@@ -18,7 +18,7 @@ struct Ray {
 
 class Camera {
 public:
-    Camera(glm::vec3 position = {0, 80, 0}, float yaw = -90.0f, float pitch = 0.0f);
+    Camera(glm::vec3 position = {0, 0, 0}, float yaw = -90.0f, float pitch = 0.0f);
 
     void processMouseMovement(float xOffset, float yOffset);
     void setPosition(const glm::vec3& pos);

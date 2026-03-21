@@ -14,17 +14,17 @@ public:
     bool init(int width, int height, const char* title);
     void destroy();
 
-    bool shouldClose() const;
+    [[nodiscard]] bool shouldClose() const;
     void swapBuffers();
     void pollEvents();       // 仅驱动 GLFW 事件泵, 由 InputManager 消费
 
-    int getWidth() const;
-    int getHeight() const;
-    float getAspectRatio() const;
+    [[nodiscard]] int getWidth() const;
+    [[nodiscard]] int getHeight() const;
+    [[nodiscard]] float getAspectRatio() const;
     void setTitle(const std::string& title) const;
 
     // 供 InputManager 注册回调时使用
-    GLFWwindow* getHandle() const;
+    [[nodiscard]] GLFWwindow* getHandle() const;
 
 private:
     GLFWwindow* m_window = nullptr;
