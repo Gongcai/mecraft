@@ -10,10 +10,15 @@
 #include "InputManager.h"
 #include "Window.h"
 #include "Time.h"
+#include "../player/Player.h"
 #include "../renderer/TestCube.h"
+#include "../renderer/Renderer.h"
+#include "InputContextManager.h"
+#include "../player/ActionMap.h"
 
 class Game {
 public:
+    Game();
     void init(int width, int height, const char* title);
     void run();       // 主循环
     void shutdown();
@@ -23,8 +28,11 @@ private:
 
     Window        m_window;
     InputManager  m_input;
-    Camera        m_camera;
-    TestCube    *m_testCube = nullptr;
+    ActionMap     m_actionMap; // Add ActionMap
+    InputContextManager m_contextManager; // Add ContextManager
+    Player        m_player;
+    Renderer      m_renderer;
+    ResourceMgr    m_resourceMgr;
 
 
     double m_lastFrameTime = 0.0;

@@ -1,0 +1,17 @@
+# Action Bindings Configuration
+# Format: ActionName BindingType KeyName
+# BindingType: KEY or MOUSE
+
+MoveForward    KEY      W
+MoveBackward   KEY      S
+MoveLeft       KEY      A
+MoveRight      KEY      D
+Jump           KEY      SPACE
+Sprint         KEY      LEFT_CONTROL
+Crouch         KEY      LEFT_SHIFT
+Inventory      KEY      E
+Menu           KEY      ESCAPE
+Attack         MOUSE    LEFT
+UseItem        MOUSE    RIGHT
+
+
