@@ -38,7 +38,7 @@ bool Window::shouldClose() const {
     return glfwWindowShouldClose(m_window);
 }
 
-void Window::swapBuffers() {
+void Window::swapBuffers() const {
     glfwSwapBuffers(m_window);
 }
 

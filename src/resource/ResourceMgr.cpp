@@ -6,6 +6,7 @@
 
 
 void ResourceMgr::init() {
+    loadShader("chunk", "../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
 }
 
 void ResourceMgr::shutdown() {
@@ -28,13 +29,18 @@ Shader *ResourceMgr::getShader(const std::string &name) {
 }
 
 GLuint ResourceMgr::loadTexture(const std::string &path, bool alpha) {
+    //TODO: 完善贴图读取
+    return 0;
 }
 
 GLuint ResourceMgr::getTexture(const std::string &name) const {
+    return 0;
+
 }
 
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
 }
 
 const TextureAtlas & ResourceMgr::getAtlas() const {
+    return m_atlas;
 }

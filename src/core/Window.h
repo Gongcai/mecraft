@@ -15,7 +15,7 @@ public:
     void destroy();
 
     [[nodiscard]] bool shouldClose() const;
-    void swapBuffers();
+     void swapBuffers() const;
     void pollEvents();       // 仅驱动 GLFW 事件泵, 由 InputManager 消费
 
     [[nodiscard]] int getWidth() const;

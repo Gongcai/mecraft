@@ -28,6 +28,7 @@ struct InputSnapshot {
     [[nodiscard]] bool isKeyJustReleased(int key) const;
     [[nodiscard]] bool isMouseButtonHeld(int button) const;
     [[nodiscard]] bool isMouseButtonJustPressed(int button) const;
+    [[nodiscard]] bool isMouseButtonJustReleased(int button) const;
 };
 
 class InputManager {
@@ -55,6 +56,7 @@ private:
     bool m_mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool m_mouseButtonsPrev[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool m_mouseButtonsJustPressed[GLFW_MOUSE_BUTTON_LAST + 1] = {};
+    bool m_mouseButtonsJustReleased[GLFW_MOUSE_BUTTON_LAST + 1] = {};
 
     // 鼠标位置
     double m_mouseX = 0.0;

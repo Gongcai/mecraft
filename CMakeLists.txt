@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 4.1  )
 project(mecraft)
 
 
@@ -28,7 +28,11 @@ add_executable(mecraft main.cpp
         src/resource/ResourceMgr.cpp
         src/resource/ResourceMgr.h
         src/renderer/Renderer.cpp
-        src/renderer/Renderer.h)
+        src/renderer/Renderer.h
+        src/player/ActionMap.cpp
+        src/player/ActionMap.h
+        src/core/InputContextManager.h
+        src/core/InputContextManager.cpp)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)
