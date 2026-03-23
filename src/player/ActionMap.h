@@ -65,6 +65,9 @@ public:
     // Load bindings from a configuration file
     void loadFromFile(const std::string& path);
 
+    // Bind a keyboard key to an action with specific trigger type
+    void bindKey(Action action, int keyCode, TriggerType trigger, InputContextType context = InputContextType::Gameplay);
+
     // Bind a keyboard key to an action
     void bindKey(Action action, int keyCode, InputContextType context = InputContextType::Gameplay);
 

@@ -1,17 +1,15 @@
-# Action Bindings Configuration
-# Format: ActionName BindingType KeyName
-# BindingType: KEY or MOUSE
+# Format: Context Action Device Control Trigger Modifiers
+Gameplay MoveForward Keyboard W Held -
+Gameplay MoveBackward Keyboard S Held -
+Gameplay MoveLeft Keyboard A Held -
+Gameplay MoveRight Keyboard D Held -
+Gameplay Jump Keyboard SPACE Held -
+Gameplay Crouch Keyboard LEFT_SHIFT Held -
+Gameplay Sprint Keyboard LEFT_CONTROL Held -
+Gameplay Attack Mouse LEFT Pressed -
+Gameplay Menu Keyboard ESCAPE Pressed -
 
-MoveForward    KEY      W
-MoveBackward   KEY      S
-MoveLeft       KEY      A
-MoveRight      KEY      D
-Jump           KEY      SPACE
-Sprint         KEY      LEFT_CONTROL
-Crouch         KEY      LEFT_SHIFT
-Inventory      KEY      E
-Menu           KEY      ESCAPE
-Attack         MOUSE    LEFT
-UseItem        MOUSE    RIGHT
+UI Menu Keyboard ESCAPE Pressed -
+UI Cancel Keyboard ESCAPE Pressed -
 
 
