@@ -19,6 +19,7 @@ struct InputSnapshot {
 
     bool mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool mouseButtonsJustPressed[GLFW_MOUSE_BUTTON_LAST + 1] = {};
+    bool mouseButtonsJustReleased[GLFW_MOUSE_BUTTON_LAST + 1] = {};
 
     glm::vec2 mousePosition{0.0f, 0.0f};
     glm::vec2 mouseDelta{0.0f, 0.0f};
@@ -82,3 +83,4 @@ private:
 
 
 #endif //MECRAFT_INPUTMANAGER_H
+

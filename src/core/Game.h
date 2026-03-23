@@ -24,6 +24,8 @@ public:
     void shutdown();
 
 private:
+    void handleGlobalInput();
+
     static constexpr double TICK_RATE = 1.0 / 60.0;
 
     Window        m_window;

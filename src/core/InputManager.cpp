@@ -24,6 +24,10 @@ bool InputSnapshot::isMouseButtonJustPressed(int button) const {
     return button >= 0 && button <= GLFW_MOUSE_BUTTON_LAST && mouseButtonsJustPressed[button];
 }
 
+bool InputSnapshot::isMouseButtonJustReleased(int button) const {
+    return button >= 0 && button <= GLFW_MOUSE_BUTTON_LAST && mouseButtonsJustReleased[button];
+}
+
 void InputManager::init(GLFWwindow* windowHandle) {
     m_handle = windowHandle;
     if (m_handle == nullptr) {
@@ -50,6 +54,7 @@ void InputManager::update() {
 
     for (int button = 0; button <= GLFW_MOUSE_BUTTON_LAST; ++button) {
         m_mouseButtonsJustPressed[button] = m_mouseButtons[button] && !m_mouseButtonsPrev[button];
+        m_mouseButtonsJustReleased[button] = !m_mouseButtons[button] && m_mouseButtonsPrev[button];
         m_mouseButtonsPrev[button] = m_mouseButtons[button];
     }
 
@@ -73,6 +78,7 @@ void InputManager::update() {
     for (int button = 0; button <= GLFW_MOUSE_BUTTON_LAST; ++button) {
         m_snapshot.mouseButtons[button] = m_mouseButtons[button];
         m_snapshot.mouseButtonsJustPressed[button] = m_mouseButtonsJustPressed[button];
+        m_snapshot.mouseButtonsJustReleased[button] = m_mouseButtonsJustReleased[button];
     }
     m_snapshot.mousePosition = {
         static_cast<float>(m_mouseX),

@@ -20,11 +20,15 @@ static int getActiveModifiers(const InputSnapshot& input) {
 }
 
 void ActionMap::bindKey(Action action, int keyCode, InputContextType context) {
+    bindKey(action, keyCode, TriggerType::Held, context);
+}
+
+void ActionMap::bindKey(Action action, int keyCode, TriggerType trigger, InputContextType context) {
     InputBinding binding;
     binding.context = context;
     binding.device = InputDevice::Keyboard;
     binding.control = keyCode;
-    binding.trigger = TriggerType::Held; // Default behavior
+    binding.trigger = trigger;
     binding.modifiers = 0;
     m_bindings[action].push_back(binding);
 }
@@ -75,9 +79,7 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
                 active = input.isMouseButtonJustPressed(binding.control);
                 break;
             case TriggerType::Released:
-                active = input.isMouseButtonJustReleased(binding.control); // Not supported by InputSnapshot yet?
-                // basic support if InputManager doesn't have it:
-                active = false;
+                active = input.isMouseButtonJustReleased(binding.control);
                 break;
             case TriggerType::Held:
                 active = input.isMouseButtonHeld(binding.control);
