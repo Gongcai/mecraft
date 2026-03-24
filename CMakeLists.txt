@@ -5,6 +5,7 @@ project(mecraft)
 set(CMAKE_CXX_STANDARD 17)
 find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 add_executable(mecraft main.cpp
         assets/third_party/glad/glad.c
         src/core/Window.cpp
@@ -43,4 +44,5 @@ add_executable(mecraft main.cpp
         assets/third_party/glad/glad.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
+target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)

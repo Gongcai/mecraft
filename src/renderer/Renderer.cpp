@@ -9,7 +9,7 @@
 void Renderer::init(ResourceMgr &resourceMgr) {
     m_chunkShader = resourceMgr.getShader("chunk");
     m_uiShader = resourceMgr.getShader("ui");
-    m_testCube = new TestCube({0.0f,0.0f,0.0f});
+    m_testCube = new TestCube({0.0f,0.0f,0.0f}, resourceMgr);
 }
 
 void Renderer::shutdown() {

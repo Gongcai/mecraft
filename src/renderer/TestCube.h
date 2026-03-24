@@ -5,23 +5,27 @@
 #ifndef MECRAFT_TESTCUBE_H
 #define MECRAFT_TESTCUBE_H
 
-#include <stb/stb_image.h>
 #include <glm/glm.hpp>
 #include "Shader.h"
 #include "../core/Time.h"
+
+class ResourceMgr;
+
 // 仅用作渲染测试
 class TestCube {
 public:
     TestCube();
     explicit TestCube(glm::vec3 pos);
+    TestCube(glm::vec3 pos, ResourceMgr& resourceMgr);
     void draw();
     void setViewProjection(glm::mat4 viewProj);
     void update();
 private:
     unsigned int loadTexture(const char* path);
     glm::vec3 pos = {0.0f,0.0f,0.0f};
-    unsigned int VAO, VBO;
-    unsigned int texture;
+    unsigned int VAO = 0;
+    unsigned int VBO = 0;
+    unsigned int texture = 0;
     Shader shader = Shader("../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
 
 };
