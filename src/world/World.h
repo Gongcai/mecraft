@@ -4,10 +4,16 @@
 
 #ifndef MECRAFT_WORLD_H
 #define MECRAFT_WORLD_H
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
 #include <vector>
+
 #include <glm/glm.hpp>
+
 #include "Chunk.h"
 #include "../physics/Ray.h"
+
 class World {
 public:
     void init(uint32_t seed);
@@ -27,6 +33,8 @@ public:
     [[nodiscard]] int getRenderDistance() const { return m_renderDistance; }
     void setRenderDistance(int dist);
 
+    [[nodiscard]] int getFlatSurfaceY() const { return m_flatSurfaceY; }
+
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t
     std::unordered_map<int64_t, std::unique_ptr<Chunk>> m_chunks;
@@ -34,7 +42,8 @@ private:
     //TerrainGenerator m_terrainGen;
 
     int m_renderDistance = 8;   // 以区块为单位
-    uint32_t m_seed;
+    uint32_t m_seed = 0;
+    int m_flatSurfaceY = 63;
 
     // 区块坐标打包
     static int64_t chunkKey(int cx, int cz);
@@ -46,6 +55,6 @@ private:
     // 区块加载队列 (按距离排序, 近的优先)
     std::vector<glm::ivec2> m_loadQueue;
     void updateLoadQueue(int playerChunkX, int playerChunkZ);
-};\
+};
 
 #endif //MECRAFT_WORLD_H
