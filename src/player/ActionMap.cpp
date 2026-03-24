@@ -23,8 +23,21 @@ void ActionMap::bindKey(Action action, int keyCode, InputContextType context) {
     bindKey(action, keyCode, TriggerType::Held, context);
 }
 
-void ActionMap::bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context) {
-    m_axisBindings[axis].push_back({context, positiveKeyCode, negativeKeyCode});
+void ActionMap::bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context, bool invert) {
+    AxisBinding binding;
+    binding.context = context;
+    binding.positiveKey = positiveKeyCode;
+    binding.negativeKey = negativeKeyCode;
+    binding.invert = invert;
+    m_axisBindings[axis].push_back(binding);
+}
+
+void ActionMap::bindNativeAxis(Axis axis, NativeAxis native, InputContextType context, bool invert) {
+    AxisBinding binding;
+    binding.context = context;
+    binding.nativeAxis = native;
+    binding.invert = invert;
+    m_axisBindings[axis].push_back(binding);
 }
 
 void ActionMap::bindKey(Action action, int keyCode, TriggerType trigger, InputContextType context) {
@@ -109,20 +122,24 @@ bool ActionMap::isActionTriggered(Action action, InputContextType context, const
 }
 
 float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSnapshot &input) const {
-    // 鼠标原生输入直接通过系统轴返回
-    if (axis == Axis::LookX) return static_cast<float>(input.mouseDelta.x);
-    if (axis == Axis::LookY) return static_cast<float>(input.mouseDelta.y);
-
-    // 键盘虚拟组合轴处理
     auto it = m_axisBindings.find(axis);
     if (it != m_axisBindings.end()) {
         for (const auto& binding : it->second) {
             if (binding.context == context) {
                 float value = 0.0f;
-                // 按下正向键 +1，负向键 -1。全按或全不按均为 0
-                if (input.isKeyHeld(binding.positiveKey)) value += 1.0f;
-                if (input.isKeyHeld(binding.negativeKey)) value -= 1.0f;
-                if (value != 0.0f) return value;
+
+                if (binding.nativeAxis == NativeAxis::MouseX) {
+                    value = static_cast<float>(input.mouseDelta.x);
+                } else if (binding.nativeAxis == NativeAxis::MouseY) {
+                    value = static_cast<float>(input.mouseDelta.y);
+                } else {
+                    if (input.isKeyHeld(binding.positiveKey)) value += 1.0f;
+                    if (input.isKeyHeld(binding.negativeKey)) value -= 1.0f;
+                }
+
+                if (value != 0.0f) {
+                    return binding.invert ? -value : value;
+                }
             }
         }
     }
@@ -211,16 +228,25 @@ void ActionMap::loadFromFile(const std::string& path) {
         if (tokens.empty()) continue;
 
         // 如果明确标注这是虚拟轴的配置
-        // 格式: Axis Context AxisName Device PositiveKey NegativeKey
-        // 例如: Axis Gameplay MoveForward Keyboard W S
+        // 格式: Axis Context AxisName Device PositiveKey/NativeAxis NegativeKey/Ignored [Invert]
+        // 例如: Axis Gameplay Vertical Keyboard W S
         if (tokens[0] == "Axis" && tokens.size() >= 6) {
             InputContextType ctx = stringToContext(tokens[1]);
             Axis axis = stringToAxis(tokens[2]);
-            // 这里当前只接了键盘虚拟轴。其实还可以根据 Device == "Gamepad" 等接手柄绑定
+
+            bool invert = (tokens.size() >= 7 && tokens[6] == "Invert");
+
             if (tokens[3] == "Keyboard") {
                 int posKey = stringToKey(tokens[4]);
                 int negKey = stringToKey(tokens[5]);
-                bindAxisKey(axis, posKey, negKey, ctx);
+                bindAxisKey(axis, posKey, negKey, ctx, invert);
+            }
+            else if (tokens[3] == "Mouse") {
+                NativeAxis nAxis = NativeAxis::None;
+                if (tokens[4] == "X") nAxis = NativeAxis::MouseX;
+                else if (tokens[4] == "Y") nAxis = NativeAxis::MouseY;
+
+                bindNativeAxis(axis, nAxis, ctx, invert);
             }
             continue;
         }
@@ -252,5 +278,4 @@ void ActionMap::loadFromFile(const std::string& path) {
         }
     }
 }
-
 

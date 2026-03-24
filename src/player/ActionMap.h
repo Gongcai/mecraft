@@ -55,6 +55,12 @@ enum class TriggerType {
     // Future: Tap, Hold, DoubleTap
 };
 
+enum class NativeAxis {
+    None,
+    MouseX,
+    MouseY
+};
+
 struct InputBinding {
     InputContextType context = InputContextType::Gameplay;
     InputDevice device = InputDevice::Keyboard;
@@ -67,6 +73,8 @@ struct AxisBinding {
     InputContextType context = InputContextType::Gameplay;
     int positiveKey = 0; // 例: GLFW_KEY_W (加1)
     int negativeKey = 0; // 例: GLFW_KEY_S (减1)
+    NativeAxis nativeAxis = NativeAxis::None;
+    bool invert = false;
 };
 
 class ActionMap {
@@ -81,7 +89,10 @@ public:
     void bindKey(Action action, int keyCode, InputContextType context = InputContextType::Gameplay);
 
     // Bind Axis to key
-    void bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context = InputContextType::Gameplay);
+    void bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context = InputContextType::Gameplay, bool invert = false);
+
+    // Bind Native Axis
+    void bindNativeAxis(Axis axis, NativeAxis native, InputContextType context = InputContextType::Gameplay, bool invert = false);
 
     // Bind a mouse button to an action
     void bindMouseButton(Action action, int buttonCode, InputContextType context = InputContextType::Gameplay);

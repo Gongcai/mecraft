@@ -37,7 +37,9 @@ add_executable(mecraft main.cpp
         src/core/GameStateMachine.h
         src/core/GameStateMachine.cpp
         src/core/states/GameplayState.h
-        src/core/states/UIState.h)
+        src/core/states/UIState.h
+        src/world/Block.cpp
+        src/world/Block.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)
