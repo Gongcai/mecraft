@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 add_executable(mecraft main.cpp
-        glad.c
+        assets/third_party/glad/glad.c
         src/core/Window.cpp
         src/core/Window.h
         src/core/Camera.cpp
@@ -39,7 +39,8 @@ add_executable(mecraft main.cpp
         src/core/states/GameplayState.h
         src/core/states/UIState.h
         src/world/Block.cpp
-        src/world/Block.h)
+        src/world/Block.h
+        assets/third_party/glad/glad.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)

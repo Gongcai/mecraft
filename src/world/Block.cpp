@@ -9,4 +9,5 @@ void BlockRegistry::init() {
 }
 
 const BlockDef & BlockRegistry::get(BlockID id) {
+    return {};
 }
