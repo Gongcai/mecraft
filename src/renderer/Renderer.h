@@ -10,6 +10,7 @@
 #include "Shader.h"
 #include <glm/glm.hpp>
 #include <array>
+#include <memory>
 
 #include "TestCube.h"
 
@@ -35,6 +36,7 @@ private:
 
     Shader* m_chunkShader = nullptr;
     Shader* m_uiShader = nullptr;
+    ResourceMgr* m_resourceMgr = nullptr;
 
     glm::mat4 m_projection;
     glm::mat4 m_view;
