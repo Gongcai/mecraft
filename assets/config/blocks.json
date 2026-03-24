@@ -6,46 +6,45 @@
       "isSolid": false,
       "isTransparent": true,
       "textures": {
-        "all": -1
+        "all": "air"
       }
     },
     {
       "id": 1,
       "name": "dirt",
       "textures": {
-        "all": 1
+        "all": "dirt"
       }
     },
     {
       "id": 2,
       "name": "grass",
       "textures": {
-        "top": 0,
-        "bottom": 1,
-        "side": 2
+        "top": "grass_top",
+        "side": "grass_side"
       }
     },
     {
       "id": 3,
       "name": "stone",
       "textures": {
-        "all": 3
+        "all": "stone"
       }
     },
     {
       "id": 4,
       "name": "sand",
       "textures": {
-        "all": 4
+        "all": "sand"
       }
     },
     {
       "id": 5,
       "name": "wood",
       "textures": {
-        "top": 21,
-        "bottom": 21,
-        "side": 20
+        "top": "wood_top",
+        "bottom": "wood_top",
+        "side": "wood_side"
       }
     },
     {
@@ -53,7 +52,7 @@
       "name": "glass",
       "isTransparent": true,
       "textures": {
-        "all": 49
+        "all": "glass"
       }
     }
   ]
