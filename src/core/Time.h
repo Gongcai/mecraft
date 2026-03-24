@@ -4,6 +4,8 @@
 
 #ifndef MECRAFT_TIME_H
 #define MECRAFT_TIME_H
+#include <iostream>
+#include <ostream>
 #include <GLFW/glfw3.h>
 
 
@@ -27,6 +29,7 @@ public:
     static void update() {
         const double now = getRawTime();
         double rawDelta = now - lastRawTime;
+        std::cout << 1 / rawDelta << std::endl;
         lastRawTime = now;
 
         if (rawDelta <= 0) rawDelta = 0.0;

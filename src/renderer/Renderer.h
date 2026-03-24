@@ -13,7 +13,7 @@
 #include <memory>
 
 #include "TestCube.h"
-
+#include "../world/Chunk.h"
 
 class Renderer {
 public:
@@ -23,7 +23,7 @@ public:
 
     // 视锥剔除
     void updateFrustum(const glm::mat4& viewProj);
-    bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax) const;
+    [[nodiscard]] bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax) const;
 
 private:
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
@@ -38,11 +38,12 @@ private:
     Shader* m_uiShader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 
-    glm::mat4 m_projection;
-    glm::mat4 m_view;
-    TestCube *m_testCube = nullptr;
+    glm::mat4 m_projection = glm::mat4(1.0f);
+    glm::mat4 m_view = glm::mat4(1.0f);
+    TestCube* m_testCube = nullptr;
+    std::unique_ptr<Chunk> m_testChunk;
     // 视锥体6个平面
-    std::array<glm::vec4, 6> m_frustumPlanes;
+    std::array<glm::vec4, 6> m_frustumPlanes{};
 };
 
 

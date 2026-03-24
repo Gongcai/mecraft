@@ -26,6 +26,8 @@ void Game::init(int width, int height, const char *title) {
     // 初始化资源管理器，加载着色器/贴图
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
+    BlockRegistry::init(&m_resourceMgr);
+    BlockRegistry::printAllBlocks();
     // 初始化玩家
     m_player.init({0.0f, 1.0f, 0.0f});
     // 初始化渲染器
@@ -39,9 +41,6 @@ void Game::init(int width, int height, const char *title) {
         m_contextManager,
         m_input
     ));
-
-    BlockRegistry::init(&m_resourceMgr);
-    BlockRegistry::printAllBlocks();
 }
 
 void Game::run() {

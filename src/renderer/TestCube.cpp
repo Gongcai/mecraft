@@ -6,6 +6,8 @@
 #include "TestCube.h"
 #include <cmath>
 #include <stb/stb_image.h>
+#include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include "../resource/ResourceMgr.h"
 
 
@@ -254,6 +256,8 @@ void TestCube::draw() {
     shader.setInt("texAtlas", 0);
     auto model = glm::mat4(1.0f);
     model = glm::translate(model, pos);
+	model = glm::scale(model, scale);
+    model = glm::rotate(model, rotationY, glm::vec3(0.0f, 1.0f, 0.0f));
     shader.setMat4("model", model);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -267,9 +271,15 @@ void TestCube::setViewProjection(glm::mat4 viewProj) {
 }
 
 void TestCube::update() {
-    float radius = 2.0f;
-    pos.x = static_cast<float>(cos(Time::currentGameTime) * radius);
-    pos.z = static_cast<float>(sin(Time::currentGameTime) * radius);
+    const float speed = glm::radians(60.0f);
+    rotationY += static_cast<float>(Time::deltaTime) * speed;
+    if (rotationY > glm::two_pi<float>()) {
+        rotationY -= glm::two_pi<float>();
+    }
+}
+
+void TestCube::setScale(glm::vec3 scale) {
+	this->scale = scale;
 }
 
 unsigned int TestCube::loadTexture(const char *path) {

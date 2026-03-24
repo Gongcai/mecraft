@@ -17,7 +17,7 @@ bool Window::init(int width, int height, const char *title) {
     }
     m_height = height;
     m_width = width;
-
+    glfwSwapInterval(0);
     return true;
 }
 

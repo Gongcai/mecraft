@@ -8,13 +8,8 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "../physics/Ray.h"
 
-struct Ray {
-    glm::vec3 origin;    // 射线的起点
-    glm::vec3 direction; // 射线的方向（通常是单位向量）
-
-    Ray(const glm::vec3& o, const glm::vec3& d) : origin(o), direction(glm::normalize(d)) {}
-};
 
 class Camera {
 public:
@@ -34,7 +29,7 @@ public:
     // 射线拾取 — 返回视线方向
     [[nodiscard]] Ray getPickRay() const;
 
-    float fov   = 70.0f;
+    float fov   = 90.0f;
     float nearPlane = 0.1f;
     float farPlane  = 500.0f;
     float sensitivity = 0.1f;

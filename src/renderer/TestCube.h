@@ -20,9 +20,12 @@ public:
     void draw();
     void setViewProjection(glm::mat4 viewProj);
     void update();
+    void setScale(glm::vec3 scale);
 private:
     unsigned int loadTexture(const char* path);
     glm::vec3 pos = {0.0f,0.0f,0.0f};
+    glm::vec3 scale = {1.0f,1.0f,1.0f};
+    float rotationY = 0.0f;
     unsigned int VAO = 0;
     unsigned int VBO = 0;
     unsigned int texture = 0;
