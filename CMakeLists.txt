@@ -41,7 +41,14 @@ add_executable(mecraft main.cpp
         src/core/states/UIState.h
         src/world/Block.cpp
         src/world/Block.h
-        assets/third_party/glad/glad.h)
+        src/world/Chunk.cpp
+        src/world/Chunk.h
+        src/renderer/ChunkMesher.cpp
+        src/renderer/ChunkMesher.h
+        assets/third_party/glad/glad.h
+        src/world/World.cpp
+        src/world/World.h
+        "src/physics/Ray.h")
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)
