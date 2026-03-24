@@ -8,6 +8,7 @@
 #include <stb/stb_image.h>
 #include <glm/glm.hpp>
 #include "Shader.h"
+#include "../core/Time.h"
 // 仅用作渲染测试
 class TestCube {
 public:
@@ -15,6 +16,7 @@ public:
     explicit TestCube(glm::vec3 pos);
     void draw();
     void setViewProjection(glm::mat4 viewProj);
+    void update();
 private:
     unsigned int loadTexture(const char* path);
     glm::vec3 pos = {0.0f,0.0f,0.0f};

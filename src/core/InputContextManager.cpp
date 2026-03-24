@@ -1,7 +1,7 @@
 #include "InputContextManager.h"
 
-InputContextManager::InputContextManager(ActionMap& actionMap)
-    : m_actionMap(actionMap)
+InputContextManager::InputContextManager(ActionMap& actionMap,const InputManager& inputManager)
+    : m_actionMap(actionMap),m_inputManager(inputManager)
 {
     // Make sure we start with a context
     m_contextStack.push_back(InputContextType::Gameplay);
@@ -37,7 +37,8 @@ bool InputContextManager::isContextActive(InputContextType context) const {
     return false;
 }
 
-bool InputContextManager::isActionTriggered(Action action, const InputSnapshot& snapshot) const {
+bool InputContextManager::isActionTriggered(Action action) const {
+    const InputSnapshot& snapshot = m_inputManager.snapshot();
     // Check Active Context (Top of Stack)
     // Design decision: "从栈顶向下查询动作，命中即停止"
     // We check from top down.
@@ -58,9 +59,22 @@ bool InputContextManager::isActionTriggered(Action action, const InputSnapshot& 
     return false;
 }
 
-bool InputContextManager::isActionHeld(Action action, const InputSnapshot& snapshot) const {
+bool InputContextManager::isActionHeld(Action action) const {
     // Forward to isActionTriggered as it handles trigger type checks logic
     // But if caller wants to check "Held" specifically, they should bind action as Held.
-    return isActionTriggered(action, snapshot);
+    return isActionTriggered(action);
+}
+
+float InputContextManager::getAxisValue(Axis axis) const {
+    const InputSnapshot& snapshot = m_inputManager.snapshot(); // 内部自取
+
+    for (auto it = m_contextStack.rbegin(); it != m_contextStack.rend(); ++it) {
+        float val = m_actionMap.getAxisValue(axis, *it, snapshot);
+        // 如果此层不为0，拦截输入
+        if (std::abs(val) > 0.001f) {
+            return val;
+        }
+    }
+    return 0.0f;
 }
 

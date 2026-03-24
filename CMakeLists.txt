@@ -32,7 +32,12 @@ add_executable(mecraft main.cpp
         src/player/ActionMap.cpp
         src/player/ActionMap.h
         src/core/InputContextManager.h
-        src/core/InputContextManager.cpp)
+        src/core/InputContextManager.cpp
+        src/core/IGameState.h
+        src/core/GameStateMachine.h
+        src/core/GameStateMachine.cpp
+        src/core/states/GameplayState.h
+        src/core/states/UIState.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)

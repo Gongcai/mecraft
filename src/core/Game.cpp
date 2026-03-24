@@ -2,9 +2,10 @@
 // Created by Caiwe on 2026/3/21.
 //
 #include "Game.h"
+#include "states/GameplayState.h"
 
 
-Game::Game() : m_contextManager(m_actionMap) {
+Game::Game() : m_contextManager(m_actionMap,m_input) {
 }
 
 void Game::init(int width, int height, const char *title) {
@@ -29,6 +30,14 @@ void Game::init(int width, int height, const char *title) {
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
+
+    // Push initial Gameplay state
+    m_stateMachine.pushState(std::make_unique<GameplayState>(
+        m_stateMachine,
+        m_player,
+        m_contextManager,
+        m_input
+    ));
 }
 
 void Game::run() {
@@ -38,32 +47,12 @@ void Game::run() {
         Time::update();
         m_input.update();
 
-        handleGlobalInput();
-
-        // Only update player if Gameplay is the active context (Pause/UI blocks gameplay input)
-        if (m_contextManager.getCurrentContext() == InputContextType::Gameplay) {
-            m_player.update(static_cast<float>(Time::deltaTime), m_input.snapshot(), m_contextManager);
-        }
+        // Update state machine instead of manual checks
+        m_stateMachine.update(static_cast<float>(Time::deltaTime), m_input.snapshot());
 
         m_renderer.render(m_player.getCamera(), m_window);
     }
 }
 
 void Game::shutdown() {
-    return;
-}
-
-void Game::handleGlobalInput() {
-    const auto& snapshot = m_input.snapshot();
-    if (m_contextManager.isActionTriggered(Action::Menu, snapshot)) {
-        if (m_contextManager.getCurrentContext() == InputContextType::Gameplay) {
-            m_contextManager.pushContext(InputContextType::UI);
-            m_input.captureMouse(false);
-        } else {
-            m_contextManager.popContext();
-            if (m_contextManager.getCurrentContext() == InputContextType::Gameplay) {
-                m_input.captureMouse(true);
-            }
-        }
-    }
 }

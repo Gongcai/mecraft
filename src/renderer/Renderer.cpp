@@ -16,6 +16,7 @@ void Renderer::shutdown() {
 }
 
 void Renderer::render(const Camera &camera, const Window &window) {
+    m_testCube->update();
     beginFrame(camera, window);
     renderWorld();
     endFrame(window);

@@ -15,6 +15,7 @@
 #include "../renderer/Renderer.h"
 #include "InputContextManager.h"
 #include "../player/ActionMap.h"
+#include "GameStateMachine.h"
 
 class Game {
 public:
@@ -24,14 +25,13 @@ public:
     void shutdown();
 
 private:
-    void handleGlobalInput();
-
     static constexpr double TICK_RATE = 1.0 / 60.0;
 
     Window        m_window;
     InputManager  m_input;
     ActionMap     m_actionMap; // Add ActionMap
     InputContextManager m_contextManager; // Add ContextManager
+    GameStateMachine m_stateMachine; // Add StateMachine
     Player        m_player;
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;

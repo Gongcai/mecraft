@@ -23,6 +23,10 @@ void ActionMap::bindKey(Action action, int keyCode, InputContextType context) {
     bindKey(action, keyCode, TriggerType::Held, context);
 }
 
+void ActionMap::bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context) {
+    m_axisBindings[axis].push_back({context, positiveKeyCode, negativeKeyCode});
+}
+
 void ActionMap::bindKey(Action action, int keyCode, TriggerType trigger, InputContextType context) {
     InputBinding binding;
     binding.context = context;
@@ -104,13 +108,30 @@ bool ActionMap::isActionTriggered(Action action, InputContextType context, const
     return false;
 }
 
+float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSnapshot &input) const {
+    // 鼠标原生输入直接通过系统轴返回
+    if (axis == Axis::LookX) return static_cast<float>(input.mouseDelta.x);
+    if (axis == Axis::LookY) return static_cast<float>(input.mouseDelta.y);
+
+    // 键盘虚拟组合轴处理
+    auto it = m_axisBindings.find(axis);
+    if (it != m_axisBindings.end()) {
+        for (const auto& binding : it->second) {
+            if (binding.context == context) {
+                float value = 0.0f;
+                // 按下正向键 +1，负向键 -1。全按或全不按均为 0
+                if (input.isKeyHeld(binding.positiveKey)) value += 1.0f;
+                if (input.isKeyHeld(binding.negativeKey)) value -= 1.0f;
+                if (value != 0.0f) return value;
+            }
+        }
+    }
+    return 0.0f;
+}
+
 // Helper to map string to Action
 static Action stringToAction(const std::string& str) {
     static const std::map<std::string, Action> lookup = {
-        {"MoveForward", Action::MoveForward},
-        {"MoveBackward", Action::MoveBackward},
-        {"MoveLeft", Action::MoveLeft},
-        {"MoveRight", Action::MoveRight},
         {"Jump", Action::Jump},
         {"Sprint", Action::Sprint},
         {"Crouch", Action::Crouch},
@@ -129,6 +150,14 @@ static Action stringToAction(const std::string& str) {
     if (it != lookup.end()) return it->second;
     // Fallback or warning
     return Action::Menu;
+}
+// 在现有的 stringToAction 下面新增
+static Axis stringToAxis(const std::string& str) {
+    if (str == "Vertical") return Axis::Vertical;
+    if (str == "Horizontal") return Axis::Horizontal;
+    if (str == "LookX") return Axis::LookX;
+    if (str == "LookY") return Axis::LookY;
+    return Axis::Vertical; // 或者随便选个默认
 }
 
 // Helper for string to key code (Simplified)
@@ -179,16 +208,33 @@ void ActionMap::loadFromFile(const std::string& path) {
         std::vector<std::string> tokens;
         while (ss >> token) tokens.push_back(token);
 
+        if (tokens.empty()) continue;
+
+        // 如果明确标注这是虚拟轴的配置
+        // 格式: Axis Context AxisName Device PositiveKey NegativeKey
+        // 例如: Axis Gameplay MoveForward Keyboard W S
+        if (tokens[0] == "Axis" && tokens.size() >= 6) {
+            InputContextType ctx = stringToContext(tokens[1]);
+            Axis axis = stringToAxis(tokens[2]);
+            // 这里当前只接了键盘虚拟轴。其实还可以根据 Device == "Gamepad" 等接手柄绑定
+            if (tokens[3] == "Keyboard") {
+                int posKey = stringToKey(tokens[4]);
+                int negKey = stringToKey(tokens[5]);
+                bindAxisKey(axis, posKey, negKey, ctx);
+            }
+            continue;
+        }
+
+        // 以往 Action 配置逻辑，兼容 6个Token情况
+        // 因为没加前缀，所以直接处理
         if (tokens.size() >= 6) {
-             // V2 Format
              InputBinding binding;
              binding.context = stringToContext(tokens[0]);
              Action action = stringToAction(tokens[1]);
-             // tokens[2] is Device
+
              if (tokens[2] == "Keyboard") binding.device = InputDevice::Keyboard;
              else if (tokens[2] == "Mouse") binding.device = InputDevice::Mouse;
 
-             // tokens[3] is Control
              if (binding.device == InputDevice::Keyboard) binding.control = stringToKey(tokens[3]);
              else {
                  if (tokens[3] == "LEFT") binding.control = GLFW_MOUSE_BUTTON_LEFT;
@@ -197,27 +243,14 @@ void ActionMap::loadFromFile(const std::string& path) {
 
              binding.trigger = stringToTrigger(tokens[4]);
 
-             // tokens[5] Modifiers
              binding.modifiers = 0;
              if (tokens[5].find("SHIFT") != std::string::npos) binding.modifiers |= GLFW_MOD_SHIFT;
              if (tokens[5].find("CTRL") != std::string::npos) binding.modifiers |= GLFW_MOD_CONTROL;
              if (tokens[5].find("ALT") != std::string::npos) binding.modifiers |= GLFW_MOD_ALT;
 
              m_bindings[action].push_back(binding);
-
-        } else if (tokens.size() >= 3) {
-            // Old Format: Action BindingType KeyName
-            // Map to default context (Gameplay) and default trigger (Held)
-            Action action = stringToAction(tokens[0]);
-            std::string type = tokens[1];
-            std::string keyName = tokens[2];
-
-            if (type == "Key") {
-                bindKey(action, stringToKey(keyName), InputContextType::Gameplay);
-            } else if (type == "MouseButton") {
-                int btn = (keyName == "Left") ? GLFW_MOUSE_BUTTON_LEFT : GLFW_MOUSE_BUTTON_RIGHT;
-                bindMouseButton(action, btn, InputContextType::Gameplay);
-            }
         }
     }
 }
+
+
