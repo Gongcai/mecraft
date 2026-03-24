@@ -1,7 +1,13 @@
 #include "World.h"
-#include <cmath>
 #include <algorithm>
-#include <iostream>
+#include <cmath>
+
+namespace {
+int worldToChunkCoord(const int world, const int chunkSize) {
+    // floor-divide for negative coordinates
+    return static_cast<int>(std::floor(static_cast<float>(world) / static_cast<float>(chunkSize)));
+}
+}
 void World::init(uint32_t seed) {
     m_seed = seed;
     m_chunks.clear();
@@ -9,8 +15,8 @@ void World::init(uint32_t seed) {
 }
 
 void World::update(const glm::vec3& playerPos) {
-    int playerChunkX = static_cast<int>(std::floor(playerPos.x / Chunk::SIZE_X));
-    int playerChunkZ = static_cast<int>(std::floor(playerPos.z / Chunk::SIZE_Z));
+    const int playerChunkX = worldToChunkCoord(static_cast<int>(std::floor(playerPos.x)), Chunk::SIZE_X);
+    const int playerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(playerPos.z)), Chunk::SIZE_Z);
 
     updateLoadQueue(playerChunkX, playerChunkZ);
 
@@ -39,8 +45,8 @@ void World::update(const glm::vec3& playerPos) {
 BlockID World::getBlock(int x, int y, int z) const {
     if (y < 0 || y >= Chunk::SIZE_Y) return BlockType::AIR;
 
-    int chunkX = static_cast<int>(std::floor(static_cast<float>(x) / Chunk::SIZE_X));
-    int chunkZ = static_cast<int>(std::floor(static_cast<float>(z) / Chunk::SIZE_Z));
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
 
     auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
     if (it != m_chunks.end()) {
@@ -54,8 +60,8 @@ BlockID World::getBlock(int x, int y, int z) const {
 void World::setBlock(int x, int y, int z, BlockID id) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
 
-    int chunkX = static_cast<int>(std::floor(static_cast<float>(x) / Chunk::SIZE_X));
-    int chunkZ = static_cast<int>(std::floor(static_cast<float>(z) / Chunk::SIZE_Z));
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
 
     auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
     if (it != m_chunks.end()) {
@@ -126,7 +132,7 @@ bool World::raycast(const Ray& ray, float maxDist, glm::ivec3& hitBlock, glm::iv
 }
 
 void World::setRenderDistance(int dist) {
-    m_renderDistance = dist;
+    m_renderDistance = std::max(1, dist);
 }
 
 int64_t World::chunkKey(int cx, int cz) {
@@ -141,10 +147,11 @@ void World::loadChunk(int cx, int cz) {
 
     for (int x = 0; x < Chunk::SIZE_X; ++x) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int y = 0; y < 64; ++y) {
-                if (y == 63) {
+            for (int y = 0; y <= m_flatSurfaceY; ++y) {
+                if (y == m_flatSurfaceY) {
                     chunk->setBlock(x, y, z, BlockType::GRASS);
-                } else if (y > 59) {
+                    chunk->setSunlight(x, y, z, 15);
+                } else if (y >= m_flatSurfaceY - 3) {
                     chunk->setBlock(x, y, z, BlockType::DIRT);
                 } else {
                     chunk->setBlock(x, y, z, BlockType::STONE);

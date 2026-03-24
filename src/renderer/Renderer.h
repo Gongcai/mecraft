@@ -10,16 +10,14 @@
 #include "Shader.h"
 #include <glm/glm.hpp>
 #include <array>
-#include <memory>
 
-#include "TestCube.h"
-#include "../world/Chunk.h"
+class World;
 
 class Renderer {
 public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void render(const Camera &camera, const Window &window);
+    void render(const World& world, const Camera &camera, const Window &window);
 
     // 视锥剔除
     void updateFrustum(const glm::mat4& viewProj);
@@ -27,7 +25,7 @@ public:
 
 private:
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
-    void renderWorld();
+    void renderWorld(const World& world);
     //TODO: 传入 World 和 UI 数据进行渲染
     //void renderWorld(const World& world, const Camera& camera);
     //void renderUI(const UI& ui);
@@ -40,8 +38,6 @@ private:
 
     glm::mat4 m_projection = glm::mat4(1.0f);
     glm::mat4 m_view = glm::mat4(1.0f);
-    TestCube* m_testCube = nullptr;
-    std::unique_ptr<Chunk> m_testChunk;
     // 视锥体6个平面
     std::array<glm::vec4, 6> m_frustumPlanes{};
 };

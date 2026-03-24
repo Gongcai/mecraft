@@ -28,8 +28,10 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     BlockRegistry::init(&m_resourceMgr);
     BlockRegistry::printAllBlocks();
+    m_world.init(1337);
+
     // 初始化玩家
-    m_player.init({0.0f, 1.0f, 0.0f});
+    m_player.init({0.0f, static_cast<float>(m_world.getFlatSurfaceY() + 2), 0.0f});
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
@@ -52,8 +54,9 @@ void Game::run() {
 
         // Update state machine instead of manual checks
         m_stateMachine.update(static_cast<float>(Time::deltaTime), m_input.snapshot());
+        m_world.update(m_player.getPosition());
 
-        m_renderer.render(m_player.getCamera(), m_window);
+        m_renderer.render(m_world, m_player.getCamera(), m_window);
     }
 }
 

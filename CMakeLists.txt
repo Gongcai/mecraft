@@ -53,3 +53,14 @@ include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)
+
+enable_testing()
+add_executable(world_flat_test
+        tests/world_flat_test.cpp
+        src/world/World.cpp
+        src/world/Chunk.cpp
+        assets/third_party/glad/glad.c)
+target_include_directories(world_flat_test PRIVATE assets/third_party)
+target_link_libraries(world_flat_test PRIVATE glm::glm)
+add_test(NAME world_flat_test COMMAND world_flat_test)
+

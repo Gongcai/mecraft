@@ -16,6 +16,7 @@
 #include "InputContextManager.h"
 #include "../player/ActionMap.h"
 #include "GameStateMachine.h"
+#include "../world/World.h"
 
 class Game {
 public:
@@ -33,6 +34,7 @@ private:
     InputContextManager m_contextManager; // Add ContextManager
     GameStateMachine m_stateMachine; // Add StateMachine
     Player        m_player;
+    World         m_world;
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;
 
