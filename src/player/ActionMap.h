@@ -17,11 +17,14 @@ enum class InputContextType {
     // Add others if needed
 };
 
+enum class Axis {
+    Vertical,   // 控制前后
+    Horizontal, // 控制左右
+    LookX,      // X轴视角移动
+    LookY       // Y轴视角移动
+};
+
 enum class Action {
-    MoveForward,
-    MoveBackward,
-    MoveLeft,
-    MoveRight,
     Jump,
     Sprint,
     Crouch,
@@ -60,6 +63,12 @@ struct InputBinding {
     int modifiers = 0; // GLFW_MOD_* bitmask (Shift=1, Ctrl=2, Alt=4, Super=8)
 };
 
+struct AxisBinding {
+    InputContextType context = InputContextType::Gameplay;
+    int positiveKey = 0; // 例: GLFW_KEY_W (加1)
+    int negativeKey = 0; // 例: GLFW_KEY_S (减1)
+};
+
 class ActionMap {
 public:
     // Load bindings from a configuration file
@@ -71,6 +80,9 @@ public:
     // Bind a keyboard key to an action
     void bindKey(Action action, int keyCode, InputContextType context = InputContextType::Gameplay);
 
+    // Bind Axis to key
+    void bindAxisKey(Axis axis, int positiveKeyCode, int negativeKeyCode, InputContextType context = InputContextType::Gameplay);
+
     // Bind a mouse button to an action
     void bindMouseButton(Action action, int buttonCode, InputContextType context = InputContextType::Gameplay);
 
@@ -80,11 +92,13 @@ public:
     // Check if the action is currently triggered in a specific context
     // This is the low-level check
     [[nodiscard]] bool isActionTriggered(Action action, InputContextType context, const InputSnapshot& input) const;
+    [[nodiscard]] float getAxisValue(Axis axis,InputContextType context, const InputSnapshot& input) const;
 
 private:
    // Store bindings per Action
    // When checking, we iterate bindings for the Action and check if context matches and input matches.
     std::unordered_map<Action, std::vector<InputBinding>> m_bindings;
+    std::unordered_map<Axis, std::vector<AxisBinding>> m_axisBindings;
 
     // Helper to evaluate a single binding
     bool evaluateBinding(const InputBinding& binding, const InputSnapshot& input) const;

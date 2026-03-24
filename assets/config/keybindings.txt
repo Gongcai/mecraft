@@ -1,8 +1,4 @@
 # Format: Context Action Device Control Trigger Modifiers
-Gameplay MoveForward Keyboard W Held -
-Gameplay MoveBackward Keyboard S Held -
-Gameplay MoveLeft Keyboard A Held -
-Gameplay MoveRight Keyboard D Held -
 Gameplay Jump Keyboard SPACE Held -
 Gameplay Crouch Keyboard LEFT_SHIFT Held -
 Gameplay Sprint Keyboard LEFT_CONTROL Held -
@@ -12,4 +8,5 @@ Gameplay Menu Keyboard ESCAPE Pressed -
 UI Menu Keyboard ESCAPE Pressed -
 UI Cancel Keyboard ESCAPE Pressed -
 
-
+Axis Gameplay Vertical Keyboard W S
+Axis Gameplay Horizontal Keyboard D A

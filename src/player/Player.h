@@ -36,8 +36,8 @@ private:
     bool  m_sprinting = false;
 
 
-    void handleMovement(float dt, const InputSnapshot &snapshot, const InputContextManager& inputContext);
-    void handleMouseLook(const InputSnapshot& snapshot);
+    void handleMovement(float dt, const InputContextManager& inputContext);
+    void handleMouseLook(const InputContextManager &inputContext);
 };
 
 #endif //MECRAFT_PLAYER_H

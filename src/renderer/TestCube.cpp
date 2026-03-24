@@ -4,6 +4,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "TestCube.h"
+#include <cmath>
 
 
 TestCube::TestCube() {
@@ -159,6 +160,12 @@ void TestCube::draw() {
 void TestCube::setViewProjection(glm::mat4 viewProj) {
 	shader.use();
 	shader.setMat4("viewProj", viewProj);
+}
+
+void TestCube::update() {
+    float radius = 2.0f;
+    pos.x = static_cast<float>(cos(Time::currentGameTime) * radius);
+    pos.z = static_cast<float>(sin(Time::currentGameTime) * radius);
 }
 
 unsigned int TestCube::loadTexture(const char *path) {
