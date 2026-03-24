@@ -10,3 +10,6 @@ UI Cancel Keyboard ESCAPE Pressed -
 
 Axis Gameplay Vertical Keyboard W S
 Axis Gameplay Horizontal Keyboard D A
+
+Axis Gameplay LookX Mouse X -
+Axis Gameplay LookY Mouse Y - Invert

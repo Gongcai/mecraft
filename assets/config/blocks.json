@@ -1,0 +1,60 @@
+{
+  "blocks": [
+    {
+      "id": 0,
+      "name": "air",
+      "isSolid": false,
+      "isTransparent": true,
+      "textures": {
+        "all": -1
+      }
+    },
+    {
+      "id": 1,
+      "name": "dirt",
+      "textures": {
+        "all": 1
+      }
+    },
+    {
+      "id": 2,
+      "name": "grass",
+      "textures": {
+        "top": 0,
+        "bottom": 1,
+        "side": 2
+      }
+    },
+    {
+      "id": 3,
+      "name": "stone",
+      "textures": {
+        "all": 3
+      }
+    },
+    {
+      "id": 4,
+      "name": "sand",
+      "textures": {
+        "all": 4
+      }
+    },
+    {
+      "id": 5,
+      "name": "wood",
+      "textures": {
+        "top": 21,
+        "bottom": 21,
+        "side": 20
+      }
+    },
+    {
+      "id": 6,
+      "name": "glass",
+      "isTransparent": true,
+      "textures": {
+        "all": 49
+      }
+    }
+  ]
+}

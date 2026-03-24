@@ -86,5 +86,5 @@ void Player::handleMouseLook(const InputContextManager &inputContext) {
     // 使用 snapshot 中的 mouseDelta
     // 注意：InputManager 应该负责处理灵敏度，或者我们在 Camera 中处理
     // Camera::processMouseMovement 接受 offset
-    m_camera.processMouseMovement(deltaX, -deltaY);
+    m_camera.processMouseMovement(deltaX, deltaY);
 }
