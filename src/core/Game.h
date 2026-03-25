@@ -17,7 +17,7 @@
 #include "../player/ActionMap.h"
 #include "GameStateMachine.h"
 #include "../world/World.h"
-
+#include "../ui/Dashboard.h"
 class Game {
 public:
     Game();
@@ -37,6 +37,7 @@ private:
     World         m_world;
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;
+    Dashboard      m_dashboard;
 
 
     double m_lastFrameTime = 0.0;

@@ -43,6 +43,9 @@ void Game::init(int width, int height, const char *title) {
         m_contextManager,
         m_input
     ));
+
+    // 初始化信息仪表盘
+    m_dashboard.init(m_window);
 }
 
 void Game::run() {
@@ -59,15 +62,18 @@ void Game::run() {
             frameTime = kMaxFrameTime;
         }
         accumulator += frameTime;
+        m_world.update(m_player.getPosition());
 
         while (accumulator >= kFixedStep) {
             m_input.update();
             m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
-            m_world.update(m_player.getPosition());
             accumulator -= kFixedStep;
         }
 
         m_renderer.render(m_world, m_player.getCamera(), m_window);
+        m_dashboard.render(m_player, m_world,m_player.getCamera());
+        m_window.swapBuffers();
+
     }
 }
 

@@ -29,12 +29,27 @@ public:
     // 射线拾取 — 返回视线方向
     [[nodiscard]] Ray getPickRay() const;
 
+
+    //参数配置
+    [[nodiscard]] float getFOV() const;
+    [[nodiscard]] float getNear() const;
+    [[nodiscard]] float getFar() const;
+    [[nodiscard]] float getSensitivity() const;
+
+    void setFOV(float fov);
+    void setNear(float near);
+    void setFar(float far);
+    void setSensitivity(float sensitivity);
+
+
+
+private:
     float fov   = 90.0f;
     float nearPlane = 0.1f;
     float farPlane  = 500.0f;
     float sensitivity = 0.1f;
 
-private:
+
     glm::vec3 m_position;
     glm::vec3 m_front;
     glm::vec3 m_up;
