@@ -86,7 +86,6 @@ void Renderer::renderWorld(const World& world) {
 }
 
 void Renderer::endFrame(const Window &window) {
-    window.swapBuffers();
 }
 
 void Renderer::updateFrustum(const glm::mat4 &viewProj) {

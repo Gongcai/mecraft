@@ -48,7 +48,25 @@ add_executable(mecraft main.cpp
         assets/third_party/glad/glad.h
         src/world/World.cpp
         src/world/World.h
-        src/physics/Ray.h)
+        src/physics/Ray.h
+        assets/third_party/imgui/imconfig.h
+        assets/third_party/imgui/imgui.cpp
+        assets/third_party/imgui/imgui.h
+        assets/third_party/imgui/imgui_demo.cpp
+        assets/third_party/imgui/imgui_draw.cpp
+        assets/third_party/imgui/imgui_impl_glfw.cpp
+        assets/third_party/imgui/imgui_impl_glfw.h
+        assets/third_party/imgui/imgui_impl_opengl3.cpp
+        assets/third_party/imgui/imgui_impl_opengl3.h
+        assets/third_party/imgui/imgui_internal.h
+        assets/third_party/imgui/imgui_tables.cpp
+        assets/third_party/imgui/imgui_widgets.cpp
+        assets/third_party/imgui/imstb_rectpack.h
+        assets/third_party/imgui/imstb_textedit.h
+        assets/third_party/imgui/imstb_truetype.h
+        assets/third_party/imgui/imgui_impl_opengl3_loader.h
+        src/ui/Dashboard.cpp
+        src/ui/Dashboard.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)

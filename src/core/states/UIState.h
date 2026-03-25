@@ -19,7 +19,6 @@ public:
         // Release mouse for UI interaction
         m_input.captureMouse(false);
         // pause game time
-        Time::setTimeSpeed(0.0f);
     }
 
     void onExit() override {
@@ -33,7 +32,6 @@ public:
              m_input.captureMouse(true);
         }
         // restore game time
-        Time::setTimeSpeed(1.0f);
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
