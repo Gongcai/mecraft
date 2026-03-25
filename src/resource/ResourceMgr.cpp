@@ -17,7 +17,7 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
     // UV起始：注意 Y从下往上递增或者从上往下递增取决于 stbi_set_flip_vertically_on_load。这里假设是自下往上
     float uMin = static_cast<float>(tileCol * tileSize) / atlasWidth;
     float vMin = static_cast<float>(tileRow * tileSize) / atlasHeight;
-    
+
     float uMax = static_cast<float>((tileCol + 1) * tileSize) / atlasWidth;
     float vMax = static_cast<float>((tileRow + 1) * tileSize) / atlasHeight;
 

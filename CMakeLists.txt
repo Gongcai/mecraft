@@ -48,7 +48,7 @@ add_executable(mecraft main.cpp
         assets/third_party/glad/glad.h
         src/world/World.cpp
         src/world/World.h
-        "src/physics/Ray.h")
+        src/physics/Ray.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)

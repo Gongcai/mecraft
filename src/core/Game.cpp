@@ -46,15 +46,26 @@ void Game::init(int width, int height, const char *title) {
 }
 
 void Game::run() {
+    constexpr double kFixedStep = 1.0 / 60.0;
+    constexpr double kMaxFrameTime = 0.25; // Avoid huge catch-up loops after stalls.
+    double accumulator = 0.0;
 
     while (!m_window.shouldClose()) {
         m_window.pollEvents();
         Time::update();
-        m_input.update();
 
-        // Update state machine instead of manual checks
-        m_stateMachine.update(static_cast<float>(Time::deltaTime), m_input.snapshot());
-        m_world.update(m_player.getPosition());
+        double frameTime = Time::deltaTime;
+        if (frameTime > kMaxFrameTime) {
+            frameTime = kMaxFrameTime;
+        }
+        accumulator += frameTime;
+
+        while (accumulator >= kFixedStep) {
+            m_input.update();
+            m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
+            m_world.update(m_player.getPosition());
+            accumulator -= kFixedStep;
+        }
 
         m_renderer.render(m_world, m_player.getCamera(), m_window);
     }
