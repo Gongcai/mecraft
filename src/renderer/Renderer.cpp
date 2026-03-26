@@ -31,6 +31,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     m_projection = camera.getProjectionMatrix(window.getAspectRatio());
     m_view = camera.getViewMatrix();
+    drawCallCount = 0;
 }
 
 void Renderer::renderWorld(const World& world) {
@@ -65,6 +66,7 @@ void Renderer::renderWorld(const World& world) {
         if (mesh.vertexCount > 0) {
             glBindVertexArray(mesh.vao);
             glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
+            ++drawCallCount;
         }
 
         if (mesh.transparentVertexCount > 0) {
@@ -74,7 +76,7 @@ void Renderer::renderWorld(const World& world) {
 
             glBindVertexArray(mesh.transparentVao);
             glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
-
+            drawCallCount++;
             glDepthMask(GL_TRUE);
             glDisable(GL_BLEND);
         }
@@ -93,4 +95,8 @@ void Renderer::updateFrustum(const glm::mat4 &viewProj) {
 
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
     return false;
+}
+
+int Renderer::getDrawCallCount() const {
+    return drawCallCount;
 }
