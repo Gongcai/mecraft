@@ -167,6 +167,17 @@ void World::unloadChunk(int cx, int cz) {
     m_chunks.erase(chunkKey(cx, cz));
 }
 
+size_t World::getTotalVertexCount() const {
+    size_t total = 0;
+    for (const auto& pair : m_chunks) {
+        if (pair.second) {
+            total += pair.second->getMesh().vertexCount;
+            total += pair.second->getMesh().transparentVertexCount;
+        }
+    }
+    return total;
+}
+
 void World::updateLoadQueue(int playerChunkX, int playerChunkZ) {
     m_loadQueue.clear();
 

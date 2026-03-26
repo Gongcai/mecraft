@@ -71,7 +71,7 @@ void Game::run() {
         }
 
         m_renderer.render(m_world, m_player.getCamera(), m_window);
-        m_dashboard.render(m_player, m_world,m_player.getCamera());
+        m_dashboard.render(m_player, m_world,m_player.getCamera(),m_renderer);
         m_window.swapBuffers();
 
     }

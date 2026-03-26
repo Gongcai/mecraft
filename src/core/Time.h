@@ -29,7 +29,6 @@ public:
     static void update() {
         const double now = getRawTime();
         double rawDelta = now - lastRawTime;
-        std::cout << 1 / rawDelta << std::endl;
         lastRawTime = now;
 
         if (rawDelta <= 0) rawDelta = 0.0;

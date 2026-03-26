@@ -28,7 +28,7 @@ void Dashboard::init(const Window &window) {
     ImGui_ImplOpenGL3_Init();
 }
 
-void Dashboard::render( Player &player,  World &world,  Camera &camera) {
+void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer &render) {
     // (Your code calls glfwPollEvents())
     // ...
     // Start the Dear ImGui frame
@@ -38,7 +38,7 @@ void Dashboard::render( Player &player,  World &world,  Camera &camera) {
 
     showCameraStats(camera);
     showWorldStats(world);
-    showPerformanceStats();
+    showPerformanceStats(render);
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
@@ -53,6 +53,7 @@ void Dashboard::showWorldStats( World &world) {
     ImGui::Begin("World Stats");
     ImGui::Text("Render Distance: %d chunks", world.getRenderDistance());
     ImGui::Text("Loaded Chunks: %zu", world.getActiveChunks().size());
+    ImGui::Text("Total Vertices: %zu", world.getTotalVertexCount());
     if (ImGui::Button("Increase Render Distance")) {
         world.setRenderDistance(world.getRenderDistance() + 1);
     }ImGui::SameLine();
@@ -80,9 +81,10 @@ void Dashboard::showCameraStats( Camera &camera) {
     ImGui::End();
 }
 
-void Dashboard::showPerformanceStats() {
+void Dashboard::showPerformanceStats(Renderer &render) {
     ImGui::Begin("Performance Stats");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+    ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
     ImGui::End();
 }

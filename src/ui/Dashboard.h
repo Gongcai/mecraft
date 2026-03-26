@@ -13,17 +13,18 @@
 #include "../core/Window.h"
 #include "../player/Player.h"
 #include "../world/World.h"
+#include "../renderer/Renderer.h"
 class Dashboard {
 public:
     Dashboard();
     ~Dashboard();
     void init(const Window& window);
-    void render( Player &player, World &world, Camera &camera);
+    void render( Player &player, World &world, Camera &camera,Renderer &render);
 private:
     void showPlayerStats( Player& player);
     void showWorldStats( World& world);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats();
+    void showPerformanceStats(Renderer &render);
 };
 
 

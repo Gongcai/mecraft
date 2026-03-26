@@ -22,7 +22,7 @@ public:
     // 视锥剔除
     void updateFrustum(const glm::mat4& viewProj);
     [[nodiscard]] bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax) const;
-
+    [[nodiscard]] int getDrawCallCount() const;
 private:
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
@@ -31,6 +31,7 @@ private:
     //void renderUI(const UI& ui);
     void endFrame(const Window &window);
 
+    int drawCallCount = 0;
 
     Shader* m_chunkShader = nullptr;
     Shader* m_uiShader = nullptr;

@@ -30,6 +30,8 @@ public:
     // 获取所有需要渲染的区块
     [[nodiscard]] const auto& getActiveChunks() const { return m_chunks; }
 
+    [[nodiscard]] size_t getTotalVertexCount() const;
+
     [[nodiscard]] int getRenderDistance() const { return m_renderDistance; }
     void setRenderDistance(int dist);
 
