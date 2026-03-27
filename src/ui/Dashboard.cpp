@@ -4,6 +4,8 @@
 
 #include "Dashboard.h"
 
+#include <cstddef>
+
 Dashboard::Dashboard() {
     // Setup Dear ImGui context
 
@@ -86,5 +88,27 @@ void Dashboard::showPerformanceStats(Renderer &render) {
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
+
+    int submitBudget = render.getMeshingSubmitBudget();
+    if (ImGui::SliderInt("Meshing Submit Budget", &submitBudget, 1, 64)) {
+        render.setMeshingSubmitBudget(submitBudget);
+    }
+
+    const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
+    ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
+    ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
+    ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);
+
+    const size_t historyCount = render.getMeshingHistoryCount();
+    if (historyCount > 1) {
+        const auto& submittedHistory = render.getMeshingSubmittedHistory();
+        const auto& completedHistory = render.getMeshingCompletedHistory();
+        const auto& inFlightHistory = render.getMeshingInFlightHistory();
+
+        ImGui::PlotLines("Submitted History", submittedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
+        ImGui::PlotLines("Completed History", completedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
+        ImGui::PlotLines("In-Flight History", inFlightHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 256.0f, ImVec2(0.0f, 60.0f));
+    }
+
     ImGui::End();
 }

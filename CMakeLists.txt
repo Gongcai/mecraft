@@ -45,6 +45,8 @@ add_executable(mecraft main.cpp
         src/world/Chunk.h
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMesher.h
+        src/renderer/ChunkMeshingService.cpp
+        src/renderer/ChunkMeshingService.h
         assets/third_party/glad/glad.h
         src/world/World.cpp
         src/world/World.h
@@ -66,7 +68,8 @@ add_executable(mecraft main.cpp
         assets/third_party/imgui/imstb_truetype.h
         assets/third_party/imgui/imgui_impl_opengl3_loader.h
         src/ui/Dashboard.cpp
-        src/ui/Dashboard.h)
+        src/ui/Dashboard.h
+        assets/third_party/FastNoise/FastNoiseLite.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)

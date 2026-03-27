@@ -54,6 +54,7 @@ public:
 
     [[nodiscard]] bool isDirty() const;
     void markDirty();
+    [[nodiscard]] uint64_t getMeshRevision() const;
     void setMesh(ChunkMesh&& mesh);
     [[nodiscard]] const ChunkMesh& getMesh() const;
     ChunkMesh& getMesh();
@@ -78,9 +79,10 @@ private:
     std::array<uint8_t, BLOCK_COUNT> m_lightMap{}; // high nibble = sun, low nibble = block
 
     ChunkMesh m_mesh;
+
     bool m_dirty = true;
+    uint64_t m_meshRevision = 1;
 };
 
 #endif // MECRAFT_CHUNK_H
-
 

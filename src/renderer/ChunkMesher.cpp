@@ -1,6 +1,7 @@
 #include "ChunkMesher.h"
 
 #include <array>
+#include <cstddef>
 #include <utility>
 
 #include <glm/vec2.hpp>
@@ -35,6 +36,20 @@ constexpr std::array<IVec3, 6> kFaceAxisB = {{{0, 0, -1}, {0, 0, 1}, {0, 1, 0}, 
 
 constexpr std::array<std::pair<int, int>, 4> kCornerSigns = {{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}}};
 
+size_t toIndex(const int x, const int y, const int z) {
+    return static_cast<size_t>(x) +
+           static_cast<size_t>(z) * Chunk::SIZE_X +
+           static_cast<size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
+}
+
+size_t toBorderYZIndex(const int y, const int z) {
+    return static_cast<size_t>(z) + static_cast<size_t>(y) * Chunk::SIZE_Z;
+}
+
+size_t toBorderYXIndex(const int y, const int x) {
+    return static_cast<size_t>(x) + static_cast<size_t>(y) * Chunk::SIZE_X;
+}
+
 IVec3 add(const IVec3& a, const IVec3& b) {
     return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
@@ -43,36 +58,37 @@ IVec3 mul(const IVec3& a, const int scalar) {
     return {a.x * scalar, a.y * scalar, a.z * scalar};
 }
 
-BlockID getNeighborAwareBlock(const Chunk& chunk, int x, int y, int z) {
+BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (y < 0 || y >= Chunk::SIZE_Y) {
         return BlockType::AIR;
     }
 
+    // Snapshot only stores +/-X and +/-Z borders, not diagonal corner neighbors.
+    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
+        return BlockType::AIR;
+    }
+
     if (x < 0) {
-        const Chunk* neighbor = chunk.neighbors[1];
-        return neighbor ? neighbor->getBlock(x + Chunk::SIZE_X, y, z) : BlockType::AIR;
+        return snapshot.negXBorder[toBorderYZIndex(y, z)];
     }
     if (x >= Chunk::SIZE_X) {
-        const Chunk* neighbor = chunk.neighbors[0];
-        return neighbor ? neighbor->getBlock(x - Chunk::SIZE_X, y, z) : BlockType::AIR;
+        return snapshot.posXBorder[toBorderYZIndex(y, z)];
     }
     if (z < 0) {
-        const Chunk* neighbor = chunk.neighbors[3];
-        return neighbor ? neighbor->getBlock(x, y, z + Chunk::SIZE_Z) : BlockType::AIR;
+        return snapshot.negZBorder[toBorderYXIndex(y, x)];
     }
     if (z >= Chunk::SIZE_Z) {
-        const Chunk* neighbor = chunk.neighbors[2];
-        return neighbor ? neighbor->getBlock(x, y, z - Chunk::SIZE_Z) : BlockType::AIR;
+        return snapshot.posZBorder[toBorderYXIndex(y, x)];
     }
 
-    return chunk.getBlock(x, y, z);
+    return snapshot.blocks[toIndex(x, y, z)];
 }
 
-bool isSolidForAO(const Chunk& chunk, int x, int y, int z) {
+bool isSolidForAO(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (y < 0 || y >= Chunk::SIZE_Y) {
         return false;
     }
-    const BlockID id = getNeighborAwareBlock(chunk, x, y, z);
+    const BlockID id = getNeighborAwareBlock(snapshot, x, y, z);
     return BlockRegistry::get(id).isSolid;
 }
 
@@ -103,7 +119,7 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
     }
 }
 
-void computeFaceAO(const Chunk& chunk, const int x, const int y, const int z, const int face, float outAO[4]) {
+void computeFaceAO(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z, const int face, float outAO[4]) {
     const IVec3 blockPos{x, y, z};
     const IVec3 normal = kFaceNormals[face];
     const IVec3 axisA = kFaceAxisA[face];
@@ -119,26 +135,68 @@ void computeFaceAO(const Chunk& chunk, const int x, const int y, const int z, co
         const IVec3 side2Pos = add(base, mul(axisB, signB));
         const IVec3 cornerPos = add(add(base, mul(axisA, signA)), mul(axisB, signB));
 
-        const bool side1 = isSolidForAO(chunk, side1Pos.x, side1Pos.y, side1Pos.z);
-        const bool side2 = isSolidForAO(chunk, side2Pos.x, side2Pos.y, side2Pos.z);
-        const bool corner = isSolidForAO(chunk, cornerPos.x, cornerPos.y, cornerPos.z);
+        const bool side1 = isSolidForAO(snapshot, side1Pos.x, side1Pos.y, side1Pos.z);
+        const bool side2 = isSolidForAO(snapshot, side2Pos.x, side2Pos.y, side2Pos.z);
+        const bool corner = isSolidForAO(snapshot, cornerPos.x, cornerPos.y, cornerPos.z);
 
         outAO[i] = static_cast<float>(calcAOValue(side1, side2, corner));
     }
 }
+
+uint8_t getSunlight(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
+    return static_cast<uint8_t>((snapshot.lightMap[toIndex(x, y, z)] >> 4) & 0x0F);
 }
 
-void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
-    std::vector<BlockVertex> opaqueVertices;
-    std::vector<BlockVertex> transparentVertices;
+uint8_t getBlockLight(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
+    return static_cast<uint8_t>(snapshot.lightMap[toIndex(x, y, z)] & 0x0F);
+}
 
-    opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
-    transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
+void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
+    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            const size_t index = toBorderYZIndex(y, z);
+            const Chunk* posX = chunk.neighbors[0];
+            const Chunk* negX = chunk.neighbors[1];
+            snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z) : BlockType::AIR;
+            snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z) : BlockType::AIR;
+        }
+        for (int x = 0; x < Chunk::SIZE_X; ++x) {
+            const size_t index = toBorderYXIndex(y, x);
+            const Chunk* posZ = chunk.neighbors[2];
+            const Chunk* negZ = chunk.neighbors[3];
+            snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0) : BlockType::AIR;
+            snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1) : BlockType::AIR;
+        }
+    }
+}
+}
+
+ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
+    ChunkMeshingSnapshot snapshot;
 
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const BlockID blockId = chunk.getBlock(x, y, z);
+                const size_t index = toIndex(x, y, z);
+                snapshot.blocks[index] = chunk.getBlock(x, y, z);
+                snapshot.lightMap[index] = static_cast<uint8_t>((chunk.getSunlight(x, y, z) << 4) | chunk.getBlockLight(x, y, z));
+            }
+        }
+    }
+
+    captureBorders(chunk, snapshot);
+    return snapshot;
+}
+
+ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, const TextureAtlas& atlas) {
+    ChunkMeshData meshData;
+    meshData.opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
+    meshData.transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
+
+    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
                 if (blockId == BlockType::AIR) {
                     continue;
                 }
@@ -152,17 +210,17 @@ void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
                     const int ny = y + normal.y;
                     const int nz = z + normal.z;
 
-                    if (!shouldRenderFace(chunk, nx, ny, nz, blockId)) {
+                    if (!shouldRenderFace(snapshot, nx, ny, nz, blockId)) {
                         continue;
                     }
 
-                    const uint8_t sunlight = chunk.getSunlight(x, y, z);
-                    const uint8_t blockLight = chunk.getBlockLight(x, y, z);
+                    const uint8_t sunlight = getSunlight(snapshot, x, y, z);
+                    const uint8_t blockLight = getBlockLight(snapshot, x, y, z);
 
                     float aoValues[4] = {3.0f, 3.0f, 3.0f, 3.0f};
-                    computeFaceAO(chunk, x, y, z, face, aoValues);
+                    computeFaceAO(snapshot, x, y, z, face, aoValues);
 
-                    auto& target = transparent ? transparentVertices : opaqueVertices;
+                    auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
                     addFace(target,
                             glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                             face,
@@ -176,18 +234,24 @@ void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
         }
     }
 
+    return meshData;
+}
+
+void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
+    const ChunkMeshingSnapshot snapshot = captureSnapshot(chunk);
+    ChunkMeshData meshData = buildMeshData(snapshot, atlas);
     ChunkMesh mesh;
-    mesh.upload(opaqueVertices);
-    mesh.uploadTransparent(transparentVertices);
+    mesh.upload(meshData.opaqueVertices);
+    mesh.uploadTransparent(meshData.transparentVertices);
     chunk.setMesh(std::move(mesh));
 }
 
-bool ChunkMesher::shouldRenderFace(const Chunk& chunk,
+bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
                                    const int nx,
                                    const int ny,
                                    const int nz,
                                    const BlockID currentId) {
-    const BlockID neighborId = getNeighborAwareBlock(chunk, nx, ny, nz);
+    const BlockID neighborId = getNeighborAwareBlock(snapshot, nx, ny, nz);
     if (neighborId == BlockType::AIR) {
         return true;
     }
