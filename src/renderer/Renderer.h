@@ -7,23 +7,45 @@
 #include "../core/Camera.h"
 #include "../resource/ResourceMgr.h"
 #include "../core/Window.h"
+#include "ChunkMeshingService.h"
 #include "Shader.h"
 #include <glm/glm.hpp>
 #include <array>
+#include <unordered_set>
 
 class World;
 
 class Renderer {
 public:
+    struct MeshingFrameStats {
+        int submitBudget = 0;
+        int submitted = 0;
+        int completed = 0;
+        int inFlight = 0;
+    };
+
+    static constexpr size_t MESHING_HISTORY_SIZE = 120;
+
+    ~Renderer();
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void render(const World& world, const Camera &camera, const Window &window);
+
+    void setMeshingSubmitBudget(int budget);
+    [[nodiscard]] int getMeshingSubmitBudget() const;
+    [[nodiscard]] MeshingFrameStats getMeshingFrameStats() const;
+    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingSubmittedHistory() const;
+    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingCompletedHistory() const;
+    [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingInFlightHistory() const;
+    [[nodiscard]] size_t getMeshingHistoryCount() const;
 
     // 视锥剔除
     void updateFrustum(const glm::mat4& viewProj);
     [[nodiscard]] bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax) const;
     [[nodiscard]] int getDrawCallCount() const;
 private:
+    void recordMeshingHistory();
+    void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
     //TODO: 传入 World 和 UI 数据进行渲染
@@ -37,6 +59,16 @@ private:
     Shader* m_uiShader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 
+    ChunkMeshingService m_meshingService;
+    std::unordered_set<int64_t> m_meshingInFlight;
+    int m_meshingSubmitBudget = 8;
+    int m_meshingSubmittedThisFrame = 0;
+    int m_meshingCompletedThisFrame = 0;
+    size_t m_meshingHistoryCount = 0;
+    std::array<float, MESHING_HISTORY_SIZE> m_meshingSubmittedHistory{};
+    std::array<float, MESHING_HISTORY_SIZE> m_meshingCompletedHistory{};
+    std::array<float, MESHING_HISTORY_SIZE> m_meshingInFlightHistory{};
+
     glm::mat4 m_projection = glm::mat4(1.0f);
     glm::mat4 m_view = glm::mat4(1.0f);
     // 视锥体6个平面
@@ -46,3 +78,4 @@ private:
 
 
 #endif //MECRAFT_RENDERER_H
+

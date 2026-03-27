@@ -73,6 +73,7 @@ void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
 
     m_blocks[index] = id;
     m_dirty = true;
+    ++m_meshRevision;
 }
 
 glm::ivec3 Chunk::worldToLocal(const int wx, const int wy, const int wz) {
@@ -89,6 +90,11 @@ bool Chunk::isDirty() const {
 
 void Chunk::markDirty() {
     m_dirty = true;
+    ++m_meshRevision;
+}
+
+uint64_t Chunk::getMeshRevision() const {
+    return m_meshRevision;
 }
 
 void Chunk::setMesh(ChunkMesh&& mesh) {
@@ -204,6 +210,4 @@ void ChunkMesh::destroy() {
     vertexCount = 0;
     transparentVertexCount = 0;
 }
-
-
 

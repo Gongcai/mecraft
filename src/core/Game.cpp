@@ -29,7 +29,7 @@ void Game::init(int width, int height, const char *title) {
     BlockRegistry::init(&m_resourceMgr);
     BlockRegistry::printAllBlocks();
     m_world.init(1337);
-
+    m_world.setRenderDistance(1);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getFlatSurfaceY() + 2), 0.0f});
     // 初始化渲染器
@@ -78,4 +78,5 @@ void Game::run() {
 }
 
 void Game::shutdown() {
+    m_renderer.shutdown();
 }
