@@ -49,7 +49,7 @@ glm::vec3 Camera::getUp() const {
     return m_up;
 }
 
-Ray Camera::getPickRay() const {
+PhysicsInfo Camera::getPickRay() const {
     return {m_position, m_front};
 }
 

@@ -64,14 +64,42 @@ void World::setBlock(int x, int y, int z, BlockID id) {
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
 
     auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
-    if (it != m_chunks.end()) {
-        int localX = x - chunkX * Chunk::SIZE_X;
-        int localZ = z - chunkZ * Chunk::SIZE_Z;
-        it->second->setBlock(localX, y, localZ, id);
+    if (it == m_chunks.end()) {
+        return;
+    }
+
+    const int localX = x - chunkX * Chunk::SIZE_X;
+    const int localZ = z - chunkZ * Chunk::SIZE_Z;
+    Chunk& chunk = *it->second;
+
+    const BlockID oldId = chunk.getBlock(localX, y, localZ);
+    if (oldId == id) {
+        return;
+    }
+
+    chunk.setBlock(localX, y, localZ, id);
+
+    // Recompute simple sky light for this vertical column so newly exposed blocks light up.
+    bool lightChanged = false;
+    bool skylightVisible = true;
+    for (int scanY = Chunk::SIZE_Y - 1; scanY >= 0; --scanY) {
+        const BlockID columnId = chunk.getBlock(localX, scanY, localZ);
+        const uint8_t targetSun = skylightVisible ? 15 : 0;
+        if (chunk.getSunlight(localX, scanY, localZ) != targetSun) {
+            chunk.setSunlight(localX, scanY, localZ, targetSun);
+            lightChanged = true;
+        }
+        if (BlockRegistry::get(columnId).isSolid) {
+            skylightVisible = false;
+        }
+    }
+
+    if (lightChanged) {
+        chunk.markDirty();
     }
 }
 
-bool World::raycast(const Ray& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {
+bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {
     glm::vec3 rayDir = glm::normalize(ray.direction);
     glm::vec3 rayOri = ray.origin;
 

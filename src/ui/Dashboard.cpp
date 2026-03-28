@@ -94,6 +94,11 @@ void Dashboard::showPerformanceStats(Renderer &render) {
         render.setMeshingSubmitBudget(submitBudget);
     }
 
+    int regionChunkSize = render.getRegionChunkSize();
+    if (ImGui::SliderInt("Region Chunk Size", &regionChunkSize, 1, 16)) {
+        render.setRegionChunkSize(regionChunkSize);
+    }
+
     const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
     ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
     ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
@@ -109,6 +114,23 @@ void Dashboard::showPerformanceStats(Renderer &render) {
         ImGui::PlotLines("Completed History", completedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
         ImGui::PlotLines("In-Flight History", inFlightHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 256.0f, ImVec2(0.0f, 60.0f));
     }
+
+    const Renderer::CullingFrameStats cullingStats = render.getCullingFrameStats();
+    const float regionPassRate = cullingStats.regionTests > 0
+        ? (100.0f * static_cast<float>(cullingStats.regionPassed) / static_cast<float>(cullingStats.regionTests))
+        : 0.0f;
+    const float columnPassRate = cullingStats.columnTests > 0
+        ? (100.0f * static_cast<float>(cullingStats.columnPassed) / static_cast<float>(cullingStats.columnTests))
+        : 0.0f;
+    const float chunkPassRate = cullingStats.chunkTests > 0
+        ? (100.0f * static_cast<float>(cullingStats.chunkPassed) / static_cast<float>(cullingStats.chunkTests))
+        : 0.0f;
+
+    ImGui::Separator();
+    ImGui::Text("Culling Stats");
+    ImGui::Text("Region Tests: %d, Pass: %.1f%%", cullingStats.regionTests, regionPassRate);
+    ImGui::Text("Column Tests: %d, Pass: %.1f%%", cullingStats.columnTests, columnPassRate);
+    ImGui::Text("Chunk Tests: %d, Pass: %.1f%%", cullingStats.chunkTests, chunkPassRate);
 
     ImGui::End();
 }

@@ -12,7 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "Chunk.h"
-#include "../physics/Ray.h"
+#include "../physics/PhysicsInfo.h"
 
 class World {
 public:
@@ -24,7 +24,7 @@ public:
     void setBlock(int x, int y, int z, BlockID id);
 
     // 射线拾取：返回命中的方块位置和放置位置
-    bool raycast(const Ray& ray, float maxDist,
+    bool raycast(const PhysicsInfo& ray, float maxDist,
                  glm::ivec3& hitBlock, glm::ivec3& placeBlock) const;
 
     // 获取所有需要渲染的区块

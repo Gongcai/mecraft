@@ -5,7 +5,7 @@
 #include "states/GameplayState.h"
 #include "../world/Block.h"
 
-Game::Game() : m_contextManager(m_actionMap,m_input) {
+Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world) {
 }
 
 void Game::init(int width, int height, const char *title) {
@@ -29,7 +29,7 @@ void Game::init(int width, int height, const char *title) {
     BlockRegistry::init(&m_resourceMgr);
     BlockRegistry::printAllBlocks();
     m_world.init(1337);
-    m_world.setRenderDistance(1);
+    m_world.setRenderDistance(8);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getFlatSurfaceY() + 2), 0.0f});
     // 初始化渲染器
@@ -41,7 +41,9 @@ void Game::init(int width, int height, const char *title) {
         m_stateMachine,
         m_player,
         m_contextManager,
-        m_input
+        m_input,
+        m_physicsSystem,
+        m_world
     ));
 
     // 初始化信息仪表盘
@@ -62,12 +64,12 @@ void Game::run() {
             frameTime = kMaxFrameTime;
         }
         accumulator += frameTime;
-        m_world.update(m_player.getPosition());
 
         while (accumulator >= kFixedStep) {
             m_input.update();
             m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
             accumulator -= kFixedStep;
+            m_world.update(m_player.getPosition());
         }
 
         m_renderer.render(m_world, m_player.getCamera(), m_window);

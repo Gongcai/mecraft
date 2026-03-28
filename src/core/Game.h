@@ -17,7 +17,9 @@
 #include "../player/ActionMap.h"
 #include "GameStateMachine.h"
 #include "../world/World.h"
+#include "../physics/PhysicsSystem.h"
 #include "../ui/Dashboard.h"
+
 class Game {
 public:
     Game();
@@ -35,6 +37,7 @@ private:
     GameStateMachine m_stateMachine; // Add StateMachine
     Player        m_player;
     World         m_world;
+    physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;
     Dashboard      m_dashboard;

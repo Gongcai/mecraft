@@ -3,88 +3,96 @@
 //
 
 #include "Player.h"
-#include <iostream>
+
+#include "../physics/PhysicsSystem.h"
 
 void Player::init(const glm::vec3 &spawnPos) {
     m_position = spawnPos;
     m_velocity = glm::vec3(0.0f);
-    m_onGround = false; // Initially in air
+    m_onGround = false;
+    m_sprinting = false;
+
+    m_body.position = spawnPos;
+    m_body.velocity = glm::vec3(0.0f);
+    m_body.halfExtents = glm::vec3(m_playerWidth * 0.5f, m_playerHeight * 0.5f, m_playerWidth * 0.5f);
+    m_body.colliderOffset = glm::vec3(0.0f, m_playerHeight * 0.5f, 0.0f);
+
     m_camera.setPosition(getEyePosition());
 }
 
-void Player::update(float dt, const InputSnapshot &snapshot, const InputContextManager& inputContext) {
-    // Rely on Game loop to ensure we only update when appropriate context is active
-    // OR verify context ourselves.
-    // If we are called, we should check input. Context Manager handles if input is valid for us.
+void Player::update(float dt, const InputSnapshot &snapshot, const InputContextManager &inputContext,
+                    physics::PhysicsSystem &physicsSystem) {
+    (void) snapshot;
     handleMouseLook(inputContext);
-    handleMovement(dt, inputContext);
+    handleMovement(inputContext);
+
+    physicsSystem.updateBody(m_body, m_intent, dt);
+
+    m_position = m_body.position;
+    m_velocity = m_body.velocity;
+    m_onGround = m_body.isGrounded;
+    m_camera.setPosition(getEyePosition());
 }
 
 glm::vec3 Player::getPosition() const {
-    return m_position;
+    return m_body.position;
 }
 
 glm::vec3 Player::getEyePosition() const {
-    return m_position + glm::vec3(0.0f, m_eyeHeight, 0.0f);
+    return m_body.position + glm::vec3(0.0f, m_eyeHeight, 0.0f);
 }
 
 Camera &Player::getCamera() {
     return m_camera;
 }
 
-void Player::handleMovement(float dt, const InputContextManager& inputContext) {
+bool Player::wouldOverlapBlock(const glm::ivec3& blockPos) const {
+    const glm::vec3 bodyCenter = m_body.position + m_body.colliderOffset;
+    const glm::vec3 bodyMin = bodyCenter - m_body.halfExtents;
+    const glm::vec3 bodyMax = bodyCenter + m_body.halfExtents;
 
-    // 基础移动方向：基于摄像机水平朝向
+    const glm::vec3 blockMin(static_cast<float>(blockPos.x),
+                             static_cast<float>(blockPos.y),
+                             static_cast<float>(blockPos.z));
+    const glm::vec3 blockMax = blockMin + glm::vec3(1.0f, 1.0f, 1.0f);
+
+    return bodyMin.x < blockMax.x && bodyMax.x > blockMin.x &&
+           bodyMin.y < blockMax.y && bodyMax.y > blockMin.y &&
+           bodyMin.z < blockMax.z && bodyMax.z > blockMin.z;
+}
+
+void Player::handleMovement(const InputContextManager &inputContext) {
     glm::vec3 front = m_camera.getFront();
     glm::vec3 right = m_camera.getRight();
 
-    // 扁平化到XZ平面（忽略Y轴，除非是飞行模式，但这里模拟行走）
     front.y = 0.0f;
     right.y = 0.0f;
-    if (glm::length(front) > 0.001f) front = glm::normalize(front);
-    if (glm::length(right) > 0.001f) right = glm::normalize(right);
 
-    // 一步到位抓取二维意图方向，再也不用一堆 If-Else
-    float forwardInput = inputContext.getAxisValue(Axis::Vertical);
-    float rightInput   = inputContext.getAxisValue(Axis::Horizontal);
+    if (glm::length(front) > 0.001f) {
+        front = glm::normalize(front);
+    }
+    if (glm::length(right) > 0.001f) {
+        right = glm::normalize(right);
+    }
 
-    glm::vec3 moveDir = front * forwardInput + right * rightInput;
+    const float forwardInput = inputContext.getAxisValue(Axis::Vertical);
+    const float rightInput = inputContext.getAxisValue(Axis::Horizontal);
 
-    if (glm::length(moveDir) > 0.001f) moveDir = glm::normalize(moveDir);
+    glm::vec3 wishDir = front * forwardInput + right * rightInput;
+    if (glm::length(wishDir) > 0.001f) {
+        wishDir = glm::normalize(wishDir);
+    }
 
-    // 简单的速度控制
     m_sprinting = inputContext.isActionTriggered(Action::Sprint);
-    float currentSpeed = m_sprinting ? m_sprintSpeed : m_walkSpeed;
 
-    // 目前没有 World 类处理碰撞和物理， temporarily implement simple free-cam flight for debugging
-    // This allows moving up/down with Space/Shift
-    // Using Jump action for Up, Sprint or Crouch for Down?
-    // Current code used space/left_shift.
-    // Jump -> Space. Crouch -> Shift? OR Sprint -> Control.
-    // Binding for Crouch? I didn't add Crouch binding to default list.
-    // Let's assume Jump is Up. And I need a Down action.
-    // "Crouch" action exists in enum. I should bind it.
-
-    if (inputContext.isActionTriggered(Action::Jump)) {
-        m_position.y += currentSpeed * dt;
-    }
-    // Shift was used for down. Sprint is usually shift in many games, but here it was Control.
-    // Let's bind Crouch to Shift and use it for Down.
-    if (inputContext.isActionTriggered(Action::Crouch)) {
-        m_position.y -= currentSpeed * dt;
-    }
-
-    m_position += moveDir * currentSpeed * dt;
-
-    // 同步摄像机位置
-    m_camera.setPosition(getEyePosition());
+    // PhysicsSystem currently expects world-space X/Z intent.
+    m_intent.move = glm::vec2(wishDir.x, wishDir.z);
+    m_intent.wantsJump = inputContext.isActionTriggered(Action::Jump);
+    m_intent.wantsSprint = m_sprinting;
 }
 
 void Player::handleMouseLook(const InputContextManager &inputContext) {
-    float deltaX = inputContext.getAxisValue(Axis::LookX);
-    float deltaY = inputContext.getAxisValue(Axis::LookY);
-    // 使用 snapshot 中的 mouseDelta
-    // 注意：InputManager 应该负责处理灵敏度，或者我们在 Camera 中处理
-    // Camera::processMouseMovement 接受 offset
+    const float deltaX = inputContext.getAxisValue(Axis::LookX);
+    const float deltaY = inputContext.getAxisValue(Axis::LookY);
     m_camera.processMouseMovement(deltaX, deltaY);
 }

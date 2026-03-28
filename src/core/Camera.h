@@ -8,7 +8,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "../physics/Ray.h"
+#include "../physics/PhysicsInfo.h"
 
 
 class Camera {
@@ -27,7 +27,7 @@ public:
     [[nodiscard]] glm::vec3 getUp() const;
 
     // 射线拾取 — 返回视线方向
-    [[nodiscard]] Ray getPickRay() const;
+    [[nodiscard]] PhysicsInfo getPickRay() const;
 
 
     //参数配置
