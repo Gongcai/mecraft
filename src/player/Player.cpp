@@ -61,6 +61,23 @@ bool Player::wouldOverlapBlock(const glm::ivec3& blockPos) const {
            bodyMin.z < blockMax.z && bodyMax.z > blockMin.z;
 }
 
+void Player::setTargetBlock(const glm::ivec3& blockPos) {
+    m_targetBlock = blockPos;
+    m_hasTargetBlock = true;
+}
+
+void Player::clearTargetBlock() {
+    m_hasTargetBlock = false;
+}
+
+bool Player::hasTargetBlock() const {
+    return m_hasTargetBlock;
+}
+
+glm::ivec3 Player::getTargetBlock() const {
+    return m_targetBlock;
+}
+
 void Player::handleMovement(const InputContextManager &inputContext) {
     glm::vec3 front = m_camera.getFront();
     glm::vec3 right = m_camera.getRight();

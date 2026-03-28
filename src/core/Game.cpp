@@ -72,7 +72,7 @@ void Game::run() {
             m_world.update(m_player.getPosition());
         }
 
-        m_renderer.render(m_world, m_player.getCamera(), m_window);
+        m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
         m_dashboard.render(m_player, m_world,m_player.getCamera(),m_renderer);
         m_window.swapBuffers();
 

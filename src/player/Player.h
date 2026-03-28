@@ -24,6 +24,10 @@ public:
     [[nodiscard]] glm::vec3 getEyePosition() const;
     Camera& getCamera();
     [[nodiscard]] bool wouldOverlapBlock(const glm::ivec3& blockPos) const;
+    void setTargetBlock(const glm::ivec3& blockPos);
+    void clearTargetBlock();
+    [[nodiscard]] bool hasTargetBlock() const;
+    [[nodiscard]] glm::ivec3 getTargetBlock() const;
 
 private:
     glm::vec3 m_position{};
@@ -39,6 +43,9 @@ private:
 
     PhysicsBody m_body{};
     MoveIntent m_intent{};
+
+    bool m_hasTargetBlock = false;
+    glm::ivec3 m_targetBlock{};
 
     void handleMovement(const InputContextManager& inputContext);
     void handleMouseLook(const InputContextManager& inputContext);

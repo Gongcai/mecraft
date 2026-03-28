@@ -6,6 +6,7 @@
 
 #include "ChunkMesher.h"
 #include "../world/World.h"
+#include "../player/Player.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
@@ -48,17 +49,28 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkShader = resourceMgr.getShader("chunk");
     m_uiShader = resourceMgr.getShader("ui");
+    m_outlineShader = resourceMgr.getShader("outline");
+    initOutlineMesh();
     m_meshingService.start();
 }
 
 void Renderer::shutdown() {
     m_meshingService.shutdown();
     m_meshingInFlight.clear();
+    if (m_outlineVbo != 0) {
+        glDeleteBuffers(1, &m_outlineVbo);
+        m_outlineVbo = 0;
+    }
+    if (m_outlineVao != 0) {
+        glDeleteVertexArrays(1, &m_outlineVao);
+        m_outlineVao = 0;
+    }
 }
 
-void Renderer::render(const World& world, const Camera &camera, const Window &window) {
+void Renderer::render(const World& world, const Camera &camera, const Window &window, const Player& player) {
     beginFrame(camera, window);
     renderWorld(world);
+    renderBlockOutline(player);
     endFrame(window);
 }
 
@@ -281,6 +293,61 @@ void Renderer::renderWorld(const World& world) {
 
 void Renderer::endFrame(const Window &window) {
     recordMeshingHistory();
+}
+
+void Renderer::initOutlineMesh() {
+    if (m_outlineVao != 0) {
+        return;
+    }
+
+    constexpr std::array<float, 72> kOutlineVertices = {
+        0,0,0, 1,0,0,  1,0,0, 1,1,0,  1,1,0, 0,1,0,  0,1,0, 0,0,0,
+        0,0,1, 1,0,1,  1,0,1, 1,1,1,  1,1,1, 0,1,1,  0,1,1, 0,0,1,
+        0,0,0, 0,0,1,  1,0,0, 1,0,1,  1,1,0, 1,1,1,  0,1,0, 0,1,1
+    };
+
+    glGenVertexArrays(1, &m_outlineVao);
+    glGenBuffers(1, &m_outlineVbo);
+
+    glBindVertexArray(m_outlineVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_outlineVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kOutlineVertices.size() * sizeof(float)),
+                 kOutlineVertices.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void Renderer::renderBlockOutline(const Player& player) {
+    if (m_outlineShader == nullptr || m_outlineVao == 0 || !player.hasTargetBlock()) {
+        return;
+    }
+
+    const glm::ivec3 target = player.getTargetBlock();
+
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, glm::vec3(target) + glm::vec3(0.5f));
+    model = glm::scale(model, glm::vec3(1.002f));
+    model = glm::translate(model, glm::vec3(-0.5f));
+
+    m_outlineShader->use();
+    m_outlineShader->setMat4("viewProj", m_projection * m_view);
+    m_outlineShader->setMat4("model", model);
+    m_outlineShader->setVec3("lineColor", 0.05f, 0.05f, 0.05f);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glLineWidth(2.0f);
+
+    glBindVertexArray(m_outlineVao);
+    glDrawArrays(GL_LINES, 0, 24);
+    glBindVertexArray(0);
+
+    glLineWidth(1.0f);
+    glDepthMask(GL_TRUE);
+    ++drawCallCount;
 }
 
 void Renderer::recordMeshingHistory() {
