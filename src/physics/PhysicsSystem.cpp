@@ -110,7 +110,9 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
         input /= len;
     }
     else if (len < 0.001f && wasGrounded) {
-        body.velocity = {0.0f,0.0f,0.0f};
+        // Keep grounded body stable without destroying vertical state.
+        body.velocity.x = 0.0f;
+        body.velocity.z = 0.0f;
     }
 
 
@@ -172,13 +174,8 @@ void moveAndCollideAxis(PhysicsBody& body, const World& world, const float dt, c
             continue;
         }
 
+        // Roll back to last valid position to avoid per-frame contact jitter.
         body.position = prevPos;
-
-        const float nudge = (stepDelta > 0.0f) ? -kContactEpsilon : kContactEpsilon;
-        body.position[axis] += nudge;
-        if (overlapsSolid(world, makeBodyAABBAt(body, body.position))) {
-            body.position = prevPos;
-        }
 
         body.velocity[axis] = 0.0f;
         if (axis == 1 && stepDelta < 0.0f) {
