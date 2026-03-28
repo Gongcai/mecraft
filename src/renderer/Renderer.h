@@ -24,6 +24,15 @@ public:
         int inFlight = 0;
     };
 
+    struct CullingFrameStats {
+        int regionTests = 0;
+        int regionPassed = 0;
+        int columnTests = 0;
+        int columnPassed = 0;
+        int chunkTests = 0;
+        int chunkPassed = 0;
+    };
+
     static constexpr size_t MESHING_HISTORY_SIZE = 120;
 
     ~Renderer();
@@ -32,8 +41,11 @@ public:
     void render(const World& world, const Camera &camera, const Window &window);
 
     void setMeshingSubmitBudget(int budget);
+    void setRegionChunkSize(int chunkSize);
     [[nodiscard]] int getMeshingSubmitBudget() const;
+    [[nodiscard]] int getRegionChunkSize() const;
     [[nodiscard]] MeshingFrameStats getMeshingFrameStats() const;
+    [[nodiscard]] CullingFrameStats getCullingFrameStats() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingSubmittedHistory() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingCompletedHistory() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingInFlightHistory() const;
@@ -44,6 +56,11 @@ public:
     [[nodiscard]] bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax) const;
     [[nodiscard]] int getDrawCallCount() const;
 private:
+    struct Plane {
+        glm::vec3 n = glm::vec3(0.0f);
+        float d = 0.0f;
+    };
+
     void recordMeshingHistory();
     void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
@@ -62,8 +79,15 @@ private:
     ChunkMeshingService m_meshingService;
     std::unordered_set<int64_t> m_meshingInFlight;
     int m_meshingSubmitBudget = 8;
+    int m_regionChunkSize = 4;
     int m_meshingSubmittedThisFrame = 0;
     int m_meshingCompletedThisFrame = 0;
+    int m_regionTestsThisFrame = 0;
+    int m_regionPassedThisFrame = 0;
+    int m_columnTestsThisFrame = 0;
+    int m_columnPassedThisFrame = 0;
+    int m_chunkTestsThisFrame = 0;
+    int m_chunkPassedThisFrame = 0;
     size_t m_meshingHistoryCount = 0;
     std::array<float, MESHING_HISTORY_SIZE> m_meshingSubmittedHistory{};
     std::array<float, MESHING_HISTORY_SIZE> m_meshingCompletedHistory{};
@@ -72,7 +96,7 @@ private:
     glm::mat4 m_projection = glm::mat4(1.0f);
     glm::mat4 m_view = glm::mat4(1.0f);
     // 视锥体6个平面
-    std::array<glm::vec4, 6> m_frustumPlanes{};
+    std::array<Plane, 6> m_frustumPlanes{};
 };
 
 

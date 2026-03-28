@@ -8,36 +8,40 @@
 #include "../core/Camera.h"
 #include "../core/InputManager.h"
 #include "../core/InputContextManager.h" // Add this
+#include "../physics/PhysicsInfo.h"
+
+namespace physics {
+class PhysicsSystem;
+}
 
 class Player {
 public:
     void init(const glm::vec3& spawnPos);
-    // Update signature change: add InputContextManager
-    void update(float dt, const InputSnapshot& snapshot, const InputContextManager& inputContext);
+    void update(float dt, const InputSnapshot& snapshot, const InputContextManager& inputContext,
+                physics::PhysicsSystem& physicsSystem);
 
     [[nodiscard]] glm::vec3 getPosition() const;
-    [[nodiscard]] glm::vec3 getEyePosition() const;   // position + {0, eyeHeight, 0}
+    [[nodiscard]] glm::vec3 getEyePosition() const;
     Camera& getCamera();
+    [[nodiscard]] bool wouldOverlapBlock(const glm::ivec3& blockPos) const;
 
 private:
-    glm::vec3 m_position;
-    glm::vec3 m_velocity = {0, 0, 0};
-    Camera    m_camera;
+    glm::vec3 m_position{};
+    glm::vec3 m_velocity = {0.0f, 0.0f, 0.0f};
+    Camera m_camera;
 
-    float m_eyeHeight   = 1.62f;   // Minecraft 标准眼高
+    float m_eyeHeight = 1.62f;
     float m_playerWidth = 0.6f;
     float m_playerHeight = 1.8f;
 
-    float m_walkSpeed  = 4.317f;   // 方块/秒
-    float m_sprintSpeed = 5.612f;
-    float m_jumpForce  = 8.0f;
+    bool m_onGround = false;
+    bool m_sprinting = false;
 
-    bool  m_onGround = false;
-    bool  m_sprinting = false;
+    PhysicsBody m_body{};
+    MoveIntent m_intent{};
 
-
-    void handleMovement(float dt, const InputContextManager& inputContext);
-    void handleMouseLook(const InputContextManager &inputContext);
+    void handleMovement(const InputContextManager& inputContext);
+    void handleMouseLook(const InputContextManager& inputContext);
 };
 
 #endif //MECRAFT_PLAYER_H

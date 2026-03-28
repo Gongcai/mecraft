@@ -50,7 +50,9 @@ add_executable(mecraft main.cpp
         assets/third_party/glad/glad.h
         src/world/World.cpp
         src/world/World.h
-        src/physics/Ray.h
+        src/physics/PhysicsInfo.h
+        src/physics/PhysicsSystem.h
+        src/physics/PhysicsSystem.cpp
         assets/third_party/imgui/imconfig.h
         assets/third_party/imgui/imgui.cpp
         assets/third_party/imgui/imgui.h
@@ -85,3 +87,14 @@ target_include_directories(world_flat_test PRIVATE assets/third_party)
 target_link_libraries(world_flat_test PRIVATE glm::glm)
 add_test(NAME world_flat_test COMMAND world_flat_test)
 
+add_executable(physics_mvp_test
+        tests/physics_mvp_test.cpp
+        src/physics/PhysicsSystem.cpp
+        src/world/World.cpp
+        src/world/Chunk.cpp
+        src/world/Block.cpp
+        assets/third_party/glad/glad.c)
+target_include_directories(physics_mvp_test PRIVATE assets/third_party)
+target_link_libraries(physics_mvp_test PRIVATE glm::glm nlohmann_json::nlohmann_json glfw)
+target_compile_definitions(physics_mvp_test PRIVATE MECRAFT_NO_TEXTURES)
+add_test(NAME physics_mvp_test COMMAND physics_mvp_test)

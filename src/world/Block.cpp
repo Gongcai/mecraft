@@ -108,11 +108,15 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             const auto& tex = blockJson["textures"];
 
             auto resolveTexName = [&](const char* key) -> int {
+#ifdef MECRAFT_NO_TEXTURES
+                return 0;
+#else
                 if (!tex.contains(key) || !tex[key].is_string() || resourceMgr == nullptr) {
                     return 0;
                 }
                 const std::string name = tex[key].get<std::string>();
                 return static_cast<int>(resourceMgr->getTexture(name));
+#endif
             };
 
             // 新格式：textures 下的字段全部是字符串贴图名
