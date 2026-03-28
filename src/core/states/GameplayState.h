@@ -35,6 +35,13 @@ public:
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
+        if (m_placeCooldownRemaining > 0.0f) {
+            m_placeCooldownRemaining -= dt;
+            if (m_placeCooldownRemaining < 0.0f) {
+                m_placeCooldownRemaining = 0.0f;
+            }
+        }
+
         // Check for global transitions (e.g. open menu)
         if (m_context.isActionTriggered(Action::Menu)) {
             m_fsm.pushState(std::make_unique<UIState>(m_fsm, m_context, m_input));
@@ -44,16 +51,19 @@ public:
         // Update gameplay entities
         m_player.update(dt, snapshot, m_context, m_physicsSystem);
 
-        const bool wantsBreak = m_context.isActionTriggered(Action::Attack);
-        const bool wantsPlace = m_context.isActionTriggered(Action::UseItem);
-        if (!wantsBreak && !wantsPlace) {
-            return;
-        }
-
         glm::ivec3 hitBlock{};
         glm::ivec3 placeBlock{};
         constexpr float kPickDistance = 6.0f;
-        if (!m_world.raycast(m_player.getCamera().getPickRay(), kPickDistance, hitBlock, placeBlock)) {
+        const bool hasHit = m_world.raycast(m_player.getCamera().getPickRay(), kPickDistance, hitBlock, placeBlock);
+        if (hasHit) {
+            m_player.setTargetBlock(hitBlock);
+        } else {
+            m_player.clearTargetBlock();
+        }
+
+        const bool wantsBreak = m_context.isActionTriggered(Action::Attack);
+        const bool wantsPlace = m_context.isActionHeld(Action::UseItem);
+        if (!hasHit || (!wantsBreak && !wantsPlace)) {
             return;
         }
 
@@ -63,9 +73,11 @@ public:
         }
 
         if (wantsPlace &&
+            m_placeCooldownRemaining <= 0.0f &&
             m_world.getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockType::AIR &&
             !m_player.wouldOverlapBlock(placeBlock)) {
             m_world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, BlockType::DIRT);
+            m_placeCooldownRemaining = kPlaceCooldownSec;
         }
     }
 
@@ -76,6 +88,8 @@ private:
     InputManager& m_input;
     physics::PhysicsSystem& m_physicsSystem;
     World& m_world;
+    static constexpr float kPlaceCooldownSec = 0.18f;
+    float m_placeCooldownRemaining = 0.0f;
 };
 
 #endif //MECRAFT_GAMEPLAYSTATE_H

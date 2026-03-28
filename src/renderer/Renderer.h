@@ -14,6 +14,7 @@
 #include <unordered_set>
 
 class World;
+class Player;
 
 class Renderer {
 public:
@@ -38,7 +39,7 @@ public:
     ~Renderer();
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void render(const World& world, const Camera &camera, const Window &window);
+    void render(const World& world, const Camera &camera, const Window &window, const Player& player);
 
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
@@ -65,6 +66,8 @@ private:
     void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
+    void initOutlineMesh();
+    void renderBlockOutline(const Player& player);
     //TODO: 传入 World 和 UI 数据进行渲染
     //void renderWorld(const World& world, const Camera& camera);
     //void renderUI(const UI& ui);
@@ -74,7 +77,11 @@ private:
 
     Shader* m_chunkShader = nullptr;
     Shader* m_uiShader = nullptr;
+    Shader* m_outlineShader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
+
+    GLuint m_outlineVao = 0;
+    GLuint m_outlineVbo = 0;
 
     ChunkMeshingService m_meshingService;
     std::unordered_set<int64_t> m_meshingInFlight;

@@ -3,7 +3,7 @@ Gameplay Jump Keyboard SPACE Held -
 Gameplay Crouch Keyboard LEFT_SHIFT Held -
 Gameplay Sprint Keyboard LEFT_CONTROL Held -
 Gameplay Attack Mouse LEFT Pressed -
-Gameplay UseItem Mouse RIGHT Pressed -
+Gameplay UseItem Mouse RIGHT Held -
 Gameplay Menu Keyboard ESCAPE Pressed -
 
 UI Menu Keyboard ESCAPE Pressed -
