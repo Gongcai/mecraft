@@ -35,6 +35,8 @@ private:
     Camera m_camera;
 
     float m_eyeHeight = 1.62f;
+    float m_standingEyeHeight = 1.62f;
+    float m_crouchEyeHeight = 1.2f;
     float m_playerWidth = 0.6f;
     float m_playerHeight = 1.8f;
 

@@ -99,6 +99,13 @@ void Player::handleMovement(const InputContextManager &inputContext) {
     if (glm::length(wishDir) > 0.001f) {
         wishDir = glm::normalize(wishDir);
     }
+    if (inputContext.isActionTriggered(Action::Crouch)) {
+        m_eyeHeight = m_crouchEyeHeight;
+    }
+    else {
+        m_eyeHeight = m_standingEyeHeight;
+    }
+
 
     m_sprinting = inputContext.isActionTriggered(Action::Sprint);
 
