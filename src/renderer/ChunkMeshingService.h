@@ -24,6 +24,7 @@ struct ChunkMeshingResult {
 
 class ChunkMeshingService {
 public:
+    ~ChunkMeshingService();
     void start();
     void shutdown();
 
@@ -42,6 +43,7 @@ private:
 
     bool m_running = false;
     bool m_stopping = false;
+    bool m_isShutdown = false;
 };
 
 #endif // MECRAFT_CHUNKMESHINGSERVICE_H

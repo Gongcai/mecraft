@@ -1,5 +1,9 @@
 #include "Window.h"
 
+Window::~Window() {
+    destroy();
+}
+
 bool Window::init(int width, int height, const char *title) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -22,14 +26,22 @@ bool Window::init(int width, int height, const char *title) {
 }
 
 void Window::destroy() {
+    static bool s_terminated = false;
+    if (s_terminated) {
+        return;
+    }
+
     if (m_window != nullptr) {
         glfwDestroyWindow(m_window);
         m_window = nullptr;
     }
 
-    m_width =0;
-    m_height =0;
+    m_width = 0;
+    m_height = 0;
+    
+    // Only terminate GLFW once
     glfwTerminate();
+    s_terminated = true;
 }
 
 

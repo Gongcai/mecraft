@@ -1,5 +1,6 @@
 #include "ChunkMesher.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <utility>
@@ -64,7 +65,16 @@ BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y
     }
 
     // Snapshot only stores +/-X and +/-Z borders, not diagonal corner neighbors.
-    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
+    if (x < 0 && z < 0) {
+        return BlockType::AIR;
+    }
+    if (x < 0 && z >= Chunk::SIZE_Z) {
+        return BlockType::AIR;
+    }
+    if (x >= Chunk::SIZE_X && z < 0) {
+        return BlockType::AIR;
+    }
+    if (x >= Chunk::SIZE_X && z >= Chunk::SIZE_Z) {
         return BlockType::AIR;
     }
 
@@ -152,24 +162,221 @@ uint8_t getBlockLight(const ChunkMeshingSnapshot& snapshot, const int x, const i
 }
 
 void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
+    const Chunk* posX = chunk.neighbors[0];
+    const Chunk* negX = chunk.neighbors[1];
+    const Chunk* posZ = chunk.neighbors[2];
+    const Chunk* negZ = chunk.neighbors[3];
+
+    // Record neighbor loaded status
+    snapshot.hasPosXNeighbor = (posX != nullptr);
+    snapshot.hasNegXNeighbor = (negX != nullptr);
+    snapshot.hasPosZNeighbor = (posZ != nullptr);
+    snapshot.hasNegZNeighbor = (negZ != nullptr);
+
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             const size_t index = toBorderYZIndex(y, z);
-            const Chunk* posX = chunk.neighbors[0];
-            const Chunk* negX = chunk.neighbors[1];
+
+            // Block borders
             snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z) : BlockType::AIR;
             snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z) : BlockType::AIR;
+
+            // Light borders (packed: high nibble = sun, low nibble = block)
+            // Use 255 as sentinel for "neighbor not loaded" instead of 0 (which means dark)
+            snapshot.posXLightBorder[index] = posX ?
+                static_cast<uint8_t>((posX->getSunlight(0, y, z) << 4) | posX->getBlockLight(0, y, z)) : 255;
+            snapshot.negXLightBorder[index] = negX ?
+                static_cast<uint8_t>((negX->getSunlight(Chunk::SIZE_X - 1, y, z) << 4) | negX->getBlockLight(Chunk::SIZE_X - 1, y, z)) : 255;
         }
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
             const size_t index = toBorderYXIndex(y, x);
-            const Chunk* posZ = chunk.neighbors[2];
-            const Chunk* negZ = chunk.neighbors[3];
+
+            // Block borders
             snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0) : BlockType::AIR;
             snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1) : BlockType::AIR;
+
+            // Light borders
+            snapshot.posZLightBorder[index] = posZ ?
+                static_cast<uint8_t>((posZ->getSunlight(x, y, 0) << 4) | posZ->getBlockLight(x, y, 0)) : 255;
+            snapshot.negZLightBorder[index] = negZ ?
+                static_cast<uint8_t>((negZ->getSunlight(x, y, Chunk::SIZE_Z - 1) << 4) | negZ->getBlockLight(x, y, Chunk::SIZE_Z - 1)) : 255;
         }
     }
 }
+
+// ============================================================================
+// Smooth Lighting Helpers
+// ============================================================================
+
+// Get light value with cross-chunk support
+uint8_t getSmoothLightValue(const ChunkMeshingSnapshot& snapshot, int x, int y, int z, bool isSunlight) {
+    if (y < 0) {
+        return 0;  // Below world = no light (solid ground below)
+    }
+    if (y >= Chunk::SIZE_Y) {
+        return isSunlight ? 15 : 0;  // Above world = full sun for sky light only
+    }
+
+    // Check if we're accessing outside chunk bounds
+    const bool outOfBoundsX = (x < 0) || (x >= Chunk::SIZE_X);
+    const bool outOfBoundsZ = (z < 0) || (z >= Chunk::SIZE_Z);
+
+    // Helper to get light from packed value (255 is sentinel for "neighbor not loaded")
+    auto extractLight = [isSunlight](uint8_t packed) -> uint8_t {
+        if (packed == 255) return 255; // Sentinel value
+        return isSunlight ? ((packed >> 4) & 0x0F) : (packed & 0x0F);
+    };
+
+    // Helper to get light from chunk interior
+    auto getInteriorLight = [&snapshot, isSunlight](int lx, int ly, int lz) -> uint8_t {
+        size_t idx = toIndex(lx, ly, lz);
+        uint8_t lightVal = snapshot.lightMap[idx];
+        return isSunlight ? ((lightVal >> 4) & 0x0F) : (lightVal & 0x0F);
+    };
+
+    // Handle cross-chunk access for X/Z borders
+    if (outOfBoundsX && outOfBoundsZ) {
+        // Diagonal corner: both x and z are outside the chunk
+        // Use border data from neighbor chunks, fall back to current chunk edge if neighbor not loaded
+        if (x < 0 && z < 0) {
+            size_t idxX = toBorderYZIndex(y, 0);
+            uint8_t valX = extractLight(snapshot.negXLightBorder[idxX]);
+            size_t idxZ = toBorderYXIndex(y, 0);
+            uint8_t valZ = extractLight(snapshot.negZLightBorder[idxZ]);
+            // If both neighbors not loaded, use current chunk corner
+            if (valX == 255 && valZ == 255) {
+                return getInteriorLight(0, y, 0);
+            }
+            // Use available border data (0 is valid - means dark)
+            if (valX == 255) valX = 0;
+            if (valZ == 255) valZ = 0;
+            // For corners, use minimum to avoid light leaks
+            return std::min(valX, valZ);
+        }
+        if (x < 0 && z >= Chunk::SIZE_Z) {
+            size_t idxX = toBorderYZIndex(y, Chunk::SIZE_Z - 1);
+            uint8_t valX = extractLight(snapshot.negXLightBorder[idxX]);
+            size_t idxZ = toBorderYXIndex(y, 0);
+            uint8_t valZ = extractLight(snapshot.posZLightBorder[idxZ]);
+            if (valX == 255 && valZ == 255) {
+                return getInteriorLight(0, y, Chunk::SIZE_Z - 1);
+            }
+            if (valX == 255) valX = 0;
+            if (valZ == 255) valZ = 0;
+            return std::min(valX, valZ);
+        }
+        if (x >= Chunk::SIZE_X && z < 0) {
+            size_t idxX = toBorderYZIndex(y, 0);
+            uint8_t valX = extractLight(snapshot.posXLightBorder[idxX]);
+            size_t idxZ = toBorderYXIndex(y, Chunk::SIZE_X - 1);
+            uint8_t valZ = extractLight(snapshot.negZLightBorder[idxZ]);
+            if (valX == 255 && valZ == 255) {
+                return getInteriorLight(Chunk::SIZE_X - 1, y, 0);
+            }
+            if (valX == 255) valX = 0;
+            if (valZ == 255) valZ = 0;
+            return std::min(valX, valZ);
+        }
+        if (x >= Chunk::SIZE_X && z >= Chunk::SIZE_Z) {
+            size_t idxX = toBorderYZIndex(y, Chunk::SIZE_Z - 1);
+            uint8_t valX = extractLight(snapshot.posXLightBorder[idxX]);
+            size_t idxZ = toBorderYXIndex(y, Chunk::SIZE_X - 1);
+            uint8_t valZ = extractLight(snapshot.posZLightBorder[idxZ]);
+            if (valX == 255 && valZ == 255) {
+                return getInteriorLight(Chunk::SIZE_X - 1, y, Chunk::SIZE_Z - 1);
+            }
+            if (valX == 255) valX = 0;
+            if (valZ == 255) valZ = 0;
+            return std::min(valX, valZ);
+        }
+    }
+
+    // Single direction boundaries
+    if (x < 0) {
+        size_t idx = toBorderYZIndex(y, z);
+        uint8_t val = extractLight(snapshot.negXLightBorder[idx]);
+        // If neighbor not loaded, fall back to current chunk edge
+        if (val == 255) {
+            return getInteriorLight(0, y, z);
+        }
+        return val;
+    }
+    if (x >= Chunk::SIZE_X) {
+        size_t idx = toBorderYZIndex(y, z);
+        uint8_t val = extractLight(snapshot.posXLightBorder[idx]);
+        if (val == 255) {
+            return getInteriorLight(Chunk::SIZE_X - 1, y, z);
+        }
+        return val;
+    }
+    if (z < 0) {
+        size_t idx = toBorderYXIndex(y, x);
+        uint8_t val = extractLight(snapshot.negZLightBorder[idx]);
+        if (val == 255) {
+            return getInteriorLight(x, y, 0);
+        }
+        return val;
+    }
+    if (z >= Chunk::SIZE_Z) {
+        size_t idx = toBorderYXIndex(y, x);
+        uint8_t val = extractLight(snapshot.posZLightBorder[idx]);
+        if (val == 255) {
+            return getInteriorLight(x, y, Chunk::SIZE_Z - 1);
+        }
+        return val;
+    }
+
+    // Within chunk
+    size_t idx = toIndex(x, y, z);
+    uint8_t lightVal = snapshot.lightMap[idx];
+    return isSunlight ? ((lightVal >> 4) & 0x0F) : (lightVal & 0x0F);
 }
+
+// Calculate smooth lighting for a face corner by averaging 3 neighboring blocks
+uint8_t calcSmoothLight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z,
+                        int dx1, int dy1, int dz1,
+                        int dx2, int dy2, int dz2,
+                        bool isSunlight) {
+    // Get light from the four relevant positions
+    uint8_t l0 = getSmoothLightValue(snapshot, x, y, z, isSunlight);
+    uint8_t l1 = getSmoothLightValue(snapshot, x + dx1, y + dy1, z + dz1, isSunlight);
+    uint8_t l2 = getSmoothLightValue(snapshot, x + dx2, y + dy2, z + dz2, isSunlight);
+    uint8_t l3 = getSmoothLightValue(snapshot, x + dx1 + dx2, y + dy1 + dy2, z + dz1 + dz2, isSunlight);
+
+    // Average the 4 values
+    return static_cast<uint8_t>((static_cast<int>(l0) + l1 + l2 + l3) / 4);
+}
+
+// Compute per-vertex smooth lighting for a face
+void computeSmoothLighting(const ChunkMeshingSnapshot& snapshot, int x, int y, int z, int face,
+                           uint8_t outSunlight[4], uint8_t outBlockLight[4]) {
+    const IVec3 normal = kFaceNormals[face];
+    const IVec3 axisA = kFaceAxisA[face];
+    const IVec3 axisB = kFaceAxisB[face];
+
+    // Position of the face center (one block outward)
+    int fx = x + normal.x;
+    int fy = y + normal.y;
+    int fz = z + normal.z;
+
+    for (int i = 0; i < 4; ++i) {
+        const int signA = kCornerSigns[i].first;
+        const int signB = kCornerSigns[i].second;
+
+        // Calculate the offsets that affect this corner
+        int dx1 = axisA.x * signA;
+        int dy1 = axisA.y * signA;
+        int dz1 = axisA.z * signA;
+
+        int dx2 = axisB.x * signB;
+        int dy2 = axisB.y * signB;
+        int dz2 = axisB.z * signB;
+
+        outSunlight[i] = calcSmoothLight(snapshot, fx, fy, fz, dx1, dy1, dz1, dx2, dy2, dz2, true);
+        outBlockLight[i] = calcSmoothLight(snapshot, fx, fy, fz, dx1, dy1, dz1, dx2, dy2, dz2, false);
+    }
+}
+} // anonymous namespace
 
 ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
     ChunkMeshingSnapshot snapshot;
@@ -214,8 +421,10 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
                         continue;
                     }
 
-                    const uint8_t sunlight = getSunlight(snapshot, x, y, z);
-                    const uint8_t blockLight = getBlockLight(snapshot, x, y, z);
+                    // Compute smooth lighting per vertex
+                    uint8_t sunlight[4] = {15, 15, 15, 15};
+                    uint8_t blockLight[4] = {0, 0, 0, 0};
+                    computeSmoothLighting(snapshot, x, y, z, face, sunlight, blockLight);
 
                     float aoValues[4] = {3.0f, 3.0f, 3.0f, 3.0f};
                     computeFaceAO(snapshot, x, y, z, face, aoValues);
@@ -278,8 +487,8 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
                           const int face,
                           const BlockDef& def,
                           const TextureAtlas& atlas,
-                          const uint8_t sunlight,
-                          const uint8_t blockLight,
+                          const uint8_t sunlight[4],
+                          const uint8_t blockLight[4],
                           const float aoValues[4]) {
     int tileIndex = getFaceTextureIndex(def, face);
     if (tileIndex < 0) {
@@ -306,8 +515,8 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             uvCoord.x,
             uvCoord.y,
             static_cast<float>(face),
-            static_cast<float>(sunlight),
-            static_cast<float>(blockLight),
+            static_cast<float>(sunlight[index]),
+            static_cast<float>(blockLight[index]),
             aoValues[index]
         });
     }

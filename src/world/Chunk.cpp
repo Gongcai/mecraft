@@ -41,6 +41,9 @@ Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(ch
 }
 
 Chunk::~Chunk() {
+    // Note: OpenGL context must still be valid when destroying Chunk
+    // If context is already destroyed, glDelete* calls will be no-ops with valid IDs
+    // but may cause errors. Ensure proper shutdown order in Game class.
     m_mesh.destroy();
 }
 
@@ -209,5 +212,37 @@ void ChunkMesh::destroy() {
 
     vertexCount = 0;
     transparentVertexCount = 0;
+}
+
+// ============================================================================
+// Heightmap operations
+// ============================================================================
+int Chunk::getHeightmap(const int x, const int z) const {
+    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) {
+        return 0;
+    }
+    return static_cast<int>(m_heightmap[static_cast<size_t>(z) * SIZE_X + x]);
+}
+
+void Chunk::setHeightmap(const int x, const int z, const int height) {
+    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) {
+        return;
+    }
+    m_heightmap[static_cast<size_t>(z) * SIZE_X + x] = static_cast<uint8_t>(std::clamp(height, 0, 255));
+}
+
+void Chunk::rebuildHeightmap() {
+    for (int x = 0; x < SIZE_X; ++x) {
+        for (int z = 0; z < SIZE_Z; ++z) {
+            int highestY = 0;
+            for (int y = SIZE_Y - 1; y >= 0; --y) {
+                if (m_blocks[toIndex(x, y, z)] != BlockType::AIR) {
+                    highestY = y;
+                    break;
+                }
+            }
+            setHeightmap(x, z, highestY);
+        }
+    }
 }
 

@@ -1,4 +1,5 @@
 #include "World.h"
+#include "LightEngine.h"
 #include <algorithm>
 #include <cmath>
 
@@ -10,6 +11,26 @@ int worldToChunkCoord(const int world, const int chunkSize) {
 }
 void World::init(uint32_t seed) {
     m_seed = seed;
+    m_chunks.clear();
+    m_loadQueue.clear();
+}
+
+void World::shutdown() {
+    if (m_isShutdown) {
+        return;
+    }
+    m_isShutdown = true;
+
+    // Clear all neighbor pointers before destroying chunks to prevent dangling pointers
+    for (auto& pair : m_chunks) {
+        Chunk* chunk = pair.second.get();
+        if (chunk) {
+            chunk->neighbors[0] = nullptr;
+            chunk->neighbors[1] = nullptr;
+            chunk->neighbors[2] = nullptr;
+            chunk->neighbors[3] = nullptr;
+        }
+    }
     m_chunks.clear();
     m_loadQueue.clear();
 }
@@ -79,23 +100,28 @@ void World::setBlock(int x, int y, int z, BlockID id) {
 
     chunk.setBlock(localX, y, localZ, id);
 
-    // Recompute simple sky light for this vertical column so newly exposed blocks light up.
-    bool lightChanged = false;
-    bool skylightVisible = true;
-    for (int scanY = Chunk::SIZE_Y - 1; scanY >= 0; --scanY) {
-        const BlockID columnId = chunk.getBlock(localX, scanY, localZ);
-        const uint8_t targetSun = skylightVisible ? 15 : 0;
-        if (chunk.getSunlight(localX, scanY, localZ) != targetSun) {
-            chunk.setSunlight(localX, scanY, localZ, targetSun);
-            lightChanged = true;
+    // Use LightEngine for proper light propagation
+    if (m_lightEngine) {
+        m_lightEngine->onBlockChange(x, y, z, oldId, id);
+    } else {
+        // Fallback: simple sky light update
+        bool lightChanged = false;
+        bool skylightVisible = true;
+        for (int scanY = Chunk::SIZE_Y - 1; scanY >= 0; --scanY) {
+            const BlockID columnId = chunk.getBlock(localX, scanY, localZ);
+            const uint8_t targetSun = skylightVisible ? 15 : 0;
+            if (chunk.getSunlight(localX, scanY, localZ) != targetSun) {
+                chunk.setSunlight(localX, scanY, localZ, targetSun);
+                lightChanged = true;
+            }
+            if (BlockRegistry::get(columnId).isSolid) {
+                skylightVisible = false;
+            }
         }
-        if (BlockRegistry::get(columnId).isSolid) {
-            skylightVisible = false;
-        }
-    }
 
-    if (lightChanged) {
-        chunk.markDirty();
+        if (lightChanged) {
+            chunk.markDirty();
+        }
     }
 }
 
@@ -173,12 +199,12 @@ void World::loadChunk(int cx, int cz) {
 
     auto chunk = std::make_unique<Chunk>(cx, cz);
 
+    // Generate terrain
     for (int x = 0; x < Chunk::SIZE_X; ++x) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int y = 0; y <= m_flatSurfaceY; ++y) {
                 if (y == m_flatSurfaceY) {
                     chunk->setBlock(x, y, z, BlockType::GRASS);
-                    chunk->setSunlight(x, y, z, 15);
                 } else if (y >= m_flatSurfaceY - 3) {
                     chunk->setBlock(x, y, z, BlockType::DIRT);
                 } else {
@@ -188,11 +214,73 @@ void World::loadChunk(int cx, int cz) {
         }
     }
 
+    // Initialize lighting using LightEngine
+    if (m_lightEngine) {
+        m_lightEngine->initChunkLight(*chunk);
+    } else {
+        // Fallback: simple sky light
+        chunk->rebuildHeightmap();
+        for (int x = 0; x < Chunk::SIZE_X; ++x) {
+            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                int height = chunk->getHeightmap(x, z);
+                for (int y = height + 1; y < Chunk::SIZE_Y; ++y) {
+                    chunk->setSunlight(x, y, z, 15);
+                }
+            }
+        }
+    }
+
+    // Set up neighbor references
+    Chunk* chunkPtr = chunk.get();
     m_chunks[key] = std::move(chunk);
+
+    // Helper lambda to get chunk at chunk coordinates
+    auto getChunkAt = [this](int chunkX, int chunkZ) -> Chunk* {
+        int64_t key = chunkKey(chunkX, chunkZ);
+        auto it = m_chunks.find(key);
+        if (it != m_chunks.end()) {
+            return it->second.get();
+        }
+        return nullptr;
+    };
+
+    // Link neighbors
+    Chunk* posX = getChunkAt(cx + 1, cz);
+    Chunk* negX = getChunkAt(cx - 1, cz);
+    Chunk* posZ = getChunkAt(cx, cz + 1);
+    Chunk* negZ = getChunkAt(cx, cz - 1);
+
+    chunkPtr->neighbors[0] = posX;
+    chunkPtr->neighbors[1] = negX;
+    chunkPtr->neighbors[2] = posZ;
+    chunkPtr->neighbors[3] = negZ;
+
+    // Update neighbor pointers to this chunk
+    if (posX) posX->neighbors[1] = chunkPtr;
+    if (negX) negX->neighbors[0] = chunkPtr;
+    if (posZ) posZ->neighbors[3] = chunkPtr;
+    if (negZ) negZ->neighbors[2] = chunkPtr;
 }
 
 void World::unloadChunk(int cx, int cz) {
-    m_chunks.erase(chunkKey(cx, cz));
+    int64_t key = chunkKey(cx, cz);
+    auto it = m_chunks.find(key);
+    if (it == m_chunks.end()) return;
+
+    Chunk* chunk = it->second.get();
+
+    // Clear neighbor pointers from adjacent chunks to prevent dangling pointers
+    Chunk* posX = chunk->neighbors[0];
+    Chunk* negX = chunk->neighbors[1];
+    Chunk* posZ = chunk->neighbors[2];
+    Chunk* negZ = chunk->neighbors[3];
+
+    if (posX) posX->neighbors[1] = nullptr;
+    if (negX) negX->neighbors[0] = nullptr;
+    if (posZ) posZ->neighbors[3] = nullptr;
+    if (negZ) negZ->neighbors[2] = nullptr;
+
+    m_chunks.erase(key);
 }
 
 size_t World::getTotalVertexCount() const {

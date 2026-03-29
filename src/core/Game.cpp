@@ -4,8 +4,9 @@
 #include "Game.h"
 #include "states/GameplayState.h"
 #include "../world/Block.h"
+#include "../world/LightEngine.h"
 
-Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world) {
+Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world), m_lightEngine(std::make_unique<LightEngine>(&m_world)) {
 }
 
 void Game::init(int width, int height, const char *title) {
@@ -26,10 +27,12 @@ void Game::init(int width, int height, const char *title) {
     // 初始化资源管理器，加载着色器/贴图
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
+    m_resourceMgr.generateLightmap();  // Generate lightmap texture
     BlockRegistry::init(&m_resourceMgr);
     BlockRegistry::printAllBlocks();
     m_world.init(1337);
     m_world.setRenderDistance(8);
+    m_world.setLightEngine(m_lightEngine.get());  // Set light engine for world
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getFlatSurfaceY() + 2), 0.0f});
     // 初始化渲染器
@@ -80,5 +83,18 @@ void Game::run() {
 }
 
 void Game::shutdown() {
+    // IMPORTANT: Shutdown order matters!
+    // 1. First stop the meshing service to prevent accessing chunks being destroyed
     m_renderer.shutdown();
+    // 2. Then destroy all chunks (with OpenGL context still valid)
+    m_world.shutdown();
+    // 3. Finally destroy window and OpenGL context
+    m_window.destroy();
+    m_shutdownCalled = true;
+}
+
+Game::~Game() {
+    if (!m_shutdownCalled) {
+        shutdown();
+    }
 }

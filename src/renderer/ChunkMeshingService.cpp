@@ -2,6 +2,10 @@
 
 #include <utility>
 
+ChunkMeshingService::~ChunkMeshingService() {
+    shutdown();
+}
+
 void ChunkMeshingService::start() {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_running) {
@@ -16,10 +20,11 @@ void ChunkMeshingService::start() {
 void ChunkMeshingService::shutdown() {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_running) {
+        if (!m_running || m_isShutdown) {
             return;
         }
         m_stopping = true;
+        m_isShutdown = true;
     }
 
     m_cv.notify_all();
@@ -30,11 +35,13 @@ void ChunkMeshingService::shutdown() {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_running = false;
 
-    std::queue<ChunkMeshingJob> emptyJobs;
-    std::swap(m_pending, emptyJobs);
-
-    std::queue<ChunkMeshingResult> emptyResults;
-    std::swap(m_completed, emptyResults);
+    // Clear queues using clear() instead of swap with empty
+    while (!m_pending.empty()) {
+        m_pending.pop();
+    }
+    while (!m_completed.empty()) {
+        m_completed.pop();
+    }
 }
 
 void ChunkMeshingService::submit(ChunkMeshingJob job) {

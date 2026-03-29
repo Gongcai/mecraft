@@ -104,6 +104,8 @@ private:
     glm::mat4 m_view = glm::mat4(1.0f);
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
+
+    bool m_isShutdown = false;
 };
 
 

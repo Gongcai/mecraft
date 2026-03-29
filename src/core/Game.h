@@ -5,6 +5,7 @@
 #ifndef MECRAFT_GAME_H
 #define MECRAFT_GAME_H
 #include <iostream>
+#include <memory>
 
 #include "Camera.h"
 #include "InputManager.h"
@@ -20,9 +21,12 @@
 #include "../physics/PhysicsSystem.h"
 #include "../ui/Dashboard.h"
 
+class LightEngine;
+
 class Game {
 public:
     Game();
+    ~Game();  // Add destructor
     void init(int width, int height, const char* title);
     void run();       // 主循环
     void shutdown();
@@ -41,9 +45,10 @@ private:
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;
     Dashboard      m_dashboard;
-
+    std::unique_ptr<LightEngine> m_lightEngine;
 
     double m_lastFrameTime = 0.0;
+    bool m_shutdownCalled = false;
 };
 
 

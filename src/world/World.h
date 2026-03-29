@@ -14,9 +14,12 @@
 #include "Chunk.h"
 #include "../physics/PhysicsInfo.h"
 
+class LightEngine;
+
 class World {
 public:
     void init(uint32_t seed);
+    void shutdown();  // Clean up before destruction
     void update(const glm::vec3& playerPos);  // 每帧调用
 
     // 方块操作 (世界坐标)
@@ -37,6 +40,13 @@ public:
 
     [[nodiscard]] int getFlatSurfaceY() const { return m_flatSurfaceY; }
 
+    // Light engine access
+    void setLightEngine(LightEngine* engine) { m_lightEngine = engine; }
+    [[nodiscard]] LightEngine* getLightEngine() const { return m_lightEngine; }
+
+    // Access chunks for LightEngine
+    [[nodiscard]] auto& getChunksForLightEngine() { return m_chunks; }
+
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t
     std::unordered_map<int64_t, std::unique_ptr<Chunk>> m_chunks;
@@ -46,6 +56,7 @@ private:
     int m_renderDistance = 8;   // 以区块为单位
     uint32_t m_seed = 0;
     int m_flatSurfaceY = 63;
+    LightEngine* m_lightEngine = nullptr;
 
     // 区块坐标打包
     static int64_t chunkKey(int cx, int cz);
@@ -57,6 +68,8 @@ private:
     // 区块加载队列 (按距离排序, 近的优先)
     std::vector<glm::ivec2> m_loadQueue;
     void updateLoadQueue(int playerChunkX, int playerChunkZ);
+
+    bool m_isShutdown = false;
 };
 
 #endif //MECRAFT_WORLD_H

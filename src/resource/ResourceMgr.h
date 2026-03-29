@@ -40,10 +40,16 @@ public:
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 
+    // 光照贴图
+    void generateLightmap();
+    [[nodiscard]] GLuint getLightmap() const { return m_lightmap; }
+    void updateLightmap(float timeOfDay);
+
 private:
     std::unordered_map<std::string, std::unique_ptr<Shader>> m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
     TextureAtlas m_atlas;
+    GLuint m_lightmap = 0;
 };
 
 

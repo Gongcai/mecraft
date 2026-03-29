@@ -48,6 +48,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     s_blocks[BlockType::AIR].name = s_blockNames[BlockType::AIR].c_str();
     s_blocks[BlockType::AIR].isSolid = false;
     s_blocks[BlockType::AIR].isTransparent = true;
+    s_blocks[BlockType::AIR].opacity = 1;  // 空气透光
     setAllFaces(s_blocks[BlockType::AIR], -1);
 
     std::ifstream file(kBlocksConfigPath);
@@ -102,6 +103,19 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("lightLevel") && blockJson["lightLevel"].is_number_integer()) {
             const int light = blockJson["lightLevel"].get<int>();
             def.lightLevel = static_cast<uint8_t>(std::clamp(light, 0, 15));
+        }
+        if (blockJson.contains("opacity") && blockJson["opacity"].is_number_integer()) {
+            const int op = blockJson["opacity"].get<int>();
+            def.opacity = static_cast<uint8_t>(std::clamp(op, 0, 15));
+        } else {
+            // 默认遮光率：透明方块透光好，实心方块遮光强
+            if (!def.isSolid) {
+                def.opacity = 1;
+            } else if (def.isTransparent) {
+                def.opacity = 2;
+            } else {
+                def.opacity = 15;
+            }
         }
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {

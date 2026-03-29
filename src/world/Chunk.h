@@ -69,6 +69,11 @@ public:
     int m_chunkX;
     int m_chunkZ;
 
+    // 高度图：记录每个垂直列中最高的不透明方块Y坐标
+    [[nodiscard]] int getHeightmap(int x, int z) const;
+    void setHeightmap(int x, int z, int height);
+    void rebuildHeightmap();
+
 private:
     static constexpr size_t BLOCK_COUNT = static_cast<size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
 
@@ -77,6 +82,9 @@ private:
 
     std::array<BlockID, BLOCK_COUNT> m_blocks{};
     std::array<uint8_t, BLOCK_COUNT> m_lightMap{}; // high nibble = sun, low nibble = block
+
+    // 高度图：16x16，记录每列最高不透明方块
+    std::array<uint8_t, SIZE_X * SIZE_Z> m_heightmap{};
 
     ChunkMesh m_mesh;
 

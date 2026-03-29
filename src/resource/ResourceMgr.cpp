@@ -6,6 +6,7 @@
 #include <iostream>
 #include <filesystem>
 #include <vector>
+#include <algorithm>
 #include "../third_party/stb/stb_image.h"
 
 std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
@@ -159,4 +160,80 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
 
 const TextureAtlas & ResourceMgr::getAtlas() const {
     return m_atlas;
+}
+
+void ResourceMgr::generateLightmap() {
+    // Generate lightmap texture using the LightmapGenerator
+    // We need to include it here, but for now we'll do a simple implementation
+    glGenTextures(1, &m_lightmap);
+    glBindTexture(GL_TEXTURE_2D, m_lightmap);
+
+    // Create a simple 16x16 lightmap (grayscale gradient for now)
+    unsigned char data[16 * 16 * 3];
+    for (int y = 0; y < 16; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            // Block light (X): warmer as it increases
+            // Sky light (Y): brighter as it increases
+            float blockLevel = x / 15.0f;
+            float skyLevel = y / 15.0f;
+
+            // Simple lighting: combine both
+            float intensity = std::max(blockLevel * 0.9f, skyLevel * 0.95f);
+            if (intensity < 0.05f) intensity = 0.05f;  // Minimum ambient
+
+            // Warm tint for block light, cool tint for sky light
+            float r = intensity * (0.8f + 0.2f * blockLevel);
+            float g = intensity * (0.8f + 0.1f * blockLevel);
+            float b = intensity * (0.9f + 0.1f * skyLevel);
+
+            int idx = (y * 16 + x) * 3;
+            data[idx + 0] = static_cast<unsigned char>(r * 255);
+            data[idx + 1] = static_cast<unsigned char>(g * 255);
+            data[idx + 2] = static_cast<unsigned char>(b * 255);
+        }
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 16, 16, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void ResourceMgr::updateLightmap(float timeOfDay) {
+    if (m_lightmap == 0) return;
+
+    // Update lightmap based on time of day
+    glBindTexture(GL_TEXTURE_2D, m_lightmap);
+
+    unsigned char data[16 * 16 * 3];
+    for (int y = 0; y < 16; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            float blockLevel = x / 15.0f;
+            float skyLevel = (y / 15.0f) * timeOfDay;  // Sky light dims at night
+
+            float intensity = std::max(blockLevel * 0.9f, skyLevel * 0.95f);
+            if (intensity < 0.05f) intensity = 0.05f;
+
+            float r = intensity * (0.8f + 0.2f * blockLevel);
+            float g = intensity * (0.8f + 0.1f * blockLevel);
+            float b = intensity * (0.9f + 0.1f * skyLevel);
+
+            // Night shift: more blue at night
+            if (timeOfDay < 0.5f) {
+                r *= (0.3f + 0.7f * timeOfDay);
+                g *= (0.4f + 0.6f * timeOfDay);
+                b *= (0.5f + 0.5f * timeOfDay);
+            }
+
+            int idx = (y * 16 + x) * 3;
+            data[idx + 0] = static_cast<unsigned char>(std::min(1.0f, r) * 255);
+            data[idx + 1] = static_cast<unsigned char>(std::min(1.0f, g) * 255);
+            data[idx + 2] = static_cast<unsigned char>(std::min(1.0f, b) * 255);
+        }
+    }
+
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 16, 16, GL_RGB, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }

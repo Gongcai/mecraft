@@ -50,6 +50,10 @@ add_executable(mecraft main.cpp
         assets/third_party/glad/glad.h
         src/world/World.cpp
         src/world/World.h
+        src/world/LightEngine.cpp
+        src/world/LightEngine.h
+        src/renderer/LightmapGenerator.cpp
+        src/renderer/LightmapGenerator.h
         src/physics/PhysicsInfo.h
         src/physics/PhysicsSystem.h
         src/physics/PhysicsSystem.cpp

@@ -15,10 +15,23 @@ struct ChunkMeshingSnapshot {
     std::array<BlockID, CHUNK_BLOCK_COUNT> blocks{};
     std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{};
 
+    // Block borders for AO
     std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXBorder{};
     std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXBorder{};
     std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZBorder{};
     std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZBorder{};
+
+    // Light borders for smooth lighting
+    std::array<uint8_t, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXLightBorder{};
+    std::array<uint8_t, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXLightBorder{};
+    std::array<uint8_t, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZLightBorder{};
+    std::array<uint8_t, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZLightBorder{};
+
+    // Flags indicating if neighbor chunks are loaded (for proper border handling)
+    bool hasPosXNeighbor = false;
+    bool hasNegXNeighbor = false;
+    bool hasPosZNeighbor = false;
+    bool hasNegZNeighbor = false;
 };
 
 struct ChunkMeshData {
@@ -44,8 +57,8 @@ private:
                         int face,
                         const BlockDef& def,
                         const TextureAtlas& atlas,
-                        uint8_t sunlight,
-                        uint8_t blockLight,
+                        const uint8_t sunlight[4],      // Per-vertex sunlight for smooth lighting
+                        const uint8_t blockLight[4],    // Per-vertex block light for smooth lighting
                         const float aoValues[4]);
 
     static uint8_t calcAO(bool side1, bool side2, bool corner);

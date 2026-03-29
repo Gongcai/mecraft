@@ -11,6 +11,7 @@
 #include <GLFW/glfw3.h>
 class Window {
 public:
+    ~Window();
     bool init(int width, int height, const char* title);
     void destroy();
 
