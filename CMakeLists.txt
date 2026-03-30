@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(OpenAL CONFIG REQUIRED)
+
 add_executable(mecraft main.cpp
         assets/third_party/glad/glad.c
         src/core/Window.cpp
@@ -71,11 +73,21 @@ add_executable(mecraft main.cpp
         assets/third_party/imgui/imgui_impl_opengl3_loader.h
         src/ui/Dashboard.cpp
         src/ui/Dashboard.h
-        assets/third_party/FastNoise/FastNoiseLite.h)
+        assets/third_party/FastNoise/FastNoiseLite.h
+        src/audio/AudioEngine.cpp
+        src/audio/AudioEngine.h
+        src/audio/AudioClip.cpp
+        src/audio/AudioClip.h
+        src/audio/AudioSource.cpp
+        src/audio/AudioSource.h
+        src/audio/AudioListener.cpp
+        src/audio/AudioListener.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)
 target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)
+target_link_libraries(mecraft PRIVATE OpenAL::OpenAL)
+
 
 enable_testing()
 add_executable(world_flat_test
@@ -98,3 +110,13 @@ target_include_directories(physics_mvp_test PRIVATE assets/third_party)
 target_link_libraries(physics_mvp_test PRIVATE glm::glm nlohmann_json::nlohmann_json glfw)
 target_compile_definitions(physics_mvp_test PRIVATE MECRAFT_NO_TEXTURES)
 add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
+
+add_executable(audio_test
+        tests/audio_test.cpp
+        src/audio/AudioEngine.cpp
+        src/audio/AudioClip.cpp
+        src/audio/AudioSource.cpp
+        src/audio/AudioListener.cpp)
+target_include_directories(audio_test PRIVATE assets/third_party)
+target_link_libraries(audio_test PRIVATE glm::glm OpenAL::OpenAL)
+add_test(NAME audio_test COMMAND audio_test)

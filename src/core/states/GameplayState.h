@@ -1,6 +1,7 @@
 #ifndef MECRAFT_GAMEPLAYSTATE_H
 #define MECRAFT_GAMEPLAYSTATE_H
-
+#include <string>
+#include <random>
 #include "../IGameState.h"
 #include "../GameStateMachine.h"
 #include "../InputContextManager.h"
@@ -8,6 +9,19 @@
 #include "../../world/World.h"
 #include "../../world/Block.h"
 #include "UIState.h"
+namespace {
+    std::string getRandomName(std::string name,int maxRandomLength) {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+
+        std::uniform_int_distribution<> dist(1, maxRandomLength);
+        int randomNum = dist(gen);
+
+        return name + std::to_string(randomNum);
+
+
+    }
+}
 
 namespace physics {
 class PhysicsSystem;
@@ -20,9 +34,10 @@ public:
                   InputContextManager& ctx,
                   InputManager& input,
                   physics::PhysicsSystem& physicsSystem,
-                  World& world)
+                  World& world,
+                  AudioEngine& audioEngine)
             : m_fsm(fsm), m_player(player), m_context(ctx), m_input(input),
-              m_physicsSystem(physicsSystem), m_world(world) {}
+              m_physicsSystem(physicsSystem), m_world(world),m_audioEngine(audioEngine) {}
 
     void onEnter() override {
         // Ensure we are in Gameplay context
@@ -61,14 +76,29 @@ public:
             m_player.clearTargetBlock();
         }
 
+        if (m_player.isMoving()) {
+            float stepInterval = m_player.isSprinting() ? 0.35f : 0.5f;
+            m_footstepTimer -= dt;
+            if (m_footstepTimer <= 0.0f) {
+                // 随机选择脚步声
+                std::string soundName = "walk_grass" + std::to_string(m_footstepIndex + 1);
+                m_audioEngine.playSound2D(soundName, 1.f);
+                m_footstepIndex = (m_footstepIndex + 1) % 6;
+                m_footstepTimer = stepInterval;
+            }
+        }
+
         const bool wantsBreak = m_context.isActionTriggered(Action::Attack);
         const bool wantsPlace = m_context.isActionHeld(Action::UseItem);
         if (!hasHit || (!wantsBreak && !wantsPlace)) {
             return;
         }
 
+
+
         if (wantsBreak) {
             m_world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockType::AIR);
+            m_audioEngine.playClip(getRandomName("put",5),hitBlock);
             return;
         }
 
@@ -76,9 +106,15 @@ public:
             m_placeCooldownRemaining <= 0.0f &&
             m_world.getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockType::AIR &&
             !m_player.wouldOverlapBlock(placeBlock)) {
+
             m_world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, BlockType::DIRT);
             m_placeCooldownRemaining = kPlaceCooldownSec;
+            m_audioEngine.playClip(getRandomName("put",5),placeBlock);
         }
+
+
+
+
     }
 
 private:
@@ -88,8 +124,12 @@ private:
     InputManager& m_input;
     physics::PhysicsSystem& m_physicsSystem;
     World& m_world;
+    AudioEngine& m_audioEngine;
     static constexpr float kPlaceCooldownSec = 0.18f;
     float m_placeCooldownRemaining = 0.0f;
+
+    float m_footstepTimer = 0.0f;
+    int m_footstepIndex = 0;
 };
 
 #endif //MECRAFT_GAMEPLAYSTATE_H

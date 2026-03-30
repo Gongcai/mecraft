@@ -4,7 +4,7 @@
 #include "Game.h"
 #include "states/GameplayState.h"
 #include "../world/Block.h"
-
+#include "../audio/AudioListener.h"
 Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world) {
 }
 
@@ -35,7 +35,7 @@ void Game::init(int width, int height, const char *title) {
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
-
+    m_audioEngine.init();
     // Push initial Gameplay state
     m_stateMachine.pushState(std::make_unique<GameplayState>(
         m_stateMachine,
@@ -43,11 +43,14 @@ void Game::init(int width, int height, const char *title) {
         m_contextManager,
         m_input,
         m_physicsSystem,
-        m_world
+        m_world,
+        m_audioEngine
     ));
 
     // 初始化信息仪表盘
     m_dashboard.init(m_window);
+
+
 }
 
 void Game::run() {
@@ -71,7 +74,13 @@ void Game::run() {
             accumulator -= kFixedStep;
             m_world.update(m_player.getPosition());
         }
-
+        m_audioEngine.update();
+        AudioListener::setPosition(m_player.getEyePosition());
+        AudioListener::setOrientation(
+            m_player.getCamera().getFront(),
+            m_player.getCamera().getUp()
+        );
+        AudioListener::setGain(1.0f);  // 确保增益为 1
         m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
         m_dashboard.render(m_player, m_world,m_player.getCamera(),m_renderer);
         m_window.swapBuffers();
