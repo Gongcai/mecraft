@@ -4,7 +4,12 @@
 
 #include "Player.h"
 
+#include <iostream>
+
 #include "../physics/PhysicsSystem.h"
+
+
+
 
 void Player::init(const glm::vec3 &spawnPos) {
     m_position = spawnPos;
@@ -78,6 +83,14 @@ glm::ivec3 Player::getTargetBlock() const {
     return m_targetBlock;
 }
 
+bool Player::isMoving() const {
+    return m_moving;
+}
+
+bool Player::isSprinting() const {
+    return m_sprinting;
+}
+
 void Player::handleMovement(const InputContextManager &inputContext) {
     glm::vec3 front = m_camera.getFront();
     glm::vec3 right = m_camera.getRight();
@@ -94,7 +107,12 @@ void Player::handleMovement(const InputContextManager &inputContext) {
 
     const float forwardInput = inputContext.getAxisValue(Axis::Vertical);
     const float rightInput = inputContext.getAxisValue(Axis::Horizontal);
-
+    if ((forwardInput != 0.0f || rightInput != 0.0f) && m_onGround) {
+        m_moving = true;
+    }
+    else {
+        m_moving = false;
+    }
     glm::vec3 wishDir = front * forwardInput + right * rightInput;
     if (glm::length(wishDir) > 0.001f) {
         wishDir = glm::normalize(wishDir);

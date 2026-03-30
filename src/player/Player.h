@@ -28,7 +28,8 @@ public:
     void clearTargetBlock();
     [[nodiscard]] bool hasTargetBlock() const;
     [[nodiscard]] glm::ivec3 getTargetBlock() const;
-
+    [[nodiscard]] bool isMoving() const;
+    [[nodiscard]] bool isSprinting() const;
 private:
     glm::vec3 m_position{};
     glm::vec3 m_velocity = {0.0f, 0.0f, 0.0f};
@@ -41,6 +42,7 @@ private:
     bool m_onGround = false;
     bool m_sprinting = false;
 
+    bool m_moving = true;
     PhysicsBody m_body{};
     MoveIntent m_intent{};
 
