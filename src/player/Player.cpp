@@ -28,15 +28,24 @@ void Player::init(const glm::vec3 &spawnPos) {
 void Player::update(float dt, const InputSnapshot &snapshot, const InputContextManager &inputContext,
                     physics::PhysicsSystem &physicsSystem) {
     (void) snapshot;
+
+
+
     handleMouseLook(inputContext);
     handleMovement(inputContext);
 
     physicsSystem.updateBody(m_body, m_intent, dt);
 
+    m_onGroundLastFrame = m_onGround;
+
     m_position = m_body.position;
     m_velocity = m_body.velocity;
     m_onGround = m_body.isGrounded;
     m_camera.setPosition(getEyePosition());
+
+
+    m_justLanded = m_onGround && !m_onGroundLastFrame;
+
 }
 
 glm::vec3 Player::getPosition() const {
@@ -89,6 +98,10 @@ bool Player::isMoving() const {
 
 bool Player::isSprinting() const {
     return m_sprinting;
+}
+
+bool Player::isJustLanded() const  {
+    return m_justLanded;
 }
 
 void Player::handleMovement(const InputContextManager &inputContext) {

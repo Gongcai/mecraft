@@ -39,7 +39,7 @@ private:
     ALCdevice* _device = nullptr;
     ALCcontext* m_context = nullptr;
     float m_masterVolume = 1.0f;
-
+    float m_pitch = 1.0f;
 
     std::unordered_map<std::string, std::unique_ptr<AudioClip>> m_clips;
     std::vector<std::unique_ptr<AudioSource>> m_sources;

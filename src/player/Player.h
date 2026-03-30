@@ -30,6 +30,7 @@ public:
     [[nodiscard]] glm::ivec3 getTargetBlock() const;
     [[nodiscard]] bool isMoving() const;
     [[nodiscard]] bool isSprinting() const;
+    [[nodiscard]] bool isJustLanded() const ;
 private:
     glm::vec3 m_position{};
     glm::vec3 m_velocity = {0.0f, 0.0f, 0.0f};
@@ -38,8 +39,10 @@ private:
     float m_eyeHeight = 1.62f;
     float m_playerWidth = 0.6f;
     float m_playerHeight = 1.8f;
-
     bool m_onGround = false;
+    bool m_onGroundLastFrame = false;
+    bool m_justLanded = false;
+
     bool m_sprinting = false;
 
     bool m_moving = true;

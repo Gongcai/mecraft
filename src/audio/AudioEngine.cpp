@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
-
+#include "../core/Time.h"
 namespace fs = std::filesystem;
 
 void AudioEngine::init() {
@@ -51,6 +51,7 @@ void AudioEngine::update() {
             ++it;
         }
     }
+    m_pitch = Time::getTimeSpeed();
 }
 
 void AudioEngine::shutdown() {
@@ -131,6 +132,7 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     }
 
     source->setClip(clip);
+    source->setPitch(m_pitch);
     source->setPosition(position);
     source->setVolume(volume * m_masterVolume);
     source->setLooping(loop);

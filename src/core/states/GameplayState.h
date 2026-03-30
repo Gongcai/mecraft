@@ -87,6 +87,10 @@ public:
                 m_footstepTimer = stepInterval;
             }
         }
+        if (m_player.isJustLanded()) {
+            m_audioEngine.playClip(getRandomName("grass",4),m_player.getPosition());
+
+        }
 
         const bool wantsBreak = m_context.isActionTriggered(Action::Attack);
         const bool wantsPlace = m_context.isActionHeld(Action::UseItem);
@@ -107,7 +111,7 @@ public:
             m_world.getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockType::AIR &&
             !m_player.wouldOverlapBlock(placeBlock)) {
 
-            m_world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, BlockType::DIRT);
+            m_world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, BlockType::GLASS);
             m_placeCooldownRemaining = kPlaceCooldownSec;
             m_audioEngine.playClip(getRandomName("put",5),placeBlock);
         }

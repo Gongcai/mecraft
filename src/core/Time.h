@@ -14,17 +14,25 @@ public:
     static double currentGameTime;
     static double lastRawTime;
     static double deltaTime;
+    static double rawDeltaTime;
     static void init() {
         currentGameTime = 0.0;
         lastRawTime = getRawTime();
         deltaTime = 0.0;
+        rawDeltaTime = 0.0;
         timeSpeed = 1.0;
     }
     static void setTimeSpeed(double speed) {
         timeSpeed = speed;
     }
+    static double getTimeSpeed() {
+        return timeSpeed;
+    }
     static double getRawTime() {
         return glfwGetTime();
+    }
+    static double getRawDeltaTime() {
+        return rawDeltaTime;
     }
     static void update() {
         const double now = getRawTime();
@@ -32,10 +40,9 @@ public:
         lastRawTime = now;
 
         if (rawDelta <= 0) rawDelta = 0.0;
-
+        rawDeltaTime = rawDelta;
         deltaTime = rawDelta * timeSpeed;
         currentGameTime += deltaTime;
-
 
     }
 private:
