@@ -70,8 +70,8 @@ void Game::run() {
 
         while (accumulator >= kFixedStep) {
             m_input.update();
-            m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
             accumulator -= kFixedStep;
+            m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
             m_world.update(m_player.getPosition());
         }
         m_audioEngine.update();

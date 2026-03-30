@@ -88,7 +88,11 @@ void Dashboard::showPerformanceStats(Renderer &render) {
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
-
+    ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
+    static float timeSpeed = Time::getTimeSpeed();
+    if (ImGui::SliderFloat("Game Time Speed", &timeSpeed, 0.0f, 10.0f)) {
+        Time::setTimeSpeed(timeSpeed);
+    }
     int submitBudget = render.getMeshingSubmitBudget();
     if (ImGui::SliderInt("Meshing Submit Budget", &submitBudget, 1, 64)) {
         render.setMeshingSubmitBudget(submitBudget);
