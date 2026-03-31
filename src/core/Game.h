@@ -19,6 +19,7 @@
 #include "../world/World.h"
 #include "../physics/PhysicsSystem.h"
 #include "../ui/Dashboard.h"
+#include "../ui/UIRenderer.h"
 #include "../audio/AudioEngine.h"
 class Game {
 public:
@@ -41,6 +42,7 @@ private:
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;
     AudioEngine   m_audioEngine;
+    UIRenderer    m_uiRenderer;
     Dashboard      m_dashboard;
 
 

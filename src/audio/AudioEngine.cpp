@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by Caiwe on 2026/3/29.
 //
 
@@ -6,8 +6,26 @@
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
-#include "../core/Time.h"
+
 namespace fs = std::filesystem;
+
+// OpenAL 扩展函数指针定义
+LPALCEVENTCALLBACKSOFT alcEventCallbackSOFT = nullptr;
+LPALCEVENTCONTROLSOFT alcEventControlSOFT = nullptr;
+LPALCREOPENDEVICESOFT alcReopenDeviceSOFT = nullptr;
+
+// 静态成员定义
+std::atomic<bool> AudioEngine::s_needDeviceReopen{false};
+
+// 设备切换回调（OpenAL 内部线程调用）
+void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
+                                 ALCdevice* device, ALCsizei length,
+                                 const ALCchar* message, void* userPtr) noexcept{
+    if (eventType == ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT) {
+        std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown") << std::endl;
+        AudioEngine::s_needDeviceReopen = true;
+    }
+}
 
 void AudioEngine::init() {
     // 打开默认音频设备
@@ -38,11 +56,17 @@ void AudioEngine::init() {
 
     std::cout << "[Audio] AudioEngine initialized" << std::endl;
 
+    // 初始化设备切换扩展
+    initDeviceSwitchExtension();
+
     // 加载所有音频文件
     getAllSounds();
 }
 
 void AudioEngine::update() {
+    // 检查并处理设备切换
+    checkDeviceSwitch();
+
     // 清理已停止的 source
     for (auto it = m_sources.begin(); it != m_sources.end();) {
         if ((*it)->isStopped()) {
@@ -51,7 +75,6 @@ void AudioEngine::update() {
             ++it;
         }
     }
-    m_pitch = Time::getTimeSpeed();
 }
 
 void AudioEngine::shutdown() {
@@ -132,7 +155,6 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     }
 
     source->setClip(clip);
-    source->setPitch(m_pitch);
     source->setPosition(position);
     source->setVolume(volume * m_masterVolume);
     source->setLooping(loop);
@@ -212,4 +234,47 @@ void AudioEngine::getAllSounds() {
     }
 
     std::cout << "[Audio] Loaded " << loadedCount << " sound(s) from " << soundsDir << std::endl;
+}
+
+bool AudioEngine::initDeviceSwitchExtension() {
+    if (!alcIsExtensionPresent(_device, "ALC_SOFT_system_events") ||
+        !alcIsExtensionPresent(_device, "ALC_SOFT_reopen_device")) {
+        std::cout << "[Audio] 设备自动切换扩展不可用" << std::endl;
+        return false;
+    }
+
+    alcEventCallbackSOFT = (LPALCEVENTCALLBACKSOFT)alcGetProcAddress(_device, "alcEventCallbackSOFT");
+    alcEventControlSOFT = (LPALCEVENTCONTROLSOFT)alcGetProcAddress(_device, "alcEventControlSOFT");
+    alcReopenDeviceSOFT = (LPALCREOPENDEVICESOFT)alcGetProcAddress(_device, "alcReopenDeviceSOFT");
+
+    if (!alcEventCallbackSOFT || !alcEventControlSOFT || !alcReopenDeviceSOFT) {
+        std::cerr << "[Audio] 获取扩展函数指针失败" << std::endl;
+        return false;
+    }
+
+    // 注册回调
+    alcEventCallbackSOFT(OnDeviceEvent, nullptr);
+
+    // 启用默认设备变更事件监听
+    ALCenum eventToListen = ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT;
+    alcEventControlSOFT(1, &eventToListen, ALC_TRUE);
+
+    m_deviceSwitchSupported = true;
+    std::cout << "[Audio] 设备自动切换已启用" << std::endl;
+    return true;
+}
+
+void AudioEngine::checkDeviceSwitch() {
+    if (!m_deviceSwitchSupported) return;
+
+    if (s_needDeviceReopen.exchange(false)) {
+        std::cout << "[Audio] 正在迁移音频上下文到新设备..." << std::endl;
+
+        // alcReopenDeviceSOFT 会保留所有 AL 对象（Buffer, Source, State）
+        if (!alcReopenDeviceSOFT(_device, nullptr, nullptr)) {
+            std::cerr << "[Audio] 设备迁移失败！" << std::endl;
+        } else {
+            std::cout << "[Audio] 设备迁移成功，音频已无缝切换" << std::endl;
+        }
+    }
 }

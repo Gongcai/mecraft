@@ -36,6 +36,8 @@ void Game::init(int width, int height, const char *title) {
     m_renderer.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
     m_audioEngine.init();
+    // 初始化UI渲染器
+    m_uiRenderer.init(m_resourceMgr);
     // Push initial Gameplay state
     m_stateMachine.pushState(std::make_unique<GameplayState>(
         m_stateMachine,
@@ -82,6 +84,7 @@ void Game::run() {
         );
         AudioListener::setGain(1.0f);  // 确保增益为 1
         m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
+        m_uiRenderer.render(m_window);
         m_dashboard.render(m_player, m_world,m_player.getCamera(),m_renderer);
         m_window.swapBuffers();
 
@@ -89,5 +92,6 @@ void Game::run() {
 }
 
 void Game::shutdown() {
+    m_uiRenderer.shutdown();
     m_renderer.shutdown();
 }
