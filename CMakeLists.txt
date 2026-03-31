@@ -81,7 +81,9 @@ add_executable(mecraft main.cpp
         src/audio/AudioSource.cpp
         src/audio/AudioSource.h
         src/audio/AudioListener.cpp
-        src/audio/AudioListener.h)
+        src/audio/AudioListener.h
+        src/ui/UIRenderer.cpp
+        src/ui/UIRenderer.h)
 include_directories(assets/third_party)
 target_link_libraries(mecraft PRIVATE glfw glm::glm)
 target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)
