@@ -85,7 +85,7 @@ void Game::run() {
         AudioListener::setGain(1.0f);  // 确保增益为 1
         m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
         m_uiRenderer.render(m_window);
-        m_dashboard.render(m_player, m_world,m_player.getCamera(),m_renderer);
+        m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer);
         m_window.swapBuffers();
 
     }
