@@ -92,6 +92,8 @@ add_executable(world_flat_test
         src/world/LightEngine.cpp
         src/resource/ResourceMgr.cpp
         src/resource/ResourceMgr.h
+        src/renderer/stb_image.cpp
+        src/renderer/Shader.cpp
         assets/third_party/glad/glad.c)
 target_include_directories(world_flat_test PRIVATE assets/third_party)
 target_link_libraries(world_flat_test PRIVATE glm::glm)
