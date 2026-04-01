@@ -6,6 +6,8 @@
 
 #include <cstddef>
 
+#include "UIRenderer.h"
+
 Dashboard::Dashboard() {
     // Setup Dear ImGui context
 
@@ -30,7 +32,7 @@ void Dashboard::init(const Window &window) {
     ImGui_ImplOpenGL3_Init();
 }
 
-void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer &render) {
+void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer &render, UIRenderer& uiRenderer) {
     // (Your code calls glfwPollEvents())
     // ...
     // Start the Dear ImGui frame
@@ -41,6 +43,7 @@ void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer 
     showCameraStats(camera);
     showWorldStats(world);
     showPerformanceStats(render);
+    showCrosshairSettings(uiRenderer);
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
@@ -138,3 +141,26 @@ void Dashboard::showPerformanceStats(Renderer &render) {
 
     ImGui::End();
 }
+
+void Dashboard::showCrosshairSettings(UIRenderer& uiRenderer) {
+    ImGui::Begin("Crosshair Settings");
+
+    float size = uiRenderer.getCrosshairSize();
+    if (ImGui::SliderFloat("Size", &size, 0.5f, 4.0f)) {
+        uiRenderer.setCrosshairSize(size);
+    }
+
+    const auto& currentColor = uiRenderer.getCrosshairColor();
+    float color[4] = {
+        currentColor[0],
+        currentColor[1],
+        currentColor[2],
+        currentColor[3]
+    };
+    if (ImGui::ColorEdit4("Color", color)) {
+        uiRenderer.setCrosshairColor({color[0], color[1], color[2], color[3]});
+    }
+
+    ImGui::End();
+}
+

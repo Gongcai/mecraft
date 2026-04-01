@@ -14,17 +14,19 @@
 #include "../player/Player.h"
 #include "../world/World.h"
 #include "../renderer/Renderer.h"
+class UIRenderer;
 class Dashboard {
 public:
     Dashboard();
     ~Dashboard();
     void init(const Window& window);
-    void render( Player &player, World &world, Camera &camera,Renderer &render);
+    void render( Player &player, World &world, Camera &camera,Renderer &render, UIRenderer& uiRenderer);
 private:
     void showPlayerStats( Player& player);
     void showWorldStats( World& world);
     void showCameraStats( Camera& camera);
     void showPerformanceStats(Renderer &render);
+    void showCrosshairSettings(UIRenderer& uiRenderer);
 };
 
 
