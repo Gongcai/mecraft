@@ -90,6 +90,8 @@ add_executable(world_flat_test
         src/world/Block.h
         src/world/Block.cpp
         src/world/LightEngine.cpp
+        src/resource/ResourceMgr.cpp
+        src/resource/ResourceMgr.h
         assets/third_party/glad/glad.c)
 target_include_directories(world_flat_test PRIVATE assets/third_party)
 target_link_libraries(world_flat_test PRIVATE glm::glm)
