@@ -8,6 +8,11 @@
 
 #include "../physics/PhysicsSystem.h"
 
+namespace {
+    float Lerp(float a, float b, float t) {
+        return a + (b - a) * t;
+    }
+}
 
 
 
@@ -43,6 +48,13 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     m_onGround = m_body.isGrounded;
     m_camera.setPosition(getEyePosition());
 
+    if (m_onGround && inputContext.isActionTriggered(Action::Crouch)) {
+        m_eyeHeight = Lerp(m_eyeHeight, m_eyeHeightCrouch, dt * 5);
+    }
+    else {
+        m_eyeHeight = Lerp(m_eyeHeight, m_eyeHeightStand, dt * 5);
+
+    }
 
     m_justLanded = m_onGround && !m_onGroundLastFrame;
 
