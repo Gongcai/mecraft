@@ -1,124 +1,108 @@
-cmake_minimum_required(VERSION 4.1  )
-project(mecraft)
-
+cmake_minimum_required(VERSION 3.20) # 建议使用 3.20，4.1 尚未正式发布
+project(mecraft LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ---------------------------------------------------------------------------
+# 1. 查找依赖 (统一管理)
+# ---------------------------------------------------------------------------
 find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenAL CONFIG REQUIRED)
 
-add_executable(mecraft main.cpp
+# ---------------------------------------------------------------------------
+# 2. 定义源文件变量 (分类管理，方便增删)
+# ---------------------------------------------------------------------------
+# 第三方库 (Glad, ImGui)
+set(THIRD_PARTY_SOURCES
         assets/third_party/glad/glad.c
-        src/core/Window.cpp
-        src/core/Window.h
-        src/core/Camera.cpp
-        src/core/Camera.h
-        src/core/InputManager.cpp
-        src/core/InputManager.h
-        src/renderer/Shader.cpp
-        src/renderer/Shader.h
-        src/core/Game.cpp
-        src/core/Game.h
-        src/core/Time.cpp
-        src/core/Time.h
-        src/player/Player.cpp
-        src/player/Player.h
-        src/renderer/TestCube.cpp
-        src/renderer/TestCube.h
-        assets/third_party/stb/stb_image.h
-        src/renderer/stb_image.cpp
-        src/resource/ResourceMgr.cpp
-        src/resource/ResourceMgr.h
-        src/renderer/Renderer.cpp
-        src/renderer/Renderer.h
-        src/player/ActionMap.cpp
-        src/player/ActionMap.h
-        src/core/InputContextManager.h
-        src/core/InputContextManager.cpp
-        src/core/IGameState.h
-        src/core/GameStateMachine.h
-        src/core/GameStateMachine.cpp
-        src/core/states/GameplayState.h
-        src/core/states/UIState.h
-        src/world/Block.cpp
-        src/world/Block.h
-        src/world/Chunk.cpp
-        src/world/Chunk.h
-        src/renderer/ChunkMesher.cpp
-        src/renderer/ChunkMesher.h
-        src/renderer/ChunkMeshingService.cpp
-        src/renderer/ChunkMeshingService.h
-        assets/third_party/glad/glad.h
-        src/world/World.cpp
-        src/world/World.h
-        src/physics/PhysicsInfo.h
-        src/physics/PhysicsSystem.h
-        src/physics/PhysicsSystem.cpp
-        assets/third_party/imgui/imconfig.h
         assets/third_party/imgui/imgui.cpp
-        assets/third_party/imgui/imgui.h
         assets/third_party/imgui/imgui_demo.cpp
         assets/third_party/imgui/imgui_draw.cpp
         assets/third_party/imgui/imgui_impl_glfw.cpp
-        assets/third_party/imgui/imgui_impl_glfw.h
         assets/third_party/imgui/imgui_impl_opengl3.cpp
-        assets/third_party/imgui/imgui_impl_opengl3.h
-        assets/third_party/imgui/imgui_internal.h
         assets/third_party/imgui/imgui_tables.cpp
         assets/third_party/imgui/imgui_widgets.cpp
-        assets/third_party/imgui/imstb_rectpack.h
-        assets/third_party/imgui/imstb_textedit.h
-        assets/third_party/imgui/imstb_truetype.h
-        assets/third_party/imgui/imgui_impl_opengl3_loader.h
-        src/ui/Dashboard.cpp
-        src/ui/Dashboard.h
-        assets/third_party/FastNoise/FastNoiseLite.h
-        src/audio/AudioEngine.cpp
-        src/audio/AudioEngine.h
-        src/audio/AudioClip.cpp
-        src/audio/AudioClip.h
-        src/audio/AudioSource.cpp
-        src/audio/AudioSource.h
-        src/audio/AudioListener.cpp
-        src/audio/AudioListener.h
-        src/ui/UIRenderer.cpp
-        src/ui/UIRenderer.h)
-include_directories(assets/third_party)
-target_link_libraries(mecraft PRIVATE glfw glm::glm)
-target_link_directories(mecraft PRIVATE nlohmann_json::nlohmann_json)
-target_compile_definitions(mecraft PRIVATE GLFW_INCLUDE_NONE)
-target_link_libraries(mecraft PRIVATE OpenAL::OpenAL)
+)
 
-
-enable_testing()
-add_executable(world_flat_test
-        tests/world_flat_test.cpp
-        src/world/World.cpp
-        src/world/Chunk.cpp
-        assets/third_party/glad/glad.c)
-target_include_directories(world_flat_test PRIVATE assets/third_party)
-target_link_libraries(world_flat_test PRIVATE glm::glm)
-add_test(NAME world_flat_test COMMAND world_flat_test)
-
-add_executable(physics_mvp_test
-        tests/physics_mvp_test.cpp
-        src/physics/PhysicsSystem.cpp
-        src/world/World.cpp
-        src/world/Chunk.cpp
+# 核心逻辑 (不包含 main.cpp 和测试代码)
+set(CORE_SOURCES
+        src/core/Window.cpp
+        src/core/Camera.cpp
+        src/core/InputManager.cpp
+        src/core/Game.cpp
+        src/core/Time.cpp
+        src/core/InputContextManager.cpp
+        src/core/GameStateMachine.cpp
+        src/player/Player.cpp
+        src/player/ActionMap.cpp
+        src/renderer/Shader.cpp
+        src/renderer/Renderer.cpp
+        src/renderer/TestCube.cpp
+        src/renderer/stb_image.cpp
+        src/renderer/ChunkMesher.cpp
+        src/renderer/ChunkMeshingService.cpp
+        src/resource/ResourceMgr.cpp
         src/world/Block.cpp
-        assets/third_party/glad/glad.c)
-target_include_directories(physics_mvp_test PRIVATE assets/third_party)
-target_link_libraries(physics_mvp_test PRIVATE glm::glm nlohmann_json::nlohmann_json glfw)
+        src/world/Chunk.cpp
+        src/world/World.cpp
+        src/physics/PhysicsSystem.cpp
+        src/audio/AudioEngine.cpp
+        src/audio/AudioClip.cpp
+        src/audio/AudioSource.cpp
+        src/audio/AudioListener.cpp
+        src/ui/Dashboard.cpp
+        src/ui/UIRenderer.cpp
+)
+
+# ---------------------------------------------------------------------------
+# 3. 构建核心静态库 (项目的“引擎”部分)
+# ---------------------------------------------------------------------------
+add_library(mecraft_core STATIC ${CORE_SOURCES} ${THIRD_PARTY_SOURCES})
+
+# 设置包含路径：PUBLIC 确保链接此库的其他目标也能找到这些头文件
+target_include_directories(mecraft_core PUBLIC
+        src
+        assets/third_party
+)
+
+# 统一链接依赖
+target_link_libraries(mecraft_core PUBLIC
+        glfw
+        glm::glm
+        nlohmann_json::nlohmann_json
+        OpenAL::OpenAL
+)
+
+# 统一宏定义
+target_compile_definitions(mecraft_core PUBLIC GLFW_INCLUDE_NONE)
+
+# ---------------------------------------------------------------------------
+# 4. 主程序 (真正的入口)
+# ---------------------------------------------------------------------------
+add_executable(mecraft main.cpp)
+target_link_libraries(mecraft PRIVATE mecraft_core)
+
+# ---------------------------------------------------------------------------
+# 5. 测试套件 (现在非常清爽)
+# ---------------------------------------------------------------------------
+enable_testing()
+
+# 辅助宏：减少重复代码
+macro(add_mecraft_test TEST_NAME SOURCE_FILE)
+    add_executable(${TEST_NAME} ${SOURCE_FILE})
+    target_link_libraries(${TEST_NAME} PRIVATE mecraft_core)
+    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+endmacro()
+
+# 物理测试 (需要特殊宏定义)
+add_executable(physics_mvp_test tests/physics_mvp_test.cpp)
+target_link_libraries(physics_mvp_test PRIVATE mecraft_core)
 target_compile_definitions(physics_mvp_test PRIVATE MECRAFT_NO_TEXTURES)
 add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 
-add_executable(audio_test
-        tests/audio_test.cpp
-        src/audio/AudioEngine.cpp
-        src/audio/AudioClip.cpp
-        src/audio/AudioSource.cpp
-        src/audio/AudioListener.cpp)
-target_include_directories(audio_test PRIVATE assets/third_party)
-target_link_libraries(audio_test PRIVATE glm::glm OpenAL::OpenAL)
-add_test(NAME audio_test COMMAND audio_test)
+# 其他简单测试
+add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
+add_mecraft_test(audio_test tests/audio_test.cpp)
