@@ -1,9 +1,6 @@
 #include "ChunkMesher.h"
 
 #include <array>
-#include <cstddef>
-#include <utility>
-
 #include <glm/vec2.hpp>
 
 namespace {
@@ -31,31 +28,18 @@ constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
     {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}  // right (+x)
 }};
 
-constexpr std::array<IVec3, 6> kFaceAxisA = {{{1, 0, 0}, {1, 0, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}};
-constexpr std::array<IVec3, 6> kFaceAxisB = {{{0, 0, -1}, {0, 0, 1}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}, {0, 1, 0}}};
-
-constexpr std::array<std::pair<int, int>, 4> kCornerSigns = {{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}}};
-
-size_t toIndex(const int x, const int y, const int z) {
-    return static_cast<size_t>(x) +
-           static_cast<size_t>(z) * Chunk::SIZE_X +
-           static_cast<size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
+std::size_t toIndex(const int x, const int y, const int z) {
+    return static_cast<std::size_t>(x) +
+           static_cast<std::size_t>(z) * Chunk::SIZE_X +
+           static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
 }
 
-size_t toBorderYZIndex(const int y, const int z) {
-    return static_cast<size_t>(z) + static_cast<size_t>(y) * Chunk::SIZE_Z;
+std::size_t toBorderYZIndex(const int y, const int z) {
+    return static_cast<std::size_t>(z) + static_cast<std::size_t>(y) * Chunk::SIZE_Z;
 }
 
-size_t toBorderYXIndex(const int y, const int x) {
-    return static_cast<size_t>(x) + static_cast<size_t>(y) * Chunk::SIZE_X;
-}
-
-IVec3 add(const IVec3& a, const IVec3& b) {
-    return {a.x + b.x, a.y + b.y, a.z + b.z};
-}
-
-IVec3 mul(const IVec3& a, const int scalar) {
-    return {a.x * scalar, a.y * scalar, a.z * scalar};
+std::size_t toBorderYXIndex(const int y, const int x) {
+    return static_cast<std::size_t>(x) + static_cast<std::size_t>(y) * Chunk::SIZE_X;
 }
 
 BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
@@ -84,22 +68,6 @@ BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y
     return snapshot.blocks[toIndex(x, y, z)];
 }
 
-bool isSolidForAO(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (y < 0 || y >= Chunk::SIZE_Y) {
-        return false;
-    }
-    const BlockID id = getNeighborAwareBlock(snapshot, x, y, z);
-    return BlockRegistry::get(id).isSolid;
-}
-
-uint8_t calcAOValue(const bool side1, const bool side2, const bool corner) {
-    if (side1 && side2) {
-        return 0;
-    }
-    const uint8_t blocked = static_cast<uint8_t>(side1) + static_cast<uint8_t>(side2) + static_cast<uint8_t>(corner);
-    return static_cast<uint8_t>(3 - blocked);
-}
-
 int getFaceTextureIndex(const BlockDef& def, const int face) {
     switch (face) {
         case FACE_TOP:
@@ -119,49 +87,17 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
     }
 }
 
-void computeFaceAO(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z, const int face, float outAO[4]) {
-    const IVec3 blockPos{x, y, z};
-    const IVec3 normal = kFaceNormals[face];
-    const IVec3 axisA = kFaceAxisA[face];
-    const IVec3 axisB = kFaceAxisB[face];
-
-    const IVec3 base = add(blockPos, normal);
-
-    for (int i = 0; i < 4; ++i) {
-        const int signA = kCornerSigns[i].first;
-        const int signB = kCornerSigns[i].second;
-
-        const IVec3 side1Pos = add(base, mul(axisA, signA));
-        const IVec3 side2Pos = add(base, mul(axisB, signB));
-        const IVec3 cornerPos = add(add(base, mul(axisA, signA)), mul(axisB, signB));
-
-        const bool side1 = isSolidForAO(snapshot, side1Pos.x, side1Pos.y, side1Pos.z);
-        const bool side2 = isSolidForAO(snapshot, side2Pos.x, side2Pos.y, side2Pos.z);
-        const bool corner = isSolidForAO(snapshot, cornerPos.x, cornerPos.y, cornerPos.z);
-
-        outAO[i] = static_cast<float>(calcAOValue(side1, side2, corner));
-    }
-}
-
-uint8_t getSunlight(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
-    return static_cast<uint8_t>((snapshot.lightMap[toIndex(x, y, z)] >> 4) & 0x0F);
-}
-
-uint8_t getBlockLight(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
-    return static_cast<uint8_t>(snapshot.lightMap[toIndex(x, y, z)] & 0x0F);
-}
-
 void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            const size_t index = toBorderYZIndex(y, z);
+            const std::size_t index = toBorderYZIndex(y, z);
             const Chunk* posX = chunk.neighbors[0];
             const Chunk* negX = chunk.neighbors[1];
             snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z) : BlockType::AIR;
             snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z) : BlockType::AIR;
         }
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            const size_t index = toBorderYXIndex(y, x);
+            const std::size_t index = toBorderYXIndex(y, x);
             const Chunk* posZ = chunk.neighbors[2];
             const Chunk* negZ = chunk.neighbors[3];
             snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0) : BlockType::AIR;
@@ -177,9 +113,8 @@ ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const size_t index = toIndex(x, y, z);
+                const std::size_t index = toIndex(x, y, z);
                 snapshot.blocks[index] = chunk.getBlock(x, y, z);
-                snapshot.lightMap[index] = static_cast<uint8_t>((chunk.getSunlight(x, y, z) << 4) | chunk.getBlockLight(x, y, z));
             }
         }
     }
@@ -214,21 +149,12 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
                         continue;
                     }
 
-                    const uint8_t sunlight = getSunlight(snapshot, x, y, z);
-                    const uint8_t blockLight = getBlockLight(snapshot, x, y, z);
-
-                    float aoValues[4] = {3.0f, 3.0f, 3.0f, 3.0f};
-                    computeFaceAO(snapshot, x, y, z, face, aoValues);
-
                     auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
                     addFace(target,
                             glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                             face,
                             def,
-                            atlas,
-                            sunlight,
-                            blockLight,
-                            aoValues);
+                            atlas);
                 }
             }
         }
@@ -243,7 +169,7 @@ void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
     ChunkMesh mesh;
     mesh.upload(meshData.opaqueVertices);
     mesh.uploadTransparent(meshData.transparentVertices);
-    chunk.setMesh(std::move(mesh));
+    chunk.setMesh(mesh);
 }
 
 bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
@@ -277,10 +203,7 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
                           const glm::vec3& pos,
                           const int face,
                           const BlockDef& def,
-                          const TextureAtlas& atlas,
-                          const uint8_t sunlight,
-                          const uint8_t blockLight,
-                          const float aoValues[4]) {
+                          const TextureAtlas& atlas) {
     int tileIndex = getFaceTextureIndex(def, face);
     if (tileIndex < 0) {
         tileIndex = 0;
@@ -305,20 +228,9 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             pos.z + local.z,
             uvCoord.x,
             uvCoord.y,
-            static_cast<float>(face),
-            static_cast<float>(sunlight),
-            static_cast<float>(blockLight),
-            aoValues[index]
+            static_cast<float>(face)
         });
     }
-}
-
-uint8_t ChunkMesher::calcAO(const bool side1, const bool side2, const bool corner) {
-    if (side1 && side2) {
-        return 0;
-    }
-    const uint8_t blocked = static_cast<uint8_t>(side1) + static_cast<uint8_t>(side2) + static_cast<uint8_t>(corner);
-    return static_cast<uint8_t>(3 - blocked);
 }
 
 

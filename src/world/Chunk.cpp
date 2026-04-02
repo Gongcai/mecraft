@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <utility>
 
 namespace {
 int wrapToChunkAxis(const int value) {
@@ -23,15 +22,6 @@ void setupVertexLayout() {
 
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
-
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
-
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
 }
 }
 
@@ -97,9 +87,9 @@ uint64_t Chunk::getMeshRevision() const {
     return m_meshRevision;
 }
 
-void Chunk::setMesh(ChunkMesh&& mesh) {
+void Chunk::setMesh(const ChunkMesh& mesh) {
     m_mesh.destroy();
-    m_mesh = std::move(mesh);
+    m_mesh = mesh;
     m_dirty = false;
 }
 

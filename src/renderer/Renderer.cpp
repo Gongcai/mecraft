@@ -174,7 +174,7 @@ void Renderer::renderWorld(const World& world) {
             job.revision = chunk.getMeshRevision();
             job.snapshot = ChunkMesher::captureSnapshot(chunk);
             job.atlas = &atlas;
-            m_meshingService.submit(std::move(job));
+            m_meshingService.submit(job);
             m_meshingInFlight.insert(chunkKey);
             ++submittedThisPass;
             ++m_meshingSubmittedThisFrame;
@@ -390,7 +390,7 @@ void Renderer::drainMeshingResults(const World& world) {
         ChunkMesh mesh;
         mesh.upload(result.meshData.opaqueVertices);
         mesh.uploadTransparent(result.meshData.transparentVertices);
-        chunk.setMesh(std::move(mesh));
+        chunk.setMesh(mesh);
     }
 }
 
