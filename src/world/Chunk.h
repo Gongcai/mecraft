@@ -2,7 +2,6 @@
 #define MECRAFT_CHUNK_H
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -18,9 +17,6 @@ struct BlockVertex {
     float u;
     float v;
     float normal;
-    float sunlight;
-    float blockLight;
-    float ao;
 };
 
 struct ChunkMesh {
@@ -46,7 +42,7 @@ public:
     Chunk(int chunkX, int chunkZ);
     ~Chunk();
 
-    BlockID getBlock(int x, int y, int z) const;
+    [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
 
     static glm::ivec3 worldToLocal(int wx, int wy, int wz);
@@ -55,7 +51,7 @@ public:
     [[nodiscard]] bool isDirty() const;
     void markDirty();
     [[nodiscard]] uint64_t getMeshRevision() const;
-    void setMesh(ChunkMesh&& mesh);
+    void setMesh(const ChunkMesh& mesh);
     [[nodiscard]] const ChunkMesh& getMesh() const;
     ChunkMesh& getMesh();
 
@@ -70,10 +66,10 @@ public:
     int m_chunkZ;
 
 private:
-    static constexpr size_t BLOCK_COUNT = static_cast<size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
+    static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
 
     [[nodiscard]] static bool isInBounds(int x, int y, int z);
-    [[nodiscard]] static size_t toIndex(int x, int y, int z);
+    [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
     std::array<BlockID, BLOCK_COUNT> m_blocks{};
     std::array<uint8_t, BLOCK_COUNT> m_lightMap{}; // high nibble = sun, low nibble = block

@@ -9,16 +9,15 @@
 #include "../resource/ResourceMgr.h"
 #include "../world/Chunk.h"
 
-constexpr size_t CHUNK_BLOCK_COUNT = static_cast<size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
+constexpr std::size_t CHUNK_BLOCK_COUNT = static_cast<std::size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
 
 struct ChunkMeshingSnapshot {
     std::array<BlockID, CHUNK_BLOCK_COUNT> blocks{};
-    std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{};
 
-    std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXBorder{};
-    std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXBorder{};
-    std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZBorder{};
-    std::array<BlockID, static_cast<size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZBorder{};
+    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXBorder{};
+    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXBorder{};
+    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZBorder{};
+    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZBorder{};
 };
 
 struct ChunkMeshData {
@@ -43,12 +42,7 @@ private:
                         const glm::vec3& pos,
                         int face,
                         const BlockDef& def,
-                        const TextureAtlas& atlas,
-                        uint8_t sunlight,
-                        uint8_t blockLight,
-                        const float aoValues[4]);
-
-    static uint8_t calcAO(bool side1, bool side2, bool corner);
+                        const TextureAtlas& atlas);
 };
 
 #endif // MECRAFT_CHUNKMESHER_H
