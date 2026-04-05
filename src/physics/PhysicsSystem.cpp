@@ -40,6 +40,40 @@ bool isWaterBlock(const World& world, const int x, const int y, const int z) {
     return def.name != nullptr && std::string(def.name) == "water";
 }
 
+float overlapLen(float aMin, float aMax, float bMin, float bMax);
+
+float queryWaterFillRatio(const PhysicsBody& body, const World& world) {
+    const AABB box = makeBodyAABBAt(body, body.position);
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
+    const int minY = static_cast<int>(std::floor(box.min.y));
+    const int maxY = static_cast<int>(std::floor(box.max.y - kContactEpsilon));
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kContactEpsilon));
+
+    const float totalVolume = (box.max.x - box.min.x) * (box.max.y - box.min.y) * (box.max.z - box.min.z);
+    if (totalVolume <= 0.0f) {
+        return 0.0f;
+    }
+
+    float waterVolume = 0.0f;
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                if (!isWaterBlock(world, x, y, z)) {
+                    continue;
+                }
+                const float ox = overlapLen(box.min.x, box.max.x, static_cast<float>(x), static_cast<float>(x + 1));
+                const float oy = overlapLen(box.min.y, box.max.y, static_cast<float>(y), static_cast<float>(y + 1));
+                const float oz = overlapLen(box.min.z, box.max.z, static_cast<float>(z), static_cast<float>(z + 1));
+                waterVolume += ox * oy * oz;
+            }
+        }
+    }
+
+    return std::clamp(waterVolume / totalVolume, 0.0f, 1.0f);
+}
+
 float overlapLen(const float aMin, const float aMax, const float bMin, const float bMax) {
     return std::max(0.0f, std::min(aMax, bMax) - std::max(aMin, bMin));
 }
@@ -65,35 +99,7 @@ bool overlapsSolid(const World& world, const AABB& box) {
 }
 
 bool queryInWater(const PhysicsBody& body, const World& world) {
-    const AABB box = makeBodyAABBAt(body, body.position);
-    const int minX = static_cast<int>(std::floor(box.min.x));
-    const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
-    const int minY = static_cast<int>(std::floor(box.min.y));
-    const int maxY = static_cast<int>(std::floor(box.max.y - kContactEpsilon));
-    const int minZ = static_cast<int>(std::floor(box.min.z));
-    const int maxZ = static_cast<int>(std::floor(box.max.z - kContactEpsilon));
-
-    const float totalVolume = (box.max.x - box.min.x) * (box.max.y - box.min.y) * (box.max.z - box.min.z);
-    if (totalVolume <= 0.0f) {
-        return false;
-    }
-
-    float waterVolume = 0.0f;
-    for (int x = minX; x <= maxX; ++x) {
-        for (int y = minY; y <= maxY; ++y) {
-            for (int z = minZ; z <= maxZ; ++z) {
-                if (!isWaterBlock(world, x, y, z)) {
-                    continue;
-                }
-                const float ox = overlapLen(box.min.x, box.max.x, static_cast<float>(x), static_cast<float>(x + 1));
-                const float oy = overlapLen(box.min.y, box.max.y, static_cast<float>(y), static_cast<float>(y + 1));
-                const float oz = overlapLen(box.min.z, box.max.z, static_cast<float>(z), static_cast<float>(z + 1));
-                waterVolume += ox * oy * oz;
-            }
-        }
-    }
-
-    return (waterVolume / totalVolume) > 0.2f;
+    return queryWaterFillRatio(body, world) > 0.2f;
 }
 
 float moveTowards(const float current, const float target, const float maxDelta) {
@@ -138,12 +144,16 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
 }
 
 void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
-                         const bool wasGrounded, const float dt) {
+                         const bool wasGrounded, const bool isFullySubmerged, const float dt) {
     const float gravityScale = body.isInWater ? tuning.waterGravityScale : 1.0f;
     body.velocity.y -= tuning.gravity * gravityScale * dt;
 
     if (body.isInWater && intent.wantsJump) {
-        body.velocity.y += sin(tuning.swimUpAccel * Time::currentGameTime);
+        if (isFullySubmerged) {
+            body.velocity.y += tuning.swimUpAccel * dt;
+        } else {
+            body.velocity.y += static_cast<float>(std::sin(tuning.swimUpAccel * Time::currentGameTime)) + 1;
+        }
     } else if (wasGrounded && intent.wantsJump) {
         // Hold-to-bounce: keep jumping as soon as we are grounded again.
         body.velocity.y = tuning.jumpSpeed;
@@ -193,6 +203,7 @@ void moveAndCollideAxis(PhysicsBody& body, const World& world, const float dt, c
 
 namespace physics {
 
+
 PhysicsSystem::PhysicsSystem(World* world) : m_world(world) {}
 
 void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, const float dt) {
@@ -203,10 +214,12 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     const bool wasGrounded = body.isGrounded;
 
     body.hitWall = false;
-    body.isInWater = queryInWater(body, *m_world);
+    const float waterFillRatio = queryWaterFillRatio(body, *m_world);
+    body.isInWater = waterFillRatio > 0.2f;
+    const bool isFullySubmerged = waterFillRatio > 0.95f;
 
     applyHorizontalControl(body, intent, tuning, wasGrounded, dt);
-    applyVerticalForces(body, intent, tuning, wasGrounded, dt);
+    applyVerticalForces(body, intent, tuning, wasGrounded, isFullySubmerged, dt);
     applyDrag(body, tuning, dt);
 
     body.isGrounded = false;

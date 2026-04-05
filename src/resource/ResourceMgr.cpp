@@ -141,7 +141,7 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
     glBindTexture(GL_TEXTURE_2D, textureID);
 
     // 设置环绕，过滤参数 (对于体素风格游戏一般使用 Nearest (邻近) 滤波从而不模糊)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
