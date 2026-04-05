@@ -10,6 +10,7 @@ int worldToChunkCoord(const int world, const int chunkSize) {
 }
 void World::init(uint32_t seed) {
     m_seed = seed;
+    m_terrainGen.init(seed, m_flatSurfaceY);
     m_chunks.clear();
     m_loadQueue.clear();
 }
@@ -163,6 +164,24 @@ void World::setRenderDistance(int dist) {
     m_renderDistance = std::max(1, dist);
 }
 
+int World::getSurfaceY(int x, int z) const {
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+    const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it != m_chunks.end()) {
+        const int localX = x - chunkX * Chunk::SIZE_X;
+        const int localZ = z - chunkZ * Chunk::SIZE_Z;
+        for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
+            if (it->second->getBlock(localX, y, localZ) != BlockType::AIR) {
+                return y;
+            }
+        }
+        return 0;
+    }
+
+    return m_terrainGen.sampleSurfaceY(x, z);
+}
+
 int64_t World::chunkKey(int cx, int cz) {
     return (static_cast<int64_t>(cx) << 32) | (static_cast<int64_t>(cz) & 0xFFFFFFFF);
 }
@@ -173,20 +192,7 @@ void World::loadChunk(int cx, int cz) {
 
     auto chunk = std::make_unique<Chunk>(cx, cz);
 
-    for (int x = 0; x < Chunk::SIZE_X; ++x) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int y = 0; y <= m_flatSurfaceY; ++y) {
-                if (y == m_flatSurfaceY) {
-                    chunk->setBlock(x, y, z, BlockType::GRASS);
-                    chunk->setSunlight(x, y, z, 15);
-                } else if (y >= m_flatSurfaceY - 3) {
-                    chunk->setBlock(x, y, z, BlockType::DIRT);
-                } else {
-                    chunk->setBlock(x, y, z, BlockType::STONE);
-                }
-            }
-        }
-    }
+    m_terrainGen.generateChunk(*chunk);
 
     m_chunks[key] = std::move(chunk);
 }

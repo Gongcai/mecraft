@@ -22,7 +22,12 @@ namespace BlockType {
     constexpr BlockID SAND   = 4;
     constexpr BlockID WOOD   = 5;
     constexpr BlockID GLASS  = 6;
-    // ....
+    constexpr BlockID COAL_ORE = 7;
+    constexpr BlockID DIAMOND_ORE = 8;
+    constexpr BlockID GOLD_ORE = 9;
+    constexpr BlockID IRON_ORE = 10;
+    constexpr BlockID WATER = 11;
+
     constexpr BlockID COUNT = 255; // 预留255种方块类型（0-254有效）
 }
 

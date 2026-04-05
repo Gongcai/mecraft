@@ -30,7 +30,7 @@ int main() {
     world.init(20260328);
     loadChunks(world);
 
-    const int surfaceY = world.getFlatSurfaceY();
+    const int surfaceY = world.getSurfaceY(0, 0);
 
     PhysicsTuning tuning;
 

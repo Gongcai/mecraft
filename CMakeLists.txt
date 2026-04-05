@@ -25,6 +25,7 @@ set(THIRD_PARTY_SOURCES
         assets/third_party/imgui/imgui_impl_opengl3.cpp
         assets/third_party/imgui/imgui_tables.cpp
         assets/third_party/imgui/imgui_widgets.cpp
+        assets/third_party/FastNoise/FastNoiseLite.h
 )
 
 # 核心逻辑 (不包含 main.cpp 和测试代码)
@@ -47,6 +48,7 @@ set(CORE_SOURCES
         src/resource/ResourceMgr.cpp
         src/world/Block.cpp
         src/world/Chunk.cpp
+        src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/physics/PhysicsSystem.cpp
         src/audio/AudioEngine.cpp
