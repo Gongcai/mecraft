@@ -12,6 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "Chunk.h"
+#include "TerrainGenerator.h"
 #include "../physics/PhysicsInfo.h"
 
 class World {
@@ -36,12 +37,13 @@ public:
     void setRenderDistance(int dist);
 
     [[nodiscard]] int getFlatSurfaceY() const { return m_flatSurfaceY; }
+    [[nodiscard]] int getSurfaceY(int x, int z) const;
 
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t
     std::unordered_map<int64_t, std::unique_ptr<Chunk>> m_chunks;
 
-    //TerrainGenerator m_terrainGen;
+    TerrainGenerator m_terrainGen;
 
     int m_renderDistance = 8;   // 以区块为单位
     uint32_t m_seed = 0;

@@ -6,6 +6,7 @@
 #include "PhysicsInfo.h"
 #include "../world/Block.h"
 #include "../world/World.h"
+#include "core/Time.h"
 
 namespace {
 
@@ -142,7 +143,7 @@ void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const Phys
     body.velocity.y -= tuning.gravity * gravityScale * dt;
 
     if (body.isInWater && intent.wantsJump) {
-        body.velocity.y += tuning.swimUpAccel * dt;
+        body.velocity.y += sin(tuning.swimUpAccel * Time::currentGameTime);
     } else if (wasGrounded && intent.wantsJump) {
         // Hold-to-bounce: keep jumping as soon as we are grounded again.
         body.velocity.y = tuning.jumpSpeed;

@@ -27,22 +27,47 @@ int main() {
         return fail("unexpected active chunk count for render distance 1");
     }
 
-    const int surfaceY = world.getFlatSurfaceY();
+    const int surfaceY = world.getSurfaceY(0, 0);
+    if (surfaceY < 8 || surfaceY > Chunk::SIZE_Y - 8) {
+        return fail("surfaceY out of expected generated range");
+    }
     if (world.getBlock(0, surfaceY + 1, 0) != BlockType::AIR) {
         return fail("block above surface should be AIR");
     }
-    if (world.getBlock(0, surfaceY, 0) != BlockType::GRASS) {
-        return fail("surface block should be GRASS");
-    }
-    if (world.getBlock(0, surfaceY - 2, 0) != BlockType::DIRT) {
-        return fail("sub-surface layer should be DIRT");
-    }
-    if (world.getBlock(0, surfaceY - 6, 0) != BlockType::STONE) {
-        return fail("deep layer should be STONE");
+    const BlockID topBlock = world.getBlock(0, surfaceY, 0);
+    if (topBlock != BlockType::GRASS && topBlock != BlockType::SAND) {
+        return fail("surface block should be GRASS or SAND");
     }
 
-    if (world.getBlock(-1, surfaceY, -1) != BlockType::GRASS) {
+    const BlockID underBlock = world.getBlock(0, surfaceY - 2, 0);
+    if (underBlock != BlockType::DIRT && underBlock != BlockType::SAND && underBlock != BlockType::STONE) {
+        return fail("sub-surface layer should be dirt/sand/stone");
+    }
+
+    if (world.getBlock(0, 1, 0) != BlockType::STONE) {
+        return fail("deep layer should include STONE");
+    }
+
+    const int negSurfaceY = world.getSurfaceY(-1, -1);
+    if (world.getBlock(-1, negSurfaceY, -1) == BlockType::AIR) {
         return fail("negative world coordinate mapping failed");
+    }
+
+    const int edgeA = world.getSurfaceY(15, 0);
+    const int edgeB = world.getSurfaceY(16, 0);
+    if (std::abs(edgeA - edgeB) > 12) {
+        return fail("height discontinuity too large across chunk border");
+    }
+
+
+    World world2;
+    world2.init(20260324);
+    world2.setRenderDistance(1);
+    for (int i = 0; i < 8; ++i) {
+        world2.update(glm::vec3(0.0f, 0.0f, 0.0f));
+    }
+    if (world2.getSurfaceY(0, 0) != surfaceY) {
+        return fail("same seed must produce same surface height");
     }
 
     world.setBlock(0, surfaceY + 1, 0, BlockType::WOOD);

@@ -178,6 +178,10 @@ bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
                                    const int nz,
                                    const BlockID currentId) {
     const BlockID neighborId = getNeighborAwareBlock(snapshot, nx, ny, nz);
+    if (currentId == BlockType::WATER && neighborId == BlockType::WATER) {
+        return false;
+    }
+
     if (neighborId == BlockType::AIR) {
         return true;
     }

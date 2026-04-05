@@ -54,6 +54,43 @@
       "textures": {
         "all": "glass"
       }
+    },
+    {
+        "id": 7,
+        "name": "coal_ore",
+        "textures": {
+            "all": "coal_ore"
+        }
+    },
+    {
+        "id": 8,
+        "name": "diamond_ore",
+        "textures": {
+            "all": "diamond_ore"
+        }
+    },
+    {
+        "id": 9,
+        "name": "gold_ore",
+        "textures": {
+            "all": "gold_ore"
+        }
+    },
+    {
+        "id": 10,
+        "name": "iron_ore",
+        "textures": {
+            "all": "iron_ore"
+        }
+    },
+    {
+        "id": 11,
+        "name": "water",
+        "isSolid": false,
+        "isTransparent": true,
+        "textures": {
+            "all": "water"
+        }
     }
   ]
 }

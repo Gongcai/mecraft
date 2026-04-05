@@ -31,7 +31,7 @@ void Game::init(int width, int height, const char *title) {
     m_world.init(1337);
     m_world.setRenderDistance(8);
     // 初始化玩家
-    m_player.init({0.0f, static_cast<float>(m_world.getFlatSurfaceY() + 2), 0.0f});
+    m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);

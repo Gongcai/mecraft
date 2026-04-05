@@ -39,6 +39,11 @@ struct RegionBucket {
     int regionZ = 0;
     std::unordered_map<int64_t, ColumnBucket> columns;
 };
+
+struct TransparentDrawItem {
+    Chunk* chunk = nullptr;
+    float distanceSq = 0.0f;
+};
 }
 
 Renderer::~Renderer() {
@@ -131,6 +136,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     m_projection = camera.getProjectionMatrix(window.getAspectRatio());
     m_view = camera.getViewMatrix();
+    m_cameraPos = camera.getPosition();
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
 
@@ -209,6 +215,9 @@ void Renderer::renderWorld(const World& world) {
         column.chunks.push_back(&chunk);
     }
 
+    std::vector<TransparentDrawItem> transparentItems;
+    transparentItems.reserve(activeChunks.size());
+
     for (const auto& regionPair : regions) {
         const RegionBucket& region = regionPair.second;
 
@@ -272,18 +281,48 @@ void Renderer::renderWorld(const World& world) {
                 }
 
                 if (mesh.transparentVertexCount > 0) {
-                    glEnable(GL_BLEND);
-                    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                    glDepthMask(GL_FALSE);
-
-                    glBindVertexArray(mesh.transparentVao);
-                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
-                    drawCallCount++;
-                    glDepthMask(GL_TRUE);
-                    glDisable(GL_BLEND);
+                    const glm::vec3 chunkCenter = glm::vec3(offset.x + Chunk::SIZE_X * 0.5f,
+                                                            offset.y + Chunk::SIZE_Y * 0.5f,
+                                                            offset.z + Chunk::SIZE_Z * 0.5f);
+                    const glm::vec3 toCamera = chunkCenter - m_cameraPos;
+                    transparentItems.push_back({chunk, glm::dot(toCamera, toCamera)});
                 }
             }
         }
+    }
+
+    std::sort(transparentItems.begin(), transparentItems.end(),
+              [](const TransparentDrawItem& a, const TransparentDrawItem& b) {
+                  return a.distanceSq > b.distanceSq;
+              });
+
+    if (!transparentItems.empty()) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
+        for (const TransparentDrawItem& item : transparentItems) {
+            if (item.chunk == nullptr) {
+                continue;
+            }
+
+            const ChunkMesh& mesh = item.chunk->getMesh();
+            if (mesh.transparentVertexCount == 0) {
+                continue;
+            }
+
+            glm::mat4 model(1.0f);
+            const glm::ivec3 offset = item.chunk->getWorldOffset();
+            model = glm::translate(model, glm::vec3(offset.x, offset.y, offset.z));
+            m_chunkShader->setMat4("model", model);
+
+            glBindVertexArray(mesh.transparentVao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
+            ++drawCallCount;
+        }
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
     }
 
     glBindVertexArray(0);
