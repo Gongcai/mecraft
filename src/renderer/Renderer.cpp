@@ -32,18 +32,41 @@ struct ColumnBucket {
     int chunkX = 0;
     int chunkZ = 0;
     std::vector<Chunk*> chunks;
+    bool hasBounds = false;
+    glm::vec3 boundsMin = glm::vec3(0.0f);
+    glm::vec3 boundsMax = glm::vec3(0.0f);
 };
 
 struct RegionBucket {
     int regionX = 0;
     int regionZ = 0;
     std::unordered_map<int64_t, ColumnBucket> columns;
+    bool hasBounds = false;
+    glm::vec3 boundsMin = glm::vec3(0.0f);
+    glm::vec3 boundsMax = glm::vec3(0.0f);
 };
 
 struct TransparentDrawItem {
     Chunk* chunk = nullptr;
     float distanceSq = 0.0f;
 };
+
+void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
+                  const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
+    if (!hasBounds) {
+        minBounds = candidateMin;
+        maxBounds = candidateMax;
+        hasBounds = true;
+        return;
+    }
+
+    minBounds.x = std::min(minBounds.x, candidateMin.x);
+    minBounds.y = std::min(minBounds.y, candidateMin.y);
+    minBounds.z = std::min(minBounds.z, candidateMin.z);
+    maxBounds.x = std::max(maxBounds.x, candidateMax.x);
+    maxBounds.y = std::max(maxBounds.y, candidateMax.y);
+    maxBounds.z = std::max(maxBounds.z, candidateMax.z);
+}
 }
 
 Renderer::~Renderer() {
@@ -157,17 +180,32 @@ void Renderer::renderWorld(const World& world) {
 
     drainMeshingResults(world);
 
+    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
+    bindChunkRenderState(atlas);
+    submitMeshingJobs(world, atlas);
+
+    std::vector<Chunk*> transparentChunks;
+    transparentChunks.reserve(world.getActiveChunks().size());
+    renderOpaqueChunksAndCollectTransparent(world, transparentChunks);
+    renderTransparentChunks(transparentChunks);
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Renderer::bindChunkRenderState(const TextureAtlas& atlas) const {
+
     m_chunkShader->use();
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
     m_chunkShader->setInt("texAtlas", 0);
 
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+}
 
+void Renderer::submitMeshingJobs(const World& world, const TextureAtlas& atlas) {
     int submittedThisPass = 0;
     const auto& activeChunks = world.getActiveChunks();
-    const int regionChunkSize = std::max(1, m_regionChunkSize);
     for (const auto& pair : activeChunks) {
         const int64_t chunkKey = pair.first;
         Chunk& chunk = *pair.second;
@@ -186,6 +224,11 @@ void Renderer::renderWorld(const World& world) {
             ++m_meshingSubmittedThisFrame;
         }
     }
+}
+
+void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks) {
+    const auto& activeChunks = world.getActiveChunks();
+    const int regionChunkSize = std::max(1, m_regionChunkSize);
 
     std::unordered_map<int64_t, RegionBucket> regions;
     regions.reserve(activeChunks.size());
@@ -213,25 +256,28 @@ void Renderer::renderWorld(const World& world) {
             column.chunkZ = chunk.m_chunkZ;
         }
         column.chunks.push_back(&chunk);
-    }
 
-    std::vector<TransparentDrawItem> transparentItems;
-    transparentItems.reserve(activeChunks.size());
+        const glm::ivec3 offset = chunk.getWorldOffset();
+        const glm::vec3 chunkMin = mesh.hasBounds
+            ? mesh.boundsMin + glm::vec3(offset)
+            : glm::vec3(offset);
+        const glm::vec3 chunkMax = mesh.hasBounds
+            ? mesh.boundsMax + glm::vec3(offset)
+            : glm::vec3(offset) + glm::vec3(static_cast<float>(Chunk::SIZE_X), static_cast<float>(Chunk::SIZE_Y), static_cast<float>(Chunk::SIZE_Z));
+
+        expandBounds(column.boundsMin, column.boundsMax, column.hasBounds, chunkMin, chunkMax);
+        expandBounds(region.boundsMin, region.boundsMax, region.hasBounds, chunkMin, chunkMax);
+    }
 
     for (const auto& regionPair : regions) {
         const RegionBucket& region = regionPair.second;
 
-        const glm::vec3 regionMin(
-            static_cast<float>(region.regionX * regionChunkSize * Chunk::SIZE_X),
-            0.0f,
-            static_cast<float>(region.regionZ * regionChunkSize * Chunk::SIZE_Z));
-        const glm::vec3 regionMax = regionMin + glm::vec3(
-            static_cast<float>(regionChunkSize * Chunk::SIZE_X),
-            static_cast<float>(Chunk::SIZE_Y),
-            static_cast<float>(regionChunkSize * Chunk::SIZE_Z));
+        if (!region.hasBounds) {
+            continue;
+        }
 
         ++m_regionTestsThisFrame;
-        if (!isChunkInFrustum(regionMin, regionMax)) {
+        if (!isChunkInFrustum(region.boundsMin, region.boundsMax)) {
             continue;
         }
         ++m_regionPassedThisFrame;
@@ -239,17 +285,12 @@ void Renderer::renderWorld(const World& world) {
         for (const auto& columnPair : region.columns) {
             const ColumnBucket& column = columnPair.second;
 
-            const glm::vec3 columnMin(
-                static_cast<float>(column.chunkX * Chunk::SIZE_X),
-                0.0f,
-                static_cast<float>(column.chunkZ * Chunk::SIZE_Z));
-            const glm::vec3 columnMax = columnMin + glm::vec3(
-                static_cast<float>(Chunk::SIZE_X),
-                static_cast<float>(Chunk::SIZE_Y),
-                static_cast<float>(Chunk::SIZE_Z));
+            if (!column.hasBounds) {
+                continue;
+            }
 
             ++m_columnTestsThisFrame;
-            if (!isChunkInFrustum(columnMin, columnMax)) {
+            if (!isChunkInFrustum(column.boundsMin, column.boundsMax)) {
                 continue;
             }
             ++m_columnPassedThisFrame;
@@ -261,13 +302,19 @@ void Renderer::renderWorld(const World& world) {
 
                 glm::vec3 chunkMin = glm::vec3(chunk->getWorldOffset());
                 glm::vec3 chunkMax = chunkMin + glm::vec3(Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z);
+                const ChunkMesh& mesh = chunk->getMesh();
+                if (mesh.hasBounds) {
+                    const glm::vec3 offset = glm::vec3(chunk->getWorldOffset());
+                    chunkMin = mesh.boundsMin + offset;
+                    chunkMax = mesh.boundsMax + offset;
+                }
+
                 ++m_chunkTestsThisFrame;
                 if (!isChunkInFrustum(chunkMin, chunkMax)) {
                     continue;
                 }
                 ++m_chunkPassedThisFrame;
 
-                const ChunkMesh& mesh = chunk->getMesh();
 
                 glm::mat4 model(1.0f);
                 const glm::ivec3 offset = chunk->getWorldOffset();
@@ -281,14 +328,32 @@ void Renderer::renderWorld(const World& world) {
                 }
 
                 if (mesh.transparentVertexCount > 0) {
-                    const glm::vec3 chunkCenter = glm::vec3(offset.x + Chunk::SIZE_X * 0.5f,
-                                                            offset.y + Chunk::SIZE_Y * 0.5f,
-                                                            offset.z + Chunk::SIZE_Z * 0.5f);
-                    const glm::vec3 toCamera = chunkCenter - m_cameraPos;
-                    transparentItems.push_back({chunk, glm::dot(toCamera, toCamera)});
+                    transparentChunks.push_back(chunk);
                 }
             }
         }
+    }
+}
+
+void Renderer::renderTransparentChunks(const std::vector<Chunk*>& transparentChunks) {
+    if (transparentChunks.empty()) {
+        return;
+    }
+
+    std::vector<TransparentDrawItem> transparentItems;
+    transparentItems.reserve(transparentChunks.size());
+
+    for (Chunk* chunk : transparentChunks) {
+        if (chunk == nullptr) {
+            continue;
+        }
+
+        const glm::ivec3 offset = chunk->getWorldOffset();
+        const glm::vec3 chunkCenter = glm::vec3(static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                                                static_cast<float>(offset.y) + Chunk::SIZE_Y * 0.5f,
+                                                static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+        const glm::vec3 toCamera = chunkCenter - m_cameraPos;
+        transparentItems.push_back({chunk, glm::dot(toCamera, toCamera)});
     }
 
     std::sort(transparentItems.begin(), transparentItems.end(),
@@ -296,42 +361,37 @@ void Renderer::renderWorld(const World& world) {
                   return a.distanceSq > b.distanceSq;
               });
 
-    if (!transparentItems.empty()) {
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
 
-        for (const TransparentDrawItem& item : transparentItems) {
-            if (item.chunk == nullptr) {
-                continue;
-            }
-
-            const ChunkMesh& mesh = item.chunk->getMesh();
-            if (mesh.transparentVertexCount == 0) {
-                continue;
-            }
-
-            glm::mat4 model(1.0f);
-            const glm::ivec3 offset = item.chunk->getWorldOffset();
-            model = glm::translate(model, glm::vec3(offset.x, offset.y, offset.z));
-            m_chunkShader->setMat4("model", model);
-
-            glBindVertexArray(mesh.transparentVao);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
-            ++drawCallCount;
+    for (const TransparentDrawItem& item : transparentItems) {
+        if (item.chunk == nullptr) {
+            continue;
         }
 
-        glDepthMask(GL_TRUE);
-        glDisable(GL_BLEND);
+        const ChunkMesh& mesh = item.chunk->getMesh();
+        if (mesh.transparentVertexCount == 0) {
+            continue;
+        }
+
+        glm::mat4 model(1.0f);
+        const glm::ivec3 offset = item.chunk->getWorldOffset();
+        model = glm::translate(model, glm::vec3(offset.x, offset.y, offset.z));
+        m_chunkShader->setMat4("model", model);
+
+        glBindVertexArray(mesh.transparentVao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
+        ++drawCallCount;
     }
 
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 }
 
+
 void Renderer::endFrame(const Window &window) {
-    recordMeshingHistory();
+    //recordMeshingHistory();
 }
 
 void Renderer::initOutlineMesh() {
@@ -429,18 +489,29 @@ void Renderer::drainMeshingResults(const World& world) {
         ChunkMesh mesh;
         mesh.upload(result.meshData.opaqueVertices);
         mesh.uploadTransparent(result.meshData.transparentVertices);
+        mesh.hasBounds = result.meshData.hasBounds;
+        mesh.boundsMin = result.meshData.boundsMin;
+        mesh.boundsMax = result.meshData.boundsMax;
         chunk.setMesh(mesh);
     }
 }
 
 void Renderer::updateFrustum(const glm::mat4 &viewProj) {
-    std::array<glm::vec4, 6> rawPlanes{};
-    for (int i = 0; i < 4; ++i) rawPlanes[0][i] = viewProj[i][3] + viewProj[i][0];
-    for (int i = 0; i < 4; ++i) rawPlanes[1][i] = viewProj[i][3] - viewProj[i][0];
-    for (int i = 0; i < 4; ++i) rawPlanes[2][i] = viewProj[i][3] + viewProj[i][1];
-    for (int i = 0; i < 4; ++i) rawPlanes[3][i] = viewProj[i][3] - viewProj[i][1];
-    for (int i = 0; i < 4; ++i) rawPlanes[4][i] = viewProj[i][3] + viewProj[i][2];
-    for (int i = 0; i < 4; ++i) rawPlanes[5][i] = viewProj[i][3] - viewProj[i][2];
+    m_viewProj = viewProj;
+
+    const glm::vec4 row0(viewProj[0][0], viewProj[1][0], viewProj[2][0], viewProj[3][0]);
+    const glm::vec4 row1(viewProj[0][1], viewProj[1][1], viewProj[2][1], viewProj[3][1]);
+    const glm::vec4 row2(viewProj[0][2], viewProj[1][2], viewProj[2][2], viewProj[3][2]);
+    const glm::vec4 row3(viewProj[0][3], viewProj[1][3], viewProj[2][3], viewProj[3][3]);
+
+    const std::array<glm::vec4, 6> rawPlanes = {
+        row3 + row0, // left
+        row3 - row0, // right
+        row3 + row1, // bottom
+        row3 - row1, // top
+        row3 + row2, // near
+        row3 - row2  // far
+    };
 
     for (size_t i = 0; i < rawPlanes.size(); ++i) {
         const glm::vec3 n(rawPlanes[i].x, rawPlanes[i].y, rawPlanes[i].z);
@@ -456,16 +527,18 @@ void Renderer::updateFrustum(const glm::mat4 &viewProj) {
 }
 
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
-    for (const auto& plane : m_frustumPlanes) {
-        glm::vec3 p = chunkMin;
-        if (plane.n.x >= 0) p.x = chunkMax.x;
-        if (plane.n.y >= 0) p.y = chunkMax.y;
-        if (plane.n.z >= 0) p.z = chunkMax.z;
+    for (const Plane& plane : m_frustumPlanes) {
+        const glm::vec3 positive(
+            plane.n.x >= 0.0f ? chunkMax.x : chunkMin.x,
+            plane.n.y >= 0.0f ? chunkMax.y : chunkMin.y,
+            plane.n.z >= 0.0f ? chunkMax.z : chunkMin.z
+        );
 
-        if (glm::dot(plane.n, p) + plane.d < 0) {
+        if (glm::dot(plane.n, positive) + plane.d < 0.0f) {
             return false;
         }
     }
+
     return true;
 }
 

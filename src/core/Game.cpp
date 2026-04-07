@@ -28,7 +28,7 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     BlockRegistry::init(&m_resourceMgr);
     BlockRegistry::printAllBlocks();
-    m_world.init(1337);
+    m_world.init(115337);
     m_world.setRenderDistance(8);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20) # 建议使用 3.20，4.1 尚未正式发布
 project(mecraft LANGUAGES C CXX)
-
+if (MSVC)
+    add_compile_options(/utf-8)
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -108,3 +110,4 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 # 其他简单测试
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
+add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)

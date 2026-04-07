@@ -1,6 +1,7 @@
 #include "ChunkMesher.h"
 
 #include <array>
+#include <algorithm>
 #include <glm/vec2.hpp>
 
 namespace {
@@ -105,6 +106,22 @@ void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
         }
     }
 }
+
+void expandBounds(ChunkMeshData& meshData, const glm::vec3& blockMin, const glm::vec3& blockMax) {
+    if (!meshData.hasBounds) {
+        meshData.hasBounds = true;
+        meshData.boundsMin = blockMin;
+        meshData.boundsMax = blockMax;
+        return;
+    }
+
+    meshData.boundsMin.x = std::min(meshData.boundsMin.x, blockMin.x);
+    meshData.boundsMin.y = std::min(meshData.boundsMin.y, blockMin.y);
+    meshData.boundsMin.z = std::min(meshData.boundsMin.z, blockMin.z);
+    meshData.boundsMax.x = std::max(meshData.boundsMax.x, blockMax.x);
+    meshData.boundsMax.y = std::max(meshData.boundsMax.y, blockMax.y);
+    meshData.boundsMax.z = std::max(meshData.boundsMax.z, blockMax.z);
+}
 }
 
 ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
@@ -155,6 +172,19 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
                             face,
                             def,
                             atlas);
+
+                    if (!meshData.hasBounds) {
+                        expandBounds(meshData,
+                                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                     glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                    } else {
+                        meshData.boundsMin.x = std::min(meshData.boundsMin.x, static_cast<float>(x));
+                        meshData.boundsMin.y = std::min(meshData.boundsMin.y, static_cast<float>(y));
+                        meshData.boundsMin.z = std::min(meshData.boundsMin.z, static_cast<float>(z));
+                        meshData.boundsMax.x = std::max(meshData.boundsMax.x, static_cast<float>(x + 1));
+                        meshData.boundsMax.y = std::max(meshData.boundsMax.y, static_cast<float>(y + 1));
+                        meshData.boundsMax.z = std::max(meshData.boundsMax.z, static_cast<float>(z + 1));
+                    }
                 }
             }
         }
@@ -169,6 +199,9 @@ void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
     ChunkMesh mesh;
     mesh.upload(meshData.opaqueVertices);
     mesh.uploadTransparent(meshData.transparentVertices);
+    mesh.hasBounds = meshData.hasBounds;
+    mesh.boundsMin = meshData.boundsMin;
+    mesh.boundsMax = meshData.boundsMax;
     chunk.setMesh(mesh);
 }
 

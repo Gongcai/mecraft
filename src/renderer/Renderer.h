@@ -12,9 +12,11 @@
 #include <glm/glm.hpp>
 #include <array>
 #include <unordered_set>
+#include <vector>
 
 class World;
 class Player;
+class Chunk;
 
 class Renderer {
 public:
@@ -66,6 +68,10 @@ private:
     void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
+    void bindChunkRenderState(const TextureAtlas& atlas) const;
+    void submitMeshingJobs(const World& world, const TextureAtlas& atlas);
+    void renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks);
+    void renderTransparentChunks(const std::vector<Chunk*>& transparentChunks);
     void initOutlineMesh();
     void renderBlockOutline(const Player& player);
     //TODO: 传入 World 和 UI 数据进行渲染
@@ -102,6 +108,7 @@ private:
 
     glm::mat4 m_projection = glm::mat4(1.0f);
     glm::mat4 m_view = glm::mat4(1.0f);
+    glm::mat4 m_viewProj = glm::mat4(1.0f);
     glm::vec3 m_cameraPos = glm::vec3(0.0f);
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
