@@ -10,6 +10,7 @@ public:
     void init(uint32_t seed, int seaLevel);
     void generateChunk(Chunk& chunk) const;
     [[nodiscard]] int sampleSurfaceY(int worldX, int worldZ) const;
+    void sampleSurfaceYBatch(int startWorldX, int worldZ, int count, int* outSurfaceY) const;
 
 private:
     [[nodiscard]] double sampleMoisture(int worldX, int worldZ) const;

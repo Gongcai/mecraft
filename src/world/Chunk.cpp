@@ -199,5 +199,8 @@ void ChunkMesh::destroy() {
 
     vertexCount = 0;
     transparentVertexCount = 0;
+    hasBounds = false;
+    boundsMin = glm::vec3(0.0f);
+    boundsMax = glm::vec3(0.0f);
 }
 

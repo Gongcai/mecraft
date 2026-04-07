@@ -3,6 +3,8 @@
 //
 
 #include "ResourceMgr.h"
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <filesystem>
 #include <vector>
@@ -21,7 +23,25 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
     float uMax = static_cast<float>((tileCol + 1) * tileSize) / atlasWidth;
     float vMax = static_cast<float>((tileRow + 1) * tileSize) / atlasHeight;
 
-    // 可能需要稍加微缩防止边缘溢出渲染相邻格子（一般叫 bleeding，通常留点余量或只取中间避免）
+    // 将采样范围向内收半个像素，减少远距离时在 tile 边界误采样到相邻块。
+    const float insetU = 0.5f / static_cast<float>(atlasWidth);
+    const float insetV = 0.5f / static_cast<float>(atlasHeight);
+    uMin += insetU;
+    vMin += insetV;
+    uMax -= insetU;
+    vMax -= insetV;
+
+    if (uMin > uMax) {
+        const float uCenter = (uMin + uMax) * 0.5f;
+        uMin = uCenter;
+        uMax = uCenter;
+    }
+    if (vMin > vMax) {
+        const float vCenter = (vMin + vMax) * 0.5f;
+        vMin = vCenter;
+        vMax = vCenter;
+    }
+
     // 返回 pair： { 左下角UV(uMin, vMin), 右上角UV(uMax, vMax) }
     return { glm::vec2(uMin, vMin), glm::vec2(uMax, vMax) };
 }
@@ -140,14 +160,21 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
-    // 设置环绕，过滤参数 (对于体素风格游戏一般使用 Nearest (邻近) 滤波从而不模糊)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    // 使用 mipmap 改善远处闪烁，同时将最大 mip 限制到单 tile 仍可独立采样的级别。
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+
+    const int atlasMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(atlasWidth, atlasHeight)))));
+    const int tileSafeMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(tileSize, 1)))));
+    const int maxLevel = std::max(0, std::min(atlasMaxLevel, tileSafeMaxLevel));
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlasWidth, atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlasPixels.data());
-    glGenerateMipmap(GL_TEXTURE_2D); // 生成 mipmap (可选)
+    glGenerateMipmap(GL_TEXTURE_2D);
+
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // 5. 将参数存入 m_atlas 结构体中备用

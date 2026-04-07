@@ -23,6 +23,9 @@ struct ChunkMeshingSnapshot {
 struct ChunkMeshData {
     std::vector<BlockVertex> opaqueVertices;
     std::vector<BlockVertex> transparentVertices;
+    bool hasBounds = false;
+    glm::vec3 boundsMin = glm::vec3(0.0f);
+    glm::vec3 boundsMax = glm::vec3(0.0f);
 };
 
 class ChunkMesher {

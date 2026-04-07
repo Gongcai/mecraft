@@ -28,6 +28,10 @@ struct ChunkMesh {
     GLuint transparentVbo = 0;
     uint32_t transparentVertexCount = 0;
 
+    bool hasBounds = false;
+    glm::vec3 boundsMin = glm::vec3(0.0f);
+    glm::vec3 boundsMax = glm::vec3(0.0f);
+
     void upload(const std::vector<BlockVertex>& vertices);
     void uploadTransparent(const std::vector<BlockVertex>& transparentVerts);
     void destroy();
