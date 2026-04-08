@@ -5,11 +5,19 @@
 
 #include "Chunk.h"
 
+enum class TerrainBiome : uint8_t {
+    Temperate = 0,
+    Arid = 1,
+    Mountain = 2,
+    HighMountain = 3,
+};
+
 class TerrainGenerator {
 public:
     void init(uint32_t seed, int seaLevel);
     void generateChunk(Chunk& chunk) const;
     [[nodiscard]] int sampleSurfaceY(int worldX, int worldZ) const;
+    [[nodiscard]] TerrainBiome sampleBiome(int worldX, int worldZ) const;
     void sampleSurfaceYBatch(int startWorldX, int worldZ, int count, int* outSurfaceY) const;
 
 private:

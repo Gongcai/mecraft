@@ -21,6 +21,7 @@
       "name": "grass",
       "textures": {
         "top": "grass_top",
+        "bottom": "dirt",
         "side": "grass_side"
       }
     },
@@ -87,6 +88,7 @@
         "id": 11,
         "name": "water",
         "isSolid": false,
+        "isSelectable": false,
         "isTransparent": true,
         "textures": {
             "all": "water"

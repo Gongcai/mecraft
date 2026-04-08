@@ -36,6 +36,7 @@ struct BlockDef {
     bool isSolid        = true;       // 是否为实体方块（如空气不是）
     bool isTransparent  = false;      // 是否透明
     bool isLightSource  = false;      // 是否为光源
+    bool isSelectable   = true;    // 是否可选中
     uint8_t lightLevel  = 0;          // 发光强度（0-15）
 
     //六面纹理Atlas tile索引（上下左右前后）

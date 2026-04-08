@@ -31,6 +31,9 @@ public:
     static double getRawTime() {
         return glfwGetTime();
     }
+    static double getGameTime() {
+        return currentGameTime;
+    }
     static double getRawDeltaTime() {
         return rawDeltaTime;
     }

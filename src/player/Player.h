@@ -22,7 +22,16 @@ public:
 
     [[nodiscard]] glm::vec3 getPosition() const;
     [[nodiscard]] glm::vec3 getEyePosition() const;
+    [[nodiscard]] float getEyeHeight() const;
+    [[nodiscard]] float getEyeBobAmplitude() const;
+    [[nodiscard]] float getEyeBobHorizontalAmplitude() const;
+    [[nodiscard]] float getEyeBobFrequency() const;
+    [[nodiscard]] float getEyeBobPhaseOffset() const;
     Camera& getCamera();
+    void setEyeBobAmplitude(float amplitude);
+    void setEyeBobHorizontalAmplitude(float amplitude);
+    void setEyeBobFrequency(float frequency);
+    void setEyeBobPhaseOffset(float radians);
     [[nodiscard]] bool wouldOverlapBlock(const glm::ivec3& blockPos) const;
     void setTargetBlock(const glm::ivec3& blockPos);
     void clearTargetBlock();
@@ -36,9 +45,17 @@ private:
     glm::vec3 m_velocity = {0.0f, 0.0f, 0.0f};
     Camera m_camera;
 
+    float m_eyeHeightBase = 1.62f;
     float m_eyeHeight = 1.62f;
     float m_eyeHeightStand = 1.62f;
     float m_eyeHeightCrouch = 1.f;
+    float m_eyeBobAmplitude = 0.25f;
+    float m_eyeBobHorizontalAmplitude = 0.02f;
+    float m_eyeBobFrequency = 6.0f;
+    float m_eyeBobPhaseOffset = 0.0f;
+    float m_eyeBobBlend = 0.0f;
+    float m_eyeBobFadeInSpeed = 10.0f;
+    float m_eyeBobFadeOutSpeed = 8.0f;
     float m_playerWidth = 0.6f;
     float m_playerHeight = 1.8f;
     bool m_onGround = false;
@@ -56,6 +73,7 @@ private:
 
     void handleMovement(const InputContextManager& inputContext);
     void handleMouseLook(const InputContextManager& inputContext);
+    void applyViewBob(float dt);
 };
 
 #endif //MECRAFT_PLAYER_H
