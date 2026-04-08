@@ -32,6 +32,7 @@ struct ColumnBucket {
     int chunkX = 0;
     int chunkZ = 0;
     std::vector<Chunk*> chunks;
+    std::size_t chunkCount = 0;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);
     glm::vec3 boundsMax = glm::vec3(0.0f);
@@ -41,6 +42,7 @@ struct RegionBucket {
     int regionX = 0;
     int regionZ = 0;
     std::unordered_map<int64_t, ColumnBucket> columns;
+    std::size_t chunkCount = 0;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);
     glm::vec3 boundsMax = glm::vec3(0.0f);
@@ -66,6 +68,10 @@ void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
     maxBounds.x = std::max(maxBounds.x, candidateMax.x);
     maxBounds.y = std::max(maxBounds.y, candidateMax.y);
     maxBounds.z = std::max(maxBounds.z, candidateMax.z);
+}
+
+constexpr Renderer::FrustumPlane kPlaneFromIndex(const size_t index) {
+    return static_cast<Renderer::FrustumPlane>(index);
 }
 }
 
@@ -110,12 +116,20 @@ void Renderer::setRegionChunkSize(const int chunkSize) {
     m_regionChunkSize = std::max(1, chunkSize);
 }
 
+void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
+    m_chunkCullingDebugEnabled = enabled;
+}
+
 int Renderer::getMeshingSubmitBudget() const {
     return m_meshingSubmitBudget;
 }
 
 int Renderer::getRegionChunkSize() const {
     return m_regionChunkSize;
+}
+
+bool Renderer::isChunkCullingDebugEnabled() const {
+    return m_chunkCullingDebugEnabled;
 }
 
 Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
@@ -135,6 +149,8 @@ Renderer::CullingFrameStats Renderer::getCullingFrameStats() const {
     stats.columnPassed = m_columnPassedThisFrame;
     stats.chunkTests = m_chunkTestsThisFrame;
     stats.chunkPassed = m_chunkPassedThisFrame;
+    stats.chunkCulled = m_chunkCulledThisFrame;
+    stats.chunkCulledByPlane = m_chunkCulledByPlaneThisFrame;
     return stats;
 }
 
@@ -171,6 +187,8 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_columnPassedThisFrame = 0;
     m_chunkTestsThisFrame = 0;
     m_chunkPassedThisFrame = 0;
+    m_chunkCulledThisFrame = 0;
+    m_chunkCulledByPlaneThisFrame.fill(0);
 }
 
 void Renderer::renderWorld(const World& world) {
@@ -256,6 +274,8 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
             column.chunkZ = chunk.m_chunkZ;
         }
         column.chunks.push_back(&chunk);
+        ++column.chunkCount;
+        ++region.chunkCount;
 
         const glm::ivec3 offset = chunk.getWorldOffset();
         const glm::vec3 chunkMin = mesh.hasBounds
@@ -277,7 +297,11 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
         }
 
         ++m_regionTestsThisFrame;
-        if (!isChunkInFrustum(region.boundsMin, region.boundsMax)) {
+        FrustumPlane culledPlane = FrustumPlane::Count;
+        if (!isChunkInFrustum(region.boundsMin, region.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+            if (m_chunkCullingDebugEnabled) {
+                recordChunkCull(culledPlane, static_cast<int>(region.chunkCount));
+            }
             continue;
         }
         ++m_regionPassedThisFrame;
@@ -290,7 +314,10 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
             }
 
             ++m_columnTestsThisFrame;
-            if (!isChunkInFrustum(column.boundsMin, column.boundsMax)) {
+            if (!isChunkInFrustum(column.boundsMin, column.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                if (m_chunkCullingDebugEnabled) {
+                    recordChunkCull(culledPlane, static_cast<int>(column.chunkCount));
+                }
                 continue;
             }
             ++m_columnPassedThisFrame;
@@ -310,7 +337,10 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                 }
 
                 ++m_chunkTestsThisFrame;
-                if (!isChunkInFrustum(chunkMin, chunkMax)) {
+                if (!isChunkInFrustum(chunkMin, chunkMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                    if (m_chunkCullingDebugEnabled) {
+                        recordChunkCull(culledPlane, 1);
+                    }
                     continue;
                 }
                 ++m_chunkPassedThisFrame;
@@ -527,6 +557,22 @@ void Renderer::updateFrustum(const glm::mat4 &viewProj) {
 }
 
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
+    return isChunkInFrustum(chunkMin, chunkMax, nullptr);
+}
+
+void Renderer::recordChunkCull(const FrustumPlane plane, const int count) {
+    if (!m_chunkCullingDebugEnabled || count <= 0) {
+        return;
+    }
+
+    m_chunkCulledThisFrame += count;
+    const size_t planeIndex = static_cast<size_t>(plane);
+    if (planeIndex < m_chunkCulledByPlaneThisFrame.size()) {
+        m_chunkCulledByPlaneThisFrame[planeIndex] += count;
+    }
+}
+
+bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax, FrustumPlane* culledPlane) const {
     for (const Plane& plane : m_frustumPlanes) {
         const glm::vec3 positive(
             plane.n.x >= 0.0f ? chunkMax.x : chunkMin.x,
@@ -535,8 +581,15 @@ bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chun
         );
 
         if (glm::dot(plane.n, positive) + plane.d < 0.0f) {
+            if (culledPlane != nullptr) {
+                *culledPlane = kPlaneFromIndex(static_cast<size_t>(&plane - m_frustumPlanes.data()));
+            }
             return false;
         }
+    }
+
+    if (culledPlane != nullptr) {
+        *culledPlane = FrustumPlane::Count;
     }
 
     return true;

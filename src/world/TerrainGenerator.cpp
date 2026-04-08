@@ -17,8 +17,19 @@
 
 namespace {
 
+double saturate(double v) {
+    return std::clamp(v, 0.0, 1.0);
+}
+
 double smoothStep(double t) {
     return t * t * (3.0 - 2.0 * t);
+}
+
+double smoothRange(double v, double lo, double hi) {
+    if (hi <= lo) {
+        return v >= hi ? 1.0 : 0.0;
+    }
+    return smoothStep(saturate((v - lo) / (hi - lo)));
 }
 
 uint32_t hash32(uint32_t x) {
@@ -299,24 +310,45 @@ __m256d fbm2D4(double x0, double x1, double x2, double x3, double z, double firs
 #endif
 
 void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int seaLevel,
-                                    int& outSurfaceY, double& outMoisture) {
+                                    int& outSurfaceY, double& outMoisture,
+                                    TerrainBiome& outSurfaceKind, double& outRuggedness) {
     const auto x = static_cast<double>(worldX);
     const auto z = static_cast<double>(worldZ);
 
     const double continental = fbm2D(x, z, 320.0, 4, seed ^ 0x6a09e667U);
-    const double detail = fbm2D(x, z, 72.0, 3, seed ^ 0xbb67ae85U);
-    const double rough = fbm2D(x, z, 36.0, 2, seed ^ 0x3c6ef372U);
-    const double mountainMask = std::max(0.0, (continental - 0.52) * 2.2);
+    const double detail = fbm2D(x, z, 64.0, 4, seed ^ 0xbb67ae85U);
+    const double rough = fbm2D(x, z, 28.0, 3, seed ^ 0x3c6ef372U);
+    const double ridgeBase = fbm2D(x, z, 96.0, 4, seed ^ 0x510e527fU);
+    const double mountainNoise = fbm2D(x, z, 220.0, 3, seed ^ 0x1f83d9abU);
+
+    const double ridge = 1.0 - std::abs(ridgeBase * 2.0 - 1.0);
+    const double mountainMask = smoothRange(continental, 0.50, 0.66);
+    const double highMountainMask = mountainMask * smoothRange(ridge, 0.58, 0.88) * smoothRange(mountainNoise, 0.45, 0.75);
 
     double height = static_cast<double>(seaLevel);
-    height += (continental - 0.5) * 34.0;
-    height += (detail - 0.5) * 14.0;
-    height += std::max(0.0, rough - 0.56) * 22.0;
-    height += mountainMask * 12.0;
+    height += (continental - 0.5) * 42.0;
+    height += (detail - 0.5) * 20.0;
+    height += (rough - 0.5) * 18.0;
+    height += std::max(0.0, rough - 0.52) * 20.0;
+    height += mountainMask * 22.0;
+    height += ridge * mountainMask * 10.0;
+    height += highMountainMask * 34.0;
 
     outMoisture = fbm2D(x, z, 420.0, 3, seed ^ 0xa54ff53aU);
-    if (outMoisture < 0.35) {
-        height -= 2.0;
+    if (outMoisture < 0.32) {
+        height -= 3.0;
+    }
+
+    outRuggedness = saturate(0.45 * rough + 0.55 * ridge);
+
+    if (highMountainMask > 0.42) {
+        outSurfaceKind = TerrainBiome::HighMountain;
+    } else if (mountainMask > 0.48) {
+        outSurfaceKind = TerrainBiome::Mountain;
+    } else if (outMoisture < 0.34) {
+        outSurfaceKind = TerrainBiome::Arid;
+    } else {
+        outSurfaceKind = TerrainBiome::Temperate;
     }
 
     const int rounded = static_cast<int>(std::lround(height));
@@ -325,89 +357,29 @@ void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int s
 
 #if defined(MECRAFT_HAS_AVX2)
 void sampleSurfaceAndMoisture4(int worldX0, int worldX1, int worldX2, int worldX3, int worldZ, uint32_t seed,
-                               int seaLevel, int outSurfaceY[4], double outMoisture[4]) {
-    const auto z = static_cast<double>(worldZ);
-    const auto x0 = static_cast<double>(worldX0);
-    const auto x1 = static_cast<double>(worldX1);
-    const auto x2 = static_cast<double>(worldX2);
-    const auto x3 = static_cast<double>(worldX3);
-
-    const __m256d continental = fbm2D4(x0, x1, x2, x3, z, 320.0, 4, seed ^ 0x6a09e667U);
-    const __m256d detail = fbm2D4(x0, x1, x2, x3, z, 72.0, 3, seed ^ 0xbb67ae85U);
-    const __m256d rough = fbm2D4(x0, x1, x2, x3, z, 36.0, 2, seed ^ 0x3c6ef372U);
-    const __m256d moisture = fbm2D4(x0, x1, x2, x3, z, 420.0, 3, seed ^ 0xa54ff53aU);
-
-    const __m256d mountainMask = _mm256_max_pd(_mm256_setzero_pd(),
-                                               _mm256_mul_pd(_mm256_sub_pd(continental, _mm256_set1_pd(0.52)),
-                                                             _mm256_set1_pd(2.2)));
-
-    __m256d height = _mm256_set1_pd(static_cast<double>(seaLevel));
-    height = _mm256_add_pd(height, _mm256_mul_pd(_mm256_sub_pd(continental, _mm256_set1_pd(0.5)),
-                                                  _mm256_set1_pd(34.0)));
-    height = _mm256_add_pd(height, _mm256_mul_pd(_mm256_sub_pd(detail, _mm256_set1_pd(0.5)), _mm256_set1_pd(14.0)));
-    height = _mm256_add_pd(height,
-                           _mm256_mul_pd(_mm256_max_pd(_mm256_setzero_pd(), _mm256_sub_pd(rough, _mm256_set1_pd(0.56))),
-                                         _mm256_set1_pd(22.0)));
-    height = _mm256_add_pd(height, _mm256_mul_pd(mountainMask, _mm256_set1_pd(12.0)));
-
-    double moistureArr[4];
-    double heightArr[4];
-    _mm256_storeu_pd(moistureArr, moisture);
-    _mm256_storeu_pd(heightArr, height);
-
+                               int seaLevel, int outSurfaceY[4], double outMoisture[4],
+                               TerrainBiome outSurfaceKind[4], double outRuggedness[4]) {
+    const int worldX[4] = {worldX0, worldX1, worldX2, worldX3};
     for (int i = 0; i < 4; ++i) {
-        outMoisture[i] = moistureArr[i];
-        double h = heightArr[i];
-        if (outMoisture[i] < 0.35) {
-            h -= 2.0;
-        }
-        const int rounded = static_cast<int>(std::lround(h));
-        outSurfaceY[i] = std::clamp(rounded, 8, Chunk::SIZE_Y - 8);
+        sampleSurfaceAndMoistureScalar(worldX[i], worldZ, seed, seaLevel,
+                                       outSurfaceY[i], outMoisture[i], outSurfaceKind[i], outRuggedness[i]);
     }
 }
 #endif
 
 void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t seed, int seaLevel,
-                               int outSurfaceY[2], double outMoisture[2]) {
+                               int outSurfaceY[2], double outMoisture[2],
+                               TerrainBiome outSurfaceKind[2], double outRuggedness[2]) {
 #if defined(MECRAFT_HAS_SSE2)
-    const auto z = static_cast<double>(worldZ);
-    const auto x0 = static_cast<double>(worldX0);
-    const auto x1 = static_cast<double>(worldX1);
-
-    const __m128d continental = fbm2D2(x0, x1, z, 320.0, 4, seed ^ 0x6a09e667U);
-    const __m128d detail = fbm2D2(x0, x1, z, 72.0, 3, seed ^ 0xbb67ae85U);
-    const __m128d rough = fbm2D2(x0, x1, z, 36.0, 2, seed ^ 0x3c6ef372U);
-    const __m128d moisture = fbm2D2(x0, x1, z, 420.0, 3, seed ^ 0xa54ff53aU);
-
-    const __m128d mountainMask = _mm_max_pd(_mm_setzero_pd(),
-                                            _mm_mul_pd(_mm_sub_pd(continental, _mm_set1_pd(0.52)),
-                                                       _mm_set1_pd(2.2)));
-
-    __m128d height = _mm_set1_pd(static_cast<double>(seaLevel));
-    height = _mm_add_pd(height, _mm_mul_pd(_mm_sub_pd(continental, _mm_set1_pd(0.5)), _mm_set1_pd(34.0)));
-    height = _mm_add_pd(height, _mm_mul_pd(_mm_sub_pd(detail, _mm_set1_pd(0.5)), _mm_set1_pd(14.0)));
-    height = _mm_add_pd(height,
-                        _mm_mul_pd(_mm_max_pd(_mm_setzero_pd(), _mm_sub_pd(rough, _mm_set1_pd(0.56))),
-                                   _mm_set1_pd(22.0)));
-    height = _mm_add_pd(height, _mm_mul_pd(mountainMask, _mm_set1_pd(12.0)));
-
-    double moistureArr[2];
-    double heightArr[2];
-    _mm_storeu_pd(moistureArr, moisture);
-    _mm_storeu_pd(heightArr, height);
-
-    for (int i = 0; i < 2; ++i) {
-        outMoisture[i] = moistureArr[i];
-        double h = heightArr[i];
-        if (outMoisture[i] < 0.35) {
-            h -= 2.0;
-        }
-        const int rounded = static_cast<int>(std::lround(h));
-        outSurfaceY[i] = std::clamp(rounded, 8, Chunk::SIZE_Y - 8);
-    }
+    sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel,
+                                   outSurfaceY[0], outMoisture[0], outSurfaceKind[0], outRuggedness[0]);
+    sampleSurfaceAndMoistureScalar(worldX1, worldZ, seed, seaLevel,
+                                   outSurfaceY[1], outMoisture[1], outSurfaceKind[1], outRuggedness[1]);
 #else
-    sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel, outSurfaceY[0], outMoisture[0]);
-    sampleSurfaceAndMoistureScalar(worldX1, worldZ, seed, seaLevel, outSurfaceY[1], outMoisture[1]);
+    sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel,
+                                   outSurfaceY[0], outMoisture[0], outSurfaceKind[0], outRuggedness[0]);
+    sampleSurfaceAndMoistureScalar(worldX1, worldZ, seed, seaLevel,
+                                   outSurfaceY[1], outMoisture[1], outSurfaceKind[1], outRuggedness[1]);
 #endif
 }
 
@@ -432,8 +404,20 @@ void TerrainGenerator::sampleSurfaceYBatch(int startWorldX, int worldZ, int coun
     // Batch API stays scalar for now because current SIMD variant is slower on benchmark hardware.
     for (int i = 0; i < count; ++i) {
         double moisture = 0.0;
-        sampleSurfaceAndMoistureScalar(startWorldX + i, worldZ, m_seed, m_seaLevel, outSurfaceY[i], moisture);
+        double ruggedness = 0.0;
+        TerrainBiome kind = TerrainBiome::Temperate;
+        sampleSurfaceAndMoistureScalar(startWorldX + i, worldZ, m_seed, m_seaLevel,
+                                       outSurfaceY[i], moisture, kind, ruggedness);
     }
+}
+
+TerrainBiome TerrainGenerator::sampleBiome(int worldX, int worldZ) const {
+    int surfaceY = 0;
+    double moisture = 0.0;
+    double ruggedness = 0.0;
+    TerrainBiome kind = TerrainBiome::Temperate;
+    sampleSurfaceAndMoistureScalar(worldX, worldZ, m_seed, m_seaLevel, surfaceY, moisture, kind, ruggedness);
+    return kind;
 }
 
 double TerrainGenerator::sampleMoisture(int worldX, int worldZ) const {
@@ -488,23 +472,27 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
             int laneCount = 1;
             int sampledSurface[4] = {};
             double sampledMoisture[4] = {};
+            double sampledRuggedness[4] = {};
+            TerrainBiome sampledSurfaceKind[4] = {};
             const int remaining = Chunk::SIZE_X - x;
 
 #if defined(MECRAFT_HAS_AVX2)
             if (remaining >= 4) {
                 laneCount = 4;
                 sampleSurfaceAndMoisture4(offset.x + x, offset.x + x + 1, offset.x + x + 2, offset.x + x + 3,
-                                          offset.z + z, m_seed, m_seaLevel, sampledSurface, sampledMoisture);
+                                          offset.z + z, m_seed, m_seaLevel,
+                                          sampledSurface, sampledMoisture, sampledSurfaceKind, sampledRuggedness);
             } else
 #endif
             if (remaining >= 2) {
                 laneCount = 2;
                 sampleSurfaceAndMoisture2(offset.x + x, offset.x + x + 1, offset.z + z, m_seed, m_seaLevel,
-                                          sampledSurface, sampledMoisture);
+                                          sampledSurface, sampledMoisture, sampledSurfaceKind, sampledRuggedness);
             } else {
                 laneCount = 1;
                 sampleSurfaceAndMoistureScalar(offset.x + x, offset.z + z, m_seed, m_seaLevel,
-                                               sampledSurface[0], sampledMoisture[0]);
+                                               sampledSurface[0], sampledMoisture[0],
+                                               sampledSurfaceKind[0], sampledRuggedness[0]);
             }
 
             for (int lane = 0; lane < laneCount; ++lane) {
@@ -513,10 +501,39 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 const int worldZ = offset.z + z;
                 const int surfaceY = sampledSurface[lane];
                 const double moisture = sampledMoisture[lane];
+                const TerrainBiome surfaceKind = sampledSurfaceKind[lane];
+                const double ruggedness = sampledRuggedness[lane];
 
                 const bool belowSeaLevel = surfaceY < m_seaLevel;
-                const BlockID topBlock = (belowSeaLevel || moisture < 0.35) ? BlockType::SAND : BlockType::GRASS;
-                const BlockID fillBlock = (belowSeaLevel || moisture < 0.35) ? BlockType::SAND : BlockType::DIRT;
+                BlockID topBlock = BlockType::GRASS;
+                BlockID fillBlock = BlockType::DIRT;
+                int coverDepth = 3;
+
+                if (belowSeaLevel || surfaceKind == TerrainBiome::Arid || moisture < 0.34) {
+                    topBlock = BlockType::SAND;
+                    fillBlock = BlockType::SAND;
+                    coverDepth = 4;
+                } else if (surfaceKind == TerrainBiome::HighMountain) {
+                    const double dirtPatchNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
+                                                        24.0, 2, m_seed ^ 0x9b05688cU);
+                    const bool dirtPatch = dirtPatchNoise > 0.62 && moisture > 0.40;
+                    topBlock = BlockType::GRASS;
+                    fillBlock = dirtPatch ? BlockType::DIRT : BlockType::STONE;
+                    coverDepth = dirtPatch ? 2 : 1;
+                } else if (surfaceKind == TerrainBiome::Mountain) {
+                    const bool rockyTop = ruggedness > 0.62 && moisture < 0.55;
+                    topBlock = BlockType::GRASS;
+                    fillBlock = rockyTop ? BlockType::STONE : BlockType::DIRT;
+                    coverDepth = rockyTop ? 2 : 3;
+                } else {
+                    const double soilNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
+                                                   18.0, 2, m_seed ^ 0x2f6b5a13U);
+                    if (soilNoise > 0.74) {
+                        coverDepth = 4;
+                    } else if (soilNoise < 0.30) {
+                        coverDepth = 2;
+                    }
+                }
 
                 const int columnTop = std::max(surfaceY, m_seaLevel);
                 for (int y = 0; y <= columnTop; ++y) {
@@ -525,7 +542,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                         id = BlockType::STONE;
                         if (y == surfaceY) {
                             id = topBlock;
-                        } else if (y >= surfaceY - 3) {
+                        } else if (y >= surfaceY - coverDepth) {
                             id = fillBlock;
                         }
 

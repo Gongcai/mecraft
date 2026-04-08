@@ -38,6 +38,9 @@ public:
 
     [[nodiscard]] int getFlatSurfaceY() const { return m_flatSurfaceY; }
     [[nodiscard]] int getSurfaceY(int x, int z) const;
+    [[nodiscard]] TerrainBiome getBiome(int x, int z) const;
+    [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const;
+    [[nodiscard]] static const char* biomeToString(TerrainBiome biome);
 
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t

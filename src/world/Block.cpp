@@ -103,6 +103,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             const int light = blockJson["lightLevel"].get<int>();
             def.lightLevel = static_cast<uint8_t>(std::clamp(light, 0, 15));
         }
+        if (blockJson.contains("isSelectable") && blockJson["isSelectable"].is_boolean()) {
+            def.isSelectable = blockJson["isSelectable"].get<bool>();
+        }
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
             const auto& tex = blockJson["textures"];

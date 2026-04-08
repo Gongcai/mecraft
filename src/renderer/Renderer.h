@@ -20,6 +20,16 @@ class Chunk;
 
 class Renderer {
 public:
+    enum class FrustumPlane : size_t {
+        Left = 0,
+        Right = 1,
+        Bottom = 2,
+        Top = 3,
+        Near = 4,
+        Far = 5,
+        Count = 6
+    };
+
     struct MeshingFrameStats {
         int submitBudget = 0;
         int submitted = 0;
@@ -34,6 +44,8 @@ public:
         int columnPassed = 0;
         int chunkTests = 0;
         int chunkPassed = 0;
+        int chunkCulled = 0;
+        std::array<int, static_cast<size_t>(FrustumPlane::Count)> chunkCulledByPlane{};
     };
 
     static constexpr size_t MESHING_HISTORY_SIZE = 120;
@@ -45,8 +57,10 @@ public:
 
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
+    void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
     [[nodiscard]] int getRegionChunkSize() const;
+    [[nodiscard]] bool isChunkCullingDebugEnabled() const;
     [[nodiscard]] MeshingFrameStats getMeshingFrameStats() const;
     [[nodiscard]] CullingFrameStats getCullingFrameStats() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingSubmittedHistory() const;
@@ -74,6 +88,8 @@ private:
     void renderTransparentChunks(const std::vector<Chunk*>& transparentChunks);
     void initOutlineMesh();
     void renderBlockOutline(const Player& player);
+    bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
+    void recordChunkCull(FrustumPlane plane, int count);
     //TODO: 传入 World 和 UI 数据进行渲染
     //void renderWorld(const World& world, const Camera& camera);
     //void renderUI(const UI& ui);
@@ -93,6 +109,7 @@ private:
     std::unordered_set<int64_t> m_meshingInFlight;
     int m_meshingSubmitBudget = 8;
     int m_regionChunkSize = 4;
+    bool m_chunkCullingDebugEnabled = false;
     int m_meshingSubmittedThisFrame = 0;
     int m_meshingCompletedThisFrame = 0;
     int m_regionTestsThisFrame = 0;
@@ -101,6 +118,8 @@ private:
     int m_columnPassedThisFrame = 0;
     int m_chunkTestsThisFrame = 0;
     int m_chunkPassedThisFrame = 0;
+    int m_chunkCulledThisFrame = 0;
+    std::array<int, static_cast<size_t>(FrustumPlane::Count)> m_chunkCulledByPlaneThisFrame{};
     size_t m_meshingHistoryCount = 0;
     std::array<float, MESHING_HISTORY_SIZE> m_meshingSubmittedHistory{};
     std::array<float, MESHING_HISTORY_SIZE> m_meshingCompletedHistory{};

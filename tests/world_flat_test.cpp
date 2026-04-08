@@ -35,13 +35,15 @@ int main() {
         return fail("block above surface should be AIR");
     }
     const BlockID topBlock = world.getBlock(0, surfaceY, 0);
-    if (topBlock != BlockType::GRASS && topBlock != BlockType::SAND) {
-        return fail("surface block should be GRASS or SAND");
+    if (topBlock != BlockType::GRASS && topBlock != BlockType::SAND &&
+        topBlock != BlockType::DIRT && topBlock != BlockType::STONE &&
+        topBlock != BlockType::WATER) {
+        return fail("surface block should be a valid generated terrain block");
     }
 
     const BlockID underBlock = world.getBlock(0, surfaceY - 2, 0);
-    if (underBlock != BlockType::DIRT && underBlock != BlockType::SAND && underBlock != BlockType::STONE) {
-        return fail("sub-surface layer should be dirt/sand/stone");
+    if (underBlock == BlockType::AIR) {
+        return fail("sub-surface layer should not be AIR");
     }
 
     if (world.getBlock(0, 1, 0) != BlockType::STONE) {

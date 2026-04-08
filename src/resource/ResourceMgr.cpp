@@ -23,9 +23,10 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
     float uMax = static_cast<float>((tileCol + 1) * tileSize) / atlasWidth;
     float vMax = static_cast<float>((tileRow + 1) * tileSize) / atlasHeight;
 
-    // 将采样范围向内收半个像素，减少远距离时在 tile 边界误采样到相邻块。
-    const float insetU = 0.5f / static_cast<float>(atlasWidth);
-    const float insetV = 0.5f / static_cast<float>(atlasHeight);
+    // With GL_NEAREST and no mipmaps, half-texel inset makes edge texels appear half-width.
+    // Keep only a tiny epsilon to avoid exact border tie-break issues.
+    const float insetU = 1e-6f;
+    const float insetV = 1e-6f;
     uMin += insetU;
     vMin += insetV;
     uMax -= insetU;
@@ -87,6 +88,8 @@ GLuint ResourceMgr::getTexture(const std::string &name) const {
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
     namespace fs = std::filesystem;
     std::vector<fs::path> imagePaths;
+    m_textures.clear();
+
     if (fs::exists(directory)) {
         for (const auto& entry : fs::directory_iterator(directory)) {
             if (entry.path().extension() == ".png") {
@@ -94,6 +97,12 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
             }
         }
     }
+
+    // Keep atlas indices stable across runs/platforms.
+    std::sort(imagePaths.begin(), imagePaths.end(),
+              [](const fs::path& a, const fs::path& b) {
+                  return a.filename().string() < b.filename().string();
+              });
 
     if (imagePaths.empty()) {
         std::cerr << "Texture Atlas generated with 0 images!\n";
@@ -160,20 +169,15 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
-    // 使用 mipmap 改善远处闪烁，同时将最大 mip 限制到单 tile 仍可独立采样的级别。
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+    // Atlas without gutters can bleed between tiles in mip levels; keep pixel-nearest sampling.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-
-    const int atlasMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(atlasWidth, atlasHeight)))));
-    const int tileSafeMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(tileSize, 1)))));
-    const int maxLevel = std::max(0, std::min(atlasMaxLevel, tileSafeMaxLevel));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxLevel);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlasWidth, atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlasPixels.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
 
     glBindTexture(GL_TEXTURE_2D, 0);
 

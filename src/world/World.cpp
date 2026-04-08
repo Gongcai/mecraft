@@ -125,7 +125,9 @@ bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock,
     float dist = 0.0f;
     while (dist <= maxDist) {
         BlockID block = getBlock(x, y, z);
-        if (block != BlockType::AIR) {
+
+
+        if (block != BlockType::AIR && block != BlockType::WATER) {
             hitBlock = glm::ivec3(x, y, z);
             placeBlock = glm::ivec3(lastX, lastY, lastZ);
             return true;
@@ -180,6 +182,32 @@ int World::getSurfaceY(int x, int z) const {
     }
 
     return m_terrainGen.sampleSurfaceY(x, z);
+}
+
+TerrainBiome World::getBiome(int x, int z) const {
+    return m_terrainGen.sampleBiome(x, z);
+}
+
+glm::ivec2 World::getChunkCoords(int worldX, int worldZ) const {
+    return {
+        worldToChunkCoord(worldX, Chunk::SIZE_X),
+        worldToChunkCoord(worldZ, Chunk::SIZE_Z)
+    };
+}
+
+const char* World::biomeToString(TerrainBiome biome) {
+    switch (biome) {
+        case TerrainBiome::Temperate:
+            return "Temperate";
+        case TerrainBiome::Arid:
+            return "Arid";
+        case TerrainBiome::Mountain:
+            return "Mountain";
+        case TerrainBiome::HighMountain:
+            return "High Mountain";
+        default:
+            return "Unknown";
+    }
 }
 
 int64_t World::chunkKey(int cx, int cz) {

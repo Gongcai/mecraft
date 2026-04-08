@@ -23,7 +23,7 @@ public:
     void render( Player &player, World &world, Camera &camera,Renderer &render, UIRenderer& uiRenderer);
 private:
     void showPlayerStats( Player& player);
-    void showWorldStats( World& world);
+    void showWorldStats(World& world, const Player& player);
     void showCameraStats( Camera& camera);
     void showPerformanceStats(Renderer &render);
     void showCrosshairSettings(UIRenderer& uiRenderer);
