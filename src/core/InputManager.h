@@ -23,6 +23,7 @@ struct InputSnapshot {
 
     glm::vec2 mousePosition{0.0f, 0.0f};
     glm::vec2 mouseDelta{0.0f, 0.0f};
+    double scrollDelta = 0.0;  // >0 = scroll up, <0 = scroll down
 
     [[nodiscard]] bool isKeyHeld(int key) const;
     [[nodiscard]] bool isKeyJustPressed(int key) const;
@@ -68,6 +69,7 @@ private:
     double m_mouseDeltaY = 0.0;
     double m_accumDeltaX = 0.0;
     double m_accumDeltaY = 0.0;
+    double m_accumScrollY = 0.0;
     bool m_firstMouse = true;
 
     InputSnapshot m_snapshot{};

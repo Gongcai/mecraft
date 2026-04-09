@@ -116,6 +116,7 @@ void Renderer::setRegionChunkSize(const int chunkSize) {
     m_regionChunkSize = std::max(1, chunkSize);
 }
 
+#ifndef NDEBUG
 void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
     m_chunkCullingDebugEnabled = enabled;
 }
@@ -169,6 +170,7 @@ const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingInF
 size_t Renderer::getMeshingHistoryCount() const {
     return m_meshingHistoryCount;
 }
+#endif
 
 void Renderer::beginFrame(const Camera &camera, const Window &window) {
     glClearColor(0.67f, 0.84f, 1.0f, 1.0f);
@@ -179,6 +181,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
 
+#ifndef NDEBUG
     m_meshingSubmittedThisFrame = 0;
     m_meshingCompletedThisFrame = 0;
     m_regionTestsThisFrame = 0;
@@ -189,6 +192,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_chunkPassedThisFrame = 0;
     m_chunkCulledThisFrame = 0;
     m_chunkCulledByPlaneThisFrame.fill(0);
+#endif
 }
 
 void Renderer::renderWorld(const World& world) {
@@ -239,7 +243,9 @@ void Renderer::submitMeshingJobs(const World& world, const TextureAtlas& atlas) 
             m_meshingService.submit(job);
             m_meshingInFlight.insert(chunkKey);
             ++submittedThisPass;
+#ifndef NDEBUG
             ++m_meshingSubmittedThisFrame;
+#endif
         }
     }
 }
@@ -296,6 +302,7 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
             continue;
         }
 
+#ifndef NDEBUG
         ++m_regionTestsThisFrame;
         FrustumPlane culledPlane = FrustumPlane::Count;
         if (!isChunkInFrustum(region.boundsMin, region.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
@@ -305,6 +312,11 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
             continue;
         }
         ++m_regionPassedThisFrame;
+#else
+        if (!isChunkInFrustum(region.boundsMin, region.boundsMax)) {
+            continue;
+        }
+#endif
 
         for (const auto& columnPair : region.columns) {
             const ColumnBucket& column = columnPair.second;
@@ -313,6 +325,7 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                 continue;
             }
 
+#ifndef NDEBUG
             ++m_columnTestsThisFrame;
             if (!isChunkInFrustum(column.boundsMin, column.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                 if (m_chunkCullingDebugEnabled) {
@@ -321,6 +334,11 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                 continue;
             }
             ++m_columnPassedThisFrame;
+#else
+            if (!isChunkInFrustum(column.boundsMin, column.boundsMax)) {
+                continue;
+            }
+#endif
 
             for (Chunk* chunk : column.chunks) {
                 if (chunk == nullptr) {
@@ -336,6 +354,7 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                     chunkMax = mesh.boundsMax + offset;
                 }
 
+#ifndef NDEBUG
                 ++m_chunkTestsThisFrame;
                 if (!isChunkInFrustum(chunkMin, chunkMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                     if (m_chunkCullingDebugEnabled) {
@@ -344,6 +363,11 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                     continue;
                 }
                 ++m_chunkPassedThisFrame;
+#else
+                if (!isChunkInFrustum(chunkMin, chunkMax)) {
+                    continue;
+                }
+#endif
 
 
                 glm::mat4 model(1.0f);
@@ -480,6 +504,7 @@ void Renderer::renderBlockOutline(const Player& player) {
 }
 
 void Renderer::recordMeshingHistory() {
+#ifndef NDEBUG
     if (m_meshingHistoryCount < MESHING_HISTORY_SIZE) {
         m_meshingSubmittedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingSubmittedThisFrame);
         m_meshingCompletedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingCompletedThisFrame);
@@ -497,12 +522,15 @@ void Renderer::recordMeshingHistory() {
     m_meshingSubmittedHistory[MESHING_HISTORY_SIZE - 1] = static_cast<float>(m_meshingSubmittedThisFrame);
     m_meshingCompletedHistory[MESHING_HISTORY_SIZE - 1] = static_cast<float>(m_meshingCompletedThisFrame);
     m_meshingInFlightHistory[MESHING_HISTORY_SIZE - 1] = static_cast<float>(m_meshingInFlight.size());
+#endif
 }
 
 void Renderer::drainMeshingResults(const World& world) {
     ChunkMeshingResult result;
     while (m_meshingService.tryPopCompleted(result)) {
+#ifndef NDEBUG
         ++m_meshingCompletedThisFrame;
+#endif
         m_meshingInFlight.erase(result.chunkKey);
 
         const auto& activeChunks = world.getActiveChunks();
@@ -556,6 +584,7 @@ void Renderer::updateFrustum(const glm::mat4 &viewProj) {
     }
 }
 
+#ifndef NDEBUG
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
     return isChunkInFrustum(chunkMin, chunkMax, nullptr);
 }
@@ -573,6 +602,10 @@ void Renderer::recordChunkCull(const FrustumPlane plane, const int count) {
 }
 
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax, FrustumPlane* culledPlane) const {
+#else
+bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
+    constexpr FrustumPlane* culledPlane = nullptr;
+#endif
     for (const Plane& plane : m_frustumPlanes) {
         const glm::vec3 positive(
             plane.n.x >= 0.0f ? chunkMax.x : chunkMin.x,
@@ -581,16 +614,20 @@ bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chun
         );
 
         if (glm::dot(plane.n, positive) + plane.d < 0.0f) {
+#ifndef NDEBUG
             if (culledPlane != nullptr) {
                 *culledPlane = kPlaneFromIndex(static_cast<size_t>(&plane - m_frustumPlanes.data()));
             }
+#endif
             return false;
         }
     }
 
+#ifndef NDEBUG
     if (culledPlane != nullptr) {
         *culledPlane = FrustumPlane::Count;
     }
+#endif
 
     return true;
 }

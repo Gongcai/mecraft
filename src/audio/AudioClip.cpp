@@ -36,9 +36,11 @@ AudioClip::AudioClip(const std::string& filepath)
     }
 
     m_valid = loadWAV(filepath);
+#ifndef NDEBUG
     if (m_valid) {
         std::cout << "[Audio] Loaded: " << m_name << " (" << m_duration << "s)" << std::endl;
     }
+#endif
 }
 
 AudioClip::~AudioClip() {

@@ -52,7 +52,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
+#ifndef NDEBUG
         std::cerr << "[BlockRegistry] Failed to open config: " << kBlocksConfigPath << std::endl;
+#endif
         s_initialized = true;
         return;
     }
@@ -61,13 +63,17 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     try {
         file >> root;
     } catch (const std::exception& e) {
+#ifndef NDEBUG
         std::cerr << "[BlockRegistry] Failed to parse blocks.json: " << e.what() << std::endl;
+#endif
         s_initialized = true;
         return;
     }
 
     if (!root.contains("blocks") || !root["blocks"].is_array()) {
+#ifndef NDEBUG
         std::cerr << "[BlockRegistry] Invalid blocks.json: missing 'blocks' array." << std::endl;
+#endif
         s_initialized = true;
         return;
     }
@@ -173,8 +179,10 @@ const BlockDef& BlockRegistry::get(BlockID id) {
 }
 
 void BlockRegistry::printAllBlocks() {
+#ifndef NDEBUG
     for (const auto& block : s_blocks) {
         std::cout << block.name << std::endl;
 
     }
+#endif
 }

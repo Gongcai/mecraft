@@ -1,6 +1,10 @@
 //
 // Created by Caiwe on 2026/3/21.
 //
+
+// TestCube 仅在 Debug 模式下编译
+#ifndef NDEBUG
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "TestCube.h"
@@ -311,8 +315,12 @@ unsigned int TestCube::loadTexture(const char *path) {
 		stbi_image_free(data);
 	}
 	else {
+#ifndef NDEBUG
 		std::cout << "Texture load failed" << std::endl;
+#endif
 		stbi_image_free(data);
 	}
 	return textureID;
 }
+
+#endif // NDEBUG

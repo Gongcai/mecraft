@@ -51,6 +51,8 @@ void ResourceMgr::init() {
     loadShader("chunk", "../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
     loadShader("outline", "../assets/shaders/outline.vs", "../assets/shaders/outline.fs");
     loadShader("crosshair", "../assets/shaders/crosshair.vs", "../assets/shaders/crosshair.fs");
+    loadShader("inventory", "../assets/shaders/inventory.vs", "../assets/shaders/inventory.fs");
+    loadShader("particle", "../assets/shaders/particle.vs", "../assets/shaders/particle.fs");
 }
 
 void ResourceMgr::shutdown() {
@@ -105,7 +107,9 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
               });
 
     if (imagePaths.empty()) {
+#ifndef NDEBUG
         std::cerr << "Texture Atlas generated with 0 images!\n";
+#endif
         return;
     }
 
@@ -131,7 +135,9 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
         if (data) {
             // 确保宽高和我们要的tileSize对得上
             if(width != tileSize || height != tileSize) {
+#ifndef NDEBUG
                  std::cerr << "Warning: Texture size mismatch! " << imagePaths[i] << "\n";
+#endif
             }
 
             // 计算当前这张图被放到了图集的行与列
@@ -160,7 +166,9 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
             std::string texName = imagePaths[i].stem().string(); // 取文件名（不带扩展)
             m_textures[texName] = i;
         } else {
+#ifndef NDEBUG
             std::cerr << "Failed to load image: " << imagePaths[i] << "\n";
+#endif
         }
     }
 

@@ -2,6 +2,9 @@
 // Created by Caiwe on 2026/3/25.
 //
 
+// Dashboard 调试 UI 仅在 Debug 模式下编译
+#ifndef NDEBUG
+
 #include "Dashboard.h"
 
 #include "UIRenderer.h"
@@ -46,6 +49,7 @@ void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer 
     showWorldStats(world, player);
     showPerformanceStats(render);
     showCrosshairSettings(uiRenderer);
+    showHotbarSettings(uiRenderer);
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
@@ -243,4 +247,30 @@ void Dashboard::showCrosshairSettings(UIRenderer& uiRenderer) {
 
     ImGui::End();
 }
+
+void Dashboard::showHotbarSettings(UIRenderer& uiRenderer) {
+    ImGui::Begin("Hotbar Settings");
+
+    const auto& bgColor = uiRenderer.getHotbarBgColor();
+    float bg[4] = { bgColor[0], bgColor[1], bgColor[2], bgColor[3] };
+    if (ImGui::ColorEdit4("Background Color", bg)) {
+        uiRenderer.setHotbarBgColor({ bg[0], bg[1], bg[2], bg[3] });
+    }
+
+    const auto& borderColor = uiRenderer.getHotbarBorderColor();
+    float border[4] = { borderColor[0], borderColor[1], borderColor[2], borderColor[3] };
+    if (ImGui::ColorEdit4("Selection Border Color", border)) {
+        uiRenderer.setHotbarBorderColor({ border[0], border[1], border[2], border[3] });
+    }
+
+    const auto& iconTint = uiRenderer.getHotbarIconTintColor();
+    float icon[4] = { iconTint[0], iconTint[1], iconTint[2], iconTint[3] };
+    if (ImGui::ColorEdit4("Icon Tint Color", icon)) {
+        uiRenderer.setHotbarIconTintColor({ icon[0], icon[1], icon[2], icon[3] });
+    }
+
+    ImGui::End();
+}
+
+#endif // NDEBUG
 

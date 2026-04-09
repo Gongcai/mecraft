@@ -22,7 +22,9 @@ void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
                                  ALCdevice* device, ALCsizei length,
                                  const ALCchar* message, void* userPtr) noexcept{
     if (eventType == ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT) {
+#ifndef NDEBUG
         std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown") << std::endl;
+#endif
         AudioEngine::s_needDeviceReopen = true;
     }
 }
@@ -54,7 +56,9 @@ void AudioEngine::init() {
         return;
     }
 
+#ifndef NDEBUG
     std::cout << "[Audio] AudioEngine initialized" << std::endl;
+#endif
 
     // 初始化设备切换扩展
     initDeviceSwitchExtension();
@@ -103,7 +107,9 @@ void AudioEngine::shutdown() {
         _device = nullptr;
     }
 
+#ifndef NDEBUG
     std::cout << "[Audio] AudioEngine shutdown" << std::endl;
+#endif
 }
 
 AudioClip* AudioEngine::loadClip(const std::string& name) {
@@ -142,7 +148,9 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     AudioClip* clip = getClip(clipName);
     if (!clip) {
         // 尝试加载
+#ifndef NDEBUG
         std::cout<<"[Audio] Sound file not found in Cache: " << clipName << std::endl;
+#endif
         clip = loadClip(clipName);
         if (!clip) {
             return nullptr;
@@ -233,13 +241,17 @@ void AudioEngine::getAllSounds() {
         }
     }
 
+#ifndef NDEBUG
     std::cout << "[Audio] Loaded " << loadedCount << " sound(s) from " << soundsDir << std::endl;
+#endif
 }
 
 bool AudioEngine::initDeviceSwitchExtension() {
     if (!alcIsExtensionPresent(_device, "ALC_SOFT_system_events") ||
         !alcIsExtensionPresent(_device, "ALC_SOFT_reopen_device")) {
+#ifndef NDEBUG
         std::cout << "[Audio] 设备自动切换扩展不可用" << std::endl;
+#endif
         return false;
     }
 
@@ -260,7 +272,9 @@ bool AudioEngine::initDeviceSwitchExtension() {
     alcEventControlSOFT(1, &eventToListen, ALC_TRUE);
 
     m_deviceSwitchSupported = true;
+#ifndef NDEBUG
     std::cout << "[Audio] 设备自动切换已启用" << std::endl;
+#endif
     return true;
 }
 
@@ -268,13 +282,17 @@ void AudioEngine::checkDeviceSwitch() {
     if (!m_deviceSwitchSupported) return;
 
     if (s_needDeviceReopen.exchange(false)) {
+#ifndef NDEBUG
         std::cout << "[Audio] 正在迁移音频上下文到新设备..." << std::endl;
+#endif
 
         // alcReopenDeviceSOFT 会保留所有 AL 对象（Buffer, Source, State）
         if (!alcReopenDeviceSOFT(_device, nullptr, nullptr)) {
             std::cerr << "[Audio] 设备迁移失败！" << std::endl;
         } else {
+#ifndef NDEBUG
             std::cout << "[Audio] 设备迁移成功，音频已无缝切换" << std::endl;
+#endif
         }
     }
 }

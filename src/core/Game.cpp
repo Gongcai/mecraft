@@ -27,13 +27,16 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     BlockRegistry::init(&m_resourceMgr);
+#ifndef NDEBUG
     BlockRegistry::printAllBlocks();
-    m_world.init(84712312123);
+#endif
+    m_world.init(82123);
     m_world.setRenderDistance(8);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
+    m_particleSystem.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
     m_audioEngine.init();
     // 初始化UI渲染器
@@ -46,11 +49,14 @@ void Game::init(int width, int height, const char *title) {
         m_input,
         m_physicsSystem,
         m_world,
-        m_audioEngine
+        m_audioEngine,
+        m_particleSystem
     ));
 
-    // 初始化信息仪表盘
+    // 初始化信息仪表盘 (仅Debug模式)
+#ifndef NDEBUG
     m_dashboard.init(m_window);
+#endif
 
 
 }
@@ -74,6 +80,7 @@ void Game::run() {
             m_input.update();
             accumulator -= kFixedStep;
             m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
+            m_particleSystem.update(static_cast<float>(kFixedStep));
             m_world.update(m_player.getPosition());
         }
         m_audioEngine.update();
@@ -84,14 +91,19 @@ void Game::run() {
         );
         AudioListener::setGain(1.0f);  // 确保增益为 1
         m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
-        m_uiRenderer.render(m_window);
+        m_particleSystem.render(m_player.getCamera().getProjectionMatrix(m_window.getAspectRatio()),
+                                m_player.getCamera().getViewMatrix());
+        m_uiRenderer.render(m_window, m_player.getInventory());
+#ifndef NDEBUG
         m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer);
+#endif
         m_window.swapBuffers();
 
     }
 }
 
 void Game::shutdown() {
+    m_particleSystem.shutdown();
     m_uiRenderer.shutdown();
     m_renderer.shutdown();
 }

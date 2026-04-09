@@ -9,6 +9,7 @@
 #include "../core/InputManager.h"
 #include "../core/InputContextManager.h" // Add this
 #include "../physics/PhysicsInfo.h"
+#include "Inventory.h"
 
 namespace physics {
 class PhysicsSystem;
@@ -17,6 +18,8 @@ class PhysicsSystem;
 class Player {
 public:
     void init(const glm::vec3& spawnPos);
+    Inventory& getInventory();
+    [[nodiscard]] const Inventory& getInventory() const;
     void update(float dt, const InputSnapshot& snapshot, const InputContextManager& inputContext,
                 physics::PhysicsSystem& physicsSystem);
 
@@ -70,6 +73,7 @@ private:
 
     bool m_hasTargetBlock = false;
     glm::ivec3 m_targetBlock{};
+    Inventory m_inventory;
 
     void handleMovement(const InputContextManager& inputContext);
     void handleMouseLook(const InputContextManager& inputContext);

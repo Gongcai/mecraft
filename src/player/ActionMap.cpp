@@ -102,6 +102,13 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
                 active = input.isMouseButtonHeld(binding.control);
                 break;
         }
+    } else if (binding.device == InputDevice::Scroll) {
+        // control: 1 = scroll up, -1 = scroll down
+        if (binding.control == 1 && input.scrollDelta > 0.0) {
+            active = true;
+        } else if (binding.control == -1 && input.scrollDelta < 0.0) {
+            active = true;
+        }
     }
 
     return active;
@@ -156,6 +163,17 @@ static Action stringToAction(const std::string& str) {
         {"UseItem", Action::UseItem},
         {"Inventory", Action::Inventory},
         {"Menu", Action::Menu},
+        {"Hotbar1", Action::Hotbar1},
+        {"Hotbar2", Action::Hotbar2},
+        {"Hotbar3", Action::Hotbar3},
+        {"Hotbar4", Action::Hotbar4},
+        {"Hotbar5", Action::Hotbar5},
+        {"Hotbar6", Action::Hotbar6},
+        {"Hotbar7", Action::Hotbar7},
+        {"Hotbar8", Action::Hotbar8},
+        {"Hotbar9", Action::Hotbar9},
+        {"HotbarScrollUp", Action::HotbarScrollUp},
+        {"HotbarScrollDown", Action::HotbarScrollDown},
         {"Confirm", Action::Confirm},
         {"Cancel", Action::Cancel},
         {"Up", Action::Up},
@@ -213,7 +231,9 @@ static TriggerType stringToTrigger(const std::string& str) {
 void ActionMap::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
+#ifndef NDEBUG
         std::cerr << "Failed to open keybindings file: " << path << std::endl;
+#endif
         return;
     }
 
@@ -260,11 +280,15 @@ void ActionMap::loadFromFile(const std::string& path) {
 
              if (tokens[2] == "Keyboard") binding.device = InputDevice::Keyboard;
              else if (tokens[2] == "Mouse") binding.device = InputDevice::Mouse;
+             else if (tokens[2] == "Scroll") binding.device = InputDevice::Scroll;
 
              if (binding.device == InputDevice::Keyboard) binding.control = stringToKey(tokens[3]);
-             else {
+             else if (binding.device == InputDevice::Mouse) {
                  if (tokens[3] == "LEFT") binding.control = GLFW_MOUSE_BUTTON_LEFT;
                  else if (tokens[3] == "RIGHT") binding.control = GLFW_MOUSE_BUTTON_RIGHT;
+             } else if (binding.device == InputDevice::Scroll) {
+                 if (tokens[3] == "UP") binding.control = 1;
+                 else if (tokens[3] == "DOWN") binding.control = -1;
              }
 
              binding.trigger = stringToTrigger(tokens[4]);
