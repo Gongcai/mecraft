@@ -198,6 +198,10 @@ bool Player::isJustLanded() const  {
     return m_justLanded;
 }
 
+bool Player::isFullySubmerged() const {
+    return m_body.isFullySubmerged;
+}
+
 Inventory& Player::getInventory() {
     return m_inventory;
 }

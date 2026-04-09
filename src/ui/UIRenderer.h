@@ -58,7 +58,7 @@ private:
     GLuint m_hotbarVao = 0;
     GLuint m_hotbarVbo = 0;
     ResourceMgr* m_resourceMgr = nullptr;
-    std::array<float, 4> m_hotbarBgColor {0.15f, 0.15f, 0.15f, 0.75f};
+    std::array<float, 4> m_hotbarBgColor {1.0f, 1.0f, 1.0f, 1.0f};
     std::array<float, 4> m_hotbarBorderColor {1.0f, 1.0f, 1.0f, 0.9f};
     std::array<float, 4> m_hotbarIconTintColor {1.0f, 1.0f, 1.0f, 1.0f};
 };

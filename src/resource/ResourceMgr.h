@@ -36,6 +36,10 @@ public:
     GLuint loadTexture(const std::string& path, bool alpha = false);
     [[nodiscard]] GLuint getTexture(const std::string& name) const;
 
+    // Standalone named textures (non-atlas), e.g. GUI sheets.
+    GLuint loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
+    [[nodiscard]] GLuint getGuiTexture(const std::string& name) const;
+
     // 纹理图集
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
@@ -43,6 +47,7 @@ public:
 private:
     std::unordered_map<std::string, std::unique_ptr<Shader>> m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
+    std::unordered_map<std::string, GLuint> m_guiTextures;
     TextureAtlas m_atlas;
 };
 

@@ -197,8 +197,8 @@ void UIRenderer::initHotbarMesh()
 
     glBindVertexArray(m_hotbarVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_hotbarVbo);
-    // Max: 9 bg + 4 border + 9 icons = 22 quads * 6 verts * 4 floats
-    glBufferData(GL_ARRAY_BUFFER, 22 * 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // Max: 1 bg + 1 selected slot + 9 icons = 11 quads * 6 verts * 4 floats
+    glBufferData(GL_ARRAY_BUFFER, 11 * 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
@@ -231,24 +231,24 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
 
     const float screenW = static_cast<float>(window.getWidth());
     const float screenH = static_cast<float>(window.getHeight());
+    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
+    const GLuint widgetsTexture = m_resourceMgr->getGuiTexture("widgets");
+    if (atlas.textureID == 0 || widgetsTexture == 0)
+        return;
 
-    constexpr float slotSize = 40.0f;
-    constexpr float padding = 2.0f;
-    constexpr float iconInset = 3.0f;
+    constexpr float kWidgetsWidth = 182.0f;
+    constexpr float kWidgetsHeight = 46.0f;
+    constexpr float kBgHeight = 23.0f;
+    constexpr float kHighlightSize = 22.0f;
+    constexpr float kScale = 2.0f;
     constexpr int hotbarSlots = Inventory::HOTBAR_SIZE;
-    const float hotbarWidth = hotbarSlots * slotSize + (hotbarSlots - 1) * padding;
+    const float hotbarWidth = kWidgetsWidth * kScale;
+    const float hotbarHeight = kBgHeight * kScale;
 
     const float startX = (screenW - hotbarWidth) * 0.5f;
-    const float startY = screenH - slotSize - 8.0f;
+    const float startY = screenH - hotbarHeight - 8.0f;
 
-    const int selectedSlot = inventory.getSelectedSlot();
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
-
-    // Tiny UV region for solid-color quads (1 atlas pixel)
-    const float solidU0 = 0.0f;
-    const float solidV0 = 0.0f;
-    const float solidU1 = 1.0f / static_cast<float>(atlas.atlasWidth);
-    const float solidV1 = 1.0f / static_cast<float>(atlas.atlasHeight);
+    const int selectedSlot = std::clamp(inventory.getSelectedSlot(), 0, hotbarSlots - 1);
 
     auto addQuad = [](std::vector<float>& buf,
                       float x0, float y0, float x1, float y1,
@@ -262,32 +262,44 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
         buf.push_back(x0); buf.push_back(y1); buf.push_back(u0); buf.push_back(v1);
     };
 
-    // ── Layer 1: Slot backgrounds (dark) ──
+    auto uvFromTopLeftPixels = [=](float x0, float y0, float x1, float y1)
+    {
+        // widgets.png is loaded with vertical flip, so convert top-left pixel rects to bottom-left UVs.
+        const float u0 = x0 / kWidgetsWidth;
+        const float u1 = x1 / kWidgetsWidth;
+        const float v0 = (kWidgetsHeight - y1) / kWidgetsHeight;
+        const float v1 = (kWidgetsHeight - y0) / kWidgetsHeight;
+        return std::array<float, 4>{u0, v0, u1, v1};
+    };
+
+    // Layer 1: widgets hotbar background.
     std::vector<float> bgVerts;
-    for (int i = 0; i < hotbarSlots; ++i)
     {
-        float sx = startX + i * (slotSize + padding);
-        addQuad(bgVerts, sx, startY, sx + slotSize, startY + slotSize,
-                solidU0, solidV0, solidU1, solidV1);
+        const auto uv = uvFromTopLeftPixels(0.0f, 0.0f, 182.0f, 23.0f);
+        addQuad(bgVerts,
+                startX, startY,
+                startX + hotbarWidth, startY + hotbarHeight,
+                uv[0], uv[1], uv[2], uv[3]);
     }
 
-    // ── Layer 2: Selection highlight border (white) ──
-    std::vector<float> borderVerts;
+    // Layer 2: widgets selected slot frame.
+    std::vector<float> selectedVerts;
     {
-        const float selX = startX + selectedSlot * (slotSize + padding);
-        constexpr float b = 2.0f; // border thickness
-        // Top
-        addQuad(borderVerts, selX - b, startY - b, selX + slotSize + b, startY, solidU0, solidV0, solidU1, solidV1);
-        // Bottom
-        addQuad(borderVerts, selX - b, startY + slotSize, selX + slotSize + b, startY + slotSize + b, solidU0, solidV0, solidU1, solidV1);
-        // Left
-        addQuad(borderVerts, selX - b, startY, selX, startY + slotSize, solidU0, solidV0, solidU1, solidV1);
-        // Right
-        addQuad(borderVerts, selX + slotSize, startY, selX + slotSize + b, startY + slotSize, solidU0, solidV0, solidU1, solidV1);
+        const auto uv = uvFromTopLeftPixels(0.0f, 24.0f, 22.0f, 46.0f);
+        const float slotStride = 20.0f * kScale;
+        const float selX = startX + static_cast<float>(selectedSlot) * slotStride;
+        const float selY = startY;
+        addQuad(selectedVerts,
+                selX, selY,
+                selX + kHighlightSize * kScale, selY + kHighlightSize * kScale,
+                uv[0], uv[1], uv[2], uv[3]);
     }
 
-    // ── Layer 3: Block icons ──
+    // Layer 3: Block icons from the block atlas.
     std::vector<float> iconVerts;
+    constexpr float slotStride = 20.0f * kScale;
+    constexpr float iconInset = 3.0f * kScale;
+    constexpr float iconSize = 16.0f * kScale;
     for (int i = 0; i < hotbarSlots; ++i)
     {
         BlockID blockId = inventory.getSlot(i);
@@ -303,24 +315,22 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
 
         auto [uvMin, uvMax] = atlas.getUV(tileIndex);
 
-        float sx = startX + i * (slotSize + padding);
-        float ix = sx + iconInset;
+        const float sx = startX + static_cast<float>(i) * slotStride;
+        const float ix = sx + iconInset;
         float iy = startY + iconInset;
-        float iw = slotSize - 2 * iconInset;
-        float ih = slotSize - 2 * iconInset;
 
-        addQuad(iconVerts, ix, iy, ix + iw, iy + ih, uvMin.x, uvMin.y, uvMax.x, uvMax.y);
+        addQuad(iconVerts, ix, iy, ix + iconSize, iy + iconSize, uvMin.x, uvMin.y, uvMax.x, uvMax.y);
     }
 
-    // Combine all layers into one VBO: bg | border | icons
+    // Combine all layers into one VBO: bg | selected | icons
     std::vector<float> vertices;
-    vertices.reserve(bgVerts.size() + borderVerts.size() + iconVerts.size());
+    vertices.reserve(bgVerts.size() + selectedVerts.size() + iconVerts.size());
     vertices.insert(vertices.end(), bgVerts.begin(), bgVerts.end());
-    vertices.insert(vertices.end(), borderVerts.begin(), borderVerts.end());
+    vertices.insert(vertices.end(), selectedVerts.begin(), selectedVerts.end());
     vertices.insert(vertices.end(), iconVerts.begin(), iconVerts.end());
 
     int bgVertCount = static_cast<int>(bgVerts.size() / 4);
-    int borderVertCount = static_cast<int>(borderVerts.size() / 4);
+    int selectedVertCount = static_cast<int>(selectedVerts.size() / 4);
     int iconVertCount = static_cast<int>(iconVerts.size() / 4);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_hotbarVbo);
@@ -337,24 +347,25 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
     m_inventoryShader->setVec2("uScreenSize", glm::vec2(screenW, screenH));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
     m_inventoryShader->setInt("uAtlas", 0);
 
     glBindVertexArray(m_hotbarVao);
 
     int offset = 0;
 
-    // Draw backgrounds (dark semi-transparent)
+    // Draw textured background.
+    glBindTexture(GL_TEXTURE_2D, widgetsTexture);
     m_inventoryShader->setVec4("uTintColor", glm::vec4(m_hotbarBgColor[0], m_hotbarBgColor[1], m_hotbarBgColor[2], m_hotbarBgColor[3]));
     glDrawArrays(GL_TRIANGLES, offset, bgVertCount);
     offset += bgVertCount;
 
-    // Draw selection border
+    // Draw textured selected frame.
     m_inventoryShader->setVec4("uTintColor", glm::vec4(m_hotbarBorderColor[0], m_hotbarBorderColor[1], m_hotbarBorderColor[2], m_hotbarBorderColor[3]));
-    glDrawArrays(GL_TRIANGLES, offset, borderVertCount);
-    offset += borderVertCount;
+    glDrawArrays(GL_TRIANGLES, offset, selectedVertCount);
+    offset += selectedVertCount;
 
-    // Draw block icons
+    // Draw block icons.
+    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
     m_inventoryShader->setVec4("uTintColor", glm::vec4(m_hotbarIconTintColor[0], m_hotbarIconTintColor[1], m_hotbarIconTintColor[2], m_hotbarIconTintColor[3]));
     glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
 

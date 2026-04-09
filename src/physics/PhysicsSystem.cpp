@@ -144,12 +144,12 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
 }
 
 void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
-                         const bool wasGrounded, const bool isFullySubmerged, const float dt) {
+                         const bool wasGrounded, const float dt) {
     const float gravityScale = body.isInWater ? tuning.waterGravityScale : 1.0f;
     body.velocity.y -= tuning.gravity * gravityScale * dt;
 
     if (body.isInWater && intent.wantsJump) {
-        if (isFullySubmerged) {
+        if (body.isFullySubmerged) {
             body.velocity.y += tuning.swimUpAccel * dt;
         } else {
             body.velocity.y += static_cast<float>(std::sin(tuning.swimUpAccel * Time::currentGameTime)) + 1;
@@ -216,10 +216,10 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     body.hitWall = false;
     const float waterFillRatio = queryWaterFillRatio(body, *m_world);
     body.isInWater = waterFillRatio > 0.2f;
-    const bool isFullySubmerged = waterFillRatio > 0.95f;
+    body.isFullySubmerged = waterFillRatio > 0.95f;
 
     applyHorizontalControl(body, intent, tuning, wasGrounded, dt);
-    applyVerticalForces(body, intent, tuning, wasGrounded, isFullySubmerged, dt);
+    applyVerticalForces(body, intent, tuning, wasGrounded,  dt);
     applyDrag(body, tuning, dt);
 
     body.isGrounded = false;
