@@ -56,6 +56,17 @@ void ResourceMgr::init() {
 }
 
 void ResourceMgr::shutdown() {
+    for (auto& [_, textureId] : m_guiTextures) {
+        if (textureId != 0) {
+            glDeleteTextures(1, &textureId);
+        }
+    }
+    m_guiTextures.clear();
+
+    if (m_atlas.textureID != 0) {
+        glDeleteTextures(1, &m_atlas.textureID);
+        m_atlas.textureID = 0;
+    }
 }
 
 Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {
@@ -76,6 +87,50 @@ Shader *ResourceMgr::getShader(const std::string &name) {
 
 GLuint ResourceMgr::loadTexture(const std::string &path, bool alpha) {
     //TODO: 完善贴图读取
+    return 0;
+}
+
+GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
+    auto existing = m_guiTextures.find(name);
+    if (existing != m_guiTextures.end()) {
+        return existing->second;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(flipVertically ? 1 : 0);
+    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (!data) {
+#ifndef NDEBUG
+        std::cerr << "Failed to load GUI texture: " << path << "\n";
+#endif
+        return 0;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    stbi_image_free(data);
+
+    m_guiTextures[name] = textureID;
+    return textureID;
+}
+
+GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
+    auto it = m_guiTextures.find(name);
+    if (it != m_guiTextures.end()) {
+        return it->second;
+    }
     return 0;
 }
 

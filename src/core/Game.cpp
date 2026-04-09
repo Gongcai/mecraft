@@ -26,11 +26,12 @@ void Game::init(int width, int height, const char *title) {
     // 初始化资源管理器，加载着色器/贴图
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
+    m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
     BlockRegistry::init(&m_resourceMgr);
 #ifndef NDEBUG
     BlockRegistry::printAllBlocks();
 #endif
-    m_world.init(82123);
+    m_world.init(12345);
     m_world.setRenderDistance(8);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});

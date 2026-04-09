@@ -42,7 +42,9 @@ public:
     [[nodiscard]] glm::ivec3 getTargetBlock() const;
     [[nodiscard]] bool isMoving() const;
     [[nodiscard]] bool isSprinting() const;
-    [[nodiscard]] bool isJustLanded() const ;
+    [[nodiscard]] bool isJustLanded() const;
+    [[nodiscard]] bool isFullySubmerged() const;
+
 private:
     glm::vec3 m_position{};
     glm::vec3 m_velocity = {0.0f, 0.0f, 0.0f};

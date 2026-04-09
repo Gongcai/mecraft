@@ -30,6 +30,7 @@ struct PhysicsBody {
     bool isGrounded = false;
     bool isInWater = false;
     bool hitWall = false;
+    bool isFullySubmerged = false;
 };
 
 struct MoveIntent {
