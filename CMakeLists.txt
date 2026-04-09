@@ -41,6 +41,7 @@ set(CORE_SOURCES
         src/core/GameStateMachine.cpp
         src/player/Player.cpp
         src/player/ActionMap.cpp
+        src/player/Inventory.cpp
         src/renderer/Shader.cpp
         src/renderer/Renderer.cpp
         src/renderer/TestCube.cpp
@@ -53,6 +54,7 @@ set(CORE_SOURCES
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/physics/PhysicsSystem.cpp
+        src/particle/ParticleSystem.cpp
         src/audio/AudioEngine.cpp
         src/audio/AudioClip.cpp
         src/audio/AudioSource.cpp

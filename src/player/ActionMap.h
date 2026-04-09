@@ -33,6 +33,18 @@ enum class Action {
     UseItem,   // e.g. Right Click
     Inventory, // e.g. E or I
     Menu,      // e.g. ESC
+    // Hotbar slot selection
+    Hotbar1,
+    Hotbar2,
+    Hotbar3,
+    Hotbar4,
+    Hotbar5,
+    Hotbar6,
+    Hotbar7,
+    Hotbar8,
+    Hotbar9,
+    HotbarScrollUp,
+    HotbarScrollDown,
     // UI Actions
     Confirm,
     Cancel,
@@ -45,7 +57,8 @@ enum class Action {
 enum class InputDevice {
     Keyboard,
     Mouse,
-    Gamepad
+    Gamepad,
+    Scroll
 };
 
 enum class TriggerType {

@@ -88,6 +88,8 @@ void InputManager::update() {
         static_cast<float>(m_mouseDeltaX),
         static_cast<float>(m_mouseDeltaY)
     };
+    m_snapshot.scrollDelta = m_accumScrollY;
+    m_accumScrollY = 0.0;
 }
 
 const InputSnapshot& InputManager::snapshot() const {
@@ -136,6 +138,7 @@ void InputManager::resetMouseDelta() {
     m_mouseDeltaY = 0.0;
     m_accumDeltaX = 0.0;
     m_accumDeltaY = 0.0;
+    m_accumScrollY = 0.0;
     // Ignore the first sample after reset/capture toggle to avoid spikes.
     m_firstMouse = true;
 }
@@ -187,11 +190,10 @@ void InputManager::cursorPosCallback(GLFWwindow* w, double xpos, double ypos) {
     self->m_mouseY = ypos;
 }
 
-void InputManager::scrollCallback(GLFWwindow* w, double /*xoffset*/, double /*yoffset*/) {
+void InputManager::scrollCallback(GLFWwindow* w, double /*xoffset*/, double yoffset) {
     auto* self = fromWindow(w);
     if (self == nullptr) {
         return;
     }
-
-    // Scroll is currently not exposed by the public API.
+    self->m_accumScrollY += yoffset;
 }

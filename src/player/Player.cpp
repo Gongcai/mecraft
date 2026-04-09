@@ -198,6 +198,14 @@ bool Player::isJustLanded() const  {
     return m_justLanded;
 }
 
+Inventory& Player::getInventory() {
+    return m_inventory;
+}
+
+const Inventory& Player::getInventory() const {
+    return m_inventory;
+}
+
 void Player::handleMovement(const InputContextManager &inputContext) {
     glm::vec3 front = m_camera.getFront();
     glm::vec3 right = m_camera.getRight();

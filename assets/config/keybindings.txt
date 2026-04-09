@@ -5,6 +5,17 @@ Gameplay Sprint Keyboard LEFT_CONTROL Held -
 Gameplay Attack Mouse LEFT Pressed -
 Gameplay UseItem Mouse RIGHT Held -
 Gameplay Menu Keyboard ESCAPE Pressed -
+Gameplay Hotbar1 Keyboard 1 Pressed -
+Gameplay Hotbar2 Keyboard 2 Pressed -
+Gameplay Hotbar3 Keyboard 3 Pressed -
+Gameplay Hotbar4 Keyboard 4 Pressed -
+Gameplay Hotbar5 Keyboard 5 Pressed -
+Gameplay Hotbar6 Keyboard 6 Pressed -
+Gameplay Hotbar7 Keyboard 7 Pressed -
+Gameplay Hotbar8 Keyboard 8 Pressed -
+Gameplay Hotbar9 Keyboard 9 Pressed -
+Gameplay HotbarScrollUp Scroll UP Pressed -
+Gameplay HotbarScrollDown Scroll DOWN Pressed -
 
 UI Menu Keyboard ESCAPE Pressed -
 UI Cancel Keyboard ESCAPE Pressed -

@@ -11,7 +11,8 @@
 
 class ResourceMgr;
 
-// 仅用作渲染测试
+// 仅用作渲染测试 - 只在 Debug 模式下可用
+#ifndef NDEBUG
 class TestCube {
 public:
     TestCube();
@@ -32,6 +33,7 @@ private:
     Shader shader = Shader("../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
 
 };
+#endif // NDEBUG
 
 
 #endif //MECRAFT_TESTCUBE_H

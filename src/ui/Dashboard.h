@@ -4,6 +4,10 @@
 
 #ifndef MECRAFT_DASHBOARD_H
 #define MECRAFT_DASHBOARD_H
+
+// Dashboard 调试 UI 仅在 Debug 模式下可用
+#ifndef NDEBUG
+
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_impl_glfw.h"
 #include "../third_party/imgui/imgui_impl_opengl3.h"
@@ -27,7 +31,10 @@ private:
     void showCameraStats( Camera& camera);
     void showPerformanceStats(Renderer &render);
     void showCrosshairSettings(UIRenderer& uiRenderer);
+    void showHotbarSettings(UIRenderer& uiRenderer);
 };
+
+#endif // NDEBUG
 
 
 #endif //MECRAFT_DASHBOARD_H

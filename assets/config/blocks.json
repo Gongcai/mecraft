@@ -91,7 +91,7 @@
         "isSelectable": false,
         "isTransparent": true,
         "textures": {
-            "all": "water"
+            "all": "water_still"
         }
     }
   ]

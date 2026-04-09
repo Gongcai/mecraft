@@ -11,16 +11,21 @@
 #include "Window.h"
 #include "Time.h"
 #include "../player/Player.h"
+#ifndef NDEBUG
 #include "../renderer/TestCube.h"
+#endif
 #include "../renderer/Renderer.h"
 #include "InputContextManager.h"
 #include "../player/ActionMap.h"
 #include "GameStateMachine.h"
 #include "../world/World.h"
 #include "../physics/PhysicsSystem.h"
+#ifndef NDEBUG
 #include "../ui/Dashboard.h"
+#endif
 #include "../ui/UIRenderer.h"
 #include "../audio/AudioEngine.h"
+#include "../particle/ParticleSystem.h"
 class Game {
 public:
     Game();
@@ -42,8 +47,11 @@ private:
     Renderer      m_renderer;
     ResourceMgr    m_resourceMgr;
     AudioEngine   m_audioEngine;
+    ParticleSystem m_particleSystem;
     UIRenderer    m_uiRenderer;
+#ifndef NDEBUG
     Dashboard      m_dashboard;
+#endif
 
 
     double m_lastFrameTime = 0.0;

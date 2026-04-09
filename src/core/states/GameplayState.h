@@ -8,6 +8,7 @@
 #include "../../player/Player.h"
 #include "../../world/World.h"
 #include "../../world/Block.h"
+#include "../../particle/ParticleSystem.h"
 #include "UIState.h"
 namespace {
     std::string getRandomName(std::string name,int maxRandomLength) {
@@ -35,9 +36,11 @@ public:
                   InputManager& input,
                   physics::PhysicsSystem& physicsSystem,
                   World& world,
-                  AudioEngine& audioEngine)
+                  AudioEngine& audioEngine,
+                  ParticleSystem& particleSystem)
             : m_fsm(fsm), m_player(player), m_context(ctx), m_input(input),
-              m_physicsSystem(physicsSystem), m_world(world),m_audioEngine(audioEngine) {}
+              m_physicsSystem(physicsSystem), m_world(world),
+              m_audioEngine(audioEngine), m_particleSystem(particleSystem) {}
 
     void onEnter() override {
         // Ensure we are in Gameplay context
@@ -55,6 +58,22 @@ public:
             if (m_placeCooldownRemaining < 0.0f) {
                 m_placeCooldownRemaining = 0.0f;
             }
+        }
+
+        // Handle hotbar slot selection via action map
+        for (int i = 0; i < Inventory::HOTBAR_SIZE; ++i) {
+            Action hotbarAction = static_cast<Action>(static_cast<int>(Action::Hotbar1) + i);
+            if (m_context.isActionTriggered(hotbarAction)) {
+                m_player.getInventory().setSelectedSlot(i);
+            }
+        }
+
+        // Handle hotbar scroll (cyclic)
+        if (m_context.isActionTriggered(Action::HotbarScrollUp)) {
+            m_player.getInventory().scrollSlot(-1);
+        }
+        if (m_context.isActionTriggered(Action::HotbarScrollDown)) {
+            m_player.getInventory().scrollSlot(1);
         }
 
         // Check for global transitions (e.g. open menu)
@@ -101,8 +120,10 @@ public:
 
 
         if (wantsBreak) {
+            BlockID brokenBlock = m_world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             m_world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockType::AIR);
             m_audioEngine.playClip(getRandomName("put",5),hitBlock);
+            m_particleSystem.emit(hitBlock, brokenBlock);
             return;
         }
 
@@ -111,7 +132,7 @@ public:
             m_world.getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockType::AIR &&
             !m_player.wouldOverlapBlock(placeBlock)) {
 
-            m_world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, BlockType::GLASS);
+            m_world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, m_player.getInventory().getSelectedBlock());
             m_placeCooldownRemaining = kPlaceCooldownSec;
             m_audioEngine.playClip(getRandomName("put",5),placeBlock);
         }
@@ -129,6 +150,7 @@ private:
     physics::PhysicsSystem& m_physicsSystem;
     World& m_world;
     AudioEngine& m_audioEngine;
+    ParticleSystem& m_particleSystem;
     static constexpr float kPlaceCooldownSec = 0.18f;
     float m_placeCooldownRemaining = 0.0f;
 
