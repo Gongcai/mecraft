@@ -21,15 +21,23 @@
 class UIRenderer;
 class Dashboard {
 public:
+    struct FrameProfilerStats {
+        double frameMs = 0.0;
+        double fixedUpdateMs = 0.0;
+        double audioMs = 0.0;
+        double renderMs = 0.0;
+    };
+
     Dashboard();
     ~Dashboard();
     void init(const Window& window);
-    void render( Player &player, World &world, Camera &camera,Renderer &render, UIRenderer& uiRenderer);
+    void render(Player &player, World &world, Camera &camera, Renderer &render,
+                UIRenderer& uiRenderer, const FrameProfilerStats& profilerStats);
 private:
     void showPlayerStats( Player& player);
     void showWorldStats(World& world, const Player& player);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats(Renderer &render);
+    void showPerformanceStats(Renderer &render, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
 };

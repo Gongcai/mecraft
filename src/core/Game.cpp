@@ -5,6 +5,11 @@
 #include "states/GameplayState.h"
 #include "../world/Block.h"
 #include "../audio/AudioListener.h"
+
+#ifndef NDEBUG
+#include <chrono>
+#endif
+
 Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world) {
 }
 
@@ -28,6 +33,7 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
     BlockRegistry::init(&m_resourceMgr);
+    m_resourceMgr.buildBlockIconAtlas(64);
 #ifndef NDEBUG
     BlockRegistry::printAllBlocks();
 #endif
@@ -37,6 +43,7 @@ void Game::init(int width, int height, const char *title) {
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
+    m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
     m_audioEngine.init();
@@ -62,49 +69,118 @@ void Game::init(int width, int height, const char *title) {
 
 }
 
+double Game::clampFrameTime(const double dt) {
+    constexpr double kMaxFrameTime = 0.25;
+    return dt > kMaxFrameTime ? kMaxFrameTime : dt;
+}
+
+void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
+    m_input.update();
+    accumulator -= fixedStep;
+    m_stateMachine.update(static_cast<float>(fixedStep), m_input.snapshot());
+    m_particleSystem.update(static_cast<float>(fixedStep));
+    m_world.update(m_player.getPosition());
+}
+
+void Game::syncAudioListener() {
+    m_audioEngine.update();
+    AudioListener::setPosition(m_player.getEyePosition());
+    AudioListener::setOrientation(
+        m_player.getCamera().getFront(),
+        m_player.getCamera().getUp()
+    );
+    AudioListener::setGain(1.0f);
+}
+
+void Game::renderFrame() {
+    m_postProcessRenderer.beginScene(m_window);
+    m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
+    m_particleSystem.render(m_player.getCamera().getProjectionMatrix(m_window.getAspectRatio()),
+                            m_player.getCamera().getViewMatrix());
+
+    PostProcessEffects effects;
+    effects.underwaterEnabled = m_player.isEyesInWater();
+    m_postProcessRenderer.setEffects(effects);
+    m_postProcessRenderer.endSceneAndComposite(m_window);
+
+    m_uiRenderer.render(m_window, m_player.getInventory());
+#ifndef NDEBUG
+    m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer,
+                       m_dashboardProfilerStats);
+#endif
+    m_window.swapBuffers();
+}
+
+#ifndef NDEBUG
+void Game::publishDebugFrameProfiler(const double frameTime) {
+    const auto smooth = [](const double previous, const double current) {
+        constexpr double kAlpha = 0.15;
+        return previous + (current - previous) * kAlpha;
+    };
+
+    m_frameProfilerDebug.fixedUpdateMs = smooth(m_frameProfilerDebug.fixedUpdateMs,
+                                                m_dashboardProfilerStats.fixedUpdateMs);
+    m_frameProfilerDebug.audioMs = smooth(m_frameProfilerDebug.audioMs, m_dashboardProfilerStats.audioMs);
+    m_frameProfilerDebug.renderMs = smooth(m_frameProfilerDebug.renderMs, m_dashboardProfilerStats.renderMs);
+
+    m_frameProfilerDebug.publishAccumulator += frameTime;
+    if (m_frameProfilerDebug.publishAccumulator < m_frameProfilerDebug.publishInterval) {
+        return;
+    }
+    m_frameProfilerDebug.publishAccumulator -= m_frameProfilerDebug.publishInterval;
+
+    m_dashboardProfilerStats.frameMs = frameTime * 1000.0;
+    m_dashboardProfilerStats.fixedUpdateMs = m_frameProfilerDebug.fixedUpdateMs;
+    m_dashboardProfilerStats.audioMs = m_frameProfilerDebug.audioMs;
+    m_dashboardProfilerStats.renderMs = m_frameProfilerDebug.renderMs;
+}
+#endif
+
 void Game::run() {
-    constexpr double kFixedStep = 1.0 / 60.0;
-    constexpr double kMaxFrameTime = 0.25; // Avoid huge catch-up loops after stalls.
+    constexpr double kFixedStep = TICK_RATE;
     double accumulator = 0.0;
 
     while (!m_window.shouldClose()) {
+        // 1) Pump OS events and advance frame clock.
         m_window.pollEvents();
         Time::update();
 
-        double frameTime = Time::deltaTime;
-        if (frameTime > kMaxFrameTime) {
-            frameTime = kMaxFrameTime;
-        }
+        const double frameTime = clampFrameTime(Time::deltaTime);
         accumulator += frameTime;
 
-        while (accumulator >= kFixedStep) {
-            m_input.update();
-            accumulator -= kFixedStep;
-            m_stateMachine.update(static_cast<float>(kFixedStep), m_input.snapshot());
-            m_particleSystem.update(static_cast<float>(kFixedStep));
-            m_world.update(m_player.getPosition());
-        }
-        m_audioEngine.update();
-        AudioListener::setPosition(m_player.getEyePosition());
-        AudioListener::setOrientation(
-            m_player.getCamera().getFront(),
-            m_player.getCamera().getUp()
-        );
-        AudioListener::setGain(1.0f);  // 确保增益为 1
-        m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
-        m_particleSystem.render(m_player.getCamera().getProjectionMatrix(m_window.getAspectRatio()),
-                                m_player.getCamera().getViewMatrix());
-        m_uiRenderer.render(m_window, m_player.getInventory());
+        // 2) Consume as many fixed simulation steps as needed.
 #ifndef NDEBUG
-        m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer);
+        const auto fixedStart = std::chrono::steady_clock::now();
 #endif
-        m_window.swapBuffers();
+        while (accumulator >= kFixedStep) {
+            runFixedUpdate(kFixedStep, accumulator);
+        }
 
+        // 3) Sync listener and submit render passes.
+#ifndef NDEBUG
+        const auto fixedEnd = std::chrono::steady_clock::now();
+        const auto audioStart = std::chrono::steady_clock::now();
+#endif
+        syncAudioListener();
+#ifndef NDEBUG
+        const auto audioEnd = std::chrono::steady_clock::now();
+        const auto renderStart = std::chrono::steady_clock::now();
+#endif
+        renderFrame();
+#ifndef NDEBUG
+        const auto renderEnd = std::chrono::steady_clock::now();
+
+        m_dashboardProfilerStats.fixedUpdateMs = std::chrono::duration<double, std::milli>(fixedEnd - fixedStart).count();
+        m_dashboardProfilerStats.audioMs = std::chrono::duration<double, std::milli>(audioEnd - audioStart).count();
+        m_dashboardProfilerStats.renderMs = std::chrono::duration<double, std::milli>(renderEnd - renderStart).count();
+        publishDebugFrameProfiler(frameTime);
+#endif
     }
 }
 
 void Game::shutdown() {
     m_particleSystem.shutdown();
     m_uiRenderer.shutdown();
+    m_postProcessRenderer.shutdown();
     m_renderer.shutdown();
 }

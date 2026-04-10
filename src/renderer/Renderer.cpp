@@ -116,6 +116,27 @@ void Renderer::setRegionChunkSize(const int chunkSize) {
     m_regionChunkSize = std::max(1, chunkSize);
 }
 
+void Renderer::setAtlasAnisotropy(const float anisotropy) {
+    if (m_resourceMgr == nullptr) {
+        return;
+    }
+    m_resourceMgr->setAtlasAnisotropy(anisotropy);
+}
+
+float Renderer::getAtlasAnisotropy() const {
+    if (m_resourceMgr == nullptr) {
+        return 1.0f;
+    }
+    return m_resourceMgr->getAtlasAnisotropy();
+}
+
+float Renderer::getAtlasMaxAnisotropy() const {
+    if (m_resourceMgr == nullptr) {
+        return 1.0f;
+    }
+    return m_resourceMgr->getAtlasMaxAnisotropy();
+}
+
 #ifndef NDEBUG
 void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
     m_chunkCullingDebugEnabled = enabled;
@@ -220,6 +241,7 @@ void Renderer::bindChunkRenderState(const TextureAtlas& atlas) const {
     m_chunkShader->use();
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
     m_chunkShader->setInt("texAtlas", 0);
+    m_chunkShader->setInt("uForceBaseLod", 0);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
@@ -415,6 +437,10 @@ void Renderer::renderTransparentChunks(const std::vector<Chunk*>& transparentChu
                   return a.distanceSq > b.distanceSq;
               });
 
+    // Implicit derivatives on atlas UV seams can produce line artifacts on transparent water.
+    // Force base LOD sampling for transparent pass only.
+    m_chunkShader->setInt("uForceBaseLod", 1);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
@@ -441,6 +467,7 @@ void Renderer::renderTransparentChunks(const std::vector<Chunk*>& transparentChu
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+    m_chunkShader->setInt("uForceBaseLod", 0);
 }
 
 

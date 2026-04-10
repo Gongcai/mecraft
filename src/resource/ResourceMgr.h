@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <utility>
@@ -15,7 +16,9 @@ struct TextureAtlas {
     GLuint textureID = 0;
     int atlasWidth  = 0;     // 像素宽度
     int atlasHeight = 0;     // 像素高度
-    int tileSize    = 16;    // 每个贴图块的像素尺寸
+    int tileSize    = 16;    // 每个贴图块的像素尺寸（不含padding）
+    int tileStride  = 16;    // 单元跨度 = tileSize + 2 * tilePadding
+    int tilePadding = 0;     // 每个tile四周复制出的gutter像素
     int tilesPerRow = 0;
 
     // 根据 tile 索引计算 UV 坐标 (左下, 右上)
@@ -44,11 +47,24 @@ public:
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 
+    // Prebaked block item icons (isometric-like) packed in a single atlas texture.
+    void buildBlockIconAtlas(int iconSize = 64);
+    [[nodiscard]] const TextureAtlas& getItemIconAtlas() const;
+
+    // Atlas sampler controls (for world block atlas).
+    void setAtlasAnisotropy(float anisotropy);
+    [[nodiscard]] float getAtlasAnisotropy() const;
+    [[nodiscard]] float getAtlasMaxAnisotropy() const;
+
 private:
     std::unordered_map<std::string, std::unique_ptr<Shader>> m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
     std::unordered_map<std::string, GLuint> m_guiTextures;
     TextureAtlas m_atlas;
+    TextureAtlas m_itemIconAtlas;
+    std::vector<unsigned char> m_blockAtlasPixels;
+    float m_atlasAnisotropy = 1.0f;
+    float m_atlasMaxAnisotropy = 1.0f;
 };
 
 

@@ -98,8 +98,12 @@ bool overlapsSolid(const World& world, const AABB& box) {
     return false;
 }
 
-bool queryInWater(const PhysicsBody& body, const World& world) {
-    return queryWaterFillRatio(body, world) > 0.2f;
+bool queryEyesInWater(const PhysicsBody& body, const World& world) {
+    const glm::vec3 eyePos = body.position + glm::vec3(0.0f, body.eyeOffsetY, 0.0f);
+    return isWaterBlock(world,
+                        static_cast<int>(std::floor(eyePos.x)),
+                        static_cast<int>(std::floor(eyePos.y)),
+                        static_cast<int>(std::floor(eyePos.z)));
 }
 
 float moveTowards(const float current, const float target, const float maxDelta) {
@@ -217,6 +221,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     const float waterFillRatio = queryWaterFillRatio(body, *m_world);
     body.isInWater = waterFillRatio > 0.2f;
     body.isFullySubmerged = waterFillRatio > 0.95f;
+    body.isEyesInWater = queryEyesInWater(body, *m_world);
 
     applyHorizontalControl(body, intent, tuning, wasGrounded, dt);
     applyVerticalForces(body, intent, tuning, wasGrounded,  dt);
@@ -227,7 +232,10 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     moveAndCollideAxis(body, *m_world, dt, 0); // X
     moveAndCollideAxis(body, *m_world, dt, 2); // Z
 
-    body.isInWater = queryInWater(body, *m_world);
+    const float postMoveWaterFillRatio = queryWaterFillRatio(body, *m_world);
+    body.isInWater = postMoveWaterFillRatio > 0.2f;
+    body.isFullySubmerged = postMoveWaterFillRatio > 0.95f;
+    body.isEyesInWater = queryEyesInWater(body, *m_world);
 }
 
 } // namespace physics

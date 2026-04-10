@@ -44,6 +44,7 @@ public:
     [[nodiscard]] bool isSprinting() const;
     [[nodiscard]] bool isJustLanded() const;
     [[nodiscard]] bool isFullySubmerged() const;
+    [[nodiscard]] bool isEyesInWater() const;
 
 private:
     glm::vec3 m_position{};

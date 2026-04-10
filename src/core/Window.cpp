@@ -15,8 +15,11 @@ bool Window::init(int width, int height, const char *title) {
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         return false;
     }
-    m_height = height;
-    m_width = width;
+    int framebufferWidth = width;
+    int framebufferHeight = height;
+    glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
+    m_width = framebufferWidth > 0 ? framebufferWidth : width;
+    m_height = framebufferHeight > 0 ? framebufferHeight : height;
     glfwSwapInterval(0);
     return true;
 }
@@ -47,15 +50,29 @@ void Window::pollEvents() {
 }
 
 int Window::getWidth() const {
-    return m_width;
+    if (m_window == nullptr) {
+        return m_width;
+    }
+    int framebufferWidth = m_width;
+    int framebufferHeight = m_height;
+    glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
+    return framebufferWidth > 0 ? framebufferWidth : m_width;
 }
 
 int Window::getHeight() const {
-    return m_height;
+    if (m_window == nullptr) {
+        return m_height;
+    }
+    int framebufferWidth = m_width;
+    int framebufferHeight = m_height;
+    glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
+    return framebufferHeight > 0 ? framebufferHeight : m_height;
 }
 
 float Window::getAspectRatio() const {
-    return static_cast<float>(m_width) / m_height;
+    const int width = getWidth();
+    const int height = getHeight();
+    return static_cast<float>(width) / static_cast<float>(height > 0 ? height : 1);
 }
 
 void Window::setTitle(const std::string &title) const {
@@ -67,6 +84,7 @@ GLFWwindow * Window::getHandle() const {
 }
 
 void Window::framebufferSizeCallback(GLFWwindow *w, int width, int height) {
+    (void) w;
     glViewport(0, 0, width, height);
 }
 

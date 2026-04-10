@@ -13,6 +13,7 @@ find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenAL CONFIG REQUIRED)
+find_package(Freetype CONFIG REQUIRED)
 
 # ---------------------------------------------------------------------------
 # 2. 定义源文件变量 (分类管理，方便增删)
@@ -44,6 +45,7 @@ set(CORE_SOURCES
         src/player/Inventory.cpp
         src/renderer/Shader.cpp
         src/renderer/Renderer.cpp
+        src/renderer/PostProcessRenderer.cpp
         src/renderer/TestCube.cpp
         src/renderer/stb_image.cpp
         src/renderer/ChunkMesher.cpp
@@ -80,20 +82,17 @@ target_link_libraries(mecraft_core PUBLIC
         glm::glm
         nlohmann_json::nlohmann_json
         OpenAL::OpenAL
+        Freetype::Freetype
 )
 
 # 统一宏定义
 target_compile_definitions(mecraft_core PUBLIC GLFW_INCLUDE_NONE)
 
-# ---------------------------------------------------------------------------
-# 4. 主程序 (真正的入口)
-# ---------------------------------------------------------------------------
+
 add_executable(mecraft main.cpp)
 target_link_libraries(mecraft PRIVATE mecraft_core)
 
-# ---------------------------------------------------------------------------
-# 5. 测试套件 (现在非常清爽)
-# ---------------------------------------------------------------------------
+
 enable_testing()
 
 # 辅助宏：减少重复代码
