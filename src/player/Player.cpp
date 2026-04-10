@@ -69,11 +69,11 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     m_velocity = m_body.velocity;
     m_onGround = m_body.isGrounded;
 
-    if (m_onGround && inputContext.isActionTriggered(Action::Crouch)) {
-        m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightCrouch, dt * 5);
+    if (m_onGround && m_intent.wantsCrouch) {
+        m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightCrouch, dt * 15);
     }
     else {
-        m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightStand, dt * 5);
+        m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightStand, dt * 15);
     }
     applyViewBob(dt);
 
@@ -82,7 +82,7 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
 }
 
 void Player::applyViewBob(float dt) {
-    const bool shouldBob = m_moving && m_onGround;
+    const bool shouldBob = m_moving && m_onGround && !m_crouching;
 
     const float targetBlend = shouldBob ? 1.0f : 0.0f;
     const float blendSpeed = shouldBob ? m_eyeBobFadeInSpeed : m_eyeBobFadeOutSpeed;
@@ -188,6 +188,29 @@ glm::ivec3 Player::getTargetBlock() const {
     return m_targetBlock;
 }
 
+void Player::setBlockBreakProgress(const glm::ivec3& blockPos, const float progress01) {
+    m_breakTargetBlock = blockPos;
+    m_hasBreakTargetBlock = true;
+    m_blockBreakProgress = std::clamp(progress01, 0.0f, 1.0f);
+}
+
+void Player::clearBlockBreakProgress() {
+    m_hasBreakTargetBlock = false;
+    m_blockBreakProgress = 0.0f;
+}
+
+bool Player::hasBlockBreakProgress() const {
+    return m_hasBreakTargetBlock;
+}
+
+glm::ivec3 Player::getBreakTargetBlock() const {
+    return m_breakTargetBlock;
+}
+
+float Player::getBlockBreakProgress() const {
+    return m_blockBreakProgress;
+}
+
 bool Player::isMoving() const {
     return m_moving;
 }
@@ -249,6 +272,8 @@ void Player::handleMovement(const InputContextManager &inputContext) {
     m_intent.move = glm::vec2(wishDir.x, wishDir.z);
     m_intent.wantsJump = inputContext.isActionTriggered(Action::Jump);
     m_intent.wantsSprint = m_sprinting;
+    m_crouching = inputContext.isActionTriggered(Action::Crouch);
+    m_intent.wantsCrouch = m_crouching;
 }
 
 void Player::handleMouseLook(const InputContextManager &inputContext) {

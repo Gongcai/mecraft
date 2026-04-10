@@ -8,6 +8,8 @@
 // Dashboard 调试 UI 仅在 Debug 模式下可用
 #ifndef NDEBUG
 
+#include <array>
+#include <cstddef>
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_impl_glfw.h"
 #include "../third_party/imgui/imgui_impl_opengl3.h"
@@ -22,10 +24,25 @@ class UIRenderer;
 class Dashboard {
 public:
     struct FrameProfilerStats {
+        static constexpr size_t kFixedHistorySamples = 120;
+
         double frameMs = 0.0;
         double fixedUpdateMs = 0.0;
+        double fixedInputMs = 0.0;
+        double fixedStateUpdateMs = 0.0;
+        double fixedParticleUpdateMs = 0.0;
+        double fixedDropUpdateMs = 0.0;
+        double fixedWorldUpdateMs = 0.0;
         double audioMs = 0.0;
         double renderMs = 0.0;
+
+        size_t fixedHistoryCount = 0;
+        std::array<float, kFixedHistorySamples> fixedUpdateHistory{};
+        std::array<float, kFixedHistorySamples> fixedInputHistory{};
+        std::array<float, kFixedHistorySamples> fixedStateHistory{};
+        std::array<float, kFixedHistorySamples> fixedParticleHistory{};
+        std::array<float, kFixedHistorySamples> fixedDropHistory{};
+        std::array<float, kFixedHistorySamples> fixedWorldHistory{};
     };
 
     Dashboard();

@@ -99,7 +99,8 @@ void drawFaceParallelogram(std::vector<unsigned char>& iconAtlasPixels,
                            const Vec2f& a,
                            const Vec2f& b,
                            const Vec2f& d,
-                           const float shade) {
+                           const float shade,
+                           const bool flipV = false) {
     if (tileIndex < 0) {
         return;
     }
@@ -131,7 +132,8 @@ void drawFaceParallelogram(std::vector<unsigned char>& iconAtlasPixels,
             }
 
             const int tx = static_cast<int>(std::round(u * static_cast<float>(srcAtlas.tileSize - 1)));
-            const int ty = static_cast<int>(std::round(v * static_cast<float>(srcAtlas.tileSize - 1)));
+            const float sampleV = flipV ? (1.0f - v) : v;
+            const int ty = static_cast<int>(std::round(sampleV * static_cast<float>(srcAtlas.tileSize - 1)));
 
             auto rgba = sampleTileNearest(srcAtlas, srcPixels, tileIndex, tx, ty);
             if (rgba[3] == 0) {
@@ -165,8 +167,9 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
     const int startX = tileCol * stride + tilePadding;
     const int startY = tileRow * stride + tilePadding;
 
-    // Sample from texel centers to avoid bilinear tie-breaks exactly on tile borders.
-    const float innerInsetPx = 0.5f;
+    // Use tile boundaries (not texel centers) so the full 16x16 area maps onto a face.
+    // A tiny inset keeps UVs strictly inside the tile to avoid border tie-break artifacts.
+    const float innerInsetPx = 1e-3f;
     float uMin = (static_cast<float>(startX) + innerInsetPx) / static_cast<float>(atlasWidth);
     float vMin = (static_cast<float>(startY) + innerInsetPx) / static_cast<float>(atlasHeight);
     float uMax = (static_cast<float>(startX + tileSize) - innerInsetPx) / static_cast<float>(atlasWidth);
@@ -190,6 +193,7 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
 void ResourceMgr::init() {
     loadShader("chunk", "../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
     loadShader("outline", "../assets/shaders/outline.vs", "../assets/shaders/outline.fs");
+    loadShader("break_overlay", "../assets/shaders/break_overlay.vs", "../assets/shaders/break_overlay.fs");
     loadShader("crosshair", "../assets/shaders/crosshair.vs", "../assets/shaders/crosshair.fs");
     loadShader("inventory", "../assets/shaders/inventory.vs", "../assets/shaders/inventory.fs");
     loadShader("particle", "../assets/shaders/particle.vs", "../assets/shaders/particle.fs");
@@ -550,12 +554,14 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
                               m_atlas, m_blockAtlasPixels, leftTex,
                               iconOriginX, iconOriginY,
                               leftA, leftB, leftD,
-                              0.68f);
+                              0.68f,
+                              true);
         drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
                               m_atlas, m_blockAtlasPixels, rightTex,
                               iconOriginX, iconOriginY,
                               rightA, rightB, rightD,
-                              0.83f);
+                              0.83f,
+                              true);
         drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
                               m_atlas, m_blockAtlasPixels, topTex,
                               iconOriginX, iconOriginY,

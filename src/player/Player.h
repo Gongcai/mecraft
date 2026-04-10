@@ -40,6 +40,11 @@ public:
     void clearTargetBlock();
     [[nodiscard]] bool hasTargetBlock() const;
     [[nodiscard]] glm::ivec3 getTargetBlock() const;
+    void setBlockBreakProgress(const glm::ivec3& blockPos, float progress01);
+    void clearBlockBreakProgress();
+    [[nodiscard]] bool hasBlockBreakProgress() const;
+    [[nodiscard]] glm::ivec3 getBreakTargetBlock() const;
+    [[nodiscard]] float getBlockBreakProgress() const;
     [[nodiscard]] bool isMoving() const;
     [[nodiscard]] bool isSprinting() const;
     [[nodiscard]] bool isJustLanded() const;
@@ -69,13 +74,16 @@ private:
     bool m_justLanded = false;
 
     bool m_sprinting = false;
-
+    bool m_crouching = false;
     bool m_moving = true;
     PhysicsBody m_body{};
     MoveIntent m_intent{};
 
     bool m_hasTargetBlock = false;
     glm::ivec3 m_targetBlock{};
+    bool m_hasBreakTargetBlock = false;
+    glm::ivec3 m_breakTargetBlock{};
+    float m_blockBreakProgress = 0.0f;
     Inventory m_inventory;
 
     void handleMovement(const InputContextManager& inputContext);

@@ -5,6 +5,7 @@
       "name": "air",
       "isSolid": false,
       "isTransparent": true,
+      "timeToBreak": 0,
       "textures": {
         "all": "air"
       }
@@ -12,6 +13,7 @@
     {
       "id": 1,
       "name": "dirt",
+      "timeToBreak": 300,
       "textures": {
         "all": "dirt"
       }
@@ -19,6 +21,7 @@
     {
       "id": 2,
       "name": "grass",
+      "timeToBreak": 300,
       "textures": {
         "top": "grass_top",
         "bottom": "dirt",
@@ -28,6 +31,7 @@
     {
       "id": 3,
       "name": "stone",
+      "timeToBreak": 1500,
       "textures": {
         "all": "stone"
       }
@@ -35,6 +39,7 @@
     {
       "id": 4,
       "name": "sand",
+      "timeToBreak": 250,
       "textures": {
         "all": "sand"
       }
@@ -42,6 +47,7 @@
     {
       "id": 5,
       "name": "wood",
+      "timeToBreak": 1000,
       "textures": {
         "top": "wood_top",
         "bottom": "wood_top",
@@ -52,6 +58,7 @@
       "id": 6,
       "name": "glass",
       "isTransparent": true,
+      "timeToBreak": 200,
       "textures": {
         "all": "glass"
       }
@@ -59,6 +66,7 @@
     {
         "id": 7,
         "name": "coal_ore",
+        "timeToBreak": 1500,
         "textures": {
             "all": "coal_ore"
         }
@@ -66,6 +74,7 @@
     {
         "id": 8,
         "name": "diamond_ore",
+        "timeToBreak": 1500,
         "textures": {
             "all": "diamond_ore"
         }
@@ -73,6 +82,7 @@
     {
         "id": 9,
         "name": "gold_ore",
+        "timeToBreak": 1500,
         "textures": {
             "all": "gold_ore"
         }
@@ -80,6 +90,7 @@
     {
         "id": 10,
         "name": "iron_ore",
+        "timeToBreak": 1500,
         "textures": {
             "all": "iron_ore"
         }

@@ -38,7 +38,7 @@ struct BlockDef {
     bool isLightSource  = false;      // 是否为光源
     bool isSelectable   = true;    // 是否可选中
     uint8_t lightLevel  = 0;          // 发光强度（0-15）
-
+    uint16_t timeToBreak = 1000;       // 破坏所需时间（毫秒）
     //六面纹理Atlas tile索引（上下左右前后）
     //值相同表示六面相同
     int texTop = 0;

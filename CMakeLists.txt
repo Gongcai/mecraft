@@ -45,6 +45,7 @@ set(CORE_SOURCES
         src/player/Inventory.cpp
         src/renderer/Shader.cpp
         src/renderer/Renderer.cpp
+        src/renderer/DropRenderer.cpp
         src/renderer/PostProcessRenderer.cpp
         src/renderer/TestCube.cpp
         src/renderer/stb_image.cpp
@@ -55,9 +56,11 @@ set(CORE_SOURCES
         src/world/Chunk.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
+        src/world/DropSystem.cpp
         src/physics/PhysicsSystem.cpp
         src/particle/ParticleSystem.cpp
         src/audio/AudioEngine.cpp
+        src/audio/BgmSystem.cpp
         src/audio/AudioClip.cpp
         src/audio/AudioSource.cpp
         src/audio/AudioListener.cpp
@@ -112,3 +115,4 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
 add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
+add_mecraft_test(drop_system_test tests/drop_system_test.cpp)

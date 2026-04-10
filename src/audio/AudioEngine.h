@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <atomic>
+#include <vector>
 #include <AL/al.h>
 #include <AL/alc.h>
 #include <AL/alext.h>
@@ -30,11 +31,12 @@ void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
 class AudioEngine {
 public:
     void init();
-    void update();
+    void update(float deltaTime);
     void shutdown();
 
     AudioClip* loadClip(const std::string& name);
     AudioClip* getClip(const std::string& name);
+    bool registerClipFromPath(const std::string& name, const std::string& filePath);
 
     AudioSource* playClip(const std::string& clipName,
                         glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),

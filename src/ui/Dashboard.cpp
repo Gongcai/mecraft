@@ -9,6 +9,7 @@
 
 #include "UIRenderer.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 
@@ -162,8 +163,47 @@ void Dashboard::showPerformanceStats(Renderer &render, const FrameProfilerStats&
     ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Text("Loop Frame (clamped): %.3f ms", profilerStats.frameMs);
     ImGui::Text("Fixed Update: %.3f ms", profilerStats.fixedUpdateMs);
+    ImGui::Text("  - Input Update: %.3f ms", profilerStats.fixedInputMs);
+    ImGui::Text("  - State Update: %.3f ms", profilerStats.fixedStateUpdateMs);
+    ImGui::Text("  - Particle Update: %.3f ms", profilerStats.fixedParticleUpdateMs);
+    ImGui::Text("  - Drop Update: %.3f ms", profilerStats.fixedDropUpdateMs);
+    ImGui::Text("  - World Update: %.3f ms", profilerStats.fixedWorldUpdateMs);
     ImGui::Text("Audio Sync: %.3f ms", profilerStats.audioMs);
     ImGui::Text("Render Submit: %.3f ms", profilerStats.renderMs);
+
+    if (profilerStats.fixedHistoryCount > 1) {
+        auto historyMax = [&](const std::array<float, FrameProfilerStats::kFixedHistorySamples>& history) {
+            float maxValue = 0.0f;
+            for (size_t i = 0; i < profilerStats.fixedHistoryCount; ++i) {
+                if (history[i] > maxValue) {
+                    maxValue = history[i];
+                }
+            }
+            return std::max(maxValue * 1.1f, 0.1f);
+        };
+
+        ImGui::Separator();
+        ImGui::Text("Fixed Update History (ms/step)");
+        ImGui::PlotLines("Fixed Total", profilerStats.fixedUpdateHistory.data(),
+                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                         0.0f, historyMax(profilerStats.fixedUpdateHistory), ImVec2(0.0f, 65.0f));
+        ImGui::PlotLines("Input", profilerStats.fixedInputHistory.data(),
+                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                         0.0f, historyMax(profilerStats.fixedInputHistory), ImVec2(0.0f, 55.0f));
+        ImGui::PlotLines("State", profilerStats.fixedStateHistory.data(),
+                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                         0.0f, historyMax(profilerStats.fixedStateHistory), ImVec2(0.0f, 55.0f));
+        ImGui::PlotLines("Particle", profilerStats.fixedParticleHistory.data(),
+                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                         0.0f, historyMax(profilerStats.fixedParticleHistory), ImVec2(0.0f, 55.0f));
+        ImGui::PlotLines("Drop", profilerStats.fixedDropHistory.data(),
+                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                         0.0f, historyMax(profilerStats.fixedDropHistory), ImVec2(0.0f, 55.0f));
+        ImGui::PlotLines("World", profilerStats.fixedWorldHistory.data(),
+                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                         0.0f, historyMax(profilerStats.fixedWorldHistory), ImVec2(0.0f, 55.0f));
+    }
+
     ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
     ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
     bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();
