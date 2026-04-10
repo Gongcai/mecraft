@@ -82,9 +82,11 @@ Renderer::~Renderer() {
 void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkShader = resourceMgr.getShader("chunk");
-    m_uiShader = resourceMgr.getShader("ui");
+    //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
+    m_breakOverlayShader = resourceMgr.getShader("break_overlay");
     initOutlineMesh();
+    initBreakOverlayMesh();
     m_meshingService.start();
 }
 
@@ -99,11 +101,20 @@ void Renderer::shutdown() {
         glDeleteVertexArrays(1, &m_outlineVao);
         m_outlineVao = 0;
     }
+    if (m_breakOverlayVbo != 0) {
+        glDeleteBuffers(1, &m_breakOverlayVbo);
+        m_breakOverlayVbo = 0;
+    }
+    if (m_breakOverlayVao != 0) {
+        glDeleteVertexArrays(1, &m_breakOverlayVao);
+        m_breakOverlayVao = 0;
+    }
 }
 
 void Renderer::render(const World& world, const Camera &camera, const Window &window, const Player& player) {
     beginFrame(camera, window);
     renderWorld(world);
+    renderBlockBreakOverlay(player);
     renderBlockOutline(player);
     endFrame(window);
 }
@@ -500,6 +511,50 @@ void Renderer::initOutlineMesh() {
     glBindVertexArray(0);
 }
 
+void Renderer::initBreakOverlayMesh() {
+    if (m_breakOverlayVao != 0) {
+        return;
+    }
+
+    // position.xyz + uv.xy
+    constexpr std::array<float, 180> kBreakOverlayVertices = {
+        // front
+        0,0,1, 0,0,  1,0,1, 1,0,  1,1,1, 1,1,
+        0,0,1, 0,0,  1,1,1, 1,1,  0,1,1, 0,1,
+        // back
+        1,0,0, 0,0,  0,0,0, 1,0,  0,1,0, 1,1,
+        1,0,0, 0,0,  0,1,0, 1,1,  1,1,0, 0,1,
+        // left
+        0,0,0, 0,0,  0,0,1, 1,0,  0,1,1, 1,1,
+        0,0,0, 0,0,  0,1,1, 1,1,  0,1,0, 0,1,
+        // right
+        1,0,1, 0,0,  1,0,0, 1,0,  1,1,0, 1,1,
+        1,0,1, 0,0,  1,1,0, 1,1,  1,1,1, 0,1,
+        // top
+        0,1,1, 0,0,  1,1,1, 1,0,  1,1,0, 1,1,
+        0,1,1, 0,0,  1,1,0, 1,1,  0,1,0, 0,1,
+        // bottom
+        0,0,0, 0,0,  1,0,0, 1,0,  1,0,1, 1,1,
+        0,0,0, 0,0,  1,0,1, 1,1,  0,0,1, 0,1
+    };
+
+    glGenVertexArrays(1, &m_breakOverlayVao);
+    glGenBuffers(1, &m_breakOverlayVbo);
+
+    glBindVertexArray(m_breakOverlayVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_breakOverlayVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kBreakOverlayVertices.size() * sizeof(float)),
+                 kBreakOverlayVertices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
 void Renderer::renderBlockOutline(const Player& player) {
     if (m_outlineShader == nullptr || m_outlineVao == 0 || !player.hasTargetBlock()) {
         return;
@@ -527,6 +582,41 @@ void Renderer::renderBlockOutline(const Player& player) {
 
     glLineWidth(1.0f);
     glDepthMask(GL_TRUE);
+    ++drawCallCount;
+}
+
+void Renderer::renderBlockBreakOverlay(const Player& player) {
+    if (m_breakOverlayShader == nullptr || m_breakOverlayVao == 0 || !player.hasBlockBreakProgress()) {
+        return;
+    }
+
+    const float breakProgress = player.getBlockBreakProgress();
+    if (breakProgress <= 0.0f) {
+        return;
+    }
+
+    const glm::ivec3 target = player.getBreakTargetBlock();
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, glm::vec3(target) + glm::vec3(0.5f));
+    model = glm::scale(model, glm::vec3(1.001f));
+    model = glm::translate(model, glm::vec3(-0.5f));
+
+    m_breakOverlayShader->use();
+    m_breakOverlayShader->setMat4("viewProj", m_projection * m_view);
+    m_breakOverlayShader->setMat4("model", model);
+    m_breakOverlayShader->setFloat("breakProgress", breakProgress);
+    m_breakOverlayShader->setVec3("blockWorldPos", glm::vec3(target));
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+    glBindVertexArray(m_breakOverlayVao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
     ++drawCallCount;
 }
 

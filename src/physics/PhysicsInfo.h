@@ -39,6 +39,7 @@ struct MoveIntent {
     glm::vec2 move{}; // x=左右, y=前后, [-1, 1]
     bool wantsJump = false;
     bool wantsSprint = false;
+    bool wantsCrouch = false;
 };
 
 struct PhysicsTuning {

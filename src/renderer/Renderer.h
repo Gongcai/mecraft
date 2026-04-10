@@ -93,7 +93,9 @@ private:
     void renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks);
     void renderTransparentChunks(const std::vector<Chunk*>& transparentChunks);
     void initOutlineMesh();
+    void initBreakOverlayMesh();
     void renderBlockOutline(const Player& player);
+    void renderBlockBreakOverlay(const Player& player);
 #ifndef NDEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
@@ -107,12 +109,15 @@ private:
     int drawCallCount = 0;
 
     Shader* m_chunkShader = nullptr;
-    Shader* m_uiShader = nullptr;
+   // Shader* m_uiShader = nullptr;
     Shader* m_outlineShader = nullptr;
+    Shader* m_breakOverlayShader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 
     GLuint m_outlineVao = 0;
     GLuint m_outlineVbo = 0;
+    GLuint m_breakOverlayVao = 0;
+    GLuint m_breakOverlayVbo = 0;
 
     ChunkMeshingService m_meshingService;
     std::unordered_set<int64_t> m_meshingInFlight;

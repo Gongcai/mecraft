@@ -6,8 +6,16 @@
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
+#include <cctype>
 
 namespace fs = std::filesystem;
+
+namespace {
+std::string pathToUtf8(const fs::path& p) {
+    // Avoid locale-dependent narrowing failures for Unicode file names on Windows.
+    return p.u8string();
+}
+}
 
 // OpenAL 扩展函数指针定义
 LPALCEVENTCALLBACKSOFT alcEventCallbackSOFT = nullptr;
@@ -67,9 +75,12 @@ void AudioEngine::init() {
     getAllSounds();
 }
 
-void AudioEngine::update() {
+void AudioEngine::update(const float deltaTime) {
     // 检查并处理设备切换
     checkDeviceSwitch();
+
+    // AudioEngine 只负责设备与 source 生命周期，BGM 逻辑由外部系统驱动。
+    (void)deltaTime;
 
     // 清理已停止的 source
     for (auto it = m_sources.begin(); it != m_sources.end();) {
@@ -126,7 +137,7 @@ AudioClip* AudioEngine::loadClip(const std::string& name) {
         return nullptr;
     }
 
-    auto clip = std::make_unique<AudioClip>(soundPath.string());
+    auto clip = std::make_unique<AudioClip>(pathToUtf8(soundPath));
     if (!clip->isValid()) {
         return nullptr;
     }
@@ -149,7 +160,7 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     if (!clip) {
         // 尝试加载
 #ifndef NDEBUG
-        std::cout<<"[Audio] Sound file not found in Cache: " << clipName << std::endl;
+        std::cout << "[Audio] Sound file not found in Cache: " << clipName << std::endl;
 #endif
         clip = loadClip(clipName);
         if (!clip) {
@@ -173,6 +184,24 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     source->play();
 
     return source;
+}
+
+bool AudioEngine::registerClipFromPath(const std::string& name, const std::string& filePath) {
+    if (name.empty() || filePath.empty()) {
+        return false;
+    }
+
+    if (m_clips.find(name) != m_clips.end()) {
+        return true;
+    }
+
+    auto clip = std::make_unique<AudioClip>(filePath);
+    if (!clip->isValid()) {
+        return false;
+    }
+
+    m_clips[name] = std::move(clip);
+    return true;
 }
 
 void AudioEngine::playSound2D(const std::string& clipName, float volume) {
@@ -221,7 +250,7 @@ void AudioEngine::getAllSounds() {
     // 遍历 sounds 目录下的所有 .wav 文件
     for (const auto& entry : fs::directory_iterator(soundsDir)) {
         if (entry.is_regular_file()) {
-            fs::path path = entry.path();
+            const fs::path& path = entry.path();
             std::string ext = path.extension().string();
 
             // 转换为小写比较
@@ -229,10 +258,10 @@ void AudioEngine::getAllSounds() {
 
             if (ext == ".wav") {
                 // 提取文件名（不含扩展名）作为 clip 名称
-                std::string clipName = path.stem().string();
+                std::string clipName = pathToUtf8(path.stem());
 
                 // 创建并加载 AudioClip
-                auto clip = std::make_unique<AudioClip>(path.string());
+                auto clip = std::make_unique<AudioClip>(pathToUtf8(path));
                 if (clip->isValid()) {
                     m_clips[clipName] = std::move(clip);
                     loadedCount++;
@@ -246,11 +275,13 @@ void AudioEngine::getAllSounds() {
 #endif
 }
 
+// BGM 调度已抽离到独立系统。
+
 bool AudioEngine::initDeviceSwitchExtension() {
     if (!alcIsExtensionPresent(_device, "ALC_SOFT_system_events") ||
         !alcIsExtensionPresent(_device, "ALC_SOFT_reopen_device")) {
 #ifndef NDEBUG
-        std::cout << "[Audio] 设备自动切换扩展不可用" << std::endl;
+        std::cout << u8"[Audio] 设备自动切换扩展不可用" << std::endl;
 #endif
         return false;
     }
@@ -260,7 +291,7 @@ bool AudioEngine::initDeviceSwitchExtension() {
     alcReopenDeviceSOFT = (LPALCREOPENDEVICESOFT)alcGetProcAddress(_device, "alcReopenDeviceSOFT");
 
     if (!alcEventCallbackSOFT || !alcEventControlSOFT || !alcReopenDeviceSOFT) {
-        std::cerr << "[Audio] 获取扩展函数指针失败" << std::endl;
+        std::cerr << u8"[Audio] 获取扩展函数指针失败" << std::endl;
         return false;
     }
 

@@ -11,7 +11,7 @@ class Window;
 struct PostProcessEffects {
     bool underwaterEnabled = false;
     glm::vec3 underwaterTint = glm::vec3(0.42f, 0.62f, 0.95f);
-    float underwaterStrength = 0.45f;
+    float underwaterStrength = 0.845f;
 };
 
 class PostProcessRenderer {

@@ -1,6 +1,7 @@
 #include "PhysicsSystem.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "PhysicsInfo.h"
@@ -106,6 +107,41 @@ bool queryEyesInWater(const PhysicsBody& body, const World& world) {
                         static_cast<int>(std::floor(eyePos.z)));
 }
 
+bool hasGroundSupportAt(const PhysicsBody& body, const World& world, const glm::vec3& position) {
+    const AABB box = makeBodyAABBAt(body, position);
+    constexpr float kSupportProbeDepth = 0.08f;
+    const int supportMinY = static_cast<int>(std::floor(box.min.y - kSupportProbeDepth));
+    const int supportMaxY = static_cast<int>(std::floor(box.min.y - kContactEpsilon));
+
+    constexpr float kProbeInset = 0.02f;
+    const float minX = box.min.x + kProbeInset;
+    const float maxX = box.max.x - kProbeInset;
+    const float minZ = box.min.z + kProbeInset;
+    const float maxZ = box.max.z - kProbeInset;
+    const float centerX = (minX + maxX) * 0.5f;
+    const float centerZ = (minZ + maxZ) * 0.5f;
+
+    const std::array<glm::vec2, 5> probes = {
+        glm::vec2(centerX, centerZ),
+        glm::vec2(minX, minZ),
+        glm::vec2(minX, maxZ),
+        glm::vec2(maxX, minZ),
+        glm::vec2(maxX, maxZ),
+    };
+
+    for (const glm::vec2& probe : probes) {
+        const int bx = static_cast<int>(std::floor(probe.x));
+        const int bz = static_cast<int>(std::floor(probe.y));
+        for (int by = supportMinY; by <= supportMaxY; ++by) {
+            if (isSolidBlock(world, bx, by, bz)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 float moveTowards(const float current, const float target, const float maxDelta) {
     if (current < target) {
         return std::min(current + maxDelta, target);
@@ -128,8 +164,13 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
 
 
     float speed = body.isInWater ? tuning.swimSpeed : tuning.moveSpeed;
-    if (!body.isInWater && intent.wantsSprint) {
-        speed *= tuning.sprintMultiplier;
+    if (!body.isInWater) {
+        const float sprintSpeed = tuning.moveSpeed * tuning.sprintMultiplier;
+        if (intent.wantsCrouch) {
+            speed = sprintSpeed * 0.5f;
+        } else if (intent.wantsSprint) {
+            speed = sprintSpeed;
+        }
     }
 
     const float targetX = input.x * speed;
@@ -172,7 +213,7 @@ void applyDrag(PhysicsBody& body, const PhysicsTuning& tuning, const float dt) {
     body.velocity *= factor;
 }
 
-void moveAndCollideAxis(PhysicsBody& body, const World& world, const float dt, const int axis) {
+void moveAndCollideAxis(PhysicsBody& body, const World& world, const MoveIntent& intent, const float dt, const int axis) {
     const float delta = body.velocity[axis] * dt;
     if (std::abs(delta) <= 0.0f) {
         return;
@@ -183,6 +224,17 @@ void moveAndCollideAxis(PhysicsBody& body, const World& world, const float dt, c
 
     for (int i = 0; i < steps; ++i) {
         const glm::vec3 prevPos = body.position;
+        const bool protectLedge = axis != 1 && intent.wantsCrouch && body.isGrounded && !body.isInWater;
+        if (protectLedge) {
+            glm::vec3 candidatePos = body.position;
+            candidatePos[axis] += stepDelta;
+            if (!hasGroundSupportAt(body, world, candidatePos)) {
+                body.velocity[axis] = 0.0f;
+                body.hitWall = true;
+                return;
+            }
+        }
+
         body.position[axis] += stepDelta;
 
         if (!overlapsSolid(world, makeBodyAABBAt(body, body.position))) {
@@ -228,9 +280,9 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     applyDrag(body, tuning, dt);
 
     body.isGrounded = false;
-    moveAndCollideAxis(body, *m_world, dt, 1); // Y
-    moveAndCollideAxis(body, *m_world, dt, 0); // X
-    moveAndCollideAxis(body, *m_world, dt, 2); // Z
+    moveAndCollideAxis(body, *m_world, intent, dt, 1); // Y
+    moveAndCollideAxis(body, *m_world, intent, dt, 0); // X
+    moveAndCollideAxis(body, *m_world, intent, dt, 2); // Z
 
     const float postMoveWaterFillRatio = queryWaterFillRatio(body, *m_world);
     body.isInWater = postMoveWaterFillRatio > 0.2f;
