@@ -15,6 +15,7 @@
 #include "../renderer/TestCube.h"
 #endif
 #include "../renderer/Renderer.h"
+#include "../renderer/PostProcessRenderer.h"
 #include "InputContextManager.h"
 #include "../player/ActionMap.h"
 #include "GameStateMachine.h"
@@ -45,6 +46,7 @@ private:
     World         m_world;
     physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;
+    PostProcessRenderer m_postProcessRenderer;
     ResourceMgr    m_resourceMgr;
     AudioEngine   m_audioEngine;
     ParticleSystem m_particleSystem;
@@ -54,7 +56,24 @@ private:
 #endif
 
 
-    double m_lastFrameTime = 0.0;
+    [[nodiscard]] static double clampFrameTime(double dt);
+    void runFixedUpdate(double fixedStep, double& accumulator);
+    void syncAudioListener();
+    void renderFrame();
+
+#ifndef NDEBUG
+    struct FrameProfilerDebug {
+        double fixedUpdateMs = 0.0;
+        double audioMs = 0.0;
+        double renderMs = 0.0;
+        double publishAccumulator = 0.0;
+        double publishInterval = 0.25;
+    };
+
+    FrameProfilerDebug m_frameProfilerDebug{};
+    Dashboard::FrameProfilerStats m_dashboardProfilerStats{};
+    void publishDebugFrameProfiler(double frameTime);
+#endif
 };
 
 

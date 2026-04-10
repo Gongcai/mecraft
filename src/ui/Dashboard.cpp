@@ -36,7 +36,8 @@ void Dashboard::init(const Window &window) {
     ImGui_ImplOpenGL3_Init();
 }
 
-void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer &render, UIRenderer& uiRenderer) {
+void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &render,
+                       UIRenderer& uiRenderer, const FrameProfilerStats& profilerStats) {
     // (Your code calls glfwPollEvents())
     // ...
     // Start the Dear ImGui frame
@@ -47,7 +48,7 @@ void Dashboard::render( Player &player,  World &world,  Camera &camera,Renderer 
     showPlayerStats(player);
     showCameraStats(camera);
     showWorldStats(world, player);
-    showPerformanceStats(render);
+    showPerformanceStats(render, profilerStats);
     showCrosshairSettings(uiRenderer);
     showHotbarSettings(uiRenderer);
     // Rendering
@@ -155,10 +156,14 @@ void Dashboard::showCameraStats( Camera &camera) {
     ImGui::End();
 }
 
-void Dashboard::showPerformanceStats(Renderer &render) {
+void Dashboard::showPerformanceStats(Renderer &render, const FrameProfilerStats& profilerStats) {
     ImGui::Begin("Performance Stats");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+    ImGui::Text("Loop Frame (clamped): %.3f ms", profilerStats.frameMs);
+    ImGui::Text("Fixed Update: %.3f ms", profilerStats.fixedUpdateMs);
+    ImGui::Text("Audio Sync: %.3f ms", profilerStats.audioMs);
+    ImGui::Text("Render Submit: %.3f ms", profilerStats.renderMs);
     ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
     ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
     bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();
@@ -177,6 +182,16 @@ void Dashboard::showPerformanceStats(Renderer &render) {
     int regionChunkSize = render.getRegionChunkSize();
     if (ImGui::SliderInt("Region Chunk Size", &regionChunkSize, 1, 16)) {
         render.setRegionChunkSize(regionChunkSize);
+    }
+
+    const float maxAnisotropy = render.getAtlasMaxAnisotropy();
+    if (maxAnisotropy > 1.0f) {
+        float anisotropy = render.getAtlasAnisotropy();
+        if (ImGui::SliderFloat("Atlas Anisotropy", &anisotropy, 1.0f, maxAnisotropy, "%.1fx")) {
+            render.setAtlasAnisotropy(anisotropy);
+        }
+    } else {
+        ImGui::Text("Atlas Anisotropy: not supported");
     }
 
     const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();

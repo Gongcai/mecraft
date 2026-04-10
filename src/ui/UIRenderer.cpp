@@ -232,21 +232,27 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
     const float screenW = static_cast<float>(window.getWidth());
     const float screenH = static_cast<float>(window.getHeight());
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
+    const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const GLuint widgetsTexture = m_resourceMgr->getGuiTexture("widgets");
-    if (atlas.textureID == 0 || widgetsTexture == 0)
+    if (widgetsTexture == 0)
+        return;
+
+    const bool hasBakedItemIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
+    const bool hasLegacyAtlas = (atlas.textureID != 0 && atlas.tilesPerRow > 0);
+    if (!hasBakedItemIcons && !hasLegacyAtlas)
         return;
 
     constexpr float kWidgetsWidth = 182.0f;
     constexpr float kWidgetsHeight = 46.0f;
-    constexpr float kBgHeight = 23.0f;
-    constexpr float kHighlightSize = 22.0f;
+    constexpr float kBgHeight = 21.0f;
+    constexpr float kHighlightSize = 25.0f;
     constexpr float kScale = 2.0f;
     constexpr int hotbarSlots = Inventory::HOTBAR_SIZE;
     const float hotbarWidth = kWidgetsWidth * kScale;
     const float hotbarHeight = kBgHeight * kScale;
 
     const float startX = (screenW - hotbarWidth) * 0.5f;
-    const float startY = screenH - hotbarHeight - 8.0f;
+    const float startY = 8.0f;
 
     const int selectedSlot = std::clamp(inventory.getSelectedSlot(), 0, hotbarSlots - 1);
 
@@ -275,7 +281,9 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
     // Layer 1: widgets hotbar background.
     std::vector<float> bgVerts;
     {
-        const auto uv = uvFromTopLeftPixels(0.0f, 0.0f, 182.0f, 23.0f);
+        // New widgets layout: background uses (row,col) [0..20] x [1..181]
+        // converted to (x0,y0,x1,y1) = (1,0,182,21).
+        const auto uv = uvFromTopLeftPixels(1.0f, 0.0f, 182.0f, 21.0f);
         addQuad(bgVerts,
                 startX, startY,
                 startX + hotbarWidth, startY + hotbarHeight,
@@ -285,10 +293,13 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
     // Layer 2: widgets selected slot frame.
     std::vector<float> selectedVerts;
     {
-        const auto uv = uvFromTopLeftPixels(0.0f, 24.0f, 22.0f, 46.0f);
+        // New widgets layout: highlight uses (row,col) [21..45] x [0..24]
+        // converted to (x0,y0,x1,y1) = (0,21,25,46).
+        const auto uv = uvFromTopLeftPixels(0.0f, 21.0f, 25.0f, 46.0f);
         const float slotStride = 20.0f * kScale;
-        const float selX = startX + static_cast<float>(selectedSlot) * slotStride;
-        const float selY = startY;
+        const float selectorOffset = ((kHighlightSize - 20.0f) * 0.5f) * kScale;
+        const float selX = startX + static_cast<float>(selectedSlot) * slotStride - selectorOffset + 2;
+        const float selY = startY - 3.0f;
         addQuad(selectedVerts,
                 selX, selY,
                 selX + kHighlightSize * kScale, selY + kHighlightSize * kScale,
@@ -298,22 +309,34 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
     // Layer 3: Block icons from the block atlas.
     std::vector<float> iconVerts;
     constexpr float slotStride = 20.0f * kScale;
-    constexpr float iconInset = 3.0f * kScale;
-    constexpr float iconSize = 16.0f * kScale;
+    constexpr float iconInset = 2.0f * kScale;
+    constexpr float iconSize = 17.5f * kScale;
     for (int i = 0; i < hotbarSlots; ++i)
     {
         BlockID blockId = inventory.getSlot(i);
         if (blockId == BlockType::AIR) continue;
 
-        const BlockDef& blockDef = BlockRegistry::get(blockId);
-        // Use front/side face for the inventory icon, fallback to top
-        int tileIndex = blockDef.texFront;
-        if (tileIndex < 0)
-            tileIndex = blockDef.texTop;
-        if (tileIndex < 0)
-            continue;
+        glm::vec2 uvMin;
+        glm::vec2 uvMax;
+        if (hasBakedItemIcons)
+        {
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(blockId));
+            uvMin = uv.first;
+            uvMax = uv.second;
+        }
+        else
+        {
+            const BlockDef& blockDef = BlockRegistry::get(blockId);
+            int tileIndex = blockDef.texFront;
+            if (tileIndex < 0)
+                tileIndex = blockDef.texTop;
+            if (tileIndex < 0)
+                continue;
 
-        auto [uvMin, uvMax] = atlas.getUV(tileIndex);
+            const auto uv = atlas.getUV(tileIndex);
+            uvMin = uv.first;
+            uvMax = uv.second;
+        }
 
         const float sx = startX + static_cast<float>(i) * slotStride;
         const float ix = sx + iconInset;
@@ -365,7 +388,7 @@ void UIRenderer::renderHotbar(const Window& window, const Inventory& inventory)
     offset += selectedVertCount;
 
     // Draw block icons.
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+    glBindTexture(GL_TEXTURE_2D, hasBakedItemIcons ? itemIconAtlas.textureID : atlas.textureID);
     m_inventoryShader->setVec4("uTintColor", glm::vec4(m_hotbarIconTintColor[0], m_hotbarIconTintColor[1], m_hotbarIconTintColor[2], m_hotbarIconTintColor[3]));
     glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
 

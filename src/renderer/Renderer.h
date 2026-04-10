@@ -59,6 +59,7 @@ public:
 
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
+    void setAtlasAnisotropy(float anisotropy);
 #ifndef NDEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
@@ -75,6 +76,8 @@ public:
     // 视锥剔除
     void updateFrustum(const glm::mat4& viewProj);
     [[nodiscard]] int getDrawCallCount() const;
+    [[nodiscard]] float getAtlasAnisotropy() const;
+    [[nodiscard]] float getAtlasMaxAnisotropy() const;
 private:
     struct Plane {
         glm::vec3 n = glm::vec3(0.0f);

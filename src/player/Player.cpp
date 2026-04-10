@@ -46,6 +46,7 @@ void Player::init(const glm::vec3 &spawnPos) {
     m_body.velocity = glm::vec3(0.0f);
     m_body.halfExtents = glm::vec3(m_playerWidth * 0.5f, m_playerHeight * 0.5f, m_playerWidth * 0.5f);
     m_body.colliderOffset = glm::vec3(0.0f, m_playerHeight * 0.5f, 0.0f);
+    m_body.eyeOffsetY = m_eyeHeightBase;
 
     m_camera.setPosition(getEyePosition());
 }
@@ -59,6 +60,7 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     handleMouseLook(inputContext);
     handleMovement(inputContext);
 
+    m_body.eyeOffsetY = m_eyeHeightBase;
     physicsSystem.updateBody(m_body, m_intent, dt);
 
     m_onGroundLastFrame = m_onGround;
@@ -200,6 +202,10 @@ bool Player::isJustLanded() const  {
 
 bool Player::isFullySubmerged() const {
     return m_body.isFullySubmerged;
+}
+
+bool Player::isEyesInWater() const {
+    return m_body.isEyesInWater;
 }
 
 Inventory& Player::getInventory() {

@@ -26,11 +26,13 @@ struct PhysicsBody {
     glm::vec3 velocity{};       // m/s
     glm::vec3 halfExtents{0.3f, 0.9f, 0.3f};
     glm::vec3 colliderOffset{}; // 相对 position 的碰撞盒偏移
+    float eyeOffsetY = 1.62f;   // 相对 position 的眼睛高度
 
     bool isGrounded = false;
     bool isInWater = false;
     bool hitWall = false;
     bool isFullySubmerged = false;
+    bool isEyesInWater = false;
 };
 
 struct MoveIntent {
