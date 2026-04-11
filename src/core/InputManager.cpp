@@ -40,6 +40,7 @@ void InputManager::init(GLFWwindow* windowHandle) {
     glfwSetMouseButtonCallback(m_handle, mouseButtonCallback);
     glfwSetCursorPosCallback(m_handle, cursorPosCallback);
     glfwSetScrollCallback(m_handle, scrollCallback);
+    glfwSetCharCallback(m_handle, charCallback);
 
     // Initialize baseline cursor position to avoid a large first delta.
     resetMouseDelta();
@@ -90,6 +91,12 @@ void InputManager::update() {
     };
     m_snapshot.scrollDelta = m_accumScrollY;
     m_accumScrollY = 0.0;
+
+    m_snapshot.typedCharCount = m_typedCharCount;
+    for (size_t i = 0; i < m_typedCharCount; ++i) {
+        m_snapshot.typedChars[i] = m_typedChars[i];
+    }
+    m_typedCharCount = 0;
 }
 
 const InputSnapshot& InputManager::snapshot() const {
@@ -197,3 +204,13 @@ void InputManager::scrollCallback(GLFWwindow* w, double /*xoffset*/, double yoff
     }
     self->m_accumScrollY += yoffset;
 }
+
+void InputManager::charCallback(GLFWwindow* w, unsigned int codepoint) {
+    auto* self = fromWindow(w);
+    if (self == nullptr || self->m_typedCharCount >= InputSnapshot::kMaxTypedCharsPerFrame) {
+        return;
+    }
+
+    self->m_typedChars[self->m_typedCharCount++] = codepoint;
+}
+

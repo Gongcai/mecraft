@@ -11,8 +11,13 @@
 #endif
 #include <GLFW/glfw3.h>
 #include <glm/vec2.hpp>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 
 struct InputSnapshot {
+    static constexpr size_t kMaxTypedCharsPerFrame = 64;
+
     bool keys[GLFW_KEY_LAST + 1] = {};
     bool keysJustPressed[GLFW_KEY_LAST + 1] = {};
     bool keysJustReleased[GLFW_KEY_LAST + 1] = {};
@@ -24,6 +29,8 @@ struct InputSnapshot {
     glm::vec2 mousePosition{0.0f, 0.0f};
     glm::vec2 mouseDelta{0.0f, 0.0f};
     double scrollDelta = 0.0;  // >0 = scroll up, <0 = scroll down
+    std::array<uint32_t, kMaxTypedCharsPerFrame> typedChars{};
+    size_t typedCharCount = 0;
 
     [[nodiscard]] bool isKeyHeld(int key) const;
     [[nodiscard]] bool isKeyJustPressed(int key) const;
@@ -71,6 +78,8 @@ private:
     double m_accumDeltaY = 0.0;
     double m_accumScrollY = 0.0;
     bool m_firstMouse = true;
+    std::array<uint32_t, InputSnapshot::kMaxTypedCharsPerFrame> m_typedChars{};
+    size_t m_typedCharCount = 0;
 
     InputSnapshot m_snapshot{};
 
@@ -81,6 +90,7 @@ private:
     static void mouseButtonCallback(GLFWwindow* w, int button, int action, int mods);
     static void cursorPosCallback(GLFWwindow* w, double xpos, double ypos);
     static void scrollCallback(GLFWwindow* w, double xoffset, double yoffset);
+    static void charCallback(GLFWwindow* w, unsigned int codepoint);
 };
 
 

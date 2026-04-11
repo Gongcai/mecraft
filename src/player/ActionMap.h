@@ -51,7 +51,9 @@ enum class Action {
     Up,
     Down,
     Left,
-    Right
+    Right,
+    Backspace,
+    OpenCommand
 };
 
 enum class InputDevice {

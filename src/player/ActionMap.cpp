@@ -179,7 +179,9 @@ static Action stringToAction(const std::string& str) {
         {"Up", Action::Up},
         {"Down", Action::Down},
         {"Left", Action::Left},
-        {"Right", Action::Right}
+        {"Right", Action::Right},
+        {"Backspace",Action::Backspace},
+        {"OpenCommand", Action::OpenCommand}
     };
     auto it = lookup.find(str);
     if (it != lookup.end()) return it->second;
@@ -205,10 +207,13 @@ static int stringToKey(const std::string& str) {
     if (str == "SPACE") return GLFW_KEY_SPACE;
     if (str == "ESCAPE") return GLFW_KEY_ESCAPE;
     if (str == "ENTER") return GLFW_KEY_ENTER;
+    if (str == "KP_ENTER") return GLFW_KEY_KP_ENTER;
     if (str == "LEFT_SHIFT") return GLFW_KEY_LEFT_SHIFT;
     if (str == "LEFT_CONTROL") return GLFW_KEY_LEFT_CONTROL;
     if (str == "TAB") return GLFW_KEY_TAB;
     if (str == "W") return GLFW_KEY_W; // specific override if length==1 fails
+    if (str == "BACKSPACE") return GLFW_KEY_BACKSPACE;
+    if (str == "SLASH") return GLFW_KEY_SLASH;
 
     // ... add more as needed
     return GLFW_KEY_UNKNOWN;

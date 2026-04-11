@@ -65,6 +65,8 @@ set(CORE_SOURCES
         src/audio/AudioSource.cpp
         src/audio/AudioListener.cpp
         src/ui/Dashboard.cpp
+        src/ui/KeyboardInputBox.cpp
+        src/ui/ConsoleDisplayBox.cpp
         src/ui/UIRenderer.cpp
 )
 
@@ -115,4 +117,6 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
 add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
+add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
 add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
+add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)

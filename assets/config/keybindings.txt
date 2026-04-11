@@ -16,9 +16,14 @@ Gameplay Hotbar8 Keyboard 8 Pressed -
 Gameplay Hotbar9 Keyboard 9 Pressed -
 Gameplay HotbarScrollUp Scroll UP Pressed -
 Gameplay HotbarScrollDown Scroll DOWN Pressed -
+Gameplay OpenCommand Keyboard SLASH Pressed -
 
 UI Menu Keyboard ESCAPE Pressed -
 UI Cancel Keyboard ESCAPE Pressed -
+UI Confirm Keyboard ENTER Pressed -
+UI Confirm Keyboard KP_ENTER Pressed -
+UI Backspace Keyboard BACKSPACE Held -
+
 
 Axis Gameplay Vertical Keyboard W S
 Axis Gameplay Horizontal Keyboard D A

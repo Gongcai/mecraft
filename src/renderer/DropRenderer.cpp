@@ -83,9 +83,11 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     }
 
     const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
+    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
+    const int modelLoc = m_shader->getUniformLocation("model");
 
     m_shader->use();
-    m_shader->setMat4("viewProj", viewProj);
+    m_shader->setMat4(viewProjLoc, viewProj);
     m_shader->setInt("texAtlas", 0);
     m_shader->setInt("uForceBaseLod", 0);
 
@@ -108,7 +110,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
         model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
 
-        m_shader->setMat4("model", model);
+        m_shader->setMat4(modelLoc, model);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }
