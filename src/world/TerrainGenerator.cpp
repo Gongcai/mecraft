@@ -41,16 +41,22 @@ uint32_t hash32(uint32_t x) {
     return x;
 }
 
+constexpr uint32_t kOreXMul = 0x9e3779b9U;
+constexpr uint32_t kOreYMul = 0x7f4a7c15U;
+constexpr uint32_t kOreZMul = 0x94d049bbU;
+
+constexpr uint32_t kOreSaltDiamond = 0x89abcdefU;
+constexpr uint32_t kOreSaltGold = 0x13572468U;
+constexpr uint32_t kOreSaltIron = 0xfedcba98U;
+constexpr uint32_t kOreSaltCoal = 0x2468ace0U;
+
+constexpr uint32_t kOreCutoffDiamond = static_cast<uint32_t>(0.0045 * 4294967295.0);
+constexpr uint32_t kOreCutoffGold = static_cast<uint32_t>(0.0080 * 4294967295.0);
+constexpr uint32_t kOreCutoffIron = static_cast<uint32_t>(0.0160 * 4294967295.0);
+constexpr uint32_t kOreCutoffCoal = static_cast<uint32_t>(0.0240 * 4294967295.0);
+
 double hashToUnit(uint32_t value) {
     return static_cast<double>(value) / static_cast<double>(0xFFFFFFFFU);
-}
-
-double hashedChance(uint32_t seed, int x, int y, int z, uint32_t salt) {
-    uint32_t h = seed ^ salt;
-    h ^= hash32(static_cast<uint32_t>(x) * 0x9e3779b9U);
-    h ^= hash32(static_cast<uint32_t>(y) * 0x7f4a7c15U);
-    h ^= hash32(static_cast<uint32_t>(z) * 0x94d049bbU);
-    return hashToUnit(hash32(h));
 }
 
 double lattice2D(int x, int z, uint32_t seed) {
@@ -437,31 +443,25 @@ bool TerrainGenerator::shouldCarveCave(int worldX, int y, int worldZ, int surfac
 }
 
 BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID baseBlock) const {
-    if (baseBlock != BlockType::STONE) {
+    if (baseBlock != BlockType::STONE || y > 128) {
         return baseBlock;
     }
 
-    // Keep ore distribution simple and deterministic by depth bands.
-    // Use early returns to avoid redundant condition checks and hash computations.
-    if (y <= 16) {
-        if (hashedChance(m_seed, worldX, y, worldZ, 0x89abcdefU) < 0.0045) {
-            return BlockType::DIAMOND_ORE;
-        }
-    } else if (y <= 32) {
-        if (hashedChance(m_seed, worldX, y, worldZ, 0x13572468U) < 0.0080) {
-            return BlockType::GOLD_ORE;
-        }
-    } else if (y <= 64) {
-        if (hashedChance(m_seed, worldX, y, worldZ, 0xfedcba98U) < 0.0160) {
-            return BlockType::IRON_ORE;
-        }
-    } else if (y <= 128) {
-        if (hashedChance(m_seed, worldX, y, worldZ, 0x2468ace0U) < 0.0240) {
-            return BlockType::COAL_ORE;
-        }
-    }
+    uint32_t h = m_seed;
+    h ^= hash32(static_cast<uint32_t>(worldX) * kOreXMul);
+    h ^= hash32(static_cast<uint32_t>(y) * kOreYMul);
+    h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
 
-    return baseBlock;
+    if (y <= 16) {
+        return hash32(h ^ kOreSaltDiamond) < kOreCutoffDiamond ? BlockType::DIAMOND_ORE : baseBlock;
+    }
+    if (y <= 32) {
+        return hash32(h ^ kOreSaltGold) < kOreCutoffGold ? BlockType::GOLD_ORE : baseBlock;
+    }
+    if (y <= 64) {
+        return hash32(h ^ kOreSaltIron) < kOreCutoffIron ? BlockType::IRON_ORE : baseBlock;
+    }
+    return hash32(h ^ kOreSaltCoal) < kOreCutoffCoal ? BlockType::COAL_ORE : baseBlock;
 }
 
 void TerrainGenerator::generateChunk(Chunk& chunk) const {
@@ -499,6 +499,9 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 const int localX = x + lane;
                 const int worldX = offset.x + localX;
                 const int worldZ = offset.z + z;
+                uint32_t oreColumnSeed = m_seed;
+                oreColumnSeed ^= hash32(static_cast<uint32_t>(worldX) * kOreXMul);
+                oreColumnSeed ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
                 const int surfaceY = sampledSurface[lane];
                 const double moisture = sampledMoisture[lane];
                 const TerrainBiome surfaceKind = sampledSurfaceKind[lane];
@@ -550,7 +553,26 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                             id = BlockType::AIR;
                         }
 
-                        id = sampleOreBlock(worldX, y, worldZ, id);
+                        if (id == BlockType::STONE && y <= 128) {
+                            const uint32_t oreHash = oreColumnSeed ^ hash32(static_cast<uint32_t>(y) * kOreYMul);
+                            if (y <= 16) {
+                                if (hash32(oreHash ^ kOreSaltDiamond) < kOreCutoffDiamond) {
+                                    id = BlockType::DIAMOND_ORE;
+                                }
+                            } else if (y <= 32) {
+                                if (hash32(oreHash ^ kOreSaltGold) < kOreCutoffGold) {
+                                    id = BlockType::GOLD_ORE;
+                                }
+                            } else if (y <= 64) {
+                                if (hash32(oreHash ^ kOreSaltIron) < kOreCutoffIron) {
+                                    id = BlockType::IRON_ORE;
+                                }
+                            } else {
+                                if (hash32(oreHash ^ kOreSaltCoal) < kOreCutoffCoal) {
+                                    id = BlockType::COAL_ORE;
+                                }
+                            }
+                        }
                     } else if (y <= m_seaLevel) {
                         id = BlockType::WATER;
                     }

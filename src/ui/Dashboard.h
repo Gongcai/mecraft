@@ -54,9 +54,10 @@ private:
     void showPlayerStats( Player& player);
     void showWorldStats(World& world, const Player& player);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats(Renderer &render, const FrameProfilerStats& profilerStats);
+    void showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
+    void showTextSettings(UIRenderer& uiRenderer);
 };
 
 #endif // NDEBUG

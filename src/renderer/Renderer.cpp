@@ -10,7 +10,6 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -23,30 +22,6 @@ int floorDiv(const int value, const int divisor) {
     }
     return q;
 }
-
-int64_t packChunkCoordKey(const int x, const int z) {
-    return (static_cast<int64_t>(x) << 32) | (static_cast<uint32_t>(z));
-}
-
-struct ColumnBucket {
-    int chunkX = 0;
-    int chunkZ = 0;
-    std::vector<Chunk*> chunks;
-    std::size_t chunkCount = 0;
-    bool hasBounds = false;
-    glm::vec3 boundsMin = glm::vec3(0.0f);
-    glm::vec3 boundsMax = glm::vec3(0.0f);
-};
-
-struct RegionBucket {
-    int regionX = 0;
-    int regionZ = 0;
-    std::unordered_map<int64_t, ColumnBucket> columns;
-    std::size_t chunkCount = 0;
-    bool hasBounds = false;
-    glm::vec3 boundsMin = glm::vec3(0.0f);
-    glm::vec3 boundsMax = glm::vec3(0.0f);
-};
 
 struct TransparentDrawItem {
     Chunk* chunk = nullptr;
@@ -134,6 +109,47 @@ void Renderer::setAtlasAnisotropy(const float anisotropy) {
     m_resourceMgr->setAtlasAnisotropy(anisotropy);
 }
 
+void Renderer::setFogEnabled(const bool enabled) {
+    m_fogSettings.enabled = enabled;
+}
+
+void Renderer::setFogMode(const FogMode mode) {
+    m_fogSettings.mode = mode;
+}
+
+void Renderer::setFogColor(const glm::vec3& color) {
+    m_fogSettings.color.x = std::clamp(color.x, 0.0f, 1.0f);
+    m_fogSettings.color.y = std::clamp(color.y, 0.0f, 1.0f);
+    m_fogSettings.color.z = std::clamp(color.z, 0.0f, 1.0f);
+}
+
+void Renderer::setFogLinearDistances(const float startDistance, const float endDistance) {
+    const float startClamped = std::max(0.0f, startDistance);
+    const float endClamped = std::max(startClamped + 0.1f, endDistance);
+    m_fogSettings.startDistance = startClamped;
+    m_fogSettings.endDistance = endClamped;
+}
+
+void Renderer::setFogDensity(const float density) {
+    m_fogSettings.density = std::max(0.0001f, density);
+}
+
+void Renderer::setFogAutoDistanceEnabled(const bool enabled) {
+    m_fogSettings.autoDistanceByRenderDistance = enabled;
+}
+
+void Renderer::setFogAutoStartOffsetChunks(const float offsetChunks) {
+    m_fogSettings.autoStartOffsetChunks = std::clamp(offsetChunks, -1.5f, 1.5f);
+}
+
+void Renderer::setFogAutoFadeWidthChunks(const float fadeWidthChunks) {
+    m_fogSettings.autoFadeWidthChunks = std::clamp(fadeWidthChunks, 0.25f, 4.0f);
+}
+
+Renderer::FogSettings Renderer::getFogSettings() const {
+    return m_fogSettings;
+}
+
 float Renderer::getAtlasAnisotropy() const {
     if (m_resourceMgr == nullptr) {
         return 1.0f;
@@ -205,7 +221,7 @@ size_t Renderer::getMeshingHistoryCount() const {
 #endif
 
 void Renderer::beginFrame(const Camera &camera, const Window &window) {
-    glClearColor(0.67f, 0.84f, 1.0f, 1.0f);
+    glClearColor(m_fogSettings.color.r, m_fogSettings.color.g, m_fogSettings.color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     m_projection = camera.getProjectionMatrix(window.getAspectRatio());
     m_view = camera.getViewMatrix();
@@ -235,7 +251,7 @@ void Renderer::renderWorld(const World& world) {
     drainMeshingResults(world);
 
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
-    bindChunkRenderState(atlas);
+    bindChunkRenderState(world, atlas);
     submitMeshingJobs(world, atlas);
 
     std::vector<Chunk*> transparentChunks;
@@ -247,12 +263,29 @@ void Renderer::renderWorld(const World& world) {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Renderer::bindChunkRenderState(const TextureAtlas& atlas) const {
+void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atlas) const {
+
+    float fogStart = m_fogSettings.startDistance;
+    float fogEnd = m_fogSettings.endDistance;
+    if (m_fogSettings.autoDistanceByRenderDistance) {
+        const float chunkSize = static_cast<float>(Chunk::SIZE_X);
+        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
+        fogStart = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoStartOffsetChunks) * chunkSize);
+        fogEnd = fogStart + m_fogSettings.autoFadeWidthChunks * chunkSize;
+    }
+    fogEnd = std::max(fogEnd, fogStart + 0.1f);
 
     m_chunkShader->use();
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
     m_chunkShader->setInt("texAtlas", 0);
     m_chunkShader->setInt("uForceBaseLod", 0);
+    m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
+    m_chunkShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
+    m_chunkShader->setVec3("uFogColor", m_fogSettings.color);
+    m_chunkShader->setFloat("uFogStart", fogStart);
+    m_chunkShader->setFloat("uFogEnd", fogEnd);
+    m_chunkShader->setFloat("uFogDensity", m_fogSettings.density);
+    m_chunkShader->setVec3("uCameraPos", m_cameraPos);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
@@ -286,9 +319,10 @@ void Renderer::submitMeshingJobs(const World& world, const TextureAtlas& atlas) 
 void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks) {
     const auto& activeChunks = world.getActiveChunks();
     const int regionChunkSize = std::max(1, m_regionChunkSize);
+    const int modelLoc = m_chunkShader->getUniformLocation("model");
 
-    std::unordered_map<int64_t, RegionBucket> regions;
-    regions.reserve(activeChunks.size());
+    m_chunkRenderEntries.clear();
+    m_chunkRenderEntries.reserve(activeChunks.size());
 
     for (const auto& pair : activeChunks) {
         Chunk& chunk = *pair.second;
@@ -296,25 +330,6 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
         if (mesh.vertexCount == 0 && mesh.transparentVertexCount == 0) {
             continue;
         }
-
-        const int regionX = floorDiv(chunk.m_chunkX, regionChunkSize);
-        const int regionZ = floorDiv(chunk.m_chunkZ, regionChunkSize);
-        const int64_t regionKey = packChunkCoordKey(regionX, regionZ);
-        RegionBucket& region = regions[regionKey];
-        if (region.columns.empty()) {
-            region.regionX = regionX;
-            region.regionZ = regionZ;
-        }
-
-        const int64_t columnKey = packChunkCoordKey(chunk.m_chunkX, chunk.m_chunkZ);
-        ColumnBucket& column = region.columns[columnKey];
-        if (column.chunks.empty()) {
-            column.chunkX = chunk.m_chunkX;
-            column.chunkZ = chunk.m_chunkZ;
-        }
-        column.chunks.push_back(&chunk);
-        ++column.chunkCount;
-        ++region.chunkCount;
 
         const glm::ivec3 offset = chunk.getWorldOffset();
         const glm::vec3 chunkMin = mesh.hasBounds
@@ -324,72 +339,133 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
             ? mesh.boundsMax + glm::vec3(offset)
             : glm::vec3(offset) + glm::vec3(static_cast<float>(Chunk::SIZE_X), static_cast<float>(Chunk::SIZE_Y), static_cast<float>(Chunk::SIZE_Z));
 
-        expandBounds(column.boundsMin, column.boundsMax, column.hasBounds, chunkMin, chunkMax);
-        expandBounds(region.boundsMin, region.boundsMax, region.hasBounds, chunkMin, chunkMax);
+        ChunkRenderEntry entry;
+        entry.chunk = &chunk;
+        entry.regionX = floorDiv(chunk.m_chunkX, regionChunkSize);
+        entry.regionZ = floorDiv(chunk.m_chunkZ, regionChunkSize);
+        entry.chunkX = chunk.m_chunkX;
+        entry.chunkZ = chunk.m_chunkZ;
+        entry.boundsMin = chunkMin;
+        entry.boundsMax = chunkMax;
+        m_chunkRenderEntries.push_back(entry);
     }
 
-    for (const auto& regionPair : regions) {
-        const RegionBucket& region = regionPair.second;
+    if (m_chunkRenderEntries.empty()) {
+        return;
+    }
 
-        if (!region.hasBounds) {
+    std::sort(m_chunkRenderEntries.begin(), m_chunkRenderEntries.end(),
+              [](const ChunkRenderEntry& a, const ChunkRenderEntry& b) {
+                  if (a.regionX != b.regionX) {
+                      return a.regionX < b.regionX;
+                  }
+                  if (a.regionZ != b.regionZ) {
+                      return a.regionZ < b.regionZ;
+                  }
+                  if (a.chunkX != b.chunkX) {
+                      return a.chunkX < b.chunkX;
+                  }
+                  return a.chunkZ < b.chunkZ;
+              });
+
+    GLuint lastOpaqueVao = 0;
+
+    size_t regionBegin = 0;
+    while (regionBegin < m_chunkRenderEntries.size()) {
+        size_t regionEnd = regionBegin + 1;
+        const ChunkRenderEntry& regionFirst = m_chunkRenderEntries[regionBegin];
+        while (regionEnd < m_chunkRenderEntries.size()) {
+            const ChunkRenderEntry& candidate = m_chunkRenderEntries[regionEnd];
+            if (candidate.regionX != regionFirst.regionX || candidate.regionZ != regionFirst.regionZ) {
+                break;
+            }
+            ++regionEnd;
+        }
+
+        bool regionHasBounds = false;
+        glm::vec3 regionMin(0.0f);
+        glm::vec3 regionMax(0.0f);
+        for (size_t i = regionBegin; i < regionEnd; ++i) {
+            const ChunkRenderEntry& entry = m_chunkRenderEntries[i];
+            expandBounds(regionMin, regionMax, regionHasBounds, entry.boundsMin, entry.boundsMax);
+        }
+
+        if (!regionHasBounds) {
+            regionBegin = regionEnd;
             continue;
         }
 
 #ifndef NDEBUG
         ++m_regionTestsThisFrame;
         FrustumPlane culledPlane = FrustumPlane::Count;
-        if (!isChunkInFrustum(region.boundsMin, region.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+        if (!isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
             if (m_chunkCullingDebugEnabled) {
-                recordChunkCull(culledPlane, static_cast<int>(region.chunkCount));
+                recordChunkCull(culledPlane, static_cast<int>(regionEnd - regionBegin));
             }
+            regionBegin = regionEnd;
             continue;
         }
         ++m_regionPassedThisFrame;
 #else
-        if (!isChunkInFrustum(region.boundsMin, region.boundsMax)) {
+        if (!isChunkInFrustum(regionMin, regionMax)) {
+            regionBegin = regionEnd;
             continue;
         }
 #endif
 
-        for (const auto& columnPair : region.columns) {
-            const ColumnBucket& column = columnPair.second;
+        size_t columnBegin = regionBegin;
+        while (columnBegin < regionEnd) {
+            size_t columnEnd = columnBegin + 1;
+            const ChunkRenderEntry& columnFirst = m_chunkRenderEntries[columnBegin];
+            while (columnEnd < regionEnd) {
+                const ChunkRenderEntry& candidate = m_chunkRenderEntries[columnEnd];
+                if (candidate.chunkX != columnFirst.chunkX || candidate.chunkZ != columnFirst.chunkZ) {
+                    break;
+                }
+                ++columnEnd;
+            }
 
-            if (!column.hasBounds) {
+            bool columnHasBounds = false;
+            glm::vec3 columnMin(0.0f);
+            glm::vec3 columnMax(0.0f);
+            for (size_t i = columnBegin; i < columnEnd; ++i) {
+                const ChunkRenderEntry& entry = m_chunkRenderEntries[i];
+                expandBounds(columnMin, columnMax, columnHasBounds, entry.boundsMin, entry.boundsMax);
+            }
+
+            if (!columnHasBounds) {
+                columnBegin = columnEnd;
                 continue;
             }
 
 #ifndef NDEBUG
             ++m_columnTestsThisFrame;
-            if (!isChunkInFrustum(column.boundsMin, column.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+            if (!isChunkInFrustum(columnMin, columnMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                 if (m_chunkCullingDebugEnabled) {
-                    recordChunkCull(culledPlane, static_cast<int>(column.chunkCount));
+                    recordChunkCull(culledPlane, static_cast<int>(columnEnd - columnBegin));
                 }
+                columnBegin = columnEnd;
                 continue;
             }
             ++m_columnPassedThisFrame;
 #else
-            if (!isChunkInFrustum(column.boundsMin, column.boundsMax)) {
+            if (!isChunkInFrustum(columnMin, columnMax)) {
+                columnBegin = columnEnd;
                 continue;
             }
 #endif
 
-            for (Chunk* chunk : column.chunks) {
-                if (chunk == nullptr) {
+            for (size_t i = columnBegin; i < columnEnd; ++i) {
+                const ChunkRenderEntry& entry = m_chunkRenderEntries[i];
+                if (entry.chunk == nullptr) {
                     continue;
                 }
 
-                glm::vec3 chunkMin = glm::vec3(chunk->getWorldOffset());
-                glm::vec3 chunkMax = chunkMin + glm::vec3(Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z);
-                const ChunkMesh& mesh = chunk->getMesh();
-                if (mesh.hasBounds) {
-                    const glm::vec3 offset = glm::vec3(chunk->getWorldOffset());
-                    chunkMin = mesh.boundsMin + offset;
-                    chunkMax = mesh.boundsMax + offset;
-                }
+                const ChunkMesh& mesh = entry.chunk->getMesh();
 
 #ifndef NDEBUG
                 ++m_chunkTestsThisFrame;
-                if (!isChunkInFrustum(chunkMin, chunkMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                if (!isChunkInFrustum(entry.boundsMin, entry.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                     if (m_chunkCullingDebugEnabled) {
                         recordChunkCull(culledPlane, 1);
                     }
@@ -397,28 +473,34 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                 }
                 ++m_chunkPassedThisFrame;
 #else
-                if (!isChunkInFrustum(chunkMin, chunkMax)) {
+                if (!isChunkInFrustum(entry.boundsMin, entry.boundsMax)) {
                     continue;
                 }
 #endif
 
-
                 glm::mat4 model(1.0f);
-                const glm::ivec3 offset = chunk->getWorldOffset();
+                const glm::ivec3 offset = entry.chunk->getWorldOffset();
                 model = glm::translate(model, glm::vec3(offset.x, offset.y, offset.z));
-                m_chunkShader->setMat4("model", model);
+                m_chunkShader->setMat4(modelLoc, model);
 
                 if (mesh.vertexCount > 0) {
-                    glBindVertexArray(mesh.vao);
+                    if (lastOpaqueVao != mesh.vao) {
+                        glBindVertexArray(mesh.vao);
+                        lastOpaqueVao = mesh.vao;
+                    }
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
                     ++drawCallCount;
                 }
 
                 if (mesh.transparentVertexCount > 0) {
-                    transparentChunks.push_back(chunk);
+                    transparentChunks.push_back(entry.chunk);
                 }
             }
+
+            columnBegin = columnEnd;
         }
+
+        regionBegin = regionEnd;
     }
 }
 
@@ -426,6 +508,8 @@ void Renderer::renderTransparentChunks(const std::vector<Chunk*>& transparentChu
     if (transparentChunks.empty()) {
         return;
     }
+
+    const int modelLoc = m_chunkShader->getUniformLocation("model");
 
     std::vector<TransparentDrawItem> transparentItems;
     transparentItems.reserve(transparentChunks.size());
@@ -469,7 +553,7 @@ void Renderer::renderTransparentChunks(const std::vector<Chunk*>& transparentChu
         glm::mat4 model(1.0f);
         const glm::ivec3 offset = item.chunk->getWorldOffset();
         model = glm::translate(model, glm::vec3(offset.x, offset.y, offset.z));
-        m_chunkShader->setMat4("model", model);
+        m_chunkShader->setMat4(modelLoc, model);
 
         glBindVertexArray(mesh.transparentVao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));

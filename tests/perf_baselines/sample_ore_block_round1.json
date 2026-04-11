@@ -1,0 +1,45 @@
+{
+  "benchmark": "ore_sampling_perf_test",
+  "focus": "TerrainGenerator::sampleOreBlock",
+  "captured_at": "2026-04-11",
+  "build": {
+    "config": "Debug",
+    "binary": "x64-Debug/ore_sampling_perf_test.exe"
+  },
+  "settings": {
+    "seed": 12345,
+    "sea_level": 63,
+    "warmup_rounds": 4,
+    "measure_rounds": 12,
+    "sample_count": 2000000
+  },
+  "results": {
+    "stone_only": {
+      "median_ms": 26.623,
+      "p95_ms": 28.002,
+      "avg_ms": 26.799,
+      "min_ms": 25.784,
+      "max_ms": 28.953,
+      "calls_per_sec": 75124284,
+      "ns_per_call": 13.31,
+      "checksum": 20
+    },
+    "mixed_base_blocks": {
+      "median_ms": 25.139,
+      "p95_ms": 25.851,
+      "avg_ms": 25.133,
+      "min_ms": 23.843,
+      "max_ms": 25.915,
+      "calls_per_sec": 79557185,
+      "ns_per_call": 12.57,
+      "checksum": 0
+    }
+  },
+  "vs_baseline": {
+    "stone_only_median_ms_delta_pct": -7.62,
+    "stone_only_ns_per_call_delta_pct": -7.63,
+    "mixed_median_ms_delta_pct": -5.81,
+    "mixed_ns_per_call_delta_pct": -5.77
+  }
+}
+

@@ -49,9 +49,10 @@ void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &r
     showPlayerStats(player);
     showCameraStats(camera);
     showWorldStats(world, player);
-    showPerformanceStats(render, profilerStats);
+    showPerformanceStats(world, render, profilerStats);
     showCrosshairSettings(uiRenderer);
     showHotbarSettings(uiRenderer);
+    showTextSettings(uiRenderer);
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
@@ -157,7 +158,7 @@ void Dashboard::showCameraStats( Camera &camera) {
     ImGui::End();
 }
 
-void Dashboard::showPerformanceStats(Renderer &render, const FrameProfilerStats& profilerStats) {
+void Dashboard::showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats) {
     ImGui::Begin("Performance Stats");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
@@ -232,6 +233,96 @@ void Dashboard::showPerformanceStats(Renderer &render, const FrameProfilerStats&
         }
     } else {
         ImGui::Text("Atlas Anisotropy: not supported");
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Distance Fog");
+    Renderer::FogSettings fog = render.getFogSettings();
+    bool fogPresetApplied = false;
+    if (ImGui::Button("Natural Distance")) {
+        render.setFogEnabled(true);
+        render.setFogMode(Renderer::FogMode::Linear);
+        render.setFogAutoDistanceEnabled(true);
+        render.setFogAutoStartOffsetChunks(-0.25f);
+        render.setFogAutoFadeWidthChunks(2.4f);
+        render.setFogDensity(0.006f);
+        fogPresetApplied = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cinematic Haze")) {
+        render.setFogEnabled(true);
+        render.setFogMode(Renderer::FogMode::Exp2);
+        render.setFogAutoDistanceEnabled(true);
+        render.setFogAutoStartOffsetChunks(-0.9f);
+        render.setFogAutoFadeWidthChunks(3.2f);
+        render.setFogDensity(0.020f);
+        fogPresetApplied = true;
+    }
+    if (fogPresetApplied) {
+        fog = render.getFogSettings();
+    }
+
+    bool fogEnabled = fog.enabled;
+    if (ImGui::Checkbox("Enable Fog", &fogEnabled)) {
+        render.setFogEnabled(fogEnabled);
+        fog.enabled = fogEnabled;
+    }
+
+    int fogMode = static_cast<int>(fog.mode);
+    static constexpr const char* kFogModeItems[] = { "Linear", "Exp", "Exp2" };
+    if (ImGui::Combo("Fog Mode", &fogMode, kFogModeItems, IM_ARRAYSIZE(kFogModeItems))) {
+        render.setFogMode(static_cast<Renderer::FogMode>(fogMode));
+    }
+
+    float fogColor[3] = { fog.color.x, fog.color.y, fog.color.z };
+    if (ImGui::ColorEdit3("Fog Color", fogColor)) {
+        render.setFogColor(glm::vec3(fogColor[0], fogColor[1], fogColor[2]));
+    }
+
+    bool fogAutoDistance = fog.autoDistanceByRenderDistance;
+    if (ImGui::Checkbox("Auto Distance (Render Distance)", &fogAutoDistance)) {
+        render.setFogAutoDistanceEnabled(fogAutoDistance);
+        fog.autoDistanceByRenderDistance = fogAutoDistance;
+    }
+
+    float fogAutoStartOffset = fog.autoStartOffsetChunks;
+    if (ImGui::SliderFloat("Auto Start Offset (chunks)", &fogAutoStartOffset, -1.5f, 1.5f, "%.2f")) {
+        render.setFogAutoStartOffsetChunks(fogAutoStartOffset);
+        fog.autoStartOffsetChunks = fogAutoStartOffset;
+    }
+
+    float fogAutoFadeWidth = fog.autoFadeWidthChunks;
+    if (ImGui::SliderFloat("Auto Fade Width (chunks)", &fogAutoFadeWidth, 0.25f, 4.0f, "%.2f")) {
+        render.setFogAutoFadeWidthChunks(fogAutoFadeWidth);
+        fog.autoFadeWidthChunks = fogAutoFadeWidth;
+    }
+
+    if (fog.autoDistanceByRenderDistance) {
+        const float chunkSize = static_cast<float>(Chunk::SIZE_X);
+        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
+        const float autoStart = std::max(0.0f, (renderDistanceChunks + fog.autoStartOffsetChunks) * chunkSize);
+        const float autoEnd = autoStart + fog.autoFadeWidthChunks * chunkSize;
+        ImGui::Text("Auto Fog Range: %.1f -> %.1f", autoStart, autoEnd);
+    }
+
+    float fogStart = fog.startDistance;
+    float fogEnd = fog.endDistance;
+    bool fogDistanceChanged = false;
+    if (fog.autoDistanceByRenderDistance) {
+        ImGui::BeginDisabled();
+    }
+    fogDistanceChanged |= ImGui::SliderFloat("Fog Start", &fogStart, 0.0f, 600.0f, "%.1f");
+    fogDistanceChanged |= ImGui::SliderFloat("Fog End", &fogEnd, 1.0f, 800.0f, "%.1f");
+    if (fog.autoDistanceByRenderDistance) {
+        ImGui::EndDisabled();
+    }
+    if (fogDistanceChanged) {
+        render.setFogLinearDistances(fogStart, fogEnd);
+    }
+
+    float fogDensity = fog.density;
+    if (ImGui::SliderFloat("Fog Density", &fogDensity, 0.001f, 0.05f, "%.4f")) {
+        render.setFogDensity(fogDensity);
     }
 
     const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
@@ -322,6 +413,22 @@ void Dashboard::showHotbarSettings(UIRenderer& uiRenderer) {
     float icon[4] = { iconTint[0], iconTint[1], iconTint[2], iconTint[3] };
     if (ImGui::ColorEdit4("Icon Tint Color", icon)) {
         uiRenderer.setHotbarIconTintColor({ icon[0], icon[1], icon[2], icon[3] });
+    }
+
+    ImGui::End();
+}
+
+void Dashboard::showTextSettings(UIRenderer& uiRenderer) {
+    ImGui::Begin("Text Settings");
+
+    float advance = uiRenderer.getTextAdvanceFactor();
+    if (ImGui::SliderFloat("Advance Factor", &advance, 0.5f, 1.2f, "%.2f")) {
+        uiRenderer.setTextAdvanceFactor(advance);
+    }
+
+    float caretBlinkMs = uiRenderer.getCommandCaretBlinkPeriodMs();
+    if (ImGui::SliderFloat("Command Caret Blink (ms)", &caretBlinkMs, 120.0f, 1500.0f, "%.0f")) {
+        uiRenderer.setCommandCaretBlinkPeriodMs(caretBlinkMs);
     }
 
     ImGui::End();

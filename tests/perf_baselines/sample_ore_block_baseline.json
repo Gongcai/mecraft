@@ -1,0 +1,41 @@
+{
+  "benchmark": "ore_sampling_perf_test",
+  "focus": "TerrainGenerator::sampleOreBlock",
+  "captured_at": "2026-04-11",
+  "build": {
+    "config": "Debug",
+    "binary": "x64-Debug/ore_sampling_perf_test.exe"
+  },
+  "settings": {
+    "seed": 12345,
+    "sea_level": 63,
+    "warmup_rounds": 4,
+    "measure_rounds": 12,
+    "sample_count": 2000000
+  },
+  "cases": [
+    {
+      "name": "stone_only",
+      "median_ms": 28.819,
+      "p95_ms": 30.679,
+      "avg_ms": 29.234,
+      "min_ms": 27.972,
+      "max_ms": 31.453,
+      "calls_per_sec": 69398901,
+      "ns_per_call": 14.41,
+      "checksum": 20
+    },
+    {
+      "name": "mixed_base_blocks",
+      "median_ms": 26.690,
+      "p95_ms": 27.619,
+      "avg_ms": 26.763,
+      "min_ms": 25.982,
+      "max_ms": 27.740,
+      "calls_per_sec": 74935836,
+      "ns_per_call": 13.34,
+      "checksum": 0
+    }
+  ]
+}
+

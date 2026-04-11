@@ -32,6 +32,7 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
+    m_resourceMgr.loadGuiTexture("font_ascii", "../assets/textures/font/ascii.png", true);
     BlockRegistry::init(&m_resourceMgr);
     m_resourceMgr.buildBlockIconAtlas(64);
 #ifndef NDEBUG
@@ -57,6 +58,8 @@ void Game::init(int width, int height, const char *title) {
         m_player,
         m_contextManager,
         m_input,
+        m_uiRenderer,
+        m_lastSubmittedCommand,
         m_physicsSystem,
         m_world,
         m_audioEngine,
@@ -140,6 +143,7 @@ void Game::renderFrame() {
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
     m_uiRenderer.render(m_window, m_player.getInventory());
+    m_stateMachine.render();
 #ifndef NDEBUG
     m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer,
                        m_dashboardProfilerStats);

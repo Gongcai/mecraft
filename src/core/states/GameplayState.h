@@ -12,6 +12,8 @@
 #include "../../world/Block.h"
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
+#include "../../ui/UIRenderer.h"
+#include "CommandState.h"
 #include "UIState.h"
 namespace gameplay_state_detail {
     inline std::string getRandomName(const std::string& name, int maxRandomLength) {
@@ -37,6 +39,8 @@ public:
                   Player& player,
                   InputContextManager& ctx,
                   InputManager& input,
+                  UIRenderer& uiRenderer,
+                  std::string& lastSubmittedCommand,
                   physics::PhysicsSystem& physicsSystem,
                   World& world,
                   AudioEngine& audioEngine,
@@ -44,6 +48,7 @@ public:
                   DropSystem& dropSystem,
                   const IGameplayModeRules& modeRules = SurvivalModeRules::instance())
             : m_fsm(fsm), m_player(player), m_context(ctx), m_input(input),
+              m_uiRenderer(uiRenderer), m_lastSubmittedCommand(lastSubmittedCommand),
               m_physicsSystem(physicsSystem), m_world(world),
               m_audioEngine(audioEngine), m_particleSystem(particleSystem),
               m_dropSystem(dropSystem),
@@ -62,6 +67,10 @@ public:
     void update(float dt, const InputSnapshot& snapshot) override {
         updatePlaceCooldown(dt);
         handleHotbarInput();
+        if (handleCommandTransition()) {
+            resetBlockBreakSession();
+            return;
+        }
         if (handleMenuTransition()) {
             resetBlockBreakSession();
             return;
@@ -119,6 +128,21 @@ private:
         }
 
         m_fsm.pushState(std::make_unique<UIState>(m_fsm, m_context, m_input));
+        return true;
+    }
+
+    bool handleCommandTransition() {
+        if (!m_context.isActionTriggered(Action::OpenCommand)) {
+            return false;
+        }
+
+        m_fsm.pushState(std::make_unique<CommandState>(
+            m_fsm,
+            m_context,
+            m_input,
+            m_uiRenderer,
+            m_lastSubmittedCommand
+        ));
         return true;
     }
 
@@ -231,6 +255,8 @@ private:
     Player& m_player;
     InputContextManager& m_context;
     InputManager& m_input;
+    UIRenderer& m_uiRenderer;
+    std::string& m_lastSubmittedCommand;
     physics::PhysicsSystem& m_physicsSystem;
     World& m_world;
     AudioEngine& m_audioEngine;

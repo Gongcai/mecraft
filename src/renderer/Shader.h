@@ -31,6 +31,7 @@ public:
     void setInt(const string& name,int value) const;
     void setFloat(const string& name,float value) const;
     void setMat4(const string& name,const glm::mat4 &value) const;
+    void setMat4(int location, const glm::mat4 &value) const;
     void setMat3(const string& name, const glm::mat3 &value) const;
     void setMat2(const string& name, const glm::mat2 &value) const;
     void setVec4(const string& name,const glm::vec4 &value) const;
@@ -38,9 +39,10 @@ public:
     void setVec2(const string& name,const glm::vec2 &value) const;
     void setVec3(const std::string& name, float x, float y, float z) const;
 
+    [[nodiscard]] int getUniformLocation(const string& name) const;
+
 private:
     mutable std::unordered_map<std::string,int> uniformLocationCache;
-    [[nodiscard]] int getUniformLocation(const string& name) const;
 };
 
 

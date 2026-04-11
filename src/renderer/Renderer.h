@@ -20,6 +20,24 @@ class Chunk;
 
 class Renderer {
 public:
+    enum class FogMode : int {
+        Linear = 0,
+        Exp = 1,
+        Exp2 = 2
+    };
+
+    struct FogSettings {
+        bool enabled = true;
+        FogMode mode = FogMode::Linear;
+        glm::vec3 color = glm::vec3(0.67f, 0.84f, 1.0f);
+        float startDistance = 140.0f;
+        float endDistance = 260.0f;
+        float density = 0.01f;
+        bool autoDistanceByRenderDistance = true;
+        float autoStartOffsetChunks = -0.5f;
+        float autoFadeWidthChunks = 1.5f;
+    };
+
     enum class FrustumPlane : size_t {
         Left = 0,
         Right = 1,
@@ -60,6 +78,15 @@ public:
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
     void setAtlasAnisotropy(float anisotropy);
+    void setFogEnabled(bool enabled);
+    void setFogMode(FogMode mode);
+    void setFogColor(const glm::vec3& color);
+    void setFogLinearDistances(float startDistance, float endDistance);
+    void setFogDensity(float density);
+    void setFogAutoDistanceEnabled(bool enabled);
+    void setFogAutoStartOffsetChunks(float offsetChunks);
+    void setFogAutoFadeWidthChunks(float fadeWidthChunks);
+    [[nodiscard]] FogSettings getFogSettings() const;
 #ifndef NDEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
@@ -84,11 +111,21 @@ private:
         float d = 0.0f;
     };
 
+    struct ChunkRenderEntry {
+        Chunk* chunk = nullptr;
+        int regionX = 0;
+        int regionZ = 0;
+        int chunkX = 0;
+        int chunkZ = 0;
+        glm::vec3 boundsMin = glm::vec3(0.0f);
+        glm::vec3 boundsMax = glm::vec3(0.0f);
+    };
+
     void recordMeshingHistory();
     void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
-    void bindChunkRenderState(const TextureAtlas& atlas) const;
+    void bindChunkRenderState(const World& world, const TextureAtlas& atlas) const;
     void submitMeshingJobs(const World& world, const TextureAtlas& atlas);
     void renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks);
     void renderTransparentChunks(const std::vector<Chunk*>& transparentChunks);
@@ -145,8 +182,10 @@ private:
     glm::mat4 m_view = glm::mat4(1.0f);
     glm::mat4 m_viewProj = glm::mat4(1.0f);
     glm::vec3 m_cameraPos = glm::vec3(0.0f);
+    FogSettings m_fogSettings{};
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
+    std::vector<ChunkRenderEntry> m_chunkRenderEntries;
 };
 
 

@@ -196,6 +196,7 @@ void ResourceMgr::init() {
     loadShader("break_overlay", "../assets/shaders/break_overlay.vs", "../assets/shaders/break_overlay.fs");
     loadShader("crosshair", "../assets/shaders/crosshair.vs", "../assets/shaders/crosshair.fs");
     loadShader("inventory", "../assets/shaders/inventory.vs", "../assets/shaders/inventory.fs");
+    loadShader("text", "../assets/shaders/text.vs", "../assets/shaders/text.fs");
     loadShader("particle", "../assets/shaders/particle.vs", "../assets/shaders/particle.fs");
     loadShader("postprocess", "../assets/shaders/postprocess.vs", "../assets/shaders/postprocess.fs");
 }

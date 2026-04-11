@@ -59,6 +59,7 @@ private:
     ParticleSystem m_particleSystem;
     DropSystem m_dropSystem;
     UIRenderer    m_uiRenderer;
+    std::string m_lastSubmittedCommand;
 #ifndef NDEBUG
     Dashboard      m_dashboard;
 #endif

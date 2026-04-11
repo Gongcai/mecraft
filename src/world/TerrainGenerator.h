@@ -12,6 +12,8 @@ enum class TerrainBiome : uint8_t {
     HighMountain = 3,
 };
 
+class TerrainGeneratorPerfAccess;
+
 class TerrainGenerator {
 public:
     void init(uint32_t seed, int seaLevel);
@@ -21,6 +23,8 @@ public:
     void sampleSurfaceYBatch(int startWorldX, int worldZ, int count, int* outSurfaceY) const;
 
 private:
+    friend class TerrainGeneratorPerfAccess;
+
     [[nodiscard]] double sampleMoisture(int worldX, int worldZ) const;
     [[nodiscard]] bool shouldCarveCave(int worldX, int y, int worldZ, int surfaceY) const;
     [[nodiscard]] BlockID sampleOreBlock(int worldX, int y, int worldZ, BlockID baseBlock) const;

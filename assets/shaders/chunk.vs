@@ -8,11 +8,14 @@ uniform mat4 viewProj;
 
 out vec2 vUV;
 out float vNormal;
+out vec3 vWorldPos;
 
 void main() {
-    gl_Position = viewProj * model * vec4(aPos, 1.0);
+    vec4 worldPos = model * vec4(aPos, 1.0);
+    gl_Position = viewProj * worldPos;
 
     vUV = aUV;
     vNormal = aNormal;
+    vWorldPos = worldPos.xyz;
 }
 
