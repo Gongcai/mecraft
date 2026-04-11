@@ -30,14 +30,17 @@ float computeFogFactor(float fogDistance) {
 }
 
 void main() {
-    vec4 texColor = (uForceBaseLod != 0)
+    // Cross vegetation alpha-cutout mips can darken noticeably at distance.
+    // Keep plants on base LOD while leaving terrain blocks on regular mip sampling.
+    bool forceBaseLod = (uForceBaseLod != 0) || (vNormal < -0.5);
+    vec4 texColor = forceBaseLod
         ? textureLod(texAtlas, vUV, 0.0)
         : texture(texAtlas, vUV);
 
     if (texColor.a < 0.1)
         discard;
 
-    if (vNormal < 0.0) {
+    if (abs(vNormal + 1.0) < 0.001) {
         texColor.rgb *= uGrassTintColor;
     }
 

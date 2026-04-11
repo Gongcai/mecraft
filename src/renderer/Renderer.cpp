@@ -5,6 +5,7 @@
 #include "Renderer.h"
 
 #include "ChunkMesher.h"
+#include "../core/Time.h"
 #include "../world/World.h"
 #include "../player/Player.h"
 
@@ -27,6 +28,10 @@ struct TransparentDrawItem {
     Chunk* chunk = nullptr;
     float distanceSq = 0.0f;
 };
+
+constexpr float kWindStrength = 0.06f;
+constexpr float kWindSpeed = 1.8f;
+constexpr float kWindSpatialFreq = 0.22f;
 
 void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
@@ -303,6 +308,10 @@ void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atla
     m_chunkShader->setFloat("uFogStart", fogStart);
     m_chunkShader->setFloat("uFogEnd", fogEnd);
     m_chunkShader->setFloat("uFogDensity", m_fogSettings.density);
+    m_chunkShader->setFloat("uWindTime", static_cast<float>(Time::getGameTime()));
+    m_chunkShader->setFloat("uWindStrength", kWindStrength);
+    m_chunkShader->setFloat("uWindSpeed", kWindSpeed);
+    m_chunkShader->setFloat("uWindSpatialFreq", kWindSpatialFreq);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);

@@ -35,6 +35,8 @@ constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.
 constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 
 constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
+constexpr float kCrossGrassMarker = -1.0f;
+constexpr float kCrossFlowerMarker = -2.0f;
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
     switch (face) {
@@ -94,6 +96,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     m_shader->setInt("texAtlas", 0);
     m_shader->setInt("uForceBaseLod", 0);
     m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+    m_shader->setFloat("uWindStrength", 0.0f);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
@@ -161,6 +164,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
         const float uMax = uv.second.x;
         const float vMax = uv.second.y;
         const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+        const float crossMarker = def.useGrassTint ? kCrossGrassMarker : kCrossFlowerMarker;
 
         const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
             for (const int idx : kFaceIndices) {
@@ -172,7 +176,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     pos.z,
                     uvCoord.x,
                     uvCoord.y,
-                    def.useGrassTint ? -1.0f : 0.0f
+                    crossMarker
                 });
             }
         };

@@ -17,6 +17,8 @@ constexpr int FACE_FRONT = 2;
 constexpr int FACE_BACK = 3;
 constexpr int FACE_LEFT = 4;
 constexpr int FACE_RIGHT = 5;
+constexpr float CROSS_GRASS_MARKER = -1.0f;
+constexpr float CROSS_FLOWER_MARKER = -2.0f;
 
 constexpr std::array<IVec3, 6> kFaceNormals = {{{0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {-1, 0, 0}, {1, 0, 0}}};
 
@@ -304,6 +306,8 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
     const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
 
+    const float crossMarker = def.useGrassTint ? CROSS_GRASS_MARKER : CROSS_FLOWER_MARKER;
+
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {
             const glm::vec3 local = corners[index];
@@ -314,7 +318,7 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                 pos.z + local.z,
                 uvCoord.x,
                 uvCoord.y,
-                def.useGrassTint ? -1.0f : static_cast<float>(FACE_TOP)
+                crossMarker
             });
         }
     };

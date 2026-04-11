@@ -37,8 +37,14 @@ int main() {
     const BlockID topBlock = world.getBlock(0, surfaceY, 0);
     if (topBlock != BlockType::GRASS && topBlock != BlockType::SAND &&
         topBlock != BlockType::DIRT && topBlock != BlockType::STONE &&
-        topBlock != BlockType::WATER) {
+        topBlock != BlockType::WATER && topBlock != BlockType::TALL_GRASS &&
+        topBlock != BlockType::ROSE) {
         return fail("surface block should be a valid generated terrain block");
+    }
+
+    if ((topBlock == BlockType::TALL_GRASS || topBlock == BlockType::ROSE) &&
+        world.getBlock(0, surfaceY - 1, 0) != BlockType::GRASS) {
+        return fail("vegetation surface block should be rooted on grass");
     }
 
     const BlockID underBlock = world.getBlock(0, surfaceY - 2, 0);

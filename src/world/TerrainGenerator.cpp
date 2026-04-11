@@ -49,6 +49,8 @@ constexpr uint32_t kOreSaltDiamond = 0x89abcdefU;
 constexpr uint32_t kOreSaltGold = 0x13572468U;
 constexpr uint32_t kOreSaltIron = 0xfedcba98U;
 constexpr uint32_t kOreSaltCoal = 0x2468ace0U;
+constexpr uint32_t kDecorSaltDensity = 0x4a3c2f1dU;
+constexpr uint32_t kDecorSaltFlower = 0xc13f7e59U;
 
 constexpr uint32_t kOreCutoffDiamond = static_cast<uint32_t>(0.0045 * 4294967295.0);
 constexpr uint32_t kOreCutoffGold = static_cast<uint32_t>(0.0080 * 4294967295.0);
@@ -57,6 +59,11 @@ constexpr uint32_t kOreCutoffCoal = static_cast<uint32_t>(0.0240 * 4294967295.0)
 
 double hashToUnit(uint32_t value) {
     return static_cast<double>(value) / static_cast<double>(0xFFFFFFFFU);
+}
+
+uint32_t probabilityToCutoff(double probability) {
+    const double clamped = std::clamp(probability, 0.0, 1.0);
+    return static_cast<uint32_t>(clamped * 4294967295.0);
 }
 
 double lattice2D(int x, int z, uint32_t seed) {
@@ -389,6 +396,48 @@ void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t se
 #endif
 }
 
+BlockID sampleVegetationBlock(int worldX,
+                              int worldZ,
+                              uint32_t seed,
+                              TerrainBiome biome,
+                              double moisture,
+                              int seaLevel,
+                              int surfaceY) {
+    if (surfaceY < seaLevel || moisture < 0.36) {
+        return BlockType::AIR;
+    }
+
+    double density = 0.0;
+    switch (biome) {
+        case TerrainBiome::Temperate:
+            density = 0.20 + moisture * 0.25;
+            break;
+        case TerrainBiome::Mountain:
+            density = 0.05 + moisture * 0.10;
+            break;
+        case TerrainBiome::Arid:
+        case TerrainBiome::HighMountain:
+        default:
+            return BlockType::AIR;
+    }
+
+    uint32_t h = seed;
+    h ^= hash32(static_cast<uint32_t>(worldX) * kOreXMul);
+    h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
+
+    if (hash32(h ^ kDecorSaltDensity) > probabilityToCutoff(density)) {
+        return BlockType::AIR;
+    }
+
+    const double flowerChance = (biome == TerrainBiome::Temperate)
+                                    ? (0.06 + moisture * 0.06)
+                                    : (0.02 + moisture * 0.02);
+    if (hash32(h ^ kDecorSaltFlower) < probabilityToCutoff(flowerChance)) {
+        return BlockType::ROSE;
+    }
+    return BlockType::TALL_GRASS;
+}
+
 } // namespace
 
 void TerrainGenerator::init(uint32_t seed, int seaLevel) {
@@ -581,6 +630,18 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
 
                     if (id != BlockType::AIR) {
                         chunk.setBlock(localX, y, z, id);
+                    }
+                }
+
+                const int vegetationY = surfaceY + 1;
+                if (vegetationY < Chunk::SIZE_Y &&
+                    chunk.getBlock(localX, surfaceY, z) == BlockType::GRASS &&
+                    chunk.getBlock(localX, vegetationY, z) == BlockType::AIR) {
+                    const BlockID vegetation = sampleVegetationBlock(worldX, worldZ, m_seed,
+                                                                     surfaceKind, moisture,
+                                                                     m_seaLevel, surfaceY);
+                    if (vegetation != BlockType::AIR) {
+                        chunk.setBlock(localX, vegetationY, z, vegetation);
                     }
                 }
 
