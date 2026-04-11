@@ -214,6 +214,8 @@ static int stringToKey(const std::string& str) {
     if (str == "W") return GLFW_KEY_W; // specific override if length==1 fails
     if (str == "BACKSPACE") return GLFW_KEY_BACKSPACE;
     if (str == "SLASH") return GLFW_KEY_SLASH;
+    if (str == "UP") return GLFW_KEY_UP;
+    if (str == "DOWN") return GLFW_KEY_DOWN;
 
     // ... add more as needed
     return GLFW_KEY_UNKNOWN;

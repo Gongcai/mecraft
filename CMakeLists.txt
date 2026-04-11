@@ -42,6 +42,7 @@ set(CORE_SOURCES
         src/core/Time.cpp
         src/core/InputContextManager.cpp
         src/core/GameStateMachine.cpp
+        src/core/states/CommandState.cpp
         src/player/Player.cpp
         src/player/ActionMap.cpp
         src/player/Inventory.cpp

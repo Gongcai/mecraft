@@ -17,6 +17,8 @@ void KeyboardInputBox::open(const std::string& initialText) {
     m_open = true;
     m_submitRequested = false;
     m_cancelRequested = false;
+    m_historyPrevRequested = false;
+    m_historyNextRequested = false;
     m_backspaceHoldElapsed = 0.0f;
     m_backspaceRepeatAccumulator = 0.0f;
     m_backspaceActionActiveLastFrame = false;
@@ -25,6 +27,8 @@ void KeyboardInputBox::open(const std::string& initialText) {
 
 void KeyboardInputBox::close() {
     m_open = false;
+    m_historyPrevRequested = false;
+    m_historyNextRequested = false;
     m_backspaceHoldElapsed = 0.0f;
     m_backspaceRepeatAccumulator = 0.0f;
     m_backspaceActionActiveLastFrame = false;
@@ -57,6 +61,13 @@ void KeyboardInputBox::update(const InputSnapshot& snapshot,
         m_submitRequested = true;
         m_open = false;
         return;
+    }
+
+    if (inputContext->isActionTriggered(Action::Up)) {
+        m_historyPrevRequested = true;
+    }
+    if (inputContext->isActionTriggered(Action::Down)) {
+        m_historyNextRequested = true;
     }
 
     const bool backspaceActive = inputContext->isActionTriggered(Action::Backspace);
@@ -136,6 +147,24 @@ bool KeyboardInputBox::consumeCancel() {
     }
 
     m_cancelRequested = false;
+    return true;
+}
+
+bool KeyboardInputBox::consumeHistoryPrev() {
+    if (!m_historyPrevRequested) {
+        return false;
+    }
+
+    m_historyPrevRequested = false;
+    return true;
+}
+
+bool KeyboardInputBox::consumeHistoryNext() {
+    if (!m_historyNextRequested) {
+        return false;
+    }
+
+    m_historyNextRequested = false;
     return true;
 }
 

@@ -31,6 +31,8 @@ public:
     // Returns true only once after Enter/Escape was pressed while open.
     bool consumeSubmit(std::string* submittedText = nullptr);
     bool consumeCancel();
+    bool consumeHistoryPrev();
+    bool consumeHistoryNext();
 
 private:
 
@@ -39,6 +41,8 @@ private:
     std::string m_text;
     bool m_submitRequested = false;
     bool m_cancelRequested = false;
+    bool m_historyPrevRequested = false;
+    bool m_historyNextRequested = false;
     float m_backspaceHoldElapsed = 0.0f;
     float m_backspaceRepeatAccumulator = 0.0f;
     bool m_backspaceActionActiveLastFrame = false;

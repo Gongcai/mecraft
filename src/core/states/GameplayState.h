@@ -15,19 +15,6 @@
 #include "../../ui/UIRenderer.h"
 #include "CommandState.h"
 #include "UIState.h"
-namespace gameplay_state_detail {
-    inline std::string getRandomName(const std::string& name, int maxRandomLength) {
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-
-        std::uniform_int_distribution<> dist(1, maxRandomLength);
-        int randomNum = dist(gen);
-
-        return name + std::to_string(randomNum);
-
-
-    }
-}
 
 namespace physics {
 class PhysicsSystem;
@@ -141,7 +128,13 @@ private:
             m_context,
             m_input,
             m_uiRenderer,
-            m_lastSubmittedCommand
+            m_lastSubmittedCommand,
+            m_player,
+            m_physicsSystem,
+            m_world,
+            m_audioEngine,
+            m_particleSystem,
+            m_dropSystem
         ));
         return true;
     }
@@ -213,7 +206,7 @@ private:
                 return;
             }
 
-            const float requiredMs = std::max(1.0f, static_cast<float>(BlockRegistry::get(targetBlock).timeToBreak));
+            const float requiredMs = m_modeRules.breakDurationMs(targetBlock);
             if (!m_blockBreakSession.active || m_blockBreakSession.blockPos != selection.hitBlock) {
                 m_blockBreakSession.active = true;
                 m_blockBreakSession.blockPos = selection.hitBlock;
@@ -223,7 +216,11 @@ private:
 
             m_blockBreakSession.elapsedMs += dt * 1000.0f;
             const float progress = m_blockBreakSession.elapsedMs / m_blockBreakSession.requiredMs;
-            updateBreakProgress(selection.hitBlock, progress);
+            if (m_modeRules.shouldReportBreakProgress()) {
+                updateBreakProgress(selection.hitBlock, progress);
+            } else {
+                m_player.clearBlockBreakProgress();
+            }
 
             if (m_blockBreakSession.elapsedMs < m_blockBreakSession.requiredMs) {
                 return;
