@@ -107,7 +107,7 @@ public:
 
     [[nodiscard]] float breakDurationMs(BlockID /*targetBlock*/) const override {
         // Creative uses a fixed break speed and ignores per-block hardness.
-        return 80.0f;
+        return 180.0f;
     }
 
     [[nodiscard]] bool shouldReportBreakProgress() const override {

@@ -29,6 +29,7 @@ struct PhysicsBody {
     float eyeOffsetY = 1.62f;   // 相对 position 的眼睛高度
 
     bool isGrounded = false;
+    float landingImpactSpeed = 0.0f; // absolute vertical speed at latest ground contact
     bool isInWater = false;
     bool hitWall = false;
     bool isFullySubmerged = false;

@@ -283,7 +283,8 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             pos.z + local.z,
             uvCoord.x,
             uvCoord.y,
-            static_cast<float>(face)
+            static_cast<float>(face),
+            0.0f
         });
     }
 }
@@ -318,7 +319,8 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                 pos.z + local.z,
                 uvCoord.x,
                 uvCoord.y,
-                crossMarker
+                crossMarker,
+                local.y
             });
         }
     };

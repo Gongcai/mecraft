@@ -142,7 +142,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     vertices.reserve(m_particles.size() * 42);
 
     for (const auto& p : m_particles) {
-        float alpha = p.life / p.maxLife;
+        float alpha = 1.f;
         float halfSize = p.size * 0.5f;
         const float tintFactor = p.grassTintFactor;
 

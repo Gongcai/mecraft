@@ -41,6 +41,7 @@ void Player::init(const glm::vec3 &spawnPos) {
     m_eyeHeightBase = m_eyeHeightStand;
     m_eyeHeight = m_eyeHeightBase;
     m_eyeBobBlend = 0.0f;
+    m_lastLandingImpactSpeed = 0.0f;
 
     m_body.position = spawnPos;
     m_body.velocity = glm::vec3(0.0f);
@@ -78,6 +79,9 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     applyViewBob(dt);
 
     m_justLanded = m_onGround && !m_onGroundLastFrame;
+    if (m_justLanded) {
+        m_lastLandingImpactSpeed = m_body.landingImpactSpeed;
+    }
 
 }
 
@@ -223,12 +227,26 @@ bool Player::isJustLanded() const  {
     return m_justLanded;
 }
 
+float Player::getLandingImpactSpeed() const {
+    return m_lastLandingImpactSpeed;
+}
+
 bool Player::isFullySubmerged() const {
     return m_body.isFullySubmerged;
 }
 
 bool Player::isEyesInWater() const {
     return m_body.isEyesInWater;
+}
+
+void Player::triggerClassicHurtEffect() {
+    m_classicHurtEffectPending = true;
+}
+
+bool Player::consumeClassicHurtEffect() {
+    const bool pending = m_classicHurtEffectPending;
+    m_classicHurtEffectPending = false;
+    return pending;
 }
 
 Inventory& Player::getInventory() {

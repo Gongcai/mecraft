@@ -244,10 +244,11 @@ void moveAndCollideAxis(PhysicsBody& body, const World& world, const MoveIntent&
         // Roll back to last valid position to avoid per-frame contact jitter.
         body.position = prevPos;
 
-        body.velocity[axis] = 0.0f;
         if (axis == 1 && stepDelta < 0.0f) {
+            body.landingImpactSpeed = -body.velocity.y;
             body.isGrounded = true;
         }
+        body.velocity[axis] = 0.0f;
         if (axis != 1) {
             body.hitWall = true;
         }
@@ -270,6 +271,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     const bool wasGrounded = body.isGrounded;
 
     body.hitWall = false;
+    body.landingImpactSpeed = 0.0f;
     const float waterFillRatio = queryWaterFillRatio(body, *m_world);
     body.isInWater = waterFillRatio > 0.2f;
     body.isFullySubmerged = waterFillRatio > 0.95f;
@@ -283,6 +285,14 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     moveAndCollideAxis(body, *m_world, intent, dt, 1); // Y
     moveAndCollideAxis(body, *m_world, intent, dt, 0); // X
     moveAndCollideAxis(body, *m_world, intent, dt, 2); // Z
+
+    // Keep grounded state stable while resting on solid support to avoid
+    // one-frame false negatives that can retrigger landing events.
+    if (!body.isGrounded && wasGrounded && body.velocity.y <= 0.0f &&
+        hasGroundSupportAt(body, *m_world, body.position)) {
+        body.isGrounded = true;
+        body.velocity.y = 0.0f;
+    }
 
     const float postMoveWaterFillRatio = queryWaterFillRatio(body, *m_world);
     body.isInWater = postMoveWaterFillRatio > 0.2f;

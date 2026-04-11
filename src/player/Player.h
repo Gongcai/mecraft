@@ -48,8 +48,11 @@ public:
     [[nodiscard]] bool isMoving() const;
     [[nodiscard]] bool isSprinting() const;
     [[nodiscard]] bool isJustLanded() const;
+    [[nodiscard]] float getLandingImpactSpeed() const;
     [[nodiscard]] bool isFullySubmerged() const;
     [[nodiscard]] bool isEyesInWater() const;
+    void triggerClassicHurtEffect();
+    [[nodiscard]] bool consumeClassicHurtEffect();
 
 private:
     glm::vec3 m_position{};
@@ -72,6 +75,8 @@ private:
     bool m_onGround = false;
     bool m_onGroundLastFrame = false;
     bool m_justLanded = false;
+    float m_lastLandingImpactSpeed = 0.0f;
+    bool m_classicHurtEffectPending = false;
 
     bool m_sprinting = false;
     bool m_crouching = false;

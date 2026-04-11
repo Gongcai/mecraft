@@ -118,10 +118,10 @@ private:
         if (primary == "gamemode") {
             std::string secondary;
             iss >> secondary;
-            if (secondary == "creative") {
+            if (secondary == "creative" || secondary == "1") {
                 switchToCreativeMode();
                 return true;
-            } else if (secondary == "survival") {
+            } else if (secondary == "survival" || secondary == "0") {
                 switchToSurvivalMode();
                 return true;
             } else {

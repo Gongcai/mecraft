@@ -20,6 +20,7 @@ struct BlockVertex {
     float u;
     float v;
     float normal;
+    float windWeight;
 };
 
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
@@ -176,7 +177,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     pos.z,
                     uvCoord.x,
                     uvCoord.y,
-                    crossMarker
+                    crossMarker,
+                    pos.y
                 });
             }
         };
@@ -207,7 +209,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                 pos.z,
                 uvCoord.x,
                 uvCoord.y,
-                static_cast<float>(face)
+                static_cast<float>(face),
+                0.0f
             });
         }
     }
@@ -234,6 +237,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

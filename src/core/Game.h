@@ -68,7 +68,14 @@ private:
     [[nodiscard]] static double clampFrameTime(double dt);
     void runFixedUpdate(double fixedStep, double& accumulator);
     void syncAudioListener(float deltaTime);
-    void renderFrame();
+    void renderFrame(float frameTime);
+
+    bool m_fallRollActive = false;
+    float m_fallRollElapsed = 0.0f;
+    float m_fallRollCurrentRadians = 0.0f;
+    static constexpr float kFallRollMaxRadians = 0.06f;
+    static constexpr float kFallRollDurationSeconds = 0.24f;
+    static constexpr float kFallRollPeakRatio = 0.35f;
 
 #ifndef NDEBUG
     struct FrameProfilerDebug {

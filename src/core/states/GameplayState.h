@@ -53,6 +53,7 @@ public:
 
     void update(float dt, const InputSnapshot& snapshot) override {
         updatePlaceCooldown(dt);
+        updateCreativeBreakCooldown(dt);
         handleHotbarInput();
         if (handleCommandTransition()) {
             resetBlockBreakSession();
@@ -90,6 +91,17 @@ private:
         m_placeCooldownRemaining -= dt;
         if (m_placeCooldownRemaining < 0.0f) {
             m_placeCooldownRemaining = 0.0f;
+        }
+    }
+
+    void updateCreativeBreakCooldown(float dt) {
+        if (m_creativeBreakCooldownRemaining <= 0.0f) {
+            return;
+        }
+
+        m_creativeBreakCooldownRemaining -= dt;
+        if (m_creativeBreakCooldownRemaining < 0.0f) {
+            m_creativeBreakCooldownRemaining = 0.0f;
         }
     }
 
@@ -167,7 +179,16 @@ private:
         }
 
         if (m_player.isJustLanded()) {
-            m_audioEngine.playClip(gameplay_state_detail::getRandomName("grass", 4), m_player.getPosition());
+            const float impactSpeed = m_player.getLandingImpactSpeed();
+            if (impactSpeed < kMinFallSoundImpactSpeed) {
+                return;
+            }
+            const bool isBigFall = impactSpeed >= kBigFallImpactSpeed;
+            const char* clipName = isBigFall ? "classic-hurt" : "fallsmall";
+            m_audioEngine.playClip(clipName, m_player.getPosition());
+            if (isBigFall) {
+                m_player.triggerClassicHurtEffect();
+            }
         }
     }
 
@@ -202,6 +223,22 @@ private:
         if (action == GameplayBlockAction::Break) {
             const BlockID targetBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
             if (targetBlock == BlockType::AIR || !BlockRegistry::get(targetBlock).isSelectable) {
+                resetBlockBreakSession();
+                return;
+            }
+
+            // Creative: instant break, but with fixed per-break cooldown.
+            if (!m_modeRules.shouldReportBreakProgress()) {
+                if (m_creativeBreakCooldownRemaining > 0.0f) {
+                    return;
+                }
+
+                const BlockID brokenBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
+                m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, BlockType::AIR);
+                m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
+                m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
+                m_particleSystem.emit(selection.hitBlock, brokenBlock);
+                m_creativeBreakCooldownRemaining = m_modeRules.breakDurationMs(targetBlock) / 1000.0f;
                 resetBlockBreakSession();
                 return;
             }
@@ -247,6 +284,8 @@ private:
     }
 
     static constexpr float kPickDistance = 6.0f;
+    static constexpr float kMinFallSoundImpactSpeed = 6.0f;
+    static constexpr float kBigFallImpactSpeed = 10.0f;
 
     GameStateMachine& m_fsm;
     Player& m_player;
@@ -262,6 +301,7 @@ private:
     const IGameplayModeRules& m_modeRules;
     float m_placeCooldownRemaining = 0.0f;
     BlockBreakSession m_blockBreakSession;
+    float m_creativeBreakCooldownRemaining = 0.0f;
 
     float m_footstepTimer = 0.0f;
     int m_footstepIndex = 0;

@@ -70,6 +70,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     m_postProcessShader->setBool("uUnderwaterEnabled", m_effects.underwaterEnabled);
     m_postProcessShader->setVec3("uUnderwaterTint", m_effects.underwaterTint);
     m_postProcessShader->setFloat("uUnderwaterStrength", m_effects.underwaterStrength);
+    m_postProcessShader->setFloat("uScreenRollRadians", m_effects.screenRollRadians);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);

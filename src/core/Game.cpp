@@ -6,6 +6,8 @@
 #include "../world/Block.h"
 #include "../audio/AudioListener.h"
 
+#include <algorithm>
+
 #ifndef NDEBUG
 #include <chrono>
 #endif
@@ -132,7 +134,31 @@ void Game::syncAudioListener(const float deltaTime) {
     //AudioListener::setGain(1.0f);
 }
 
-void Game::renderFrame() {
+void Game::renderFrame(const float frameTime) {
+    if (m_player.consumeClassicHurtEffect()) {
+        m_fallRollActive = true;
+        m_fallRollElapsed = 0.0f;
+    }
+
+    if (m_fallRollActive) {
+        m_fallRollElapsed += frameTime;
+        float t = m_fallRollElapsed / kFallRollDurationSeconds;
+        t = std::clamp(t, 0.0f, 1.0f);
+
+        if (t < kFallRollPeakRatio) {
+            const float phase = t / kFallRollPeakRatio;
+            m_fallRollCurrentRadians = -kFallRollMaxRadians * phase;
+        } else {
+            const float phase = (t - kFallRollPeakRatio) / (1.0f - kFallRollPeakRatio);
+            m_fallRollCurrentRadians = -kFallRollMaxRadians * (1.0f - phase);
+        }
+
+        if (t >= 1.0f) {
+            m_fallRollActive = false;
+            m_fallRollCurrentRadians = 0.0f;
+        }
+    }
+
     m_postProcessRenderer.beginScene(m_window);
     m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
     m_dropRenderer.render(m_dropSystem, m_player.getCamera(), m_window);
@@ -141,6 +167,7 @@ void Game::renderFrame() {
 
     PostProcessEffects effects;
     effects.underwaterEnabled = m_player.isEyesInWater();
+    effects.screenRollRadians = m_fallRollCurrentRadians;
     m_postProcessRenderer.setEffects(effects);
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
@@ -284,7 +311,7 @@ void Game::run() {
         const auto audioEnd = std::chrono::steady_clock::now();
         const auto renderStart = std::chrono::steady_clock::now();
 #endif
-        renderFrame();
+        renderFrame(static_cast<float>(frameTime));
 #ifndef NDEBUG
         const auto renderEnd = std::chrono::steady_clock::now();
 

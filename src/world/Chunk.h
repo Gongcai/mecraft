@@ -17,6 +17,7 @@ struct BlockVertex {
     float u;
     float v;
     float normal;
+    float windWeight;
 };
 
 struct ChunkMesh {
