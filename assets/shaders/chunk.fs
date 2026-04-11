@@ -2,10 +2,12 @@
 out vec4 FragColor;
 
 in vec2 vUV;
+in float vNormal;
 in float vFogDist;
 
 uniform sampler2D texAtlas;
 uniform int uForceBaseLod;
+uniform vec3 uGrassTintColor;
 uniform int uFogEnabled;
 uniform int uFogMode;
 uniform vec3 uFogColor;
@@ -34,6 +36,10 @@ void main() {
 
     if (texColor.a < 0.1)
         discard;
+
+    if (vNormal < 0.0) {
+        texColor.rgb *= uGrassTintColor;
+    }
 
     if (uFogEnabled == 0) {
         FragColor = texColor;

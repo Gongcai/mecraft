@@ -157,6 +157,28 @@ void ChunkMesh::upload(const std::vector<BlockVertex>& vertices) {
     glBindVertexArray(0);
 }
 
+void ChunkMesh::uploadCutout(const std::vector<BlockVertex>& cutoutVerts) {
+    cutoutVertexCount = static_cast<uint32_t>(cutoutVerts.size());
+
+    if (cutoutVao == 0) {
+        glGenVertexArrays(1, &cutoutVao);
+    }
+    if (cutoutVbo == 0) {
+        glGenBuffers(1, &cutoutVbo);
+    }
+
+    glBindVertexArray(cutoutVao);
+    glBindBuffer(GL_ARRAY_BUFFER, cutoutVbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(cutoutVerts.size() * sizeof(BlockVertex)),
+                 cutoutVerts.empty() ? nullptr : cutoutVerts.data(),
+                 GL_STATIC_DRAW);
+    setupVertexLayout();
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
 void ChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparentVerts) {
     transparentVertexCount = static_cast<uint32_t>(transparentVerts.size());
 
@@ -196,9 +218,18 @@ void ChunkMesh::destroy() {
         glDeleteVertexArrays(1, &transparentVao);
         transparentVao = 0;
     }
+    if (cutoutVbo != 0) {
+        glDeleteBuffers(1, &cutoutVbo);
+        cutoutVbo = 0;
+    }
+    if (cutoutVao != 0) {
+        glDeleteVertexArrays(1, &cutoutVao);
+        cutoutVao = 0;
+    }
 
     vertexCount = 0;
     transparentVertexCount = 0;
+    cutoutVertexCount = 0;
     hasBounds = false;
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);

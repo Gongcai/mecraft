@@ -9,8 +9,8 @@ Inventory::Inventory() {
     m_slots[4] = BlockType::WOOD;
     m_slots[5] = BlockType::GLASS;
     m_slots[6] = BlockType::COAL_ORE;
-    m_slots[7] = BlockType::DIAMOND_ORE;
-    m_slots[8] = BlockType::IRON_ORE;
+    m_slots[7] = BlockType::ROSE;
+    m_slots[8] = BlockType::TALL_GRASS;
 }
 
 void Inventory::setSelectedSlot(int slot) {

@@ -87,12 +87,22 @@ void Renderer::shutdown() {
         glDeleteVertexArrays(1, &m_breakOverlayVao);
         m_breakOverlayVao = 0;
     }
+    if (m_breakOverlayCrossVbo != 0) {
+        glDeleteBuffers(1, &m_breakOverlayCrossVbo);
+        m_breakOverlayCrossVbo = 0;
+    }
+    if (m_breakOverlayCrossVao != 0) {
+        glDeleteVertexArrays(1, &m_breakOverlayCrossVao);
+        m_breakOverlayCrossVao = 0;
+    }
+    m_breakOverlayVertexCount = 0;
+    m_breakOverlayCrossVertexCount = 0;
 }
 
 void Renderer::render(const World& world, const Camera &camera, const Window &window, const Player& player) {
     beginFrame(camera, window);
     renderWorld(world);
-    renderBlockBreakOverlay(player);
+    renderBlockBreakOverlay(world, player);
     renderBlockOutline(player);
     endFrame(window);
 }
@@ -257,9 +267,12 @@ void Renderer::renderWorld(const World& world) {
     bindChunkRenderState(world, atlas);
     submitMeshingJobs(world, atlas);
 
+    std::vector<Chunk*> cutoutChunks;
+    cutoutChunks.reserve(world.getActiveChunks().size());
     std::vector<Chunk*> transparentChunks;
     transparentChunks.reserve(world.getActiveChunks().size());
-    renderOpaqueChunksAndCollectTransparent(world, transparentChunks);
+    renderOpaqueChunksAndCollectPasses(world, cutoutChunks, transparentChunks);
+    renderCutoutChunks(cutoutChunks);
     renderTransparentChunks(transparentChunks);
 
     glBindVertexArray(0);
@@ -282,6 +295,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atla
     m_chunkShader->setMat4("view", m_view);
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
     m_chunkShader->setInt("texAtlas", 0);
+    m_chunkShader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
     m_chunkShader->setInt("uForceBaseLod", 0);
     m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
     m_chunkShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
@@ -319,7 +333,9 @@ void Renderer::submitMeshingJobs(const World& world, const TextureAtlas& atlas) 
     }
 }
 
-void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks) {
+void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
+                                                  std::vector<Chunk*>& cutoutChunks,
+                                                  std::vector<Chunk*>& transparentChunks) {
     const auto& activeChunks = world.getActiveChunks();
     const int regionChunkSize = std::max(1, m_regionChunkSize);
     const int modelLoc = m_chunkShader->getUniformLocation("model");
@@ -495,6 +511,10 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
                     ++drawCallCount;
                 }
 
+                if (mesh.cutoutVertexCount > 0) {
+                    cutoutChunks.push_back(entry.chunk);
+                }
+
                 if (mesh.transparentVertexCount > 0) {
                     transparentChunks.push_back(entry.chunk);
                 }
@@ -504,6 +524,37 @@ void Renderer::renderOpaqueChunksAndCollectTransparent(const World& world, std::
         }
 
         regionBegin = regionEnd;
+    }
+}
+
+void Renderer::renderCutoutChunks(const std::vector<Chunk*>& cutoutChunks) {
+    if (cutoutChunks.empty()) {
+        return;
+    }
+
+    const int modelLoc = m_chunkShader->getUniformLocation("model");
+
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+
+    for (Chunk* chunk : cutoutChunks) {
+        if (chunk == nullptr) {
+            continue;
+        }
+
+        const ChunkMesh& mesh = chunk->getMesh();
+        if (mesh.cutoutVertexCount == 0) {
+            continue;
+        }
+
+        glm::mat4 model(1.0f);
+        const glm::ivec3 offset = chunk->getWorldOffset();
+        model = glm::translate(model, glm::vec3(offset.x, offset.y, offset.z));
+        m_chunkShader->setMat4(modelLoc, model);
+
+        glBindVertexArray(mesh.cutoutVao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.cutoutVertexCount));
+        ++drawCallCount;
     }
 }
 
@@ -599,7 +650,7 @@ void Renderer::initOutlineMesh() {
 }
 
 void Renderer::initBreakOverlayMesh() {
-    if (m_breakOverlayVao != 0) {
+    if (m_breakOverlayVao != 0 && m_breakOverlayCrossVao != 0) {
         return;
     }
 
@@ -625,6 +676,15 @@ void Renderer::initBreakOverlayMesh() {
         0,0,0, 0,0,  1,0,1, 1,1,  0,0,1, 0,1
     };
 
+    constexpr std::array<float, 60> kBreakOverlayCrossVertices = {
+        // quad A
+        0.1464f,0.0f,0.1464f, 0,0,  0.8536f,0.0f,0.8536f, 1,0,  0.8536f,1.0f,0.8536f, 1,1,
+        0.1464f,0.0f,0.1464f, 0,0,  0.8536f,1.0f,0.8536f, 1,1,  0.1464f,1.0f,0.1464f, 0,1,
+        // quad B
+        0.8536f,0.0f,0.1464f, 0,0,  0.1464f,0.0f,0.8536f, 1,0,  0.1464f,1.0f,0.8536f, 1,1,
+        0.8536f,0.0f,0.1464f, 0,0,  0.1464f,1.0f,0.8536f, 1,1,  0.8536f,1.0f,0.1464f, 0,1
+    };
+
     glGenVertexArrays(1, &m_breakOverlayVao);
     glGenBuffers(1, &m_breakOverlayVbo);
 
@@ -637,6 +697,23 @@ void Renderer::initBreakOverlayMesh() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+
+    m_breakOverlayVertexCount = static_cast<GLsizei>(kBreakOverlayVertices.size() / 5);
+
+    glGenVertexArrays(1, &m_breakOverlayCrossVao);
+    glGenBuffers(1, &m_breakOverlayCrossVbo);
+
+    glBindVertexArray(m_breakOverlayCrossVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_breakOverlayCrossVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kBreakOverlayCrossVertices.size() * sizeof(float)),
+                 kBreakOverlayCrossVertices.data(), GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+
+    m_breakOverlayCrossVertexCount = static_cast<GLsizei>(kBreakOverlayCrossVertices.size() / 5);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -672,7 +749,7 @@ void Renderer::renderBlockOutline(const Player& player) {
     ++drawCallCount;
 }
 
-void Renderer::renderBlockBreakOverlay(const Player& player) {
+void Renderer::renderBlockBreakOverlay(const World& world, const Player& player) {
     if (m_breakOverlayShader == nullptr || m_breakOverlayVao == 0 || !player.hasBlockBreakProgress()) {
         return;
     }
@@ -683,6 +760,10 @@ void Renderer::renderBlockBreakOverlay(const Player& player) {
     }
 
     const glm::ivec3 target = player.getBreakTargetBlock();
+    const BlockID targetId = world.getBlock(target.x, target.y, target.z);
+    const BlockDef& targetDef = BlockRegistry::get(targetId);
+    const bool useCrossOverlay = (targetDef.renderShape == BlockRenderShape::Cross);
+
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(target) + glm::vec3(0.5f));
     model = glm::scale(model, glm::vec3(1.001f));
@@ -693,13 +774,14 @@ void Renderer::renderBlockBreakOverlay(const Player& player) {
     m_breakOverlayShader->setMat4("model", model);
     m_breakOverlayShader->setFloat("breakProgress", breakProgress);
     m_breakOverlayShader->setVec3("blockWorldPos", glm::vec3(target));
+    m_breakOverlayShader->setInt("uUseMeshUV", useCrossOverlay ? 1 : 0);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glBindVertexArray(m_breakOverlayVao);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(useCrossOverlay ? m_breakOverlayCrossVao : m_breakOverlayVao);
+    glDrawArrays(GL_TRIANGLES, 0, useCrossOverlay ? m_breakOverlayCrossVertexCount : m_breakOverlayVertexCount);
     glBindVertexArray(0);
 
     glDepthMask(GL_TRUE);
@@ -750,6 +832,7 @@ void Renderer::drainMeshingResults(const World& world) {
 
         ChunkMesh mesh;
         mesh.upload(result.meshData.opaqueVertices);
+        mesh.uploadCutout(result.meshData.cutoutVertices);
         mesh.uploadTransparent(result.meshData.transparentVertices);
         mesh.hasBounds = result.meshData.hasBounds;
         mesh.boundsMin = result.meshData.boundsMin;

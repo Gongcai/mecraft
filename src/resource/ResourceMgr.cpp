@@ -153,6 +153,54 @@ void drawFaceParallelogram(std::vector<unsigned char>& iconAtlasPixels,
         }
     }
 }
+
+void drawCrossPlantIcon(std::vector<unsigned char>& iconAtlasPixels,
+                        const int atlasWidth,
+                        const int atlasHeight,
+                        const TextureAtlas& srcAtlas,
+                        const std::vector<unsigned char>& srcPixels,
+                        const int tileIndex,
+                        const int iconOriginX,
+                        const int iconOriginY,
+                        const float unit,
+                        const bool useGrassTint) {
+    constexpr float kGrassTintR = 0.50f;
+    constexpr float kGrassTintG = 0.78f;
+    constexpr float kGrassTintB = 0.34f;
+
+    std::vector<unsigned char> tintedPixels;
+    if (useGrassTint) {
+        tintedPixels = srcPixels;
+        for (size_t i = 0; i + 3 < tintedPixels.size(); i += 4) {
+            tintedPixels[i + 0] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 0]) * kGrassTintR, 0.0f, 255.0f)));
+            tintedPixels[i + 1] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 1]) * kGrassTintG, 0.0f, 255.0f)));
+            tintedPixels[i + 2] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 2]) * kGrassTintB, 0.0f, 255.0f)));
+        }
+    }
+
+    const std::vector<unsigned char>& iconPixels = useGrassTint ? tintedPixels : srcPixels;
+
+    const Vec2f a1 { 8.0f * unit, 5.0f * unit };
+    const Vec2f b1 { 22.0f * unit, 11.0f * unit };
+    const Vec2f d1 { 8.0f * unit, 29.0f * unit };
+
+    const Vec2f a2 { 24.0f * unit, 5.0f * unit };
+    const Vec2f b2 { 10.0f * unit, 11.0f * unit };
+    const Vec2f d2 { 24.0f * unit, 29.0f * unit };
+
+    drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
+                          srcAtlas, iconPixels, tileIndex,
+                          iconOriginX, iconOriginY,
+                          a1, b1, d1,
+                          0.92f,
+                          false);
+    drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
+                          srcAtlas, iconPixels, tileIndex,
+                          iconOriginX, iconOriginY,
+                          a2, b2, d2,
+                          0.78f,
+                          false);
+}
 }
 
 std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
@@ -529,6 +577,32 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
         }
 
         const BlockDef& def = BlockRegistry::get(blockId);
+        if (def.renderShape == BlockRenderShape::Cross) {
+            int crossTex = def.texTop;
+            if (crossTex < 0) {
+                crossTex = def.texFront;
+            }
+            if (crossTex < 0) {
+                continue;
+            }
+
+            const int tileCol = id % tilesPerRow;
+            const int tileRow = id / tilesPerRow;
+            const int iconOriginX = tileCol * iconSize;
+            const int iconOriginY = tileRow * iconSize;
+            drawCrossPlantIcon(iconAtlasPixels,
+                               atlasWidth,
+                               atlasHeight,
+                               m_atlas,
+                               m_blockAtlasPixels,
+                               crossTex,
+                               iconOriginX,
+                               iconOriginY,
+                               unit,
+                               def.useGrassTint);
+            continue;
+        }
+
         int topTex = def.texTop;
         int rightTex = def.texRight;
         int leftTex = def.texFront;

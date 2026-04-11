@@ -27,20 +27,24 @@ void ParticleSystem::init(ResourceMgr& resourceMgr) {
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // Pre-allocate: MAX_PARTICLES * 6 vertices * 6 floats (pos3 + uv2 + alpha1)
-    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 6 * 6 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // Pre-allocate: MAX_PARTICLES * 6 vertices * 7 floats (pos3 + uv2 + alpha1 + tint1)
+    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
     // Position (location 0)
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), nullptr);
 
     // UV (location 1)
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
 
     // Alpha (location 2)
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(5 * sizeof(float)));
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(5 * sizeof(float)));
+
+    // Grass tint factor (location 3)
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(6 * sizeof(float)));
 
     glBindVertexArray(0);
 }
@@ -83,7 +87,7 @@ void ParticleSystem::emit(const glm::ivec3& blockPos, BlockID blockType) {
         float uSubMax = uSubMin + 0.5f * uRange;
         float vSubMax = vSubMin + 0.5f * vRange;
 
-        Particle p;
+        Particle p{};
         // Spawn within block volume
         p.position = glm::vec3(blockPos) + glm::vec3(
             randomFloat(0.2f, 0.8f),
@@ -99,6 +103,7 @@ void ParticleSystem::emit(const glm::ivec3& blockPos, BlockID blockType) {
         p.maxLife = randomFloat(0.4f, 0.8f);
         p.life = p.maxLife;
         p.size = randomFloat(0.06f, 0.14f);
+        p.grassTintFactor = blockDef.useGrassTint ? 1.0f : 0.0f;
         p.uvMin = glm::vec2(uSubMin, vSubMin);
         p.uvMax = glm::vec2(uSubMax, vSubMax);
 
@@ -134,11 +139,12 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
 
     // Build vertex data on CPU
     std::vector<float> vertices;
-    vertices.reserve(m_particles.size() * 36);
+    vertices.reserve(m_particles.size() * 42);
 
     for (const auto& p : m_particles) {
         float alpha = p.life / p.maxLife;
         float halfSize = p.size * 0.5f;
+        const float tintFactor = p.grassTintFactor;
 
         // Billboard quad corners
         glm::vec3 c0 = p.position - right * halfSize - up * halfSize; // bottom-left
@@ -151,33 +157,40 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
         vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
         vertices.push_back(p.uvMin.x); vertices.push_back(p.uvMin.y);
         vertices.push_back(alpha);
+        vertices.push_back(tintFactor);
         // c1
         vertices.push_back(c1.x); vertices.push_back(c1.y); vertices.push_back(c1.z);
         vertices.push_back(p.uvMax.x); vertices.push_back(p.uvMin.y);
         vertices.push_back(alpha);
+        vertices.push_back(tintFactor);
         // c2
         vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
         vertices.push_back(p.uvMax.x); vertices.push_back(p.uvMax.y);
         vertices.push_back(alpha);
+        vertices.push_back(tintFactor);
 
         // Triangle 2: c0, c2, c3
         // c0
         vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
         vertices.push_back(p.uvMin.x); vertices.push_back(p.uvMin.y);
         vertices.push_back(alpha);
+        vertices.push_back(tintFactor);
         // c2
         vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
         vertices.push_back(p.uvMax.x); vertices.push_back(p.uvMax.y);
         vertices.push_back(alpha);
+        vertices.push_back(tintFactor);
         // c3
         vertices.push_back(c3.x); vertices.push_back(c3.y); vertices.push_back(c3.z);
         vertices.push_back(p.uvMin.x); vertices.push_back(p.uvMax.y);
         vertices.push_back(alpha);
+        vertices.push_back(tintFactor);
     }
 
     m_shader->use();
     m_shader->setMat4("viewProj", projection * view);
     m_shader->setInt("texAtlas", 0);
+    m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_atlas->textureID);
@@ -190,7 +203,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 6));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 7));
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);

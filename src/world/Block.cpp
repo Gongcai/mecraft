@@ -40,6 +40,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].isSolid = true;
         s_blocks[i].isTransparent = false;
         s_blocks[i].isLightSource = false;
+        s_blocks[i].renderShape = BlockRenderShape::Cube;
+        s_blocks[i].useGrassTint = false;
         s_blocks[i].lightLevel = 0;
         setAllFaces(s_blocks[i], 0);
     }
@@ -111,6 +113,13 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("isSelectable") && blockJson["isSelectable"].is_boolean()) {
             def.isSelectable = blockJson["isSelectable"].get<bool>();
+        }
+        if (blockJson.contains("renderShape") && blockJson["renderShape"].is_string()) {
+            const std::string renderShape = blockJson["renderShape"].get<std::string>();
+            def.renderShape = (renderShape == "cross") ? BlockRenderShape::Cross : BlockRenderShape::Cube;
+        }
+        if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
+            def.useGrassTint = blockJson["useGrassTint"].get<bool>();
         }
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {

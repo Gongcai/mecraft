@@ -16,6 +16,7 @@ struct Particle {
     float life;
     float maxLife;
     float size;
+    float grassTintFactor;
     glm::vec2 uvMin;
     glm::vec2 uvMax;
 };

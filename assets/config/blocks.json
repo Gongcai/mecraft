@@ -113,6 +113,30 @@
       "textures": {
         "all": "bedrock"
       }
+    },
+    {
+      "id": 13,
+      "name": "tall_grass",
+      "isSolid": false,
+      "isTransparent": true,
+      "timeToBreak": 80,
+      "renderShape": "cross",
+      "useGrassTint": true,
+      "textures": {
+        "all": "tall_grass_bottom"
+      }
+    },
+    {
+        "id": 14,
+        "name": "rose",
+        "isSolid": false,
+        "isTransparent": true,
+        "renderShape": "cross",
+        "useGrassTint": false,
+        "timeToBreak": 300,
+        "textures": {
+            "all": "rose_bush_bottom"
+        }
     }
   ]
 }

@@ -127,12 +127,15 @@ private:
     void renderWorld(const World& world);
     void bindChunkRenderState(const World& world, const TextureAtlas& atlas) const;
     void submitMeshingJobs(const World& world, const TextureAtlas& atlas);
-    void renderOpaqueChunksAndCollectTransparent(const World& world, std::vector<Chunk*>& transparentChunks);
+    void renderOpaqueChunksAndCollectPasses(const World& world,
+                                            std::vector<Chunk*>& cutoutChunks,
+                                            std::vector<Chunk*>& transparentChunks);
+    void renderCutoutChunks(const std::vector<Chunk*>& cutoutChunks);
     void renderTransparentChunks(const std::vector<Chunk*>& transparentChunks);
     void initOutlineMesh();
     void initBreakOverlayMesh();
     void renderBlockOutline(const Player& player);
-    void renderBlockBreakOverlay(const Player& player);
+    void renderBlockBreakOverlay(const World& world, const Player& player);
 #ifndef NDEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
@@ -155,6 +158,10 @@ private:
     GLuint m_outlineVbo = 0;
     GLuint m_breakOverlayVao = 0;
     GLuint m_breakOverlayVbo = 0;
+    GLsizei m_breakOverlayVertexCount = 0;
+    GLuint m_breakOverlayCrossVao = 0;
+    GLuint m_breakOverlayCrossVbo = 0;
+    GLsizei m_breakOverlayCrossVertexCount = 0;
 
     ChunkMeshingService m_meshingService;
     std::unordered_set<int64_t> m_meshingInFlight;

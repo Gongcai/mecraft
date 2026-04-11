@@ -31,6 +31,9 @@ constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
     {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}  // right (+x)
 }};
 
+constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
+constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
+
 constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
@@ -90,6 +93,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     m_shader->setMat4(viewProjLoc, viewProj);
     m_shader->setInt("texAtlas", 0);
     m_shader->setInt("uForceBaseLod", 0);
+    m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
@@ -142,6 +146,41 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     std::vector<BlockVertex> vertices;
     vertices.reserve(36);
 
+    if (def.renderShape == BlockRenderShape::Cross) {
+        int tileIndex = def.texTop;
+        if (tileIndex < 0) {
+            tileIndex = def.texFront;
+        }
+        if (tileIndex < 0) {
+            tileIndex = 0;
+        }
+
+        const auto uv = atlas.getUV(tileIndex);
+        const float uMin = uv.first.x;
+        const float vMin = uv.first.y;
+        const float uMax = uv.second.x;
+        const float vMax = uv.second.y;
+        const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+
+        const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
+            for (const int idx : kFaceIndices) {
+                const glm::vec3& pos = corners[idx];
+                const glm::vec2& uvCoord = quadUV[idx];
+                vertices.push_back({
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    uvCoord.x,
+                    uvCoord.y,
+                    def.useGrassTint ? -1.0f : 0.0f
+                });
+            }
+        };
+
+        emitQuad(kCrossQuadA);
+        emitQuad(kCrossQuadB);
+    } else {
+
     for (int face = 0; face < 6; ++face) {
         int tileIndex = getFaceTextureIndex(def, face);
         if (tileIndex < 0) {
@@ -167,6 +206,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                 static_cast<float>(face)
             });
         }
+    }
     }
 
     if (vertices.empty()) {

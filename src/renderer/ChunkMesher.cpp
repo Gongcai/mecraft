@@ -29,6 +29,9 @@ constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
     {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}  // right (+x)
 }};
 
+constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
+constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
+
 std::size_t toIndex(const int x, const int y, const int z) {
     return static_cast<std::size_t>(x) +
            static_cast<std::size_t>(z) * Chunk::SIZE_X +
@@ -143,6 +146,7 @@ ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
 ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, const TextureAtlas& atlas) {
     ChunkMeshData meshData;
     meshData.opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
+    meshData.cutoutVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
     meshData.transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
 
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
@@ -154,6 +158,17 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
                 }
 
                 const BlockDef& def = BlockRegistry::get(blockId);
+                if (def.renderShape == BlockRenderShape::Cross) {
+                    addCrossedQuads(meshData.cutoutVertices,
+                                    glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                    def,
+                                    atlas);
+                    expandBounds(meshData,
+                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                    continue;
+                }
+
                 const bool transparent = def.isTransparent;
 
                 for (int face = 0; face < 6; ++face) {
@@ -198,6 +213,7 @@ void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
     ChunkMeshData meshData = buildMeshData(snapshot, atlas);
     ChunkMesh mesh;
     mesh.upload(meshData.opaqueVertices);
+    mesh.uploadCutout(meshData.cutoutVertices);
     mesh.uploadTransparent(meshData.transparentVertices);
     mesh.hasBounds = meshData.hasBounds;
     mesh.boundsMin = meshData.boundsMin;
@@ -268,6 +284,43 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             static_cast<float>(face)
         });
     }
+}
+
+void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
+                                  const glm::vec3& pos,
+                                  const BlockDef& def,
+                                  const TextureAtlas& atlas) {
+    int tileIndex = def.texTop;
+    if (tileIndex < 0) {
+        tileIndex = 0;
+    }
+
+    const auto uv = atlas.getUV(tileIndex);
+    const float uMin = uv.first.x;
+    const float vMin = uv.first.y;
+    const float uMax = uv.second.x;
+    const float vMax = uv.second.y;
+
+    const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+    const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
+
+    const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
+        for (const int index : indices) {
+            const glm::vec3 local = corners[index];
+            const glm::vec2 uvCoord = quadUV[index];
+            vertices.push_back({
+                pos.x + local.x,
+                pos.y + local.y,
+                pos.z + local.z,
+                uvCoord.x,
+                uvCoord.y,
+                def.useGrassTint ? -1.0f : static_cast<float>(FACE_TOP)
+            });
+        }
+    };
+
+    emitQuad(kCrossQuadA);
+    emitQuad(kCrossQuadB);
 }
 
 

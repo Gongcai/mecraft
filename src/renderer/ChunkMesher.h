@@ -22,6 +22,7 @@ struct ChunkMeshingSnapshot {
 
 struct ChunkMeshData {
     std::vector<BlockVertex> opaqueVertices;
+    std::vector<BlockVertex> cutoutVertices;
     std::vector<BlockVertex> transparentVertices;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);
@@ -46,6 +47,11 @@ private:
                         int face,
                         const BlockDef& def,
                         const TextureAtlas& atlas);
+
+    static void addCrossedQuads(std::vector<BlockVertex>& vertices,
+                                const glm::vec3& pos,
+                                const BlockDef& def,
+                                const TextureAtlas& atlas);
 };
 
 #endif // MECRAFT_CHUNKMESHER_H

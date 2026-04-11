@@ -7,6 +7,7 @@ in vec3 vLocalPos;
 
 uniform float breakProgress;
 uniform vec3 blockWorldPos;
+uniform int uUseMeshUV;
 
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -89,7 +90,7 @@ void main() {
     float faceId;
     getFaceUV(vLocalPos, faceUV, faceId);
 
-    vec2 tileUV = clamp(faceUV, 0.0, 0.9999);
+    vec2 tileUV = clamp((uUseMeshUV != 0) ? vUV : faceUV, 0.0, 0.9999);
     vec2 cell = floor(tileUV * 16.0);
     vec2 cellCenter = (cell + 0.5) / 16.0;
 

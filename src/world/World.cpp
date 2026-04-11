@@ -234,6 +234,7 @@ size_t World::getTotalVertexCount() const {
     for (const auto& pair : m_chunks) {
         if (pair.second) {
             total += pair.second->getMesh().vertexCount;
+            total += pair.second->getMesh().cutoutVertexCount;
             total += pair.second->getMesh().transparentVertexCount;
         }
     }
