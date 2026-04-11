@@ -1,5 +1,25 @@
 cmake_minimum_required(VERSION 3.20) # 建议使用 3.20，4.1 尚未正式发布
 project(mecraft LANGUAGES C CXX)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(MSVC)
+        add_compile_options(/O2 /Oi /Ot /GL)
+        add_link_options(/LTCG)  # 全程序优化
+    else()
+        add_compile_options(-O2 -march=native -flto)
+        add_link_options(-flto)
+    endif()
+endif()
+
+# Debug模式选项
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(MSVC)
+        add_compile_options(/Od /Zi /DEBUG)
+    else()
+        add_compile_options(-O0 -g)
+    endif()
+endif()
+
 if (MSVC)
     add_compile_options(/utf-8)
 endif()
