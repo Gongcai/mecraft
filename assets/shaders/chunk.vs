@@ -4,18 +4,20 @@ layout (location = 1) in vec2 aUV;
 layout (location = 2) in float aNormal;
 
 uniform mat4 model;
+uniform mat4 view;
 uniform mat4 viewProj;
 
 out vec2 vUV;
 out float vNormal;
-out vec3 vWorldPos;
+out float vFogDist;
 
 void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
+    vec4 viewPos = view * worldPos;
     gl_Position = viewProj * worldPos;
 
     vUV = aUV;
     vNormal = aNormal;
-    vWorldPos = worldPos.xyz;
+    vFogDist = max(0.0, -viewPos.z);
 }
 

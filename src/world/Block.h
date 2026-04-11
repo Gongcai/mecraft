@@ -27,6 +27,7 @@ namespace BlockType {
     constexpr BlockID GOLD_ORE = 9;
     constexpr BlockID IRON_ORE = 10;
     constexpr BlockID WATER = 11;
+    constexpr BlockID BEDROCK = 12;
 
     constexpr BlockID COUNT = 255; // 预留255种方块类型（0-254有效）
 }

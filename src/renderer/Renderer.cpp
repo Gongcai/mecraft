@@ -57,6 +57,9 @@ Renderer::~Renderer() {
 void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkShader = resourceMgr.getShader("chunk");
+    if (m_chunkShader == nullptr) {
+        m_chunkShader = resourceMgr.getShader("chunk");
+    }
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
@@ -276,6 +279,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atla
     fogEnd = std::max(fogEnd, fogStart + 0.1f);
 
     m_chunkShader->use();
+    m_chunkShader->setMat4("view", m_view);
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
     m_chunkShader->setInt("texAtlas", 0);
     m_chunkShader->setInt("uForceBaseLod", 0);
@@ -285,7 +289,6 @@ void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atla
     m_chunkShader->setFloat("uFogStart", fogStart);
     m_chunkShader->setFloat("uFogEnd", fogEnd);
     m_chunkShader->setFloat("uFogDensity", m_fogSettings.density);
-    m_chunkShader->setVec3("uCameraPos", m_cameraPos);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);

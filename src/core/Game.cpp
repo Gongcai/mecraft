@@ -44,6 +44,7 @@ void Game::init(int width, int height, const char *title) {
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
+    m_renderer.setFogEnabled(true);
     m_dropRenderer.init(m_resourceMgr);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
@@ -85,12 +86,13 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     const auto inputStart = std::chrono::steady_clock::now();
 #endif
     m_input.update();
+    const InputSnapshot& inputSnapshot = m_input.snapshot();
 #ifndef NDEBUG
     const auto inputEnd = std::chrono::steady_clock::now();
     const auto stateStart = std::chrono::steady_clock::now();
 #endif
     accumulator -= fixedStep;
-    m_stateMachine.update(static_cast<float>(fixedStep), m_input.snapshot());
+    m_stateMachine.update(static_cast<float>(fixedStep), inputSnapshot);
 #ifndef NDEBUG
     const auto stateEnd = std::chrono::steady_clock::now();
     const auto particleStart = std::chrono::steady_clock::now();

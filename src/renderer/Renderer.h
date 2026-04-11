@@ -34,7 +34,7 @@ public:
         float endDistance = 260.0f;
         float density = 0.01f;
         bool autoDistanceByRenderDistance = true;
-        float autoStartOffsetChunks = -0.5f;
+        float autoStartOffsetChunks = -1.5f;
         float autoFadeWidthChunks = 1.5f;
     };
 

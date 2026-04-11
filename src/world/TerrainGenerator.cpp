@@ -541,7 +541,9 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 const int columnTop = std::max(surfaceY, m_seaLevel);
                 for (int y = 0; y <= columnTop; ++y) {
                     BlockID id = BlockType::AIR;
-                    if (y <= surfaceY) {
+                    if (y == 0) {
+                        id = BlockType::BEDROCK;
+                    } else if (y <= surfaceY) {
                         id = BlockType::STONE;
                         if (y == surfaceY) {
                             id = topBlock;

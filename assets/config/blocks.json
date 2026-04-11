@@ -104,6 +104,15 @@
         "textures": {
             "all": "water_still"
         }
+    },
+    {
+      "id": 12,
+      "name": "bedrock",
+      "isSelectable": false,
+      "timeToBreak": 65535,
+      "textures": {
+        "all": "bedrock"
+      }
     }
   ]
 }
