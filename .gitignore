@@ -3,4 +3,5 @@
 /cmake-build-release/
 /cmake-build-debug/
 /.vs/
+/.idea/
 /lighting-system-readme.md
