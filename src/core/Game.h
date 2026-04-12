@@ -32,6 +32,7 @@
 #include "../audio/AudioEngine.h"
 #include "../audio/BgmSystem.h"
 #include "../particle/ParticleSystem.h"
+#include "../crafting/CraftingSystem.h"
 class Game {
 public:
     Game();
@@ -59,6 +60,7 @@ private:
     ParticleSystem m_particleSystem;
     DropSystem m_dropSystem;
     UIRenderer    m_uiRenderer;
+    CraftingSystem m_craftingSystem;
     std::string m_lastSubmittedCommand;
 #ifndef NDEBUG
     Dashboard      m_dashboard;

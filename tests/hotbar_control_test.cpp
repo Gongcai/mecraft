@@ -13,6 +13,13 @@ int fail(const char* message) {
 int main() {
     HotbarControl hotbar;
 
+    if (!hotbar.isVisible()) {
+        return fail("hotbar should default to visible");
+    }
+    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Ignored) {
+        return fail("hotbar should ignore pointer input by default");
+    }
+
     const std::array<float, 4> bg{0.1f, 0.2f, 0.3f, 0.4f};
     const std::array<float, 4> border{0.5f, 0.6f, 0.7f, 0.8f};
     const std::array<float, 4> icon{0.9f, 0.7f, 0.5f, 0.3f};

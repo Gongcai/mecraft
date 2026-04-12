@@ -1,0 +1,355 @@
+#include "InventoryPanelControl.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <vector>
+
+#include <glad/glad.h>
+#include <glm/vec2.hpp>
+#include <glm/vec4.hpp>
+
+#include "../crafting/CraftingSystem.h"
+#include "../player/Inventory.h"
+#include "../renderer/Shader.h"
+#include "../resource/ResourceMgr.h"
+
+namespace {
+void addQuad(std::vector<float>& vertices,
+             const float x0,
+             const float y0,
+             const float x1,
+             const float y1,
+             const float u0,
+             const float v0,
+             const float u1,
+             const float v1)
+{
+    vertices.push_back(x0); vertices.push_back(y0); vertices.push_back(u0); vertices.push_back(v0);
+    vertices.push_back(x1); vertices.push_back(y0); vertices.push_back(u1); vertices.push_back(v0);
+    vertices.push_back(x1); vertices.push_back(y1); vertices.push_back(u1); vertices.push_back(v1);
+    vertices.push_back(x0); vertices.push_back(y0); vertices.push_back(u0); vertices.push_back(v0);
+    vertices.push_back(x1); vertices.push_back(y1); vertices.push_back(u1); vertices.push_back(v1);
+    vertices.push_back(x0); vertices.push_back(y1); vertices.push_back(u0); vertices.push_back(v1);
+}
+}
+
+void InventoryPanelControl::init(ResourceMgr& resourceMgr)
+{
+    m_resourceMgr = &resourceMgr;
+    m_inventoryShader = resourceMgr.getShader("inventory");
+
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    m_itemGrid.init(resourceMgr);
+    m_craftingGrid.init(resourceMgr);
+}
+
+void InventoryPanelControl::shutdown()
+{
+    if (m_vao != 0) {
+        glDeleteVertexArrays(1, &m_vao);
+        m_vao = 0;
+    }
+    if (m_vbo != 0) {
+        glDeleteBuffers(1, &m_vbo);
+        m_vbo = 0;
+    }
+
+    m_craftingGrid.shutdown();
+    m_itemGrid.shutdown();
+    m_inventory = nullptr;
+    m_craftingSystem = nullptr;
+    m_inventoryShader = nullptr;
+    m_resourceMgr = nullptr;
+}
+
+void InventoryPanelControl::render(const UIRenderContext& context) const
+{
+    if (!m_visible) {
+        return;
+    }
+
+    auto* self = const_cast<InventoryPanelControl*>(this);
+    self->m_cachedScreenWidth = context.screenWidth;
+    self->m_cachedScreenHeight = context.screenHeight;
+    self->syncSlotsFromInventory();
+
+    const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
+    self->syncCraftingGridPosition(panelRect);
+
+    // Update crafting result when visible
+    if (m_craftingSystem) {
+        self->m_craftingGrid.updateCraftingResult(*m_craftingSystem);
+    }
+
+    renderBackground(context);
+    m_craftingGrid.render(context);
+    m_itemGrid.render(context);
+    renderDraggedItem(context);
+}
+
+UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event)
+{
+    if (!m_visible) {
+        return UIEventResult::Ignored;
+    }
+    syncSlotsFromInventory();
+
+    const ResolvedPanelRect panelRect = resolvePanelRect(m_cachedScreenWidth, m_cachedScreenHeight);
+    syncCraftingGridPosition(panelRect);
+
+    // Crafting grid gets input priority (rendered on top)
+    UIEventResult result = m_craftingGrid.onInput(event);
+    if (result == UIEventResult::Consumed) {
+        // Clear inventory grid's activation to avoid stale state
+        m_itemGrid.clearLastActivatedIndex();
+        return result;
+    }
+    if (result == UIEventResult::Handled) {
+        return result;
+    }
+
+    result = m_itemGrid.onInput(event);
+    if (result == UIEventResult::Consumed) {
+        // Clear crafting grid's activation to avoid stale state
+        m_craftingGrid.clearActivation();
+    }
+    return result;
+}
+
+bool InventoryPanelControl::isVisible() const
+{
+    return m_visible;
+}
+
+void InventoryPanelControl::setVisible(bool visible)
+{
+    m_visible = visible;
+    m_itemGrid.setVisible(visible);
+    m_craftingGrid.setVisible(visible);
+}
+
+void InventoryPanelControl::setSlots(const Pickable::SlotInfo* slots, int count)
+{
+    m_useExternalSlots = true;
+    m_itemGrid.setSlots(slots, count);
+}
+
+void InventoryPanelControl::setInventorySource(const Inventory* inventory)
+{
+    m_inventory = inventory;
+    m_useExternalSlots = false;
+}
+
+void InventoryPanelControl::setLayout(const InventoryPanelLayout& layout)
+{
+    m_layout = layout;
+    m_craftingGrid.setLayout(layout.craftingGrid);
+    syncSlotsFromInventory();
+}
+
+const InventoryPanelLayout& InventoryPanelControl::getLayout() const
+{
+    return m_layout;
+}
+
+ItemGridControl& InventoryPanelControl::itemGrid()
+{
+    return m_itemGrid;
+}
+
+const ItemGridControl& InventoryPanelControl::itemGrid() const
+{
+    return m_itemGrid;
+}
+
+CraftingGridControl& InventoryPanelControl::craftingGrid()
+{
+    return m_craftingGrid;
+}
+
+const CraftingGridControl& InventoryPanelControl::craftingGrid() const
+{
+    return m_craftingGrid;
+}
+
+void InventoryPanelControl::setCraftingSystem(const CraftingSystem* craftingSystem)
+{
+    m_craftingSystem = craftingSystem;
+}
+
+void InventoryPanelControl::syncSlotsFromInventory()
+{
+    if (m_useExternalSlots) {
+        return;
+    }
+    if (!m_inventory) {
+        return;
+    }
+
+    const ResolvedPanelRect panelRect = resolvePanelRect(m_cachedScreenWidth, m_cachedScreenHeight);
+    const float scale = panelRect.scale;
+
+    std::array<Pickable::SlotInfo, Inventory::INVENTORY_SIZE> slots{};
+    const int baseX = static_cast<int>(std::lround(panelRect.x + m_layout.gridOffsetX * scale));
+    const int baseY = static_cast<int>(std::lround(panelRect.y + m_layout.gridOffsetY * scale));
+    const int slotSize = std::max(1, static_cast<int>(std::lround(m_layout.slotSize * scale)));
+    const int colStep = std::max(1, static_cast<int>(std::lround((m_layout.slotSize + m_layout.columnGap) * scale)));
+    const int rowStep = std::max(1, static_cast<int>(std::lround((m_layout.slotSize + m_layout.rowGap) * scale)));
+    const int extraRow4 = static_cast<int>(std::lround(m_layout.row4ExtraGap * scale));
+
+    int outIndex = 0;
+    for (int row = 0; row < Inventory::INVENTORY_ROWS; ++row) {
+        const int y = baseY + row * rowStep + (row >= 3 ? extraRow4 : 0);
+        for (int col = 0; col < Inventory::INVENTORY_COLUMNS; ++col) {
+            const int inventoryIndex = Inventory::toInventoryIndex(row, col);
+            slots[static_cast<size_t>(outIndex)] = {
+                baseX + col * colStep,
+                y,
+                slotSize,
+                static_cast<int>(m_inventory->getSlot(inventoryIndex))
+            };
+            ++outIndex;
+        }
+    }
+
+    m_itemGrid.setSlots(slots.data(), static_cast<int>(slots.size()));
+}
+
+void InventoryPanelControl::syncCraftingGridPosition(const ResolvedPanelRect& panelRect)
+{
+    m_craftingGrid.setPanelOrigin(panelRect.x, panelRect.y, panelRect.scale);
+    m_craftingGrid.setLayout(m_layout.craftingGrid);
+}
+
+void InventoryPanelControl::renderBackground(const UIRenderContext& context) const
+{
+    if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
+        return;
+    }
+    if (context.screenWidth <= 0 || context.screenHeight <= 0) {
+        return;
+    }
+
+    const unsigned int texture = m_resourceMgr->getGuiTexture("inventory");
+    if (texture == 0) {
+        return;
+    }
+
+    const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
+    const float x0 = panelRect.x;
+    const float y0 = panelRect.y;
+    const float x1 = panelRect.x + panelRect.width;
+    const float y1 = panelRect.y + panelRect.height;
+
+    const float vertices[] = {
+        x0, y0, 0.0f, 0.0f,
+        x1, y0, 1.0f, 0.0f,
+        x1, y1, 1.0f, 1.0f,
+        x0, y0, 0.0f, 0.0f,
+        x1, y1, 1.0f, 1.0f,
+        x0, y1, 0.0f, 1.0f,
+    };
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    m_inventoryShader->use();
+    m_inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight)));
+    m_inventoryShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    m_inventoryShader->setInt("uAtlas", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const
+{
+    if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_inventoryShader || !m_resourceMgr) {
+        return;
+    }
+
+    const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
+    if (itemIconAtlas.textureID == 0 || itemIconAtlas.tilesPerRow <= 0) {
+        return;
+    }
+
+    const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
+    const float iconSize = std::max(1.0f, m_layout.slotSize * panelRect.scale);
+    constexpr float kDragCursorOffsetPx = 1.0f;
+    const float x0 = context.pointerX + kDragCursorOffsetPx;
+    const float topY0 = context.pointerY + kDragCursorOffsetPx;
+    const float x1 = x0 + iconSize;
+    const float topY1 = topY0 + iconSize;
+    const float y0 = static_cast<float>(context.screenHeight) - topY1;
+    const float y1 = static_cast<float>(context.screenHeight) - topY0;
+
+    const auto uv = itemIconAtlas.getUV(context.draggedItemId);
+    std::vector<float> vertices;
+    vertices.reserve(24);
+    addQuad(vertices, x0, y0, x1, y1, uv.first.x, uv.first.y, uv.second.x, uv.second.y);
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    m_inventoryShader->use();
+    m_inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight)));
+    m_inventoryShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 0.95f));
+    m_inventoryShader->setInt("uAtlas", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+InventoryPanelControl::ResolvedPanelRect InventoryPanelControl::resolvePanelRect(const int screenWidth,
+                                                                                 const int screenHeight) const
+{
+    const int safeWidth = std::max(1, screenWidth);
+    const int safeHeight = std::max(1, screenHeight);
+    const float scale = std::max(0.1f, m_layout.panelScale);
+
+    ResolvedPanelRect rect;
+    rect.scale = scale;
+    rect.width = InventoryPanelLayout::kTextureWidth * scale;
+    rect.height = InventoryPanelLayout::kTextureHeight * scale;
+    rect.x = static_cast<float>(safeWidth) * m_layout.anchorX + m_layout.offsetX;
+    rect.y = static_cast<float>(safeHeight) * m_layout.anchorY + m_layout.offsetY;
+    return rect;
+}

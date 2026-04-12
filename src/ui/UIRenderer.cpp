@@ -1,6 +1,9 @@
 #include "UIRenderer.h"
 
+#include <glad/glad.h>
+
 #include "../core/Time.h"
+#include "../core/InputManager.h"
 #include "../core/Window.h"
 #include "../player/Inventory.h"
 #include "../resource/ResourceMgr.h"
@@ -14,14 +17,31 @@ UIRenderer::~UIRenderer()
 
 void UIRenderer::init(ResourceMgr& resourceMgr)
 {
+    m_resourceMgr = &resourceMgr;
     m_crosshair.init(resourceMgr);
+    m_text.init(resourceMgr);
 
     m_hotbar.init(resourceMgr);
-    m_pickable.init(resourceMgr);
-    m_text.init(resourceMgr);
+    m_hotbar.setVisible(true);
+    m_inventoryPanel.init(resourceMgr);
+    m_inventoryPanel.setVisible(false);
     m_commandInput.init(resourceMgr);
+    m_commandInput.setVisible(false);
     m_console.init(resourceMgr);
+    m_console.setVisible(true);
+    m_console.setTextRenderer(&m_text);
     m_console.setMaxLines(m_consoleMaxLines);
+
+    m_controls = {
+        &m_hotbar,
+        &m_inventoryPanel,
+        &m_console,
+        &m_commandInput,
+    };
+
+    for (IUIControl* control : m_controls) {
+        m_inputRouter.registerControl(control);
+    }
 }
 
 void UIRenderer::shutdown()
@@ -31,8 +51,12 @@ void UIRenderer::shutdown()
     m_console.shutdown();
     m_commandInput.shutdown();
     m_text.shutdown();
-    m_pickable.shutdown();
+    m_inputRouter.clear();
+    m_controls.clear();
+    m_inventoryPanel.shutdown();
     m_hotbar.shutdown();
+    m_commandInputRequested = false;
+    m_resourceMgr = nullptr;
 }
 
 void UIRenderer::setCrosshairSize(float size)
@@ -147,20 +171,135 @@ void UIRenderer::renderText(const std::string& text,
 
 void UIRenderer::renderCommandInputBox(const std::string& text)
 {
-    m_commandInput.render(text, m_text);
+    m_commandInput.setText(text);
+    m_commandInput.setVisible(true);
+    m_commandInputRequested = true;
 }
 
 void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
                                 float mouseX, float mouseY)
 {
-    m_pickable.render(slots, count, mouseX, mouseY);
+    if (!slots || count <= 0 || !m_resourceMgr) {
+        return;
+    }
+
+    const bool wasVisible = m_inventoryPanel.isVisible();
+    m_inventoryPanel.setVisible(true);
+    m_inventoryPanel.setSlots(slots, count);
+    static_cast<void>(m_inputRouter.route({UIInputEventType::PointerMove, mouseX, mouseY, 0}));
+    m_inventoryPanel.render(makeContextFromViewport());
+    m_inventoryPanel.setVisible(wasVisible);
 }
 
-void UIRenderer::render(const Window& window, const Inventory& inventory)
+UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
+{
+    return m_inputRouter.route(event);
+}
+
+void UIRenderer::setInventoryPanelVisible(bool visible)
+{
+    m_inventoryPanel.setVisible(visible);
+}
+
+void UIRenderer::setInventoryPanelLayout(const InventoryPanelLayout& layout)
+{
+    m_inventoryPanel.setLayout(layout);
+}
+
+const InventoryPanelLayout& UIRenderer::getInventoryPanelLayout() const
+{
+    return m_inventoryPanel.getLayout();
+}
+
+int UIRenderer::getInventoryPanelLastActivatedSlot() const
+{
+    return m_inventoryPanel.itemGrid().getLastActivatedIndex();
+}
+
+int UIRenderer::getInventoryPanelHoveredSlot() const
+{
+    return m_inventoryPanel.itemGrid().getHoveredIndex();
+}
+
+int UIRenderer::getCraftingGridLastActivatedSlot() const
+{
+    return m_inventoryPanel.craftingGrid().getLastActivatedSlot();
+}
+
+int UIRenderer::getCraftingGridHoveredSlot() const
+{
+    return m_inventoryPanel.craftingGrid().getHoveredSlot();
+}
+
+CraftingGridControl& UIRenderer::getCraftingGrid()
+{
+    return m_inventoryPanel.craftingGrid();
+}
+
+const CraftingGridControl& UIRenderer::getCraftingGrid() const
+{
+    return m_inventoryPanel.craftingGrid();
+}
+
+void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
+{
+    m_inventoryPanel.setCraftingSystem(craftingSystem);
+}
+
+void UIRenderer::render(const Window& window, const Inventory& inventory, const InputSnapshot& inputSnapshot)
 {
     m_crosshair.render(window);
-    m_hotbar.render(window, inventory);
-    m_console.render(Time::getRawTime(), m_text);
+    m_hotbar.setInventorySource(&inventory);
+    m_inventoryPanel.setInventorySource(&inventory);
+    m_commandInput.setVisible(m_commandInputRequested);
+    renderControls(makeContextFromWindow(window, inventory, inputSnapshot));
+    m_commandInputRequested = false;
+}
+
+UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
+                                                  const Inventory& inventory,
+                                                  const InputSnapshot& inputSnapshot) const
+{
+    UIRenderContext context;
+    context.screenWidth = window.getWidth();
+    context.screenHeight = window.getHeight();
+    context.timeSeconds = static_cast<float>(Time::getRawTime());
+    context.resourceMgr = m_resourceMgr;
+    context.inventory = &inventory;
+    context.textRenderer = &m_text;
+    context.commandInputText = &m_commandInput.getText();
+    context.commandInputVisible = m_commandInput.isVisible();
+    context.pointerX = inputSnapshot.mousePosition.x;
+    context.pointerY = inputSnapshot.mousePosition.y;
+    context.hasDraggedItem = inputSnapshot.draggedItem.active;
+    context.draggedItemId = inputSnapshot.draggedItem.itemId;
+    return context;
+}
+
+UIRenderContext UIRenderer::makeContextFromViewport() const
+{
+    GLint viewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    UIRenderContext context;
+    context.screenWidth = viewport[2];
+    context.screenHeight = viewport[3];
+    context.timeSeconds = static_cast<float>(Time::getRawTime());
+    context.resourceMgr = m_resourceMgr;
+    context.textRenderer = &m_text;
+    context.commandInputText = &m_commandInput.getText();
+    context.commandInputVisible = m_commandInput.isVisible();
+    return context;
+}
+
+void UIRenderer::renderControls(const UIRenderContext& context) const
+{
+    for (const IUIControl* control : m_controls) {
+        if (!control || !control->isVisible()) {
+            continue;
+        }
+        control->render(context);
+    }
 }
 
 

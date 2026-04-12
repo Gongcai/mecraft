@@ -137,6 +137,131 @@
         "textures": {
             "all": "rose_bush_bottom"
         }
+    },
+    {
+        "id": 15,
+        "name": "oak_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "oak_planks"
+        }
+    },
+    {
+        "id": 16,
+        "name": "spruce_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "spruce_planks"
+        }
+    },
+    {
+        "id": 17,
+        "name": "birch_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "birch_planks"
+        }
+    },
+    {
+        "id": 18,
+        "name": "jungle_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "jungle_planks"
+        }
+    },
+    {
+        "id": 19,
+        "name": "acacia_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "acacia_planks"
+        }
+    },
+    {
+        "id": 20,
+        "name": "dark_oak_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "dark_oak_planks"
+        }
+    },
+    {
+        "id": 21,
+        "name": "mangrove_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "mangrove_planks"
+        }
+    },
+    {
+        "id": 22,
+        "name": "cherry_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "cherry_planks"
+        }
+    },
+    {
+        "id": 23,
+        "name": "pale_oak_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "pale_oak_planks"
+        }
+    },
+    {
+        "id": 24,
+        "name": "bamboo_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "bamboo_planks"
+        }
+    },
+    {
+        "id": 25,
+        "name": "crimson_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "crimson_planks"
+        }
+    },
+    {
+        "id": 26,
+        "name": "warped_planks",
+        "timeToBreak": 1000,
+        "textures": {
+            "all": "warped_planks"
+        }
+    },
+    {
+        "id": 27,
+        "name": "birch_log",
+        "timeToBreak": 1000,
+        "textures": {
+            "top": "birch_log_top",
+            "bottom": "birch_log_top",
+            "side": "birch_log"
+        }
+    },
+    {
+        "id": 28,
+        "name": "blue_wool",
+        "timeToBreak": 200,
+        "textures": {
+            "all": "blue_wool"
+        }
+    },
+    {
+        "id": 29,
+        "name": "brown_mushroom",
+        "isSolid": false,
+        "isTransparent": true,
+        "renderShape": "cross",
+        "timeToBreak": 10,
+        "textures": {
+            "all": "brown_mushroom"
+        }
     }
   ]
 }

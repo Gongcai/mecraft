@@ -70,6 +70,40 @@ void ConsoleOverlay::setMaxLines(std::size_t maxLines)
     m_display.setMaxLines(maxLines);
 }
 
+void ConsoleOverlay::setTextRenderer(const TextRenderer* textRenderer)
+{
+    m_textRenderer = textRenderer;
+}
+
+void ConsoleOverlay::setVisible(bool visible)
+{
+    m_visible = visible;
+}
+
+bool ConsoleOverlay::isVisible() const
+{
+    return m_visible;
+}
+
+UIEventResult ConsoleOverlay::onInput(const UIInputEvent&)
+{
+    return UIEventResult::Ignored;
+}
+
+void ConsoleOverlay::render(const UIRenderContext& context) const
+{
+    if (!m_visible) {
+        return;
+    }
+
+    const TextRenderer* textRenderer = context.textRenderer ? context.textRenderer : m_textRenderer;
+    if (!textRenderer) {
+        return;
+    }
+
+    render(static_cast<double>(context.timeSeconds), *textRenderer);
+}
+
 void ConsoleOverlay::drawOverlayRect(int screenW,
                                      int screenH,
                                      int x,
@@ -112,6 +146,10 @@ void ConsoleOverlay::drawOverlayRect(int screenW,
 
 void ConsoleOverlay::render(double nowSec, const TextRenderer& textRenderer) const
 {
+    if (!m_visible) {
+        return;
+    }
+
     if (m_display.empty()) {
         return;
     }

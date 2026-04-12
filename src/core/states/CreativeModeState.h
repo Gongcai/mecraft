@@ -31,7 +31,8 @@ public:
                             audioEngine,
                             particleSystem,
                             dropSystem,
-                            CreativeModeRules::instance()) {}
+                            CreativeModeRules::instance(),
+                            GameplayMode::Creative) {}
 };
 
 #endif //MECRAFT_CREATIVEMODESTATE_H

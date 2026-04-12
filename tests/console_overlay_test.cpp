@@ -15,6 +15,13 @@ int main() {
     ConsoleOverlay console;
     TextRenderer textRenderer;
 
+    if (!console.isVisible()) {
+        return fail("console should default to visible");
+    }
+    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Ignored) {
+        return fail("console should ignore pointer input");
+    }
+
     if (!console.empty()) {
         return fail("console should start empty");
     }

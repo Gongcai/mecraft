@@ -24,6 +24,43 @@ void HotbarControl::shutdown()
     cleanupMesh();
     m_inventoryShader = nullptr;
     m_resourceMgr = nullptr;
+    m_inventory = nullptr;
+}
+
+void HotbarControl::setInventorySource(const Inventory* inventory)
+{
+    m_inventory = inventory;
+}
+
+void HotbarControl::setVisible(bool visible)
+{
+    m_visible = visible;
+}
+
+bool HotbarControl::isVisible() const
+{
+    return m_visible;
+}
+
+UIEventResult HotbarControl::onInput(const UIInputEvent&)
+{
+    return UIEventResult::Ignored;
+}
+
+void HotbarControl::render(const UIRenderContext& context) const
+{
+    if (!m_visible) {
+        return;
+    }
+
+    const Inventory* inventory = context.inventory ? context.inventory : m_inventory;
+    if (!inventory || context.screenWidth <= 0 || context.screenHeight <= 0) {
+        return;
+    }
+
+    renderInternal(static_cast<float>(context.screenWidth),
+                   static_cast<float>(context.screenHeight),
+                   *inventory);
 }
 
 void HotbarControl::initMesh()
@@ -88,12 +125,20 @@ const std::array<float, 4>& HotbarControl::getIconTintColor() const
 
 void HotbarControl::render(const Window& window, const Inventory& inventory) const
 {
-    if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
+    if (!m_visible) {
         return;
     }
 
-    const auto screenW = static_cast<float>(window.getWidth());
-    const auto screenH = static_cast<float>(window.getHeight());
+    renderInternal(static_cast<float>(window.getWidth()),
+                   static_cast<float>(window.getHeight()),
+                   inventory);
+}
+
+void HotbarControl::renderInternal(float screenW, float screenH, const Inventory& inventory) const
+{
+    if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
+        return;
+    }
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const GLuint widgetsTexture = m_resourceMgr->getGuiTexture("widgets");

@@ -9,12 +9,23 @@ class ResourceMgr;
 class Shader;
 class TextRenderer;
 
-class CommandInputOverlay
+#include "IUIControl.h"
+
+class CommandInputOverlay : public IUIControl
 {
 public:
-    void init(ResourceMgr& resourceMgr);
-    void shutdown();
+    void init(ResourceMgr& resourceMgr) override;
+    void shutdown() override;
 
+    void render(const UIRenderContext& context) const override;
+    UIEventResult onInput(const UIInputEvent& event) override;
+    [[nodiscard]] bool isVisible() const override;
+
+    void setVisible(bool visible);
+    void setText(std::string text);
+    [[nodiscard]] const std::string& getText() const;
+
+    // Backward-compatible API.
     void render(const std::string& text, const TextRenderer& textRenderer) const;
 
     void setCaretBlinkPeriodMs(float periodMs);
@@ -62,5 +73,8 @@ private:
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
     float m_caretBlinkPeriodMs = 530.0f;
+    bool m_visible = false;
+    std::string m_text;
+    const TextRenderer* m_textRenderer = nullptr;
 };
 

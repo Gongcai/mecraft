@@ -52,6 +52,8 @@ void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &r
     showPerformanceStats(world, render, profilerStats);
     showCrosshairSettings(uiRenderer);
     showHotbarSettings(uiRenderer);
+    showInventoryPanelSettings(uiRenderer);
+    showCraftingGridSettings(uiRenderer);
     showTextSettings(uiRenderer);
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
@@ -413,6 +415,61 @@ void Dashboard::showHotbarSettings(UIRenderer& uiRenderer) {
     float icon[4] = { iconTint[0], iconTint[1], iconTint[2], iconTint[3] };
     if (ImGui::ColorEdit4("Icon Tint Color", icon)) {
         uiRenderer.setHotbarIconTintColor({ icon[0], icon[1], icon[2], icon[3] });
+    }
+
+    ImGui::End();
+}
+
+void Dashboard::showInventoryPanelSettings(UIRenderer& uiRenderer) {
+    ImGui::Begin("Inventory Panel Settings");
+
+    InventoryPanelLayout layout = uiRenderer.getInventoryPanelLayout();
+    bool changed = false;
+
+    changed |= ImGui::SliderFloat("Anchor X", &layout.anchorX, 0.0f, 1.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Anchor Y", &layout.anchorY, 0.0f, 1.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Offset X", &layout.offsetX, -1200.0f, 1200.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Offset Y", &layout.offsetY, -1200.0f, 1200.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Panel Scale", &layout.panelScale, 0.5f, 4.0f, "%.2f");
+    ImGui::Text("Texture Base: %.0fx%.0f", InventoryPanelLayout::kTextureWidth, InventoryPanelLayout::kTextureHeight);
+    ImGui::Separator();
+    changed |= ImGui::SliderFloat("Grid Offset X", &layout.gridOffsetX, -40.0f, 120.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Grid Offset Y", &layout.gridOffsetY, -40.0f, 120.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Slot Size", &layout.slotSize, 6.0f, 36.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Column Gap", &layout.columnGap, -4.0f, 16.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Row Gap", &layout.rowGap, -4.0f, 16.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Row4 Extra Gap", &layout.row4ExtraGap, -4.0f, 40.0f, "%.1f");
+
+    if (changed) {
+        uiRenderer.setInventoryPanelLayout(layout);
+    }
+
+    ImGui::End();
+}
+
+void Dashboard::showCraftingGridSettings(UIRenderer& uiRenderer) {
+    ImGui::Begin("Crafting Grid Settings");
+
+    InventoryPanelLayout panelLayout = uiRenderer.getInventoryPanelLayout();
+    CraftingGridLayout craftLayout = panelLayout.craftingGrid;
+    bool changed = false;
+
+    ImGui::Text("2x2 Crafting Grid");
+    changed |= ImGui::SliderFloat("Craft Offset X", &craftLayout.offsetX, -40.0f, 170.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Craft Offset Y", &craftLayout.offsetY, -40.0f, 170.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Craft Slot Size", &craftLayout.slotSize, 6.0f, 36.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Craft Column Gap", &craftLayout.columnGap, -4.0f, 16.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Craft Row Gap", &craftLayout.rowGap, -4.0f, 16.0f, "%.1f");
+
+    ImGui::Separator();
+    ImGui::Text("Result Slot");
+    changed |= ImGui::SliderFloat("Result Offset X", &craftLayout.resultOffsetX, -40.0f, 170.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Result Offset Y", &craftLayout.resultOffsetY, -40.0f, 170.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Result Slot Size", &craftLayout.resultSlotSize, 6.0f, 36.0f, "%.1f");
+
+    if (changed) {
+        panelLayout.craftingGrid = craftLayout;
+        uiRenderer.setInventoryPanelLayout(panelLayout);
     }
 
     ImGui::End();

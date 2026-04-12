@@ -7,6 +7,7 @@
 #include "../GameStateMachine.h"
 #include "../InputContextManager.h"
 #include "GameplayModeRules.h"
+#include "InventoryState.h"
 #include "../../player/Player.h"
 #include "../../world/World.h"
 #include "../../world/Block.h"
@@ -33,13 +34,15 @@ public:
                   AudioEngine& audioEngine,
                   ParticleSystem& particleSystem,
                   DropSystem& dropSystem,
-                  const IGameplayModeRules& modeRules = SurvivalModeRules::instance())
+                  const IGameplayModeRules& modeRules = SurvivalModeRules::instance(),
+                  GameplayMode gameplayMode = GameplayMode::Survival)
             : m_fsm(fsm), m_player(player), m_context(ctx), m_input(input),
               m_uiRenderer(uiRenderer), m_lastSubmittedCommand(lastSubmittedCommand),
               m_physicsSystem(physicsSystem), m_world(world),
               m_audioEngine(audioEngine), m_particleSystem(particleSystem),
               m_dropSystem(dropSystem),
-              m_modeRules(modeRules) {}
+              m_modeRules(modeRules),
+              m_gameplayMode(gameplayMode) {}
 
     void onEnter() override {
         // Ensure we are in Gameplay context
@@ -49,12 +52,18 @@ public:
         }
         // Gameplay requires to be captured mouse
         m_input.captureMouse(true);
+        m_uiRenderer.setInventoryPanelVisible(false);
+        m_input.clearUIDragItem();
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
         updatePlaceCooldown(dt);
         updateCreativeBreakCooldown(dt);
         handleHotbarInput();
+        if (handleInventoryTransition()) {
+            resetBlockBreakSession();
+            return;
+        }
         if (handleCommandTransition()) {
             resetBlockBreakSession();
             return;
@@ -119,6 +128,21 @@ private:
         if (m_context.isActionTriggered(Action::HotbarScrollDown)) {
             m_player.getInventory().scrollSlot(1);
         }
+    }
+
+    bool handleInventoryTransition() {
+        if (!m_context.isActionTriggered(Action::Inventory)) {
+            return false;
+        }
+        m_fsm.pushState(std::make_unique<InventoryState>(
+            m_fsm,
+            m_player,
+            m_context,
+            m_input,
+            m_uiRenderer,
+            m_gameplayMode
+        ));
+        return true;
     }
 
     bool handleMenuTransition() {
@@ -299,6 +323,7 @@ private:
     ParticleSystem& m_particleSystem;
     DropSystem& m_dropSystem;
     const IGameplayModeRules& m_modeRules;
+    GameplayMode m_gameplayMode = GameplayMode::Survival;
     float m_placeCooldownRemaining = 0.0f;
     BlockBreakSession m_blockBreakSession;
     float m_creativeBreakCooldownRemaining = 0.0f;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
@@ -53,6 +54,49 @@ void CommandInputOverlay::shutdown()
         m_vbo = 0;
     }
     m_crosshairShader = nullptr;
+    m_textRenderer = nullptr;
+    m_text.clear();
+}
+
+UIEventResult CommandInputOverlay::onInput(const UIInputEvent&)
+{
+    return UIEventResult::Ignored;
+}
+
+bool CommandInputOverlay::isVisible() const
+{
+    return m_visible;
+}
+
+void CommandInputOverlay::setVisible(bool visible)
+{
+    m_visible = visible;
+}
+
+void CommandInputOverlay::setText(std::string text)
+{
+    m_text = std::move(text);
+}
+
+const std::string& CommandInputOverlay::getText() const
+{
+    return m_text;
+}
+
+void CommandInputOverlay::render(const UIRenderContext& context) const
+{
+    const bool visible = context.commandInputVisible || m_visible;
+    if (!visible) {
+        return;
+    }
+
+    const TextRenderer* textRenderer = context.textRenderer ? context.textRenderer : m_textRenderer;
+    if (!textRenderer) {
+        return;
+    }
+
+    const std::string* text = context.commandInputText ? context.commandInputText : &m_text;
+    render(*text, *textRenderer);
 }
 
 void CommandInputOverlay::setCaretBlinkPeriodMs(float periodMs)

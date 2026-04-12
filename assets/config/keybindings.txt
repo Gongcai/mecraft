@@ -4,6 +4,7 @@ Gameplay Crouch Keyboard LEFT_SHIFT Held -
 Gameplay Sprint Keyboard LEFT_CONTROL Held -
 Gameplay Attack Mouse LEFT Held -
 Gameplay UseItem Mouse RIGHT Held -
+Gameplay Inventory Keyboard E Pressed -
 Gameplay Menu Keyboard ESCAPE Pressed -
 Gameplay Hotbar1 Keyboard 1 Pressed -
 Gameplay Hotbar2 Keyboard 2 Pressed -
@@ -25,6 +26,15 @@ UI Confirm Keyboard KP_ENTER Pressed -
 UI Backspace Keyboard BACKSPACE Held -
 UI Up Keyboard UP Pressed -
 UI Down Keyboard DOWN Pressed -
+UI Hotbar1 Keyboard 1 Pressed -
+UI Hotbar2 Keyboard 2 Pressed -
+UI Hotbar3 Keyboard 3 Pressed -
+UI Hotbar4 Keyboard 4 Pressed -
+UI Hotbar5 Keyboard 5 Pressed -
+UI Hotbar6 Keyboard 6 Pressed -
+UI Hotbar7 Keyboard 7 Pressed -
+UI Hotbar8 Keyboard 8 Pressed -
+UI Hotbar9 Keyboard 9 Pressed -
 
 
 Axis Gameplay Vertical Keyboard W S

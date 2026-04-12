@@ -31,6 +31,21 @@ namespace BlockType {
     constexpr BlockID TALL_GRASS = 13;
     constexpr BlockID ROSE = 14;
     constexpr BlockID RED_FLOWER = ROSE;
+    constexpr BlockID OAK_PLANKS = 15;
+    constexpr BlockID SPRUCE_PLANKS = 16;
+    constexpr BlockID BIRCH_PLANKS = 17;
+    constexpr BlockID JUNGLE_PLANKS = 18;
+    constexpr BlockID ACACIA_PLANKS = 19;
+    constexpr BlockID DARK_OAK_PLANKS = 20;
+    constexpr BlockID MANGROVE_PLANKS = 21;
+    constexpr BlockID CHERRY_PLANKS = 22;
+    constexpr BlockID PALE_OAK_PLANKS = 23;
+    constexpr BlockID BAMBOO_PLANKS = 24;
+    constexpr BlockID CRIMSON_PLANKS = 25;
+    constexpr BlockID WARPED_PLANKS = 26;
+    constexpr BlockID BIRCH_LOG = 27;
+    constexpr BlockID BLUE_WOOL = 28;
+    constexpr BlockID BROWN_MUSHROOM = 29;
 
     constexpr BlockID COUNT = 255; // 预留255种方块类型（0-254有效）
 }

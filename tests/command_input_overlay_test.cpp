@@ -15,6 +15,17 @@ int main() {
     CommandInputOverlay overlay;
     TextRenderer textRenderer;
 
+    if (overlay.isVisible()) {
+        return fail("command input should default to hidden");
+    }
+    overlay.setText("/help");
+    if (overlay.getText() != "/help") {
+        return fail("command input text setter/getter mismatch");
+    }
+    if (overlay.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Ignored) {
+        return fail("command input overlay should ignore pointer input");
+    }
+
     overlay.setCaretBlinkPeriodMs(1.0f);
     if (overlay.getCaretBlinkPeriodMs() != 120.0f) {
         return fail("caret period should clamp to minimum");

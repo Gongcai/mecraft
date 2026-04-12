@@ -34,6 +34,7 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
+    m_resourceMgr.loadGuiTexture("inventory", "../assets/textures/gui/inventory.png", true);
     m_resourceMgr.loadGuiTexture("font_ascii", "../assets/textures/font/ascii.png", true);
     BlockRegistry::init(&m_resourceMgr);
     m_resourceMgr.buildBlockIconAtlas(64);
@@ -55,6 +56,9 @@ void Game::init(int width, int height, const char *title) {
     m_bgmSystem.init(m_audioEngine);
     // 初始化UI渲染器
     m_uiRenderer.init(m_resourceMgr);
+    // 初始化合成系统
+    m_craftingSystem.loadRecipes("../assets/config/recipes.json");
+    m_uiRenderer.setCraftingSystem(&m_craftingSystem);
     // Push initial Gameplay state
     m_stateMachine.pushState(std::make_unique<GameplayState>(
         m_stateMachine,
@@ -171,7 +175,7 @@ void Game::renderFrame(const float frameTime) {
     m_postProcessRenderer.setEffects(effects);
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
-    m_uiRenderer.render(m_window, m_player.getInventory());
+    m_uiRenderer.render(m_window, m_player.getInventory(), m_input.snapshot());
     m_stateMachine.render();
 #ifndef NDEBUG
     m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer,

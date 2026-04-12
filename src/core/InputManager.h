@@ -35,6 +35,14 @@ struct InputSnapshot {
     std::array<uint32_t, kMaxTypedCharsPerFrame> typedChars{};
     size_t typedCharCount = 0;
 
+    struct UIDragPayload {
+        bool active = false;
+        int itemId = 0;
+        int sourceSlot = -1;
+        glm::vec2 pointerPosition{0.0f, 0.0f};
+    };
+    UIDragPayload draggedItem{};
+
     [[nodiscard]] bool isKeyHeld(int key) const;
     [[nodiscard]] bool isKeyJustPressed(int key) const;
     [[nodiscard]] bool isKeyJustReleased(int key) const;
@@ -57,6 +65,11 @@ public:
     // ── 鼠标模式 ──
     void captureMouse(bool capture);       // true → GLFW_CURSOR_DISABLED
     void resetMouseDelta();              // 重置鼠标位移
+
+    // Shared UI drag payload channel for inventory/other UI systems.
+    void beginUIDragItem(int itemId, int sourceSlot);
+    void clearUIDragItem();
+    [[nodiscard]] const InputSnapshot::UIDragPayload& getUIDragItem() const;
 private:
     GLFWwindow* m_handle = nullptr;
 
@@ -94,6 +107,7 @@ private:
     size_t m_typedCharCount = 0;
 
     InputSnapshot m_snapshot{};
+    InputSnapshot::UIDragPayload m_draggedItem{};
 
     static InputManager* fromWindow(GLFWwindow* w);
 

@@ -57,6 +57,8 @@ private:
     void showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
+    void showInventoryPanelSettings(UIRenderer& uiRenderer);
+    void showCraftingGridSettings(UIRenderer& uiRenderer);
     void showTextSettings(UIRenderer& uiRenderer);
 };
 

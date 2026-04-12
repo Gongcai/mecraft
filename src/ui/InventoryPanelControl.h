@@ -1,0 +1,92 @@
+#pragma once
+
+#include <array>
+
+#include "CraftingGridControl.h"
+#include "IUIControl.h"
+#include "ItemGridControl.h"
+
+class Inventory;
+class Shader;
+class CraftingSystem;
+
+struct InventoryPanelLayout {
+    static constexpr float kTextureWidth = 176.0f;
+    static constexpr float kTextureHeight = 166.0f;
+
+    // Anchor is normalized to current screen size (0..1).
+    float anchorX = 0.5f;
+    float anchorY = 0.5f;
+    // Pixel offset from anchored top-left position.
+    float offsetX = -176.0f;
+    float offsetY = -166.0f;
+    // Uniform scale based on 176x166 source texture.
+    float panelScale = 2.0f;
+
+    // Inventory grid layout in source-texture design pixels (scaled by panelScale).
+    float gridOffsetX = 6.8f;
+    float gridOffsetY = 81.7f;
+    float slotSize = 18.0f;
+    float columnGap = 0.0f;
+    float rowGap = 0.0f;
+    float row4ExtraGap = 4.0f;
+
+    // Crafting grid layout
+    CraftingGridLayout craftingGrid;
+};
+
+class InventoryPanelControl : public IUIControl {
+public:
+    void init(ResourceMgr& resourceMgr) override;
+    void shutdown() override;
+
+    void render(const UIRenderContext& context) const override;
+    UIEventResult onInput(const UIInputEvent& event) override;
+    [[nodiscard]] bool isVisible() const override;
+
+    void setVisible(bool visible);
+    void setSlots(const Pickable::SlotInfo* slots, int count);
+    void setInventorySource(const Inventory* inventory);
+    void setLayout(const InventoryPanelLayout& layout);
+    [[nodiscard]] const InventoryPanelLayout& getLayout() const;
+    [[nodiscard]] ItemGridControl& itemGrid();
+    [[nodiscard]] const ItemGridControl& itemGrid() const;
+
+    // Crafting grid access
+    [[nodiscard]] CraftingGridControl& craftingGrid();
+    [[nodiscard]] const CraftingGridControl& craftingGrid() const;
+
+    // Set the crafting system for recipe lookup
+    void setCraftingSystem(const CraftingSystem* craftingSystem);
+
+private:
+    struct ResolvedPanelRect {
+        float x = 0.0f;
+        float y = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
+        float scale = 1.0f;
+    };
+
+    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int screenWidth, int screenHeight) const;
+    void syncSlotsFromInventory();
+    void syncCraftingGridPosition(const ResolvedPanelRect& panelRect);
+    void renderBackground(const UIRenderContext& context) const;
+    void renderDraggedItem(const UIRenderContext& context) const;
+
+    bool m_visible = false;
+    const Inventory* m_inventory = nullptr;
+    const CraftingSystem* m_craftingSystem = nullptr;
+    InventoryPanelLayout m_layout;
+    ItemGridControl m_itemGrid;
+    CraftingGridControl m_craftingGrid;
+    bool m_useExternalSlots = false;
+
+    ResourceMgr* m_resourceMgr = nullptr;
+    Shader* m_inventoryShader = nullptr;
+    unsigned int m_vao = 0;
+    unsigned int m_vbo = 0;
+    int m_cachedScreenWidth = 1920;
+    int m_cachedScreenHeight = 1080;
+};
+

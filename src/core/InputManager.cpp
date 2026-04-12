@@ -94,6 +94,10 @@ void InputManager::update() {
     if (m_handle == nullptr) {
         m_mouseDeltaX = 0.0;
         m_mouseDeltaY = 0.0;
+        if (m_draggedItem.active) {
+            m_draggedItem.pointerPosition = m_snapshot.mousePosition;
+        }
+        m_snapshot.draggedItem = m_draggedItem;
         return;
     }
 
@@ -121,6 +125,10 @@ void InputManager::update() {
         static_cast<float>(m_mouseDeltaX),
         static_cast<float>(m_mouseDeltaY)
     };
+    if (m_draggedItem.active) {
+        m_draggedItem.pointerPosition = m_snapshot.mousePosition;
+    }
+    m_snapshot.draggedItem = m_draggedItem;
     m_snapshot.scrollDelta = m_accumScrollY;
     m_accumScrollY = 0.0;
 
@@ -180,6 +188,28 @@ void InputManager::resetMouseDelta() {
     m_accumScrollY = 0.0;
     // Ignore the first sample after reset/capture toggle to avoid spikes.
     m_firstMouse = true;
+}
+
+void InputManager::beginUIDragItem(const int itemId, const int sourceSlot) {
+    if (itemId <= 0) {
+        clearUIDragItem();
+        return;
+    }
+
+    m_draggedItem.active = true;
+    m_draggedItem.itemId = itemId;
+    m_draggedItem.sourceSlot = sourceSlot;
+    m_draggedItem.pointerPosition = {static_cast<float>(m_mouseX), static_cast<float>(m_mouseY)};
+    m_snapshot.draggedItem = m_draggedItem;
+}
+
+void InputManager::clearUIDragItem() {
+    m_draggedItem = {};
+    m_snapshot.draggedItem = m_draggedItem;
+}
+
+const InputSnapshot::UIDragPayload& InputManager::getUIDragItem() const {
+    return m_draggedItem;
 }
 
 void InputManager::keyCallback(GLFWwindow* w, int key, int /*scancode*/, int action, int /*mods*/) {

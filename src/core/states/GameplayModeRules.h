@@ -21,6 +21,11 @@ enum class GameplayBlockAction {
     Place
 };
 
+enum class GameplayMode {
+    Survival,
+    Creative
+};
+
 struct GameplayBlockActionRequest {
     bool hasHit = false;
     bool wantsBreak = false;

@@ -1,0 +1,59 @@
+{
+  "recipes": [
+    {
+      "comment": "橡木木板 x4 (原木 -> 木板)",
+      "pattern": ["W"],
+      "key": { "W": "5" },
+      "result": 15,
+      "resultCount": 4
+    },
+    {
+      "comment": "白桦木板 x4 (白桦原木 -> 木板)",
+      "pattern": ["W"],
+      "key": { "W": "27" },
+      "result": 17,
+      "resultCount": 4
+    },
+    {
+      "comment": "蓝色羊毛 x2 (沙子 + 沙子)",
+      "pattern": [
+        "S",
+        "S"
+      ],
+      "key": { "S": "4" },
+      "result": 28,
+      "resultCount": 2
+    },
+    {
+      "comment": "玻璃 x4 (沙子 2x2)",
+      "pattern": [
+        "SS",
+        "SS"
+      ],
+      "key": { "S": "4" },
+      "result": 6,
+      "resultCount": 4
+    },
+    {
+      "comment": "石砖 x4 (石头 2x2)",
+      "pattern": [
+        "SS",
+        "SS"
+      ],
+      "key": { "S": "3" },
+      "result": 3,
+      "resultCount": 4
+    },
+    {
+      "comment": "蘑菇方块 (蘑菇 3x3)",
+      "pattern": [
+        "MMM",
+        "MMM",
+        "MMM"
+      ],
+      "key": { "M": "29" },
+      "result": 29,
+      "resultCount": 1
+    }
+  ]
+}

@@ -3,19 +3,24 @@
 #include <array>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include "CommandInputOverlay.h"
 #include "ConsoleDisplayBox.h"
 #include "ConsoleOverlay.h"
 #include "CrosshairControl.h"
 #include "HotbarControl.h"
+#include "InventoryPanelControl.h"
 #include "Pickable.h"
-#include "PickableOverlay.h"
 #include "TextRenderer.h"
+#include "UIInputRouter.h"
+#include "UIRenderContext.h"
 
 class Window;
 class ResourceMgr;
 class Inventory;
+class CraftingSystem;
+ struct InputSnapshot;
 
 class UIRenderer
 {
@@ -26,9 +31,24 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
-    void render(const Window& window, const Inventory& inventory);
+    void render(const Window& window, const Inventory& inventory, const InputSnapshot& inputSnapshot);
     void renderCommandInputBox(const std::string& text);
     void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
+    [[nodiscard]] UIEventResult routeUIInput(const UIInputEvent& event) const;
+    void setInventoryPanelVisible(bool visible);
+    void setInventoryPanelLayout(const InventoryPanelLayout& layout);
+    [[nodiscard]] const InventoryPanelLayout& getInventoryPanelLayout() const;
+    [[nodiscard]] int getInventoryPanelLastActivatedSlot() const;
+    [[nodiscard]] int getInventoryPanelHoveredSlot() const;
+
+    // Crafting grid slot access
+    [[nodiscard]] int getCraftingGridLastActivatedSlot() const;
+    [[nodiscard]] int getCraftingGridHoveredSlot() const;
+    [[nodiscard]] CraftingGridControl& getCraftingGrid();
+    [[nodiscard]] const CraftingGridControl& getCraftingGrid() const;
+
+    // Crafting system connection
+    void setCraftingSystem(const CraftingSystem* craftingSystem);
 
     void appendCommandLine(const std::string& command);
     void appendOutputLine(const std::string& message,
@@ -67,13 +87,23 @@ public:
     [[nodiscard]] const std::array<float, 4>& getHotbarIconTintColor() const;
 
 private:
+    [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,
+                                                        const Inventory& inventory,
+                                                        const InputSnapshot& inputSnapshot) const;
+    [[nodiscard]] UIRenderContext makeContextFromViewport() const;
+    void renderControls(const UIRenderContext& context) const;
+
     CrosshairControl m_crosshair;
 
     HotbarControl m_hotbar;
-    PickableOverlay m_pickable;
+    InventoryPanelControl m_inventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;
     ConsoleOverlay m_console;
+    UIInputRouter m_inputRouter;
+    std::vector<IUIControl*> m_controls;
+    ResourceMgr* m_resourceMgr = nullptr;
+    bool m_commandInputRequested = false;
 
     std::size_t m_consoleMaxLines = 64;
 };
