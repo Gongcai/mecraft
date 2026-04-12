@@ -65,6 +65,18 @@ bool InputContextManager::isActionHeld(Action action) const {
     return isActionTriggered(action);
 }
 
+bool InputContextManager::isActionDoubleTapped(Action action) const {
+    const InputSnapshot& snapshot = m_inputManager.snapshot();
+    for (auto it = m_contextStack.rbegin(); it != m_contextStack.rend(); ++it) {
+        InputContextType context = *it;
+        // 检查该 context 下是否有 DoubleTap 绑定且触发
+        if (m_actionMap.isActionDoubleTapped(action, context, snapshot)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 float InputContextManager::getAxisValue(Axis axis) const {
     const InputSnapshot& snapshot = m_inputManager.snapshot(); // 内部自取
 
@@ -76,5 +88,16 @@ float InputContextManager::getAxisValue(Axis axis) const {
         }
     }
     return 0.0f;
+}
+
+float InputContextManager::getMouseX() const {
+    const InputSnapshot& snapshot = m_inputManager.snapshot(); // 内部自取
+    return snapshot.mousePosition.x;
+
+}
+
+float InputContextManager::getMouseY() const {
+    const InputSnapshot& snapshot = m_inputManager.snapshot(); // 内部自取
+    return snapshot.mousePosition.y;
 }
 

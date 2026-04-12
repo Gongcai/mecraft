@@ -17,14 +17,17 @@
 
 struct InputSnapshot {
     static constexpr size_t kMaxTypedCharsPerFrame = 64;
+    static constexpr double kDefaultDoubleTapTimeout = 0.3; // 双击最大间隔（秒）
 
     bool keys[GLFW_KEY_LAST + 1] = {};
     bool keysJustPressed[GLFW_KEY_LAST + 1] = {};
     bool keysJustReleased[GLFW_KEY_LAST + 1] = {};
+    bool keysDoubleTapped[GLFW_KEY_LAST + 1] = {};  // 本帧检测到键盘双击
 
     bool mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool mouseButtonsJustPressed[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool mouseButtonsJustReleased[GLFW_MOUSE_BUTTON_LAST + 1] = {};
+    bool mouseButtonsDoubleTapped[GLFW_MOUSE_BUTTON_LAST + 1] = {};  // 本帧检测到鼠标双击
 
     glm::vec2 mousePosition{0.0f, 0.0f};
     glm::vec2 mouseDelta{0.0f, 0.0f};
@@ -35,9 +38,11 @@ struct InputSnapshot {
     [[nodiscard]] bool isKeyHeld(int key) const;
     [[nodiscard]] bool isKeyJustPressed(int key) const;
     [[nodiscard]] bool isKeyJustReleased(int key) const;
+    [[nodiscard]] bool isKeyDoubleTapped(int key) const;
     [[nodiscard]] bool isMouseButtonHeld(int button) const;
     [[nodiscard]] bool isMouseButtonJustPressed(int button) const;
     [[nodiscard]] bool isMouseButtonJustReleased(int button) const;
+    [[nodiscard]] bool isMouseButtonDoubleTapped(int button) const;
 };
 
 class InputManager {
@@ -61,11 +66,18 @@ private:
     bool m_keysJustPressed[GLFW_KEY_LAST + 1] = {};
     bool m_keysJustReleased[GLFW_KEY_LAST + 1] = {};
 
+    // 键盘双击追踪
+    double m_keyLastPressTime[GLFW_KEY_LAST + 1] = {}; // 上次按下时的时间戳
+    double m_doubleTapTimeout = InputSnapshot::kDefaultDoubleTapTimeout;
+
     // 鼠标按键双缓冲
     bool m_mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool m_mouseButtonsPrev[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool m_mouseButtonsJustPressed[GLFW_MOUSE_BUTTON_LAST + 1] = {};
     bool m_mouseButtonsJustReleased[GLFW_MOUSE_BUTTON_LAST + 1] = {};
+
+    // 鼠标双击追踪
+    double m_mouseButtonLastPressTime[GLFW_MOUSE_BUTTON_LAST + 1] = {};
 
     // 鼠标位置
     double m_mouseX = 0.0;

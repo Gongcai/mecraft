@@ -16,6 +16,7 @@
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../audio/AudioEngine.h"
+#include "../../ui/Pickable.h"
 namespace physics {
 class PhysicsSystem;
 }
@@ -33,7 +34,8 @@ public:
                  World& world,
                  AudioEngine& audioEngine,
                  ParticleSystem& particleSystem,
-                 DropSystem& dropSystem)
+                 DropSystem& dropSystem
+                 )
         : m_fsm(fsm),
           m_context(context),
           m_input(input),
@@ -102,6 +104,8 @@ public:
             return;
         }
         m_uiRenderer.renderCommandInputBox(m_inputBox.getText());
+        Pickable::SlotInfo info{40,40,40,3};
+        m_uiRenderer.renderPickable(&info,1,m_context.getMouseX(),m_context.getMouseY());
     }
 
 private:

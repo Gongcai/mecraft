@@ -1,0 +1,39 @@
+#include <cstdlib>
+#include <iostream>
+
+#include "../src/ui/ConsoleOverlay.h"
+#include "../src/ui/TextRenderer.h"
+
+namespace {
+int fail(const char* message) {
+    std::cerr << "[console_overlay_test] FAIL: " << message << '\n';
+    return EXIT_FAILURE;
+}
+}
+
+int main() {
+    ConsoleOverlay console;
+    TextRenderer textRenderer;
+
+    if (!console.empty()) {
+        return fail("console should start empty");
+    }
+
+    console.appendLine("hello", 1.0, ConsoleDisplayBox::MessageType::Normal);
+    if (console.empty()) {
+        return fail("appendLine should add an entry");
+    }
+
+    console.clear();
+    if (!console.empty()) {
+        return fail("clear should remove all lines");
+    }
+
+    // Smoke: render with empty queue should no-op without init/context.
+    console.render(1.0, textRenderer);
+    console.shutdown();
+
+    std::cout << "[console_overlay_test] PASS\n";
+    return EXIT_SUCCESS;
+}
+

@@ -121,6 +121,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
             def.useGrassTint = blockJson["useGrassTint"].get<bool>();
         }
+        if (blockJson.contains("timeToBreak") && blockJson["timeToBreak"].is_number_integer()) {
+            def.timeToBreak = blockJson["timeToBreak"].get<int>();
+        }
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
             const auto& tex = blockJson["textures"];

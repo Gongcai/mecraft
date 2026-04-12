@@ -89,6 +89,9 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
             case TriggerType::Held:
                 active = input.isKeyHeld(binding.control);
                 break;
+            case TriggerType::DoubleTap:
+                active = input.isKeyDoubleTapped(binding.control);
+                break;
         }
     } else if (binding.device == InputDevice::Mouse) {
         switch (binding.trigger) {
@@ -100,6 +103,9 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
                 break;
             case TriggerType::Held:
                 active = input.isMouseButtonHeld(binding.control);
+                break;
+            case TriggerType::DoubleTap:
+                active = input.isMouseButtonDoubleTapped(binding.control);
                 break;
         }
     } else if (binding.device == InputDevice::Scroll) {
@@ -120,6 +126,20 @@ bool ActionMap::isActionTriggered(Action action, InputContextType context, const
 
     for (const auto& binding : it->second) {
         if (binding.context == context) {
+            if (evaluateBinding(binding, input)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ActionMap::isActionDoubleTapped(Action action, InputContextType context, const InputSnapshot& input) const {
+    auto it = m_bindings.find(action);
+    if (it == m_bindings.end()) return false;
+
+    for (const auto& binding : it->second) {
+        if (binding.context == context && binding.trigger == TriggerType::DoubleTap) {
             if (evaluateBinding(binding, input)) {
                 return true;
             }
@@ -230,6 +250,7 @@ static InputContextType stringToContext(const std::string& str) {
 static TriggerType stringToTrigger(const std::string& str) {
     if (str == "Pressed") return TriggerType::Pressed;
     if (str == "Released") return TriggerType::Released;
+    if (str == "DoubleTap") return TriggerType::DoubleTap;
     return TriggerType::Held;
 }
 

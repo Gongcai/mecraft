@@ -28,6 +28,14 @@ bool InputSnapshot::isMouseButtonJustReleased(int button) const {
     return button >= 0 && button <= GLFW_MOUSE_BUTTON_LAST && mouseButtonsJustReleased[button];
 }
 
+bool InputSnapshot::isKeyDoubleTapped(int key) const {
+    return key >= 0 && key <= GLFW_KEY_LAST && keysDoubleTapped[key];
+}
+
+bool InputSnapshot::isMouseButtonDoubleTapped(int button) const {
+    return button >= 0 && button <= GLFW_MOUSE_BUTTON_LAST && mouseButtonsDoubleTapped[button];
+}
+
 void InputManager::init(GLFWwindow* windowHandle) {
     m_handle = windowHandle;
     if (m_handle == nullptr) {
@@ -47,15 +55,39 @@ void InputManager::init(GLFWwindow* windowHandle) {
 }
 
 void InputManager::update() {
+    double now = glfwGetTime();
+
     for (int key = 0; key <= GLFW_KEY_LAST; ++key) {
         m_keysJustPressed[key] = m_keys[key] && !m_keysPrev[key];
         m_keysJustReleased[key] = !m_keys[key] && m_keysPrev[key];
+
+        // 双击检测：本次刚按下 且 距上次按下时间在超时内
+        m_snapshot.keysDoubleTapped[key] = m_keysJustPressed[key]
+            && m_keyLastPressTime[key] > 0.0
+            && (now - m_keyLastPressTime[key]) <= m_doubleTapTimeout;
+        if (m_keysJustPressed[key]) {
+            m_keyLastPressTime[key] = now;
+        }
+        // 松开后重置上次按下时间，避免松开再按被误判为双击
+        // 不重置：允许双击的第二次按下可以跨松开事件
+        // 如果想要"快速连按"而非"双击"语义，可取消下面的注释
+        // if (m_keysJustReleased[key]) { m_keyLastPressTime[key] = 0.0; }
+
         m_keysPrev[key] = m_keys[key];
     }
 
     for (int button = 0; button <= GLFW_MOUSE_BUTTON_LAST; ++button) {
         m_mouseButtonsJustPressed[button] = m_mouseButtons[button] && !m_mouseButtonsPrev[button];
         m_mouseButtonsJustReleased[button] = !m_mouseButtons[button] && m_mouseButtonsPrev[button];
+
+        // 鼠标双击检测
+        m_snapshot.mouseButtonsDoubleTapped[button] = m_mouseButtonsJustPressed[button]
+            && m_mouseButtonLastPressTime[button] > 0.0
+            && (now - m_mouseButtonLastPressTime[button]) <= m_doubleTapTimeout;
+        if (m_mouseButtonsJustPressed[button]) {
+            m_mouseButtonLastPressTime[button] = now;
+        }
+
         m_mouseButtonsPrev[button] = m_mouseButtons[button];
     }
 

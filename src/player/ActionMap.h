@@ -67,7 +67,8 @@ enum class TriggerType {
     Pressed,
     Released,
     Held,
-    // Future: Tap, Hold, DoubleTap
+    DoubleTap,
+    // Future: Tap, Hold
 };
 
 enum class NativeAxis {
@@ -118,6 +119,7 @@ public:
     // Check if the action is currently triggered in a specific context
     // This is the low-level check
     [[nodiscard]] bool isActionTriggered(Action action, InputContextType context, const InputSnapshot& input) const;
+    [[nodiscard]] bool isActionDoubleTapped(Action action, InputContextType context, const InputSnapshot& input) const;
     [[nodiscard]] float getAxisValue(Axis axis,InputContextType context, const InputSnapshot& input) const;
 
 private:

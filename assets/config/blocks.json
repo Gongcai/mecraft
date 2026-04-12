@@ -13,7 +13,7 @@
     {
       "id": 1,
       "name": "dirt",
-      "timeToBreak": 300,
+      "timeToBreak": 1300,
       "textures": {
         "all": "dirt"
       }
@@ -21,7 +21,7 @@
     {
       "id": 2,
       "name": "grass",
-      "timeToBreak": 300,
+      "timeToBreak": 1300,
       "textures": {
         "top": "grass_top",
         "bottom": "dirt",
@@ -119,7 +119,7 @@
       "name": "tall_grass",
       "isSolid": false,
       "isTransparent": true,
-      "timeToBreak": 80,
+      "timeToBreak": 10,
       "renderShape": "cross",
       "useGrassTint": true,
       "textures": {
@@ -133,7 +133,7 @@
         "isTransparent": true,
         "renderShape": "cross",
         "useGrassTint": false,
-        "timeToBreak": 300,
+        "timeToBreak": 30,
         "textures": {
             "all": "rose_bush_bottom"
         }

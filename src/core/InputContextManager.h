@@ -23,8 +23,11 @@ public:
     // Considering active context stack
     [[nodiscard]] bool isActionTriggered(Action action) const;
     [[nodiscard]] bool isActionHeld(Action action) const;
+    [[nodiscard]] bool isActionDoubleTapped(Action action) const;
 
     [[nodiscard]] float getAxisValue(Axis axis) const;
+    [[nodiscard]] float getMouseX() const;
+    [[nodiscard]] float getMouseY() const;
 
 private:
     std::vector<InputContextType> m_contextStack;

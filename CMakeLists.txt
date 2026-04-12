@@ -70,6 +70,13 @@ set(CORE_SOURCES
         src/ui/Dashboard.cpp
         src/ui/KeyboardInputBox.cpp
         src/ui/ConsoleDisplayBox.cpp
+        src/ui/CrosshairControl.cpp
+        src/ui/TextRenderer.cpp
+        src/ui/HotbarControl.cpp
+        src/ui/CommandInputOverlay.cpp
+        src/ui/ConsoleOverlay.cpp
+        src/ui/PickableOverlay.cpp
+        src/ui/Pickable.cpp
         src/ui/UIRenderer.cpp
 )
 
@@ -123,3 +130,9 @@ add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
 add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
 add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
 add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)
+add_mecraft_test(crosshair_control_test tests/crosshair_control_test.cpp)
+add_mecraft_test(hotbar_control_test tests/hotbar_control_test.cpp)
+add_mecraft_test(text_renderer_test tests/text_renderer_test.cpp)
+add_mecraft_test(command_input_overlay_test tests/command_input_overlay_test.cpp)
+add_mecraft_test(console_overlay_test tests/console_overlay_test.cpp)
+add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
