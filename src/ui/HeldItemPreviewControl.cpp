@@ -24,7 +24,9 @@ struct BlockVertex {
     float u;
     float v;
     float normal;
-    float windWeight;
+    float sunlight;
+    float blockLight;
+    float ao;
     float layer;
 };
 
@@ -63,7 +65,7 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
 void HeldItemPreviewControl::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
-    m_shader = resourceMgr.getShader("chunk");
+    m_shader = resourceMgr.getShader("chunk_lit");
     m_itemShader = resourceMgr.getShader("item_model");
 }
 
@@ -337,7 +339,9 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     uvCoord.x,
                     uvCoord.y,
                     crossMarker,
-                    pos.y,
+                    15.0f,  // sunlight: full brightness for UI
+                    0.0f,   // blockLight
+                    3.0f,   // ao: no occlusion
                     layer
                 });
             }
@@ -365,7 +369,9 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     uvCoord.x,
                     uvCoord.y,
                     static_cast<float>(face),
-                    0.0f,
+                    15.0f,  // sunlight: full brightness for UI
+                    0.0f,   // blockLight
+                    3.0f,   // ao: no occlusion
                     layer
                 });
             }
@@ -394,9 +400,13 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
     glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

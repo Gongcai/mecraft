@@ -13,6 +13,7 @@ void World::init(uint32_t seed) {
     m_terrainGen.init(seed, m_flatSurfaceY);
     m_chunks.clear();
     m_loadQueue.clear();
+    m_lightEngine = std::make_unique<LightEngine>(*this);
 }
 
 void World::update(const glm::vec3& playerPos) {
@@ -80,23 +81,9 @@ void World::setBlock(int x, int y, int z, BlockID id) {
 
     chunk.setBlock(localX, y, localZ, id);
 
-    // Recompute simple sky light for this vertical column so newly exposed blocks light up.
-    bool lightChanged = false;
-    bool skylightVisible = true;
-    for (int scanY = Chunk::SIZE_Y - 1; scanY >= 0; --scanY) {
-        const BlockID columnId = chunk.getBlock(localX, scanY, localZ);
-        const uint8_t targetSun = skylightVisible ? 15 : 0;
-        if (chunk.getSunlight(localX, scanY, localZ) != targetSun) {
-            chunk.setSunlight(localX, scanY, localZ, targetSun);
-            lightChanged = true;
-        }
-        if (BlockRegistry::get(columnId).isSolid) {
-            skylightVisible = false;
-        }
-    }
-
-    if (lightChanged) {
-        chunk.markDirty();
+    // Delegate light updates to LightEngine
+    if (m_lightEngine) {
+        m_lightEngine->onBlockChanged(x, y, z, oldId, id);
     }
 }
 
@@ -223,10 +210,49 @@ void World::loadChunk(int cx, int cz) {
     m_terrainGen.generateChunk(*chunk);
 
     m_chunks[key] = std::move(chunk);
+
+    // Wire up neighbor pointers for the new chunk and its existing neighbors
+    Chunk* cur = m_chunks[key].get();
+    auto linkNeighbor = [&](int ncx, int ncz, int selfIdx, int neighborIdx) {
+        auto it = m_chunks.find(chunkKey(ncx, ncz));
+        if (it != m_chunks.end()) {
+            Chunk* neighbor = it->second.get();
+            cur->neighbors[selfIdx] = neighbor;
+            neighbor->neighbors[neighborIdx] = cur;
+            // Neighbor border data changed — needs re-meshing
+            neighbor->markDirty();
+        }
+    };
+    linkNeighbor(cx + 1, cz, 0, 1); // +X neighbor, our +X=0, their -X=1
+    linkNeighbor(cx - 1, cz, 1, 0); // -X neighbor, our -X=1, their +X=0
+    linkNeighbor(cx, cz + 1, 2, 3); // +Z neighbor, our +Z=2, their -Z=3
+    linkNeighbor(cx, cz - 1, 3, 2); // -Z neighbor, our -Z=3, their +Z=2
+
+    // Initialize lighting after terrain generation and neighbor linking
+    if (m_lightEngine) {
+        m_lightEngine->onChunkLoaded(*cur);
+
+        // Re-propagate light into existing neighbors now that this chunk's light data is available
+        for (int i = 0; i < 4; ++i) {
+            if (cur->neighbors[i]) {
+                m_lightEngine->repropagateChunk(*cur->neighbors[i]);
+            }
+        }
+    }
 }
 
 void World::unloadChunk(int cx, int cz) {
-    m_chunks.erase(chunkKey(cx, cz));
+    auto it = m_chunks.find(chunkKey(cx, cz));
+    if (it == m_chunks.end()) return;
+
+    Chunk* chunk = it->second.get();
+    // Clear neighbor back-pointers before removing
+    if (chunk->neighbors[0]) chunk->neighbors[0]->neighbors[1] = nullptr;
+    if (chunk->neighbors[1]) chunk->neighbors[1]->neighbors[0] = nullptr;
+    if (chunk->neighbors[2]) chunk->neighbors[2]->neighbors[3] = nullptr;
+    if (chunk->neighbors[3]) chunk->neighbors[3]->neighbors[2] = nullptr;
+
+    m_chunks.erase(it);
 }
 
 size_t World::getTotalVertexCount() const {

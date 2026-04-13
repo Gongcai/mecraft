@@ -12,6 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "Chunk.h"
+#include "LightEngine.h"
 #include "TerrainGenerator.h"
 #include "../physics/PhysicsInfo.h"
 
@@ -42,18 +43,19 @@ public:
     [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const;
     [[nodiscard]] static const char* biomeToString(TerrainBiome biome);
 
+    // Chunk key packing — public for LightEngine access
+    static int64_t chunkKey(int cx, int cz);
+
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t
     std::unordered_map<int64_t, std::unique_ptr<Chunk>> m_chunks;
 
     TerrainGenerator m_terrainGen;
+    std::unique_ptr<LightEngine> m_lightEngine;
 
     int m_renderDistance = 8;   // 以区块为单位
     uint32_t m_seed = 0;
     int m_flatSurfaceY = 63;
-
-    // 区块坐标打包
-    static int64_t chunkKey(int cx, int cz);
 
     // 加载/卸载
     void loadChunk(int cx, int cz);

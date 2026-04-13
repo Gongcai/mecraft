@@ -22,7 +22,9 @@ struct BlockVertex {
     float u;
     float v;
     float normal;
-    float windWeight;
+    float sunlight;
+    float blockLight;
+    float ao;
     float layer;
 };
 
@@ -64,7 +66,7 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
 
 void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_shader = resourceMgr.getShader("chunk");
+    m_shader = resourceMgr.getShader("chunk_lit");
     m_itemShader = resourceMgr.getShader("item_model");
 }
 
@@ -106,11 +108,16 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         const int blockViewProjLoc = m_shader->getUniformLocation("viewProj");
         blockModelLoc = m_shader->getUniformLocation("model");
         m_shader->use();
+        m_shader->setMat4("view", camera.getViewMatrix());
         m_shader->setMat4(blockViewProjLoc, viewProj);
         m_shader->setInt("texArray", 0);
         m_shader->setInt("uForceBaseLod", 0);
         m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
         m_shader->setFloat("uWindStrength", 0.0f);
+        m_shader->setFloat("uWindSpeed", 0.0f);
+        m_shader->setFloat("uWindSpatialFreq", 1.0f);
+        m_shader->setFloat("uWindTime", 0.0f);
+        m_shader->setInt("uFogEnabled", 0);
     }
 
     int itemModelLoc = -1;
@@ -268,7 +275,9 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     uvCoord.x,
                     uvCoord.y,
                     crossMarker,
-                    pos.y,
+                    15.0f,  // sunlight: full brightness for drop items
+                    0.0f,   // blockLight
+                    3.0f,   // ao: no occlusion
                     layer
                 });
             }
@@ -297,7 +306,9 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                 uvCoord.x,
                 uvCoord.y,
                 static_cast<float>(face),
-                0.0f,
+                15.0f,  // sunlight: full brightness for drop items
+                0.0f,   // blockLight
+                3.0f,   // ao: no occlusion
                 layer
             });
         }
@@ -326,9 +337,13 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
     glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

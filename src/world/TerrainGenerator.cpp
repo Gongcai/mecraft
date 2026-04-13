@@ -644,15 +644,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                         chunk.setBlock(localX, vegetationY, z, vegetation);
                     }
                 }
-
-                bool skylightVisible = true;
-                for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-                    const BlockID id = chunk.getBlock(localX, y, z);
-                    chunk.setSunlight(localX, y, z, skylightVisible ? 15 : 0);
-                    if (BlockRegistry::get(id).isSolid) {
-                        skylightVisible = false;
-                    }
-                }
+                // Sky light initialization is deferred to LightEngine::onChunkLoaded
             }
 
             x += laneCount;

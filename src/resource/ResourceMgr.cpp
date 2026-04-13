@@ -240,6 +240,7 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
 
 void ResourceMgr::init() {
     loadShader("chunk", "../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
+    loadShader("chunk_lit", "../assets/shaders/chunk_lit.vs", "../assets/shaders/chunk_lit.fs");
     loadShader("outline", "../assets/shaders/outline.vs", "../assets/shaders/outline.fs");
     loadShader("break_overlay", "../assets/shaders/break_overlay.vs", "../assets/shaders/break_overlay.fs");
     loadShader("crosshair", "../assets/shaders/crosshair.vs", "../assets/shaders/crosshair.fs");

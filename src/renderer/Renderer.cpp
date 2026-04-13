@@ -61,9 +61,9 @@ Renderer::~Renderer() {
 
 void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_chunkShader = resourceMgr.getShader("chunk");
+    m_chunkShader = resourceMgr.getShader("chunk_lit");
     if (m_chunkShader == nullptr) {
-        m_chunkShader = resourceMgr.getShader("chunk");
+        m_chunkShader = resourceMgr.getShader("chunk_lit");
     }
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");

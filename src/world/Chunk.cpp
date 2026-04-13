@@ -24,16 +24,23 @@ void setupVertexLayout() {
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
 
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
 
     glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
+
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
+
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
 }
 }
 
 Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(chunkZ) {
     m_blocks.fill(BlockType::AIR);
     m_lightMap.fill(0);
+    m_heightMap.fill(0);
 }
 
 Chunk::~Chunk() {
@@ -139,6 +146,34 @@ void Chunk::setBlockLight(const int x, const int y, const int z, const uint8_t l
     const size_t index = toIndex(x, y, z);
     const uint8_t clamped = clampLight(level);
     m_lightMap[index] = static_cast<uint8_t>((m_lightMap[index] & 0xF0) | clamped);
+}
+
+int Chunk::getHeightMap(const int x, const int z) const {
+    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) {
+        return 0;
+    }
+    return m_heightMap[static_cast<size_t>(x) + static_cast<size_t>(z) * SIZE_X];
+}
+
+void Chunk::setHeightMap(const int x, const int z, const int height) {
+    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) {
+        return;
+    }
+    m_heightMap[static_cast<size_t>(x) + static_cast<size_t>(z) * SIZE_X] = height;
+}
+
+void Chunk::recalcHeightMap(const int x, const int z) {
+    if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) {
+        return;
+    }
+    int height = 0;
+    for (int y = SIZE_Y - 1; y >= 0; --y) {
+        if (BlockRegistry::get(m_blocks[toIndex(x, y, z)]).isSolid) {
+            height = y;
+            break;
+        }
+    }
+    m_heightMap[static_cast<size_t>(x) + static_cast<size_t>(z) * SIZE_X] = height;
 }
 
 void ChunkMesh::upload(const std::vector<BlockVertex>& vertices) {

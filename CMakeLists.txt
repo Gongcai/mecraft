@@ -59,6 +59,7 @@ set(CORE_SOURCES
         src/world/Block.cpp
         src/item/Item.cpp
         src/world/Chunk.cpp
+        src/world/LightEngine.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp

@@ -77,7 +77,7 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
         m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightStand, dt * 15);
     }
     // 疾跑FOV插值
-    const float targetFOV = m_sprinting ? m_SprintFOV : m_WalkFOV;
+    const float targetFOV = m_sprinting && isMoving()? m_SprintFOV : m_WalkFOV;
     m_camera.setFOV(Lerp(m_camera.getFOV(), targetFOV, dt * 10.0f));
 
     applyViewBob(dt);

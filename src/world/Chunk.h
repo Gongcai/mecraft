@@ -17,7 +17,9 @@ struct BlockVertex {
     float u;
     float v;
     float normal;
-    float windWeight;
+    float sunlight;
+    float blockLight;
+    float ao;
     float layer;
 };
 
@@ -71,19 +73,26 @@ public:
     [[nodiscard]] uint8_t getBlockLight(int x, int y, int z) const;
     void setBlockLight(int x, int y, int z, uint8_t level);
 
+    [[nodiscard]] int getHeightMap(int x, int z) const;
+    void setHeightMap(int x, int z, int height);
+    void recalcHeightMap(int x, int z);
+
     Chunk* neighbors[4] = {nullptr, nullptr, nullptr, nullptr}; // +X, -X, +Z, -Z
 
     int m_chunkX;
     int m_chunkZ;
 
-private:
-    static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
-
-    [[nodiscard]] static bool isInBounds(int x, int y, int z);
     [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
-    std::array<BlockID, BLOCK_COUNT> m_blocks{};
+    // Public for ChunkMesher snapshot capture
+    static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
     std::array<uint8_t, BLOCK_COUNT> m_lightMap{}; // high nibble = sun, low nibble = block
+
+private:
+    [[nodiscard]] static bool isInBounds(int x, int y, int z);
+
+    std::array<BlockID, BLOCK_COUNT> m_blocks{};
+    std::array<int, static_cast<std::size_t>(SIZE_X) * SIZE_Z> m_heightMap{}; // highest opaque Y per column
 
     ChunkMesh m_mesh;
 
