@@ -14,14 +14,14 @@
 | `getSunlight / setSunlight / getBlockLight / setBlockLight` | ✅ 读写接口已就绪 |
 | `BlockDef::isLightSource / lightLevel / isTransparent / isSolid` | ✅ 方块属性已就绪 |
 | `chunk_lit.vs / chunk_lit.fs` 光照 shader | ✅ 着色器已准备好 (aSunlight, aBlockLight, aAO) |
-| 天空光列扫描 (`World::setBlock` 中) | ⚠️ 仅做垂直列直射，无侧向传播 |
-| 地形生成时天空光初始化 | ⚠️ 仅做垂直列直射 |
-| Block Light 传播 | ❌ 完全未实现 |
-| 增量传播 (增/减双 pass) | ❌ 未实现 |
-| 跨 Chunk 边界传播 | ❌ 未实现 |
-| AO (Ambient Occlusion) | ❌ 顶点数据/Shader 有字段但 Mesher 未写入 |
-| 光照异步化 | ❌ 未实现 |
-| `ChunkMesher` 将光照写入顶点 | ❌ 当前 `BlockVertex` 无光照字段 |
+| 天空光列扫描 (`World::setBlock` 中) | ✅ 替换为LightEngine增量更新 |
+| 地形生成时天空光初始化 | ✅ 已由 LightEngine onChunkLoaded 接管 |
+| Block Light 传播 | ✅ 已实现 BFS 传播 |
+| 增量传播 (增/减双 pass) | ✅ 已实现 |
+| 跨 Chunk 边界传播 | ✅ 已实现边界预传播与世界坐标访问 |
+| AO (Ambient Occlusion) | ✅ 已实现基于拓扑的顶点 AO 计算 |
+| 光照异步化/性能调度 | ❌ 进行中 (Time-Slicing 优化) |
+| `ChunkMesher` 将光照写入顶点 | ✅ BlockVertex 与 Mesher 已扩展并集成 |
 
 ### 二、核心架构设计
 
@@ -724,16 +724,16 @@ gantt
     ChunkMeshingSnapshot添加光照     :p0c, 2026-04-15, 1d
 
     section Phase 1 单线程正确性
-    LightEngine框架 + 天空光初始化   :p1a, 2026-04-16, 2d
-    天空光增量传播(双pass)           :p1b, 2026-04-18, 2d
-    Block Light传播                 :p1c, 2026-04-20, 2d
-    跨Chunk边界传播                 :p1d, 2026-04-22, 2d
-    AO实现 + Mesher集成             :p1e, 2026-04-24, 2d
-    调试视图 + 回归测试             :p1f, 2026-04-26, 2d
+    LightEngine框架 + 天空光初始化   :p1a, 2026-04-16, 2d, done
+    天空光增量传播(双pass)           :p1b, 2026-04-18, 2d, done
+    Block Light传播                 :p1c, 2026-04-20, 2d, done
+    跨Chunk边界传播                 :p1d, 2026-04-22, 2d, done
+    AO实现 + Mesher集成             :p1e, 2026-04-24, 2d, done
+    调试视图 + 回归测试             :p1f, 2026-04-26, 2d, done
 
-    section Phase 2 异步化
-    LightService线程池              :p2a, 2026-04-28, 3d
-    预算控制 + 优先级调度           :p2b, 2026-05-01, 2d
+    section Phase 2 性能调度与平滑
+    主线程 Time-Slicing 队列        :p2a, 2026-04-28, 3d, active
+    Tick预算控制断点续传            :p2b, 2026-05-01, 2d
     性能Profile + 调优              :p2c, 2026-05-03, 2d
 
     section Phase 3 渲染质量

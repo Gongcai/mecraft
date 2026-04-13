@@ -14,6 +14,7 @@
 #include "Chunk.h"
 #include "LightEngine.h"
 #include "TerrainGenerator.h"
+#include "DayNightSystem.h"
 #include "../physics/PhysicsInfo.h"
 
 class World {
@@ -46,12 +47,16 @@ public:
     // Chunk key packing — public for LightEngine access
     static int64_t chunkKey(int cx, int cz);
 
+    DayNightSystem& getDayNightSystem() { return m_dayNightSystem; }
+    const DayNightSystem& getDayNightSystem() const { return m_dayNightSystem; }
+
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t
     std::unordered_map<int64_t, std::unique_ptr<Chunk>> m_chunks;
 
     TerrainGenerator m_terrainGen;
     std::unique_ptr<LightEngine> m_lightEngine;
+    DayNightSystem m_dayNightSystem;
 
     int m_renderDistance = 8;   // 以区块为单位
     uint32_t m_seed = 0;

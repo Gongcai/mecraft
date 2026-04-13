@@ -87,6 +87,7 @@ set(CORE_SOURCES
         src/ui/CraftingGridControl.cpp
         src/ui/UIRenderer.cpp
         src/crafting/CraftingSystem.cpp
+        src/world/DayNightSystem.cpp
 )
 
 # ---------------------------------------------------------------------------

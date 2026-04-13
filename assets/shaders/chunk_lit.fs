@@ -22,8 +22,10 @@ uniform float uFogDensity;
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
 uniform float uSkyIntensity; // 0.0-1.0, day/night cycle (default 1.0)
 
-// Ambient Occlusion brightness levels (softened to reduce harsh corners)
-const float aoLevels[4] = float[](0.50, 0.65, 0.82, 1.0);
+// Ambient Occlusion brightness levels
+// Level 0 (fully occluded corner) = 0.72, level 3 (open) = 1.0
+// Keep the range narrow so corners are darkened but never go jet-black.
+const float aoLevels[4] = float[](0.72, 0.82, 0.91, 1.0);
 
 float computeFogFactor(float fogDistance) {
     if (uFogMode == 1) {
@@ -80,12 +82,24 @@ void main() {
         texColor.rgb *= uGrassTintColor;
     }
 
-    // AO: map 0-3 level to brightness multiplier
-    float aoFactor = aoLevels[int(vAO + 0.5)];
+    // AO: bilinear interpolate through the discrete AO levels
+    // GPU smoothly interpolates vAO between vertex values (e.g., 2.3),
+    // so we must NOT discretize with int() - that destroys the gradient.
+    float aoIdx = clamp(vAO, 0.0, 3.0);
+    int aoLow = int(aoIdx);
+    int aoHigh = min(aoLow + 1, 3);
+    float aoFactor = mix(aoLevels[aoLow], aoLevels[aoHigh], fract(aoIdx));
+
+    // Brightness was pre-computed on the CPU via the exponential decay curve
+    // pow(0.8, 15-L) and averaged in brightness space for physically-correct
+    // smooth lighting.  The GPU interpolates brightness values directly.
+    float sun   = vSunlight;
+    float block = vBlockLight;
 
     // Base light: use skyIntensity to scale sun contribution (for day/night cycle)
-    float skyContribution = vSunlight * max(uSkyIntensity, 0.0);
-    float lightFactor = max(max(vBlockLight, skyContribution), 0.05);
+    float skyContribution = sun * max(uSkyIntensity, 0.0);
+    // Ambient floor of 0.08 ensures even fully-shadowed spots are visible
+    float lightFactor = max(max(block, skyContribution), 0.08);
 
     // Combine texture, lighting, and AO
     vec3 finalColor = texColor.rgb * lightFactor * aoFactor;

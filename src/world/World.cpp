@@ -1,6 +1,7 @@
 #include "World.h"
 #include <algorithm>
 #include <cmath>
+#include "../core/Time.h"
 
 namespace {
 int worldToChunkCoord(const int world, const int chunkSize) {
@@ -14,9 +15,12 @@ void World::init(uint32_t seed) {
     m_chunks.clear();
     m_loadQueue.clear();
     m_lightEngine = std::make_unique<LightEngine>(*this);
+    m_dayNightSystem.setTimeOfDay(300.0f); // Default to mid-day
 }
 
 void World::update(const glm::vec3& playerPos) {
+    m_dayNightSystem.update(static_cast<float>(Time::deltaTime));
+
     const int playerChunkX = worldToChunkCoord(static_cast<int>(std::floor(playerPos.x)), Chunk::SIZE_X);
     const int playerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(playerPos.z)), Chunk::SIZE_Z);
 
@@ -41,6 +45,10 @@ void World::update(const glm::vec3& playerPos) {
         m_loadQueue.pop_back();
         loadChunk(pos.x, pos.y);
         loaded++;
+    }
+
+    if (m_lightEngine) {
+        m_lightEngine->tick(32768);
     }
 }
 
@@ -87,22 +95,33 @@ void World::setBlock(int x, int y, int z, BlockID id) {
     }
 
     // If the block is on a chunk boundary, neighbor chunks may need re-meshing
-    // because their border faces depend on this block
-    if (localX == 0) {
-        auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-        if (nit != m_chunks.end()) nit->second->markDirty();
-    }
-    if (localX == Chunk::SIZE_X - 1) {
-        auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-        if (nit != m_chunks.end()) nit->second->markDirty();
-    }
-    if (localZ == 0) {
-        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-        if (nit != m_chunks.end()) nit->second->markDirty();
-    }
-    if (localZ == Chunk::SIZE_Z - 1) {
-        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-        if (nit != m_chunks.end()) nit->second->markDirty();
+    // because their border faces depend on this block.
+    // We use the light engine's deferred dirty system so the mesh isn't rebuilt
+    // until light propagation BFS finishes.  This prevents the meshing service
+    // from snapshotting stale/partial light data.
+    if (m_lightEngine) {
+        if (localX == 0)                    m_lightEngine->markNeighborDirty(chunkX - 1, chunkZ);
+        if (localX == Chunk::SIZE_X - 1)    m_lightEngine->markNeighborDirty(chunkX + 1, chunkZ);
+        if (localZ == 0)                    m_lightEngine->markNeighborDirty(chunkX, chunkZ - 1);
+        if (localZ == Chunk::SIZE_Z - 1)    m_lightEngine->markNeighborDirty(chunkX, chunkZ + 1);
+    } else {
+        // Fallback: no light engine, mark immediately
+        if (localX == 0) {
+            auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
+            if (nit != m_chunks.end()) nit->second->markDirty();
+        }
+        if (localX == Chunk::SIZE_X - 1) {
+            auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
+            if (nit != m_chunks.end()) nit->second->markDirty();
+        }
+        if (localZ == 0) {
+            auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
+            if (nit != m_chunks.end()) nit->second->markDirty();
+        }
+        if (localZ == Chunk::SIZE_Z - 1) {
+            auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
+            if (nit != m_chunks.end()) nit->second->markDirty();
+        }
     }
 }
 

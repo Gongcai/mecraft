@@ -118,6 +118,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_shader->setFloat("uWindSpatialFreq", 1.0f);
         m_shader->setFloat("uWindTime", 0.0f);
         m_shader->setInt("uFogEnabled", 0);
+        m_shader->setFloat("uSkyIntensity", 1.0f);
     }
 
     int itemModelLoc = -1;
@@ -275,7 +276,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     uvCoord.x,
                     uvCoord.y,
                     crossMarker,
-                    15.0f,  // sunlight: full brightness for drop items
+                    1.0f,  // sunlight: full brightness for drop items
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
                     layer
@@ -306,7 +307,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                 uvCoord.x,
                 uvCoord.y,
                 static_cast<float>(face),
-                15.0f,  // sunlight: full brightness for drop items
+                1.0f,  // sunlight: full brightness for drop items
                 0.0f,   // blockLight
                 3.0f,   // ao: no occlusion
                 layer

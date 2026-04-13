@@ -2,6 +2,7 @@
 
 #include <array>
 #include <algorithm>
+#include <cmath>
 #include <glm/vec2.hpp>
 
 namespace {
@@ -135,58 +136,127 @@ bool isSolidForAO(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     return BlockRegistry::get(id).isSolid;
 }
 
-// Compute AO values for the 4 vertices of a face.
+struct VertexLightData {
+    uint8_t ao;
+    uint8_t sunLight;        // raw 0-15, kept for flip diagonal metric
+    uint8_t blockLight;      // raw 0-15, kept for flip diagonal metric
+    float sunBrightness;     // 0.0-1.0, pre-computed for vertex attribute
+    float blockBrightness;   // 0.0-1.0, pre-computed for vertex attribute
+};
+
+// Convert a raw 0-15 light level to a 0.0-1.0 brightness using the exponential decay curve.
+// This is the same curve the fragment shader used: pow(0.8, 15 - level).
+// Moving it here lets us average BRIGHTNESS values (physically correct) rather than
+// raw light levels (which causes extreme darkening from solid blocks' stored zeros).
+float lightToBrightness(uint8_t level) {
+    if (level == 0) return 0.0f;
+    return std::pow(0.8f, 15.0f - static_cast<float>(level));
+}
+
+// Average brightness values for smooth lighting.
+// By operating in brightness space, solid blocks' near-zero brightness (0.035 at level 1,
+// 0.0 at level 0) participates in the average without catastrophically darkening the result
+// the way raw-level averaging did with the exponential curve.
+float computeVertexBrightness(float base, float s1, float s2, float cn,
+                              bool s1Solid, bool s2Solid) {
+    if (s1Solid && s2Solid) {
+        return (base + s1 + s2) / 3.0f;
+    }
+    return (base + s1 + s2 + cn) / 4.0f;
+}
+
+// Safe light sampler for sun: handles positions that the snapshot can't look up.
+//   - Diagonal cross-chunk (x AND z both out of bounds): no border data available
+//   - Above world height: always full sky
+uint8_t safeSunLevel(const ChunkMeshingSnapshot& snapshot,
+                     int x, int y, int z, bool isSolid, uint8_t base) {
+    if (!isSolid) {
+        if (y >= Chunk::SIZE_Y) return 15;
+        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z))
+            return base;
+    }
+    return getNeighborSunlight(snapshot, x, y, z);
+}
+
+uint8_t safeBlockLevel(const ChunkMeshingSnapshot& snapshot,
+                       int x, int y, int z, bool isSolid, uint8_t base) {
+    if (!isSolid) {
+        if (y >= Chunk::SIZE_Y) return 0;
+        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z))
+            return base;
+    }
+    return getNeighborBlockLight(snapshot, x, y, z);
+}
+
+// Compute AO and Light values for the 4 vertices of a face.
 // For each vertex, we check 3 neighbors in the plane one step along the face normal:
 //   side1: along the first tangent axis
 //   side2: along the second tangent axis
 //   corner: diagonal (both tangent axes)
-std::array<uint8_t, 4> computeFaceAO(const ChunkMeshingSnapshot& snapshot,
+std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot& snapshot,
                                        int x, int y, int z, int face) {
-    // Face normal direction
     const int nx = kFaceNormals[face].x;
     const int ny = kFaceNormals[face].y;
     const int nz = kFaceNormals[face].z;
 
-    // Base position: one step along the normal (the face's exterior side)
     const int bx = x + nx;
     const int by = y + ny;
     const int bz = z + nz;
 
-    // Determine the two tangent axes for each face
-    // axis0, axis1: the two axes perpendicular to the face normal
-    // We encode directions as offsets along these axes for each vertex corner.
-    // kFaceCorners gives the 4 corners of each face in order.
-    // Each corner is either 0 or 1 along each tangent axis.
-    // We need to convert corner position to direction: 0 -> -1, 1 -> +1
+    int a0, a1;
+    if (ny != 0) { a0 = 0; a1 = 2; }
+    else if (nz != 0) { a0 = 0; a1 = 1; }
+    else { a0 = 2; a1 = 1; }
 
-    // For each face, identify which world axes are the two tangent axes:
-    int a0, a1; // world axis indices (0=x, 1=y, 2=z)
-    if (ny != 0) { a0 = 0; a1 = 2; } // top/bottom: tangent = x, z
-    else if (nz != 0) { a0 = 0; a1 = 1; } // front/back: tangent = x, y
-    else { a0 = 2; a1 = 1; } // left/right: tangent = z, y
+    std::array<VertexLightData, 4> data{};
 
-    std::array<uint8_t, 4> ao{};
+    const uint8_t baseSun   = getNeighborSunlight(snapshot, bx, by, bz);
+    const uint8_t baseBlock = getNeighborBlockLight(snapshot, bx, by, bz);
+    const float baseSunBr   = lightToBrightness(baseSun);
+    const float baseBlockBr = lightToBrightness(baseBlock);
+
     for (int i = 0; i < 4; ++i) {
         const glm::vec3 c = kFaceCorners[face][i];
-
-        // Convert corner position to direction along each tangent axis
-        // corner value 0 -> direction -1, corner value 1 -> direction +1
         const int d0 = (c[static_cast<size_t>(a0)] > 0.5f) ? 1 : -1;
         const int d1 = (c[static_cast<size_t>(a1)] > 0.5f) ? 1 : -1;
 
-        // Build the 3 neighbor positions to check
         int s1[3] = {bx, by, bz}; s1[a0] += d0;
         int s2[3] = {bx, by, bz}; s2[a1] += d1;
         int cn[3] = {bx, by, bz}; cn[a0] += d0; cn[a1] += d1;
 
-        const bool side1 = isSolidForAO(snapshot, s1[0], s1[1], s1[2]);
-        const bool side2 = isSolidForAO(snapshot, s2[0], s2[1], s2[2]);
+        const bool side1  = isSolidForAO(snapshot, s1[0], s1[1], s1[2]);
+        const bool side2  = isSolidForAO(snapshot, s2[0], s2[1], s2[2]);
         const bool corner = isSolidForAO(snapshot, cn[0], cn[1], cn[2]);
 
-        ao[i] = computeVertexAO(side1, side2, corner);
+        data[i].ao = computeVertexAO(side1, side2, corner);
+
+        // Fetch raw levels (with safe fallback for unsampleable positions)
+        const uint8_t s1Sun   = safeSunLevel  (snapshot, s1[0], s1[1], s1[2], side1,  baseSun);
+        const uint8_t s2Sun   = safeSunLevel  (snapshot, s2[0], s2[1], s2[2], side2,  baseSun);
+        const uint8_t cnSun   = safeSunLevel  (snapshot, cn[0], cn[1], cn[2], corner, baseSun);
+        const uint8_t s1Block = safeBlockLevel(snapshot, s1[0], s1[1], s1[2], side1,  baseBlock);
+        const uint8_t s2Block = safeBlockLevel(snapshot, s2[0], s2[1], s2[2], side2,  baseBlock);
+        const uint8_t cnBlock = safeBlockLevel(snapshot, cn[0], cn[1], cn[2], corner, baseBlock);
+
+        // Raw-level average (kept for the flip-diagonal metric which needs integer sums)
+        if (side1 && side2) {
+            data[i].sunLight   = static_cast<uint8_t>((baseSun   + s1Sun   + s2Sun)   / 3);
+            data[i].blockLight = static_cast<uint8_t>((baseBlock + s1Block + s2Block) / 3);
+        } else {
+            data[i].sunLight   = static_cast<uint8_t>((baseSun   + s1Sun   + s2Sun   + cnSun)   / 4);
+            data[i].blockLight = static_cast<uint8_t>((baseBlock + s1Block + s2Block + cnBlock) / 4);
+        }
+
+        // Brightness-space average (for the actual vertex attribute)
+        data[i].sunBrightness   = computeVertexBrightness(
+            baseSunBr, lightToBrightness(s1Sun), lightToBrightness(s2Sun), lightToBrightness(cnSun),
+            side1, side2);
+        data[i].blockBrightness = computeVertexBrightness(
+            baseBlockBr, lightToBrightness(s1Block), lightToBrightness(s2Block), lightToBrightness(cnBlock),
+            side1, side2);
     }
 
-    return ao;
+    return data;
 }
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
@@ -387,21 +457,18 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
 
     const float layer = static_cast<float>(tileIndex);
 
-    // Get face lighting from the neighbor direction
-    const uint8_t sunLight = getFaceSunlight(snapshot, x, y, z, face);
-    const uint8_t blockLight = getFaceBlockLight(snapshot, x, y, z, face);
-
-    // Compute per-vertex AO
-    const std::array<uint8_t, 4> ao = computeFaceAO(snapshot, x, y, z, face);
+    // Compute per-vertex AO and Light
+    const std::array<VertexLightData, 4> data = computeFaceVertexData(snapshot, x, y, z, face);
 
     // Normalized [0,1] UV coordinates
     const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
 
     // AO flip correction: when the ao values on one diagonal are darker than the
     // other, flip the triangle split to prevent visible seam artifacts.
-    // Standard indices: 0,1,2, 0,2,3  (split along 0-2 diagonal)
-    // Flipped indices:  1,2,3, 1,3,0  (split along 1-3 diagonal)
-    const bool flipDiagonal = (ao[0] + ao[2]) < (ao[1] + ao[3]);
+    // We incorporate light for a better metric to avoid diagonal light banding.
+    int metric02 = data[0].ao + data[2].ao + data[0].sunLight + data[2].sunLight + data[0].blockLight + data[2].blockLight;
+    int metric13 = data[1].ao + data[3].ao + data[1].sunLight + data[3].sunLight + data[1].blockLight + data[3].blockLight;
+    const bool flipDiagonal = metric02 < metric13;
     const std::array<int, 6> indices = flipDiagonal
         ? std::array<int, 6>{{1, 2, 3, 1, 3, 0}}
         : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
@@ -417,9 +484,9 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             uvCoord.x,
             uvCoord.y,
             static_cast<float>(face),
-            static_cast<float>(sunLight),
-            static_cast<float>(blockLight),
-            static_cast<float>(ao[index]),
+            data[index].sunBrightness,
+            data[index].blockBrightness,
+            static_cast<float>(data[index].ao),
             layer
         });
     }
@@ -437,17 +504,18 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
 
     const float layer = static_cast<float>(tileIndex);
 
-    // Cross quads use the block's own position light (average from all neighbors)
-    // Use the maximum sunlight/blocklight from all 6 neighbors
-    uint8_t sunLight = getNeighborSunlight(snapshot, x, y, z);
-    uint8_t blockLight = getNeighborBlockLight(snapshot, x, y, z);
+    // Cross quads use the max light from self + 6 neighbors, converted to brightness
+    uint8_t sunLevel = getNeighborSunlight(snapshot, x, y, z);
+    uint8_t blockLevel = getNeighborBlockLight(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
         const int nx = x + kFaceNormals[d].x;
         const int ny = y + kFaceNormals[d].y;
         const int nz = z + kFaceNormals[d].z;
-        sunLight = std::max(sunLight, getNeighborSunlight(snapshot, nx, ny, nz));
-        blockLight = std::max(blockLight, getNeighborBlockLight(snapshot, nx, ny, nz));
+        sunLevel = std::max(sunLevel, getNeighborSunlight(snapshot, nx, ny, nz));
+        blockLevel = std::max(blockLevel, getNeighborBlockLight(snapshot, nx, ny, nz));
     }
+    const float sunBrightness = lightToBrightness(sunLevel);
+    const float blockBrightness = lightToBrightness(blockLevel);
 
     const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
@@ -465,8 +533,8 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                 uvCoord.x,
                 uvCoord.y,
                 crossMarker,
-                static_cast<float>(sunLight),
-                static_cast<float>(blockLight),
+                sunBrightness,
+                blockBrightness,
                 3.0f, // No AO for cross quads (always full brightness)
                 layer
             });

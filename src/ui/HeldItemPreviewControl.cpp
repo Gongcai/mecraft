@@ -218,6 +218,7 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
         m_shader->setInt("uForceBaseLod", 1);
         m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
         m_shader->setInt("uFogEnabled", 0);
+        m_shader->setFloat("uSkyIntensity", 1.0f);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
     }
 
@@ -339,7 +340,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     uvCoord.x,
                     uvCoord.y,
                     crossMarker,
-                    15.0f,  // sunlight: full brightness for UI
+                    1.0f,  // sunlight: full brightness for UI
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
                     layer
@@ -369,7 +370,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     uvCoord.x,
                     uvCoord.y,
                     static_cast<float>(face),
-                    15.0f,  // sunlight: full brightness for UI
+                    1.0f,  // sunlight: full brightness for UI
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
                     layer

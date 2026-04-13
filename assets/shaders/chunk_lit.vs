@@ -2,8 +2,8 @@
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aUV;
 layout (location = 2) in float aNormal;     // face index or cross marker
-layout (location = 3) in float aSunlight;   // 0.0 - 15.0
-layout (location = 4) in float aBlockLight; // 0.0 - 15.0
+layout (location = 3) in float aSunlight;   // 0.0 - 1.0  (pre-computed brightness)
+layout (location = 4) in float aBlockLight; // 0.0 - 1.0  (pre-computed brightness)
 layout (location = 5) in float aAO;         // 0.0 - 3.0
 layout (location = 6) in float aLayer;
 
@@ -43,12 +43,12 @@ void main() {
 
     vUV = aUV;
 
-    // Normalize light intensity to 0.0 - 1.0
-    float sun = aSunlight / 15.0;
-    float block = aBlockLight / 15.0;
-    vSunlight = sun;
-    vBlockLight = block;
-    vLight = max(sun, block);
+    // Brightness values are pre-computed via the exponential decay curve in the CPU
+    // mesher (averaged in brightness space for physically-correct smooth lighting).
+    // Pass through as-is for GPU interpolation and fragment shader use.
+    vSunlight = aSunlight;
+    vBlockLight = aBlockLight;
+    vLight = max(aSunlight, aBlockLight);
 
     vAO = aAO;
     vNormal = aNormal;
