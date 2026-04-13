@@ -5,6 +5,7 @@
 
 #include "../src/world/DropSystem.h"
 #include "../src/world/World.h"
+#include "../src/item/Item.h"
 
 namespace {
 int fail(const char* message) {
@@ -15,6 +16,7 @@ int fail(const char* message) {
 
 int main() {
     BlockRegistry::init(nullptr);
+    ItemRegistry::init();
 
     World world;
     world.init(20260410);
@@ -43,6 +45,10 @@ int main() {
 
     if (dropSystem.getDrops().front().stackCount != 2) {
         return fail("merged drop should accumulate stack count");
+    }
+
+    if (dropSystem.getDrops().front().itemId != ItemRegistry::fromBlock(BlockType::STONE)) {
+        return fail("drop payload should preserve spawned item id");
     }
 
     DropSystem placementDropSystem;

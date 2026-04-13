@@ -190,6 +190,29 @@ const BlockDef& BlockRegistry::get(BlockID id) {
     return s_blocks[id];
 }
 
+BlockID BlockRegistry::findByName(const std::string& name) {
+    BlockID outId = BlockType::AIR;
+    if (!tryGetIdByName(name, outId)) {
+        return BlockType::AIR;
+    }
+    return outId;
+}
+
+bool BlockRegistry::tryGetIdByName(const std::string& name, BlockID& outId) {
+    if (!s_initialized) {
+        init(nullptr);
+    }
+
+    for (size_t i = 0; i < s_blockNames.size(); ++i) {
+        if (s_blockNames[i] == name) {
+            outId = static_cast<BlockID>(i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void BlockRegistry::printAllBlocks() {
 #ifndef NDEBUG
     for (const auto& block : s_blocks) {

@@ -10,6 +10,7 @@
 #include <glm/vec4.hpp>
 
 #include "../crafting/CraftingSystem.h"
+#include "../item/Item.h"
 #include "../player/Inventory.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
@@ -218,7 +219,7 @@ void InventoryPanelControl::syncSlotsFromInventory()
                 baseX + col * colStep,
                 y,
                 slotSize,
-                static_cast<int>(m_inventory->getSlot(inventoryIndex))
+                static_cast<int>(m_inventory->getSlotItem(inventoryIndex))
             };
             ++outIndex;
         }
@@ -294,9 +295,7 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
     }
 
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
-    if (itemIconAtlas.textureID == 0 || itemIconAtlas.tilesPerRow <= 0) {
-        return;
-    }
+    const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
 
     const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
     const float iconSize = std::max(1.0f, m_layout.slotSize * panelRect.scale);
@@ -308,7 +307,19 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
     const float y0 = static_cast<float>(context.screenHeight) - topY1;
     const float y1 = static_cast<float>(context.screenHeight) - topY0;
 
-    const auto uv = itemIconAtlas.getUV(context.draggedItemId);
+    const auto draggedItem = static_cast<ItemID>(context.draggedItemId);
+    const ItemDef& itemDef = ItemRegistry::get(draggedItem);
+    const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
+    const bool hasFallbackIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
+    const int itemTileIndex = hasItemTextures ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
+    const bool useItemTexture = itemTileIndex >= 0;
+    if (!useItemTexture && !hasFallbackIcons) {
+        return;
+    }
+
+    const auto uv = useItemTexture
+        ? itemTextureAtlas.getUV(itemTileIndex)
+        : itemIconAtlas.getUV(static_cast<int>(itemDef.iconItemId));
     std::vector<float> vertices;
     vertices.reserve(24);
     addQuad(vertices, x0, y0, x1, y1, uv.first.x, uv.first.y, uv.second.x, uv.second.y);
@@ -324,7 +335,7 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
     m_inventoryShader->setInt("uAtlas", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+    glBindTexture(GL_TEXTURE_2D, useItemTexture ? itemTextureAtlas.textureID : itemIconAtlas.textureID);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());

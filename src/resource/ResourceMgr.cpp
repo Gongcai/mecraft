@@ -247,6 +247,7 @@ void ResourceMgr::init() {
     loadShader("text", "../assets/shaders/text.vs", "../assets/shaders/text.fs");
     loadShader("particle", "../assets/shaders/particle.vs", "../assets/shaders/particle.fs");
     loadShader("postprocess", "../assets/shaders/postprocess.vs", "../assets/shaders/postprocess.fs");
+    loadShader("item_model", "../assets/shaders/item_model.vs", "../assets/shaders/item_model.fs");
 }
 
 void ResourceMgr::shutdown() {
@@ -267,12 +268,19 @@ void ResourceMgr::shutdown() {
         m_itemIconAtlas.textureID = 0;
     }
 
+    if (m_itemTextureAtlas.textureID != 0) {
+        glDeleteTextures(1, &m_itemTextureAtlas.textureID);
+        m_itemTextureAtlas.textureID = 0;
+    }
+
     if (m_textureArray.textureID != 0) {
         glDeleteTextures(1, &m_textureArray.textureID);
         m_textureArray.textureID = 0;
     }
 
     m_blockAtlasPixels.clear();
+    m_itemAtlasPixels.clear();
+    m_itemTextureIndices.clear();
 }
 
 Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {
@@ -791,6 +799,156 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
 
 const TextureAtlas& ResourceMgr::getItemIconAtlas() const {
     return m_itemIconAtlas;
+}
+
+void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSize) {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> imagePaths;
+    m_itemTextureIndices.clear();
+
+    if (fs::exists(directory)) {
+        for (const auto& entry : fs::directory_iterator(directory)) {
+            if (entry.path().extension() == ".png") {
+                imagePaths.push_back(entry.path());
+            }
+        }
+    }
+
+    std::sort(imagePaths.begin(), imagePaths.end(),
+              [](const fs::path& a, const fs::path& b) {
+                  return a.filename().string() < b.filename().string();
+              });
+
+    if (imagePaths.empty()) {
+#ifndef NDEBUG
+        std::cerr << "Item texture atlas generated with 0 images!\n";
+#endif
+        return;
+    }
+
+    const int numTiles = static_cast<int>(imagePaths.size());
+    const int tilesPerRow = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numTiles))));
+    const int numRows = static_cast<int>(std::ceil(static_cast<float>(numTiles) / static_cast<float>(tilesPerRow)));
+    constexpr int kTilePadding = 1;
+    const int tileStride = tileSize + kTilePadding * 2;
+    const int atlasWidth = tilesPerRow * tileStride;
+    const int atlasHeight = numRows * tileStride;
+    std::vector<unsigned char> atlasPixels(static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight) * 4, 0);
+
+    stbi_set_flip_vertically_on_load(true);
+
+    for (int i = 0; i < numTiles; ++i) {
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        unsigned char* data = stbi_load(imagePaths[i].string().c_str(), &width, &height, &channels, 4);
+        if (!data) {
+            continue;
+        }
+
+        const int copyWidth = std::min(tileSize, width);
+        const int copyHeight = std::min(tileSize, height);
+
+        const int tileCol = i % tilesPerRow;
+        const int tileRow = i / tilesPerRow;
+        const int tileBaseX = tileCol * tileStride;
+        const int tileBaseY = tileRow * tileStride;
+        const int innerStartX = tileBaseX + kTilePadding;
+        const int innerStartY = tileBaseY + kTilePadding;
+
+        for (int y = 0; y < copyHeight; ++y) {
+            for (int x = 0; x < copyWidth; ++x) {
+                const int dstIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
+                const int srcIndex = (y * width + x) * 4;
+                atlasPixels[dstIndex + 0] = data[srcIndex + 0];
+                atlasPixels[dstIndex + 1] = data[srcIndex + 1];
+                atlasPixels[dstIndex + 2] = data[srcIndex + 2];
+                atlasPixels[dstIndex + 3] = data[srcIndex + 3];
+            }
+        }
+
+        for (int y = 0; y < copyHeight; ++y) {
+            const int srcY = innerStartY + y;
+            const int leftSrcX = innerStartX;
+            const int rightSrcX = innerStartX + copyWidth - 1;
+            for (int p = 1; p <= kTilePadding; ++p) {
+                const int dstLeftX = innerStartX - p;
+                const int dstRightX = innerStartX + copyWidth - 1 + p;
+                const int leftSrcIndex = (srcY * atlasWidth + leftSrcX) * 4;
+                const int rightSrcIndex = (srcY * atlasWidth + rightSrcX) * 4;
+                const int dstLeftIndex = (srcY * atlasWidth + dstLeftX) * 4;
+                const int dstRightIndex = (srcY * atlasWidth + dstRightX) * 4;
+                for (int c = 0; c < 4; ++c) {
+                    atlasPixels[dstLeftIndex + c] = atlasPixels[leftSrcIndex + c];
+                    atlasPixels[dstRightIndex + c] = atlasPixels[rightSrcIndex + c];
+                }
+            }
+        }
+
+        for (int x = -kTilePadding; x < copyWidth + kTilePadding; ++x) {
+            const int srcX = innerStartX + std::clamp(x, 0, copyWidth - 1);
+            const int topSrcY = innerStartY;
+            const int bottomSrcY = innerStartY + copyHeight - 1;
+            for (int p = 1; p <= kTilePadding; ++p) {
+                const int dstTopY = innerStartY - p;
+                const int dstBottomY = innerStartY + copyHeight - 1 + p;
+                const int topSrcIndex = (topSrcY * atlasWidth + srcX) * 4;
+                const int bottomSrcIndex = (bottomSrcY * atlasWidth + srcX) * 4;
+                const int dstTopIndex = (dstTopY * atlasWidth + srcX) * 4;
+                const int dstBottomIndex = (dstBottomY * atlasWidth + srcX) * 4;
+                for (int c = 0; c < 4; ++c) {
+                    atlasPixels[dstTopIndex + c] = atlasPixels[topSrcIndex + c];
+                    atlasPixels[dstBottomIndex + c] = atlasPixels[bottomSrcIndex + c];
+                }
+            }
+        }
+
+        stbi_image_free(data);
+        m_itemTextureIndices[imagePaths[i].stem().string()] = i;
+    }
+
+    if (m_itemTextureAtlas.textureID != 0) {
+        glDeleteTextures(1, &m_itemTextureAtlas.textureID);
+        m_itemTextureAtlas.textureID = 0;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, atlasWidth, atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlasPixels.data());
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_itemTextureAtlas.textureID = textureID;
+    m_itemTextureAtlas.atlasWidth = atlasWidth;
+    m_itemTextureAtlas.atlasHeight = atlasHeight;
+    m_itemTextureAtlas.tileSize = tileSize;
+    m_itemTextureAtlas.tileStride = tileStride;
+    m_itemTextureAtlas.tilePadding = kTilePadding;
+    m_itemTextureAtlas.tilesPerRow = tilesPerRow;
+    m_itemAtlasPixels = std::move(atlasPixels);
+}
+
+const TextureAtlas& ResourceMgr::getItemTextureAtlas() const {
+    return m_itemTextureAtlas;
+}
+
+int ResourceMgr::getItemTextureIndex(const std::string& textureName) const {
+    const auto it = m_itemTextureIndices.find(textureName);
+    if (it == m_itemTextureIndices.end()) {
+        return -1;
+    }
+    return it->second;
+}
+
+const std::vector<unsigned char>& ResourceMgr::getItemTexturePixels() const {
+    return m_itemAtlasPixels;
 }
 
 float ResourceMgr::getAtlasAnisotropy() const {

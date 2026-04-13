@@ -39,7 +39,9 @@ void ItemGridControl::render(const UIRenderContext& context) const
                      m_crosshairShader,
                      m_inventoryShader,
                      m_mesh,
-                     m_resourceMgr->getItemIconAtlas());
+                     *m_resourceMgr,
+                     m_resourceMgr->getItemIconAtlas(),
+                     m_resourceMgr->getItemTextureAtlas());
 }
 
 UIEventResult ItemGridControl::onInput(const UIInputEvent& event)

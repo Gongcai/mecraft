@@ -61,6 +61,12 @@ public:
     void buildBlockIconAtlas(int iconSize = 64);
     [[nodiscard]] const TextureAtlas& getItemIconAtlas() const;
 
+    // Item textures packed from assets/textures/items for UI icons and 3D item models.
+    void buildItemTextureAtlas(const std::string& directory, int tileSize = 16);
+    [[nodiscard]] const TextureAtlas& getItemTextureAtlas() const;
+    [[nodiscard]] int getItemTextureIndex(const std::string& textureName) const;
+    [[nodiscard]] const std::vector<unsigned char>& getItemTexturePixels() const;
+
     // Atlas sampler controls (for world block atlas).
     void setAtlasAnisotropy(float anisotropy);
     [[nodiscard]] float getAtlasAnisotropy() const;
@@ -72,8 +78,11 @@ private:
     std::unordered_map<std::string, GLuint> m_guiTextures;
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;
+    TextureAtlas m_itemTextureAtlas;
     TextureArray m_textureArray;
     std::vector<unsigned char> m_blockAtlasPixels;
+    std::vector<unsigned char> m_itemAtlasPixels;
+    std::unordered_map<std::string, int> m_itemTextureIndices;
     float m_atlasAnisotropy = 1.0f;
     float m_atlasMaxAnisotropy = 1.0f;
 };

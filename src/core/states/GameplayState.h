@@ -12,6 +12,7 @@
 #include "../../world/World.h"
 #include "../../world/Block.h"
 #include "../../world/DropSystem.h"
+#include "../../item/Item.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../ui/UIRenderer.h"
 #include "CommandState.h"
@@ -219,6 +220,7 @@ private:
     void resetBlockBreakSession() {
         m_blockBreakSession = {};
         m_player.clearBlockBreakProgress();
+        m_uiRenderer.setHeldItemPreviewActionAnimationActive(false);
     }
 
     void updateBreakProgress(const glm::ivec3& blockPos, const float progress01) {
@@ -251,6 +253,8 @@ private:
                 return;
             }
 
+            m_uiRenderer.setHeldItemPreviewActionAnimationActive(true);
+
             // Creative: instant break, but with fixed per-break cooldown.
             if (!m_modeRules.shouldReportBreakProgress()) {
                 if (m_creativeBreakCooldownRemaining > 0.0f) {
@@ -262,7 +266,6 @@ private:
                 m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
                 m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
                 m_particleSystem.emit(selection.hitBlock, brokenBlock);
-                m_uiRenderer.triggerHeldItemPreviewActionAnimation();
                 m_creativeBreakCooldownRemaining = m_modeRules.breakDurationMs(targetBlock) / 1000.0f;
                 resetBlockBreakSession();
                 return;
@@ -293,7 +296,6 @@ private:
             m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
             m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
             m_particleSystem.emit(selection.hitBlock, brokenBlock);
-            m_uiRenderer.triggerHeldItemPreviewActionAnimation();
             resetBlockBreakSession();
             return;
         }
@@ -301,9 +303,18 @@ private:
         resetBlockBreakSession();
 
         if (action == GameplayBlockAction::Place) {
-            m_world.setBlock(selection.placeBlock.x, selection.placeBlock.y, selection.placeBlock.z,
-                             m_player.getInventory().getSelectedBlock());
+            Inventory& inventory = m_player.getInventory();
+            const ItemID selectedItem = inventory.getSelectedItem();
+            const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
+            if (blockToPlace == BlockType::AIR) {
+                return;
+            }
+
+            m_world.setBlock(selection.placeBlock.x, selection.placeBlock.y, selection.placeBlock.z, blockToPlace);
             m_dropSystem.onBlockPlaced(selection.placeBlock, m_world);
+            if (m_modeRules.shouldReportBreakProgress()) {
+                static_cast<void>(inventory.consumeSelectedOne());
+            }
             m_placeCooldownRemaining = m_modeRules.placeCooldownSeconds();
             m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.placeBlock);
             m_uiRenderer.triggerHeldItemPreviewActionAnimation();

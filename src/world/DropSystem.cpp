@@ -8,6 +8,7 @@
 #include <glm/gtc/constants.hpp>
 
 #include "World.h"
+#include "../player/Inventory.h"
 
 namespace {
 constexpr float kGravity = 20.0f;
@@ -21,8 +22,7 @@ constexpr float kMergeRadiusSq = kMergeRadius * kMergeRadius;
 constexpr float kMergeIntervalSeconds = 0.2f;
 
 bool canMergeDrops(const DropEntity& a, const DropEntity& b) {
-    return a.kind == DropKind::Block && b.kind == DropKind::Block &&
-           a.blockId == b.blockId && a.stackCount > 0 && b.stackCount > 0;
+    return a.itemId == b.itemId && a.stackCount > 0 && b.stackCount > 0;
 }
 
 void absorbDrop(DropEntity& target, const DropEntity& source) {
@@ -43,13 +43,14 @@ void absorbDrop(DropEntity& target, const DropEntity& source) {
 }
 
 bool tryMergeDropAtSpawn(std::vector<DropEntity>& drops,
-                         const BlockID blockId,
-                         const glm::vec3& spawnPos) {
+                         const ItemID itemId,
+                         const glm::vec3& spawnPos,
+                         const uint32_t stackCount) {
     DropEntity* bestMatch = nullptr;
     float bestDistSq = kMergeRadiusSq;
 
     for (DropEntity& drop : drops) {
-        if (drop.kind != DropKind::Block || drop.blockId != blockId || drop.stackCount == 0) {
+        if (drop.itemId != itemId || drop.stackCount == 0) {
             continue;
         }
         const glm::vec3 delta = drop.position - spawnPos;
@@ -65,7 +66,7 @@ bool tryMergeDropAtSpawn(std::vector<DropEntity>& drops,
         return false;
     }
 
-    bestMatch->stackCount += 1;
+    bestMatch->stackCount += stackCount;
     bestMatch->position = (bestMatch->position + spawnPos) * 0.5f;
     bestMatch->ageSeconds = std::max(0.0f, bestMatch->ageSeconds - 1.0f);
     return true;
@@ -182,13 +183,13 @@ void moveAndCollideAxis(DropEntity& drop, const World& world, const int axis, co
 }
 }
 
-void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPos) {
-    if (blockId == BlockType::AIR) {
+void DropSystem::spawnItemDrop(const ItemID itemId, const glm::ivec3& blockPos, const uint32_t stackCount) {
+    if (itemId == ItemType::AIR || stackCount == 0) {
         return;
     }
 
     const glm::vec3 spawnPos = glm::vec3(blockPos) + glm::vec3(0.5f, 0.42f, 0.5f);
-    if (tryMergeDropAtSpawn(m_drops, blockId, spawnPos)) {
+    if (tryMergeDropAtSpawn(m_drops, itemId, spawnPos, stackCount)) {
         return;
     }
 
@@ -200,14 +201,22 @@ void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPo
 
     DropEntity drop;
     drop.id = m_nextId++;
-    drop.kind = DropKind::Block;
-    drop.blockId = blockId;
+    drop.kind = DropKind::Item;
+    drop.itemId = itemId;
+    drop.stackCount = stackCount;
     drop.position = spawnPos;
     drop.velocity = glm::vec3(horizontalDist(rng), upwardDist(rng), horizontalDist(rng));
     drop.yawRadians = yawDist(rng);
     drop.spinSpeedRadians = spinDist(rng);
 
     m_drops.push_back(drop);
+}
+
+void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPos) {
+    if (blockId == BlockType::AIR) {
+        return;
+    }
+    spawnItemDrop(ItemRegistry::fromBlock(blockId), blockPos, 1);
 }
 
 void DropSystem::onBlockPlaced(const glm::ivec3& blockPos, const World& world) {
@@ -282,6 +291,39 @@ void DropSystem::update(const float dt, const World& world) {
     mergeNearbyDrops(m_drops);
 }
 
+uint32_t DropSystem::collectNearbyDrops(const glm::vec3& position, const float radius, Inventory& inventory) {
+    if (radius <= 0.0f || m_drops.empty()) {
+        return 0;
+    }
+
+    const float radiusSq = radius * radius;
+    uint32_t collectedTotal = 0;
+
+    for (DropEntity& drop : m_drops) {
+        if (drop.stackCount == 0 || drop.itemId == ItemType::AIR) {
+            continue;
+        }
+
+        const glm::vec3 delta = drop.position - position;
+        if (glm::dot(delta, delta) > radiusSq) {
+            continue;
+        }
+
+        const uint32_t before = drop.stackCount;
+        const uint32_t remaining = inventory.addItem(drop.itemId, drop.stackCount);
+        drop.stackCount = remaining;
+        collectedTotal += (before - remaining);
+    }
+
+    m_drops.erase(std::remove_if(m_drops.begin(), m_drops.end(),
+                                 [](const DropEntity& drop) {
+                                     return drop.stackCount == 0;
+                                 }),
+                  m_drops.end());
+
+    return collectedTotal;
+}
+
 void DropSystem::clear() {
     m_drops.clear();
 }
@@ -289,5 +331,4 @@ void DropSystem::clear() {
 const std::vector<DropEntity>& DropSystem::getDrops() const {
     return m_drops;
 }
-
 

@@ -8,6 +8,7 @@
 
 #include "Shader.h"
 #include "../world/Block.h"
+#include "../item/Item.h"
 
 class Camera;
 class ResourceMgr;
@@ -29,11 +30,15 @@ private:
 
 	Mesh* getOrCreateBlockMesh(BlockID blockId);
 	Mesh buildBlockMesh(BlockID blockId) const;
+	Mesh* getOrCreateItemMesh(ItemID itemId);
+	Mesh buildItemMesh(ItemID itemId) const;
 	static void destroyMesh(Mesh& mesh);
 
 	ResourceMgr* m_resourceMgr = nullptr;
 	Shader* m_shader = nullptr;
+	Shader* m_itemShader = nullptr;
 	std::unordered_map<BlockID, Mesh> m_blockMeshes;
+	std::unordered_map<ItemID, Mesh> m_itemMeshes;
 };
 
 #endif // MECRAFT_DROPRENDERER_H

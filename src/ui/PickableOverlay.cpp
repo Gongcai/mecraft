@@ -48,6 +48,8 @@ void PickableOverlay::render(const Pickable::SlotInfo* slots, int count, float m
                      m_crosshairShader,
                      m_inventoryShader,
                      m_mesh,
-                     itemIconAtlas);
+                     *m_resourceMgr,
+                     itemIconAtlas,
+                     m_resourceMgr->getItemTextureAtlas());
 }
 

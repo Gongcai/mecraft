@@ -8,8 +8,10 @@
 #include <glm/glm.hpp>
 
 #include "Block.h"
+#include "../item/Item.h"
 
 class World;
+class Inventory;
 
 enum class DropKind {
     Item,
@@ -18,8 +20,8 @@ enum class DropKind {
 
 struct DropEntity {
     std::size_t id = 0;
-    DropKind kind = DropKind::Block;
-    BlockID blockId = BlockType::AIR;
+    DropKind kind = DropKind::Item;
+    ItemID itemId = ItemType::AIR;
 
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 velocity = glm::vec3(0.0f);
@@ -36,9 +38,11 @@ struct DropEntity {
 
 class DropSystem {
 public:
+    void spawnItemDrop(ItemID itemId, const glm::ivec3& blockPos, uint32_t stackCount = 1);
     void spawnBlockDrop(BlockID blockId, const glm::ivec3& blockPos);
     void onBlockPlaced(const glm::ivec3& blockPos, const World& world);
     void update(float dt, const World& world);
+    uint32_t collectNearbyDrops(const glm::vec3& position, float radius, Inventory& inventory);
     void clear();
 
     [[nodiscard]] const std::vector<DropEntity>& getDrops() const;

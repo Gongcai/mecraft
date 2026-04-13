@@ -47,5 +47,7 @@ public:
                        Shader* crosshairShader,
                        Shader* inventoryShader,
                        const MeshHandles& mesh,
-                       const class TextureAtlas& itemIconAtlas);
+                       const class ResourceMgr& resourceMgr,
+                       const class TextureAtlas& itemIconAtlas,
+                       const class TextureAtlas& itemTextureAtlas);
 };

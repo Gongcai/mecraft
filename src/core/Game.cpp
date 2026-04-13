@@ -4,6 +4,7 @@
 #include "Game.h"
 #include "states/GameplayState.h"
 #include "../world/Block.h"
+#include "../item/Item.h"
 #include "../audio/AudioListener.h"
 
 #include <algorithm>
@@ -34,10 +35,12 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     m_resourceMgr.buildTextureArray("../assets/textures/blocks", 16);
+    m_resourceMgr.buildItemTextureAtlas("../assets/textures/items", 16);
     m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
     m_resourceMgr.loadGuiTexture("inventory", "../assets/textures/gui/inventory.png", true);
     m_resourceMgr.loadGuiTexture("font_ascii", "../assets/textures/font/ascii.png", true);
     BlockRegistry::init(&m_resourceMgr);
+    ItemRegistry::init();
     m_resourceMgr.buildBlockIconAtlas(64);
 #ifndef NDEBUG
     BlockRegistry::printAllBlocks();
@@ -110,6 +113,7 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     const auto dropStart = std::chrono::steady_clock::now();
 #endif
     m_dropSystem.update(static_cast<float>(fixedStep), m_world);
+    static_cast<void>(m_dropSystem.collectNearbyDrops(m_player.getPosition(), 1.35f, m_player.getInventory()));
 #ifndef NDEBUG
     const auto dropEnd = std::chrono::steady_clock::now();
     const auto worldStart = std::chrono::steady_clock::now();

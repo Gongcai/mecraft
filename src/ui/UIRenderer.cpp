@@ -129,6 +129,11 @@ void UIRenderer::triggerHeldItemPreviewActionAnimation()
     m_heldItemPreview.triggerActionAnimation();
 }
 
+void UIRenderer::setHeldItemPreviewActionAnimationActive(const bool active)
+{
+    m_heldItemPreview.setActionAnimationActive(active);
+}
+
 void UIRenderer::setTextAdvanceFactor(float factor)
 {
     m_text.setAdvanceFactor(factor);

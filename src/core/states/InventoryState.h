@@ -133,15 +133,17 @@ public:
 
         const auto& dragged = m_input.getUIDragItem();
         if (!dragged.active) {
-            const BlockID picked = inventory.takeSlot(inventorySlot);
-            if (picked != BlockType::AIR) {
+            const ItemID picked = inventory.getSlotItem(inventorySlot);
+            if (picked != ItemType::AIR) {
+                inventory.setSlotItem(inventorySlot, ItemType::AIR, 0);
                 m_input.beginUIDragItem(static_cast<int>(picked), inventorySlot);
             }
             return;
         }
 
-        const BlockID replaced = inventory.placeSlot(inventorySlot, static_cast<BlockID>(dragged.itemId));
-        if (replaced == BlockType::AIR) {
+        const ItemID replaced = inventory.getSlotItem(inventorySlot);
+        inventory.setSlotItem(inventorySlot, static_cast<ItemID>(dragged.itemId), 1);
+        if (replaced == ItemType::AIR) {
             m_input.clearUIDragItem();
         } else {
             m_input.beginUIDragItem(static_cast<int>(replaced), inventorySlot);
@@ -164,15 +166,15 @@ private:
             // Return to crafting grid
             const int craftIdx = dragged.sourceSlot - kCraftingSlotBase;
             if (craftIdx < 4) {
-                m_uiRenderer.getCraftingGrid().setCraftingSlot(craftIdx, static_cast<BlockID>(dragged.itemId));
+                m_uiRenderer.getCraftingGrid().setCraftingSlot(craftIdx, static_cast<ItemID>(dragged.itemId));
             } else if (craftIdx == 4) {
-                m_uiRenderer.getCraftingGrid().setResultSlot(static_cast<BlockID>(dragged.itemId));
+                m_uiRenderer.getCraftingGrid().setResultSlot(static_cast<ItemID>(dragged.itemId));
             }
         } else {
             // Return to inventory
             Inventory& inventory = m_player.getInventory();
             if (inventory.isValidSlot(dragged.sourceSlot)) {
-                static_cast<void>(inventory.placeSlot(dragged.sourceSlot, static_cast<BlockID>(dragged.itemId)));
+                inventory.setSlotItem(dragged.sourceSlot, static_cast<ItemID>(dragged.itemId), 1);
             }
         }
         m_input.clearUIDragItem();
@@ -186,8 +188,8 @@ private:
         if (slotIndex == 4) {
             // Clicked the result slot — take the result item (only if not dragging)
             if (!dragged.active) {
-                BlockID resultItem = craftGrid.getResultSlot();
-                if (resultItem != BlockType::AIR) {
+                ItemID resultItem = craftGrid.getResultSlot();
+                if (resultItem != ItemType::AIR) {
                     // Take result: clear crafting input slots, start dragging the result
                     craftGrid.clearAll();
                     m_input.beginUIDragItem(static_cast<int>(resultItem), kCraftingSlotBase + 4);
@@ -199,17 +201,17 @@ private:
         // Crafting input slot (0-3)
         if (!dragged.active) {
             // Pick up item from crafting slot
-            BlockID current = craftGrid.getCraftingSlot(slotIndex);
-            if (current != BlockType::AIR) {
-                craftGrid.setCraftingSlot(slotIndex, BlockType::AIR);
+            ItemID current = craftGrid.getCraftingSlot(slotIndex);
+            if (current != ItemType::AIR) {
+                craftGrid.setCraftingSlot(slotIndex, ItemType::AIR);
                 m_input.beginUIDragItem(static_cast<int>(current), kCraftingSlotBase + slotIndex);
             }
         } else {
             // Place dragged item into crafting slot
             // If there's already an item, swap
-            BlockID current = craftGrid.getCraftingSlot(slotIndex);
-            craftGrid.setCraftingSlot(slotIndex, static_cast<BlockID>(dragged.itemId));
-            if (current == BlockType::AIR) {
+            ItemID current = craftGrid.getCraftingSlot(slotIndex);
+            craftGrid.setCraftingSlot(slotIndex, static_cast<ItemID>(dragged.itemId));
+            if (current == ItemType::AIR) {
                 m_input.clearUIDragItem();
             } else {
                 m_input.beginUIDragItem(static_cast<int>(current), kCraftingSlotBase + slotIndex);
@@ -222,13 +224,13 @@ private:
         Inventory& inventory = m_player.getInventory();
 
         for (int i = 0; i < 4; ++i) {
-            BlockID item = craftGrid.getCraftingSlot(i);
-            if (item != BlockType::AIR) {
+            ItemID item = craftGrid.getCraftingSlot(i);
+            if (item != ItemType::AIR) {
                 // Try to find an empty slot in inventory
                 bool placed = false;
                 for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
-                    if (inventory.getSlot(slot) == BlockType::AIR) {
-                        inventory.setSlot(slot, item);
+                    if (inventory.getSlotItem(slot) == ItemType::AIR) {
+                        inventory.setSlotItem(slot, item, 1);
                         placed = true;
                         break;
                     }

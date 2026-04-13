@@ -1,4 +1,5 @@
 #include "DropRenderer.h"
+#include "ItemModelMesh.h"
 
 #include <array>
 #include <cstddef>
@@ -11,6 +12,7 @@
 #include "../core/Window.h"
 #include "../resource/ResourceMgr.h"
 #include "../world/DropSystem.h"
+#include "../item/Item.h"
 
 namespace {
 struct BlockVertex {
@@ -63,6 +65,7 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
 void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_shader = resourceMgr.getShader("chunk");
+    m_itemShader = resourceMgr.getShader("item_model");
 }
 
 void DropRenderer::shutdown() {
@@ -70,12 +73,17 @@ void DropRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_blockMeshes.clear();
+    for (auto& pair : m_itemMeshes) {
+        destroyMesh(pair.second);
+    }
+    m_itemMeshes.clear();
     m_shader = nullptr;
+    m_itemShader = nullptr;
     m_resourceMgr = nullptr;
 }
 
 void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, const Window& window) {
-    if (m_shader == nullptr || m_resourceMgr == nullptr) {
+    if (m_resourceMgr == nullptr) {
         return;
     }
 
@@ -85,33 +93,38 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     }
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    if (texArray.textureID == 0) {
+    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
+    const bool canRenderBlocks = (m_shader != nullptr && texArray.textureID != 0);
+    const bool canRenderItems = (m_itemShader != nullptr && itemAtlas.textureID != 0);
+    if (!canRenderBlocks && !canRenderItems) {
         return;
     }
 
     const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
-    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
-    const int modelLoc = m_shader->getUniformLocation("model");
+    int blockModelLoc = -1;
+    if (canRenderBlocks) {
+        const int blockViewProjLoc = m_shader->getUniformLocation("viewProj");
+        blockModelLoc = m_shader->getUniformLocation("model");
+        m_shader->use();
+        m_shader->setMat4(blockViewProjLoc, viewProj);
+        m_shader->setInt("texArray", 0);
+        m_shader->setInt("uForceBaseLod", 0);
+        m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+        m_shader->setFloat("uWindStrength", 0.0f);
+    }
 
-    m_shader->use();
-    m_shader->setMat4(viewProjLoc, viewProj);
-    m_shader->setInt("texArray", 0);
-    m_shader->setInt("uForceBaseLod", 0);
-    m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
-    m_shader->setFloat("uWindStrength", 0.0f);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    int itemModelLoc = -1;
+    if (canRenderItems) {
+        const int itemViewProjLoc = m_itemShader->getUniformLocation("viewProj");
+        itemModelLoc = m_itemShader->getUniformLocation("model");
+        m_itemShader->use();
+        m_itemShader->setMat4(itemViewProjLoc, viewProj);
+        m_itemShader->setInt("uAtlas", 0);
+    }
 
     for (const DropEntity& drop : drops) {
-        if (drop.kind != DropKind::Block) {
-            continue;
-        }
-
-        Mesh* mesh = getOrCreateBlockMesh(drop.blockId);
-        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
-            continue;
-        }
+        const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
+        const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
 
         glm::mat4 model(1.0f);
         model = glm::translate(model, drop.position);
@@ -119,13 +132,94 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
         model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
 
-        m_shader->setMat4(modelLoc, model);
+        if (itemTileIndex >= 0 && canRenderItems) {
+            Mesh* mesh = getOrCreateItemMesh(drop.itemId);
+            if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
+                m_itemShader->use();
+                m_itemShader->setMat4(itemModelLoc, model);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+                glBindVertexArray(mesh->vao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            }
+            continue;
+        }
+
+        const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
+        if (renderBlock == BlockType::AIR || !canRenderBlocks) {
+            continue;
+        }
+
+        Mesh* mesh = getOrCreateBlockMesh(renderBlock);
+        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
+            continue;
+        }
+
+        m_shader->use();
+        m_shader->setMat4(blockModelLoc, model);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+DropRenderer::Mesh* DropRenderer::getOrCreateItemMesh(const ItemID itemId) {
+    const auto it = m_itemMeshes.find(itemId);
+    if (it != m_itemMeshes.end()) {
+        return &it->second;
+    }
+
+    Mesh mesh = buildItemMesh(itemId);
+    auto inserted = m_itemMeshes.emplace(itemId, std::move(mesh));
+    return &inserted.first->second;
+}
+
+DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
+    Mesh mesh;
+    if (m_resourceMgr == nullptr || itemId == ItemType::AIR) {
+        return mesh;
+    }
+
+    const ItemDef& itemDef = ItemRegistry::get(itemId);
+    const int tileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    if (tileIndex < 0) {
+        return mesh;
+    }
+
+    std::vector<ItemModelVertex> vertices;
+    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(),
+                               m_resourceMgr->getItemTexturePixels(),
+                               tileIndex,
+                               vertices)) {
+        return mesh;
+    }
+
+    glGenVertexArrays(1, &mesh.vao);
+    glGenBuffers(1, &mesh.vbo);
+    mesh.vertexCount = static_cast<uint32_t>(vertices.size());
+
+    glBindVertexArray(mesh.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(vertices.size() * sizeof(ItemModelVertex)),
+                 vertices.data(),
+                 GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, u)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, shade)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    return mesh;
 }
 
 DropRenderer::Mesh* DropRenderer::getOrCreateBlockMesh(const BlockID blockId) {
@@ -253,4 +347,3 @@ void DropRenderer::destroyMesh(Mesh& mesh) {
     }
     mesh.vertexCount = 0;
 }
-

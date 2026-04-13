@@ -1,5 +1,7 @@
 #include "HeldItemPreviewControl.h"
 
+#include "../renderer/ItemModelMesh.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -12,6 +14,7 @@
 #include "../player/Inventory.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
+#include "../item/Item.h"
 
 namespace {
 struct BlockVertex {
@@ -61,6 +64,7 @@ void HeldItemPreviewControl::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
     m_shader = resourceMgr.getShader("chunk");
+    m_itemShader = resourceMgr.getShader("item_model");
 }
 
 void HeldItemPreviewControl::shutdown()
@@ -69,7 +73,12 @@ void HeldItemPreviewControl::shutdown()
         destroyMesh(pair.second);
     }
     m_blockMeshes.clear();
+    for (auto& pair : m_itemMeshes) {
+        destroyMesh(pair.second);
+    }
+    m_itemMeshes.clear();
     m_shader = nullptr;
+    m_itemShader = nullptr;
     m_resourceMgr = nullptr;
     m_hasPrevSample = false;
     m_prevTimeSeconds = 0.0f;
@@ -77,29 +86,42 @@ void HeldItemPreviewControl::shutdown()
     m_swayX = 0.0f;
     m_swayY = 0.0f;
     m_actionAnimActive = false;
+    m_actionAnimContinuous = false;
     m_actionAnimElapsed = 0.0f;
 }
 
 void HeldItemPreviewControl::render(const UIRenderContext& context) const
 {
-    if (!m_visible || !m_resourceMgr || !m_shader || !context.inventory) {
+    if (!m_visible || !m_resourceMgr || !context.inventory) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
     }
 
-    const BlockID selectedBlock = context.inventory->getSelectedBlock();
-    if (selectedBlock == BlockType::AIR) {
+    const ItemID selectedItem = context.inventory->getSelectedItem();
+    if (selectedItem == ItemType::AIR) {
         return;
     }
 
+    const ItemDef& itemDef = ItemRegistry::get(selectedItem);
+    const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    if (texArray.textureID == 0) {
+
+    const bool useItemMesh = (itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
+    const BlockID renderBlock = ItemRegistry::toRenderBlock(selectedItem);
+    const bool useBlockMesh = (!useItemMesh && renderBlock != BlockType::AIR && texArray.textureID != 0 && m_shader != nullptr);
+    if (!useItemMesh && !useBlockMesh) {
         return;
     }
 
-    Mesh* mesh = const_cast<HeldItemPreviewControl*>(this)->getOrCreateBlockMesh(selectedBlock);
+    Mesh* mesh = nullptr;
+    if (useItemMesh) {
+        mesh = const_cast<HeldItemPreviewControl*>(this)->getOrCreateItemMesh(selectedItem);
+    } else {
+        mesh = const_cast<HeldItemPreviewControl*>(this)->getOrCreateBlockMesh(renderBlock);
+    }
     if (!mesh || mesh->vao == 0 || mesh->vertexCount == 0) {
         return;
     }
@@ -144,9 +166,13 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
     float actionPitchOffset = 0.0f;
     if (m_actionAnimActive) {
         m_actionAnimElapsed += dt;
+        if (m_actionAnimContinuous && m_actionAnimElapsed > kActionAnimDurationSec) {
+            m_actionAnimElapsed = std::fmod(m_actionAnimElapsed, kActionAnimDurationSec);
+        }
+
         const float t = std::clamp(m_actionAnimElapsed / kActionAnimDurationSec, 0.0f, 1.0f);
         actionPitchOffset = -std::sin(t * kPi) * glm::radians(kActionPitchAmplitudeDeg);
-        if (t >= 1.0f) {
+        if (!m_actionAnimContinuous && t >= 1.0f) {
             m_actionAnimActive = false;
             m_actionAnimElapsed = 0.0f;
         }
@@ -170,26 +196,35 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 
-    m_shader->use();
-    m_shader->setMat4("model", model);
-    m_shader->setMat4("view", view);
-    m_shader->setMat4("viewProj", viewProj);
-    m_shader->setFloat("uWindTime", 0.0f);
-    m_shader->setFloat("uWindStrength", 0.0f);
-    m_shader->setFloat("uWindSpeed", 0.0f);
-    m_shader->setFloat("uWindSpatialFreq", 1.0f);
-    m_shader->setInt("texArray", 0);
-    m_shader->setInt("uForceBaseLod", 1);
-    m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
-    m_shader->setInt("uFogEnabled", 0);
-
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    if (useItemMesh) {
+        m_itemShader->use();
+        m_itemShader->setMat4("model", model);
+        m_itemShader->setMat4("viewProj", viewProj);
+        m_itemShader->setInt("uAtlas", 0);
+        glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+    } else {
+        m_shader->use();
+        m_shader->setMat4("model", model);
+        m_shader->setMat4("view", view);
+        m_shader->setMat4("viewProj", viewProj);
+        m_shader->setFloat("uWindTime", 0.0f);
+        m_shader->setFloat("uWindStrength", 0.0f);
+        m_shader->setFloat("uWindSpeed", 0.0f);
+        m_shader->setFloat("uWindSpatialFreq", 1.0f);
+        m_shader->setInt("texArray", 0);
+        m_shader->setInt("uForceBaseLod", 1);
+        m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+        m_shader->setInt("uFogEnabled", 0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    }
+
     glBindVertexArray(mesh->vao);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 UIEventResult HeldItemPreviewControl::onInput(const UIInputEvent&)
@@ -224,8 +259,22 @@ const HeldItemPreviewLayout& HeldItemPreviewControl::getLayout() const
 
 void HeldItemPreviewControl::triggerActionAnimation()
 {
+    m_actionAnimContinuous = false;
     m_actionAnimActive = true;
     m_actionAnimElapsed = 0.0f;
+}
+
+void HeldItemPreviewControl::setActionAnimationActive(const bool active)
+{
+    if (!active) {
+        m_actionAnimContinuous = false;
+        m_actionAnimActive = false;
+        m_actionAnimElapsed = 0.0f;
+        return;
+    }
+
+    m_actionAnimContinuous = true;
+    m_actionAnimActive = true;
 }
 
 HeldItemPreviewControl::Mesh* HeldItemPreviewControl::getOrCreateBlockMesh(const BlockID blockId)
@@ -237,6 +286,18 @@ HeldItemPreviewControl::Mesh* HeldItemPreviewControl::getOrCreateBlockMesh(const
 
     Mesh mesh = buildBlockMesh(blockId);
     auto inserted = m_blockMeshes.emplace(blockId, std::move(mesh));
+    return &inserted.first->second;
+}
+
+HeldItemPreviewControl::Mesh* HeldItemPreviewControl::getOrCreateItemMesh(const ItemID itemId)
+{
+    const auto it = m_itemMeshes.find(itemId);
+    if (it != m_itemMeshes.end()) {
+        return &it->second;
+    }
+
+    Mesh mesh = buildItemMesh(itemId);
+    auto inserted = m_itemMeshes.emplace(itemId, std::move(mesh));
     return &inserted.first->second;
 }
 
@@ -336,6 +397,50 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
     glEnableVertexAttribArray(4);
     glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    return mesh;
+}
+
+HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildItemMesh(const ItemID itemId) const
+{
+    Mesh mesh;
+    if (!m_resourceMgr || itemId == ItemType::AIR) {
+        return mesh;
+    }
+
+    const ItemDef& itemDef = ItemRegistry::get(itemId);
+    const int tileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    if (tileIndex < 0) {
+        return mesh;
+    }
+
+    std::vector<ItemModelVertex> vertices;
+    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(),
+                               m_resourceMgr->getItemTexturePixels(),
+                               tileIndex,
+                               vertices)) {
+        return mesh;
+    }
+
+    glGenVertexArrays(1, &mesh.vao);
+    glGenBuffers(1, &mesh.vbo);
+    mesh.vertexCount = static_cast<uint32_t>(vertices.size());
+
+    glBindVertexArray(mesh.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(vertices.size() * sizeof(ItemModelVertex)),
+                 vertices.data(),
+                 GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, u)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, shade)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

@@ -60,41 +60,41 @@ const CraftingGridLayout& CraftingGridControl::getLayout() const
     return m_layout;
 }
 
-BlockID CraftingGridControl::getCraftingSlot(int index) const
+ItemID CraftingGridControl::getCraftingSlot(int index) const
 {
     if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
-        return BlockType::AIR;
+        return ItemType::AIR;
     }
     return m_slots[static_cast<size_t>(index)];
 }
 
-void CraftingGridControl::setCraftingSlot(int index, BlockID block)
+void CraftingGridControl::setCraftingSlot(int index, const ItemID itemId)
 {
     if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
         return;
     }
-    m_slots[static_cast<size_t>(index)] = block;
+    m_slots[static_cast<size_t>(index)] = itemId;
 }
 
-BlockID CraftingGridControl::getResultSlot() const
+ItemID CraftingGridControl::getResultSlot() const
 {
     return m_slots[4];
 }
 
-void CraftingGridControl::setResultSlot(BlockID block)
+void CraftingGridControl::setResultSlot(const ItemID itemId)
 {
-    m_slots[4] = block;
+    m_slots[4] = itemId;
 }
 
 void CraftingGridControl::clearAll()
 {
-    m_slots.fill(BlockType::AIR);
+    m_slots.fill(ItemType::AIR);
 }
 
 void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSystem)
 {
     // Build a 2x2 grid for the crafting system
-    std::vector<BlockID> grid = {
+    std::vector<ItemID> grid = {
         m_slots[0], m_slots[1],
         m_slots[2], m_slots[3]
     };
@@ -103,7 +103,7 @@ void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSys
     if (result.matched) {
         m_slots[4] = result.itemId;
     } else {
-        m_slots[4] = BlockType::AIR;
+        m_slots[4] = ItemType::AIR;
     }
 }
 

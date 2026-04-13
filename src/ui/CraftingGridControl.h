@@ -4,7 +4,7 @@
 
 #include "IUIControl.h"
 #include "ItemGridControl.h"
-#include "../world/Block.h"
+#include "../item/Item.h"
 
 class Shader;
 class CraftingSystem;
@@ -41,10 +41,10 @@ public:
     [[nodiscard]] const CraftingGridLayout& getLayout() const;
 
     // Crafting grid state (4 slots + 1 result)
-    [[nodiscard]] BlockID getCraftingSlot(int index) const;
-    void setCraftingSlot(int index, BlockID block);
-    [[nodiscard]] BlockID getResultSlot() const;
-    void setResultSlot(BlockID block);
+    [[nodiscard]] ItemID getCraftingSlot(int index) const;
+    void setCraftingSlot(int index, ItemID itemId);
+    [[nodiscard]] ItemID getResultSlot() const;
+    void setResultSlot(ItemID itemId);
 
     // Clear all crafting slots and result
     void clearAll();
@@ -67,7 +67,7 @@ private:
     ItemGridControl m_itemGrid;
 
     // Crafting grid content: slots 0-3 are 2x2 grid, slot 4 is result
-    std::array<BlockID, CraftingGridLayout::TOTAL_SLOTS> m_slots{};
+    std::array<ItemID, CraftingGridLayout::TOTAL_SLOTS> m_slots{};
 
     // Cached panel positioning
     float m_panelX = 0.0f;

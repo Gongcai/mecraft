@@ -79,6 +79,8 @@ class BlockRegistry {
 public:
     static void init(ResourceMgr* resourceMgr = nullptr);
     static const BlockDef& get(BlockID id);
+    [[nodiscard]] static BlockID findByName(const std::string& name);
+    [[nodiscard]] static bool tryGetIdByName(const std::string& name, BlockID& outId);
     static void printAllBlocks();
 private:
     static std::array<BlockDef, BlockType::COUNT> s_blocks;

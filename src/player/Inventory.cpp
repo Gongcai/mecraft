@@ -1,26 +1,29 @@
 #include "Inventory.h"
 
+#include <algorithm>
 #include <utility>
 
 Inventory::Inventory() : m_slots{} {
-    m_slots.fill(BlockType::AIR);
+    for (ItemStack& stack : m_slots) {
+        stack = {};
+    }
 
-    // 默认热栏内容
-    m_slots[0] = BlockType::DIRT;
-    m_slots[1] = BlockType::GRASS;
-    m_slots[2] = BlockType::STONE;
-    m_slots[3] = BlockType::SAND;
-    m_slots[4] = BlockType::WOOD;
-    m_slots[5] = BlockType::GLASS;
-    m_slots[6] = BlockType::COAL_ORE;
-    m_slots[7] = BlockType::ROSE;
-    m_slots[8] = BlockType::TALL_GRASS;
+    // Default hotbar content.
+    setSlotItem(0, BlockType::DIRT);
+    setSlotItem(1, BlockType::GRASS);
+    setSlotItem(2, BlockType::STONE);
+    setSlotItem(3, BlockType::SAND);
+    setSlotItem(4, BlockType::WOOD);
+    setSlotItem(5, BlockType::GLASS);
+    setSlotItem(6, BlockType::COAL_ORE);
+    setSlotItem(7, ItemType::COAL, 16);
+    setSlotItem(8, ItemType::IRON_PICKAXE, 1);
 
-    // 默认背包内容（前三行）
-    m_slots[9] = BlockType::IRON_ORE;
-    m_slots[10] = BlockType::DIAMOND_ORE;
-    m_slots[11] = BlockType::WATER;
-    m_slots[12] = BlockType::BIRCH_LOG;
+    // Default inventory content.
+    setSlotItem(9, BlockType::IRON_ORE);
+    setSlotItem(10, BlockType::DIAMOND_ORE);
+    setSlotItem(11, BlockType::WATER);
+    setSlotItem(12, BlockType::BIRCH_LOG);
 }
 
 void Inventory::setSelectedSlot(int slot) {
@@ -39,21 +42,89 @@ void Inventory::scrollSlot(int direction) {
     if (m_selectedSlot >= HOTBAR_SIZE) m_selectedSlot = 0;
 }
 
-BlockID Inventory::getSlot(int slot) const {
-    if (slot >= 0 && slot < INVENTORY_SIZE) {
-        return m_slots[slot];
+ItemID Inventory::getSlotItem(const int slot) const {
+    if (!isValidSlot(slot)) {
+        return ItemType::AIR;
     }
-    return BlockType::AIR;
+    const ItemStack& stack = m_slots[slot];
+    return stack.isEmpty() ? ItemType::AIR : stack.itemId;
 }
 
-void Inventory::setSlot(int slot, BlockID block) {
-    if (slot >= 0 && slot < INVENTORY_SIZE) {
-        m_slots[slot] = block;
+void Inventory::setSlotItem(const int slot, const ItemID item, const uint16_t count) {
+    if (!isValidSlot(slot) || item >= BlockType::COUNT) {
+        return;
     }
+
+    if (item == ItemType::AIR || count == 0) {
+        m_slots[slot] = {};
+        return;
+    }
+
+    ItemStack stack;
+    stack.itemId = item;
+    stack.count = count;
+    // Avoid touching ItemRegistry here: Inventory can be constructed before BlockRegistry
+    // is fully initialized with ResourceMgr, and early ItemRegistry access would lock blocks
+    // into fallback texture index 0 for the whole run.
+    stack.durability = 0;
+    m_slots[slot] = stack;
+}
+
+ItemStack Inventory::getSlotStack(const int slot) const {
+    if (!isValidSlot(slot)) {
+        return {};
+    }
+    return m_slots[slot];
+}
+
+void Inventory::setSlotStack(const int slot, const ItemStack& stack) {
+    if (!isValidSlot(slot)) {
+        return;
+    }
+    if (stack.isEmpty()) {
+        m_slots[slot] = {};
+        return;
+    }
+    m_slots[slot] = stack;
+}
+
+BlockID Inventory::getSlot(const int slot) const {
+    return static_cast<BlockID>(getSlotItem(slot));
+}
+
+void Inventory::setSlot(const int slot, const BlockID block) {
+    setSlotItem(slot, static_cast<ItemID>(block), block == BlockType::AIR ? 0 : 1);
+}
+
+ItemID Inventory::getSelectedItem() const {
+    return getSlotItem(m_selectedSlot);
+}
+
+ItemStack Inventory::getSelectedStack() const {
+    return getSlotStack(m_selectedSlot);
 }
 
 BlockID Inventory::getSelectedBlock() const {
-    return m_slots[m_selectedSlot];
+    return ItemRegistry::toPlaceBlock(getSelectedItem());
+}
+
+bool Inventory::consumeSelectedOne() {
+    if (!isValidSlot(m_selectedSlot)) {
+        return false;
+    }
+
+    ItemStack& stack = m_slots[m_selectedSlot];
+    if (stack.isEmpty()) {
+        return false;
+    }
+
+    if (stack.count > 1) {
+        --stack.count;
+        return true;
+    }
+
+    m_slots[m_selectedSlot] = {};
+    return true;
 }
 
 bool Inventory::isValidSlot(const int slot) const {
@@ -64,18 +135,20 @@ BlockID Inventory::takeSlot(const int slot) {
     if (!isValidSlot(slot)) {
         return BlockType::AIR;
     }
-    const BlockID value = m_slots[slot];
-    m_slots[slot] = BlockType::AIR;
-    return value;
+
+    const ItemID value = getSlotItem(slot);
+    m_slots[slot] = {};
+    return static_cast<BlockID>(value);
 }
 
 BlockID Inventory::placeSlot(const int slot, const BlockID block) {
     if (!isValidSlot(slot)) {
         return block;
     }
-    const BlockID replaced = m_slots[slot];
-    m_slots[slot] = block;
-    return replaced;
+
+    const ItemID replaced = getSlotItem(slot);
+    setSlot(slot, block);
+    return static_cast<BlockID>(replaced);
 }
 
 void Inventory::swapSlots(const int a, const int b) {
@@ -83,6 +156,50 @@ void Inventory::swapSlots(const int a, const int b) {
         return;
     }
     std::swap(m_slots[a], m_slots[b]);
+}
+
+uint32_t Inventory::addItem(const ItemID itemId, uint32_t count) {
+    if (itemId == ItemType::AIR || count == 0 || itemId >= BlockType::COUNT) {
+        return count;
+    }
+
+    const ItemDef& def = ItemRegistry::get(itemId);
+    if (def.maxStack == 0) {
+        return count;
+    }
+
+    // First pass: merge into existing stacks.
+    for (ItemStack& stack : m_slots) {
+        if (count == 0) {
+            return 0;
+        }
+        if (stack.isEmpty() || stack.itemId != itemId || stack.count >= def.maxStack) {
+            continue;
+        }
+
+        const uint16_t freeSpace = static_cast<uint16_t>(def.maxStack - stack.count);
+        const uint16_t add = static_cast<uint16_t>(std::min<uint32_t>(count, freeSpace));
+        stack.count = static_cast<uint16_t>(stack.count + add);
+        count -= add;
+    }
+
+    // Second pass: fill empty slots.
+    for (ItemStack& stack : m_slots) {
+        if (count == 0) {
+            return 0;
+        }
+        if (!stack.isEmpty()) {
+            continue;
+        }
+
+        const uint16_t add = static_cast<uint16_t>(std::min<uint32_t>(count, def.maxStack));
+        stack.itemId = itemId;
+        stack.count = add;
+        stack.durability = def.isTool ? def.maxDurability : 0;
+        count -= add;
+    }
+
+    return count;
 }
 
 int Inventory::toInventoryIndex(const int row, const int column) {
@@ -105,4 +222,3 @@ int Inventory::toInventoryIndexFromGridSlot(const int gridSlot) {
     const int col = gridSlot % INVENTORY_COLUMNS;
     return toInventoryIndex(row, col);
 }
-

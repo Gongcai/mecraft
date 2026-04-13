@@ -4,6 +4,7 @@
 #include <glm/vec4.hpp>
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
+#include "../item/Item.h"
 
 void Pickable::initMesh(MeshHandles& mesh)
 {
@@ -62,23 +63,29 @@ void Pickable::render(const SlotInfo* slots, int count,
                       Shader* crosshairShader,
                       Shader* inventoryShader,
                       const MeshHandles& mesh,
-                      const TextureAtlas& itemIconAtlas)
+                      const ResourceMgr& resourceMgr,
+                      const TextureAtlas& itemIconAtlas,
+                      const TextureAtlas& itemTextureAtlas)
 {
     if (count <= 0 || mesh.vao == 0 || mesh.vbo == 0)
         return;
 
     const bool hasBakedItemIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
+    const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
     const float halfW = static_cast<float>(screenW) * 0.5f;
     const float halfH = static_cast<float>(screenH) * 0.5f;
 
     // ── Collect icon vertices (pass 2) ──
     std::vector<float> iconVerts;
+    std::vector<float> fallbackIconVerts;
     for (int i = 0; i < count; ++i)
     {
-        if (slots[i].itemId == 0 || !hasBakedItemIcons)
+        if (slots[i].itemId == 0)
             continue;
 
-        const auto uv = itemIconAtlas.getUV(slots[i].itemId);
+        const ItemID itemId = static_cast<ItemID>(slots[i].itemId);
+        const ItemDef& itemDef = ItemRegistry::get(itemId);
+        bool pushed = false;
         const auto& s = slots[i];
         // inventory shader expects bottom-left pixel coordinates.
         const float x0 = static_cast<float>(s.x);
@@ -86,17 +93,34 @@ void Pickable::render(const SlotInfo* slots, int count,
         const float x1 = static_cast<float>(s.x + s.size);
         const float y1 = static_cast<float>(screenH - s.y);
 
-        // 6 vertices × 4 floats (pos2 + uv2)
-        iconVerts.push_back(x0); iconVerts.push_back(y0); iconVerts.push_back(uv.first.x);  iconVerts.push_back(uv.first.y);
-        iconVerts.push_back(x1); iconVerts.push_back(y0); iconVerts.push_back(uv.second.x); iconVerts.push_back(uv.first.y);
-        iconVerts.push_back(x1); iconVerts.push_back(y1); iconVerts.push_back(uv.second.x); iconVerts.push_back(uv.second.y);
-        iconVerts.push_back(x0); iconVerts.push_back(y0); iconVerts.push_back(uv.first.x);  iconVerts.push_back(uv.first.y);
-        iconVerts.push_back(x1); iconVerts.push_back(y1); iconVerts.push_back(uv.second.x); iconVerts.push_back(uv.second.y);
-        iconVerts.push_back(x0); iconVerts.push_back(y1); iconVerts.push_back(uv.first.x);  iconVerts.push_back(uv.second.y);
+        if (hasItemTextures) {
+            const int tileIndex = resourceMgr.getItemTextureIndex(itemDef.iconTextureName);
+            if (tileIndex >= 0) {
+                const auto uv = itemTextureAtlas.getUV(tileIndex);
+                iconVerts.push_back(x0); iconVerts.push_back(y0); iconVerts.push_back(uv.first.x);  iconVerts.push_back(uv.first.y);
+                iconVerts.push_back(x1); iconVerts.push_back(y0); iconVerts.push_back(uv.second.x); iconVerts.push_back(uv.first.y);
+                iconVerts.push_back(x1); iconVerts.push_back(y1); iconVerts.push_back(uv.second.x); iconVerts.push_back(uv.second.y);
+                iconVerts.push_back(x0); iconVerts.push_back(y0); iconVerts.push_back(uv.first.x);  iconVerts.push_back(uv.first.y);
+                iconVerts.push_back(x1); iconVerts.push_back(y1); iconVerts.push_back(uv.second.x); iconVerts.push_back(uv.second.y);
+                iconVerts.push_back(x0); iconVerts.push_back(y1); iconVerts.push_back(uv.first.x);  iconVerts.push_back(uv.second.y);
+                pushed = true;
+            }
+        }
+
+        if (!pushed && hasBakedItemIcons) {
+            const ItemID iconItemId = itemDef.iconItemId;
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(iconItemId));
+            fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.first.y);
+            fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.first.y);
+            fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.second.y);
+            fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.first.y);
+            fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.second.y);
+            fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.second.y);
+        }
     }
 
     const bool hasBg = (hoveredIndex >= 0 && hoveredIndex < count);
-    const bool hasIcons = !iconVerts.empty();
+    const bool hasIcons = !iconVerts.empty() || !fallbackIconVerts.empty();
     if (!hasBg && !hasIcons)
         return;
 
@@ -148,13 +172,23 @@ void Pickable::render(const SlotInfo* slots, int count,
         inventoryShader->setInt("uAtlas", 0);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
-
         glBindVertexArray(mesh.vao);
         glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(iconVerts.size() * sizeof(float)),
-                     iconVerts.data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(iconVerts.size() / 4));
+
+        if (!iconVerts.empty()) {
+            glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
+            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(iconVerts.size() * sizeof(float)),
+                         iconVerts.data(), GL_DYNAMIC_DRAW);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(iconVerts.size() / 4));
+        }
+
+        if (!fallbackIconVerts.empty()) {
+            glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(fallbackIconVerts.size() * sizeof(float)),
+                         fallbackIconVerts.data(), GL_DYNAMIC_DRAW);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(fallbackIconVerts.size() / 4));
+        }
+
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 

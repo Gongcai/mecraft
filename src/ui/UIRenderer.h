@@ -94,6 +94,7 @@ public:
     void setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout);
     [[nodiscard]] const HeldItemPreviewLayout& getHeldItemPreviewLayout() const;
     void triggerHeldItemPreviewActionAnimation();
+    void setHeldItemPreviewActionAnimationActive(bool active);
 
 private:
     [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,

@@ -49,6 +49,7 @@ set(CORE_SOURCES
         src/renderer/Shader.cpp
         src/renderer/Renderer.cpp
         src/renderer/DropRenderer.cpp
+        src/renderer/ItemModelMesh.cpp
         src/renderer/PostProcessRenderer.cpp
         src/renderer/TestCube.cpp
         src/renderer/stb_image.cpp
@@ -56,6 +57,7 @@ set(CORE_SOURCES
         src/renderer/ChunkMeshingService.cpp
         src/resource/ResourceMgr.cpp
         src/world/Block.cpp
+        src/item/Item.cpp
         src/world/Chunk.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
@@ -148,3 +150,4 @@ add_mecraft_test(inventory_drag_logic_test tests/inventory_drag_logic_test.cpp)
 add_mecraft_test(ui_input_router_test tests/ui_input_router_test.cpp)
 add_mecraft_test(ui_renderer_scheduler_test tests/ui_renderer_scheduler_test.cpp)
 add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
+add_mecraft_test(item_registry_test tests/item_registry_test.cpp)

@@ -7,6 +7,7 @@
 
 #include "IUIControl.h"
 #include "../world/Block.h"
+#include "../item/Item.h"
 
 class Shader;
 
@@ -33,6 +34,7 @@ public:
     void setLayout(const HeldItemPreviewLayout& layout);
     [[nodiscard]] const HeldItemPreviewLayout& getLayout() const;
     void triggerActionAnimation();
+    void setActionAnimationActive(bool active);
 
 private:
     struct Mesh {
@@ -43,11 +45,15 @@ private:
 
     Mesh* getOrCreateBlockMesh(BlockID blockId);
     Mesh buildBlockMesh(BlockID blockId) const;
+    Mesh* getOrCreateItemMesh(ItemID itemId);
+    Mesh buildItemMesh(ItemID itemId) const;
     static void destroyMesh(Mesh& mesh);
 
     ResourceMgr* m_resourceMgr = nullptr;
     Shader* m_shader = nullptr;
+    Shader* m_itemShader = nullptr;
     mutable std::unordered_map<BlockID, Mesh> m_blockMeshes;
+    mutable std::unordered_map<ItemID, Mesh> m_itemMeshes;
     HeldItemPreviewLayout m_layout;
     mutable bool m_hasPrevSample = false;
     mutable float m_prevTimeSeconds = 0.0f;
@@ -55,6 +61,7 @@ private:
     mutable float m_swayX = 0.0f;
     mutable float m_swayY = 0.0f;
     mutable bool m_actionAnimActive = false;
+    mutable bool m_actionAnimContinuous = false;
     mutable float m_actionAnimElapsed = 0.0f;
     bool m_visible = true;
 };

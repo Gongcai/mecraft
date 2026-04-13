@@ -11,6 +11,7 @@
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
 #include "../world/Block.h"
+#include "../item/Item.h"
 #include "TextRenderer.h"
 
 void HotbarControl::init(ResourceMgr& resourceMgr)
@@ -152,14 +153,16 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     }
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
+    const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
     const GLuint widgetsTexture = m_resourceMgr->getGuiTexture("widgets");
     if (widgetsTexture == 0) {
         return;
     }
 
+    const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
     const bool hasBakedItemIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
     const bool hasLegacyAtlas = (atlas.textureID != 0 && atlas.tilesPerRow > 0);
-    if (!hasBakedItemIcons && !hasLegacyAtlas) {
+    if (!hasItemTextures && !hasBakedItemIcons && !hasLegacyAtlas) {
         return;
     }
 
@@ -221,27 +224,45 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     }
 
     std::vector<float> iconVerts;
+    std::vector<float> fallbackIconVerts;
+    std::vector<float> legacyIconVerts;
     constexpr float slotStride = 20.0f * kScale;
     constexpr float iconInset = 2.0f * kScale;
     constexpr float iconSize = 17.5f * kScale;
     for (int i = 0; i < hotbarSlots; ++i)
     {
-        BlockID blockId = inventory.getSlot(i);
-        if (blockId == BlockType::AIR) {
+        const ItemID itemId = static_cast<ItemID>(inventory.getSlot(i));
+        if (itemId == ItemType::AIR) {
             continue;
         }
 
+        const ItemDef& itemDef = ItemRegistry::get(itemId);
         glm::vec2 uvMin;
         glm::vec2 uvMax;
-        if (hasBakedItemIcons)
-        {
-            const auto uv = itemIconAtlas.getUV(static_cast<int>(blockId));
+        std::vector<float>* targetBuffer = nullptr;
+        if (hasItemTextures) {
+            const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+            if (itemTileIndex >= 0) {
+                const auto uv = itemTextureAtlas.getUV(itemTileIndex);
+                uvMin = uv.first;
+                uvMax = uv.second;
+                targetBuffer = &iconVerts;
+            }
+        }
+
+        if (!targetBuffer && hasBakedItemIcons) {
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(itemDef.iconItemId));
             uvMin = uv.first;
             uvMax = uv.second;
+            targetBuffer = &fallbackIconVerts;
         }
-        else
-        {
-            const BlockDef& blockDef = BlockRegistry::get(blockId);
+
+        if (!targetBuffer && hasLegacyAtlas) {
+            const BlockID renderBlock = itemDef.renderBlock;
+            if (renderBlock == BlockType::AIR) {
+                continue;
+            }
+            const BlockDef& blockDef = BlockRegistry::get(renderBlock);
             int tileIndex = blockDef.texFront;
             if (tileIndex < 0) {
                 tileIndex = blockDef.texTop;
@@ -253,24 +274,33 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
             const auto uv = atlas.getUV(tileIndex);
             uvMin = uv.first;
             uvMax = uv.second;
+            targetBuffer = &legacyIconVerts;
+        }
+
+        if (!targetBuffer) {
+            continue;
         }
 
         const float sx = startX + static_cast<float>(i) * slotStride;
         const float ix = sx + iconInset;
         const float iy = startY + iconInset;
 
-        addQuad(iconVerts, ix, iy, ix + iconSize, iy + iconSize, uvMin.x, uvMin.y, uvMax.x, uvMax.y);
+        addQuad(*targetBuffer, ix, iy, ix + iconSize, iy + iconSize, uvMin.x, uvMin.y, uvMax.x, uvMax.y);
     }
 
     std::vector<float> vertices;
-    vertices.reserve(bgVerts.size() + selectedVerts.size() + iconVerts.size());
+    vertices.reserve(bgVerts.size() + selectedVerts.size() + iconVerts.size() + fallbackIconVerts.size() + legacyIconVerts.size());
     vertices.insert(vertices.end(), bgVerts.begin(), bgVerts.end());
     vertices.insert(vertices.end(), selectedVerts.begin(), selectedVerts.end());
     vertices.insert(vertices.end(), iconVerts.begin(), iconVerts.end());
+    vertices.insert(vertices.end(), fallbackIconVerts.begin(), fallbackIconVerts.end());
+    vertices.insert(vertices.end(), legacyIconVerts.begin(), legacyIconVerts.end());
 
     const int bgVertCount = static_cast<int>(bgVerts.size() / 4);
     const int selectedVertCount = static_cast<int>(selectedVerts.size() / 4);
     const int iconVertCount = static_cast<int>(iconVerts.size() / 4);
+    const int fallbackIconVertCount = static_cast<int>(fallbackIconVerts.size() / 4);
+    const int legacyIconVertCount = static_cast<int>(legacyIconVerts.size() / 4);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
@@ -300,9 +330,21 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     glDrawArrays(GL_TRIANGLES, offset, selectedVertCount);
     offset += selectedVertCount;
 
-    glBindTexture(GL_TEXTURE_2D, hasBakedItemIcons ? itemIconAtlas.textureID : atlas.textureID);
     m_inventoryShader->setVec4("uTintColor", glm::vec4(m_iconTintColor[0], m_iconTintColor[1], m_iconTintColor[2], m_iconTintColor[3]));
-    glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
+    if (iconVertCount > 0) {
+        glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
+        glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
+    }
+    offset += iconVertCount;
+    if (fallbackIconVertCount > 0) {
+        glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+        glDrawArrays(GL_TRIANGLES, offset, fallbackIconVertCount);
+    }
+    offset += fallbackIconVertCount;
+    if (legacyIconVertCount > 0) {
+        glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+        glDrawArrays(GL_TRIANGLES, offset, legacyIconVertCount);
+    }
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -314,25 +356,23 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 void HotbarControl::checkSlotChange(const Inventory& inventory) const
 {
     const int currentSlot = inventory.getSelectedSlot();
-    const BlockID currentBlock = inventory.getSelectedBlock();
+    const ItemID currentItem = inventory.getSelectedItem();
 
     if (m_lastSelectedSlot < 0) {
-        // First frame, just record state without showing popup
         m_lastSelectedSlot = currentSlot;
-        m_lastSelectedBlock = currentBlock;
+        m_lastSelectedBlock = static_cast<BlockID>(currentItem);
         return;
     }
 
-    if (currentSlot != m_lastSelectedSlot || currentBlock != m_lastSelectedBlock) {
+    if (currentSlot != m_lastSelectedSlot || currentItem != static_cast<ItemID>(m_lastSelectedBlock)) {
         m_lastSelectedSlot = currentSlot;
-        m_lastSelectedBlock = currentBlock;
-        if (currentBlock != BlockType::AIR) {
-            const BlockDef& blockDef = BlockRegistry::get(currentBlock);
-            m_itemName = blockDef.name;
+        m_lastSelectedBlock = static_cast<BlockID>(currentItem);
+        if (currentItem != ItemType::AIR) {
+            m_itemName = ItemRegistry::get(currentItem).name;
         } else {
             m_itemName.clear();
         }
-        m_itemNameShowTime = 0.0f; // will be set to current time in renderItemName
+        m_itemNameShowTime = 0.0f;
     }
 }
 
@@ -397,5 +437,4 @@ float HotbarControl::getItemNameDisplayDuration() const
 {
     return m_itemNameDisplayDuration;
 }
-
 

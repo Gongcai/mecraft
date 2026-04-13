@@ -2,11 +2,51 @@
 
 #include <algorithm>
 #include <fstream>
+#include <unordered_map>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
+namespace {
+bool parseItemToken(const json& token, ItemID& outItemId) {
+    if (token.is_number_integer()) {
+        const int id = token.get<int>();
+        if (id < 0 || id >= static_cast<int>(BlockType::COUNT)) {
+            return false;
+        }
+        outItemId = static_cast<ItemID>(id);
+        return true;
+    }
+
+    if (!token.is_string()) {
+        return false;
+    }
+
+    const std::string text = token.get<std::string>();
+    bool allDigits = !text.empty();
+    for (const char ch : text) {
+        if (ch < '0' || ch > '9') {
+            allDigits = false;
+            break;
+        }
+    }
+
+    if (allDigits) {
+        const int id = std::stoi(text);
+        if (id < 0 || id >= static_cast<int>(BlockType::COUNT)) {
+            return false;
+        }
+        outItemId = static_cast<ItemID>(id);
+        return true;
+    }
+
+    return ItemRegistry::tryGetIdByName(text, outItemId);
+}
+}
+
 void CraftingSystem::loadRecipes(const std::string& configPath) {
+    ItemRegistry::init();
+
     std::ifstream file(configPath);
     if (!file.is_open()) {
         return;
@@ -23,27 +63,27 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
         CraftingRecipe recipe;
 
         // 解析 result
-        recipe.result = static_cast<BlockID>(recipeJson.value("result", 0));
+        ItemID result = ItemType::AIR;
+        if (recipeJson.contains("result")) {
+            static_cast<void>(parseItemToken(recipeJson["result"], result));
+        }
+        recipe.result = result;
         recipe.resultCount = recipeJson.value("resultCount", 1);
 
         // 解析 pattern：字符串数组，每个字符串代表一行
-        // 用字符串名称映射 BlockID（通过名称查找）
+        // 用字符串名称映射 ItemID（通过名称查找）
         const auto& patternJson = recipeJson["pattern"];
         if (!patternJson.is_array()) {
             continue;
         }
 
-        // 建立键映射：key -> BlockID
-        std::unordered_map<std::string, BlockID> keyMap;
+        // 建立键映射：key -> ItemID
+        std::unordered_map<std::string, ItemID> keyMap;
         if (recipeJson.contains("key") && recipeJson["key"].is_object()) {
             for (const auto& [key, value] : recipeJson["key"].items()) {
-                if (value.is_string()) {
-                    // 通过 BlockRegistry 查找 BlockID — 这里简化为直接用整数
-                    // 由于 JSON 中存储的是字符串名称，我们使用 blocks.json 的反向映射
-                    // 为简化，key 映射中直接存储 BlockID 整数
-                    keyMap[key] = static_cast<BlockID>(std::stoi(value.get<std::string>()));
-                } else if (value.is_number()) {
-                    keyMap[key] = static_cast<BlockID>(value.get<int>());
+                ItemID keyItem = ItemType::AIR;
+                if (parseItemToken(value, keyItem)) {
+                    keyMap[key] = keyItem;
                 }
             }
         }
@@ -59,7 +99,7 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
             for (char ch : rowStr) {
                 std::string key(1, ch);
                 if (ch == ' ' || keyMap.find(key) == keyMap.end()) {
-                    recipe.pattern[row].push_back(BlockType::AIR);
+                    recipe.pattern[row].push_back(ItemType::AIR);
                 } else {
                     recipe.pattern[row].push_back(keyMap.at(key));
                 }
@@ -70,16 +110,16 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
     }
 }
 
-CraftingResult CraftingSystem::match(const std::vector<BlockID>& grid,
+CraftingResult CraftingSystem::match(const std::vector<ItemID>& grid,
                                      int gridWidth,
                                      int gridHeight) const {
     // 先裁剪输入网格
-    std::vector<std::vector<BlockID>> trimmed;
+    std::vector<std::vector<ItemID>> trimmed;
     int trimmedW = 0, trimmedH = 0;
 
     if (!trimGrid(grid, gridWidth, gridHeight, trimmed, trimmedW, trimmedH)) {
         // 空网格，无法合成
-        return {BlockType::AIR, 0, false};
+        return {ItemType::AIR, 0, false};
     }
 
     // 遍历所有配方，比较裁剪后的模式
@@ -92,7 +132,7 @@ CraftingResult CraftingSystem::match(const std::vector<BlockID>& grid,
         }
     }
 
-    return {BlockType::AIR, 0, false};
+    return {ItemType::AIR, 0, false};
 }
 
 const std::vector<CraftingRecipe>& CraftingSystem::getRecipes() const {
@@ -103,10 +143,10 @@ void CraftingSystem::clear() {
     m_recipes.clear();
 }
 
-bool CraftingSystem::trimGrid(const std::vector<BlockID>& grid,
+bool CraftingSystem::trimGrid(const std::vector<ItemID>& grid,
                                int gridWidth,
                                int gridHeight,
-                               std::vector<std::vector<BlockID>>& outPattern,
+                               std::vector<std::vector<ItemID>>& outPattern,
                                int& outWidth,
                                int& outHeight) {
     // 找到非空行列的范围
@@ -115,8 +155,9 @@ bool CraftingSystem::trimGrid(const std::vector<BlockID>& grid,
 
     for (int row = 0; row < gridHeight; ++row) {
         for (int col = 0; col < gridWidth; ++col) {
-            BlockID id = grid[static_cast<size_t>(row * gridWidth + col)];
-            if (id != BlockType::AIR) {
+            const size_t index = static_cast<size_t>(row) * static_cast<size_t>(gridWidth) + static_cast<size_t>(col);
+            ItemID id = grid[index];
+            if (id != ItemType::AIR) {
                 minRow = std::min(minRow, row);
                 maxRow = std::max(maxRow, row);
                 minCol = std::min(minCol, col);
@@ -138,16 +179,17 @@ bool CraftingSystem::trimGrid(const std::vector<BlockID>& grid,
     for (int row = minRow; row <= maxRow; ++row) {
         outPattern[static_cast<size_t>(row - minRow)].reserve(static_cast<size_t>(outWidth));
         for (int col = minCol; col <= maxCol; ++col) {
+            const size_t index = static_cast<size_t>(row) * static_cast<size_t>(gridWidth) + static_cast<size_t>(col);
             outPattern[static_cast<size_t>(row - minRow)].push_back(
-                grid[static_cast<size_t>(row * gridWidth + col)]);
+                grid[index]);
         }
     }
 
     return true;
 }
 
-bool CraftingSystem::patternEquals(const std::vector<std::vector<BlockID>>& a,
-                                   const std::vector<std::vector<BlockID>>& b) {
+bool CraftingSystem::patternEquals(const std::vector<std::vector<ItemID>>& a,
+                                   const std::vector<std::vector<ItemID>>& b) {
     if (a.size() != b.size()) {
         return false;
     }
