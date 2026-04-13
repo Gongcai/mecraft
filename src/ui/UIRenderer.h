@@ -9,6 +9,7 @@
 #include "ConsoleDisplayBox.h"
 #include "ConsoleOverlay.h"
 #include "CrosshairControl.h"
+#include "HeldItemPreviewControl.h"
 #include "HotbarControl.h"
 #include "InventoryPanelControl.h"
 #include "Pickable.h"
@@ -19,6 +20,7 @@
 class Window;
 class ResourceMgr;
 class Inventory;
+class Player;
 class CraftingSystem;
  struct InputSnapshot;
 
@@ -31,7 +33,10 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
-    void render(const Window& window, const Inventory& inventory, const InputSnapshot& inputSnapshot);
+    void render(const Window& window,
+                const Inventory& inventory,
+                const Player& player,
+                const InputSnapshot& inputSnapshot);
     void renderCommandInputBox(const std::string& text);
     void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
     [[nodiscard]] UIEventResult routeUIInput(const UIInputEvent& event) const;
@@ -86,14 +91,20 @@ public:
     void setHotbarIconTintColor(const std::array<float, 4>& color);
     [[nodiscard]] const std::array<float, 4>& getHotbarIconTintColor() const;
 
+    void setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout);
+    [[nodiscard]] const HeldItemPreviewLayout& getHeldItemPreviewLayout() const;
+    void triggerHeldItemPreviewActionAnimation();
+
 private:
     [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,
                                                         const Inventory& inventory,
+                                                        const Player& player,
                                                         const InputSnapshot& inputSnapshot) const;
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     void renderControls(const UIRenderContext& context) const;
 
     CrosshairControl m_crosshair;
+    HeldItemPreviewControl m_heldItemPreview;
 
     HotbarControl m_hotbar;
     InventoryPanelControl m_inventoryPanel;

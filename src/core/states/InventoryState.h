@@ -42,12 +42,51 @@ public:
     }
 
     void update(float /*dt*/, const InputSnapshot& snapshot) override {
+        const bool primaryPressed = m_context.isActionTriggered(Action::UIPrimaryClick);
+        const bool secondaryPressed = m_context.isActionTriggered(Action::UISecondaryClick);
+        const bool primaryReleased = m_context.isActionTriggered(Action::UIPrimaryRelease);
+        const bool secondaryReleased = m_context.isActionTriggered(Action::UISecondaryRelease);
+
         static_cast<void>(m_uiRenderer.routeUIInput({
             UIInputEventType::PointerMove,
             snapshot.mousePosition.x,
             snapshot.mousePosition.y,
-            0
+            UIPointerButton::None
         }));
+
+        UIEventResult primaryDownResult = UIEventResult::Ignored;
+        if (primaryPressed) {
+            primaryDownResult = m_uiRenderer.routeUIInput({
+                UIInputEventType::PointerDown,
+                snapshot.mousePosition.x,
+                snapshot.mousePosition.y,
+                UIPointerButton::Primary
+            });
+        }
+        if (secondaryPressed) {
+            static_cast<void>(m_uiRenderer.routeUIInput({
+                UIInputEventType::PointerDown,
+                snapshot.mousePosition.x,
+                snapshot.mousePosition.y,
+                UIPointerButton::Secondary
+            }));
+        }
+        if (primaryReleased) {
+            static_cast<void>(m_uiRenderer.routeUIInput({
+                UIInputEventType::PointerUp,
+                snapshot.mousePosition.x,
+                snapshot.mousePosition.y,
+                UIPointerButton::Primary
+            }));
+        }
+        if (secondaryReleased) {
+            static_cast<void>(m_uiRenderer.routeUIInput({
+                UIInputEventType::PointerUp,
+                snapshot.mousePosition.x,
+                snapshot.mousePosition.y,
+                UIPointerButton::Secondary
+            }));
+        }
 
         if (m_context.isActionTriggered(Action::Inventory) ||
             m_context.isActionTriggered(Action::Menu) ||
@@ -65,22 +104,16 @@ public:
             }
         }
 
-        if (snapshot.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+        if (secondaryPressed) {
             cancelDraggedItemToSource();
             return;
         }
 
-        if (!snapshot.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_LEFT)) {
+        if (!primaryPressed) {
             return;
         }
 
-        const UIEventResult result = m_uiRenderer.routeUIInput({
-            UIInputEventType::PointerDown,
-            snapshot.mousePosition.x,
-            snapshot.mousePosition.y,
-            GLFW_MOUSE_BUTTON_LEFT
-        });
-        if (result != UIEventResult::Consumed) {
+        if (primaryDownResult != UIEventResult::Consumed) {
             return;
         }
 

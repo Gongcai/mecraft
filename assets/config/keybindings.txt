@@ -21,6 +21,10 @@ Gameplay OpenCommand Keyboard SLASH Pressed -
 
 UI Menu Keyboard ESCAPE Pressed -
 UI Cancel Keyboard ESCAPE Pressed -
+UI UIPrimaryClick Mouse LEFT Pressed -
+UI UISecondaryClick Mouse RIGHT Pressed -
+UI UIPrimaryRelease Mouse LEFT Released -
+UI UISecondaryRelease Mouse RIGHT Released -
 UI Confirm Keyboard ENTER Pressed -
 UI Confirm Keyboard KP_ENTER Pressed -
 UI Backspace Keyboard BACKSPACE Held -

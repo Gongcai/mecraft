@@ -11,6 +11,7 @@
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
 #include "../world/Block.h"
+#include "TextRenderer.h"
 
 void HotbarControl::init(ResourceMgr& resourceMgr)
 {
@@ -61,6 +62,16 @@ void HotbarControl::render(const UIRenderContext& context) const
     renderInternal(static_cast<float>(context.screenWidth),
                    static_cast<float>(context.screenHeight),
                    *inventory);
+
+    // Render item name popup above hotbar
+    if (context.textRenderer) {
+        checkSlotChange(*inventory);
+        renderItemName(static_cast<float>(context.screenWidth),
+                       static_cast<float>(context.screenHeight),
+                       *inventory,
+                       *context.textRenderer,
+                       context.timeSeconds);
+    }
 }
 
 void HotbarControl::initMesh()
@@ -298,6 +309,93 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+}
+
+void HotbarControl::checkSlotChange(const Inventory& inventory) const
+{
+    const int currentSlot = inventory.getSelectedSlot();
+    const BlockID currentBlock = inventory.getSelectedBlock();
+
+    if (m_lastSelectedSlot < 0) {
+        // First frame, just record state without showing popup
+        m_lastSelectedSlot = currentSlot;
+        m_lastSelectedBlock = currentBlock;
+        return;
+    }
+
+    if (currentSlot != m_lastSelectedSlot || currentBlock != m_lastSelectedBlock) {
+        m_lastSelectedSlot = currentSlot;
+        m_lastSelectedBlock = currentBlock;
+        if (currentBlock != BlockType::AIR) {
+            const BlockDef& blockDef = BlockRegistry::get(currentBlock);
+            m_itemName = blockDef.name;
+        } else {
+            m_itemName.clear();
+        }
+        m_itemNameShowTime = 0.0f; // will be set to current time in renderItemName
+    }
+}
+
+void HotbarControl::renderItemName(float screenW, float screenH, const Inventory& inventory, const TextRenderer& textRenderer, float timeSeconds) const
+{
+    if (m_itemName.empty()) {
+        return;
+    }
+
+    // Set show time on first call after change
+    if (m_itemNameShowTime <= -1.0f) {
+        return;
+    }
+    if (m_itemNameShowTime == 0.0f) {
+        m_itemNameShowTime = timeSeconds;
+    }
+
+    const float elapsed = timeSeconds - m_itemNameShowTime;
+    if (elapsed > m_itemNameDisplayDuration) {
+        m_itemNameShowTime = -100.0f;
+        return;
+    }
+
+    // Fade out in the last 0.5 seconds
+    float alpha = 1.0f;
+    constexpr float kFadeDuration = 0.5f;
+    if (elapsed > m_itemNameDisplayDuration - kFadeDuration) {
+        alpha = (m_itemNameDisplayDuration - elapsed) / kFadeDuration;
+        alpha = std::clamp(alpha, 0.0f, 1.0f);
+    }
+
+    // Position: centered above the hotbar
+    constexpr float kWidgetsWidth = 182.0f;
+    constexpr float kScale = 2.0f;
+    constexpr float kBgHeight = 21.0f;
+    const float hotbarWidth = kWidgetsWidth * kScale;
+    const float hotbarHeight = kBgHeight * kScale;
+    const float hotbarY = 8.0f;
+    const float hotbarCenterX = screenW * 0.5f;
+
+    const float textScale = 1.5f;
+    const float textY = hotbarY + hotbarHeight + 6.0f;
+
+    const std::array<float, 4> textColor = {1.0f, 1.0f, 1.0f, alpha};
+
+    // Estimate text width for centering
+    const float advanceFactor = textRenderer.getAdvanceFactor();
+    const float glyphSize = 8.0f * textScale; // BitmapFont glyph is 8px
+    const float charAdvance = glyphSize * advanceFactor;
+    const float textWidth = static_cast<float>(m_itemName.size()) * charAdvance;
+    const float textX = hotbarCenterX - textWidth * 0.5f;
+
+    textRenderer.render(m_itemName, textX, textY, textScale, textColor, screenW, screenH);
+}
+
+void HotbarControl::setItemNameDisplayDuration(float seconds)
+{
+    m_itemNameDisplayDuration = std::clamp(seconds, 0.5f, 10.0f);
+}
+
+float HotbarControl::getItemNameDisplayDuration() const
+{
+    return m_itemNameDisplayDuration;
 }
 
 

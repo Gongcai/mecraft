@@ -6,6 +6,7 @@
 #include "../core/InputManager.h"
 #include "../core/Window.h"
 #include "../player/Inventory.h"
+#include "../player/Player.h"
 #include "../resource/ResourceMgr.h"
 
 UIRenderer::UIRenderer() = default;
@@ -21,6 +22,8 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_crosshair.init(resourceMgr);
     m_text.init(resourceMgr);
 
+    m_heldItemPreview.init(resourceMgr);
+    m_heldItemPreview.setVisible(true);
     m_hotbar.init(resourceMgr);
     m_hotbar.setVisible(true);
     m_inventoryPanel.init(resourceMgr);
@@ -33,6 +36,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_console.setMaxLines(m_consoleMaxLines);
 
     m_controls = {
+        &m_heldItemPreview,
         &m_hotbar,
         &m_inventoryPanel,
         &m_console,
@@ -55,6 +59,7 @@ void UIRenderer::shutdown()
     m_controls.clear();
     m_inventoryPanel.shutdown();
     m_hotbar.shutdown();
+    m_heldItemPreview.shutdown();
     m_commandInputRequested = false;
     m_resourceMgr = nullptr;
 }
@@ -107,6 +112,21 @@ void UIRenderer::setHotbarIconTintColor(const std::array<float, 4>& color)
 const std::array<float, 4>& UIRenderer::getHotbarIconTintColor() const
 {
     return m_hotbar.getIconTintColor();
+}
+
+void UIRenderer::setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout)
+{
+    m_heldItemPreview.setLayout(layout);
+}
+
+const HeldItemPreviewLayout& UIRenderer::getHeldItemPreviewLayout() const
+{
+    return m_heldItemPreview.getLayout();
+}
+
+void UIRenderer::triggerHeldItemPreviewActionAnimation()
+{
+    m_heldItemPreview.triggerActionAnimation();
 }
 
 void UIRenderer::setTextAdvanceFactor(float factor)
@@ -186,7 +206,7 @@ void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
     const bool wasVisible = m_inventoryPanel.isVisible();
     m_inventoryPanel.setVisible(true);
     m_inventoryPanel.setSlots(slots, count);
-    static_cast<void>(m_inputRouter.route({UIInputEventType::PointerMove, mouseX, mouseY, 0}));
+    static_cast<void>(m_inputRouter.route({UIInputEventType::PointerMove, mouseX, mouseY, UIPointerButton::None}));
     m_inventoryPanel.render(makeContextFromViewport());
     m_inventoryPanel.setVisible(wasVisible);
 }
@@ -246,24 +266,28 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
     m_inventoryPanel.setCraftingSystem(craftingSystem);
 }
 
-void UIRenderer::render(const Window& window, const Inventory& inventory, const InputSnapshot& inputSnapshot)
+void UIRenderer::render(const Window& window,
+                        const Inventory& inventory,
+                        const Player& player,
+                        const InputSnapshot& inputSnapshot)
 {
     m_crosshair.render(window);
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
     m_commandInput.setVisible(m_commandInputRequested);
-    renderControls(makeContextFromWindow(window, inventory, inputSnapshot));
+    renderControls(makeContextFromWindow(window, inventory, player, inputSnapshot));
     m_commandInputRequested = false;
 }
 
 UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
                                                   const Inventory& inventory,
+                                                  const Player& player,
                                                   const InputSnapshot& inputSnapshot) const
 {
     UIRenderContext context;
     context.screenWidth = window.getWidth();
     context.screenHeight = window.getHeight();
-    context.timeSeconds = static_cast<float>(Time::getRawTime());
+    context.timeSeconds = static_cast<float>(Time::getGameTime());
     context.resourceMgr = m_resourceMgr;
     context.inventory = &inventory;
     context.textRenderer = &m_text;
@@ -273,6 +297,10 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.pointerY = inputSnapshot.mousePosition.y;
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
+    context.heldItemPreviewMotion.moving = player.isMoving();
+    context.heldItemPreviewMotion.sprinting = player.isSprinting();
+    context.heldItemPreviewMotion.bobFrequency = player.getEyeBobFrequency();
+    context.heldItemPreviewMotion.bobPhaseOffset = player.getEyeBobPhaseOffset();
     return context;
 }
 
@@ -301,5 +329,3 @@ void UIRenderer::renderControls(const UIRenderContext& context) const
         control->render(context);
     }
 }
-
-

@@ -59,6 +59,7 @@ private:
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);
     void showCraftingGridSettings(UIRenderer& uiRenderer);
+    void showHeldItemPreviewSettings(UIRenderer& uiRenderer);
     void showTextSettings(UIRenderer& uiRenderer);
 };
 

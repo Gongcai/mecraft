@@ -262,6 +262,7 @@ private:
                 m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
                 m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
                 m_particleSystem.emit(selection.hitBlock, brokenBlock);
+                m_uiRenderer.triggerHeldItemPreviewActionAnimation();
                 m_creativeBreakCooldownRemaining = m_modeRules.breakDurationMs(targetBlock) / 1000.0f;
                 resetBlockBreakSession();
                 return;
@@ -292,6 +293,7 @@ private:
             m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
             m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
             m_particleSystem.emit(selection.hitBlock, brokenBlock);
+            m_uiRenderer.triggerHeldItemPreviewActionAnimation();
             resetBlockBreakSession();
             return;
         }
@@ -304,6 +306,7 @@ private:
             m_dropSystem.onBlockPlaced(selection.placeBlock, m_world);
             m_placeCooldownRemaining = m_modeRules.placeCooldownSeconds();
             m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.placeBlock);
+            m_uiRenderer.triggerHeldItemPreviewActionAnimation();
         }
     }
 

@@ -44,7 +44,7 @@ public:
 
 
 private:
-    float fov   = 90.0f;
+    float fov   = 75.0f;
     float nearPlane = 0.1f;
     float farPlane  = 500.0f;
     float sensitivity = 0.1f;

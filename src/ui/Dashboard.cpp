@@ -54,6 +54,7 @@ void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &r
     showHotbarSettings(uiRenderer);
     showInventoryPanelSettings(uiRenderer);
     showCraftingGridSettings(uiRenderer);
+    showHeldItemPreviewSettings(uiRenderer);
     showTextSettings(uiRenderer);
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
@@ -486,6 +487,27 @@ void Dashboard::showTextSettings(UIRenderer& uiRenderer) {
     float caretBlinkMs = uiRenderer.getCommandCaretBlinkPeriodMs();
     if (ImGui::SliderFloat("Command Caret Blink (ms)", &caretBlinkMs, 120.0f, 1500.0f, "%.0f")) {
         uiRenderer.setCommandCaretBlinkPeriodMs(caretBlinkMs);
+    }
+
+    ImGui::End();
+}
+
+void Dashboard::showHeldItemPreviewSettings(UIRenderer& uiRenderer) {
+    ImGui::Begin("Held Item Preview Settings");
+
+    HeldItemPreviewLayout layout = uiRenderer.getHeldItemPreviewLayout();
+    bool changed = false;
+
+    changed |= ImGui::SliderFloat("Center X", &layout.centerXRatio, 0.0f, 1.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Center Y", &layout.centerYRatio, 0.0f, 1.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Size Ratio", &layout.sizeRatio, 0.02f, 0.6f, "%.3f");
+    changed |= ImGui::SliderFloat("Pitch (deg)", &layout.pitchDegrees, -89.0f, 89.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Yaw (deg)", &layout.yawDegrees, -180.0f, 180.0f, "%.1f");
+    changed |= ImGui::SliderFloat("Sway Amplitude X", &layout.swayAmplitudeX, 0.0f, 0.08f, "%.4f");
+    changed |= ImGui::SliderFloat("Sway Amplitude Y", &layout.swayAmplitudeY, 0.0f, 0.08f, "%.4f");
+
+    if (changed) {
+        uiRenderer.setHeldItemPreviewLayout(layout);
     }
 
     ImGui::End();

@@ -6,6 +6,13 @@ class ResourceMgr;
 class Inventory;
 class TextRenderer;
 
+struct HeldItemPreviewMotion {
+    bool moving = false;
+    bool sprinting = false;
+    float bobFrequency = 6.0f;
+    float bobPhaseOffset = 0.0f;
+};
+
 struct UIRenderContext {
     int screenWidth = 0;
     int screenHeight = 0;
@@ -19,5 +26,5 @@ struct UIRenderContext {
     float pointerY = 0.0f;
     bool hasDraggedItem = false;
     int draggedItemId = 0;
+    HeldItemPreviewMotion heldItemPreviewMotion;
 };
-

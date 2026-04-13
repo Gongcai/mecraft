@@ -175,7 +175,7 @@ void Game::renderFrame(const float frameTime) {
     m_postProcessRenderer.setEffects(effects);
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
-    m_uiRenderer.render(m_window, m_player.getInventory(), m_input.snapshot());
+    m_uiRenderer.render(m_window, m_player.getInventory(), m_player, m_input.snapshot());
     m_stateMachine.render();
 #ifndef NDEBUG
     m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer,

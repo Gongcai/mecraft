@@ -18,7 +18,7 @@ int main() {
     if (!console.isVisible()) {
         return fail("console should default to visible");
     }
-    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Ignored) {
+    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
         return fail("console should ignore pointer input");
     }
 

@@ -14,12 +14,12 @@ int main() {
     UIRenderer renderer;
 
     // Smoke/API: routing without init should be safe and ignored.
-    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, 0}) != UIEventResult::Ignored) {
+    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
         return fail("routeUIInput should ignore when no visible controls are active");
     }
 
     renderer.setInventoryPanelVisible(true);
-    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, 0}) != UIEventResult::Ignored) {
+    if (renderer.routeUIInput({UIInputEventType::PointerMove, 8.0f, 8.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
         return fail("routeUIInput should still ignore before controls are initialized");
     }
 

@@ -72,6 +72,8 @@ private:
     float m_eyeBobFadeOutSpeed = 8.0f;
     float m_playerWidth = 0.6f;
     float m_playerHeight = 1.8f;
+    float m_SprintFOV = 90.0f;
+    float m_WalkFOV = 75.0f;
     bool m_onGround = false;
     bool m_onGroundLastFrame = false;
     bool m_justLanded = false;

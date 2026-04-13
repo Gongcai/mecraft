@@ -40,7 +40,7 @@ int main() {
     router.registerControl(&handled);
     router.registerControl(&consumed);
 
-    const UIEventResult result = router.route({UIInputEventType::PointerMove, 10.0f, 10.0f, 0});
+    const UIEventResult result = router.route({UIInputEventType::PointerMove, 10.0f, 10.0f, UIPointerButton::None});
     if (result != UIEventResult::Consumed) {
         return fail("router should return consumed when top-most control consumes event");
     }
@@ -52,12 +52,12 @@ int main() {
     }
 
     consumed.setVisible(false);
-    if (router.route({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Handled) {
+    if (router.route({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Handled) {
         return fail("router should aggregate handled when visible controls handle input");
     }
 
     router.clear();
-    if (router.route({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Ignored) {
+    if (router.route({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
         return fail("router should ignore input with no controls");
     }
 

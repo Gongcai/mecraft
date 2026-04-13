@@ -16,7 +16,7 @@ int main() {
     if (!hotbar.isVisible()) {
         return fail("hotbar should default to visible");
     }
-    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, 0}) != UIEventResult::Ignored) {
+    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
         return fail("hotbar should ignore pointer input by default");
     }
 

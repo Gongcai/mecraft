@@ -48,6 +48,10 @@ enum class Action {
     // UI Actions
     Confirm,
     Cancel,
+    UIPrimaryClick,
+    UISecondaryClick,
+    UIPrimaryRelease,
+    UISecondaryRelease,
     Up,
     Down,
     Left,

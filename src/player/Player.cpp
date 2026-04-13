@@ -76,6 +76,10 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     else {
         m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightStand, dt * 15);
     }
+    // 疾跑FOV插值
+    const float targetFOV = m_sprinting ? m_SprintFOV : m_WalkFOV;
+    m_camera.setFOV(Lerp(m_camera.getFOV(), targetFOV, dt * 10.0f));
+
     applyViewBob(dt);
 
     m_justLanded = m_onGround && !m_onGroundLastFrame;
@@ -284,8 +288,8 @@ void Player::handleMovement(const InputContextManager &inputContext) {
         wishDir = glm::normalize(wishDir);
     }
 
-    m_sprinting = inputContext.isActionTriggered(Action::Sprint);
 
+    m_sprinting = inputContext.isActionTriggered(Action::Sprint);
     // PhysicsSystem currently expects world-space X/Z intent.
     m_intent.move = glm::vec2(wishDir.x, wishDir.z);
     m_intent.wantsJump = inputContext.isActionTriggered(Action::Jump);

@@ -54,7 +54,9 @@ UIEventResult ItemGridControl::onInput(const UIInputEvent& event)
         return m_hoveredIndex >= 0 ? UIEventResult::Handled : UIEventResult::Ignored;
     }
 
-    if (event.type == UIInputEventType::PointerDown && event.button == 0 && m_hoveredIndex >= 0) {
+    if (event.type == UIInputEventType::PointerDown &&
+        event.button == UIPointerButton::Primary &&
+        m_hoveredIndex >= 0) {
         m_lastActivatedIndex = m_hoveredIndex;
         return UIEventResult::Consumed;
     }

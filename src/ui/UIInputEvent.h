@@ -6,10 +6,16 @@ enum class UIInputEventType {
     PointerUp,
 };
 
+enum class UIPointerButton {
+    None = -1,
+    Primary = 0,
+    Secondary = 1,
+};
+
 struct UIInputEvent {
     UIInputEventType type = UIInputEventType::PointerMove;
     float x = 0.0f;
     float y = 0.0f;
-    int button = 0;
+    UIPointerButton button = UIPointerButton::None;
 };
 

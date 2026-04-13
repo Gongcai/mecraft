@@ -73,6 +73,7 @@ set(CORE_SOURCES
         src/ui/CrosshairControl.cpp
         src/ui/TextRenderer.cpp
         src/ui/HotbarControl.cpp
+        src/ui/HeldItemPreviewControl.cpp
         src/ui/CommandInputOverlay.cpp
         src/ui/ConsoleOverlay.cpp
         src/ui/PickableOverlay.cpp
