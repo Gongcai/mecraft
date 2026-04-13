@@ -396,7 +396,15 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
 
     // Normalized [0,1] UV coordinates
     const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-    const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
+
+    // AO flip correction: when the ao values on one diagonal are darker than the
+    // other, flip the triangle split to prevent visible seam artifacts.
+    // Standard indices: 0,1,2, 0,2,3  (split along 0-2 diagonal)
+    // Flipped indices:  1,2,3, 1,3,0  (split along 1-3 diagonal)
+    const bool flipDiagonal = (ao[0] + ao[2]) < (ao[1] + ao[3]);
+    const std::array<int, 6> indices = flipDiagonal
+        ? std::array<int, 6>{{1, 2, 3, 1, 3, 0}}
+        : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
         const glm::vec3 local = kFaceCorners[face][index];

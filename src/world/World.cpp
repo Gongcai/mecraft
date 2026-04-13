@@ -251,11 +251,21 @@ void World::loadChunk(int cx, int cz) {
     if (m_lightEngine) {
         m_lightEngine->onChunkLoaded(*cur);
 
-        // Re-propagate light into existing neighbors now that this chunk's light data is available
-        for (int i = 0; i < 4; ++i) {
-            if (cur->neighbors[i]) {
-                m_lightEngine->repropagateChunk(*cur->neighbors[i]);
-            }
+        // Propagate light from the new chunk's borders into existing neighbors.
+        // direction: 0=+X, 1=-X, 2=+Z, 3=-Z (which slot 'into' is relative to 'from')
+        // cur->neighbors[0] is the +X neighbor, so from cur's perspective we propagate
+        // our +X border (direction=0) into that neighbor.
+        if (cur->neighbors[0]) {
+            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[0], 0);
+        }
+        if (cur->neighbors[1]) {
+            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[1], 1);
+        }
+        if (cur->neighbors[2]) {
+            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[2], 2);
+        }
+        if (cur->neighbors[3]) {
+            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[3], 3);
         }
     }
 }

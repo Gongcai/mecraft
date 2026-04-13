@@ -64,6 +64,7 @@ struct BlockDef {
     BlockRenderShape renderShape = BlockRenderShape::Cube;
     bool useGrassTint = false;         // cross 植被是否乘草色
     uint8_t lightLevel  = 0;          // 发光强度（0-15）
+    uint8_t opacity     = 0;          // 光照衰减量（0=全透明, 15=全阻断, water≈2）
     uint16_t timeToBreak = 1000;       // 破坏所需时间（毫秒）
     //六面纹理Atlas tile索引（上下左右前后）
     //值相同表示六面相同

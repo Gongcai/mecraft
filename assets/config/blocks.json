@@ -102,6 +102,7 @@
         "isSolid": false,
         "isSelectable": false,
         "isTransparent": true,
+        "opacity": 2,
         "textures": {
             "all": "water_still"
         }

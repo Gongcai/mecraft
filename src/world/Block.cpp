@@ -44,6 +44,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].renderShape = BlockRenderShape::Cube;
         s_blocks[i].useGrassTint = false;
         s_blocks[i].lightLevel = 0;
+        s_blocks[i].opacity = 15; // default: fully opaque
         setAllFaces(s_blocks[i], 0);
     }
 
@@ -51,6 +52,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     s_blocks[BlockType::AIR].name = s_blockNames[BlockType::AIR].c_str();
     s_blocks[BlockType::AIR].isSolid = false;
     s_blocks[BlockType::AIR].isTransparent = true;
+    s_blocks[BlockType::AIR].opacity = 0;
     setAllFaces(s_blocks[BlockType::AIR], -1);
 
     std::ifstream file(kBlocksConfigPath);
@@ -114,6 +116,13 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("isSelectable") && blockJson["isSelectable"].is_boolean()) {
             def.isSelectable = blockJson["isSelectable"].get<bool>();
+        }
+        if (blockJson.contains("opacity") && blockJson["opacity"].is_number_integer()) {
+            const int o = blockJson["opacity"].get<int>();
+            def.opacity = static_cast<uint8_t>(std::clamp(o, 0, 15));
+        } else {
+            // Auto-derive opacity from solid/transparent flags if not explicitly set
+            def.opacity = def.isSolid ? 15 : 0;
         }
         if (blockJson.contains("renderShape") && blockJson["renderShape"].is_string()) {
             const std::string renderShape = blockJson["renderShape"].get<std::string>();

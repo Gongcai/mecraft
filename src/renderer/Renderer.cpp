@@ -321,6 +321,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setFloat("uWindSpeed", kWindSpeed);
     m_chunkShader->setFloat("uWindSpatialFreq", kWindSpatialFreq);
     m_chunkShader->setInt("uDebugLightMode", m_debugLightMode);
+    m_chunkShader->setFloat("uSkyIntensity", 1.0f); // TODO: connect to day/night cycle
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);

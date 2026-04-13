@@ -20,9 +20,10 @@ uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
+uniform float uSkyIntensity; // 0.0-1.0, day/night cycle (default 1.0)
 
-// Ambient Occlusion brightness levels
-const float aoLevels[4] = float[](0.4, 0.6, 0.8, 1.0);
+// Ambient Occlusion brightness levels (softened to reduce harsh corners)
+const float aoLevels[4] = float[](0.50, 0.65, 0.82, 1.0);
 
 float computeFogFactor(float fogDistance) {
     if (uFogMode == 1) {
@@ -82,8 +83,9 @@ void main() {
     // AO: map 0-3 level to brightness multiplier
     float aoFactor = aoLevels[int(vAO + 0.5)];
 
-    // Base light (minimum 0.1 so dark areas aren't fully black)
-    float lightFactor = max(vLight, 0.1);
+    // Base light: use skyIntensity to scale sun contribution (for day/night cycle)
+    float skyContribution = vSunlight * max(uSkyIntensity, 0.0);
+    float lightFactor = max(max(vBlockLight, skyContribution), 0.05);
 
     // Combine texture, lighting, and AO
     vec3 finalColor = texColor.rgb * lightFactor * aoFactor;
