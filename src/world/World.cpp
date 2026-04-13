@@ -85,6 +85,25 @@ void World::setBlock(int x, int y, int z, BlockID id) {
     if (m_lightEngine) {
         m_lightEngine->onBlockChanged(x, y, z, oldId, id);
     }
+
+    // If the block is on a chunk boundary, neighbor chunks may need re-meshing
+    // because their border faces depend on this block
+    if (localX == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
+        if (nit != m_chunks.end()) nit->second->markDirty();
+    }
+    if (localX == Chunk::SIZE_X - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
+        if (nit != m_chunks.end()) nit->second->markDirty();
+    }
+    if (localZ == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
+        if (nit != m_chunks.end()) nit->second->markDirty();
+    }
+    if (localZ == Chunk::SIZE_Z - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
+        if (nit != m_chunks.end()) nit->second->markDirty();
+    }
 }
 
 bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {

@@ -5,3 +5,5 @@
 /.vs/
 /.idea/
 /lighting-system-readme.md
+/build/
+/build/CMakeFiles/

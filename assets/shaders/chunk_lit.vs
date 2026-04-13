@@ -17,6 +17,8 @@ uniform float uWindSpatialFreq;
 
 out vec2 vUV;
 out float vLight;
+out float vSunlight;
+out float vBlockLight;
 out float vAO;
 out float vNormal;
 out float vLayer;
@@ -44,6 +46,8 @@ void main() {
     // Normalize light intensity to 0.0 - 1.0
     float sun = aSunlight / 15.0;
     float block = aBlockLight / 15.0;
+    vSunlight = sun;
+    vBlockLight = block;
     vLight = max(sun, block);
 
     vAO = aAO;

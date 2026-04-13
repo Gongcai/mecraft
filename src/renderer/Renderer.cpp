@@ -168,6 +168,14 @@ Renderer::FogSettings Renderer::getFogSettings() const {
     return m_fogSettings;
 }
 
+void Renderer::setDebugLightMode(const int mode) {
+    m_debugLightMode = std::clamp(mode, 0, 3);
+}
+
+int Renderer::getDebugLightMode() const {
+    return m_debugLightMode;
+}
+
 float Renderer::getAtlasAnisotropy() const {
     if (m_resourceMgr == nullptr) {
         return 1.0f;
@@ -312,6 +320,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setFloat("uWindStrength", kWindStrength);
     m_chunkShader->setFloat("uWindSpeed", kWindSpeed);
     m_chunkShader->setFloat("uWindSpatialFreq", kWindSpatialFreq);
+    m_chunkShader->setInt("uDebugLightMode", m_debugLightMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);

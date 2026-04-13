@@ -87,6 +87,10 @@ public:
     void setFogAutoStartOffsetChunks(float offsetChunks);
     void setFogAutoFadeWidthChunks(float fadeWidthChunks);
     [[nodiscard]] FogSettings getFogSettings() const;
+
+    // Debug light visualization: 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
+    void setDebugLightMode(int mode);
+    [[nodiscard]] int getDebugLightMode() const;
 #ifndef NDEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
@@ -190,6 +194,7 @@ private:
     glm::mat4 m_viewProj = glm::mat4(1.0f);
     glm::vec3 m_cameraPos = glm::vec3(0.0f);
     FogSettings m_fogSettings{};
+    int m_debugLightMode = 0;
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
     std::vector<ChunkRenderEntry> m_chunkRenderEntries;

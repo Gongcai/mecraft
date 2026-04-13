@@ -44,7 +44,7 @@ namespace BlockType {
     constexpr BlockID CRIMSON_PLANKS = 25;
     constexpr BlockID WARPED_PLANKS = 26;
     constexpr BlockID BIRCH_LOG = 27;
-    constexpr BlockID BLUE_WOOL = 28;
+    constexpr BlockID TORCH = 28;
     constexpr BlockID BROWN_MUSHROOM = 29;
 
     constexpr BlockID COUNT = 255; // 预留255种方块类型（0-254有效）

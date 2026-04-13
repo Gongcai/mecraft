@@ -9,7 +9,7 @@ Inventory::Inventory() : m_slots{} {
     }
 
     // Default hotbar content.
-    setSlotItem(0, BlockType::DIRT);
+    setSlotItem(0, BlockType::DIRT,64);
     setSlotItem(1, BlockType::GRASS);
     setSlotItem(2, BlockType::STONE);
     setSlotItem(3, BlockType::SAND);
@@ -18,6 +18,7 @@ Inventory::Inventory() : m_slots{} {
     setSlotItem(6, BlockType::COAL_ORE);
     setSlotItem(7, ItemType::COAL, 16);
     setSlotItem(8, ItemType::IRON_PICKAXE, 1);
+    setSlotItem(13, BlockType::TORCH, 64);
 
     // Default inventory content.
     setSlotItem(9, BlockType::IRON_ORE);

@@ -247,8 +247,13 @@
     },
     {
         "id": 28,
-        "name": "blue_wool",
-        "timeToBreak": 200,
+        "name": "torch",
+        "isSolid": false,
+        "isTransparent": true,
+        "isLightSource": true,
+        "lightLevel": 14,
+        "renderShape": "cross",
+        "timeToBreak": 10,
         "textures": {
             "all": "blue_wool"
         }
