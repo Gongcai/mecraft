@@ -13,14 +13,8 @@
 class World;
 class Inventory;
 
-enum class DropKind {
-    Item,
-    Block
-};
-
 struct DropEntity {
     std::size_t id = 0;
-    DropKind kind = DropKind::Item;
     ItemID itemId = ItemType::AIR;
 
     glm::vec3 position = glm::vec3(0.0f);

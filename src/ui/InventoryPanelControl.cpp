@@ -215,11 +215,13 @@ void InventoryPanelControl::syncSlotsFromInventory()
         const int y = baseY + row * rowStep + (row >= 3 ? extraRow4 : 0);
         for (int col = 0; col < Inventory::INVENTORY_COLUMNS; ++col) {
             const int inventoryIndex = Inventory::toInventoryIndex(row, col);
+            const ItemStack stack = m_inventory->getSlotStack(inventoryIndex);
             slots[static_cast<size_t>(outIndex)] = {
                 baseX + col * colStep,
                 y,
                 slotSize,
-                static_cast<int>(m_inventory->getSlotItem(inventoryIndex))
+                static_cast<int>(stack.itemId),
+                static_cast<int>(stack.count)
             };
             ++outIndex;
         }

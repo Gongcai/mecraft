@@ -7,12 +7,13 @@
 
 #include "../world/Block.h"
 
-using ItemID = uint8_t;
+using ItemID = uint16_t;
 
 namespace ItemType {
-constexpr ItemID AIR = BlockType::AIR;
-constexpr ItemID COAL = 200;
-constexpr ItemID IRON_PICKAXE = 201;
+constexpr ItemID AIR = 0;
+constexpr ItemID COAL = 256;
+constexpr ItemID IRON_PICKAXE = 257;
+constexpr uint16_t COUNT = 4096;
 }
 
 struct ItemStack {
@@ -36,6 +37,24 @@ struct ItemDef {
     uint16_t maxDurability = 0;
 };
 
+// Block drop table entry: describes what item a block drops when broken.
+struct BlockDropEntry {
+    ItemID dropItem = 0;   // defaults to ItemType::AIR (0)
+    uint8_t minCount = 1;
+    uint8_t maxCount = 1;
+};
+
+// Maps BlockID → drop item info. Initialized after BlockRegistry and ItemRegistry.
+class BlockDropTable {
+public:
+    static void init();
+    [[nodiscard]] static ItemID getDropItem(BlockID blockId);
+    [[nodiscard]] static const BlockDropEntry& get(BlockID blockId);
+private:
+    static std::array<BlockDropEntry, BlockType::COUNT> s_drops;
+    static bool s_initialized;
+};
+
 class ItemRegistry {
 public:
     // Loads item definitions from assets/config/items.json.
@@ -48,9 +67,9 @@ public:
     [[nodiscard]] static BlockID toRenderBlock(ItemID itemId);
 
 private:
-    static std::array<ItemDef, BlockType::COUNT> s_items;
-    static std::array<std::string, BlockType::COUNT> s_itemNames;
-    static std::array<std::string, BlockType::COUNT> s_itemIconTextureNames;
+    static std::array<ItemDef, ItemType::COUNT> s_items;
+    static std::array<std::string, ItemType::COUNT> s_itemNames;
+    static std::array<std::string, ItemType::COUNT> s_itemIconTextureNames;
     static bool s_initializing;
     static bool s_initialized;
 };

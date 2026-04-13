@@ -91,6 +91,16 @@ public:
     void setHotbarIconTintColor(const std::array<float, 4>& color);
     [[nodiscard]] const std::array<float, 4>& getHotbarIconTintColor() const;
 
+    void setHotbarCountTextScale(float scale);
+    [[nodiscard]] float getHotbarCountTextScale() const;
+
+    void setInventoryCountTextOffsetX(float offsetX);
+    [[nodiscard]] float getInventoryCountTextOffsetX() const;
+    void setInventoryCountTextOffsetY(float offsetY);
+    [[nodiscard]] float getInventoryCountTextOffsetY() const;
+    void setInventoryCountTextScale(float scale);
+    [[nodiscard]] float getInventoryCountTextScale() const;
+
     void setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout);
     [[nodiscard]] const HeldItemPreviewLayout& getHeldItemPreviewLayout() const;
     void triggerHeldItemPreviewActionAnimation();

@@ -22,11 +22,18 @@ public:
         int y = 0;          // Top-left pixel Y (top-down origin)
         int size = 40;      // Width & height (square)
         int itemId = 0;     // 0 = empty slot, no icon drawn
+        int count = 0;      // Item stack count (displayed when > 1)
     };
 
     struct RenderParams {
         std::array<float, 4> hoverBgColor{1.0f, 1.0f, 1.0f, 0.25f};
         std::array<float, 4> iconTintColor{1.0f, 1.0f, 1.0f, 1.0f};
+
+        // Count text layout parameters — all values are ratios of slot size for resolution independence.
+        // Actual font scale = countTextScale * slotSize / 8.0 (8 = base glyph pixel size).
+        float countTextOffsetX = -0.05f;  // Ratio of slot width, from right edge
+        float countTextOffsetY = 0.03f;   // Ratio of slot height, from bottom edge
+        float countTextScale = 0.35f;     // Ratio of slot size for text height
     };
 
     static void initMesh(MeshHandles& mesh);
@@ -49,5 +56,6 @@ public:
                        const MeshHandles& mesh,
                        const class ResourceMgr& resourceMgr,
                        const class TextureAtlas& itemIconAtlas,
-                       const class TextureAtlas& itemTextureAtlas);
+                       const class TextureAtlas& itemTextureAtlas,
+                       const class TextRenderer* textRenderer = nullptr);
 };

@@ -41,7 +41,8 @@ void ItemGridControl::render(const UIRenderContext& context) const
                      m_mesh,
                      *m_resourceMgr,
                      m_resourceMgr->getItemIconAtlas(),
-                     m_resourceMgr->getItemTextureAtlas());
+                     m_resourceMgr->getItemTextureAtlas(),
+                     context.textRenderer);
 }
 
 UIEventResult ItemGridControl::onInput(const UIInputEvent& event)
@@ -94,6 +95,26 @@ void ItemGridControl::clearSlots()
 {
     m_slots.clear();
     m_hoveredIndex = -1;
+}
+
+void ItemGridControl::setCountTextOffsetX(float offsetX)
+{
+    m_renderParams.countTextOffsetX = offsetX;
+}
+
+void ItemGridControl::setCountTextOffsetY(float offsetY)
+{
+    m_renderParams.countTextOffsetY = offsetY;
+}
+
+void ItemGridControl::setCountTextScale(float scale)
+{
+    m_renderParams.countTextScale = std::max(0.1f, scale);
+}
+
+const Pickable::RenderParams& ItemGridControl::getRenderParams() const
+{
+    return m_renderParams;
 }
 
 int ItemGridControl::getHoveredIndex() const

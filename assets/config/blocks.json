@@ -66,6 +66,7 @@
     {
         "id": 7,
         "name": "coal_ore",
+        "drop": "coal",
         "timeToBreak": 1500,
         "textures": {
             "all": "coal_ore"

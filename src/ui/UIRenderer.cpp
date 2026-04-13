@@ -114,6 +114,47 @@ const std::array<float, 4>& UIRenderer::getHotbarIconTintColor() const
     return m_hotbar.getIconTintColor();
 }
 
+
+void UIRenderer::setHotbarCountTextScale(float scale)
+{
+    m_hotbar.setCountTextScale(scale);
+}
+
+float UIRenderer::getHotbarCountTextScale() const
+{
+    return m_hotbar.getCountTextScale();
+}
+
+void UIRenderer::setInventoryCountTextOffsetX(float offsetX)
+{
+    m_inventoryPanel.itemGrid().setCountTextOffsetX(offsetX);
+}
+
+float UIRenderer::getInventoryCountTextOffsetX() const
+{
+    return m_inventoryPanel.itemGrid().getRenderParams().countTextOffsetX;
+}
+
+void UIRenderer::setInventoryCountTextOffsetY(float offsetY)
+{
+    m_inventoryPanel.itemGrid().setCountTextOffsetY(offsetY);
+}
+
+float UIRenderer::getInventoryCountTextOffsetY() const
+{
+    return m_inventoryPanel.itemGrid().getRenderParams().countTextOffsetY;
+}
+
+void UIRenderer::setInventoryCountTextScale(float scale)
+{
+    m_inventoryPanel.itemGrid().setCountTextScale(scale);
+}
+
+float UIRenderer::getInventoryCountTextScale() const
+{
+    return m_inventoryPanel.itemGrid().getRenderParams().countTextScale;
+}
+
 void UIRenderer::setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout)
 {
     m_heldItemPreview.setLayout(layout);

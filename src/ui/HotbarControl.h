@@ -6,6 +6,7 @@
 
 #include "IUIControl.h"
 #include "../world/Block.h"
+#include "../item/Item.h"
 class Window;
 class Inventory;
 class ResourceMgr;
@@ -36,13 +37,16 @@ public:
     void setIconTintColor(const std::array<float, 4>& color);
     [[nodiscard]] const std::array<float, 4>& getIconTintColor() const;
 
+    void setCountTextScale(float scale);
+    [[nodiscard]] float getCountTextScale() const;
+
     void setItemNameDisplayDuration(float seconds);
     [[nodiscard]] float getItemNameDisplayDuration() const;
 
 private:
     void initMesh();
     void cleanupMesh();
-    void renderInternal(float screenW, float screenH, const Inventory& inventory) const;
+    void renderInternal(float screenW, float screenH, const Inventory& inventory, const TextRenderer* textRenderer = nullptr) const;
     void renderItemName(float screenW, float screenH, const Inventory& inventory, const TextRenderer& textRenderer, float timeSeconds) const;
     void checkSlotChange(const Inventory& inventory) const;
 
@@ -57,9 +61,13 @@ private:
     std::array<float, 4> m_borderColor {1.0f, 1.0f, 1.0f, 0.9f};
     std::array<float, 4> m_iconTintColor {1.0f, 1.0f, 1.0f, 1.0f};
 
+    // Count text layout parameters.
+    // Actual font scale = countTextScale * slotSize / 8.0 (8 = base glyph pixel size).
+    float m_countTextScale = 0.35f;     // Ratio of slot size for text height
+
     // Item name popup state (mutable to allow updates in const render method)
     mutable int m_lastSelectedSlot = -1;
-    mutable BlockID m_lastSelectedBlock = 255;
+    mutable ItemID m_lastSelectedItem = ItemType::AIR;
     mutable std::string m_itemName;
     mutable float m_itemNameShowTime = -100.0f;
     float m_itemNameDisplayDuration = 2.0f;

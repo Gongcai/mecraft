@@ -5,6 +5,7 @@
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
 #include "../item/Item.h"
+#include "TextRenderer.h"
 
 void Pickable::initMesh(MeshHandles& mesh)
 {
@@ -65,7 +66,8 @@ void Pickable::render(const SlotInfo* slots, int count,
                       const MeshHandles& mesh,
                       const ResourceMgr& resourceMgr,
                       const TextureAtlas& itemIconAtlas,
-                      const TextureAtlas& itemTextureAtlas)
+                      const TextureAtlas& itemTextureAtlas,
+                      const TextRenderer* textRenderer)
 {
     if (count <= 0 || mesh.vao == 0 || mesh.vbo == 0)
         return;
@@ -199,4 +201,34 @@ void Pickable::render(const SlotInfo* slots, int count,
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+
+    // ── Pass 3: Item count text (bottom-right of slot) ──
+    if (textRenderer)
+    {
+        constexpr float kBaseGlyphSize = 8.0f;  // BitmapFont glyph pixel size
+        constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
+        const float advanceFactor = textRenderer->getAdvanceFactor();
+
+        for (int i = 0; i < count; ++i)
+        {
+            if (slots[i].itemId == 0 || slots[i].count <= 1)
+                continue;
+
+            const float slotSize = static_cast<float>(slots[i].size);
+            // Scale text proportionally to slot size
+            const float textScale = params.countTextScale * slotSize / kBaseGlyphSize;
+            const float glyphSize = kBaseGlyphSize * textScale;
+            const float charAdvance = glyphSize * advanceFactor;
+
+            const std::string countStr = std::to_string(slots[i].count);
+            const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
+            // Position: bottom-right corner of the slot (offsets are ratio of slotSize)
+            // TextRenderer uses bottom-left pixel origin
+            const float textX = static_cast<float>(slots[i].x + slots[i].size) - textWidth + params.countTextOffsetX * slotSize;
+            const float textY = static_cast<float>(screenH - (slots[i].y + slots[i].size)) + params.countTextOffsetY * slotSize;
+
+            textRenderer->render(countStr, textX, textY, textScale, kTextColor,
+                                 static_cast<float>(screenW), static_cast<float>(screenH));
+        }
+    }
 }

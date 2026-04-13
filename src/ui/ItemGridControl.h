@@ -20,6 +20,11 @@ public:
     void setSlots(const Pickable::SlotInfo* slots, int count);
     void clearSlots();
 
+    void setCountTextOffsetX(float offsetX);
+    void setCountTextOffsetY(float offsetY);
+    void setCountTextScale(float scale);
+    [[nodiscard]] const Pickable::RenderParams& getRenderParams() const;
+
     [[nodiscard]] int getHoveredIndex() const;
     [[nodiscard]] int getLastActivatedIndex() const;
     void clearLastActivatedIndex();

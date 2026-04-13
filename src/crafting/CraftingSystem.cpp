@@ -11,7 +11,7 @@ namespace {
 bool parseItemToken(const json& token, ItemID& outItemId) {
     if (token.is_number_integer()) {
         const int id = token.get<int>();
-        if (id < 0 || id >= static_cast<int>(BlockType::COUNT)) {
+        if (id < 0 || id >= static_cast<int>(ItemType::COUNT)) {
             return false;
         }
         outItemId = static_cast<ItemID>(id);
@@ -33,7 +33,7 @@ bool parseItemToken(const json& token, ItemID& outItemId) {
 
     if (allDigits) {
         const int id = std::stoi(text);
-        if (id < 0 || id >= static_cast<int>(BlockType::COUNT)) {
+        if (id < 0 || id >= static_cast<int>(ItemType::COUNT)) {
             return false;
         }
         outItemId = static_cast<ItemID>(id);

@@ -62,7 +62,8 @@ void HotbarControl::render(const UIRenderContext& context) const
 
     renderInternal(static_cast<float>(context.screenWidth),
                    static_cast<float>(context.screenHeight),
-                   *inventory);
+                   *inventory,
+                   context.textRenderer);
 
     // Render item name popup above hotbar
     if (context.textRenderer) {
@@ -135,6 +136,16 @@ const std::array<float, 4>& HotbarControl::getIconTintColor() const
     return m_iconTintColor;
 }
 
+void HotbarControl::setCountTextScale(float scale)
+{
+    m_countTextScale = std::max(0.1f, scale);
+}
+
+float HotbarControl::getCountTextScale() const
+{
+    return m_countTextScale;
+}
+
 void HotbarControl::render(const Window& window, const Inventory& inventory) const
 {
     if (!m_visible) {
@@ -143,10 +154,11 @@ void HotbarControl::render(const Window& window, const Inventory& inventory) con
 
     renderInternal(static_cast<float>(window.getWidth()),
                    static_cast<float>(window.getHeight()),
-                   inventory);
+                   inventory,
+                   nullptr);
 }
 
-void HotbarControl::renderInternal(float screenW, float screenH, const Inventory& inventory) const
+void HotbarControl::renderInternal(float screenW, float screenH, const Inventory& inventory, const TextRenderer* textRenderer) const
 {
     if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
         return;
@@ -226,12 +238,15 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     std::vector<float> iconVerts;
     std::vector<float> fallbackIconVerts;
     std::vector<float> legacyIconVerts;
+    int slotCounts[hotbarSlots] = {};
     constexpr float slotStride = 20.0f * kScale;
     constexpr float iconInset = 2.0f * kScale;
     constexpr float iconSize = 17.5f * kScale;
     for (int i = 0; i < hotbarSlots; ++i)
     {
-        const ItemID itemId = static_cast<ItemID>(inventory.getSlot(i));
+        const ItemStack stack = inventory.getSlotStack(i);
+        const ItemID itemId = stack.itemId;
+        slotCounts[i] = static_cast<int>(stack.count);
         if (itemId == ItemType::AIR) {
             continue;
         }
@@ -351,6 +366,39 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+
+    // ── Render item count text (bottom-right of each slot) ──
+    if (textRenderer)
+    {
+        constexpr float kBaseGlyphSize = 8.0f;  // BitmapFont glyph pixel size
+        constexpr float kCountRightPaddingRatio = 0.05f;
+        constexpr float kCountBottomPaddingRatio = 0.03f;
+        constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
+        const float advanceFactor = textRenderer->getAdvanceFactor();
+        const float slotFullSize = slotStride;
+        // Scale text proportionally to slot size
+        const float textScale = m_countTextScale * slotFullSize / kBaseGlyphSize;
+        const float glyphSize = kBaseGlyphSize * textScale;
+        const float charAdvance = glyphSize * advanceFactor;
+
+        for (int i = 0; i < hotbarSlots; ++i)
+        {
+            if (slotCounts[i] <= 1)
+                continue;
+
+            const std::string countStr = std::to_string(slotCounts[i]);
+            const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
+            // Slot position in screen pixels (bottom-left origin for TextRenderer).
+            const float slotX = startX + static_cast<float>(i) * slotStride;
+            const float slotY = startY;
+            const float slotBottomY = slotY;
+            const float textRightX = slotX + slotFullSize - kCountRightPaddingRatio * slotFullSize;
+            const float textX = textRightX - textWidth;
+            const float textY = slotBottomY + kCountBottomPaddingRatio * slotFullSize;
+
+            textRenderer->render(countStr, textX, textY, textScale, kTextColor, screenW, screenH);
+        }
+    }
 }
 
 void HotbarControl::checkSlotChange(const Inventory& inventory) const
@@ -360,13 +408,13 @@ void HotbarControl::checkSlotChange(const Inventory& inventory) const
 
     if (m_lastSelectedSlot < 0) {
         m_lastSelectedSlot = currentSlot;
-        m_lastSelectedBlock = static_cast<BlockID>(currentItem);
+        m_lastSelectedItem = currentItem;
         return;
     }
 
-    if (currentSlot != m_lastSelectedSlot || currentItem != static_cast<ItemID>(m_lastSelectedBlock)) {
+    if (currentSlot != m_lastSelectedSlot || currentItem != m_lastSelectedItem) {
         m_lastSelectedSlot = currentSlot;
-        m_lastSelectedBlock = static_cast<BlockID>(currentItem);
+        m_lastSelectedItem = currentItem;
         if (currentItem != ItemType::AIR) {
             m_itemName = ItemRegistry::get(currentItem).name;
         } else {

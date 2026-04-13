@@ -51,7 +51,7 @@ ItemID Inventory::getSlotItem(const int slot) const {
 }
 
 void Inventory::setSlotItem(const int slot, const ItemID item, const uint16_t count) {
-    if (!isValidSlot(slot) || item >= BlockType::COUNT) {
+    if (!isValidSlot(slot) || item >= ItemType::COUNT) {
         return;
     }
 
@@ -66,6 +66,8 @@ void Inventory::setSlotItem(const int slot, const ItemID item, const uint16_t co
     // Avoid touching ItemRegistry here: Inventory can be constructed before BlockRegistry
     // is fully initialized with ResourceMgr, and early ItemRegistry access would lock blocks
     // into fallback texture index 0 for the whole run.
+    // NOTE: durability is intentionally left as 0 here for the same reason.
+    // Callers that need proper durability (e.g. addItem) set it explicitly.
     stack.durability = 0;
     m_slots[slot] = stack;
 }
@@ -159,7 +161,7 @@ void Inventory::swapSlots(const int a, const int b) {
 }
 
 uint32_t Inventory::addItem(const ItemID itemId, uint32_t count) {
-    if (itemId == ItemType::AIR || count == 0 || itemId >= BlockType::COUNT) {
+    if (itemId == ItemType::AIR || count == 0 || itemId >= ItemType::COUNT) {
         return count;
     }
 

@@ -418,6 +418,13 @@ void Dashboard::showHotbarSettings(UIRenderer& uiRenderer) {
         uiRenderer.setHotbarIconTintColor({ icon[0], icon[1], icon[2], icon[3] });
     }
 
+    ImGui::Separator();
+    ImGui::Text("Count Text");
+    float countScale = uiRenderer.getHotbarCountTextScale();
+    if (ImGui::SliderFloat("Count Scale", &countScale, 0.05f, 1.0f, "%.3f")) {
+        uiRenderer.setHotbarCountTextScale(countScale);
+    }
+
     ImGui::End();
 }
 
@@ -443,6 +450,21 @@ void Dashboard::showInventoryPanelSettings(UIRenderer& uiRenderer) {
 
     if (changed) {
         uiRenderer.setInventoryPanelLayout(layout);
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Count Text");
+    float invCountOffsetX = uiRenderer.getInventoryCountTextOffsetX();
+    if (ImGui::SliderFloat("Inv Count Offset X", &invCountOffsetX, -1.0f, 1.0f, "%.3f")) {
+        uiRenderer.setInventoryCountTextOffsetX(invCountOffsetX);
+    }
+    float invCountOffsetY = uiRenderer.getInventoryCountTextOffsetY();
+    if (ImGui::SliderFloat("Inv Count Offset Y", &invCountOffsetY, -1.0f, 1.0f, "%.3f")) {
+        uiRenderer.setInventoryCountTextOffsetY(invCountOffsetY);
+    }
+    float invCountScale = uiRenderer.getInventoryCountTextScale();
+    if (ImGui::SliderFloat("Inv Count Scale", &invCountScale, 0.05f, 1.0f, "%.3f")) {
+        uiRenderer.setInventoryCountTextScale(invCountScale);
     }
 
     ImGui::End();

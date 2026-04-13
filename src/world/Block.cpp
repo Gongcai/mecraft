@@ -12,6 +12,7 @@
 #include "../resource/ResourceMgr.h"
 
 std::array<BlockDef, BlockType::COUNT> BlockRegistry::s_blocks{};
+std::array<std::string, BlockType::COUNT> BlockRegistry::s_blockDropNames{};
 
 namespace {
 constexpr const char* kBlocksConfigPath = "../assets/config/blocks.json";
@@ -172,6 +173,14 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
 
+        if (blockJson.contains("drop")) {
+            if (blockJson["drop"].is_string()) {
+                s_blockDropNames[id] = blockJson["drop"].get<std::string>();
+            } else if (blockJson["drop"].is_number_integer()) {
+                s_blockDropNames[id] = std::to_string(blockJson["drop"].get<int>());
+            }
+        }
+
         s_blocks[id] = def;
     }
 
@@ -220,4 +229,12 @@ void BlockRegistry::printAllBlocks() {
 
     }
 #endif
+}
+
+const std::string& BlockRegistry::getBlockDropName(const BlockID id) {
+    if (id >= BlockType::COUNT) {
+        static const std::string empty;
+        return empty;
+    }
+    return s_blockDropNames[id];
 }

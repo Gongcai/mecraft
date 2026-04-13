@@ -17,6 +17,7 @@ int fail(const char* message) {
 int main() {
     BlockRegistry::init(nullptr);
     ItemRegistry::init();
+    BlockDropTable::init();
 
     World world;
     world.init(20260410);
@@ -47,8 +48,18 @@ int main() {
         return fail("merged drop should accumulate stack count");
     }
 
-    if (dropSystem.getDrops().front().itemId != ItemRegistry::fromBlock(BlockType::STONE)) {
-        return fail("drop payload should preserve spawned item id");
+    if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockType::STONE)) {
+        return fail("drop payload should preserve spawned item id from BlockDropTable");
+    }
+
+    // Test coal_ore drops coal item (not itself)
+    DropSystem coalDropSystem;
+    coalDropSystem.spawnBlockDrop(BlockType::COAL_ORE, glm::ivec3(0, 122, 0));
+    if (coalDropSystem.getDrops().empty()) {
+        return fail("coal_ore should spawn a drop");
+    }
+    if (coalDropSystem.getDrops().front().itemId != ItemType::COAL) {
+        return fail("coal_ore should drop coal item, not itself");
     }
 
     DropSystem placementDropSystem;
@@ -110,4 +121,3 @@ int main() {
     std::cout << "[drop_system_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

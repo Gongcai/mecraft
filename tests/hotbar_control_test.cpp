@@ -38,6 +38,11 @@ int main() {
         return fail("icon tint setter/getter mismatch");
     }
 
+    hotbar.setCountTextScale(0.42f);
+    if (hotbar.getCountTextScale() != 0.42f) {
+        return fail("count text scale setter/getter mismatch");
+    }
+
     // Smoke: should be safe without init.
     hotbar.shutdown();
 

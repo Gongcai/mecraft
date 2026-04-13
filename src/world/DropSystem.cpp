@@ -201,7 +201,6 @@ void DropSystem::spawnItemDrop(const ItemID itemId, const glm::ivec3& blockPos, 
 
     DropEntity drop;
     drop.id = m_nextId++;
-    drop.kind = DropKind::Item;
     drop.itemId = itemId;
     drop.stackCount = stackCount;
     drop.position = spawnPos;
@@ -216,7 +215,11 @@ void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPo
     if (blockId == BlockType::AIR) {
         return;
     }
-    spawnItemDrop(ItemRegistry::fromBlock(blockId), blockPos, 1);
+    const BlockDropEntry& drop = BlockDropTable::get(blockId);
+    if (drop.dropItem == ItemType::AIR) {
+        return;
+    }
+    spawnItemDrop(drop.dropItem, blockPos, drop.minCount);
 }
 
 void DropSystem::onBlockPlaced(const glm::ivec3& blockPos, const World& world) {

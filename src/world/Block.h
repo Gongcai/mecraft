@@ -81,9 +81,11 @@ public:
     static const BlockDef& get(BlockID id);
     [[nodiscard]] static BlockID findByName(const std::string& name);
     [[nodiscard]] static bool tryGetIdByName(const std::string& name, BlockID& outId);
+    [[nodiscard]] static const std::string& getBlockDropName(BlockID id);
     static void printAllBlocks();
 private:
     static std::array<BlockDef, BlockType::COUNT> s_blocks;
+    static std::array<std::string, BlockType::COUNT> s_blockDropNames;
 
 };
 
