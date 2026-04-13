@@ -2,10 +2,11 @@
 out vec4 FragColor;
 
 in vec2 vUV;
+in float vLayer;
 in float vNormal;
 in float vFogDist;
 
-uniform sampler2D texAtlas;
+uniform sampler2DArray texArray;
 uniform int uForceBaseLod;
 uniform vec3 uGrassTintColor;
 uniform int uFogEnabled;
@@ -33,9 +34,10 @@ void main() {
     // Cross vegetation alpha-cutout mips can darken noticeably at distance.
     // Keep plants on base LOD while leaving terrain blocks on regular mip sampling.
     bool forceBaseLod = (uForceBaseLod != 0) || (vNormal < -0.5);
+    vec3 sampleCoord = vec3(vUV, vLayer);
     vec4 texColor = forceBaseLod
-        ? textureLod(texAtlas, vUV, 0.0)
-        : texture(texAtlas, vUV);
+        ? textureLod(texArray, sampleCoord, 0.0)
+        : texture(texArray, sampleCoord);
 
     if (texColor.a < 0.1)
         discard;

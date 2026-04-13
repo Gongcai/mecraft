@@ -5,14 +5,15 @@ in vec2 vUV;
 in float vLight;
 in float vAO;
 in float vNormal;
+in float vLayer;
 
-uniform sampler2D texAtlas;
+uniform sampler2DArray texArray;
 
 // Ambient Occlusion 的四个亮度等级
 const float aoLevels[4] = float[](0.4, 0.6, 0.8, 1.0);
 
 void main() {
-    vec4 texColor = texture(texAtlas, vUV);
+    vec4 texColor = texture(texArray, vec3(vUV, vLayer));
 
     // 如果是透明通道（例如树叶或空气），丢弃像素
     if(texColor.a < 0.1)

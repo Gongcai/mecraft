@@ -267,6 +267,11 @@ void ResourceMgr::shutdown() {
         m_itemIconAtlas.textureID = 0;
     }
 
+    if (m_textureArray.textureID != 0) {
+        glDeleteTextures(1, &m_textureArray.textureID);
+        m_textureArray.textureID = 0;
+    }
+
     m_blockAtlasPixels.clear();
 }
 
@@ -539,6 +544,120 @@ const TextureAtlas & ResourceMgr::getAtlas() const {
     return m_atlas;
 }
 
+void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) {
+    namespace fs = std::filesystem;
+
+    if (m_textureArray.textureID != 0) {
+        glDeleteTextures(1, &m_textureArray.textureID);
+        m_textureArray.textureID = 0;
+    }
+
+    std::vector<fs::path> imagePaths;
+
+    if (fs::exists(directory)) {
+        for (const auto& entry : fs::directory_iterator(directory)) {
+            if (entry.path().extension() == ".png") {
+                imagePaths.push_back(entry.path());
+            }
+        }
+    }
+
+    // Same sort order as buildTextureAtlas for consistent tile indices.
+    std::sort(imagePaths.begin(), imagePaths.end(),
+              [](const fs::path& a, const fs::path& b) {
+                  return a.filename().string() < b.filename().string();
+              });
+
+    if (imagePaths.empty()) {
+#ifndef NDEBUG
+        std::cerr << "Texture Array generated with 0 images!\n";
+#endif
+        return;
+    }
+
+    const int numLayers = static_cast<int>(imagePaths.size());
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, textureID);
+
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
+                 tileSize, tileSize, numLayers,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    stbi_set_flip_vertically_on_load(true);
+
+    for (int i = 0; i < numLayers; ++i) {
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        unsigned char* data = stbi_load(imagePaths[i].string().c_str(), &width, &height, &channels, 4);
+
+        if (!data) {
+#ifndef NDEBUG
+            std::cerr << "Failed to load image for texture array: " << imagePaths[i] << "\n";
+#endif
+            continue;
+        }
+
+        if (width != tileSize || height != tileSize) {
+#ifndef NDEBUG
+            std::cerr << "Warning: Texture size mismatch in texture array! " << imagePaths[i] << "\n";
+#endif
+        }
+
+        const int copyWidth = std::min(tileSize, width);
+        const int copyHeight = std::min(tileSize, height);
+
+        if (copyWidth == tileSize && copyHeight == tileSize) {
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
+                            tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        } else {
+            // Upload into a temporary full-size buffer if the source was smaller.
+            std::vector<unsigned char> padded(static_cast<size_t>(tileSize) * tileSize * 4, 0);
+            for (int y = 0; y < copyHeight; ++y) {
+                for (int x = 0; x < copyWidth; ++x) {
+                    const int dstIdx = (y * tileSize + x) * 4;
+                    const int srcIdx = (y * width + x) * 4;
+                    padded[dstIdx + 0] = data[srcIdx + 0];
+                    padded[dstIdx + 1] = data[srcIdx + 1];
+                    padded[dstIdx + 2] = data[srcIdx + 2];
+                    padded[dstIdx + 3] = data[srcIdx + 3];
+                }
+            }
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
+                            tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, padded.data());
+        }
+
+        stbi_image_free(data);
+    }
+
+    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    if (supportsAnisotropicFiltering()) {
+        GLfloat maxAniso = 1.0f;
+        glGetFloatv(kMaxTextureMaxAnisotropyPName, &maxAniso);
+        m_atlasMaxAnisotropy = std::max(1.0f, static_cast<float>(maxAniso));
+        m_atlasAnisotropy = std::clamp(m_atlasAnisotropy, 1.0f, m_atlasMaxAnisotropy);
+        glTexParameterf(GL_TEXTURE_2D_ARRAY, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
+    }
+
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+
+    m_textureArray.textureID = textureID;
+    m_textureArray.tileSize = tileSize;
+    m_textureArray.layerCount = numLayers;
+}
+
+const TextureArray& ResourceMgr::getTextureArray() const {
+    return m_textureArray;
+}
+
 void ResourceMgr::buildBlockIconAtlas(int iconSize) {
     if (iconSize < 16) {
         iconSize = 16;
@@ -689,11 +808,18 @@ void ResourceMgr::setAtlasAnisotropy(const float anisotropy) {
     }
 
     m_atlasAnisotropy = clamped;
-    if (m_atlas.textureID == 0 || !supportsAnisotropicFiltering()) {
-        return;
-    }
 
-    glBindTexture(GL_TEXTURE_2D, m_atlas.textureID);
-    glTexParameterf(GL_TEXTURE_2D, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    if (supportsAnisotropicFiltering()) {
+        if (m_atlas.textureID != 0) {
+            glBindTexture(GL_TEXTURE_2D, m_atlas.textureID);
+            glTexParameterf(GL_TEXTURE_2D, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        if (m_textureArray.textureID != 0) {
+            glBindTexture(GL_TEXTURE_2D_ARRAY, m_textureArray.textureID);
+            glTexParameterf(GL_TEXTURE_2D_ARRAY, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+        }
+    }
 }

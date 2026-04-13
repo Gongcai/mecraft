@@ -268,9 +268,9 @@ void Renderer::renderWorld(const World& world) {
 
     drainMeshingResults(world);
 
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
-    bindChunkRenderState(world, atlas);
-    submitMeshingJobs(world, atlas);
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    bindChunkRenderState(world, texArray);
+    submitMeshingJobs(world);
 
     std::vector<Chunk*> cutoutChunks;
     cutoutChunks.reserve(world.getActiveChunks().size());
@@ -281,10 +281,10 @@ void Renderer::renderWorld(const World& world) {
     renderTransparentChunks(transparentChunks);
 
     glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
-void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atlas) const {
+void Renderer::bindChunkRenderState(const World& world, const TextureArray& texArray) const {
 
     float fogStart = m_fogSettings.startDistance;
     float fogEnd = m_fogSettings.endDistance;
@@ -299,7 +299,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atla
     m_chunkShader->use();
     m_chunkShader->setMat4("view", m_view);
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
-    m_chunkShader->setInt("texAtlas", 0);
+    m_chunkShader->setInt("texArray", 0);
     m_chunkShader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
     m_chunkShader->setInt("uForceBaseLod", 0);
     m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
@@ -314,10 +314,10 @@ void Renderer::bindChunkRenderState(const World& world, const TextureAtlas& atla
     m_chunkShader->setFloat("uWindSpatialFreq", kWindSpatialFreq);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
 }
 
-void Renderer::submitMeshingJobs(const World& world, const TextureAtlas& atlas) {
+void Renderer::submitMeshingJobs(const World& world) {
     int submittedThisPass = 0;
     const auto& activeChunks = world.getActiveChunks();
     for (const auto& pair : activeChunks) {
@@ -331,7 +331,6 @@ void Renderer::submitMeshingJobs(const World& world, const TextureAtlas& atlas) 
             job.chunkKey = chunkKey;
             job.revision = chunk.getMeshRevision();
             job.snapshot = ChunkMesher::captureSnapshot(chunk);
-            job.atlas = &atlas;
             m_meshingService.submit(job);
             m_meshingInFlight.insert(chunkKey);
             ++submittedThisPass;

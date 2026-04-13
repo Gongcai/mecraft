@@ -125,8 +125,8 @@ private:
     void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
-    void bindChunkRenderState(const World& world, const TextureAtlas& atlas) const;
-    void submitMeshingJobs(const World& world, const TextureAtlas& atlas);
+    void bindChunkRenderState(const World& world, const TextureArray& texArray) const;
+    void submitMeshingJobs(const World& world);
     void renderOpaqueChunksAndCollectPasses(const World& world,
                                             std::vector<Chunk*>& cutoutChunks,
                                             std::vector<Chunk*>& transparentChunks);

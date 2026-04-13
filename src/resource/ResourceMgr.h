@@ -25,6 +25,12 @@ struct TextureAtlas {
     [[nodiscard]] std::pair<glm::vec2, glm::vec2> getUV(int tileIndex) const;
 };
 
+struct TextureArray {
+    GLuint textureID = 0;
+    int tileSize = 16;
+    int layerCount = 0;
+};
+
 class ResourceMgr {
 public:
     void init();
@@ -43,9 +49,13 @@ public:
     GLuint loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
     [[nodiscard]] GLuint getGuiTexture(const std::string& name) const;
 
-    // 纹理图集
+    // 纹理图集 (UI 使用)
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
+
+    // 纹理数组 (方块渲染使用)
+    void buildTextureArray(const std::string& directory, int tileSize = 16);
+    [[nodiscard]] const TextureArray& getTextureArray() const;
 
     // Prebaked block item icons (isometric-like) packed in a single atlas texture.
     void buildBlockIconAtlas(int iconSize = 64);
@@ -62,6 +72,7 @@ private:
     std::unordered_map<std::string, GLuint> m_guiTextures;
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;
+    TextureArray m_textureArray;
     std::vector<unsigned char> m_blockAtlasPixels;
     float m_atlasAnisotropy = 1.0f;
     float m_atlasMaxAnisotropy = 1.0f;

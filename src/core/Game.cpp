@@ -33,6 +33,7 @@ void Game::init(int width, int height, const char *title) {
     // 初始化资源管理器，加载着色器/贴图
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
+    m_resourceMgr.buildTextureArray("../assets/textures/blocks", 16);
     m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
     m_resourceMgr.loadGuiTexture("inventory", "../assets/textures/gui/inventory.png", true);
     m_resourceMgr.loadGuiTexture("font_ascii", "../assets/textures/font/ascii.png", true);

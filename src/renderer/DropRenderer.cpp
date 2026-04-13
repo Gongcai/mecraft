@@ -21,6 +21,7 @@ struct BlockVertex {
     float v;
     float normal;
     float windWeight;
+    float layer;
 };
 
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
@@ -83,8 +84,8 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         return;
     }
 
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
-    if (atlas.textureID == 0) {
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    if (texArray.textureID == 0) {
         return;
     }
 
@@ -94,13 +95,13 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
 
     m_shader->use();
     m_shader->setMat4(viewProjLoc, viewProj);
-    m_shader->setInt("texAtlas", 0);
+    m_shader->setInt("texArray", 0);
     m_shader->setInt("uForceBaseLod", 0);
     m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
     m_shader->setFloat("uWindStrength", 0.0f);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
 
     for (const DropEntity& drop : drops) {
         if (drop.kind != DropKind::Block) {
@@ -124,7 +125,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     }
 
     glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
 DropRenderer::Mesh* DropRenderer::getOrCreateBlockMesh(const BlockID blockId) {
@@ -145,7 +146,6 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     }
 
     const BlockDef& def = BlockRegistry::get(blockId);
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
 
     std::vector<BlockVertex> vertices;
     vertices.reserve(36);
@@ -159,12 +159,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
             tileIndex = 0;
         }
 
-        const auto uv = atlas.getUV(tileIndex);
-        const float uMin = uv.first.x;
-        const float vMin = uv.first.y;
-        const float uMax = uv.second.x;
-        const float vMax = uv.second.y;
-        const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+        const float layer = static_cast<float>(tileIndex);
+        const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
         const float crossMarker = def.useGrassTint ? kCrossGrassMarker : kCrossFlowerMarker;
 
         const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
@@ -178,7 +174,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     uvCoord.x,
                     uvCoord.y,
                     crossMarker,
-                    pos.y
+                    pos.y,
+                    layer
                 });
             }
         };
@@ -193,12 +190,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
             tileIndex = 0;
         }
 
-        const auto uv = atlas.getUV(tileIndex);
-        const float uMin = uv.first.x;
-        const float vMin = uv.first.y;
-        const float uMax = uv.second.x;
-        const float vMax = uv.second.y;
-        const std::array<glm::vec2, 4> faceUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+        const float layer = static_cast<float>(tileIndex);
+        const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
 
         for (const int idx : kFaceIndices) {
             const glm::vec3& pos = kFaceCorners[face][idx];
@@ -210,7 +203,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                 uvCoord.x,
                 uvCoord.y,
                 static_cast<float>(face),
-                0.0f
+                0.0f,
+                layer
             });
         }
     }
@@ -239,6 +233,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

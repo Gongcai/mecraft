@@ -2,14 +2,15 @@
 out vec4 FragColor;
 
 in vec2 vUV;
+in float vLayer;
 in float vAlpha;
 in float vGrassTintFactor;
 
-uniform sampler2D texAtlas;
+uniform sampler2DArray texArray;
 uniform vec3 uGrassTintColor;
 
 void main() {
-    vec4 texColor = texture(texAtlas, vUV);
+    vec4 texColor = texture(texArray, vec3(vUV, vLayer));
     if (texColor.a < 0.1)
         discard;
     if (vGrassTintFactor > 0.5) {

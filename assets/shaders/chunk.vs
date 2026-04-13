@@ -3,6 +3,7 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aUV;
 layout (location = 2) in float aNormal;
 layout (location = 3) in float aWindWeight;
+layout (location = 4) in float aLayer;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -13,6 +14,7 @@ uniform float uWindSpeed;
 uniform float uWindSpatialFreq;
 
 out vec2 vUV;
+out float vLayer;
 out float vNormal;
 out float vFogDist;
 
@@ -30,6 +32,7 @@ void main() {
     gl_Position = viewProj * worldPos;
 
     vUV = aUV;
+    vLayer = aLayer;
     vNormal = aNormal;
     vFogDist = max(0.0, -viewPos.z);
 }

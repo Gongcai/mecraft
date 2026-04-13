@@ -5,6 +5,7 @@ layout (location = 2) in float aNormal;     // 简单的面法线索引或方向
 layout (location = 3) in float aSunlight;   // 0.0 - 15.0
 layout (location = 4) in float aBlockLight; // 0.0 - 15.0
 layout (location = 5) in float aAO;         // 0.0 - 3.0
+layout (location = 6) in float aLayer;
 
 uniform mat4 model;
 uniform mat4 viewProj; // 通常是 projection * view
@@ -13,6 +14,7 @@ out vec2 vUV;
 out float vLight;
 out float vAO;
 out float vNormal;
+out float vLayer;
 
 void main() {
     gl_Position = viewProj * model * vec4(aPos, 1.0);
@@ -26,5 +28,6 @@ void main() {
 
     vAO = aAO;
     vNormal = aNormal;
+    vLayer = aLayer;
 }
 

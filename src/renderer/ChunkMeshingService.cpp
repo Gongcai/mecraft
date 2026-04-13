@@ -74,14 +74,10 @@ void ChunkMeshingService::workerLoop() {
             m_pending.pop();
         }
 
-        if (job.atlas == nullptr) {
-            continue;
-        }
-
         ChunkMeshingResult result;
         result.chunkKey = job.chunkKey;
         result.revision = job.revision;
-        result.meshData = ChunkMesher::buildMeshData(job.snapshot, *job.atlas);
+        result.meshData = ChunkMesher::buildMeshData(job.snapshot);
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);

@@ -32,8 +32,8 @@ struct ChunkMeshData {
 class ChunkMesher {
 public:
     static ChunkMeshingSnapshot captureSnapshot(const Chunk& chunk);
-    static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot, const TextureAtlas& atlas);
-    static void generateMesh(Chunk& chunk, const TextureAtlas& atlas);
+    static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot);
+    static void generateMesh(Chunk& chunk);
 
 private:
     static bool shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
@@ -45,13 +45,11 @@ private:
     static void addFace(std::vector<BlockVertex>& vertices,
                         const glm::vec3& pos,
                         int face,
-                        const BlockDef& def,
-                        const TextureAtlas& atlas);
+                        const BlockDef& def);
 
     static void addCrossedQuads(std::vector<BlockVertex>& vertices,
                                 const glm::vec3& pos,
-                                const BlockDef& def,
-                                const TextureAtlas& atlas);
+                                const BlockDef& def);
 };
 
 #endif // MECRAFT_CHUNKMESHER_H

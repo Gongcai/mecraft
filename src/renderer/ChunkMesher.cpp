@@ -145,7 +145,7 @@ ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
     return snapshot;
 }
 
-ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, const TextureAtlas& atlas) {
+ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
     ChunkMeshData meshData;
     meshData.opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
     meshData.cutoutVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
@@ -163,8 +163,7 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
                 if (def.renderShape == BlockRenderShape::Cross) {
                     addCrossedQuads(meshData.cutoutVertices,
                                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                    def,
-                                    atlas);
+                                    def);
                     expandBounds(meshData,
                                  glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
@@ -187,8 +186,7 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
                     addFace(target,
                             glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                             face,
-                            def,
-                            atlas);
+                            def);
 
                     if (!meshData.hasBounds) {
                         expandBounds(meshData,
@@ -210,9 +208,9 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot, c
     return meshData;
 }
 
-void ChunkMesher::generateMesh(Chunk& chunk, const TextureAtlas& atlas) {
+void ChunkMesher::generateMesh(Chunk& chunk) {
     const ChunkMeshingSnapshot snapshot = captureSnapshot(chunk);
-    ChunkMeshData meshData = buildMeshData(snapshot, atlas);
+    ChunkMeshData meshData = buildMeshData(snapshot);
     ChunkMesh mesh;
     mesh.upload(meshData.opaqueVertices);
     mesh.uploadCutout(meshData.cutoutVertices);
@@ -257,20 +255,17 @@ bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
 void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
                           const glm::vec3& pos,
                           const int face,
-                          const BlockDef& def,
-                          const TextureAtlas& atlas) {
+                          const BlockDef& def) {
     int tileIndex = getFaceTextureIndex(def, face);
     if (tileIndex < 0) {
         tileIndex = 0;
     }
 
-    const auto uv = atlas.getUV(tileIndex);
-    const float uMin = uv.first.x;
-    const float vMin = uv.first.y;
-    const float uMax = uv.second.x;
-    const float vMax = uv.second.y;
+    const float layer = static_cast<float>(tileIndex);
 
-    const std::array<glm::vec2, 4> faceUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+    // Normalized [0,1] UV coordinates — texture array layers are independent,
+    // so GL_REPEAT works correctly for greedy meshing.
+    const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
@@ -284,27 +279,23 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             uvCoord.x,
             uvCoord.y,
             static_cast<float>(face),
-            0.0f
+            0.0f,
+            layer
         });
     }
 }
 
 void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                                   const glm::vec3& pos,
-                                  const BlockDef& def,
-                                  const TextureAtlas& atlas) {
+                                  const BlockDef& def) {
     int tileIndex = def.texTop;
     if (tileIndex < 0) {
         tileIndex = 0;
     }
 
-    const auto uv = atlas.getUV(tileIndex);
-    const float uMin = uv.first.x;
-    const float vMin = uv.first.y;
-    const float uMax = uv.second.x;
-    const float vMax = uv.second.y;
+    const float layer = static_cast<float>(tileIndex);
 
-    const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+    const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
 
     const float crossMarker = def.useGrassTint ? CROSS_GRASS_MARKER : CROSS_FLOWER_MARKER;
@@ -320,7 +311,8 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                 uvCoord.x,
                 uvCoord.y,
                 crossMarker,
-                local.y
+                local.y,
+                layer
             });
         }
     };

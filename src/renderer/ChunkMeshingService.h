@@ -13,7 +13,6 @@ struct ChunkMeshingJob {
     int64_t chunkKey = 0;
     uint64_t revision = 0;
     ChunkMeshingSnapshot snapshot{};
-    const TextureAtlas* atlas = nullptr;
 };
 
 struct ChunkMeshingResult {

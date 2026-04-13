@@ -8,7 +8,7 @@
 
 class ResourceMgr;
 class Shader;
-struct TextureAtlas;
+struct TextureArray;
 
 struct Particle {
     glm::vec3 position;
@@ -17,6 +17,7 @@ struct Particle {
     float maxLife;
     float size;
     float grassTintFactor;
+    float layer;
     glm::vec2 uvMin;
     glm::vec2 uvMax;
 };
@@ -33,7 +34,7 @@ public:
 private:
     std::vector<Particle> m_particles;
     Shader* m_shader = nullptr;
-    const TextureAtlas* m_atlas = nullptr;
+    const TextureArray* m_texArray = nullptr;
 
     GLuint m_vao = 0;
     GLuint m_vbo = 0;

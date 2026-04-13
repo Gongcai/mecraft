@@ -22,6 +22,7 @@ struct BlockVertex {
     float v;
     float normal;
     float windWeight;
+    float layer;
 };
 
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
@@ -93,8 +94,8 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
         return;
     }
 
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
-    if (atlas.textureID == 0) {
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    if (texArray.textureID == 0) {
         return;
     }
 
@@ -177,18 +178,18 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
     m_shader->setFloat("uWindStrength", 0.0f);
     m_shader->setFloat("uWindSpeed", 0.0f);
     m_shader->setFloat("uWindSpatialFreq", 1.0f);
-    m_shader->setInt("texAtlas", 0);
+    m_shader->setInt("texArray", 0);
     m_shader->setInt("uForceBaseLod", 1);
     m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
     m_shader->setInt("uFogEnabled", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
     glBindVertexArray(mesh->vao);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
 
     glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
 UIEventResult HeldItemPreviewControl::onInput(const UIInputEvent&)
@@ -247,7 +248,6 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
     }
 
     const BlockDef& def = BlockRegistry::get(blockId);
-    const TextureAtlas& atlas = m_resourceMgr->getAtlas();
 
     std::vector<BlockVertex> vertices;
     vertices.reserve(36);
@@ -261,12 +261,8 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
             tileIndex = 0;
         }
 
-        const auto uv = atlas.getUV(tileIndex);
-        const float uMin = uv.first.x;
-        const float vMin = uv.first.y;
-        const float uMax = uv.second.x;
-        const float vMax = uv.second.y;
-        const std::array<glm::vec2, 4> quadUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+        const float layer = static_cast<float>(tileIndex);
+        const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
         const float crossMarker = def.useGrassTint ? kCrossGrassMarker : kCrossFlowerMarker;
 
         const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
@@ -280,7 +276,8 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     uvCoord.x,
                     uvCoord.y,
                     crossMarker,
-                    pos.y
+                    pos.y,
+                    layer
                 });
             }
         };
@@ -294,12 +291,8 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                 tileIndex = 0;
             }
 
-            const auto uv = atlas.getUV(tileIndex);
-            const float uMin = uv.first.x;
-            const float vMin = uv.first.y;
-            const float uMax = uv.second.x;
-            const float vMax = uv.second.y;
-            const std::array<glm::vec2, 4> faceUV = {{{uMin, vMin}, {uMax, vMin}, {uMax, vMax}, {uMin, vMax}}};
+            const float layer = static_cast<float>(tileIndex);
+            const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
 
             for (const int idx : kFaceIndices) {
                 const glm::vec3& pos = kFaceCorners[face][idx];
@@ -311,7 +304,8 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     uvCoord.x,
                     uvCoord.y,
                     static_cast<float>(face),
-                    0.0f
+                    0.0f,
+                    layer
                 });
             }
         }
@@ -340,6 +334,8 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, windWeight)));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
