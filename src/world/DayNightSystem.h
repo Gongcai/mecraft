@@ -1,4 +1,4 @@
-#ifndef MECRAFT_DAY_NIGHT_SYSTEM_H
+ #ifndef MECRAFT_DAY_NIGHT_SYSTEM_H
 #define MECRAFT_DAY_NIGHT_SYSTEM_H
 
 class DayNightSystem {
