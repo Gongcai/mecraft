@@ -1,8 +1,11 @@
 #include "ChunkMesher.h"
 
-#include <array>
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
+
 #include <glm/vec2.hpp>
 
 namespace {
@@ -10,6 +13,39 @@ struct IVec3 {
     int x;
     int y;
     int z;
+};
+
+struct VertexLightData {
+    uint8_t ao = 0;
+    uint8_t sunLight = 0;
+    uint8_t blockLight = 0;
+    float sunNormalized = 0.0f;
+    float blockNormalized = 0.0f;
+};
+
+struct FaceRenderData {
+    std::array<VertexLightData, 4> vertices{};
+    int tileIndex = 0;
+    float layer = 0.0f;
+    bool flipDiagonal = false;
+};
+
+struct FaceMergeKey {
+    BlockID blockId = BlockType::AIR;
+    int tileIndex = 0;
+    bool flipDiagonal = false;
+    std::array<uint8_t, 4> ao{};
+    std::array<uint16_t, 4> sun{};
+    std::array<uint16_t, 4> block{};
+};
+
+struct FaceCell {
+    bool valid = false;
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    FaceRenderData renderData{};
+    FaceMergeKey key{};
 };
 
 constexpr int FACE_TOP = 0;
@@ -20,16 +56,17 @@ constexpr int FACE_LEFT = 4;
 constexpr int FACE_RIGHT = 5;
 constexpr float CROSS_GRASS_MARKER = -1.0f;
 constexpr float CROSS_FLOWER_MARKER = -2.0f;
+constexpr float kNormalizedQuantizationScale = 180.0f;
 
 constexpr std::array<IVec3, 6> kFaceNormals = {{{0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {-1, 0, 0}, {1, 0, 0}}};
 
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
-    {{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}}, // top
-    {{{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}}, // bottom
-    {{{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}}, // front (+z)
-    {{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}}, // back (-z)
-    {{{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}}, // left (-x)
-    {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}  // right (+x)
+    {{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}},
+    {{{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}},
+    {{{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}},
+    {{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}},
+    {{{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}},
+    {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}
 }};
 
 constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
@@ -54,7 +91,6 @@ BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y
         return BlockType::AIR;
     }
 
-    // Snapshot only stores +/-X and +/-Z borders, not diagonal corner neighbors.
     if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
         return BlockType::AIR;
     }
@@ -101,60 +137,36 @@ uint8_t getNeighborAwareLight(const ChunkMeshingSnapshot& snapshot, int x, int y
 }
 
 uint8_t getNeighborSunlight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    return (getNeighborAwareLight(snapshot, x, y, z) >> 4) & 0x0F;
+    return static_cast<uint8_t>((getNeighborAwareLight(snapshot, x, y, z) >> 4) & 0x0F);
 }
 
 uint8_t getNeighborBlockLight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    return getNeighborAwareLight(snapshot, x, y, z) & 0x0F;
+    return static_cast<uint8_t>(getNeighborAwareLight(snapshot, x, y, z) & 0x0F);
 }
 
-// Get face-center light: use the light from the neighbor air/transparent block
-// that this face is exposed to
-uint8_t getFaceSunlight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z, int face) {
-    const int nx = x + kFaceNormals[face].x;
-    const int ny = y + kFaceNormals[face].y;
-    const int nz = z + kFaceNormals[face].z;
-    return getNeighborSunlight(snapshot, nx, ny, nz);
+uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
+    if (side1 && side2) {
+        return 0;
+    }
+    return static_cast<uint8_t>(3 - (static_cast<int>(side1) + static_cast<int>(side2) + static_cast<int>(corner)));
 }
 
-uint8_t getFaceBlockLight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z, int face) {
-    const int nx = x + kFaceNormals[face].x;
-    const int ny = y + kFaceNormals[face].y;
-    const int nz = z + kFaceNormals[face].z;
-    return getNeighborBlockLight(snapshot, nx, ny, nz);
-}
-
-// Ambient Occlusion: compute per-vertex AO value (0-3)
-uint8_t computeVertexAO(bool side1, bool side2, bool corner) {
-    if (side1 && side2) return 0;
-    return 3 - (static_cast<int>(side1) + static_cast<int>(side2) + static_cast<int>(corner));
-}
-
-// Check if a block at the given position is solid for AO purposes
-bool isSolidForAO(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+bool isSolidForAO(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     const BlockID id = getNeighborAwareBlock(snapshot, x, y, z);
     return BlockRegistry::get(id).isSolid;
 }
 
-struct VertexLightData {
-    uint8_t ao;
-    uint8_t sunLight;        // raw 0-15, kept for flip diagonal metric
-    uint8_t blockLight;      // raw 0-15, kept for flip diagonal metric
-    float sunNormalized;     // 0.0-1.0, raw level / 15 for lightmap UV
-    float blockNormalized;   // 0.0-1.0, raw level / 15 for lightmap UV
-};
-
-// Normalize a raw 0-15 light level to 0.0-1.0 for lightmap UV coordinate.
-float lightToNormalized(uint8_t level) {
+float lightToNormalized(const uint8_t level) {
     return static_cast<float>(level) / 15.0f;
 }
 
-// Average raw light levels for smooth lighting, then normalize.
-// By averaging raw levels, we get smooth gradients that the lightmap
-// texture will convert to the appropriate brightness.
-float computeVertexNormalized(uint8_t base, uint8_t s1, uint8_t s2, uint8_t cn,
-                              bool s1Solid, bool s2Solid) {
-    float avg;
+float computeVertexNormalized(const uint8_t base,
+                              const uint8_t s1,
+                              const uint8_t s2,
+                              const uint8_t cn,
+                              const bool s1Solid,
+                              const bool s2Solid) {
+    float avg = 0.0f;
     if (s1Solid && s2Solid) {
         avg = static_cast<float>(base + s1 + s2) / 3.0f;
     } else {
@@ -163,36 +175,45 @@ float computeVertexNormalized(uint8_t base, uint8_t s1, uint8_t s2, uint8_t cn,
     return avg / 15.0f;
 }
 
-// Safe light sampler for sun: handles positions that the snapshot can't look up.
-//   - Diagonal cross-chunk (x AND z both out of bounds): no border data available
-//   - Above world height: always full sky
 uint8_t safeSunLevel(const ChunkMeshingSnapshot& snapshot,
-                     int x, int y, int z, bool isSolid, uint8_t base) {
+                     const int x,
+                     const int y,
+                     const int z,
+                     const bool isSolid,
+                     const uint8_t base) {
     if (!isSolid) {
-        if (y >= Chunk::SIZE_Y) return 15;
-        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z))
+        if (y >= Chunk::SIZE_Y) {
+            return 15;
+        }
+        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
             return base;
+        }
     }
     return getNeighborSunlight(snapshot, x, y, z);
 }
 
 uint8_t safeBlockLevel(const ChunkMeshingSnapshot& snapshot,
-                       int x, int y, int z, bool isSolid, uint8_t base) {
+                       const int x,
+                       const int y,
+                       const int z,
+                       const bool isSolid,
+                       const uint8_t base) {
     if (!isSolid) {
-        if (y >= Chunk::SIZE_Y) return 0;
-        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z))
+        if (y >= Chunk::SIZE_Y) {
+            return 0;
+        }
+        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
             return base;
+        }
     }
     return getNeighborBlockLight(snapshot, x, y, z);
 }
 
-// Compute AO and Light values for the 4 vertices of a face.
-// For each vertex, we check 3 neighbors in the plane one step along the face normal:
-//   side1: along the first tangent axis
-//   side2: along the second tangent axis
-//   corner: diagonal (both tangent axes)
 std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot& snapshot,
-                                       int x, int y, int z, int face) {
+                                                     const int x,
+                                                     const int y,
+                                                     const int z,
+                                                     const int face) {
     const int nx = kFaceNormals[face].x;
     const int ny = kFaceNormals[face].y;
     const int nz = kFaceNormals[face].z;
@@ -201,53 +222,59 @@ std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot&
     const int by = y + ny;
     const int bz = z + nz;
 
-    int a0, a1;
-    if (ny != 0) { a0 = 0; a1 = 2; }
-    else if (nz != 0) { a0 = 0; a1 = 1; }
-    else { a0 = 2; a1 = 1; }
+    int a0 = 0;
+    int a1 = 0;
+    if (ny != 0) {
+        a0 = 0;
+        a1 = 2;
+    } else if (nz != 0) {
+        a0 = 0;
+        a1 = 1;
+    } else {
+        a0 = 2;
+        a1 = 1;
+    }
 
     std::array<VertexLightData, 4> data{};
-
-    const uint8_t baseSun   = getNeighborSunlight(snapshot, bx, by, bz);
+    const uint8_t baseSun = getNeighborSunlight(snapshot, bx, by, bz);
     const uint8_t baseBlock = getNeighborBlockLight(snapshot, bx, by, bz);
 
     for (int i = 0; i < 4; ++i) {
-        const glm::vec3 c = kFaceCorners[face][i];
-        const int d0 = (c[static_cast<size_t>(a0)] > 0.5f) ? 1 : -1;
-        const int d1 = (c[static_cast<size_t>(a1)] > 0.5f) ? 1 : -1;
+        const glm::vec3 corner = kFaceCorners[face][i];
+        const int d0 = (corner[static_cast<size_t>(a0)] > 0.5f) ? 1 : -1;
+        const int d1 = (corner[static_cast<size_t>(a1)] > 0.5f) ? 1 : -1;
 
-        int s1[3] = {bx, by, bz}; s1[a0] += d0;
-        int s2[3] = {bx, by, bz}; s2[a1] += d1;
-        int cn[3] = {bx, by, bz}; cn[a0] += d0; cn[a1] += d1;
+        int s1[3] = {bx, by, bz};
+        int s2[3] = {bx, by, bz};
+        int cn[3] = {bx, by, bz};
+        s1[a0] += d0;
+        s2[a1] += d1;
+        cn[a0] += d0;
+        cn[a1] += d1;
 
-        const bool side1  = isSolidForAO(snapshot, s1[0], s1[1], s1[2]);
-        const bool side2  = isSolidForAO(snapshot, s2[0], s2[1], s2[2]);
-        const bool corner = isSolidForAO(snapshot, cn[0], cn[1], cn[2]);
+        const bool side1 = isSolidForAO(snapshot, s1[0], s1[1], s1[2]);
+        const bool side2 = isSolidForAO(snapshot, s2[0], s2[1], s2[2]);
+        const bool cornerSolid = isSolidForAO(snapshot, cn[0], cn[1], cn[2]);
 
-        data[i].ao = computeVertexAO(side1, side2, corner);
+        data[i].ao = computeVertexAO(side1, side2, cornerSolid);
 
-        // Fetch raw levels (with safe fallback for unsampleable positions)
-        const uint8_t s1Sun   = safeSunLevel  (snapshot, s1[0], s1[1], s1[2], side1,  baseSun);
-        const uint8_t s2Sun   = safeSunLevel  (snapshot, s2[0], s2[1], s2[2], side2,  baseSun);
-        const uint8_t cnSun   = safeSunLevel  (snapshot, cn[0], cn[1], cn[2], corner, baseSun);
-        const uint8_t s1Block = safeBlockLevel(snapshot, s1[0], s1[1], s1[2], side1,  baseBlock);
-        const uint8_t s2Block = safeBlockLevel(snapshot, s2[0], s2[1], s2[2], side2,  baseBlock);
-        const uint8_t cnBlock = safeBlockLevel(snapshot, cn[0], cn[1], cn[2], corner, baseBlock);
+        const uint8_t s1Sun = safeSunLevel(snapshot, s1[0], s1[1], s1[2], side1, baseSun);
+        const uint8_t s2Sun = safeSunLevel(snapshot, s2[0], s2[1], s2[2], side2, baseSun);
+        const uint8_t cnSun = safeSunLevel(snapshot, cn[0], cn[1], cn[2], cornerSolid, baseSun);
+        const uint8_t s1Block = safeBlockLevel(snapshot, s1[0], s1[1], s1[2], side1, baseBlock);
+        const uint8_t s2Block = safeBlockLevel(snapshot, s2[0], s2[1], s2[2], side2, baseBlock);
+        const uint8_t cnBlock = safeBlockLevel(snapshot, cn[0], cn[1], cn[2], cornerSolid, baseBlock);
 
-        // Raw-level average (kept for the flip-diagonal metric which needs integer sums)
         if (side1 && side2) {
-            data[i].sunLight   = static_cast<uint8_t>((baseSun   + s1Sun   + s2Sun)   / 3);
+            data[i].sunLight = static_cast<uint8_t>((baseSun + s1Sun + s2Sun) / 3);
             data[i].blockLight = static_cast<uint8_t>((baseBlock + s1Block + s2Block) / 3);
         } else {
-            data[i].sunLight   = static_cast<uint8_t>((baseSun   + s1Sun   + s2Sun   + cnSun)   / 4);
+            data[i].sunLight = static_cast<uint8_t>((baseSun + s1Sun + s2Sun + cnSun) / 4);
             data[i].blockLight = static_cast<uint8_t>((baseBlock + s1Block + s2Block + cnBlock) / 4);
         }
 
-        // Normalized raw-level average for lightmap UV coordinates
-        data[i].sunNormalized   = computeVertexNormalized(
-            baseSun, s1Sun, s2Sun, cnSun, side1, side2);
-        data[i].blockNormalized = computeVertexNormalized(
-            baseBlock, s1Block, s2Block, cnBlock, side1, side2);
+        data[i].sunNormalized = computeVertexNormalized(baseSun, s1Sun, s2Sun, cnSun, side1, side2);
+        data[i].blockNormalized = computeVertexNormalized(baseBlock, s1Block, s2Block, cnBlock, side1, side2);
     }
 
     return data;
@@ -272,146 +299,65 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
     }
 }
 
-void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            const std::size_t index = toBorderYZIndex(y, z);
-            const Chunk* posX = chunk.neighbors[0];
-            const Chunk* negX = chunk.neighbors[1];
-            snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z) : BlockType::AIR;
-            snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z) : BlockType::AIR;
-            // Light borders
-            snapshot.posXLightBorder[index] = posX ? posX->m_lightMap[posX->toIndex(0, y, z)] : 0;
-            snapshot.negXLightBorder[index] = negX ? negX->m_lightMap[negX->toIndex(Chunk::SIZE_X - 1, y, z)] : 0;
-        }
-        for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            const std::size_t index = toBorderYXIndex(y, x);
-            const Chunk* posZ = chunk.neighbors[2];
-            const Chunk* negZ = chunk.neighbors[3];
-            snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0) : BlockType::AIR;
-            snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1) : BlockType::AIR;
-            // Light borders
-            snapshot.posZLightBorder[index] = posZ ? posZ->m_lightMap[posZ->toIndex(x, y, 0)] : 0;
-            snapshot.negZLightBorder[index] = negZ ? negZ->m_lightMap[negZ->toIndex(x, y, Chunk::SIZE_Z - 1)] : 0;
-        }
+FaceRenderData buildFaceRenderData(const ChunkMeshingSnapshot& snapshot,
+                                   const BlockDef& def,
+                                   const int x,
+                                   const int y,
+                                   const int z,
+                                   const int face) {
+    FaceRenderData renderData;
+    renderData.tileIndex = std::max(0, getFaceTextureIndex(def, face));
+    renderData.layer = static_cast<float>(renderData.tileIndex);
+    renderData.vertices = computeFaceVertexData(snapshot, x, y, z, face);
+
+    int metric02 = 0;
+    int metric13 = 0;
+    for (const int index : {0, 2}) {
+        metric02 += renderData.vertices[index].ao;
+        metric02 += renderData.vertices[index].sunLight;
+        metric02 += renderData.vertices[index].blockLight;
     }
-}
-
-void expandBounds(ChunkMeshData& meshData, const glm::vec3& blockMin, const glm::vec3& blockMax) {
-    if (!meshData.hasBounds) {
-        meshData.hasBounds = true;
-        meshData.boundsMin = blockMin;
-        meshData.boundsMax = blockMax;
-        return;
+    for (const int index : {1, 3}) {
+        metric13 += renderData.vertices[index].ao;
+        metric13 += renderData.vertices[index].sunLight;
+        metric13 += renderData.vertices[index].blockLight;
     }
-
-    meshData.boundsMin.x = std::min(meshData.boundsMin.x, blockMin.x);
-    meshData.boundsMin.y = std::min(meshData.boundsMin.y, blockMin.y);
-    meshData.boundsMin.z = std::min(meshData.boundsMin.z, blockMin.z);
-    meshData.boundsMax.x = std::max(meshData.boundsMax.x, blockMax.x);
-    meshData.boundsMax.y = std::max(meshData.boundsMax.y, blockMax.y);
-    meshData.boundsMax.z = std::max(meshData.boundsMax.z, blockMax.z);
-}
+    renderData.flipDiagonal = metric02 < metric13;
+    return renderData;
 }
 
-ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
-    ChunkMeshingSnapshot snapshot;
+uint16_t quantizeNormalized(const float value) {
+    const float clamped = std::clamp(value, 0.0f, 1.0f);
+    return static_cast<uint16_t>(std::lround(clamped * kNormalizedQuantizationScale));
+}
 
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const std::size_t index = toIndex(x, y, z);
-                snapshot.blocks[index] = chunk.getBlock(x, y, z);
-                snapshot.lightMap[index] = chunk.m_lightMap[index];
-            }
-        }
+FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& renderData) {
+    FaceMergeKey key;
+    key.blockId = blockId;
+    key.tileIndex = renderData.tileIndex;
+    key.flipDiagonal = renderData.flipDiagonal;
+    for (size_t i = 0; i < renderData.vertices.size(); ++i) {
+        key.ao[i] = renderData.vertices[i].ao;
+        key.sun[i] = quantizeNormalized(renderData.vertices[i].sunNormalized);
+        key.block[i] = quantizeNormalized(renderData.vertices[i].blockNormalized);
     }
-
-    captureBorders(chunk, snapshot);
-    return snapshot;
+    return key;
 }
 
-ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
-    ChunkMeshData meshData;
-    meshData.opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
-    meshData.cutoutVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
-    meshData.transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
-
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
-                if (blockId == BlockType::AIR) {
-                    continue;
-                }
-
-                const BlockDef& def = BlockRegistry::get(blockId);
-                if (def.renderShape == BlockRenderShape::Cross) {
-                    addCrossedQuads(meshData.cutoutVertices,
-                                    glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                    def, x, y, z, snapshot);
-                    expandBounds(meshData,
-                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
-                    continue;
-                }
-
-                const bool transparent = def.isTransparent;
-
-                for (int face = 0; face < 6; ++face) {
-                    const IVec3 normal = kFaceNormals[face];
-                    const int nx = x + normal.x;
-                    const int ny = y + normal.y;
-                    const int nz = z + normal.z;
-
-                    if (!shouldRenderFace(snapshot, nx, ny, nz, blockId)) {
-                        continue;
-                    }
-
-                    auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
-                    addFace(target,
-                            glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                            face,
-                            def, x, y, z, snapshot);
-
-                    if (!meshData.hasBounds) {
-                        expandBounds(meshData,
-                                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                     glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
-                    } else {
-                        meshData.boundsMin.x = std::min(meshData.boundsMin.x, static_cast<float>(x));
-                        meshData.boundsMin.y = std::min(meshData.boundsMin.y, static_cast<float>(y));
-                        meshData.boundsMin.z = std::min(meshData.boundsMin.z, static_cast<float>(z));
-                        meshData.boundsMax.x = std::max(meshData.boundsMax.x, static_cast<float>(x + 1));
-                        meshData.boundsMax.y = std::max(meshData.boundsMax.y, static_cast<float>(y + 1));
-                        meshData.boundsMax.z = std::max(meshData.boundsMax.z, static_cast<float>(z + 1));
-                    }
-                }
-            }
-        }
-    }
-
-    return meshData;
+bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
+    return lhs.blockId == rhs.blockId &&
+           lhs.tileIndex == rhs.tileIndex &&
+           lhs.flipDiagonal == rhs.flipDiagonal &&
+           lhs.ao == rhs.ao &&
+           lhs.sun == rhs.sun &&
+           lhs.block == rhs.block;
 }
 
-void ChunkMesher::generateMesh(Chunk& chunk) {
-    const ChunkMeshingSnapshot snapshot = captureSnapshot(chunk);
-    ChunkMeshData meshData = buildMeshData(snapshot);
-    ChunkMesh mesh;
-    mesh.upload(meshData.opaqueVertices);
-    mesh.uploadCutout(meshData.cutoutVertices);
-    mesh.uploadTransparent(meshData.transparentVertices);
-    mesh.hasBounds = meshData.hasBounds;
-    mesh.boundsMin = meshData.boundsMin;
-    mesh.boundsMax = meshData.boundsMax;
-    chunk.setMesh(mesh);
-}
-
-bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
-                                   const int nx,
-                                   const int ny,
-                                   const int nz,
-                                   const BlockID currentId) {
+bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
+                          const int nx,
+                          const int ny,
+                          const int nz,
+                          const BlockID currentId) {
     const BlockID neighborId = getNeighborAwareBlock(snapshot, nx, ny, nz);
     if (currentId == BlockType::WATER && neighborId == BlockType::WATER) {
         return false;
@@ -438,58 +384,421 @@ bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
     return false;
 }
 
-void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
-                          const glm::vec3& pos,
-                          const int face,
-                          const BlockDef& def,
-                          int x, int y, int z,
-                          const ChunkMeshingSnapshot& snapshot) {
-    int tileIndex = getFaceTextureIndex(def, face);
-    if (tileIndex < 0) {
-        tileIndex = 0;
+void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
+    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            const std::size_t index = toBorderYZIndex(y, z);
+            const Chunk* posX = chunk.neighbors[0];
+            const Chunk* negX = chunk.neighbors[1];
+            snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z) : BlockType::AIR;
+            snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z) : BlockType::AIR;
+            snapshot.posXLightBorder[index] = posX ? posX->m_lightMap[posX->toIndex(0, y, z)] : 0;
+            snapshot.negXLightBorder[index] = negX ? negX->m_lightMap[negX->toIndex(Chunk::SIZE_X - 1, y, z)] : 0;
+        }
+        for (int x = 0; x < Chunk::SIZE_X; ++x) {
+            const std::size_t index = toBorderYXIndex(y, x);
+            const Chunk* posZ = chunk.neighbors[2];
+            const Chunk* negZ = chunk.neighbors[3];
+            snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0) : BlockType::AIR;
+            snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1) : BlockType::AIR;
+            snapshot.posZLightBorder[index] = posZ ? posZ->m_lightMap[posZ->toIndex(x, y, 0)] : 0;
+            snapshot.negZLightBorder[index] = negZ ? negZ->m_lightMap[negZ->toIndex(x, y, Chunk::SIZE_Z - 1)] : 0;
+        }
+    }
+}
+
+void expandBounds(ChunkMeshData& meshData, const glm::vec3& blockMin, const glm::vec3& blockMax) {
+    if (!meshData.hasBounds) {
+        meshData.hasBounds = true;
+        meshData.boundsMin = blockMin;
+        meshData.boundsMax = blockMax;
+        return;
     }
 
-    const float layer = static_cast<float>(tileIndex);
+    meshData.boundsMin.x = std::min(meshData.boundsMin.x, blockMin.x);
+    meshData.boundsMin.y = std::min(meshData.boundsMin.y, blockMin.y);
+    meshData.boundsMin.z = std::min(meshData.boundsMin.z, blockMin.z);
+    meshData.boundsMax.x = std::max(meshData.boundsMax.x, blockMax.x);
+    meshData.boundsMax.y = std::max(meshData.boundsMax.y, blockMax.y);
+    meshData.boundsMax.z = std::max(meshData.boundsMax.z, blockMax.z);
+}
 
-    // Compute per-vertex AO and Light
-    const std::array<VertexLightData, 4> data = computeFaceVertexData(snapshot, x, y, z, face);
-
-    // Normalized [0,1] UV coordinates
-    const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-
-    // AO flip correction: when the ao values on one diagonal are darker than the
-    // other, flip the triangle split to prevent visible seam artifacts.
-    // We incorporate light for a better metric to avoid diagonal light banding.
-    int metric02 = data[0].ao + data[2].ao + data[0].sunLight + data[2].sunLight + data[0].blockLight + data[2].blockLight;
-    int metric13 = data[1].ao + data[3].ao + data[1].sunLight + data[3].sunLight + data[1].blockLight + data[3].blockLight;
-    const bool flipDiagonal = metric02 < metric13;
-    const std::array<int, 6> indices = flipDiagonal
+void appendFaceVertices(std::vector<BlockVertex>& vertices,
+                        const std::array<glm::vec3, 4>& corners,
+                        const std::array<glm::vec2, 4>& faceUV,
+                        const int face,
+                        const FaceRenderData& renderData) {
+    const std::array<int, 6> indices = renderData.flipDiagonal
         ? std::array<int, 6>{{1, 2, 3, 1, 3, 0}}
         : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
-        const glm::vec3 local = kFaceCorners[face][index];
-        const glm::vec2 uvCoord = faceUV[index];
-
         vertices.push_back({
-            pos.x + local.x,
-            pos.y + local.y,
-            pos.z + local.z,
-            uvCoord.x,
-            uvCoord.y,
+            corners[static_cast<size_t>(index)].x,
+            corners[static_cast<size_t>(index)].y,
+            corners[static_cast<size_t>(index)].z,
+            faceUV[static_cast<size_t>(index)].x,
+            faceUV[static_cast<size_t>(index)].y,
             static_cast<float>(face),
-            data[index].sunNormalized,
-            data[index].blockNormalized,
-            static_cast<float>(data[index].ao),
-            layer
+            renderData.vertices[static_cast<size_t>(index)].sunNormalized,
+            renderData.vertices[static_cast<size_t>(index)].blockNormalized,
+            static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
+            renderData.layer
         });
     }
+}
+
+std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face,
+                                                const int x,
+                                                const int y,
+                                                const int z,
+                                                const int width,
+                                                const int height) {
+    switch (face) {
+        case FACE_TOP:
+            return {{{static_cast<float>(x), static_cast<float>(y + 1), static_cast<float>(z + height)},
+                     {static_cast<float>(x + width), static_cast<float>(y + 1), static_cast<float>(z + height)},
+                     {static_cast<float>(x + width), static_cast<float>(y + 1), static_cast<float>(z)},
+                     {static_cast<float>(x), static_cast<float>(y + 1), static_cast<float>(z)}}};
+        case FACE_BOTTOM:
+            return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
+                     {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z)},
+                     {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z + height)},
+                     {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + height)}}};
+        case FACE_FRONT:
+            return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + 1)},
+                     {static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z + 1)},
+                     {static_cast<float>(x + width), static_cast<float>(y + height), static_cast<float>(z + 1)},
+                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z + 1)}}};
+        case FACE_BACK:
+            return {{{static_cast<float>(x + width), static_cast<float>(y), static_cast<float>(z)},
+                     {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
+                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z)},
+                     {static_cast<float>(x + width), static_cast<float>(y + height), static_cast<float>(z)}}};
+        case FACE_LEFT:
+            return {{{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)},
+                     {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z + width)},
+                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z + width)},
+                     {static_cast<float>(x), static_cast<float>(y + height), static_cast<float>(z)}}};
+        case FACE_RIGHT:
+        default:
+            return {{{static_cast<float>(x + 1), static_cast<float>(y), static_cast<float>(z + width)},
+                     {static_cast<float>(x + 1), static_cast<float>(y), static_cast<float>(z)},
+                     {static_cast<float>(x + 1), static_cast<float>(y + height), static_cast<float>(z)},
+                     {static_cast<float>(x + 1), static_cast<float>(y + height), static_cast<float>(z + width)}}};
+    }
+}
+
+void emitGreedyFace(std::vector<BlockVertex>& vertices,
+                    ChunkMeshData& meshData,
+                    const FaceCell& cell,
+                    const int face,
+                    const int width,
+                    const int height) {
+    const std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, width, height);
+    const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f},
+                                              {static_cast<float>(width), 0.0f},
+                                              {static_cast<float>(width), static_cast<float>(height)},
+                                              {0.0f, static_cast<float>(height)}}};
+
+    appendFaceVertices(vertices, corners, faceUV, face, cell.renderData);
+
+    glm::vec3 boundsMin = corners[0];
+    glm::vec3 boundsMax = corners[0];
+    for (const glm::vec3& corner : corners) {
+        boundsMin.x = std::min(boundsMin.x, corner.x);
+        boundsMin.y = std::min(boundsMin.y, corner.y);
+        boundsMin.z = std::min(boundsMin.z, corner.z);
+        boundsMax.x = std::max(boundsMax.x, corner.x);
+        boundsMax.y = std::max(boundsMax.y, corner.y);
+        boundsMax.z = std::max(boundsMax.z, corner.z);
+    }
+    expandBounds(meshData, boundsMin, boundsMax);
+}
+
+void emitLegacyFace(std::vector<BlockVertex>& vertices,
+                    const glm::vec3& pos,
+                    const int face,
+                    const FaceRenderData& renderData) {
+    const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+    std::array<glm::vec3, 4> corners{};
+    for (size_t i = 0; i < corners.size(); ++i) {
+        corners[i] = pos + kFaceCorners[static_cast<size_t>(face)][i];
+    }
+    appendFaceVertices(vertices, corners, faceUV, face, renderData);
+}
+
+bool isOpaqueCubeCandidate(const BlockDef& def) {
+    return def.renderShape == BlockRenderShape::Cube && !def.isTransparent;
+}
+
+bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
+                            const int face,
+                            const int x,
+                            const int y,
+                            const int z,
+                            FaceCell& outCell) {
+    const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
+    if (blockId == BlockType::AIR) {
+        return false;
+    }
+
+    const BlockDef& def = BlockRegistry::get(blockId);
+    if (!isOpaqueCubeCandidate(def)) {
+        return false;
+    }
+
+    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId)) {
+        return false;
+    }
+
+    outCell.valid = true;
+    outCell.x = x;
+    outCell.y = y;
+    outCell.z = z;
+    outCell.renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    return true;
+}
+
+void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+    auto buildPlane = [&](const int face, const int width, const int height, const int slices, auto&& mapper) {
+        std::vector<FaceCell> plane(static_cast<size_t>(width) * static_cast<size_t>(height));
+        std::vector<bool> consumed(static_cast<size_t>(width) * static_cast<size_t>(height), false);
+
+        for (int slice = 0; slice < slices; ++slice) {
+            std::fill(consumed.begin(), consumed.end(), false);
+            for (FaceCell& cell : plane) {
+                cell = FaceCell{};
+            }
+
+            for (int v = 0; v < height; ++v) {
+                for (int u = 0; u < width; ++u) {
+                    int x = 0;
+                    int y = 0;
+                    int z = 0;
+                    mapper(slice, u, v, x, y, z);
+                    FaceCell& cell = plane[static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width)];
+                    if (populateOpaqueFaceCell(snapshot, face, x, y, z, cell)) {
+                        ++meshData.opaqueFaceCountBeforeGreedy;
+                    }
+                }
+            }
+
+            for (int v = 0; v < height; ++v) {
+                for (int u = 0; u < width; ++u) {
+                    const size_t startIndex = static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width);
+                    if (consumed[startIndex] || !plane[startIndex].valid) {
+                        continue;
+                    }
+
+                    int runWidth = 1;
+                    while (u + runWidth < width) {
+                        const size_t nextIndex = static_cast<size_t>(u + runWidth) + static_cast<size_t>(v) * static_cast<size_t>(width);
+                        if (consumed[nextIndex] || !plane[nextIndex].valid ||
+                            !sameMergeKey(plane[startIndex].key, plane[nextIndex].key)) {
+                            break;
+                        }
+                        ++runWidth;
+                    }
+
+                    int runHeight = 1;
+                    bool canGrow = true;
+                    while (v + runHeight < height && canGrow) {
+                        for (int rowX = 0; rowX < runWidth; ++rowX) {
+                            const size_t candidateIndex = static_cast<size_t>(u + rowX) +
+                                                          static_cast<size_t>(v + runHeight) * static_cast<size_t>(width);
+                            if (consumed[candidateIndex] || !plane[candidateIndex].valid ||
+                                !sameMergeKey(plane[startIndex].key, plane[candidateIndex].key)) {
+                                canGrow = false;
+                                break;
+                            }
+                        }
+                        if (canGrow) {
+                            ++runHeight;
+                        }
+                    }
+
+                    for (int dy = 0; dy < runHeight; ++dy) {
+                        for (int dx = 0; dx < runWidth; ++dx) {
+                            consumed[static_cast<size_t>(u + dx) +
+                                     static_cast<size_t>(v + dy) * static_cast<size_t>(width)] = true;
+                        }
+                    }
+
+                    emitGreedyFace(meshData.opaqueVertices, meshData, plane[startIndex], face, runWidth, runHeight);
+                    ++meshData.opaqueFaceCountAfterGreedy;
+                }
+            }
+        }
+    };
+
+    buildPlane(FACE_TOP, Chunk::SIZE_X, Chunk::SIZE_Z, Chunk::SIZE_Y,
+               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+                   x = u;
+                   y = slice;
+                   z = v;
+               });
+    buildPlane(FACE_BOTTOM, Chunk::SIZE_X, Chunk::SIZE_Z, Chunk::SIZE_Y,
+               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+                   x = u;
+                   y = slice;
+                   z = v;
+               });
+    buildPlane(FACE_FRONT, Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z,
+               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+                   x = u;
+                   y = v;
+                   z = slice;
+               });
+    buildPlane(FACE_BACK, Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z,
+               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+                   x = u;
+                   y = v;
+                   z = slice;
+               });
+    buildPlane(FACE_LEFT, Chunk::SIZE_Z, Chunk::SIZE_Y, Chunk::SIZE_X,
+               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+                   x = slice;
+                   y = v;
+                   z = u;
+               });
+    buildPlane(FACE_RIGHT, Chunk::SIZE_Z, Chunk::SIZE_Y, Chunk::SIZE_X,
+               [](const int slice, const int u, const int v, int& x, int& y, int& z) {
+                   x = slice;
+                   y = v;
+                   z = u;
+               });
+}
+}
+
+ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
+    ChunkMeshingSnapshot snapshot;
+
+    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                const std::size_t index = toIndex(x, y, z);
+                snapshot.blocks[index] = chunk.getBlock(x, y, z);
+                snapshot.lightMap[index] = chunk.m_lightMap[index];
+            }
+        }
+    }
+
+    captureBorders(chunk, snapshot);
+    return snapshot;
+}
+
+ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
+    const auto startTime = std::chrono::steady_clock::now();
+
+    ChunkMeshData meshData;
+    meshData.opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
+    meshData.cutoutVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
+    meshData.transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
+
+    buildOpaqueGreedyFaces(snapshot, meshData);
+
+    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
+                if (blockId == BlockType::AIR) {
+                    continue;
+                }
+
+                const BlockDef& def = BlockRegistry::get(blockId);
+                if (def.renderShape == BlockRenderShape::Cross) {
+                    addCrossedQuads(meshData.cutoutVertices,
+                                    glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                    def,
+                                    x,
+                                    y,
+                                    z,
+                                    snapshot);
+                    expandBounds(meshData,
+                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                    continue;
+                }
+
+                if (isOpaqueCubeCandidate(def)) {
+                    continue;
+                }
+
+                const bool transparent = def.isTransparent;
+                for (int face = 0; face < 6; ++face) {
+                    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+                    const int nx = x + normal.x;
+                    const int ny = y + normal.y;
+                    const int nz = z + normal.z;
+
+                    if (!shouldRenderFace(snapshot, nx, ny, nz, blockId)) {
+                        continue;
+                    }
+
+                    auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
+                    addFace(target,
+                            glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                            face,
+                            def,
+                            x,
+                            y,
+                            z,
+                            snapshot);
+                    expandBounds(meshData,
+                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                }
+            }
+        }
+    }
+
+    meshData.opaqueVertexCount = static_cast<uint32_t>(meshData.opaqueVertices.size());
+    meshData.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
+    return meshData;
+}
+
+void ChunkMesher::generateMesh(Chunk& chunk) {
+    const ChunkMeshingSnapshot snapshot = captureSnapshot(chunk);
+    ChunkMeshData meshData = buildMeshData(snapshot);
+    ChunkMesh mesh;
+    mesh.upload(meshData.opaqueVertices);
+    mesh.uploadCutout(meshData.cutoutVertices);
+    mesh.uploadTransparent(meshData.transparentVertices);
+    mesh.hasBounds = meshData.hasBounds;
+    mesh.boundsMin = meshData.boundsMin;
+    mesh.boundsMax = meshData.boundsMax;
+    chunk.setMesh(mesh);
+}
+
+bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
+                                   const int nx,
+                                   const int ny,
+                                   const int nz,
+                                   const BlockID currentId) {
+    return shouldRenderFaceImpl(snapshot, nx, ny, nz, currentId);
+}
+
+void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
+                          const glm::vec3& pos,
+                          const int face,
+                          const BlockDef& def,
+                          const int x,
+                          const int y,
+                          const int z,
+                          const ChunkMeshingSnapshot& snapshot) {
+    const FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+    emitLegacyFace(vertices, pos, face, renderData);
 }
 
 void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                                   const glm::vec3& pos,
                                   const BlockDef& def,
-                                  int x, int y, int z,
+                                  const int x,
+                                  const int y,
+                                  const int z,
                                   const ChunkMeshingSnapshot& snapshot) {
     int tileIndex = def.texTop;
     if (tileIndex < 0) {
@@ -498,13 +807,12 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
 
     const float layer = static_cast<float>(tileIndex);
 
-    // Cross quads use the max light from self + 6 neighbors, converted to brightness
     uint8_t sunLevel = getNeighborSunlight(snapshot, x, y, z);
     uint8_t blockLevel = getNeighborBlockLight(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
-        const int nx = x + kFaceNormals[d].x;
-        const int ny = y + kFaceNormals[d].y;
-        const int nz = z + kFaceNormals[d].z;
+        const int nx = x + kFaceNormals[static_cast<size_t>(d)].x;
+        const int ny = y + kFaceNormals[static_cast<size_t>(d)].y;
+        const int nz = z + kFaceNormals[static_cast<size_t>(d)].z;
         sunLevel = std::max(sunLevel, getNeighborSunlight(snapshot, nx, ny, nz));
         blockLevel = std::max(blockLevel, getNeighborBlockLight(snapshot, nx, ny, nz));
     }
@@ -513,23 +821,20 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
 
     const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
-
     const float crossMarker = def.useGrassTint ? CROSS_GRASS_MARKER : CROSS_FLOWER_MARKER;
 
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {
-            const glm::vec3 local = corners[index];
-            const glm::vec2 uvCoord = quadUV[index];
             vertices.push_back({
-                pos.x + local.x,
-                pos.y + local.y,
-                pos.z + local.z,
-                uvCoord.x,
-                uvCoord.y,
+                pos.x + corners[static_cast<size_t>(index)].x,
+                pos.y + corners[static_cast<size_t>(index)].y,
+                pos.z + corners[static_cast<size_t>(index)].z,
+                quadUV[static_cast<size_t>(index)].x,
+                quadUV[static_cast<size_t>(index)].y,
                 crossMarker,
                 sunNormalized,
                 blockNormalized,
-                3.0f, // No AO for cross quads (always full brightness)
+                3.0f,
                 layer
             });
         }
@@ -538,7 +843,3 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
     emitQuad(kCrossQuadA);
     emitQuad(kCrossQuadB);
 }
-
-
-
-

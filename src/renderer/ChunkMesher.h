@@ -2,6 +2,7 @@
 #define MECRAFT_CHUNKMESHER_H
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -31,6 +32,10 @@ struct ChunkMeshData {
     std::vector<BlockVertex> opaqueVertices;
     std::vector<BlockVertex> cutoutVertices;
     std::vector<BlockVertex> transparentVertices;
+    uint32_t opaqueFaceCountBeforeGreedy = 0;
+    uint32_t opaqueFaceCountAfterGreedy = 0;
+    uint32_t opaqueVertexCount = 0;
+    double buildTimeMs = 0.0;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);
     glm::vec3 boundsMax = glm::vec3(0.0f);

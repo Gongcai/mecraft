@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 
 Dashboard::Dashboard() {
     // Setup Dear ImGui context
@@ -332,6 +333,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
     ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
     ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
     ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);
+    ImGui::Text("Meshing Build: last %.3f ms, avg %.3f ms", meshingStats.lastBuildMs, meshingStats.averageBuildMs);
+
+    const uint32_t greedyBefore = meshingStats.lastOpaqueFacesBeforeGreedy;
+    const uint32_t greedyAfter = meshingStats.lastOpaqueFacesAfterGreedy;
+    const float greedyReduction = greedyBefore > 0
+        ? (100.0f * static_cast<float>(greedyBefore - greedyAfter) / static_cast<float>(greedyBefore))
+        : 0.0f;
+    ImGui::Text("Opaque Faces: %u -> %u (%.1f%% fewer)", greedyBefore, greedyAfter, greedyReduction);
+    ImGui::Text("Opaque Vertices: %u", meshingStats.lastOpaqueVertexCount);
 
     const size_t historyCount = render.getMeshingHistoryCount();
     if (historyCount > 1) {

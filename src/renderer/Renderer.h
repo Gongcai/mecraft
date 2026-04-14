@@ -54,6 +54,11 @@ public:
         int submitted = 0;
         int completed = 0;
         int inFlight = 0;
+        double lastBuildMs = 0.0;
+        double averageBuildMs = 0.0;
+        uint32_t lastOpaqueFacesBeforeGreedy = 0;
+        uint32_t lastOpaqueFacesAfterGreedy = 0;
+        uint32_t lastOpaqueVertexCount = 0;
     };
 
     struct CullingFrameStats {
@@ -175,6 +180,11 @@ private:
     bool m_chunkCullingDebugEnabled = false;
     int m_meshingSubmittedThisFrame = 0;
     int m_meshingCompletedThisFrame = 0;
+    double m_meshingBuildMsThisFrame = 0.0;
+    double m_lastMeshingBuildMs = 0.0;
+    uint32_t m_lastOpaqueFacesBeforeGreedy = 0;
+    uint32_t m_lastOpaqueFacesAfterGreedy = 0;
+    uint32_t m_lastOpaqueVertexCount = 0;
     int m_regionTestsThisFrame = 0;
     int m_regionPassedThisFrame = 0;
     int m_columnTestsThisFrame = 0;

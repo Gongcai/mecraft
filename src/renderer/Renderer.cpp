@@ -213,6 +213,13 @@ Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
     stats.submitted = m_meshingSubmittedThisFrame;
     stats.completed = m_meshingCompletedThisFrame;
     stats.inFlight = static_cast<int>(m_meshingInFlight.size());
+    stats.lastBuildMs = m_lastMeshingBuildMs;
+    stats.averageBuildMs = m_meshingCompletedThisFrame > 0
+        ? (m_meshingBuildMsThisFrame / static_cast<double>(m_meshingCompletedThisFrame))
+        : 0.0;
+    stats.lastOpaqueFacesBeforeGreedy = m_lastOpaqueFacesBeforeGreedy;
+    stats.lastOpaqueFacesAfterGreedy = m_lastOpaqueFacesAfterGreedy;
+    stats.lastOpaqueVertexCount = m_lastOpaqueVertexCount;
     return stats;
 }
 
@@ -258,6 +265,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
 #ifndef NDEBUG
     m_meshingSubmittedThisFrame = 0;
     m_meshingCompletedThisFrame = 0;
+    m_meshingBuildMsThisFrame = 0.0;
     m_regionTestsThisFrame = 0;
     m_regionPassedThisFrame = 0;
     m_columnTestsThisFrame = 0;
@@ -647,7 +655,7 @@ void Renderer::renderTransparentChunks(const std::vector<Chunk*>& transparentChu
 
 
 void Renderer::endFrame(const Window &window) {
-    //recordMeshingHistory();
+    recordMeshingHistory();
 }
 
 void Renderer::initOutlineMesh() {
@@ -855,6 +863,14 @@ void Renderer::drainMeshingResults(const World& world) {
         if (chunk.getMeshRevision() != result.revision) {
             continue;
         }
+
+#ifndef NDEBUG
+        m_meshingBuildMsThisFrame += result.meshData.buildTimeMs;
+        m_lastMeshingBuildMs = result.meshData.buildTimeMs;
+        m_lastOpaqueFacesBeforeGreedy = result.meshData.opaqueFaceCountBeforeGreedy;
+        m_lastOpaqueFacesAfterGreedy = result.meshData.opaqueFaceCountAfterGreedy;
+        m_lastOpaqueVertexCount = result.meshData.opaqueVertexCount;
+#endif
 
         ChunkMesh mesh;
         mesh.upload(result.meshData.opaqueVertices);
