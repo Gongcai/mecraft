@@ -28,13 +28,13 @@ int main() {
     }
 
     // Build a deterministic platform so the drop can land on a known height.
-    world.setBlock(0, 120, 0, BlockType::STONE);
-    world.setBlock(0, 121, 0, BlockType::AIR);
-    world.setBlock(0, 122, 0, BlockType::AIR);
+    world.setBlock(0, 120, 0, BlockIds::STONE);
+    world.setBlock(0, 121, 0, BlockIds::AIR);
+    world.setBlock(0, 122, 0, BlockIds::AIR);
 
     DropSystem dropSystem;
-    dropSystem.spawnBlockDrop(BlockType::STONE, glm::ivec3(0, 122, 0));
-    dropSystem.spawnBlockDrop(BlockType::STONE, glm::ivec3(0, 122, 0));
+    dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
+    dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
 
     if (dropSystem.getDrops().empty()) {
         return fail("spawnBlockDrop should create one block drop");
@@ -48,28 +48,28 @@ int main() {
         return fail("merged drop should accumulate stack count");
     }
 
-    if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockType::STONE)) {
+    if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockIds::STONE)) {
         return fail("drop payload should preserve spawned item id from BlockDropTable");
     }
 
     // Test coal_ore drops coal item (not itself)
     DropSystem coalDropSystem;
-    coalDropSystem.spawnBlockDrop(BlockType::COAL_ORE, glm::ivec3(0, 122, 0));
+    coalDropSystem.spawnBlockDrop(BlockIds::COAL_ORE, glm::ivec3(0, 122, 0));
     if (coalDropSystem.getDrops().empty()) {
         return fail("coal_ore should spawn a drop");
     }
-    if (coalDropSystem.getDrops().front().itemId != ItemType::COAL) {
+    if (coalDropSystem.getDrops().front().itemId != ItemIds::COAL) {
         return fail("coal_ore should drop coal item, not itself");
     }
 
     DropSystem placementDropSystem;
     const glm::ivec3 placementCell(2, 130, 2);
-    placementDropSystem.spawnBlockDrop(BlockType::STONE, placementCell);
+    placementDropSystem.spawnBlockDrop(BlockIds::STONE, placementCell);
     if (placementDropSystem.getDrops().empty()) {
         return fail("placement test setup failed to spawn drop");
     }
 
-    world.setBlock(placementCell.x, placementCell.y, placementCell.z, BlockType::STONE);
+    world.setBlock(placementCell.x, placementCell.y, placementCell.z, BlockIds::STONE);
     placementDropSystem.onBlockPlaced(placementCell, world);
 
     const DropEntity& moved = placementDropSystem.getDrops().front();

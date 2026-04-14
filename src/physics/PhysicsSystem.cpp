@@ -26,7 +26,7 @@ AABB makeBodyAABBAt(const PhysicsBody& body, const glm::vec3& position) {
 
 bool isSolidBlock(const World& world, const int x, const int y, const int z) {
     const BlockID id = world.getBlock(x, y, z);
-    if (id == BlockType::AIR) {
+    if (id == 0) {
         return false;
     }
     return BlockRegistry::get(id).isSolid;
@@ -34,11 +34,11 @@ bool isSolidBlock(const World& world, const int x, const int y, const int z) {
 
 bool isWaterBlock(const World& world, const int x, const int y, const int z) {
     const BlockID id = world.getBlock(x, y, z);
-    if (id == BlockType::AIR) {
+    if (id == 0) {
         return false;
     }
     const BlockDef& def = BlockRegistry::get(id);
-    return def.name != nullptr && std::string(def.name) == "water";
+    return def.namespacedId.path() == "water";
 }
 
 float overlapLen(float aMin, float aMax, float bMin, float bMax);

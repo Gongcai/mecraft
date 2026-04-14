@@ -740,7 +740,7 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
         return;
     }
 
-    constexpr int kBlockTypeCount = static_cast<int>(BlockType::COUNT);
+    const int kBlockTypeCount = static_cast<int>(BlockRegistry::getBlockCount());
     const int tilesPerRow = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(kBlockTypeCount))));
     const int numRows = static_cast<int>(std::ceil(static_cast<float>(kBlockTypeCount) / static_cast<float>(tilesPerRow)));
     const int atlasWidth = tilesPerRow * iconSize;
@@ -762,7 +762,7 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
 
     for (int id = 0; id < kBlockTypeCount; ++id) {
         const BlockID blockId = static_cast<BlockID>(id);
-        if (blockId == BlockType::AIR) {
+        if (blockId == 0) {
             continue;
         }
 

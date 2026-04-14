@@ -1,8 +1,7 @@
 {
   "blocks": [
     {
-      "id": 0,
-      "name": "air",
+      "id": "minecraft:air",
       "isSolid": false,
       "isTransparent": true,
       "timeToBreak": 0,
@@ -11,16 +10,14 @@
       }
     },
     {
-      "id": 1,
-      "name": "dirt",
+      "id": "minecraft:dirt",
       "timeToBreak": 1300,
       "textures": {
         "all": "dirt"
       }
     },
     {
-      "id": 2,
-      "name": "grass",
+      "id": "minecraft:grass_block",
       "timeToBreak": 1300,
       "textures": {
         "top": "grass_top",
@@ -29,24 +26,21 @@
       }
     },
     {
-      "id": 3,
-      "name": "stone",
+      "id": "minecraft:stone",
       "timeToBreak": 1500,
       "textures": {
         "all": "stone"
       }
     },
     {
-      "id": 4,
-      "name": "sand",
+      "id": "minecraft:sand",
       "timeToBreak": 250,
       "textures": {
         "all": "sand"
       }
     },
     {
-      "id": 5,
-      "name": "wood",
+      "id": "minecraft:oak_log",
       "timeToBreak": 1000,
       "textures": {
         "top": "wood_top",
@@ -55,8 +49,7 @@
       }
     },
     {
-      "id": 6,
-      "name": "glass",
+      "id": "minecraft:glass",
       "isSolid": true,
       "isTransparent": true,
       "opacity": 0,
@@ -66,52 +59,46 @@
       }
     },
     {
-        "id": 7,
-        "name": "coal_ore",
-        "drop": "coal",
-        "timeToBreak": 1500,
-        "textures": {
-            "all": "coal_ore"
-        }
+      "id": "minecraft:coal_ore",
+      "drop": "minecraft:coal",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "coal_ore"
+      }
     },
     {
-        "id": 8,
-        "name": "diamond_ore",
-        "timeToBreak": 1500,
-        "textures": {
-            "all": "diamond_ore"
-        }
+      "id": "minecraft:diamond_ore",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "diamond_ore"
+      }
     },
     {
-        "id": 9,
-        "name": "gold_ore",
-        "timeToBreak": 1500,
-        "textures": {
-            "all": "gold_ore"
-        }
+      "id": "minecraft:gold_ore",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "gold_ore"
+      }
     },
     {
-        "id": 10,
-        "name": "iron_ore",
-        "timeToBreak": 1500,
-        "textures": {
-            "all": "iron_ore"
-        }
+      "id": "minecraft:iron_ore",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "iron_ore"
+      }
     },
     {
-        "id": 11,
-        "name": "water",
-        "isSolid": false,
-        "isSelectable": false,
-        "isTransparent": true,
-        "opacity": 2,
-        "textures": {
-            "all": "water_still"
-        }
+      "id": "minecraft:water",
+      "isSolid": false,
+      "isSelectable": false,
+      "isTransparent": true,
+      "opacity": 2,
+      "textures": {
+        "all": "water_still"
+      }
     },
     {
-      "id": 12,
-      "name": "bedrock",
+      "id": "minecraft:bedrock",
       "isSelectable": false,
       "timeToBreak": 65535,
       "textures": {
@@ -119,8 +106,7 @@
       }
     },
     {
-      "id": 13,
-      "name": "tall_grass",
+      "id": "minecraft:tall_grass",
       "isSolid": false,
       "isTransparent": true,
       "timeToBreak": 10,
@@ -131,146 +117,130 @@
       }
     },
     {
-        "id": 14,
-        "name": "rose",
-        "isSolid": false,
-        "isTransparent": true,
-        "renderShape": "cross",
-        "useGrassTint": false,
-        "timeToBreak": 30,
-        "textures": {
-            "all": "rose_bush_bottom"
-        }
+      "id": "minecraft:rose",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderShape": "cross",
+      "useGrassTint": false,
+      "timeToBreak": 30,
+      "textures": {
+        "all": "rose_bush_bottom"
+      }
     },
     {
-        "id": 15,
-        "name": "oak_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "oak_planks"
-        }
+      "id": "minecraft:oak_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "oak_planks"
+      }
     },
     {
-        "id": 16,
-        "name": "spruce_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "spruce_planks"
-        }
+      "id": "minecraft:spruce_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "spruce_planks"
+      }
     },
     {
-        "id": 17,
-        "name": "birch_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "birch_planks"
-        }
+      "id": "minecraft:birch_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "birch_planks"
+      }
     },
     {
-        "id": 18,
-        "name": "jungle_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "jungle_planks"
-        }
+      "id": "minecraft:jungle_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "jungle_planks"
+      }
     },
     {
-        "id": 19,
-        "name": "acacia_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "acacia_planks"
-        }
+      "id": "minecraft:acacia_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "acacia_planks"
+      }
     },
     {
-        "id": 20,
-        "name": "dark_oak_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "dark_oak_planks"
-        }
+      "id": "minecraft:dark_oak_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "dark_oak_planks"
+      }
     },
     {
-        "id": 21,
-        "name": "mangrove_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "mangrove_planks"
-        }
+      "id": "minecraft:mangrove_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "mangrove_planks"
+      }
     },
     {
-        "id": 22,
-        "name": "cherry_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "cherry_planks"
-        }
+      "id": "minecraft:cherry_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "cherry_planks"
+      }
     },
     {
-        "id": 23,
-        "name": "pale_oak_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "pale_oak_planks"
-        }
+      "id": "minecraft:pale_oak_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "pale_oak_planks"
+      }
     },
     {
-        "id": 24,
-        "name": "bamboo_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "bamboo_planks"
-        }
+      "id": "minecraft:bamboo_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "bamboo_planks"
+      }
     },
     {
-        "id": 25,
-        "name": "crimson_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "crimson_planks"
-        }
+      "id": "minecraft:crimson_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "crimson_planks"
+      }
     },
     {
-        "id": 26,
-        "name": "warped_planks",
-        "timeToBreak": 1000,
-        "textures": {
-            "all": "warped_planks"
-        }
+      "id": "minecraft:warped_planks",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "warped_planks"
+      }
     },
     {
-        "id": 27,
-        "name": "birch_log",
-        "timeToBreak": 1000,
-        "textures": {
-            "top": "birch_log_top",
-            "bottom": "birch_log_top",
-            "side": "birch_log"
-        }
+      "id": "minecraft:birch_log",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "birch_log_top",
+        "bottom": "birch_log_top",
+        "side": "birch_log"
+      }
     },
     {
-        "id": 28,
-        "name": "torch",
-        "isSolid": false,
-        "isTransparent": true,
-        "isLightSource": true,
-        "lightLevel": 14,
-        "renderShape": "cross",
-        "timeToBreak": 10,
-        "textures": {
-            "all": "blue_wool"
-        }
+      "id": "minecraft:torch",
+      "isSolid": false,
+      "isTransparent": true,
+      "isLightSource": true,
+      "lightLevel": 14,
+      "renderShape": "cross",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "blue_wool"
+      }
     },
     {
-        "id": 29,
-        "name": "brown_mushroom",
-        "isSolid": false,
-        "isTransparent": true,
-        "renderShape": "cross",
-        "timeToBreak": 10,
-        "textures": {
-            "all": "brown_mushroom"
-        }
+      "id": "minecraft:brown_mushroom",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderShape": "cross",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "brown_mushroom"
+      }
     }
   ]
 }

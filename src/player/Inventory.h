@@ -24,18 +24,12 @@ public:
     [[nodiscard]] ItemStack getSlotStack(int slot) const;
     void setSlotStack(int slot, const ItemStack& stack);
 
-    // Compatibility wrappers kept for existing block-centric call sites.
-    [[nodiscard]] BlockID getSlot(int slot) const;
-    void setSlot(int slot, BlockID block);
-
     [[nodiscard]] ItemID getSelectedItem() const;
     [[nodiscard]] ItemStack getSelectedStack() const;
     [[nodiscard]] BlockID getSelectedBlock() const;
     [[nodiscard]] bool consumeSelectedOne();
 
     [[nodiscard]] bool isValidSlot(int slot) const;
-    [[nodiscard]] BlockID takeSlot(int slot);
-    [[nodiscard]] BlockID placeSlot(int slot, BlockID block);
     void swapSlots(int a, int b);
 
     // Add items with stack merging. Returns remaining count that did not fit.

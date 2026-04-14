@@ -412,7 +412,7 @@ void LightEngine::tick(int budget) {
 // ========================================================================
 
 void LightEngine::onBlockChanged(int wx, int wy, int wz,
-                                  uint8_t oldBlockId, uint8_t newBlockId) {
+                                  BlockID oldBlockId, BlockID newBlockId) {
     const BlockDef& oldDef = BlockRegistry::get(oldBlockId);
     const BlockDef& newDef = BlockRegistry::get(newBlockId);
 

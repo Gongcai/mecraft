@@ -33,7 +33,7 @@ struct FaceRenderData {
 };
 
 struct FaceMergeKey {
-    BlockID blockId = BlockType::AIR;
+    BlockID blockId = 0;
     int tileIndex = 0;
     bool flipDiagonal = false;
     std::array<uint8_t, 4> ao{};
@@ -90,11 +90,11 @@ std::size_t toBorderYXIndex(const int y, const int x) {
 
 BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (y < 0 || y >= Chunk::SIZE_Y) {
-        return BlockType::AIR;
+        return 0;
     }
 
     if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
-        return BlockType::AIR;
+        return 0;
     }
 
     if (x < 0) {
@@ -368,7 +368,7 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
         return false;
     }
 
-    if (neighborId == BlockType::AIR) {
+    if (neighborId == 0) {
         return true;
     }
 
@@ -390,7 +390,7 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
 
 BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y, const int wz) {
     if (world == nullptr) {
-        return BlockType::AIR;
+        return 0;
     }
     return world->sampleGeneratedBlock(wx, y, wz);
 }
@@ -559,7 +559,7 @@ bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
                             const int z,
                             FaceCell& outCell) {
     const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
-    if (blockId == BlockType::AIR) {
+    if (blockId == 0) {
         return false;
     }
 
@@ -589,7 +589,7 @@ bool populateTransparentFaceCell(const ChunkMeshingSnapshot& snapshot,
                                  const int z,
                                  FaceCell& outCell) {
     const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
-    if (blockId == BlockType::AIR) {
+    if (blockId == 0) {
         return false;
     }
 
@@ -779,7 +779,7 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
                 const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
-                if (blockId == BlockType::AIR) {
+                if (blockId == 0) {
                     continue;
                 }
 

@@ -19,7 +19,7 @@ static std::vector<ItemID> makeGrid(std::initializer_list<std::initializer_list<
 static void testEmptyGrid() {
     CraftingSystem sys;
     // 空网格
-    std::vector<ItemID> grid(9, ItemType::AIR);
+    std::vector<ItemID> grid(9, ItemIds::AIR);
     auto result = sys.match(grid, 3, 3);
     assert(!result.matched);
     std::cout << "  PASS: empty grid returns no match\n";

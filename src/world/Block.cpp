@@ -11,13 +11,14 @@
 
 #include "../resource/ResourceMgr.h"
 
-std::array<BlockDef, BlockType::COUNT> BlockRegistry::s_blocks{};
-std::array<std::string, BlockType::COUNT> BlockRegistry::s_blockDropNames{};
+IdRegistry BlockRegistry::s_idRegistry{};
+std::vector<BlockDef> BlockRegistry::s_blocks{};
+std::vector<NamespacedId> BlockRegistry::s_blockDropIds{};
+std::unordered_map<NamespacedId, BlockID> BlockRegistry::s_idLookup{};
+bool BlockRegistry::s_initialized = false;
 
 namespace {
 constexpr const char* kBlocksConfigPath = "../assets/config/blocks.json";
-std::array<std::string, BlockType::COUNT> s_blockNames;
-bool s_initialized = false;
 
 void setAllFaces(BlockDef& def, int tex) {
     def.texTop = tex;
@@ -29,38 +30,120 @@ void setAllFaces(BlockDef& def, int tex) {
 }
 }
 
+// Initialize BlockIds constants
+namespace BlockIds {
+BlockID AIR = 0;
+BlockID DIRT = 1;
+BlockID GRASS = 2;
+BlockID STONE = 3;
+BlockID SAND = 4;
+BlockID WOOD = 5;
+BlockID GLASS = 6;
+BlockID COAL_ORE = 7;
+BlockID DIAMOND_ORE = 8;
+BlockID GOLD_ORE = 9;
+BlockID IRON_ORE = 10;
+BlockID WATER = 11;
+BlockID BEDROCK = 12;
+BlockID TALL_GRASS = 13;
+BlockID ROSE = 14;
+BlockID OAK_PLANKS = 15;
+BlockID SPRUCE_PLANKS = 16;
+BlockID BIRCH_PLANKS = 17;
+BlockID JUNGLE_PLANKS = 18;
+BlockID ACACIA_PLANKS = 19;
+BlockID DARK_OAK_PLANKS = 20;
+BlockID MANGROVE_PLANKS = 21;
+BlockID CHERRY_PLANKS = 22;
+BlockID PALE_OAK_PLANKS = 23;
+BlockID BAMBOO_PLANKS = 24;
+BlockID CRIMSON_PLANKS = 25;
+BlockID WARPED_PLANKS = 26;
+BlockID BIRCH_LOG = 27;
+BlockID TORCH = 28;
+BlockID BROWN_MUSHROOM = 29;
+
+void init() {
+    AIR            = BlockRegistry::getId(NamespacedId("minecraft", "air"));
+    DIRT           = BlockRegistry::getId(NamespacedId("minecraft", "dirt"));
+    GRASS          = BlockRegistry::getId(NamespacedId("minecraft", "grass_block"));
+    STONE          = BlockRegistry::getId(NamespacedId("minecraft", "stone"));
+    SAND           = BlockRegistry::getId(NamespacedId("minecraft", "sand"));
+    WOOD           = BlockRegistry::getId(NamespacedId("minecraft", "oak_log"));
+    GLASS          = BlockRegistry::getId(NamespacedId("minecraft", "glass"));
+    COAL_ORE       = BlockRegistry::getId(NamespacedId("minecraft", "coal_ore"));
+    DIAMOND_ORE    = BlockRegistry::getId(NamespacedId("minecraft", "diamond_ore"));
+    GOLD_ORE       = BlockRegistry::getId(NamespacedId("minecraft", "gold_ore"));
+    IRON_ORE       = BlockRegistry::getId(NamespacedId("minecraft", "iron_ore"));
+    WATER          = BlockRegistry::getId(NamespacedId("minecraft", "water"));
+    BEDROCK        = BlockRegistry::getId(NamespacedId("minecraft", "bedrock"));
+    TALL_GRASS     = BlockRegistry::getId(NamespacedId("minecraft", "tall_grass"));
+    ROSE           = BlockRegistry::getId(NamespacedId("minecraft", "rose"));
+    OAK_PLANKS     = BlockRegistry::getId(NamespacedId("minecraft", "oak_planks"));
+    SPRUCE_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "spruce_planks"));
+    BIRCH_PLANKS   = BlockRegistry::getId(NamespacedId("minecraft", "birch_planks"));
+    JUNGLE_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "jungle_planks"));
+    ACACIA_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "acacia_planks"));
+    DARK_OAK_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "dark_oak_planks"));
+    MANGROVE_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "mangrove_planks"));
+    CHERRY_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "cherry_planks"));
+    PALE_OAK_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "pale_oak_planks"));
+    BAMBOO_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "bamboo_planks"));
+    CRIMSON_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "crimson_planks"));
+    WARPED_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "warped_planks"));
+    BIRCH_LOG      = BlockRegistry::getId(NamespacedId("minecraft", "birch_log"));
+    TORCH          = BlockRegistry::getId(NamespacedId("minecraft", "torch"));
+    BROWN_MUSHROOM = BlockRegistry::getId(NamespacedId("minecraft", "brown_mushroom"));
+}
+}
+
 void BlockRegistry::init(ResourceMgr* resourceMgr) {
     if (s_initialized) {
         return;
     }
 
-    // 先建立一份稳定的默认表，读取配置失败时仍然可用。
+    // Step 1: Register all built-in block IDs in stable order
+    s_idRegistry.initBuiltinBlockIds();
+
+    // Step 2: Create default BlockDef entries for each registered ID
+    s_blocks.resize(s_idRegistry.size());
+    s_blockDropIds.resize(s_idRegistry.size());
+
     for (size_t i = 0; i < s_blocks.size(); ++i) {
-        s_blockNames[i] = "unknown";
-        s_blocks[i].name = s_blockNames[i].c_str();
+        s_blocks[i] = BlockDef{};
+        s_blocks[i].namespacedId = s_idRegistry.getNamespacedId(static_cast<BlockID>(i));
         s_blocks[i].isSolid = true;
         s_blocks[i].isTransparent = false;
         s_blocks[i].isLightSource = false;
         s_blocks[i].renderShape = BlockRenderShape::Cube;
         s_blocks[i].useGrassTint = false;
         s_blocks[i].lightLevel = 0;
-        s_blocks[i].opacity = 15; // default: fully opaque
+        s_blocks[i].opacity = 15;
         setAllFaces(s_blocks[i], 0);
+        s_blockDropIds[i] = NamespacedId("minecraft", "air");
     }
 
-    s_blockNames[BlockType::AIR] = "air";
-    s_blocks[BlockType::AIR].name = s_blockNames[BlockType::AIR].c_str();
-    s_blocks[BlockType::AIR].isSolid = false;
-    s_blocks[BlockType::AIR].isTransparent = true;
-    s_blocks[BlockType::AIR].opacity = 0;
-    setAllFaces(s_blocks[BlockType::AIR], -1);
+    // Override AIR defaults
+    s_blocks[0].isSolid = false;
+    s_blocks[0].isTransparent = true;
+    s_blocks[0].isSelectable = false;
+    s_blocks[0].opacity = 0;
+    setAllFaces(s_blocks[0], -1);
 
+    // Build idLookup map
+    s_idLookup.clear();
+    for (size_t i = 0; i < s_idRegistry.size(); ++i) {
+        s_idLookup[s_idRegistry.getNamespacedId(static_cast<BlockID>(i))] = static_cast<BlockID>(i);
+    }
+
+    // Step 3: Load config from JSON
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
 #ifndef NDEBUG
         std::cerr << "[BlockRegistry] Failed to open config: " << kBlocksConfigPath << std::endl;
 #endif
         s_initialized = true;
+        BlockIds::init();
         return;
     }
 
@@ -72,6 +155,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         std::cerr << "[BlockRegistry] Failed to parse blocks.json: " << e.what() << std::endl;
 #endif
         s_initialized = true;
+        BlockIds::init();
         return;
     }
 
@@ -80,26 +164,39 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         std::cerr << "[BlockRegistry] Invalid blocks.json: missing 'blocks' array." << std::endl;
 #endif
         s_initialized = true;
+        BlockIds::init();
         return;
     }
 
     for (const auto& blockJson : root["blocks"]) {
-        if (!blockJson.contains("id") || !blockJson["id"].is_number_integer()) {
+        BlockID id = 0;
+        bool found = false;
+
+        if (blockJson.contains("id") && blockJson["id"].is_string()) {
+            const std::string idStr = blockJson["id"].get<std::string>();
+            NamespacedId nsId(idStr);
+            auto it = s_idLookup.find(nsId);
+            if (it != s_idLookup.end()) {
+                id = it->second;
+                found = true;
+            } else {
+                id = registerBlock(nsId, BlockDef{});
+                found = true;
+            }
+        }
+
+        if (!found) {
             continue;
         }
 
-        const int idInt = blockJson["id"].get<int>();
-        if (idInt < 0 || idInt >= static_cast<int>(BlockType::COUNT)) {
-            continue;
+        // Ensure vectors are large enough
+        if (id >= s_blocks.size()) {
+            s_blocks.resize(id + 1);
+            s_blockDropIds.resize(id + 1, NamespacedId("minecraft", "air"));
         }
 
-        const auto id = static_cast<BlockID>(idInt);
         BlockDef def = s_blocks[id];
-
-        if (blockJson.contains("name") && blockJson["name"].is_string()) {
-            s_blockNames[id] = blockJson["name"].get<std::string>();
-            def.name = s_blockNames[id].c_str();
-        }
+        def.namespacedId = s_idRegistry.getNamespacedId(id);
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -121,7 +218,6 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             const int o = blockJson["opacity"].get<int>();
             def.opacity = static_cast<uint8_t>(std::clamp(o, 0, 15));
         } else {
-            // Auto-derive opacity from solid/transparent flags if not explicitly set
             def.opacity = def.isSolid ? 15 : 0;
         }
         if (blockJson.contains("renderShape") && blockJson["renderShape"].is_string()) {
@@ -150,7 +246,6 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 #endif
             };
 
-            // 新格式：textures 下的字段全部是字符串贴图名
             if (tex.contains("all")) {
                 const int idx = resolveTexName("all");
                 setAllFaces(def, idx);
@@ -182,18 +277,15 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
 
-        if (blockJson.contains("drop")) {
-            if (blockJson["drop"].is_string()) {
-                s_blockDropNames[id] = blockJson["drop"].get<std::string>();
-            } else if (blockJson["drop"].is_number_integer()) {
-                s_blockDropNames[id] = std::to_string(blockJson["drop"].get<int>());
-            }
+        if (blockJson.contains("drop") && blockJson["drop"].is_string()) {
+            s_blockDropIds[id] = NamespacedId(blockJson["drop"].get<std::string>());
         }
 
         s_blocks[id] = def;
     }
 
     s_initialized = true;
+    BlockIds::init();
 }
 
 const BlockDef& BlockRegistry::get(BlockID id) {
@@ -201,17 +293,17 @@ const BlockDef& BlockRegistry::get(BlockID id) {
         init(nullptr);
     }
 
-    if (id >= BlockType::COUNT) {
-        return s_blocks[BlockType::AIR];
+    if (id >= s_blocks.size()) {
+        return s_blocks[0];  // Return AIR for invalid IDs
     }
 
     return s_blocks[id];
 }
 
 BlockID BlockRegistry::findByName(const std::string& name) {
-    BlockID outId = BlockType::AIR;
+    BlockID outId = 0;
     if (!tryGetIdByName(name, outId)) {
-        return BlockType::AIR;
+        return 0;  // AIR
     }
     return outId;
 }
@@ -221,29 +313,79 @@ bool BlockRegistry::tryGetIdByName(const std::string& name, BlockID& outId) {
         init(nullptr);
     }
 
-    for (size_t i = 0; i < s_blockNames.size(); ++i) {
-        if (s_blockNames[i] == name) {
-            outId = static_cast<BlockID>(i);
-            return true;
-        }
+    // Try as NamespacedId first (contains ':')
+    if (name.find(':') != std::string::npos) {
+        NamespacedId nsId(name);
+        return tryGetId(nsId, outId);
     }
 
+    // Try as path with default "minecraft" namespace
+    NamespacedId nsId("minecraft", name);
+    return tryGetId(nsId, outId);
+}
+
+BlockID BlockRegistry::getId(const NamespacedId& namespacedId) {
+    if (!s_initialized) {
+        init(nullptr);
+    }
+    auto it = s_idLookup.find(namespacedId);
+    if (it != s_idLookup.end()) {
+        return it->second;
+    }
+    return 0;  // AIR
+}
+
+bool BlockRegistry::tryGetId(const NamespacedId& namespacedId, BlockID& outId) {
+    if (!s_initialized) {
+        init(nullptr);
+    }
+    auto it = s_idLookup.find(namespacedId);
+    if (it != s_idLookup.end()) {
+        outId = it->second;
+        return true;
+    }
     return false;
+}
+
+const NamespacedId& BlockRegistry::getNamespacedId(BlockID runtimeId) {
+    return s_idRegistry.getNamespacedId(runtimeId);
 }
 
 void BlockRegistry::printAllBlocks() {
 #ifndef NDEBUG
-    for (const auto& block : s_blocks) {
-        std::cout << block.name << std::endl;
-
+    for (size_t i = 0; i < s_blocks.size(); ++i) {
+        std::cout << i << " → " << s_blocks[i].namespacedId.full() << std::endl;
     }
 #endif
 }
 
-const std::string& BlockRegistry::getBlockDropName(const BlockID id) {
-    if (id >= BlockType::COUNT) {
-        static const std::string empty;
+const NamespacedId& BlockRegistry::getBlockDropId(const BlockID id) {
+    if (id >= s_blockDropIds.size()) {
+        static const NamespacedId empty("minecraft", "air");
         return empty;
     }
-    return s_blockDropNames[id];
+    return s_blockDropIds[id];
+}
+
+BlockID BlockRegistry::registerBlock(const NamespacedId& id, BlockDef def) {
+    // Check if already registered
+    auto it = s_idLookup.find(id);
+    if (it != s_idLookup.end()) {
+        return it->second;
+    }
+
+    BlockID runtimeId = s_idRegistry.registerId(id);
+    def.namespacedId = id;
+
+    if (runtimeId >= s_blocks.size()) {
+        s_blocks.resize(runtimeId + 1);
+        s_blockDropIds.resize(runtimeId + 1, NamespacedId("minecraft", "air"));
+    }
+    s_blocks[runtimeId] = def;
+    s_idLookup[id] = runtimeId;
+    return runtimeId;
+}
+
+size_t BlockRegistry::getBlockCount() {
+    return s_blocks.size();
 }

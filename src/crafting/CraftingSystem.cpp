@@ -11,7 +11,7 @@ namespace {
 bool parseItemToken(const json& token, ItemID& outItemId) {
     if (token.is_number_integer()) {
         const int id = token.get<int>();
-        if (id < 0 || id >= static_cast<int>(ItemType::COUNT)) {
+        if (id < 0 || id >= static_cast<int>(ItemRegistry::getItemCount())) {
             return false;
         }
         outItemId = static_cast<ItemID>(id);
@@ -33,7 +33,7 @@ bool parseItemToken(const json& token, ItemID& outItemId) {
 
     if (allDigits) {
         const int id = std::stoi(text);
-        if (id < 0 || id >= static_cast<int>(ItemType::COUNT)) {
+        if (id < 0 || id >= static_cast<int>(ItemRegistry::getItemCount())) {
             return false;
         }
         outItemId = static_cast<ItemID>(id);
@@ -63,7 +63,7 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
         CraftingRecipe recipe;
 
         // 解析 result
-        ItemID result = ItemType::AIR;
+        ItemID result = 0;
         if (recipeJson.contains("result")) {
             static_cast<void>(parseItemToken(recipeJson["result"], result));
         }
@@ -81,7 +81,7 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
         std::unordered_map<std::string, ItemID> keyMap;
         if (recipeJson.contains("key") && recipeJson["key"].is_object()) {
             for (const auto& [key, value] : recipeJson["key"].items()) {
-                ItemID keyItem = ItemType::AIR;
+                ItemID keyItem = 0;
                 if (parseItemToken(value, keyItem)) {
                     keyMap[key] = keyItem;
                 }
@@ -99,7 +99,7 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
             for (char ch : rowStr) {
                 std::string key(1, ch);
                 if (ch == ' ' || keyMap.find(key) == keyMap.end()) {
-                    recipe.pattern[row].push_back(ItemType::AIR);
+                    recipe.pattern[row].push_back(0);
                 } else {
                     recipe.pattern[row].push_back(keyMap.at(key));
                 }
@@ -119,7 +119,7 @@ CraftingResult CraftingSystem::match(const std::vector<ItemID>& grid,
 
     if (!trimGrid(grid, gridWidth, gridHeight, trimmed, trimmedW, trimmedH)) {
         // 空网格，无法合成
-        return {ItemType::AIR, 0, false};
+        return {0, 0, false};
     }
 
     // 遍历所有配方，比较裁剪后的模式
@@ -132,7 +132,7 @@ CraftingResult CraftingSystem::match(const std::vector<ItemID>& grid,
         }
     }
 
-    return {ItemType::AIR, 0, false};
+    return {0, 0, false};
 }
 
 const std::vector<CraftingRecipe>& CraftingSystem::getRecipes() const {
@@ -157,7 +157,7 @@ bool CraftingSystem::trimGrid(const std::vector<ItemID>& grid,
         for (int col = 0; col < gridWidth; ++col) {
             const size_t index = static_cast<size_t>(row) * static_cast<size_t>(gridWidth) + static_cast<size_t>(col);
             ItemID id = grid[index];
-            if (id != ItemType::AIR) {
+            if (id != 0) {
                 minRow = std::min(minRow, row);
                 maxRow = std::max(maxRow, row);
                 minCol = std::min(minCol, col);

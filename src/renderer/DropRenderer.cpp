@@ -156,7 +156,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         }
 
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
-        if (renderBlock == BlockType::AIR || !canRenderBlocks) {
+        if (renderBlock == 0 || !canRenderBlocks) {
             continue;
         }
 
@@ -196,7 +196,7 @@ DropRenderer::Mesh* DropRenderer::getOrCreateItemMesh(const ItemID itemId) {
 
 DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     Mesh mesh;
-    if (m_resourceMgr == nullptr || itemId == ItemType::AIR) {
+    if (m_resourceMgr == nullptr || itemId == 0) {
         return mesh;
     }
 
@@ -250,7 +250,7 @@ DropRenderer::Mesh* DropRenderer::getOrCreateBlockMesh(const BlockID blockId) {
 
 DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     Mesh mesh;
-    if (m_resourceMgr == nullptr || blockId == BlockType::AIR) {
+    if (m_resourceMgr == nullptr || blockId == 0) {
         return mesh;
     }
 

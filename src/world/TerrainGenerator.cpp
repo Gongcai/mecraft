@@ -404,7 +404,7 @@ BlockID sampleVegetationBlock(int worldX,
                               int seaLevel,
                               int surfaceY) {
     if (surfaceY < seaLevel || moisture < 0.36) {
-        return BlockType::AIR;
+        return 0;
     }
 
     double density = 0.0;
@@ -418,7 +418,7 @@ BlockID sampleVegetationBlock(int worldX,
         case TerrainBiome::Arid:
         case TerrainBiome::HighMountain:
         default:
-            return BlockType::AIR;
+            return 0;
     }
 
     uint32_t h = seed;
@@ -426,16 +426,16 @@ BlockID sampleVegetationBlock(int worldX,
     h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
 
     if (hash32(h ^ kDecorSaltDensity) > probabilityToCutoff(density)) {
-        return BlockType::AIR;
+        return 0;
     }
 
     const double flowerChance = (biome == TerrainBiome::Temperate)
                                     ? (0.06 + moisture * 0.06)
                                     : (0.02 + moisture * 0.02);
     if (hash32(h ^ kDecorSaltFlower) < probabilityToCutoff(flowerChance)) {
-        return BlockType::ROSE;
+        return BlockIds::ROSE;
     }
-    return BlockType::TALL_GRASS;
+    return BlockIds::TALL_GRASS;
 }
 
 } // namespace
@@ -447,7 +447,7 @@ void TerrainGenerator::init(uint32_t seed, int seaLevel) {
 
 BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int worldZ) const {
     if (y < 0 || y >= Chunk::SIZE_Y) {
-        return BlockType::AIR;
+        return 0;
     }
 
     int surfaceY = 0;
@@ -457,25 +457,25 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
     sampleSurfaceAndMoistureScalar(worldX, worldZ, m_seed, m_seaLevel, surfaceY, moisture, surfaceKind, ruggedness);
 
     const bool belowSeaLevel = surfaceY < m_seaLevel;
-    BlockID topBlock = BlockType::GRASS;
-    BlockID fillBlock = BlockType::DIRT;
+    BlockID topBlock = BlockIds::GRASS;
+    BlockID fillBlock = BlockIds::DIRT;
     int coverDepth = 3;
 
     if (belowSeaLevel || surfaceKind == TerrainBiome::Arid || moisture < 0.34) {
-        topBlock = BlockType::SAND;
-        fillBlock = BlockType::SAND;
+        topBlock = BlockIds::SAND;
+        fillBlock = BlockIds::SAND;
         coverDepth = 4;
     } else if (surfaceKind == TerrainBiome::HighMountain) {
         const double dirtPatchNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
                                             24.0, 2, m_seed ^ 0x9b05688cU);
         const bool dirtPatch = dirtPatchNoise > 0.62 && moisture > 0.40;
-        topBlock = BlockType::GRASS;
-        fillBlock = dirtPatch ? BlockType::DIRT : BlockType::STONE;
+        topBlock = BlockIds::GRASS;
+        fillBlock = dirtPatch ? BlockIds::DIRT : BlockIds::STONE;
         coverDepth = dirtPatch ? 2 : 1;
     } else if (surfaceKind == TerrainBiome::Mountain) {
         const bool rockyTop = ruggedness > 0.62 && moisture < 0.55;
-        topBlock = BlockType::GRASS;
-        fillBlock = rockyTop ? BlockType::STONE : BlockType::DIRT;
+        topBlock = BlockIds::GRASS;
+        fillBlock = rockyTop ? BlockIds::STONE : BlockIds::DIRT;
         coverDepth = rockyTop ? 2 : 3;
     } else {
         const double soilNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
@@ -487,32 +487,32 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
         }
     }
 
-    BlockID id = BlockType::AIR;
+    BlockID id = 0;
     if (y == 0) {
-        id = BlockType::BEDROCK;
+        id = BlockIds::BEDROCK;
     } else if (y <= surfaceY) {
-        id = BlockType::STONE;
+        id = BlockIds::STONE;
         if (y == surfaceY) {
             id = topBlock;
         } else if (y >= surfaceY - coverDepth) {
             id = fillBlock;
         }
 
-        if (id != BlockType::AIR && shouldCarveCave(worldX, y, worldZ, surfaceY)) {
-            id = BlockType::AIR;
+        if (id != 0 && shouldCarveCave(worldX, y, worldZ, surfaceY)) {
+            id = 0;
         }
 
-        if (id == BlockType::STONE && y <= 128) {
+        if (id == BlockIds::STONE && y <= 128) {
             id = sampleOreBlock(worldX, y, worldZ, id);
         }
     } else if (y <= m_seaLevel) {
-        id = BlockType::WATER;
+        id = BlockIds::WATER;
     }
 
     const int vegetationY = surfaceY + 1;
-    if (id == BlockType::AIR &&
+    if (id == 0 &&
         y == vegetationY &&
-        topBlock == BlockType::GRASS) {
+        topBlock == BlockIds::GRASS) {
         id = sampleVegetationBlock(worldX, worldZ, m_seed, surfaceKind, moisture, m_seaLevel, surfaceY);
     }
 
@@ -566,7 +566,7 @@ bool TerrainGenerator::shouldCarveCave(int worldX, int y, int worldZ, int surfac
 }
 
 BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID baseBlock) const {
-    if (baseBlock != BlockType::STONE || y > 128) {
+    if (baseBlock != BlockIds::STONE || y > 128) {
         return baseBlock;
     }
 
@@ -576,15 +576,15 @@ BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID 
     h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
 
     if (y <= 16) {
-        return hash32(h ^ kOreSaltDiamond) < kOreCutoffDiamond ? BlockType::DIAMOND_ORE : baseBlock;
+        return hash32(h ^ kOreSaltDiamond) < kOreCutoffDiamond ? BlockIds::DIAMOND_ORE : baseBlock;
     }
     if (y <= 32) {
-        return hash32(h ^ kOreSaltGold) < kOreCutoffGold ? BlockType::GOLD_ORE : baseBlock;
+        return hash32(h ^ kOreSaltGold) < kOreCutoffGold ? BlockIds::GOLD_ORE : baseBlock;
     }
     if (y <= 64) {
-        return hash32(h ^ kOreSaltIron) < kOreCutoffIron ? BlockType::IRON_ORE : baseBlock;
+        return hash32(h ^ kOreSaltIron) < kOreCutoffIron ? BlockIds::IRON_ORE : baseBlock;
     }
-    return hash32(h ^ kOreSaltCoal) < kOreCutoffCoal ? BlockType::COAL_ORE : baseBlock;
+    return hash32(h ^ kOreSaltCoal) < kOreCutoffCoal ? BlockIds::COAL_ORE : baseBlock;
 }
 
 void TerrainGenerator::generateChunk(Chunk& chunk) const {
@@ -631,25 +631,25 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 const double ruggedness = sampledRuggedness[lane];
 
                 const bool belowSeaLevel = surfaceY < m_seaLevel;
-                BlockID topBlock = BlockType::GRASS;
-                BlockID fillBlock = BlockType::DIRT;
+                BlockID topBlock = BlockIds::GRASS;
+                BlockID fillBlock = BlockIds::DIRT;
                 int coverDepth = 3;
 
                 if (belowSeaLevel || surfaceKind == TerrainBiome::Arid || moisture < 0.34) {
-                    topBlock = BlockType::SAND;
-                    fillBlock = BlockType::SAND;
+                    topBlock = BlockIds::SAND;
+                    fillBlock = BlockIds::SAND;
                     coverDepth = 4;
                 } else if (surfaceKind == TerrainBiome::HighMountain) {
                     const double dirtPatchNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
                                                         24.0, 2, m_seed ^ 0x9b05688cU);
                     const bool dirtPatch = dirtPatchNoise > 0.62 && moisture > 0.40;
-                    topBlock = BlockType::GRASS;
-                    fillBlock = dirtPatch ? BlockType::DIRT : BlockType::STONE;
+                    topBlock = BlockIds::GRASS;
+                    fillBlock = dirtPatch ? BlockIds::DIRT : BlockIds::STONE;
                     coverDepth = dirtPatch ? 2 : 1;
                 } else if (surfaceKind == TerrainBiome::Mountain) {
                     const bool rockyTop = ruggedness > 0.62 && moisture < 0.55;
-                    topBlock = BlockType::GRASS;
-                    fillBlock = rockyTop ? BlockType::STONE : BlockType::DIRT;
+                    topBlock = BlockIds::GRASS;
+                    fillBlock = rockyTop ? BlockIds::STONE : BlockIds::DIRT;
                     coverDepth = rockyTop ? 2 : 3;
                 } else {
                     const double soilNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
@@ -663,58 +663,58 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
 
                 const int columnTop = std::max(surfaceY, m_seaLevel);
                 for (int y = 0; y <= columnTop; ++y) {
-                    BlockID id = BlockType::AIR;
+                    BlockID id = 0;
                     if (y == 0) {
-                        id = BlockType::BEDROCK;
+                        id = BlockIds::BEDROCK;
                     } else if (y <= surfaceY) {
-                        id = BlockType::STONE;
+                        id = BlockIds::STONE;
                         if (y == surfaceY) {
                             id = topBlock;
                         } else if (y >= surfaceY - coverDepth) {
                             id = fillBlock;
                         }
 
-                        if (id != BlockType::AIR && shouldCarveCave(worldX, y, worldZ, surfaceY)) {
-                            id = BlockType::AIR;
+                        if (id != 0 && shouldCarveCave(worldX, y, worldZ, surfaceY)) {
+                            id = 0;
                         }
 
-                        if (id == BlockType::STONE && y <= 128) {
+                        if (id == BlockIds::STONE && y <= 128) {
                             const uint32_t oreHash = oreColumnSeed ^ hash32(static_cast<uint32_t>(y) * kOreYMul);
                             if (y <= 16) {
                                 if (hash32(oreHash ^ kOreSaltDiamond) < kOreCutoffDiamond) {
-                                    id = BlockType::DIAMOND_ORE;
+                                    id = BlockIds::DIAMOND_ORE;
                                 }
                             } else if (y <= 32) {
                                 if (hash32(oreHash ^ kOreSaltGold) < kOreCutoffGold) {
-                                    id = BlockType::GOLD_ORE;
+                                    id = BlockIds::GOLD_ORE;
                                 }
                             } else if (y <= 64) {
                                 if (hash32(oreHash ^ kOreSaltIron) < kOreCutoffIron) {
-                                    id = BlockType::IRON_ORE;
+                                    id = BlockIds::IRON_ORE;
                                 }
                             } else {
                                 if (hash32(oreHash ^ kOreSaltCoal) < kOreCutoffCoal) {
-                                    id = BlockType::COAL_ORE;
+                                    id = BlockIds::COAL_ORE;
                                 }
                             }
                         }
                     } else if (y <= m_seaLevel) {
-                        id = BlockType::WATER;
+                        id = BlockIds::WATER;
                     }
 
-                    if (id != BlockType::AIR) {
+                    if (id != 0) {
                         chunk.setBlock(localX, y, z, id);
                     }
                 }
 
                 const int vegetationY = surfaceY + 1;
                 if (vegetationY < Chunk::SIZE_Y &&
-                    chunk.getBlock(localX, surfaceY, z) == BlockType::GRASS &&
-                    chunk.getBlock(localX, vegetationY, z) == BlockType::AIR) {
+                    chunk.getBlock(localX, surfaceY, z) == BlockIds::GRASS &&
+                    chunk.getBlock(localX, vegetationY, z) == 0) {
                     const BlockID vegetation = sampleVegetationBlock(worldX, worldZ, m_seed,
                                                                      surfaceKind, moisture,
                                                                      m_seaLevel, surfaceY);
-                    if (vegetation != BlockType::AIR) {
+                    if (vegetation != 0) {
                         chunk.setBlock(localX, vegetationY, z, vegetation);
                     }
                 }

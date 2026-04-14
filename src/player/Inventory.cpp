@@ -9,22 +9,22 @@ Inventory::Inventory() : m_slots{} {
     }
 
     // Default hotbar content.
-    setSlotItem(0, BlockType::DIRT,64);
-    setSlotItem(1, BlockType::GRASS);
-    setSlotItem(2, BlockType::STONE);
-    setSlotItem(3, BlockType::SAND);
-    setSlotItem(4, BlockType::WOOD);
-    setSlotItem(5, BlockType::GLASS);
-    setSlotItem(6, BlockType::COAL_ORE);
-    setSlotItem(7, ItemType::COAL, 16);
-    setSlotItem(8, ItemType::IRON_PICKAXE, 1);
-    setSlotItem(13, BlockType::TORCH, 64);
+    setSlotItem(0, BlockIds::DIRT,64);
+    setSlotItem(1, BlockIds::GRASS);
+    setSlotItem(2, BlockIds::STONE);
+    setSlotItem(3, BlockIds::SAND);
+    setSlotItem(4, BlockIds::WOOD);
+    setSlotItem(5, BlockIds::GLASS);
+    setSlotItem(6, BlockIds::COAL_ORE);
+    setSlotItem(7, ItemIds::COAL, 16);
+    setSlotItem(8, ItemIds::IRON_PICKAXE, 1);
+    setSlotItem(13, BlockIds::TORCH, 64);
 
     // Default inventory content.
-    setSlotItem(9, BlockType::IRON_ORE);
-    setSlotItem(10, BlockType::DIAMOND_ORE);
-    setSlotItem(11, BlockType::WATER);
-    setSlotItem(12, BlockType::BIRCH_LOG);
+    setSlotItem(9, BlockIds::IRON_ORE);
+    setSlotItem(10, BlockIds::DIAMOND_ORE);
+    setSlotItem(11, BlockIds::WATER);
+    setSlotItem(12, BlockIds::BIRCH_LOG);
 }
 
 void Inventory::setSelectedSlot(int slot) {
@@ -45,18 +45,18 @@ void Inventory::scrollSlot(int direction) {
 
 ItemID Inventory::getSlotItem(const int slot) const {
     if (!isValidSlot(slot)) {
-        return ItemType::AIR;
+        return 0;
     }
     const ItemStack& stack = m_slots[slot];
-    return stack.isEmpty() ? ItemType::AIR : stack.itemId;
+    return stack.isEmpty() ? 0 : stack.itemId;
 }
 
 void Inventory::setSlotItem(const int slot, const ItemID item, const uint16_t count) {
-    if (!isValidSlot(slot) || item >= ItemType::COUNT) {
+    if (!isValidSlot(slot) || item >= 65536) {
         return;
     }
 
-    if (item == ItemType::AIR || count == 0) {
+    if (item == 0 || count == 0) {
         m_slots[slot] = {};
         return;
     }
@@ -89,14 +89,6 @@ void Inventory::setSlotStack(const int slot, const ItemStack& stack) {
         return;
     }
     m_slots[slot] = stack;
-}
-
-BlockID Inventory::getSlot(const int slot) const {
-    return static_cast<BlockID>(getSlotItem(slot));
-}
-
-void Inventory::setSlot(const int slot, const BlockID block) {
-    setSlotItem(slot, static_cast<ItemID>(block), block == BlockType::AIR ? 0 : 1);
 }
 
 ItemID Inventory::getSelectedItem() const {
@@ -134,26 +126,6 @@ bool Inventory::isValidSlot(const int slot) const {
     return slot >= 0 && slot < INVENTORY_SIZE;
 }
 
-BlockID Inventory::takeSlot(const int slot) {
-    if (!isValidSlot(slot)) {
-        return BlockType::AIR;
-    }
-
-    const ItemID value = getSlotItem(slot);
-    m_slots[slot] = {};
-    return static_cast<BlockID>(value);
-}
-
-BlockID Inventory::placeSlot(const int slot, const BlockID block) {
-    if (!isValidSlot(slot)) {
-        return block;
-    }
-
-    const ItemID replaced = getSlotItem(slot);
-    setSlot(slot, block);
-    return static_cast<BlockID>(replaced);
-}
-
 void Inventory::swapSlots(const int a, const int b) {
     if (!isValidSlot(a) || !isValidSlot(b) || a == b) {
         return;
@@ -162,7 +134,7 @@ void Inventory::swapSlots(const int a, const int b) {
 }
 
 uint32_t Inventory::addItem(const ItemID itemId, uint32_t count) {
-    if (itemId == ItemType::AIR || count == 0 || itemId >= ItemType::COUNT) {
+    if (itemId == 0 || count == 0 || itemId >= 65536) {
         return count;
     }
 

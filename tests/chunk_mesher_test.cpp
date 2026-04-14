@@ -21,7 +21,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         for (int x = 0; x < 4; ++x) {
-            chunk.setBlock(x, 32, 0, BlockType::DIRT);
+            chunk.setBlock(x, 32, 0, BlockIds::DIRT);
         }
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -46,7 +46,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         for (int x = 0; x < 4; ++x) {
-            chunk.setBlock(x, 32, 0, BlockType::WATER);
+            chunk.setBlock(x, 32, 0, BlockIds::WATER);
         }
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -70,8 +70,8 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockType::WATER);
-        chunk.setBlock(1, 32, 0, BlockType::GLASS);
+        chunk.setBlock(0, 32, 0, BlockIds::WATER);
+        chunk.setBlock(1, 32, 0, BlockIds::GLASS);
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
 
@@ -89,8 +89,8 @@ int main() {
         leftChunk.neighbors[0] = &rightChunk;
         rightChunk.neighbors[1] = &leftChunk;
 
-        leftChunk.setBlock(Chunk::SIZE_X - 1, 32, 0, BlockType::WATER);
-        rightChunk.setBlock(0, 32, 0, BlockType::WATER);
+        leftChunk.setBlock(Chunk::SIZE_X - 1, 32, 0, BlockIds::WATER);
+        rightChunk.setBlock(0, 32, 0, BlockIds::WATER);
 
         const ChunkMeshData meshData = buildMeshDataFor(leftChunk);
 
@@ -104,8 +104,8 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockType::WATER);
-        chunk.setBlock(1, 32, 0, BlockType::TALL_GRASS);
+        chunk.setBlock(0, 32, 0, BlockIds::WATER);
+        chunk.setBlock(1, 32, 0, BlockIds::TALL_GRASS);
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
 

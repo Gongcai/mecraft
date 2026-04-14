@@ -102,7 +102,7 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
     }
 
     const ItemID selectedItem = context.inventory->getSelectedItem();
-    if (selectedItem == ItemType::AIR) {
+    if (selectedItem == 0) {
         return;
     }
 
@@ -113,7 +113,7 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
 
     const bool useItemMesh = (itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
     const BlockID renderBlock = ItemRegistry::toRenderBlock(selectedItem);
-    const bool useBlockMesh = (!useItemMesh && renderBlock != BlockType::AIR && texArray.textureID != 0 && m_shader != nullptr);
+    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArray.textureID != 0 && m_shader != nullptr);
     if (!useItemMesh && !useBlockMesh) {
         return;
     }
@@ -314,7 +314,7 @@ HeldItemPreviewControl::Mesh* HeldItemPreviewControl::getOrCreateItemMesh(const 
 HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockID blockId) const
 {
     Mesh mesh;
-    if (!m_resourceMgr || blockId == BlockType::AIR) {
+    if (!m_resourceMgr || blockId == 0) {
         return mesh;
     }
 
@@ -424,7 +424,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
 HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildItemMesh(const ItemID itemId) const
 {
     Mesh mesh;
-    if (!m_resourceMgr || itemId == ItemType::AIR) {
+    if (!m_resourceMgr || itemId == 0) {
         return mesh;
     }
 

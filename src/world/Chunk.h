@@ -9,6 +9,8 @@
 #include <glm/vec3.hpp>
 
 #include "Block.h"
+#include "Palette.h"
+#include "BitPackedArray.h"
 
 struct BlockVertex {
     float x;
@@ -58,6 +60,9 @@ public:
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
 
+    // Compact palette by removing unused entries and re-encoding block data
+    void optimizePalette();
+
     static glm::ivec3 worldToLocal(int wx, int wy, int wz);
     [[nodiscard]] glm::ivec3 getWorldOffset() const;
 
@@ -91,7 +96,10 @@ public:
 private:
     [[nodiscard]] static bool isInBounds(int x, int y, int z);
 
-    std::array<BlockID, BLOCK_COUNT> m_blocks{};
+    // Palette + BitPackedArray storage
+    Palette m_palette;
+    BitPackedArray m_blockData;
+
     std::array<int, static_cast<std::size_t>(SIZE_X) * SIZE_Z> m_heightMap{}; // highest opaque Y per column
 
     ChunkMesh m_mesh;
@@ -101,4 +109,3 @@ private:
 };
 
 #endif // MECRAFT_CHUNK_H
-

@@ -26,6 +26,8 @@ void loadChunks(World& world) {
 } // namespace
 
 int main() {
+    BlockRegistry::init(nullptr);
+
     World world;
     world.init(20260328);
     loadChunks(world);
@@ -57,7 +59,7 @@ int main() {
     }
 
     // Case 2: moving into a wall should stop horizontal movement.
-    world.setBlock(2, surfaceY + 1, 0, BlockType::STONE);
+    world.setBlock(2, surfaceY + 1, 0, BlockIds::STONE);
 
     PhysicsBody runner;
     runner.position = glm::vec3(0.5f, expectedGroundY, 0.5f);
@@ -82,12 +84,12 @@ int main() {
     for (int x = -2; x <= 8; ++x) {
         for (int y = surfaceY + 1; y <= stripY + 2; ++y) {
             for (int z = 13; z <= 15; ++z) {
-                world.setBlock(x, y, z, BlockType::AIR);
+                world.setBlock(x, y, z, BlockIds::AIR);
             }
         }
     }
     for (int x = 0; x <= 5; ++x) {
-        world.setBlock(x, stripY, 14, BlockType::STONE);
+        world.setBlock(x, stripY, 14, BlockIds::STONE);
     }
 
     const float stripTopY = static_cast<float>(stripY) + 1.0f + runner.halfExtents.y;
@@ -113,12 +115,12 @@ int main() {
     for (int x = -2; x <= 40; ++x) {
         for (int y = surfaceY + 1; y <= speedLaneY + 2; ++y) {
             for (int z = 16; z <= 18; ++z) {
-                world.setBlock(x, y, z, BlockType::AIR);
+                world.setBlock(x, y, z, BlockIds::AIR);
             }
         }
     }
     for (int x = 0; x <= 35; ++x) {
-        world.setBlock(x, speedLaneY, 17, BlockType::STONE);
+        world.setBlock(x, speedLaneY, 17, BlockIds::STONE);
     }
 
     const float speedLaneTopY = static_cast<float>(speedLaneY) + 1.0f + runner.halfExtents.y;
@@ -159,13 +161,13 @@ int main() {
     for (int x = -5; x <= 20; ++x) {
         for (int y = surfaceY + 1; y <= platformY + 2; ++y) {
             for (int z = 5; z <= 12; ++z) {
-                world.setBlock(x, y, z, BlockType::AIR);
+                world.setBlock(x, y, z, BlockIds::AIR);
             }
         }
     }
-    world.setBlock(0, platformY, 8, BlockType::STONE);
-    world.setBlock(1, platformY, 8, BlockType::STONE);
-    world.setBlock(2, platformY, 8, BlockType::STONE);
+    world.setBlock(0, platformY, 8, BlockIds::STONE);
+    world.setBlock(1, platformY, 8, BlockIds::STONE);
+    world.setBlock(2, platformY, 8, BlockIds::STONE);
 
     const float platformTopY = static_cast<float>(platformY) + 1.0f + runner.halfExtents.y;
 

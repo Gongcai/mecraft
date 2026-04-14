@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <unordered_set>
 
 namespace {
 int wrapToChunkAxis(const int value) {
@@ -38,7 +39,13 @@ void setupVertexLayout() {
 }
 
 Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(chunkZ) {
-    m_blocks.fill(BlockType::AIR);
+    // Initialize palette with AIR as entry 0
+    m_palette.getOrCreateIndex(0);  // AIR = RuntimeId 0
+
+    // Initialize bit-packed array with enough bits for 1 entry (2 bits minimum for practical use)
+    m_blockData = BitPackedArray(BLOCK_COUNT, 2);
+    m_blockData.fill(0);  // Fill with palette index 0 (AIR)
+
     m_lightMap.fill(0);
     m_heightMap.fill(0);
 }
@@ -59,9 +66,11 @@ size_t Chunk::toIndex(const int x, const int y, const int z) {
 
 BlockID Chunk::getBlock(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
-        return BlockType::AIR;
+        return 0;  // AIR
     }
-    return m_blocks[toIndex(x, y, z)];
+    const size_t idx = toIndex(x, y, z);
+    const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(idx));
+    return m_palette.getRuntimeId(paletteIdx);
 }
 
 void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
@@ -70,13 +79,62 @@ void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
     }
 
     const size_t index = toIndex(x, y, z);
-    if (m_blocks[index] == id) {
+
+    // Check if block is already the same
+    const uint8_t oldPaletteIdx = static_cast<uint8_t>(m_blockData.get(index));
+    if (m_palette.getRuntimeId(oldPaletteIdx) == id) {
         return;
     }
 
-    m_blocks[index] = id;
+    // Get or create palette index for this block ID
+    const uint8_t paletteIdx = m_palette.getOrCreateIndex(id);
+
+    // Check if we need to expand bit width
+    const uint8_t neededBits = m_palette.bitsPerEntry();
+    if (neededBits > m_blockData.bitsPerEntry()) {
+        m_blockData.resize(neededBits);
+    }
+
+    m_blockData.set(index, paletteIdx);
     m_dirty = true;
     ++m_meshRevision;
+}
+
+void Chunk::optimizePalette() {
+    // Step 1: Scan all block data to find which RuntimeIds are actually used
+    std::vector<RuntimeId> usedIds;
+    std::unordered_set<RuntimeId> seen;
+    for (size_t i = 0; i < BLOCK_COUNT; ++i) {
+        uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(i));
+        RuntimeId runtimeId = m_palette.getRuntimeId(paletteIdx);
+        if (seen.insert(runtimeId).second) {
+            usedIds.push_back(runtimeId);
+        }
+    }
+
+    // Step 2: Compact the palette, getting old→new index mapping
+    std::vector<uint8_t> oldToNew = m_palette.compact(usedIds);
+
+    // Step 3: Re-encode all block data with new palette indices
+    const uint8_t newBits = m_palette.bitsPerEntry();
+    if (newBits != m_blockData.bitsPerEntry()) {
+        // Read all old values, then rewrite with new bit width
+        std::vector<uint32_t> oldValues(BLOCK_COUNT);
+        for (size_t i = 0; i < BLOCK_COUNT; ++i) {
+            uint8_t oldIdx = static_cast<uint8_t>(m_blockData.get(i));
+            oldValues[i] = oldToNew[oldIdx];
+        }
+        m_blockData.resize(newBits);
+        for (size_t i = 0; i < BLOCK_COUNT; ++i) {
+            m_blockData.set(i, oldValues[i]);
+        }
+    } else {
+        // Same bit width, just remap in place
+        for (size_t i = 0; i < BLOCK_COUNT; ++i) {
+            uint8_t oldIdx = static_cast<uint8_t>(m_blockData.get(i));
+            m_blockData.set(i, oldToNew[oldIdx]);
+        }
+    }
 }
 
 glm::ivec3 Chunk::worldToLocal(const int wx, const int wy, const int wz) {
@@ -168,7 +226,7 @@ void Chunk::recalcHeightMap(const int x, const int z) {
     }
     int height = 0;
     for (int y = SIZE_Y - 1; y >= 0; --y) {
-        if (BlockRegistry::get(m_blocks[toIndex(x, y, z)]).opacity >= 15) {
+        if (BlockRegistry::get(getBlock(x, y, z)).opacity >= 15) {
             height = y;
             break;
         }
@@ -275,4 +333,3 @@ void ChunkMesh::destroy() {
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);
 }
-

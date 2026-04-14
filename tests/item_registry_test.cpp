@@ -15,27 +15,27 @@ int main() {
     ItemRegistry::init();
     BlockDropTable::init();
 
-    const ItemDef& dirtItem = ItemRegistry::get(ItemRegistry::fromBlock(BlockType::DIRT));
-    if (dirtItem.placeBlock != BlockType::DIRT) {
+    const ItemDef& dirtItem = ItemRegistry::get(ItemRegistry::fromBlock(BlockIds::DIRT));
+    if (dirtItem.placeBlock != BlockIds::DIRT) {
         return fail("dirt should place its source block via block fallback");
     }
-    if (ItemRegistry::findByName("dirt") != ItemRegistry::fromBlock(BlockType::DIRT)) {
+    if (ItemRegistry::findByName("dirt") != ItemRegistry::fromBlock(BlockIds::DIRT)) {
         return fail("block name lookup should resolve dirt via BlockRegistry");
     }
 
-    const ItemDef& coal = ItemRegistry::get(ItemType::COAL);
-    if (ItemRegistry::findByName("coal") != ItemType::COAL) {
+    const ItemDef& coal = ItemRegistry::get(ItemIds::COAL);
+    if (ItemRegistry::findByName("coal") != ItemIds::COAL) {
         return fail("item name lookup should resolve coal from items.json");
     }
-    if (coal.placeBlock != BlockType::AIR) {
+    if (coal.placeBlock != BlockIds::AIR) {
         return fail("coal should not be directly placeable");
     }
     if (std::string(coal.iconTextureName) != "coal") {
         return fail("coal should provide iconTexture from items.json");
     }
 
-    const ItemDef& ironPickaxe = ItemRegistry::get(ItemType::IRON_PICKAXE);
-    if (ItemRegistry::findByName("iron_pickaxe") != ItemType::IRON_PICKAXE) {
+    const ItemDef& ironPickaxe = ItemRegistry::get(ItemIds::IRON_PICKAXE);
+    if (ItemRegistry::findByName("iron_pickaxe") != ItemIds::IRON_PICKAXE) {
         return fail("item name lookup should resolve iron_pickaxe from items.json");
     }
     if (!ironPickaxe.isTool || ironPickaxe.maxStack != 1) {
@@ -43,13 +43,13 @@ int main() {
     }
 
     // BlockDropTable tests
-    if (BlockDropTable::getDropItem(BlockType::COAL_ORE) != ItemType::COAL) {
+    if (BlockDropTable::getDropItem(BlockIds::COAL_ORE) != ItemIds::COAL) {
         return fail("coal_ore should drop coal item");
     }
-    if (BlockDropTable::getDropItem(BlockType::DIRT) != ItemRegistry::fromBlock(BlockType::DIRT)) {
+    if (BlockDropTable::getDropItem(BlockIds::DIRT) != ItemRegistry::fromBlock(BlockIds::DIRT)) {
         return fail("dirt should drop itself by default");
     }
-    if (BlockDropTable::getDropItem(BlockType::AIR) != ItemType::AIR) {
+    if (BlockDropTable::getDropItem(BlockIds::AIR) != ItemIds::AIR) {
         return fail("air should drop air (nothing)");
     }
 

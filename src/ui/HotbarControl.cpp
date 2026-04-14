@@ -247,7 +247,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         const ItemStack stack = inventory.getSlotStack(i);
         const ItemID itemId = stack.itemId;
         slotCounts[i] = static_cast<int>(stack.count);
-        if (itemId == ItemType::AIR) {
+        if (itemId == 0) {
             continue;
         }
 
@@ -274,7 +274,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 
         if (!targetBuffer && hasLegacyAtlas) {
             const BlockID renderBlock = itemDef.renderBlock;
-            if (renderBlock == BlockType::AIR) {
+            if (renderBlock == 0) {
                 continue;
             }
             const BlockDef& blockDef = BlockRegistry::get(renderBlock);
@@ -415,8 +415,8 @@ void HotbarControl::checkSlotChange(const Inventory& inventory) const
     if (currentSlot != m_lastSelectedSlot || currentItem != m_lastSelectedItem) {
         m_lastSelectedSlot = currentSlot;
         m_lastSelectedItem = currentItem;
-        if (currentItem != ItemType::AIR) {
-            m_itemName = ItemRegistry::get(currentItem).name;
+        if (currentItem != 0) {
+            m_itemName = std::string(ItemRegistry::get(currentItem).namespacedId.path());
         } else {
             m_itemName.clear();
         }

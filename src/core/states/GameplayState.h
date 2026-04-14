@@ -248,7 +248,7 @@ private:
         const GameplayBlockAction action = m_modeRules.decideBlockAction(request);
         if (action == GameplayBlockAction::Break) {
             const BlockID targetBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
-            if (targetBlock == BlockType::AIR || !BlockRegistry::get(targetBlock).isSelectable) {
+            if (targetBlock == 0 || !BlockRegistry::get(targetBlock).isSelectable) {
                 resetBlockBreakSession();
                 return;
             }
@@ -262,7 +262,7 @@ private:
                 }
 
                 const BlockID brokenBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
-                m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, BlockType::AIR);
+                m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, 0);
                 m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
                 m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
                 m_particleSystem.emit(selection.hitBlock, brokenBlock);
@@ -292,7 +292,7 @@ private:
             }
 
             const BlockID brokenBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
-            m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, BlockType::AIR);
+            m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, 0);
             m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
             m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
             m_particleSystem.emit(selection.hitBlock, brokenBlock);
@@ -306,7 +306,7 @@ private:
             Inventory& inventory = m_player.getInventory();
             const ItemID selectedItem = inventory.getSelectedItem();
             const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
-            if (blockToPlace == BlockType::AIR) {
+            if (blockToPlace == 0) {
                 return;
             }
 

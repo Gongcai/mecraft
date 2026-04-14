@@ -28,7 +28,7 @@ struct OreSample {
     int x = 0;
     int y = 0;
     int z = 0;
-    BlockID baseBlock = BlockType::STONE;
+    BlockID baseBlock = BlockIds::STONE;
 };
 
 struct BenchmarkStats {
@@ -54,7 +54,7 @@ std::vector<OreSample> buildStoneOnlySamples(int sampleCount) {
         const int z = static_cast<int>(state & 8191U) - 4096;
         state = state * 1664525U + 1013904223U;
         const int y = 1 + static_cast<int>(state % 129U);
-        samples.push_back(OreSample{x, y, z, BlockType::STONE});
+        samples.push_back(OreSample{x, y, z, BlockIds::STONE});
     }
 
     return samples;
@@ -75,15 +75,15 @@ std::vector<OreSample> buildMixedSamples(int sampleCount) {
 
         state = state * 1664525U + 1013904223U;
         const uint32_t bucket = state % 100U;
-        BlockID baseBlock = BlockType::STONE;
+        BlockID baseBlock = BlockIds::STONE;
         if (bucket < 74U) {
-            baseBlock = BlockType::STONE;
+            baseBlock = BlockIds::STONE;
         } else if (bucket < 84U) {
-            baseBlock = BlockType::DIRT;
+            baseBlock = BlockIds::DIRT;
         } else if (bucket < 93U) {
-            baseBlock = BlockType::SAND;
+            baseBlock = BlockIds::SAND;
         } else {
-            baseBlock = BlockType::AIR;
+            baseBlock = BlockIds::AIR;
         }
 
         samples.push_back(OreSample{x, y, z, baseBlock});
@@ -181,6 +181,8 @@ BenchmarkStats runBenchmark(const std::string& caseName,
 } // namespace
 
 int main() {
+    BlockRegistry::init(nullptr);
+
     constexpr uint32_t seed = 12345;
     constexpr int seaLevel = 63;
     constexpr int warmupRounds = 4;

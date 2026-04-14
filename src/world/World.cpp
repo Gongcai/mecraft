@@ -55,7 +55,7 @@ void World::update(const glm::vec3& playerPos) {
 }
 
 BlockID World::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return BlockType::AIR;
+    if (y < 0 || y >= Chunk::SIZE_Y) return 0;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -66,12 +66,12 @@ BlockID World::getBlock(int x, int y, int z) const {
         int localZ = z - chunkZ * Chunk::SIZE_Z;
         return it->second->getBlock(localX, y, localZ);
     }
-    return BlockType::AIR;
+    return 0;
 }
 
 BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const {
     if (y < 0 || y >= Chunk::SIZE_Y) {
-        return BlockType::AIR;
+        return 0;
     }
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
@@ -171,7 +171,7 @@ bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock,
         BlockID block = getBlock(x, y, z);
 
 
-        if (block != BlockType::AIR && block != BlockType::WATER) {
+        if (block != BlockIds::AIR && block != BlockIds::WATER) {
             hitBlock = glm::ivec3(x, y, z);
             placeBlock = glm::ivec3(lastX, lastY, lastZ);
             return true;
@@ -218,7 +218,7 @@ int World::getSurfaceY(int x, int z) const {
         const int localX = x - chunkX * Chunk::SIZE_X;
         const int localZ = z - chunkZ * Chunk::SIZE_Z;
         for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-            if (it->second->getBlock(localX, y, localZ) != BlockType::AIR) {
+            if (it->second->getBlock(localX, y, localZ) != 0) {
                 return y;
             }
         }

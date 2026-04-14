@@ -15,7 +15,7 @@ class Inventory;
 
 struct DropEntity {
     std::size_t id = 0;
-    ItemID itemId = ItemType::AIR;
+    ItemID itemId = 0;
 
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 velocity = glm::vec3(0.0f);

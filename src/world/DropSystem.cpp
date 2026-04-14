@@ -109,7 +109,7 @@ void mergeNearbyDrops(std::vector<DropEntity>& drops) {
 
 bool isSolidBlock(const World& world, const int x, const int y, const int z) {
     const BlockID id = world.getBlock(x, y, z);
-    if (id == BlockType::AIR) {
+    if (id == 0) {
         return false;
     }
     return BlockRegistry::get(id).isSolid;
@@ -184,7 +184,7 @@ void moveAndCollideAxis(DropEntity& drop, const World& world, const int axis, co
 }
 
 void DropSystem::spawnItemDrop(const ItemID itemId, const glm::ivec3& blockPos, const uint32_t stackCount) {
-    if (itemId == ItemType::AIR || stackCount == 0) {
+    if (itemId == 0 || stackCount == 0) {
         return;
     }
 
@@ -212,11 +212,11 @@ void DropSystem::spawnItemDrop(const ItemID itemId, const glm::ivec3& blockPos, 
 }
 
 void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPos) {
-    if (blockId == BlockType::AIR) {
+    if (blockId == 0) {
         return;
     }
     const BlockDropEntry& drop = BlockDropTable::get(blockId);
-    if (drop.dropItem == ItemType::AIR) {
+    if (drop.dropItem == 0) {
         return;
     }
     spawnItemDrop(drop.dropItem, blockPos, drop.minCount);
@@ -303,7 +303,7 @@ uint32_t DropSystem::collectNearbyDrops(const glm::vec3& position, const float r
     uint32_t collectedTotal = 0;
 
     for (DropEntity& drop : m_drops) {
-        if (drop.stackCount == 0 || drop.itemId == ItemType::AIR) {
+        if (drop.stackCount == 0 || drop.itemId == 0) {
             continue;
         }
 

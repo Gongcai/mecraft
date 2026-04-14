@@ -6,6 +6,8 @@
 #include <vector>
 #include <unordered_set>
 
+#include "Block.h"
+
 class Chunk;
 class World;
 
@@ -21,7 +23,7 @@ public:
 
     // Incremental update when a block is placed or broken
     void onBlockChanged(int wx, int wy, int wz,
-                        uint8_t oldBlockId, uint8_t newBlockId);
+                        BlockID oldBlockId, BlockID newBlockId);
 
     // --- Tick-based budget logic ---
     void tick(int budget = 32768);

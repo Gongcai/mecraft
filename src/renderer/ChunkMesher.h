@@ -18,16 +18,23 @@ struct ChunkMeshingSnapshot {
     std::array<BlockID, CHUNK_BLOCK_COUNT> blocks{};
     std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{}; // same packing as Chunk::m_lightMap
 
-    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXBorder{};
-    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXBorder{};
-    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZBorder{};
-    std::array<BlockID, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZBorder{};
+    // Border block data for cross-chunk AO and face culling
+    std::vector<BlockID> posXBorder;  // SIZE_Y * SIZE_Z entries
+    std::vector<BlockID> negXBorder;
+    std::vector<BlockID> posZBorder;
+    std::vector<BlockID> negZBorder;
 
     // Border light data for cross-chunk AO and light lookups
     std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXLightBorder{};
     std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXLightBorder{};
     std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZLightBorder{};
     std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZLightBorder{};
+
+    ChunkMeshingSnapshot()
+        : posXBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z, 0)
+        , negXBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z, 0)
+        , posZBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X, 0)
+        , negZBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X, 0) {}
 };
 
 struct ChunkMeshData {

@@ -34,6 +34,8 @@ bool hasDanglingNeighbor(const World& world) {
 }
 
 int main() {
+    BlockRegistry::init(nullptr);
+
     World world;
     world.init(20260324);
     world.setRenderDistance(1);
@@ -52,33 +54,33 @@ int main() {
     if (surfaceY < 8 || surfaceY > Chunk::SIZE_Y - 8) {
         return fail("surfaceY out of expected generated range");
     }
-    if (world.getBlock(0, surfaceY + 1, 0) != BlockType::AIR) {
+    if (world.getBlock(0, surfaceY + 1, 0) != BlockIds::AIR) {
         return fail("block above surface should be AIR");
     }
     const BlockID topBlock = world.getBlock(0, surfaceY, 0);
-    if (topBlock != BlockType::GRASS && topBlock != BlockType::SAND &&
-        topBlock != BlockType::DIRT && topBlock != BlockType::STONE &&
-        topBlock != BlockType::WATER && topBlock != BlockType::TALL_GRASS &&
-        topBlock != BlockType::ROSE) {
+    if (topBlock != BlockIds::GRASS && topBlock != BlockIds::SAND &&
+        topBlock != BlockIds::DIRT && topBlock != BlockIds::STONE &&
+        topBlock != BlockIds::WATER && topBlock != BlockIds::TALL_GRASS &&
+        topBlock != BlockIds::ROSE) {
         return fail("surface block should be a valid generated terrain block");
     }
 
-    if ((topBlock == BlockType::TALL_GRASS || topBlock == BlockType::ROSE) &&
-        world.getBlock(0, surfaceY - 1, 0) != BlockType::GRASS) {
+    if ((topBlock == BlockIds::TALL_GRASS || topBlock == BlockIds::ROSE) &&
+        world.getBlock(0, surfaceY - 1, 0) != BlockIds::GRASS) {
         return fail("vegetation surface block should be rooted on grass");
     }
 
     const BlockID underBlock = world.getBlock(0, surfaceY - 2, 0);
-    if (underBlock == BlockType::AIR) {
+    if (underBlock == BlockIds::AIR) {
         return fail("sub-surface layer should not be AIR");
     }
 
-    if (world.getBlock(0, 1, 0) != BlockType::STONE) {
+    if (world.getBlock(0, 1, 0) != BlockIds::STONE) {
         return fail("deep layer should include STONE");
     }
 
     const int negSurfaceY = world.getSurfaceY(-1, -1);
-    if (world.getBlock(-1, negSurfaceY, -1) == BlockType::AIR) {
+    if (world.getBlock(-1, negSurfaceY, -1) == BlockIds::AIR) {
         return fail("negative world coordinate mapping failed");
     }
 
@@ -103,8 +105,8 @@ int main() {
         return fail("same seed must produce same surface height");
     }
 
-    world.setBlock(0, surfaceY + 1, 0, BlockType::WOOD);
-    if (world.getBlock(0, surfaceY + 1, 0) != BlockType::WOOD) {
+    world.setBlock(0, surfaceY + 1, 0, BlockIds::WOOD);
+    if (world.getBlock(0, surfaceY + 1, 0) != BlockIds::WOOD) {
         return fail("setBlock/getBlock mismatch");
     }
 

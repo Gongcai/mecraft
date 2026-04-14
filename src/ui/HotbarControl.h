@@ -67,7 +67,7 @@ private:
 
     // Item name popup state (mutable to allow updates in const render method)
     mutable int m_lastSelectedSlot = -1;
-    mutable ItemID m_lastSelectedItem = ItemType::AIR;
+    mutable ItemID m_lastSelectedItem = 0;
     mutable std::string m_itemName;
     mutable float m_itemNameShowTime = -100.0f;
     float m_itemNameDisplayDuration = 2.0f;

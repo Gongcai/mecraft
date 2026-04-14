@@ -31,7 +31,7 @@ struct GameplayBlockActionRequest {
     bool wantsBreak = false;
     bool wantsPlace = false;
     float placeCooldownRemaining = 0.0f;
-    BlockID targetBlock = BlockType::AIR;
+    BlockID targetBlock = 0;
     bool playerWouldOverlapPlaceBlock = false;
 };
 
@@ -49,7 +49,7 @@ namespace gameplay_mode_rules_detail {
         if (request.placeCooldownRemaining > 0.0f) {
             return GameplayBlockAction::None;
         }
-        if (request.targetBlock != BlockType::AIR && request.targetBlock != BlockType::WATER) {
+        if (request.targetBlock != 0 && request.targetBlock != BlockIds::WATER) {
             return GameplayBlockAction::None;
         }
         if (request.playerWouldOverlapPlaceBlock) {

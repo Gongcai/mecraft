@@ -8,16 +8,16 @@
 // 合成配方：模式 + 产物
 struct CraftingRecipe {
     // 模式：二维数组 [row][col]，用 ItemID 表示
-    // ItemType::AIR 表示该位置为空
+    // ItemID 0 表示该位置为空
     std::vector<std::vector<ItemID>> pattern;
-    ItemID result = ItemType::AIR;
+    ItemID result = 0;
     int resultCount = 1;
     int width = 0;   // 模式实际宽度
     int height = 0;  // 模式实际高度
 };
 
 struct CraftingResult {
-    ItemID itemId = ItemType::AIR;
+    ItemID itemId = 0;
     int count = 0;
     bool matched = false;
 };

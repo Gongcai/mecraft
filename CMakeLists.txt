@@ -59,10 +59,14 @@ set(CORE_SOURCES
         src/world/Block.cpp
         src/item/Item.cpp
         src/world/Chunk.cpp
+        src/world/Palette.cpp
+        src/world/BitPackedArray.cpp
         src/world/LightEngine.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
+        src/core/NamespacedId.cpp
+        src/core/IdRegistry.cpp
         src/physics/PhysicsSystem.cpp
         src/particle/ParticleSystem.cpp
         src/audio/AudioEngine.cpp

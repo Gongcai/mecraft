@@ -63,7 +63,7 @@ const CraftingGridLayout& CraftingGridControl::getLayout() const
 ItemID CraftingGridControl::getCraftingSlot(int index) const
 {
     if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
-        return ItemType::AIR;
+        return 0;
     }
     return m_slots[static_cast<size_t>(index)];
 }
@@ -88,7 +88,7 @@ void CraftingGridControl::setResultSlot(const ItemID itemId)
 
 void CraftingGridControl::clearAll()
 {
-    m_slots.fill(ItemType::AIR);
+    m_slots.fill(0);
 }
 
 void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSystem)
@@ -103,7 +103,7 @@ void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSys
     if (result.matched) {
         m_slots[4] = result.itemId;
     } else {
-        m_slots[4] = ItemType::AIR;
+        m_slots[4] = 0;
     }
 }
 

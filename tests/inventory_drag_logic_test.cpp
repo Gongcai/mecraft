@@ -12,6 +12,9 @@ int fail(const char* message) {
 }
 
 int main() {
+    BlockRegistry::init(nullptr);
+    ItemRegistry::init();
+
     Inventory inventory;
 
     if (Inventory::toInventoryIndexFromGridSlot(0) != 9) {
@@ -24,29 +27,29 @@ int main() {
         return fail("grid slot 35 should map to hotbar slot 8");
     }
 
-    const BlockID sourceItem = inventory.getSlot(0);
-    if (sourceItem == BlockType::AIR) {
+    const ItemID sourceItem = inventory.getSlotItem(0);
+    if (sourceItem == ItemIds::AIR) {
         return fail("expected non-empty default hotbar slot");
     }
 
-    const BlockID picked = inventory.takeSlot(0);
+    const ItemStack pickedStack = inventory.getSlotStack(0);
+    const ItemID picked = pickedStack.itemId;
     if (picked != sourceItem) {
-        return fail("takeSlot should return the original item");
+        return fail("getSlotStack should return the original item");
     }
-    if (inventory.getSlot(0) != BlockType::AIR) {
-        return fail("takeSlot should clear source slot");
+    inventory.setSlotItem(0, ItemIds::AIR, 0);
+    if (inventory.getSlotItem(0) != ItemIds::AIR) {
+        return fail("clearing slot should result in AIR");
     }
 
-    const BlockID replaced = inventory.placeSlot(10, picked);
-    if (inventory.getSlot(10) != picked) {
-        return fail("placeSlot should put item into destination slot");
-    }
-    if (replaced == BlockType::AIR) {
-        return fail("placeSlot should return replaced item when destination was occupied");
+    const ItemID replaced = inventory.getSlotItem(10);
+    inventory.setSlotItem(10, picked, 1);
+    if (inventory.getSlotItem(10) != picked) {
+        return fail("setSlotItem should put item into destination slot");
     }
 
     inventory.swapSlots(10, 11);
-    if (inventory.getSlot(11) != picked) {
+    if (inventory.getSlotItem(11) != picked) {
         return fail("swapSlots should move placed item to other slot");
     }
 
