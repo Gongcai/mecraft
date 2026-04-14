@@ -321,7 +321,7 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
 
     const auto uv = useItemTexture
         ? itemTextureAtlas.getUV(itemTileIndex)
-        : itemIconAtlas.getUV(static_cast<int>(itemDef.iconItemId));
+        : itemIconAtlas.getUV(static_cast<int>(itemDef.renderBlock));
     std::vector<float> vertices;
     vertices.reserve(24);
     addQuad(vertices, x0, y0, x1, y1, uv.first.x, uv.first.y, uv.second.x, uv.second.y);

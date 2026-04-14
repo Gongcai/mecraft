@@ -105,6 +105,7 @@ void ItemRegistry::init() {
         itemDef.maxStack = 64;
         itemDef.placeBlock = blockId;
         itemDef.renderBlock = blockId;
+        itemDef.iconItemId = static_cast<ItemID>(i);
 
         // Register explicit mapping
         registerBlockItem(blockId, static_cast<ItemID>(i));

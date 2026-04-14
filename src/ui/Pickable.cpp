@@ -110,8 +110,7 @@ void Pickable::render(const SlotInfo* slots, int count,
         }
 
         if (!pushed && hasBakedItemIcons) {
-            const ItemID iconItemId = itemDef.iconItemId;
-            const auto uv = itemIconAtlas.getUV(static_cast<int>(iconItemId));
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(itemDef.renderBlock));
             fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.first.y);
             fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.first.y);
             fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.second.y);

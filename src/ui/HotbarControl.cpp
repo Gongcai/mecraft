@@ -266,7 +266,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         }
 
         if (!targetBuffer && hasBakedItemIcons) {
-            const auto uv = itemIconAtlas.getUV(static_cast<int>(itemDef.iconItemId));
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(itemDef.renderBlock));
             uvMin = uv.first;
             uvMax = uv.second;
             targetBuffer = &fallbackIconVerts;
