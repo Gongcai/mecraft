@@ -10,6 +10,8 @@
 #include "../resource/ResourceMgr.h"
 #include "../world/Chunk.h"
 
+class World;
+
 constexpr std::size_t CHUNK_BLOCK_COUNT = static_cast<std::size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
 
 struct ChunkMeshingSnapshot {
@@ -34,6 +36,8 @@ struct ChunkMeshData {
     std::vector<BlockVertex> transparentVertices;
     uint32_t opaqueFaceCountBeforeGreedy = 0;
     uint32_t opaqueFaceCountAfterGreedy = 0;
+    uint32_t transparentFaceCountBeforeGreedy = 0;
+    uint32_t transparentFaceCountAfterGreedy = 0;
     uint32_t opaqueVertexCount = 0;
     double buildTimeMs = 0.0;
     bool hasBounds = false;
@@ -43,7 +47,7 @@ struct ChunkMeshData {
 
 class ChunkMesher {
 public:
-    static ChunkMeshingSnapshot captureSnapshot(const Chunk& chunk);
+    static ChunkMeshingSnapshot captureSnapshot(const Chunk& chunk, const World* world = nullptr);
     static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot);
     static void generateMesh(Chunk& chunk);
 

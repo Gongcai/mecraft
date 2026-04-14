@@ -58,6 +58,8 @@ public:
         double averageBuildMs = 0.0;
         uint32_t lastOpaqueFacesBeforeGreedy = 0;
         uint32_t lastOpaqueFacesAfterGreedy = 0;
+        uint32_t lastTransparentFacesBeforeGreedy = 0;
+        uint32_t lastTransparentFacesAfterGreedy = 0;
         uint32_t lastOpaqueVertexCount = 0;
     };
 
@@ -184,6 +186,8 @@ private:
     double m_lastMeshingBuildMs = 0.0;
     uint32_t m_lastOpaqueFacesBeforeGreedy = 0;
     uint32_t m_lastOpaqueFacesAfterGreedy = 0;
+    uint32_t m_lastTransparentFacesBeforeGreedy = 0;
+    uint32_t m_lastTransparentFacesAfterGreedy = 0;
     uint32_t m_lastOpaqueVertexCount = 0;
     int m_regionTestsThisFrame = 0;
     int m_regionPassedThisFrame = 0;

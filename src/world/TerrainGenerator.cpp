@@ -445,6 +445,80 @@ void TerrainGenerator::init(uint32_t seed, int seaLevel) {
     m_seaLevel = std::clamp(seaLevel, 16, Chunk::SIZE_Y - 32);
 }
 
+BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int worldZ) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) {
+        return BlockType::AIR;
+    }
+
+    int surfaceY = 0;
+    double moisture = 0.0;
+    double ruggedness = 0.0;
+    TerrainBiome surfaceKind = TerrainBiome::Temperate;
+    sampleSurfaceAndMoistureScalar(worldX, worldZ, m_seed, m_seaLevel, surfaceY, moisture, surfaceKind, ruggedness);
+
+    const bool belowSeaLevel = surfaceY < m_seaLevel;
+    BlockID topBlock = BlockType::GRASS;
+    BlockID fillBlock = BlockType::DIRT;
+    int coverDepth = 3;
+
+    if (belowSeaLevel || surfaceKind == TerrainBiome::Arid || moisture < 0.34) {
+        topBlock = BlockType::SAND;
+        fillBlock = BlockType::SAND;
+        coverDepth = 4;
+    } else if (surfaceKind == TerrainBiome::HighMountain) {
+        const double dirtPatchNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
+                                            24.0, 2, m_seed ^ 0x9b05688cU);
+        const bool dirtPatch = dirtPatchNoise > 0.62 && moisture > 0.40;
+        topBlock = BlockType::GRASS;
+        fillBlock = dirtPatch ? BlockType::DIRT : BlockType::STONE;
+        coverDepth = dirtPatch ? 2 : 1;
+    } else if (surfaceKind == TerrainBiome::Mountain) {
+        const bool rockyTop = ruggedness > 0.62 && moisture < 0.55;
+        topBlock = BlockType::GRASS;
+        fillBlock = rockyTop ? BlockType::STONE : BlockType::DIRT;
+        coverDepth = rockyTop ? 2 : 3;
+    } else {
+        const double soilNoise = fbm2D(static_cast<double>(worldX), static_cast<double>(worldZ),
+                                       18.0, 2, m_seed ^ 0x2f6b5a13U);
+        if (soilNoise > 0.74) {
+            coverDepth = 4;
+        } else if (soilNoise < 0.30) {
+            coverDepth = 2;
+        }
+    }
+
+    BlockID id = BlockType::AIR;
+    if (y == 0) {
+        id = BlockType::BEDROCK;
+    } else if (y <= surfaceY) {
+        id = BlockType::STONE;
+        if (y == surfaceY) {
+            id = topBlock;
+        } else if (y >= surfaceY - coverDepth) {
+            id = fillBlock;
+        }
+
+        if (id != BlockType::AIR && shouldCarveCave(worldX, y, worldZ, surfaceY)) {
+            id = BlockType::AIR;
+        }
+
+        if (id == BlockType::STONE && y <= 128) {
+            id = sampleOreBlock(worldX, y, worldZ, id);
+        }
+    } else if (y <= m_seaLevel) {
+        id = BlockType::WATER;
+    }
+
+    const int vegetationY = surfaceY + 1;
+    if (id == BlockType::AIR &&
+        y == vegetationY &&
+        topBlock == BlockType::GRASS) {
+        id = sampleVegetationBlock(worldX, worldZ, m_seed, surfaceKind, moisture, m_seaLevel, surfaceY);
+    }
+
+    return id;
+}
+
 int TerrainGenerator::sampleSurfaceY(int worldX, int worldZ) const {
     int surfaceY = 0;
     sampleSurfaceYBatch(worldX, worldZ, 1, &surfaceY);

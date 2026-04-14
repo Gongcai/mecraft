@@ -24,6 +24,7 @@ public:
 
     // 方块操作 (世界坐标)
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
+    [[nodiscard]] BlockID sampleGeneratedBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
 
     // 射线拾取：返回命中的方块位置和放置位置

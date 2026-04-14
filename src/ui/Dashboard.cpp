@@ -341,6 +341,16 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ? (100.0f * static_cast<float>(greedyBefore - greedyAfter) / static_cast<float>(greedyBefore))
         : 0.0f;
     ImGui::Text("Opaque Faces: %u -> %u (%.1f%% fewer)", greedyBefore, greedyAfter, greedyReduction);
+
+    const uint32_t transparentGreedyBefore = meshingStats.lastTransparentFacesBeforeGreedy;
+    const uint32_t transparentGreedyAfter = meshingStats.lastTransparentFacesAfterGreedy;
+    const float transparentGreedyReduction = transparentGreedyBefore > 0
+        ? (100.0f * static_cast<float>(transparentGreedyBefore - transparentGreedyAfter) / static_cast<float>(transparentGreedyBefore))
+        : 0.0f;
+    ImGui::Text("Transparent Faces: %u -> %u (%.1f%% fewer)",
+                transparentGreedyBefore,
+                transparentGreedyAfter,
+                transparentGreedyReduction);
     ImGui::Text("Opaque Vertices: %u", meshingStats.lastOpaqueVertexCount);
 
     const size_t historyCount = render.getMeshingHistoryCount();

@@ -219,6 +219,8 @@ Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
         : 0.0;
     stats.lastOpaqueFacesBeforeGreedy = m_lastOpaqueFacesBeforeGreedy;
     stats.lastOpaqueFacesAfterGreedy = m_lastOpaqueFacesAfterGreedy;
+    stats.lastTransparentFacesBeforeGreedy = m_lastTransparentFacesBeforeGreedy;
+    stats.lastTransparentFacesAfterGreedy = m_lastTransparentFacesAfterGreedy;
     stats.lastOpaqueVertexCount = m_lastOpaqueVertexCount;
     return stats;
 }
@@ -356,7 +358,7 @@ void Renderer::submitMeshingJobs(const World& world) {
             ChunkMeshingJob job;
             job.chunkKey = chunkKey;
             job.revision = chunk.getMeshRevision();
-            job.snapshot = ChunkMesher::captureSnapshot(chunk);
+            job.snapshot = ChunkMesher::captureSnapshot(chunk, &world);
             m_meshingService.submit(job);
             m_meshingInFlight.insert(chunkKey);
             ++submittedThisPass;
@@ -869,6 +871,8 @@ void Renderer::drainMeshingResults(const World& world) {
         m_lastMeshingBuildMs = result.meshData.buildTimeMs;
         m_lastOpaqueFacesBeforeGreedy = result.meshData.opaqueFaceCountBeforeGreedy;
         m_lastOpaqueFacesAfterGreedy = result.meshData.opaqueFaceCountAfterGreedy;
+        m_lastTransparentFacesBeforeGreedy = result.meshData.transparentFaceCountBeforeGreedy;
+        m_lastTransparentFacesAfterGreedy = result.meshData.transparentFaceCountAfterGreedy;
         m_lastOpaqueVertexCount = result.meshData.opaqueVertexCount;
 #endif
 

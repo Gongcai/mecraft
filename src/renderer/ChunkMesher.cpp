@@ -8,6 +8,8 @@
 
 #include <glm/vec2.hpp>
 
+#include "../world/World.h"
+
 namespace {
 struct IVec3 {
     int x;
@@ -358,8 +360,11 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
                           const int ny,
                           const int nz,
                           const BlockID currentId) {
+    const BlockDef& currentDef = BlockRegistry::get(currentId);
     const BlockID neighborId = getNeighborAwareBlock(snapshot, nx, ny, nz);
-    if (currentId == BlockType::WATER && neighborId == BlockType::WATER) {
+    if (currentDef.renderShape == BlockRenderShape::Cube &&
+        currentDef.isTransparent &&
+        neighborId == currentId) {
         return false;
     }
 
@@ -367,7 +372,6 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
         return true;
     }
 
-    const BlockDef& currentDef = BlockRegistry::get(currentId);
     const BlockDef& neighborDef = BlockRegistry::get(neighborId);
 
     if (!neighborDef.isSolid) {
@@ -384,14 +388,24 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
     return false;
 }
 
-void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
+BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y, const int wz) {
+    if (world == nullptr) {
+        return BlockType::AIR;
+    }
+    return world->sampleGeneratedBlock(wx, y, wz);
+}
+
+void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot, const World* world) {
+    const glm::ivec3 offset = chunk.getWorldOffset();
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             const std::size_t index = toBorderYZIndex(y, z);
             const Chunk* posX = chunk.neighbors[0];
             const Chunk* negX = chunk.neighbors[1];
-            snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z) : BlockType::AIR;
-            snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z) : BlockType::AIR;
+            snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z)
+                                              : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, y, offset.z + z);
+            snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z)
+                                              : sampleMissingNeighborBlock(world, offset.x - 1, y, offset.z + z);
             snapshot.posXLightBorder[index] = posX ? posX->m_lightMap[posX->toIndex(0, y, z)] : 0;
             snapshot.negXLightBorder[index] = negX ? negX->m_lightMap[negX->toIndex(Chunk::SIZE_X - 1, y, z)] : 0;
         }
@@ -399,8 +413,10 @@ void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot) {
             const std::size_t index = toBorderYXIndex(y, x);
             const Chunk* posZ = chunk.neighbors[2];
             const Chunk* negZ = chunk.neighbors[3];
-            snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0) : BlockType::AIR;
-            snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1) : BlockType::AIR;
+            snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0)
+                                              : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z + Chunk::SIZE_Z);
+            snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1)
+                                              : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z - 1);
             snapshot.posZLightBorder[index] = posZ ? posZ->m_lightMap[posZ->toIndex(x, y, 0)] : 0;
             snapshot.negZLightBorder[index] = negZ ? negZ->m_lightMap[negZ->toIndex(x, y, Chunk::SIZE_Z - 1)] : 0;
         }
@@ -532,6 +548,10 @@ bool isOpaqueCubeCandidate(const BlockDef& def) {
     return def.renderShape == BlockRenderShape::Cube && !def.isTransparent;
 }
 
+bool isTransparentCubeCandidate(const BlockDef& def) {
+    return def.renderShape == BlockRenderShape::Cube && def.isTransparent;
+}
+
 bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
                             const int face,
                             const int x,
@@ -562,7 +582,43 @@ bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
     return true;
 }
 
-void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+bool populateTransparentFaceCell(const ChunkMeshingSnapshot& snapshot,
+                                 const int face,
+                                 const int x,
+                                 const int y,
+                                 const int z,
+                                 FaceCell& outCell) {
+    const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
+    if (blockId == BlockType::AIR) {
+        return false;
+    }
+
+    const BlockDef& def = BlockRegistry::get(blockId);
+    if (!isTransparentCubeCandidate(def)) {
+        return false;
+    }
+
+    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId)) {
+        return false;
+    }
+
+    outCell.valid = true;
+    outCell.x = x;
+    outCell.y = y;
+    outCell.z = z;
+    outCell.renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    return true;
+}
+
+template <typename PopulateCellFn>
+void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
+                          ChunkMeshData& meshData,
+                          std::vector<BlockVertex>& targetVertices,
+                          uint32_t& faceCountBeforeGreedy,
+                          uint32_t& faceCountAfterGreedy,
+                          PopulateCellFn&& populateCell) {
     auto buildPlane = [&](const int face, const int width, const int height, const int slices, auto&& mapper) {
         std::vector<FaceCell> plane(static_cast<size_t>(width) * static_cast<size_t>(height));
         std::vector<bool> consumed(static_cast<size_t>(width) * static_cast<size_t>(height), false);
@@ -580,8 +636,8 @@ void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData&
                     int z = 0;
                     mapper(slice, u, v, x, y, z);
                     FaceCell& cell = plane[static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width)];
-                    if (populateOpaqueFaceCell(snapshot, face, x, y, z, cell)) {
-                        ++meshData.opaqueFaceCountBeforeGreedy;
+                    if (populateCell(snapshot, face, x, y, z, cell)) {
+                        ++faceCountBeforeGreedy;
                     }
                 }
             }
@@ -627,8 +683,8 @@ void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData&
                         }
                     }
 
-                    emitGreedyFace(meshData.opaqueVertices, meshData, plane[startIndex], face, runWidth, runHeight);
-                    ++meshData.opaqueFaceCountAfterGreedy;
+                    emitGreedyFace(targetVertices, meshData, plane[startIndex], face, runWidth, runHeight);
+                    ++faceCountAfterGreedy;
                 }
             }
         }
@@ -671,9 +727,27 @@ void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData&
                    z = u;
                });
 }
+
+void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+    buildCubeGreedyFaces(snapshot,
+                         meshData,
+                         meshData.opaqueVertices,
+                         meshData.opaqueFaceCountBeforeGreedy,
+                         meshData.opaqueFaceCountAfterGreedy,
+                         populateOpaqueFaceCell);
 }
 
-ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
+void buildTransparentGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+    buildCubeGreedyFaces(snapshot,
+                         meshData,
+                         meshData.transparentVertices,
+                         meshData.transparentFaceCountBeforeGreedy,
+                         meshData.transparentFaceCountAfterGreedy,
+                         populateTransparentFaceCell);
+}
+}
+
+ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
     ChunkMeshingSnapshot snapshot;
 
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
@@ -686,7 +760,7 @@ ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk) {
         }
     }
 
-    captureBorders(chunk, snapshot);
+    captureBorders(chunk, snapshot, world);
     return snapshot;
 }
 
@@ -699,6 +773,7 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
     meshData.transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
 
     buildOpaqueGreedyFaces(snapshot, meshData);
+    buildTransparentGreedyFaces(snapshot, meshData);
 
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
@@ -723,7 +798,7 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
                     continue;
                 }
 
-                if (isOpaqueCubeCandidate(def)) {
+                if (isOpaqueCubeCandidate(def) || isTransparentCubeCandidate(def)) {
                     continue;
                 }
 

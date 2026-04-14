@@ -69,6 +69,23 @@ BlockID World::getBlock(int x, int y, int z) const {
     return BlockType::AIR;
 }
 
+BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) {
+        return BlockType::AIR;
+    }
+
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+    const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it != m_chunks.end()) {
+        const int localX = x - chunkX * Chunk::SIZE_X;
+        const int localZ = z - chunkZ * Chunk::SIZE_Z;
+        return it->second->getBlock(localX, y, localZ);
+    }
+
+    return m_terrainGen.sampleBlock(x, y, z);
+}
+
 void World::setBlock(int x, int y, int z, BlockID id) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
 
