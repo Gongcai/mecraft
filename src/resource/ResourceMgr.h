@@ -57,6 +57,11 @@ public:
     void buildTextureArray(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureArray& getTextureArray() const;
 
+    // Lightmap textures (16x16, maps blockLight x skyLight -> RGB brightness)
+    void loadLightmapTextures(const std::string& dayPath, const std::string& nightPath);
+    [[nodiscard]] GLuint getLightmapDay() const;
+    [[nodiscard]] GLuint getLightmapNight() const;
+
     // Prebaked block item icons (isometric-like) packed in a single atlas texture.
     void buildBlockIconAtlas(int iconSize = 64);
     [[nodiscard]] const TextureAtlas& getItemIconAtlas() const;
@@ -80,6 +85,8 @@ private:
     TextureAtlas m_itemIconAtlas;
     TextureAtlas m_itemTextureAtlas;
     TextureArray m_textureArray;
+    GLuint m_lightmapDay = 0;
+    GLuint m_lightmapNight = 0;
     std::vector<unsigned char> m_blockAtlasPixels;
     std::vector<unsigned char> m_itemAtlasPixels;
     std::unordered_map<std::string, int> m_itemTextureIndices;

@@ -279,6 +279,15 @@ void ResourceMgr::shutdown() {
         m_textureArray.textureID = 0;
     }
 
+    if (m_lightmapDay != 0) {
+        glDeleteTextures(1, &m_lightmapDay);
+        m_lightmapDay = 0;
+    }
+    if (m_lightmapNight != 0) {
+        glDeleteTextures(1, &m_lightmapNight);
+        m_lightmapNight = 0;
+    }
+
     m_blockAtlasPixels.clear();
     m_itemAtlasPixels.clear();
     m_itemTextureIndices.clear();
@@ -665,6 +674,59 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
 const TextureArray& ResourceMgr::getTextureArray() const {
     return m_textureArray;
+}
+
+namespace {
+GLuint loadLightmapTexture(const std::string& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(0);
+    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (!data) {
+#ifndef NDEBUG
+        std::cerr << "Failed to load lightmap texture: " << path << "\n";
+#endif
+        return 0;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    stbi_image_free(data);
+    return textureID;
+}
+}
+
+void ResourceMgr::loadLightmapTextures(const std::string& dayPath, const std::string& nightPath) {
+    if (m_lightmapDay != 0) {
+        glDeleteTextures(1, &m_lightmapDay);
+        m_lightmapDay = 0;
+    }
+    if (m_lightmapNight != 0) {
+        glDeleteTextures(1, &m_lightmapNight);
+        m_lightmapNight = 0;
+    }
+
+    m_lightmapDay = loadLightmapTexture(dayPath);
+    m_lightmapNight = loadLightmapTexture(nightPath);
+}
+
+GLuint ResourceMgr::getLightmapDay() const {
+    return m_lightmapDay;
+}
+
+GLuint ResourceMgr::getLightmapNight() const {
+    return m_lightmapNight;
 }
 
 void ResourceMgr::buildBlockIconAtlas(int iconSize) {

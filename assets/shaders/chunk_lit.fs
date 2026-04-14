@@ -11,6 +11,8 @@ in float vLayer;
 in float vFogDist;
 
 uniform sampler2DArray texArray;
+uniform sampler2D uLightmapDay;
+uniform sampler2D uLightmapNight;
 uniform int uForceBaseLod;
 uniform vec3 uGrassTintColor;
 uniform int uFogEnabled;
@@ -20,7 +22,7 @@ uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
-uniform float uSkyIntensity; // 0.0-1.0, day/night cycle (default 1.0)
+uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
 
 // Ambient Occlusion brightness levels
 // Level 0 (fully occluded corner) = 0.72, level 3 (open) = 1.0
@@ -90,19 +92,20 @@ void main() {
     int aoHigh = min(aoLow + 1, 3);
     float aoFactor = mix(aoLevels[aoLow], aoLevels[aoHigh], fract(aoIdx));
 
-    // Brightness was pre-computed on the CPU via the exponential decay curve
-    // pow(0.8, 15-L) and averaged in brightness space for physically-correct
-    // smooth lighting.  The GPU interpolates brightness values directly.
-    float sun   = vSunlight;
-    float block = vBlockLight;
+    // Lightmap lookup:
+    // vBlockLight and vSunlight are raw light levels normalized to [0,1] range (level/15).
+    // The lightmap image layout:
+    //   X axis (left to right) = block light 0 -> 15
+    //   Y axis (top to bottom) = sky light 15 -> 0 (inverted)
+    // OpenGL V=0 is the top of the image (sky=15, brightest), V=1 is bottom (sky=0, darkest).
+    // So we invert vSunlight: high sky level -> low V -> top of texture -> bright.
+    vec2 lightmapUV = vec2(vBlockLight, 1.0 - vSunlight);
+    vec3 dayLight = texture(uLightmapDay, lightmapUV).rgb;
+    vec3 nightLight = texture(uLightmapNight, lightmapUV).rgb;
+    vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
 
-    // Base light: use skyIntensity to scale sun contribution (for day/night cycle)
-    float skyContribution = sun * max(uSkyIntensity, 0.0);
-    // Ambient floor of 0.08 ensures even fully-shadowed spots are visible
-    float lightFactor = max(max(block, skyContribution), 0.08);
-
-    // Combine texture, lighting, and AO
-    vec3 finalColor = texColor.rgb * lightFactor * aoFactor;
+    // Combine texture, lightmap color, and AO
+    vec3 finalColor = texColor.rgb * lightColor * aoFactor;
 
     if (uFogEnabled != 0) {
         float fogFactor = computeFogFactor(vFogDist);

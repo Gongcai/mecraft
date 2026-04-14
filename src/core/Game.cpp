@@ -35,6 +35,8 @@ void Game::init(int width, int height, const char *title) {
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
     m_resourceMgr.buildTextureArray("../assets/textures/blocks", 16);
+    m_resourceMgr.loadLightmapTextures("../assets/textures/lightmap/lightmap_day.png",
+                                        "../assets/textures/lightmap/lightmap_night.png");
     m_resourceMgr.buildItemTextureAtlas("../assets/textures/items", 16);
     m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
     m_resourceMgr.loadGuiTexture("inventory", "../assets/textures/gui/inventory.png", true);

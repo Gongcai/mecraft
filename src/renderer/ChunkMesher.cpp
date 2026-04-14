@@ -140,29 +140,27 @@ struct VertexLightData {
     uint8_t ao;
     uint8_t sunLight;        // raw 0-15, kept for flip diagonal metric
     uint8_t blockLight;      // raw 0-15, kept for flip diagonal metric
-    float sunBrightness;     // 0.0-1.0, pre-computed for vertex attribute
-    float blockBrightness;   // 0.0-1.0, pre-computed for vertex attribute
+    float sunNormalized;     // 0.0-1.0, raw level / 15 for lightmap UV
+    float blockNormalized;   // 0.0-1.0, raw level / 15 for lightmap UV
 };
 
-// Convert a raw 0-15 light level to a 0.0-1.0 brightness using the exponential decay curve.
-// This is the same curve the fragment shader used: pow(0.8, 15 - level).
-// Moving it here lets us average BRIGHTNESS values (physically correct) rather than
-// raw light levels (which causes extreme darkening from solid blocks' stored zeros).
-float lightToBrightness(uint8_t level) {
-    if (level == 0) return 0.0f;
-    return std::pow(0.8f, 15.0f - static_cast<float>(level));
+// Normalize a raw 0-15 light level to 0.0-1.0 for lightmap UV coordinate.
+float lightToNormalized(uint8_t level) {
+    return static_cast<float>(level) / 15.0f;
 }
 
-// Average brightness values for smooth lighting.
-// By operating in brightness space, solid blocks' near-zero brightness (0.035 at level 1,
-// 0.0 at level 0) participates in the average without catastrophically darkening the result
-// the way raw-level averaging did with the exponential curve.
-float computeVertexBrightness(float base, float s1, float s2, float cn,
+// Average raw light levels for smooth lighting, then normalize.
+// By averaging raw levels, we get smooth gradients that the lightmap
+// texture will convert to the appropriate brightness.
+float computeVertexNormalized(uint8_t base, uint8_t s1, uint8_t s2, uint8_t cn,
                               bool s1Solid, bool s2Solid) {
+    float avg;
     if (s1Solid && s2Solid) {
-        return (base + s1 + s2) / 3.0f;
+        avg = static_cast<float>(base + s1 + s2) / 3.0f;
+    } else {
+        avg = static_cast<float>(base + s1 + s2 + cn) / 4.0f;
     }
-    return (base + s1 + s2 + cn) / 4.0f;
+    return avg / 15.0f;
 }
 
 // Safe light sampler for sun: handles positions that the snapshot can't look up.
@@ -212,8 +210,6 @@ std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot&
 
     const uint8_t baseSun   = getNeighborSunlight(snapshot, bx, by, bz);
     const uint8_t baseBlock = getNeighborBlockLight(snapshot, bx, by, bz);
-    const float baseSunBr   = lightToBrightness(baseSun);
-    const float baseBlockBr = lightToBrightness(baseBlock);
 
     for (int i = 0; i < 4; ++i) {
         const glm::vec3 c = kFaceCorners[face][i];
@@ -247,13 +243,11 @@ std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot&
             data[i].blockLight = static_cast<uint8_t>((baseBlock + s1Block + s2Block + cnBlock) / 4);
         }
 
-        // Brightness-space average (for the actual vertex attribute)
-        data[i].sunBrightness   = computeVertexBrightness(
-            baseSunBr, lightToBrightness(s1Sun), lightToBrightness(s2Sun), lightToBrightness(cnSun),
-            side1, side2);
-        data[i].blockBrightness = computeVertexBrightness(
-            baseBlockBr, lightToBrightness(s1Block), lightToBrightness(s2Block), lightToBrightness(cnBlock),
-            side1, side2);
+        // Normalized raw-level average for lightmap UV coordinates
+        data[i].sunNormalized   = computeVertexNormalized(
+            baseSun, s1Sun, s2Sun, cnSun, side1, side2);
+        data[i].blockNormalized = computeVertexNormalized(
+            baseBlock, s1Block, s2Block, cnBlock, side1, side2);
     }
 
     return data;
@@ -484,8 +478,8 @@ void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
             uvCoord.x,
             uvCoord.y,
             static_cast<float>(face),
-            data[index].sunBrightness,
-            data[index].blockBrightness,
+            data[index].sunNormalized,
+            data[index].blockNormalized,
             static_cast<float>(data[index].ao),
             layer
         });
@@ -514,8 +508,8 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
         sunLevel = std::max(sunLevel, getNeighborSunlight(snapshot, nx, ny, nz));
         blockLevel = std::max(blockLevel, getNeighborBlockLight(snapshot, nx, ny, nz));
     }
-    const float sunBrightness = lightToBrightness(sunLevel);
-    const float blockBrightness = lightToBrightness(blockLevel);
+    const float sunNormalized = lightToNormalized(sunLevel);
+    const float blockNormalized = lightToNormalized(blockLevel);
 
     const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
@@ -533,8 +527,8 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
                 uvCoord.x,
                 uvCoord.y,
                 crossMarker,
-                sunBrightness,
-                blockBrightness,
+                sunNormalized,
+                blockNormalized,
                 3.0f, // No AO for cross quads (always full brightness)
                 layer
             });

@@ -308,6 +308,8 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setMat4("view", m_view);
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
     m_chunkShader->setInt("texArray", 0);
+    m_chunkShader->setInt("uLightmapDay", 1);
+    m_chunkShader->setInt("uLightmapNight", 2);
     m_chunkShader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
     m_chunkShader->setInt("uForceBaseLod", 0);
     m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
@@ -325,6 +327,12 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+
+    // Bind lightmap textures
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
 }
 
 void Renderer::submitMeshingJobs(const World& world) {

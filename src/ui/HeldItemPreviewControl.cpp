@@ -219,7 +219,14 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
         m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
         m_shader->setInt("uFogEnabled", 0);
         m_shader->setFloat("uSkyIntensity", 1.0f);
+        m_shader->setInt("uLightmapDay", 1);
+        m_shader->setInt("uLightmapNight", 2);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        // Bind lightmap textures for held item rendering
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     }
 
     glBindVertexArray(mesh->vao);

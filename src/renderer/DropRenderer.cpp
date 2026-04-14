@@ -119,6 +119,8 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_shader->setFloat("uWindTime", 0.0f);
         m_shader->setInt("uFogEnabled", 0);
         m_shader->setFloat("uSkyIntensity", 1.0f);
+        m_shader->setInt("uLightmapDay", 1);
+        m_shader->setInt("uLightmapNight", 2);
     }
 
     int itemModelLoc = -1;
@@ -167,6 +169,11 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_shader->setMat4(blockModelLoc, model);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        // Bind lightmap textures for drop block rendering
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }
