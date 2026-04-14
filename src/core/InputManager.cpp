@@ -190,7 +190,7 @@ void InputManager::resetMouseDelta() {
     m_firstMouse = true;
 }
 
-void InputManager::beginUIDragItem(const int itemId, const int sourceSlot) {
+void InputManager::beginUIDragItem(const int itemId, const int count, const int sourceSlot) {
     if (itemId <= 0) {
         clearUIDragItem();
         return;
@@ -198,6 +198,7 @@ void InputManager::beginUIDragItem(const int itemId, const int sourceSlot) {
 
     m_draggedItem.active = true;
     m_draggedItem.itemId = itemId;
+    m_draggedItem.count = count;
     m_draggedItem.sourceSlot = sourceSlot;
     m_draggedItem.pointerPosition = {static_cast<float>(m_mouseX), static_cast<float>(m_mouseY)};
     m_snapshot.draggedItem = m_draggedItem;

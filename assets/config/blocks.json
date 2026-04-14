@@ -57,7 +57,9 @@
     {
       "id": 6,
       "name": "glass",
+      "isSolid": true,
       "isTransparent": true,
+      "opacity": 0,
       "timeToBreak": 200,
       "textures": {
         "all": "glass"

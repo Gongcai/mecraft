@@ -62,7 +62,7 @@ void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
                 const int wz = fromBaseZ + z;
 
                 const uint8_t sky = from.getSunlight(lx, y, z);
-                if (sky > 1 && !BlockRegistry::get(from.getBlock(lx, y, z)).isSolid) {
+                if (sky > 1 && BlockRegistry::get(from.getBlock(lx, y, z)).opacity < 15) {
                     // Check if the adjacent voxel in 'into' would benefit
                     const int targetWx = (direction == 0) ? (wx + 1) : (wx - 1);
                     const uint8_t propagated = (sky > 1) ? static_cast<uint8_t>(sky - 1) : 0;
@@ -72,7 +72,7 @@ void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
                 }
 
                 const uint8_t bl = from.getBlockLight(lx, y, z);
-                if (bl > 1 && !BlockRegistry::get(from.getBlock(lx, y, z)).isSolid) {
+                if (bl > 1 && BlockRegistry::get(from.getBlock(lx, y, z)).opacity < 15) {
                     const int targetWx = (direction == 0) ? (wx + 1) : (wx - 1);
                     const uint8_t propagated = static_cast<uint8_t>(bl - 1);
                     if (propagated > getBlockLightAt(targetWx, y, wz)) {
@@ -88,7 +88,7 @@ void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
                 const int wz = fromBaseZ + lz;
 
                 const uint8_t sky = from.getSunlight(x, y, lz);
-                if (sky > 1 && !BlockRegistry::get(from.getBlock(x, y, lz)).isSolid) {
+                if (sky > 1 && BlockRegistry::get(from.getBlock(x, y, lz)).opacity < 15) {
                     const int targetWz = (direction == 2) ? (wz + 1) : (wz - 1);
                     const uint8_t propagated = (sky > 1) ? static_cast<uint8_t>(sky - 1) : 0;
                     if (propagated > 0 && propagated > getSkyLight(wx, y, targetWz)) {
@@ -97,7 +97,7 @@ void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
                 }
 
                 const uint8_t bl = from.getBlockLight(x, y, lz);
-                if (bl > 1 && !BlockRegistry::get(from.getBlock(x, y, lz)).isSolid) {
+                if (bl > 1 && BlockRegistry::get(from.getBlock(x, y, lz)).opacity < 15) {
                     const int targetWz = (direction == 2) ? (wz + 1) : (wz - 1);
                     const uint8_t propagated = static_cast<uint8_t>(bl - 1);
                     if (propagated > getBlockLightAt(wx, y, targetWz)) {
@@ -126,18 +126,21 @@ void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
 
 void LightEngine::initSkyLight(Chunk& chunk) {
     // Column scan: from top to bottom
-    // Sky light = 15 for AIR/transparent blocks above the highest opaque block
-    // Sky light = 0 for opaque blocks (they block light, not carry it)
+    // Track sky light level and attenuate through semi-transparent blocks
     for (int z = 0; z < Chunk::SIZE_Z; ++z) {
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            bool openToSky = true;
+            uint8_t skyLevel = 15;
             for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-                const bool solid = BlockRegistry::get(chunk.getBlock(x, y, z)).isSolid;
-                if (solid) {
+                const uint8_t blockOpacity = BlockRegistry::get(chunk.getBlock(x, y, z)).opacity;
+                if (blockOpacity >= 15) {
+                    // Fully opaque block: kills all light
                     chunk.setSunlight(x, y, z, 0);
-                    openToSky = false;
-                } else if (openToSky) {
-                    chunk.setSunlight(x, y, z, 15);
+                    skyLevel = 0;
+                } else if (skyLevel > 0) {
+                    // Attenuate by block opacity (downward propagation)
+                    skyLevel = (skyLevel > blockOpacity)
+                        ? static_cast<uint8_t>(skyLevel - blockOpacity) : 0;
+                    chunk.setSunlight(x, y, z, skyLevel);
                 } else {
                     chunk.setSunlight(x, y, z, 0);
                 }
@@ -157,7 +160,7 @@ void LightEngine::propagateSkyLight(Chunk& chunk) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
                 const uint8_t sky = chunk.getSunlight(x, y, z);
                 if (sky == 0) continue;
-                if (BlockRegistry::get(chunk.getBlock(x, y, z)).isSolid) continue;
+                if (BlockRegistry::get(chunk.getBlock(x, y, z)).opacity >= 15) continue;
 
                 const int wx = chunk.m_chunkX * Chunk::SIZE_X + x;
                 const int wz = chunk.m_chunkZ * Chunk::SIZE_Z + z;
@@ -413,8 +416,8 @@ void LightEngine::onBlockChanged(int wx, int wy, int wz,
     const BlockDef& oldDef = BlockRegistry::get(oldBlockId);
     const BlockDef& newDef = BlockRegistry::get(newBlockId);
 
-    const bool wasSolid = oldDef.isSolid;
-    const bool isSolid  = newDef.isSolid;
+    const bool wasLightBlocking = (oldDef.opacity >= 15);
+    const bool isLightBlocking  = (newDef.opacity >= 15);
     const bool wasLight = oldDef.isLightSource;
     const bool isLight  = newDef.isLightSource;
 
@@ -430,7 +433,7 @@ void LightEngine::onBlockChanged(int wx, int wy, int wz,
 
     // === Sky light ===
 
-    if (wasSolid && !isSolid) {
+    if (wasLightBlocking && !isLightBlocking) {
         // Broke an opaque block — sky light and block light may enter
 
         // --- Sky light ---
@@ -454,6 +457,19 @@ void LightEngine::onBlockChanged(int wx, int wy, int wz,
             skySeeds.push_back({wx, wy, wz, aboveSky});
         }
 
+        // Pull sky light from all 6 neighbors (critical for lateral propagation into caves)
+        for (int d = 0; d < 6; ++d) {
+            const int nx = wx + DX[d];
+            const int ny = wy + DY[d];
+            const int nz = wz + DZ[d];
+            if (ny >= 0 && ny < Chunk::SIZE_Y) {
+                const uint8_t ns = getSkyLight(nx, ny, nz);
+                if (ns > 0) {
+                    skySeeds.push_back({nx, ny, nz, ns});
+                }
+            }
+        }
+
         spreadSkyLight(skySeeds);
 
         // --- Block light: re-propagate from neighbors ---
@@ -469,7 +485,7 @@ void LightEngine::onBlockChanged(int wx, int wy, int wz,
             }
         }
         spreadBlockLight(blockSeeds);
-    } else if (!wasSolid && isSolid) {
+    } else if (!wasLightBlocking && isLightBlocking) {
         // Placed an opaque block — both sky light and block light blocked
         removeSkyLight(wx, wy, wz);
 
@@ -611,7 +627,7 @@ bool LightEngine::isOpaque(int wx, int wy, int wz) const {
     if (wy < 0 || wy >= Chunk::SIZE_Y) return true;
 
     const BlockID id = m_world.getBlock(wx, wy, wz);
-    return BlockRegistry::get(id).isSolid;
+    return BlockRegistry::get(id).opacity >= 15;
 }
 
 uint8_t LightEngine::getOpacity(int wx, int wy, int wz) const {

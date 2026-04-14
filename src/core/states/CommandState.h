@@ -16,7 +16,7 @@
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../audio/AudioEngine.h"
-#include "../../ui/Pickable.h"
+#include <cstdlib>
 namespace physics {
 class PhysicsSystem;
 }
@@ -104,8 +104,6 @@ public:
             return;
         }
         m_uiRenderer.renderCommandInputBox(m_inputBox.getText());
-        Pickable::SlotInfo info{40,40,40,3};
-        m_uiRenderer.renderPickable(&info,1,m_context.getMouseX(),m_context.getMouseY());
     }
 
 private:
@@ -131,6 +129,31 @@ private:
             } else {
                 m_uiRenderer.appendWarningLine("Usage: /gamemode <creative|survival>");
                 return false; // Command recognized but invalid argument, so we consider it handled.
+            }
+        }
+
+        if (primary == "time") {
+            std::string secondary;
+            iss >> secondary;
+            if (secondary == "set") {
+                std::string valueStr;
+                iss >> valueStr;
+                if (valueStr.empty()) {
+                    m_uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                    return false;
+                }
+                char* endPtr = nullptr;
+                const float value = std::strtof(valueStr.c_str(), &endPtr);
+                if (endPtr == valueStr.c_str() || value < 0.0f || value > 1200.0f) {
+                    m_uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                    return false;
+                }
+                m_world.getDayNightSystem().setTimeOfDay(value);
+                m_uiRenderer.appendCommandLine("Time set to " + std::to_string(static_cast<int>(value)));
+                return false;
+            } else {
+                m_uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                return false;
             }
         }
 

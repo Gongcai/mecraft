@@ -168,7 +168,7 @@ void Chunk::recalcHeightMap(const int x, const int z) {
     }
     int height = 0;
     for (int y = SIZE_Y - 1; y >= 0; --y) {
-        if (BlockRegistry::get(m_blocks[toIndex(x, y, z)]).isSolid) {
+        if (BlockRegistry::get(m_blocks[toIndex(x, y, z)]).opacity >= 15) {
             height = y;
             break;
         }

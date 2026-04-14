@@ -51,9 +51,9 @@ int main() {
     }
 
     InputManager input;
-    input.beginUIDragItem(static_cast<int>(picked), 11);
+    input.beginUIDragItem(static_cast<int>(picked), 1, 11);
     const auto& dragged = input.getUIDragItem();
-    if (!dragged.active || dragged.itemId != static_cast<int>(picked) || dragged.sourceSlot != 11) {
+    if (!dragged.active || dragged.itemId != static_cast<int>(picked) || dragged.count != 1 || dragged.sourceSlot != 11) {
         return fail("beginUIDragItem should publish active drag payload");
     }
 

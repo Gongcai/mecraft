@@ -38,6 +38,7 @@ struct InputSnapshot {
     struct UIDragPayload {
         bool active = false;
         int itemId = 0;
+        int count = 0;
         int sourceSlot = -1;
         glm::vec2 pointerPosition{0.0f, 0.0f};
     };
@@ -67,7 +68,7 @@ public:
     void resetMouseDelta();              // 重置鼠标位移
 
     // Shared UI drag payload channel for inventory/other UI systems.
-    void beginUIDragItem(int itemId, int sourceSlot);
+    void beginUIDragItem(int itemId, int count, int sourceSlot);
     void clearUIDragItem();
     [[nodiscard]] const InputSnapshot::UIDragPayload& getUIDragItem() const;
 private:
