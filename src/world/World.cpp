@@ -35,7 +35,9 @@ void World::update(const glm::vec3& playerPos) {
         }
     }
     for (int64_t key : toUnload) {
-        m_chunks.erase(key);
+        const int cx = static_cast<int>(key >> 32);
+        const int cz = static_cast<int>(key & 0xFFFFFFFF);
+        unloadChunk(cx, cz);
     }
 
     // Load up to 4 chunks per frame to avoid severe freezing but keep load speed reasonable

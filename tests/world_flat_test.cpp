@@ -10,6 +10,27 @@ int fail(const char* message) {
     std::cerr << "[world_flat_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
 }
+
+bool hasDanglingNeighbor(const World& world) {
+    const auto& chunks = world.getActiveChunks();
+    for (const auto& entry : chunks) {
+        const Chunk* chunk = entry.second.get();
+        for (int neighborIndex = 0; neighborIndex < 4; ++neighborIndex) {
+            const Chunk* neighbor = chunk->neighbors[neighborIndex];
+            if (neighbor == nullptr) {
+                continue;
+            }
+
+            const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
+            const auto neighborIt = chunks.find(neighborKey);
+            if (neighborIt == chunks.end() || neighborIt->second.get() != neighbor) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
 }
 
 int main() {
@@ -67,6 +88,10 @@ int main() {
         return fail("height discontinuity too large across chunk border");
     }
 
+    if (hasDanglingNeighbor(world)) {
+        return fail("freshly loaded chunks should not contain dangling neighbor pointers");
+    }
+
 
     World world2;
     world2.init(20260324);
@@ -81,6 +106,23 @@ int main() {
     world.setBlock(0, surfaceY + 1, 0, BlockType::WOOD);
     if (world.getBlock(0, surfaceY + 1, 0) != BlockType::WOOD) {
         return fail("setBlock/getBlock mismatch");
+    }
+
+    world.update(glm::vec3(static_cast<float>(Chunk::SIZE_X), 0.0f, 0.0f));
+    for (int i = 0; i < 8; ++i) {
+        world.update(glm::vec3(static_cast<float>(Chunk::SIZE_X), 0.0f, 0.0f));
+    }
+
+    if (hasDanglingNeighbor(world)) {
+        return fail("unloading chunks should clear neighbor back-pointers on survivors");
+    }
+
+    const auto& shiftedChunks = world.getActiveChunks();
+    for (int z = -1; z <= 1; ++z) {
+        const auto it = shiftedChunks.find(World::chunkKey(0, z));
+        if (it != shiftedChunks.end() && it->second->neighbors[1] != nullptr) {
+            return fail("chunks on the new west edge should not retain an unloaded -X neighbor");
+        }
     }
 
     std::cout << "[world_flat_test] PASS\n";
