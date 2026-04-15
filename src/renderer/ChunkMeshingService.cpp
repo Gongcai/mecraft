@@ -77,7 +77,9 @@ void ChunkMeshingService::workerLoop() {
         ChunkMeshingResult result;
         result.chunkKey = job.chunkKey;
         result.revision = job.revision;
-        result.meshData = ChunkMesher::buildMeshData(job.snapshot);
+        if (job.snapshot) {
+            result.meshData = ChunkMesher::buildMeshData(*job.snapshot);
+        }
 
         {
             std::lock_guard<std::mutex> lock(m_mutex);

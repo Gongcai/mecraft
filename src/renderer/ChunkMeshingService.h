@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -12,7 +13,7 @@
 struct ChunkMeshingJob {
     int64_t chunkKey = 0;
     uint64_t revision = 0;
-    ChunkMeshingSnapshot snapshot{};
+    ChunkMeshingSnapshotPtr snapshot;
 };
 
 struct ChunkMeshingResult {

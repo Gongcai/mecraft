@@ -10,8 +10,8 @@ int fail(const char* message) {
 }
 
 ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
-    const ChunkMeshingSnapshot snapshot = ChunkMesher::captureSnapshot(chunk);
-    return ChunkMesher::buildMeshData(snapshot);
+    const ChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSnapshot(chunk);
+    return ChunkMesher::buildMeshData(*snapshot);
 }
 }
 

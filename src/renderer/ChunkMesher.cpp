@@ -747,20 +747,20 @@ void buildTransparentGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMesh
 }
 }
 
-ChunkMeshingSnapshot ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
-    ChunkMeshingSnapshot snapshot;
+ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
+    auto snapshot = std::make_shared<ChunkMeshingSnapshot>();
 
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
                 const std::size_t index = toIndex(x, y, z);
-                snapshot.blocks[index] = chunk.getBlock(x, y, z);
-                snapshot.lightMap[index] = chunk.m_lightMap[index];
+                snapshot->blocks[index] = chunk.getBlock(x, y, z);
+                snapshot->lightMap[index] = chunk.m_lightMap[index];
             }
         }
     }
 
-    captureBorders(chunk, snapshot, world);
+    captureBorders(chunk, *snapshot, world);
     return snapshot;
 }
 
@@ -836,8 +836,8 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
 }
 
 void ChunkMesher::generateMesh(Chunk& chunk) {
-    const ChunkMeshingSnapshot snapshot = captureSnapshot(chunk);
-    ChunkMeshData meshData = buildMeshData(snapshot);
+    const ChunkMeshingSnapshotPtr snapshot = captureSnapshot(chunk);
+    ChunkMeshData meshData = buildMeshData(*snapshot);
     ChunkMesh mesh;
     mesh.upload(meshData.opaqueVertices);
     mesh.uploadCutout(meshData.cutoutVertices);

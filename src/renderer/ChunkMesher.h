@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -37,6 +38,8 @@ struct ChunkMeshingSnapshot {
         , negZBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X, 0) {}
 };
 
+using ChunkMeshingSnapshotPtr = std::shared_ptr<ChunkMeshingSnapshot>;
+
 struct ChunkMeshData {
     std::vector<BlockVertex> opaqueVertices;
     std::vector<BlockVertex> cutoutVertices;
@@ -54,7 +57,7 @@ struct ChunkMeshData {
 
 class ChunkMesher {
 public:
-    static ChunkMeshingSnapshot captureSnapshot(const Chunk& chunk, const World* world = nullptr);
+    static ChunkMeshingSnapshotPtr captureSnapshot(const Chunk& chunk, const World* world = nullptr);
     static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot);
     static void generateMesh(Chunk& chunk);
 
