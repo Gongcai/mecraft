@@ -4,7 +4,6 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <queue>
 
 #include "ChunkMesher.h"
@@ -42,7 +41,7 @@ public:
 
 private:
     mutable std::mutex m_stateMutex;
-    std::mutex m_completedMutex;
+    SpinLock m_completedLock;   // hot-path: workers push, main thread pops
     ThreadPool* m_pool = nullptr;
     std::queue<ChunkMeshingResult> m_completed;
     std::atomic<int> m_inFlight{0};

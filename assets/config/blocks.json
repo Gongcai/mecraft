@@ -2,6 +2,7 @@
   "blocks": [
     {
       "id": "minecraft:air",
+      "drop": "minecraft:air",
       "isSolid": false,
       "isTransparent": true,
       "timeToBreak": 0,
@@ -11,6 +12,7 @@
     },
     {
       "id": "minecraft:dirt",
+      "drop": "minecraft:dirt",
       "timeToBreak": 1300,
       "textures": {
         "all": "dirt"
@@ -18,6 +20,7 @@
     },
     {
       "id": "minecraft:grass_block",
+      "drop": "minecraft:grass_block",
       "timeToBreak": 1300,
       "textures": {
         "top": "grass_top",
@@ -27,6 +30,7 @@
     },
     {
       "id": "minecraft:stone",
+      "drop": "minecraft:stone",
       "timeToBreak": 1500,
       "textures": {
         "all": "stone"
@@ -34,6 +38,7 @@
     },
     {
       "id": "minecraft:sand",
+      "drop": "minecraft:sand",
       "timeToBreak": 250,
       "textures": {
         "all": "sand"
@@ -41,6 +46,7 @@
     },
     {
       "id": "minecraft:oak_log",
+      "drop": "minecraft:oak_log",
       "timeToBreak": 1000,
       "textures": {
         "top": "wood_top",
@@ -50,6 +56,7 @@
     },
     {
       "id": "minecraft:glass",
+      "drop": "minecraft:air",
       "isSolid": true,
       "isTransparent": true,
       "opacity": 0,
@@ -68,6 +75,7 @@
     },
     {
       "id": "minecraft:diamond_ore",
+      "drop": "minecraft:diamond_ore",
       "timeToBreak": 1500,
       "textures": {
         "all": "diamond_ore"
@@ -75,6 +83,7 @@
     },
     {
       "id": "minecraft:gold_ore",
+      "drop": "minecraft:gold_ore",
       "timeToBreak": 1500,
       "textures": {
         "all": "gold_ore"
@@ -82,6 +91,7 @@
     },
     {
       "id": "minecraft:iron_ore",
+      "drop": "minecraft:iron_ore",
       "timeToBreak": 1500,
       "textures": {
         "all": "iron_ore"
@@ -89,6 +99,7 @@
     },
     {
       "id": "minecraft:water",
+      "drop": "minecraft:air",
       "isSolid": false,
       "isSelectable": false,
       "isTransparent": true,
@@ -99,6 +110,7 @@
     },
     {
       "id": "minecraft:bedrock",
+      "drop": "minecraft:air",
       "isSelectable": false,
       "timeToBreak": 65535,
       "textures": {
@@ -107,6 +119,7 @@
     },
     {
       "id": "minecraft:tall_grass",
+      "drop": "minecraft:air",
       "isSolid": false,
       "isTransparent": true,
       "timeToBreak": 10,
@@ -118,6 +131,7 @@
     },
     {
       "id": "minecraft:rose",
+      "drop": "minecraft:rose",
       "isSolid": false,
       "isTransparent": true,
       "renderShape": "cross",
@@ -129,6 +143,7 @@
     },
     {
       "id": "minecraft:oak_planks",
+      "drop": "minecraft:oak_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "oak_planks"
@@ -136,6 +151,7 @@
     },
     {
       "id": "minecraft:spruce_planks",
+      "drop": "minecraft:spruce_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "spruce_planks"
@@ -143,6 +159,7 @@
     },
     {
       "id": "minecraft:birch_planks",
+      "drop": "minecraft:birch_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "birch_planks"
@@ -150,6 +167,7 @@
     },
     {
       "id": "minecraft:jungle_planks",
+      "drop": "minecraft:jungle_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "jungle_planks"
@@ -157,6 +175,7 @@
     },
     {
       "id": "minecraft:acacia_planks",
+      "drop": "minecraft:acacia_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "acacia_planks"
@@ -164,6 +183,7 @@
     },
     {
       "id": "minecraft:dark_oak_planks",
+      "drop": "minecraft:dark_oak_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "dark_oak_planks"
@@ -171,6 +191,7 @@
     },
     {
       "id": "minecraft:mangrove_planks",
+      "drop": "minecraft:mangrove_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "mangrove_planks"
@@ -178,6 +199,7 @@
     },
     {
       "id": "minecraft:cherry_planks",
+      "drop": "minecraft:cherry_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "cherry_planks"
@@ -185,6 +207,7 @@
     },
     {
       "id": "minecraft:pale_oak_planks",
+      "drop": "minecraft:pale_oak_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "pale_oak_planks"
@@ -192,6 +215,7 @@
     },
     {
       "id": "minecraft:bamboo_planks",
+      "drop": "minecraft:bamboo_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "bamboo_planks"
@@ -199,6 +223,7 @@
     },
     {
       "id": "minecraft:crimson_planks",
+      "drop": "minecraft:crimson_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "crimson_planks"
@@ -206,6 +231,7 @@
     },
     {
       "id": "minecraft:warped_planks",
+      "drop": "minecraft:warped_planks",
       "timeToBreak": 1000,
       "textures": {
         "all": "warped_planks"
@@ -213,6 +239,7 @@
     },
     {
       "id": "minecraft:birch_log",
+      "drop": "minecraft:birch_log",
       "timeToBreak": 1000,
       "textures": {
         "top": "birch_log_top",
@@ -222,6 +249,7 @@
     },
     {
       "id": "minecraft:torch",
+      "drop": "minecraft:torch",
       "isSolid": false,
       "isTransparent": true,
       "isLightSource": true,
@@ -234,6 +262,7 @@
     },
     {
       "id": "minecraft:brown_mushroom",
+      "drop": "minecraft:brown_mushroom",
       "isSolid": false,
       "isTransparent": true,
       "renderShape": "cross",

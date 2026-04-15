@@ -24,7 +24,7 @@ void ChunkMeshingService::shutdown() {
         m_epoch.fetch_add(1, std::memory_order_release);
     }
 
-    std::lock_guard<std::mutex> completedLock(m_completedMutex);
+    std::lock_guard<SpinLock> completedLock(m_completedLock);
     std::queue<ChunkMeshingResult> emptyResults;
     std::swap(m_completed, emptyResults);
 }
@@ -60,7 +60,7 @@ void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
         const bool shouldPublish = m_running.load(std::memory_order_acquire) &&
             m_epoch.load(std::memory_order_acquire) == epoch;
         if (shouldPublish) {
-            std::lock_guard<std::mutex> lock(m_completedMutex);
+            std::lock_guard<SpinLock> lock(m_completedLock);
             if (m_running.load(std::memory_order_acquire) &&
                 m_epoch.load(std::memory_order_acquire) == epoch) {
                 m_completed.push(std::move(result));
@@ -72,7 +72,7 @@ void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
 }
 
 bool ChunkMeshingService::tryPopCompleted(ChunkMeshingResult& out) {
-    std::lock_guard<std::mutex> lock(m_completedMutex);
+    std::lock_guard<SpinLock> lock(m_completedLock);
     if (m_completed.empty()) {
         return false;
     }

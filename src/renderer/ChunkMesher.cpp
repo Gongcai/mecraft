@@ -39,6 +39,7 @@ struct FaceMergeKey {
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
     std::array<uint16_t, 4> block{};
+    uint64_t hash = 0;  // pre-computed hash for fast comparison in greedy merge
 };
 
 struct FaceCell {
@@ -333,6 +334,28 @@ uint16_t quantizeNormalized(const float value) {
     return static_cast<uint16_t>(std::lround(clamped * kNormalizedQuantizationScale));
 }
 
+uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
+    // FNV-1a style hash over all fields
+    uint64_t h = 14695981039346656037ULL;
+    auto mix = [&](uint64_t v) {
+        h ^= v;
+        h *= 1099511628211ULL;
+    };
+    mix(static_cast<uint64_t>(key.blockId));
+    mix(static_cast<uint64_t>(key.tileIndex));
+    mix(static_cast<uint64_t>(key.flipDiagonal));
+    for (size_t i = 0; i < 4; ++i) {
+        mix(static_cast<uint64_t>(key.ao[i]));
+    }
+    for (size_t i = 0; i < 4; ++i) {
+        mix(static_cast<uint64_t>(key.sun[i]));
+    }
+    for (size_t i = 0; i < 4; ++i) {
+        mix(static_cast<uint64_t>(key.block[i]));
+    }
+    return h;
+}
+
 FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& renderData) {
     FaceMergeKey key;
     key.blockId = blockId;
@@ -343,11 +366,13 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
         key.sun[i] = quantizeNormalized(renderData.vertices[i].sunNormalized);
         key.block[i] = quantizeNormalized(renderData.vertices[i].blockNormalized);
     }
+    key.hash = computeMergeKeyHash(key);
     return key;
 }
 
 bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
-    return lhs.blockId == rhs.blockId &&
+    return lhs.hash == rhs.hash &&
+           lhs.blockId == rhs.blockId &&
            lhs.tileIndex == rhs.tileIndex &&
            lhs.flipDiagonal == rhs.flipDiagonal &&
            lhs.ao == rhs.ao &&
@@ -359,8 +384,8 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
                           const int nx,
                           const int ny,
                           const int nz,
-                          const BlockID currentId) {
-    const BlockDef& currentDef = BlockRegistry::get(currentId);
+                          const BlockID currentId,
+                          const BlockDef& currentDef) {
     const BlockID neighborId = getNeighborAwareBlock(snapshot, nx, ny, nz);
     if (currentDef.renderShape == BlockRenderShape::Cube &&
         currentDef.isTransparent &&
@@ -571,7 +596,7 @@ bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
     }
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId)) {
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
         return false;
     }
 
@@ -601,7 +626,7 @@ bool populateTransparentFaceCell(const ChunkMeshingSnapshot& snapshot,
     }
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId)) {
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
         return false;
     }
 
@@ -631,9 +656,10 @@ void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
         const size_t planeSize = static_cast<size_t>(width) * static_cast<size_t>(height);
 
         for (int slice = 0; slice < slices; ++slice) {
-            std::fill_n(consumed.begin(), planeSize, false);
+            // Only reset valid flags and consumed — avoids zeroing ~480KB of FaceCell data per slice
             for (size_t i = 0; i < planeSize; ++i) {
-                plane[i] = FaceCell{};
+                plane[i].valid = false;
+                consumed[i] = false;
             }
 
             for (int v = 0; v < height; ++v) {
@@ -656,10 +682,13 @@ void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
                         continue;
                     }
 
+                    const uint64_t startHash = plane[startIndex].key.hash;
+
                     int runWidth = 1;
                     while (u + runWidth < width) {
                         const size_t nextIndex = static_cast<size_t>(u + runWidth) + static_cast<size_t>(v) * static_cast<size_t>(width);
                         if (consumed[nextIndex] || !plane[nextIndex].valid ||
+                            plane[nextIndex].key.hash != startHash ||
                             !sameMergeKey(plane[startIndex].key, plane[nextIndex].key)) {
                             break;
                         }
@@ -673,6 +702,7 @@ void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
                             const size_t candidateIndex = static_cast<size_t>(u + rowX) +
                                                           static_cast<size_t>(v + runHeight) * static_cast<size_t>(width);
                             if (consumed[candidateIndex] || !plane[candidateIndex].valid ||
+                                plane[candidateIndex].key.hash != startHash ||
                                 !sameMergeKey(plane[startIndex].key, plane[candidateIndex].key)) {
                                 canGrow = false;
                                 break;
@@ -823,7 +853,7 @@ ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
                     const int ny = y + normal.y;
                     const int nz = z + normal.z;
 
-                    if (!shouldRenderFace(snapshot, nx, ny, nz, blockId)) {
+                    if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, blockId, def)) {
                         continue;
                     }
 
@@ -867,7 +897,8 @@ bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
                                    const int ny,
                                    const int nz,
                                    const BlockID currentId) {
-    return shouldRenderFaceImpl(snapshot, nx, ny, nz, currentId);
+    const BlockDef& currentDef = BlockRegistry::get(currentId);
+    return shouldRenderFaceImpl(snapshot, nx, ny, nz, currentId, currentDef);
 }
 
 void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
