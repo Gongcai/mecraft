@@ -1,14 +1,14 @@
 #ifndef MECRAFT_CHUNKMESHINGSERVICE_H
 #define MECRAFT_CHUNKMESHINGSERVICE_H
 
+#include <atomic>
 #include <cstdint>
-#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <queue>
-#include <thread>
 
 #include "ChunkMesher.h"
+#include "../thread/ThreadPool.h"
 
 struct ChunkMeshingJob {
     int64_t chunkKey = 0;
@@ -24,24 +24,21 @@ struct ChunkMeshingResult {
 
 class ChunkMeshingService {
 public:
-    void start();
+    void start(ThreadPool* pool);
     void shutdown();
 
-    void submit(ChunkMeshingJob job);
+    void submit(ChunkMeshingJob job, int priority);
     bool tryPopCompleted(ChunkMeshingResult& out);
+    [[nodiscard]] int inFlightCount() const;
 
 private:
-    void workerLoop();
-
-    std::thread m_worker;
-    std::mutex m_mutex;
-    std::condition_variable m_cv;
-
-    std::queue<ChunkMeshingJob> m_pending;
+    mutable std::mutex m_stateMutex;
+    std::mutex m_completedMutex;
+    ThreadPool* m_pool = nullptr;
     std::queue<ChunkMeshingResult> m_completed;
-
-    bool m_running = false;
-    bool m_stopping = false;
+    std::atomic<int> m_inFlight{0};
+    std::atomic<uint64_t> m_epoch{0};
+    std::atomic<bool> m_running{false};
 };
 
 #endif // MECRAFT_CHUNKMESHINGSERVICE_H

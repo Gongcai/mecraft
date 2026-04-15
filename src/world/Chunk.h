@@ -53,12 +53,14 @@ public:
     static constexpr int SIZE_X = 16;
     static constexpr int SIZE_Y = 256;
     static constexpr int SIZE_Z = 16;
+    static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
 
     Chunk(int chunkX, int chunkZ);
     ~Chunk();
 
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
+    void copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const;
 
     // Compact palette by removing unused entries and re-encoding block data
     void optimizePalette();
@@ -70,6 +72,7 @@ public:
     void markDirty();
     [[nodiscard]] uint64_t getMeshRevision() const;
     void setMesh(const ChunkMesh& mesh);
+    void markMeshClean();
     [[nodiscard]] const ChunkMesh& getMesh() const;
     ChunkMesh& getMesh();
 
@@ -90,7 +93,6 @@ public:
     [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
     // Public for ChunkMesher snapshot capture
-    static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
     std::array<uint8_t, BLOCK_COUNT> m_lightMap{}; // high nibble = sun, low nibble = block
 
 private:

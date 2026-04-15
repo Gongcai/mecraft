@@ -55,6 +55,7 @@ set(CORE_SOURCES
         src/renderer/stb_image.cpp
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMeshingService.cpp
+        src/thread/ThreadPool.cpp
         src/resource/ResourceMgr.cpp
         src/world/Block.cpp
         src/item/Item.cpp
@@ -158,3 +159,5 @@ add_mecraft_test(ui_renderer_scheduler_test tests/ui_renderer_scheduler_test.cpp
 add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
 add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
 add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
+add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)
+add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp)

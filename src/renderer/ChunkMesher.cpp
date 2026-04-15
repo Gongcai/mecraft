@@ -749,16 +749,8 @@ void buildTransparentGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMesh
 
 ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
     auto snapshot = std::make_shared<ChunkMeshingSnapshot>();
-
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const std::size_t index = toIndex(x, y, z);
-                snapshot->blocks[index] = chunk.getBlock(x, y, z);
-                snapshot->lightMap[index] = chunk.m_lightMap[index];
-            }
-        }
-    }
+    chunk.copyBlocksTo(snapshot->blocks);
+    snapshot->lightMap = chunk.m_lightMap;
 
     captureBorders(chunk, *snapshot, world);
     return snapshot;

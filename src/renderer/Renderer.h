@@ -6,6 +6,7 @@
 #define MECRAFT_RENDERER_H
 #include "../core/Camera.h"
 #include "../resource/ResourceMgr.h"
+#include "../thread/ThreadPool.h"
 #include "../core/Window.h"
 #include "ChunkMeshingService.h"
 #include "Shader.h"
@@ -174,9 +175,15 @@ private:
     GLuint m_breakOverlayCrossVbo = 0;
     GLsizei m_breakOverlayCrossVertexCount = 0;
 
+    ThreadPool m_threadPool;
     ChunkMeshingService m_meshingService;
     std::unordered_set<int64_t> m_meshingInFlight;
     int m_meshingSubmitBudget = 8;
+    bool m_meshingSubmitBudgetOverridden = false;
+    int m_meshingMaxInFlight = 16;
+    double m_meshingSubmitTimeBudgetMs = 0.75;
+    int m_meshingDrainBudget = 2;
+    double m_meshingDrainTimeBudgetMs = 1.0;
     int m_regionChunkSize = 4;
 #ifndef NDEBUG
     bool m_chunkCullingDebugEnabled = false;

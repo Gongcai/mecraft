@@ -100,6 +100,13 @@ void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
     ++m_meshRevision;
 }
 
+void Chunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
+    for (size_t index = 0; index < BLOCK_COUNT; ++index) {
+        const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(index));
+        out[index] = m_palette.getRuntimeId(paletteIdx);
+    }
+}
+
 void Chunk::optimizePalette() {
     // Step 1: Scan all block data to find which RuntimeIds are actually used
     std::vector<RuntimeId> usedIds;
@@ -161,6 +168,10 @@ uint64_t Chunk::getMeshRevision() const {
 void Chunk::setMesh(const ChunkMesh& mesh) {
     m_mesh.destroy();
     m_mesh = mesh;
+    m_dirty = false;
+}
+
+void Chunk::markMeshClean() {
     m_dirty = false;
 }
 

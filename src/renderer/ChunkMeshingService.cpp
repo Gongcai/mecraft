@@ -2,54 +2,70 @@
 
 #include <utility>
 
-void ChunkMeshingService::start() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_running) {
+void ChunkMeshingService::start(ThreadPool* pool) {
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    if (m_running.load(std::memory_order_relaxed) || pool == nullptr) {
         return;
     }
 
-    m_stopping = false;
-    m_running = true;
-    m_worker = std::thread(&ChunkMeshingService::workerLoop, this);
+    m_pool = pool;
+    m_running.store(true, std::memory_order_relaxed);
+    m_epoch.fetch_add(1, std::memory_order_relaxed);
 }
 
 void ChunkMeshingService::shutdown() {
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_running) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        if (!m_running.load(std::memory_order_relaxed)) {
             return;
         }
-        m_stopping = true;
+        m_running.store(false, std::memory_order_relaxed);
+        m_pool = nullptr;
+        m_epoch.fetch_add(1, std::memory_order_relaxed);
     }
 
-    m_cv.notify_all();
-    if (m_worker.joinable()) {
-        m_worker.join();
-    }
-
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_running = false;
-
-    std::queue<ChunkMeshingJob> emptyJobs;
-    std::swap(m_pending, emptyJobs);
-
+    std::lock_guard<std::mutex> completedLock(m_completedMutex);
     std::queue<ChunkMeshingResult> emptyResults;
     std::swap(m_completed, emptyResults);
 }
 
-void ChunkMeshingService::submit(ChunkMeshingJob job) {
+void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
+    ThreadPool* pool = nullptr;
+    uint64_t epoch = 0;
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_running || m_stopping) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        if (!m_running.load(std::memory_order_relaxed) || m_pool == nullptr) {
             return;
         }
-        m_pending.push(std::move(job));
+        pool = m_pool;
+        epoch = m_epoch.load(std::memory_order_relaxed);
+        m_inFlight.fetch_add(1, std::memory_order_relaxed);
     }
-    m_cv.notify_one();
+
+    pool->submit([this, epoch, job = std::move(job)]() mutable {
+        ChunkMeshingResult result;
+        result.chunkKey = job.chunkKey;
+        result.revision = job.revision;
+        if (job.snapshot) {
+            result.meshData = ChunkMesher::buildMeshData(*job.snapshot);
+        }
+
+        const bool shouldPublish = m_running.load(std::memory_order_relaxed) &&
+            m_epoch.load(std::memory_order_relaxed) == epoch;
+        if (shouldPublish) {
+            std::lock_guard<std::mutex> lock(m_completedMutex);
+            if (m_running.load(std::memory_order_relaxed) &&
+                m_epoch.load(std::memory_order_relaxed) == epoch) {
+                m_completed.push(std::move(result));
+            }
+        }
+
+        m_inFlight.fetch_sub(1, std::memory_order_relaxed);
+    }, priority);
 }
 
 bool ChunkMeshingService::tryPopCompleted(ChunkMeshingResult& out) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_completedMutex);
     if (m_completed.empty()) {
         return false;
     }
@@ -59,34 +75,7 @@ bool ChunkMeshingService::tryPopCompleted(ChunkMeshingResult& out) {
     return true;
 }
 
-void ChunkMeshingService::workerLoop() {
-    while (true) {
-        ChunkMeshingJob job;
-        {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv.wait(lock, [this] { return m_stopping || !m_pending.empty(); });
-
-            if (m_stopping && m_pending.empty()) {
-                return;
-            }
-
-            job = std::move(m_pending.front());
-            m_pending.pop();
-        }
-
-        ChunkMeshingResult result;
-        result.chunkKey = job.chunkKey;
-        result.revision = job.revision;
-        if (job.snapshot) {
-            result.meshData = ChunkMesher::buildMeshData(*job.snapshot);
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            if (!m_stopping) {
-                m_completed.push(std::move(result));
-            }
-        }
-    }
+int ChunkMeshingService::inFlightCount() const {
+    return m_inFlight.load(std::memory_order_relaxed);
 }
 

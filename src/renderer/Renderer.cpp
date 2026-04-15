@@ -11,6 +11,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <chrono>
 #include <utility>
 #include <vector>
 
@@ -25,6 +26,12 @@ int floorDiv(const int value, const int divisor) {
 }
 
 struct TransparentDrawItem {
+    Chunk* chunk = nullptr;
+    float distanceSq = 0.0f;
+};
+
+struct MeshingCandidate {
+    int64_t chunkKey = 0;
     Chunk* chunk = nullptr;
     float distanceSq = 0.0f;
 };
@@ -70,11 +77,27 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
     initOutlineMesh();
     initBreakOverlayMesh();
-    m_meshingService.start();
+    m_threadPool.start();
+    if (!m_meshingSubmitBudgetOverridden) {
+        const int workerCount = std::max(1, m_threadPool.numWorkers());
+        m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);
+        m_meshingMaxInFlight = std::max(4, workerCount * 2);
+#ifdef NDEBUG
+        m_meshingSubmitTimeBudgetMs = 1.0;
+        m_meshingDrainBudget = std::max(2, workerCount);
+        m_meshingDrainTimeBudgetMs = 1.25;
+#else
+        m_meshingSubmitTimeBudgetMs = 0.5;
+        m_meshingDrainBudget = 1;
+        m_meshingDrainTimeBudgetMs = 0.5;
+#endif
+    }
+    m_meshingService.start(&m_threadPool);
 }
 
 void Renderer::shutdown() {
     m_meshingService.shutdown();
+    m_threadPool.shutdown();
     m_meshingInFlight.clear();
     if (m_outlineVbo != 0) {
         glDeleteBuffers(1, &m_outlineVbo);
@@ -114,6 +137,7 @@ void Renderer::render(const World& world, const Camera &camera, const Window &wi
 
 void Renderer::setMeshingSubmitBudget(const int budget) {
     m_meshingSubmitBudget = std::max(1, budget);
+    m_meshingSubmitBudgetOverridden = true;
 }
 
 void Renderer::setRegionChunkSize(const int chunkSize) {
@@ -346,26 +370,65 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
 }
 
 void Renderer::submitMeshingJobs(const World& world) {
-    int submittedThisPass = 0;
+    std::vector<MeshingCandidate> candidates;
     const auto& activeChunks = world.getActiveChunks();
     for (const auto& pair : activeChunks) {
         const int64_t chunkKey = pair.first;
         Chunk& chunk = *pair.second;
 
-        if (chunk.isDirty() &&
-            submittedThisPass < m_meshingSubmitBudget &&
-            m_meshingInFlight.find(chunkKey) == m_meshingInFlight.end()) {
-            ChunkMeshingJob job;
-            job.chunkKey = chunkKey;
-            job.revision = chunk.getMeshRevision();
-            job.snapshot = ChunkMesher::captureSnapshot(chunk, &world);
-            m_meshingService.submit(job);
-            m_meshingInFlight.insert(chunkKey);
-            ++submittedThisPass;
-#ifndef NDEBUG
-            ++m_meshingSubmittedThisFrame;
-#endif
+        if (!chunk.isDirty() || m_meshingInFlight.find(chunkKey) != m_meshingInFlight.end()) {
+            continue;
         }
+
+        const glm::ivec3 offset = chunk.getWorldOffset();
+        const float centerX = static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f;
+        const float centerZ = static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f;
+        const float dx = centerX - m_cameraPos.x;
+        const float dz = centerZ - m_cameraPos.z;
+        candidates.push_back({chunkKey, &chunk, dx * dx + dz * dz});
+    }
+
+    const int availableInFlightSlots = std::max(0, m_meshingMaxInFlight - static_cast<int>(m_meshingInFlight.size()));
+    const int submitCount = std::min({m_meshingSubmitBudget, availableInFlightSlots, static_cast<int>(candidates.size())});
+    if (submitCount <= 0) {
+        return;
+    }
+
+    const auto candidateLess = [](const MeshingCandidate& lhs, const MeshingCandidate& rhs) {
+        if (lhs.distanceSq != rhs.distanceSq) {
+            return lhs.distanceSq < rhs.distanceSq;
+        }
+        return lhs.chunkKey < rhs.chunkKey;
+    };
+    std::partial_sort(candidates.begin(),
+                      candidates.begin() + submitCount,
+                      candidates.end(),
+                      candidateLess);
+
+    const auto submitStartTime = std::chrono::steady_clock::now();
+    for (int index = 0; index < submitCount; ++index) {
+        const double elapsedMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - submitStartTime).count();
+        if (elapsedMs >= m_meshingSubmitTimeBudgetMs) {
+            break;
+        }
+
+        MeshingCandidate& candidate = candidates[static_cast<size_t>(index)];
+        if (candidate.chunk == nullptr) {
+            continue;
+        }
+
+        ChunkMeshingJob job;
+        job.chunkKey = candidate.chunkKey;
+        job.revision = candidate.chunk->getMeshRevision();
+        job.snapshot = ChunkMesher::captureSnapshot(*candidate.chunk, &world);
+
+        const int priority = static_cast<int>(candidate.distanceSq);
+        m_meshingService.submit(std::move(job), priority);
+        m_meshingInFlight.insert(candidate.chunkKey);
+#ifndef NDEBUG
+        ++m_meshingSubmittedThisFrame;
+#endif
     }
 }
 
@@ -848,11 +911,23 @@ void Renderer::recordMeshingHistory() {
 }
 
 void Renderer::drainMeshingResults(const World& world) {
+    const auto drainStartTime = std::chrono::steady_clock::now();
+    int drainedCount = 0;
     ChunkMeshingResult result;
-    while (m_meshingService.tryPopCompleted(result)) {
+    while (drainedCount < m_meshingDrainBudget) {
+        const double elapsedMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - drainStartTime).count();
+        if (elapsedMs >= m_meshingDrainTimeBudgetMs) {
+            break;
+        }
+        if (!m_meshingService.tryPopCompleted(result)) {
+            break;
+        }
+
 #ifndef NDEBUG
         ++m_meshingCompletedThisFrame;
 #endif
+        ++drainedCount;
         m_meshingInFlight.erase(result.chunkKey);
 
         const auto& activeChunks = world.getActiveChunks();
@@ -876,14 +951,14 @@ void Renderer::drainMeshingResults(const World& world) {
         m_lastOpaqueVertexCount = result.meshData.opaqueVertexCount;
 #endif
 
-        ChunkMesh mesh;
+        ChunkMesh& mesh = chunk.getMesh();
         mesh.upload(result.meshData.opaqueVertices);
         mesh.uploadCutout(result.meshData.cutoutVertices);
         mesh.uploadTransparent(result.meshData.transparentVertices);
         mesh.hasBounds = result.meshData.hasBounds;
         mesh.boundsMin = result.meshData.boundsMin;
         mesh.boundsMax = result.meshData.boundsMax;
-        chunk.setMesh(mesh);
+        chunk.markMeshClean();
     }
 }
 
