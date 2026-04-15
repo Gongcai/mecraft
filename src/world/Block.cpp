@@ -3,6 +3,7 @@
 //
 
 #include "Block.h"
+#include "Paths.h"
 
 #include <algorithm>
 #include <fstream>
@@ -18,7 +19,7 @@ std::unordered_map<NamespacedId, BlockID> BlockRegistry::s_idLookup{};
 bool BlockRegistry::s_initialized = false;
 
 namespace {
-constexpr const char* kBlocksConfigPath = "../assets/config/blocks.json";
+constexpr const char* kBlocksConfigPath = BLOCKS_CONFIG_PATH;
 
 void setAllFaces(BlockDef& def, int tex) {
     def.texTop = tex;
@@ -64,7 +65,7 @@ BlockID TORCH = 28;
 BlockID BROWN_MUSHROOM = 29;
 
 void init() {
-    AIR            = BlockRegistry::getId(NamespacedId("minecraft", "air"));
+    /*AIR            = BlockRegistry::getId(NamespacedId("minecraft", "air"));
     DIRT           = BlockRegistry::getId(NamespacedId("minecraft", "dirt"));
     GRASS          = BlockRegistry::getId(NamespacedId("minecraft", "grass_block"));
     STONE          = BlockRegistry::getId(NamespacedId("minecraft", "stone"));
@@ -93,7 +94,7 @@ void init() {
     WARPED_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "warped_planks"));
     BIRCH_LOG      = BlockRegistry::getId(NamespacedId("minecraft", "birch_log"));
     TORCH          = BlockRegistry::getId(NamespacedId("minecraft", "torch"));
-    BROWN_MUSHROOM = BlockRegistry::getId(NamespacedId("minecraft", "brown_mushroom"));
+    BROWN_MUSHROOM = BlockRegistry::getId(NamespacedId("minecraft", "brown_mushroom"));*/
 }
 }
 

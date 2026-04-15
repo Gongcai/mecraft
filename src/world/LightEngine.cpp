@@ -394,8 +394,11 @@ void LightEngine::tick(int budget) {
         }
     }
 
-    if (m_skyRemoveQueue.empty() && m_skySpreadQueue.empty() && 
-        m_blockRemoveQueue.empty() && m_blockSpreadQueue.empty()) {
+    // Flush deferred mesh-dirty marks each tick.
+    // Waiting for all BFS queues to become empty can starve border chunks when
+    // light work spans multiple frames, leaving stale lighting until another
+    // local edit happens to force a remesh.
+    if (!m_dirtyChunks.empty()) {
         const auto& chunks = m_world.getActiveChunks();
         for (int64_t key : m_dirtyChunks) {
             auto it = chunks.find(key);

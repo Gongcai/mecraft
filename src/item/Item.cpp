@@ -1,4 +1,5 @@
 #include "Item.h"
+#include "Paths.h"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +34,7 @@ void init() {
 }
 
 namespace {
-constexpr const char* kItemsConfigPath = "../assets/config/items.json";
+constexpr const char* kItemsConfigPath = ITEMS_CONFIG_PATH;
 
 bool resolveItemToken(const nlohmann::json& value, ItemID& outId) {
     if (!value.is_string()) {

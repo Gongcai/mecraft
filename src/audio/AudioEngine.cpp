@@ -3,6 +3,7 @@
 //
 
 #include "AudioEngine.h"
+#include "Paths.h"
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
@@ -131,7 +132,7 @@ AudioClip* AudioEngine::loadClip(const std::string& name) {
     }
 
     // 尝试加载 WAV 文件
-    fs::path soundPath = fs::path("assets/sounds") / (name + ".wav");
+    fs::path soundPath = fs::path(SOUNDS_DIR) / (name + ".wav");
     if (!fs::exists(soundPath)) {
         std::cerr << "[Audio] Sound file not found: " << soundPath << std::endl;
         return nullptr;
@@ -238,7 +239,7 @@ void AudioEngine::releaseSource(AudioSource* source) {
 }
 
 void AudioEngine::getAllSounds() {
-    fs::path soundsDir = "../assets/sounds";
+    fs::path soundsDir = SOUNDS_DIR;
 
     if (!fs::exists(soundsDir)) {
         std::cerr << "[Audio] Sounds directory not found: " << soundsDir << std::endl;

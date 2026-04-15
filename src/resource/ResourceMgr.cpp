@@ -3,6 +3,7 @@
 //
 
 #include "ResourceMgr.h"
+#include "Paths.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -239,16 +240,16 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
 }
 
 void ResourceMgr::init() {
-    loadShader("chunk", "../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
-    loadShader("chunk_lit", "../assets/shaders/chunk_lit.vs", "../assets/shaders/chunk_lit.fs");
-    loadShader("outline", "../assets/shaders/outline.vs", "../assets/shaders/outline.fs");
-    loadShader("break_overlay", "../assets/shaders/break_overlay.vs", "../assets/shaders/break_overlay.fs");
-    loadShader("crosshair", "../assets/shaders/crosshair.vs", "../assets/shaders/crosshair.fs");
-    loadShader("inventory", "../assets/shaders/inventory.vs", "../assets/shaders/inventory.fs");
-    loadShader("text", "../assets/shaders/text.vs", "../assets/shaders/text.fs");
-    loadShader("particle", "../assets/shaders/particle.vs", "../assets/shaders/particle.fs");
-    loadShader("postprocess", "../assets/shaders/postprocess.vs", "../assets/shaders/postprocess.fs");
-    loadShader("item_model", "../assets/shaders/item_model.vs", "../assets/shaders/item_model.fs");
+    loadShader("chunk", SHADERS_DIR "/chunk.vs", SHADERS_DIR "/chunk.fs");
+    loadShader("chunk_lit", SHADERS_DIR "/chunk_lit.vs", SHADERS_DIR "/chunk_lit.fs");
+    loadShader("outline", SHADERS_DIR "/outline.vs", SHADERS_DIR "/outline.fs");
+    loadShader("break_overlay", SHADERS_DIR "/break_overlay.vs", SHADERS_DIR "/break_overlay.fs");
+    loadShader("crosshair", SHADERS_DIR "/crosshair.vs", SHADERS_DIR "/crosshair.fs");
+    loadShader("inventory", SHADERS_DIR "/inventory.vs", SHADERS_DIR "/inventory.fs");
+    loadShader("text", SHADERS_DIR "/text.vs", SHADERS_DIR "/text.fs");
+    loadShader("particle", SHADERS_DIR "/particle.vs", SHADERS_DIR "/particle.fs");
+    loadShader("postprocess", SHADERS_DIR "/postprocess.vs", SHADERS_DIR "/postprocess.fs");
+    loadShader("item_model", SHADERS_DIR "/item_model.vs", SHADERS_DIR "/item_model.fs");
 }
 
 void ResourceMgr::shutdown() {

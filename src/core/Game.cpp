@@ -2,6 +2,7 @@
 // Created by Caiwe on 2026/3/21.
 //
 #include "Game.h"
+#include "Paths.h"
 #include "states/GameplayState.h"
 #include "../world/Block.h"
 #include "../item/Item.h"
@@ -26,21 +27,21 @@ void Game::init(int width, int height, const char *title) {
         std::cerr << "Error while initializing the window." << std::endl;
     }
     // Load bindings
-    m_actionMap.loadFromFile("../assets/config/keybindings.txt");
+    m_actionMap.loadFromFile(KEYBINDINGS_PATH);
 
 
     // 初始化时间
     Time::init();
     // 初始化资源管理器，加载着色器/贴图
     m_resourceMgr.init();
-    m_resourceMgr.buildTextureAtlas("../assets/textures/blocks", 16);
-    m_resourceMgr.buildTextureArray("../assets/textures/blocks", 16);
-    m_resourceMgr.loadLightmapTextures("../assets/textures/lightmap/lightmap_day.png",
-                                        "../assets/textures/lightmap/lightmap_night.png");
-    m_resourceMgr.buildItemTextureAtlas("../assets/textures/items", 16);
-    m_resourceMgr.loadGuiTexture("widgets", "../assets/textures/gui/widgets.png", true);
-    m_resourceMgr.loadGuiTexture("inventory", "../assets/textures/gui/inventory.png", true);
-    m_resourceMgr.loadGuiTexture("font_ascii", "../assets/textures/font/ascii.png", true);
+    m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
+    m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
+    m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH,
+                                        LIGHTMAP_NIGHT_PATH);
+    m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
+    m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
+    m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
+    m_resourceMgr.loadGuiTexture("font_ascii", FONT_ASCII_PATH, true);
     BlockRegistry::init(&m_resourceMgr);
     ItemRegistry::init();
     m_resourceMgr.buildBlockIconAtlas(64);
@@ -48,7 +49,7 @@ void Game::init(int width, int height, const char *title) {
     BlockRegistry::printAllBlocks();
 #endif
     m_world.init(3123345);
-    m_world.setRenderDistance(4);
+    m_world.setRenderDistance(32);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
@@ -63,7 +64,7 @@ void Game::init(int width, int height, const char *title) {
     // 初始化UI渲染器
     m_uiRenderer.init(m_resourceMgr);
     // 初始化合成系统
-    m_craftingSystem.loadRecipes("../assets/config/recipes.json");
+    m_craftingSystem.loadRecipes(RECIPES_CONFIG_PATH);
     m_uiRenderer.setCraftingSystem(&m_craftingSystem);
     // Push initial Gameplay state
     m_stateMachine.pushState(std::make_unique<GameplayState>(

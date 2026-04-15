@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include "Shader.h"
 #include "../core/Time.h"
+#include "Paths.h"
 
 class ResourceMgr;
 
@@ -30,7 +31,7 @@ private:
     unsigned int VAO = 0;
     unsigned int VBO = 0;
     unsigned int texture = 0;
-    Shader shader = Shader("../assets/shaders/chunk.vs", "../assets/shaders/chunk.fs");
+    Shader shader = Shader(SHADERS_DIR "/chunk.vs", SHADERS_DIR "/chunk.fs");
 
 };
 #endif // NDEBUG

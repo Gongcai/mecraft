@@ -1,4 +1,5 @@
 #include "BgmSystem.h"
+#include "Paths.h"
 
 #include "AudioEngine.h"
 
@@ -60,12 +61,9 @@ void BgmSystem::setVolume(const float volume) {
 void BgmSystem::buildPlaylist() {
     m_playlist.clear();
 
-    const fs::path preferredDir = "assets/bgm";
-    const fs::path fallbackDir = "../assets/bgm";
-    const fs::path bgmDir = fs::exists(preferredDir) ? preferredDir : fallbackDir;
+    const fs::path bgmDir = BGM_DIR;
     if (!fs::exists(bgmDir)) {
-        std::cerr << "[Audio] BGM directory not found: " << preferredDir
-                  << " or " << fallbackDir << std::endl;
+        std::cerr << "[Audio] BGM directory not found: " << bgmDir << std::endl;
         return;
     }
 

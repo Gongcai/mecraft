@@ -26,7 +26,7 @@ public:
                         BlockID oldBlockId, BlockID newBlockId);
 
     // --- Tick-based budget logic ---
-    void tick(int budget = 32768);
+    void tick(int budget = 32768 );
 
     // Mark a chunk (by chunk coords) as needing re-meshing, deferred until BFS completes
     void markNeighborDirty(int chunkX, int chunkZ);

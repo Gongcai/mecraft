@@ -8,6 +8,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "TestCube.h"
+#include "Paths.h"
 #include <cmath>
 #include <stb/stb_image.h>
 #include <glm/gtc/constants.hpp>
@@ -16,7 +17,7 @@
 
 
 TestCube::TestCube() {
-	texture = loadTexture("../assets/textures/blocks/test.png");
+	texture = loadTexture(TEST_TEXTURE_PATH);
     float vertices[] = {
 			// back face		  //norm			  // tex
 			-1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
@@ -80,7 +81,7 @@ TestCube::TestCube() {
 
 TestCube::TestCube(glm::vec3 pos) {
 	this->pos = pos;
-	texture = loadTexture("../assets/textures/blocks/test.png");
+	texture = loadTexture(TEST_TEXTURE_PATH);
     float vertices[] = {
         // Position           // UV      // Norm // Sun  // Block // AO
         -0.5f, -0.5f, -0.5f,  0.0f, 0.0f, 0.0f,  15.0f,  10.0f,    3.0f,

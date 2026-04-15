@@ -50,7 +50,7 @@ void World::update(const glm::vec3& playerPos) {
     }
 
     if (m_lightEngine) {
-        m_lightEngine->tick(32768);
+        m_lightEngine->tick(32768 );
     }
 }
 

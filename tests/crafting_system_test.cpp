@@ -4,6 +4,7 @@
 
 #include "crafting/CraftingSystem.h"
 #include "item/Item.h"
+#include "Paths.h"
 
 // 辅助：构造网格（行优先）
 static std::vector<ItemID> makeGrid(std::initializer_list<std::initializer_list<ItemID>> rows) {
@@ -27,7 +28,7 @@ static void testEmptyGrid() {
 
 static void testLoadAndMatch() {
     CraftingSystem sys;
-    sys.loadRecipes("../assets/config/recipes.json");
+    sys.loadRecipes(RECIPES_CONFIG_PATH);
 
     // 橡木原木(5) -> 橡木木板(15) x4
     {
@@ -108,7 +109,7 @@ static void testNoRecipesLoaded() {
 
 static void testClear() {
     CraftingSystem sys;
-    sys.loadRecipes("../assets/config/recipes.json");
+    sys.loadRecipes(RECIPES_CONFIG_PATH);
     assert(!sys.getRecipes().empty());
     sys.clear();
     assert(sys.getRecipes().empty());
