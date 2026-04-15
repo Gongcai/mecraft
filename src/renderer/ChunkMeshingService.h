@@ -10,10 +10,19 @@
 #include "ChunkMesher.h"
 #include "../thread/ThreadPool.h"
 
+class World;
+
 struct ChunkMeshingJob {
     int64_t chunkKey = 0;
     uint64_t revision = 0;
-    ChunkMeshingSnapshotPtr snapshot;
+    // Chunk reference kept alive for async snapshot capture on worker thread
+    std::shared_ptr<Chunk> chunk;
+    // Neighbor references so captureBorders can safely read border data
+    std::shared_ptr<Chunk> neighborPosX;   // neighbors[0]
+    std::shared_ptr<Chunk> neighborNegX;   // neighbors[1]
+    std::shared_ptr<Chunk> neighborPosZ;   // neighbors[2]
+    std::shared_ptr<Chunk> neighborNegZ;   // neighbors[3]
+    const World* world = nullptr;
 };
 
 struct ChunkMeshingResult {

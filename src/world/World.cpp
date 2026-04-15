@@ -262,7 +262,7 @@ void World::loadChunk(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
     if (m_chunks.find(key) != m_chunks.end()) return;
 
-    auto chunk = std::make_unique<Chunk>(cx, cz);
+    auto chunk = std::make_shared<Chunk>(cx, cz);
 
     m_terrainGen.generateChunk(*chunk);
 

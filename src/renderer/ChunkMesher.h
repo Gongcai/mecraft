@@ -15,27 +15,24 @@ class World;
 
 constexpr std::size_t CHUNK_BLOCK_COUNT = static_cast<std::size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
 
+constexpr std::size_t BORDER_YZ_COUNT = static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z;
+constexpr std::size_t BORDER_YX_COUNT = static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X;
+
 struct ChunkMeshingSnapshot {
     std::array<BlockID, CHUNK_BLOCK_COUNT> blocks{};
     std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{}; // same packing as Chunk::m_lightMap
 
-    // Border block data for cross-chunk AO and face culling
-    std::vector<BlockID> posXBorder;  // SIZE_Y * SIZE_Z entries
-    std::vector<BlockID> negXBorder;
-    std::vector<BlockID> posZBorder;
-    std::vector<BlockID> negZBorder;
+    // Border block data for cross-chunk AO and face culling (fixed arrays, no heap alloc)
+    std::array<BlockID, BORDER_YZ_COUNT> posXBorder{};
+    std::array<BlockID, BORDER_YZ_COUNT> negXBorder{};
+    std::array<BlockID, BORDER_YX_COUNT> posZBorder{};
+    std::array<BlockID, BORDER_YX_COUNT> negZBorder{};
 
     // Border light data for cross-chunk AO and light lookups
-    std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> posXLightBorder{};
-    std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z> negXLightBorder{};
-    std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> posZLightBorder{};
-    std::array<uint8_t, static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X> negZLightBorder{};
-
-    ChunkMeshingSnapshot()
-        : posXBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z, 0)
-        , negXBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z, 0)
-        , posZBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X, 0)
-        , negZBorder(static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X, 0) {}
+    std::array<uint8_t, BORDER_YZ_COUNT> posXLightBorder{};
+    std::array<uint8_t, BORDER_YZ_COUNT> negXLightBorder{};
+    std::array<uint8_t, BORDER_YX_COUNT> posZLightBorder{};
+    std::array<uint8_t, BORDER_YX_COUNT> negZLightBorder{};
 };
 
 using ChunkMeshingSnapshotPtr = std::shared_ptr<ChunkMeshingSnapshot>;
@@ -57,7 +54,20 @@ struct ChunkMeshData {
 
 class ChunkMesher {
 public:
+    /// Capture a snapshot of chunk data for async meshing.
+    /// When called from a worker thread, pass explicit neighbor pointers instead of
+    /// relying on chunk.neighbors[] (which may be mutated by the main thread).
+    static ChunkMeshingSnapshotPtr captureSnapshot(
+        const Chunk& chunk,
+        const Chunk* neighborPosX,
+        const Chunk* neighborNegX,
+        const Chunk* neighborPosZ,
+        const Chunk* neighborNegZ,
+        const World* world = nullptr);
+
+    /// Convenience overload that reads chunk.neighbors[] — main-thread only.
     static ChunkMeshingSnapshotPtr captureSnapshot(const Chunk& chunk, const World* world = nullptr);
+
     static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot);
     static void generateMesh(Chunk& chunk);
 

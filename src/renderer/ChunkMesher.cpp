@@ -395,30 +395,32 @@ BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y
     return world->sampleGeneratedBlock(wx, y, wz);
 }
 
-void captureBorders(const Chunk& chunk, ChunkMeshingSnapshot& snapshot, const World* world) {
+void captureBorders(const Chunk& chunk,
+                    ChunkMeshingSnapshot& snapshot,
+                    const Chunk* neighborPosX,
+                    const Chunk* neighborNegX,
+                    const Chunk* neighborPosZ,
+                    const Chunk* neighborNegZ,
+                    const World* world) {
     const glm::ivec3 offset = chunk.getWorldOffset();
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             const std::size_t index = toBorderYZIndex(y, z);
-            const Chunk* posX = chunk.neighbors[0];
-            const Chunk* negX = chunk.neighbors[1];
-            snapshot.posXBorder[index] = posX ? posX->getBlock(0, y, z)
-                                              : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, y, offset.z + z);
-            snapshot.negXBorder[index] = negX ? negX->getBlock(Chunk::SIZE_X - 1, y, z)
-                                              : sampleMissingNeighborBlock(world, offset.x - 1, y, offset.z + z);
-            snapshot.posXLightBorder[index] = posX ? posX->m_lightMap[posX->toIndex(0, y, z)] : 0;
-            snapshot.negXLightBorder[index] = negX ? negX->m_lightMap[negX->toIndex(Chunk::SIZE_X - 1, y, z)] : 0;
+            snapshot.posXBorder[index] = neighborPosX ? neighborPosX->getBlock(0, y, z)
+                                                      : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, y, offset.z + z);
+            snapshot.negXBorder[index] = neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, y, z)
+                                                      : sampleMissingNeighborBlock(world, offset.x - 1, y, offset.z + z);
+            snapshot.posXLightBorder[index] = neighborPosX ? neighborPosX->m_lightMap[neighborPosX->toIndex(0, y, z)] : 0;
+            snapshot.negXLightBorder[index] = neighborNegX ? neighborNegX->m_lightMap[neighborNegX->toIndex(Chunk::SIZE_X - 1, y, z)] : 0;
         }
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
             const std::size_t index = toBorderYXIndex(y, x);
-            const Chunk* posZ = chunk.neighbors[2];
-            const Chunk* negZ = chunk.neighbors[3];
-            snapshot.posZBorder[index] = posZ ? posZ->getBlock(x, y, 0)
-                                              : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z + Chunk::SIZE_Z);
-            snapshot.negZBorder[index] = negZ ? negZ->getBlock(x, y, Chunk::SIZE_Z - 1)
-                                              : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z - 1);
-            snapshot.posZLightBorder[index] = posZ ? posZ->m_lightMap[posZ->toIndex(x, y, 0)] : 0;
-            snapshot.negZLightBorder[index] = negZ ? negZ->m_lightMap[negZ->toIndex(x, y, Chunk::SIZE_Z - 1)] : 0;
+            snapshot.posZBorder[index] = neighborPosZ ? neighborPosZ->getBlock(x, y, 0)
+                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z + Chunk::SIZE_Z);
+            snapshot.negZBorder[index] = neighborNegZ ? neighborNegZ->getBlock(x, y, Chunk::SIZE_Z - 1)
+                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z - 1);
+            snapshot.posZLightBorder[index] = neighborPosZ ? neighborPosZ->m_lightMap[neighborPosZ->toIndex(x, y, 0)] : 0;
+            snapshot.negZLightBorder[index] = neighborNegZ ? neighborNegZ->m_lightMap[neighborNegZ->toIndex(x, y, Chunk::SIZE_Z - 1)] : 0;
         }
     }
 }
@@ -619,14 +621,19 @@ void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
                           uint32_t& faceCountBeforeGreedy,
                           uint32_t& faceCountAfterGreedy,
                           PopulateCellFn&& populateCell) {
+    // Pre-allocate reusable buffers outside the slice loop to avoid per-slice heap allocation.
+    // The maximum plane size is SIZE_X * SIZE_Y = 16 * 256 = 4096 FaceCells.
+    constexpr size_t kMaxPlaneSize = static_cast<size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y;
+    std::vector<FaceCell> plane(kMaxPlaneSize);
+    std::vector<bool> consumed(kMaxPlaneSize, false);
+
     auto buildPlane = [&](const int face, const int width, const int height, const int slices, auto&& mapper) {
-        std::vector<FaceCell> plane(static_cast<size_t>(width) * static_cast<size_t>(height));
-        std::vector<bool> consumed(static_cast<size_t>(width) * static_cast<size_t>(height), false);
+        const size_t planeSize = static_cast<size_t>(width) * static_cast<size_t>(height);
 
         for (int slice = 0; slice < slices; ++slice) {
-            std::fill(consumed.begin(), consumed.end(), false);
-            for (FaceCell& cell : plane) {
-                cell = FaceCell{};
+            std::fill_n(consumed.begin(), planeSize, false);
+            for (size_t i = 0; i < planeSize; ++i) {
+                plane[i] = FaceCell{};
             }
 
             for (int v = 0; v < height; ++v) {
@@ -747,22 +754,37 @@ void buildTransparentGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMesh
 }
 }
 
-ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
+ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(
+    const Chunk& chunk,
+    const Chunk* neighborPosX,
+    const Chunk* neighborNegX,
+    const Chunk* neighborPosZ,
+    const Chunk* neighborNegZ,
+    const World* world) {
     auto snapshot = std::make_shared<ChunkMeshingSnapshot>();
     chunk.copyBlocksTo(snapshot->blocks);
     snapshot->lightMap = chunk.m_lightMap;
 
-    captureBorders(chunk, *snapshot, world);
+    captureBorders(chunk, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
     return snapshot;
+}
+
+ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
+    return captureSnapshot(chunk,
+                           chunk.neighbors[0], chunk.neighbors[1],
+                           chunk.neighbors[2], chunk.neighbors[3],
+                           world);
 }
 
 ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
     const auto startTime = std::chrono::steady_clock::now();
 
     ChunkMeshData meshData;
-    meshData.opaqueVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 256);
-    meshData.cutoutVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
-    meshData.transparentVertices.reserve(Chunk::SIZE_X * Chunk::SIZE_Z * 64);
+    // Conservative initial reserves — avoids massive over-allocation for sparse chunks.
+    // Greedy meshing typically reduces vertex count significantly.
+    meshData.opaqueVertices.reserve(8192);
+    meshData.cutoutVertices.reserve(2048);
+    meshData.transparentVertices.reserve(4096);
 
     buildOpaqueGreedyFaces(snapshot, meshData);
     buildTransparentGreedyFaces(snapshot, meshData);

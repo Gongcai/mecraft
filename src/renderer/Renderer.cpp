@@ -34,6 +34,11 @@ struct MeshingCandidate {
     int64_t chunkKey = 0;
     Chunk* chunk = nullptr;
     float distanceSq = 0.0f;
+    std::shared_ptr<Chunk> chunkRef;
+    std::shared_ptr<Chunk> neighborPosX;
+    std::shared_ptr<Chunk> neighborNegX;
+    std::shared_ptr<Chunk> neighborPosZ;
+    std::shared_ptr<Chunk> neighborNegZ;
 };
 
 constexpr float kWindStrength = 0.06f;
@@ -372,6 +377,17 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
 void Renderer::submitMeshingJobs(const World& world) {
     std::vector<MeshingCandidate> candidates;
     const auto& activeChunks = world.getActiveChunks();
+
+    // Helper: look up shared_ptr<Chunk> from activeChunks by raw pointer.
+    // Returns nullptr if the chunk is not found (e.g. already unloaded).
+    auto findSharedByPtr = [&](const Chunk* raw) -> std::shared_ptr<Chunk> {
+        if (!raw) return nullptr;
+        // Fast path: neighbors share the same chunkKey derived from (m_chunkX, m_chunkZ)
+        const int64_t key = World::chunkKey(raw->m_chunkX, raw->m_chunkZ);
+        auto it = activeChunks.find(key);
+        return (it != activeChunks.end() && it->second.get() == raw) ? it->second : nullptr;
+    };
+
     for (const auto& pair : activeChunks) {
         const int64_t chunkKey = pair.first;
         Chunk& chunk = *pair.second;
@@ -385,7 +401,17 @@ void Renderer::submitMeshingJobs(const World& world) {
         const float centerZ = static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f;
         const float dx = centerX - m_cameraPos.x;
         const float dz = centerZ - m_cameraPos.z;
-        candidates.push_back({chunkKey, &chunk, dx * dx + dz * dz});
+
+        MeshingCandidate candidate;
+        candidate.chunkKey = chunkKey;
+        candidate.chunk = &chunk;
+        candidate.distanceSq = dx * dx + dz * dz;
+        candidate.chunkRef = pair.second;
+        candidate.neighborPosX = findSharedByPtr(chunk.neighbors[0]);
+        candidate.neighborNegX = findSharedByPtr(chunk.neighbors[1]);
+        candidate.neighborPosZ = findSharedByPtr(chunk.neighbors[2]);
+        candidate.neighborNegZ = findSharedByPtr(chunk.neighbors[3]);
+        candidates.push_back(std::move(candidate));
     }
 
     const int availableInFlightSlots = std::max(0, m_meshingMaxInFlight - static_cast<int>(m_meshingInFlight.size()));
@@ -405,14 +431,7 @@ void Renderer::submitMeshingJobs(const World& world) {
                       candidates.end(),
                       candidateLess);
 
-    const auto submitStartTime = std::chrono::steady_clock::now();
     for (int index = 0; index < submitCount; ++index) {
-        const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - submitStartTime).count();
-        if (elapsedMs >= m_meshingSubmitTimeBudgetMs) {
-            break;
-        }
-
         MeshingCandidate& candidate = candidates[static_cast<size_t>(index)];
         if (candidate.chunk == nullptr) {
             continue;
@@ -421,7 +440,12 @@ void Renderer::submitMeshingJobs(const World& world) {
         ChunkMeshingJob job;
         job.chunkKey = candidate.chunkKey;
         job.revision = candidate.chunk->getMeshRevision();
-        job.snapshot = ChunkMesher::captureSnapshot(*candidate.chunk, &world);
+        job.chunk = std::move(candidate.chunkRef);
+        job.neighborPosX = std::move(candidate.neighborPosX);
+        job.neighborNegX = std::move(candidate.neighborNegX);
+        job.neighborPosZ = std::move(candidate.neighborPosZ);
+        job.neighborNegZ = std::move(candidate.neighborNegZ);
+        job.world = &world;
 
         const int priority = static_cast<int>(candidate.distanceSq);
         m_meshingService.submit(std::move(job), priority);

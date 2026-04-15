@@ -31,19 +31,21 @@ ChunkMeshingJob makeDenseJob(const int64_t chunkKey,
                              const int chunkZ,
                              const int maxY,
                              const BlockID blockId = BlockIds::DIRT) {
-    Chunk chunk(chunkX, chunkZ);
+    auto chunkPtr = std::make_shared<Chunk>(chunkX, chunkZ);
     for (int y = 0; y < maxY; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                chunk.setBlock(x, y, z, blockId);
+                chunkPtr->setBlock(x, y, z, blockId);
             }
         }
     }
 
     ChunkMeshingJob job;
     job.chunkKey = chunkKey;
-    job.revision = chunk.getMeshRevision();
-    job.snapshot = ChunkMesher::captureSnapshot(chunk);
+    job.revision = chunkPtr->getMeshRevision();
+    job.chunk = chunkPtr;
+    // No neighbors in this test — captureBorders will fall back to world=nullptr
+    job.world = nullptr;
     return job;
 }
 }

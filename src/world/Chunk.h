@@ -29,14 +29,17 @@ struct ChunkMesh {
     GLuint vao = 0;
     GLuint vbo = 0;
     uint32_t vertexCount = 0;
+    GLsizeiptr vboCapacity = 0;  // tracks allocated VBO size for orphaning optimization
 
     GLuint transparentVao = 0;
     GLuint transparentVbo = 0;
     uint32_t transparentVertexCount = 0;
+    GLsizeiptr transparentVboCapacity = 0;
 
     GLuint cutoutVao = 0;
     GLuint cutoutVbo = 0;
     uint32_t cutoutVertexCount = 0;
+    GLsizeiptr cutoutVboCapacity = 0;
 
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);

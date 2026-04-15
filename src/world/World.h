@@ -53,7 +53,8 @@ public:
 
 private:
     // 区块存储: key = (chunkX, chunkZ) 打包为 int64_t
-    std::unordered_map<int64_t, std::unique_ptr<Chunk>> m_chunks;
+    // shared_ptr so worker threads can hold references during async snapshot capture
+    std::unordered_map<int64_t, std::shared_ptr<Chunk>> m_chunks;
 
     TerrainGenerator m_terrainGen;
     std::unique_ptr<LightEngine> m_lightEngine;

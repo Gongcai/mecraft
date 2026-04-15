@@ -10,8 +10,8 @@ ThreadPool::~ThreadPool() {
 }
 
 void ThreadPool::start() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_running) {
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    if (m_running.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -22,8 +22,8 @@ void ThreadPool::start() {
         m_numThreads = std::min(m_numThreads, 8);
     }
 
-    m_stopping = false;
-    m_running = true;
+    m_stopping.store(false, std::memory_order_relaxed);
+    m_running.store(true, std::memory_order_release);
 
     for (int i = 0; i < m_numThreads; ++i) {
         m_workers.emplace_back(&ThreadPool::workerLoop, this);
@@ -32,11 +32,11 @@ void ThreadPool::start() {
 
 void ThreadPool::shutdown() {
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_running) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        if (!m_running.load(std::memory_order_relaxed)) {
             return;
         }
-        m_stopping = true;
+        m_stopping.store(true, std::memory_order_release);
     }
 
     m_cv.notify_all();
@@ -48,19 +48,22 @@ void ThreadPool::shutdown() {
     }
     m_workers.clear();
 
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_running = false;
-
-    // Drain remaining tasks
-    while (!m_pending.empty()) {
-        m_pending.pop();
+    {
+        std::lock_guard<SpinLock> qLock(m_queueLock);
+        while (!m_pending.empty()) {
+            m_pending.pop();
+        }
     }
+    m_pendingCount.store(0, std::memory_order_relaxed);
+
+    m_running.store(false, std::memory_order_release);
 }
 
 void ThreadPool::submit(std::function<void()> task, int priority) {
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_running || m_stopping) {
+        std::lock_guard<SpinLock> lock(m_queueLock);
+        if (!m_running.load(std::memory_order_acquire) ||
+            m_stopping.load(std::memory_order_acquire)) {
             return;
         }
 
@@ -70,6 +73,7 @@ void ThreadPool::submit(std::function<void()> task, int priority) {
         pt.func = std::move(task);
         m_pending.push(std::move(pt));
     }
+    m_pendingCount.fetch_add(1, std::memory_order_release);
     m_cv.notify_one();
 }
 
@@ -78,31 +82,39 @@ int ThreadPool::numWorkers() const {
 }
 
 int ThreadPool::pendingCount() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return static_cast<int>(m_pending.size());
+    return m_pendingCount.load(std::memory_order_acquire);
 }
 
 int ThreadPool::activeCount() const {
-    return m_activeCount.load(std::memory_order_relaxed);
+    return m_activeCount.load(std::memory_order_acquire);
 }
 
 void ThreadPool::workerLoop() {
     while (true) {
         PrioritizedTask task;
         {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv.wait(lock, [this] { return m_stopping || !m_pending.empty(); });
+            std::unique_lock<std::mutex> lock(m_stateMutex);
+            m_cv.wait(lock, [this] {
+                return m_stopping.load(std::memory_order_acquire) ||
+                       m_pendingCount.load(std::memory_order_acquire) > 0;
+            });
 
-            if (m_stopping && m_pending.empty()) {
-                return;
+            std::lock_guard<SpinLock> qLock(m_queueLock);
+            if (m_pending.empty()) {
+                if (m_stopping.load(std::memory_order_acquire)) {
+                    return;
+                }
+                // Spurious wakeup — pendingCount was stale
+                continue;
             }
 
-            task = m_pending.top();
+            task = std::move(const_cast<PrioritizedTask&>(m_pending.top()));
             m_pending.pop();
         }
+        m_pendingCount.fetch_sub(1, std::memory_order_release);
 
         m_activeCount.fetch_add(1, std::memory_order_relaxed);
         task.func();
-        m_activeCount.fetch_sub(1, std::memory_order_relaxed);
+        m_activeCount.fetch_sub(1, std::memory_order_release);
     }
 }

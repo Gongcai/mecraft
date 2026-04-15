@@ -255,12 +255,23 @@ void ChunkMesh::upload(const std::vector<BlockVertex>& vertices) {
         glGenBuffers(1, &vbo);
     }
 
+    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex));
+
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex)),
-                 vertices.empty() ? nullptr : vertices.data(),
-                 GL_STATIC_DRAW);
+
+    if (dataSize <= vboCapacity) {
+        // Reuse existing buffer — just update the data
+        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+                        vertices.empty() ? nullptr : vertices.data());
+    } else {
+        // Orphaning: allocate new buffer with headroom to reduce future reallocations
+        vboCapacity = dataSize + dataSize / 2;
+        glBufferData(GL_ARRAY_BUFFER, vboCapacity, nullptr, GL_STATIC_DRAW);
+        if (!vertices.empty()) {
+            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, vertices.data());
+        }
+    }
     setupVertexLayout();
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -277,12 +288,21 @@ void ChunkMesh::uploadCutout(const std::vector<BlockVertex>& cutoutVerts) {
         glGenBuffers(1, &cutoutVbo);
     }
 
+    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(cutoutVerts.size() * sizeof(BlockVertex));
+
     glBindVertexArray(cutoutVao);
     glBindBuffer(GL_ARRAY_BUFFER, cutoutVbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(cutoutVerts.size() * sizeof(BlockVertex)),
-                 cutoutVerts.empty() ? nullptr : cutoutVerts.data(),
-                 GL_STATIC_DRAW);
+
+    if (dataSize <= cutoutVboCapacity) {
+        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+                        cutoutVerts.empty() ? nullptr : cutoutVerts.data());
+    } else {
+        cutoutVboCapacity = dataSize + dataSize / 2;
+        glBufferData(GL_ARRAY_BUFFER, cutoutVboCapacity, nullptr, GL_STATIC_DRAW);
+        if (!cutoutVerts.empty()) {
+            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, cutoutVerts.data());
+        }
+    }
     setupVertexLayout();
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -299,12 +319,21 @@ void ChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparentVer
         glGenBuffers(1, &transparentVbo);
     }
 
+    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(transparentVerts.size() * sizeof(BlockVertex));
+
     glBindVertexArray(transparentVao);
     glBindBuffer(GL_ARRAY_BUFFER, transparentVbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(transparentVerts.size() * sizeof(BlockVertex)),
-                 transparentVerts.empty() ? nullptr : transparentVerts.data(),
-                 GL_STATIC_DRAW);
+
+    if (dataSize <= transparentVboCapacity) {
+        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+                        transparentVerts.empty() ? nullptr : transparentVerts.data());
+    } else {
+        transparentVboCapacity = dataSize + dataSize / 2;
+        glBufferData(GL_ARRAY_BUFFER, transparentVboCapacity, nullptr, GL_STATIC_DRAW);
+        if (!transparentVerts.empty()) {
+            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, transparentVerts.data());
+        }
+    }
     setupVertexLayout();
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -320,6 +349,7 @@ void ChunkMesh::destroy() {
         glDeleteVertexArrays(1, &vao);
         vao = 0;
     }
+    vboCapacity = 0;
     if (transparentVbo != 0) {
         glDeleteBuffers(1, &transparentVbo);
         transparentVbo = 0;
@@ -328,6 +358,7 @@ void ChunkMesh::destroy() {
         glDeleteVertexArrays(1, &transparentVao);
         transparentVao = 0;
     }
+    transparentVboCapacity = 0;
     if (cutoutVbo != 0) {
         glDeleteBuffers(1, &cutoutVbo);
         cutoutVbo = 0;
@@ -336,6 +367,7 @@ void ChunkMesh::destroy() {
         glDeleteVertexArrays(1, &cutoutVao);
         cutoutVao = 0;
     }
+    cutoutVboCapacity = 0;
 
     vertexCount = 0;
     transparentVertexCount = 0;
