@@ -13,22 +13,60 @@
 
 class World;
 
-constexpr std::size_t CHUNK_BLOCK_COUNT = static_cast<std::size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
+// Per-sub-chunk snapshot constants
+constexpr std::size_t SC_BLOCK_COUNT = static_cast<std::size_t>(SubChunk::SIZE) *
+                                        SubChunk::SIZE * SubChunk::SIZE;  // 4096
+constexpr std::size_t SC_BORDER_SIZE = static_cast<std::size_t>(SubChunk::SIZE) * SubChunk::SIZE;  // 256
 
+// Snapshot of a single SubChunk for meshing.
+// Contains the 16x16x16 block/light data plus 6-direction border slices.
+struct SubChunkMeshingSnapshot {
+    // Core data (16x16x16)
+    std::array<BlockID, SC_BLOCK_COUNT> blocks{};
+    std::array<uint8_t, SC_BLOCK_COUNT> lightMap{};
+
+    // Horizontal borders (same as before, but now per-sub-chunk height slice)
+    std::array<BlockID, SC_BORDER_SIZE> posXBorder{};
+    std::array<BlockID, SC_BORDER_SIZE> negXBorder{};
+    std::array<BlockID, SC_BORDER_SIZE> posZBorder{};
+    std::array<BlockID, SC_BORDER_SIZE> negZBorder{};
+    std::array<uint8_t, SC_BORDER_SIZE> posXLightBorder{};
+    std::array<uint8_t, SC_BORDER_SIZE> negXLightBorder{};
+    std::array<uint8_t, SC_BORDER_SIZE> posZLightBorder{};
+    std::array<uint8_t, SC_BORDER_SIZE> negZLightBorder{};
+
+    // Vertical borders (+Y and -Y) — new in Phase 2
+    std::array<BlockID, SC_BORDER_SIZE> posYBorder{};
+    std::array<BlockID, SC_BORDER_SIZE> negYBorder{};
+    std::array<uint8_t, SC_BORDER_SIZE> posYLightBorder{};
+    std::array<uint8_t, SC_BORDER_SIZE> negYLightBorder{};
+
+    // Column-relative Y base (scy * 16)
+    int yBase = 0;
+    // Sub-chunk index within the column (0..15)
+    int scy = 0;
+    // Whether this is the topmost sub-chunk (for sky light at y=256)
+    bool isTopSection = false;
+    // Whether this is the bottommost sub-chunk
+    bool isBottomSection = false;
+};
+
+using SubChunkMeshingSnapshotPtr = std::shared_ptr<SubChunkMeshingSnapshot>;
+
+// Legacy full-column snapshot — kept for backward compatibility during transition
+constexpr std::size_t CHUNK_BLOCK_COUNT = static_cast<std::size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
 constexpr std::size_t BORDER_YZ_COUNT = static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z;
 constexpr std::size_t BORDER_YX_COUNT = static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X;
 
 struct ChunkMeshingSnapshot {
     std::array<BlockID, CHUNK_BLOCK_COUNT> blocks{};
-    std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{}; // same packing as Chunk::m_lightMap
+    std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{};
 
-    // Border block data for cross-chunk AO and face culling (fixed arrays, no heap alloc)
     std::array<BlockID, BORDER_YZ_COUNT> posXBorder{};
     std::array<BlockID, BORDER_YZ_COUNT> negXBorder{};
     std::array<BlockID, BORDER_YX_COUNT> posZBorder{};
     std::array<BlockID, BORDER_YX_COUNT> negZBorder{};
 
-    // Border light data for cross-chunk AO and light lookups
     std::array<uint8_t, BORDER_YZ_COUNT> posXLightBorder{};
     std::array<uint8_t, BORDER_YZ_COUNT> negXLightBorder{};
     std::array<uint8_t, BORDER_YX_COUNT> posZLightBorder{};
@@ -54,9 +92,25 @@ struct ChunkMeshData {
 
 class ChunkMesher {
 public:
-    /// Capture a snapshot of chunk data for async meshing.
-    /// When called from a worker thread, pass explicit neighbor pointers instead of
-    /// relying on chunk.neighbors[] (which may be mutated by the main thread).
+    // --- Per-sub-chunk snapshot capture ---
+    static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(
+        const Chunk& chunk,
+        int scy,
+        const Chunk* neighborPosX,
+        const Chunk* neighborNegX,
+        const Chunk* neighborPosZ,
+        const Chunk* neighborNegZ,
+        const World* world = nullptr);
+
+    static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(
+        const Chunk& chunk,
+        int scy,
+        const World* world = nullptr);
+
+    // --- Per-sub-chunk mesh building ---
+    static ChunkMeshData buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot);
+
+    // --- Legacy full-column snapshot capture (deprecated) ---
     static ChunkMeshingSnapshotPtr captureSnapshot(
         const Chunk& chunk,
         const Chunk* neighborPosX,
@@ -65,17 +119,21 @@ public:
         const Chunk* neighborNegZ,
         const World* world = nullptr);
 
-    /// Convenience overload that reads chunk.neighbors[] — main-thread only.
     static ChunkMeshingSnapshotPtr captureSnapshot(const Chunk& chunk, const World* world = nullptr);
 
+    // Legacy full-column mesh building (deprecated)
     static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot);
+
+    // Direct mesh generation (for synchronous path)
+    static void generateSubChunkMesh(Chunk& chunk, int scy);
     static void generateMesh(Chunk& chunk);
 
+    // Check if a sub-chunk should be skipped (Air type)
+    static bool shouldSkipSubChunk(const Chunk& chunk, int scy);
+
 private:
-    static bool shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
-                                 int nx,
-                                 int ny,
-                                 int nz,
+    static bool shouldRenderFace(const SubChunkMeshingSnapshot& snapshot,
+                                 int nx, int ny, int nz,
                                  BlockID currentId);
 
     static void addFace(std::vector<BlockVertex>& vertices,
@@ -83,13 +141,18 @@ private:
                         int face,
                         const BlockDef& def,
                         int x, int y, int z,
-                        const ChunkMeshingSnapshot& snapshot);
+                        const SubChunkMeshingSnapshot& snapshot);
 
     static void addCrossedQuads(std::vector<BlockVertex>& vertices,
                                 const glm::vec3& pos,
                                 const BlockDef& def,
                                 int x, int y, int z,
-                                const ChunkMeshingSnapshot& snapshot);
+                                const SubChunkMeshingSnapshot& snapshot);
+
+    // Legacy helpers (kept for transition)
+    static bool shouldRenderFaceLegacy(const ChunkMeshingSnapshot& snapshot,
+                                       int nx, int ny, int nz,
+                                       BlockID currentId);
 };
 
 #endif // MECRAFT_CHUNKMESHER_H

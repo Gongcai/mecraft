@@ -355,7 +355,7 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
         int completedCount = 0;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (completedCount < totalChunks && std::chrono::steady_clock::now() < deadline) {
-            ChunkMeshingResult result;
+            SubChunkMeshingResult result;
             while (service.tryPopCompleted(result)) {
                 ++completedCount;
             }
@@ -392,7 +392,7 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
         int completedCount = 0;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         while (completedCount < totalChunks && std::chrono::steady_clock::now() < deadline) {
-            ChunkMeshingResult result;
+            SubChunkMeshingResult result;
             while (service.tryPopCompleted(result)) {
                 checksum ^= checksumMeshData(result.meshData) + static_cast<uint64_t>(completedCount + 1);
                 ++completedCount;

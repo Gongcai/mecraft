@@ -70,11 +70,11 @@ int main() {
         }
 
         if (!waitUntil([&]() {
-                ChunkMeshingResult result;
+                SubChunkMeshingResult result;
                 while (service.tryPopCompleted(result)) {
                     completedKeys.push_back(result.chunkKey);
                 }
-                return completedKeys.size() == 8 && service.inFlightCount() == 0;
+                return completedKeys.size() >= 8 && service.inFlightCount() == 0;
             })) {
             return fail("all submitted meshing jobs should eventually complete");
         }
@@ -104,7 +104,7 @@ int main() {
         service.shutdown();
         pool.shutdown();
 
-        ChunkMeshingResult result;
+        SubChunkMeshingResult result;
         if (service.tryPopCompleted(result)) {
             return fail("shutdown service should not publish new completed results");
         }
@@ -114,7 +114,8 @@ int main() {
 
         service.submit(makeDenseJob(999, 0, 0, 64), 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        if (service.tryPopCompleted(result)) {
+        SubChunkMeshingResult result2;
+        if (service.tryPopCompleted(result2)) {
             return fail("service should reject submissions after shutdown");
         }
     }

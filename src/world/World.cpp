@@ -266,6 +266,15 @@ void World::loadChunk(int cx, int cz) {
 
     m_terrainGen.generateChunk(*chunk);
 
+    // Infer SubChunk types after terrain generation (enables Air/Solid skipping)
+    chunk->optimizePalette();  // Compact palettes and infer types
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        SubChunk* sc = chunk->getSubChunk(scy);
+        if (sc) {
+            sc->inferType();
+        }
+    }
+
     m_chunks[key] = std::move(chunk);
 
     // Wire up neighbor pointers for the new chunk and its existing neighbors
@@ -326,9 +335,14 @@ size_t World::getTotalVertexCount() const {
     size_t total = 0;
     for (const auto& pair : m_chunks) {
         if (pair.second) {
-            total += pair.second->getMesh().vertexCount;
-            total += pair.second->getMesh().cutoutVertexCount;
-            total += pair.second->getMesh().transparentVertexCount;
+            for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                const SubChunk* sc = pair.second->getSubChunk(scy);
+                if (sc) {
+                    total += sc->getMesh().vertexCount;
+                    total += sc->getMesh().cutoutVertexCount;
+                    total += sc->getMesh().transparentVertexCount;
+                }
+            }
         }
     }
     return total;

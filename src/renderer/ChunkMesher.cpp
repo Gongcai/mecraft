@@ -39,7 +39,7 @@ struct FaceMergeKey {
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
     std::array<uint16_t, 4> block{};
-    uint64_t hash = 0;  // pre-computed hash for fast comparison in greedy merge
+    uint64_t hash = 0;
 };
 
 struct FaceCell {
@@ -75,77 +75,94 @@ constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
 constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
 constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 
-std::size_t toIndex(const int x, const int y, const int z) {
+// Sub-chunk local index (16x16x16)
+std::size_t scToIndex(const int x, const int y, const int z) {
     return static_cast<std::size_t>(x) +
-           static_cast<std::size_t>(z) * Chunk::SIZE_X +
-           static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
+           static_cast<std::size_t>(z) * SubChunk::SIZE +
+           static_cast<std::size_t>(y) * SubChunk::SIZE * SubChunk::SIZE;
 }
 
-std::size_t toBorderYZIndex(const int y, const int z) {
-    return static_cast<std::size_t>(z) + static_cast<std::size_t>(y) * Chunk::SIZE_Z;
+// Border index helpers for sub-chunk borders (16x16 slice)
+std::size_t toBorderXZIndex(const int x, const int z) {
+    return static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * SubChunk::SIZE;
 }
 
-std::size_t toBorderYXIndex(const int y, const int x) {
-    return static_cast<std::size_t>(x) + static_cast<std::size_t>(y) * Chunk::SIZE_X;
-}
+// ======================== Neighbor-aware block/light lookup (sub-chunk) ========================
 
-BlockID getNeighborAwareBlock(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
+BlockID getNeighborAwareBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    // Out of Y range — above top = air, below bottom = stone/air
+    if (y < 0) {
+        if (snapshot.isBottomSection) return 0;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.negYBorder[toBorderXZIndex(x, z)];
+    }
+    if (y >= SubChunk::SIZE) {
+        if (snapshot.isTopSection) return 0;  // Above world = air
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.posYBorder[toBorderXZIndex(x, z)];
     }
 
-    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
-        return 0;
+    // X borders
+    if (x < 0) {
+        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.negXBorder[toBorderXZIndex(y, z)];
+    }
+    if (x >= SubChunk::SIZE) {
+        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.posXBorder[toBorderXZIndex(y, z)];
+    }
+
+    // Z borders
+    if (z < 0) {
+        return snapshot.negZBorder[toBorderXZIndex(y, x)];
+    }
+    if (z >= SubChunk::SIZE) {
+        return snapshot.posZBorder[toBorderXZIndex(y, x)];
+    }
+
+    return snapshot.blocks[scToIndex(x, y, z)];
+}
+
+uint8_t getNeighborAwareLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    if (y < 0) {
+        if (snapshot.isBottomSection) return 0;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.negYLightBorder[toBorderXZIndex(x, z)];
+    }
+    if (y >= SubChunk::SIZE) {
+        if (snapshot.isTopSection) return 0;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.posYLightBorder[toBorderXZIndex(x, z)];
     }
 
     if (x < 0) {
-        return snapshot.negXBorder[toBorderYZIndex(y, z)];
+        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.negXLightBorder[toBorderXZIndex(y, z)];
     }
-    if (x >= Chunk::SIZE_X) {
-        return snapshot.posXBorder[toBorderYZIndex(y, z)];
+    if (x >= SubChunk::SIZE) {
+        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        return snapshot.posXLightBorder[toBorderXZIndex(y, z)];
     }
+
     if (z < 0) {
-        return snapshot.negZBorder[toBorderYXIndex(y, x)];
+        return snapshot.negZLightBorder[toBorderXZIndex(y, x)];
     }
-    if (z >= Chunk::SIZE_Z) {
-        return snapshot.posZBorder[toBorderYXIndex(y, x)];
+    if (z >= SubChunk::SIZE) {
+        return snapshot.posZLightBorder[toBorderXZIndex(y, x)];
     }
 
-    return snapshot.blocks[toIndex(x, y, z)];
+    return snapshot.lightMap[scToIndex(x, y, z)];
 }
 
-uint8_t getNeighborAwareLight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
-    }
-
-    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
-        return 0;
-    }
-
-    if (x < 0) {
-        return snapshot.negXLightBorder[toBorderYZIndex(y, z)];
-    }
-    if (x >= Chunk::SIZE_X) {
-        return snapshot.posXLightBorder[toBorderYZIndex(y, z)];
-    }
-    if (z < 0) {
-        return snapshot.negZLightBorder[toBorderYXIndex(y, x)];
-    }
-    if (z >= Chunk::SIZE_Z) {
-        return snapshot.posZLightBorder[toBorderYXIndex(y, x)];
-    }
-
-    return snapshot.lightMap[toIndex(x, y, z)];
+uint8_t getNeighborSunlightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    return static_cast<uint8_t>((getNeighborAwareLightSC(snapshot, x, y, z) >> 4) & 0x0F);
 }
 
-uint8_t getNeighborSunlight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    return static_cast<uint8_t>((getNeighborAwareLight(snapshot, x, y, z) >> 4) & 0x0F);
+uint8_t getNeighborBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    return static_cast<uint8_t>(getNeighborAwareLightSC(snapshot, x, y, z) & 0x0F);
 }
 
-uint8_t getNeighborBlockLight(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    return static_cast<uint8_t>(getNeighborAwareLight(snapshot, x, y, z) & 0x0F);
-}
+// ======================== AO / light computation ========================
 
 uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
     if (side1 && side2) {
@@ -154,8 +171,8 @@ uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
     return static_cast<uint8_t>(3 - (static_cast<int>(side1) + static_cast<int>(side2) + static_cast<int>(corner)));
 }
 
-bool isSolidForAO(const ChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
-    const BlockID id = getNeighborAwareBlock(snapshot, x, y, z);
+bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
+    const BlockID id = getNeighborAwareBlockSC(snapshot, x, y, z);
     return BlockRegistry::get(id).isSolid;
 }
 
@@ -178,41 +195,68 @@ float computeVertexNormalized(const uint8_t base,
     return avg / 15.0f;
 }
 
-uint8_t safeSunLevel(const ChunkMeshingSnapshot& snapshot,
+// Check if coordinates fall in a "gap" that the 6-direction border data cannot
+// resolve.  This happens when two or more axes are simultaneously out of range
+// (e.g. y>=SIZE and x<0, or x<0 and z<0, or all three at once).
+// The 6-direction borders only store single-axis neighbours; any multi-axis
+// out-of-bounds position has no stored data and would return 0, producing dark
+// seams at chunk/sub-chunk boundaries — particularly visible on flat surfaces
+// at sea level where the Y boundary and chunk X/Z boundary coincide.
+bool isUnresolvablePosition(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    const bool xOut = (x < 0 || x >= SubChunk::SIZE);
+    const bool yOut = (y < 0 || y >= SubChunk::SIZE);
+    const bool zOut = (z < 0 || z >= SubChunk::SIZE);
+
+    // Two or more axes out of range — no border data covers this
+    if ((xOut && zOut) || (xOut && yOut) || (yOut && zOut)) {
+        return true;
+    }
+
+    // Single-axis Y out of range where the section has no neighbour above/below
+    if (yOut) {
+        if (y < 0 && snapshot.isBottomSection) return true;
+        if (y >= SubChunk::SIZE && snapshot.isTopSection) return true;
+    }
+
+    return false;
+}
+
+uint8_t safeSunLevel(const SubChunkMeshingSnapshot& snapshot,
                      const int x,
                      const int y,
                      const int z,
                      const bool isSolid,
                      const uint8_t base) {
     if (!isSolid) {
-        if (y >= Chunk::SIZE_Y) {
+        // Above the top of the world — full sky light
+        if (y >= SubChunk::SIZE && snapshot.isTopSection) {
             return 15;
         }
-        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
+        if (isUnresolvablePosition(snapshot, x, y, z)) {
             return base;
         }
     }
-    return getNeighborSunlight(snapshot, x, y, z);
+    return getNeighborSunlightSC(snapshot, x, y, z);
 }
 
-uint8_t safeBlockLevel(const ChunkMeshingSnapshot& snapshot,
+uint8_t safeBlockLevel(const SubChunkMeshingSnapshot& snapshot,
                        const int x,
                        const int y,
                        const int z,
                        const bool isSolid,
                        const uint8_t base) {
     if (!isSolid) {
-        if (y >= Chunk::SIZE_Y) {
+        if (y >= SubChunk::SIZE && snapshot.isTopSection) {
             return 0;
         }
-        if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
+        if (isUnresolvablePosition(snapshot, x, y, z)) {
             return base;
         }
     }
-    return getNeighborBlockLight(snapshot, x, y, z);
+    return getNeighborBlockLightSC(snapshot, x, y, z);
 }
 
-std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot& snapshot,
+std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
                                                      const int x,
                                                      const int y,
                                                      const int z,
@@ -239,8 +283,8 @@ std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot&
     }
 
     std::array<VertexLightData, 4> data{};
-    const uint8_t baseSun = getNeighborSunlight(snapshot, bx, by, bz);
-    const uint8_t baseBlock = getNeighborBlockLight(snapshot, bx, by, bz);
+    const uint8_t baseSun = getNeighborSunlightSC(snapshot, bx, by, bz);
+    const uint8_t baseBlock = getNeighborBlockLightSC(snapshot, bx, by, bz);
 
     for (int i = 0; i < 4; ++i) {
         const glm::vec3 corner = kFaceCorners[face][i];
@@ -285,24 +329,17 @@ std::array<VertexLightData, 4> computeFaceVertexData(const ChunkMeshingSnapshot&
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
     switch (face) {
-        case FACE_TOP:
-            return def.texTop;
-        case FACE_BOTTOM:
-            return def.texBottom;
-        case FACE_FRONT:
-            return def.texFront;
-        case FACE_BACK:
-            return def.texBack;
-        case FACE_LEFT:
-            return def.texLeft;
-        case FACE_RIGHT:
-            return def.texRight;
-        default:
-            return 0;
+        case FACE_TOP:    return def.texTop;
+        case FACE_BOTTOM: return def.texBottom;
+        case FACE_FRONT:  return def.texFront;
+        case FACE_BACK:   return def.texBack;
+        case FACE_LEFT:   return def.texLeft;
+        case FACE_RIGHT:  return def.texRight;
+        default:          return 0;
     }
 }
 
-FaceRenderData buildFaceRenderData(const ChunkMeshingSnapshot& snapshot,
+FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
                                    const BlockDef& def,
                                    const int x,
                                    const int y,
@@ -335,7 +372,6 @@ uint16_t quantizeNormalized(const float value) {
 }
 
 uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
-    // FNV-1a style hash over all fields
     uint64_t h = 14695981039346656037ULL;
     auto mix = [&](uint64_t v) {
         h ^= v;
@@ -380,13 +416,13 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.block == rhs.block;
 }
 
-bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
+bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
                           const int nx,
                           const int ny,
                           const int nz,
                           const BlockID currentId,
                           const BlockDef& currentDef) {
-    const BlockID neighborId = getNeighborAwareBlock(snapshot, nx, ny, nz);
+    const BlockID neighborId = getNeighborAwareBlockSC(snapshot, nx, ny, nz);
     if (currentDef.renderShape == BlockRenderShape::Cube &&
         currentDef.isTransparent &&
         neighborId == currentId) {
@@ -413,6 +449,8 @@ bool shouldRenderFaceImpl(const ChunkMeshingSnapshot& snapshot,
     return false;
 }
 
+// ======================== Snapshot capture helpers ========================
+
 BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y, const int wz) {
     if (world == nullptr) {
         return 0;
@@ -420,35 +458,81 @@ BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y
     return world->sampleGeneratedBlock(wx, y, wz);
 }
 
-void captureBorders(const Chunk& chunk,
-                    ChunkMeshingSnapshot& snapshot,
-                    const Chunk* neighborPosX,
-                    const Chunk* neighborNegX,
-                    const Chunk* neighborPosZ,
-                    const Chunk* neighborNegZ,
-                    const World* world) {
+// Capture horizontal borders for a specific sub-chunk (y in [yBase, yBase+16))
+void captureSubChunkBorders(const Chunk& chunk,
+                            int scy,
+                            SubChunkMeshingSnapshot& snapshot,
+                            const Chunk* neighborPosX,
+                            const Chunk* neighborNegX,
+                            const Chunk* neighborPosZ,
+                            const Chunk* neighborNegZ,
+                            const World* world) {
     const glm::ivec3 offset = chunk.getWorldOffset();
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            const std::size_t index = toBorderYZIndex(y, z);
-            snapshot.posXBorder[index] = neighborPosX ? neighborPosX->getBlock(0, y, z)
-                                                      : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, y, offset.z + z);
-            snapshot.negXBorder[index] = neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, y, z)
-                                                      : sampleMissingNeighborBlock(world, offset.x - 1, y, offset.z + z);
-            snapshot.posXLightBorder[index] = neighborPosX ? neighborPosX->m_lightMap[neighborPosX->toIndex(0, y, z)] : 0;
-            snapshot.negXLightBorder[index] = neighborNegX ? neighborNegX->m_lightMap[neighborNegX->toIndex(Chunk::SIZE_X - 1, y, z)] : 0;
+    const int yBase = scy * SubChunk::SIZE;
+
+    // +Y border: sub-chunk above (or air if top)
+    if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
+        const SubChunk* above = chunk.getSubChunk(scy + 1);
+        if (above) {
+            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                    const auto idx = toBorderXZIndex(lx, lz);
+                    snapshot.posYBorder[idx] = above->getBlock(lx, 0, lz);
+                    snapshot.posYLightBorder[idx] = above->m_lightMap[SubChunk::toIndex(lx, 0, lz)];
+                }
+            }
         }
-        for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            const std::size_t index = toBorderYXIndex(y, x);
-            snapshot.posZBorder[index] = neighborPosZ ? neighborPosZ->getBlock(x, y, 0)
-                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z + Chunk::SIZE_Z);
-            snapshot.negZBorder[index] = neighborNegZ ? neighborNegZ->getBlock(x, y, Chunk::SIZE_Z - 1)
-                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z - 1);
-            snapshot.posZLightBorder[index] = neighborPosZ ? neighborPosZ->m_lightMap[neighborPosZ->toIndex(x, y, 0)] : 0;
-            snapshot.negZLightBorder[index] = neighborNegZ ? neighborNegZ->m_lightMap[neighborNegZ->toIndex(x, y, Chunk::SIZE_Z - 1)] : 0;
+        // If above sub-chunk is nullptr, border stays as 0 (air) — correct for all-air
+    }
+    // else: isTopSection, border stays 0
+
+    // -Y border: sub-chunk below (or air if bottom)
+    if (scy - 1 >= 0) {
+        const SubChunk* below = chunk.getSubChunk(scy - 1);
+        if (below) {
+            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                    const auto idx = toBorderXZIndex(lx, lz);
+                    snapshot.negYBorder[idx] = below->getBlock(lx, SubChunk::SIZE - 1, lz);
+                    snapshot.negYLightBorder[idx] = below->m_lightMap[SubChunk::toIndex(lx, SubChunk::SIZE - 1, lz)];
+                }
+            }
+        }
+    }
+
+    // Horizontal borders (+X, -X, +Z, -Z) — same as before but only for yBase..yBase+15
+    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+        const int columnY = yBase + ly;
+        for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+            const auto idx = toBorderXZIndex(ly, lz);
+            snapshot.posXBorder[idx] = neighborPosX
+                ? neighborPosX->getBlock(0, columnY, lz)
+                : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, columnY, offset.z + lz);
+            snapshot.negXBorder[idx] = neighborNegX
+                ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz)
+                : sampleMissingNeighborBlock(world, offset.x - 1, columnY, offset.z + lz);
+            snapshot.posXLightBorder[idx] = neighborPosX
+                ? neighborPosX->getLightByFlatIndex(neighborPosX->toIndex(0, columnY, lz)) : 0;
+            snapshot.negXLightBorder[idx] = neighborNegX
+                ? neighborNegX->getLightByFlatIndex(neighborNegX->toIndex(Chunk::SIZE_X - 1, columnY, lz)) : 0;
+        }
+        for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+            const auto idx = toBorderXZIndex(ly, lx);
+            snapshot.posZBorder[idx] = neighborPosZ
+                ? neighborPosZ->getBlock(lx, columnY, 0)
+                : sampleMissingNeighborBlock(world, offset.x + lx, columnY, offset.z + Chunk::SIZE_Z);
+            snapshot.negZBorder[idx] = neighborNegZ
+                ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1)
+                : sampleMissingNeighborBlock(world, offset.x + lx, columnY, offset.z - 1);
+            snapshot.posZLightBorder[idx] = neighborPosZ
+                ? neighborPosZ->getLightByFlatIndex(neighborPosZ->toIndex(lx, columnY, 0)) : 0;
+            snapshot.negZLightBorder[idx] = neighborNegZ
+                ? neighborNegZ->getLightByFlatIndex(neighborNegZ->toIndex(lx, columnY, Chunk::SIZE_Z - 1)) : 0;
         }
     }
 }
+
+// ======================== Face vertex emission ========================
 
 void expandBounds(ChunkMeshData& meshData, const glm::vec3& blockMin, const glm::vec3& blockMax) {
     if (!meshData.hasBounds) {
@@ -491,6 +575,7 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
     }
 }
 
+// Greedy meshing corners — coordinates are in sub-chunk local space
 std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face,
                                                 const int x,
                                                 const int y,
@@ -579,13 +664,13 @@ bool isTransparentCubeCandidate(const BlockDef& def) {
     return def.renderShape == BlockRenderShape::Cube && def.isTransparent;
 }
 
-bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
+bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
                             const int face,
                             const int x,
                             const int y,
                             const int z,
                             FaceCell& outCell) {
-    const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
+    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
     if (blockId == 0) {
         return false;
     }
@@ -609,13 +694,13 @@ bool populateOpaqueFaceCell(const ChunkMeshingSnapshot& snapshot,
     return true;
 }
 
-bool populateTransparentFaceCell(const ChunkMeshingSnapshot& snapshot,
+bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
                                  const int face,
                                  const int x,
                                  const int y,
                                  const int z,
                                  FaceCell& outCell) {
-    const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
+    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
     if (blockId == 0) {
         return false;
     }
@@ -640,15 +725,14 @@ bool populateTransparentFaceCell(const ChunkMeshingSnapshot& snapshot,
 }
 
 template <typename PopulateCellFn>
-void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
+void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                           ChunkMeshData& meshData,
                           std::vector<BlockVertex>& targetVertices,
                           uint32_t& faceCountBeforeGreedy,
                           uint32_t& faceCountAfterGreedy,
                           PopulateCellFn&& populateCell) {
-    // Pre-allocate reusable buffers outside the slice loop to avoid per-slice heap allocation.
-    // The maximum plane size is SIZE_X * SIZE_Y = 16 * 256 = 4096 FaceCells.
-    constexpr size_t kMaxPlaneSize = static_cast<size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y;
+    // Max plane size for sub-chunk: 16 * 16 = 256 FaceCells
+    constexpr size_t kMaxPlaneSize = static_cast<size_t>(SubChunk::SIZE) * SubChunk::SIZE;
     std::vector<FaceCell> plane(kMaxPlaneSize);
     std::vector<bool> consumed(kMaxPlaneSize, false);
 
@@ -656,7 +740,6 @@ void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
         const size_t planeSize = static_cast<size_t>(width) * static_cast<size_t>(height);
 
         for (int slice = 0; slice < slices; ++slice) {
-            // Only reset valid flags and consumed — avoids zeroing ~480KB of FaceCell data per slice
             for (size_t i = 0; i < planeSize; ++i) {
                 plane[i].valid = false;
                 consumed[i] = false;
@@ -727,45 +810,35 @@ void buildCubeGreedyFaces(const ChunkMeshingSnapshot& snapshot,
         }
     };
 
-    buildPlane(FACE_TOP, Chunk::SIZE_X, Chunk::SIZE_Z, Chunk::SIZE_Y,
+    constexpr int S = SubChunk::SIZE;
+
+    buildPlane(FACE_TOP, S, S, S,
                [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u;
-                   y = slice;
-                   z = v;
+                   x = u; y = slice; z = v;
                });
-    buildPlane(FACE_BOTTOM, Chunk::SIZE_X, Chunk::SIZE_Z, Chunk::SIZE_Y,
+    buildPlane(FACE_BOTTOM, S, S, S,
                [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u;
-                   y = slice;
-                   z = v;
+                   x = u; y = slice; z = v;
                });
-    buildPlane(FACE_FRONT, Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z,
+    buildPlane(FACE_FRONT, S, S, S,
                [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u;
-                   y = v;
-                   z = slice;
+                   x = u; y = v; z = slice;
                });
-    buildPlane(FACE_BACK, Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z,
+    buildPlane(FACE_BACK, S, S, S,
                [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = u;
-                   y = v;
-                   z = slice;
+                   x = u; y = v; z = slice;
                });
-    buildPlane(FACE_LEFT, Chunk::SIZE_Z, Chunk::SIZE_Y, Chunk::SIZE_X,
+    buildPlane(FACE_LEFT, S, S, S,
                [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = slice;
-                   y = v;
-                   z = u;
+                   x = slice; y = v; z = u;
                });
-    buildPlane(FACE_RIGHT, Chunk::SIZE_Z, Chunk::SIZE_Y, Chunk::SIZE_X,
+    buildPlane(FACE_RIGHT, S, S, S,
                [](const int slice, const int u, const int v, int& x, int& y, int& z) {
-                   x = slice;
-                   y = v;
-                   z = u;
+                   x = slice; y = v; z = u;
                });
 }
 
-void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+void buildOpaqueGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
     buildCubeGreedyFaces(snapshot,
                          meshData,
                          meshData.opaqueVertices,
@@ -774,7 +847,7 @@ void buildOpaqueGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData&
                          populateOpaqueFaceCell);
 }
 
-void buildTransparentGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
     buildCubeGreedyFaces(snapshot,
                          meshData,
                          meshData.transparentVertices,
@@ -782,144 +855,14 @@ void buildTransparentGreedyFaces(const ChunkMeshingSnapshot& snapshot, ChunkMesh
                          meshData.transparentFaceCountAfterGreedy,
                          populateTransparentFaceCell);
 }
-}
 
-ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(
-    const Chunk& chunk,
-    const Chunk* neighborPosX,
-    const Chunk* neighborNegX,
-    const Chunk* neighborPosZ,
-    const Chunk* neighborNegZ,
-    const World* world) {
-    auto snapshot = std::make_shared<ChunkMeshingSnapshot>();
-    chunk.copyBlocksTo(snapshot->blocks);
-    snapshot->lightMap = chunk.m_lightMap;
-
-    captureBorders(chunk, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
-    return snapshot;
-}
-
-ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
-    return captureSnapshot(chunk,
-                           chunk.neighbors[0], chunk.neighbors[1],
-                           chunk.neighbors[2], chunk.neighbors[3],
-                           world);
-}
-
-ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
-    const auto startTime = std::chrono::steady_clock::now();
-
-    ChunkMeshData meshData;
-    // Conservative initial reserves — avoids massive over-allocation for sparse chunks.
-    // Greedy meshing typically reduces vertex count significantly.
-    meshData.opaqueVertices.reserve(8192);
-    meshData.cutoutVertices.reserve(2048);
-    meshData.transparentVertices.reserve(4096);
-
-    buildOpaqueGreedyFaces(snapshot, meshData);
-    buildTransparentGreedyFaces(snapshot, meshData);
-
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const BlockID blockId = snapshot.blocks[toIndex(x, y, z)];
-                if (blockId == 0) {
-                    continue;
-                }
-
-                const BlockDef& def = BlockRegistry::get(blockId);
-                if (def.renderShape == BlockRenderShape::Cross) {
-                    addCrossedQuads(meshData.cutoutVertices,
-                                    glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                    def,
-                                    x,
-                                    y,
-                                    z,
-                                    snapshot);
-                    expandBounds(meshData,
-                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
-                    continue;
-                }
-
-                if (isOpaqueCubeCandidate(def) || isTransparentCubeCandidate(def)) {
-                    continue;
-                }
-
-                const bool transparent = def.isTransparent;
-                for (int face = 0; face < 6; ++face) {
-                    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-                    const int nx = x + normal.x;
-                    const int ny = y + normal.y;
-                    const int nz = z + normal.z;
-
-                    if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, blockId, def)) {
-                        continue;
-                    }
-
-                    auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
-                    addFace(target,
-                            glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                            face,
-                            def,
-                            x,
-                            y,
-                            z,
-                            snapshot);
-                    expandBounds(meshData,
-                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
-                }
-            }
-        }
-    }
-
-    meshData.opaqueVertexCount = static_cast<uint32_t>(meshData.opaqueVertices.size());
-    meshData.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
-    return meshData;
-}
-
-void ChunkMesher::generateMesh(Chunk& chunk) {
-    const ChunkMeshingSnapshotPtr snapshot = captureSnapshot(chunk);
-    ChunkMeshData meshData = buildMeshData(*snapshot);
-    ChunkMesh mesh;
-    mesh.upload(meshData.opaqueVertices);
-    mesh.uploadCutout(meshData.cutoutVertices);
-    mesh.uploadTransparent(meshData.transparentVertices);
-    mesh.hasBounds = meshData.hasBounds;
-    mesh.boundsMin = meshData.boundsMin;
-    mesh.boundsMax = meshData.boundsMax;
-    chunk.setMesh(mesh);
-}
-
-bool ChunkMesher::shouldRenderFace(const ChunkMeshingSnapshot& snapshot,
-                                   const int nx,
-                                   const int ny,
-                                   const int nz,
-                                   const BlockID currentId) {
-    const BlockDef& currentDef = BlockRegistry::get(currentId);
-    return shouldRenderFaceImpl(snapshot, nx, ny, nz, currentId, currentDef);
-}
-
-void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
+void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                           const glm::vec3& pos,
-                          const int face,
                           const BlockDef& def,
                           const int x,
                           const int y,
                           const int z,
-                          const ChunkMeshingSnapshot& snapshot) {
-    const FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
-    emitLegacyFace(vertices, pos, face, renderData);
-}
-
-void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
-                                  const glm::vec3& pos,
-                                  const BlockDef& def,
-                                  const int x,
-                                  const int y,
-                                  const int z,
-                                  const ChunkMeshingSnapshot& snapshot) {
+                          const SubChunkMeshingSnapshot& snapshot) {
     int tileIndex = def.texTop;
     if (tileIndex < 0) {
         tileIndex = 0;
@@ -927,14 +870,14 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
 
     const float layer = static_cast<float>(tileIndex);
 
-    uint8_t sunLevel = getNeighborSunlight(snapshot, x, y, z);
-    uint8_t blockLevel = getNeighborBlockLight(snapshot, x, y, z);
+    uint8_t sunLevel = getNeighborSunlightSC(snapshot, x, y, z);
+    uint8_t blockLevel = getNeighborBlockLightSC(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
         const int nx = x + kFaceNormals[static_cast<size_t>(d)].x;
         const int ny = y + kFaceNormals[static_cast<size_t>(d)].y;
         const int nz = z + kFaceNormals[static_cast<size_t>(d)].z;
-        sunLevel = std::max(sunLevel, getNeighborSunlight(snapshot, nx, ny, nz));
-        blockLevel = std::max(blockLevel, getNeighborBlockLight(snapshot, nx, ny, nz));
+        sunLevel = std::max(sunLevel, getNeighborSunlightSC(snapshot, nx, ny, nz));
+        blockLevel = std::max(blockLevel, getNeighborBlockLightSC(snapshot, nx, ny, nz));
     }
     const float sunNormalized = lightToNormalized(sunLevel);
     const float blockNormalized = lightToNormalized(blockLevel);
@@ -962,4 +905,445 @@ void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
 
     emitQuad(kCrossQuadA);
     emitQuad(kCrossQuadB);
+}
+
+// ======================== Legacy full-column helpers ========================
+
+std::size_t toIndex(const int x, const int y, const int z) {
+    return static_cast<std::size_t>(x) +
+           static_cast<std::size_t>(z) * Chunk::SIZE_X +
+           static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
+}
+
+std::size_t toBorderYZIndex(const int y, const int z) {
+    return static_cast<std::size_t>(z) + static_cast<std::size_t>(y) * Chunk::SIZE_Z;
+}
+
+std::size_t toBorderYXIndex(const int y, const int x) {
+    return static_cast<std::size_t>(x) + static_cast<std::size_t>(y) * Chunk::SIZE_X;
+}
+
+BlockID getNeighborAwareBlockLegacy(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    if (y < 0 || y >= Chunk::SIZE_Y) {
+        return 0;
+    }
+
+    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
+        return 0;
+    }
+
+    if (x < 0) {
+        return snapshot.negXBorder[toBorderYZIndex(y, z)];
+    }
+    if (x >= Chunk::SIZE_X) {
+        return snapshot.posXBorder[toBorderYZIndex(y, z)];
+    }
+    if (z < 0) {
+        return snapshot.negZBorder[toBorderYXIndex(y, x)];
+    }
+    if (z >= Chunk::SIZE_Z) {
+        return snapshot.posZBorder[toBorderYXIndex(y, x)];
+    }
+
+    return snapshot.blocks[toIndex(x, y, z)];
+}
+
+uint8_t getNeighborAwareLightLegacy(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    if (y < 0 || y >= Chunk::SIZE_Y) {
+        return 0;
+    }
+
+    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
+        return 0;
+    }
+
+    if (x < 0) {
+        return snapshot.negXLightBorder[toBorderYZIndex(y, z)];
+    }
+    if (x >= Chunk::SIZE_X) {
+        return snapshot.posXLightBorder[toBorderYZIndex(y, z)];
+    }
+    if (z < 0) {
+        return snapshot.negZLightBorder[toBorderYXIndex(y, x)];
+    }
+    if (z >= Chunk::SIZE_Z) {
+        return snapshot.posZLightBorder[toBorderYXIndex(y, x)];
+    }
+
+    return snapshot.lightMap[toIndex(x, y, z)];
+}
+
+void captureBordersLegacy(const Chunk& chunk,
+                          ChunkMeshingSnapshot& snapshot,
+                          const Chunk* neighborPosX,
+                          const Chunk* neighborNegX,
+                          const Chunk* neighborPosZ,
+                          const Chunk* neighborNegZ,
+                          const World* world) {
+    const glm::ivec3 offset = chunk.getWorldOffset();
+    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            const std::size_t index = toBorderYZIndex(y, z);
+            snapshot.posXBorder[index] = neighborPosX ? neighborPosX->getBlock(0, y, z)
+                                                      : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, y, offset.z + z);
+            snapshot.negXBorder[index] = neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, y, z)
+                                                      : sampleMissingNeighborBlock(world, offset.x - 1, y, offset.z + z);
+            snapshot.posXLightBorder[index] = neighborPosX ? neighborPosX->getLightByFlatIndex(neighborPosX->toIndex(0, y, z)) : 0;
+            snapshot.negXLightBorder[index] = neighborNegX ? neighborNegX->getLightByFlatIndex(neighborNegX->toIndex(Chunk::SIZE_X - 1, y, z)) : 0;
+        }
+        for (int x = 0; x < Chunk::SIZE_X; ++x) {
+            const std::size_t index = toBorderYXIndex(y, x);
+            snapshot.posZBorder[index] = neighborPosZ ? neighborPosZ->getBlock(x, y, 0)
+                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z + Chunk::SIZE_Z);
+            snapshot.negZBorder[index] = neighborNegZ ? neighborNegZ->getBlock(x, y, Chunk::SIZE_Z - 1)
+                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z - 1);
+            snapshot.posZLightBorder[index] = neighborPosZ ? neighborPosZ->getLightByFlatIndex(neighborPosZ->toIndex(x, y, 0)) : 0;
+            snapshot.negZLightBorder[index] = neighborNegZ ? neighborNegZ->getLightByFlatIndex(neighborNegZ->toIndex(x, y, Chunk::SIZE_Z - 1)) : 0;
+        }
+    }
+}
+} // anonymous namespace
+
+// ======================== Public API: Per-sub-chunk ========================
+
+SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
+    const Chunk& chunk,
+    const int scy,
+    const Chunk* neighborPosX,
+    const Chunk* neighborNegX,
+    const Chunk* neighborPosZ,
+    const Chunk* neighborNegZ,
+    const World* world) {
+    auto snapshot = std::make_shared<SubChunkMeshingSnapshot>();
+    snapshot->scy = scy;
+    snapshot->yBase = scy * SubChunk::SIZE;
+    snapshot->isTopSection = (scy == Chunk::NUM_SUB_CHUNKS - 1);
+    snapshot->isBottomSection = (scy == 0);
+
+    const SubChunk* sc = chunk.getSubChunk(scy);
+    if (!sc) {
+        // All-air sub-chunk — blocks and lightMap default to 0
+        // Still capture borders for completeness
+        captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+        return snapshot;
+    }
+
+    // Copy block data
+    sc->copyBlocksTo(snapshot->blocks);
+
+    // Copy light data
+    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+        for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+            for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                snapshot->lightMap[scToIndex(lx, ly, lz)] = sc->m_lightMap[SubChunk::toIndex(lx, ly, lz)];
+            }
+        }
+    }
+
+    // Capture all 6-direction borders
+    captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+
+    return snapshot;
+}
+
+SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
+    const Chunk& chunk,
+    const int scy,
+    const World* world) {
+    return captureSubChunkSnapshot(chunk, scy,
+                                   chunk.neighbors[0], chunk.neighbors[1],
+                                   chunk.neighbors[2], chunk.neighbors[3],
+                                   world);
+}
+
+ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot) {
+    const auto startTime = std::chrono::steady_clock::now();
+
+    ChunkMeshData meshData;
+    meshData.opaqueVertices.reserve(2048);
+    meshData.cutoutVertices.reserve(512);
+    meshData.transparentVertices.reserve(1024);
+
+    buildOpaqueGreedyFaces(snapshot, meshData);
+    buildTransparentGreedyFaces(snapshot, meshData);
+
+    // Non-cube blocks (cross shapes, etc.)
+    constexpr int S = SubChunk::SIZE;
+    for (int y = 0; y < S; ++y) {
+        for (int z = 0; z < S; ++z) {
+            for (int x = 0; x < S; ++x) {
+                const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+                if (blockId == 0) {
+                    continue;
+                }
+
+                const BlockDef& def = BlockRegistry::get(blockId);
+                if (def.renderShape == BlockRenderShape::Cross) {
+                    addCrossedQuadsImpl(meshData.cutoutVertices,
+                                    glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                    def, x, y, z, snapshot);
+                    expandBounds(meshData,
+                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                    continue;
+                }
+
+                if (isOpaqueCubeCandidate(def) || isTransparentCubeCandidate(def)) {
+                    continue;
+                }
+
+                // Other non-cube shapes — per-face
+                const bool transparent = def.isTransparent;
+                for (int face = 0; face < 6; ++face) {
+                    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+                    const int nx = x + normal.x;
+                    const int ny = y + normal.y;
+                    const int nz = z + normal.z;
+
+                    if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, blockId, def)) {
+                        continue;
+                    }
+
+                    auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
+                    FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+                    emitLegacyFace(target,
+                            glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                            face, renderData);
+                    expandBounds(meshData,
+                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                }
+            }
+        }
+    }
+
+    meshData.opaqueVertexCount = static_cast<uint32_t>(meshData.opaqueVertices.size());
+    meshData.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
+    return meshData;
+}
+
+void ChunkMesher::generateSubChunkMesh(Chunk& chunk, const int scy) {
+    const SubChunkMeshingSnapshotPtr snapshot = captureSubChunkSnapshot(chunk, scy);
+    ChunkMeshData meshData = buildSubChunkMeshData(*snapshot);
+
+    // Offset bounds from sub-chunk local to column-local
+    const int yBase = scy * SubChunk::SIZE;
+    if (meshData.hasBounds) {
+        meshData.boundsMin.y += static_cast<float>(yBase);
+        meshData.boundsMax.y += static_cast<float>(yBase);
+    }
+
+    SubChunkMesh mesh;
+    mesh.upload(meshData.opaqueVertices);
+    mesh.uploadCutout(meshData.cutoutVertices);
+    mesh.uploadTransparent(meshData.transparentVertices);
+    mesh.hasBounds = meshData.hasBounds;
+    mesh.boundsMin = meshData.boundsMin;
+    mesh.boundsMax = meshData.boundsMax;
+    chunk.setSubChunkMesh(scy, mesh);
+}
+
+bool ChunkMesher::shouldSkipSubChunk(const Chunk& chunk, const int scy) {
+    const SubChunk* sc = chunk.getSubChunk(scy);
+    if (!sc) return true;  // nullptr = all-air, skip
+    if (sc->getType() == SubChunkType::Air) return true;  // All-air sub-chunk
+    // Solid type: still mesh it (may have exposed faces at borders)
+    return false;
+}
+
+// ======================== Legacy full-column API ========================
+
+ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(
+    const Chunk& chunk,
+    const Chunk* neighborPosX,
+    const Chunk* neighborNegX,
+    const Chunk* neighborPosZ,
+    const Chunk* neighborNegZ,
+    const World* world) {
+    auto snapshot = std::make_shared<ChunkMeshingSnapshot>();
+    chunk.copyBlocksTo(snapshot->blocks);
+    chunk.copyLightMapTo(snapshot->lightMap);
+    captureBordersLegacy(chunk, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+    return snapshot;
+}
+
+ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
+    return captureSnapshot(chunk,
+                           chunk.neighbors[0], chunk.neighbors[1],
+                           chunk.neighbors[2], chunk.neighbors[3],
+                           world);
+}
+
+ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
+    // Convert legacy snapshot to sub-chunk snapshots and build per-section
+    // For transition, we build all 16 sub-chunk sections and merge
+    ChunkMeshData merged;
+    merged.opaqueVertices.reserve(8192);
+    merged.cutoutVertices.reserve(2048);
+    merged.transparentVertices.reserve(4096);
+
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        const int yBase = scy * SubChunk::SIZE;
+
+        SubChunkMeshingSnapshot scSnapshot;
+        scSnapshot.scy = scy;
+        scSnapshot.yBase = yBase;
+        scSnapshot.isTopSection = (scy == Chunk::NUM_SUB_CHUNKS - 1);
+        scSnapshot.isBottomSection = (scy == 0);
+
+        // Extract sub-chunk block/light data from legacy snapshot
+        for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                    const int columnY = yBase + ly;
+                    const auto colIdx = toIndex(lx, columnY, lz);
+                    scSnapshot.blocks[scToIndex(lx, ly, lz)] = snapshot.blocks[colIdx];
+                    scSnapshot.lightMap[scToIndex(lx, ly, lz)] = snapshot.lightMap[colIdx];
+                }
+            }
+        }
+
+        // Extract borders from legacy border arrays
+        for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+            const int columnY = yBase + ly;
+            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+                const auto scIdx = toBorderXZIndex(ly, lz);
+                const auto colIdx = toBorderYZIndex(columnY, lz);
+                scSnapshot.posXBorder[scIdx] = snapshot.posXBorder[colIdx];
+                scSnapshot.negXBorder[scIdx] = snapshot.negXBorder[colIdx];
+                scSnapshot.posXLightBorder[scIdx] = snapshot.posXLightBorder[colIdx];
+                scSnapshot.negXLightBorder[scIdx] = snapshot.negXLightBorder[colIdx];
+            }
+            for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                const auto scIdx = toBorderXZIndex(ly, lx);
+                const auto colIdx = toBorderYXIndex(columnY, lx);
+                scSnapshot.posZBorder[scIdx] = snapshot.posZBorder[colIdx];
+                scSnapshot.negZBorder[scIdx] = snapshot.negZBorder[colIdx];
+                scSnapshot.posZLightBorder[scIdx] = snapshot.posZLightBorder[colIdx];
+                scSnapshot.negZLightBorder[scIdx] = snapshot.negZLightBorder[colIdx];
+            }
+        }
+
+        // +Y / -Y borders from the full column snapshot
+        if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
+            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                    const auto idx = toBorderXZIndex(lx, lz);
+                    const int aboveY = yBase + SubChunk::SIZE;
+                    scSnapshot.posYBorder[idx] = (aboveY < Chunk::SIZE_Y) ? snapshot.blocks[toIndex(lx, aboveY, lz)] : 0;
+                    scSnapshot.posYLightBorder[idx] = (aboveY < Chunk::SIZE_Y) ? snapshot.lightMap[toIndex(lx, aboveY, lz)] : 0;
+                }
+            }
+        }
+        if (scy - 1 >= 0) {
+            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                    const auto idx = toBorderXZIndex(lx, lz);
+                    const int belowY = yBase - 1;
+                    scSnapshot.negYBorder[idx] = snapshot.blocks[toIndex(lx, belowY, lz)];
+                    scSnapshot.negYLightBorder[idx] = snapshot.lightMap[toIndex(lx, belowY, lz)];
+                }
+            }
+        }
+
+        // Build sub-chunk mesh data
+        // Skip all-air sections
+        bool allAir = true;
+        for (size_t i = 0; i < SC_BLOCK_COUNT; ++i) {
+            if (scSnapshot.blocks[i] != 0) {
+                allAir = false;
+                break;
+            }
+        }
+        if (allAir) continue;
+
+        ChunkMeshData scMeshData = buildSubChunkMeshData(scSnapshot);
+
+        // Offset vertices from sub-chunk local to column-local
+        const float yOffset = static_cast<float>(yBase);
+        for (auto& v : scMeshData.opaqueVertices) { v.y += yOffset; }
+        for (auto& v : scMeshData.cutoutVertices) { v.y += yOffset; }
+        for (auto& v : scMeshData.transparentVertices) { v.y += yOffset; }
+
+        // Merge into column-level data
+        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
+                                     scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
+        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
+                                     scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
+        merged.transparentVertices.insert(merged.transparentVertices.end(),
+                                          scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
+        merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
+        merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
+        merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
+        merged.transparentFaceCountAfterGreedy += scMeshData.transparentFaceCountAfterGreedy;
+
+        if (scMeshData.hasBounds) {
+            glm::vec3 offsetMin = scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f);
+            glm::vec3 offsetMax = scMeshData.boundsMax + glm::vec3(0.0f, yOffset, 0.0f);
+            expandBounds(merged, offsetMin, offsetMax);
+        }
+    }
+
+    merged.opaqueVertexCount = static_cast<uint32_t>(merged.opaqueVertices.size());
+    return merged;
+}
+
+void ChunkMesher::generateMesh(Chunk& chunk) {
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if (shouldSkipSubChunk(chunk, scy)) continue;
+        generateSubChunkMesh(chunk, scy);
+    }
+}
+
+bool ChunkMesher::shouldRenderFace(const SubChunkMeshingSnapshot& snapshot,
+                                   const int nx,
+                                   const int ny,
+                                   const int nz,
+                                   const BlockID currentId) {
+    const BlockDef& currentDef = BlockRegistry::get(currentId);
+    return shouldRenderFaceImpl(snapshot, nx, ny, nz, currentId, currentDef);
+}
+
+void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
+                          const glm::vec3& pos,
+                          const int face,
+                          const BlockDef& def,
+                          const int x,
+                          const int y,
+                          const int z,
+                          const SubChunkMeshingSnapshot& snapshot) {
+    const FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+    emitLegacyFace(vertices, pos, face, renderData);
+}
+
+void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
+                                  const glm::vec3& pos,
+                                  const BlockDef& def,
+                                  const int x,
+                                  const int y,
+                                  const int z,
+                                  const SubChunkMeshingSnapshot& snapshot) {
+    addCrossedQuadsImpl(vertices, pos, def, x, y, z, snapshot);
+}
+
+bool ChunkMesher::shouldRenderFaceLegacy(const ChunkMeshingSnapshot& snapshot,
+                                         const int nx,
+                                         const int ny,
+                                         const int nz,
+                                         const BlockID currentId) {
+    const BlockDef& currentDef = BlockRegistry::get(currentId);
+    const BlockID neighborId = getNeighborAwareBlockLegacy(snapshot, nx, ny, nz);
+    if (currentDef.renderShape == BlockRenderShape::Cube &&
+        currentDef.isTransparent &&
+        neighborId == currentId) {
+        return false;
+    }
+    if (neighborId == 0) return true;
+    const BlockDef& neighborDef = BlockRegistry::get(neighborId);
+    if (!neighborDef.isSolid) return true;
+    if (neighborDef.isTransparent) {
+        if (!currentDef.isTransparent) return true;
+        return neighborId != currentId;
+    }
+    return false;
 }

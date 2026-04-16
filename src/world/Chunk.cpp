@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <unordered_set>
 
 namespace {
 int wrapToChunkAxis(const int value) {
@@ -13,45 +12,16 @@ int wrapToChunkAxis(const int value) {
 uint8_t clampLight(const uint8_t level) {
     return static_cast<uint8_t>(std::min<int>(level, 15));
 }
-
-void setupVertexLayout() {
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, x)));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
-
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
-
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
-
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
-}
-}
+} // namespace
 
 Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(chunkZ) {
-    // Initialize palette with AIR as entry 0
-    m_palette.getOrCreateIndex(0);  // AIR = RuntimeId 0
-
-    // Initialize bit-packed array with enough bits for 1 entry (2 bits minimum for practical use)
-    m_blockData = BitPackedArray(BLOCK_COUNT, 2);
-    m_blockData.fill(0);  // Fill with palette index 0 (AIR)
-
-    m_lightMap.fill(0);
+    // Sub-chunks are lazily created on first write.
+    // All start as nullptr (= all-air, SubChunkType::Air with zero storage).
     m_heightMap.fill(0);
 }
 
 Chunk::~Chunk() {
-    m_mesh.destroy();
+    // unique_ptr<SubChunk> auto-destructs, which destroys SubChunk and its mesh
 }
 
 bool Chunk::isInBounds(const int x, const int y, const int z) {
@@ -64,13 +34,83 @@ size_t Chunk::toIndex(const int x, const int y, const int z) {
            static_cast<size_t>(y) * SIZE_X * SIZE_Z;
 }
 
+// --- Sub-chunk access ---
+
+SubChunk* Chunk::getSubChunk(const int scy) {
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+    return m_subChunks[scy].get();
+}
+
+const SubChunk* Chunk::getSubChunk(const int scy) const {
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+    return m_subChunks[scy].get();
+}
+
+SubChunk* Chunk::getOrCreateSubChunk(const int scy) {
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+    if (!m_subChunks[scy]) {
+        m_subChunks[scy] = std::make_unique<SubChunk>();
+        m_subChunks[scy]->m_subChunkY = scy;
+    }
+    return m_subChunks[scy].get();
+}
+
+// --- Light map copy (for mesher snapshot compatibility) ---
+
+void Chunk::copyLightMapTo(std::array<uint8_t, BLOCK_COUNT>& out) const {
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        const int yBase = scy * SUB_CHUNK_SIZE;
+        const SubChunk* sc = getSubChunk(scy);
+        if (!sc) {
+            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
+                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
+                        out[toIndex(lx, yBase + ly, lz)] = 0;
+                    }
+                }
+            }
+        } else {
+            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
+                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
+                        out[toIndex(lx, yBase + ly, lz)] = sc->m_lightMap[SubChunk::toIndex(lx, ly, lz)];
+                    }
+                }
+            }
+        }
+    }
+}
+
+uint8_t Chunk::getLightByFlatIndex(std::size_t flatIndex) const {
+    // Decode flat index back to (x, y, z), then delegate to sub-chunk
+    const int z = static_cast<int>((flatIndex / SIZE_X) % SIZE_Z);
+    const int y = static_cast<int>(flatIndex / (SIZE_X * SIZE_Z));
+    const int x = static_cast<int>(flatIndex % SIZE_X);
+
+    if (!isInBounds(x, y, z)) {
+        return 0;
+    }
+    const int scy = toSubChunkIndex(y);
+    const SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        return 0;
+    }
+    return sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)];
+}
+
+// --- Block access (delegates to sub-chunks) ---
+
 BlockID Chunk::getBlock(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
-        return 0;  // AIR
+        return 0;
     }
-    const size_t idx = toIndex(x, y, z);
-    const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(idx));
-    return m_palette.getRuntimeId(paletteIdx);
+    const int scy = toSubChunkIndex(y);
+    const SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        // Null sub-chunk = all air
+        return 0;
+    }
+    return sc->getBlock(x, toSubChunkLocalY(y), z);
 }
 
 void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
@@ -78,68 +118,52 @@ void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
         return;
     }
 
-    const size_t index = toIndex(x, y, z);
+    const int scy = toSubChunkIndex(y);
+    const int localY = toSubChunkLocalY(y);
 
-    // Check if block is already the same
-    const uint8_t oldPaletteIdx = static_cast<uint8_t>(m_blockData.get(index));
-    if (m_palette.getRuntimeId(oldPaletteIdx) == id) {
+    // If setting to air and sub-chunk doesn't exist, no-op
+    if (id == 0 && !m_subChunks[scy]) {
         return;
     }
 
-    // Get or create palette index for this block ID
-    const uint8_t paletteIdx = m_palette.getOrCreateIndex(id);
-
-    // Check if we need to expand bit width
-    const uint8_t neededBits = m_palette.bitsPerEntry();
-    if (neededBits > m_blockData.bitsPerEntry()) {
-        m_blockData.resize(neededBits);
-    }
-
-    m_blockData.set(index, paletteIdx);
+    SubChunk* sc = getOrCreateSubChunk(scy);
+    sc->setBlock(x, localY, z, id);
+    // Also mark column-level dirty for meshing
     m_dirty = true;
     ++m_meshRevision;
 }
 
 void Chunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
-    for (size_t index = 0; index < BLOCK_COUNT; ++index) {
-        const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(index));
-        out[index] = m_palette.getRuntimeId(paletteIdx);
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        const int yBase = scy * SUB_CHUNK_SIZE;
+        const SubChunk* sc = getSubChunk(scy);
+        if (!sc) {
+            // All-air sub-chunk
+            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
+                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
+                        out[toIndex(lx, yBase + ly, lz)] = 0;
+                    }
+                }
+            }
+        } else {
+            std::array<BlockID, SubChunk::BLOCK_COUNT> subBlocks{};
+            sc->copyBlocksTo(subBlocks);
+            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
+                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
+                        out[toIndex(lx, yBase + ly, lz)] = subBlocks[SubChunk::toIndex(lx, ly, lz)];
+                    }
+                }
+            }
+        }
     }
 }
 
 void Chunk::optimizePalette() {
-    // Step 1: Scan all block data to find which RuntimeIds are actually used
-    std::vector<RuntimeId> usedIds;
-    std::unordered_set<RuntimeId> seen;
-    for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-        uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(i));
-        RuntimeId runtimeId = m_palette.getRuntimeId(paletteIdx);
-        if (seen.insert(runtimeId).second) {
-            usedIds.push_back(runtimeId);
-        }
-    }
-
-    // Step 2: Compact the palette, getting old→new index mapping
-    std::vector<uint8_t> oldToNew = m_palette.compact(usedIds);
-
-    // Step 3: Re-encode all block data with new palette indices
-    const uint8_t newBits = m_palette.bitsPerEntry();
-    if (newBits != m_blockData.bitsPerEntry()) {
-        // Read all old values, then rewrite with new bit width
-        std::vector<uint32_t> oldValues(BLOCK_COUNT);
-        for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            uint8_t oldIdx = static_cast<uint8_t>(m_blockData.get(i));
-            oldValues[i] = oldToNew[oldIdx];
-        }
-        m_blockData.resize(newBits);
-        for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            m_blockData.set(i, oldValues[i]);
-        }
-    } else {
-        // Same bit width, just remap in place
-        for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            uint8_t oldIdx = static_cast<uint8_t>(m_blockData.get(i));
-            m_blockData.set(i, oldToNew[oldIdx]);
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (m_subChunks[scy]) {
+            m_subChunks[scy]->optimizePalette();
         }
     }
 }
@@ -152,70 +176,162 @@ glm::ivec3 Chunk::getWorldOffset() const {
     return {m_chunkX * SIZE_X, 0, m_chunkZ * SIZE_Z};
 }
 
+// --- Dirty tracking ---
+
 bool Chunk::isDirty() const {
-    return m_dirty;
+    if (m_dirty) return true;
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (m_subChunks[scy] && m_subChunks[scy]->isDirty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Chunk::isSubChunkDirty(const int scy) const {
+    const SubChunk* sc = getSubChunk(scy);
+    return sc ? sc->isDirty() : false;
 }
 
 void Chunk::markDirty() {
     m_dirty = true;
     ++m_meshRevision;
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (m_subChunks[scy]) {
+            m_subChunks[scy]->markDirty();
+        }
+    }
 }
 
 uint64_t Chunk::getMeshRevision() const {
     return m_meshRevision;
 }
 
-void Chunk::setMesh(const ChunkMesh& mesh) {
-    m_mesh.destroy();
-    m_mesh = mesh;
-    m_dirty = false;
+// --- Column-level mesh (DEPRECATED — for transition) ---
+
+namespace {
+// Static empty mesh for fallback
+static SubChunkMesh s_emptyMesh;
+}
+
+const SubChunkMesh& Chunk::getMesh() const {
+    // Return the first non-empty sub-chunk mesh for backward compat
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (m_subChunks[scy]) {
+            const SubChunkMesh& m = m_subChunks[scy]->getMesh();
+            if (m.vertexCount > 0 || m.transparentVertexCount > 0 || m.cutoutVertexCount > 0) {
+                return m;
+            }
+        }
+    }
+    return s_emptyMesh;
+}
+
+// --- Per sub-chunk mesh ---
+
+const SubChunkMesh& Chunk::getSubChunkMesh(const int scy) const {
+    const SubChunk* sc = getSubChunk(scy);
+    return sc ? sc->getMesh() : s_emptyMesh;
+}
+
+SubChunkMesh& Chunk::getSubChunkMesh(const int scy) {
+    SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        // Cannot return reference to null — fallback to static empty (read-only path)
+        return s_emptyMesh;
+    }
+    return sc->getMesh();
+}
+
+void Chunk::setSubChunkMesh(const int scy, const SubChunkMesh& mesh) {
+    SubChunk* sc = getOrCreateSubChunk(scy);
+    sc->setMesh(mesh);
 }
 
 void Chunk::markMeshClean() {
     m_dirty = false;
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (m_subChunks[scy]) {
+            m_subChunks[scy]->markMeshClean();
+        }
+    }
 }
 
-const ChunkMesh& Chunk::getMesh() const {
-    return m_mesh;
+void Chunk::markSubChunkMeshClean(const int scy) {
+    SubChunk* sc = getSubChunk(scy);
+    if (sc) {
+        sc->markMeshClean();
+    }
 }
 
-ChunkMesh& Chunk::getMesh() {
-    return m_mesh;
+void Chunk::markSubChunkDirty(const int scy) {
+    SubChunk* sc = getOrCreateSubChunk(scy);
+    sc->markDirty();
+    m_dirty = true;
+    ++m_meshRevision;
 }
+
+uint64_t Chunk::getSubChunkMeshRevision(const int scy) const {
+    const SubChunk* sc = getSubChunk(scy);
+    return sc ? sc->getMeshRevision() : 0;
+}
+
+// --- Light access (delegates to sub-chunks) ---
 
 uint8_t Chunk::getSunlight(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
         return 0;
     }
-    return static_cast<uint8_t>((m_lightMap[toIndex(x, y, z)] >> 4) & 0x0F);
+    const int scy = toSubChunkIndex(y);
+    const SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        // Null sub-chunk = all air, sky light is 15 (full sun) above height map
+        // But we don't know height map here, so return 0 as safe default.
+        // LightEngine will handle this correctly via world-coordinate access.
+        return 0;
+    }
+    return sc->getSunlight(x, toSubChunkLocalY(y), z);
 }
 
 void Chunk::setSunlight(const int x, const int y, const int z, const uint8_t level) {
     if (!isInBounds(x, y, z)) {
         return;
     }
-
-    const size_t index = toIndex(x, y, z);
-    const uint8_t clamped = clampLight(level);
-    m_lightMap[index] = static_cast<uint8_t>((clamped << 4) | (m_lightMap[index] & 0x0F));
+    const int scy = toSubChunkIndex(y);
+    // Optimization: don't create a sub-chunk just to write 0 — nullptr sub-chunks default to 0
+    if (level == 0 && !m_subChunks[scy]) {
+        return;
+    }
+    SubChunk* sc = getOrCreateSubChunk(scy);
+    sc->setSunlight(x, toSubChunkLocalY(y), z, level);
 }
 
 uint8_t Chunk::getBlockLight(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
         return 0;
     }
-    return static_cast<uint8_t>(m_lightMap[toIndex(x, y, z)] & 0x0F);
+    const int scy = toSubChunkIndex(y);
+    const SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        return 0;
+    }
+    return sc->getBlockLight(x, toSubChunkLocalY(y), z);
 }
 
 void Chunk::setBlockLight(const int x, const int y, const int z, const uint8_t level) {
     if (!isInBounds(x, y, z)) {
         return;
     }
-
-    const size_t index = toIndex(x, y, z);
-    const uint8_t clamped = clampLight(level);
-    m_lightMap[index] = static_cast<uint8_t>((m_lightMap[index] & 0xF0) | clamped);
+    const int scy = toSubChunkIndex(y);
+    // Optimization: don't create a sub-chunk just to write 0 — nullptr sub-chunks default to 0
+    if (level == 0 && !m_subChunks[scy]) {
+        return;
+    }
+    SubChunk* sc = getOrCreateSubChunk(scy);
+    sc->setBlockLight(x, toSubChunkLocalY(y), z, level);
 }
+
+// --- Height map (remains column-level) ---
 
 int Chunk::getHeightMap(const int x, const int z) const {
     if (x < 0 || x >= SIZE_X || z < 0 || z >= SIZE_Z) {
@@ -243,136 +359,4 @@ void Chunk::recalcHeightMap(const int x, const int z) {
         }
     }
     m_heightMap[static_cast<size_t>(x) + static_cast<size_t>(z) * SIZE_X] = height;
-}
-
-void ChunkMesh::upload(const std::vector<BlockVertex>& vertices) {
-    vertexCount = static_cast<uint32_t>(vertices.size());
-
-    if (vao == 0) {
-        glGenVertexArrays(1, &vao);
-    }
-    if (vbo == 0) {
-        glGenBuffers(1, &vbo);
-    }
-
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex));
-
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-    if (dataSize <= vboCapacity) {
-        // Reuse existing buffer — just update the data
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
-                        vertices.empty() ? nullptr : vertices.data());
-    } else {
-        // Orphaning: allocate new buffer with headroom to reduce future reallocations
-        vboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, vboCapacity, nullptr, GL_STATIC_DRAW);
-        if (!vertices.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, vertices.data());
-        }
-    }
-    setupVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
-void ChunkMesh::uploadCutout(const std::vector<BlockVertex>& cutoutVerts) {
-    cutoutVertexCount = static_cast<uint32_t>(cutoutVerts.size());
-
-    if (cutoutVao == 0) {
-        glGenVertexArrays(1, &cutoutVao);
-    }
-    if (cutoutVbo == 0) {
-        glGenBuffers(1, &cutoutVbo);
-    }
-
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(cutoutVerts.size() * sizeof(BlockVertex));
-
-    glBindVertexArray(cutoutVao);
-    glBindBuffer(GL_ARRAY_BUFFER, cutoutVbo);
-
-    if (dataSize <= cutoutVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
-                        cutoutVerts.empty() ? nullptr : cutoutVerts.data());
-    } else {
-        cutoutVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, cutoutVboCapacity, nullptr, GL_STATIC_DRAW);
-        if (!cutoutVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, cutoutVerts.data());
-        }
-    }
-    setupVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
-void ChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparentVerts) {
-    transparentVertexCount = static_cast<uint32_t>(transparentVerts.size());
-
-    if (transparentVao == 0) {
-        glGenVertexArrays(1, &transparentVao);
-    }
-    if (transparentVbo == 0) {
-        glGenBuffers(1, &transparentVbo);
-    }
-
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(transparentVerts.size() * sizeof(BlockVertex));
-
-    glBindVertexArray(transparentVao);
-    glBindBuffer(GL_ARRAY_BUFFER, transparentVbo);
-
-    if (dataSize <= transparentVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
-                        transparentVerts.empty() ? nullptr : transparentVerts.data());
-    } else {
-        transparentVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, transparentVboCapacity, nullptr, GL_STATIC_DRAW);
-        if (!transparentVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, transparentVerts.data());
-        }
-    }
-    setupVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
-void ChunkMesh::destroy() {
-    if (vbo != 0) {
-        glDeleteBuffers(1, &vbo);
-        vbo = 0;
-    }
-    if (vao != 0) {
-        glDeleteVertexArrays(1, &vao);
-        vao = 0;
-    }
-    vboCapacity = 0;
-    if (transparentVbo != 0) {
-        glDeleteBuffers(1, &transparentVbo);
-        transparentVbo = 0;
-    }
-    if (transparentVao != 0) {
-        glDeleteVertexArrays(1, &transparentVao);
-        transparentVao = 0;
-    }
-    transparentVboCapacity = 0;
-    if (cutoutVbo != 0) {
-        glDeleteBuffers(1, &cutoutVbo);
-        cutoutVbo = 0;
-    }
-    if (cutoutVao != 0) {
-        glDeleteVertexArrays(1, &cutoutVao);
-        cutoutVao = 0;
-    }
-    cutoutVboCapacity = 0;
-
-    vertexCount = 0;
-    transparentVertexCount = 0;
-    cutoutVertexCount = 0;
-    hasBounds = false;
-    boundsMin = glm::vec3(0.0f);
-    boundsMax = glm::vec3(0.0f);
 }

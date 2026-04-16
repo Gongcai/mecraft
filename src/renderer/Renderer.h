@@ -125,6 +125,7 @@ private:
 
     struct ChunkRenderEntry {
         Chunk* chunk = nullptr;
+        int scy = 0;  // Sub-chunk index for per-section rendering
         int regionX = 0;
         int regionZ = 0;
         int chunkX = 0;
@@ -140,10 +141,10 @@ private:
     void bindChunkRenderState(const World& world, const TextureArray& texArray) const;
     void submitMeshingJobs(const World& world);
     void renderOpaqueChunksAndCollectPasses(const World& world,
-                                            std::vector<Chunk*>& cutoutChunks,
-                                            std::vector<Chunk*>& transparentChunks);
-    void renderCutoutChunks(const std::vector<Chunk*>& cutoutChunks);
-    void renderTransparentChunks(const std::vector<Chunk*>& transparentChunks);
+                                            std::vector<ChunkRenderEntry>& cutoutEntries,
+                                            std::vector<ChunkRenderEntry>& transparentEntries);
+    void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
+    void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void initOutlineMesh();
     void initBreakOverlayMesh();
     void renderBlockOutline(const Player& player);

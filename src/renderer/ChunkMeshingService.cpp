@@ -25,11 +25,11 @@ void ChunkMeshingService::shutdown() {
     }
 
     std::lock_guard<SpinLock> completedLock(m_completedLock);
-    std::queue<ChunkMeshingResult> emptyResults;
+    std::queue<SubChunkMeshingResult> emptyResults;
     std::swap(m_completed, emptyResults);
 }
 
-void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
+void ChunkMeshingService::submit(SubChunkMeshingJob job, const int priority) {
     ThreadPool* pool = nullptr;
     uint64_t epoch = 0;
     {
@@ -43,17 +43,26 @@ void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
     }
 
     pool->submit([this, epoch, job = std::move(job)]() mutable {
-        ChunkMeshingResult result;
+        SubChunkMeshingResult result;
         result.chunkKey = job.chunkKey;
+        result.scy = job.scy;
         result.revision = job.revision;
 
         if (job.chunk) {
-            ChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSnapshot(
-                *job.chunk, job.neighborPosX.get(), job.neighborNegX.get(),
+            SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
+                *job.chunk, job.scy,
+                job.neighborPosX.get(), job.neighborNegX.get(),
                 job.neighborPosZ.get(), job.neighborNegZ.get(),
                 job.world);
             if (snapshot) {
-                result.meshData = ChunkMesher::buildMeshData(*snapshot);
+                result.meshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
+
+                // Offset bounds from sub-chunk local to column-local
+                const int yBase = job.scy * SubChunk::SIZE;
+                if (result.meshData.hasBounds) {
+                    result.meshData.boundsMin.y += static_cast<float>(yBase);
+                    result.meshData.boundsMax.y += static_cast<float>(yBase);
+                }
             }
         }
 
@@ -71,7 +80,28 @@ void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
     }, priority);
 }
 
-bool ChunkMeshingService::tryPopCompleted(ChunkMeshingResult& out) {
+void ChunkMeshingService::submit(ChunkMeshingJob job, const int priority) {
+    // Legacy: split into per-sub-chunk jobs
+    if (!job.chunk) return;
+
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if (ChunkMesher::shouldSkipSubChunk(*job.chunk, scy)) continue;
+
+        SubChunkMeshingJob scJob;
+        scJob.chunkKey = job.chunkKey;
+        scJob.scy = scy;
+        scJob.revision = job.chunk->getSubChunkMeshRevision(scy);
+        scJob.chunk = job.chunk;
+        scJob.neighborPosX = job.neighborPosX;
+        scJob.neighborNegX = job.neighborNegX;
+        scJob.neighborPosZ = job.neighborPosZ;
+        scJob.neighborNegZ = job.neighborNegZ;
+        scJob.world = job.world;
+        submit(std::move(scJob), priority);
+    }
+}
+
+bool ChunkMeshingService::tryPopCompleted(SubChunkMeshingResult& out) {
     std::lock_guard<SpinLock> lock(m_completedLock);
     if (m_completed.empty()) {
         return false;
@@ -85,4 +115,3 @@ bool ChunkMeshingService::tryPopCompleted(ChunkMeshingResult& out) {
 int ChunkMeshingService::inFlightCount() const {
     return m_inFlight.load(std::memory_order_acquire);
 }
-
