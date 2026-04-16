@@ -256,7 +256,8 @@ std::shared_ptr<Chunk> makeLargeChunk(int cx, int cz, uint32_t seed) {
     return chunk;
 }
 
-// ── Scenario 1: Single-thread buildMeshData baseline ─────────────────
+// ── Scenario 1: Single-thread sub-chunk meshing baseline ─────────────
+
 
 struct TestCase {
     std::string name;
@@ -273,29 +274,101 @@ uint64_t checksumMeshData(const ChunkMeshData& data) {
     return h;
 }
 
+void expandBounds(ChunkMeshData& merged, const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
+    if (!merged.hasBounds) {
+        merged.hasBounds = true;
+        merged.boundsMin = candidateMin;
+        merged.boundsMax = candidateMax;
+        return;
+    }
+
+    merged.boundsMin.x = std::min(merged.boundsMin.x, candidateMin.x);
+    merged.boundsMin.y = std::min(merged.boundsMin.y, candidateMin.y);
+    merged.boundsMin.z = std::min(merged.boundsMin.z, candidateMin.z);
+    merged.boundsMax.x = std::max(merged.boundsMax.x, candidateMax.x);
+    merged.boundsMax.y = std::max(merged.boundsMax.y, candidateMax.y);
+    merged.boundsMax.z = std::max(merged.boundsMax.z, candidateMax.z);
+}
+
+ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
+    ChunkMeshData merged;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if (ChunkMesher::shouldSkipSubChunk(chunk, scy)) {
+            continue;
+        }
+
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(chunk, scy);
+        if (!snapshot) {
+            continue;
+        }
+
+        ChunkMeshData scMeshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
+        const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
+        for (auto& vertex : scMeshData.opaqueVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.cutoutVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.transparentVertices) { vertex.y += yOffset; }
+
+        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
+                                     scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
+        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
+                                     scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
+        merged.transparentVertices.insert(merged.transparentVertices.end(),
+                                          scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
+        merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
+        merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
+        merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
+        merged.transparentFaceCountAfterGreedy += scMeshData.transparentFaceCountAfterGreedy;
+        if (scMeshData.hasBounds) {
+            expandBounds(merged,
+                         scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
+                         scMeshData.boundsMax + glm::vec3(0.0f, yOffset, 0.0f));
+        }
+    }
+
+    merged.opaqueVertexCount = static_cast<uint32_t>(merged.opaqueVertices.size());
+    return merged;
+}
+
+std::vector<SubChunkMeshingJob> collectMeshingJobs(const std::vector<std::shared_ptr<Chunk>>& chunks) {
+    std::vector<SubChunkMeshingJob> jobs;
+    for (size_t chunkIndex = 0; chunkIndex < chunks.size(); ++chunkIndex) {
+        const std::shared_ptr<Chunk>& chunk = chunks[chunkIndex];
+        if (!chunk) {
+            continue;
+        }
+
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (ChunkMesher::shouldSkipSubChunk(*chunk, scy)) {
+                continue;
+            }
+
+            SubChunkMeshingJob job;
+            job.chunkKey = static_cast<int64_t>(chunkIndex);
+            job.scy = scy;
+            job.revision = chunk->getSubChunkMeshRevision(scy);
+            job.chunk = chunk;
+            job.world = nullptr;
+            jobs.push_back(std::move(job));
+        }
+    }
+    return jobs;
+}
+
+
 BenchmarkStats runSingleThreadBenchmark(const TestCase& testCase,
                                         int warmupRounds,
                                         int measureRounds) {
-    // Pre-capture snapshots so measurement only covers buildMeshData
-    std::vector<ChunkMeshingSnapshotPtr> snapshots;
-    snapshots.reserve(testCase.chunks.size());
-    for (const auto& chunk : testCase.chunks) {
-        snapshots.push_back(ChunkMesher::captureSnapshot(*chunk));
-    }
+    const size_t batchCount = testCase.chunks.size();
 
-    const size_t batchCount = snapshots.size();
-
-    // Warmup
     for (int r = 0; r < warmupRounds; ++r) {
         for (size_t i = 0; i < batchCount; ++i) {
-            ChunkMeshData data = ChunkMesher::buildMeshData(*snapshots[i]);
+            ChunkMeshData data = buildMeshDataFor(*testCase.chunks[i]);
             if (checksumMeshData(data) == 0xFFFFFFFFFFFFFFFFULL) {
                 std::cout << "[meshing_perf_test] impossible_warmup_checksum\n";
             }
         }
     }
 
-    // Measure
     std::vector<double> timingsMs;
     timingsMs.reserve(static_cast<size_t>(measureRounds));
     uint64_t checksum = 0;
@@ -304,10 +377,11 @@ BenchmarkStats runSingleThreadBenchmark(const TestCase& testCase,
         const auto start = std::chrono::high_resolution_clock::now();
         uint64_t roundChecksum = 0;
         for (size_t i = 0; i < batchCount; ++i) {
-            ChunkMeshData data = ChunkMesher::buildMeshData(*snapshots[i]);
+            ChunkMeshData data = buildMeshDataFor(*testCase.chunks[i]);
             roundChecksum ^= checksumMeshData(data) + static_cast<uint64_t>(i + 1);
         }
         const auto end = std::chrono::high_resolution_clock::now();
+
 
         checksum ^= roundChecksum + static_cast<uint64_t>(r + 1);
         const double durationMs = std::chrono::duration<double, std::milli>(end - start).count();
@@ -334,22 +408,17 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
                                      int numThreads,
                                      int warmupRounds,
                                      int measureRounds) {
-    const int totalChunks = static_cast<int>(chunks.size());
+    const std::vector<SubChunkMeshingJob> jobs = collectMeshingJobs(chunks);
+    const int totalChunks = static_cast<int>(jobs.size());
 
-    // Warmup
     for (int w = 0; w < warmupRounds; ++w) {
         ThreadPool pool(numThreads);
         ChunkMeshingService service;
         pool.start();
         service.start(&pool);
 
-        for (int i = 0; i < totalChunks; ++i) {
-            ChunkMeshingJob job;
-            job.chunkKey = i;
-            job.revision = chunks[static_cast<size_t>(i)]->getMeshRevision();
-            job.chunk = chunks[static_cast<size_t>(i)];
-            job.world = nullptr;
-            service.submit(std::move(job), 0);
+        for (const SubChunkMeshingJob& job : jobs) {
+            service.submit(job, 0);
         }
 
         int completedCount = 0;
@@ -368,7 +437,6 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
         pool.shutdown();
     }
 
-    // Measure
     double totalTimeMs = 0.0;
     uint64_t checksum = 0;
 
@@ -380,13 +448,8 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
 
         const auto submitStart = std::chrono::high_resolution_clock::now();
 
-        for (int i = 0; i < totalChunks; ++i) {
-            ChunkMeshingJob job;
-            job.chunkKey = i;
-            job.revision = chunks[static_cast<size_t>(i)]->getMeshRevision();
-            job.chunk = chunks[static_cast<size_t>(i)];
-            job.world = nullptr;
-            service.submit(std::move(job), 0);
+        for (const SubChunkMeshingJob& job : jobs) {
+            service.submit(job, 0);
         }
 
         int completedCount = 0;
@@ -418,6 +481,7 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
     }
     return stats;
 }
+
 
 void printThroughput(const std::string& caseName,
                      int numThreads,
@@ -532,7 +596,8 @@ bool writeResultsJson(const std::string& filePath,
 
     json root;
     root["benchmark"]     = "meshing_perf_test";
-    root["focus"]         = "ChunkMesher::buildMeshData + ChunkMeshingService throughput";
+    root["focus"]         = "SubChunk meshing + ChunkMeshingService throughput";
+
     root["captured_at"]   = getCurrentDate();
     root["build"]         = {{"config", buildConfig}};
     root["settings"]      = {
@@ -603,8 +668,9 @@ int main() {
     std::vector<CaseResult> singleThreadResults;
     std::vector<CaseResult> throughputResults;
 
-    // ── Scenario 1: Single-thread buildMeshData baseline ─────────────
-    std::cout << "[meshing_perf_test] === Scenario 1: buildMeshData single-thread baseline ===\n";
+    // ── Scenario 1: Single-thread sub-chunk meshing baseline ─────────
+    std::cout << "[meshing_perf_test] === Scenario 1: sub-chunk meshing single-thread baseline ===\n";
+
     for (const auto& tc : testCases) {
         const BenchmarkStats stats = runSingleThreadBenchmark(tc, warmupRounds, measureRounds);
         printStats("meshing_perf_test", tc.name, stats, warmupRounds, measureRounds,

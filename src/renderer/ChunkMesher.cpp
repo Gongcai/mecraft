@@ -470,32 +470,27 @@ void captureSubChunkBorders(const Chunk& chunk,
     const glm::ivec3 offset = chunk.getWorldOffset();
     const int yBase = scy * SubChunk::SIZE;
 
-    // +Y border: sub-chunk above (or air if top)
+    // +Y border: query through Chunk so missing sky-only sub-chunks still expose implicit sunlight.
     if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
-        const SubChunk* above = chunk.getSubChunk(scy + 1);
-        if (above) {
-            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
-                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                    const auto idx = toBorderXZIndex(lx, lz);
-                    snapshot.posYBorder[idx] = above->getBlock(lx, 0, lz);
-                    snapshot.posYLightBorder[idx] = above->m_lightMap[SubChunk::toIndex(lx, 0, lz)];
-                }
+        const int aboveY = yBase + SubChunk::SIZE;
+        for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+            for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                const auto idx = toBorderXZIndex(lx, lz);
+                snapshot.posYBorder[idx] = chunk.getBlock(lx, aboveY, lz);
+                snapshot.posYLightBorder[idx] = chunk.getPackedLight(lx, aboveY, lz);
             }
         }
-        // If above sub-chunk is nullptr, border stays as 0 (air) — correct for all-air
     }
     // else: isTopSection, border stays 0
 
-    // -Y border: sub-chunk below (or air if bottom)
+    // -Y border: query through Chunk for consistency with implicit light defaults.
     if (scy - 1 >= 0) {
-        const SubChunk* below = chunk.getSubChunk(scy - 1);
-        if (below) {
-            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
-                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                    const auto idx = toBorderXZIndex(lx, lz);
-                    snapshot.negYBorder[idx] = below->getBlock(lx, SubChunk::SIZE - 1, lz);
-                    snapshot.negYLightBorder[idx] = below->m_lightMap[SubChunk::toIndex(lx, SubChunk::SIZE - 1, lz)];
-                }
+        const int belowY = yBase - 1;
+        for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+            for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                const auto idx = toBorderXZIndex(lx, lz);
+                snapshot.negYBorder[idx] = chunk.getBlock(lx, belowY, lz);
+                snapshot.negYLightBorder[idx] = chunk.getPackedLight(lx, belowY, lz);
             }
         }
     }
@@ -512,9 +507,9 @@ void captureSubChunkBorders(const Chunk& chunk,
                 ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz)
                 : sampleMissingNeighborBlock(world, offset.x - 1, columnY, offset.z + lz);
             snapshot.posXLightBorder[idx] = neighborPosX
-                ? neighborPosX->getLightByFlatIndex(neighborPosX->toIndex(0, columnY, lz)) : 0;
+                ? neighborPosX->getPackedLight(0, columnY, lz) : 0;
             snapshot.negXLightBorder[idx] = neighborNegX
-                ? neighborNegX->getLightByFlatIndex(neighborNegX->toIndex(Chunk::SIZE_X - 1, columnY, lz)) : 0;
+                ? neighborNegX->getPackedLight(Chunk::SIZE_X - 1, columnY, lz) : 0;
         }
         for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
             const auto idx = toBorderXZIndex(ly, lx);
@@ -525,9 +520,9 @@ void captureSubChunkBorders(const Chunk& chunk,
                 ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1)
                 : sampleMissingNeighborBlock(world, offset.x + lx, columnY, offset.z - 1);
             snapshot.posZLightBorder[idx] = neighborPosZ
-                ? neighborPosZ->getLightByFlatIndex(neighborPosZ->toIndex(lx, columnY, 0)) : 0;
+                ? neighborPosZ->getPackedLight(lx, columnY, 0) : 0;
             snapshot.negZLightBorder[idx] = neighborNegZ
-                ? neighborNegZ->getLightByFlatIndex(neighborNegZ->toIndex(lx, columnY, Chunk::SIZE_Z - 1)) : 0;
+                ? neighborNegZ->getPackedLight(lx, columnY, Chunk::SIZE_Z - 1) : 0;
         }
     }
 }
@@ -644,10 +639,10 @@ void emitGreedyFace(std::vector<BlockVertex>& vertices,
     expandBounds(meshData, boundsMin, boundsMax);
 }
 
-void emitLegacyFace(std::vector<BlockVertex>& vertices,
-                    const glm::vec3& pos,
-                    const int face,
-                    const FaceRenderData& renderData) {
+void emitUnitFace(std::vector<BlockVertex>& vertices,
+                  const glm::vec3& pos,
+                  const int face,
+                  const FaceRenderData& renderData) {
     const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     std::array<glm::vec3, 4> corners{};
     for (size_t i = 0; i < corners.size(); ++i) {
@@ -907,101 +902,6 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
     emitQuad(kCrossQuadB);
 }
 
-// ======================== Legacy full-column helpers ========================
-
-std::size_t toIndex(const int x, const int y, const int z) {
-    return static_cast<std::size_t>(x) +
-           static_cast<std::size_t>(z) * Chunk::SIZE_X +
-           static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
-}
-
-std::size_t toBorderYZIndex(const int y, const int z) {
-    return static_cast<std::size_t>(z) + static_cast<std::size_t>(y) * Chunk::SIZE_Z;
-}
-
-std::size_t toBorderYXIndex(const int y, const int x) {
-    return static_cast<std::size_t>(x) + static_cast<std::size_t>(y) * Chunk::SIZE_X;
-}
-
-BlockID getNeighborAwareBlockLegacy(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
-    }
-
-    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
-        return 0;
-    }
-
-    if (x < 0) {
-        return snapshot.negXBorder[toBorderYZIndex(y, z)];
-    }
-    if (x >= Chunk::SIZE_X) {
-        return snapshot.posXBorder[toBorderYZIndex(y, z)];
-    }
-    if (z < 0) {
-        return snapshot.negZBorder[toBorderYXIndex(y, x)];
-    }
-    if (z >= Chunk::SIZE_Z) {
-        return snapshot.posZBorder[toBorderYXIndex(y, x)];
-    }
-
-    return snapshot.blocks[toIndex(x, y, z)];
-}
-
-uint8_t getNeighborAwareLightLegacy(const ChunkMeshingSnapshot& snapshot, int x, int y, int z) {
-    if (y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
-    }
-
-    if ((x < 0 || x >= Chunk::SIZE_X) && (z < 0 || z >= Chunk::SIZE_Z)) {
-        return 0;
-    }
-
-    if (x < 0) {
-        return snapshot.negXLightBorder[toBorderYZIndex(y, z)];
-    }
-    if (x >= Chunk::SIZE_X) {
-        return snapshot.posXLightBorder[toBorderYZIndex(y, z)];
-    }
-    if (z < 0) {
-        return snapshot.negZLightBorder[toBorderYXIndex(y, x)];
-    }
-    if (z >= Chunk::SIZE_Z) {
-        return snapshot.posZLightBorder[toBorderYXIndex(y, x)];
-    }
-
-    return snapshot.lightMap[toIndex(x, y, z)];
-}
-
-void captureBordersLegacy(const Chunk& chunk,
-                          ChunkMeshingSnapshot& snapshot,
-                          const Chunk* neighborPosX,
-                          const Chunk* neighborNegX,
-                          const Chunk* neighborPosZ,
-                          const Chunk* neighborNegZ,
-                          const World* world) {
-    const glm::ivec3 offset = chunk.getWorldOffset();
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            const std::size_t index = toBorderYZIndex(y, z);
-            snapshot.posXBorder[index] = neighborPosX ? neighborPosX->getBlock(0, y, z)
-                                                      : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, y, offset.z + z);
-            snapshot.negXBorder[index] = neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, y, z)
-                                                      : sampleMissingNeighborBlock(world, offset.x - 1, y, offset.z + z);
-            snapshot.posXLightBorder[index] = neighborPosX ? neighborPosX->getLightByFlatIndex(neighborPosX->toIndex(0, y, z)) : 0;
-            snapshot.negXLightBorder[index] = neighborNegX ? neighborNegX->getLightByFlatIndex(neighborNegX->toIndex(Chunk::SIZE_X - 1, y, z)) : 0;
-        }
-        for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            const std::size_t index = toBorderYXIndex(y, x);
-            snapshot.posZBorder[index] = neighborPosZ ? neighborPosZ->getBlock(x, y, 0)
-                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z + Chunk::SIZE_Z);
-            snapshot.negZBorder[index] = neighborNegZ ? neighborNegZ->getBlock(x, y, Chunk::SIZE_Z - 1)
-                                                      : sampleMissingNeighborBlock(world, offset.x + x, y, offset.z - 1);
-            snapshot.posZLightBorder[index] = neighborPosZ ? neighborPosZ->getLightByFlatIndex(neighborPosZ->toIndex(x, y, 0)) : 0;
-            snapshot.negZLightBorder[index] = neighborNegZ ? neighborNegZ->getLightByFlatIndex(neighborNegZ->toIndex(x, y, Chunk::SIZE_Z - 1)) : 0;
-        }
-    }
-}
 } // anonymous namespace
 
 // ======================== Public API: Per-sub-chunk ========================
@@ -1106,9 +1006,9 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
 
                     auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
                     FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
-                    emitLegacyFace(target,
-                            glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                            face, renderData);
+                    emitUnitFace(target,
+                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                                 face, renderData);
                     expandBounds(meshData,
                                  glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
@@ -1145,205 +1045,16 @@ void ChunkMesher::generateSubChunkMesh(Chunk& chunk, const int scy) {
 
 bool ChunkMesher::shouldSkipSubChunk(const Chunk& chunk, const int scy) {
     const SubChunk* sc = chunk.getSubChunk(scy);
-    if (!sc) return true;  // nullptr = all-air, skip
-    if (sc->getType() == SubChunkType::Air) return true;  // All-air sub-chunk
-    // Solid type: still mesh it (may have exposed faces at borders)
-    return false;
-}
+    if (!sc) return true;
+    if (sc->getType() == SubChunkType::Air) return true;
+    if (sc->getType() != SubChunkType::Solid) return false;
 
-// ======================== Legacy full-column API ========================
-
-ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(
-    const Chunk& chunk,
-    const Chunk* neighborPosX,
-    const Chunk* neighborNegX,
-    const Chunk* neighborPosZ,
-    const Chunk* neighborNegZ,
-    const World* world) {
-    auto snapshot = std::make_shared<ChunkMeshingSnapshot>();
-    chunk.copyBlocksTo(snapshot->blocks);
-    chunk.copyLightMapTo(snapshot->lightMap);
-    captureBordersLegacy(chunk, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
-    return snapshot;
-}
-
-ChunkMeshingSnapshotPtr ChunkMesher::captureSnapshot(const Chunk& chunk, const World* world) {
-    return captureSnapshot(chunk,
-                           chunk.neighbors[0], chunk.neighbors[1],
-                           chunk.neighbors[2], chunk.neighbors[3],
-                           world);
-}
-
-ChunkMeshData ChunkMesher::buildMeshData(const ChunkMeshingSnapshot& snapshot) {
-    // Convert legacy snapshot to sub-chunk snapshots and build per-section
-    // For transition, we build all 16 sub-chunk sections and merge
-    ChunkMeshData merged;
-    merged.opaqueVertices.reserve(8192);
-    merged.cutoutVertices.reserve(2048);
-    merged.transparentVertices.reserve(4096);
-
-    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-        const int yBase = scy * SubChunk::SIZE;
-
-        SubChunkMeshingSnapshot scSnapshot;
-        scSnapshot.scy = scy;
-        scSnapshot.yBase = yBase;
-        scSnapshot.isTopSection = (scy == Chunk::NUM_SUB_CHUNKS - 1);
-        scSnapshot.isBottomSection = (scy == 0);
-
-        // Extract sub-chunk block/light data from legacy snapshot
-        for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
-            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
-                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                    const int columnY = yBase + ly;
-                    const auto colIdx = toIndex(lx, columnY, lz);
-                    scSnapshot.blocks[scToIndex(lx, ly, lz)] = snapshot.blocks[colIdx];
-                    scSnapshot.lightMap[scToIndex(lx, ly, lz)] = snapshot.lightMap[colIdx];
-                }
-            }
-        }
-
-        // Extract borders from legacy border arrays
-        for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
-            const int columnY = yBase + ly;
-            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
-                const auto scIdx = toBorderXZIndex(ly, lz);
-                const auto colIdx = toBorderYZIndex(columnY, lz);
-                scSnapshot.posXBorder[scIdx] = snapshot.posXBorder[colIdx];
-                scSnapshot.negXBorder[scIdx] = snapshot.negXBorder[colIdx];
-                scSnapshot.posXLightBorder[scIdx] = snapshot.posXLightBorder[colIdx];
-                scSnapshot.negXLightBorder[scIdx] = snapshot.negXLightBorder[colIdx];
-            }
-            for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                const auto scIdx = toBorderXZIndex(ly, lx);
-                const auto colIdx = toBorderYXIndex(columnY, lx);
-                scSnapshot.posZBorder[scIdx] = snapshot.posZBorder[colIdx];
-                scSnapshot.negZBorder[scIdx] = snapshot.negZBorder[colIdx];
-                scSnapshot.posZLightBorder[scIdx] = snapshot.posZLightBorder[colIdx];
-                scSnapshot.negZLightBorder[scIdx] = snapshot.negZLightBorder[colIdx];
-            }
-        }
-
-        // +Y / -Y borders from the full column snapshot
-        if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
-            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
-                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                    const auto idx = toBorderXZIndex(lx, lz);
-                    const int aboveY = yBase + SubChunk::SIZE;
-                    scSnapshot.posYBorder[idx] = (aboveY < Chunk::SIZE_Y) ? snapshot.blocks[toIndex(lx, aboveY, lz)] : 0;
-                    scSnapshot.posYLightBorder[idx] = (aboveY < Chunk::SIZE_Y) ? snapshot.lightMap[toIndex(lx, aboveY, lz)] : 0;
-                }
-            }
-        }
-        if (scy - 1 >= 0) {
-            for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
-                for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                    const auto idx = toBorderXZIndex(lx, lz);
-                    const int belowY = yBase - 1;
-                    scSnapshot.negYBorder[idx] = snapshot.blocks[toIndex(lx, belowY, lz)];
-                    scSnapshot.negYLightBorder[idx] = snapshot.lightMap[toIndex(lx, belowY, lz)];
-                }
-            }
-        }
-
-        // Build sub-chunk mesh data
-        // Skip all-air sections
-        bool allAir = true;
-        for (size_t i = 0; i < SC_BLOCK_COUNT; ++i) {
-            if (scSnapshot.blocks[i] != 0) {
-                allAir = false;
-                break;
-            }
-        }
-        if (allAir) continue;
-
-        ChunkMeshData scMeshData = buildSubChunkMeshData(scSnapshot);
-
-        // Offset vertices from sub-chunk local to column-local
-        const float yOffset = static_cast<float>(yBase);
-        for (auto& v : scMeshData.opaqueVertices) { v.y += yOffset; }
-        for (auto& v : scMeshData.cutoutVertices) { v.y += yOffset; }
-        for (auto& v : scMeshData.transparentVertices) { v.y += yOffset; }
-
-        // Merge into column-level data
-        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
-                                     scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
-        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
-                                     scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
-        merged.transparentVertices.insert(merged.transparentVertices.end(),
-                                          scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
-        merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
-        merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
-        merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
-        merged.transparentFaceCountAfterGreedy += scMeshData.transparentFaceCountAfterGreedy;
-
-        if (scMeshData.hasBounds) {
-            glm::vec3 offsetMin = scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f);
-            glm::vec3 offsetMax = scMeshData.boundsMax + glm::vec3(0.0f, yOffset, 0.0f);
-            expandBounds(merged, offsetMin, offsetMax);
+    for (const SubChunk* neighbor : sc->neighbors) {
+        if (!neighbor || neighbor->getType() != SubChunkType::Solid) {
+            return false;
         }
     }
 
-    merged.opaqueVertexCount = static_cast<uint32_t>(merged.opaqueVertices.size());
-    return merged;
+    return true;
 }
 
-void ChunkMesher::generateMesh(Chunk& chunk) {
-    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-        if (shouldSkipSubChunk(chunk, scy)) continue;
-        generateSubChunkMesh(chunk, scy);
-    }
-}
-
-bool ChunkMesher::shouldRenderFace(const SubChunkMeshingSnapshot& snapshot,
-                                   const int nx,
-                                   const int ny,
-                                   const int nz,
-                                   const BlockID currentId) {
-    const BlockDef& currentDef = BlockRegistry::get(currentId);
-    return shouldRenderFaceImpl(snapshot, nx, ny, nz, currentId, currentDef);
-}
-
-void ChunkMesher::addFace(std::vector<BlockVertex>& vertices,
-                          const glm::vec3& pos,
-                          const int face,
-                          const BlockDef& def,
-                          const int x,
-                          const int y,
-                          const int z,
-                          const SubChunkMeshingSnapshot& snapshot) {
-    const FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
-    emitLegacyFace(vertices, pos, face, renderData);
-}
-
-void ChunkMesher::addCrossedQuads(std::vector<BlockVertex>& vertices,
-                                  const glm::vec3& pos,
-                                  const BlockDef& def,
-                                  const int x,
-                                  const int y,
-                                  const int z,
-                                  const SubChunkMeshingSnapshot& snapshot) {
-    addCrossedQuadsImpl(vertices, pos, def, x, y, z, snapshot);
-}
-
-bool ChunkMesher::shouldRenderFaceLegacy(const ChunkMeshingSnapshot& snapshot,
-                                         const int nx,
-                                         const int ny,
-                                         const int nz,
-                                         const BlockID currentId) {
-    const BlockDef& currentDef = BlockRegistry::get(currentId);
-    const BlockID neighborId = getNeighborAwareBlockLegacy(snapshot, nx, ny, nz);
-    if (currentDef.renderShape == BlockRenderShape::Cube &&
-        currentDef.isTransparent &&
-        neighborId == currentId) {
-        return false;
-    }
-    if (neighborId == 0) return true;
-    const BlockDef& neighborDef = BlockRegistry::get(neighborId);
-    if (!neighborDef.isSolid) return true;
-    if (neighborDef.isTransparent) {
-        if (!currentDef.isTransparent) return true;
-        return neighborId != currentId;
-    }
-    return false;
-}

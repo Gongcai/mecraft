@@ -4,7 +4,8 @@
 #include <cstdint>
 #include <deque>
 #include <vector>
-#include <unordered_set>
+#include <unordered_map>
+
 
 #include "Block.h"
 
@@ -28,10 +29,8 @@ public:
     // --- Tick-based budget logic ---
     void tick(int budget = 32768 );
 
-    // Mark a chunk (by chunk coords) as needing re-meshing, deferred until BFS completes
-    void markNeighborDirty(int chunkX, int chunkZ);
-
 private:
+
     World& m_world;
 
     // --- BFS node ---
@@ -57,7 +56,8 @@ private:
     std::deque<LightNode> m_blockRemoveQueue;
     std::deque<LightNode> m_blockSpreadQueue;
 
-    std::unordered_set<int64_t> m_dirtyChunks;
+    std::unordered_map<int64_t, uint32_t> m_dirtySubChunkMasks;
+
 
     // --- World-coordinate light access (crosses chunk boundaries) ---
     uint8_t getSkyLight(int wx, int wy, int wz) const;
@@ -67,8 +67,10 @@ private:
     bool isOpaque(int wx, int wy, int wz) const;
     uint8_t getOpacity(int wx, int wy, int wz) const;
 
-    // Mark chunks dirty when their light changes
-    void markChunkDirtyAt(int wx, int wz);
+    // Mark sub-chunks dirty when their light changes.
+    void markSubChunkDirty(int chunkX, int chunkZ, int scy);
+    void markSubChunkAndNeighborsDirtyAt(int wx, int wy, int wz);
+
 };
 
 #endif // MECRAFT_LIGHTENGINE_H

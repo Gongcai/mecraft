@@ -53,29 +53,8 @@ struct SubChunkMeshingSnapshot {
 
 using SubChunkMeshingSnapshotPtr = std::shared_ptr<SubChunkMeshingSnapshot>;
 
-// Legacy full-column snapshot — kept for backward compatibility during transition
-constexpr std::size_t CHUNK_BLOCK_COUNT = static_cast<std::size_t>(Chunk::SIZE_X) * Chunk::SIZE_Y * Chunk::SIZE_Z;
-constexpr std::size_t BORDER_YZ_COUNT = static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_Z;
-constexpr std::size_t BORDER_YX_COUNT = static_cast<std::size_t>(Chunk::SIZE_Y) * Chunk::SIZE_X;
-
-struct ChunkMeshingSnapshot {
-    std::array<BlockID, CHUNK_BLOCK_COUNT> blocks{};
-    std::array<uint8_t, CHUNK_BLOCK_COUNT> lightMap{};
-
-    std::array<BlockID, BORDER_YZ_COUNT> posXBorder{};
-    std::array<BlockID, BORDER_YZ_COUNT> negXBorder{};
-    std::array<BlockID, BORDER_YX_COUNT> posZBorder{};
-    std::array<BlockID, BORDER_YX_COUNT> negZBorder{};
-
-    std::array<uint8_t, BORDER_YZ_COUNT> posXLightBorder{};
-    std::array<uint8_t, BORDER_YZ_COUNT> negXLightBorder{};
-    std::array<uint8_t, BORDER_YX_COUNT> posZLightBorder{};
-    std::array<uint8_t, BORDER_YX_COUNT> negZLightBorder{};
-};
-
-using ChunkMeshingSnapshotPtr = std::shared_ptr<ChunkMeshingSnapshot>;
-
 struct ChunkMeshData {
+
     std::vector<BlockVertex> opaqueVertices;
     std::vector<BlockVertex> cutoutVertices;
     std::vector<BlockVertex> transparentVertices;
@@ -110,50 +89,13 @@ public:
     // --- Per-sub-chunk mesh building ---
     static ChunkMeshData buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot);
 
-    // --- Legacy full-column snapshot capture (deprecated) ---
-    static ChunkMeshingSnapshotPtr captureSnapshot(
-        const Chunk& chunk,
-        const Chunk* neighborPosX,
-        const Chunk* neighborNegX,
-        const Chunk* neighborPosZ,
-        const Chunk* neighborNegZ,
-        const World* world = nullptr);
-
-    static ChunkMeshingSnapshotPtr captureSnapshot(const Chunk& chunk, const World* world = nullptr);
-
-    // Legacy full-column mesh building (deprecated)
-    static ChunkMeshData buildMeshData(const ChunkMeshingSnapshot& snapshot);
-
     // Direct mesh generation (for synchronous path)
     static void generateSubChunkMesh(Chunk& chunk, int scy);
-    static void generateMesh(Chunk& chunk);
 
-    // Check if a sub-chunk should be skipped (Air type)
+    // Check if a sub-chunk should be skipped (air or fully occluded semantic-solid sub-chunk)
     static bool shouldSkipSubChunk(const Chunk& chunk, int scy);
-
-private:
-    static bool shouldRenderFace(const SubChunkMeshingSnapshot& snapshot,
-                                 int nx, int ny, int nz,
-                                 BlockID currentId);
-
-    static void addFace(std::vector<BlockVertex>& vertices,
-                        const glm::vec3& pos,
-                        int face,
-                        const BlockDef& def,
-                        int x, int y, int z,
-                        const SubChunkMeshingSnapshot& snapshot);
-
-    static void addCrossedQuads(std::vector<BlockVertex>& vertices,
-                                const glm::vec3& pos,
-                                const BlockDef& def,
-                                int x, int y, int z,
-                                const SubChunkMeshingSnapshot& snapshot);
-
-    // Legacy helpers (kept for transition)
-    static bool shouldRenderFaceLegacy(const ChunkMeshingSnapshot& snapshot,
-                                       int nx, int ny, int nz,
-                                       BlockID currentId);
 };
+
 
 #endif // MECRAFT_CHUNKMESHER_H
 

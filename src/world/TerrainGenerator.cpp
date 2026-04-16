@@ -662,6 +662,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 }
 
                 const int columnTop = std::max(surfaceY, m_seaLevel);
+                int highestOpaqueY = 0;
                 for (int y = 0; y <= columnTop; ++y) {
                     BlockID id = 0;
                     if (y == 0) {
@@ -703,7 +704,10 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                     }
 
                     if (id != 0) {
-                        chunk.setBlock(localX, y, z, id);
+                        chunk.setBlockFast(localX, y, z, id);
+                        if (BlockRegistry::get(id).opacity >= 15) {
+                            highestOpaqueY = y;
+                        }
                     }
                 }
 
@@ -715,9 +719,14 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                                                                      surfaceKind, moisture,
                                                                      m_seaLevel, surfaceY);
                     if (vegetation != 0) {
-                        chunk.setBlock(localX, vegetationY, z, vegetation);
+                        chunk.setBlockFast(localX, vegetationY, z, vegetation);
+                        if (BlockRegistry::get(vegetation).opacity >= 15) {
+                            highestOpaqueY = std::max(highestOpaqueY, vegetationY);
+                        }
                     }
                 }
+                chunk.setHeightMap(localX, z, highestOpaqueY);
+
                 // Sky light initialization is deferred to LightEngine::onChunkLoaded
             }
 

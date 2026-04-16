@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -9,14 +10,279 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
+void expandBounds(ChunkMeshData& merged, const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
+    if (!merged.hasBounds) {
+        merged.hasBounds = true;
+        merged.boundsMin = candidateMin;
+        merged.boundsMax = candidateMax;
+        return;
+    }
+
+    merged.boundsMin.x = std::min(merged.boundsMin.x, candidateMin.x);
+    merged.boundsMin.y = std::min(merged.boundsMin.y, candidateMin.y);
+    merged.boundsMin.z = std::min(merged.boundsMin.z, candidateMin.z);
+    merged.boundsMax.x = std::max(merged.boundsMax.x, candidateMax.x);
+    merged.boundsMax.y = std::max(merged.boundsMax.y, candidateMax.y);
+    merged.boundsMax.z = std::max(merged.boundsMax.z, candidateMax.z);
+}
+
 ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
-    const ChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSnapshot(chunk);
-    return ChunkMesher::buildMeshData(*snapshot);
+    ChunkMeshData merged;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if (ChunkMesher::shouldSkipSubChunk(chunk, scy)) {
+            continue;
+        }
+
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(chunk, scy);
+        if (!snapshot) {
+            continue;
+        }
+
+        ChunkMeshData scMeshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
+        const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
+        for (auto& vertex : scMeshData.opaqueVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.cutoutVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.transparentVertices) { vertex.y += yOffset; }
+
+        merged.opaqueVertices.insert(merged.opaqueVertices.end(),
+                                     scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
+        merged.cutoutVertices.insert(merged.cutoutVertices.end(),
+                                     scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
+        merged.transparentVertices.insert(merged.transparentVertices.end(),
+                                          scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
+        merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
+        merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
+        merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
+        merged.transparentFaceCountAfterGreedy += scMeshData.transparentFaceCountAfterGreedy;
+        if (scMeshData.hasBounds) {
+            expandBounds(merged,
+                         scMeshData.boundsMin + glm::vec3(0.0f, yOffset, 0.0f),
+                         scMeshData.boundsMax + glm::vec3(0.0f, yOffset, 0.0f));
+        }
+    }
+
+    merged.opaqueVertexCount = static_cast<uint32_t>(merged.opaqueVertices.size());
+    return merged;
 }
+
+void fillSubChunk(Chunk& chunk, const int scy, const BlockID blockId) {
+    const int yBase = scy * SubChunk::SIZE;
+    for (int y = 0; y < SubChunk::SIZE; ++y) {
+        for (int z = 0; z < SubChunk::SIZE; ++z) {
+            for (int x = 0; x < SubChunk::SIZE; ++x) {
+                chunk.setBlockFast(x, yBase + y, z, blockId);
+            }
+        }
+    }
+
+    SubChunk* sc = chunk.getSubChunk(scy);
+    if (sc) {
+        sc->inferType();
+    }
 }
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
+
+    {
+        Chunk chunk(0, 0);
+        if (!ChunkMesher::shouldSkipSubChunk(chunk, 0)) {
+            return fail("empty sub-chunks should be skipped");
+        }
+
+        chunk.setBlock(1, 1, 1, BlockIds::STONE);
+        SubChunk* sc = chunk.getSubChunk(0);
+        if (!sc) {
+            return fail("editing a block should create the owning sub-chunk");
+        }
+        if (sc->getType() != SubChunkType::Normal) {
+            return fail("partially filled sub-chunks should remain Normal");
+        }
+        if (ChunkMesher::shouldSkipSubChunk(chunk, 0)) {
+            return fail("partially filled sub-chunks should not be skipped");
+        }
+
+        chunk.setBlock(2, 1, 1, BlockIds::DIRT);
+        if (sc->getType() != SubChunkType::Normal) {
+            return fail("mixed edited sub-chunks should remain Normal");
+        }
+
+        chunk.setBlock(1, 1, 1, BlockIds::AIR);
+        chunk.setBlock(2, 1, 1, BlockIds::AIR);
+        if (chunk.getSubChunk(0) != nullptr) {
+            return fail("cleared sub-chunks should recycle back to implicit air storage");
+        }
+        if (!ChunkMesher::shouldSkipSubChunk(chunk, 0)) {
+            return fail("air-only sub-chunks should be skipped after runtime edits");
+        }
+    }
+
+    {
+        Chunk center(0, 0);
+        Chunk posX(1, 0);
+        Chunk negX(-1, 0);
+        Chunk posZ(0, 1);
+        Chunk negZ(0, -1);
+        center.neighbors[0] = &posX;
+        center.neighbors[1] = &negX;
+        center.neighbors[2] = &posZ;
+        center.neighbors[3] = &negZ;
+        posX.neighbors[1] = &center;
+        negX.neighbors[0] = &center;
+        posZ.neighbors[3] = &center;
+        negZ.neighbors[2] = &center;
+
+        if (center.getSubChunk(5) != nullptr) {
+            return fail("fresh chunk should not eagerly allocate unrelated sub-chunks");
+        }
+        center.markSubChunkDirty(5);
+        if (center.getSubChunk(5) != nullptr) {
+            return fail("markSubChunkDirty should not instantiate missing air sub-chunks");
+        }
+
+        SubChunk* base = center.getOrCreateSubChunk(2);
+        SubChunk* above = center.getOrCreateSubChunk(3);
+        SubChunk* east = posX.getOrCreateSubChunk(2);
+        SubChunk* south = negZ.getOrCreateSubChunk(2);
+
+        if (base->neighbors[2] != above || above->neighbors[3] != base) {
+            return fail("vertical sub-chunk neighbor pointers should be linked on creation");
+        }
+        if (base->neighbors[0] != east || east->neighbors[1] != base) {
+            return fail("horizontal +X sub-chunk neighbor pointers should be linked on creation");
+        }
+        if (base->neighbors[5] != south || south->neighbors[4] != base) {
+            return fail("horizontal -Z sub-chunk neighbor pointers should be linked on creation");
+        }
+    }
+
+    {
+        Chunk center(0, 0);
+        Chunk posX(1, 0);
+        Chunk negX(-1, 0);
+        Chunk posZ(0, 1);
+        Chunk negZ(0, -1);
+        center.neighbors[0] = &posX;
+        center.neighbors[1] = &negX;
+        center.neighbors[2] = &posZ;
+        center.neighbors[3] = &negZ;
+        posX.neighbors[1] = &center;
+        negX.neighbors[0] = &center;
+        posZ.neighbors[3] = &center;
+        negZ.neighbors[2] = &center;
+
+        fillSubChunk(center, 0, BlockIds::STONE);
+        fillSubChunk(center, 1, BlockIds::STONE);
+        fillSubChunk(center, 2, BlockIds::STONE);
+        fillSubChunk(posX, 1, BlockIds::STONE);
+        fillSubChunk(negX, 1, BlockIds::STONE);
+        fillSubChunk(posZ, 1, BlockIds::STONE);
+        fillSubChunk(negZ, 1, BlockIds::STONE);
+
+        const SubChunk* centerSolid = center.getSubChunk(1);
+        if (!centerSolid || centerSolid->getType() != SubChunkType::Solid) {
+            return fail("fully filled opaque cube sub-chunks should infer Solid");
+        }
+        if (!ChunkMesher::shouldSkipSubChunk(center, 1)) {
+            return fail("fully occluded semantic-solid sub-chunks should be skipped");
+        }
+
+        posX.setBlock(0, 16, 0, BlockIds::AIR);
+        if (ChunkMesher::shouldSkipSubChunk(center, 1)) {
+            return fail("solid sub-chunks with any exposed border should not be skipped");
+        }
+    }
+
+    {
+        Chunk waterChunk(0, 0);
+        fillSubChunk(waterChunk, 1, BlockIds::WATER);
+        const SubChunk* water = waterChunk.getSubChunk(1);
+        if (!water || water->getType() != SubChunkType::Normal) {
+            return fail("uniform transparent sub-chunks should remain Normal");
+        }
+        if (ChunkMesher::shouldSkipSubChunk(waterChunk, 1)) {
+            return fail("uniform transparent sub-chunks should still mesh when exposed");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 15, 0, BlockIds::STONE);
+        chunk.recalcHeightMap(0, 0);
+
+        if (chunk.getSubChunk(1) != nullptr) {
+            return fail("top air sub-chunks should stay unallocated before any non-default light writes");
+        }
+        if (chunk.getSunlight(0, 16, 0) != 15) {
+            return fail("missing sky-exposed sub-chunks should report implicit full sunlight");
+        }
+        if (chunk.getPackedLight(0, 16, 0) != 0xF0) {
+            return fail("packed light reads should preserve implicit sunlight for missing sub-chunks");
+        }
+
+        chunk.setSunlight(0, 16, 0, 15);
+        if (chunk.getSubChunk(1) != nullptr) {
+            return fail("writing implicit sunlight should not instantiate a sky-only sub-chunk");
+        }
+
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(chunk, 0);
+        if (!snapshot) {
+            return fail("sub-chunk snapshot capture should succeed for populated sections");
+        }
+        if (snapshot->posYLightBorder[0] != 0xF0) {
+            return fail("vertical border capture should preserve implicit sky light above missing air sections");
+        }
+
+        chunk.setSunlight(0, 16, 0, 14);
+        SubChunk* lightOnly = chunk.getSubChunk(1);
+        if (!lightOnly || chunk.getSunlight(0, 16, 0) != 14) {
+            return fail("non-default sky light writes should materialize and store the affected sub-chunk");
+        }
+        if (lightOnly->getSunlight(1, 0, 0) != 15) {
+            return fail("newly materialized light-only sub-chunks should seed implicit sunlight for untouched voxels");
+        }
+
+        chunk.setSunlight(0, 16, 0, 15);
+        if (chunk.getSubChunk(1) != nullptr) {
+            return fail("light-only sub-chunks should be recycled once sunlight returns to the implicit default");
+        }
+
+        chunk.setBlockLight(0, 16, 0, 7);
+        lightOnly = chunk.getSubChunk(1);
+        if (!lightOnly || lightOnly->getSunlight(1, 0, 0) != 15 || chunk.getBlockLight(0, 16, 0) != 7) {
+            return fail("block-light-only sub-chunks should preserve implicit sunlight when materialized");
+        }
+
+        chunk.setBlockLight(0, 16, 0, 0);
+        if (chunk.getSubChunk(1) != nullptr) {
+            return fail("block-light-only sub-chunks should be recycled once lighting returns to implicit defaults");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 1, 0, BlockIds::STONE);
+        chunk.setBlock(0, 33, 0, BlockIds::STONE);
+        chunk.recalcHeightMap(0, 0);
+
+        SubChunk* bottom = chunk.getSubChunk(0);
+        SubChunk* top = chunk.getSubChunk(2);
+        if (!bottom || !top || bottom->neighbors[2] != nullptr || top->neighbors[3] != nullptr) {
+            return fail("non-adjacent solid sub-chunks should not be linked before a middle section exists");
+        }
+
+        chunk.setBlockLight(0, 16, 0, 5);
+        SubChunk* middle = chunk.getSubChunk(1);
+        if (!middle || bottom->neighbors[2] != middle || middle->neighbors[3] != bottom || top->neighbors[3] != middle || middle->neighbors[2] != top) {
+            return fail("materialized light-only sub-chunks should wire vertical neighbors while alive");
+        }
+
+        chunk.setBlockLight(0, 16, 0, 0);
+        if (chunk.getSubChunk(1) != nullptr || bottom->neighbors[2] != nullptr || top->neighbors[3] != nullptr) {
+            return fail("recycling a light-only sub-chunk should clear reciprocal vertical neighbor links");
+        }
+    }
 
     {
         Chunk chunk(0, 0);

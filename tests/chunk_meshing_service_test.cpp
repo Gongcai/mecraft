@@ -26,29 +26,30 @@ bool waitUntil(Predicate&& predicate, const int timeoutMs = 4000) {
     return predicate();
 }
 
-ChunkMeshingJob makeDenseJob(const int64_t chunkKey,
-                             const int chunkX,
-                             const int chunkZ,
-                             const int maxY,
-                             const BlockID blockId = BlockIds::DIRT) {
+SubChunkMeshingJob makeDenseJob(const int64_t chunkKey,
+                                const int chunkX,
+                                const int chunkZ,
+                                const int scy,
+                                const BlockID blockId = BlockIds::DIRT) {
     auto chunkPtr = std::make_shared<Chunk>(chunkX, chunkZ);
-    for (int y = 0; y < maxY; ++y) {
+    const int yBase = scy * SubChunk::SIZE;
+    for (int y = 0; y < SubChunk::SIZE; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                chunkPtr->setBlock(x, y, z, blockId);
+                chunkPtr->setBlock(x, yBase + y, z, blockId);
             }
         }
     }
 
-    ChunkMeshingJob job;
+    SubChunkMeshingJob job;
     job.chunkKey = chunkKey;
-    job.revision = chunkPtr->getMeshRevision();
+    job.scy = scy;
+    job.revision = chunkPtr->getSubChunkMeshRevision(scy);
     job.chunk = chunkPtr;
-    // No neighbors in this test — captureBorders will fall back to world=nullptr
     job.world = nullptr;
     return job;
 }
-}
+} // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
@@ -62,7 +63,7 @@ int main() {
         service.start(&pool);
 
         for (int i = 0; i < 8; ++i) {
-            service.submit(makeDenseJob(100 + i, i, 0, 96), i);
+            service.submit(makeDenseJob(100 + i, i, 0, i % 3), i);
         }
 
         if (service.inFlightCount() <= 0) {
@@ -98,7 +99,7 @@ int main() {
         service.start(&pool);
 
         for (int i = 0; i < 8; ++i) {
-            service.submit(makeDenseJob(200 + i, i, 1, 128), i);
+            service.submit(makeDenseJob(200 + i, i, 1, (i % 4) + 1), i);
         }
 
         service.shutdown();
@@ -112,7 +113,7 @@ int main() {
             return fail("in-flight count should drain back to zero after the pool finishes");
         }
 
-        service.submit(makeDenseJob(999, 0, 0, 64), 0);
+        service.submit(makeDenseJob(999, 0, 0, 0), 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         SubChunkMeshingResult result2;
         if (service.tryPopCompleted(result2)) {

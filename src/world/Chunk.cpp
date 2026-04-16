@@ -12,6 +12,18 @@ int wrapToChunkAxis(const int value) {
 uint8_t clampLight(const uint8_t level) {
     return static_cast<uint8_t>(std::min<int>(level, 15));
 }
+
+constexpr int OPPOSITE_SUB_CHUNK_NEIGHBOR[6] = {1, 0, 3, 2, 5, 4};
+
+int chunkDirectionToSubChunkDirection(const int direction) {
+    switch (direction) {
+        case 0: return 0;
+        case 1: return 1;
+        case 2: return 4;
+        case 3: return 5;
+        default: return -1;
+    }
+}
 } // namespace
 
 Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(chunkZ) {
@@ -34,6 +46,76 @@ size_t Chunk::toIndex(const int x, const int y, const int z) {
            static_cast<size_t>(y) * SIZE_X * SIZE_Z;
 }
 
+uint8_t Chunk::getImplicitSunlight(const int x, const int y, const int z) const {
+    if (!isInBounds(x, y, z)) {
+        return 0;
+    }
+    return static_cast<uint8_t>(y >= getHeightMap(x, z) ? 15 : 0);
+}
+
+uint8_t Chunk::getImplicitPackedLight(const int x, const int y, const int z) const {
+    return static_cast<uint8_t>(getImplicitSunlight(x, y, z) << 4);
+}
+
+void Chunk::initializeSubChunkLightDefaults(SubChunk& subChunk) const {
+    const int yBase = subChunk.m_subChunkY * SUB_CHUNK_SIZE;
+    for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+        for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
+            for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
+                subChunk.m_lightMap[SubChunk::toIndex(lx, ly, lz)] = getImplicitPackedLight(lx, yBase + ly, lz);
+            }
+        }
+    }
+}
+
+bool Chunk::canRecycleSubChunk(const SubChunk& subChunk) const {
+    if (subChunk.getType() != SubChunkType::Air) {
+        return false;
+    }
+
+    const int yBase = subChunk.m_subChunkY * SUB_CHUNK_SIZE;
+    for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+        for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
+            for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
+                if (subChunk.m_lightMap[SubChunk::toIndex(lx, ly, lz)] != getImplicitPackedLight(lx, yBase + ly, lz)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void Chunk::recycleSubChunk(const int scy) {
+    SubChunk* subChunk = getSubChunk(scy);
+    if (!subChunk) {
+        return;
+    }
+
+    for (int direction = 0; direction < 6; ++direction) {
+        SubChunk* neighbor = subChunk->neighbors[direction];
+        if (!neighbor) {
+            continue;
+        }
+
+        const int opposite = OPPOSITE_SUB_CHUNK_NEIGHBOR[direction];
+        if (neighbor->neighbors[opposite] == subChunk) {
+            neighbor->neighbors[opposite] = nullptr;
+        }
+        subChunk->neighbors[direction] = nullptr;
+    }
+
+    m_subChunks[scy].reset();
+}
+
+void Chunk::tryRecycleSubChunk(const int scy) {
+    SubChunk* subChunk = getSubChunk(scy);
+    if (!subChunk || !canRecycleSubChunk(*subChunk)) {
+        return;
+    }
+    recycleSubChunk(scy);
+}
+
 // --- Sub-chunk access ---
 
 SubChunk* Chunk::getSubChunk(const int scy) {
@@ -50,50 +132,54 @@ SubChunk* Chunk::getOrCreateSubChunk(const int scy) {
     if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
     if (!m_subChunks[scy]) {
         m_subChunks[scy] = std::make_unique<SubChunk>();
-        m_subChunks[scy]->m_subChunkY = scy;
+        SubChunk* sc = m_subChunks[scy].get();
+        sc->m_subChunkY = scy;
+        initializeSubChunkLightDefaults(*sc);
+
+        if (SubChunk* above = getSubChunk(scy + 1)) {
+            sc->neighbors[2] = above;
+            above->neighbors[3] = sc;
+        }
+        if (SubChunk* below = getSubChunk(scy - 1)) {
+            sc->neighbors[3] = below;
+            below->neighbors[2] = sc;
+        }
+        if (Chunk* posXChunk = neighbors[0]) {
+            if (SubChunk* posX = posXChunk->getSubChunk(scy)) {
+                sc->neighbors[0] = posX;
+                posX->neighbors[1] = sc;
+            }
+        }
+        if (Chunk* negXChunk = neighbors[1]) {
+            if (SubChunk* negX = negXChunk->getSubChunk(scy)) {
+                sc->neighbors[1] = negX;
+                negX->neighbors[0] = sc;
+            }
+        }
+        if (Chunk* posZChunk = neighbors[2]) {
+            if (SubChunk* posZ = posZChunk->getSubChunk(scy)) {
+                sc->neighbors[4] = posZ;
+                posZ->neighbors[5] = sc;
+            }
+        }
+        if (Chunk* negZChunk = neighbors[3]) {
+            if (SubChunk* negZ = negZChunk->getSubChunk(scy)) {
+                sc->neighbors[5] = negZ;
+                negZ->neighbors[4] = sc;
+            }
+        }
     }
     return m_subChunks[scy].get();
 }
 
-// --- Light map copy (for mesher snapshot compatibility) ---
-
-void Chunk::copyLightMapTo(std::array<uint8_t, BLOCK_COUNT>& out) const {
-    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
-        const int yBase = scy * SUB_CHUNK_SIZE;
-        const SubChunk* sc = getSubChunk(scy);
-        if (!sc) {
-            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
-                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
-                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
-                        out[toIndex(lx, yBase + ly, lz)] = 0;
-                    }
-                }
-            }
-        } else {
-            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
-                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
-                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
-                        out[toIndex(lx, yBase + ly, lz)] = sc->m_lightMap[SubChunk::toIndex(lx, ly, lz)];
-                    }
-                }
-            }
-        }
-    }
-}
-
-uint8_t Chunk::getLightByFlatIndex(std::size_t flatIndex) const {
-    // Decode flat index back to (x, y, z), then delegate to sub-chunk
-    const int z = static_cast<int>((flatIndex / SIZE_X) % SIZE_Z);
-    const int y = static_cast<int>(flatIndex / (SIZE_X * SIZE_Z));
-    const int x = static_cast<int>(flatIndex % SIZE_X);
-
+uint8_t Chunk::getPackedLight(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
         return 0;
     }
     const int scy = toSubChunkIndex(y);
     const SubChunk* sc = getSubChunk(scy);
     if (!sc) {
-        return 0;
+        return getImplicitPackedLight(x, y, z);
     }
     return sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)];
 }
@@ -113,7 +199,7 @@ BlockID Chunk::getBlock(const int x, const int y, const int z) const {
     return sc->getBlock(x, toSubChunkLocalY(y), z);
 }
 
-void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
+void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id, const bool markMeshDirty) {
     if (!isInBounds(x, y, z)) {
         return;
     }
@@ -121,39 +207,115 @@ void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
     const int scy = toSubChunkIndex(y);
     const int localY = toSubChunkLocalY(y);
 
-    // If setting to air and sub-chunk doesn't exist, no-op
     if (id == 0 && !m_subChunks[scy]) {
         return;
     }
 
     SubChunk* sc = getOrCreateSubChunk(scy);
-    sc->setBlock(x, localY, z, id);
-    // Also mark column-level dirty for meshing
+    if (markMeshDirty) {
+        sc->setBlock(x, localY, z, id);
+    } else {
+        sc->setBlockWithoutMeshDirty(x, localY, z, id);
+    }
+    tryRecycleSubChunk(scy);
+
+    if (!markMeshDirty) {
+        return;
+    }
+
+    if (localY == 0) {
+        markSubChunkDirty(scy - 1);
+    }
+    if (localY == SUB_CHUNK_SIZE - 1) {
+        markSubChunkDirty(scy + 1);
+    }
+    if (x == 0 && neighbors[1]) {
+        neighbors[1]->markSubChunkDirty(scy);
+    }
+    if (x == SIZE_X - 1 && neighbors[0]) {
+        neighbors[0]->markSubChunkDirty(scy);
+    }
+    if (z == 0 && neighbors[3]) {
+        neighbors[3]->markSubChunkDirty(scy);
+    }
+    if (z == SIZE_Z - 1 && neighbors[2]) {
+        neighbors[2]->markSubChunkDirty(scy);
+    }
+
     m_dirty = true;
-    ++m_meshRevision;
 }
 
-void Chunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
+void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
+    setBlockImpl(x, y, z, id, true);
+}
+
+void Chunk::setBlockWithoutMeshDirty(const int x, const int y, const int z, const BlockID id) {
+    setBlockImpl(x, y, z, id, false);
+}
+
+void Chunk::setBlockFast(const int x, const int y, const int z, const BlockID id) {
+    if (!isInBounds(x, y, z)) {
+        return;
+    }
+
+    const int scy = toSubChunkIndex(y);
+    if (id == 0 && !m_subChunks[scy]) {
+        return;
+    }
+
+    SubChunk* sc = getOrCreateSubChunk(scy);
+    sc->setBlockFast(x, toSubChunkLocalY(y), z, id);
+}
+
+void Chunk::markExistingSubChunksDirty() {
     for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
-        const int yBase = scy * SUB_CHUNK_SIZE;
-        const SubChunk* sc = getSubChunk(scy);
-        if (!sc) {
-            // All-air sub-chunk
-            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
-                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
-                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
-                        out[toIndex(lx, yBase + ly, lz)] = 0;
-                    }
-                }
+        if (m_subChunks[scy]) {
+            markSubChunkDirty(scy);
+        }
+    }
+}
+
+void Chunk::linkExistingSubChunksWithNeighbor(const int direction) {
+    if (direction < 0 || direction >= 4) {
+        return;
+    }
+
+    Chunk* neighborChunk = neighbors[direction];
+    if (!neighborChunk) {
+        return;
+    }
+
+    const int selfSubDir = chunkDirectionToSubChunkDirection(direction);
+    const int neighborSubDir = OPPOSITE_SUB_CHUNK_NEIGHBOR[selfSubDir];
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        SubChunk* self = getSubChunk(scy);
+        SubChunk* neighbor = neighborChunk->getSubChunk(scy);
+        if (!self || !neighbor) {
+            continue;
+        }
+        self->neighbors[selfSubDir] = neighbor;
+        neighbor->neighbors[neighborSubDir] = self;
+    }
+}
+
+void Chunk::unlinkExistingSubChunksFromNeighbor(const int direction) {
+    if (direction < 0 || direction >= 4) {
+        return;
+    }
+
+    Chunk* neighborChunk = neighbors[direction];
+    const int selfSubDir = chunkDirectionToSubChunkDirection(direction);
+    const int neighborSubDir = OPPOSITE_SUB_CHUNK_NEIGHBOR[selfSubDir];
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (SubChunk* self = getSubChunk(scy)) {
+            if (self->neighbors[selfSubDir]) {
+                self->neighbors[selfSubDir] = nullptr;
             }
-        } else {
-            std::array<BlockID, SubChunk::BLOCK_COUNT> subBlocks{};
-            sc->copyBlocksTo(subBlocks);
-            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
-                for (int lz = 0; lz < SUB_CHUNK_SIZE; ++lz) {
-                    for (int lx = 0; lx < SUB_CHUNK_SIZE; ++lx) {
-                        out[toIndex(lx, yBase + ly, lz)] = subBlocks[SubChunk::toIndex(lx, ly, lz)];
-                    }
+        }
+        if (neighborChunk) {
+            if (SubChunk* neighbor = neighborChunk->getSubChunk(scy)) {
+                if (neighbor->neighbors[neighborSubDir]) {
+                    neighbor->neighbors[neighborSubDir] = nullptr;
                 }
             }
         }
@@ -193,41 +355,11 @@ bool Chunk::isSubChunkDirty(const int scy) const {
     return sc ? sc->isDirty() : false;
 }
 
-void Chunk::markDirty() {
-    m_dirty = true;
-    ++m_meshRevision;
-    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
-        if (m_subChunks[scy]) {
-            m_subChunks[scy]->markDirty();
-        }
-    }
-}
-
-uint64_t Chunk::getMeshRevision() const {
-    return m_meshRevision;
-}
-
-// --- Column-level mesh (DEPRECATED — for transition) ---
+// --- Per sub-chunk mesh ---
 
 namespace {
-// Static empty mesh for fallback
 static SubChunkMesh s_emptyMesh;
 }
-
-const SubChunkMesh& Chunk::getMesh() const {
-    // Return the first non-empty sub-chunk mesh for backward compat
-    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
-        if (m_subChunks[scy]) {
-            const SubChunkMesh& m = m_subChunks[scy]->getMesh();
-            if (m.vertexCount > 0 || m.transparentVertexCount > 0 || m.cutoutVertexCount > 0) {
-                return m;
-            }
-        }
-    }
-    return s_emptyMesh;
-}
-
-// --- Per sub-chunk mesh ---
 
 const SubChunkMesh& Chunk::getSubChunkMesh(const int scy) const {
     const SubChunk* sc = getSubChunk(scy);
@@ -257,18 +389,13 @@ void Chunk::markMeshClean() {
     }
 }
 
-void Chunk::markSubChunkMeshClean(const int scy) {
-    SubChunk* sc = getSubChunk(scy);
-    if (sc) {
-        sc->markMeshClean();
-    }
-}
-
 void Chunk::markSubChunkDirty(const int scy) {
-    SubChunk* sc = getOrCreateSubChunk(scy);
+    SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        return;
+    }
     sc->markDirty();
     m_dirty = true;
-    ++m_meshRevision;
 }
 
 uint64_t Chunk::getSubChunkMeshRevision(const int scy) const {
@@ -285,10 +412,7 @@ uint8_t Chunk::getSunlight(const int x, const int y, const int z) const {
     const int scy = toSubChunkIndex(y);
     const SubChunk* sc = getSubChunk(scy);
     if (!sc) {
-        // Null sub-chunk = all air, sky light is 15 (full sun) above height map
-        // But we don't know height map here, so return 0 as safe default.
-        // LightEngine will handle this correctly via world-coordinate access.
-        return 0;
+        return getImplicitSunlight(x, y, z);
     }
     return sc->getSunlight(x, toSubChunkLocalY(y), z);
 }
@@ -298,12 +422,16 @@ void Chunk::setSunlight(const int x, const int y, const int z, const uint8_t lev
         return;
     }
     const int scy = toSubChunkIndex(y);
-    // Optimization: don't create a sub-chunk just to write 0 — nullptr sub-chunks default to 0
-    if (level == 0 && !m_subChunks[scy]) {
-        return;
+    const uint8_t clamped = clampLight(level);
+    SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        if (clamped == getImplicitSunlight(x, y, z)) {
+            return;
+        }
+        sc = getOrCreateSubChunk(scy);
     }
-    SubChunk* sc = getOrCreateSubChunk(scy);
-    sc->setSunlight(x, toSubChunkLocalY(y), z, level);
+    sc->setSunlight(x, toSubChunkLocalY(y), z, clamped);
+    tryRecycleSubChunk(scy);
 }
 
 uint8_t Chunk::getBlockLight(const int x, const int y, const int z) const {
@@ -323,12 +451,16 @@ void Chunk::setBlockLight(const int x, const int y, const int z, const uint8_t l
         return;
     }
     const int scy = toSubChunkIndex(y);
-    // Optimization: don't create a sub-chunk just to write 0 — nullptr sub-chunks default to 0
-    if (level == 0 && !m_subChunks[scy]) {
-        return;
+    const uint8_t clamped = clampLight(level);
+    SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        if (clamped == 0) {
+            return;
+        }
+        sc = getOrCreateSubChunk(scy);
     }
-    SubChunk* sc = getOrCreateSubChunk(scy);
-    sc->setBlockLight(x, toSubChunkLocalY(y), z, level);
+    sc->setBlockLight(x, toSubChunkLocalY(y), z, clamped);
+    tryRecycleSubChunk(scy);
 }
 
 // --- Height map (remains column-level) ---

@@ -40,9 +40,11 @@ void World::update(const glm::vec3& playerPos) {
         unloadChunk(cx, cz);
     }
 
-    // Load up to 4 chunks per frame to avoid severe freezing but keep load speed reasonable
+    // Keep per-frame chunk creation conservative to reduce visible frame spikes.
+    constexpr int kMaxChunkLoadsPerFrame = 2;
     int loaded = 0;
-    while (!m_loadQueue.empty() && loaded < 4) {
+    while (!m_loadQueue.empty() && loaded < kMaxChunkLoadsPerFrame) {
+
         auto pos = m_loadQueue.back();
         m_loadQueue.pop_back();
         loadChunk(pos.x, pos.y);
@@ -106,42 +108,35 @@ void World::setBlock(int x, int y, int z, BlockID id) {
         return;
     }
 
-    chunk.setBlock(localX, y, localZ, id);
-
-    // Delegate light updates to LightEngine
     if (m_lightEngine) {
+        chunk.setBlockWithoutMeshDirty(localX, y, localZ, id);
         m_lightEngine->onBlockChanged(x, y, z, oldId, id);
+    } else {
+        chunk.setBlock(localX, y, localZ, id);
     }
 
-    // If the block is on a chunk boundary, neighbor chunks may need re-meshing
-    // because their border faces depend on this block.
-    // We use the light engine's deferred dirty system so the mesh isn't rebuilt
-    // until light propagation BFS finishes.  This prevents the meshing service
-    // from snapshotting stale/partial light data.
-    if (m_lightEngine) {
-        if (localX == 0)                    m_lightEngine->markNeighborDirty(chunkX - 1, chunkZ);
-        if (localX == Chunk::SIZE_X - 1)    m_lightEngine->markNeighborDirty(chunkX + 1, chunkZ);
-        if (localZ == 0)                    m_lightEngine->markNeighborDirty(chunkX, chunkZ - 1);
-        if (localZ == Chunk::SIZE_Z - 1)    m_lightEngine->markNeighborDirty(chunkX, chunkZ + 1);
-    } else {
-        // Fallback: no light engine, mark immediately
+
+    // When LightEngine is present, onBlockChanged() owns deferred remesh dirtying
+    // for the edited sub-chunk plus all affected neighbors after light propagation.
+    if (!m_lightEngine) {
         if (localX == 0) {
             auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-            if (nit != m_chunks.end()) nit->second->markDirty();
+            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
         }
         if (localX == Chunk::SIZE_X - 1) {
             auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-            if (nit != m_chunks.end()) nit->second->markDirty();
+            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
         }
         if (localZ == 0) {
             auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-            if (nit != m_chunks.end()) nit->second->markDirty();
+            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
         }
         if (localZ == Chunk::SIZE_Z - 1) {
             auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-            if (nit != m_chunks.end()) nit->second->markDirty();
+            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
         }
     }
+
 }
 
 bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {
@@ -279,42 +274,48 @@ void World::loadChunk(int cx, int cz) {
 
     // Wire up neighbor pointers for the new chunk and its existing neighbors
     Chunk* cur = m_chunks[key].get();
-    auto linkNeighbor = [&](int ncx, int ncz, int selfIdx, int neighborIdx) {
-        auto it = m_chunks.find(chunkKey(ncx, ncz));
-        if (it != m_chunks.end()) {
-            Chunk* neighbor = it->second.get();
-            cur->neighbors[selfIdx] = neighbor;
-            neighbor->neighbors[neighborIdx] = cur;
-            // Neighbor border data changed — needs re-meshing
-            neighbor->markDirty();
+    auto markNeighborBorderDirty = [&](Chunk& neighbor) {
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (cur->getSubChunk(scy) || neighbor.getSubChunk(scy)) {
+                neighbor.markSubChunkDirty(scy);
+            }
         }
     };
-    linkNeighbor(cx + 1, cz, 0, 1); // +X neighbor, our +X=0, their -X=1
-    linkNeighbor(cx - 1, cz, 1, 0); // -X neighbor, our -X=1, their +X=0
-    linkNeighbor(cx, cz + 1, 2, 3); // +Z neighbor, our +Z=2, their -Z=3
-    linkNeighbor(cx, cz - 1, 3, 2); // -Z neighbor, our -Z=3, their +Z=2
+    auto linkNeighbor = [&](int ncx, int ncz, int selfIdx, int neighborIdx) {
+        auto it = m_chunks.find(chunkKey(ncx, ncz));
+        if (it == m_chunks.end()) {
+            return;
+        }
+
+        Chunk* neighbor = it->second.get();
+        cur->neighbors[selfIdx] = neighbor;
+        neighbor->neighbors[neighborIdx] = cur;
+        cur->linkExistingSubChunksWithNeighbor(selfIdx);
+        markNeighborBorderDirty(*neighbor);
+    };
+    linkNeighbor(cx + 1, cz, 0, 1);
+    linkNeighbor(cx - 1, cz, 1, 0);
+    linkNeighbor(cx, cz + 1, 2, 3);
+    linkNeighbor(cx, cz - 1, 3, 2);
 
     // Initialize lighting after terrain generation and neighbor linking
     if (m_lightEngine) {
         m_lightEngine->onChunkLoaded(*cur);
 
-        // Propagate light from the new chunk's borders into existing neighbors.
-        // direction: 0=+X, 1=-X, 2=+Z, 3=-Z (which slot 'into' is relative to 'from')
-        // cur->neighbors[0] is the +X neighbor, so from cur's perspective we propagate
-        // our +X border (direction=0) into that neighbor.
-        if (cur->neighbors[0]) {
-            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[0], 0);
-        }
-        if (cur->neighbors[1]) {
-            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[1], 1);
-        }
-        if (cur->neighbors[2]) {
-            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[2], 2);
-        }
-        if (cur->neighbors[3]) {
-            m_lightEngine->propagateBorderInto(*cur, *cur->neighbors[3], 3);
-        }
+        auto propagateBothWays = [&](const int direction, const int oppositeDirection) {
+            Chunk* neighbor = cur->neighbors[direction];
+            if (!neighbor) {
+                return;
+            }
+            m_lightEngine->propagateBorderInto(*cur, *neighbor, direction);
+            m_lightEngine->propagateBorderInto(*neighbor, *cur, oppositeDirection);
+        };
+        propagateBothWays(0, 1);
+        propagateBothWays(1, 0);
+        propagateBothWays(2, 3);
+        propagateBothWays(3, 2);
     }
+
 }
 
 void World::unloadChunk(int cx, int cz) {
@@ -322,7 +323,20 @@ void World::unloadChunk(int cx, int cz) {
     if (it == m_chunks.end()) return;
 
     Chunk* chunk = it->second.get();
-    // Clear neighbor back-pointers before removing
+    for (int direction = 0; direction < 4; ++direction) {
+        Chunk* neighbor = chunk->neighbors[direction];
+        if (!neighbor) {
+            continue;
+        }
+
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (chunk->getSubChunk(scy) || neighbor->getSubChunk(scy)) {
+                neighbor->markSubChunkDirty(scy);
+            }
+        }
+        chunk->unlinkExistingSubChunksFromNeighbor(direction);
+    }
+
     if (chunk->neighbors[0]) chunk->neighbors[0]->neighbors[1] = nullptr;
     if (chunk->neighbors[1]) chunk->neighbors[1]->neighbors[0] = nullptr;
     if (chunk->neighbors[2]) chunk->neighbors[2]->neighbors[3] = nullptr;
@@ -330,6 +344,7 @@ void World::unloadChunk(int cx, int cz) {
 
     m_chunks.erase(it);
 }
+
 
 size_t World::getTotalVertexCount() const {
     size_t total = 0;

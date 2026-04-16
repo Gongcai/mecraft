@@ -24,21 +24,19 @@ LightEngine::LightEngine(World& world) : m_world(world) {}
 // ========================================================================
 
 void LightEngine::onChunkLoaded(Chunk& chunk) {
-    // Step 1: Build height map
-    for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-        for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            chunk.recalcHeightMap(x, z);
-        }
-    }
+    // Height map is prepared during chunk generation/loading so lighting init can
+    // avoid an extra full-column rescan on the main thread.
 
-    // Step 2: Sky light column scan
+    // Step 1: Sky light column scan
     initSkyLight(chunk);
 
-    // Step 3: Block light from light sources
+    // Step 2: Block light from light sources
     initBlockLight(chunk);
 
-    chunk.markDirty();
+    chunk.markExistingSubChunksDirty();
 }
+
+
 
 void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
     // Collect light seeds from the border face of 'from' and propagate them
@@ -115,10 +113,8 @@ void LightEngine::propagateBorderInto(Chunk& from, Chunk& into, int direction) {
         spreadBlockLight(blockSeeds);
     }
 
-    if (!skySeeds.empty() || !blockSeeds.empty()) {
-        into.markDirty();
-    }
 }
+
 
 // ========================================================================
 // Sky light
@@ -285,7 +281,7 @@ void LightEngine::tick(int budget) {
 
             if (neighborLevel <= provided) {
                 setSkyLight(nx, ny, nz, 0);
-                markChunkDirtyAt(nx, nz);
+                markSubChunkAndNeighborsDirtyAt(nx, ny, nz);
                 m_skyRemoveQueue.push_back({nx, ny, nz, neighborLevel});
             } else {
                 m_skySpreadQueue.push_back({nx, ny, nz, neighborLevel});
@@ -314,7 +310,7 @@ void LightEngine::tick(int budget) {
 
             if (neighborLevel <= provided) {
                 setBlockLightAt(nx, ny, nz, 0);
-                markChunkDirtyAt(nx, nz);
+                markSubChunkAndNeighborsDirtyAt(nx, ny, nz);
                 m_blockRemoveQueue.push_back({nx, ny, nz, neighborLevel});
             } else {
                 m_blockSpreadQueue.push_back({nx, ny, nz, neighborLevel});
@@ -353,7 +349,7 @@ void LightEngine::tick(int budget) {
                 const uint8_t neighborSky = getSkyLight(nx, ny, nz);
                 if (propagated > neighborSky) {
                     setSkyLight(nx, ny, nz, propagated);
-                    markChunkDirtyAt(nx, nz);
+                    markSubChunkAndNeighborsDirtyAt(nx, ny, nz);
                     m_skySpreadQueue.push_back({nx, ny, nz, propagated});
                 }
             }
@@ -387,7 +383,7 @@ void LightEngine::tick(int budget) {
                 const uint8_t neighborBlock = getBlockLightAt(nx, ny, nz);
                 if (propagated > neighborBlock) {
                     setBlockLightAt(nx, ny, nz, propagated);
-                    markChunkDirtyAt(nx, nz);
+                    markSubChunkAndNeighborsDirtyAt(nx, ny, nz);
                     m_blockSpreadQueue.push_back({nx, ny, nz, propagated});
                 }
             }
@@ -398,15 +394,20 @@ void LightEngine::tick(int budget) {
     // Waiting for all BFS queues to become empty can starve border chunks when
     // light work spans multiple frames, leaving stale lighting until another
     // local edit happens to force a remesh.
-    if (!m_dirtyChunks.empty()) {
+    if (!m_dirtySubChunkMasks.empty()) {
         const auto& chunks = m_world.getActiveChunks();
-        for (int64_t key : m_dirtyChunks) {
-            auto it = chunks.find(key);
-            if (it != chunks.end()) {
-                it->second->markDirty();
+        for (const auto& entry : m_dirtySubChunkMasks) {
+            auto it = chunks.find(entry.first);
+            if (it == chunks.end()) {
+                continue;
+            }
+            for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                if ((entry.second & (1u << scy)) != 0u) {
+                    it->second->markSubChunkDirty(scy);
+                }
             }
         }
-        m_dirtyChunks.clear();
+        m_dirtySubChunkMasks.clear();
     }
 }
 
@@ -553,16 +554,13 @@ void LightEngine::onBlockChanged(int wx, int wy, int wz,
         spreadBlockLight(blockSeeds);
     }
 
-    markChunkDirtyAt(wx, wz);
-}
-
-void LightEngine::markNeighborDirty(int chunkX, int chunkZ) {
-    m_dirtyChunks.insert(World::chunkKey(chunkX, chunkZ));
+    markSubChunkAndNeighborsDirtyAt(wx, wy, wz);
 }
 
 // ========================================================================
 // World-coordinate accessors
 // ========================================================================
+
 
 uint8_t LightEngine::getSkyLight(int wx, int wy, int wz) const {
     if (wy < 0 || wy >= Chunk::SIZE_Y) return 0;
@@ -640,9 +638,44 @@ uint8_t LightEngine::getOpacity(int wx, int wy, int wz) const {
     return BlockRegistry::get(id).opacity;
 }
 
-void LightEngine::markChunkDirtyAt(int wx, int wz) {
+void LightEngine::markSubChunkDirty(const int chunkX, const int chunkZ, const int scy) {
+    if (scy < 0 || scy >= Chunk::NUM_SUB_CHUNKS) {
+        return;
+    }
+    m_dirtySubChunkMasks[World::chunkKey(chunkX, chunkZ)] |= (1u << scy);
+}
+
+void LightEngine::markSubChunkAndNeighborsDirtyAt(const int wx, const int wy, const int wz) {
+    if (wy < 0 || wy >= Chunk::SIZE_Y) {
+        return;
+    }
+
     const int cx = worldToChunkCoord(wx, Chunk::SIZE_X);
     const int cz = worldToChunkCoord(wz, Chunk::SIZE_Z);
+    const int lx = wx - cx * Chunk::SIZE_X;
+    const int lz = wz - cz * Chunk::SIZE_Z;
+    const int scy = Chunk::toSubChunkIndex(wy);
+    const int localY = Chunk::toSubChunkLocalY(wy);
 
-    m_dirtyChunks.insert(World::chunkKey(cx, cz));
+    markSubChunkDirty(cx, cz, scy);
+
+    if (lx == 0) {
+        markSubChunkDirty(cx - 1, cz, scy);
+    }
+    if (lx == Chunk::SIZE_X - 1) {
+        markSubChunkDirty(cx + 1, cz, scy);
+    }
+    if (lz == 0) {
+        markSubChunkDirty(cx, cz - 1, scy);
+    }
+    if (lz == Chunk::SIZE_Z - 1) {
+        markSubChunkDirty(cx, cz + 1, scy);
+    }
+    if (localY == 0) {
+        markSubChunkDirty(cx, cz, scy - 1);
+    }
+    if (localY == Chunk::SUB_CHUNK_SIZE - 1) {
+        markSubChunkDirty(cx, cz, scy + 1);
+    }
 }
+
