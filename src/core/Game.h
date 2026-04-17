@@ -33,7 +33,10 @@
 #include "../audio/BgmSystem.h"
 #include "../particle/ParticleSystem.h"
 #include "../crafting/CraftingSystem.h"
+#include "../ecs/GameplayScene.h"
+#include "states/StateDependencies.h"
 class Game {
+
 public:
     Game();
     void init(int width, int height, const char* title);
@@ -61,6 +64,7 @@ private:
     DropSystem m_dropSystem;
     UIRenderer    m_uiRenderer;
     CraftingSystem m_craftingSystem;
+    ecs::GameplayScene m_gameplayScene;
     std::string m_lastSubmittedCommand;
 #ifndef NDEBUG
     Dashboard      m_dashboard;
@@ -68,7 +72,9 @@ private:
 
 
     [[nodiscard]] static double clampFrameTime(double dt);
+    [[nodiscard]] StateDependencies makeStateDependencies();
     void runFixedUpdate(double fixedStep, double& accumulator);
+
     void syncAudioListener(float deltaTime);
     void renderFrame(float frameTime);
 

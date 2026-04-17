@@ -11,6 +11,8 @@
 #include "Block.h"
 #include "SubChunk.h"
 
+struct ChunkMeshData;
+
 // Chunk = ChunkColumn. Internally composed of NUM_SUB_CHUNKS SubChunks along Y axis.
 // Phase 2: Each SubChunk owns its own mesh. Chunk provides column-level aggregation.
 class Chunk {
@@ -49,6 +51,12 @@ public:
     [[nodiscard]] SubChunkMesh& getSubChunkMesh(int scy);
     void setSubChunkMesh(int scy, const SubChunkMesh& mesh);
 
+    // --- Column-level aggregated mesh access (opaque + cutout) ---
+    [[nodiscard]] const SubChunkMesh& getColumnMesh() const;
+    [[nodiscard]] SubChunkMesh& getColumnMesh();
+    void updateColumnAggregateData(int scy, const ChunkMeshData& meshData);
+    void ensureColumnMeshBuilt();
+
     // --- Light access (column-local coordinates) ---
     [[nodiscard]] uint8_t getSunlight(int x, int y, int z) const;
     void setSunlight(int x, int y, int z, uint8_t level);
@@ -85,6 +93,14 @@ public:
     [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
 private:
+    struct ColumnAggregateSlice {
+        std::vector<BlockVertex> opaqueVertices;
+        std::vector<BlockVertex> cutoutVertices;
+        bool hasBounds = false;
+        glm::vec3 boundsMin = glm::vec3(0.0f);
+        glm::vec3 boundsMax = glm::vec3(0.0f);
+    };
+
     [[nodiscard]] static bool isInBounds(int x, int y, int z);
     void setBlockImpl(int x, int y, int z, BlockID id, bool markMeshDirty);
     [[nodiscard]] uint8_t getImplicitSunlight(int x, int y, int z) const;
@@ -93,13 +109,17 @@ private:
     [[nodiscard]] bool canRecycleSubChunk(const SubChunk& subChunk) const;
     void recycleSubChunk(int scy);
     void tryRecycleSubChunk(int scy);
+    void rebuildColumnMesh();
 
     // Sub-chunks along Y axis. nullptr = all-air (SubChunkType::Air with no storage)
     std::array<std::unique_ptr<SubChunk>, NUM_SUB_CHUNKS> m_subChunks{};
+    std::array<ColumnAggregateSlice, NUM_SUB_CHUNKS> m_columnAggregateSlices{};
+    SubChunkMesh m_columnMesh;
 
     std::array<int, static_cast<std::size_t>(SIZE_X) * SIZE_Z> m_heightMap{};
 
     bool m_dirty = true;
+    bool m_columnMeshDirty = false;
 };
 
 #endif // MECRAFT_CHUNK_H

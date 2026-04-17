@@ -7,8 +7,9 @@
 #include <glm/glm.hpp>
 #include "../core/Camera.h"
 #include "../core/InputManager.h"
-#include "../core/InputContextManager.h" // Add this
+#include "../core/InputContextManager.h"
 #include "../physics/PhysicsInfo.h"
+#include "../ecs/Components.h"
 #include "Inventory.h"
 
 namespace physics {
@@ -23,6 +24,20 @@ public:
     void update(float dt, const InputSnapshot& snapshot, const InputContextManager& inputContext,
                 physics::PhysicsSystem& physicsSystem);
 
+    void updateFromECS(float dt, const ecs::MoveIntentComponent& moveIntent,
+                       const ecs::LookIntentComponent& lookIntent,
+                       physics::PhysicsSystem& physicsSystem);
+
+    void syncFromECS(const ecs::TransformComponent& transform,
+                     const ecs::PhysicsBodyComponent& physicsBody,
+                     const ecs::CameraStateComponent& camera,
+                     const ecs::MoveIntentComponent& moveIntent,
+                     const ecs::BlockTargetComponent& target,
+                     const ecs::BlockBreakComponent& blockBreak,
+                     const ecs::LandingStateComponent& landing,
+                     const ecs::InventoryComponent& inventory,
+                     float dt);
+
     [[nodiscard]] glm::vec3 getPosition() const;
     [[nodiscard]] glm::vec3 getEyePosition() const;
     [[nodiscard]] float getEyeHeight() const;
@@ -30,6 +45,7 @@ public:
     [[nodiscard]] float getEyeBobHorizontalAmplitude() const;
     [[nodiscard]] float getEyeBobFrequency() const;
     [[nodiscard]] float getEyeBobPhaseOffset() const;
+    [[nodiscard]] const PhysicsBody& getPhysicsBody() const;
     Camera& getCamera();
     void setEyeBobAmplitude(float amplitude);
     void setEyeBobHorizontalAmplitude(float amplitude);

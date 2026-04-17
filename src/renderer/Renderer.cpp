@@ -478,32 +478,53 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
     const int modelLoc = m_chunkShader->getUniformLocation("model");
 
     m_chunkRenderEntries.clear();
-    m_chunkRenderEntries.reserve(activeChunks.size() * 4);  // Approx 4 sub-chunks per column visible
+    m_chunkRenderEntries.reserve(activeChunks.size() * 4);
 
     for (const auto& pair : activeChunks) {
         Chunk& chunk = *pair.second;
+        chunk.ensureColumnMeshBuilt();
         const glm::ivec3 offset = chunk.getWorldOffset();
+        const glm::vec3 worldOffset(offset);
+        const SubChunkMesh& columnMesh = chunk.getColumnMesh();
+
+        if (columnMesh.vertexCount > 0 || columnMesh.cutoutVertexCount > 0) {
+            ChunkRenderEntry entry;
+            entry.chunk = &chunk;
+            entry.aggregated = true;
+            entry.regionX = floorDiv(chunk.m_chunkX, regionChunkSize);
+            entry.regionZ = floorDiv(chunk.m_chunkZ, regionChunkSize);
+            entry.chunkX = chunk.m_chunkX;
+            entry.chunkZ = chunk.m_chunkZ;
+            entry.boundsMin = columnMesh.hasBounds
+                ? columnMesh.boundsMin + worldOffset
+                : glm::vec3(offset.x, offset.y, offset.z);
+            entry.boundsMax = columnMesh.hasBounds
+                ? columnMesh.boundsMax + worldOffset
+                : glm::vec3(offset.x + Chunk::SIZE_X, offset.y + Chunk::SIZE_Y, offset.z + Chunk::SIZE_Z);
+            m_chunkRenderEntries.push_back(entry);
+        }
 
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
             const SubChunk* sc = chunk.getSubChunk(scy);
-            if (!sc) continue;  // Air sub-chunk — skip
+            if (!sc) continue;
 
             const SubChunkMesh& mesh = sc->getMesh();
-            if (mesh.vertexCount == 0 && mesh.transparentVertexCount == 0 && mesh.cutoutVertexCount == 0) {
-                continue;  // No geometry
+            if (mesh.transparentVertexCount == 0) {
+                continue;
             }
 
             const int yBase = scy * SubChunk::SIZE;
             const glm::vec3 sectionMin = mesh.hasBounds
-                ? mesh.boundsMin + glm::vec3(offset)
+                ? mesh.boundsMin + worldOffset
                 : glm::vec3(offset.x, static_cast<float>(yBase) + offset.y, offset.z);
             const glm::vec3 sectionMax = mesh.hasBounds
-                ? mesh.boundsMax + glm::vec3(offset)
+                ? mesh.boundsMax + worldOffset
                 : glm::vec3(offset.x + Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE) + offset.y, offset.z + Chunk::SIZE_Z);
 
             ChunkRenderEntry entry;
             entry.chunk = &chunk;
             entry.scy = scy;
+            entry.aggregated = false;
             entry.regionX = floorDiv(chunk.m_chunkX, regionChunkSize);
             entry.regionZ = floorDiv(chunk.m_chunkZ, regionChunkSize);
             entry.chunkX = chunk.m_chunkX;
@@ -531,6 +552,9 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                   }
                   if (a.chunkZ != b.chunkZ) {
                       return a.chunkZ < b.chunkZ;
+                  }
+                  if (a.aggregated != b.aggregated) {
+                      return a.aggregated && !b.aggregated;
                   }
                   return a.scy < b.scy;
               });
@@ -643,29 +667,31 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                 }
 #endif
 
+                if (entry.aggregated) {
+                    const SubChunkMesh& mesh = entry.chunk->getColumnMesh();
+                    glm::mat4 model(1.0f);
+                    const glm::ivec3 offset = entry.chunk->getWorldOffset();
+                    model = glm::translate(model, glm::vec3(offset));
+                    m_chunkShader->setMat4(modelLoc, model);
+
+                    if (mesh.vertexCount > 0) {
+                        if (lastOpaqueVao != mesh.vao) {
+                            glBindVertexArray(mesh.vao);
+                            lastOpaqueVao = mesh.vao;
+                        }
+                        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
+                        ++drawCallCount;
+                    }
+
+                    if (mesh.cutoutVertexCount > 0) {
+                        cutoutEntries.push_back(entry);
+                    }
+                    continue;
+                }
+
                 const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
                 if (!sc) continue;
                 const SubChunkMesh& mesh = sc->getMesh();
-
-                glm::mat4 model(1.0f);
-                const glm::ivec3 offset = entry.chunk->getWorldOffset();
-                const int yBase = entry.scy * SubChunk::SIZE;
-                model = glm::translate(model, glm::vec3(offset.x, offset.y + yBase, offset.z));
-                m_chunkShader->setMat4(modelLoc, model);
-
-                if (mesh.vertexCount > 0) {
-                    if (lastOpaqueVao != mesh.vao) {
-                        glBindVertexArray(mesh.vao);
-                        lastOpaqueVao = mesh.vao;
-                    }
-                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
-                    ++drawCallCount;
-                }
-
-                if (mesh.cutoutVertexCount > 0) {
-                    cutoutEntries.push_back(entry);
-                }
-
                 if (mesh.transparentVertexCount > 0) {
                     transparentEntries.push_back(entry);
                 }
@@ -691,22 +717,29 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
     for (const ChunkRenderEntry& entry : cutoutEntries) {
         if (entry.chunk == nullptr) continue;
 
-        const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-        if (!sc) continue;
-        const SubChunkMesh& mesh = sc->getMesh();
-        if (mesh.cutoutVertexCount == 0) continue;
+        const SubChunkMesh* mesh = nullptr;
+        int yBase = 0;
+        if (entry.aggregated) {
+            mesh = &entry.chunk->getColumnMesh();
+        } else {
+            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+            if (!sc) continue;
+            mesh = &sc->getMesh();
+            yBase = entry.scy * SubChunk::SIZE;
+        }
+        if (mesh->cutoutVertexCount == 0) continue;
 
         glm::mat4 model(1.0f);
         const glm::ivec3 offset = entry.chunk->getWorldOffset();
-        const int yBase = entry.scy * SubChunk::SIZE;
         model = glm::translate(model, glm::vec3(offset.x, offset.y + yBase, offset.z));
         m_chunkShader->setMat4(modelLoc, model);
 
-        glBindVertexArray(mesh.cutoutVao);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.cutoutVertexCount));
+        glBindVertexArray(mesh->cutoutVao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutVertexCount));
         ++drawCallCount;
     }
 }
+
 
 void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
     if (transparentEntries.empty()) {
@@ -1010,7 +1043,7 @@ void Renderer::drainMeshingResults(const World& world) {
         m_lastOpaqueVertexCount = result.meshData.opaqueVertexCount;
 #endif
 
-        // Upload per-sub-chunk mesh
+        // Upload per-sub-chunk mesh and refresh column-level aggregate for opaque/cutout.
         SubChunkMesh mesh;
         mesh.upload(result.meshData.opaqueVertices);
         mesh.uploadCutout(result.meshData.cutoutVertices);
@@ -1019,6 +1052,8 @@ void Renderer::drainMeshingResults(const World& world) {
         mesh.boundsMin = result.meshData.boundsMin;
         mesh.boundsMax = result.meshData.boundsMax;
         chunk.setSubChunkMesh(result.scy, mesh);
+        chunk.updateColumnAggregateData(result.scy, result.meshData);
+
     }
 }
 

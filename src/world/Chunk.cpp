@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstddef>
 
+#include "../renderer/ChunkMesher.h"
+
 namespace {
 int wrapToChunkAxis(const int value) {
     const int mod = value % Chunk::SIZE_X;
@@ -11,6 +13,26 @@ int wrapToChunkAxis(const int value) {
 
 uint8_t clampLight(const uint8_t level) {
     return static_cast<uint8_t>(std::min<int>(level, 15));
+}
+
+void expandBounds(glm::vec3& minBounds,
+                  glm::vec3& maxBounds,
+                  bool& hasBounds,
+                  const glm::vec3& candidateMin,
+                  const glm::vec3& candidateMax) {
+    if (!hasBounds) {
+        minBounds = candidateMin;
+        maxBounds = candidateMax;
+        hasBounds = true;
+        return;
+    }
+
+    minBounds.x = std::min(minBounds.x, candidateMin.x);
+    minBounds.y = std::min(minBounds.y, candidateMin.y);
+    minBounds.z = std::min(minBounds.z, candidateMin.z);
+    maxBounds.x = std::max(maxBounds.x, candidateMax.x);
+    maxBounds.y = std::max(maxBounds.y, candidateMax.y);
+    maxBounds.z = std::max(maxBounds.z, candidateMax.z);
 }
 
 constexpr int OPPOSITE_SUB_CHUNK_NEIGHBOR[6] = {1, 0, 3, 2, 5, 4};
@@ -33,7 +55,7 @@ Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(ch
 }
 
 Chunk::~Chunk() {
-    // unique_ptr<SubChunk> auto-destructs, which destroys SubChunk and its mesh
+    m_columnMesh.destroy();
 }
 
 bool Chunk::isInBounds(const int x, const int y, const int z) {
@@ -104,6 +126,14 @@ void Chunk::recycleSubChunk(const int scy) {
         }
         subChunk->neighbors[direction] = nullptr;
     }
+
+    ColumnAggregateSlice& slice = m_columnAggregateSlices[scy];
+    slice.opaqueVertices.clear();
+    slice.cutoutVertices.clear();
+    slice.hasBounds = false;
+    slice.boundsMin = glm::vec3(0.0f);
+    slice.boundsMax = glm::vec3(0.0f);
+    m_columnMeshDirty = true;
 
     m_subChunks[scy].reset();
 }
@@ -378,6 +408,85 @@ SubChunkMesh& Chunk::getSubChunkMesh(const int scy) {
 void Chunk::setSubChunkMesh(const int scy, const SubChunkMesh& mesh) {
     SubChunk* sc = getOrCreateSubChunk(scy);
     sc->setMesh(mesh);
+}
+
+const SubChunkMesh& Chunk::getColumnMesh() const {
+    return m_columnMesh;
+}
+
+SubChunkMesh& Chunk::getColumnMesh() {
+    return m_columnMesh;
+}
+
+void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshData) {
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS) {
+        return;
+    }
+
+    ColumnAggregateSlice& slice = m_columnAggregateSlices[scy];
+    slice.opaqueVertices = meshData.opaqueVertices;
+    slice.cutoutVertices = meshData.cutoutVertices;
+
+    const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
+    for (BlockVertex& vertex : slice.opaqueVertices) {
+        vertex.y += yOffset;
+    }
+    for (BlockVertex& vertex : slice.cutoutVertices) {
+        vertex.y += yOffset;
+    }
+
+    slice.hasBounds = meshData.hasBounds && (!slice.opaqueVertices.empty() || !slice.cutoutVertices.empty());
+    if (slice.hasBounds) {
+        const glm::vec3 offset(0.0f, yOffset, 0.0f);
+        slice.boundsMin = meshData.boundsMin + offset;
+        slice.boundsMax = meshData.boundsMax + offset;
+    } else {
+        slice.boundsMin = glm::vec3(0.0f);
+        slice.boundsMax = glm::vec3(0.0f);
+    }
+
+    m_columnMeshDirty = true;
+    rebuildColumnMesh();
+}
+
+void Chunk::ensureColumnMeshBuilt() {
+    if (!m_columnMeshDirty) {
+        return;
+    }
+    rebuildColumnMesh();
+}
+
+void Chunk::rebuildColumnMesh() {
+    size_t totalOpaqueVertices = 0;
+    size_t totalCutoutVertices = 0;
+    bool hasBounds = false;
+    glm::vec3 boundsMin(0.0f);
+    glm::vec3 boundsMax(0.0f);
+
+    for (const ColumnAggregateSlice& slice : m_columnAggregateSlices) {
+        totalOpaqueVertices += slice.opaqueVertices.size();
+        totalCutoutVertices += slice.cutoutVertices.size();
+        if (slice.hasBounds) {
+            expandBounds(boundsMin, boundsMax, hasBounds, slice.boundsMin, slice.boundsMax);
+        }
+    }
+
+    std::vector<BlockVertex> opaqueVertices;
+    opaqueVertices.reserve(totalOpaqueVertices);
+    std::vector<BlockVertex> cutoutVertices;
+    cutoutVertices.reserve(totalCutoutVertices);
+
+    for (const ColumnAggregateSlice& slice : m_columnAggregateSlices) {
+        opaqueVertices.insert(opaqueVertices.end(), slice.opaqueVertices.begin(), slice.opaqueVertices.end());
+        cutoutVertices.insert(cutoutVertices.end(), slice.cutoutVertices.begin(), slice.cutoutVertices.end());
+    }
+
+    m_columnMesh.upload(opaqueVertices);
+    m_columnMesh.uploadCutout(cutoutVertices);
+    m_columnMesh.hasBounds = hasBounds;
+    m_columnMesh.boundsMin = hasBounds ? boundsMin : glm::vec3(0.0f);
+    m_columnMesh.boundsMax = hasBounds ? boundsMax : glm::vec3(0.0f);
+    m_columnMeshDirty = false;
 }
 
 void Chunk::markMeshClean() {

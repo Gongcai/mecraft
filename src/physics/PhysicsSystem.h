@@ -14,7 +14,9 @@ public:
 
     // 提供给外部调用的主更新接口
     void updateBody(PhysicsBody& body, const MoveIntent& intent, float dt);
+    void updateBody(PhysicsBody& body, const MoveIntent& intent, float dt, const PhysicsTuning& tuningOverride);
     PhysicsTuning tuning;
+
 private:
     World* m_world;
 };

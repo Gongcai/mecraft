@@ -3,8 +3,10 @@
 
 #include <glm/vec3.hpp>
 
+#include "../src/ecs/GameplayRegistry.h"
 #include "../src/world/DropSystem.h"
 #include "../src/world/World.h"
+#include "../src/player/Inventory.h"
 #include "../src/item/Item.h"
 
 namespace {
@@ -32,7 +34,9 @@ int main() {
     world.setBlock(0, 121, 0, BlockIds::AIR);
     world.setBlock(0, 122, 0, BlockIds::AIR);
 
+    ecs::GameplayRegistry dropRegistry;
     DropSystem dropSystem;
+    dropSystem.bindRegistry(dropRegistry);
     dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
     dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
 
@@ -53,7 +57,9 @@ int main() {
     }
 
     // Test coal_ore drops coal item (not itself)
+    ecs::GameplayRegistry coalDropRegistry;
     DropSystem coalDropSystem;
+    coalDropSystem.bindRegistry(coalDropRegistry);
     coalDropSystem.spawnBlockDrop(BlockIds::COAL_ORE, glm::ivec3(0, 122, 0));
     if (coalDropSystem.getDrops().empty()) {
         return fail("coal_ore should spawn a drop");
@@ -62,7 +68,9 @@ int main() {
         return fail("coal_ore should drop coal item, not itself");
     }
 
+    ecs::GameplayRegistry placementDropRegistry;
     DropSystem placementDropSystem;
+    placementDropSystem.bindRegistry(placementDropRegistry);
     const glm::ivec3 placementCell(2, 130, 2);
     placementDropSystem.spawnBlockDrop(BlockIds::STONE, placementCell);
     if (placementDropSystem.getDrops().empty()) {
@@ -80,6 +88,32 @@ int main() {
     const float expectedLiftedY = static_cast<float>(placementCell.y + 1) + moved.halfExtents.y;
     if (moved.position.y < expectedLiftedY || moved.position.y > expectedLiftedY + 0.01f) {
         return fail("drop should be moved to top of newly placed block");
+    }
+
+    DropSystem itemSpawnDropSystem;
+    ecs::GameplayRegistry itemSpawnRegistry;
+    itemSpawnDropSystem.bindRegistry(itemSpawnRegistry);
+    itemSpawnDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(4, 122, 4), 1);
+    itemSpawnDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(4, 122, 4), 2);
+    if (itemSpawnDropSystem.getDrops().size() != 1 || itemSpawnDropSystem.getDrops().front().stackCount != 3) {
+        return fail("spawnItemDrop should merge same-position same-item stacks");
+    }
+
+    DropSystem collectDropSystem;
+    ecs::GameplayRegistry collectDropRegistry;
+    collectDropSystem.bindRegistry(collectDropRegistry);
+    collectDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(6, 122, 6), 2);
+    Inventory inventory;
+    const uint16_t coalBefore = inventory.getSlotStack(7).count;
+    const uint32_t collected = collectDropSystem.collectNearbyDrops(glm::vec3(6.5f, 122.42f, 6.5f), 1.0f, inventory);
+    if (collected != 2) {
+        return fail("collectNearbyDrops should collect stacks within radius");
+    }
+    if (!collectDropSystem.getDrops().empty()) {
+        return fail("collectNearbyDrops should remove fully collected drops");
+    }
+    if (inventory.getSlotStack(7).count != static_cast<uint16_t>(coalBefore + 2)) {
+        return fail("collectNearbyDrops should add items into inventory stacks");
     }
 
     const float initialYaw = dropSystem.getDrops().front().yawRadians;

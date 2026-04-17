@@ -37,9 +37,9 @@ bool isWaterBlock(const World& world, const int x, const int y, const int z) {
     if (id == 0) {
         return false;
     }
-    const BlockDef& def = BlockRegistry::get(id);
-    return def.namespacedId.path() == "water";
+    return id == BlockIds::WATER;
 }
+
 
 float overlapLen(float aMin, float aMax, float bMin, float bMax);
 
@@ -264,6 +264,11 @@ namespace physics {
 PhysicsSystem::PhysicsSystem(World* world) : m_world(world) {}
 
 void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, const float dt) {
+    updateBody(body, intent, dt, tuning);
+}
+
+void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, const float dt,
+                               const PhysicsTuning& tuningOverride) {
     if (dt <= 0.0f || m_world == nullptr) {
         return;
     }
@@ -277,9 +282,9 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     body.isFullySubmerged = waterFillRatio > 0.95f;
     body.isEyesInWater = queryEyesInWater(body, *m_world);
 
-    applyHorizontalControl(body, intent, tuning, wasGrounded, dt);
-    applyVerticalForces(body, intent, tuning, wasGrounded,  dt);
-    applyDrag(body, tuning, dt);
+    applyHorizontalControl(body, intent, tuningOverride, wasGrounded, dt);
+    applyVerticalForces(body, intent, tuningOverride, wasGrounded, dt);
+    applyDrag(body, tuningOverride, dt);
 
     body.isGrounded = false;
     moveAndCollideAxis(body, *m_world, intent, dt, 1); // Y
@@ -299,6 +304,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     body.isFullySubmerged = postMoveWaterFillRatio > 0.95f;
     body.isEyesInWater = queryEyesInWater(body, *m_world);
 }
+
 
 } // namespace physics
 

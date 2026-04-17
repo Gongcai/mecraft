@@ -49,7 +49,16 @@ glm::vec3 Camera::getUp() const {
     return m_up;
 }
 
+float Camera::getYaw() const {
+    return m_yaw;
+}
+
+float Camera::getPitch() const {
+    return m_pitch;
+}
+
 PhysicsInfo Camera::getPickRay() const {
+
     return {m_position, m_front};
 }
 
@@ -95,8 +104,14 @@ void Camera::setSensitivity(float newSensitivity) {
     this->sensitivity = newSensitivity;
 }
 
+void Camera::setYawPitch(float yaw, float pitch) {
+    m_yaw = yaw;
+    m_pitch = std::clamp(pitch, -89.0f, 89.0f);
+    updateVectors();
+}
 
 void Camera::updateVectors() {
+
     const glm::vec3 front = {
         cos(glm::radians(m_yaw)) * cos(glm::radians(m_pitch)),
         sin(glm::radians(m_pitch)),

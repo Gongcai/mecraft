@@ -31,8 +31,6 @@ namespace {
     }
 }
 
-
-
 void Player::init(const glm::vec3 &spawnPos) {
     m_position = spawnPos;
     m_velocity = glm::vec3(0.0f);
@@ -56,8 +54,6 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
                     physics::PhysicsSystem &physicsSystem) {
     (void) snapshot;
 
-
-
     handleMouseLook(inputContext);
     handleMovement(inputContext);
 
@@ -76,8 +72,7 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     else {
         m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightStand, dt * 15);
     }
-    // 疾跑FOV插值
-    const float targetFOV = m_sprinting && (m_body.velocity != glm::vec3(0.0f))? m_SprintFOV : m_WalkFOV;
+    const float targetFOV = m_sprinting && (m_body.velocity != glm::vec3(0.0f)) ? m_SprintFOV : m_WalkFOV;
     m_camera.setFOV(Lerp(m_camera.getFOV(), targetFOV, dt * 10.0f));
 
     applyViewBob(dt);
@@ -86,7 +81,92 @@ void Player::update(float dt, const InputSnapshot &snapshot, const InputContextM
     if (m_justLanded) {
         m_lastLandingImpactSpeed = m_body.landingImpactSpeed;
     }
+}
 
+void Player::updateFromECS(float dt, const ecs::MoveIntentComponent& moveIntent,
+                           const ecs::LookIntentComponent& lookIntent,
+                           physics::PhysicsSystem& physicsSystem) {
+    m_camera.processMouseMovement(lookIntent.deltaX, lookIntent.deltaY);
+
+    m_intent.move = moveIntent.move;
+    m_intent.wantsJump = moveIntent.wantsJump;
+    m_intent.wantsSprint = moveIntent.wantsSprint;
+    m_intent.wantsCrouch = moveIntent.wantsCrouch;
+
+    const bool hasMoveInput = (moveIntent.move.x != 0.0f || moveIntent.move.y != 0.0f);
+    m_moving = hasMoveInput && m_onGround;
+    m_sprinting = moveIntent.wantsSprint;
+    m_crouching = moveIntent.wantsCrouch;
+
+    m_body.eyeOffsetY = m_eyeHeightBase;
+    physicsSystem.updateBody(m_body, m_intent, dt);
+
+    m_onGroundLastFrame = m_onGround;
+    m_position = m_body.position;
+    m_velocity = m_body.velocity;
+    m_onGround = m_body.isGrounded;
+
+    if (m_onGround && m_intent.wantsCrouch) {
+        m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightCrouch, dt * 15);
+    } else {
+        m_eyeHeightBase = Lerp(m_eyeHeightBase, m_eyeHeightStand, dt * 15);
+    }
+
+    const float targetFOV = m_sprinting && (m_body.velocity != glm::vec3(0.0f)) ? m_SprintFOV : m_WalkFOV;
+    m_camera.setFOV(Lerp(m_camera.getFOV(), targetFOV, dt * 10.0f));
+
+    applyViewBob(dt);
+
+    m_justLanded = m_onGround && !m_onGroundLastFrame;
+    if (m_justLanded) {
+        m_lastLandingImpactSpeed = m_body.landingImpactSpeed;
+    }
+}
+
+void Player::syncFromECS(const ecs::TransformComponent& transform,
+                         const ecs::PhysicsBodyComponent& physicsBody,
+                         const ecs::CameraStateComponent& camera,
+                         const ecs::MoveIntentComponent& moveIntent,
+                         const ecs::BlockTargetComponent& target,
+                         const ecs::BlockBreakComponent& blockBreak,
+                         const ecs::LandingStateComponent& landing,
+                         const ecs::InventoryComponent& inventory,
+                         const float dt) {
+    m_onGroundLastFrame = m_onGround;
+    m_body = physicsBody.body;
+    m_position = transform.position;
+    m_velocity = physicsBody.body.velocity;
+    m_onGround = physicsBody.body.isGrounded;
+    m_justLanded = landing.justLanded;
+    m_lastLandingImpactSpeed = landing.impactSpeed;
+
+    m_intent.move = moveIntent.move;
+    m_intent.wantsJump = moveIntent.wantsJump;
+    m_intent.wantsSprint = moveIntent.wantsSprint;
+    m_intent.wantsCrouch = moveIntent.wantsCrouch;
+
+    const bool hasMoveInput = (moveIntent.move.x != 0.0f || moveIntent.move.y != 0.0f);
+    m_moving = hasMoveInput && m_onGround;
+    m_sprinting = moveIntent.wantsSprint;
+    m_crouching = moveIntent.wantsCrouch;
+
+    m_eyeHeightBase = transform.eyeHeight;
+    m_eyeHeight = m_eyeHeightBase;
+
+    m_camera.setSensitivity(camera.sensitivity);
+    m_camera.setYawPitch(camera.yaw, camera.pitch);
+    m_camera.setFOV(camera.fov);
+    m_camera.setPosition(m_position + glm::vec3(0.0f, m_eyeHeightBase, 0.0f));
+    applyViewBob(dt);
+
+    m_hasTargetBlock = target.hasTarget;
+    m_targetBlock = target.targetBlock;
+
+    m_hasBreakTargetBlock = blockBreak.active;
+    m_breakTargetBlock = blockBreak.blockPos;
+    m_blockBreakProgress = blockBreak.active ? std::clamp(blockBreak.progress01, 0.0f, 1.0f) : 0.0f;
+
+    m_inventory.setSelectedSlot(inventory.selectedHotbarSlot);
 }
 
 void Player::applyViewBob(float dt) {
@@ -142,6 +222,10 @@ float Player::getEyeBobFrequency() const {
 
 float Player::getEyeBobPhaseOffset() const {
     return m_eyeBobPhaseOffset;
+}
+
+const PhysicsBody& Player::getPhysicsBody() const {
+    return m_body;
 }
 
 Camera &Player::getCamera() {
@@ -288,9 +372,7 @@ void Player::handleMovement(const InputContextManager &inputContext) {
         wishDir = glm::normalize(wishDir);
     }
 
-
     m_sprinting = inputContext.isActionTriggered(Action::Sprint);
-    // PhysicsSystem currently expects world-space X/Z intent.
     m_intent.move = glm::vec2(wishDir.x, wishDir.z);
     m_intent.wantsJump = inputContext.isActionTriggered(Action::Jump);
     m_intent.wantsSprint = m_sprinting;

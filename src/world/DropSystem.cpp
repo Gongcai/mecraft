@@ -1,214 +1,85 @@
 #include "DropSystem.h"
 
 #include <algorithm>
-#include <array>
-#include <cmath>
-#include <random>
-
-#include <glm/gtc/constants.hpp>
+#include <vector>
 
 #include "World.h"
+#include "../ecs/Components.h"
+#include "../ecs/DropRuntimeState.h"
+#include "../ecs/GameplayRegistry.h"
+#include "../ecs/ItemLifetimeSystem.h"
+#include "../ecs/ItemMergeSystem.h"
+#include "../ecs/ItemPhysicsSystem.h"
+#include "../ecs/ItemPickupSystem.h"
+#include "../ecs/ItemPlacementResolveSystem.h"
+#include "../ecs/ItemSpawnSystem.h"
 #include "../player/Inventory.h"
 
 namespace {
-constexpr float kGravity = 20.0f;
-constexpr float kTerminalVelocity = 25.0f;
-constexpr float kAxisStep = 0.2f;
-constexpr float kContactEpsilon = 0.0005f;
-constexpr float kHorizontalDamping = 0.92f;
-constexpr float kGroundFriction = 0.86f;
-constexpr float kMergeRadius = 1.75f;
-constexpr float kMergeRadiusSq = kMergeRadius * kMergeRadius;
-constexpr float kMergeIntervalSeconds = 0.2f;
 
-bool canMergeDrops(const DropEntity& a, const DropEntity& b) {
-    return a.itemId == b.itemId && a.stackCount > 0 && b.stackCount > 0;
+DropEntity readDropEntity(const entt::registry& registry, const entt::entity e) {
+    const auto& idComp = registry.get<ecs::DropEntityIdComponent>(e);
+    const auto& transform = registry.get<ecs::TransformComponent>(e);
+    const auto& item = registry.get<ecs::ItemComponent>(e);
+    const auto& velocity = registry.get<ecs::VelocityComponent>(e);
+    const auto& bounds = registry.get<ecs::BoundsComponent>(e);
+    const auto& lifetime = registry.get<ecs::LifetimeComponent>(e);
+    const auto& spin = registry.get<ecs::SpinVisualComponent>(e);
+    const auto& grounded = registry.get<ecs::GroundedStateComponent>(e);
+
+    DropEntity drop;
+    drop.id = idComp.dropId;
+    drop.itemId = item.itemId;
+    drop.position = transform.position;
+    drop.velocity = velocity.velocity;
+    drop.halfExtents = bounds.halfExtents;
+    drop.yawRadians = spin.yawRadians;
+    drop.spinSpeedRadians = spin.spinSpeedRadians;
+    drop.ageSeconds = lifetime.ageSeconds;
+    drop.lifeTimeSeconds = lifetime.lifeTimeSeconds;
+    drop.stackCount = item.stackCount;
+    drop.grounded = grounded.grounded;
+    return drop;
 }
 
-void absorbDrop(DropEntity& target, const DropEntity& source) {
-    const uint32_t totalCount = target.stackCount + source.stackCount;
-    if (totalCount == 0) {
-        return;
+std::vector<DropEntity> snapshotDrops(ecs::GameplayRegistry& registry) {
+    auto& raw = registry.registry();
+    auto view = raw.view<ecs::DropItemTag,
+                         ecs::DropEntityIdComponent,
+                         ecs::TransformComponent,
+                         ecs::ItemComponent,
+                         ecs::VelocityComponent,
+                         ecs::BoundsComponent,
+                         ecs::LifetimeComponent,
+                         ecs::SpinVisualComponent,
+                         ecs::GroundedStateComponent>();
+
+    std::vector<DropEntity> drops;
+    for (const entt::entity e : view) {
+        drops.push_back(readDropEntity(raw, e));
     }
 
-    const float targetWeight = static_cast<float>(target.stackCount);
-    const float sourceWeight = static_cast<float>(source.stackCount);
-    const float invTotal = 1.0f / static_cast<float>(totalCount);
-
-    target.position = (target.position * targetWeight + source.position * sourceWeight) * invTotal;
-    target.velocity = (target.velocity * targetWeight + source.velocity * sourceWeight) * invTotal;
-    target.ageSeconds = std::min(target.ageSeconds, source.ageSeconds);
-    target.grounded = target.grounded || source.grounded;
-    target.stackCount = totalCount;
+    std::sort(drops.begin(), drops.end(),
+              [](const DropEntity& a, const DropEntity& b) {
+                  return a.id < b.id;
+              });
+    return drops;
 }
 
-bool tryMergeDropAtSpawn(std::vector<DropEntity>& drops,
-                         const ItemID itemId,
-                         const glm::vec3& spawnPos,
-                         const uint32_t stackCount) {
-    DropEntity* bestMatch = nullptr;
-    float bestDistSq = kMergeRadiusSq;
+} // namespace
 
-    for (DropEntity& drop : drops) {
-        if (drop.itemId != itemId || drop.stackCount == 0) {
-            continue;
-        }
-        const glm::vec3 delta = drop.position - spawnPos;
-        const float distSq = glm::dot(delta, delta);
-        if (distSq > bestDistSq) {
-            continue;
-        }
-        bestDistSq = distSq;
-        bestMatch = &drop;
-    }
-
-    if (bestMatch == nullptr) {
-        return false;
-    }
-
-    bestMatch->stackCount += stackCount;
-    bestMatch->position = (bestMatch->position + spawnPos) * 0.5f;
-    bestMatch->ageSeconds = std::max(0.0f, bestMatch->ageSeconds - 1.0f);
-    return true;
-}
-
-void mergeNearbyDrops(std::vector<DropEntity>& drops) {
-    if (drops.size() < 2) {
-        return;
-    }
-
-    for (size_t i = 0; i < drops.size(); ++i) {
-        DropEntity& base = drops[i];
-        if (base.stackCount == 0) {
-            continue;
-        }
-
-        for (size_t j = i + 1; j < drops.size(); ++j) {
-            DropEntity& candidate = drops[j];
-            if (!canMergeDrops(base, candidate)) {
-                continue;
-            }
-
-            const glm::vec3 delta = base.position - candidate.position;
-            const float distSq = glm::dot(delta, delta);
-            if (distSq > kMergeRadiusSq) {
-                continue;
-            }
-
-            absorbDrop(base, candidate);
-            candidate.stackCount = 0;
-        }
-    }
-
-    drops.erase(std::remove_if(drops.begin(), drops.end(),
-                               [](const DropEntity& drop) {
-                                   return drop.stackCount == 0;
-                               }),
-                drops.end());
-}
-
-bool isSolidBlock(const World& world, const int x, const int y, const int z) {
-    const BlockID id = world.getBlock(x, y, z);
-    if (id == 0) {
-        return false;
-    }
-    return BlockRegistry::get(id).isSolid;
-}
-
-bool overlapsSolid(const World& world, const glm::vec3& center, const glm::vec3& halfExtents) {
-    const glm::vec3 minPos = center - halfExtents;
-    const glm::vec3 maxPos = center + halfExtents;
-
-    const int minX = static_cast<int>(std::floor(minPos.x));
-    const int maxX = static_cast<int>(std::floor(maxPos.x - kContactEpsilon));
-    const int minY = static_cast<int>(std::floor(minPos.y));
-    const int maxY = static_cast<int>(std::floor(maxPos.y - kContactEpsilon));
-    const int minZ = static_cast<int>(std::floor(minPos.z));
-    const int maxZ = static_cast<int>(std::floor(maxPos.z - kContactEpsilon));
-
-    for (int x = minX; x <= maxX; ++x) {
-        for (int y = minY; y <= maxY; ++y) {
-            for (int z = minZ; z <= maxZ; ++z) {
-                if (isSolidBlock(world, x, y, z)) {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
-}
-
-bool overlapsBlockAabb(const DropEntity& drop, const glm::ivec3& blockPos) {
-    const glm::vec3 minPos = drop.position - drop.halfExtents;
-    const glm::vec3 maxPos = drop.position + drop.halfExtents;
-
-    const float blockMinX = static_cast<float>(blockPos.x);
-    const float blockMinY = static_cast<float>(blockPos.y);
-    const float blockMinZ = static_cast<float>(blockPos.z);
-    const float blockMaxX = blockMinX + 1.0f;
-    const float blockMaxY = blockMinY + 1.0f;
-    const float blockMaxZ = blockMinZ + 1.0f;
-
-    return minPos.x < blockMaxX && maxPos.x > blockMinX &&
-           minPos.y < blockMaxY && maxPos.y > blockMinY &&
-           minPos.z < blockMaxZ && maxPos.z > blockMinZ;
-}
-
-void moveAndCollideAxis(DropEntity& drop, const World& world, const int axis, const float dt) {
-    const float delta = drop.velocity[axis] * dt;
-    if (std::abs(delta) <= 0.0f) {
-        return;
-    }
-
-    const int steps = std::max(1, static_cast<int>(std::ceil(std::abs(delta) / kAxisStep)));
-    const float stepDelta = delta / static_cast<float>(steps);
-
-    for (int i = 0; i < steps; ++i) {
-        const glm::vec3 previousPos = drop.position;
-        drop.position[axis] += stepDelta;
-
-        if (!overlapsSolid(world, drop.position, drop.halfExtents)) {
-            continue;
-        }
-
-        drop.position = previousPos;
-        drop.velocity[axis] = 0.0f;
-
-        if (axis == 1 && stepDelta < 0.0f) {
-            drop.grounded = true;
-        }
-        return;
-    }
-}
+void DropSystem::bindRegistry(ecs::GameplayRegistry& registry) {
+    m_registry = &registry;
+    static_cast<void>(ecs::ensureDropRuntimeState(registry));
+    m_dropCache.clear();
 }
 
 void DropSystem::spawnItemDrop(const ItemID itemId, const glm::ivec3& blockPos, const uint32_t stackCount) {
-    if (itemId == 0 || stackCount == 0) {
+    if (m_registry == nullptr) {
         return;
     }
 
-    const glm::vec3 spawnPos = glm::vec3(blockPos) + glm::vec3(0.5f, 0.42f, 0.5f);
-    if (tryMergeDropAtSpawn(m_drops, itemId, spawnPos, stackCount)) {
-        return;
-    }
-
-    static std::mt19937 rng{std::random_device{}()};
-    std::uniform_real_distribution<float> yawDist(0.0f, glm::two_pi<float>());
-    std::uniform_real_distribution<float> spinDist(1.8f, 3.2f);
-    std::uniform_real_distribution<float> horizontalDist(-1.1f, 1.1f);
-    std::uniform_real_distribution<float> upwardDist(2.4f, 3.3f);
-
-    DropEntity drop;
-    drop.id = m_nextId++;
-    drop.itemId = itemId;
-    drop.stackCount = stackCount;
-    drop.position = spawnPos;
-    drop.velocity = glm::vec3(horizontalDist(rng), upwardDist(rng), horizontalDist(rng));
-    drop.yawRadians = yawDist(rng);
-    drop.spinSpeedRadians = spinDist(rng);
-
-    m_drops.push_back(drop);
+    ecs::ItemSpawnSystem::spawn(*m_registry, itemId, blockPos, stackCount);
 }
 
 void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPos) {
@@ -223,115 +94,58 @@ void DropSystem::spawnBlockDrop(const BlockID blockId, const glm::ivec3& blockPo
 }
 
 void DropSystem::onBlockPlaced(const glm::ivec3& blockPos, const World& world) {
-    if (!isSolidBlock(world, blockPos.x, blockPos.y, blockPos.z) || m_drops.empty()) {
+    if (m_registry == nullptr) {
         return;
     }
-
-    for (DropEntity& drop : m_drops) {
-        if (!overlapsBlockAabb(drop, blockPos)) {
-            continue;
-        }
-
-        const float baseY = static_cast<float>(blockPos.y + 1) + drop.halfExtents.y + kContactEpsilon;
-        glm::vec3 resolvedPos = drop.position;
-        resolvedPos.y = baseY;
-
-        // If a low ceiling exists, keep lifting until the drop no longer intersects solids.
-        constexpr int kMaxLiftSteps = 8;
-        int liftSteps = 0;
-        while (liftSteps < kMaxLiftSteps && overlapsSolid(world, resolvedPos, drop.halfExtents)) {
-            resolvedPos.y += 1.0f;
-            ++liftSteps;
-        }
-
-        drop.position = resolvedPos;
-        drop.velocity.y = 0.0f;
-        drop.grounded = true;
-    }
+    ecs::ItemPlacementResolveSystem::update(*m_registry, world, blockPos);
 }
 
 void DropSystem::update(const float dt, const World& world) {
-    if (dt <= 0.0f || m_drops.empty()) {
+    if (m_registry == nullptr || dt <= 0.0f) {
         return;
     }
 
-    for (DropEntity& drop : m_drops) {
-        drop.ageSeconds += dt;
-        drop.yawRadians = std::fmod(drop.yawRadians + drop.spinSpeedRadians * dt, glm::two_pi<float>());
-
-        drop.grounded = false;
-        drop.velocity.y = std::max(drop.velocity.y - kGravity * dt, -kTerminalVelocity);
-
-        moveAndCollideAxis(drop, world, 1, dt);
-        moveAndCollideAxis(drop, world, 0, dt);
-        moveAndCollideAxis(drop, world, 2, dt);
-
-        if (drop.grounded) {
-            drop.velocity.x *= kGroundFriction;
-            drop.velocity.z *= kGroundFriction;
-        } else {
-            drop.velocity.x *= kHorizontalDamping;
-            drop.velocity.z *= kHorizontalDamping;
-        }
-    }
-
-    m_drops.erase(std::remove_if(m_drops.begin(), m_drops.end(),
-                                 [](const DropEntity& drop) {
-                                     return drop.ageSeconds >= drop.lifeTimeSeconds;
-                                 }),
-                  m_drops.end());
-
-    if (m_drops.size() < 2) {
-        return;
-    }
-
-    m_mergeAccumulator += dt;
-    if (m_mergeAccumulator < kMergeIntervalSeconds) {
-        return;
-    }
-
-    m_mergeAccumulator = 0.0f;
-    mergeNearbyDrops(m_drops);
+    ecs::ItemPhysicsSystem::update(*m_registry, world, dt);
+    ecs::ItemMergeSystem::update(*m_registry, dt);
+    ecs::ItemLifetimeSystem::update(*m_registry, dt);
 }
 
 uint32_t DropSystem::collectNearbyDrops(const glm::vec3& position, const float radius, Inventory& inventory) {
-    if (radius <= 0.0f || m_drops.empty()) {
+    if (m_registry == nullptr) {
         return 0;
     }
-
-    const float radiusSq = radius * radius;
-    uint32_t collectedTotal = 0;
-
-    for (DropEntity& drop : m_drops) {
-        if (drop.stackCount == 0 || drop.itemId == 0) {
-            continue;
-        }
-
-        const glm::vec3 delta = drop.position - position;
-        if (glm::dot(delta, delta) > radiusSq) {
-            continue;
-        }
-
-        const uint32_t before = drop.stackCount;
-        const uint32_t remaining = inventory.addItem(drop.itemId, drop.stackCount);
-        drop.stackCount = remaining;
-        collectedTotal += (before - remaining);
-    }
-
-    m_drops.erase(std::remove_if(m_drops.begin(), m_drops.end(),
-                                 [](const DropEntity& drop) {
-                                     return drop.stackCount == 0;
-                                 }),
-                  m_drops.end());
-
-    return collectedTotal;
+    return ecs::ItemPickupSystem::update(*m_registry, position, radius, inventory);
 }
 
 void DropSystem::clear() {
-    m_drops.clear();
+    m_dropCache.clear();
+    if (m_registry == nullptr) {
+        return;
+    }
+
+    std::vector<entt::entity> entities;
+    auto& raw = m_registry->registry();
+    auto view = raw.view<ecs::DropItemTag>();
+    for (const entt::entity e : view) {
+        entities.push_back(e);
+    }
+    for (const entt::entity e : entities) {
+        if (raw.valid(e)) {
+            m_registry->destroy(e);
+        }
+    }
+
+    if (m_registry->ctxHas<ecs::DropRuntimeState>()) {
+        m_registry->ctxGet<ecs::DropRuntimeState>() = {};
+    }
 }
 
 const std::vector<DropEntity>& DropSystem::getDrops() const {
-    return m_drops;
-}
+    m_dropCache.clear();
+    if (m_registry == nullptr) {
+        return m_dropCache;
+    }
 
+    m_dropCache = snapshotDrops(*m_registry);
+    return m_dropCache;
+}

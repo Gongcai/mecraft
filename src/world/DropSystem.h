@@ -13,6 +13,10 @@
 class World;
 class Inventory;
 
+namespace ecs {
+class GameplayRegistry;
+}
+
 struct DropEntity {
     std::size_t id = 0;
     ItemID itemId = 0;
@@ -32,6 +36,8 @@ struct DropEntity {
 
 class DropSystem {
 public:
+    void bindRegistry(ecs::GameplayRegistry& registry);
+
     void spawnItemDrop(ItemID itemId, const glm::ivec3& blockPos, uint32_t stackCount = 1);
     void spawnBlockDrop(BlockID blockId, const glm::ivec3& blockPos);
     void onBlockPlaced(const glm::ivec3& blockPos, const World& world);
@@ -42,10 +48,8 @@ public:
     [[nodiscard]] const std::vector<DropEntity>& getDrops() const;
 
 private:
-    std::vector<DropEntity> m_drops;
-    std::size_t m_nextId = 1;
-    float m_mergeAccumulator = 0.0f;
+    ecs::GameplayRegistry*      m_registry = nullptr;
+    mutable std::vector<DropEntity> m_dropCache;
 };
 
 #endif // MECRAFT_DROPSYSTEM_H
-

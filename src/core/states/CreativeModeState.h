@@ -7,30 +7,14 @@ namespace physics {
 class PhysicsSystem;
 }
 
+namespace ecs {
+class GameplayRegistry;
+}
+
 class CreativeModeState final : public GameplayState {
 public:
-    CreativeModeState(GameStateMachine& fsm,
-                      Player& player,
-                      InputContextManager& ctx,
-                      InputManager& input,
-                      UIRenderer& uiRenderer,
-                      std::string& lastSubmittedCommand,
-                      physics::PhysicsSystem& physicsSystem,
-                      World& world,
-                      AudioEngine& audioEngine,
-                      ParticleSystem& particleSystem,
-                      DropSystem& dropSystem)
-            : GameplayState(fsm,
-                            player,
-                            ctx,
-                            input,
-                            uiRenderer,
-                            lastSubmittedCommand,
-                            physicsSystem,
-                            world,
-                            audioEngine,
-                            particleSystem,
-                            dropSystem,
+    explicit CreativeModeState(StateDependencies deps)
+            : GameplayState(deps,
                             CreativeModeRules::instance(),
                             GameplayMode::Creative) {}
 };

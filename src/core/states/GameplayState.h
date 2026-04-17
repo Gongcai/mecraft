@@ -1,13 +1,13 @@
 #ifndef MECRAFT_GAMEPLAYSTATE_H
 #define MECRAFT_GAMEPLAYSTATE_H
 #include <string>
-#include <random>
-#include <algorithm>
+
 #include "../IGameState.h"
 #include "../GameStateMachine.h"
 #include "../InputContextManager.h"
 #include "GameplayModeRules.h"
 #include "InventoryState.h"
+#include "StateDependencies.h"
 #include "../../player/Player.h"
 #include "../../world/World.h"
 #include "../../world/Block.h"
@@ -17,6 +17,9 @@
 #include "../../ui/UIRenderer.h"
 #include "CommandState.h"
 #include "UIState.h"
+#include "../../ecs/GameplayRegistry.h"
+#include "../../ecs/GameplayRuntimeContext.h"
+#include "../../ecs/Components.h"
 
 namespace physics {
 class PhysicsSystem;
@@ -24,43 +27,35 @@ class PhysicsSystem;
 
 class GameplayState : public IGameState {
 public:
-    GameplayState(GameStateMachine& fsm,
-                  Player& player,
-                  InputContextManager& ctx,
-                  InputManager& input,
-                  UIRenderer& uiRenderer,
-                  std::string& lastSubmittedCommand,
-                  physics::PhysicsSystem& physicsSystem,
-                  World& world,
-                  AudioEngine& audioEngine,
-                  ParticleSystem& particleSystem,
-                  DropSystem& dropSystem,
-                  const IGameplayModeRules& modeRules = SurvivalModeRules::instance(),
-                  GameplayMode gameplayMode = GameplayMode::Survival)
-            : m_fsm(fsm), m_player(player), m_context(ctx), m_input(input),
-              m_uiRenderer(uiRenderer), m_lastSubmittedCommand(lastSubmittedCommand),
-              m_physicsSystem(physicsSystem), m_world(world),
-              m_audioEngine(audioEngine), m_particleSystem(particleSystem),
-              m_dropSystem(dropSystem),
+    explicit GameplayState(StateDependencies deps,
+                           const IGameplayModeRules& modeRules = SurvivalModeRules::instance(),
+                           GameplayMode gameplayMode = GameplayMode::Survival)
+            : m_deps(deps),
               m_modeRules(modeRules),
               m_gameplayMode(gameplayMode) {}
 
     void onEnter() override {
-        // Ensure we are in Gameplay context
-        // This might be redundant if this is the first state, but safe.
-        if (m_context.getCurrentContext() != InputContextType::Gameplay) {
-             m_context.switchContext(InputContextType::Gameplay);
+        if (m_deps.context.getCurrentContext() != InputContextType::Gameplay) {
+             m_deps.context.switchContext(InputContextType::Gameplay);
         }
-        // Gameplay requires to be captured mouse
-        m_input.captureMouse(true);
-        m_uiRenderer.setInventoryPanelVisible(false);
-        m_input.clearUIDragItem();
+        m_deps.input.captureMouse(true);
+        m_deps.uiRenderer.setInventoryPanelVisible(false);
+        m_deps.input.clearUIDragItem();
+
+        if (!m_deps.ecsRegistry.ctxHas<ecs::GameplayRuntimeContext>()) {
+            m_deps.ecsRegistry.ctxSet<ecs::GameplayRuntimeContext>();
+        }
+        m_deps.ecsRegistry.ctxGet<ecs::GameplayRuntimeContext>().modeRules = &m_modeRules;
+
+        auto view = m_deps.ecsRegistry.view<ecs::LocalPlayerTag, ecs::InventoryComponent>();
+        for (auto e : view) {
+            view.get<ecs::InventoryComponent>(e).selectedHotbarSlot = m_deps.player.getInventory().getSelectedSlot();
+        }
+
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
-        updatePlaceCooldown(dt);
-        updateCreativeBreakCooldown(dt);
-        handleHotbarInput();
+        static_cast<void>(snapshot);
         if (handleInventoryTransition()) {
             resetBlockBreakSession();
             return;
@@ -74,277 +69,65 @@ public:
             return;
         }
 
-        const BlockSelection selection = updatePlayerAndTarget(dt, snapshot);
-        updateMovementAudio(dt);
-        handleBlockInteraction(dt, selection);
+        driveLegacyGameplayBridge(dt);
     }
 
 private:
-    struct BlockSelection {
-        bool hasHit = false;
-        glm::ivec3 hitBlock{};
-        glm::ivec3 placeBlock{};
-    };
-
-    struct BlockBreakSession {
-        bool active = false;
-        glm::ivec3 blockPos{};
-        float elapsedMs = 0.0f;
-        float requiredMs = 0.0f;
-    };
-
-    void updatePlaceCooldown(float dt) {
-        if (m_placeCooldownRemaining <= 0.0f) {
-            return;
-        }
-
-        m_placeCooldownRemaining -= dt;
-        if (m_placeCooldownRemaining < 0.0f) {
-            m_placeCooldownRemaining = 0.0f;
-        }
-    }
-
-    void updateCreativeBreakCooldown(float dt) {
-        if (m_creativeBreakCooldownRemaining <= 0.0f) {
-            return;
-        }
-
-        m_creativeBreakCooldownRemaining -= dt;
-        if (m_creativeBreakCooldownRemaining < 0.0f) {
-            m_creativeBreakCooldownRemaining = 0.0f;
-        }
-    }
-
-    void handleHotbarInput() {
-        for (int i = 0; i < Inventory::HOTBAR_SIZE; ++i) {
-            const auto hotbarAction = static_cast<Action>(static_cast<int>(Action::Hotbar1) + i);
-            if (m_context.isActionTriggered(hotbarAction)) {
-                m_player.getInventory().setSelectedSlot(i);
-            }
-        }
-
-        if (m_context.isActionTriggered(Action::HotbarScrollUp)) {
-            m_player.getInventory().scrollSlot(-1);
-        }
-        if (m_context.isActionTriggered(Action::HotbarScrollDown)) {
-            m_player.getInventory().scrollSlot(1);
-        }
-    }
-
     bool handleInventoryTransition() {
-        if (!m_context.isActionTriggered(Action::Inventory)) {
+        if (!m_deps.context.isActionTriggered(Action::Inventory)) {
             return false;
         }
-        m_fsm.pushState(std::make_unique<InventoryState>(
-            m_fsm,
-            m_player,
-            m_context,
-            m_input,
-            m_uiRenderer,
-            m_gameplayMode
-        ));
+        m_deps.fsm.pushState(std::make_unique<InventoryState>(m_deps, m_gameplayMode));
         return true;
     }
 
     bool handleMenuTransition() {
-        if (!m_context.isActionTriggered(Action::Menu)) {
+        if (!m_deps.context.isActionTriggered(Action::Menu)) {
             return false;
         }
 
-        m_fsm.pushState(std::make_unique<UIState>(m_fsm, m_context, m_input));
+        m_deps.fsm.pushState(std::make_unique<UIState>(m_deps));
         return true;
     }
 
     bool handleCommandTransition() {
-        if (!m_context.isActionTriggered(Action::OpenCommand)) {
+        if (!m_deps.context.isActionTriggered(Action::OpenCommand)) {
             return false;
         }
 
-        m_fsm.pushState(std::make_unique<CommandState>(
-            m_fsm,
-            m_context,
-            m_input,
-            m_uiRenderer,
-            m_lastSubmittedCommand,
-            m_player,
-            m_physicsSystem,
-            m_world,
-            m_audioEngine,
-            m_particleSystem,
-            m_dropSystem
-        ));
+        m_deps.fsm.pushState(std::make_unique<CommandState>(m_deps));
         return true;
     }
 
-    BlockSelection updatePlayerAndTarget(float dt, const InputSnapshot& snapshot) {
-        m_player.update(dt, snapshot, m_context, m_physicsSystem);
-
-        BlockSelection selection;
-        selection.hasHit = m_world.raycast(m_player.getCamera().getPickRay(), kPickDistance,
-                                           selection.hitBlock, selection.placeBlock);
-        if (selection.hasHit) {
-            m_player.setTargetBlock(selection.hitBlock);
-        } else {
-            m_player.clearTargetBlock();
-        }
-
-        return selection;
-    }
-
-    void updateMovementAudio(float dt) {
-        if (m_player.isMoving()) {
-            const float stepInterval = m_player.isSprinting() ? 0.35f : 0.5f;
-            m_footstepTimer -= dt;
-            if (m_footstepTimer <= 0.0f) {
-                const std::string soundName = "walk_grass" + std::to_string(m_footstepIndex + 1);
-                m_audioEngine.playSound2D(soundName, 1.f);
-                m_footstepIndex = (m_footstepIndex + 1) % 6;
-                m_footstepTimer = stepInterval;
-            }
-        }
-
-        if (m_player.isJustLanded()) {
-            const float impactSpeed = m_player.getLandingImpactSpeed();
-            if (impactSpeed < kMinFallSoundImpactSpeed) {
-                return;
-            }
-            const bool isBigFall = impactSpeed >= kBigFallImpactSpeed;
-            const char* clipName = isBigFall ? "classic-hurt" : "fallsmall";
-            m_audioEngine.playClip(clipName, m_player.getPosition());
-            if (isBigFall) {
-                m_player.triggerClassicHurtEffect();
-            }
-        }
+    void driveLegacyGameplayBridge(float dt) {
+        static_cast<void>(dt);
     }
 
     void resetBlockBreakSession() {
-        m_blockBreakSession = {};
-        m_player.clearBlockBreakProgress();
-        m_uiRenderer.setHeldItemPreviewActionAnimationActive(false);
+        auto view = m_deps.ecsRegistry.view<ecs::LocalPlayerTag>();
+        for (auto e : view) {
+            if (m_deps.ecsRegistry.has<ecs::BlockBreakComponent>(e)) {
+                auto& blockBreak = m_deps.ecsRegistry.get<ecs::BlockBreakComponent>(e);
+                blockBreak.active = false;
+                blockBreak.blockPos = glm::ivec3{};
+                blockBreak.progress01 = 0.0f;
+            }
+            if (m_deps.ecsRegistry.has<ecs::BlockInteractionRuntimeComponent>(e)) {
+                auto& runtime = m_deps.ecsRegistry.get<ecs::BlockInteractionRuntimeComponent>(e);
+                runtime.breakActive = false;
+                runtime.breakBlockPos = glm::ivec3{};
+                runtime.breakElapsedMs = 0.0f;
+                runtime.breakRequiredMs = 0.0f;
+            }
+        }
+        m_deps.player.clearBlockBreakProgress();
+        m_deps.uiRenderer.setHeldItemPreviewActionAnimationActive(false);
     }
 
-    void updateBreakProgress(const glm::ivec3& blockPos, const float progress01) {
-        m_player.setBlockBreakProgress(blockPos, std::clamp(progress01, 0.0f, 1.0f));
-    }
 
-    void handleBlockInteraction(float dt, const BlockSelection& selection) {
-        const bool wantsBreak = m_context.isActionHeld(Action::Attack);
-        const bool wantsPlace = m_context.isActionHeld(Action::UseItem);
-        if (!wantsBreak && !wantsPlace) {
-            resetBlockBreakSession();
-            return;
-        }
-
-        GameplayBlockActionRequest request;
-        request.hasHit = selection.hasHit;
-        request.wantsBreak = wantsBreak;
-        request.wantsPlace = wantsPlace;
-        request.placeCooldownRemaining = m_placeCooldownRemaining;
-        if (selection.hasHit) {
-            request.targetBlock = m_world.getBlock(selection.placeBlock.x, selection.placeBlock.y, selection.placeBlock.z);
-            request.playerWouldOverlapPlaceBlock = m_player.wouldOverlapBlock(selection.placeBlock);
-        }
-
-        const GameplayBlockAction action = m_modeRules.decideBlockAction(request);
-        if (action == GameplayBlockAction::Break) {
-            const BlockID targetBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
-            if (targetBlock == 0 || !BlockRegistry::get(targetBlock).isSelectable) {
-                resetBlockBreakSession();
-                return;
-            }
-
-            m_uiRenderer.setHeldItemPreviewActionAnimationActive(true);
-
-            // Creative: instant break, but with fixed per-break cooldown.
-            if (!m_modeRules.shouldReportBreakProgress()) {
-                if (m_creativeBreakCooldownRemaining > 0.0f) {
-                    return;
-                }
-
-                const BlockID brokenBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
-                m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, 0);
-                m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
-                m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
-                m_particleSystem.emit(selection.hitBlock, brokenBlock);
-                m_creativeBreakCooldownRemaining = m_modeRules.breakDurationMs(targetBlock) / 1000.0f;
-                resetBlockBreakSession();
-                return;
-            }
-
-            const float requiredMs = m_modeRules.breakDurationMs(targetBlock);
-            if (!m_blockBreakSession.active || m_blockBreakSession.blockPos != selection.hitBlock) {
-                m_blockBreakSession.active = true;
-                m_blockBreakSession.blockPos = selection.hitBlock;
-                m_blockBreakSession.elapsedMs = 0.0f;
-                m_blockBreakSession.requiredMs = requiredMs;
-            }
-
-            m_blockBreakSession.elapsedMs += dt * 1000.0f;
-            const float progress = m_blockBreakSession.elapsedMs / m_blockBreakSession.requiredMs;
-            if (m_modeRules.shouldReportBreakProgress()) {
-                updateBreakProgress(selection.hitBlock, progress);
-            } else {
-                m_player.clearBlockBreakProgress();
-            }
-
-            if (m_blockBreakSession.elapsedMs < m_blockBreakSession.requiredMs) {
-                return;
-            }
-
-            const BlockID brokenBlock = m_world.getBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z);
-            m_world.setBlock(selection.hitBlock.x, selection.hitBlock.y, selection.hitBlock.z, 0);
-            m_dropSystem.spawnBlockDrop(brokenBlock, selection.hitBlock);
-            m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.hitBlock);
-            m_particleSystem.emit(selection.hitBlock, brokenBlock);
-            resetBlockBreakSession();
-            return;
-        }
-
-        resetBlockBreakSession();
-
-        if (action == GameplayBlockAction::Place) {
-            Inventory& inventory = m_player.getInventory();
-            const ItemID selectedItem = inventory.getSelectedItem();
-            const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
-            if (blockToPlace == 0) {
-                return;
-            }
-
-            m_world.setBlock(selection.placeBlock.x, selection.placeBlock.y, selection.placeBlock.z, blockToPlace);
-            m_dropSystem.onBlockPlaced(selection.placeBlock, m_world);
-            if (m_modeRules.shouldReportBreakProgress()) {
-                static_cast<void>(inventory.consumeSelectedOne());
-            }
-            m_placeCooldownRemaining = m_modeRules.placeCooldownSeconds();
-            m_audioEngine.playClip(gameplay_state_detail::getRandomName("put", 5), selection.placeBlock);
-            m_uiRenderer.triggerHeldItemPreviewActionAnimation();
-        }
-    }
-
-    static constexpr float kPickDistance = 6.0f;
-    static constexpr float kMinFallSoundImpactSpeed = 6.0f;
-    static constexpr float kBigFallImpactSpeed = 10.0f;
-
-    GameStateMachine& m_fsm;
-    Player& m_player;
-    InputContextManager& m_context;
-    InputManager& m_input;
-    UIRenderer& m_uiRenderer;
-    std::string& m_lastSubmittedCommand;
-    physics::PhysicsSystem& m_physicsSystem;
-    World& m_world;
-    AudioEngine& m_audioEngine;
-    ParticleSystem& m_particleSystem;
-    DropSystem& m_dropSystem;
+    StateDependencies m_deps;
     const IGameplayModeRules& m_modeRules;
     GameplayMode m_gameplayMode = GameplayMode::Survival;
-    float m_placeCooldownRemaining = 0.0f;
-    BlockBreakSession m_blockBreakSession;
-    float m_creativeBreakCooldownRemaining = 0.0f;
-
-    float m_footstepTimer = 0.0f;
-    int m_footstepIndex = 0;
 };
 
 #endif //MECRAFT_GAMEPLAYSTATE_H
-

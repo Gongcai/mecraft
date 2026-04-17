@@ -5,51 +5,37 @@
 #include "../GameStateMachine.h"
 #include "../InputContextManager.h"
 #include "../Time.h"
+#include "StateDependencies.h"
 
 class UIState : public IGameState {
 public:
-    UIState(GameStateMachine& fsm,
-            InputContextManager& ctx,
-            InputManager& input)
-            : m_fsm(fsm), m_context(ctx), m_input(input) {}
+    explicit UIState(StateDependencies deps)
+            : m_deps(deps) {}
 
     void onEnter() override {
-        // Activate UI context
-        m_context.pushContext(InputContextType::UI);
-        // Release mouse for UI interaction
-        m_input.captureMouse(false);
-        // pause game time
+        m_deps.context.pushContext(InputContextType::UI);
+        m_deps.input.captureMouse(false);
     }
 
     void onExit() override {
-        // Deactivate UI context
-        m_context.popContext();
-
-        // Restore mouse capture if verify we are back to Gameplay
-        // A robust way is checking the context below, or letting GameplayState::onResume handle it.
-        // For simple stack, we can check current context:
-        if (m_context.getCurrentContext() == InputContextType::Gameplay) {
-             m_input.captureMouse(true);
+        m_deps.context.popContext();
+        if (m_deps.context.getCurrentContext() == InputContextType::Gameplay) {
+             m_deps.input.captureMouse(true);
         }
-        // restore game time
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
-        // Check for exit conditions
-        if (m_context.isActionTriggered(Action::Menu) ||
-            m_context.isActionTriggered(Action::Cancel)) {
-            m_fsm.popState();
+        static_cast<void>(dt);
+        static_cast<void>(snapshot);
+        if (m_deps.context.isActionTriggered(Action::Menu) ||
+            m_deps.context.isActionTriggered(Action::Cancel)) {
+            m_deps.fsm.popState();
             return;
         }
-
-        // Logic for UI update goes here
     }
 
 private:
-    GameStateMachine& m_fsm;
-    InputContextManager& m_context;
-    InputManager& m_input;
+    StateDependencies m_deps;
 };
 
 #endif //MECRAFT_UISTATE_H
-

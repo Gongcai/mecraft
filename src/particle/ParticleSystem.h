@@ -1,7 +1,6 @@
 #ifndef MECRAFT_PARTICLESYSTEM_H
 #define MECRAFT_PARTICLESYSTEM_H
 
-#include <vector>
 #include <glm/glm.hpp>
 #include <glad/glad.h>
 #include "../world/Block.h"
@@ -10,20 +9,14 @@ class ResourceMgr;
 class Shader;
 struct TextureArray;
 
-struct Particle {
-    glm::vec3 position;
-    glm::vec3 velocity;
-    float life;
-    float maxLife;
-    float size;
-    float grassTintFactor;
-    float layer;
-    glm::vec2 uvMin;
-    glm::vec2 uvMax;
-};
+namespace ecs {
+class GameplayRegistry;
+}
 
 class ParticleSystem {
 public:
+    void bindRegistry(ecs::GameplayRegistry& registry);
+
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
@@ -32,7 +25,7 @@ public:
     void render(const glm::mat4& projection, const glm::mat4& view);
 
 private:
-    std::vector<Particle> m_particles;
+    ecs::GameplayRegistry* m_registry = nullptr;
     Shader* m_shader = nullptr;
     const TextureArray* m_texArray = nullptr;
 
@@ -40,7 +33,6 @@ private:
     GLuint m_vbo = 0;
 
     static constexpr int MAX_PARTICLES = 1000;
-    static constexpr int PARTICLES_PER_BREAK = 24;
 };
 
 #endif // MECRAFT_PARTICLESYSTEM_H

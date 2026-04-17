@@ -15,7 +15,8 @@ find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenAL CONFIG REQUIRED)
-find_package(Freetype CONFIG REQUIRED)
+find_package(Freetype REQUIRED)
+find_package(EnTT CONFIG REQUIRED)
 
 # ---------------------------------------------------------------------------
 # 2. 定义源文件变量 (分类管理，方便增删)
@@ -94,6 +95,27 @@ set(CORE_SOURCES
         src/ui/UIRenderer.cpp
         src/crafting/CraftingSystem.cpp
         src/world/DayNightSystem.cpp
+        src/ecs/GameplayScene.cpp
+        src/ecs/InputSamplingSystem.cpp
+        src/ecs/PlayerIntentBuildSystem.cpp
+        src/ecs/CharacterPhysicsSystem.cpp
+        src/ecs/PlayerRuntimeUpdateSystem.cpp
+        src/ecs/BlockInteractionBridgeSystem.cpp
+
+        src/ecs/DropCollectionBridgeSystem.cpp
+        src/ecs/ItemSpawnSystem.cpp
+        src/ecs/ItemPhysicsSystem.cpp
+        src/ecs/ItemMergeSystem.cpp
+        src/ecs/ItemPickupSystem.cpp
+        src/ecs/ItemLifetimeSystem.cpp
+        src/ecs/ItemPlacementResolveSystem.cpp
+        src/ecs/ParticleSpawnSystem.cpp
+        src/ecs/ParticleSimulationSystem.cpp
+        src/ecs/ParticleCleanupSystem.cpp
+        src/ecs/AudioSyncSystem.cpp
+        src/ecs/PlayerFacadeSyncSystem.cpp
+
+        src/ecs/PlayerAudioBridgeSystem.cpp
 )
 
 # ---------------------------------------------------------------------------
@@ -114,6 +136,7 @@ target_link_libraries(mecraft_core PUBLIC
         nlohmann_json::nlohmann_json
         OpenAL::OpenAL
         Freetype::Freetype
+        EnTT::EnTT
 )
 
 # 统一宏定义
@@ -142,7 +165,9 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 # 其他简单测试
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
+add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
 add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
+
 add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
 add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
 add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)

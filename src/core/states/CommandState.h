@@ -8,6 +8,7 @@
 #include "../IGameState.h"
 #include "../GameStateMachine.h"
 #include "../InputContextManager.h"
+#include "StateDependencies.h"
 #include "../../ui/KeyboardInputBox.h"
 #include "../../ui/UIRenderer.h"
 #include "../../player/Player.h"
@@ -16,56 +17,35 @@
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../audio/AudioEngine.h"
+#include "../../ecs/GameplayRegistry.h"
 #include <cstdlib>
 namespace physics {
 class PhysicsSystem;
 }
 
-
 class CommandState : public IGameState {
 public:
-    CommandState(GameStateMachine& fsm,
-                 InputContextManager& context,
-                 InputManager& input,
-                 UIRenderer& uiRenderer,
-                 std::string& lastSubmittedCommand,
-                 Player& player,
-                 physics::PhysicsSystem& physicsSystem,
-                 World& world,
-                 AudioEngine& audioEngine,
-                 ParticleSystem& particleSystem,
-                 DropSystem& dropSystem
-                 )
-        : m_fsm(fsm),
-          m_context(context),
-          m_input(input),
-          m_uiRenderer(uiRenderer),
-          m_lastSubmittedCommand(lastSubmittedCommand),
-          m_player(player),
-          m_physicsSystem(physicsSystem),
-          m_world(world),
-          m_audioEngine(audioEngine),
-          m_particleSystem(particleSystem),
-          m_dropSystem(dropSystem),
+    explicit CommandState(StateDependencies deps)
+        : m_deps(deps),
           m_inputBox(128) {
     }
 
     void onEnter() override {
-        m_context.pushContext(InputContextType::UI);
-        m_input.captureMouse(false);
+        m_deps.context.pushContext(InputContextType::UI);
+        m_deps.input.captureMouse(false);
         m_inputBox.open("/");
     }
 
     void onExit() override {
-        m_context.popContext();
-        if (m_context.getCurrentContext() == InputContextType::Gameplay) {
-            m_input.captureMouse(true);
+        m_deps.context.popContext();
+        if (m_deps.context.getCurrentContext() == InputContextType::Gameplay) {
+            m_deps.input.captureMouse(true);
         }
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
         const std::string textBeforeUpdate = m_inputBox.getText();
-        m_inputBox.update(snapshot, dt, &m_context);
+        m_inputBox.update(snapshot, dt, &m_deps.context);
 
         bool appliedHistoryNavigation = false;
         if (m_inputBox.consumeHistoryPrev()) {
@@ -79,11 +59,11 @@ public:
         std::string submitted;
         if (m_inputBox.consumeSubmit(&submitted)) {
             commitCommandToHistory(submitted);
-            m_lastSubmittedCommand = submitted;
-            m_uiRenderer.appendCommandLine(submitted);
+            m_deps.lastSubmittedCommand = submitted;
+            m_deps.uiRenderer.appendCommandLine(submitted);
             const bool handledTransition = executeCommand(submitted);
             if (!handledTransition) {
-                m_fsm.popState();
+                m_deps.fsm.popState();
             }
             return;
         }
@@ -94,7 +74,7 @@ public:
         }
 
         if (m_inputBox.consumeCancel()) {
-            m_fsm.popState();
+            m_deps.fsm.popState();
             return;
         }
     }
@@ -103,17 +83,16 @@ public:
         if (!m_inputBox.isOpen()) {
             return;
         }
-        m_uiRenderer.renderCommandInputBox(m_inputBox.getText());
+        m_deps.uiRenderer.renderCommandInputBox(m_inputBox.getText());
     }
 
 private:
     bool executeCommand(const std::string& command) {
-        // 指令格式: /一级指令 二级指令
         if (command.empty() || command[0] != '/') {
             return false;
         }
 
-        std::istringstream iss(command.substr(1)); // 去掉 '/'
+        std::istringstream iss(command.substr(1));
         std::string primary;
         iss >> primary;
 
@@ -127,8 +106,8 @@ private:
                 switchToSurvivalMode();
                 return true;
             } else {
-                m_uiRenderer.appendWarningLine("Usage: /gamemode <creative|survival>");
-                return false; // Command recognized but invalid argument, so we consider it handled.
+                m_deps.uiRenderer.appendWarningLine("Usage: /gamemode <creative|survival>");
+                return false;
             }
         }
 
@@ -139,20 +118,20 @@ private:
                 std::string valueStr;
                 iss >> valueStr;
                 if (valueStr.empty()) {
-                    m_uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                    m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
                     return false;
                 }
                 char* endPtr = nullptr;
                 const float value = std::strtof(valueStr.c_str(), &endPtr);
                 if (endPtr == valueStr.c_str() || value < 0.0f || value > 1200.0f) {
-                    m_uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                    m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
                     return false;
                 }
-                m_world.getDayNightSystem().setTimeOfDay(value);
-                m_uiRenderer.appendCommandLine("Time set to " + std::to_string(static_cast<int>(value)));
+                m_deps.world.getDayNightSystem().setTimeOfDay(value);
+                m_deps.uiRenderer.appendCommandLine("Time set to " + std::to_string(static_cast<int>(value)));
                 return false;
             } else {
-                m_uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
                 return false;
             }
         }
@@ -222,17 +201,7 @@ private:
         return s_history;
     }
 
-    GameStateMachine& m_fsm;
-    InputContextManager& m_context;
-    InputManager& m_input;
-    UIRenderer& m_uiRenderer;
-    std::string& m_lastSubmittedCommand;
-    Player& m_player;
-    physics::PhysicsSystem& m_physicsSystem;
-    World& m_world;
-    AudioEngine& m_audioEngine;
-    ParticleSystem& m_particleSystem;
-    DropSystem& m_dropSystem;
+    StateDependencies m_deps;
     KeyboardInputBox m_inputBox;
     std::string m_historyDraft;
     int m_historyCursor = -1;
@@ -241,4 +210,3 @@ private:
 };
 
 #endif // MECRAFT_COMMANDSTATE_H
-

@@ -1,20 +1,17 @@
 #include "ParticleSystem.h"
+
+#include <vector>
+
+#include <glm/common.hpp>
+
+#include "../ecs/Components.h"
+#include "../ecs/GameplayRegistry.h"
+#include "../ecs/ParticleEventBuffer.h"
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
-#include "../world/Block.h"
 
-#include <glm/gtc/matrix_transform.hpp>
-#include <random>
-#include <algorithm>
-
-namespace {
-std::random_device rd;
-std::mt19937 gen(rd());
-
-float randomFloat(float min, float max) {
-    std::uniform_real_distribution<float> dist(min, max);
-    return dist(gen);
-}
+void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
+    m_registry = &registry;
 }
 
 void ParticleSystem::init(ResourceMgr& resourceMgr) {
@@ -27,26 +24,20 @@ void ParticleSystem::init(ResourceMgr& resourceMgr) {
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // Pre-allocate: MAX_PARTICLES * 6 vertices * 8 floats (pos3 + uv2 + layer1 + alpha1 + tint1)
     glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 6 * 8 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
-    // Position (location 0)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
 
-    // UV (location 1)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
 
-    // Layer (location 2)
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
 
-    // Alpha (location 3)
     glEnableVertexAttribArray(3);
     glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 
-    // Grass tint factor (location 4)
     glEnableVertexAttribArray(4);
     glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(7 * sizeof(float)));
 
@@ -64,138 +55,95 @@ void ParticleSystem::shutdown() {
     }
 }
 
-void ParticleSystem::emit(const glm::ivec3& blockPos, BlockID blockType) {
-    const BlockDef& blockDef = BlockRegistry::get(blockType);
-
-    int texIndices[] = {
-        blockDef.texTop, blockDef.texBottom,
-        blockDef.texLeft, blockDef.texRight,
-        blockDef.texFront, blockDef.texBack
-    };
-
-    for (int i = 0; i < PARTICLES_PER_BREAK; ++i) {
-        // Remove oldest if at capacity
-        if (m_particles.size() >= static_cast<size_t>(MAX_PARTICLES)) {
-            m_particles.erase(m_particles.begin());
-        }
-
-        // Random face texture
-        int texIdx = texIndices[static_cast<int>(randomFloat(0, 6))];
-        if (texIdx < 0) {
-            texIdx = 0;
-        }
-
-        // Sub-region of the tile for particle (like MC samples a small area)
-        float uSubMin = randomFloat(0.0f, 0.5f);
-        float vSubMin = randomFloat(0.0f, 0.5f);
-        float uSubMax = uSubMin + 0.5f;
-        float vSubMax = vSubMin + 0.5f;
-
-        Particle p{};
-        // Spawn within block volume
-        p.position = glm::vec3(blockPos) + glm::vec3(
-            randomFloat(0.2f, 0.8f),
-            randomFloat(0.2f, 0.8f),
-            randomFloat(0.2f, 0.8f)
-        );
-        // Random velocity with upward bias
-        p.velocity = glm::vec3(
-            randomFloat(-2.0f, 2.0f),
-            randomFloat(0.5f, 3.5f),
-            randomFloat(-2.0f, 2.0f)
-        );
-        p.maxLife = randomFloat(0.4f, 0.8f);
-        p.life = p.maxLife;
-        p.size = randomFloat(0.06f, 0.14f);
-        p.grassTintFactor = blockDef.useGrassTint ? 1.0f : 0.0f;
-        p.layer = static_cast<float>(texIdx);
-        p.uvMin = glm::vec2(uSubMin, vSubMin);
-        p.uvMax = glm::vec2(uSubMax, vSubMax);
-
-        m_particles.push_back(p);
-    }
-}
-
-void ParticleSystem::update(float dt) {
-    constexpr float gravity = -14.0f;
-
-    for (auto& p : m_particles) {
-        p.life -= dt;
-        if (p.life > 0.0f) {
-            p.velocity.y += gravity * dt;
-            p.position += p.velocity * dt;
-        }
-    }
-
-    m_particles.erase(
-        std::remove_if(m_particles.begin(), m_particles.end(),
-            [](const Particle& p) { return p.life <= 0.0f; }),
-        m_particles.end());
-}
-
-void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) {
-    if (m_particles.empty() || m_shader == nullptr || m_texArray == nullptr) {
+void ParticleSystem::emit(const glm::ivec3& blockPos, const BlockID blockType) {
+    if (m_registry == nullptr || blockType == 0) {
         return;
     }
 
-    // Extract camera right and up vectors from view matrix
+    auto& buffer = ecs::ensureParticleEventBuffer(*m_registry);
+    buffer.blockBreakEvents.push_back({blockPos, blockType});
+}
+
+void ParticleSystem::update(const float dt) {
+    static_cast<void>(dt);
+}
+
+void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) {
+    if (m_registry == nullptr || m_shader == nullptr || m_texArray == nullptr) {
+        return;
+    }
+
+    auto particleView = m_registry->view<ecs::ParticleTag, ecs::TransformComponent, ecs::ParticleComponent>();
+    if (particleView.begin() == particleView.end()) {
+        return;
+    }
+
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
     glm::vec3 up(view[0][1], view[1][1], view[2][1]);
 
-    // Build vertex data on CPU
     std::vector<float> vertices;
-    vertices.reserve(m_particles.size() * 48);
+    vertices.reserve(static_cast<size_t>(MAX_PARTICLES) * 48u);
 
-    for (const auto& p : m_particles) {
-        float alpha = 1.f;
-        float halfSize = p.size * 0.5f;
-        const float tintFactor = p.grassTintFactor;
+    int emittedParticles = 0;
+    for (const entt::entity e : particleView) {
+        const auto& transform = particleView.get<ecs::TransformComponent>(e);
+        const auto& particle = particleView.get<ecs::ParticleComponent>(e);
+        if (particle.life <= 0.0f || particle.maxLife <= 0.0f) {
+            continue;
+        }
+        if (emittedParticles >= MAX_PARTICLES) {
+            break;
+        }
 
-        // Billboard quad corners
-        glm::vec3 c0 = p.position - right * halfSize - up * halfSize; // bottom-left
-        glm::vec3 c1 = p.position + right * halfSize - up * halfSize; // bottom-right
-        glm::vec3 c2 = p.position + right * halfSize + up * halfSize; // top-right
-        glm::vec3 c3 = p.position - right * halfSize + up * halfSize; // top-left
+        const float alpha = glm::clamp(particle.life / particle.maxLife, 0.0f, 1.0f);
+        const float halfSize = particle.size * 0.5f;
 
-        // Triangle 1: c0, c1, c2
-        // c0
+        glm::vec3 c0 = transform.position - right * halfSize - up * halfSize;
+        glm::vec3 c1 = transform.position + right * halfSize - up * halfSize;
+        glm::vec3 c2 = transform.position + right * halfSize + up * halfSize;
+        glm::vec3 c3 = transform.position - right * halfSize + up * halfSize;
+
         vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
-        vertices.push_back(p.uvMin.x); vertices.push_back(p.uvMin.y);
-        vertices.push_back(p.layer);
+        vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMin.y);
+        vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(tintFactor);
-        // c1
+        vertices.push_back(particle.grassTintFactor);
+
         vertices.push_back(c1.x); vertices.push_back(c1.y); vertices.push_back(c1.z);
-        vertices.push_back(p.uvMax.x); vertices.push_back(p.uvMin.y);
-        vertices.push_back(p.layer);
+        vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMin.y);
+        vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(tintFactor);
-        // c2
-        vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
-        vertices.push_back(p.uvMax.x); vertices.push_back(p.uvMax.y);
-        vertices.push_back(p.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(tintFactor);
+        vertices.push_back(particle.grassTintFactor);
 
-        // Triangle 2: c0, c2, c3
-        // c0
-        vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
-        vertices.push_back(p.uvMin.x); vertices.push_back(p.uvMin.y);
-        vertices.push_back(p.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(tintFactor);
-        // c2
         vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
-        vertices.push_back(p.uvMax.x); vertices.push_back(p.uvMax.y);
-        vertices.push_back(p.layer);
+        vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMax.y);
+        vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(tintFactor);
-        // c3
+        vertices.push_back(particle.grassTintFactor);
+
+        vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
+        vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMin.y);
+        vertices.push_back(particle.layer);
+        vertices.push_back(alpha);
+        vertices.push_back(particle.grassTintFactor);
+
+        vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
+        vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMax.y);
+        vertices.push_back(particle.layer);
+        vertices.push_back(alpha);
+        vertices.push_back(particle.grassTintFactor);
+
         vertices.push_back(c3.x); vertices.push_back(c3.y); vertices.push_back(c3.z);
-        vertices.push_back(p.uvMin.x); vertices.push_back(p.uvMax.y);
-        vertices.push_back(p.layer);
+        vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMax.y);
+        vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(tintFactor);
+        vertices.push_back(particle.grassTintFactor);
+
+        ++emittedParticles;
+    }
+
+    if (vertices.empty()) {
+        return;
     }
 
     m_shader->use();

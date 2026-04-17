@@ -125,7 +125,8 @@ private:
 
     struct ChunkRenderEntry {
         Chunk* chunk = nullptr;
-        int scy = 0;  // Sub-chunk index for per-section rendering
+        int scy = -1;  // -1 = column aggregate, otherwise sub-chunk index
+        bool aggregated = false;
         int regionX = 0;
         int regionZ = 0;
         int chunkX = 0;
@@ -133,6 +134,7 @@ private:
         glm::vec3 boundsMin = glm::vec3(0.0f);
         glm::vec3 boundsMax = glm::vec3(0.0f);
     };
+
 
     void recordMeshingHistory();
     void drainMeshingResults(const World& world);

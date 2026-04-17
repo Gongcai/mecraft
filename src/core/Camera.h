@@ -25,6 +25,9 @@ public:
     [[nodiscard]] glm::vec3 getFront() const;
     [[nodiscard]] glm::vec3 getRight() const;
     [[nodiscard]] glm::vec3 getUp() const;
+    [[nodiscard]] float getYaw() const;
+    [[nodiscard]] float getPitch() const;
+
 
     // 射线拾取 — 返回视线方向
     [[nodiscard]] PhysicsInfo getPickRay() const;
@@ -40,6 +43,8 @@ public:
     void setNear(float near);
     void setFar(float far);
     void setSensitivity(float sensitivity);
+    void setYawPitch(float yaw, float pitch);
+
 
 
 

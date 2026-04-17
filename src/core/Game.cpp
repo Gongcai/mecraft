@@ -49,7 +49,7 @@ void Game::init(int width, int height, const char *title) {
     BlockRegistry::printAllBlocks();
 #endif
     m_world.init(3123345);
-    m_world.setRenderDistance(6);
+    m_world.setRenderDistance(16);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
@@ -66,20 +66,34 @@ void Game::init(int width, int height, const char *title) {
     // 初始化合成系统
     m_craftingSystem.loadRecipes(RECIPES_CONFIG_PATH);
     m_uiRenderer.setCraftingSystem(&m_craftingSystem);
+
+    // Initialize GameplayScene services (ECS backbone)
+    {
+        auto& svc = m_gameplayScene.services();
+        svc.world              = &m_world;
+        svc.audioEngine        = &m_audioEngine;
+        svc.inputContextManager = &m_contextManager;
+
+        svc.resourceMgr        = &m_resourceMgr;
+        svc.player             = &m_player;
+        svc.dropSystem         = &m_dropSystem;
+        svc.particleSystem     = &m_particleSystem;
+        svc.uiRenderer         = &m_uiRenderer;
+        svc.physicsSystem      = &m_physicsSystem;
+
+
+    }
+    m_dropSystem.bindRegistry(m_gameplayScene.registry());
+    m_particleSystem.bindRegistry(m_gameplayScene.registry());
+
+    // Create local player entity in ECS
+    m_gameplayScene.initLocalPlayer();
+
+
+
     // Push initial Gameplay state
-    m_stateMachine.pushState(std::make_unique<GameplayState>(
-        m_stateMachine,
-        m_player,
-        m_contextManager,
-        m_input,
-        m_uiRenderer,
-        m_lastSubmittedCommand,
-        m_physicsSystem,
-        m_world,
-        m_audioEngine,
-        m_particleSystem,
-        m_dropSystem
-    ));
+    m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
+
 
     // 初始化信息仪表盘 (仅Debug模式)
 #ifndef NDEBUG
@@ -94,6 +108,24 @@ double Game::clampFrameTime(const double dt) {
     return dt > kMaxFrameTime ? kMaxFrameTime : dt;
 }
 
+StateDependencies Game::makeStateDependencies() {
+    return {
+        m_stateMachine,
+        m_player,
+        m_contextManager,
+        m_input,
+        m_uiRenderer,
+        m_lastSubmittedCommand,
+        m_physicsSystem,
+        m_world,
+        m_audioEngine,
+        m_particleSystem,
+        m_dropSystem,
+        m_gameplayScene.registry()
+    };
+}
+
+
 void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 #ifndef NDEBUG
     const auto inputStart = std::chrono::steady_clock::now();
@@ -105,30 +137,41 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     const auto stateStart = std::chrono::steady_clock::now();
 #endif
     accumulator -= fixedStep;
+
+    // ECS pre-state stage: sample input and build intents before states consume them.
+    m_gameplayScene.runFixedUpdate(static_cast<float>(fixedStep));
+    m_gameplayScene.tickClock().advance(fixedStep);
+    uint32_t ticksThisFrame = 0;
+    while (m_gameplayScene.tickClock().shouldTick()
+           && ticksThisFrame < m_gameplayScene.tickClock().maxTicksPerFrame()) {
+        m_gameplayScene.runOneTick();
+        m_gameplayScene.tickClock().consumeTick();
+        ++ticksThisFrame;
+    }
+
     m_stateMachine.update(static_cast<float>(fixedStep), inputSnapshot);
 #ifndef NDEBUG
     const auto stateEnd = std::chrono::steady_clock::now();
-    const auto particleStart = std::chrono::steady_clock::now();
-#endif
-    m_particleSystem.update(static_cast<float>(fixedStep));
-#ifndef NDEBUG
-    const auto particleEnd = std::chrono::steady_clock::now();
-    const auto dropStart = std::chrono::steady_clock::now();
-#endif
-    m_dropSystem.update(static_cast<float>(fixedStep), m_world);
-    static_cast<void>(m_dropSystem.collectNearbyDrops(m_player.getPosition(), 1.35f, m_player.getInventory()));
-#ifndef NDEBUG
-    const auto dropEnd = std::chrono::steady_clock::now();
     const auto worldStart = std::chrono::steady_clock::now();
 #endif
+
     m_world.update(m_player.getPosition());
 #ifndef NDEBUG
     const auto worldEnd = std::chrono::steady_clock::now();
+#endif
+
+
+
+#ifndef NDEBUG
 
     m_frameProfilerDebug.fixedInputAccumMs += std::chrono::duration<double, std::milli>(inputEnd - inputStart).count();
     m_frameProfilerDebug.fixedStateAccumMs += std::chrono::duration<double, std::milli>(stateEnd - stateStart).count();
-    m_frameProfilerDebug.fixedParticleAccumMs += std::chrono::duration<double, std::milli>(particleEnd - particleStart).count();
-    m_frameProfilerDebug.fixedDropAccumMs += std::chrono::duration<double, std::milli>(dropEnd - dropStart).count();
+    // Particle simulation has moved into GameplayScene ECS systems.
+    m_frameProfilerDebug.fixedParticleAccumMs += 0.0;
+    // Drop update/collect has moved into GameplayScene ECS bridge systems.
+    m_frameProfilerDebug.fixedDropAccumMs += 0.0;
+
+
     m_frameProfilerDebug.fixedWorldAccumMs += std::chrono::duration<double, std::milli>(worldEnd - worldStart).count();
     ++m_frameProfilerDebug.fixedStepCount;
 #endif
