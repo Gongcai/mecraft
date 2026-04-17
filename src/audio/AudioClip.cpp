@@ -7,6 +7,7 @@
 #include <iostream>
 #include <cstring>
 #include <vector>
+#include <cstdint>
 // WAV 文件头结构
 #pragma pack(push, 1)
 struct WAVHeader {

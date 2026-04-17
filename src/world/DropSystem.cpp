@@ -7,12 +7,12 @@
 #include "../ecs/components/Components.h"
 #include "../ecs/util/DropRuntimeState.h"
 #include "../ecs/GameplayRegistry.h"
-#include "../ecs/systems/ItemLifetimeSystem.h"
-#include "../ecs/systems/ItemMergeSystem.h"
-#include "../ecs/systems/ItemPhysicsSystem.h"
-#include "../ecs/systems/ItemPickupSystem.h"
-#include "../ecs/systems/ItemPlacementResolveSystem.h"
-#include "../ecs/systems/ItemSpawnSystem.h"
+#include "../ecs/systems/item/ItemLifetimeSystem.h"
+#include "../ecs/systems/item/ItemMergeSystem.h"
+#include "../ecs/systems/item/ItemPhysicsSystem.h"
+#include "../ecs/systems/item/ItemPickupSystem.h"
+#include "../ecs/systems/item/ItemPlacementResolveSystem.h"
+#include "../ecs/systems/item/ItemSpawnSystem.h"
 #include "../player/Inventory.h"
 
 namespace {

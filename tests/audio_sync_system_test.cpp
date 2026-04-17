@@ -5,7 +5,7 @@
 
 #include "../src/audio/AudioEngine.h"
 #include "../src/ecs/util/AudioEventBuffer.h"
-#include "../src/ecs/systems/AudioSyncSystem.h"
+#include "../src/ecs/systems/audio/AudioSyncSystem.h"
 #include "../src/ecs/components/Components.h"
 #include "../src/ecs/GameplayRegistry.h"
 

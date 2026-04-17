@@ -96,26 +96,26 @@ set(CORE_SOURCES
         src/crafting/CraftingSystem.cpp
         src/world/DayNightSystem.cpp
         src/ecs/GameplayScene.cpp
-        src/ecs/systems/InputSamplingSystem.cpp
-        src/ecs/systems/PlayerIntentBuildSystem.cpp
-        src/ecs/systems/CharacterPhysicsSystem.cpp
-        src/ecs/systems/PlayerRuntimeUpdateSystem.cpp
-        src/ecs/systems/BlockInteractionBridgeSystem.cpp
+        src/ecs/systems/player/InputSamplingSystem.cpp
+        src/ecs/systems/player/PlayerIntentBuildSystem.cpp
+        src/ecs/systems/player/CharacterPhysicsSystem.cpp
+        src/ecs/systems/player/PlayerRuntimeUpdateSystem.cpp
+        src/ecs/systems/interaction/BlockInteractionBridgeSystem.cpp
 
-        src/ecs/systems/DropCollectionBridgeSystem.cpp
-        src/ecs/systems/ItemSpawnSystem.cpp
-        src/ecs/systems/ItemPhysicsSystem.cpp
-        src/ecs/systems/ItemMergeSystem.cpp
-        src/ecs/systems/ItemPickupSystem.cpp
-        src/ecs/systems/ItemLifetimeSystem.cpp
-        src/ecs/systems/ItemPlacementResolveSystem.cpp
-        src/ecs/systems/ParticleSpawnSystem.cpp
-        src/ecs/systems/ParticleSimulationSystem.cpp
-        src/ecs/systems/ParticleCleanupSystem.cpp
-        src/ecs/systems/AudioSyncSystem.cpp
-        src/ecs/systems/PlayerFacadeSyncSystem.cpp
+        src/ecs/systems/item/DropCollectionBridgeSystem.cpp
+        src/ecs/systems/item/ItemSpawnSystem.cpp
+        src/ecs/systems/item/ItemPhysicsSystem.cpp
+        src/ecs/systems/item/ItemMergeSystem.cpp
+        src/ecs/systems/item/ItemPickupSystem.cpp
+        src/ecs/systems/item/ItemLifetimeSystem.cpp
+        src/ecs/systems/item/ItemPlacementResolveSystem.cpp
+        src/ecs/systems/particle/ParticleSpawnSystem.cpp
+        src/ecs/systems/particle/ParticleSimulationSystem.cpp
+        src/ecs/systems/particle/ParticleCleanupSystem.cpp
+        src/ecs/systems/audio/AudioSyncSystem.cpp
+        src/ecs/systems/player/PlayerFacadeSyncSystem.cpp
 
-        src/ecs/systems/PlayerAudioBridgeSystem.cpp
+        src/ecs/systems/audio/PlayerAudioBridgeSystem.cpp
 )
 
 # ---------------------------------------------------------------------------
