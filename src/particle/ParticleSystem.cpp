@@ -4,9 +4,9 @@
 
 #include <glm/common.hpp>
 
-#include "../ecs/Components.h"
+#include "../ecs/components/Components.h"
 #include "../ecs/GameplayRegistry.h"
-#include "../ecs/ParticleEventBuffer.h"
+#include "../ecs/util/ParticleEventBuffer.h"
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
 

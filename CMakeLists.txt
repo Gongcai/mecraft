@@ -96,26 +96,26 @@ set(CORE_SOURCES
         src/crafting/CraftingSystem.cpp
         src/world/DayNightSystem.cpp
         src/ecs/GameplayScene.cpp
-        src/ecs/InputSamplingSystem.cpp
-        src/ecs/PlayerIntentBuildSystem.cpp
-        src/ecs/CharacterPhysicsSystem.cpp
-        src/ecs/PlayerRuntimeUpdateSystem.cpp
-        src/ecs/BlockInteractionBridgeSystem.cpp
+        src/ecs/systems/InputSamplingSystem.cpp
+        src/ecs/systems/PlayerIntentBuildSystem.cpp
+        src/ecs/systems/CharacterPhysicsSystem.cpp
+        src/ecs/systems/PlayerRuntimeUpdateSystem.cpp
+        src/ecs/systems/BlockInteractionBridgeSystem.cpp
 
-        src/ecs/DropCollectionBridgeSystem.cpp
-        src/ecs/ItemSpawnSystem.cpp
-        src/ecs/ItemPhysicsSystem.cpp
-        src/ecs/ItemMergeSystem.cpp
-        src/ecs/ItemPickupSystem.cpp
-        src/ecs/ItemLifetimeSystem.cpp
-        src/ecs/ItemPlacementResolveSystem.cpp
-        src/ecs/ParticleSpawnSystem.cpp
-        src/ecs/ParticleSimulationSystem.cpp
-        src/ecs/ParticleCleanupSystem.cpp
-        src/ecs/AudioSyncSystem.cpp
-        src/ecs/PlayerFacadeSyncSystem.cpp
+        src/ecs/systems/DropCollectionBridgeSystem.cpp
+        src/ecs/systems/ItemSpawnSystem.cpp
+        src/ecs/systems/ItemPhysicsSystem.cpp
+        src/ecs/systems/ItemMergeSystem.cpp
+        src/ecs/systems/ItemPickupSystem.cpp
+        src/ecs/systems/ItemLifetimeSystem.cpp
+        src/ecs/systems/ItemPlacementResolveSystem.cpp
+        src/ecs/systems/ParticleSpawnSystem.cpp
+        src/ecs/systems/ParticleSimulationSystem.cpp
+        src/ecs/systems/ParticleCleanupSystem.cpp
+        src/ecs/systems/AudioSyncSystem.cpp
+        src/ecs/systems/PlayerFacadeSyncSystem.cpp
 
-        src/ecs/PlayerAudioBridgeSystem.cpp
+        src/ecs/systems/PlayerAudioBridgeSystem.cpp
 )
 
 # ---------------------------------------------------------------------------

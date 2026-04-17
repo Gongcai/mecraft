@@ -9,7 +9,7 @@
 #include "../core/InputManager.h"
 #include "../core/InputContextManager.h"
 #include "../physics/PhysicsInfo.h"
-#include "../ecs/Components.h"
+#include "../ecs/components/Components.h"
 #include "Inventory.h"
 
 namespace physics {

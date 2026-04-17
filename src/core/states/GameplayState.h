@@ -18,8 +18,8 @@
 #include "CommandState.h"
 #include "UIState.h"
 #include "../../ecs/GameplayRegistry.h"
-#include "../../ecs/GameplayRuntimeContext.h"
-#include "../../ecs/Components.h"
+#include "../../ecs/util/GameplayRuntimeContext.h"
+#include "../../ecs/components/Components.h"
 
 namespace physics {
 class PhysicsSystem;

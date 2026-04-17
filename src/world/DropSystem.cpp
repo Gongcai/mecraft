@@ -4,15 +4,15 @@
 #include <vector>
 
 #include "World.h"
-#include "../ecs/Components.h"
-#include "../ecs/DropRuntimeState.h"
+#include "../ecs/components/Components.h"
+#include "../ecs/util/DropRuntimeState.h"
 #include "../ecs/GameplayRegistry.h"
-#include "../ecs/ItemLifetimeSystem.h"
-#include "../ecs/ItemMergeSystem.h"
-#include "../ecs/ItemPhysicsSystem.h"
-#include "../ecs/ItemPickupSystem.h"
-#include "../ecs/ItemPlacementResolveSystem.h"
-#include "../ecs/ItemSpawnSystem.h"
+#include "../ecs/systems/ItemLifetimeSystem.h"
+#include "../ecs/systems/ItemMergeSystem.h"
+#include "../ecs/systems/ItemPhysicsSystem.h"
+#include "../ecs/systems/ItemPickupSystem.h"
+#include "../ecs/systems/ItemPlacementResolveSystem.h"
+#include "../ecs/systems/ItemSpawnSystem.h"
 #include "../player/Inventory.h"
 
 namespace {
