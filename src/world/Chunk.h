@@ -74,6 +74,14 @@ public:
     [[nodiscard]] SubChunk* getOrCreateSubChunk(int scy);
 
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
+    bool replacePackedLight(const uint8_t* data, size_t size, uint32_t* outDirtySubChunkMask = nullptr);
+
+    [[nodiscard]] uint64_t getLightRevision() const { return m_lightRevision; }
+    uint64_t bumpLightRevision() { return ++m_lightRevision; }
+    void setLightQueued(bool queued) { m_lightQueued = queued; }
+    [[nodiscard]] bool isLightQueued() const { return m_lightQueued; }
+    void setLightInFlight(bool inFlight) { m_lightInFlight = inFlight; }
+    [[nodiscard]] bool isLightInFlight() const { return m_lightInFlight; }
 
     // Convert column-local Y to sub-chunk index and sub-chunk-local Y
     [[nodiscard]] static int toSubChunkIndex(int y) { return y / SUB_CHUNK_SIZE; }
@@ -120,6 +128,9 @@ private:
 
     bool m_dirty = true;
     bool m_columnMeshDirty = false;
+    uint64_t m_lightRevision = 1;
+    bool m_lightQueued = false;
+    bool m_lightInFlight = false;
 };
 
 #endif // MECRAFT_CHUNK_H

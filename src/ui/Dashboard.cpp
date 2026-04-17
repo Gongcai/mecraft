@@ -335,6 +335,16 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
     ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);
     ImGui::Text("Meshing Build: last %.3f ms, avg %.3f ms", meshingStats.lastBuildMs, meshingStats.averageBuildMs);
 
+    const LightFrameStats lightStats = world.getLightFrameStats();
+    ImGui::Text("Light Submitted: %d / frame", lightStats.submitted);
+    ImGui::Text("Light Completed: %d / frame", lightStats.completed);
+    ImGui::Text("Light In-Flight: %d", lightStats.inFlight);
+    ImGui::Text("Light Boundary Sync: %d", lightStats.boundarySync);
+    ImGui::Text("Light Nodes Visited: %d", lightStats.nodesVisited);
+    ImGui::Text("Light Stale Dropped: %d", lightStats.staleDropped);
+    ImGui::Text("Light Requeued: %d", lightStats.requeued);
+    ImGui::Text("Light Worker: %.3f ms, Merge: %.3f ms", lightStats.workerMs, lightStats.mergeMs);
+
     const uint32_t greedyBefore = meshingStats.lastOpaqueFacesBeforeGreedy;
     const uint32_t greedyAfter = meshingStats.lastOpaqueFacesAfterGreedy;
     const float greedyReduction = greedyBefore > 0

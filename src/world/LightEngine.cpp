@@ -411,6 +411,14 @@ void LightEngine::tick(int budget) {
     }
 }
 
+bool LightEngine::hasPendingWork() const {
+    return !m_skyRemoveQueue.empty() ||
+           !m_skySpreadQueue.empty() ||
+           !m_blockRemoveQueue.empty() ||
+           !m_blockSpreadQueue.empty() ||
+           !m_dirtySubChunkMasks.empty();
+}
+
 // ========================================================================
 // Incremental update on block change
 // ========================================================================

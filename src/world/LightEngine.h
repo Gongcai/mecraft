@@ -28,6 +28,7 @@ public:
 
     // --- Tick-based budget logic ---
     void tick(int budget = 32768 );
+    [[nodiscard]] bool hasPendingWork() const;
 
 private:
 

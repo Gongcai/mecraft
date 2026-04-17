@@ -64,7 +64,8 @@ set(CORE_SOURCES
         src/world/SubChunk.cpp
         src/world/Palette.cpp
         src/world/BitPackedArray.cpp
-        src/world/LightEngine.cpp
+        src/world/LightSolver.cpp
+        src/world/LightService.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
@@ -190,4 +191,7 @@ add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp
 add_mecraft_test(chunk_section_test tests/chunk_section_test.cpp)
 add_mecraft_test(chunk_aggregation_test tests/chunk_aggregation_test.cpp)
 add_mecraft_test(meshing_perf_test tests/meshing_perf_test.cpp)
+add_mecraft_test(light_solver_sky_rules_test tests/light_solver_sky_rules_test.cpp)
+add_mecraft_test(light_solver_cross_chunk_block_rules_test tests/light_solver_cross_chunk_block_rules_test.cpp)
+add_mecraft_test(light_service_cross_chunk_block_test tests/light_service_cross_chunk_block_test.cpp)
 

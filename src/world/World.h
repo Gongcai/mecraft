@@ -12,9 +12,10 @@
 #include <glm/glm.hpp>
 
 #include "Chunk.h"
-#include "LightEngine.h"
+#include "LightService.h"
 #include "TerrainGenerator.h"
 #include "DayNightSystem.h"
+#include "../thread/ThreadPool.h"
 #include "../physics/PhysicsInfo.h"
 
 class World {
@@ -33,6 +34,8 @@ public:
 
     // 获取所有需要渲染的区块
     [[nodiscard]] const auto& getActiveChunks() const { return m_chunks; }
+    void setThreadPool(ThreadPool* pool);
+    [[nodiscard]] LightFrameStats getLightFrameStats() const;
 
     [[nodiscard]] size_t getTotalVertexCount() const;
 
@@ -45,7 +48,7 @@ public:
     [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const;
     [[nodiscard]] static const char* biomeToString(TerrainBiome biome);
 
-    // Chunk key packing — public for LightEngine access
+    // Chunk key packing — public for light/meshing services
     static int64_t chunkKey(int cx, int cz);
 
     DayNightSystem& getDayNightSystem() { return m_dayNightSystem; }
@@ -57,8 +60,9 @@ private:
     std::unordered_map<int64_t, std::shared_ptr<Chunk>> m_chunks;
 
     TerrainGenerator m_terrainGen;
-    std::unique_ptr<LightEngine> m_lightEngine;
+    std::unique_ptr<LightService> m_lightService;
     DayNightSystem m_dayNightSystem;
+    ThreadPool* m_threadPool = nullptr;
 
     int m_renderDistance = 8;   // 以区块为单位
     uint32_t m_seed = 0;

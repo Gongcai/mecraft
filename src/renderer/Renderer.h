@@ -99,6 +99,7 @@ public:
     // Debug light visualization: 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
     void setDebugLightMode(int mode);
     [[nodiscard]] int getDebugLightMode() const;
+    [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 #ifndef NDEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;

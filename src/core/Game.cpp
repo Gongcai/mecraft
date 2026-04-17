@@ -49,11 +49,13 @@ void Game::init(int width, int height, const char *title) {
     BlockRegistry::printAllBlocks();
 #endif
     m_world.init(3123345);
-    m_world.setRenderDistance(16);
+    m_world.setRenderDistance(4);
     // 初始化玩家
     m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
     // 初始化渲染器
     m_renderer.init(m_resourceMgr);
+    // LightService needs a live worker pool; reuse the renderer pool.
+    m_world.setThreadPool(m_renderer.getThreadPool());
     m_renderer.setFogEnabled(true);
     m_dropRenderer.init(m_resourceMgr);
     m_postProcessRenderer.init(m_resourceMgr);

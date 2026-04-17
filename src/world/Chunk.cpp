@@ -214,6 +214,55 @@ uint8_t Chunk::getPackedLight(const int x, const int y, const int z) const {
     return sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)];
 }
 
+bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t* outDirtySubChunkMask) {
+    if (data == nullptr || size != BLOCK_COUNT) {
+        return false;
+    }
+
+    uint32_t dirtyMask = 0;
+
+    for (int y = 0; y < SIZE_Y; ++y) {
+        const int scy = toSubChunkIndex(y);
+        SubChunk* sc = getSubChunk(scy);
+        for (int z = 0; z < SIZE_Z; ++z) {
+            for (int x = 0; x < SIZE_X; ++x) {
+                const size_t index = toIndex(x, y, z);
+                const uint8_t packed = data[index];
+                const uint8_t implicit = getImplicitPackedLight(x, y, z);
+                const uint8_t currentPacked = sc
+                    ? sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)]
+                    : implicit;
+
+                if (currentPacked == packed) {
+                    continue;
+                }
+
+                if (!sc) {
+                    sc = getOrCreateSubChunk(scy);
+                }
+                sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)] = packed;
+                dirtyMask |= (1u << scy);
+            }
+        }
+        tryRecycleSubChunk(scy);
+    }
+
+    if (outDirtySubChunkMask) {
+        *outDirtySubChunkMask = dirtyMask;
+    }
+
+    if (dirtyMask != 0) {
+        ++m_lightRevision;
+        for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+            if ((dirtyMask & (1u << scy)) != 0u) {
+                markSubChunkDirty(scy);
+            }
+        }
+    }
+
+    return true;
+}
+
 // --- Block access (delegates to sub-chunks) ---
 
 BlockID Chunk::getBlock(const int x, const int y, const int z) const {

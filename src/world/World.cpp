@@ -14,7 +14,8 @@ void World::init(uint32_t seed) {
     m_terrainGen.init(seed, m_flatSurfaceY);
     m_chunks.clear();
     m_loadQueue.clear();
-    m_lightEngine = std::make_unique<LightEngine>(*this);
+    m_lightService = std::make_unique<LightService>(*this);
+    m_lightService->start(m_threadPool);
     m_dayNightSystem.setTimeOfDay(300.0f); // Default to mid-day
 }
 
@@ -51,8 +52,9 @@ void World::update(const glm::vec3& playerPos) {
         loaded++;
     }
 
-    if (m_lightEngine) {
-        m_lightEngine->tick(32768 );
+    if (m_lightService) {
+        m_lightService->submitJobs(playerPos, 8);
+        m_lightService->drainCompleted(*this, 32);
     }
 }
 
@@ -108,35 +110,55 @@ void World::setBlock(int x, int y, int z, BlockID id) {
         return;
     }
 
-    if (m_lightEngine) {
+    if (m_lightService) {
         chunk.setBlockWithoutMeshDirty(localX, y, localZ, id);
-        m_lightEngine->onBlockChanged(x, y, z, oldId, id);
+        m_lightService->onBlockChanged(x, y, z, oldId, id);
     } else {
         chunk.setBlock(localX, y, localZ, id);
     }
 
 
-    // When LightEngine is present, onBlockChanged() owns deferred remesh dirtying
-    // for the edited sub-chunk plus all affected neighbors after light propagation.
-    if (!m_lightEngine) {
-        if (localX == 0) {
-            auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-        }
-        if (localX == Chunk::SIZE_X - 1) {
-            auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-        }
-        if (localZ == 0) {
-            auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-        }
-        if (localZ == Chunk::SIZE_Z - 1) {
-            auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-            if (nit != m_chunks.end()) nit->second->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-        }
+    // Geometry edits must always trigger remesh, regardless of lighting pipeline.
+    const int editedScy = Chunk::toSubChunkIndex(y);
+    const int localY = Chunk::toSubChunkLocalY(y);
+    chunk.markSubChunkDirty(editedScy);
+    if (localY == 0) {
+        chunk.markSubChunkDirty(editedScy - 1);
     }
+    if (localY == Chunk::SUB_CHUNK_SIZE - 1) {
+        chunk.markSubChunkDirty(editedScy + 1);
+    }
+    if (localX == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
+        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+    }
+    if (localX == Chunk::SIZE_X - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
+        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+    }
+    if (localZ == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
+        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+    }
+    if (localZ == Chunk::SIZE_Z - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
+        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+    }
+}
 
+void World::setThreadPool(ThreadPool* pool) {
+    m_threadPool = pool;
+    if (m_lightService) {
+        m_lightService->shutdown();
+        m_lightService->start(m_threadPool);
+    }
+}
+
+LightFrameStats World::getLightFrameStats() const {
+    if (!m_lightService) {
+        return {};
+    }
+    return m_lightService->getFrameStats();
 }
 
 bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {
@@ -299,21 +321,8 @@ void World::loadChunk(int cx, int cz) {
     linkNeighbor(cx, cz - 1, 3, 2);
 
     // Initialize lighting after terrain generation and neighbor linking
-    if (m_lightEngine) {
-        m_lightEngine->onChunkLoaded(*cur);
-
-        auto propagateBothWays = [&](const int direction, const int oppositeDirection) {
-            Chunk* neighbor = cur->neighbors[direction];
-            if (!neighbor) {
-                return;
-            }
-            m_lightEngine->propagateBorderInto(*cur, *neighbor, direction);
-            m_lightEngine->propagateBorderInto(*neighbor, *cur, oppositeDirection);
-        };
-        propagateBothWays(0, 1);
-        propagateBothWays(1, 0);
-        propagateBothWays(2, 3);
-        propagateBothWays(3, 2);
+    if (m_lightService) {
+        m_lightService->onChunkLoaded(m_chunks[key]);
     }
 
 }
@@ -321,6 +330,10 @@ void World::loadChunk(int cx, int cz) {
 void World::unloadChunk(int cx, int cz) {
     auto it = m_chunks.find(chunkKey(cx, cz));
     if (it == m_chunks.end()) return;
+
+    if (m_lightService) {
+        m_lightService->onChunkUnloaded(it->first);
+    }
 
     Chunk* chunk = it->second.get();
     for (int direction = 0; direction < 4; ++direction) {
