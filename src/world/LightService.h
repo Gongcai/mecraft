@@ -40,7 +40,10 @@ private:
         bool queued = false;
         bool inFlight = false;
         uint64_t inFlightRevision = 0;
+        std::vector<LocalLightChange> pendingBlockChanges;
         std::array<std::optional<BorderUpdateBatch>, 4> boundaryCache;
+        std::array<std::optional<BorderUpdateBatch>, 4> pendingPreviousBoundaryCache;
+        std::array<bool, 4> pendingBoundaryChanged{};
         LightDirtyReason reason = LightDirtyReason::NeighborBoundary;
     };
 
@@ -52,6 +55,9 @@ private:
     static std::vector<int16_t> captureHeightMapSnapshot(const Chunk& chunk);
     static std::vector<uint8_t> capturePackedLightSnapshot(const Chunk& chunk);
     static std::vector<BorderUpdateBatch> collectBoundaryInputs(const LightChunkState& state);
+    static std::vector<BorderUpdateBatch> collectBoundaryInputs(
+        const std::array<std::optional<BorderUpdateBatch>, 4>& cache);
+    static void clearBoundaryInputs(std::array<std::optional<BorderUpdateBatch>, 4>& cache);
     void markChunkDirty(int64_t chunkKey, LightDirtyReason reason);
     void onWorkerCompleted(CompletedTicket ticket);
 

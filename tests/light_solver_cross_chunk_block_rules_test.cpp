@@ -98,6 +98,8 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     const BorderUpdateBatch litBoundary = findOutgoingToPosXNeighbor(leftLit, World::chunkKey(1, 0));
 
     LightJob rightLitJob = buildJob(right);
+    rightLitJob.reason = LightDirtyReason::NeighborBoundary;
+    rightLitJob.changedBoundaryDirections[0] = true;
     rightLitJob.inbox.push_back(litBoundary);
     const LightResult rightLit = LightSolver::solve(rightLitJob);
     if (blockAt(rightLit.selfDelta.packedLight, 0, y, z) == 0 ||
@@ -121,11 +123,53 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     const BorderUpdateBatch removedBoundary = findOutgoingToPosXNeighbor(leftRemoved, World::chunkKey(1, 0));
 
     LightJob rightRemovedJob = buildJob(right);
+    rightRemovedJob.reason = LightDirtyReason::NeighborBoundary;
+    rightRemovedJob.changedBoundaryDirections[0] = true;
+    rightRemovedJob.previousInbox.push_back(litBoundary);
     rightRemovedJob.inbox.push_back(removedBoundary);
     const LightResult rightCleared = LightSolver::solve(rightRemovedJob);
     if (blockAt(rightCleared.selfDelta.packedLight, 0, y, z) != 0 ||
         blockAt(rightCleared.selfDelta.packedLight, 1, y, z) != 0) {
         fail("neighbor block light should clear after source torch removal");
+    }
+}
+
+void testLocalEmitterRemovalUsesRemovePass() {
+    auto chunk = std::make_shared<Chunk>(0, 0);
+
+    constexpr int y = 20;
+    constexpr int z = 8;
+    for (int iy = 0; iy <= 40; ++iy) {
+        for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
+            for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
+                chunk->setBlockFast(ix, iy, iz, BlockIds::STONE);
+            }
+        }
+    }
+    for (int x = 6; x <= 10; ++x) {
+        chunk->setBlockFast(x, y, z, BlockIds::AIR);
+    }
+    chunk->setBlockFast(8, y, z, BlockIds::TORCH);
+
+    const LightResult lit = LightSolver::solve(buildJob(chunk));
+    chunk->replacePackedLight(lit.selfDelta.packedLight.data(), lit.selfDelta.packedLight.size(), nullptr);
+
+    chunk->setBlockFast(8, y, z, BlockIds::AIR);
+    LightJob removedJob = buildJob(chunk);
+    removedJob.reason = LightDirtyReason::BlockChanged;
+    removedJob.blockChanges.push_back({
+        static_cast<uint8_t>(8),
+        static_cast<uint8_t>(y),
+        static_cast<uint8_t>(z),
+        BlockIds::TORCH,
+        BlockIds::AIR
+    });
+
+    const LightResult cleared = LightSolver::solve(removedJob);
+    if (blockAt(cleared.selfDelta.packedLight, 8, y, z) != 0 ||
+        blockAt(cleared.selfDelta.packedLight, 9, y, z) != 0 ||
+        blockAt(cleared.selfDelta.packedLight, 10, y, z) != 0) {
+        fail("local block light should be removed after deleting the emitter");
     }
 }
 } // namespace
@@ -134,6 +178,7 @@ int main() {
     BlockRegistry::init(nullptr);
 
     testCrossChunkBlockLightNeedsPersistentBoundaryInput();
+    testLocalEmitterRemovalUsesRemovePass();
 
     std::cout << "[light_solver_cross_chunk_block_rules_test] PASS\n";
     return EXIT_SUCCESS;

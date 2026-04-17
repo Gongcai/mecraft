@@ -1,6 +1,7 @@
 #ifndef MECRAFT_LIGHTTYPES_H
 #define MECRAFT_LIGHTTYPES_H
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -36,6 +37,14 @@ struct BorderUpdateBatch {
     std::vector<BorderLightNode> nodes;
 };
 
+struct LocalLightChange {
+    uint8_t localX = 0;
+    uint8_t y = 0;
+    uint8_t localZ = 0;
+    BlockID oldBlock = BlockIds::AIR;
+    BlockID newBlock = BlockIds::AIR;
+};
+
 struct LightJob {
     int64_t chunkKey = 0;
     uint64_t revision = 0;
@@ -47,7 +56,10 @@ struct LightJob {
     std::vector<BlockID> blockSnapshot;
     std::vector<int16_t> heightMapSnapshot;
     std::vector<uint8_t> packedLightSnapshot;
+    std::vector<LocalLightChange> blockChanges;
+    std::vector<BorderUpdateBatch> previousInbox;
     std::vector<BorderUpdateBatch> inbox;
+    std::array<bool, 4> changedBoundaryDirections{};
     LightDirtyReason reason = LightDirtyReason::NeighborBoundary;
 };
 

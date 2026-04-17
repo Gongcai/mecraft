@@ -96,7 +96,9 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
 
             const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
             LightChunkState& neighborState = m_chunkStates[neighborKey];
+            neighborState.pendingPreviousBoundaryCache[direction] = neighborState.boundaryCache[direction];
             neighborState.boundaryCache[direction].reset();
+            neighborState.pendingBoundaryChanged[direction] = true;
             neighborState.dirty = true;
             if (neighborState.reason != LightDirtyReason::BlockChanged) {
                 neighborState.reason = LightDirtyReason::NeighborBoundary;
@@ -114,9 +116,6 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
 
 void LightService::onBlockChanged(const int wx, const int wy, const int wz,
                                   const BlockID oldId, const BlockID newId) {
-    (void)oldId;
-    (void)newId;
-
     if (!m_running) {
         return;
     }
@@ -129,6 +128,18 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz,
         const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
         it->second->recalcHeightMap(localX, localZ);
         it->second->bumpLightRevision();
+
+        {
+            std::lock_guard<std::mutex> lock(m_stateMutex);
+            LightChunkState& state = m_chunkStates[key];
+            state.pendingBlockChanges.push_back({
+                static_cast<uint8_t>(localX),
+                static_cast<uint8_t>(wy),
+                static_cast<uint8_t>(localZ),
+                oldId,
+                newId
+            });
+        }
 
         for (int direction = 0; direction < 4; ++direction) {
             Chunk* neighbor = it->second->neighbors[direction];
@@ -210,6 +221,12 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.neighborNegZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[3]);
                     job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
                     job.heightMapSnapshot = captureHeightMapSnapshot(*chunkIt->second);
+                    job.blockChanges = std::move(state.pendingBlockChanges);
+                    state.pendingBlockChanges.clear();
+                    job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
+                    clearBoundaryInputs(state.pendingPreviousBoundaryCache);
+                    job.changedBoundaryDirections = state.pendingBoundaryChanged;
+                    state.pendingBoundaryChanged.fill(false);
                     job.inbox = collectBoundaryInputs(state);
                     job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
 
@@ -319,7 +336,10 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
 
                 LightChunkState& neighborState = m_chunkStates[batch.targetChunkKey];
                 if (batch.fromDirection < neighborState.boundaryCache.size()) {
+                    neighborState.pendingPreviousBoundaryCache[batch.fromDirection] =
+                        neighborState.boundaryCache[batch.fromDirection];
                     neighborState.boundaryCache[batch.fromDirection] = batch;
+                    neighborState.pendingBoundaryChanged[batch.fromDirection] = true;
                 }
                 neighborState.dirty = true;
                 if (neighborState.reason != LightDirtyReason::BlockChanged) {
@@ -440,14 +460,25 @@ std::vector<uint8_t> LightService::capturePackedLightSnapshot(const Chunk& chunk
 }
 
 std::vector<BorderUpdateBatch> LightService::collectBoundaryInputs(const LightChunkState& state) {
+    return collectBoundaryInputs(state.boundaryCache);
+}
+
+std::vector<BorderUpdateBatch> LightService::collectBoundaryInputs(
+    const std::array<std::optional<BorderUpdateBatch>, 4>& cache) {
     std::vector<BorderUpdateBatch> batches;
-    batches.reserve(state.boundaryCache.size());
-    for (const auto& cachedBatch : state.boundaryCache) {
+    batches.reserve(cache.size());
+    for (const auto& cachedBatch : cache) {
         if (cachedBatch.has_value()) {
             batches.push_back(*cachedBatch);
         }
     }
     return batches;
+}
+
+void LightService::clearBoundaryInputs(std::array<std::optional<BorderUpdateBatch>, 4>& cache) {
+    for (auto& entry : cache) {
+        entry.reset();
+    }
 }
 
 
