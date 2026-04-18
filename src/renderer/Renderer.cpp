@@ -392,11 +392,11 @@ void Renderer::submitMeshingJobs(const World& world) {
 
         // Check each sub-chunk individually
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-            // Skip Air sub-chunks
-            if (ChunkMesher::shouldSkipSubChunk(chunk, scy)) continue;
-
             // Skip if not dirty
             if (!chunk.isSubChunkDirty(scy)) continue;
+
+            // Skip Air sub-chunks / fully occluded solid sub-chunks
+            if (ChunkMesher::shouldSkipSubChunk(chunk, scy)) continue;
 
             // Skip if already in flight
             const int64_t flightKey = subChunkFlightKey(chunkKey, scy);

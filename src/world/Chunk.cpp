@@ -134,6 +134,8 @@ void Chunk::recycleSubChunk(const int scy) {
     slice.boundsMin = glm::vec3(0.0f);
     slice.boundsMax = glm::vec3(0.0f);
     m_columnMeshDirty = true;
+    m_dirtySubChunkMask &= ~(1u << scy);
+    m_dirty = m_dirtySubChunkMask != 0u;
 
     m_subChunks[scy].reset();
 }
@@ -148,16 +150,6 @@ void Chunk::tryRecycleSubChunk(const int scy) {
 
 // --- Sub-chunk access ---
 
-SubChunk* Chunk::getSubChunk(const int scy) {
-    if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
-    return m_subChunks[scy].get();
-}
-
-const SubChunk* Chunk::getSubChunk(const int scy) const {
-    if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
-    return m_subChunks[scy].get();
-}
-
 SubChunk* Chunk::getOrCreateSubChunk(const int scy) {
     if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
     if (!m_subChunks[scy]) {
@@ -165,6 +157,8 @@ SubChunk* Chunk::getOrCreateSubChunk(const int scy) {
         SubChunk* sc = m_subChunks[scy].get();
         sc->m_subChunkY = scy;
         initializeSubChunkLightDefaults(*sc);
+        m_dirtySubChunkMask |= (1u << scy);
+        m_dirty = true;
 
         if (SubChunk* above = getSubChunk(scy + 1)) {
             sc->neighbors[2] = above;
@@ -293,6 +287,8 @@ void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id
     SubChunk* sc = getOrCreateSubChunk(scy);
     if (markMeshDirty) {
         sc->setBlock(x, localY, z, id);
+        m_dirtySubChunkMask |= (1u << scy);
+        m_dirty = true;
     } else {
         sc->setBlockWithoutMeshDirty(x, localY, z, id);
     }
@@ -321,7 +317,7 @@ void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id
         neighbors[2]->markSubChunkDirty(scy);
     }
 
-    m_dirty = true;
+    m_dirty = m_dirtySubChunkMask != 0u;
 }
 
 void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
@@ -428,7 +424,7 @@ void Chunk::seedInitialLightMap() {
                     blockId = sc->getBlock(x, toSubChunkLocalY(y), z);
                 }
 
-                const BlockDef& def = BlockRegistry::get(blockId);
+                const BlockDef& def = BlockRegistry::getFast(blockId);
                 if (def.opacity >= 15) {
                     skyLevel = 0;
                 } else if (skyLevel > 0) {
@@ -462,18 +458,7 @@ glm::ivec3 Chunk::getWorldOffset() const {
 // --- Dirty tracking ---
 
 bool Chunk::isDirty() const {
-    if (m_dirty) return true;
-    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
-        if (m_subChunks[scy] && m_subChunks[scy]->isDirty()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool Chunk::isSubChunkDirty(const int scy) const {
-    const SubChunk* sc = getSubChunk(scy);
-    return sc ? sc->isDirty() : false;
+    return m_dirty || m_dirtySubChunkMask != 0u;
 }
 
 // --- Per sub-chunk mesh ---
@@ -499,6 +484,8 @@ SubChunkMesh& Chunk::getSubChunkMesh(const int scy) {
 void Chunk::setSubChunkMesh(const int scy, const SubChunkMesh& mesh) {
     SubChunk* sc = getOrCreateSubChunk(scy);
     sc->setMesh(mesh);
+    m_dirtySubChunkMask &= ~(1u << scy);
+    m_dirty = m_dirtySubChunkMask != 0u;
 }
 
 const SubChunkMesh& Chunk::getColumnMesh() const {
@@ -582,6 +569,7 @@ void Chunk::rebuildColumnMesh() {
 
 void Chunk::markMeshClean() {
     m_dirty = false;
+    m_dirtySubChunkMask = 0;
     for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
         if (m_subChunks[scy]) {
             m_subChunks[scy]->markMeshClean();
@@ -595,6 +583,7 @@ void Chunk::markSubChunkDirty(const int scy) {
         return;
     }
     sc->markDirty();
+    m_dirtySubChunkMask |= (1u << scy);
     m_dirty = true;
 }
 
@@ -685,7 +674,7 @@ void Chunk::recalcHeightMap(const int x, const int z) {
     }
     int height = 0;
     for (int y = SIZE_Y - 1; y >= 0; --y) {
-        if (BlockRegistry::get(getBlock(x, y, z)).opacity >= 15) {
+        if (BlockRegistry::getOpacityFast(getBlock(x, y, z)) >= 15) {
             height = y;
             break;
         }

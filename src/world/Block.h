@@ -84,7 +84,9 @@ public:
     static void init(ResourceMgr* resourceMgr = nullptr);
     static void ensureInitialized();
     static const BlockDef& get(BlockID id);
-    static const BlockDef& getFast(BlockID id);
+    static const BlockDef& getFast(BlockID id) {
+        return id < s_blocks.size() ? s_blocks[id] : s_blocks[0];
+    }
     [[nodiscard]] static uint8_t getOpacityFast(BlockID id) {
         return id < s_blocks.size() ? s_blocks[id].opacity : 0;
     }

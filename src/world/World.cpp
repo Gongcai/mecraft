@@ -283,15 +283,6 @@ void World::loadChunk(int cx, int cz) {
     auto chunk = std::make_shared<Chunk>(cx, cz);
 
     m_terrainGen.generateChunk(*chunk);
-
-    // Infer SubChunk types after terrain generation (enables Air/Solid skipping)
-    chunk->optimizePalette();  // Compact palettes and infer types
-    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-        SubChunk* sc = chunk->getSubChunk(scy);
-        if (sc) {
-            sc->inferType();
-        }
-    }
     chunk->seedInitialLightMap();
 
     m_chunks[key] = std::move(chunk);

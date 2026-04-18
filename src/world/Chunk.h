@@ -42,7 +42,10 @@ public:
     // --- Dirty tracking ---
     // A chunk is "dirty" if any of its sub-chunks is dirty.
     [[nodiscard]] bool isDirty() const;
-    [[nodiscard]] bool isSubChunkDirty(int scy) const;
+    [[nodiscard]] bool isSubChunkDirty(int scy) const {
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS) return false;
+        return (m_dirtySubChunkMask & (1u << scy)) != 0u;
+    }
     void markSubChunkDirty(int scy);
     [[nodiscard]] uint64_t getSubChunkMeshRevision(int scy) const;
     void markMeshClean();  // Clears all sub-chunk dirty flags
@@ -70,8 +73,14 @@ public:
     void recalcHeightMap(int x, int z);
 
     // --- Sub-chunk access ---
-    [[nodiscard]] SubChunk* getSubChunk(int scy);
-    [[nodiscard]] const SubChunk* getSubChunk(int scy) const;
+    [[nodiscard]] SubChunk* getSubChunk(int scy) {
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+        return m_subChunks[scy].get();
+    }
+    [[nodiscard]] const SubChunk* getSubChunk(int scy) const {
+        if (scy < 0 || scy >= NUM_SUB_CHUNKS) return nullptr;
+        return m_subChunks[scy].get();
+    }
     [[nodiscard]] SubChunk* getOrCreateSubChunk(int scy);
 
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
@@ -128,6 +137,7 @@ private:
     std::array<int, static_cast<std::size_t>(SIZE_X) * SIZE_Z> m_heightMap{};
 
     bool m_dirty = true;
+    uint32_t m_dirtySubChunkMask = 0;
     bool m_columnMeshDirty = false;
     uint64_t m_lightRevision = 1;
     bool m_lightQueued = false;

@@ -300,14 +300,6 @@ const BlockDef& BlockRegistry::get(BlockID id) {
     return getFast(id);
 }
 
-const BlockDef& BlockRegistry::getFast(BlockID id) {
-    if (id >= s_blocks.size()) {
-        return s_blocks[0];  // Return AIR for invalid IDs
-    }
-
-    return s_blocks[id];
-}
-
 BlockID BlockRegistry::findByName(const std::string& name) {
     BlockID outId = 0;
     if (!tryGetIdByName(name, outId)) {

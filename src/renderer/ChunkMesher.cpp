@@ -173,7 +173,7 @@ uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
 
 bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     const BlockID id = getNeighborAwareBlockSC(snapshot, x, y, z);
-    return BlockRegistry::get(id).isSolid;
+    return BlockRegistry::getFast(id).isSolid;
 }
 
 float lightToNormalized(const uint8_t level) {
@@ -433,7 +433,7 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
         return true;
     }
 
-    const BlockDef& neighborDef = BlockRegistry::get(neighborId);
+    const BlockDef& neighborDef = BlockRegistry::getFast(neighborId);
 
     if (!neighborDef.isSolid) {
         return true;
@@ -670,7 +670,7 @@ bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::get(blockId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     if (!isOpaqueCubeCandidate(def)) {
         return false;
     }
@@ -700,7 +700,7 @@ bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::get(blockId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     if (!isTransparentCubeCandidate(def)) {
         return false;
     }
@@ -977,7 +977,7 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
                     continue;
                 }
 
-                const BlockDef& def = BlockRegistry::get(blockId);
+                const BlockDef& def = BlockRegistry::getFast(blockId);
                 if (def.renderShape == BlockRenderShape::Cross) {
                     addCrossedQuadsImpl(meshData.cutoutVertices,
                                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
@@ -1045,9 +1045,17 @@ void ChunkMesher::generateSubChunkMesh(Chunk& chunk, const int scy) {
 
 bool ChunkMesher::shouldSkipSubChunk(const Chunk& chunk, const int scy) {
     const SubChunk* sc = chunk.getSubChunk(scy);
-    if (!sc) return true;
-    if (sc->getType() == SubChunkType::Air) return true;
-    if (sc->getType() != SubChunkType::Solid) return false;
+    if (!sc) {
+        return true;
+    }
+
+    const SubChunkType type = sc->getType();
+    if (type == SubChunkType::Air) {
+        return true;
+    }
+    if (type != SubChunkType::Solid) {
+        return false;
+    }
 
     for (const SubChunk* neighbor : sc->neighbors) {
         if (!neighbor || neighbor->getType() != SubChunkType::Solid) {
@@ -1057,4 +1065,3 @@ bool ChunkMesher::shouldSkipSubChunk(const Chunk& chunk, const int scy) {
 
     return true;
 }
-

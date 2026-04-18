@@ -171,6 +171,95 @@ double fbm3D(double x, double y, double z, double firstCell, int octaves, uint32
     return weight > 0.0 ? (sum / weight) : 0.0;
 }
 
+double sampleCaveNoise(int worldX, int y, int worldZ, uint32_t seed) {
+    return fbm3D(static_cast<double>(worldX), static_cast<double>(y), static_cast<double>(worldZ),
+                 44.0, 3, seed ^ 0x510e527fU);
+}
+
+bool shouldCarveCaveFromNoise(double cave, int y, int surfaceY) {
+    const double depthFactor = static_cast<double>(surfaceY - y) / static_cast<double>(Chunk::SIZE_Y);
+    const double threshold = 0.77 - depthFactor * 0.18;
+    return cave > threshold;
+}
+
+double interpolateNoiseXZSlice(int x0, int x1, int y, int z0, int z1, double tx, double tz, uint32_t seed) {
+    const double n00 = lattice3D(x0, y, z0, seed);
+    const double n10 = lattice3D(x1, y, z0, seed);
+    const double n01 = lattice3D(x0, y, z1, seed);
+    const double n11 = lattice3D(x1, y, z1, seed);
+
+    const double nx0 = n00 + (n10 - n00) * tx;
+    const double nx1 = n01 + (n11 - n01) * tx;
+    return nx0 + (nx1 - nx0) * tz;
+}
+
+void buildCaveMaskColumn(int worldX,
+                         int worldZ,
+                         int surfaceY,
+                         uint32_t seed,
+                         std::array<uint8_t, Chunk::SIZE_Y>& outMask) {
+    constexpr double kFirstCell = 44.0;
+    constexpr int kOctaves = 3;
+    const int caveStartY = 10;
+    const int caveEndY = surfaceY - 5;
+    if (caveEndY < caveStartY) {
+        return;
+    }
+
+    std::array<double, Chunk::SIZE_Y> caveNoise{};
+    double amplitude = 1.0;
+    double weight = 0.0;
+    double cell = kFirstCell;
+
+    for (int octave = 0; octave < kOctaves; ++octave) {
+        const uint32_t octaveSeed = (seed ^ 0x510e527fU) + static_cast<uint32_t>(octave) * 2053U;
+        const double invCell = 1.0 / cell;
+        const double sx = static_cast<double>(worldX) * invCell;
+        const double sz = static_cast<double>(worldZ) * invCell;
+
+        const int x0 = static_cast<int>(std::floor(sx));
+        const int z0 = static_cast<int>(std::floor(sz));
+        const int x1 = x0 + 1;
+        const int z1 = z0 + 1;
+
+        const double tx = smoothStep(sx - static_cast<double>(x0));
+        const double tz = smoothStep(sz - static_cast<double>(z0));
+
+        bool hasCachedSlice = false;
+        int cachedYCell = 0;
+        double slice0 = 0.0;
+        double slice1 = 0.0;
+
+        for (int y = caveStartY; y <= caveEndY; ++y) {
+            const double sy = static_cast<double>(y) * invCell;
+            const int y0 = static_cast<int>(std::floor(sy));
+
+            if (!hasCachedSlice || y0 != cachedYCell) {
+                cachedYCell = y0;
+                slice0 = interpolateNoiseXZSlice(x0, x1, y0, z0, z1, tx, tz, octaveSeed);
+                slice1 = interpolateNoiseXZSlice(x0, x1, y0 + 1, z0, z1, tx, tz, octaveSeed);
+                hasCachedSlice = true;
+            }
+
+            const double ty = smoothStep(sy - static_cast<double>(y0));
+            caveNoise[y] += (slice0 + (slice1 - slice0) * ty) * amplitude;
+        }
+
+        weight += amplitude;
+        amplitude *= 0.5;
+        cell *= 0.5;
+    }
+
+    if (weight <= 0.0) {
+        return;
+    }
+
+    const double invWeight = 1.0 / weight;
+    for (int y = caveStartY; y <= caveEndY; ++y) {
+        outMask[y] = static_cast<uint8_t>(shouldCarveCaveFromNoise(caveNoise[y] * invWeight, y, surfaceY));
+    }
+}
+
 #if defined(MECRAFT_HAS_SSE2)
 __m128d smoothStep2(__m128d t) {
     const __m128d two = _mm_set1_pd(2.0);
@@ -322,6 +411,18 @@ __m256d fbm2D4(double x0, double x1, double x2, double x3, double z, double firs
 }
 #endif
 
+void finalizeSurfaceSample(double continental,
+                           double detail,
+                           double rough,
+                           double ridgeBase,
+                           double mountainNoise,
+                           double moisture,
+                           int seaLevel,
+                           int& outSurfaceY,
+                           double& outMoisture,
+                           TerrainBiome& outSurfaceKind,
+                           double& outRuggedness);
+
 void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int seaLevel,
                                     int& outSurfaceY, double& outMoisture,
                                     TerrainBiome& outSurfaceKind, double& outRuggedness) {
@@ -333,7 +434,22 @@ void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int s
     const double rough = fbm2D(x, z, 28.0, 3, seed ^ 0x3c6ef372U);
     const double ridgeBase = fbm2D(x, z, 96.0, 4, seed ^ 0x510e527fU);
     const double mountainNoise = fbm2D(x, z, 220.0, 3, seed ^ 0x1f83d9abU);
+    const double moisture = fbm2D(x, z, 420.0, 3, seed ^ 0xa54ff53aU);
+    finalizeSurfaceSample(continental, detail, rough, ridgeBase, mountainNoise, moisture,
+                          seaLevel, outSurfaceY, outMoisture, outSurfaceKind, outRuggedness);
+}
 
+void finalizeSurfaceSample(double continental,
+                           double detail,
+                           double rough,
+                           double ridgeBase,
+                           double mountainNoise,
+                           double moisture,
+                           int seaLevel,
+                           int& outSurfaceY,
+                           double& outMoisture,
+                           TerrainBiome& outSurfaceKind,
+                           double& outRuggedness) {
     const double ridge = 1.0 - std::abs(ridgeBase * 2.0 - 1.0);
     const double mountainMask = smoothRange(continental, 0.50, 0.66);
     const double highMountainMask = mountainMask * smoothRange(ridge, 0.58, 0.88) * smoothRange(mountainNoise, 0.45, 0.75);
@@ -347,7 +463,7 @@ void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int s
     height += ridge * mountainMask * 10.0;
     height += highMountainMask * 34.0;
 
-    outMoisture = fbm2D(x, z, 420.0, 3, seed ^ 0xa54ff53aU);
+    outMoisture = moisture;
     if (outMoisture < 0.32) {
         height -= 3.0;
     }
@@ -372,10 +488,29 @@ void sampleSurfaceAndMoistureScalar(int worldX, int worldZ, uint32_t seed, int s
 void sampleSurfaceAndMoisture4(int worldX0, int worldX1, int worldX2, int worldX3, int worldZ, uint32_t seed,
                                int seaLevel, int outSurfaceY[4], double outMoisture[4],
                                TerrainBiome outSurfaceKind[4], double outRuggedness[4]) {
-    const int worldX[4] = {worldX0, worldX1, worldX2, worldX3};
+    const double z = static_cast<double>(worldZ);
+    const double x0 = static_cast<double>(worldX0);
+    const double x1 = static_cast<double>(worldX1);
+    const double x2 = static_cast<double>(worldX2);
+    const double x3 = static_cast<double>(worldX3);
+
+    alignas(32) double continental[4];
+    alignas(32) double detail[4];
+    alignas(32) double rough[4];
+    alignas(32) double ridgeBase[4];
+    alignas(32) double mountainNoise[4];
+    alignas(32) double moisture[4];
+
+    _mm256_storeu_pd(continental, fbm2D4(x0, x1, x2, x3, z, 320.0, 4, seed ^ 0x6a09e667U));
+    _mm256_storeu_pd(detail, fbm2D4(x0, x1, x2, x3, z, 64.0, 4, seed ^ 0xbb67ae85U));
+    _mm256_storeu_pd(rough, fbm2D4(x0, x1, x2, x3, z, 28.0, 3, seed ^ 0x3c6ef372U));
+    _mm256_storeu_pd(ridgeBase, fbm2D4(x0, x1, x2, x3, z, 96.0, 4, seed ^ 0x510e527fU));
+    _mm256_storeu_pd(mountainNoise, fbm2D4(x0, x1, x2, x3, z, 220.0, 3, seed ^ 0x1f83d9abU));
+    _mm256_storeu_pd(moisture, fbm2D4(x0, x1, x2, x3, z, 420.0, 3, seed ^ 0xa54ff53aU));
+
     for (int i = 0; i < 4; ++i) {
-        sampleSurfaceAndMoistureScalar(worldX[i], worldZ, seed, seaLevel,
-                                       outSurfaceY[i], outMoisture[i], outSurfaceKind[i], outRuggedness[i]);
+        finalizeSurfaceSample(continental[i], detail[i], rough[i], ridgeBase[i], mountainNoise[i], moisture[i],
+                              seaLevel, outSurfaceY[i], outMoisture[i], outSurfaceKind[i], outRuggedness[i]);
     }
 }
 #endif
@@ -384,10 +519,28 @@ void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t se
                                int outSurfaceY[2], double outMoisture[2],
                                TerrainBiome outSurfaceKind[2], double outRuggedness[2]) {
 #if defined(MECRAFT_HAS_SSE2)
-    sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel,
-                                   outSurfaceY[0], outMoisture[0], outSurfaceKind[0], outRuggedness[0]);
-    sampleSurfaceAndMoistureScalar(worldX1, worldZ, seed, seaLevel,
-                                   outSurfaceY[1], outMoisture[1], outSurfaceKind[1], outRuggedness[1]);
+    const double z = static_cast<double>(worldZ);
+    const double x0 = static_cast<double>(worldX0);
+    const double x1 = static_cast<double>(worldX1);
+
+    double continental[2];
+    double detail[2];
+    double rough[2];
+    double ridgeBase[2];
+    double mountainNoise[2];
+    double moisture[2];
+
+    _mm_storeu_pd(continental, fbm2D2(x0, x1, z, 320.0, 4, seed ^ 0x6a09e667U));
+    _mm_storeu_pd(detail, fbm2D2(x0, x1, z, 64.0, 4, seed ^ 0xbb67ae85U));
+    _mm_storeu_pd(rough, fbm2D2(x0, x1, z, 28.0, 3, seed ^ 0x3c6ef372U));
+    _mm_storeu_pd(ridgeBase, fbm2D2(x0, x1, z, 96.0, 4, seed ^ 0x510e527fU));
+    _mm_storeu_pd(mountainNoise, fbm2D2(x0, x1, z, 220.0, 3, seed ^ 0x1f83d9abU));
+    _mm_storeu_pd(moisture, fbm2D2(x0, x1, z, 420.0, 3, seed ^ 0xa54ff53aU));
+
+    for (int i = 0; i < 2; ++i) {
+        finalizeSurfaceSample(continental[i], detail[i], rough[i], ridgeBase[i], mountainNoise[i], moisture[i],
+                              seaLevel, outSurfaceY[i], outMoisture[i], outSurfaceKind[i], outRuggedness[i]);
+    }
 #else
     sampleSurfaceAndMoistureScalar(worldX0, worldZ, seed, seaLevel,
                                    outSurfaceY[0], outMoisture[0], outSurfaceKind[0], outRuggedness[0]);
@@ -530,8 +683,26 @@ void TerrainGenerator::sampleSurfaceYBatch(int startWorldX, int worldZ, int coun
         return;
     }
 
-    // Batch API stays scalar for now because current SIMD variant is slower on benchmark hardware.
-    for (int i = 0; i < count; ++i) {
+    int i = 0;
+#if defined(MECRAFT_HAS_AVX2)
+    for (; i + 3 < count; i += 4) {
+        double moisture[4] = {};
+        double ruggedness[4] = {};
+        TerrainBiome kind[4] = {};
+        sampleSurfaceAndMoisture4(startWorldX + i, startWorldX + i + 1, startWorldX + i + 2, startWorldX + i + 3,
+                                  worldZ, m_seed, m_seaLevel, outSurfaceY + i, moisture, kind, ruggedness);
+    }
+#endif
+#if defined(MECRAFT_HAS_SSE2)
+    for (; i + 1 < count; i += 2) {
+        double moisture[2] = {};
+        double ruggedness[2] = {};
+        TerrainBiome kind[2] = {};
+        sampleSurfaceAndMoisture2(startWorldX + i, startWorldX + i + 1, worldZ, m_seed, m_seaLevel,
+                                  outSurfaceY + i, moisture, kind, ruggedness);
+    }
+#endif
+    for (; i < count; ++i) {
         double moisture = 0.0;
         double ruggedness = 0.0;
         TerrainBiome kind = TerrainBiome::Temperate;
@@ -558,11 +729,7 @@ bool TerrainGenerator::shouldCarveCave(int worldX, int y, int worldZ, int surfac
         return false;
     }
 
-    const double cave = fbm3D(static_cast<double>(worldX), static_cast<double>(y), static_cast<double>(worldZ),
-                              44.0, 3, m_seed ^ 0x510e527fU);
-    const double depthFactor = static_cast<double>(surfaceY - y) / static_cast<double>(Chunk::SIZE_Y);
-    const double threshold = 0.77 - depthFactor * 0.18;
-    return cave > threshold;
+    return shouldCarveCaveFromNoise(sampleCaveNoise(worldX, y, worldZ, m_seed), y, surfaceY);
 }
 
 BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID baseBlock) const {
@@ -589,6 +756,8 @@ BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID 
 
 void TerrainGenerator::generateChunk(Chunk& chunk) const {
     const glm::ivec3 offset = chunk.getWorldOffset();
+    std::array<std::array<BlockID, SubChunk::BLOCK_COUNT>, Chunk::NUM_SUB_CHUNKS> generatedBlocks{};
+    std::array<bool, Chunk::NUM_SUB_CHUNKS> hasGeneratedBlocks{};
 
     for (int z = 0; z < Chunk::SIZE_Z; ++z) {
         for (int x = 0; x < Chunk::SIZE_X;) {
@@ -599,14 +768,6 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
             TerrainBiome sampledSurfaceKind[4] = {};
             const int remaining = Chunk::SIZE_X - x;
 
-#if defined(MECRAFT_HAS_AVX2)
-            if (remaining >= 4) {
-                laneCount = 4;
-                sampleSurfaceAndMoisture4(offset.x + x, offset.x + x + 1, offset.x + x + 2, offset.x + x + 3,
-                                          offset.z + z, m_seed, m_seaLevel,
-                                          sampledSurface, sampledMoisture, sampledSurfaceKind, sampledRuggedness);
-            } else
-#endif
             if (remaining >= 2) {
                 laneCount = 2;
                 sampleSurfaceAndMoisture2(offset.x + x, offset.x + x + 1, offset.z + z, m_seed, m_seaLevel,
@@ -629,6 +790,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 const double moisture = sampledMoisture[lane];
                 const TerrainBiome surfaceKind = sampledSurfaceKind[lane];
                 const double ruggedness = sampledRuggedness[lane];
+                std::array<uint8_t, Chunk::SIZE_Y> caveMask{};
 
                 const bool belowSeaLevel = surfaceY < m_seaLevel;
                 BlockID topBlock = BlockIds::GRASS;
@@ -662,6 +824,9 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 }
 
                 const int columnTop = std::max(surfaceY, m_seaLevel);
+                if (surfaceY - 5 >= 10) {
+                    buildCaveMaskColumn(worldX, worldZ, surfaceY, m_seed, caveMask);
+                }
                 int highestOpaqueY = 0;
                 for (int y = 0; y <= columnTop; ++y) {
                     BlockID id = 0;
@@ -675,7 +840,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                             id = fillBlock;
                         }
 
-                        if (id != 0 && shouldCarveCave(worldX, y, worldZ, surfaceY)) {
+                        if (id == BlockIds::STONE && y >= 10 && y <= surfaceY - 5 && caveMask[y] != 0) {
                             id = 0;
                         }
 
@@ -704,24 +869,34 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                     }
 
                     if (id != 0) {
-                        chunk.setBlockFast(localX, y, z, id);
-                        if (BlockRegistry::get(id).opacity >= 15) {
+                        const int scy = Chunk::toSubChunkIndex(y);
+                        generatedBlocks[scy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(y), z)] = id;
+                        hasGeneratedBlocks[scy] = true;
+                        if (BlockRegistry::getOpacityFast(id) >= 15) {
                             highestOpaqueY = y;
                         }
                     }
                 }
 
                 const int vegetationY = surfaceY + 1;
-                if (vegetationY < Chunk::SIZE_Y &&
-                    chunk.getBlock(localX, surfaceY, z) == BlockIds::GRASS &&
-                    chunk.getBlock(localX, vegetationY, z) == 0) {
-                    const BlockID vegetation = sampleVegetationBlock(worldX, worldZ, m_seed,
-                                                                     surfaceKind, moisture,
-                                                                     m_seaLevel, surfaceY);
-                    if (vegetation != 0) {
-                        chunk.setBlockFast(localX, vegetationY, z, vegetation);
-                        if (BlockRegistry::get(vegetation).opacity >= 15) {
-                            highestOpaqueY = std::max(highestOpaqueY, vegetationY);
+                if (vegetationY < Chunk::SIZE_Y) {
+                    const int surfaceScy = Chunk::toSubChunkIndex(surfaceY);
+                    const int vegetationScy = Chunk::toSubChunkIndex(vegetationY);
+                    const BlockID surfaceBlock =
+                        generatedBlocks[surfaceScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(surfaceY), z)];
+                    const BlockID blockAbove =
+                        generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)];
+
+                    if (surfaceBlock == BlockIds::GRASS && blockAbove == 0) {
+                        const BlockID vegetation = sampleVegetationBlock(worldX, worldZ, m_seed,
+                                                                         surfaceKind, moisture,
+                                                                         m_seaLevel, surfaceY);
+                        if (vegetation != 0) {
+                            generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)] = vegetation;
+                            hasGeneratedBlocks[vegetationScy] = true;
+                            if (BlockRegistry::getOpacityFast(vegetation) >= 15) {
+                                highestOpaqueY = std::max(highestOpaqueY, vegetationY);
+                            }
                         }
                     }
                 }
@@ -731,6 +906,16 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
             }
 
             x += laneCount;
+        }
+    }
+
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if (!hasGeneratedBlocks[scy]) {
+            continue;
+        }
+
+        if (SubChunk* sc = chunk.getOrCreateSubChunk(scy)) {
+            sc->initializeFromBlocks(generatedBlocks[scy]);
         }
     }
 }

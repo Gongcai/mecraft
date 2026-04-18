@@ -162,6 +162,26 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockID
     ++m_blockCounts[id];
 }
 
+void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& blocks) {
+    m_palette.clear();
+    m_blockCounts.clear();
+
+    std::array<uint8_t, BLOCK_COUNT> paletteIndices{};
+    for (size_t index = 0; index < BLOCK_COUNT; ++index) {
+        const BlockID id = blocks[index];
+        paletteIndices[index] = m_palette.getOrCreateIndex(id);
+        ++m_blockCounts[id];
+    }
+
+    m_blockData = BitPackedArray(BLOCK_COUNT, m_palette.bitsPerEntry());
+    for (size_t index = 0; index < BLOCK_COUNT; ++index) {
+        m_blockData.set(index, paletteIndices[index]);
+    }
+
+    inferType();
+    m_dirty = true;
+}
+
 void SubChunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
         const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(index));
@@ -199,10 +219,6 @@ void SubChunk::optimizePalette() {
             m_blockData.set(i, oldToNew[oldIdx]);
         }
     }
-}
-
-bool SubChunk::isDirty() const {
-    return m_dirty;
 }
 
 void SubChunk::markDirty() {
@@ -252,14 +268,6 @@ void SubChunk::setBlockLight(const int x, const int y, const int z, const uint8_
     m_lightMap[index] = static_cast<uint8_t>((m_lightMap[index] & 0xF0) | clamped);
 }
 
-SubChunkType SubChunk::getType() const {
-    return m_type;
-}
-
-void SubChunk::setType(SubChunkType type) {
-    m_type = type;
-}
-
 void SubChunk::inferType() {
     if (m_blockCounts.empty()) {
         m_type = SubChunkType::Air;
@@ -274,7 +282,7 @@ void SubChunk::inferType() {
             return;
         }
 
-        const BlockDef& def = BlockRegistry::get(blockId);
+        const BlockDef& def = BlockRegistry::getFast(blockId);
         if (only->second == BLOCK_COUNT && def.renderShape == BlockRenderShape::Cube && def.isSolid && !def.isTransparent) {
             m_type = SubChunkType::Solid;
             return;

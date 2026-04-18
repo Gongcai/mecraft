@@ -79,13 +79,14 @@ public:
     void setBlock(int x, int y, int z, BlockID id);
     void setBlockWithoutMeshDirty(int x, int y, int z, BlockID id);
     void setBlockFast(int x, int y, int z, BlockID id);
+    void initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& blocks);
     void copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const;
 
     void optimizePalette();
 
     [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
-    [[nodiscard]] bool isDirty() const;
+    [[nodiscard]] bool isDirty() const { return m_dirty; }
     void markDirty();
     [[nodiscard]] uint64_t getMeshRevision() const;
     void markMeshClean();
@@ -97,8 +98,8 @@ public:
     void setBlockLight(int x, int y, int z, uint8_t level);
 
     // Sub-chunk type — for semantic culling
-    [[nodiscard]] SubChunkType getType() const;
-    void setType(SubChunkType type);
+    [[nodiscard]] SubChunkType getType() const { return m_type; }
+    void setType(SubChunkType type) { m_type = type; }
     void inferType();  // Scan contents and set type accordingly
 
     // Per-sub-chunk mesh
