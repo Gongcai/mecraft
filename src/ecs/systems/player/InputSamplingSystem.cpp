@@ -5,7 +5,7 @@
 namespace ecs {
 
 void InputSamplingSystem::update(GameplayRegistry& registry, const InputContextManager& inputCtx) {
-    InputFrameState& frame = registry.ctxGet<InputFrameState>();
+    auto& frame = registry.ctxGet<InputFrameState>();
 
     // Axes
     frame.verticalAxis = inputCtx.getAxisValue(Axis::Vertical);

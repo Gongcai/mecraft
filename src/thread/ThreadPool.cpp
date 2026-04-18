@@ -19,14 +19,14 @@ void ThreadPool::start() {
     if (m_numThreads <= 0) {
         const int hw = static_cast<int>(std::thread::hardware_concurrency());
         m_numThreads = std::max(2, hw - 1);
-        m_numThreads = std::min(m_numThreads, 8);
+        m_numThreads = std::min(m_numThreads, 18);
     }
 
     m_stopping.store(false, std::memory_order_relaxed);
     m_running.store(true, std::memory_order_release);
 
     for (int i = 0; i < m_numThreads; ++i) {
-        m_workers.emplace_back(&ThreadPool::workerLoop, this);
+          m_workers.emplace_back(&ThreadPool::workerLoop, this);
     }
 }
 
