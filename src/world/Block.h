@@ -82,7 +82,18 @@ struct BlockDef {
 class BlockRegistry {
 public:
     static void init(ResourceMgr* resourceMgr = nullptr);
+    static void ensureInitialized();
     static const BlockDef& get(BlockID id);
+    static const BlockDef& getFast(BlockID id);
+    [[nodiscard]] static uint8_t getOpacityFast(BlockID id) {
+        return id < s_blocks.size() ? s_blocks[id].opacity : 0;
+    }
+    [[nodiscard]] static uint8_t getLightLevelFast(BlockID id) {
+        return id < s_blocks.size() ? s_blocks[id].lightLevel : 0;
+    }
+    [[nodiscard]] static bool isLightSourceFast(BlockID id) {
+        return id < s_blocks.size() && s_blocks[id].isLightSource;
+    }
     [[nodiscard]] static BlockID findByName(const std::string& name);
     [[nodiscard]] static bool tryGetIdByName(const std::string& name, BlockID& outId);
     [[nodiscard]] static BlockID getId(const NamespacedId& namespacedId);

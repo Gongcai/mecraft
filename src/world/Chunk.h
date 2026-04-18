@@ -34,6 +34,7 @@ public:
     void setBlockFast(int x, int y, int z, BlockID id);
 
     void optimizePalette();
+    void seedInitialLightMap();
 
     static glm::ivec3 worldToLocal(int wx, int wy, int wz);
     [[nodiscard]] glm::ivec3 getWorldOffset() const;

@@ -409,6 +409,48 @@ void Chunk::optimizePalette() {
     }
 }
 
+void Chunk::seedInitialLightMap() {
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        if (SubChunk* sc = getSubChunk(scy)) {
+            sc->m_lightMap.fill(0);
+        }
+    }
+
+    for (int z = 0; z < SIZE_Z; ++z) {
+        for (int x = 0; x < SIZE_X; ++x) {
+            uint8_t skyLevel = 15;
+            for (int y = SIZE_Y - 1; y >= 0; --y) {
+                const int scy = toSubChunkIndex(y);
+                SubChunk* sc = getSubChunk(scy);
+
+                BlockID blockId = BlockIds::AIR;
+                if (sc) {
+                    blockId = sc->getBlock(x, toSubChunkLocalY(y), z);
+                }
+
+                const BlockDef& def = BlockRegistry::get(blockId);
+                if (def.opacity >= 15) {
+                    skyLevel = 0;
+                } else if (skyLevel > 0) {
+                    skyLevel = (skyLevel > def.opacity)
+                        ? static_cast<uint8_t>(skyLevel - def.opacity)
+                        : 0;
+                }
+
+                if (!sc) {
+                    continue;
+                }
+
+                const uint8_t blockLight = (def.isLightSource && def.lightLevel > 0)
+                    ? clampLight(def.lightLevel)
+                    : 0;
+                sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)] =
+                    static_cast<uint8_t>((skyLevel << 4) | blockLight);
+            }
+        }
+    }
+}
+
 glm::ivec3 Chunk::worldToLocal(const int wx, const int wy, const int wz) {
     return {wrapToChunkAxis(wx), wy, wrapToChunkAxis(wz)};
 }

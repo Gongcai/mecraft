@@ -3,12 +3,51 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <deque>
+#include <utility>
 
 #include "Block.h"
 #include "Chunk.h"
 
 namespace {
+struct SolverContext {
+    const LightJob& job;
+    bool hasBlockSnapshot = false;
+};
+
+template <typename T>
+class WorkQueue {
+public:
+    void reserve(const std::size_t capacity) {
+        m_items.reserve(capacity);
+    }
+
+    bool empty() const {
+        return m_head >= m_items.size();
+    }
+
+    void push(const T& value) {
+        m_items.push_back(value);
+    }
+
+    void push(T&& value) {
+        m_items.push_back(std::move(value));
+    }
+
+    T pop() {
+        T value = m_items[m_head];
+        ++m_head;
+        if (m_head == m_items.size()) {
+            m_items.clear();
+            m_head = 0;
+        }
+        return value;
+    }
+
+private:
+    std::vector<T> m_items;
+    std::size_t m_head = 0;
+};
+
 struct LightNode {
     int x = 0;
     int y = 0;
@@ -73,21 +112,31 @@ bool isInside(const int x, const int y, const int z) {
     return x >= 0 && x < Chunk::SIZE_X && y >= 0 && y < Chunk::SIZE_Y && z >= 0 && z < Chunk::SIZE_Z;
 }
 
-BlockID getBlockId(const LightJob& job, const int x, const int y, const int z) {
+SolverContext makeSolverContext(const LightJob& job) {
+    BlockRegistry::ensureInitialized();
+
+    SolverContext context{
+        job,
+        job.blockSnapshot.size() == Chunk::BLOCK_COUNT
+    };
+    return context;
+}
+
+BlockID getBlockId(const SolverContext& context, const int x, const int y, const int z) {
     if (!isInside(x, y, z)) {
         return BlockIds::AIR;
     }
-    if (job.blockSnapshot.size() == Chunk::BLOCK_COUNT) {
-        return job.blockSnapshot[packedIndex(x, y, z)];
+    if (context.hasBlockSnapshot) {
+        return context.job.blockSnapshot[packedIndex(x, y, z)];
     }
     return BlockIds::AIR;
 }
 
-uint8_t getOpacity(const LightJob& job, const int x, const int y, const int z) {
-    return BlockRegistry::get(getBlockId(job, x, y, z)).opacity;
+uint8_t getOpacity(SolverContext& context, const int x, const int y, const int z) {
+    return BlockRegistry::getOpacityFast(getBlockId(context, x, y, z));
 }
 
-uint8_t propagateLevel(const LightJob& job,
+uint8_t propagateLevel(SolverContext& context,
                        const LightKind kind,
                        const uint8_t level,
                        const int direction,
@@ -98,7 +147,7 @@ uint8_t propagateLevel(const LightJob& job,
         return 0;
     }
 
-    const uint8_t opacity = getOpacity(job, nx, ny, nz);
+    const uint8_t opacity = getOpacity(context, nx, ny, nz);
     if (opacity >= 15) {
         return 0;
     }
@@ -118,7 +167,7 @@ std::vector<uint8_t> buildOriginalPacked(const LightJob& job) {
     return std::vector<uint8_t>(Chunk::BLOCK_COUNT, 0);
 }
 
-void applyBoundarySeeds(const LightJob& job,
+void applyBoundarySeeds(SolverContext& context,
                         const std::vector<BorderUpdateBatch>& batches,
                         std::vector<uint8_t>& packed) {
     for (const BorderUpdateBatch& batch : batches) {
@@ -126,7 +175,7 @@ void applyBoundarySeeds(const LightJob& job,
             const int x = static_cast<int>(node.localX);
             const int y = static_cast<int>(node.y);
             const int z = static_cast<int>(node.localZ);
-            if (!isInside(x, y, z) || node.level == 0 || getOpacity(job, x, y, z) >= 15) {
+            if (!isInside(x, y, z) || node.level == 0 || getOpacity(context, x, y, z) >= 15) {
                 continue;
             }
 
@@ -138,22 +187,23 @@ void applyBoundarySeeds(const LightJob& job,
     }
 }
 
-void buildCurrentBasePacked(const LightJob& job, std::vector<uint8_t>& packed) {
+void buildCurrentBasePacked(SolverContext& context, std::vector<uint8_t>& packed) {
     packed.assign(Chunk::BLOCK_COUNT, 0);
 
     for (int z = 0; z < Chunk::SIZE_Z; ++z) {
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
             uint8_t skyLevel = 15;
             for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-                const BlockDef& def = BlockRegistry::get(getBlockId(job, x, y, z));
-                if (def.opacity >= 15) {
+                const BlockID blockId = getBlockId(context, x, y, z);
+                const uint8_t opacity = BlockRegistry::getOpacityFast(blockId);
+                if (opacity >= 15) {
                     skyLevel = 0;
                     continue;
                 }
 
                 if (skyLevel > 0) {
-                    skyLevel = (skyLevel > def.opacity)
-                        ? static_cast<uint8_t>(skyLevel - def.opacity)
+                    skyLevel = (skyLevel > opacity)
+                        ? static_cast<uint8_t>(skyLevel - opacity)
                         : 0;
                 }
 
@@ -167,19 +217,20 @@ void buildCurrentBasePacked(const LightJob& job, std::vector<uint8_t>& packed) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const BlockDef& def = BlockRegistry::get(getBlockId(job, x, y, z));
-                if (!def.isLightSource || def.lightLevel == 0) {
+                const BlockID blockId = getBlockId(context, x, y, z);
+                if (!BlockRegistry::isLightSourceFast(blockId)) {
                     continue;
                 }
 
-                if (def.lightLevel > getBlock(packed, x, y, z)) {
-                    setBlock(packed, x, y, z, def.lightLevel);
+                const uint8_t lightLevel = BlockRegistry::getLightLevelFast(blockId);
+                if (lightLevel > 0 && lightLevel > getBlock(packed, x, y, z)) {
+                    setBlock(packed, x, y, z, lightLevel);
                 }
             }
         }
     }
 
-    applyBoundarySeeds(job, job.inbox, packed);
+    applyBoundarySeeds(context, context.job.inbox, packed);
 }
 
 uint32_t borderFaceDirtyMask(const std::vector<uint8_t>& before,
@@ -217,11 +268,11 @@ uint32_t borderFaceDirtyMask(const std::vector<uint8_t>& before,
     return dirtyMask;
 }
 
-void emitBoundarySeeds(const LightJob& job,
+void emitBoundarySeeds(SolverContext& context,
                        const std::vector<uint8_t>& packedLight,
                        const int direction,
                        BorderUpdateBatch& outBatch) {
-    if (!job.chunk) {
+    if (!context.job.chunk) {
         return;
     }
 
@@ -229,7 +280,7 @@ void emitBoundarySeeds(const LightJob& job,
         const int x = (direction == 0) ? (Chunk::SIZE_X - 1) : 0;
         for (int y = 0; y < Chunk::SIZE_Y; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-                if (getOpacity(job, x, y, z) >= 15) {
+                if (getOpacity(context, x, y, z) >= 15) {
                     continue;
                 }
 
@@ -262,7 +313,7 @@ void emitBoundarySeeds(const LightJob& job,
     const int z = (direction == 2) ? (Chunk::SIZE_Z - 1) : 0;
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            if (getOpacity(job, x, y, z) >= 15) {
+            if (getOpacity(context, x, y, z) >= 15) {
                 continue;
             }
 
@@ -297,8 +348,8 @@ void seedCellDiff(const std::vector<uint8_t>& basePacked,
                   const int x,
                   const int y,
                   const int z,
-                  std::deque<RemovalNode>& removeQueue,
-                  std::deque<LightNode>& addQueue) {
+                  WorkQueue<RemovalNode>& removeQueue,
+                  WorkQueue<LightNode>& addQueue) {
     if (!isInside(x, y, z)) {
         return;
     }
@@ -308,13 +359,13 @@ void seedCellDiff(const std::vector<uint8_t>& basePacked,
 
     if (current > source) {
         setLight(workingPacked, kind, x, y, z, source);
-        removeQueue.push_back({x, y, z, current});
+        removeQueue.push({x, y, z, current});
         if (source > 0) {
-            addQueue.push_back({x, y, z});
+            addQueue.push({x, y, z});
         }
     } else if (source > current) {
         setLight(workingPacked, kind, x, y, z, source);
-        addQueue.push_back({x, y, z});
+        addQueue.push({x, y, z});
     }
 }
 
@@ -322,8 +373,8 @@ void seedSkyColumnDiff(const std::vector<uint8_t>& basePacked,
                        std::vector<uint8_t>& workingPacked,
                        const int x,
                        const int z,
-                       std::deque<RemovalNode>& removeQueue,
-                       std::deque<LightNode>& addQueue) {
+                       WorkQueue<RemovalNode>& removeQueue,
+                       WorkQueue<LightNode>& addQueue) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         seedCellDiff(basePacked, workingPacked, LightKind::Sky, x, y, z, removeQueue, addQueue);
     }
@@ -333,8 +384,8 @@ void seedNeighborReadds(const std::vector<uint8_t>& workingPacked,
                         const int x,
                         const int y,
                         const int z,
-                        std::deque<LightNode>& skyAddQueue,
-                        std::deque<LightNode>& blockAddQueue) {
+                        WorkQueue<LightNode>& skyAddQueue,
+                        WorkQueue<LightNode>& blockAddQueue) {
     for (int d = 0; d < 6; ++d) {
         const int nx = x + DX[d];
         const int ny = y + DY[d];
@@ -344,10 +395,10 @@ void seedNeighborReadds(const std::vector<uint8_t>& workingPacked,
         }
 
         if (getSky(workingPacked, nx, ny, nz) > 0) {
-            skyAddQueue.push_back({nx, ny, nz});
+            skyAddQueue.push({nx, ny, nz});
         }
         if (getBlock(workingPacked, nx, ny, nz) > 0) {
-            blockAddQueue.push_back({nx, ny, nz});
+            blockAddQueue.push({nx, ny, nz});
         }
     }
 }
@@ -357,10 +408,10 @@ void seedBoundaryDiffs(const std::vector<uint8_t>& basePacked,
                        const std::vector<uint8_t>& previousBoundaryPacked,
                        const std::vector<uint8_t>& currentBoundaryPacked,
                        const std::array<bool, 4>& changedDirections,
-                       std::deque<RemovalNode>& skyRemoveQueue,
-                       std::deque<RemovalNode>& blockRemoveQueue,
-                       std::deque<LightNode>& skyAddQueue,
-                       std::deque<LightNode>& blockAddQueue) {
+                       WorkQueue<RemovalNode>& skyRemoveQueue,
+                       WorkQueue<RemovalNode>& blockRemoveQueue,
+                       WorkQueue<LightNode>& skyAddQueue,
+                       WorkQueue<LightNode>& blockAddQueue) {
     for (int direction = 0; direction < 4; ++direction) {
         if (!changedDirections[direction]) {
             continue;
@@ -395,16 +446,15 @@ void seedBoundaryDiffs(const std::vector<uint8_t>& basePacked,
     }
 }
 
-void runRemovePass(const LightJob& job,
+void runRemovePass(SolverContext& context,
                    const std::vector<uint8_t>& basePacked,
                    std::vector<uint8_t>& workingPacked,
                    const LightKind kind,
-                   std::deque<RemovalNode>& removeQueue,
-                   std::deque<LightNode>& addQueue,
+                   WorkQueue<RemovalNode>& removeQueue,
+                   WorkQueue<LightNode>& addQueue,
                    uint32_t& nodesVisited) {
     while (!removeQueue.empty()) {
-        const RemovalNode cur = removeQueue.front();
-        removeQueue.pop_front();
+        const RemovalNode cur = removeQueue.pop();
         ++nodesVisited;
 
         for (int d = 0; d < 6; ++d) {
@@ -420,7 +470,7 @@ void runRemovePass(const LightJob& job,
                 continue;
             }
 
-            const uint8_t propagated = propagateLevel(job, kind, cur.level, d, nx, ny, nz);
+            const uint8_t propagated = propagateLevel(context, kind, cur.level, d, nx, ny, nz);
             if (propagated == 0) {
                 continue;
             }
@@ -428,25 +478,24 @@ void runRemovePass(const LightJob& job,
             const uint8_t sourceLevel = getLight(basePacked, kind, nx, ny, nz);
             if (sourceLevel < neighborLevel && neighborLevel <= propagated) {
                 setLight(workingPacked, kind, nx, ny, nz, sourceLevel);
-                removeQueue.push_back({nx, ny, nz, neighborLevel});
+                removeQueue.push({nx, ny, nz, neighborLevel});
                 if (sourceLevel > 0) {
-                    addQueue.push_back({nx, ny, nz});
+                    addQueue.push({nx, ny, nz});
                 }
             } else {
-                addQueue.push_back({nx, ny, nz});
+                addQueue.push({nx, ny, nz});
             }
         }
     }
 }
 
-void runAddPass(const LightJob& job,
+void runAddPass(SolverContext& context,
                 std::vector<uint8_t>& packedLight,
                 const LightKind kind,
-                std::deque<LightNode>& addQueue,
+                WorkQueue<LightNode>& addQueue,
                 uint32_t& nodesVisited) {
     while (!addQueue.empty()) {
-        const LightNode cur = addQueue.front();
-        addQueue.pop_front();
+        const LightNode cur = addQueue.pop();
         ++nodesVisited;
 
         const uint8_t curLight = getLight(packedLight, kind, cur.x, cur.y, cur.z);
@@ -462,13 +511,13 @@ void runAddPass(const LightJob& job,
                 continue;
             }
 
-            const uint8_t propagated = propagateLevel(job, kind, curLight, d, nx, ny, nz);
+            const uint8_t propagated = propagateLevel(context, kind, curLight, d, nx, ny, nz);
             if (propagated <= getLight(packedLight, kind, nx, ny, nz)) {
                 continue;
             }
 
             setLight(packedLight, kind, nx, ny, nz, propagated);
-            addQueue.push_back({nx, ny, nz});
+            addQueue.push({nx, ny, nz});
         }
     }
 }
@@ -499,15 +548,15 @@ uint32_t computeDirtyMask(const std::vector<uint8_t>& before, const std::vector<
     return dirtyMask;
 }
 
-void buildOutgoingBatches(const LightJob& job,
+void buildOutgoingBatches(SolverContext& context,
                           const std::vector<uint8_t>& before,
                           const std::vector<uint8_t>& after,
                           std::vector<BorderUpdateBatch>& outgoing) {
     const std::shared_ptr<const Chunk> neighbors[4] = {
-        job.neighborPosX,
-        job.neighborNegX,
-        job.neighborPosZ,
-        job.neighborNegZ
+        context.job.neighborPosX,
+        context.job.neighborNegX,
+        context.job.neighborPosZ,
+        context.job.neighborNegZ
     };
 
     for (int direction = 0; direction < 4; ++direction) {
@@ -518,10 +567,10 @@ void buildOutgoingBatches(const LightJob& job,
         BorderUpdateBatch batch;
         batch.targetChunkKey = static_cast<int64_t>(neighbors[direction]->m_chunkX) << 32 |
             (static_cast<int64_t>(neighbors[direction]->m_chunkZ) & 0xFFFFFFFF);
-        batch.sourceRevision = job.revision;
+        batch.sourceRevision = context.job.revision;
         batch.fromDirection = static_cast<uint8_t>(direction);
 
-        emitBoundarySeeds(job, after, direction, batch);
+        emitBoundarySeeds(context, after, direction, batch);
         batch.dirtySubChunkMask = borderFaceDirtyMask(before, after, direction);
         if (batch.dirtySubChunkMask != 0) {
             outgoing.push_back(std::move(batch));
@@ -534,35 +583,38 @@ bool hasChangedBoundary(const std::array<bool, 4>& changedDirections) {
                        [](const bool changed) { return changed; });
 }
 
-LightResult solveByRebuild(const LightJob& job,
+LightResult solveByRebuild(SolverContext& context,
                            const std::vector<uint8_t>& originalPacked,
                            const std::chrono::steady_clock::time_point startTime) {
     LightResult result;
-    result.selfDelta.chunkKey = job.chunkKey;
-    result.selfDelta.revision = job.revision;
+    result.selfDelta.chunkKey = context.job.chunkKey;
+    result.selfDelta.revision = context.job.revision;
+    result.outgoing.reserve(4);
 
-    buildCurrentBasePacked(job, result.selfDelta.packedLight);
+    buildCurrentBasePacked(context, result.selfDelta.packedLight);
 
-    std::deque<LightNode> skyAddQueue;
-    std::deque<LightNode> blockAddQueue;
+    WorkQueue<LightNode> skyAddQueue;
+    WorkQueue<LightNode> blockAddQueue;
+    skyAddQueue.reserve(Chunk::BLOCK_COUNT);
+    blockAddQueue.reserve(Chunk::BLOCK_COUNT);
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
                 if (getSky(result.selfDelta.packedLight, x, y, z) > 0) {
-                    skyAddQueue.push_back({x, y, z});
+                    skyAddQueue.push({x, y, z});
                 }
                 if (getBlock(result.selfDelta.packedLight, x, y, z) > 0) {
-                    blockAddQueue.push_back({x, y, z});
+                    blockAddQueue.push({x, y, z});
                 }
             }
         }
     }
 
-    runAddPass(job, result.selfDelta.packedLight, LightKind::Sky, skyAddQueue, result.nodesVisited);
-    runAddPass(job, result.selfDelta.packedLight, LightKind::Block, blockAddQueue, result.nodesVisited);
+    runAddPass(context, result.selfDelta.packedLight, LightKind::Sky, skyAddQueue, result.nodesVisited);
+    runAddPass(context, result.selfDelta.packedLight, LightKind::Block, blockAddQueue, result.nodesVisited);
 
     result.selfDelta.dirtySubChunkMask = computeDirtyMask(originalPacked, result.selfDelta.packedLight);
-    buildOutgoingBatches(job, originalPacked, result.selfDelta.packedLight, result.outgoing);
+    buildOutgoingBatches(context, originalPacked, result.selfDelta.packedLight, result.outgoing);
     result.workerMs = static_cast<float>(std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - startTime).count());
     return result;
@@ -579,30 +631,37 @@ LightResult LightSolver::solve(const LightJob& job) {
         return empty;
     }
 
+    SolverContext context = makeSolverContext(job);
+
     const std::vector<uint8_t> originalPacked = buildOriginalPacked(job);
     if (job.reason == LightDirtyReason::ChunkLoaded ||
         (!hasChangedBoundary(job.changedBoundaryDirections) && job.blockChanges.empty())) {
-        return solveByRebuild(job, originalPacked, startTime);
+        return solveByRebuild(context, originalPacked, startTime);
     }
 
     LightResult result;
     result.selfDelta.chunkKey = job.chunkKey;
     result.selfDelta.revision = job.revision;
+    result.outgoing.reserve(4);
 
     std::vector<uint8_t> basePacked;
-    buildCurrentBasePacked(job, basePacked);
+    buildCurrentBasePacked(context, basePacked);
 
     std::vector<uint8_t> previousBoundaryPacked(Chunk::BLOCK_COUNT, 0);
     std::vector<uint8_t> currentBoundaryPacked(Chunk::BLOCK_COUNT, 0);
-    applyBoundarySeeds(job, job.previousInbox, previousBoundaryPacked);
-    applyBoundarySeeds(job, job.inbox, currentBoundaryPacked);
+    applyBoundarySeeds(context, job.previousInbox, previousBoundaryPacked);
+    applyBoundarySeeds(context, job.inbox, currentBoundaryPacked);
 
     result.selfDelta.packedLight = originalPacked;
 
-    std::deque<RemovalNode> skyRemoveQueue;
-    std::deque<RemovalNode> blockRemoveQueue;
-    std::deque<LightNode> skyAddQueue;
-    std::deque<LightNode> blockAddQueue;
+    WorkQueue<RemovalNode> skyRemoveQueue;
+    WorkQueue<RemovalNode> blockRemoveQueue;
+    WorkQueue<LightNode> skyAddQueue;
+    WorkQueue<LightNode> blockAddQueue;
+    skyRemoveQueue.reserve(Chunk::BLOCK_COUNT);
+    blockRemoveQueue.reserve(Chunk::BLOCK_COUNT);
+    skyAddQueue.reserve(Chunk::BLOCK_COUNT);
+    blockAddQueue.reserve(Chunk::BLOCK_COUNT);
 
     std::array<bool, Chunk::SIZE_X * Chunk::SIZE_Z> dirtySkyColumns{};
     for (const LocalLightChange& change : job.blockChanges) {
@@ -638,15 +697,15 @@ LightResult LightSolver::solve(const LightJob& job) {
                       skyAddQueue,
                       blockAddQueue);
 
-    runRemovePass(job, basePacked, result.selfDelta.packedLight, LightKind::Sky,
+    runRemovePass(context, basePacked, result.selfDelta.packedLight, LightKind::Sky,
                   skyRemoveQueue, skyAddQueue, result.nodesVisited);
-    runRemovePass(job, basePacked, result.selfDelta.packedLight, LightKind::Block,
+    runRemovePass(context, basePacked, result.selfDelta.packedLight, LightKind::Block,
                   blockRemoveQueue, blockAddQueue, result.nodesVisited);
-    runAddPass(job, result.selfDelta.packedLight, LightKind::Sky, skyAddQueue, result.nodesVisited);
-    runAddPass(job, result.selfDelta.packedLight, LightKind::Block, blockAddQueue, result.nodesVisited);
+    runAddPass(context, result.selfDelta.packedLight, LightKind::Sky, skyAddQueue, result.nodesVisited);
+    runAddPass(context, result.selfDelta.packedLight, LightKind::Block, blockAddQueue, result.nodesVisited);
 
     result.selfDelta.dirtySubChunkMask = computeDirtyMask(originalPacked, result.selfDelta.packedLight);
-    buildOutgoingBatches(job, originalPacked, result.selfDelta.packedLight, result.outgoing);
+    buildOutgoingBatches(context, originalPacked, result.selfDelta.packedLight, result.outgoing);
     result.workerMs = static_cast<float>(std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - startTime).count());
     return result;

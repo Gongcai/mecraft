@@ -289,11 +289,18 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     BlockIds::init();
 }
 
-const BlockDef& BlockRegistry::get(BlockID id) {
+void BlockRegistry::ensureInitialized() {
     if (!s_initialized) {
         init(nullptr);
     }
+}
 
+const BlockDef& BlockRegistry::get(BlockID id) {
+    ensureInitialized();
+    return getFast(id);
+}
+
+const BlockDef& BlockRegistry::getFast(BlockID id) {
     if (id >= s_blocks.size()) {
         return s_blocks[0];  // Return AIR for invalid IDs
     }
@@ -310,9 +317,7 @@ BlockID BlockRegistry::findByName(const std::string& name) {
 }
 
 bool BlockRegistry::tryGetIdByName(const std::string& name, BlockID& outId) {
-    if (!s_initialized) {
-        init(nullptr);
-    }
+    ensureInitialized();
 
     // Try as NamespacedId first (contains ':')
     if (name.find(':') != std::string::npos) {
@@ -326,9 +331,7 @@ bool BlockRegistry::tryGetIdByName(const std::string& name, BlockID& outId) {
 }
 
 BlockID BlockRegistry::getId(const NamespacedId& namespacedId) {
-    if (!s_initialized) {
-        init(nullptr);
-    }
+    ensureInitialized();
     auto it = s_idLookup.find(namespacedId);
     if (it != s_idLookup.end()) {
         return it->second;
@@ -337,9 +340,7 @@ BlockID BlockRegistry::getId(const NamespacedId& namespacedId) {
 }
 
 bool BlockRegistry::tryGetId(const NamespacedId& namespacedId, BlockID& outId) {
-    if (!s_initialized) {
-        init(nullptr);
-    }
+    ensureInitialized();
     auto it = s_idLookup.find(namespacedId);
     if (it != s_idLookup.end()) {
         outId = it->second;

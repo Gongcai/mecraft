@@ -291,6 +291,7 @@ void World::loadChunk(int cx, int cz) {
             sc->inferType();
         }
     }
+    chunk->seedInitialLightMap();
 
     m_chunks[key] = std::move(chunk);
 
