@@ -8,6 +8,16 @@ int worldToChunkCoord(const int world, const int chunkSize) {
     // floor-divide for negative coordinates
     return static_cast<int>(std::floor(static_cast<float>(world) / static_cast<float>(chunkSize)));
 }
+
+void markChunkSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, const int localY) {
+    chunk.markSubChunkDirty(scy);
+    if (localY == 0) {
+        chunk.markSubChunkDirty(scy - 1);
+    }
+    if (localY == Chunk::SUB_CHUNK_SIZE - 1) {
+        chunk.markSubChunkDirty(scy + 1);
+    }
+}
 }
 void World::init(uint32_t seed) {
     m_seed = seed;
@@ -122,28 +132,22 @@ void World::setBlock(int x, int y, int z, BlockID id) {
     // Geometry edits must always trigger remesh, regardless of lighting pipeline.
     const int editedScy = Chunk::toSubChunkIndex(y);
     const int localY = Chunk::toSubChunkLocalY(y);
-    chunk.markSubChunkDirty(editedScy);
-    if (localY == 0) {
-        chunk.markSubChunkDirty(editedScy - 1);
-    }
-    if (localY == Chunk::SUB_CHUNK_SIZE - 1) {
-        chunk.markSubChunkDirty(editedScy + 1);
-    }
+    markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
-        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localX == Chunk::SIZE_X - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
-        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
-        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
     if (localZ == Chunk::SIZE_Z - 1) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
-        if (nit != m_chunks.end()) nit->second->markSubChunkDirty(editedScy);
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 }
 

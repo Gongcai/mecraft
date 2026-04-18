@@ -19,7 +19,7 @@ void ThreadPool::start() {
     if (m_numThreads <= 0) {
         const int hw = static_cast<int>(std::thread::hardware_concurrency());
         m_numThreads = std::max(2, hw - 1);
-        m_numThreads = std::min(m_numThreads, 18);
+        m_numThreads = std::min(m_numThreads, 12);
     }
 
     m_stopping.store(false, std::memory_order_relaxed);

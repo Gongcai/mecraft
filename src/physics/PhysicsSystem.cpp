@@ -163,10 +163,10 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
     }
 
 
-    float speed = body.isInWater ? tuning.swimSpeed : tuning.moveSpeed;
-    if (!body.isInWater) {
+    float speed = intent.isFlying ? tuning.moveSpeed : (body.isInWater ? tuning.swimSpeed : tuning.moveSpeed);
+    if (!body.isInWater || intent.isFlying) {
         const float sprintSpeed = tuning.moveSpeed * tuning.sprintMultiplier;
-        if (intent.wantsCrouch) {
+        if (!intent.isFlying && intent.wantsCrouch) {
             speed = sprintSpeed * 0.5f;
         } else if (intent.wantsSprint) {
             speed = sprintSpeed;
@@ -177,7 +177,9 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
     const float targetZ = input.y * speed;
 
     float control = tuning.groundFriction * 2.0f;
-    if (body.isInWater) {
+    if (intent.isFlying) {
+        control = tuning.groundFriction * 2.0f;
+    } else if (body.isInWater) {
         control = tuning.waterDrag * 1.4f;
     } else if (!wasGrounded) {
         control = std::max(0.1f, tuning.groundFriction * tuning.airControl);
@@ -190,6 +192,22 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
 
 void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
                          const bool wasGrounded, const float dt) {
+    if (intent.isFlying) {
+        float verticalSpeed = tuning.moveSpeed;
+        if (intent.wantsSprint) {
+            verticalSpeed *= tuning.sprintMultiplier;
+        }
+
+        body.velocity.y = 0.0f;
+        if (intent.wantsJump) {
+            body.velocity.y += verticalSpeed;
+        }
+        if (intent.wantsCrouch) {
+            body.velocity.y -= verticalSpeed;
+        }
+        return;
+    }
+
     const float gravityScale = body.isInWater ? tuning.waterGravityScale : 1.0f;
     body.velocity.y -= tuning.gravity * gravityScale * dt;
 
@@ -207,8 +225,8 @@ void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const Phys
     body.velocity.y = std::clamp(body.velocity.y, -tuning.terminalVelocity, tuning.terminalVelocity);
 }
 
-void applyDrag(PhysicsBody& body, const PhysicsTuning& tuning, const float dt) {
-    const float drag = body.isInWater ? tuning.waterDrag : tuning.airDrag;
+void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning, const float dt) {
+    const float drag = (body.isInWater && !intent.isFlying) ? tuning.waterDrag : tuning.airDrag;
     const float factor = std::max(0.0f, 1.0f - drag * dt);
     body.velocity *= factor;
 }
@@ -224,7 +242,8 @@ void moveAndCollideAxis(PhysicsBody& body, const World& world, const MoveIntent&
 
     for (int i = 0; i < steps; ++i) {
         const glm::vec3 prevPos = body.position;
-        const bool protectLedge = axis != 1 && intent.wantsCrouch && body.isGrounded && !body.isInWater;
+        const bool protectLedge = axis != 1 && intent.wantsCrouch && !intent.isFlying &&
+                                  body.isGrounded && !body.isInWater;
         if (protectLedge) {
             glm::vec3 candidatePos = body.position;
             candidatePos[axis] += stepDelta;
@@ -284,7 +303,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
 
     applyHorizontalControl(body, intent, tuningOverride, wasGrounded, dt);
     applyVerticalForces(body, intent, tuningOverride, wasGrounded, dt);
-    applyDrag(body, tuningOverride, dt);
+    applyDrag(body, intent, tuningOverride, dt);
 
     body.isGrounded = false;
     moveAndCollideAxis(body, *m_world, intent, dt, 1); // Y
@@ -293,7 +312,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
 
     // Keep grounded state stable while resting on solid support to avoid
     // one-frame false negatives that can retrigger landing events.
-    if (!body.isGrounded && wasGrounded && body.velocity.y <= 0.0f &&
+    if (!intent.isFlying && !body.isGrounded && wasGrounded && body.velocity.y <= 0.0f &&
         hasGroundSupportAt(body, *m_world, body.position)) {
         body.isGrounded = true;
         body.velocity.y = 0.0f;

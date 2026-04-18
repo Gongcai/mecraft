@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 #include "../src/world/Chunk.h"
 
@@ -112,6 +113,20 @@ int main() {
         if (posX.isDirty() || posZ.isDirty() || negZ.isDirty()) {
             return fail("x-border edits should not dirty unrelated neighbors");
         }
+
+        clearDirty(center);
+        clearDirty(posX);
+        clearDirty(negX);
+        clearDirty(posZ);
+        clearDirty(negZ);
+
+        center.setBlock(0, 64, 5, BlockIds::STONE);
+        if (!center.isSubChunkDirty(4) || !center.isSubChunkDirty(3)) {
+            return fail("boundary edits on a sub-chunk floor should dirty both local touching sub-chunks");
+        }
+        if (!negX.isSubChunkDirty(4) || !negX.isSubChunkDirty(3)) {
+            return fail("cross-chunk boundary edits on a sub-chunk floor should dirty the neighbor's touching sub-chunks");
+        }
     }
 
     {
@@ -128,6 +143,33 @@ int main() {
         }
         if (sc->getBlock(2, 1, 4) != BlockIds::STONE || chunk.getBlock(2, 33, 4) != BlockIds::STONE) {
             return fail("block reads should round-trip through sub-chunk-backed storage");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(1, 63, 1, BlockIds::STONE);
+        chunk.recalcHeightMap(1, 1);
+        clearDirty(chunk);
+
+        std::vector<uint8_t> packed(Chunk::BLOCK_COUNT);
+        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                    packed[Chunk::toIndex(x, y, z)] = chunk.getPackedLight(x, y, z);
+                }
+            }
+        }
+
+        packed[Chunk::toIndex(1, 64, 1)] = 0xE0;
+        if (!chunk.replacePackedLight(packed.data(), packed.size(), nullptr)) {
+            return fail("replacePackedLight should accept a full packed-light snapshot");
+        }
+        if (!chunk.isSubChunkDirty(3)) {
+            return fail("light changes in the section above should dirty the lower neighbor mesh section");
+        }
+        if (!chunk.isSubChunkDirty(4)) {
+            return fail("replacePackedLight should still dirty the directly changed light section");
         }
     }
 

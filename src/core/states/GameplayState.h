@@ -45,7 +45,9 @@ public:
         if (!m_deps.ecsRegistry.ctxHas<ecs::GameplayRuntimeContext>()) {
             m_deps.ecsRegistry.ctxSet<ecs::GameplayRuntimeContext>();
         }
-        m_deps.ecsRegistry.ctxGet<ecs::GameplayRuntimeContext>().modeRules = &m_modeRules;
+        auto& runtime = m_deps.ecsRegistry.ctxGet<ecs::GameplayRuntimeContext>();
+        runtime.modeRules = &m_modeRules;
+        runtime.gameplayMode = m_gameplayMode;
 
         auto view = m_deps.ecsRegistry.view<ecs::LocalPlayerTag, ecs::InventoryComponent>();
         for (auto e : view) {

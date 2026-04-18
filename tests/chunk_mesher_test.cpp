@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -63,6 +64,29 @@ ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
 
     merged.opaqueVertexCount = static_cast<uint32_t>(merged.opaqueVertices.size());
     return merged;
+}
+
+bool approxEqual(const float lhs, const float rhs, const float epsilon = 0.001f) {
+    return std::fabs(lhs - rhs) <= epsilon;
+}
+
+std::vector<const BlockVertex*> collectTopFaceVertices(const ChunkMeshData& meshData,
+                                                       const float minX,
+                                                       const float maxX,
+                                                       const float y,
+                                                       const float minZ,
+                                                       const float maxZ) {
+    std::vector<const BlockVertex*> matches;
+    for (const BlockVertex& vertex : meshData.opaqueVertices) {
+        if (!approxEqual(vertex.normal, 0.0f) ||
+            !approxEqual(vertex.y, y) ||
+            vertex.x < minX - 0.001f || vertex.x > maxX + 0.001f ||
+            vertex.z < minZ - 0.001f || vertex.z > maxZ + 0.001f) {
+            continue;
+        }
+        matches.push_back(&vertex);
+    }
+    return matches;
 }
 
 void fillSubChunk(Chunk& chunk, const int scy, const BlockID blockId) {
@@ -281,6 +305,54 @@ int main() {
         chunk.setBlockLight(0, 16, 0, 0);
         if (chunk.getSubChunk(1) != nullptr || bottom->neighbors[2] != nullptr || top->neighbors[3] != nullptr) {
             return fail("recycling a light-only sub-chunk should clear reciprocal vertical neighbor links");
+        }
+    }
+
+    {
+        Chunk left(0, 0);
+        Chunk right(1, 0);
+        left.neighbors[0] = &right;
+        right.neighbors[1] = &left;
+
+        left.setBlock(Chunk::SIZE_X - 1, 63, 8, BlockIds::STONE);
+        right.setBlock(0, 64, 8, BlockIds::STONE);
+
+        const ChunkMeshData meshData = buildMeshDataFor(left);
+        const auto faceVertices = collectTopFaceVertices(meshData, 15.0f, 16.0f, 64.0f, 8.0f, 9.0f);
+        if (faceVertices.size() != 6) {
+            return fail("expected one top face worth of vertices for boundary AO regression case");
+        }
+
+        const bool hasOccludedCorner = std::any_of(faceVertices.begin(), faceVertices.end(),
+                                                   [](const BlockVertex* vertex) {
+                                                       return vertex && vertex->ao < 3.0f - 0.001f;
+                                                   });
+        if (!hasOccludedCorner) {
+            return fail("top-face AO should account for neighbor blocks across chunk and sub-chunk edges");
+        }
+    }
+
+    {
+        Chunk left(0, 0);
+        Chunk right(1, 0);
+        left.neighbors[0] = &right;
+        right.neighbors[1] = &left;
+
+        left.setBlock(Chunk::SIZE_X - 1, 63, 8, BlockIds::STONE);
+        right.setBlockLight(0, 64, 8, 12);
+
+        const ChunkMeshData meshData = buildMeshDataFor(left);
+        const auto faceVertices = collectTopFaceVertices(meshData, 15.0f, 16.0f, 64.0f, 8.0f, 9.0f);
+        if (faceVertices.size() != 6) {
+            return fail("expected one top face worth of vertices for boundary block-light regression case");
+        }
+
+        const bool receivedNeighborLight = std::any_of(faceVertices.begin(), faceVertices.end(),
+                                                       [](const BlockVertex* vertex) {
+                                                           return vertex && vertex->blockLight > 0.001f;
+                                                       });
+        if (!receivedNeighborLight) {
+            return fail("top-face block light should sample across chunk and sub-chunk halo positions");
         }
     }
 

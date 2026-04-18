@@ -54,6 +54,7 @@ void PlayerIntentBuildSystem::update(GameplayRegistry& registry) {
         move.wantsJump = frame.jump;
         move.wantsSprint = frame.sprint;
         move.wantsCrouch = frame.crouch;
+        move.toggleFlightMode = frame.jumpDoubleTap;
 
         look.deltaX = frame.lookX;
         look.deltaY = frame.lookY;

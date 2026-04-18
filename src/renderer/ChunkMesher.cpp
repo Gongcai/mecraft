@@ -82,6 +82,12 @@ std::size_t scToIndex(const int x, const int y, const int z) {
            static_cast<std::size_t>(y) * SubChunk::SIZE * SubChunk::SIZE;
 }
 
+std::size_t haloToIndex(const int x, const int y, const int z) {
+    return static_cast<std::size_t>(x + 1) +
+           static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
+           static_cast<std::size_t>(y + 1) * SC_HALO_SIZE * SC_HALO_SIZE;
+}
+
 // Border index helpers for sub-chunk borders (16x16 slice)
 std::size_t toBorderXZIndex(const int x, const int z) {
     return static_cast<std::size_t>(x) + static_cast<std::size_t>(z) * SubChunk::SIZE;
@@ -162,6 +168,32 @@ uint8_t getNeighborBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, 
     return static_cast<uint8_t>(getNeighborAwareLightSC(snapshot, x, y, z) & 0x0F);
 }
 
+BlockID getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    if (x < -1 || x > SubChunk::SIZE ||
+        y < -1 || y > SubChunk::SIZE ||
+        z < -1 || z > SubChunk::SIZE) {
+        return 0;
+    }
+    return snapshot.haloBlocks[haloToIndex(x, y, z)];
+}
+
+uint8_t getResolvedLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    if (x < -1 || x > SubChunk::SIZE ||
+        y < -1 || y > SubChunk::SIZE ||
+        z < -1 || z > SubChunk::SIZE) {
+        return 0;
+    }
+    return snapshot.haloLightMap[haloToIndex(x, y, z)];
+}
+
+uint8_t getResolvedSunlightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    return static_cast<uint8_t>((getResolvedLightSC(snapshot, x, y, z) >> 4) & 0x0F);
+}
+
+uint8_t getResolvedBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    return static_cast<uint8_t>(getResolvedLightSC(snapshot, x, y, z) & 0x0F);
+}
+
 // ======================== AO / light computation ========================
 
 uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
@@ -172,7 +204,7 @@ uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
 }
 
 bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
-    const BlockID id = getNeighborAwareBlockSC(snapshot, x, y, z);
+    const BlockID id = getResolvedBlockSC(snapshot, x, y, z);
     return BlockRegistry::getFast(id).isSolid;
 }
 
@@ -232,11 +264,8 @@ uint8_t safeSunLevel(const SubChunkMeshingSnapshot& snapshot,
         if (y >= SubChunk::SIZE && snapshot.isTopSection) {
             return 15;
         }
-        if (isUnresolvablePosition(snapshot, x, y, z)) {
-            return base;
-        }
     }
-    return getNeighborSunlightSC(snapshot, x, y, z);
+    return getResolvedSunlightSC(snapshot, x, y, z);
 }
 
 uint8_t safeBlockLevel(const SubChunkMeshingSnapshot& snapshot,
@@ -249,11 +278,8 @@ uint8_t safeBlockLevel(const SubChunkMeshingSnapshot& snapshot,
         if (y >= SubChunk::SIZE && snapshot.isTopSection) {
             return 0;
         }
-        if (isUnresolvablePosition(snapshot, x, y, z)) {
-            return base;
-        }
     }
-    return getNeighborBlockLightSC(snapshot, x, y, z);
+    return getResolvedBlockLightSC(snapshot, x, y, z);
 }
 
 std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
@@ -283,8 +309,8 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
     }
 
     std::array<VertexLightData, 4> data{};
-    const uint8_t baseSun = getNeighborSunlightSC(snapshot, bx, by, bz);
-    const uint8_t baseBlock = getNeighborBlockLightSC(snapshot, bx, by, bz);
+    const uint8_t baseSun = getResolvedSunlightSC(snapshot, bx, by, bz);
+    const uint8_t baseBlock = getResolvedBlockLightSC(snapshot, bx, by, bz);
 
     for (int i = 0; i < 4; ++i) {
         const glm::vec3 corner = kFaceCorners[face][i];
@@ -422,7 +448,7 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
                           const int nz,
                           const BlockID currentId,
                           const BlockDef& currentDef) {
-    const BlockID neighborId = getNeighborAwareBlockSC(snapshot, nx, ny, nz);
+    const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
     if (currentDef.renderShape == BlockRenderShape::Cube &&
         currentDef.isTransparent &&
         neighborId == currentId) {
@@ -456,6 +482,119 @@ BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y
         return 0;
     }
     return world->sampleGeneratedBlock(wx, y, wz);
+}
+
+uint8_t sampleMissingNeighborLight(const World* world, const int wx, const int y, const int wz) {
+    if (world == nullptr || y < 0 || y >= Chunk::SIZE_Y) {
+        return 0;
+    }
+
+    const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
+    const auto it = world->getActiveChunks().find(World::chunkKey(chunkCoords.x, chunkCoords.y));
+    if (it == world->getActiveChunks().end() || !it->second) {
+        return 0;
+    }
+
+    const int localX = wx - chunkCoords.x * Chunk::SIZE_X;
+    const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
+    return it->second->getPackedLight(localX, y, localZ);
+}
+
+BlockID sampleHaloBlock(const Chunk& chunk,
+                        const int localX,
+                        const int worldY,
+                        const int localZ,
+                        const Chunk* neighborPosX,
+                        const Chunk* neighborNegX,
+                        const Chunk* neighborPosZ,
+                        const Chunk* neighborNegZ,
+                        const World* world) {
+    const glm::ivec3 offset = chunk.getWorldOffset();
+    const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
+    const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
+    if (xInRange && zInRange) {
+        return chunk.getBlock(localX, worldY, localZ);
+    }
+
+    if (world != nullptr) {
+        return world->sampleGeneratedBlock(offset.x + localX, worldY, offset.z + localZ);
+    }
+
+    if (!zInRange) {
+        return 0;
+    }
+    if (localX < 0) {
+        return neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, worldY, localZ) : 0;
+    }
+    if (localX >= Chunk::SIZE_X) {
+        return neighborPosX ? neighborPosX->getBlock(0, worldY, localZ) : 0;
+    }
+    if (localZ < 0) {
+        return neighborNegZ ? neighborNegZ->getBlock(localX, worldY, Chunk::SIZE_Z - 1) : 0;
+    }
+    return neighborPosZ ? neighborPosZ->getBlock(localX, worldY, 0) : 0;
+}
+
+uint8_t sampleHaloLight(const Chunk& chunk,
+                        const int localX,
+                        const int worldY,
+                        const int localZ,
+                        const Chunk* neighborPosX,
+                        const Chunk* neighborNegX,
+                        const Chunk* neighborPosZ,
+                        const Chunk* neighborNegZ,
+                        const World* world) {
+    const glm::ivec3 offset = chunk.getWorldOffset();
+    const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
+    const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
+    if (xInRange && zInRange) {
+        return chunk.getPackedLight(localX, worldY, localZ);
+    }
+
+    if (world != nullptr) {
+        return sampleMissingNeighborLight(world, offset.x + localX, worldY, offset.z + localZ);
+    }
+
+    if (!zInRange) {
+        return 0;
+    }
+    if (localX < 0) {
+        return neighborNegX ? neighborNegX->getPackedLight(Chunk::SIZE_X - 1, worldY, localZ) : 0;
+    }
+    if (localX >= Chunk::SIZE_X) {
+        return neighborPosX ? neighborPosX->getPackedLight(0, worldY, localZ) : 0;
+    }
+    if (localZ < 0) {
+        return neighborNegZ ? neighborNegZ->getPackedLight(localX, worldY, Chunk::SIZE_Z - 1) : 0;
+    }
+    return neighborPosZ ? neighborPosZ->getPackedLight(localX, worldY, 0) : 0;
+}
+
+void captureSubChunkHalo(const Chunk& chunk,
+                         const int scy,
+                         SubChunkMeshingSnapshot& snapshot,
+                         const Chunk* neighborPosX,
+                         const Chunk* neighborNegX,
+                         const Chunk* neighborPosZ,
+                         const Chunk* neighborNegZ,
+                         const World* world) {
+    const int yBase = scy * SubChunk::SIZE;
+    for (int ly = -1; ly <= SubChunk::SIZE; ++ly) {
+        const int worldY = yBase + ly;
+        for (int lz = -1; lz <= SubChunk::SIZE; ++lz) {
+            for (int lx = -1; lx <= SubChunk::SIZE; ++lx) {
+                const std::size_t haloIdx = haloToIndex(lx, ly, lz);
+                snapshot.haloBlocks[haloIdx] = sampleHaloBlock(chunk, lx, worldY, lz,
+                                                               neighborPosX, neighborNegX,
+                                                               neighborPosZ, neighborNegZ,
+                                                               world);
+                snapshot.haloLightMap[haloIdx] = sampleHaloLight(chunk, lx, worldY, lz,
+                                                                 neighborPosX, neighborNegX,
+                                                                 neighborPosZ, neighborNegZ,
+                                                                 world);
+            }
+        }
+    }
 }
 
 // Capture horizontal borders for a specific sub-chunk (y in [yBase, yBase+16))
@@ -865,14 +1004,14 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
 
     const float layer = static_cast<float>(tileIndex);
 
-    uint8_t sunLevel = getNeighborSunlightSC(snapshot, x, y, z);
-    uint8_t blockLevel = getNeighborBlockLightSC(snapshot, x, y, z);
+    uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
+    uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
     for (int d = 0; d < 6; ++d) {
         const int nx = x + kFaceNormals[static_cast<size_t>(d)].x;
         const int ny = y + kFaceNormals[static_cast<size_t>(d)].y;
         const int nz = z + kFaceNormals[static_cast<size_t>(d)].z;
-        sunLevel = std::max(sunLevel, getNeighborSunlightSC(snapshot, nx, ny, nz));
-        blockLevel = std::max(blockLevel, getNeighborBlockLightSC(snapshot, nx, ny, nz));
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot, nx, ny, nz));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot, nx, ny, nz));
     }
     const float sunNormalized = lightToNormalized(sunLevel);
     const float blockNormalized = lightToNormalized(blockLevel);
@@ -925,6 +1064,7 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
         // All-air sub-chunk — blocks and lightMap default to 0
         // Still capture borders for completeness
         captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+        captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
         return snapshot;
     }
 
@@ -942,6 +1082,7 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
 
     // Capture all 6-direction borders
     captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+    captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
 
     return snapshot;
 }

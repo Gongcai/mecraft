@@ -21,6 +21,7 @@ struct MoveIntentComponent {
     bool wantsJump   = false;
     bool wantsSprint = false;
     bool wantsCrouch = false;
+    bool toggleFlightMode = false;
 };
 
 struct LookIntentComponent {
@@ -56,6 +57,10 @@ struct CharacterControllerComponent {
     float crouchEyeHeight = 1.0f;
     float eyeHeightLerpSpeed = 15.0f;
     bool crouchChangesEyeHeight = true;
+};
+
+struct FlightStateComponent {
+    bool isFlying = false;
 };
 
 struct CameraStateComponent {

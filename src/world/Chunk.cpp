@@ -46,6 +46,16 @@ int chunkDirectionToSubChunkDirection(const int direction) {
         default: return -1;
     }
 }
+
+void markSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, const int localY) {
+    chunk.markSubChunkDirty(scy);
+    if (localY == 0) {
+        chunk.markSubChunkDirty(scy - 1);
+    }
+    if (localY == Chunk::SUB_CHUNK_SIZE - 1) {
+        chunk.markSubChunkDirty(scy + 1);
+    }
+}
 } // namespace
 
 Chunk::Chunk(const int chunkX, const int chunkZ) : m_chunkX(chunkX), m_chunkZ(chunkZ) {
@@ -214,6 +224,7 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
     }
 
     uint32_t dirtyMask = 0;
+    uint32_t meshDirtyMask = 0;
 
     for (int y = 0; y < SIZE_Y; ++y) {
         const int scy = toSubChunkIndex(y);
@@ -249,6 +260,18 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
         ++m_lightRevision;
         for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
             if ((dirtyMask & (1u << scy)) != 0u) {
+                meshDirtyMask |= (1u << scy);
+                if (scy > 0) {
+                    meshDirtyMask |= (1u << (scy - 1));
+                }
+                if (scy + 1 < NUM_SUB_CHUNKS) {
+                    meshDirtyMask |= (1u << (scy + 1));
+                }
+            }
+        }
+
+        for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+            if ((meshDirtyMask & (1u << scy)) != 0u) {
                 markSubChunkDirty(scy);
             }
         }
@@ -298,23 +321,18 @@ void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id
         return;
     }
 
-    if (localY == 0) {
-        markSubChunkDirty(scy - 1);
-    }
-    if (localY == SUB_CHUNK_SIZE - 1) {
-        markSubChunkDirty(scy + 1);
-    }
+    markSubChunkAndVerticalNeighborsDirty(*this, scy, localY);
     if (x == 0 && neighbors[1]) {
-        neighbors[1]->markSubChunkDirty(scy);
+        markSubChunkAndVerticalNeighborsDirty(*neighbors[1], scy, localY);
     }
     if (x == SIZE_X - 1 && neighbors[0]) {
-        neighbors[0]->markSubChunkDirty(scy);
+        markSubChunkAndVerticalNeighborsDirty(*neighbors[0], scy, localY);
     }
     if (z == 0 && neighbors[3]) {
-        neighbors[3]->markSubChunkDirty(scy);
+        markSubChunkAndVerticalNeighborsDirty(*neighbors[3], scy, localY);
     }
     if (z == SIZE_Z - 1 && neighbors[2]) {
-        neighbors[2]->markSubChunkDirty(scy);
+        markSubChunkAndVerticalNeighborsDirty(*neighbors[2], scy, localY);
     }
 
     m_dirty = m_dirtySubChunkMask != 0u;

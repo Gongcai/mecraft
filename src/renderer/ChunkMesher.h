@@ -17,6 +17,9 @@ class World;
 constexpr std::size_t SC_BLOCK_COUNT = static_cast<std::size_t>(SubChunk::SIZE) *
                                         SubChunk::SIZE * SubChunk::SIZE;  // 4096
 constexpr std::size_t SC_BORDER_SIZE = static_cast<std::size_t>(SubChunk::SIZE) * SubChunk::SIZE;  // 256
+constexpr int SC_HALO_SIZE = SubChunk::SIZE + 2;
+constexpr std::size_t SC_HALO_BLOCK_COUNT = static_cast<std::size_t>(SC_HALO_SIZE) *
+                                            SC_HALO_SIZE * SC_HALO_SIZE;
 
 // Snapshot of a single SubChunk for meshing.
 // Contains the 16x16x16 block/light data plus 6-direction border slices.
@@ -24,6 +27,8 @@ struct SubChunkMeshingSnapshot {
     // Core data (16x16x16)
     std::array<BlockID, SC_BLOCK_COUNT> blocks{};
     std::array<uint8_t, SC_BLOCK_COUNT> lightMap{};
+    std::array<BlockID, SC_HALO_BLOCK_COUNT> haloBlocks{};
+    std::array<uint8_t, SC_HALO_BLOCK_COUNT> haloLightMap{};
 
     // Horizontal borders (same as before, but now per-sub-chunk height slice)
     std::array<BlockID, SC_BORDER_SIZE> posXBorder{};

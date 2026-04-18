@@ -35,6 +35,7 @@ void GameplayScene::initLocalPlayer() {
     m_registry.emplace<BlockTargetComponent>(m_localPlayer);
     m_registry.emplace<BlockBreakComponent>(m_localPlayer);
     m_registry.emplace<BlockInteractionRuntimeComponent>(m_localPlayer);
+    m_registry.emplace<FlightStateComponent>(m_localPlayer);
     m_registry.emplace<FootstepStateComponent>(m_localPlayer);
     m_registry.emplace<LandingStateComponent>(m_localPlayer);
 

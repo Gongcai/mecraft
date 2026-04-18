@@ -18,6 +18,7 @@ struct InputFrameState {
 
     // Action states
     bool jump             = false;
+    bool jumpDoubleTap    = false;
     bool sprint           = false;
     bool crouch           = false;
     bool attack           = false;

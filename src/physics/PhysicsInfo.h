@@ -41,6 +41,7 @@ struct MoveIntent {
     bool wantsJump = false;
     bool wantsSprint = false;
     bool wantsCrouch = false;
+    bool isFlying = false;
 };
 
 struct PhysicsTuning {
