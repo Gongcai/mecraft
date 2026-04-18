@@ -3,15 +3,25 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <utility>
 
 #include "Block.h"
 #include "Chunk.h"
 
 namespace {
+#if defined(_MSC_VER)
+#define MECRAFT_FORCEINLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define MECRAFT_FORCEINLINE inline __attribute__((always_inline))
+#else
+#define MECRAFT_FORCEINLINE inline
+#endif
+
 struct SolverContext {
     const LightJob& job;
     bool hasBlockSnapshot = false;
+    std::vector<uint8_t> opacitySnapshot;
 };
 
 template <typename T>
@@ -64,27 +74,51 @@ struct RemovalNode {
 constexpr int DX[6] = {1, -1, 0, 0, 0, 0};
 constexpr int DY[6] = {0, 0, 1, -1, 0, 0};
 constexpr int DZ[6] = {0, 0, 0, 0, 1, -1};
+constexpr std::ptrdiff_t INDEX_DELTAS[6] = {
+    1,
+    -1,
+    static_cast<std::ptrdiff_t>(Chunk::SIZE_X * Chunk::SIZE_Z),
+    -static_cast<std::ptrdiff_t>(Chunk::SIZE_X * Chunk::SIZE_Z),
+    static_cast<std::ptrdiff_t>(Chunk::SIZE_X),
+    -static_cast<std::ptrdiff_t>(Chunk::SIZE_X)
+};
 
-inline std::size_t packedIndex(const int x, const int y, const int z) {
-    return Chunk::toIndex(x, y, z);
+MECRAFT_FORCEINLINE std::size_t packedIndex(const int x, const int y, const int z) {
+    return static_cast<std::size_t>(x) +
+           static_cast<std::size_t>(z) * Chunk::SIZE_X +
+           static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
 }
 
-inline uint8_t getSky(const std::vector<uint8_t>& packed, const int x, const int y, const int z) {
-    return static_cast<uint8_t>((packed[packedIndex(x, y, z)] >> 4) & 0x0F);
+MECRAFT_FORCEINLINE uint8_t getSkyAtIndex(const std::vector<uint8_t>& packed, const std::size_t idx) {
+    return static_cast<uint8_t>((packed[idx] >> 4) & 0x0F);
 }
 
-inline uint8_t getBlock(const std::vector<uint8_t>& packed, const int x, const int y, const int z) {
-    return static_cast<uint8_t>(packed[packedIndex(x, y, z)] & 0x0F);
+MECRAFT_FORCEINLINE uint8_t getBlockAtIndex(const std::vector<uint8_t>& packed, const std::size_t idx) {
+    return static_cast<uint8_t>(packed[idx] & 0x0F);
 }
 
-inline void setSky(std::vector<uint8_t>& packed, const int x, const int y, const int z, const uint8_t value) {
-    const std::size_t idx = packedIndex(x, y, z);
+MECRAFT_FORCEINLINE void setSkyAtIndex(std::vector<uint8_t>& packed, const std::size_t idx, const uint8_t value) {
     packed[idx] = static_cast<uint8_t>((packed[idx] & 0x0F) | ((value & 0x0F) << 4));
 }
 
-inline void setBlock(std::vector<uint8_t>& packed, const int x, const int y, const int z, const uint8_t value) {
-    const std::size_t idx = packedIndex(x, y, z);
+MECRAFT_FORCEINLINE void setBlockAtIndex(std::vector<uint8_t>& packed, const std::size_t idx, const uint8_t value) {
     packed[idx] = static_cast<uint8_t>((packed[idx] & 0xF0) | (value & 0x0F));
+}
+
+inline uint8_t getSky(const std::vector<uint8_t>& packed, const int x, const int y, const int z) {
+    return getSkyAtIndex(packed, packedIndex(x, y, z));
+}
+
+inline uint8_t getBlock(const std::vector<uint8_t>& packed, const int x, const int y, const int z) {
+    return getBlockAtIndex(packed, packedIndex(x, y, z));
+}
+
+inline void setSky(std::vector<uint8_t>& packed, const int x, const int y, const int z, const uint8_t value) {
+    setSkyAtIndex(packed, packedIndex(x, y, z), value);
+}
+
+inline void setBlock(std::vector<uint8_t>& packed, const int x, const int y, const int z, const uint8_t value) {
+    setBlockAtIndex(packed, packedIndex(x, y, z), value);
 }
 
 uint8_t getLight(const std::vector<uint8_t>& packed,
@@ -112,6 +146,12 @@ bool isInside(const int x, const int y, const int z) {
     return x >= 0 && x < Chunk::SIZE_X && y >= 0 && y < Chunk::SIZE_Y && z >= 0 && z < Chunk::SIZE_Z;
 }
 
+MECRAFT_FORCEINLINE bool isInteriorCell(const int x, const int y, const int z) {
+    return x > 0 && x < (Chunk::SIZE_X - 1) &&
+           y > 0 && y < (Chunk::SIZE_Y - 1) &&
+           z > 0 && z < (Chunk::SIZE_Z - 1);
+}
+
 SolverContext makeSolverContext(const LightJob& job) {
     BlockRegistry::ensureInitialized();
 
@@ -119,6 +159,12 @@ SolverContext makeSolverContext(const LightJob& job) {
         job,
         job.blockSnapshot.size() == Chunk::BLOCK_COUNT
     };
+    if (context.hasBlockSnapshot) {
+        context.opacitySnapshot.resize(Chunk::BLOCK_COUNT);
+        for (std::size_t i = 0; i < Chunk::BLOCK_COUNT; ++i) {
+            context.opacitySnapshot[i] = BlockRegistry::getOpacityFast(job.blockSnapshot[i]);
+        }
+    }
     return context;
 }
 
@@ -132,29 +178,38 @@ BlockID getBlockId(const SolverContext& context, const int x, const int y, const
     return BlockIds::AIR;
 }
 
-uint8_t getOpacity(SolverContext& context, const int x, const int y, const int z) {
-    return BlockRegistry::getOpacityFast(getBlockId(context, x, y, z));
+MECRAFT_FORCEINLINE uint8_t getOpacityAtIndex(const SolverContext& context, const std::size_t idx) {
+    return context.hasBlockSnapshot
+        ? context.opacitySnapshot[idx]
+        : 0;
 }
 
-uint8_t propagateLevel(SolverContext& context,
-                       const LightKind kind,
-                       const uint8_t level,
-                       const int direction,
-                       const int nx,
-                       const int ny,
-                       const int nz) {
-    if (!isInside(nx, ny, nz) || level == 0) {
+MECRAFT_FORCEINLINE uint8_t getOpacityInside(const SolverContext& context, const int x, const int y, const int z) {
+    return context.hasBlockSnapshot
+        ? getOpacityAtIndex(context, packedIndex(x, y, z))
+        : 0;
+}
+
+uint8_t getOpacity(const SolverContext& context, const int x, const int y, const int z) {
+    if (!isInside(x, y, z)) {
+        return 0;
+    }
+    return getOpacityInside(context, x, y, z);
+}
+
+template <LightKind Kind>
+MECRAFT_FORCEINLINE uint8_t propagateLevelFromOpacity(const uint8_t level,
+                                                      const int direction,
+                                                      const uint8_t opacity) {
+    if (level == 0 || opacity >= 15) {
         return 0;
     }
 
-    const uint8_t opacity = getOpacity(context, nx, ny, nz);
-    if (opacity >= 15) {
-        return 0;
-    }
-
-    uint8_t attenuation = std::max<uint8_t>(1, opacity);
-    if (kind == LightKind::Sky && DY[direction] == -1) {
-        attenuation = opacity;
+    uint8_t attenuation = (opacity == 0) ? 1 : opacity;
+    if constexpr (Kind == LightKind::Sky) {
+        if (DY[direction] == -1) {
+            attenuation = opacity;
+        }
     }
 
     return level > attenuation ? static_cast<uint8_t>(level - attenuation) : 0;
@@ -446,60 +501,55 @@ void seedBoundaryDiffs(const std::vector<uint8_t>& basePacked,
     }
 }
 
-void runRemovePass(SolverContext& context,
-                   const std::vector<uint8_t>& basePacked,
-                   std::vector<uint8_t>& workingPacked,
-                   const LightKind kind,
-                   WorkQueue<RemovalNode>& removeQueue,
-                   WorkQueue<LightNode>& addQueue,
-                   uint32_t& nodesVisited) {
+template <LightKind Kind>
+void runRemovePassTyped(SolverContext& context,
+                        const std::vector<uint8_t>& basePacked,
+                        std::vector<uint8_t>& workingPacked,
+                        WorkQueue<RemovalNode>& removeQueue,
+                        WorkQueue<LightNode>& addQueue,
+                        uint32_t& nodesVisited) {
     while (!removeQueue.empty()) {
         const RemovalNode cur = removeQueue.pop();
         ++nodesVisited;
 
-        for (int d = 0; d < 6; ++d) {
-            const int nx = cur.x + DX[d];
-            const int ny = cur.y + DY[d];
-            const int nz = cur.z + DZ[d];
-            if (!isInside(nx, ny, nz)) {
-                continue;
-            }
+        if (isInteriorCell(cur.x, cur.y, cur.z)) {
+            const std::size_t curIdx = packedIndex(cur.x, cur.y, cur.z);
+            for (int d = 0; d < 6; ++d) {
+                const int nx = cur.x + DX[d];
+                const int ny = cur.y + DY[d];
+                const int nz = cur.z + DZ[d];
+                const std::size_t neighborIdx = static_cast<std::size_t>(
+                    static_cast<std::ptrdiff_t>(curIdx) + INDEX_DELTAS[d]);
+                const uint8_t neighborLevel = (Kind == LightKind::Sky)
+                    ? getSkyAtIndex(workingPacked, neighborIdx)
+                    : getBlockAtIndex(workingPacked, neighborIdx);
+                if (neighborLevel == 0) {
+                    continue;
+                }
 
-            const uint8_t neighborLevel = getLight(workingPacked, kind, nx, ny, nz);
-            if (neighborLevel == 0) {
-                continue;
-            }
+                const uint8_t opacity = getOpacityAtIndex(context, neighborIdx);
+                const uint8_t propagated = propagateLevelFromOpacity<Kind>(cur.level, d, opacity);
+                if (propagated == 0) {
+                    continue;
+                }
 
-            const uint8_t propagated = propagateLevel(context, kind, cur.level, d, nx, ny, nz);
-            if (propagated == 0) {
-                continue;
-            }
-
-            const uint8_t sourceLevel = getLight(basePacked, kind, nx, ny, nz);
-            if (sourceLevel < neighborLevel && neighborLevel <= propagated) {
-                setLight(workingPacked, kind, nx, ny, nz, sourceLevel);
-                removeQueue.push({nx, ny, nz, neighborLevel});
-                if (sourceLevel > 0) {
+                const uint8_t sourceLevel = (Kind == LightKind::Sky)
+                    ? getSkyAtIndex(basePacked, neighborIdx)
+                    : getBlockAtIndex(basePacked, neighborIdx);
+                if (sourceLevel < neighborLevel && neighborLevel <= propagated) {
+                    if constexpr (Kind == LightKind::Sky) {
+                        setSkyAtIndex(workingPacked, neighborIdx, sourceLevel);
+                    } else {
+                        setBlockAtIndex(workingPacked, neighborIdx, sourceLevel);
+                    }
+                    removeQueue.push({nx, ny, nz, neighborLevel});
+                    if (sourceLevel > 0) {
+                        addQueue.push({nx, ny, nz});
+                    }
+                } else {
                     addQueue.push({nx, ny, nz});
                 }
-            } else {
-                addQueue.push({nx, ny, nz});
             }
-        }
-    }
-}
-
-void runAddPass(SolverContext& context,
-                std::vector<uint8_t>& packedLight,
-                const LightKind kind,
-                WorkQueue<LightNode>& addQueue,
-                uint32_t& nodesVisited) {
-    while (!addQueue.empty()) {
-        const LightNode cur = addQueue.pop();
-        ++nodesVisited;
-
-        const uint8_t curLight = getLight(packedLight, kind, cur.x, cur.y, cur.z);
-        if (curLight == 0) {
             continue;
         }
 
@@ -511,14 +561,134 @@ void runAddPass(SolverContext& context,
                 continue;
             }
 
-            const uint8_t propagated = propagateLevel(context, kind, curLight, d, nx, ny, nz);
-            if (propagated <= getLight(packedLight, kind, nx, ny, nz)) {
+            const std::size_t neighborIdx = packedIndex(nx, ny, nz);
+            const uint8_t neighborLevel = (Kind == LightKind::Sky)
+                ? getSkyAtIndex(workingPacked, neighborIdx)
+                : getBlockAtIndex(workingPacked, neighborIdx);
+            if (neighborLevel == 0) {
                 continue;
             }
 
-            setLight(packedLight, kind, nx, ny, nz, propagated);
+            const uint8_t opacity = getOpacityAtIndex(context, neighborIdx);
+            const uint8_t propagated = propagateLevelFromOpacity<Kind>(cur.level, d, opacity);
+            if (propagated == 0) {
+                continue;
+            }
+
+            const uint8_t sourceLevel = (Kind == LightKind::Sky)
+                ? getSkyAtIndex(basePacked, neighborIdx)
+                : getBlockAtIndex(basePacked, neighborIdx);
+            if (sourceLevel < neighborLevel && neighborLevel <= propagated) {
+                if constexpr (Kind == LightKind::Sky) {
+                    setSkyAtIndex(workingPacked, neighborIdx, sourceLevel);
+                } else {
+                    setBlockAtIndex(workingPacked, neighborIdx, sourceLevel);
+                }
+                removeQueue.push({nx, ny, nz, neighborLevel});
+                if (sourceLevel > 0) {
+                    addQueue.push({nx, ny, nz});
+                }
+            } else {
+                addQueue.push({nx, ny, nz});
+            }
+        }
+    }
+}
+
+void runRemovePass(SolverContext& context,
+                   const std::vector<uint8_t>& basePacked,
+                   std::vector<uint8_t>& workingPacked,
+                   const LightKind kind,
+                   WorkQueue<RemovalNode>& removeQueue,
+                   WorkQueue<LightNode>& addQueue,
+                   uint32_t& nodesVisited) {
+    if (kind == LightKind::Sky) {
+        runRemovePassTyped<LightKind::Sky>(context, basePacked, workingPacked, removeQueue, addQueue, nodesVisited);
+    } else {
+        runRemovePassTyped<LightKind::Block>(context, basePacked, workingPacked, removeQueue, addQueue, nodesVisited);
+    }
+}
+
+template <LightKind Kind>
+void runAddPassTyped(SolverContext& context,
+                     std::vector<uint8_t>& packedLight,
+                     WorkQueue<LightNode>& addQueue,
+                     uint32_t& nodesVisited) {
+    while (!addQueue.empty()) {
+        const LightNode cur = addQueue.pop();
+        ++nodesVisited;
+
+        const std::size_t curIdx = packedIndex(cur.x, cur.y, cur.z);
+        const uint8_t curLight = (Kind == LightKind::Sky)
+            ? getSkyAtIndex(packedLight, curIdx)
+            : getBlockAtIndex(packedLight, curIdx);
+        if (curLight == 0) {
+            continue;
+        }
+
+        if (isInteriorCell(cur.x, cur.y, cur.z)) {
+            for (int d = 0; d < 6; ++d) {
+                const int nx = cur.x + DX[d];
+                const int ny = cur.y + DY[d];
+                const int nz = cur.z + DZ[d];
+                const std::size_t neighborIdx = static_cast<std::size_t>(
+                    static_cast<std::ptrdiff_t>(curIdx) + INDEX_DELTAS[d]);
+                const uint8_t opacity = getOpacityAtIndex(context, neighborIdx);
+                const uint8_t propagated = propagateLevelFromOpacity<Kind>(curLight, d, opacity);
+                const uint8_t neighborLight = (Kind == LightKind::Sky)
+                    ? getSkyAtIndex(packedLight, neighborIdx)
+                    : getBlockAtIndex(packedLight, neighborIdx);
+                if (propagated <= neighborLight) {
+                    continue;
+                }
+
+                if constexpr (Kind == LightKind::Sky) {
+                    setSkyAtIndex(packedLight, neighborIdx, propagated);
+                } else {
+                    setBlockAtIndex(packedLight, neighborIdx, propagated);
+                }
+                addQueue.push({nx, ny, nz});
+            }
+            continue;
+        }
+
+        for (int d = 0; d < 6; ++d) {
+            const int nx = cur.x + DX[d];
+            const int ny = cur.y + DY[d];
+            const int nz = cur.z + DZ[d];
+            if (!isInside(nx, ny, nz)) {
+                continue;
+            }
+
+            const std::size_t neighborIdx = packedIndex(nx, ny, nz);
+            const uint8_t opacity = getOpacityAtIndex(context, neighborIdx);
+            const uint8_t propagated = propagateLevelFromOpacity<Kind>(curLight, d, opacity);
+            const uint8_t neighborLight = (Kind == LightKind::Sky)
+                ? getSkyAtIndex(packedLight, neighborIdx)
+                : getBlockAtIndex(packedLight, neighborIdx);
+            if (propagated <= neighborLight) {
+                continue;
+            }
+
+            if constexpr (Kind == LightKind::Sky) {
+                setSkyAtIndex(packedLight, neighborIdx, propagated);
+            } else {
+                setBlockAtIndex(packedLight, neighborIdx, propagated);
+            }
             addQueue.push({nx, ny, nz});
         }
+    }
+}
+
+void runAddPass(SolverContext& context,
+                std::vector<uint8_t>& packedLight,
+                const LightKind kind,
+                WorkQueue<LightNode>& addQueue,
+                uint32_t& nodesVisited) {
+    if (kind == LightKind::Sky) {
+        runAddPassTyped<LightKind::Sky>(context, packedLight, addQueue, nodesVisited);
+    } else {
+        runAddPassTyped<LightKind::Block>(context, packedLight, addQueue, nodesVisited);
     }
 }
 

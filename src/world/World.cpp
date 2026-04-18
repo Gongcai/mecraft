@@ -14,6 +14,7 @@ void World::init(uint32_t seed) {
     m_terrainGen.init(seed, m_flatSurfaceY);
     m_chunks.clear();
     m_loadQueue.clear();
+    ++m_activeChunkRevision;
     m_lightService = std::make_unique<LightService>(*this);
     m_lightService->start(m_threadPool);
     m_dayNightSystem.setTimeOfDay(300.0f); // Default to mid-day
@@ -294,6 +295,7 @@ void World::loadChunk(int cx, int cz) {
     chunk->seedInitialLightMap();
 
     m_chunks[key] = std::move(chunk);
+    ++m_activeChunkRevision;
 
     // Wire up neighbor pointers for the new chunk and its existing neighbors
     Chunk* cur = m_chunks[key].get();
@@ -357,6 +359,7 @@ void World::unloadChunk(int cx, int cz) {
     if (chunk->neighbors[3]) chunk->neighbors[3]->neighbors[2] = nullptr;
 
     m_chunks.erase(it);
+    ++m_activeChunkRevision;
 }
 
 

@@ -128,12 +128,34 @@ private:
         Chunk* chunk = nullptr;
         int scy = -1;  // -1 = column aggregate, otherwise sub-chunk index
         bool aggregated = false;
+    };
+
+    struct TransparentSubChunkCache {
+        glm::vec3 boundsMin = glm::vec3(0.0f);
+        glm::vec3 boundsMax = glm::vec3(0.0f);
+    };
+
+    struct ChunkRenderColumnCache {
+        Chunk* chunk = nullptr;
+        int64_t chunkKey = 0;
         int regionX = 0;
         int regionZ = 0;
         int chunkX = 0;
         int chunkZ = 0;
-        glm::vec3 boundsMin = glm::vec3(0.0f);
-        glm::vec3 boundsMax = glm::vec3(0.0f);
+        glm::vec3 worldOffset = glm::vec3(0.0f);
+        bool stateValid = false;
+        bool aggregatedPresent = false;
+        bool aggregatedHasOpaque = false;
+        bool aggregatedHasCutout = false;
+        glm::vec3 aggregatedBoundsMin = glm::vec3(0.0f);
+        glm::vec3 aggregatedBoundsMax = glm::vec3(0.0f);
+        bool columnHasBounds = false;
+        glm::vec3 columnBoundsMin = glm::vec3(0.0f);
+        glm::vec3 columnBoundsMax = glm::vec3(0.0f);
+        std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshRevisions{};
+        std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
+        std::array<TransparentSubChunkCache, Chunk::NUM_SUB_CHUNKS> transparentSubChunks{};
+        int transparentCount = 0;
     };
 
 
@@ -148,6 +170,8 @@ private:
                                             std::vector<ChunkRenderEntry>& transparentEntries);
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
+    void syncChunkRenderColumns(const World& world);
+    void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
     void initOutlineMesh();
     void initBreakOverlayMesh();
     void renderBlockOutline(const Player& player);
@@ -222,7 +246,9 @@ private:
     int m_debugLightMode = 0;
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
-    std::vector<ChunkRenderEntry> m_chunkRenderEntries;
+    std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
+    uint64_t m_chunkRenderColumnsRevision = 0;
+    int m_chunkRenderColumnsRegionSize = 0;
 };
 
 

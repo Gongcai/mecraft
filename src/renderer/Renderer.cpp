@@ -473,100 +473,21 @@ void Renderer::submitMeshingJobs(const World& world) {
 void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                   std::vector<ChunkRenderEntry>& cutoutEntries,
                                                   std::vector<ChunkRenderEntry>& transparentEntries) {
-    const auto& activeChunks = world.getActiveChunks();
-    const int regionChunkSize = std::max(1, m_regionChunkSize);
-    const int modelLoc = m_chunkShader->getUniformLocation("model");
-
-    m_chunkRenderEntries.clear();
-    m_chunkRenderEntries.reserve(activeChunks.size() * 4);
-
-    for (const auto& pair : activeChunks) {
-        Chunk& chunk = *pair.second;
-        chunk.ensureColumnMeshBuilt();
-        const glm::ivec3 offset = chunk.getWorldOffset();
-        const glm::vec3 worldOffset(offset);
-        const SubChunkMesh& columnMesh = chunk.getColumnMesh();
-
-        if (columnMesh.vertexCount > 0 || columnMesh.cutoutVertexCount > 0) {
-            ChunkRenderEntry entry;
-            entry.chunk = &chunk;
-            entry.aggregated = true;
-            entry.regionX = floorDiv(chunk.m_chunkX, regionChunkSize);
-            entry.regionZ = floorDiv(chunk.m_chunkZ, regionChunkSize);
-            entry.chunkX = chunk.m_chunkX;
-            entry.chunkZ = chunk.m_chunkZ;
-            entry.boundsMin = columnMesh.hasBounds
-                ? columnMesh.boundsMin + worldOffset
-                : glm::vec3(offset.x, offset.y, offset.z);
-            entry.boundsMax = columnMesh.hasBounds
-                ? columnMesh.boundsMax + worldOffset
-                : glm::vec3(offset.x + Chunk::SIZE_X, offset.y + Chunk::SIZE_Y, offset.z + Chunk::SIZE_Z);
-            m_chunkRenderEntries.push_back(entry);
-        }
-
-        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-            const SubChunk* sc = chunk.getSubChunk(scy);
-            if (!sc) continue;
-
-            const SubChunkMesh& mesh = sc->getMesh();
-            if (mesh.transparentVertexCount == 0) {
-                continue;
-            }
-
-            const int yBase = scy * SubChunk::SIZE;
-            const glm::vec3 sectionMin = mesh.hasBounds
-                ? mesh.boundsMin + worldOffset
-                : glm::vec3(offset.x, static_cast<float>(yBase) + offset.y, offset.z);
-            const glm::vec3 sectionMax = mesh.hasBounds
-                ? mesh.boundsMax + worldOffset
-                : glm::vec3(offset.x + Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE) + offset.y, offset.z + Chunk::SIZE_Z);
-
-            ChunkRenderEntry entry;
-            entry.chunk = &chunk;
-            entry.scy = scy;
-            entry.aggregated = false;
-            entry.regionX = floorDiv(chunk.m_chunkX, regionChunkSize);
-            entry.regionZ = floorDiv(chunk.m_chunkZ, regionChunkSize);
-            entry.chunkX = chunk.m_chunkX;
-            entry.chunkZ = chunk.m_chunkZ;
-            entry.boundsMin = sectionMin;
-            entry.boundsMax = sectionMax;
-            m_chunkRenderEntries.push_back(entry);
-        }
-    }
-
-    if (m_chunkRenderEntries.empty()) {
+    syncChunkRenderColumns(world);
+    if (m_chunkRenderColumns.empty()) {
         return;
     }
 
-    std::sort(m_chunkRenderEntries.begin(), m_chunkRenderEntries.end(),
-              [](const ChunkRenderEntry& a, const ChunkRenderEntry& b) {
-                  if (a.regionX != b.regionX) {
-                      return a.regionX < b.regionX;
-                  }
-                  if (a.regionZ != b.regionZ) {
-                      return a.regionZ < b.regionZ;
-                  }
-                  if (a.chunkX != b.chunkX) {
-                      return a.chunkX < b.chunkX;
-                  }
-                  if (a.chunkZ != b.chunkZ) {
-                      return a.chunkZ < b.chunkZ;
-                  }
-                  if (a.aggregated != b.aggregated) {
-                      return a.aggregated && !b.aggregated;
-                  }
-                  return a.scy < b.scy;
-              });
+    const int modelLoc = m_chunkShader->getUniformLocation("model");
 
     GLuint lastOpaqueVao = 0;
 
     size_t regionBegin = 0;
-    while (regionBegin < m_chunkRenderEntries.size()) {
+    while (regionBegin < m_chunkRenderColumns.size()) {
         size_t regionEnd = regionBegin + 1;
-        const ChunkRenderEntry& regionFirst = m_chunkRenderEntries[regionBegin];
-        while (regionEnd < m_chunkRenderEntries.size()) {
-            const ChunkRenderEntry& candidate = m_chunkRenderEntries[regionEnd];
+        const ChunkRenderColumnCache& regionFirst = m_chunkRenderColumns[regionBegin];
+        while (regionEnd < m_chunkRenderColumns.size()) {
+            const ChunkRenderColumnCache& candidate = m_chunkRenderColumns[regionEnd];
             if (candidate.regionX != regionFirst.regionX || candidate.regionZ != regionFirst.regionZ) {
                 break;
             }
@@ -576,9 +497,15 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
         bool regionHasBounds = false;
         glm::vec3 regionMin(0.0f);
         glm::vec3 regionMax(0.0f);
+        int regionCandidateCount = 0;
         for (size_t i = regionBegin; i < regionEnd; ++i) {
-            const ChunkRenderEntry& entry = m_chunkRenderEntries[i];
-            expandBounds(regionMin, regionMax, regionHasBounds, entry.boundsMin, entry.boundsMax);
+            ChunkRenderColumnCache& column = m_chunkRenderColumns[i];
+            refreshChunkRenderColumnCache(column);
+            if (!column.columnHasBounds) {
+                continue;
+            }
+            expandBounds(regionMin, regionMax, regionHasBounds, column.columnBoundsMin, column.columnBoundsMax);
+            regionCandidateCount += (column.aggregatedPresent ? 1 : 0) + column.transparentCount;
         }
 
         if (!regionHasBounds) {
@@ -591,7 +518,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
         FrustumPlane culledPlane = FrustumPlane::Count;
         if (!isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
             if (m_chunkCullingDebugEnabled) {
-                recordChunkCull(culledPlane, static_cast<int>(regionEnd - regionBegin));
+                recordChunkCull(culledPlane, regionCandidateCount);
             }
             regionBegin = regionEnd;
             continue;
@@ -604,77 +531,50 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
         }
 #endif
 
-        size_t columnBegin = regionBegin;
-        while (columnBegin < regionEnd) {
-            size_t columnEnd = columnBegin + 1;
-            const ChunkRenderEntry& columnFirst = m_chunkRenderEntries[columnBegin];
-            while (columnEnd < regionEnd) {
-                const ChunkRenderEntry& candidate = m_chunkRenderEntries[columnEnd];
-                if (candidate.chunkX != columnFirst.chunkX || candidate.chunkZ != columnFirst.chunkZ) {
-                    break;
-                }
-                ++columnEnd;
-            }
-
-            bool columnHasBounds = false;
-            glm::vec3 columnMin(0.0f);
-            glm::vec3 columnMax(0.0f);
-            for (size_t i = columnBegin; i < columnEnd; ++i) {
-                const ChunkRenderEntry& entry = m_chunkRenderEntries[i];
-                expandBounds(columnMin, columnMax, columnHasBounds, entry.boundsMin, entry.boundsMax);
-            }
-
-            if (!columnHasBounds) {
-                columnBegin = columnEnd;
+        for (size_t i = regionBegin; i < regionEnd; ++i) {
+            ChunkRenderColumnCache& column = m_chunkRenderColumns[i];
+            if (column.chunk == nullptr || !column.columnHasBounds) {
                 continue;
             }
 
+            const int columnCandidateCount = (column.aggregatedPresent ? 1 : 0) + column.transparentCount;
+
 #ifndef NDEBUG
             ++m_columnTestsThisFrame;
-            if (!isChunkInFrustum(columnMin, columnMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+            FrustumPlane culledPlane = FrustumPlane::Count;
+            if (!isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax,
+                                  m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                 if (m_chunkCullingDebugEnabled) {
-                    recordChunkCull(culledPlane, static_cast<int>(columnEnd - columnBegin));
+                    recordChunkCull(culledPlane, columnCandidateCount);
                 }
-                columnBegin = columnEnd;
                 continue;
             }
             ++m_columnPassedThisFrame;
 #else
-            if (!isChunkInFrustum(columnMin, columnMax)) {
-                columnBegin = columnEnd;
+            if (!isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax)) {
                 continue;
             }
 #endif
 
-            for (size_t i = columnBegin; i < columnEnd; ++i) {
-                const ChunkRenderEntry& entry = m_chunkRenderEntries[i];
-                if (entry.chunk == nullptr) {
-                    continue;
-                }
-
+            if (column.aggregatedPresent) {
 #ifndef NDEBUG
                 ++m_chunkTestsThisFrame;
-                if (!isChunkInFrustum(entry.boundsMin, entry.boundsMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                if (!isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
+                                      m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                     if (m_chunkCullingDebugEnabled) {
                         recordChunkCull(culledPlane, 1);
                     }
-                    continue;
-                }
-                ++m_chunkPassedThisFrame;
+                } else {
+                    ++m_chunkPassedThisFrame;
 #else
-                if (!isChunkInFrustum(entry.boundsMin, entry.boundsMax)) {
-                    continue;
-                }
+                if (isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
 #endif
-
-                if (entry.aggregated) {
-                    const SubChunkMesh& mesh = entry.chunk->getColumnMesh();
+                    const SubChunkMesh& mesh = column.chunk->getColumnMesh();
                     glm::mat4 model(1.0f);
-                    const glm::ivec3 offset = entry.chunk->getWorldOffset();
-                    model = glm::translate(model, glm::vec3(offset));
+                    model = glm::translate(model, column.worldOffset);
                     m_chunkShader->setMat4(modelLoc, model);
 
-                    if (mesh.vertexCount > 0) {
+                    if (column.aggregatedHasOpaque && mesh.vertexCount > 0) {
                         if (lastOpaqueVao != mesh.vao) {
                             glBindVertexArray(mesh.vao);
                             lastOpaqueVao = mesh.vao;
@@ -683,25 +583,161 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                         ++drawCallCount;
                     }
 
-                    if (mesh.cutoutVertexCount > 0) {
-                        cutoutEntries.push_back(entry);
+                    if (column.aggregatedHasCutout && mesh.cutoutVertexCount > 0) {
+                        cutoutEntries.push_back({column.chunk, -1, true});
                     }
-                    continue;
-                }
-
-                const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-                if (!sc) continue;
-                const SubChunkMesh& mesh = sc->getMesh();
-                if (mesh.transparentVertexCount > 0) {
-                    transparentEntries.push_back(entry);
                 }
             }
 
-            columnBegin = columnEnd;
+            for (int transparentIndex = 0; transparentIndex < column.transparentCount; ++transparentIndex) {
+                const int scy = column.transparentScys[transparentIndex];
+                const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
+
+#ifndef NDEBUG
+                ++m_chunkTestsThisFrame;
+                if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax,
+                                      m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                    if (m_chunkCullingDebugEnabled) {
+                        recordChunkCull(culledPlane, 1);
+                    }
+                    continue;
+                }
+                ++m_chunkPassedThisFrame;
+#else
+                if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax)) {
+                    continue;
+                }
+#endif
+
+                transparentEntries.push_back({column.chunk, scy, false});
+            }
         }
 
         regionBegin = regionEnd;
     }
+}
+
+void Renderer::syncChunkRenderColumns(const World& world) {
+    const uint64_t activeChunkRevision = world.getActiveChunkRevision();
+    const int regionChunkSize = std::max(1, m_regionChunkSize);
+    if (m_chunkRenderColumnsRevision == activeChunkRevision &&
+        m_chunkRenderColumnsRegionSize == regionChunkSize) {
+        return;
+    }
+
+    const auto& activeChunks = world.getActiveChunks();
+    m_chunkRenderColumns.clear();
+    m_chunkRenderColumns.reserve(activeChunks.size());
+
+    for (const auto& pair : activeChunks) {
+        if (!pair.second) {
+            continue;
+        }
+
+        ChunkRenderColumnCache column;
+        column.chunk = pair.second.get();
+        column.chunkKey = pair.first;
+        column.chunkX = column.chunk->m_chunkX;
+        column.chunkZ = column.chunk->m_chunkZ;
+        column.regionX = floorDiv(column.chunkX, regionChunkSize);
+        column.regionZ = floorDiv(column.chunkZ, regionChunkSize);
+        column.worldOffset = glm::vec3(column.chunk->getWorldOffset());
+        m_chunkRenderColumns.push_back(column);
+    }
+
+    std::sort(m_chunkRenderColumns.begin(), m_chunkRenderColumns.end(),
+              [](const ChunkRenderColumnCache& a, const ChunkRenderColumnCache& b) {
+                  if (a.regionX != b.regionX) {
+                      return a.regionX < b.regionX;
+                  }
+                  if (a.regionZ != b.regionZ) {
+                      return a.regionZ < b.regionZ;
+                  }
+                  if (a.chunkX != b.chunkX) {
+                      return a.chunkX < b.chunkX;
+                  }
+                  return a.chunkZ < b.chunkZ;
+              });
+
+    m_chunkRenderColumnsRevision = activeChunkRevision;
+    m_chunkRenderColumnsRegionSize = regionChunkSize;
+}
+
+void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
+    if (column.chunk == nullptr) {
+        return;
+    }
+
+    column.chunk->ensureColumnMeshBuilt();
+
+    bool needsRefresh = !column.stateValid;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        const uint64_t revision = column.chunk->getSubChunkMeshRevision(scy);
+        if (!column.stateValid || column.subChunkMeshRevisions[scy] != revision) {
+            column.subChunkMeshRevisions[scy] = revision;
+            needsRefresh = true;
+        }
+    }
+
+    if (!needsRefresh) {
+        return;
+    }
+
+    const SubChunkMesh& columnMesh = column.chunk->getColumnMesh();
+    column.aggregatedHasOpaque = columnMesh.vertexCount > 0;
+    column.aggregatedHasCutout = columnMesh.cutoutVertexCount > 0;
+    column.aggregatedPresent = column.aggregatedHasOpaque || column.aggregatedHasCutout;
+
+    if (column.aggregatedPresent) {
+        column.aggregatedBoundsMin = columnMesh.hasBounds
+            ? columnMesh.boundsMin + column.worldOffset
+            : column.worldOffset;
+        column.aggregatedBoundsMax = columnMesh.hasBounds
+            ? columnMesh.boundsMax + column.worldOffset
+            : column.worldOffset + glm::vec3(Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z);
+    } else {
+        column.aggregatedBoundsMin = glm::vec3(0.0f);
+        column.aggregatedBoundsMax = glm::vec3(0.0f);
+    }
+
+    bool columnHasBounds = false;
+    glm::vec3 columnMin(0.0f);
+    glm::vec3 columnMax(0.0f);
+    if (column.aggregatedPresent) {
+        expandBounds(columnMin, columnMax, columnHasBounds,
+                     column.aggregatedBoundsMin, column.aggregatedBoundsMax);
+    }
+
+    column.transparentCount = 0;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        const SubChunk* sc = column.chunk->getSubChunk(scy);
+        if (!sc) {
+            continue;
+        }
+
+        const SubChunkMesh& mesh = sc->getMesh();
+        if (mesh.transparentVertexCount == 0) {
+            continue;
+        }
+
+        const int yBase = scy * SubChunk::SIZE;
+        TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
+        transparent.boundsMin = mesh.hasBounds
+            ? mesh.boundsMin + column.worldOffset
+            : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
+        transparent.boundsMax = mesh.hasBounds
+            ? mesh.boundsMax + column.worldOffset
+            : column.worldOffset + glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
+
+        column.transparentScys[column.transparentCount++] = scy;
+        expandBounds(columnMin, columnMax, columnHasBounds,
+                     transparent.boundsMin, transparent.boundsMax);
+    }
+
+    column.columnHasBounds = columnHasBounds;
+    column.columnBoundsMin = columnHasBounds ? columnMin : glm::vec3(0.0f);
+    column.columnBoundsMax = columnHasBounds ? columnMax : glm::vec3(0.0f);
+    column.stateValid = true;
 }
 
 void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {

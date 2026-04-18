@@ -34,6 +34,7 @@ public:
 
     // 获取所有需要渲染的区块
     [[nodiscard]] const auto& getActiveChunks() const { return m_chunks; }
+    [[nodiscard]] uint64_t getActiveChunkRevision() const { return m_activeChunkRevision; }
     void setThreadPool(ThreadPool* pool);
     [[nodiscard]] LightFrameStats getLightFrameStats() const;
 
@@ -67,6 +68,7 @@ private:
     int m_renderDistance = 8;   // 以区块为单位
     uint32_t m_seed = 0;
     int m_flatSurfaceY = 63;
+    uint64_t m_activeChunkRevision = 1;
 
     // 加载/卸载
     void loadChunk(int cx, int cz);
