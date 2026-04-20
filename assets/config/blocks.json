@@ -75,7 +75,7 @@
     },
     {
       "id": "minecraft:diamond_ore",
-      "drop": "minecraft:diamond_ore",
+      "drop": "minecraft:diamond",
       "timeToBreak": 1500,
       "textures": {
         "all": "diamond_ore"
@@ -83,7 +83,7 @@
     },
     {
       "id": "minecraft:gold_ore",
-      "drop": "minecraft:gold_ore",
+      "drop": "minecraft:gold_ingot",
       "timeToBreak": 1500,
       "textures": {
         "all": "gold_ore"
@@ -91,7 +91,7 @@
     },
     {
       "id": "minecraft:iron_ore",
-      "drop": "minecraft:iron_ore",
+      "drop": "minecraft:iron_ingot",
       "timeToBreak": 1500,
       "textures": {
         "all": "iron_ore"

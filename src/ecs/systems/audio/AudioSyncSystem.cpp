@@ -149,7 +149,7 @@ void AudioSyncSystem::update(GameplayRegistry& registry, AudioEngine& audioEngin
     }
 
     for (auto it = runtime.trackedSources.begin(); it != runtime.trackedSources.end();) {
-        const entt::entity entity = static_cast<entt::entity>(it->first);
+        const auto entity = static_cast<entt::entity>(it->first);
         if (!raw.valid(entity) || !raw.all_of<AudioSourceComponent>(entity)) {
             stopTracked(it->second);
             it = runtime.trackedSources.erase(it);

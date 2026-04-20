@@ -86,9 +86,15 @@ void CraftingGridControl::setResultSlot(const ItemID itemId)
     m_slots[4] = itemId;
 }
 
+int CraftingGridControl::getResultCount() const
+{
+    return m_resultCount;
+}
+
 void CraftingGridControl::clearAll()
 {
     m_slots.fill(0);
+    m_resultCount = 0;
 }
 
 void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSystem)
@@ -102,8 +108,10 @@ void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSys
     CraftingResult result = craftingSystem.match(grid, CraftingGridLayout::GRID_SIZE, CraftingGridLayout::GRID_SIZE);
     if (result.matched) {
         m_slots[4] = result.itemId;
+        m_resultCount = result.count;
     } else {
         m_slots[4] = 0;
+        m_resultCount = 0;
     }
 }
 
@@ -157,7 +165,7 @@ void CraftingGridControl::syncSlotPositions()
     const int resultX = static_cast<int>(std::lround(m_panelX + m_layout.resultOffsetX * scale));
     const int resultY = static_cast<int>(std::lround(m_panelY + m_layout.resultOffsetY * scale));
     const int resultSize = std::max(1, static_cast<int>(std::lround(m_layout.resultSlotSize * scale)));
-    slots[4] = { resultX, resultY, resultSize, static_cast<int>(m_slots[4]) };
+    slots[4] = { resultX, resultY, resultSize, static_cast<int>(m_slots[4]), m_resultCount };
 
     m_itemGrid.setSlots(slots.data(), static_cast<int>(slots.size()));
 }

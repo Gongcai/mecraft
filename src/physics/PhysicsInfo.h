@@ -49,7 +49,7 @@ struct PhysicsTuning {
     float jumpSpeed = 8.5f;
     float moveSpeed = 4.5f;
     float sprintMultiplier = 1.3f; // wantsSprint 生效倍率
-    float airControl = 0.35f;
+     float airControl = 0.35f;
     float groundFriction = 10.0f;
     float airDrag = 1.0f;
     float terminalVelocity = 30.0f;

@@ -24,6 +24,7 @@ UI Menu Keyboard ESCAPE Pressed -
 UI Cancel Keyboard ESCAPE Pressed -
 UI UIPrimaryClick Mouse LEFT Pressed -
 UI UISecondaryClick Mouse RIGHT Pressed -
+UI UISecondaryClick Mouse RIGHT Held -
 UI UIPrimaryRelease Mouse LEFT Released -
 UI UISecondaryRelease Mouse RIGHT Released -
 UI Confirm Keyboard ENTER Pressed -

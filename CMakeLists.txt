@@ -1,16 +1,22 @@
-cmake_minimum_required(VERSION 3.20) # 建议使用 3.20，4.1 尚未正式发布
+cmake_minimum_required(VERSION 3.20)
 project(mecraft LANGUAGES C CXX)
 
-
-if (MSVC)
-    add_compile_options(/utf-8)
-endif()
+# ===========================================================================
+# 全局设置
+# ===========================================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ---------------------------------------------------------------------------
-# 1. 查找依赖 (统一管理)
-# ---------------------------------------------------------------------------
+# 开启链接期优化
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT error)
+if(ipo_supported)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
+# 查找依赖
+
 find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
@@ -18,11 +24,9 @@ find_package(OpenAL CONFIG REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
 
-# ---------------------------------------------------------------------------
-# 2. 定义源文件变量 (分类管理，方便增删)
-# ---------------------------------------------------------------------------
-# 第三方库 (Glad, ImGui)
-set(THIRD_PARTY_SOURCES
+
+# [第三方库]
+set(SRC_THIRD_PARTY
         assets/third_party/glad/glad.c
         assets/third_party/imgui/imgui.cpp
         assets/third_party/imgui/imgui_demo.cpp
@@ -34,32 +38,25 @@ set(THIRD_PARTY_SOURCES
         assets/third_party/FastNoise/FastNoiseLite.h
 )
 
-# 核心逻辑 (不包含 main.cpp 和测试代码)
-set(CORE_SOURCES
+# [核心逻辑]
+set(SRC_CORE
         src/core/Window.cpp
         src/core/Camera.cpp
         src/core/InputManager.cpp
+        src/core/InputContextManager.cpp
         src/core/Game.cpp
         src/core/Time.cpp
-        src/core/InputContextManager.cpp
         src/core/GameStateMachine.cpp
         src/core/states/CommandState.cpp
-        src/player/Player.cpp
-        src/player/ActionMap.cpp
-        src/player/Inventory.cpp
-        src/renderer/Shader.cpp
-        src/renderer/Renderer.cpp
-        src/renderer/DropRenderer.cpp
-        src/renderer/ItemModelMesh.cpp
-        src/renderer/PostProcessRenderer.cpp
-        src/renderer/TestCube.cpp
-        src/renderer/stb_image.cpp
-        src/renderer/ChunkMesher.cpp
-        src/renderer/ChunkMeshingService.cpp
+        src/core/NamespacedId.cpp
+        src/core/IdRegistry.cpp
         src/thread/ThreadPool.cpp
         src/resource/ResourceMgr.cpp
+)
+
+# [世界与地形]
+set(SRC_WORLD
         src/world/Block.cpp
-        src/item/Item.cpp
         src/world/Chunk.cpp
         src/world/SubChunk.cpp
         src/world/Palette.cpp
@@ -69,15 +66,23 @@ set(CORE_SOURCES
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
-        src/core/NamespacedId.cpp
-        src/core/IdRegistry.cpp
-        src/physics/PhysicsSystem.cpp
-        src/particle/ParticleSystem.cpp
-        src/audio/AudioEngine.cpp
-        src/audio/BgmSystem.cpp
-        src/audio/AudioClip.cpp
-        src/audio/AudioSource.cpp
-        src/audio/AudioListener.cpp
+        src/world/DayNightSystem.cpp
+)
+
+# [渲染与UI]
+set(SRC_RENDERER
+        src/renderer/Shader.cpp
+        src/renderer/Renderer.cpp
+        src/renderer/DropRenderer.cpp
+        src/renderer/ItemModelMesh.cpp
+        src/renderer/PostProcessRenderer.cpp
+        src/renderer/TestCube.cpp
+        src/renderer/stb_image.cpp
+        src/renderer/ChunkMesher.cpp
+        src/renderer/ChunkMeshingService.cpp
+)
+
+set(SRC_UI
         src/ui/Dashboard.cpp
         src/ui/KeyboardInputBox.cpp
         src/ui/ConsoleDisplayBox.cpp
@@ -94,15 +99,17 @@ set(CORE_SOURCES
         src/ui/InventoryPanelControl.cpp
         src/ui/CraftingGridControl.cpp
         src/ui/UIRenderer.cpp
-        src/crafting/CraftingSystem.cpp
-        src/world/DayNightSystem.cpp
+)
+
+# [实体与游戏系统]
+set(SRC_ECS
         src/ecs/GameplayScene.cpp
         src/ecs/systems/player/InputSamplingSystem.cpp
         src/ecs/systems/player/PlayerIntentBuildSystem.cpp
         src/ecs/systems/player/CharacterPhysicsSystem.cpp
         src/ecs/systems/player/PlayerRuntimeUpdateSystem.cpp
+        src/ecs/systems/player/PlayerFacadeSyncSystem.cpp
         src/ecs/systems/interaction/BlockInteractionBridgeSystem.cpp
-
         src/ecs/systems/item/DropCollectionBridgeSystem.cpp
         src/ecs/systems/item/ItemSpawnSystem.cpp
         src/ecs/systems/item/ItemPhysicsSystem.cpp
@@ -114,21 +121,44 @@ set(CORE_SOURCES
         src/ecs/systems/particle/ParticleSimulationSystem.cpp
         src/ecs/systems/particle/ParticleCleanupSystem.cpp
         src/ecs/systems/audio/AudioSyncSystem.cpp
-        src/ecs/systems/player/PlayerFacadeSyncSystem.cpp
-
         src/ecs/systems/audio/PlayerAudioBridgeSystem.cpp
 )
 
-# ---------------------------------------------------------------------------
-# 3. 构建核心静态库 (项目的“引擎”部分)
-# ---------------------------------------------------------------------------
-add_library(mecraft_core STATIC ${CORE_SOURCES} ${THIRD_PARTY_SOURCES})
-
-# 设置包含路径：PUBLIC 确保链接此库的其他目标也能找到这些头文件
-target_include_directories(mecraft_core PUBLIC
-        src
-        assets/third_party
+# [其他子系统]
+set(SRC_PLAYER
+        src/player/Player.cpp
+        src/player/ActionMap.cpp
+        src/player/Inventory.cpp
 )
+set(SRC_PHYSICS src/physics/PhysicsSystem.cpp)
+set(SRC_PARTICLE src/particle/ParticleSystem.cpp)
+set(SRC_ITEM src/item/Item.cpp)
+set(SRC_CRAFTING src/crafting/CraftingSystem.cpp)
+set(SRC_AUDIO
+        src/audio/AudioEngine.cpp
+        src/audio/BgmSystem.cpp
+        src/audio/AudioClip.cpp
+        src/audio/AudioSource.cpp
+        src/audio/AudioListener.cpp
+)
+
+# 合并所有核心代码
+set(CORE_SOURCES
+        ${SRC_CORE} ${SRC_WORLD} ${SRC_RENDERER} ${SRC_UI}
+        ${SRC_ECS} ${SRC_PLAYER} ${SRC_PHYSICS} ${SRC_PARTICLE}
+        ${SRC_ITEM} ${SRC_CRAFTING} ${SRC_AUDIO}
+)
+
+# ===========================================================================
+# 3. 构建核心静态库
+# ===========================================================================
+add_library(mecraft_core STATIC ${CORE_SOURCES} ${SRC_THIRD_PARTY})
+
+
+
+# 设置包含路径：注意这里将 third_party 标记为 SYSTEM，编译器将不再报告里面的警告
+target_include_directories(mecraft_core PUBLIC src)
+target_include_directories(mecraft_core SYSTEM PUBLIC assets/third_party)
 
 # 统一链接依赖
 target_link_libraries(mecraft_core PUBLIC
@@ -143,11 +173,22 @@ target_link_libraries(mecraft_core PUBLIC
 # 统一宏定义
 target_compile_definitions(mecraft_core PUBLIC GLFW_INCLUDE_NONE)
 
+# 基于 Target 的编译器选项（更严谨的代码质量控制）
+if (MSVC)
+    target_compile_options(mecraft_core PRIVATE /utf-8 /W4 /WX-)
+else()
+    target_compile_options(mecraft_core PRIVATE -Wall -Wextra -pedantic)
+endif()
 
+# ===========================================================================
+# 4. 主程序入口
+# ===========================================================================
 add_executable(mecraft main.cpp)
 target_link_libraries(mecraft PRIVATE mecraft_core)
 
-
+# ===========================================================================
+# 5. 测试用例
+# ===========================================================================
 enable_testing()
 
 # 辅助宏：减少重复代码
@@ -163,7 +204,7 @@ target_link_libraries(physics_mvp_test PRIVATE mecraft_core)
 target_compile_definitions(physics_mvp_test PRIVATE MECRAFT_NO_TEXTURES)
 add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 
-# 其他简单测试
+# 测试列表
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
 add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
@@ -199,4 +240,3 @@ add_mecraft_test(light_solver_cross_chunk_block_rules_test tests/light_solver_cr
 add_mecraft_test(light_solver_perf_test tests/light_solver_perf_test.cpp)
 add_mecraft_test(light_service_cross_chunk_block_test tests/light_service_cross_chunk_block_test.cpp)
 add_mecraft_test(light_service_scheduler_test tests/light_service_scheduler_test.cpp)
-

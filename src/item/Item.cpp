@@ -99,7 +99,7 @@ void ItemRegistry::init() {
 
     // Step 3: Set up block-backed items (IDs 1-29 correspond to blocks 1-29)
     for (size_t i = 1; i < 30 && i < s_items.size(); ++i) {
-        const BlockID blockId = static_cast<BlockID>(i);
+        const auto blockId = static_cast<BlockID>(i);
         const BlockDef& blockDef = BlockRegistry::get(blockId);
         ItemDef& itemDef = s_items[i];
         itemDef.namespacedId = s_idRegistry.getNamespacedId(static_cast<ItemID>(i));
@@ -223,6 +223,14 @@ void ItemRegistry::init() {
         s_itemToRenderBlock[id] = def.renderBlock;
     }
 
+    // Fix iconTextureName pointers — vector resizes during registerItem()
+    // may have invalidated c_str() pointers stored in s_items[].iconTextureName.
+    for (size_t i = 0; i < s_items.size(); ++i) {
+        if (i < s_itemIconTextureNames.size()) {
+            s_items[i].iconTextureName = s_itemIconTextureNames[i].c_str();
+        }
+    }
+
     s_initializing = false;
     s_initialized = true;
     ItemIds::init();
@@ -324,12 +332,23 @@ ItemID ItemRegistry::registerItem(const NamespacedId& id, ItemDef def) {
     ItemID runtimeId = s_idRegistry.registerId(id);
     def.namespacedId = id;
 
-    if (runtimeId >= s_items.size()) {
+    const bool resized = (runtimeId >= s_items.size());
+    if (resized) {
         s_items.resize(runtimeId + 1);
         s_itemIconTextureNames.resize(runtimeId + 1);
     }
     s_items[runtimeId] = def;
     s_idLookup[id] = runtimeId;
+
+    // Fix iconTextureName pointers — resize may have invalidated c_str() pointers
+    if (resized) {
+        for (size_t i = 0; i < s_items.size(); ++i) {
+            if (i < s_itemIconTextureNames.size()) {
+                s_items[i].iconTextureName = s_itemIconTextureNames[i].c_str();
+            }
+        }
+    }
+
     return runtimeId;
 }
 

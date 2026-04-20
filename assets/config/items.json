@@ -24,6 +24,30 @@
       "renderBlock": "minecraft:iron_ore",
       "isTool": true,
       "maxDurability": 250
+    },
+    {
+      "id": "minecraft:diamond",
+      "iconTexture": "diamond",
+      "maxStack": 64,
+      "icon": "minecraft:diamond_ore",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:diamond_ore"
+    },
+    {
+      "id": "minecraft:gold_ingot",
+      "iconTexture": "gold_ingot",
+      "maxStack": 64,
+      "icon": "minecraft:gold_ore",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:gold_ore"
+    },
+    {
+      "id": "minecraft:iron_ingot",
+      "iconTexture": "iron_ingot",
+      "maxStack": 64,
+      "icon": "minecraft:iron_ore",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:iron_ore"
     }
   ]
 }
