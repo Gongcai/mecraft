@@ -101,6 +101,23 @@ public:
     static bool shouldSkipSubChunk(const Chunk& chunk, int scy);
 };
 
+namespace ChunkMeshBuilders {
+void buildCross(ChunkMeshData& meshData,
+                const SubChunkMeshingSnapshot& snapshot,
+                BlockID blockId,
+                const BlockDef& def,
+                int x,
+                int y,
+                int z);
+void buildUnitFaces(ChunkMeshData& meshData,
+                    const SubChunkMeshingSnapshot& snapshot,
+                    BlockID blockId,
+                    const BlockDef& def,
+                    int x,
+                    int y,
+                    int z);
+}
+
 
 #endif // MECRAFT_CHUNKMESHER_H
 

@@ -86,6 +86,8 @@ struct InventoryComponent {
 struct BlockTargetComponent {
     bool hasTarget = false;
     glm::ivec3 targetBlock{};
+    glm::ivec3 placeBlock{};
+    glm::ivec3 hitNormal{};
 };
 
 struct BlockBreakComponent {

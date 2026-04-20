@@ -166,66 +166,80 @@ LightFrameStats World::getLightFrameStats() const {
     return m_lightService->getFrameStats();
 }
 
-bool World::raycast(const PhysicsInfo& ray, float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {
-    glm::vec3 rayDir = glm::normalize(ray.direction);
-    glm::vec3 rayOri = ray.origin;
+RayHit World::raycast(const PhysicsInfo& ray, const float maxDist) const {
+    RayHit hitResult{};
 
-    int x = std::floor(rayOri.x);
-    int y = std::floor(rayOri.y);
-    int z = std::floor(rayOri.z);
+    const glm::vec3 rayDir = glm::normalize(ray.direction);
+    const glm::vec3 rayOri = ray.origin;
 
-    float stepX = (rayDir.x > 0) ? 1.0f : -1.0f;
-    float stepY = (rayDir.y > 0) ? 1.0f : -1.0f;
-    float stepZ = (rayDir.z > 0) ? 1.0f : -1.0f;
+    int x = static_cast<int>(std::floor(rayOri.x));
+    int y = static_cast<int>(std::floor(rayOri.y));
+    int z = static_cast<int>(std::floor(rayOri.z));
 
-    float tDeltaX = (rayDir.x != 0.0f) ? std::abs(1.0f / rayDir.x) : 1e30f;
-    float tDeltaY = (rayDir.y != 0.0f) ? std::abs(1.0f / rayDir.y) : 1e30f;
-    float tDeltaZ = (rayDir.z != 0.0f) ? std::abs(1.0f / rayDir.z) : 1e30f;
+    const int stepX = (rayDir.x > 0.0f) ? 1 : -1;
+    const int stepY = (rayDir.y > 0.0f) ? 1 : -1;
+    const int stepZ = (rayDir.z > 0.0f) ? 1 : -1;
+
+    const float tDeltaX = (rayDir.x != 0.0f) ? std::abs(1.0f / rayDir.x) : 1e30f;
+    const float tDeltaY = (rayDir.y != 0.0f) ? std::abs(1.0f / rayDir.y) : 1e30f;
+    const float tDeltaZ = (rayDir.z != 0.0f) ? std::abs(1.0f / rayDir.z) : 1e30f;
 
     float tMaxX = (stepX > 0) ? (x + 1.0f - rayOri.x) * tDeltaX : (rayOri.x - x) * tDeltaX;
     float tMaxY = (stepY > 0) ? (y + 1.0f - rayOri.y) * tDeltaY : (rayOri.y - y) * tDeltaY;
     float tMaxZ = (stepZ > 0) ? (z + 1.0f - rayOri.z) * tDeltaZ : (rayOri.z - z) * tDeltaZ;
 
-    int lastX = x, lastY = y, lastZ = z;
-
     float dist = 0.0f;
+    glm::ivec3 hitNormal(0);
+
     while (dist <= maxDist) {
-        BlockID block = getBlock(x, y, z);
-
-
+        const BlockID block = getBlock(x, y, z);
         if (block != BlockIds::AIR && block != BlockIds::WATER) {
-            hitBlock = glm::ivec3(x, y, z);
-            placeBlock = glm::ivec3(lastX, lastY, lastZ);
-            return true;
+            hitResult.hit = true;
+            hitResult.blockPos = glm::ivec3(x, y, z);
+            hitResult.normal = hitNormal;
+            hitResult.distance = dist;
+            return hitResult;
         }
-
-        lastX = x;
-        lastY = y;
-        lastZ = z;
 
         if (tMaxX < tMaxY) {
             if (tMaxX < tMaxZ) {
-                x += static_cast<int>(stepX);
+                x += stepX;
                 dist = tMaxX;
                 tMaxX += tDeltaX;
+                hitNormal = glm::ivec3(-stepX, 0, 0);
             } else {
-                z += static_cast<int>(stepZ);
+                z += stepZ;
                 dist = tMaxZ;
                 tMaxZ += tDeltaZ;
+                hitNormal = glm::ivec3(0, 0, -stepZ);
             }
         } else {
             if (tMaxY < tMaxZ) {
-                y += static_cast<int>(stepY);
+                y += stepY;
                 dist = tMaxY;
                 tMaxY += tDeltaY;
+                hitNormal = glm::ivec3(0, -stepY, 0);
             } else {
-                z += static_cast<int>(stepZ);
+                z += stepZ;
                 dist = tMaxZ;
                 tMaxZ += tDeltaZ;
+                hitNormal = glm::ivec3(0, 0, -stepZ);
             }
         }
     }
-    return false;
+
+    return hitResult;
+}
+
+bool World::raycast(const PhysicsInfo& ray, const float maxDist, glm::ivec3& hitBlock, glm::ivec3& placeBlock) const {
+    const RayHit hit = raycast(ray, maxDist);
+    if (!hit.hit) {
+        return false;
+    }
+
+    hitBlock = hit.blockPos;
+    placeBlock = hit.blockPos + hit.normal;
+    return true;
 }
 
 void World::setRenderDistance(int dist) {

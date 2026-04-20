@@ -4,6 +4,9 @@
 #include <iostream>
 
 #include "../src/renderer/ChunkMesher.h"
+#include "../src/renderer/MeshBuilderRegistry.h"
+#include "../src/world/BlockStateRegistry.h"
+#include "../src/world/PropIndices.h"
 
 namespace {
 int fail(const char* message) {
@@ -89,6 +92,27 @@ std::vector<const BlockVertex*> collectTopFaceVertices(const ChunkMeshData& mesh
     return matches;
 }
 
+std::vector<const BlockVertex*> collectFaceVertices(const std::vector<BlockVertex>& vertices,
+                                                    const float face,
+                                                    const float minX,
+                                                    const float maxX,
+                                                    const float minY,
+                                                    const float maxY,
+                                                    const float minZ,
+                                                    const float maxZ) {
+    std::vector<const BlockVertex*> matches;
+    for (const BlockVertex& vertex : vertices) {
+        if (!approxEqual(vertex.normal, face) ||
+            vertex.x < minX - 0.001f || vertex.x > maxX + 0.001f ||
+            vertex.y < minY - 0.001f || vertex.y > maxY + 0.001f ||
+            vertex.z < minZ - 0.001f || vertex.z > maxZ + 0.001f) {
+            continue;
+        }
+        matches.push_back(&vertex);
+    }
+    return matches;
+}
+
 void fillSubChunk(Chunk& chunk, const int scy, const BlockID blockId) {
     const int yBase = scy * SubChunk::SIZE;
     for (int y = 0; y < SubChunk::SIZE; ++y) {
@@ -108,6 +132,25 @@ void fillSubChunk(Chunk& chunk, const int scy, const BlockID blockId) {
 
 int main() {
     BlockRegistry::init(nullptr);
+
+    {
+        if (MeshBuilderRegistry::getShapeTag("cube") != MeshBuilderRegistry::CUBE_TAG) {
+            return fail("cube shape should resolve to the builtin cube tag");
+        }
+        if (MeshBuilderRegistry::getShapeTag("cross") != MeshBuilderRegistry::CROSS_TAG) {
+            return fail("cross shape should resolve to the builtin cross tag");
+        }
+        if (MeshBuilderRegistry::getShapeTag("torch") == MeshBuilderRegistry::INVALID_TAG) {
+            return fail("torch shape alias should be registered");
+        }
+        if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::CROSS_TAG) == nullptr) {
+            return fail("cross shape should resolve to a mesh builder");
+        }
+        const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
+        if (torchDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("torch")) {
+            return fail("torch block should resolve renderShapeTag through the mesh builder registry");
+        }
+    }
 
     {
         Chunk chunk(0, 0);
@@ -455,6 +498,38 @@ int main() {
         }
         if (meshData.cutoutVertices.empty()) {
             return fail("tall grass should stay in the cutout pass");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        const StateID birchLogX = BlockStateRegistry::getState(
+            BlockIds::BIRCH_LOG,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::AXIS, PropIndices::AXIS_X}
+            });
+        chunk.setBlock(0, 32, 0, birchLogX);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        const auto frontFaceVertices = collectFaceVertices(
+            meshData.opaqueVertices,
+            2.0f,
+            0.0f, 1.0f,
+            32.0f, 32.0f,
+            1.0f, 1.0f);
+
+        if (frontFaceVertices.size() != 3) {
+            return fail("expected one front-face triangle worth of bottom-edge vertices for rotated log UV test");
+        }
+
+        const bool hasSharedU = approxEqual(frontFaceVertices[0]->u, frontFaceVertices[1]->u) ||
+                                approxEqual(frontFaceVertices[1]->u, frontFaceVertices[2]->u) ||
+                                approxEqual(frontFaceVertices[0]->u, frontFaceVertices[2]->u);
+        const bool hasDifferentV = !approxEqual(frontFaceVertices[0]->v, frontFaceVertices[1]->v) ||
+                                   !approxEqual(frontFaceVertices[1]->v, frontFaceVertices[2]->v) ||
+                                   !approxEqual(frontFaceVertices[0]->v, frontFaceVertices[2]->v);
+        if (!hasSharedU || !hasDifferentV) {
+            return fail("x-axis log bark should rotate front-face UVs so texture direction follows the log axis");
         }
     }
 

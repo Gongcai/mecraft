@@ -57,12 +57,15 @@ set(SRC_CORE
 # [世界与地形]
 set(SRC_WORLD
         src/world/Block.cpp
+        src/world/BlockStateRegistry.cpp
         src/world/Chunk.cpp
         src/world/SubChunk.cpp
         src/world/Palette.cpp
         src/world/BitPackedArray.cpp
         src/world/LightSolver.cpp
         src/world/LightService.cpp
+        src/world/Placement.cpp
+        src/world/PropIndices.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
@@ -75,6 +78,7 @@ set(SRC_RENDERER
         src/renderer/Renderer.cpp
         src/renderer/DropRenderer.cpp
         src/renderer/ItemModelMesh.cpp
+        src/renderer/MeshBuilderRegistry.cpp
         src/renderer/PostProcessRenderer.cpp
         src/renderer/TestCube.cpp
         src/renderer/stb_image.cpp
@@ -206,6 +210,7 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 
 # 测试列表
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
+add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
 add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
 add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)

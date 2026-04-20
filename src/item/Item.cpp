@@ -1,5 +1,6 @@
 #include "Item.h"
 #include "Paths.h"
+#include "../world/BlockStateRegistry.h"
 
 #include <algorithm>
 #include <array>
@@ -35,6 +36,16 @@ void init() {
 
 namespace {
 constexpr const char* kItemsConfigPath = ITEMS_CONFIG_PATH;
+
+BlockID resolveDropBlockId(const BlockID blockId) {
+    if (blockId < BlockRegistry::getBlockCount()) {
+        return blockId;
+    }
+    if (blockId < BlockStateRegistry::getStateCount()) {
+        return BlockStateRegistry::getBlockId(blockId);
+    }
+    return 0;
+}
 
 bool resolveItemToken(const nlohmann::json& value, ItemID& outId) {
     if (!value.is_string()) {
@@ -383,14 +394,14 @@ void BlockDropTable::init() {
 
 ItemID BlockDropTable::getDropItem(const BlockID blockId) {
     if (!s_initialized) init();
-    auto it = s_drops.find(blockId);
+    auto it = s_drops.find(resolveDropBlockId(blockId));
     if (it == s_drops.end()) return 0;
     return it->second.dropItem;
 }
 
 const BlockDropEntry& BlockDropTable::get(const BlockID blockId) {
     if (!s_initialized) init();
-    auto it = s_drops.find(blockId);
+    auto it = s_drops.find(resolveDropBlockId(blockId));
     if (it == s_drops.end()) {
         static BlockDropEntry empty{0, 1, 1};
         return empty;

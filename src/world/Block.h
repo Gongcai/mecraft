@@ -56,7 +56,8 @@ namespace BlockIds {
 
 enum class BlockRenderShape : uint8_t {
     Cube = 0,
-    Cross = 1
+    Cross = 1,
+    Custom = 2
 };
 
 struct BlockDef {
@@ -66,6 +67,10 @@ struct BlockDef {
     bool isLightSource  = false;
     bool isSelectable   = true;
     BlockRenderShape renderShape = BlockRenderShape::Cube;
+    std::string renderShapeName = "cube";
+    uint8_t renderShapeTag = 0;
+    std::string placementStrategy = "simple";
+    std::string supportRule;
     bool useGrassTint = false;
     uint8_t lightLevel  = 0;
     uint8_t opacity     = 0;
@@ -84,18 +89,10 @@ public:
     static void init(ResourceMgr* resourceMgr = nullptr);
     static void ensureInitialized();
     static const BlockDef& get(BlockID id);
-    static const BlockDef& getFast(BlockID id) {
-        return id < s_blocks.size() ? s_blocks[id] : s_blocks[0];
-    }
-    [[nodiscard]] static uint8_t getOpacityFast(BlockID id) {
-        return id < s_blocks.size() ? s_blocks[id].opacity : 0;
-    }
-    [[nodiscard]] static uint8_t getLightLevelFast(BlockID id) {
-        return id < s_blocks.size() ? s_blocks[id].lightLevel : 0;
-    }
-    [[nodiscard]] static bool isLightSourceFast(BlockID id) {
-        return id < s_blocks.size() && s_blocks[id].isLightSource;
-    }
+    static const BlockDef& getFast(BlockID id);
+    [[nodiscard]] static uint8_t getOpacityFast(BlockID id);
+    [[nodiscard]] static uint8_t getLightLevelFast(BlockID id);
+    [[nodiscard]] static bool isLightSourceFast(BlockID id);
     [[nodiscard]] static BlockID findByName(const std::string& name);
     [[nodiscard]] static bool tryGetIdByName(const std::string& name, BlockID& outId);
     [[nodiscard]] static BlockID getId(const NamespacedId& namespacedId);

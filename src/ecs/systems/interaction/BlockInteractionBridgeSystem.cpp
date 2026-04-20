@@ -8,6 +8,7 @@
 #include "../../util/ParticleEventBuffer.h"
 #include "../../../core/states/GameplayModeRules.h"
 #include "../../../player/Player.h"
+#include "../../../world/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
 #include "../../../ui/UIRenderer.h"
@@ -30,6 +31,26 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
 
 PhysicsInfo buildPickRay(const TransformComponent& transform, const CameraStateComponent& camera) {
     return {transform.position + glm::vec3(0.0f, transform.eyeHeight, 0.0f), camera.front};
+}
+
+BlockID resolvePlacementState(const BlockID blockId,
+                              const CameraStateComponent& camera,
+                              const MoveIntentComponent& moveIntent,
+                              const RayHit& hit) {
+    const BlockDef& def = BlockRegistry::get(blockId);
+    PlacementStrategyFn strategy = PlacementStrategyRegistry::getStrategy(def.placementStrategy);
+    if (strategy == nullptr) {
+        return BlockStateRegistry::getDefaultState(blockId);
+    }
+
+    PlacementContext ctx;
+    ctx.blockId = blockId;
+    ctx.hitNormal = hit.normal;
+    ctx.playerYaw = camera.yaw;
+    ctx.isSneaking = moveIntent.wantsCrouch;
+
+    const StateID stateId = strategy(ctx);
+    return stateId != 0 ? stateId : BlockIds::AIR;
 }
 
 bool wouldOverlapBlock(const PhysicsBody& body, const glm::ivec3& blockPos) {
@@ -74,6 +95,7 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
 
     auto view = registry.view<LocalPlayerTag,
                               BlockActionIntentComponent,
+                              MoveIntentComponent,
                               TransformComponent,
                               PhysicsBodyComponent,
                               CameraStateComponent,
@@ -85,6 +107,7 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
             registry.emplace<BlockInteractionRuntimeComponent>(e);
         }
         auto& runtime = registry.get<BlockInteractionRuntimeComponent>(e);
+        auto& moveIntent = view.get<MoveIntentComponent>(e);
         auto& transform = view.get<TransformComponent>(e);
         auto& physicsBody = view.get<PhysicsBodyComponent>(e);
         auto& camera = view.get<CameraStateComponent>(e);
@@ -97,11 +120,14 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
 
         player.getInventory().setSelectedSlot(inventoryState.selectedHotbarSlot);
 
-        glm::ivec3 hitBlock{};
-        glm::ivec3 placeBlock{};
-        const bool hasHit = world.raycast(buildPickRay(transform, camera), kPickDistance, hitBlock, placeBlock);
+        const RayHit hit = world.raycast(buildPickRay(transform, camera), kPickDistance);
+        const bool hasHit = hit.hit;
+        const glm::ivec3 hitBlock = hit.blockPos;
+        const glm::ivec3 placeBlock = hit.blockPos + hit.normal;
         target.hasTarget = hasHit;
         target.targetBlock = hasHit ? hitBlock : glm::ivec3{};
+        target.placeBlock = hasHit ? placeBlock : glm::ivec3{};
+        target.hitNormal = hasHit ? hit.normal : glm::ivec3{};
 
         const auto& blockIntent = view.get<BlockActionIntentComponent>(e);
         const bool wantsBreak = blockIntent.wantsBreak;
@@ -184,7 +210,12 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
             continue;
         }
 
-        world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, blockToPlace);
+        const BlockID placedState = resolvePlacementState(blockToPlace, camera, moveIntent, hit);
+        if (placedState == BlockIds::AIR) {
+            continue;
+        }
+
+        world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
         dropSystem.onBlockPlaced(placeBlock, world);
         if (modeRules.shouldReportBreakProgress()) {
             static_cast<void>(inventory.consumeSelectedOne());

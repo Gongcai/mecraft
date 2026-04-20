@@ -1,0 +1,62 @@
+{
+  "benchmark": "light_solver_perf_test",
+  "build": {
+    "config": "Release"
+  },
+  "captured_at": "2026-04-18",
+  "cases": [
+    {
+      "avg_ms": 24.89997,
+      "avg_nodes_visited": 49497.916666666664,
+      "avg_outgoing_nodes": 0.0,
+      "avg_worker_ms": 2.072069998582204,
+      "calls_per_sec": 484.9523332269132,
+      "checksum": 11,
+      "focus": "Full rebuild path dominated by sky/block add propagation",
+      "jobs": 12,
+      "max_ms": 26.8644,
+      "median_ms": 24.7447,
+      "min_ms": 23.3124,
+      "name": "chunk_loaded_rebuild",
+      "ns_per_call": 2062058.3333333333,
+      "p95_ms": 25.7057
+    },
+    {
+      "avg_ms": 6.728309999999999,
+      "avg_nodes_visited": 4676.333333333333,
+      "avg_outgoing_nodes": 0.0,
+      "avg_worker_ms": 0.5383666676779588,
+      "calls_per_sec": 1776.172643980995,
+      "checksum": 11,
+      "focus": "Local block updates with remove/add passes and dirty sky columns",
+      "jobs": 12,
+      "max_ms": 7.7141,
+      "median_ms": 6.7561,
+      "min_ms": 6.2388,
+      "name": "block_changed_mixed",
+      "ns_per_call": 563008.3333333334,
+      "p95_ms": 6.9075
+    },
+    {
+      "avg_ms": 5.87091,
+      "avg_nodes_visited": 7.0,
+      "avg_outgoing_nodes": 0.0,
+      "avg_worker_ms": 0.47444083417455357,
+      "calls_per_sec": 2080.7865373111035,
+      "checksum": 27,
+      "focus": "Cross-chunk boundary diff with propagated light removal",
+      "jobs": 12,
+      "max_ms": 6.3658,
+      "median_ms": 5.76705,
+      "min_ms": 5.6413,
+      "name": "neighbor_boundary_removal",
+      "ns_per_call": 480587.5,
+      "p95_ms": 6.2643
+    }
+  ],
+  "focus": "LightSolver solve()/propagateLevel()/getOpacity() baseline",
+  "settings": {
+    "measure_rounds": 10,
+    "warmup_rounds": 3
+  }
+}

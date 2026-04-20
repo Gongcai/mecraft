@@ -4,6 +4,8 @@
 #include <glm/vec3.hpp>
 
 #include "../src/ecs/GameplayRegistry.h"
+#include "../src/world/BlockStateRegistry.h"
+#include "../src/world/PropIndices.h"
 #include "../src/world/DropSystem.h"
 #include "../src/world/World.h"
 #include "../src/player/Inventory.h"
@@ -66,6 +68,22 @@ int main() {
     }
     if (coalDropSystem.getDrops().front().itemId != ItemIds::COAL) {
         return fail("coal_ore should drop coal item, not itself");
+    }
+
+    ecs::GameplayRegistry stateDropRegistry;
+    DropSystem stateDropSystem;
+    stateDropSystem.bindRegistry(stateDropRegistry);
+    const StateID birchLogX = BlockStateRegistry::getState(
+        BlockIds::BIRCH_LOG,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::AXIS, PropIndices::AXIS_X}
+        });
+    stateDropSystem.spawnBlockDrop(birchLogX, glm::ivec3(1, 122, 1));
+    if (stateDropSystem.getDrops().empty()) {
+        return fail("stateful blocks should still spawn drops");
+    }
+    if (stateDropSystem.getDrops().front().itemId != ItemRegistry::fromBlock(BlockIds::BIRCH_LOG)) {
+        return fail("stateful blocks should resolve drops through their owning base block");
     }
 
     ecs::GameplayRegistry placementDropRegistry;

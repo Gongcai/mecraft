@@ -8,6 +8,9 @@
 
 #include <glm/vec2.hpp>
 
+#include "MeshBuilderRegistry.h"
+#include "../world/BlockStateRegistry.h"
+#include "../world/PropIndices.h"
 #include "../world/World.h"
 
 namespace {
@@ -30,12 +33,14 @@ struct FaceRenderData {
     int tileIndex = 0;
     float layer = 0.0f;
     bool flipDiagonal = false;
+    uint8_t uvQuarterTurns = 0;
 };
 
 struct FaceMergeKey {
     BlockID blockId = 0;
     int tileIndex = 0;
     bool flipDiagonal = false;
+    uint8_t uvQuarterTurns = 0;
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
     std::array<uint16_t, 4> block{};
@@ -353,28 +358,67 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
     return data;
 }
 
-int getFaceTextureIndex(const BlockDef& def, const int face) {
+int getFaceTextureIndex(const StateTextureIndices& textures, const int face) {
     switch (face) {
-        case FACE_TOP:    return def.texTop;
-        case FACE_BOTTOM: return def.texBottom;
-        case FACE_FRONT:  return def.texFront;
-        case FACE_BACK:   return def.texBack;
-        case FACE_LEFT:   return def.texLeft;
-        case FACE_RIGHT:  return def.texRight;
+        case FACE_TOP:    return textures.texTop;
+        case FACE_BOTTOM: return textures.texBottom;
+        case FACE_FRONT:  return textures.texFront;
+        case FACE_BACK:   return textures.texBack;
+        case FACE_LEFT:   return textures.texLeft;
+        case FACE_RIGHT:  return textures.texRight;
         default:          return 0;
     }
 }
 
+uint8_t getFaceUvQuarterTurns(const BlockID blockId, const int face) {
+    if (PropIndices::AXIS == PropIndices::INVALID) {
+        return 0;
+    }
+
+    const uint16_t axisValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::AXIS);
+    if (axisValue == PropIndices::INVALID) {
+        return 0;
+    }
+
+    if (axisValue == PropIndices::AXIS_X) {
+        switch (face) {
+            case FACE_TOP:
+            case FACE_BOTTOM:
+            case FACE_FRONT:
+            case FACE_BACK:
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    if (axisValue == PropIndices::AXIS_Z) {
+        switch (face) {
+            case FACE_LEFT:
+            case FACE_RIGHT:
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    return 0;
+}
+
 FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockID blockId,
                                    const BlockDef& def,
                                    const int x,
                                    const int y,
                                    const int z,
                                    const int face) {
     FaceRenderData renderData;
-    renderData.tileIndex = std::max(0, getFaceTextureIndex(def, face));
+    static_cast<void>(def);
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    renderData.tileIndex = std::max(0, getFaceTextureIndex(textures, face));
     renderData.layer = static_cast<float>(renderData.tileIndex);
     renderData.vertices = computeFaceVertexData(snapshot, x, y, z, face);
+    renderData.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
 
     int metric02 = 0;
     int metric13 = 0;
@@ -406,6 +450,7 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
     mix(static_cast<uint64_t>(key.blockId));
     mix(static_cast<uint64_t>(key.tileIndex));
     mix(static_cast<uint64_t>(key.flipDiagonal));
+    mix(static_cast<uint64_t>(key.uvQuarterTurns));
     for (size_t i = 0; i < 4; ++i) {
         mix(static_cast<uint64_t>(key.ao[i]));
     }
@@ -423,6 +468,7 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
     key.blockId = blockId;
     key.tileIndex = renderData.tileIndex;
     key.flipDiagonal = renderData.flipDiagonal;
+    key.uvQuarterTurns = renderData.uvQuarterTurns;
     for (size_t i = 0; i < renderData.vertices.size(); ++i) {
         key.ao[i] = renderData.vertices[i].ao;
         key.sun[i] = quantizeNormalized(renderData.vertices[i].sunNormalized);
@@ -437,6 +483,7 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.blockId == rhs.blockId &&
            lhs.tileIndex == rhs.tileIndex &&
            lhs.flipDiagonal == rhs.flipDiagonal &&
+           lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
            lhs.ao == rhs.ao &&
            lhs.sun == rhs.sun &&
            lhs.block == rhs.block;
@@ -751,6 +798,34 @@ std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face,
     }
 }
 
+std::array<glm::vec2, 4> buildFaceUv(const float width,
+                                     const float height,
+                                     const uint8_t quarterTurns) {
+    switch (quarterTurns % 4) {
+        case 1:
+            return {{{0.0f, 0.0f},
+                     {0.0f, width},
+                     {height, width},
+                     {height, 0.0f}}};
+        case 2:
+            return {{{width, height},
+                     {0.0f, height},
+                     {0.0f, 0.0f},
+                     {width, 0.0f}}};
+        case 3:
+            return {{{height, width},
+                     {height, 0.0f},
+                     {0.0f, 0.0f},
+                     {0.0f, width}}};
+        case 0:
+        default:
+            return {{{0.0f, 0.0f},
+                     {width, 0.0f},
+                     {width, height},
+                     {0.0f, height}}};
+    }
+}
+
 void emitGreedyFace(std::vector<BlockVertex>& vertices,
                     ChunkMeshData& meshData,
                     const FaceCell& cell,
@@ -758,10 +833,10 @@ void emitGreedyFace(std::vector<BlockVertex>& vertices,
                     const int width,
                     const int height) {
     const std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, width, height);
-    const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f},
-                                              {static_cast<float>(width), 0.0f},
-                                              {static_cast<float>(width), static_cast<float>(height)},
-                                              {0.0f, static_cast<float>(height)}}};
+    const std::array<glm::vec2, 4> faceUV = buildFaceUv(
+        static_cast<float>(width),
+        static_cast<float>(height),
+        cell.renderData.uvQuarterTurns);
 
     appendFaceVertices(vertices, corners, faceUV, face, cell.renderData);
 
@@ -782,7 +857,7 @@ void emitUnitFace(std::vector<BlockVertex>& vertices,
                   const glm::vec3& pos,
                   const int face,
                   const FaceRenderData& renderData) {
-    const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+    const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
     std::array<glm::vec3, 4> corners{};
     for (size_t i = 0; i < corners.size(); ++i) {
         corners[i] = pos + kFaceCorners[static_cast<size_t>(face)][i];
@@ -823,7 +898,7 @@ bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
     outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
     return true;
 }
@@ -853,7 +928,7 @@ bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
     outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
     return true;
 }
@@ -992,12 +1067,15 @@ void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkM
 
 void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                           const glm::vec3& pos,
+                          const BlockID blockId,
                           const BlockDef& def,
                           const int x,
                           const int y,
                           const int z,
                           const SubChunkMeshingSnapshot& snapshot) {
-    int tileIndex = def.texTop;
+    static_cast<void>(def);
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    int tileIndex = textures.texTop;
     if (tileIndex < 0) {
         tileIndex = 0;
     }
@@ -1042,6 +1120,51 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
 }
 
 } // anonymous namespace
+
+void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
+                                   const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockID blockId,
+                                   const BlockDef& def,
+                                   const int x,
+                                   const int y,
+                                   const int z) {
+    addCrossedQuadsImpl(meshData.cutoutVertices,
+                        glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                        blockId, def, x, y, z, snapshot);
+    expandBounds(meshData,
+                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+}
+
+void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
+                                       const SubChunkMeshingSnapshot& snapshot,
+                                       const BlockID blockId,
+                                       const BlockDef& def,
+                                       const int x,
+                                       const int y,
+                                       const int z) {
+    const bool transparent = def.isTransparent;
+    for (int face = 0; face < 6; ++face) {
+        const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+        const int nx = x + normal.x;
+        const int ny = y + normal.y;
+        const int nz = z + normal.z;
+
+        if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, blockId, def)) {
+            continue;
+        }
+
+        auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
+        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        emitUnitFace(target,
+                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                     face, renderData);
+        expandBounds(meshData,
+                     glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                     glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+    }
+}
+
 
 // ======================== Public API: Per-sub-chunk ========================
 
@@ -1119,41 +1242,16 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
                 }
 
                 const BlockDef& def = BlockRegistry::getFast(blockId);
-                if (def.renderShape == BlockRenderShape::Cross) {
-                    addCrossedQuadsImpl(meshData.cutoutVertices,
-                                    glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                    def, x, y, z, snapshot);
-                    expandBounds(meshData,
-                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
-                    continue;
-                }
 
                 if (isOpaqueCubeCandidate(def) || isTransparentCubeCandidate(def)) {
                     continue;
                 }
 
-                // Other non-cube shapes — per-face
-                const bool transparent = def.isTransparent;
-                for (int face = 0; face < 6; ++face) {
-                    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-                    const int nx = x + normal.x;
-                    const int ny = y + normal.y;
-                    const int nz = z + normal.z;
-
-                    if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, blockId, def)) {
-                        continue;
-                    }
-
-                    auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
-                    FaceRenderData renderData = buildFaceRenderData(snapshot, def, x, y, z, face);
-                    emitUnitFace(target,
-                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                 face, renderData);
-                    expandBounds(meshData,
-                                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+                MeshBuilderFn builder = MeshBuilderRegistry::getBuilder(def.renderShapeTag);
+                if (builder == nullptr) {
+                    builder = &ChunkMeshBuilders::buildUnitFaces;
                 }
+                builder(meshData, snapshot, blockId, def, x, y, z);
             }
         }
     }

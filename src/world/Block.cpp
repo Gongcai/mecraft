@@ -3,11 +3,16 @@
 //
 
 #include "Block.h"
+#include "BlockStateRegistry.h"
+#include "Placement.h"
+#include "PropIndices.h"
 #include "Paths.h"
+#include "../renderer/MeshBuilderRegistry.h"
 
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 
 #include "../resource/ResourceMgr.h"
@@ -28,6 +33,18 @@ void setAllFaces(BlockDef& def, int tex) {
     def.texRight = tex;
     def.texFront = tex;
     def.texBack = tex;
+}
+
+BlockID resolveDefinitionBlockId(const BlockID id) {
+    if (id < BlockRegistry::getBlockCount()) {
+        return id;
+    }
+
+    if (id < BlockStateRegistry::getStateCount()) {
+        return BlockStateRegistry::getBlockId(id);
+    }
+
+    return BlockIds::AIR;
 }
 }
 
@@ -117,6 +134,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].isTransparent = false;
         s_blocks[i].isLightSource = false;
         s_blocks[i].renderShape = BlockRenderShape::Cube;
+        s_blocks[i].renderShapeName = "cube";
+        s_blocks[i].renderShapeTag = 0;
+        s_blocks[i].placementStrategy = "simple";
+        s_blocks[i].supportRule.clear();
         s_blocks[i].useGrassTint = false;
         s_blocks[i].lightLevel = 0;
         s_blocks[i].opacity = 15;
@@ -138,6 +159,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     }
 
     // Step 3: Load config from JSON
+    PlacementStrategyRegistry::initBuiltinStrategies();
+    MeshBuilderRegistry::initBuiltinBuilders();
+
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
 #ifndef NDEBUG
@@ -198,6 +222,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
         BlockDef def = s_blocks[id];
         def.namespacedId = s_idRegistry.getNamespacedId(id);
+        def.renderShape = BlockRenderShape::Cube;
+        def.renderShapeName = "cube";
+        def.renderShapeTag = 0;
+        def.placementStrategy = "simple";
+        def.supportRule.clear();
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -222,8 +251,31 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             def.opacity = def.isSolid ? 15 : 0;
         }
         if (blockJson.contains("renderShape") && blockJson["renderShape"].is_string()) {
-            const std::string renderShape = blockJson["renderShape"].get<std::string>();
-            def.renderShape = (renderShape == "cross") ? BlockRenderShape::Cross : BlockRenderShape::Cube;
+            def.renderShapeName = blockJson["renderShape"].get<std::string>();
+            def.renderShapeTag = MeshBuilderRegistry::getShapeTag(def.renderShapeName);
+            if (def.renderShapeTag == MeshBuilderRegistry::INVALID_TAG) {
+                def.renderShapeName = "cube";
+                def.renderShapeTag = MeshBuilderRegistry::CUBE_TAG;
+            }
+
+            switch (MeshBuilderRegistry::getShapeClass(def.renderShapeTag)) {
+                case MeshShapeClass::Cross:
+                    def.renderShape = BlockRenderShape::Cross;
+                    break;
+                case MeshShapeClass::Custom:
+                    def.renderShape = BlockRenderShape::Custom;
+                    break;
+                case MeshShapeClass::Cube:
+                default:
+                    def.renderShape = BlockRenderShape::Cube;
+                    break;
+            }
+        }
+        if (blockJson.contains("placementStrategy") && blockJson["placementStrategy"].is_string()) {
+            def.placementStrategy = blockJson["placementStrategy"].get<std::string>();
+        }
+        if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
+            def.supportRule = blockJson["supportRule"].get<std::string>();
         }
         if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
             def.useGrassTint = blockJson["useGrassTint"].get<bool>();
@@ -282,8 +334,46 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             s_blockDropIds[id] = NamespacedId(blockJson["drop"].get<std::string>());
         }
 
+        if (blockJson.contains("properties") && blockJson["properties"].is_object()) {
+            std::vector<std::pair<std::string, std::vector<std::string>>> properties;
+            std::map<std::string, std::string> defaultState;
+
+            for (auto it = blockJson["properties"].begin(); it != blockJson["properties"].end(); ++it) {
+                if (!it.value().is_array()) {
+                    continue;
+                }
+
+                std::vector<std::string> values;
+                values.reserve(it.value().size());
+                for (const auto& rawValue : it.value()) {
+                    if (rawValue.is_string()) {
+                        values.push_back(rawValue.get<std::string>());
+                    }
+                }
+
+                if (!values.empty()) {
+                    properties.emplace_back(it.key(), std::move(values));
+                }
+            }
+
+            if (blockJson.contains("defaultState") && blockJson["defaultState"].is_object()) {
+                for (auto it = blockJson["defaultState"].begin(); it != blockJson["defaultState"].end(); ++it) {
+                    if (it.value().is_string()) {
+                        defaultState[it.key()] = it.value().get<std::string>();
+                    }
+                }
+            }
+
+            if (!properties.empty()) {
+                BlockStateRegistry::registerBlockProperties(id, std::move(properties), std::move(defaultState));
+            }
+        }
+
         s_blocks[id] = def;
     }
+
+    BlockStateRegistry::explodeAllStates();
+    PropIndices::init();
 
     s_initialized = true;
     BlockIds::init();
@@ -298,6 +388,23 @@ void BlockRegistry::ensureInitialized() {
 const BlockDef& BlockRegistry::get(BlockID id) {
     ensureInitialized();
     return getFast(id);
+}
+
+const BlockDef& BlockRegistry::getFast(const BlockID id) {
+    const BlockID resolvedId = resolveDefinitionBlockId(id);
+    return resolvedId < s_blocks.size() ? s_blocks[resolvedId] : s_blocks[0];
+}
+
+uint8_t BlockRegistry::getOpacityFast(const BlockID id) {
+    return getFast(id).opacity;
+}
+
+uint8_t BlockRegistry::getLightLevelFast(const BlockID id) {
+    return getFast(id).lightLevel;
+}
+
+bool BlockRegistry::isLightSourceFast(const BlockID id) {
+    return getFast(id).isLightSource;
 }
 
 BlockID BlockRegistry::findByName(const std::string& name) {
@@ -342,7 +449,7 @@ bool BlockRegistry::tryGetId(const NamespacedId& namespacedId, BlockID& outId) {
 }
 
 const NamespacedId& BlockRegistry::getNamespacedId(BlockID runtimeId) {
-    return s_idRegistry.getNamespacedId(runtimeId);
+    return s_idRegistry.getNamespacedId(resolveDefinitionBlockId(runtimeId));
 }
 
 void BlockRegistry::printAllBlocks() {
@@ -354,11 +461,12 @@ void BlockRegistry::printAllBlocks() {
 }
 
 const NamespacedId& BlockRegistry::getBlockDropId(const BlockID id) {
-    if (id >= s_blockDropIds.size()) {
+    const BlockID resolvedId = resolveDefinitionBlockId(id);
+    if (resolvedId >= s_blockDropIds.size()) {
         static const NamespacedId empty("minecraft", "air");
         return empty;
     }
-    return s_blockDropIds[id];
+    return s_blockDropIds[resolvedId];
 }
 
 BlockID BlockRegistry::registerBlock(const NamespacedId& id, BlockDef def) {

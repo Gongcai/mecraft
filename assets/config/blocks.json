@@ -47,6 +47,13 @@
     {
       "id": "minecraft:oak_log",
       "drop": "minecraft:oak_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
       "timeToBreak": 1000,
       "textures": {
         "top": "wood_top",
@@ -240,6 +247,13 @@
     {
       "id": "minecraft:birch_log",
       "drop": "minecraft:birch_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
       "timeToBreak": 1000,
       "textures": {
         "top": "birch_log_top",
@@ -250,11 +264,19 @@
     {
       "id": "minecraft:torch",
       "drop": "minecraft:torch",
+      "properties": {
+        "facing": ["floor", "north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "floor"
+      },
       "isSolid": false,
       "isTransparent": true,
       "isLightSource": true,
       "lightLevel": 14,
-      "renderShape": "cross",
+      "placementStrategy": "attach_wall",
+      "supportRule": "attached_face",
+      "renderShape": "torch",
       "timeToBreak": 10,
       "textures": {
         "all": "blue_wool"

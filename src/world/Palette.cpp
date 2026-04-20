@@ -1,20 +1,22 @@
 #include "Palette.h"
+
+#include <algorithm>
 #include <cmath>
 #include <unordered_set>
 
-uint8_t Palette::getOrCreateIndex(RuntimeId runtimeId) {
-    auto it = m_idToIndex.find(runtimeId);
+uint16_t Palette::getOrCreateIndex(const RuntimeId runtimeId) {
+    const auto it = m_idToIndex.find(runtimeId);
     if (it != m_idToIndex.end()) {
         return it->second;
     }
 
-    uint8_t index = static_cast<uint8_t>(m_indexToId.size());
+    const uint16_t index = static_cast<uint16_t>(m_indexToId.size());
     m_indexToId.push_back(runtimeId);
     m_idToIndex[runtimeId] = index;
     return index;
 }
 
-RuntimeId Palette::getRuntimeId(uint8_t paletteIndex) const {
+RuntimeId Palette::getRuntimeId(const uint16_t paletteIndex) const {
     if (paletteIndex < m_indexToId.size()) {
         return m_indexToId[paletteIndex];
     }
@@ -26,41 +28,38 @@ size_t Palette::size() const {
 }
 
 uint8_t Palette::bitsPerEntry() const {
-    if (m_indexToId.size() <= 1) return 1;
-    return static_cast<uint8_t>(std::ceil(std::log2(static_cast<double>(m_indexToId.size()))));
+    if (m_indexToId.size() <= 1) {
+        return 1;
+    }
+
+    const double bits = std::ceil(std::log2(static_cast<double>(m_indexToId.size())));
+    return static_cast<uint8_t>(std::clamp(bits, 1.0, 16.0));
 }
 
-std::vector<uint8_t> Palette::compact(const std::vector<RuntimeId>& usedIds) {
-    // Build old → new index mapping before modifying the palette.
-    // oldToNew[oldIndex] = newIndex, or 0xFF if removed.
-    std::vector<uint8_t> oldToNew(m_indexToId.size(), 0xFF);
+std::vector<uint16_t> Palette::compact(const std::vector<RuntimeId>& usedIds) {
+    std::vector<uint16_t> oldToNew(m_indexToId.size(), UINT16_MAX);
 
-    // Deduplicate while preserving order
     std::unordered_set<RuntimeId> seen;
     std::vector<RuntimeId> uniqueUsed;
     uniqueUsed.reserve(usedIds.size());
-    for (RuntimeId id : usedIds) {
+    for (const RuntimeId id : usedIds) {
         if (seen.insert(id).second) {
             uniqueUsed.push_back(id);
         }
     }
 
-    // Build oldToNew: for each unique used id, find its old index and assign a new one
-    uint8_t newIndex = 0;
-    for (RuntimeId id : uniqueUsed) {
-        auto it = m_idToIndex.find(id);
+    uint16_t newIndex = 0;
+    for (const RuntimeId id : uniqueUsed) {
+        const auto it = m_idToIndex.find(id);
         if (it != m_idToIndex.end()) {
-            oldToNew[it->second] = newIndex;
-            ++newIndex;
+            oldToNew[it->second] = newIndex++;
         }
     }
 
-    // Rebuild palette
     m_indexToId.clear();
     m_idToIndex.clear();
-
-    for (RuntimeId id : uniqueUsed) {
-        uint8_t idx = static_cast<uint8_t>(m_indexToId.size());
+    for (const RuntimeId id : uniqueUsed) {
+        const uint16_t idx = static_cast<uint16_t>(m_indexToId.size());
         m_indexToId.push_back(id);
         m_idToIndex[id] = idx;
     }

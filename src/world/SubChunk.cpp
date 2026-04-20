@@ -74,7 +74,7 @@ BlockID SubChunk::getBlock(const int x, const int y, const int z) const {
         return 0;  // AIR
     }
     const size_t idx = toIndex(x, y, z);
-    const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(idx));
+    const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(idx));
     return m_palette.getRuntimeId(paletteIdx);
 }
 
@@ -84,13 +84,13 @@ void SubChunk::setBlockImpl(const int x, const int y, const int z, const BlockID
     }
 
     const size_t index = toIndex(x, y, z);
-    const uint8_t oldPaletteIdx = static_cast<uint8_t>(m_blockData.get(index));
+    const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_blockData.get(index));
     const BlockID oldId = m_palette.getRuntimeId(oldPaletteIdx);
     if (oldId == id) {
         return;
     }
 
-    const uint8_t paletteIdx = m_palette.getOrCreateIndex(id);
+    const uint16_t paletteIdx = m_palette.getOrCreateIndex(id);
     const uint8_t neededBits = m_palette.bitsPerEntry();
     if (neededBits > m_blockData.bitsPerEntry()) {
         m_blockData.resize(neededBits);
@@ -133,13 +133,13 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockID
     }
 
     const size_t index = toIndex(x, y, z);
-    const uint8_t oldPaletteIdx = static_cast<uint8_t>(m_blockData.get(index));
+    const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_blockData.get(index));
     const BlockID oldId = m_palette.getRuntimeId(oldPaletteIdx);
     if (oldId == id) {
         return;
     }
 
-    const uint8_t paletteIdx = m_palette.getOrCreateIndex(id);
+    const uint16_t paletteIdx = m_palette.getOrCreateIndex(id);
     const uint8_t neededBits = m_palette.bitsPerEntry();
     if (neededBits > m_blockData.bitsPerEntry()) {
         m_blockData.resize(neededBits);
@@ -166,7 +166,7 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
     m_palette.clear();
     m_blockCounts.clear();
 
-    std::array<uint8_t, BLOCK_COUNT> paletteIndices{};
+    std::array<uint16_t, BLOCK_COUNT> paletteIndices{};
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
         const BlockID id = blocks[index];
         paletteIndices[index] = m_palette.getOrCreateIndex(id);
@@ -184,7 +184,7 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
 
 void SubChunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
-        const uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(index));
+        const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(index));
         out[index] = m_palette.getRuntimeId(paletteIdx);
     }
 }
@@ -193,20 +193,20 @@ void SubChunk::optimizePalette() {
     std::vector<RuntimeId> usedIds;
     std::unordered_set<RuntimeId> seen;
     for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-        uint8_t paletteIdx = static_cast<uint8_t>(m_blockData.get(i));
-        RuntimeId runtimeId = m_palette.getRuntimeId(paletteIdx);
+        const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(i));
+        const RuntimeId runtimeId = m_palette.getRuntimeId(paletteIdx);
         if (seen.insert(runtimeId).second) {
             usedIds.push_back(runtimeId);
         }
     }
 
-    std::vector<uint8_t> oldToNew = m_palette.compact(usedIds);
+    std::vector<uint16_t> oldToNew = m_palette.compact(usedIds);
 
     const uint8_t newBits = m_palette.bitsPerEntry();
     if (newBits != m_blockData.bitsPerEntry()) {
         std::vector<uint32_t> oldValues(BLOCK_COUNT);
         for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            uint8_t oldIdx = static_cast<uint8_t>(m_blockData.get(i));
+            const uint16_t oldIdx = static_cast<uint16_t>(m_blockData.get(i));
             oldValues[i] = oldToNew[oldIdx];
         }
         m_blockData.resize(newBits);
@@ -215,7 +215,7 @@ void SubChunk::optimizePalette() {
         }
     } else {
         for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            uint8_t oldIdx = static_cast<uint8_t>(m_blockData.get(i));
+            const uint16_t oldIdx = static_cast<uint16_t>(m_blockData.get(i));
             m_blockData.set(i, oldToNew[oldIdx]);
         }
     }
