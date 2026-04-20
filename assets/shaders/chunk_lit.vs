@@ -27,8 +27,9 @@ out float vFogDist;
 void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
 
-    // Wind effect for cross vegetation (aNormal < -0.5 indicates cross quads)
-    if (aNormal < -0.5) {
+    // Wind effect only applies to vegetation cross quads. Other custom cutout shapes
+    // use their own negative markers and should remain rigid.
+    if (aNormal > -2.5 && aNormal < -0.5) {
         float phase = worldPos.x * uWindSpatialFreq + worldPos.z * (uWindSpatialFreq * 1.37) + uWindTime * uWindSpeed;
         float swayX = sin(phase);
         float swayZ = cos(phase * 0.91 + 1.7);

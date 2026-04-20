@@ -533,6 +533,102 @@ int main() {
         }
     }
 
+    {
+        constexpr float kTorchHeight = 10.0f / 16.0f;
+        constexpr float kTorchHalfWidth = 1.0f / 16.0f;
+        constexpr float kTorchTopU0 = 7.0f / 16.0f;
+        constexpr float kTorchTopU1 = 9.0f / 16.0f;
+        constexpr float kTorchTopV0 = 1.0f - 8.0f / 16.0f;
+        constexpr float kTorchTopV1 = 1.0f - 6.0f / 16.0f;
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockIds::TORCH));
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutVertices.size() != 36) {
+            return fail("floor torch should emit the rebuilt torch template in the cutout pass");
+        }
+
+        float minY = meshData.cutoutVertices.front().y;
+        float maxY = meshData.cutoutVertices.front().y;
+        for (const BlockVertex& vertex : meshData.cutoutVertices) {
+            if (vertex.normal < 0.0f || vertex.normal > 5.0f) {
+                return fail("torch template should use regular face normals instead of cross markers");
+            }
+            minY = std::min(minY, vertex.y);
+            maxY = std::max(maxY, vertex.y);
+        }
+        if (!approxEqual(minY, 32.0f) || !approxEqual(maxY, 33.0f)) {
+            return fail("floor torch planes should span the full texture height after rebuild");
+        }
+
+        float minU = meshData.cutoutVertices.front().u;
+        float maxU = meshData.cutoutVertices.front().u;
+        float minV = meshData.cutoutVertices.front().v;
+        float maxV = meshData.cutoutVertices.front().v;
+        for (const BlockVertex& vertex : meshData.cutoutVertices) {
+            minU = std::min(minU, vertex.u);
+            maxU = std::max(maxU, vertex.u);
+            minV = std::min(minV, vertex.v);
+            maxV = std::max(maxV, vertex.v);
+        }
+        if (!approxEqual(minU, 0.0f) || !approxEqual(maxU, 1.0f) ||
+            !approxEqual(minV, 0.0f) || !approxEqual(maxV, 1.0f)) {
+            return fail("torch planes should sample the full torch texture after rebuild");
+        }
+
+        const auto topFaceVertices = collectFaceVertices(meshData.cutoutVertices,
+                                                         0.0f,
+                                                         0.5f - kTorchHalfWidth,
+                                                         0.5f + kTorchHalfWidth,
+                                                         32.0f + kTorchHeight,
+                                                         32.0f + kTorchHeight,
+                                                         0.5f - kTorchHalfWidth,
+                                                         0.5f + kTorchHalfWidth);
+        if (topFaceVertices.size() != 6) {
+            return fail("floor torch should keep a 2x2 core top face");
+        }
+        float topMinV = topFaceVertices.front()->v;
+        float topMaxV = topFaceVertices.front()->v;
+        float topMinU = topFaceVertices.front()->u;
+        float topMaxU = topFaceVertices.front()->u;
+        for (const BlockVertex* vertex : topFaceVertices) {
+            topMinV = std::min(topMinV, vertex->v);
+            topMaxV = std::max(topMaxV, vertex->v);
+            topMinU = std::min(topMinU, vertex->u);
+            topMaxU = std::max(topMaxU, vertex->u);
+        }
+        if (!approxEqual(topMinU, kTorchTopU0) || !approxEqual(topMaxU, kTorchTopU1) ||
+            !approxEqual(topMinV, kTorchTopV0) || !approxEqual(topMaxV, kTorchTopV1)) {
+            return fail("torch core top face should sample the flame cap source texels");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        const StateID northTorch = BlockStateRegistry::getState(
+            BlockIds::TORCH,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_NORTH}
+            });
+        chunk.setBlock(0, 32, 0, northTorch);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutVertices.size() != 36) {
+            return fail("wall torch should emit the rebuilt torch template in the cutout pass");
+        }
+
+        float minZ = meshData.cutoutVertices.front().z;
+        float maxZ = meshData.cutoutVertices.front().z;
+        for (const BlockVertex& vertex : meshData.cutoutVertices) {
+            minZ = std::min(minZ, vertex.z);
+            maxZ = std::max(maxZ, vertex.z);
+        }
+        if (minZ > 0.1f || maxZ < 0.45f) {
+            return fail("north wall torch should lean out from the north wall after rebuild");
+        }
+    }
+
     std::cout << "[chunk_mesher_test] PASS\n";
     return EXIT_SUCCESS;
 }

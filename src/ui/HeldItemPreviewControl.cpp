@@ -45,6 +45,13 @@ constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
 
 constexpr float kCrossGrassMarker = -1.0f;
 constexpr float kCrossFlowerMarker = -2.0f;
+constexpr float kTorchU0 = 7.0f / 16.0f;
+constexpr float kTorchU1 = 9.0f / 16.0f;
+constexpr float kTorchV0 = 6.0f / 16.0f;
+constexpr float kTorchV1 = 1.0f;
+constexpr float kTorchTopV1 = 8.0f / 16.0f;
+constexpr float kTorchHalfWidth = 1.0f / 16.0f;
+constexpr float kTorchHeight = 10.0f / 16.0f;
 constexpr float kActionAnimDurationSec = 0.380f;
 constexpr float kActionPitchAmplitudeDeg = 18.0f;
 constexpr float kPi = 6.28318530717958647692f / 2;
@@ -59,6 +66,10 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
         case 5: return def.texRight;
         default: return 0;
     }
+}
+
+bool isTorchShape(const BlockDef& def) {
+    return def.renderShapeName == "torch";
 }
 }
 
@@ -110,9 +121,10 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
     const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
     const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-
-    const bool useItemMesh = (itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
     const BlockID renderBlock = ItemRegistry::toRenderBlock(selectedItem);
+    const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+
+    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
     const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArray.textureID != 0 && m_shader != nullptr);
     if (!useItemMesh && !useBlockMesh) {
         return;
@@ -357,6 +369,92 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
 
         emitQuad(kCrossQuadA);
         emitQuad(kCrossQuadB);
+    } else if (isTorchShape(def)) {
+        int tileIndex = def.texTop;
+        if (tileIndex < 0) {
+            tileIndex = def.texFront;
+        }
+        if (tileIndex < 0) {
+            tileIndex = 0;
+        }
+
+        const float layer = static_cast<float>(tileIndex);
+        const std::array<glm::vec2, 4> sideUV = {{
+            {kTorchU0, kTorchV0},
+            {kTorchU1, kTorchV0},
+            {kTorchU1, kTorchV1},
+            {kTorchU0, kTorchV1}
+        }};
+        const std::array<glm::vec2, 4> topUV = {{
+            {kTorchU0, 14.0f / 16.0f},
+            {kTorchU1, 14.0f / 16.0f},
+            {kTorchU1, 1.0f},
+            {kTorchU0, 1.0f}
+        }};
+        const float x0 = 0.5f - kTorchHalfWidth;
+        const float x1 = 0.5f + kTorchHalfWidth;
+        const float z0 = 0.5f - kTorchHalfWidth;
+        const float z1 = 0.5f + kTorchHalfWidth;
+        const float y0 = 0.0f;
+        const float y1 = kTorchHeight;
+
+        const auto emitFace = [&](const std::array<glm::vec3, 4>& corners,
+                                  const float normal,
+                                  const std::array<glm::vec2, 4>& uv) {
+            for (const int idx : kFaceIndices) {
+                const glm::vec3& pos = corners[idx];
+                const glm::vec2& uvCoord = uv[idx];
+                vertices.push_back({
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    uvCoord.x,
+                    uvCoord.y,
+                    normal,
+                    1.0f,
+                    0.0f,
+                    3.0f,
+                    layer
+                });
+            }
+        };
+
+        emitFace({{
+            {x0, y1, z1},
+            {x1, y1, z1},
+            {x1, y1, z0},
+            {x0, y1, z0}
+        }}, 0.0f, topUV);
+        emitFace({{
+            {x0, y0, z0},
+            {x1, y0, z0},
+            {x1, y0, z1},
+            {x0, y0, z1}
+        }}, 1.0f, topUV);
+        emitFace({{
+            {x0, y0, z1},
+            {x1, y0, z1},
+            {x1, y1, z1},
+            {x0, y1, z1}
+        }}, 2.0f, sideUV);
+        emitFace({{
+            {x1, y0, z0},
+            {x0, y0, z0},
+            {x0, y1, z0},
+            {x1, y1, z0}
+        }}, 3.0f, sideUV);
+        emitFace({{
+            {x0, y0, z0},
+            {x0, y0, z1},
+            {x0, y1, z1},
+            {x0, y1, z0}
+        }}, 4.0f, sideUV);
+        emitFace({{
+            {x1, y0, z1},
+            {x1, y0, z0},
+            {x1, y1, z0},
+            {x1, y1, z1}
+        }}, 5.0f, sideUV);
     } else {
         for (int face = 0; face < 6; ++face) {
             int tileIndex = getFaceTextureIndex(def, face);

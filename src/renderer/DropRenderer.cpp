@@ -43,6 +43,32 @@ constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.
 constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
 constexpr float kCrossGrassMarker = -1.0f;
 constexpr float kCrossFlowerMarker = -2.0f;
+// Torch opaque texels occupy inclusive pixel coordinates:
+// left=7, right=8, top=6, bottom=15 on a 16x16 tile.
+// We sample at texel centers to avoid pulling in the transparent neighbors.
+constexpr float kTorchPixelLeft = 7.0f;
+constexpr float kTorchPixelRight = 8.0f;
+constexpr float kTorchPixelTop = 6.0f;
+constexpr float kTorchPixelBottom = 15.0f;
+constexpr float kTorchU0 = (kTorchPixelLeft + 0.5f) / 16.0f;
+constexpr float kTorchU1 = (kTorchPixelRight + 0.5f) / 16.0f;
+constexpr float kTorchSideV0 = (kTorchPixelTop + 0.5f) / 16.0f;
+constexpr float kTorchSideV1 = (kTorchPixelBottom + 0.5f) / 16.0f;
+constexpr float kTorchTopV0 = (kTorchPixelTop + 0.5f) / 16.0f;
+constexpr float kTorchTopV1 = (kTorchPixelTop + 1.5f) / 16.0f;
+constexpr float kTorchHalfWidth = 1.0f / 16.0f;
+constexpr float kTorchHeight = 10.0f / 16.0f;
+constexpr float kTorchModelPixel = 1.0f / 16.0f;
+constexpr float kTorchModelCoreMin = 7.0f * kTorchModelPixel;
+constexpr float kTorchModelCoreMax = 9.0f * kTorchModelPixel;
+constexpr float kTorchModelCoreTop = 10.0f * kTorchModelPixel;
+
+struct TorchModelUvRect {
+    float u0;
+    float v0;
+    float u1;
+    float v1;
+};
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
     switch (face) {
@@ -60,6 +86,52 @@ int getFaceTextureIndex(const BlockDef& def, const int face) {
             return def.texRight;
         default:
             return 0;
+    }
+}
+
+bool isTorchShape(const BlockDef& def) {
+    return def.renderShapeName == "torch";
+}
+
+TorchModelUvRect makeTorchModelSourceUvRect(const float left,
+                                            const float top,
+                                            const float right,
+                                            const float bottom) {
+    return {
+        left * kTorchModelPixel,
+        1.0f - bottom * kTorchModelPixel,
+        right * kTorchModelPixel,
+        1.0f - top * kTorchModelPixel
+    };
+}
+
+void emitTorchModelFace(std::vector<BlockVertex>& vertices,
+                        const float layer,
+                        const float normal,
+                        const std::array<glm::vec3, 4>& corners,
+                        const TorchModelUvRect& uvRect) {
+    const std::array<glm::vec2, 4> uv = {{
+        {uvRect.u0, uvRect.v0},
+        {uvRect.u1, uvRect.v0},
+        {uvRect.u1, uvRect.v1},
+        {uvRect.u0, uvRect.v1}
+    }};
+
+    for (const int idx : kFaceIndices) {
+        const glm::vec3& pos = corners[static_cast<size_t>(idx)];
+        const glm::vec2& uvCoord = uv[static_cast<size_t>(idx)];
+        vertices.push_back({
+            pos.x,
+            pos.y,
+            pos.z,
+            uvCoord.x,
+            uvCoord.y,
+            normal,
+            1.0f,
+            0.0f,
+            3.0f,
+            layer
+        });
     }
 }
 }
@@ -135,6 +207,8 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     for (const DropEntity& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+        const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
+        const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
 
         glm::mat4 model(1.0f);
         model = glm::translate(model, drop.position);
@@ -142,7 +216,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
         model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
 
-        if (itemTileIndex >= 0 && canRenderItems) {
+        if (!preferBlockMesh && itemTileIndex >= 0 && canRenderItems) {
             Mesh* mesh = getOrCreateItemMesh(drop.itemId);
             if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
                 m_itemShader->use();
@@ -155,7 +229,6 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
             continue;
         }
 
-        const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
         if (renderBlock == 0 || !canRenderBlocks) {
             continue;
         }
@@ -293,34 +366,83 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
 
         emitQuad(kCrossQuadA);
         emitQuad(kCrossQuadB);
-    } else {
-
-    for (int face = 0; face < 6; ++face) {
-        int tileIndex = getFaceTextureIndex(def, face);
+    } else if (isTorchShape(def)) {
+        int tileIndex = def.texTop;
+        if (tileIndex < 0) {
+            tileIndex = def.texFront;
+        }
         if (tileIndex < 0) {
             tileIndex = 0;
         }
 
         const float layer = static_cast<float>(tileIndex);
-        const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+        const TorchModelUvRect kTorchTopUv = makeTorchModelSourceUvRect(7.0f, 6.0f, 9.0f, 8.0f);
+        const TorchModelUvRect kTorchBottomUv = makeTorchModelSourceUvRect(7.0f, 13.0f, 9.0f, 15.0f);
+        const TorchModelUvRect kTorchFullUv = makeTorchModelSourceUvRect(0.0f, 0.0f, 16.0f, 16.0f);
 
-        for (const int idx : kFaceIndices) {
-            const glm::vec3& pos = kFaceCorners[face][idx];
-            const glm::vec2& uvCoord = faceUV[idx];
-            vertices.push_back({
-                pos.x,
-                pos.y,
-                pos.z,
-                uvCoord.x,
-                uvCoord.y,
-                static_cast<float>(face),
-                1.0f,  // sunlight: full brightness for drop items
-                0.0f,   // blockLight
-                3.0f,   // ao: no occlusion
-                layer
-            });
+        emitTorchModelFace(vertices, layer, 0.0f, {{
+            {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMax},
+            {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax},
+            {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMin},
+            {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMin}
+        }}, kTorchTopUv);
+        emitTorchModelFace(vertices, layer, 1.0f, {{
+            {kTorchModelCoreMin, 0.0f, kTorchModelCoreMin},
+            {kTorchModelCoreMax, 0.0f, kTorchModelCoreMin},
+            {kTorchModelCoreMax, 0.0f, kTorchModelCoreMax},
+            {kTorchModelCoreMin, 0.0f, kTorchModelCoreMax}
+        }}, kTorchBottomUv);
+        emitTorchModelFace(vertices, layer, 4.0f, {{
+            {kTorchModelCoreMin, 0.0f, 0.0f},
+            {kTorchModelCoreMin, 0.0f, 1.0f},
+            {kTorchModelCoreMin, 1.0f, 1.0f},
+            {kTorchModelCoreMin, 1.0f, 0.0f}
+        }}, kTorchFullUv);
+        emitTorchModelFace(vertices, layer, 5.0f, {{
+            {kTorchModelCoreMax, 0.0f, 1.0f},
+            {kTorchModelCoreMax, 0.0f, 0.0f},
+            {kTorchModelCoreMax, 1.0f, 0.0f},
+            {kTorchModelCoreMax, 1.0f, 1.0f}
+        }}, kTorchFullUv);
+        emitTorchModelFace(vertices, layer, 2.0f, {{
+            {0.0f, 0.0f, kTorchModelCoreMax},
+            {1.0f, 0.0f, kTorchModelCoreMax},
+            {1.0f, 1.0f, kTorchModelCoreMax},
+            {0.0f, 1.0f, kTorchModelCoreMax}
+        }}, kTorchFullUv);
+        emitTorchModelFace(vertices, layer, 3.0f, {{
+            {1.0f, 0.0f, kTorchModelCoreMin},
+            {0.0f, 0.0f, kTorchModelCoreMin},
+            {0.0f, 1.0f, kTorchModelCoreMin},
+            {1.0f, 1.0f, kTorchModelCoreMin}
+        }}, kTorchFullUv);
+    } else {
+        for (int face = 0; face < 6; ++face) {
+            int tileIndex = getFaceTextureIndex(def, face);
+            if (tileIndex < 0) {
+                tileIndex = 0;
+            }
+
+            const float layer = static_cast<float>(tileIndex);
+            const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+
+            for (const int idx : kFaceIndices) {
+                const glm::vec3& pos = kFaceCorners[face][idx];
+                const glm::vec2& uvCoord = faceUV[idx];
+                vertices.push_back({
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    uvCoord.x,
+                    uvCoord.y,
+                    static_cast<float>(face),
+                    1.0f,  // sunlight: full brightness for drop items
+                    0.0f,   // blockLight
+                    3.0f,   // ao: no occlusion
+                    layer
+                });
+            }
         }
-    }
     }
 
     if (vertices.empty()) {

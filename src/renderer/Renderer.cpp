@@ -749,6 +749,7 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
 
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
+    m_chunkShader->setInt("uForceBaseLod", 1);
 
     for (const ChunkRenderEntry& entry : cutoutEntries) {
         if (entry.chunk == nullptr) continue;
@@ -774,6 +775,8 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutVertexCount));
         ++drawCallCount;
     }
+
+    m_chunkShader->setInt("uForceBaseLod", 0);
 }
 
 

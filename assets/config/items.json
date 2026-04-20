@@ -48,6 +48,14 @@
       "icon": "minecraft:iron_ore",
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:iron_ore"
+    },
+    {
+      "id": "minecraft:torch",
+      "iconTexture": "torch",
+      "maxStack": 64,
+      "icon": "minecraft:torch",
+      "placeBlock": "minecraft:torch",
+      "renderBlock": "minecraft:torch"
     }
   ]
 }

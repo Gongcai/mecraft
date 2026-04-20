@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec2.hpp>
 
 #include "MeshBuilderRegistry.h"
@@ -1173,17 +1174,31 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
 //   east   — single quad in X-max plane, offset toward +X wall
 //   west   — single quad in X-min plane, offset toward -X wall
 
-constexpr float kTorchU0 = 7.0f / 16.0f;
-constexpr float kTorchU1 = 9.0f / 16.0f;
-constexpr float kTorchV0 = 6.0f / 16.0f;
-constexpr float kTorchV1 = 1.0f;
+// Torch opaque texels occupy inclusive pixel coordinates:
+// left=7, right=8, top=6, bottom=15 on a 16x16 tile.
+// We sample at texel centers to avoid pulling in the transparent neighbors.
+constexpr float kTorchPixelLeft = 7.0f;
+constexpr float kTorchPixelRight = 8.0f;
+constexpr float kTorchPixelTop = 6.0f;
+constexpr float kTorchPixelBottom = 15.0f;
+constexpr float kTorchU0 = (kTorchPixelLeft + 0.5f) / 16.0f;
+constexpr float kTorchU1 = (kTorchPixelRight + 0.5f) / 16.0f;
+constexpr float kTorchSideV0 = (kTorchPixelTop + 0.5f) / 16.0f;
+constexpr float kTorchSideV1 = (kTorchPixelBottom + 0.5f) / 16.0f;
+constexpr float kTorchTopV0 = (kTorchPixelTop + 0.5f) / 16.0f;
+constexpr float kTorchTopV1 = (kTorchPixelTop + 1.5f) / 16.0f;
 
 // Torch half-width in world units (1 pixel = 1/16 block)
 constexpr float kTorchHW = 1.0f / 16.0f;
+constexpr float kTorchHeight = 10.0f / 16.0f;
+constexpr float kFloorTorchBottom = 0.0f;
+constexpr float kFloorTorchTop = kFloorTorchBottom + kTorchHeight;
+constexpr float kWallTorchBottom = 3.0f / 16.0f;
+constexpr float kWallTorchTop = kWallTorchBottom + kTorchHeight;
 // Wall offset: how far the torch center sits from the wall
 constexpr float kTorchWallOffset = 1.0f / 16.0f;
 
-void addTorchQuadsImpl(std::vector<BlockVertex>& vertices,
+void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                         const glm::vec3& pos,
                         const BlockID blockId,
                         const int x,
@@ -1219,23 +1234,30 @@ void addTorchQuadsImpl(std::vector<BlockVertex>& vertices,
 
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
 
-    // UV for torch: sample center 2px wide, bottom 10px tall
-    const std::array<glm::vec2, 4> torchUV = {{
-        {kTorchU0, kTorchV0},
-        {kTorchU1, kTorchV0},
-        {kTorchU1, kTorchV1},
-        {kTorchU0, kTorchV1}
+    const std::array<glm::vec2, 4> sideUV = {{
+        {kTorchU0, kTorchSideV0},
+        {kTorchU1, kTorchSideV0},
+        {kTorchU1, kTorchSideV1},
+        {kTorchU0, kTorchSideV1}
+    }};
+    const std::array<glm::vec2, 4> topUV = {{
+        {kTorchU0, kTorchTopV0},
+        {kTorchU1, kTorchTopV0},
+        {kTorchU1, kTorchTopV1},
+        {kTorchU0, kTorchTopV1}
     }};
 
-    const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
+    const auto emitFace = [&](const std::array<glm::vec3, 4>& corners,
+                              const int face,
+                              const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
             vertices.push_back({
                 pos.x + corners[static_cast<size_t>(idx)].x,
                 pos.y + corners[static_cast<size_t>(idx)].y,
                 pos.z + corners[static_cast<size_t>(idx)].z,
-                torchUV[static_cast<size_t>(idx)].x,
-                torchUV[static_cast<size_t>(idx)].y,
-                CROSS_FLOWER_MARKER,
+                uv[static_cast<size_t>(idx)].x,
+                uv[static_cast<size_t>(idx)].y,
+                static_cast<float>(face),
                 sunNorm,
                 blockNorm,
                 3.0f,
@@ -1244,59 +1266,496 @@ void addTorchQuadsImpl(std::vector<BlockVertex>& vertices,
         }
     };
 
+    float x0 = 0.5f - kTorchHW;
+    float x1 = 0.5f + kTorchHW;
+    float z0 = 0.5f - kTorchHW;
+    float z1 = 0.5f + kTorchHW;
+    float y0 = kFloorTorchBottom;
+    float y1 = kFloorTorchTop;
+    const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
+        emitFace(corners, FACE_FRONT, sideUV);
+    };
+
     if (facingValue == PropIndices::FACING_FLOOR) {
         // ── Floor torch: two thin crossed quads, centered ──
         // Quad A: diagonal along (X+Z)
         emitQuad({{
-            {0.5f - kTorchHW, 0.0f, 0.5f - kTorchHW},
-            {0.5f + kTorchHW, 0.0f, 0.5f + kTorchHW},
-            {0.5f + kTorchHW, 1.0f, 0.5f + kTorchHW},
-            {0.5f - kTorchHW, 1.0f, 0.5f - kTorchHW}
+            {0.5f - kTorchHW, kFloorTorchBottom, 0.5f - kTorchHW},
+            {0.5f + kTorchHW, kFloorTorchBottom, 0.5f + kTorchHW},
+            {0.5f + kTorchHW, kFloorTorchTop, 0.5f + kTorchHW},
+            {0.5f - kTorchHW, kFloorTorchTop, 0.5f - kTorchHW}
         }});
         // Quad B: diagonal along (X-Z)
         emitQuad({{
-            {0.5f + kTorchHW, 0.0f, 0.5f - kTorchHW},
-            {0.5f - kTorchHW, 0.0f, 0.5f + kTorchHW},
-            {0.5f - kTorchHW, 1.0f, 0.5f + kTorchHW},
-            {0.5f + kTorchHW, 1.0f, 0.5f - kTorchHW}
+            {0.5f + kTorchHW, kFloorTorchBottom, 0.5f - kTorchHW},
+            {0.5f - kTorchHW, kFloorTorchBottom, 0.5f + kTorchHW},
+            {0.5f - kTorchHW, kFloorTorchTop, 0.5f + kTorchHW},
+            {0.5f + kTorchHW, kFloorTorchTop, 0.5f - kTorchHW}
         }});
     } else if (facingValue == PropIndices::FACING_NORTH) {
         // ── Wall torch on -Z face ──
         const float cz = kTorchWallOffset;
         emitQuad({{
-            {0.5f - kTorchHW, 0.0f, cz - kTorchHW},
-            {0.5f + kTorchHW, 0.0f, cz + kTorchHW},
-            {0.5f + kTorchHW, 1.0f, cz + kTorchHW},
-            {0.5f - kTorchHW, 1.0f, cz - kTorchHW}
+            {0.5f - kTorchHW, kWallTorchBottom, cz - kTorchHW},
+            {0.5f + kTorchHW, kWallTorchBottom, cz + kTorchHW},
+            {0.5f + kTorchHW, kWallTorchTop, cz + kTorchHW},
+            {0.5f - kTorchHW, kWallTorchTop, cz - kTorchHW}
         }});
     } else if (facingValue == PropIndices::FACING_SOUTH) {
         // ── Wall torch on +Z face ──
         const float cz = 1.0f - kTorchWallOffset;
         emitQuad({{
-            {0.5f + kTorchHW, 0.0f, cz + kTorchHW},
-            {0.5f - kTorchHW, 0.0f, cz - kTorchHW},
-            {0.5f - kTorchHW, 1.0f, cz - kTorchHW},
-            {0.5f + kTorchHW, 1.0f, cz + kTorchHW}
+            {0.5f + kTorchHW, kWallTorchBottom, cz + kTorchHW},
+            {0.5f - kTorchHW, kWallTorchBottom, cz - kTorchHW},
+            {0.5f - kTorchHW, kWallTorchTop, cz - kTorchHW},
+            {0.5f + kTorchHW, kWallTorchTop, cz + kTorchHW}
         }});
     } else if (facingValue == PropIndices::FACING_WEST) {
         // ── Wall torch on -X face ──
         const float cx = kTorchWallOffset;
         emitQuad({{
-            {cx + kTorchHW, 0.0f, 0.5f - kTorchHW},
-            {cx - kTorchHW, 0.0f, 0.5f + kTorchHW},
-            {cx - kTorchHW, 1.0f, 0.5f + kTorchHW},
-            {cx + kTorchHW, 1.0f, 0.5f - kTorchHW}
+            {cx + kTorchHW, kWallTorchBottom, 0.5f - kTorchHW},
+            {cx - kTorchHW, kWallTorchBottom, 0.5f + kTorchHW},
+            {cx - kTorchHW, kWallTorchTop, 0.5f + kTorchHW},
+            {cx + kTorchHW, kWallTorchTop, 0.5f - kTorchHW}
         }});
     } else if (facingValue == PropIndices::FACING_EAST) {
         // ── Wall torch on +X face ──
         const float cx = 1.0f - kTorchWallOffset;
         emitQuad({{
-            {cx - kTorchHW, 0.0f, 0.5f + kTorchHW},
-            {cx + kTorchHW, 0.0f, 0.5f - kTorchHW},
-            {cx + kTorchHW, 1.0f, 0.5f - kTorchHW},
-            {cx - kTorchHW, 1.0f, 0.5f + kTorchHW}
+            {cx - kTorchHW, kWallTorchBottom, 0.5f + kTorchHW},
+            {cx + kTorchHW, kWallTorchBottom, 0.5f - kTorchHW},
+            {cx + kTorchHW, kWallTorchTop, 0.5f - kTorchHW},
+            {cx - kTorchHW, kWallTorchTop, 0.5f + kTorchHW}
         }});
     }
+}
+
+void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
+                       const glm::vec3& pos,
+                       const BlockID blockId,
+                       const int x,
+                       const int y,
+                       const int z,
+                       const SubChunkMeshingSnapshot& snapshot) {
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    int tileIndex = textures.texTop;
+    if (tileIndex < 0) {
+        tileIndex = 0;
+    }
+    const float layer = static_cast<float>(tileIndex);
+
+    uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
+    uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
+    for (int d = 0; d < 6; ++d) {
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot,
+            x + kFaceNormals[static_cast<size_t>(d)].x,
+            y + kFaceNormals[static_cast<size_t>(d)].y,
+            z + kFaceNormals[static_cast<size_t>(d)].z));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot,
+            x + kFaceNormals[static_cast<size_t>(d)].x,
+            y + kFaceNormals[static_cast<size_t>(d)].y,
+            z + kFaceNormals[static_cast<size_t>(d)].z));
+    }
+    const float sunNorm = lightToNormalized(sunLevel);
+    const float blockNorm = lightToNormalized(blockLevel);
+
+    uint16_t facingValue = PropIndices::FACING_FLOOR;
+    if (PropIndices::FACING != PropIndices::INVALID) {
+        facingValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    }
+
+    const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
+    const std::array<glm::vec2, 4> sideUV = {{
+        {kTorchU0, kTorchSideV0},
+        {kTorchU1, kTorchSideV0},
+        {kTorchU1, kTorchSideV1},
+        {kTorchU0, kTorchSideV1}
+    }};
+    const std::array<glm::vec2, 4> topUV = {{
+        {kTorchU0, kTorchTopV0},
+        {kTorchU1, kTorchTopV0},
+        {kTorchU1, kTorchTopV1},
+        {kTorchU0, kTorchTopV1}
+    }};
+
+    const auto emitFace = [&](const std::array<glm::vec3, 4>& corners,
+                              const int face,
+                              const std::array<glm::vec2, 4>& uv) {
+        for (const int idx : indices) {
+            vertices.push_back({
+                pos.x + corners[static_cast<size_t>(idx)].x,
+                pos.y + corners[static_cast<size_t>(idx)].y,
+                pos.z + corners[static_cast<size_t>(idx)].z,
+                uv[static_cast<size_t>(idx)].x,
+                uv[static_cast<size_t>(idx)].y,
+                static_cast<float>(face),
+                sunNorm,
+                blockNorm,
+                3.0f,
+                layer
+            });
+        }
+    };
+
+    float x0 = 0.5f - kTorchHW;
+    float x1 = 0.5f + kTorchHW;
+    float z0 = 0.5f - kTorchHW;
+    float z1 = 0.5f + kTorchHW;
+    float y0 = kFloorTorchBottom;
+    float y1 = kFloorTorchTop;
+
+    if (facingValue == PropIndices::FACING_NORTH) {
+        z0 = 0.0f;
+        z1 = 2.0f * kTorchHW;
+        y0 = kWallTorchBottom;
+        y1 = kWallTorchTop;
+    } else if (facingValue == PropIndices::FACING_SOUTH) {
+        z0 = 1.0f - 2.0f * kTorchHW;
+        z1 = 1.0f;
+        y0 = kWallTorchBottom;
+        y1 = kWallTorchTop;
+    } else if (facingValue == PropIndices::FACING_WEST) {
+        x0 = 0.0f;
+        x1 = 2.0f * kTorchHW;
+        y0 = kWallTorchBottom;
+        y1 = kWallTorchTop;
+    } else if (facingValue == PropIndices::FACING_EAST) {
+        x0 = 1.0f - 2.0f * kTorchHW;
+        x1 = 1.0f;
+        y0 = kWallTorchBottom;
+        y1 = kWallTorchTop;
+    }
+
+    emitFace({{
+        {x0, y1, z1},
+        {x1, y1, z1},
+        {x1, y1, z0},
+        {x0, y1, z0}
+    }}, FACE_TOP, topUV);
+    emitFace({{
+        {x0, y0, z0},
+        {x1, y0, z0},
+        {x1, y0, z1},
+        {x0, y0, z1}
+    }}, FACE_BOTTOM, topUV);
+    emitFace({{
+        {x0, y0, z1},
+        {x1, y0, z1},
+        {x1, y1, z1},
+        {x0, y1, z1}
+    }}, FACE_FRONT, sideUV);
+    emitFace({{
+        {x1, y0, z0},
+        {x0, y0, z0},
+        {x0, y1, z0},
+        {x1, y1, z0}
+    }}, FACE_BACK, sideUV);
+    emitFace({{
+        {x0, y0, z0},
+        {x0, y0, z1},
+        {x0, y1, z1},
+        {x0, y1, z0}
+    }}, FACE_LEFT, sideUV);
+    emitFace({{
+        {x1, y0, z1},
+        {x1, y0, z0},
+        {x1, y1, z0},
+        {x1, y1, z1}
+    }}, FACE_RIGHT, sideUV);
+}
+
+constexpr float kTorchModelPixel = 1.0f / 16.0f;
+constexpr float kTorchModelCoreMin = 7.0f * kTorchModelPixel;
+constexpr float kTorchModelCoreMax = 9.0f * kTorchModelPixel;
+constexpr float kTorchModelCoreTop = 10.0f * kTorchModelPixel;
+
+struct TorchModelUvRect {
+    float u0;
+    float v0;
+    float u1;
+    float v1;
+};
+
+TorchModelUvRect makeTorchModelSourceUvRect(const float left,
+                                            const float top,
+                                            const float right,
+                                            const float bottom) {
+    return {
+        left * kTorchModelPixel,
+        1.0f - bottom * kTorchModelPixel,
+        right * kTorchModelPixel,
+        1.0f - top * kTorchModelPixel
+    };
+}
+
+glm::vec3 transformTorchModelPoint(const glm::mat4& transform, const glm::vec3& point) {
+    return glm::vec3(transform * glm::vec4(point, 1.0f));
+}
+
+glm::mat4 makeTorchModelRotation(const float angleDegrees,
+                                 const glm::vec3& axis,
+                                 const glm::vec3& origin) {
+    glm::mat4 transform(1.0f);
+    transform = glm::translate(transform, origin);
+    transform = glm::rotate(transform, glm::radians(angleDegrees), axis);
+    transform = glm::translate(transform, -origin);
+    return transform;
+}
+
+glm::mat4 buildWallTorchModelTransform(const uint16_t facingValue) {
+    const glm::mat4 tilt = makeTorchModelRotation(-22.5f,
+                                                  glm::vec3(0.0f, 0.0f, 1.0f),
+                                                  glm::vec3(0.0f, 3.5f * kTorchModelPixel, 8.0f * kTorchModelPixel));
+
+    float yDegrees = 0.0f;
+    if (facingValue == PropIndices::FACING_NORTH) {
+        yDegrees = 90.0f;
+    } else if (facingValue == PropIndices::FACING_SOUTH) {
+        yDegrees = -90.0f;
+    } else if (facingValue == PropIndices::FACING_WEST) {
+        yDegrees = 180.0f;
+    } else if (facingValue == PropIndices::FACING_EAST) {
+        yDegrees = 0.0f;
+    }
+
+    const glm::mat4 yaw = makeTorchModelRotation(yDegrees,
+                                                 glm::vec3(0.0f, 1.0f, 0.0f),
+                                                 glm::vec3(0.5f, 0.5f, 0.5f));
+    return yaw * tilt;
+}
+
+void emitTorchModelFace(std::vector<BlockVertex>& vertices,
+                        const glm::vec3& pos,
+                        const float layer,
+                        const float sunNorm,
+                        const float blockNorm,
+                        const int face,
+                        const std::array<glm::vec3, 4>& localCorners,
+                        const TorchModelUvRect& uvRect,
+                        const glm::mat4& transform = glm::mat4(1.0f)) {
+    const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
+    const std::array<glm::vec2, 4> uv = {{
+        {uvRect.u0, uvRect.v0},
+        {uvRect.u1, uvRect.v0},
+        {uvRect.u1, uvRect.v1},
+        {uvRect.u0, uvRect.v1}
+    }};
+
+    for (const int idx : indices) {
+        const glm::vec3 localPos = transformTorchModelPoint(transform, localCorners[static_cast<size_t>(idx)]);
+        vertices.push_back({
+            pos.x + localPos.x,
+            pos.y + localPos.y,
+            pos.z + localPos.z,
+            uv[static_cast<size_t>(idx)].x,
+            uv[static_cast<size_t>(idx)].y,
+            static_cast<float>(face),
+            sunNorm,
+            blockNorm,
+            3.0f,
+            layer
+        });
+    }
+}
+
+void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
+                               const glm::vec3& pos,
+                               const float layer,
+                               const float sunNorm,
+                               const float blockNorm,
+                               const glm::vec3& from,
+                               const glm::vec3& to,
+                               const glm::mat4& transform,
+                               const bool emitTop,
+                               const TorchModelUvRect& topUv,
+                               const bool emitBottom,
+                               const TorchModelUvRect& bottomUv,
+                               const bool emitFront,
+                               const TorchModelUvRect& frontUv,
+                               const bool emitBack,
+                               const TorchModelUvRect& backUv,
+                               const bool emitLeft,
+                               const TorchModelUvRect& leftUv,
+                               const bool emitRight,
+                               const TorchModelUvRect& rightUv) {
+    if (emitTop) {
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_TOP, {{
+            {from.x, to.y, to.z},
+            {to.x, to.y, to.z},
+            {to.x, to.y, from.z},
+            {from.x, to.y, from.z}
+        }}, topUv, transform);
+    }
+    if (emitBottom) {
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BOTTOM, {{
+            {from.x, from.y, from.z},
+            {to.x, from.y, from.z},
+            {to.x, from.y, to.z},
+            {from.x, from.y, to.z}
+        }}, bottomUv, transform);
+    }
+    if (emitFront) {
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_FRONT, {{
+            {from.x, from.y, to.z},
+            {to.x, from.y, to.z},
+            {to.x, to.y, to.z},
+            {from.x, to.y, to.z}
+        }}, frontUv, transform);
+    }
+    if (emitBack) {
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BACK, {{
+            {to.x, from.y, from.z},
+            {from.x, from.y, from.z},
+            {from.x, to.y, from.z},
+            {to.x, to.y, from.z}
+        }}, backUv, transform);
+    }
+    if (emitLeft) {
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_LEFT, {{
+            {from.x, from.y, from.z},
+            {from.x, from.y, to.z},
+            {from.x, to.y, to.z},
+            {from.x, to.y, from.z}
+        }}, leftUv, transform);
+    }
+    if (emitRight) {
+        emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_RIGHT, {{
+            {to.x, from.y, to.z},
+            {to.x, from.y, from.z},
+            {to.x, to.y, from.z},
+            {to.x, to.y, to.z}
+        }}, rightUv, transform);
+    }
+}
+
+void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
+                          const glm::vec3& pos,
+                          const BlockID blockId,
+                          const int x,
+                          const int y,
+                          const int z,
+                          const SubChunkMeshingSnapshot& snapshot) {
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    int tileIndex = textures.texTop;
+    if (tileIndex < 0) {
+        tileIndex = 0;
+    }
+    const float layer = static_cast<float>(tileIndex);
+
+    uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
+    uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
+    for (int d = 0; d < 6; ++d) {
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot,
+            x + kFaceNormals[static_cast<size_t>(d)].x,
+            y + kFaceNormals[static_cast<size_t>(d)].y,
+            z + kFaceNormals[static_cast<size_t>(d)].z));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot,
+            x + kFaceNormals[static_cast<size_t>(d)].x,
+            y + kFaceNormals[static_cast<size_t>(d)].y,
+            z + kFaceNormals[static_cast<size_t>(d)].z));
+    }
+    const float sunNorm = lightToNormalized(sunLevel);
+    const float blockNorm = lightToNormalized(blockLevel);
+
+    uint16_t facingValue = PropIndices::FACING_FLOOR;
+    if (PropIndices::FACING != PropIndices::INVALID) {
+        facingValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    }
+
+    const TorchModelUvRect kTorchTopUv = makeTorchModelSourceUvRect(7.0f, 6.0f, 9.0f, 8.0f);
+    const TorchModelUvRect kTorchBottomUv = makeTorchModelSourceUvRect(7.0f, 13.0f, 9.0f, 15.0f);
+    const TorchModelUvRect kTorchFullUv = makeTorchModelSourceUvRect(0.0f, 0.0f, 16.0f, 16.0f);
+
+    if (facingValue == PropIndices::FACING_FLOOR) {
+        emitTorchModelCuboidFaces(vertices,
+                                  pos,
+                                  layer,
+                                  sunNorm,
+                                  blockNorm,
+                                  glm::vec3(kTorchModelCoreMin, 0.0f, kTorchModelCoreMin),
+                                  glm::vec3(kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax),
+                                  glm::mat4(1.0f),
+                                  true, kTorchTopUv,
+                                  true, kTorchBottomUv,
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv);
+        emitTorchModelCuboidFaces(vertices,
+                                  pos,
+                                  layer,
+                                  sunNorm,
+                                  blockNorm,
+                                  glm::vec3(kTorchModelCoreMin, 0.0f, 0.0f),
+                                  glm::vec3(kTorchModelCoreMax, 1.0f, 1.0f),
+                                  glm::mat4(1.0f),
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  true, kTorchFullUv,
+                                  true, kTorchFullUv);
+        emitTorchModelCuboidFaces(vertices,
+                                  pos,
+                                  layer,
+                                  sunNorm,
+                                  blockNorm,
+                                  glm::vec3(0.0f, 0.0f, kTorchModelCoreMin),
+                                  glm::vec3(1.0f, 1.0f, kTorchModelCoreMax),
+                                  glm::mat4(1.0f),
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  true, kTorchFullUv,
+                                  true, kTorchFullUv,
+                                  false, kTorchFullUv,
+                                  false, kTorchFullUv);
+        return;
+    }
+
+    const glm::mat4 wallTransform = buildWallTorchModelTransform(facingValue);
+    emitTorchModelCuboidFaces(vertices,
+                              pos,
+                              layer,
+                              sunNorm,
+                              blockNorm,
+                              glm::vec3(-1.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 7.0f * kTorchModelPixel),
+                              glm::vec3( 1.0f * kTorchModelPixel, 13.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
+                              wallTransform,
+                              true, kTorchTopUv,
+                              true, kTorchBottomUv,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv);
+    emitTorchModelCuboidFaces(vertices,
+                              pos,
+                              layer,
+                              sunNorm,
+                              blockNorm,
+                              glm::vec3(-1.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 0.0f),
+                              glm::vec3( 1.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 1.0f),
+                              wallTransform,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv,
+                              true, kTorchFullUv,
+                              true, kTorchFullUv);
+    emitTorchModelCuboidFaces(vertices,
+                              pos,
+                              layer,
+                              sunNorm,
+                              blockNorm,
+                              glm::vec3(-8.0f * kTorchModelPixel, 3.5f * kTorchModelPixel, 7.0f * kTorchModelPixel),
+                              glm::vec3( 8.0f * kTorchModelPixel, 19.5f * kTorchModelPixel, 9.0f * kTorchModelPixel),
+                              wallTransform,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv,
+                              true, kTorchFullUv,
+                              true, kTorchFullUv,
+                              false, kTorchFullUv,
+                              false, kTorchFullUv);
 }
 
 } // anonymous namespace
@@ -1323,7 +1782,7 @@ void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
                                     const int x,
                                     const int y,
                                     const int z) {
-    addTorchQuadsImpl(meshData.cutoutVertices,
+    addTorchTemplateImpl(meshData.cutoutVertices,
                       glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                       blockId, x, y, z, snapshot);
     expandBounds(meshData,

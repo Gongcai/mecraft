@@ -70,7 +70,8 @@ void main() {
     }
 
     // Cross vegetation alpha-cutout mips can darken noticeably at distance.
-    bool forceBaseLod = (uForceBaseLod != 0) || (vNormal < -0.5);
+    bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
+    bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
     vec3 sampleCoord = vec3(vUV, vLayer);
     vec4 texColor = forceBaseLod
         ? textureLod(texArray, sampleCoord, 0.0)
