@@ -279,7 +279,7 @@
       "renderShape": "torch",
       "timeToBreak": 10,
       "textures": {
-        "all": "blue_wool"
+        "all": "torch_on"
       }
     },
     {

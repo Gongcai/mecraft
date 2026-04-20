@@ -52,7 +52,7 @@ void MeshBuilderRegistry::initBuiltinBuilders() {
 
     registerBuilder("cube", CUBE_TAG, MeshShapeClass::Cube, nullptr);
     registerBuilder("cross", CROSS_TAG, MeshShapeClass::Cross, &ChunkMeshBuilders::buildCross);
-    registerBuilder("torch", TORCH_TAG, MeshShapeClass::Cross, &ChunkMeshBuilders::buildCross);
+    registerBuilder("torch", TORCH_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildTorch);
 
     g_initialized = true;
 }

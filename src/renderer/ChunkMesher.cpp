@@ -65,6 +65,7 @@ constexpr int FACE_RIGHT = 5;
 constexpr float CROSS_GRASS_MARKER = -1.0f;
 constexpr float CROSS_FLOWER_MARKER = -2.0f;
 constexpr float kNormalizedQuantizationScale = 180.0f;
+constexpr float kGreedyFaceOverlapEpsilon = 1.0f / 1024.0f;
 
 constexpr std::array<IVec3, 6> kFaceNormals = {{{0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}, {-1, 0, 0}, {1, 0, 0}}};
 
@@ -798,6 +799,44 @@ std::array<glm::vec3, 4> buildGreedyFaceCorners(const int face,
     }
 }
 
+void expandGreedyFaceCornersInPlane(std::array<glm::vec3, 4>& corners, const int face) {
+    glm::vec3 center(0.0f);
+    for (const glm::vec3& corner : corners) {
+        center += corner;
+    }
+    center *= 0.25f;
+
+    const auto expandAxis = [](float& value, const float centerValue) {
+        value += (value >= centerValue) ? kGreedyFaceOverlapEpsilon : -kGreedyFaceOverlapEpsilon;
+    };
+
+    switch (face) {
+        case FACE_TOP:
+        case FACE_BOTTOM:
+            for (glm::vec3& corner : corners) {
+                expandAxis(corner.x, center.x);
+                expandAxis(corner.z, center.z);
+            }
+            break;
+        case FACE_FRONT:
+        case FACE_BACK:
+            for (glm::vec3& corner : corners) {
+                expandAxis(corner.x, center.x);
+                expandAxis(corner.y, center.y);
+            }
+            break;
+        case FACE_LEFT:
+        case FACE_RIGHT:
+            for (glm::vec3& corner : corners) {
+                expandAxis(corner.y, center.y);
+                expandAxis(corner.z, center.z);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 std::array<glm::vec2, 4> buildFaceUv(const float width,
                                      const float height,
                                      const uint8_t quarterTurns) {
@@ -832,7 +871,11 @@ void emitGreedyFace(std::vector<BlockVertex>& vertices,
                     const int face,
                     const int width,
                     const int height) {
-    const std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, width, height);
+    std::array<glm::vec3, 4> corners = buildGreedyFaceCorners(face, cell.x, cell.y, cell.z, width, height);
+    // Greedy quads can form T-junctions against neighbouring smaller quads.
+    // Expanding them by a tiny amount in-plane hides raster cracks without
+    // changing the face depth.
+    expandGreedyFaceCornersInPlane(corners, face);
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(
         static_cast<float>(width),
         static_cast<float>(height),
@@ -1119,6 +1162,143 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
     emitQuad(kCrossQuadB);
 }
 
+// ── Torch mesh builder ──────────────────────────────────────────────────────
+// Torch texture: 16×16 pixels, valid region = center 2 columns × bottom 10 rows.
+// UV mapping:  U = [7/16, 9/16],  V = [6/16, 16/16]  (bottom-aligned)
+//
+// Geometry:
+//   floor  — two thin crossed quads standing upright, centered in the block
+//   north  — single quad in Z-min plane, offset toward -Z wall
+//   south  — single quad in Z-max plane, offset toward +Z wall
+//   east   — single quad in X-max plane, offset toward +X wall
+//   west   — single quad in X-min plane, offset toward -X wall
+
+constexpr float kTorchU0 = 7.0f / 16.0f;
+constexpr float kTorchU1 = 9.0f / 16.0f;
+constexpr float kTorchV0 = 6.0f / 16.0f;
+constexpr float kTorchV1 = 1.0f;
+
+// Torch half-width in world units (1 pixel = 1/16 block)
+constexpr float kTorchHW = 1.0f / 16.0f;
+// Wall offset: how far the torch center sits from the wall
+constexpr float kTorchWallOffset = 1.0f / 16.0f;
+
+void addTorchQuadsImpl(std::vector<BlockVertex>& vertices,
+                        const glm::vec3& pos,
+                        const BlockID blockId,
+                        const int x,
+                        const int y,
+                        const int z,
+                        const SubChunkMeshingSnapshot& snapshot) {
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    int tileIndex = textures.texTop;
+    if (tileIndex < 0) tileIndex = 0;
+    const float layer = static_cast<float>(tileIndex);
+
+    // Lighting: take max of self + all 6 neighbors (same as cross)
+    uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
+    uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
+    for (int d = 0; d < 6; ++d) {
+        sunLevel = std::max(sunLevel, getResolvedSunlightSC(snapshot,
+            x + kFaceNormals[static_cast<size_t>(d)].x,
+            y + kFaceNormals[static_cast<size_t>(d)].y,
+            z + kFaceNormals[static_cast<size_t>(d)].z));
+        blockLevel = std::max(blockLevel, getResolvedBlockLightSC(snapshot,
+            x + kFaceNormals[static_cast<size_t>(d)].x,
+            y + kFaceNormals[static_cast<size_t>(d)].y,
+            z + kFaceNormals[static_cast<size_t>(d)].z));
+    }
+    const float sunNorm = lightToNormalized(sunLevel);
+    const float blockNorm = lightToNormalized(blockLevel);
+
+    // Determine facing from block state
+    uint16_t facingValue = PropIndices::FACING_FLOOR;
+    if (PropIndices::FACING != PropIndices::INVALID) {
+        facingValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    }
+
+    const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
+
+    // UV for torch: sample center 2px wide, bottom 10px tall
+    const std::array<glm::vec2, 4> torchUV = {{
+        {kTorchU0, kTorchV0},
+        {kTorchU1, kTorchV0},
+        {kTorchU1, kTorchV1},
+        {kTorchU0, kTorchV1}
+    }};
+
+    const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
+        for (const int idx : indices) {
+            vertices.push_back({
+                pos.x + corners[static_cast<size_t>(idx)].x,
+                pos.y + corners[static_cast<size_t>(idx)].y,
+                pos.z + corners[static_cast<size_t>(idx)].z,
+                torchUV[static_cast<size_t>(idx)].x,
+                torchUV[static_cast<size_t>(idx)].y,
+                CROSS_FLOWER_MARKER,
+                sunNorm,
+                blockNorm,
+                3.0f,
+                layer
+            });
+        }
+    };
+
+    if (facingValue == PropIndices::FACING_FLOOR) {
+        // ── Floor torch: two thin crossed quads, centered ──
+        // Quad A: diagonal along (X+Z)
+        emitQuad({{
+            {0.5f - kTorchHW, 0.0f, 0.5f - kTorchHW},
+            {0.5f + kTorchHW, 0.0f, 0.5f + kTorchHW},
+            {0.5f + kTorchHW, 1.0f, 0.5f + kTorchHW},
+            {0.5f - kTorchHW, 1.0f, 0.5f - kTorchHW}
+        }});
+        // Quad B: diagonal along (X-Z)
+        emitQuad({{
+            {0.5f + kTorchHW, 0.0f, 0.5f - kTorchHW},
+            {0.5f - kTorchHW, 0.0f, 0.5f + kTorchHW},
+            {0.5f - kTorchHW, 1.0f, 0.5f + kTorchHW},
+            {0.5f + kTorchHW, 1.0f, 0.5f - kTorchHW}
+        }});
+    } else if (facingValue == PropIndices::FACING_NORTH) {
+        // ── Wall torch on -Z face ──
+        const float cz = kTorchWallOffset;
+        emitQuad({{
+            {0.5f - kTorchHW, 0.0f, cz - kTorchHW},
+            {0.5f + kTorchHW, 0.0f, cz + kTorchHW},
+            {0.5f + kTorchHW, 1.0f, cz + kTorchHW},
+            {0.5f - kTorchHW, 1.0f, cz - kTorchHW}
+        }});
+    } else if (facingValue == PropIndices::FACING_SOUTH) {
+        // ── Wall torch on +Z face ──
+        const float cz = 1.0f - kTorchWallOffset;
+        emitQuad({{
+            {0.5f + kTorchHW, 0.0f, cz + kTorchHW},
+            {0.5f - kTorchHW, 0.0f, cz - kTorchHW},
+            {0.5f - kTorchHW, 1.0f, cz - kTorchHW},
+            {0.5f + kTorchHW, 1.0f, cz + kTorchHW}
+        }});
+    } else if (facingValue == PropIndices::FACING_WEST) {
+        // ── Wall torch on -X face ──
+        const float cx = kTorchWallOffset;
+        emitQuad({{
+            {cx + kTorchHW, 0.0f, 0.5f - kTorchHW},
+            {cx - kTorchHW, 0.0f, 0.5f + kTorchHW},
+            {cx - kTorchHW, 1.0f, 0.5f + kTorchHW},
+            {cx + kTorchHW, 1.0f, 0.5f - kTorchHW}
+        }});
+    } else if (facingValue == PropIndices::FACING_EAST) {
+        // ── Wall torch on +X face ──
+        const float cx = 1.0f - kTorchWallOffset;
+        emitQuad({{
+            {cx - kTorchHW, 0.0f, 0.5f + kTorchHW},
+            {cx + kTorchHW, 0.0f, 0.5f - kTorchHW},
+            {cx + kTorchHW, 1.0f, 0.5f - kTorchHW},
+            {cx - kTorchHW, 1.0f, 0.5f + kTorchHW}
+        }});
+    }
+}
+
 } // anonymous namespace
 
 void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
@@ -1131,6 +1311,21 @@ void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
     addCrossedQuadsImpl(meshData.cutoutVertices,
                         glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                         blockId, def, x, y, z, snapshot);
+    expandBounds(meshData,
+                 glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                 glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+}
+
+void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
+                                    const SubChunkMeshingSnapshot& snapshot,
+                                    const BlockID blockId,
+                                    const BlockDef& /*def*/,
+                                    const int x,
+                                    const int y,
+                                    const int z) {
+    addTorchQuadsImpl(meshData.cutoutVertices,
+                      glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
+                      blockId, x, y, z, snapshot);
     expandBounds(meshData,
                  glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
