@@ -14,6 +14,7 @@ public:
     static constexpr int MAIN_INVENTORY_ROWS = 3;
 
     Inventory();
+    void initializeDefaultLoadout();
 
     void setSelectedSlot(int slot);
     [[nodiscard]] int getSelectedSlot() const;

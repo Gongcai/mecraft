@@ -1,0 +1,38 @@
+#pragma once
+
+#define MECRAFT_FOR_EACH_BUILTIN_BLOCK(X) \
+    X(AIR, "air") \
+    X(DIRT, "dirt") \
+    X(GRASS, "grass_block") \
+    X(STONE, "stone") \
+    X(SAND, "sand") \
+    X(WOOD, "oak_log") \
+    X(GLASS, "glass") \
+    X(COAL_ORE, "coal_ore") \
+    X(DIAMOND_ORE, "diamond_ore") \
+    X(GOLD_ORE, "gold_ore") \
+    X(IRON_ORE, "iron_ore") \
+    X(WATER, "water") \
+    X(BEDROCK, "bedrock") \
+    X(TALL_GRASS, "tall_grass") \
+    X(ROSE, "rose") \
+    X(OAK_PLANKS, "oak_planks") \
+    X(SPRUCE_PLANKS, "spruce_planks") \
+    X(BIRCH_PLANKS, "birch_planks") \
+    X(JUNGLE_PLANKS, "jungle_planks") \
+    X(ACACIA_PLANKS, "acacia_planks") \
+    X(DARK_OAK_PLANKS, "dark_oak_planks") \
+    X(MANGROVE_PLANKS, "mangrove_planks") \
+    X(CHERRY_PLANKS, "cherry_planks") \
+    X(PALE_OAK_PLANKS, "pale_oak_planks") \
+    X(BAMBOO_PLANKS, "bamboo_planks") \
+    X(CRIMSON_PLANKS, "crimson_planks") \
+    X(WARPED_PLANKS, "warped_planks") \
+    X(BIRCH_LOG, "birch_log") \
+    X(TORCH, "torch") \
+    X(BROWN_MUSHROOM, "brown_mushroom") \
+    X(BLUE_WOOL, "blue_wool")
+
+#define MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(X) \
+    X(COAL, "coal") \
+    X(IRON_PICKAXE, "iron_pickaxe")

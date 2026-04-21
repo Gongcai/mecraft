@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include "../core/NamespacedId.h"
+#include "../core/BuiltinIds.h"
 #include "../core/IdRegistry.h"
 
 class ResourceMgr;
@@ -20,36 +21,9 @@ using BlockID = RuntimeId;
 
 // Block ID constants — initialized after BlockRegistry::init()
 namespace BlockIds {
-    extern BlockID AIR;
-    extern BlockID DIRT;
-    extern BlockID GRASS;
-    extern BlockID STONE;
-    extern BlockID SAND;
-    extern BlockID WOOD;
-    extern BlockID GLASS;
-    extern BlockID COAL_ORE;
-    extern BlockID DIAMOND_ORE;
-    extern BlockID GOLD_ORE;
-    extern BlockID IRON_ORE;
-    extern BlockID WATER;
-    extern BlockID BEDROCK;
-    extern BlockID TALL_GRASS;
-    extern BlockID ROSE;
-    extern BlockID OAK_PLANKS;
-    extern BlockID SPRUCE_PLANKS;
-    extern BlockID BIRCH_PLANKS;
-    extern BlockID JUNGLE_PLANKS;
-    extern BlockID ACACIA_PLANKS;
-    extern BlockID DARK_OAK_PLANKS;
-    extern BlockID MANGROVE_PLANKS;
-    extern BlockID CHERRY_PLANKS;
-    extern BlockID PALE_OAK_PLANKS;
-    extern BlockID BAMBOO_PLANKS;
-    extern BlockID CRIMSON_PLANKS;
-    extern BlockID WARPED_PLANKS;
-    extern BlockID BIRCH_LOG;
-    extern BlockID TORCH;
-    extern BlockID BROWN_MUSHROOM;
+#define MECRAFT_DECLARE_BLOCK_ID(symbol, path) extern BlockID symbol;
+    MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_DECLARE_BLOCK_ID)
+#undef MECRAFT_DECLARE_BLOCK_ID
 
     void init();  // Called after BlockRegistry::init()
 }

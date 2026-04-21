@@ -47,6 +47,7 @@ void Player::init(const glm::vec3 &spawnPos) {
     m_body.colliderOffset = glm::vec3(0.0f, m_playerHeight * 0.5f, 0.0f);
     m_body.eyeOffsetY = m_eyeHeightBase;
 
+    m_inventory.initializeDefaultLoadout();
     m_camera.setPosition(getEyePosition());
 }
 

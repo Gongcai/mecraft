@@ -50,9 +50,9 @@ inline bool overlapsBlockAabb(const glm::vec3& position,
     const glm::vec3 minPos = position - halfExtents;
     const glm::vec3 maxPos = position + halfExtents;
 
-    const float blockMinX = static_cast<float>(blockPos.x);
-    const float blockMinY = static_cast<float>(blockPos.y);
-    const float blockMinZ = static_cast<float>(blockPos.z);
+    const auto blockMinX = static_cast<float>(blockPos.x);
+    const auto blockMinY = static_cast<float>(blockPos.y);
+    const auto blockMinZ = static_cast<float>(blockPos.z);
     const float blockMaxX = blockMinX + 1.0f;
     const float blockMaxY = blockMinY + 1.0f;
     const float blockMaxZ = blockMinZ + 1.0f;

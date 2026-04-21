@@ -23,6 +23,18 @@ int main() {
         return fail("block name lookup should resolve dirt via BlockRegistry");
     }
 
+    const ItemID blueWoolItem = ItemRegistry::fromBlock(BlockIds::BLUE_WOOL);
+    if (blueWoolItem == ItemIds::AIR) {
+        return fail("blue_wool should synthesize a block-backed item without items.json");
+    }
+    if (ItemRegistry::findByName("blue_wool") != blueWoolItem) {
+        return fail("block name lookup should resolve synthesized block items");
+    }
+    const ItemDef& blueWool = ItemRegistry::get(blueWoolItem);
+    if (blueWool.placeBlock != BlockIds::BLUE_WOOL || blueWool.renderBlock != BlockIds::BLUE_WOOL) {
+        return fail("blue_wool synthesized item should render and place its source block");
+    }
+
     const ItemDef& coal = ItemRegistry::get(ItemIds::COAL);
     if (ItemRegistry::findByName("coal") != ItemIds::COAL) {
         return fail("item name lookup should resolve coal from items.json");

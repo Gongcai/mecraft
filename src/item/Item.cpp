@@ -24,13 +24,15 @@ bool BlockDropTable::s_initialized = false;
 
 namespace ItemIds {
 ItemID AIR = 0;
-ItemID COAL = 30;
-ItemID IRON_PICKAXE = 31;
+#define MECRAFT_DEFINE_PURE_ITEM_ID(symbol, path) ItemID symbol = 0;
+MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(MECRAFT_DEFINE_PURE_ITEM_ID)
+#undef MECRAFT_DEFINE_PURE_ITEM_ID
 
 void init() {
     AIR = ItemRegistry::getId(NamespacedId("minecraft", "air"));
-    COAL = ItemRegistry::getId(NamespacedId("minecraft", "coal"));
-    IRON_PICKAXE = ItemRegistry::getId(NamespacedId("minecraft", "iron_pickaxe"));
+#define MECRAFT_INIT_PURE_ITEM_ID(symbol, path) symbol = ItemRegistry::getId(NamespacedId("minecraft", path));
+    MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(MECRAFT_INIT_PURE_ITEM_ID)
+#undef MECRAFT_INIT_PURE_ITEM_ID
 }
 }
 
@@ -108,21 +110,6 @@ void ItemRegistry::init() {
         s_items[i].maxStack = 0;
     }
 
-    // Step 3: Set up block-backed items (IDs 1-29 correspond to blocks 1-29)
-    for (size_t i = 1; i < 30 && i < s_items.size(); ++i) {
-        const auto blockId = static_cast<BlockID>(i);
-        const BlockDef& blockDef = BlockRegistry::get(blockId);
-        ItemDef& itemDef = s_items[i];
-        itemDef.namespacedId = s_idRegistry.getNamespacedId(static_cast<ItemID>(i));
-        itemDef.maxStack = 64;
-        itemDef.placeBlock = blockId;
-        itemDef.renderBlock = blockId;
-        itemDef.iconItemId = static_cast<ItemID>(i);
-
-        // Register explicit mapping
-        registerBlockItem(blockId, static_cast<ItemID>(i));
-    }
-
     // AIR item
     s_items[0].maxStack = 0;
 
@@ -130,6 +117,51 @@ void ItemRegistry::init() {
     s_idLookup.clear();
     for (size_t i = 0; i < s_idRegistry.size(); ++i) {
         s_idLookup[s_idRegistry.getNamespacedId(static_cast<ItemID>(i))] = static_cast<ItemID>(i);
+    }
+
+    auto ensureUnknownIconStorage = [&](const ItemID itemId) {
+        if (itemId >= s_itemIconTextureNames.size()) {
+            s_itemIconTextureNames.resize(itemId + 1);
+        }
+        if (s_itemIconTextureNames[itemId].empty()) {
+            s_itemIconTextureNames[itemId] = "unknown";
+        }
+    };
+
+    auto configureBlockBackedItem = [&](const BlockID blockId, const ItemID itemId) {
+        ensureUnknownIconStorage(itemId);
+
+        if (itemId >= s_items.size()) {
+            s_items.resize(itemId + 1);
+        }
+
+        ItemDef& itemDef = s_items[itemId];
+        itemDef.namespacedId = s_idRegistry.getNamespacedId(itemId);
+        itemDef.iconTextureName = s_itemIconTextureNames[itemId].c_str();
+        itemDef.maxStack = 64;
+        itemDef.iconItemId = itemId;
+        itemDef.placeBlock = blockId;
+        itemDef.renderBlock = blockId;
+
+        registerBlockItem(blockId, itemId);
+    };
+
+    // Step 3: Every registered block gets a default block-backed item.
+    // Built-in block items keep their stable IDs; JSON-only blocks get synthesized items on demand.
+    for (size_t i = 1; i < BlockRegistry::getBlockCount(); ++i) {
+        const BlockID blockId = static_cast<BlockID>(i);
+        const NamespacedId& blockNsId = BlockRegistry::getNamespacedId(blockId);
+
+        ItemID itemId = 0;
+        auto itemIt = s_idLookup.find(blockNsId);
+        if (itemIt != s_idLookup.end()) {
+            itemId = itemIt->second;
+        } else {
+            itemId = registerItem(blockNsId, ItemDef{});
+            ensureUnknownIconStorage(itemId);
+        }
+
+        configureBlockBackedItem(blockId, itemId);
     }
 
     // Step 4: Load items.json to override defaults

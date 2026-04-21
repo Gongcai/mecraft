@@ -292,6 +292,14 @@
       "textures": {
         "all": "brown_mushroom"
       }
+    },
+    {
+      "id": "minecraft:blue_wool",
+      "drop": "minecraft:blue_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "blue_wool"
+      }
     }
   ]
 }

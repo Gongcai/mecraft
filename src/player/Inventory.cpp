@@ -1,5 +1,5 @@
 #include "Inventory.h"
-
+#include "../item/Item.h"
 #include <algorithm>
 #include <utility>
 
@@ -7,8 +7,14 @@ Inventory::Inventory() : m_slots{} {
     for (ItemStack& stack : m_slots) {
         stack = {};
     }
+}
 
-    // Default hotbar content.
+void Inventory::initializeDefaultLoadout() {
+    for (ItemStack& stack : m_slots) {
+        stack = {};
+    }
+
+    // Default hotbar content. Call only after block/item registries are initialized.
     setSlotItem(0, BlockIds::DIRT,64);
     setSlotItem(1, BlockIds::GRASS);
     setSlotItem(2, BlockIds::STONE);
@@ -19,7 +25,7 @@ Inventory::Inventory() : m_slots{} {
     setSlotItem(7, ItemIds::COAL, 16);
     setSlotItem(8, ItemIds::IRON_PICKAXE, 1);
     setSlotItem(13, BlockIds::TORCH, 64);
-
+    setSlotItem(14, ItemRegistry::fromBlock(BlockIds::BLUE_WOOL), 64);
     // Default inventory content.
     setSlotItem(9, BlockIds::IRON_ORE);
     setSlotItem(10, BlockIds::DIAMOND_ORE);

@@ -50,68 +50,14 @@ BlockID resolveDefinitionBlockId(const BlockID id) {
 
 // Initialize BlockIds constants
 namespace BlockIds {
-BlockID AIR = 0;
-BlockID DIRT = 1;
-BlockID GRASS = 2;
-BlockID STONE = 3;
-BlockID SAND = 4;
-BlockID WOOD = 5;
-BlockID GLASS = 6;
-BlockID COAL_ORE = 7;
-BlockID DIAMOND_ORE = 8;
-BlockID GOLD_ORE = 9;
-BlockID IRON_ORE = 10;
-BlockID WATER = 11;
-BlockID BEDROCK = 12;
-BlockID TALL_GRASS = 13;
-BlockID ROSE = 14;
-BlockID OAK_PLANKS = 15;
-BlockID SPRUCE_PLANKS = 16;
-BlockID BIRCH_PLANKS = 17;
-BlockID JUNGLE_PLANKS = 18;
-BlockID ACACIA_PLANKS = 19;
-BlockID DARK_OAK_PLANKS = 20;
-BlockID MANGROVE_PLANKS = 21;
-BlockID CHERRY_PLANKS = 22;
-BlockID PALE_OAK_PLANKS = 23;
-BlockID BAMBOO_PLANKS = 24;
-BlockID CRIMSON_PLANKS = 25;
-BlockID WARPED_PLANKS = 26;
-BlockID BIRCH_LOG = 27;
-BlockID TORCH = 28;
-BlockID BROWN_MUSHROOM = 29;
+#define MECRAFT_DEFINE_BLOCK_ID(symbol, path) BlockID symbol = 0;
+MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_DEFINE_BLOCK_ID)
+#undef MECRAFT_DEFINE_BLOCK_ID
 
 void init() {
-    /*AIR            = BlockRegistry::getId(NamespacedId("minecraft", "air"));
-    DIRT           = BlockRegistry::getId(NamespacedId("minecraft", "dirt"));
-    GRASS          = BlockRegistry::getId(NamespacedId("minecraft", "grass_block"));
-    STONE          = BlockRegistry::getId(NamespacedId("minecraft", "stone"));
-    SAND           = BlockRegistry::getId(NamespacedId("minecraft", "sand"));
-    WOOD           = BlockRegistry::getId(NamespacedId("minecraft", "oak_log"));
-    GLASS          = BlockRegistry::getId(NamespacedId("minecraft", "glass"));
-    COAL_ORE       = BlockRegistry::getId(NamespacedId("minecraft", "coal_ore"));
-    DIAMOND_ORE    = BlockRegistry::getId(NamespacedId("minecraft", "diamond_ore"));
-    GOLD_ORE       = BlockRegistry::getId(NamespacedId("minecraft", "gold_ore"));
-    IRON_ORE       = BlockRegistry::getId(NamespacedId("minecraft", "iron_ore"));
-    WATER          = BlockRegistry::getId(NamespacedId("minecraft", "water"));
-    BEDROCK        = BlockRegistry::getId(NamespacedId("minecraft", "bedrock"));
-    TALL_GRASS     = BlockRegistry::getId(NamespacedId("minecraft", "tall_grass"));
-    ROSE           = BlockRegistry::getId(NamespacedId("minecraft", "rose"));
-    OAK_PLANKS     = BlockRegistry::getId(NamespacedId("minecraft", "oak_planks"));
-    SPRUCE_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "spruce_planks"));
-    BIRCH_PLANKS   = BlockRegistry::getId(NamespacedId("minecraft", "birch_planks"));
-    JUNGLE_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "jungle_planks"));
-    ACACIA_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "acacia_planks"));
-    DARK_OAK_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "dark_oak_planks"));
-    MANGROVE_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "mangrove_planks"));
-    CHERRY_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "cherry_planks"));
-    PALE_OAK_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "pale_oak_planks"));
-    BAMBOO_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "bamboo_planks"));
-    CRIMSON_PLANKS = BlockRegistry::getId(NamespacedId("minecraft", "crimson_planks"));
-    WARPED_PLANKS  = BlockRegistry::getId(NamespacedId("minecraft", "warped_planks"));
-    BIRCH_LOG      = BlockRegistry::getId(NamespacedId("minecraft", "birch_log"));
-    TORCH          = BlockRegistry::getId(NamespacedId("minecraft", "torch"));
-    BROWN_MUSHROOM = BlockRegistry::getId(NamespacedId("minecraft", "brown_mushroom"));*/
+#define MECRAFT_INIT_BLOCK_ID(symbol, path) symbol = BlockRegistry::getId(NamespacedId("minecraft", path));
+    MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_INIT_BLOCK_ID)
+#undef MECRAFT_INIT_BLOCK_ID
 }
 }
 
