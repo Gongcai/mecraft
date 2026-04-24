@@ -6,6 +6,7 @@
 #include "../src/renderer/ChunkMesher.h"
 #include "../src/renderer/MeshBuilderRegistry.h"
 #include "../src/world/BlockStateRegistry.h"
+#include "../src/world/FluidState.h"
 #include "../src/world/PropIndices.h"
 
 namespace {
@@ -143,12 +144,19 @@ int main() {
         if (MeshBuilderRegistry::getShapeTag("torch") == MeshBuilderRegistry::INVALID_TAG) {
             return fail("torch shape alias should be registered");
         }
+        if (MeshBuilderRegistry::getShapeTag("water") == MeshBuilderRegistry::INVALID_TAG) {
+            return fail("water shape alias should be registered");
+        }
         if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::CROSS_TAG) == nullptr) {
             return fail("cross shape should resolve to a mesh builder");
         }
         const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
         if (torchDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("torch")) {
             return fail("torch block should resolve renderShapeTag through the mesh builder registry");
+        }
+        const BlockDef& waterDef = BlockRegistry::get(BlockIds::WATER);
+        if (waterDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("water")) {
+            return fail("water block should resolve renderShapeTag through the mesh builder registry");
         }
     }
 
@@ -427,7 +435,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         for (int x = 0; x < 4; ++x) {
-            chunk.setBlock(x, 32, 0, BlockIds::WATER);
+            chunk.setBlock(x, 32, 0, FluidState::makeWater(0, false));
         }
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -438,8 +446,8 @@ int main() {
         if (meshData.transparentFaceCountBeforeGreedy != 18) {
             return fail("unexpected raw transparent face count for 4-block water strip");
         }
-        if (meshData.transparentFaceCountAfterGreedy >= meshData.transparentFaceCountBeforeGreedy) {
-            return fail("transparent greedy meshing should reduce water face count");
+        if (meshData.transparentFaceCountAfterGreedy != meshData.transparentFaceCountBeforeGreedy) {
+            return fail("custom water meshing should report one emitted quad per visible water face");
         }
         if (meshData.transparentVertices.size() != static_cast<size_t>(meshData.transparentFaceCountAfterGreedy) * 6) {
             return fail("transparent vertex count should stay aligned to merged quad count");
@@ -451,7 +459,7 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockIds::WATER);
+        chunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
         chunk.setBlock(1, 32, 0, BlockIds::GLASS);
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -470,8 +478,8 @@ int main() {
         leftChunk.neighbors[0] = &rightChunk;
         rightChunk.neighbors[1] = &leftChunk;
 
-        leftChunk.setBlock(Chunk::SIZE_X - 1, 32, 0, BlockIds::WATER);
-        rightChunk.setBlock(0, 32, 0, BlockIds::WATER);
+        leftChunk.setBlock(Chunk::SIZE_X - 1, 32, 0, FluidState::makeWater(0, false));
+        rightChunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
 
         const ChunkMeshData meshData = buildMeshDataFor(leftChunk);
 
@@ -485,7 +493,7 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockIds::WATER);
+        chunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
         chunk.setBlock(1, 32, 0, BlockIds::TALL_GRASS);
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -498,6 +506,29 @@ int main() {
         }
         if (meshData.cutoutVertices.empty()) {
             return fail("tall grass should stay in the cutout pass");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, FluidState::makeWater(3, false));
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        float topMinY = 9999.0f;
+        float topMaxY = -9999.0f;
+        for (const BlockVertex& vertex : meshData.transparentVertices) {
+            if (!approxEqual(vertex.normal, 0.0f)) {
+                continue;
+            }
+            topMinY = std::min(topMinY, vertex.y);
+            topMaxY = std::max(topMaxY, vertex.y);
+        }
+
+        if (topMinY < 32.0f || topMaxY >= 32.95f) {
+            return fail("level-3 water should render below full block height");
+        }
+        if (!(topMinY + 0.01f < topMaxY)) {
+            return fail("isolated flowing water should form a sloped top surface");
         }
     }
 

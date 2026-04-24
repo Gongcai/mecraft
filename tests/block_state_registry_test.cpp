@@ -6,6 +6,7 @@
 
 #include "../src/world/Block.h"
 #include "../src/world/BlockStateRegistry.h"
+#include "../src/world/FluidState.h"
 #include "../src/world/Placement.h"
 #include "../src/world/PropIndices.h"
 #include "../src/world/SubChunk.h"
@@ -25,6 +26,9 @@ int main() {
     }
     if (PropIndices::AXIS == PropIndices::INVALID) {
         return fail("axis property should be registered from blocks.json");
+    }
+    if (PropIndices::LEVEL == PropIndices::INVALID || PropIndices::FALLING == PropIndices::INVALID) {
+        return fail("water properties should be registered from blocks.json");
     }
 
     const StateID torchDefault = BlockStateRegistry::getDefaultState(BlockIds::TORCH);
@@ -132,6 +136,24 @@ int main() {
 
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {
         return fail("state registry should contain expanded states beyond raw block ids");
+    }
+
+    const StateID waterDefault = BlockStateRegistry::getDefaultState(BlockIds::WATER);
+    if (!FluidState::isWater(waterDefault) || waterDefault == BlockIds::WATER) {
+        return fail("water should expand into dedicated state ids");
+    }
+    if (!FluidState::isSource(waterDefault) || FluidState::level(waterDefault) != 0 || FluidState::isFalling(waterDefault)) {
+        return fail("default water state should decode as a non-falling source");
+    }
+
+    const StateID waterLevel3 = FluidState::makeWater(3, false);
+    if (FluidState::level(waterLevel3) != 3 || FluidState::isFalling(waterLevel3)) {
+        return fail("water helper should build horizontal decay states");
+    }
+
+    const StateID fallingWater = FluidState::makeWater(0, true);
+    if (!FluidState::isFalling(fallingWater) || !FluidState::isWater(fallingWater)) {
+        return fail("water helper should build falling water states");
     }
 
     {

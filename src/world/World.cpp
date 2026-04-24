@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "../core/Time.h"
+#include "FluidState.h"
 
 namespace {
 int worldToChunkCoord(const int world, const int chunkSize) {
@@ -24,6 +25,7 @@ void World::init(uint32_t seed) {
     m_terrainGen.init(seed, m_flatSurfaceY);
     m_chunks.clear();
     m_loadQueue.clear();
+    m_fluidSystem.reset();
     ++m_activeChunkRevision;
     m_lightService = std::make_unique<LightService>(*this);
     m_lightService->start(m_threadPool);
@@ -84,6 +86,10 @@ BlockID World::getBlock(int x, int y, int z) const {
     return 0;
 }
 
+StateID World::getBlockState(const int x, const int y, const int z) const {
+    return getBlock(x, y, z);
+}
+
 BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const {
     if (y < 0 || y >= Chunk::SIZE_Y) {
         return 0;
@@ -102,6 +108,20 @@ BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const
 }
 
 void World::setBlock(int x, int y, int z, BlockID id) {
+    setBlockState(x, y, z, id);
+}
+
+bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) {
+        return false;
+    }
+
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+    return m_chunks.find(chunkKey(chunkX, chunkZ)) != m_chunks.end();
+}
+
+void World::setBlockState(int x, int y, int z, StateID id) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
@@ -149,6 +169,8 @@ void World::setBlock(int x, int y, int z, BlockID id) {
         auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
         if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
+
+    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z));
 }
 
 void World::setThreadPool(ThreadPool* pool) {
@@ -193,7 +215,7 @@ RayHit World::raycast(const PhysicsInfo& ray, const float maxDist) const {
 
     while (dist <= maxDist) {
         const BlockID block = getBlock(x, y, z);
-        if (block != BlockIds::AIR && block != BlockIds::WATER) {
+        if (block != BlockIds::AIR && !FluidState::isWater(block)) {
             hitResult.hit = true;
             hitResult.blockPos = glm::ivec3(x, y, z);
             hitResult.normal = hitNormal;

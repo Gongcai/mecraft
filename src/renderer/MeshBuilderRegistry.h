@@ -28,6 +28,7 @@ public:
     static constexpr uint8_t CUBE_TAG = 0;
     static constexpr uint8_t CROSS_TAG = 1;
     static constexpr uint8_t TORCH_TAG = 2;
+    static constexpr uint8_t WATER_TAG = 3;
 
     static void registerBuilder(const std::string& shapeName,
                                 uint8_t tag,
@@ -39,4 +40,3 @@ public:
     static MeshShapeClass getShapeClass(uint8_t tag);
     static void initBuiltinBuilders();
 };
-

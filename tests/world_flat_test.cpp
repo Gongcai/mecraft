@@ -3,6 +3,7 @@
 
 #include <glm/vec3.hpp>
 
+#include "../src/world/FluidState.h"
 #include "../src/world/World.h"
 
 namespace {
@@ -60,7 +61,7 @@ int main() {
     const BlockID topBlock = world.getBlock(0, surfaceY, 0);
     if (topBlock != BlockIds::GRASS && topBlock != BlockIds::SAND &&
         topBlock != BlockIds::DIRT && topBlock != BlockIds::STONE &&
-        topBlock != BlockIds::WATER && topBlock != BlockIds::TALL_GRASS &&
+        !FluidState::isWater(topBlock) && topBlock != BlockIds::TALL_GRASS &&
         topBlock != BlockIds::ROSE) {
         return fail("surface block should be a valid generated terrain block");
     }

@@ -11,6 +11,8 @@ uint16_t OPEN = INVALID;
 uint16_t POWERED = INVALID;
 uint16_t LIT = INVALID;
 uint16_t WATERLOGGED = INVALID;
+uint16_t LEVEL = INVALID;
+uint16_t FALLING = INVALID;
 
 uint16_t FACING_FLOOR = INVALID;
 uint16_t FACING_NORTH = INVALID;
@@ -33,6 +35,16 @@ uint16_t LIT_TRUE = INVALID;
 uint16_t LIT_FALSE = INVALID;
 uint16_t WATERLOGGED_TRUE = INVALID;
 uint16_t WATERLOGGED_FALSE = INVALID;
+uint16_t LEVEL_0 = INVALID;
+uint16_t LEVEL_1 = INVALID;
+uint16_t LEVEL_2 = INVALID;
+uint16_t LEVEL_3 = INVALID;
+uint16_t LEVEL_4 = INVALID;
+uint16_t LEVEL_5 = INVALID;
+uint16_t LEVEL_6 = INVALID;
+uint16_t LEVEL_7 = INVALID;
+uint16_t FALLING_TRUE = INVALID;
+uint16_t FALLING_FALSE = INVALID;
 
 namespace {
 uint16_t lookupName(const char* name) {
@@ -52,6 +64,8 @@ void init() {
     POWERED = lookupName("powered");
     LIT = lookupName("lit");
     WATERLOGGED = lookupName("waterlogged");
+    LEVEL = lookupName("level");
+    FALLING = lookupName("falling");
 
     FACING_FLOOR = lookupValue(FACING, "floor");
     FACING_NORTH = lookupValue(FACING, "north");
@@ -74,6 +88,16 @@ void init() {
     LIT_FALSE = lookupValue(LIT, "false");
     WATERLOGGED_TRUE = lookupValue(WATERLOGGED, "true");
     WATERLOGGED_FALSE = lookupValue(WATERLOGGED, "false");
+    LEVEL_0 = lookupValue(LEVEL, "0");
+    LEVEL_1 = lookupValue(LEVEL, "1");
+    LEVEL_2 = lookupValue(LEVEL, "2");
+    LEVEL_3 = lookupValue(LEVEL, "3");
+    LEVEL_4 = lookupValue(LEVEL, "4");
+    LEVEL_5 = lookupValue(LEVEL, "5");
+    LEVEL_6 = lookupValue(LEVEL, "6");
+    LEVEL_7 = lookupValue(LEVEL, "7");
+    FALLING_TRUE = lookupValue(FALLING, "true");
+    FALLING_FALSE = lookupValue(FALLING, "false");
 }
 
 }

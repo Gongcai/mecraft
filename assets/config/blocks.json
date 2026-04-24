@@ -111,6 +111,15 @@
       "isSelectable": false,
       "isTransparent": true,
       "opacity": 2,
+      "renderShape": "water",
+      "properties": {
+        "level": ["0", "1", "2", "3", "4", "5", "6", "7"],
+        "falling": ["false", "true"]
+      },
+      "defaultState": {
+        "level": "0",
+        "falling": "false"
+      },
       "textures": {
         "all": "water_still"
       }

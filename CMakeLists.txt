@@ -66,6 +66,8 @@ set(SRC_WORLD
         src/world/LightService.cpp
         src/world/Placement.cpp
         src/world/PropIndices.cpp
+        src/world/FluidState.cpp
+        src/world/FluidSystem.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
@@ -126,6 +128,7 @@ set(SRC_ECS
         src/ecs/systems/particle/ParticleCleanupSystem.cpp
         src/ecs/systems/audio/AudioSyncSystem.cpp
         src/ecs/systems/audio/PlayerAudioBridgeSystem.cpp
+        src/ecs/systems/world/FluidTickSystem.cpp
 )
 
 # [其他子系统]
@@ -234,6 +237,7 @@ add_mecraft_test(creative_flight_system_test tests/creative_flight_system_test.c
 add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
 add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
 add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
+add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
 add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)
 add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp)
 add_mecraft_test(chunk_section_test tests/chunk_section_test.cpp)

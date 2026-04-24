@@ -65,53 +65,58 @@ ItemID CraftingGridControl::getCraftingSlot(int index) const
     if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
         return 0;
     }
-    return m_slots[static_cast<size_t>(index)];
+    return m_slots[static_cast<size_t>(index)].itemId;
 }
 
-void CraftingGridControl::setCraftingSlot(int index, const ItemID itemId)
+uint16_t CraftingGridControl::getCraftingSlotCount(int index) const
+{
+    if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
+        return 0;
+    }
+    return m_slots[static_cast<size_t>(index)].count;
+}
+
+void CraftingGridControl::setCraftingSlot(int index, const ItemID itemId, uint16_t count)
 {
     if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
         return;
     }
-    m_slots[static_cast<size_t>(index)] = itemId;
+    m_slots[static_cast<size_t>(index)] = {itemId, count, 0};
 }
 
 ItemID CraftingGridControl::getResultSlot() const
 {
-    return m_slots[4];
+    return m_slots[4].itemId;
 }
 
-void CraftingGridControl::setResultSlot(const ItemID itemId)
+void CraftingGridControl::setResultSlot(const ItemID itemId, uint16_t count)
 {
-    m_slots[4] = itemId;
+    m_slots[4] = {itemId, count, 0};
 }
 
 int CraftingGridControl::getResultCount() const
 {
-    return m_resultCount;
+    return m_slots[4].count;
 }
 
 void CraftingGridControl::clearAll()
 {
-    m_slots.fill(0);
-    m_resultCount = 0;
+    m_slots.fill({});
 }
 
 void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSystem)
 {
     // Build a 2x2 grid for the crafting system
     std::vector<ItemID> grid = {
-        m_slots[0], m_slots[1],
-        m_slots[2], m_slots[3]
+        m_slots[0].itemId, m_slots[1].itemId,
+        m_slots[2].itemId, m_slots[3].itemId
     };
 
     CraftingResult result = craftingSystem.match(grid, CraftingGridLayout::GRID_SIZE, CraftingGridLayout::GRID_SIZE);
     if (result.matched) {
-        m_slots[4] = result.itemId;
-        m_resultCount = result.count;
+        m_slots[4] = {result.itemId, static_cast<uint16_t>(result.count), 0};
     } else {
-        m_slots[4] = 0;
-        m_resultCount = 0;
+        m_slots[4] = {};
     }
 }
 
@@ -156,7 +161,8 @@ void CraftingGridControl::syncSlotPositions()
                 baseX + col * colStep,
                 baseY + row * rowStep,
                 slotSize,
-                static_cast<int>(m_slots[static_cast<size_t>(idx)])
+                static_cast<int>(m_slots[static_cast<size_t>(idx)].itemId),
+                static_cast<int>(m_slots[static_cast<size_t>(idx)].count)
             };
         }
     }
@@ -165,7 +171,7 @@ void CraftingGridControl::syncSlotPositions()
     const int resultX = static_cast<int>(std::lround(m_panelX + m_layout.resultOffsetX * scale));
     const int resultY = static_cast<int>(std::lround(m_panelY + m_layout.resultOffsetY * scale));
     const int resultSize = std::max(1, static_cast<int>(std::lround(m_layout.resultSlotSize * scale)));
-    slots[4] = { resultX, resultY, resultSize, static_cast<int>(m_slots[4]), m_resultCount };
+    slots[4] = { resultX, resultY, resultSize, static_cast<int>(m_slots[4].itemId), static_cast<int>(m_slots[4].count) };
 
     m_itemGrid.setSlots(slots.data(), static_cast<int>(slots.size()));
 }

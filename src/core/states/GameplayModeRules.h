@@ -5,6 +5,7 @@
 #include <random>
 #include <algorithm>
 #include "../../world/Block.h"
+#include "../../world/FluidState.h"
 
 namespace gameplay_state_detail {
     inline std::string getRandomName(const std::string& name, int maxRandomLength) {
@@ -49,7 +50,7 @@ namespace gameplay_mode_rules_detail {
         if (request.placeCooldownRemaining > 0.0f) {
             return GameplayBlockAction::None;
         }
-        if (request.targetBlock != 0 && request.targetBlock != BlockIds::WATER) {
+        if (request.targetBlock != 0 && !FluidState::isWater(request.targetBlock)) {
             return GameplayBlockAction::None;
         }
         if (request.playerWouldOverlapPlaceBlock) {

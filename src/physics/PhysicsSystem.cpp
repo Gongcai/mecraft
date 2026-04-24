@@ -6,6 +6,7 @@
 
 #include "PhysicsInfo.h"
 #include "../world/Block.h"
+#include "../world/FluidState.h"
 #include "../world/World.h"
 #include "core/Time.h"
 
@@ -37,7 +38,15 @@ bool isWaterBlock(const World& world, const int x, const int y, const int z) {
     if (id == 0) {
         return false;
     }
-    return id == BlockIds::WATER;
+    return FluidState::isWater(id);
+}
+
+float waterTopY(const World& world, const int x, const int y, const int z) {
+    const BlockID id = world.getBlock(x, y, z);
+    if (!FluidState::isWater(id)) {
+        return static_cast<float>(y);
+    }
+    return static_cast<float>(y) + FluidState::surfaceHeight(id);
 }
 
 
@@ -65,7 +74,7 @@ float queryWaterFillRatio(const PhysicsBody& body, const World& world) {
                     continue;
                 }
                 const float ox = overlapLen(box.min.x, box.max.x, static_cast<float>(x), static_cast<float>(x + 1));
-                const float oy = overlapLen(box.min.y, box.max.y, static_cast<float>(y), static_cast<float>(y + 1));
+                const float oy = overlapLen(box.min.y, box.max.y, static_cast<float>(y), waterTopY(world, x, y, z));
                 const float oz = overlapLen(box.min.z, box.max.z, static_cast<float>(z), static_cast<float>(z + 1));
                 waterVolume += ox * oy * oz;
             }
@@ -101,10 +110,15 @@ bool overlapsSolid(const World& world, const AABB& box) {
 
 bool queryEyesInWater(const PhysicsBody& body, const World& world) {
     const glm::vec3 eyePos = body.position + glm::vec3(0.0f, body.eyeOffsetY, 0.0f);
-    return isWaterBlock(world,
-                        static_cast<int>(std::floor(eyePos.x)),
-                        static_cast<int>(std::floor(eyePos.y)),
-                        static_cast<int>(std::floor(eyePos.z)));
+    const int blockX = static_cast<int>(std::floor(eyePos.x));
+    const int blockY = static_cast<int>(std::floor(eyePos.y));
+    const int blockZ = static_cast<int>(std::floor(eyePos.z));
+    const BlockID id = world.getBlock(blockX, blockY, blockZ);
+    if (!FluidState::isWater(id)) {
+        return false;
+    }
+    const float localEyeY = eyePos.y - static_cast<float>(blockY);
+    return localEyeY <= FluidState::surfaceHeight(id) + 0.0001f;
 }
 
 bool hasGroundSupportAt(const PhysicsBody& body, const World& world, const glm::vec3& position) {

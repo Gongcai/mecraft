@@ -11,6 +11,7 @@
 
 #include "MeshBuilderRegistry.h"
 #include "../world/BlockStateRegistry.h"
+#include "../world/FluidState.h"
 #include "../world/PropIndices.h"
 #include "../world/World.h"
 
@@ -909,6 +910,208 @@ void emitUnitFace(std::vector<BlockVertex>& vertices,
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
 }
 
+void emitCustomFace(std::vector<BlockVertex>& vertices,
+                    const std::array<glm::vec3, 4>& corners,
+                    const int face,
+                    const FaceRenderData& renderData) {
+    const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
+    appendFaceVertices(vertices, corners, faceUV, face, renderData);
+}
+
+bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
+                           const int nx,
+                           const int ny,
+                           const int nz,
+                           const BlockID currentId) {
+    const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
+    if (FluidState::isSameWater(currentId, neighborId)) {
+        return false;
+    }
+    if (neighborId == BlockIds::AIR) {
+        return true;
+    }
+
+    const BlockDef& neighborDef = BlockRegistry::getFast(neighborId);
+    if (!neighborDef.isSolid) {
+        return true;
+    }
+
+    return neighborDef.isTransparent;
+}
+
+float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot,
+                                     const int x,
+                                     const int y,
+                                     const int z) {
+    if (FluidState::isWater(getResolvedBlockSC(snapshot, x, y + 1, z))) {
+        return 1.0f;
+    }
+    const BlockID id = getResolvedBlockSC(snapshot, x, y, z);
+    if (!FluidState::isWater(id)) {
+        return 0.0f;
+    }
+    return 1.0f - static_cast<float>(FluidState::level(id) + 1) / 9.0f;
+}
+
+bool isOpenWaterSurfaceSample(const BlockID id) {
+    if (id == BlockIds::AIR) {
+        return true;
+    }
+
+    if (FluidState::isWater(id)) {
+        return false;
+    }
+
+    return !BlockRegistry::getFast(id).isSolid;
+}
+
+float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
+                               const BlockID currentId,
+                               const int x0,
+                               const int y,
+                               const int z0,
+                               const int x1,
+                               const int z1,
+                               const int x2,
+                               const int z2,
+                               const int x3,
+                               const int z3) {
+    const std::array<glm::ivec2, 4> samples = {{
+        {x0, z0},
+        {x1, z1},
+        {x2, z2},
+        {x3, z3}
+    }};
+
+    float liquidPercentSum = 0.0f;
+    int weightSum = 0;
+    for (const glm::ivec2& sample : samples) {
+        const BlockID aboveId = getResolvedBlockSC(snapshot, sample.x, y + 1, sample.y);
+        if (FluidState::isWater(aboveId)) {
+            return 1.0f;
+        }
+
+        const BlockID sampleId = getResolvedBlockSC(snapshot, sample.x, y, sample.y);
+        if (FluidState::isWater(sampleId)) {
+            const float liquidPercent = static_cast<float>(FluidState::level(sampleId) + 1) / 9.0f;
+            const int weight = (FluidState::level(sampleId) == 0) ? 10 : 1;
+            liquidPercentSum += liquidPercent * static_cast<float>(weight);
+            weightSum += weight;
+
+            liquidPercentSum += liquidPercent;
+            ++weightSum;
+            continue;
+        }
+
+        if (isOpenWaterSurfaceSample(sampleId)) {
+            liquidPercentSum += 1.0f;
+            ++weightSum;
+        }
+    }
+
+    if (weightSum == 0) {
+        return sampleWaterColumnSurfaceHeight(snapshot, x1, y, z1);
+    }
+    static_cast<void>(currentId);
+    return 1.0f - liquidPercentSum / static_cast<float>(weightSum);
+}
+
+void expandBoundsForCorners(ChunkMeshData& meshData, const std::array<glm::vec3, 4>& corners) {
+    glm::vec3 boundsMin = corners[0];
+    glm::vec3 boundsMax = corners[0];
+    for (const glm::vec3& corner : corners) {
+        boundsMin.x = std::min(boundsMin.x, corner.x);
+        boundsMin.y = std::min(boundsMin.y, corner.y);
+        boundsMin.z = std::min(boundsMin.z, corner.z);
+        boundsMax.x = std::max(boundsMax.x, corner.x);
+        boundsMax.y = std::max(boundsMax.y, corner.y);
+        boundsMax.z = std::max(boundsMax.z, corner.z);
+    }
+    expandBounds(meshData, boundsMin, boundsMax);
+}
+
+void addWaterFacesImpl(ChunkMeshData& meshData,
+                       const SubChunkMeshingSnapshot& snapshot,
+                       const BlockID blockId,
+                       const BlockDef& def,
+                       const int x,
+                       const int y,
+                       const int z) {
+    static_cast<void>(def);
+
+    const float frontLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
+    const float frontRight = computeWaterCornerHeight(snapshot, blockId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
+    const float backRight = computeWaterCornerHeight(snapshot, blockId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
+    const float backLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
+
+    const glm::vec3 pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+    const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
+        const FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        emitCustomFace(meshData.transparentVertices, corners, face, renderData);
+        expandBoundsForCorners(meshData, corners);
+        ++meshData.transparentFaceCountBeforeGreedy;
+        ++meshData.transparentFaceCountAfterGreedy;
+    };
+
+    if (shouldRenderWaterFace(snapshot, x, y + 1, z, blockId)) {
+        emitWaterFace(FACE_TOP, {{
+            pos + glm::vec3(0.0f, frontLeft, 1.0f),
+            pos + glm::vec3(1.0f, frontRight, 1.0f),
+            pos + glm::vec3(1.0f, backRight, 0.0f),
+            pos + glm::vec3(0.0f, backLeft, 0.0f)
+        }});
+    }
+
+    if (shouldRenderWaterFace(snapshot, x, y - 1, z, blockId)) {
+        emitWaterFace(FACE_BOTTOM, {{
+            pos + glm::vec3(0.0f, 0.0f, 0.0f),
+            pos + glm::vec3(1.0f, 0.0f, 0.0f),
+            pos + glm::vec3(1.0f, 0.0f, 1.0f),
+            pos + glm::vec3(0.0f, 0.0f, 1.0f)
+        }});
+    }
+
+    if (shouldRenderWaterFace(snapshot, x, y, z + 1, blockId) &&
+        (frontLeft > 0.0f || frontRight > 0.0f)) {
+        emitWaterFace(FACE_FRONT, {{
+            pos + glm::vec3(0.0f, 0.0f, 1.0f),
+            pos + glm::vec3(1.0f, 0.0f, 1.0f),
+            pos + glm::vec3(1.0f, frontRight, 1.0f),
+            pos + glm::vec3(0.0f, frontLeft, 1.0f)
+        }});
+    }
+
+    if (shouldRenderWaterFace(snapshot, x, y, z - 1, blockId) &&
+        (backLeft > 0.0f || backRight > 0.0f)) {
+        emitWaterFace(FACE_BACK, {{
+            pos + glm::vec3(1.0f, 0.0f, 0.0f),
+            pos + glm::vec3(0.0f, 0.0f, 0.0f),
+            pos + glm::vec3(0.0f, backLeft, 0.0f),
+            pos + glm::vec3(1.0f, backRight, 0.0f)
+        }});
+    }
+
+    if (shouldRenderWaterFace(snapshot, x - 1, y, z, blockId) &&
+        (frontLeft > 0.0f || backLeft > 0.0f)) {
+        emitWaterFace(FACE_LEFT, {{
+            pos + glm::vec3(0.0f, 0.0f, 0.0f),
+            pos + glm::vec3(0.0f, 0.0f, 1.0f),
+            pos + glm::vec3(0.0f, frontLeft, 1.0f),
+            pos + glm::vec3(0.0f, backLeft, 0.0f)
+        }});
+    }
+
+    if (shouldRenderWaterFace(snapshot, x + 1, y, z, blockId) &&
+        (frontRight > 0.0f || backRight > 0.0f)) {
+        emitWaterFace(FACE_RIGHT, {{
+            pos + glm::vec3(1.0f, 0.0f, 1.0f),
+            pos + glm::vec3(1.0f, 0.0f, 0.0f),
+            pos + glm::vec3(1.0f, backRight, 0.0f),
+            pos + glm::vec3(1.0f, frontRight, 1.0f)
+        }});
+    }
+}
+
 bool isOpaqueCubeCandidate(const BlockDef& def) {
     return def.renderShape == BlockRenderShape::Cube && !def.isTransparent;
 }
@@ -1788,6 +1991,16 @@ void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
     expandBounds(meshData,
                  glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
+}
+
+void ChunkMeshBuilders::buildWater(ChunkMeshData& meshData,
+                                   const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockID blockId,
+                                   const BlockDef& def,
+                                   const int x,
+                                   const int y,
+                                   const int z) {
+    addWaterFacesImpl(meshData, snapshot, blockId, def, x, y, z);
 }
 
 void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,

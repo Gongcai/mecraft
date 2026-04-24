@@ -10,6 +10,7 @@
 
 #include "Chunk.h"
 #include "DayNightSystem.h"
+#include "FluidSystem.h"
 #include "LightService.h"
 #include "TerrainGenerator.h"
 #include "../physics/PhysicsInfo.h"
@@ -21,8 +22,11 @@ public:
     void update(const glm::vec3& playerPos);
 
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
+    [[nodiscard]] StateID getBlockState(int x, int y, int z) const;
     [[nodiscard]] BlockID sampleGeneratedBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
+    void setBlockState(int x, int y, int z, StateID stateId);
+    [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const;
 
     [[nodiscard]] RayHit raycast(const PhysicsInfo& ray, float maxDist) const;
     bool raycast(const PhysicsInfo& ray, float maxDist,
@@ -48,6 +52,8 @@ public:
 
     DayNightSystem& getDayNightSystem() { return m_dayNightSystem; }
     const DayNightSystem& getDayNightSystem() const { return m_dayNightSystem; }
+    FluidSystem& fluidSystem() { return m_fluidSystem; }
+    const FluidSystem& fluidSystem() const { return m_fluidSystem; }
 
 private:
     std::unordered_map<int64_t, std::shared_ptr<Chunk>> m_chunks;
@@ -55,6 +61,7 @@ private:
     TerrainGenerator m_terrainGen;
     std::unique_ptr<LightService> m_lightService;
     DayNightSystem m_dayNightSystem;
+    FluidSystem m_fluidSystem{*this};
     ThreadPool* m_threadPool = nullptr;
 
     int m_renderDistance = 8;

@@ -13,8 +13,10 @@
 #include "systems/particle/ParticleSpawnSystem.h"
 #include "systems/player/PlayerFacadeSyncSystem.h"
 #include "systems/audio/PlayerAudioBridgeSystem.h"
+#include "systems/world/FluidTickSystem.h"
 #include "../player/Player.h"
 #include "../physics/PhysicsSystem.h"
+#include "../world/World.h"
 
 namespace ecs {
 
@@ -110,10 +112,9 @@ void GameplayScene::runFixedUpdate(float dt) {
 }
 
 void GameplayScene::runOneTick() {
-    // Placeholder for future tick-based systems:
-    //   - BlockScheduledUpdateSystem
-    //   - WorldRuleTickSystem
-    //   - GameplayScheduledEventSystem
+    if (m_services.world != nullptr) {
+        FluidTickSystem::update(*m_services.world, m_tickClock.tickIndex());
+    }
 }
 
 } // namespace ecs

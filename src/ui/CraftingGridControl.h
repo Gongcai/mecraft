@@ -42,9 +42,10 @@ public:
 
     // Crafting grid state (4 slots + 1 result)
     [[nodiscard]] ItemID getCraftingSlot(int index) const;
-    void setCraftingSlot(int index, ItemID itemId);
+    [[nodiscard]] uint16_t getCraftingSlotCount(int index) const;
+    void setCraftingSlot(int index, ItemID itemId, uint16_t count = 1);
     [[nodiscard]] ItemID getResultSlot() const;
-    void setResultSlot(ItemID itemId);
+    void setResultSlot(ItemID itemId, uint16_t count = 0);
     [[nodiscard]] int getResultCount() const;
 
     // Clear all crafting slots and result
@@ -68,8 +69,7 @@ private:
     ItemGridControl m_itemGrid;
 
     // Crafting grid content: slots 0-3 are 2x2 grid, slot 4 is result
-    std::array<ItemID, CraftingGridLayout::TOTAL_SLOTS> m_slots{};
-    int m_resultCount = 0;
+    std::array<ItemStack, CraftingGridLayout::TOTAL_SLOTS> m_slots{};
 
     // Cached panel positioning
     float m_panelX = 0.0f;

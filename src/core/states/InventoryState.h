@@ -276,9 +276,9 @@ private:
         if (dragged.sourceSlot >= kCraftingSlotBase) {
             const int craftIdx = dragged.sourceSlot - kCraftingSlotBase;
             if (craftIdx < 4) {
-                m_deps.uiRenderer.getCraftingGrid().setCraftingSlot(craftIdx, static_cast<ItemID>(dragged.itemId));
+                m_deps.uiRenderer.getCraftingGrid().setCraftingSlot(craftIdx, static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
             } else if (craftIdx == 4) {
-                m_deps.uiRenderer.getCraftingGrid().setResultSlot(static_cast<ItemID>(dragged.itemId));
+                m_deps.uiRenderer.getCraftingGrid().setResultSlot(static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
             }
         } else {
             Inventory& inventory = m_deps.player.getInventory();
@@ -306,18 +306,44 @@ private:
         }
 
         if (!dragged.active) {
+            // No drag: pick up the item from the crafting slot with its count
             ItemID current = craftGrid.getCraftingSlot(slotIndex);
             if (current != 0) {
+                uint16_t currentCount = craftGrid.getCraftingSlotCount(slotIndex);
                 craftGrid.setCraftingSlot(slotIndex, 0);
-                m_deps.input.beginUIDragItem(static_cast<int>(current), 1, kCraftingSlotBase + slotIndex);
+                m_deps.input.beginUIDragItem(static_cast<int>(current), static_cast<int>(currentCount), kCraftingSlotBase + slotIndex);
             }
         } else {
+            // Drag active: place dragged item into crafting slot
             ItemID current = craftGrid.getCraftingSlot(slotIndex);
-            craftGrid.setCraftingSlot(slotIndex, static_cast<ItemID>(dragged.itemId));
+            uint16_t currentCount = craftGrid.getCraftingSlotCount(slotIndex);
+
             if (current == 0) {
-                m_deps.input.clearUIDragItem();
+                // Empty slot: start drag-distribute tracking (same as inventory behavior)
+                m_primaryDragging = true;
+                m_primaryDragEmptySlots.clear();
+                m_primaryDragEmptySlots.push_back(kCraftingSlotBase + slotIndex);
+                redistributePrimaryDrag();
+            } else if (current == static_cast<ItemID>(dragged.itemId)) {
+                // Same item: merge up to maxStack
+                const ItemDef& def = ItemRegistry::get(current);
+                const uint16_t freeSpace = (def.maxStack > currentCount)
+                    ? static_cast<uint16_t>(def.maxStack - currentCount) : 0;
+                const int toAdd = (dragged.count < freeSpace) ? dragged.count : static_cast<int>(freeSpace);
+                if (toAdd > 0) {
+                    craftGrid.setCraftingSlot(slotIndex, current,
+                        static_cast<uint16_t>(currentCount + toAdd));
+                    const int remaining = dragged.count - toAdd;
+                    if (remaining <= 0) {
+                        m_deps.input.clearUIDragItem();
+                    } else {
+                        m_deps.input.beginUIDragItem(dragged.itemId, remaining, dragged.sourceSlot);
+                    }
+                }
             } else {
-                m_deps.input.beginUIDragItem(static_cast<int>(current), 1, kCraftingSlotBase + slotIndex);
+                // Different items: swap
+                craftGrid.setCraftingSlot(slotIndex, static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
+                m_deps.input.beginUIDragItem(static_cast<int>(current), static_cast<int>(currentCount), kCraftingSlotBase + slotIndex);
             }
         }
     }
@@ -329,8 +355,9 @@ private:
         for (int i = 0; i < 4; ++i) {
             ItemID item = craftGrid.getCraftingSlot(i);
             if (item != 0) {
-                if (!tryPlaceItemInInventory(inventory, item, 1)) {
-                    spawnItemDropAtPlayer(item, 1);
+                uint16_t count = craftGrid.getCraftingSlotCount(i);
+                if (!tryPlaceItemInInventory(inventory, item, count)) {
+                    spawnItemDropAtPlayer(item, count);
                 }
             }
         }
@@ -374,38 +401,54 @@ private:
 
     // Track a new empty slot encountered while left-dragging with a held item.
     // Immediately redistributes the dragged item count evenly across all tracked slots.
+    // Works for both inventory slots and crafting grid slots (0-3).
     void trackPrimaryDragSlot() {
-        const int hoveredGridIndex = m_deps.uiRenderer.getInventoryPanelHoveredSlot();
-        if (hoveredGridIndex < 0) {
-            return;
+        // Try crafting grid first
+        const int hoveredCraftingSlot = m_deps.uiRenderer.getCraftingGridHoveredSlot();
+        int unifiedSlot = -1;
+
+        if (hoveredCraftingSlot >= 0 && hoveredCraftingSlot < 4) {
+            CraftingGridControl& craftGrid = m_deps.uiRenderer.getCraftingGrid();
+            if (craftGrid.getCraftingSlot(hoveredCraftingSlot) == 0) {
+                unifiedSlot = kCraftingSlotBase + hoveredCraftingSlot;
+            }
         }
-        const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
-        Inventory& inventory = m_deps.player.getInventory();
-        if (!inventory.isValidSlot(inventorySlot)) {
-            return;
+
+        if (unifiedSlot < 0) {
+            const int hoveredGridIndex = m_deps.uiRenderer.getInventoryPanelHoveredSlot();
+            if (hoveredGridIndex < 0) {
+                return;
+            }
+            const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
+            Inventory& inventory = m_deps.player.getInventory();
+            if (!inventory.isValidSlot(inventorySlot)) {
+                return;
+            }
+            if (inventory.getSlotItem(inventorySlot) != 0) {
+                return;
+            }
+            unifiedSlot = inventorySlot;
         }
-        // Only track empty slots that are not already in the list
-        if (inventory.getSlotItem(inventorySlot) != 0) {
-            return;
-        }
+
+        // Only track slots that are not already in the list
         for (int slot : m_primaryDragEmptySlots) {
-            if (slot == inventorySlot) {
+            if (slot == unifiedSlot) {
                 return;
             }
         }
-        m_primaryDragEmptySlots.push_back(inventorySlot);
+        m_primaryDragEmptySlots.push_back(unifiedSlot);
         redistributePrimaryDrag();
     }
 
     // Redistribute dragged items evenly across all tracked empty slots.
     // Called each time a new slot is added during left-drag.
+    // Supports both inventory slots and crafting grid slots.
     void redistributePrimaryDrag() {
         const auto& dragged = m_deps.input.getUIDragItem();
         if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0 || m_primaryDragEmptySlots.empty()) {
             return;
         }
 
-        Inventory& inventory = m_deps.player.getInventory();
         const ItemID itemId = static_cast<ItemID>(dragged.itemId);
         const int total = dragged.count;
         const int n = static_cast<int>(m_primaryDragEmptySlots.size());
@@ -414,7 +457,14 @@ private:
 
         for (int i = 0; i < n; ++i) {
             const int count = base + (i >= n - remainder ? 1 : 0);
-            inventory.setSlotItem(m_primaryDragEmptySlots[i], itemId, static_cast<uint16_t>(count));
+            const int slot = m_primaryDragEmptySlots[i];
+            if (slot >= kCraftingSlotBase) {
+                m_deps.uiRenderer.getCraftingGrid().setCraftingSlot(
+                    slot - kCraftingSlotBase, itemId, static_cast<uint16_t>(count));
+            } else {
+                m_deps.player.getInventory().setSlotItem(
+                    slot, itemId, static_cast<uint16_t>(count));
+            }
         }
     }
 
@@ -473,38 +523,55 @@ private:
         }
     }
 
-    // Right-click place: put one item from the drag payload into the hovered inventory slot.
+    // Right-click place: put one item from the drag payload into the hovered slot.
     // Also called when right button is held and cursor moves to a new slot (spread-items behavior).
+    // Works for both inventory slots and crafting grid slots (0-3, not result).
     void handleSecondaryPlace() {
-        const int hoveredGridIndex = m_deps.uiRenderer.getInventoryPanelHoveredSlot();
-        if (hoveredGridIndex < 0) {
-            return;
+        // Try crafting grid first
+        const int hoveredCraftingSlot = m_deps.uiRenderer.getCraftingGridHoveredSlot();
+        int unifiedSlot = -1;
+
+        if (hoveredCraftingSlot >= 0 && hoveredCraftingSlot < 4) {
+            CraftingGridControl& craftGrid = m_deps.uiRenderer.getCraftingGrid();
+            if (craftGrid.getCraftingSlot(hoveredCraftingSlot) == 0) {
+                unifiedSlot = kCraftingSlotBase + hoveredCraftingSlot;
+            }
         }
 
-        const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
-        Inventory& inventory = m_deps.player.getInventory();
-        if (!inventory.isValidSlot(inventorySlot)) {
-            return;
+        if (unifiedSlot < 0) {
+            const int hoveredGridIndex = m_deps.uiRenderer.getInventoryPanelHoveredSlot();
+            if (hoveredGridIndex < 0) {
+                return;
+            }
+
+            const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
+            Inventory& inventory = m_deps.player.getInventory();
+            if (!inventory.isValidSlot(inventorySlot)) {
+                return;
+            }
+            if (inventory.getSlotItem(inventorySlot) != 0) {
+                return;
+            }
+            unifiedSlot = inventorySlot;
         }
 
         // Avoid placing into the same slot twice while right button is held
-        if (inventorySlot == m_lastSecondaryPlaceSlot) {
+        if (unifiedSlot == m_lastSecondaryPlaceSlot) {
             return;
         }
-        m_lastSecondaryPlaceSlot = inventorySlot;
+        m_lastSecondaryPlaceSlot = unifiedSlot;
 
         const auto& dragged = m_deps.input.getUIDragItem();
         if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0) {
             return;
         }
 
-        // Only place into empty slots
-        if (inventory.getSlotItem(inventorySlot) != 0) {
-            return;
-        }
-
         const ItemID itemId = static_cast<ItemID>(dragged.itemId);
-        inventory.setSlotItem(inventorySlot, itemId, 1);
+        if (unifiedSlot >= kCraftingSlotBase) {
+            m_deps.uiRenderer.getCraftingGrid().setCraftingSlot(unifiedSlot - kCraftingSlotBase, itemId, 1);
+        } else {
+            m_deps.player.getInventory().setSlotItem(unifiedSlot, itemId, 1);
+        }
 
         const int remaining = dragged.count - 1;
         if (remaining <= 0) {
