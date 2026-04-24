@@ -10,6 +10,7 @@
 #include <glm/vec2.hpp>
 
 #include "MeshBuilderRegistry.h"
+#include "../world/FluidFlow.h"
 #include "../world/BlockStateRegistry.h"
 #include "../world/FluidState.h"
 #include "../world/PropIndices.h"
@@ -924,7 +925,9 @@ bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
                            const int nz,
                            const BlockID currentId) {
     const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
-    if (FluidState::isSameWater(currentId, neighborId)) {
+    const DecodedFluid currentFluid = FluidState::decode(currentId);
+    if (currentFluid.kind != FluidKind::None &&
+        FluidState::decode(neighborId).kind == currentFluid.kind) {
         return false;
     }
     if (neighborId == BlockIds::AIR) {
@@ -943,14 +946,16 @@ float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot,
                                      const int x,
                                      const int y,
                                      const int z) {
-    if (FluidState::isWater(getResolvedBlockSC(snapshot, x, y + 1, z))) {
-        return 1.0f;
-    }
+    const BlockID aboveId = getResolvedBlockSC(snapshot, x, y + 1, z);
     const BlockID id = getResolvedBlockSC(snapshot, x, y, z);
-    if (!FluidState::isWater(id)) {
+    const DecodedFluid fluid = FluidState::decode(id);
+    if (fluid.kind == FluidKind::None) {
         return 0.0f;
     }
-    return 1.0f - static_cast<float>(FluidState::level(id) + 1) / 9.0f;
+    if (FluidState::decode(aboveId).kind == fluid.kind) {
+        return 1.0f;
+    }
+    return FluidState::surfaceHeight(id);
 }
 
 bool isOpenWaterSurfaceSample(const BlockID id) {
@@ -1030,6 +1035,30 @@ void expandBoundsForCorners(ChunkMeshData& meshData, const std::array<glm::vec3,
     expandBounds(meshData, boundsMin, boundsMax);
 }
 
+uint8_t computeWaterTopQuarterTurns(const SubChunkMeshingSnapshot& snapshot,
+                                    const int x,
+                                    const int y,
+                                    const int z) {
+    const glm::vec3 flow = computeFluidFlowVector(snapshot, x, y, z, FluidKind::Water);
+    if (std::abs(flow.x) >= std::abs(flow.z)) {
+        if (flow.x > 0.001f) {
+            return 1;
+        }
+        if (flow.x < -0.001f) {
+            return 3;
+        }
+        return 0;
+    }
+
+    if (flow.z > 0.001f) {
+        return 2;
+    }
+    if (flow.z < -0.001f) {
+        return 0;
+    }
+    return 0;
+}
+
 void addWaterFacesImpl(ChunkMeshData& meshData,
                        const SubChunkMeshingSnapshot& snapshot,
                        const BlockID blockId,
@@ -1046,7 +1075,10 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
 
     const glm::vec3 pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
     const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
-        const FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        if (face == FACE_TOP) {
+            renderData.uvQuarterTurns = computeWaterTopQuarterTurns(snapshot, x, y, z);
+        }
         emitCustomFace(meshData.transparentVertices, corners, face, renderData);
         expandBoundsForCorners(meshData, corners);
         ++meshData.transparentFaceCountBeforeGreedy;

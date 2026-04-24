@@ -1,0 +1,13 @@
+{
+  "fluids": [
+    {
+      "id": "minecraft:water",
+      "tickDelay": 5,
+      "maxLevel": 7,
+      "slopeSearchDistance": 5,
+      "canCreateInfiniteSource": true,
+      "infiniteSourceNeighborCount": 2,
+      "requiresSupportForInfiniteSource": true
+    }
+  ]
+}

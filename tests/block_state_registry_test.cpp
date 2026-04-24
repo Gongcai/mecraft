@@ -6,6 +6,7 @@
 
 #include "../src/world/Block.h"
 #include "../src/world/BlockStateRegistry.h"
+#include "../src/world/FluidRegistry.h"
 #include "../src/world/FluidState.h"
 #include "../src/world/Placement.h"
 #include "../src/world/PropIndices.h"
@@ -154,6 +155,30 @@ int main() {
     const StateID fallingWater = FluidState::makeWater(0, true);
     if (!FluidState::isFalling(fallingWater) || !FluidState::isWater(fallingWater)) {
         return fail("water helper should build falling water states");
+    }
+
+    const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
+    if (waterDesc.blockId != BlockIds::WATER || waterDesc.tickDelay != 5 || waterDesc.maxLevel != 7) {
+        return fail("fluid registry should load the configured water descriptor");
+    }
+    if (waterDesc.slopeSearchDistance != 5 || !waterDesc.canCreateInfiniteSource ||
+        waterDesc.infiniteSourceNeighborCount != 2 || !waterDesc.requiresSupportForInfiniteSource) {
+        return fail("fluid registry should expose water spread and infinite source settings");
+    }
+
+    const DecodedFluid decodedLevel3 = FluidState::decode(waterLevel3);
+    if (decodedLevel3.kind != FluidKind::Water || decodedLevel3.level != 3 ||
+        decodedLevel3.falling || decodedLevel3.isSource) {
+        return fail("fluid decode should preserve water level metadata");
+    }
+    if (FluidState::encode(decodedLevel3) != waterLevel3) {
+        return fail("fluid encode should round-trip decoded water states");
+    }
+    if (!FluidState::canReplace(waterDesc, BlockIds::AIR) || !FluidState::canReplace(waterDesc, waterLevel3)) {
+        return fail("water should be allowed to replace air and existing water");
+    }
+    if (FluidState::canReplace(waterDesc, BlockIds::STONE) || FluidState::canCoexist(waterDesc, BlockIds::STONE)) {
+        return fail("waterlogging placeholder APIs should not allow solid coexistence yet");
     }
 
     {

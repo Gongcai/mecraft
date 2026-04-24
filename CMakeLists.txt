@@ -66,7 +66,9 @@ set(SRC_WORLD
         src/world/LightService.cpp
         src/world/Placement.cpp
         src/world/PropIndices.cpp
+        src/world/FluidRegistry.cpp
         src/world/FluidState.cpp
+        src/world/FluidFlow.cpp
         src/world/FluidSystem.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp

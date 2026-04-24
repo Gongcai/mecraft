@@ -5,6 +5,7 @@
 #include <glm/vec3.hpp>
 
 #include "../src/physics/PhysicsSystem.h"
+#include "../src/world/FluidState.h"
 #include "../src/world/World.h"
 
 namespace {
@@ -209,6 +210,40 @@ int main() {
 
     if (!fellOffPlatform) {
         return fail("non-crouching body should be able to walk off ledge");
+    }
+
+    // Case 6: fluid flow should impart a repeatable horizontal push.
+    const int flowY = surfaceY + 8;
+    for (int x = -2; x <= 4; ++x) {
+        for (int y = surfaceY + 1; y <= flowY + 2; ++y) {
+            for (int z = -1; z <= 1; ++z) {
+                world.setBlock(x, y, z, BlockIds::AIR);
+            }
+        }
+    }
+    for (int x = -2; x <= 4; ++x) {
+        for (int z = -1; z <= 1; ++z) {
+            world.setBlock(x, flowY - 1, z, BlockIds::STONE);
+        }
+    }
+    world.setBlock(0, flowY, 0, FluidState::makeWater(0, false));
+    world.setBlock(1, flowY, 0, FluidState::makeWater(3, false));
+
+    PhysicsBody floater;
+    floater.position = glm::vec3(0.5f, static_cast<float>(flowY) + 1.2f, 0.5f);
+
+    const float startX = floater.position.x;
+    bool touchedWater = false;
+    for (int i = 0; i < 120; ++i) {
+        phys.updateBody(floater, idleIntent, kDt);
+        touchedWater = touchedWater || floater.isInWater;
+    }
+
+    if (!touchedWater) {
+        return fail("flow test body should remain in water long enough to sample fluid push");
+    }
+    if (floater.position.x <= startX + 0.03f || floater.velocity.x <= 0.02f) {
+        return fail("water flow should push bodies in the direction of the fluid vector");
     }
 
     std::cout << "[physics_mvp_test] PASS\n";

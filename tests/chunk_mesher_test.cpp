@@ -6,6 +6,7 @@
 #include "../src/renderer/ChunkMesher.h"
 #include "../src/renderer/MeshBuilderRegistry.h"
 #include "../src/world/BlockStateRegistry.h"
+#include "../src/world/FluidFlow.h"
 #include "../src/world/FluidState.h"
 #include "../src/world/PropIndices.h"
 
@@ -512,6 +513,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, FluidState::makeWater(3, false));
+        chunk.setBlock(1, 32, 0, FluidState::makeWater(0, false));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         float topMinY = 9999.0f;
@@ -528,7 +530,40 @@ int main() {
             return fail("level-3 water should render below full block height");
         }
         if (!(topMinY + 0.01f < topMaxY)) {
-            return fail("isolated flowing water should form a sloped top surface");
+            return fail("neighboring water heights should produce a sloped top surface");
+        }
+    }
+
+    {
+        Chunk eastFlowChunk(0, 0);
+        eastFlowChunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
+        eastFlowChunk.setBlock(1, 32, 0, FluidState::makeWater(3, false));
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(eastFlowChunk, 2);
+        const glm::vec3 flow = computeFluidFlowVector(*snapshot, 0, 0, 0, FluidKind::Water);
+        if (flow.x <= 0.1f || std::abs(flow.z) >= 0.2f) {
+            return fail("water flow vector should point toward the lower eastern neighbor");
+        }
+
+        const ChunkMeshData meshData = buildMeshDataFor(eastFlowChunk);
+        const auto topFaceVertices = collectFaceVertices(
+            meshData.transparentVertices,
+            0.0f,
+            0.0f, 1.0f,
+            32.0f, 33.0f,
+            0.0f, 1.0f);
+        if (topFaceVertices.size() < 6) {
+            return fail("expected water top-face vertices for flow-direction UV test");
+        }
+        bool hasVerticalUvEdge = false;
+        for (size_t i = 1; i < topFaceVertices.size(); ++i) {
+            if (approxEqual(topFaceVertices[0]->u, topFaceVertices[i]->u) &&
+                !approxEqual(topFaceVertices[0]->v, topFaceVertices[i]->v)) {
+                hasVerticalUvEdge = true;
+                break;
+            }
+        }
+        if (!hasVerticalUvEdge) {
+            return fail("water top face UVs should rotate to follow the computed flow direction");
         }
     }
 

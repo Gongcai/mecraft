@@ -4,6 +4,7 @@
 
 #include "Block.h"
 #include "BlockStateRegistry.h"
+#include "FluidRegistry.h"
 #include "Placement.h"
 #include "PropIndices.h"
 #include "Paths.h"
@@ -323,6 +324,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     s_initialized = true;
     BlockIds::init();
+    FluidRegistry::init();
 }
 
 void BlockRegistry::ensureInitialized() {

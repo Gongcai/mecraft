@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include "BlockStateRegistry.h"
+#include "FluidRegistry.h"
 
 class World;
 
@@ -53,6 +54,7 @@ private:
 
     void updateFluidCell(const glm::ivec3& pos);
     [[nodiscard]] StateID computeTargetFluidState(const glm::ivec3& pos, BlockID currentId) const;
+    [[nodiscard]] uint64_t resolveNeighborhoodTickDelay(const glm::ivec3& pos) const;
 
     World& m_world;
     std::priority_queue<ScheduledBlockTick,

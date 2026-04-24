@@ -2,16 +2,17 @@
 
 #include <algorithm>
 
+#include "FluidRegistry.h"
 #include "PropIndices.h"
 
 namespace {
 
-uint8_t clampWaterLevel(const uint8_t level) {
-    return static_cast<uint8_t>(std::min<uint8_t>(level, 7));
+uint8_t clampFluidLevel(const FluidDesc& desc, const uint8_t level) {
+    return static_cast<uint8_t>(std::min<uint8_t>(level, desc.maxLevel));
 }
 
-uint16_t resolveLevelValue(const uint8_t level) {
-    switch (clampWaterLevel(level)) {
+uint16_t resolveLevelValue(const uint8_t level, const FluidDesc& desc) {
+    switch (clampFluidLevel(desc, level)) {
         case 0: return PropIndices::LEVEL_0;
         case 1: return PropIndices::LEVEL_1;
         case 2: return PropIndices::LEVEL_2;
@@ -29,74 +30,112 @@ uint16_t resolveLevelValue(const uint8_t level) {
 
 namespace FluidState {
 
-bool isWater(const BlockID id) {
-    return BlockStateRegistry::getBlockId(id) == BlockIds::WATER;
+DecodedFluid decode(const StateID id) {
+    const FluidKind kind = FluidRegistry::kindForBlock(BlockStateRegistry::getBlockId(id));
+    if (kind == FluidKind::None) {
+        return {};
+    }
+
+    DecodedFluid fluid;
+    fluid.kind = kind;
+
+    if (PropIndices::LEVEL != PropIndices::INVALID) {
+        const uint16_t value = BlockStateRegistry::getPropertyIndex(id, PropIndices::LEVEL);
+        if (value == PropIndices::LEVEL_1) fluid.level = 1;
+        else if (value == PropIndices::LEVEL_2) fluid.level = 2;
+        else if (value == PropIndices::LEVEL_3) fluid.level = 3;
+        else if (value == PropIndices::LEVEL_4) fluid.level = 4;
+        else if (value == PropIndices::LEVEL_5) fluid.level = 5;
+        else if (value == PropIndices::LEVEL_6) fluid.level = 6;
+        else if (value == PropIndices::LEVEL_7) fluid.level = 7;
+    }
+
+    if (PropIndices::FALLING != PropIndices::INVALID) {
+        const uint16_t value = BlockStateRegistry::getPropertyIndex(id, PropIndices::FALLING);
+        fluid.falling = value == PropIndices::FALLING_TRUE;
+    }
+
+    fluid.isSource = !fluid.falling && fluid.level == 0;
+    return fluid;
 }
 
-bool isFalling(const BlockID id) {
-    if (!isWater(id) || PropIndices::FALLING == PropIndices::INVALID) {
-        return false;
-    }
-    const uint16_t value = BlockStateRegistry::getPropertyIndex(id, PropIndices::FALLING);
-    if (value == BlockStateRegistry::INVALID_INDEX) {
-        return false;
-    }
-    return value == PropIndices::FALLING_TRUE;
-}
-
-uint8_t level(const BlockID id) {
-    if (!isWater(id) || PropIndices::LEVEL == PropIndices::INVALID) {
-        return 0;
+StateID encode(const DecodedFluid& fluid) {
+    if (fluid.kind == FluidKind::None) {
+        return BlockIds::AIR;
     }
 
-    const uint16_t value = BlockStateRegistry::getPropertyIndex(id, PropIndices::LEVEL);
-    if (value == BlockStateRegistry::INVALID_INDEX) {
-        return 0;
+    const FluidDesc& desc = FluidRegistry::get(fluid.kind);
+    if (desc.blockId == BlockIds::AIR) {
+        return BlockIds::AIR;
     }
 
-    if (value == PropIndices::LEVEL_1) return 1;
-    if (value == PropIndices::LEVEL_2) return 2;
-    if (value == PropIndices::LEVEL_3) return 3;
-    if (value == PropIndices::LEVEL_4) return 4;
-    if (value == PropIndices::LEVEL_5) return 5;
-    if (value == PropIndices::LEVEL_6) return 6;
-    if (value == PropIndices::LEVEL_7) return 7;
-    return 0;
-}
-
-bool isSource(const BlockID id) {
-    return isWater(id) && !isFalling(id) && level(id) == 0;
-}
-
-float surfaceHeight(const BlockID id) {
-    if (!isWater(id)) {
-        return 0.0f;
-    }
-    if (isFalling(id) && level(id) == 0) {
-        return 1.0f;
-    }
-    return 1.0f - static_cast<float>(level(id)) / 8.0f;
-}
-
-StateID makeWater(const uint8_t requestedLevel, const bool falling) {
     if (PropIndices::LEVEL == PropIndices::INVALID || PropIndices::FALLING == PropIndices::INVALID) {
-        return BlockIds::WATER;
+        return desc.blockId;
     }
 
-    StateID state = BlockStateRegistry::getDefaultState(BlockIds::WATER);
-    state = BlockStateRegistry::withProperty(state, PropIndices::LEVEL, resolveLevelValue(requestedLevel));
-    state = BlockStateRegistry::withProperty(state,
-                                             PropIndices::FALLING,
-                                             falling ? PropIndices::FALLING_TRUE : PropIndices::FALLING_FALSE);
+    StateID state = BlockStateRegistry::getDefaultState(desc.blockId);
+    state = BlockStateRegistry::withProperty(state, PropIndices::LEVEL, resolveLevelValue(fluid.level, desc));
+    state = BlockStateRegistry::withProperty(
+        state,
+        PropIndices::FALLING,
+        fluid.falling ? PropIndices::FALLING_TRUE : PropIndices::FALLING_FALSE);
     return state;
 }
 
+bool isFluidOf(const StateID id, const FluidKind kind) {
+    return decode(id).kind == kind;
+}
+
+bool isWater(const BlockID id) {
+    return isFluidOf(id, FluidKind::Water);
+}
+
+bool isFalling(const BlockID id) {
+    return decode(id).falling;
+}
+
+uint8_t level(const BlockID id) {
+    return decode(id).level;
+}
+
+bool isSource(const BlockID id) {
+    return decode(id).isSource;
+}
+
+float surfaceHeight(const BlockID id) {
+    const DecodedFluid fluid = decode(id);
+    if (fluid.kind == FluidKind::None) {
+        return 0.0f;
+    }
+
+    const FluidDesc& desc = FluidRegistry::get(fluid.kind);
+    if (fluid.falling && fluid.level == 0) {
+        return 1.0f;
+    }
+
+    return 1.0f - static_cast<float>(fluid.level) / static_cast<float>(desc.maxLevel + 1);
+}
+
+StateID makeWater(const uint8_t requestedLevel, const bool falling) {
+    return encode(DecodedFluid{FluidKind::Water, requestedLevel, falling, !falling && requestedLevel == 0});
+}
+
+bool canReplace(const FluidDesc& desc, const StateID occupant) {
+    return occupant == BlockIds::AIR || decode(occupant).kind == desc.kind;
+}
+
+bool canCoexist(const FluidDesc& desc, const StateID occupant) {
+    static_cast<void>(desc);
+    static_cast<void>(occupant);
+    return false;
+}
+
 bool canWaterReplace(const BlockID id) {
-    return id == BlockIds::AIR || isWater(id);
+    return canReplace(FluidRegistry::get(FluidKind::Water), id);
 }
 
 bool isSameWater(const BlockID a, const BlockID b) {
-    return isWater(a) && isWater(b);
+    return isFluidOf(a, FluidKind::Water) && isFluidOf(b, FluidKind::Water);
 }
 
 }

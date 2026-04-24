@@ -6,6 +6,7 @@
 
 #include "PhysicsInfo.h"
 #include "../world/Block.h"
+#include "../world/FluidFlow.h"
 #include "../world/FluidState.h"
 #include "../world/World.h"
 #include "core/Time.h"
@@ -82,6 +83,43 @@ float queryWaterFillRatio(const PhysicsBody& body, const World& world) {
     }
 
     return std::clamp(waterVolume / totalVolume, 0.0f, 1.0f);
+}
+
+glm::vec3 queryWaterFlowVector(const PhysicsBody& body, const World& world) {
+    const AABB box = makeBodyAABBAt(body, body.position);
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
+    const int minY = static_cast<int>(std::floor(box.min.y));
+    const int maxY = static_cast<int>(std::floor(box.max.y - kContactEpsilon));
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kContactEpsilon));
+
+    glm::vec3 weightedFlow(0.0f);
+    float weightSum = 0.0f;
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                if (!isWaterBlock(world, x, y, z)) {
+                    continue;
+                }
+                const float ox = overlapLen(box.min.x, box.max.x, static_cast<float>(x), static_cast<float>(x + 1));
+                const float oy = overlapLen(box.min.y, box.max.y, static_cast<float>(y), waterTopY(world, x, y, z));
+                const float oz = overlapLen(box.min.z, box.max.z, static_cast<float>(z), static_cast<float>(z + 1));
+                const float overlap = ox * oy * oz;
+                if (overlap <= 0.0f) {
+                    continue;
+                }
+
+                weightedFlow += computeFluidFlowVector(world, glm::ivec3(x, y, z), FluidKind::Water) * overlap;
+                weightSum += overlap;
+            }
+        }
+    }
+
+    if (weightSum <= 0.0f) {
+        return glm::vec3(0.0f);
+    }
+    return weightedFlow / weightSum;
 }
 
 float overlapLen(const float aMin, const float aMax, const float bMin, const float bMax) {
@@ -170,7 +208,7 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
     if (len > 1.0f) {
         input /= len;
     }
-    else if (len < 0.001f && wasGrounded) {
+    else if (len < 0.001f && wasGrounded && !body.isInWater) {
         // Keep grounded body stable without destroying vertical state.
         body.velocity.x = 0.0f;
         body.velocity.z = 0.0f;
@@ -243,6 +281,23 @@ void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning&
     const float drag = (body.isInWater && !intent.isFlying) ? tuning.waterDrag : tuning.airDrag;
     const float factor = std::max(0.0f, 1.0f - drag * dt);
     body.velocity *= factor;
+}
+
+void applyFluidFlow(PhysicsBody& body, const World& world, const MoveIntent& intent,
+                    const PhysicsTuning& tuning, const float waterFillRatio, const float dt) {
+    if (intent.isFlying || !body.isInWater || waterFillRatio <= 0.0f) {
+        return;
+    }
+
+    const glm::vec3 flow = queryWaterFlowVector(body, world);
+    if (glm::length(flow) <= 0.0001f) {
+        return;
+    }
+
+    const float pushScale = body.isFullySubmerged
+        ? 1.0f
+        : std::max(0.8f, std::clamp(waterFillRatio, 0.0f, 1.0f));
+    body.velocity += flow * (tuning.waterFlowPush * pushScale * dt);
 }
 
 void moveAndCollideAxis(PhysicsBody& body, const World& world, const MoveIntent& intent, const float dt, const int axis) {
@@ -318,6 +373,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     applyHorizontalControl(body, intent, tuningOverride, wasGrounded, dt);
     applyVerticalForces(body, intent, tuningOverride, wasGrounded, dt);
     applyDrag(body, intent, tuningOverride, dt);
+    applyFluidFlow(body, *m_world, intent, tuningOverride, waterFillRatio, dt);
 
     body.isGrounded = false;
     moveAndCollideAxis(body, *m_world, intent, dt, 1); // Y

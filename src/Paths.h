@@ -24,6 +24,7 @@
 #define LIGHTMAP_DIR          TEXTURES_DIR "/lightmap"
 
 #define BLOCKS_CONFIG_PATH    CONFIG_DIR "/blocks.json"
+#define FLUIDS_CONFIG_PATH    CONFIG_DIR "/fluids.json"
 #define ITEMS_CONFIG_PATH     CONFIG_DIR "/items.json"
 #define RECIPES_CONFIG_PATH   CONFIG_DIR "/recipes.json"
 #define KEYBINDINGS_PATH      CONFIG_DIR "/keybindings.txt"

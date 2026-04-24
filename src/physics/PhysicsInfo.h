@@ -58,6 +58,7 @@ struct PhysicsTuning {
     float waterDrag = 6.0f;
     float swimSpeed = 3.2f;
     float swimUpAccel = 10.0f;
+    float waterFlowPush = 18.0f;
 };
 
 #endif // MECRAFT_PHYSICS_INFO_H
