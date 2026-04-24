@@ -125,6 +125,16 @@ int main() {
     if (transparentMinY < 33.0f || transparentMaxY > 34.0f) {
         return fail("transparent vertices should remain offset into the owning high sub-chunk slice");
     }
+    const bool hasAnimatedWaterVertex = std::any_of(aggregated.transparentVertices.begin(),
+                                                    aggregated.transparentVertices.end(),
+                                                    [](const BlockVertex& vertex) {
+                                                        return vertex.animated > 0.5f &&
+                                                               vertex.animationFrameCount >= 32.0f &&
+                                                               vertex.animationFps > 0.0f;
+                                                    });
+    if (!hasAnimatedWaterVertex) {
+        return fail("aggregated transparent water vertices should preserve animation metadata");
+    }
 
     std::cout << "[chunk_aggregation_test] PASS\n";
     return EXIT_SUCCESS;

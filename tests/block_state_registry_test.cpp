@@ -152,9 +152,42 @@ int main() {
         return fail("water helper should build horizontal decay states");
     }
 
+    const StateTextureIndices& waterDefaultTextures = BlockStateRegistry::getStateTextures(waterDefault);
+    if (!waterDefaultTextures.worldTop.isAnimated ||
+        waterDefaultTextures.worldTop.frameCount != 32 ||
+        waterDefaultTextures.worldTop.fps <= 0.0f) {
+        return fail("default water state should expose animated still top-face metadata");
+    }
+    if (!waterDefaultTextures.worldBottom.isAnimated ||
+        waterDefaultTextures.worldBottom.frameCount != 32) {
+        return fail("default water state should expose animated still bottom-face metadata");
+    }
+    if (!waterDefaultTextures.worldFront.isAnimated ||
+        waterDefaultTextures.worldFront.frameCount != 32 ||
+        waterDefaultTextures.worldFront.fps != waterDefaultTextures.worldTop.fps) {
+        return fail("default water state sides should expose animated still metadata");
+    }
+
+    const StateTextureIndices& waterLevel3Textures = BlockStateRegistry::getStateTextures(waterLevel3);
+    if (!waterLevel3Textures.worldTop.isAnimated ||
+        waterLevel3Textures.worldTop.frameCount != 32 ||
+        waterLevel3Textures.worldTop.fps != waterDefaultTextures.worldTop.fps) {
+        return fail("flowing water top face should stay on the still animation");
+    }
+
     const StateID fallingWater = FluidState::makeWater(0, true);
     if (!FluidState::isFalling(fallingWater) || !FluidState::isWater(fallingWater)) {
         return fail("water helper should build falling water states");
+    }
+
+    const StateTextureIndices& fallingWaterTextures = BlockStateRegistry::getStateTextures(fallingWater);
+    if (!fallingWaterTextures.worldTop.isAnimated ||
+        fallingWaterTextures.worldTop.fps != waterDefaultTextures.worldTop.fps) {
+        return fail("falling water top face should stay on the still animation");
+    }
+    if (!fallingWaterTextures.worldFront.isAnimated ||
+        fallingWaterTextures.worldFront.fps != waterDefaultTextures.worldFront.fps) {
+        return fail("falling water side faces should stay on the still animation");
     }
 
     const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);

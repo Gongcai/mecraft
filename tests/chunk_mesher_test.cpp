@@ -453,6 +453,16 @@ int main() {
         if (meshData.transparentVertices.size() != static_cast<size_t>(meshData.transparentFaceCountAfterGreedy) * 6) {
             return fail("transparent vertex count should stay aligned to merged quad count");
         }
+        const bool hasAnimatedWaterVertex = std::any_of(meshData.transparentVertices.begin(),
+                                                        meshData.transparentVertices.end(),
+                                                        [](const BlockVertex& vertex) {
+                                                            return vertex.animated > 0.5f &&
+                                                                   vertex.animationFrameCount >= 32.0f &&
+                                                                   vertex.animationFps > 0.0f;
+                                                        });
+        if (!hasAnimatedWaterVertex) {
+            return fail("water vertices should carry animation sampling metadata");
+        }
         if (!meshData.cutoutVertices.empty()) {
             return fail("water strip should not emit cutout geometry");
         }
@@ -538,12 +548,6 @@ int main() {
         Chunk eastFlowChunk(0, 0);
         eastFlowChunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
         eastFlowChunk.setBlock(1, 32, 0, FluidState::makeWater(3, false));
-        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(eastFlowChunk, 2);
-        const glm::vec3 flow = computeFluidFlowVector(*snapshot, 0, 0, 0, FluidKind::Water);
-        if (flow.x <= 0.1f || std::abs(flow.z) >= 0.2f) {
-            return fail("water flow vector should point toward the lower eastern neighbor");
-        }
-
         const ChunkMeshData meshData = buildMeshDataFor(eastFlowChunk);
         const auto topFaceVertices = collectFaceVertices(
             meshData.transparentVertices,
@@ -554,16 +558,16 @@ int main() {
         if (topFaceVertices.size() < 6) {
             return fail("expected water top-face vertices for flow-direction UV test");
         }
-        bool hasVerticalUvEdge = false;
-        for (size_t i = 1; i < topFaceVertices.size(); ++i) {
-            if (approxEqual(topFaceVertices[0]->u, topFaceVertices[i]->u) &&
-                !approxEqual(topFaceVertices[0]->v, topFaceVertices[i]->v)) {
-                hasVerticalUvEdge = true;
-                break;
-            }
-        }
-        if (!hasVerticalUvEdge) {
-            return fail("water top face UVs should rotate to follow the computed flow direction");
+        const bool hasStillAnimatedTopVertex = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
+                                                           [](const BlockVertex* vertex) {
+                                                               return vertex != nullptr &&
+                                                                      vertex->animated > 0.5f &&
+                                                                      vertex->animationFrameCount >= 32.0f &&
+                                                                      vertex->animationFps >= 6.0f &&
+                                                                      vertex->animationFps < 8.0f;
+                                                           });
+        if (!hasStillAnimatedTopVertex) {
+            return fail("water top face should keep still animation metadata after meshing");
         }
     }
 

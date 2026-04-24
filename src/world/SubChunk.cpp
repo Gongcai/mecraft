@@ -330,6 +330,15 @@ void setupSubChunkVertexLayout() {
 
     glEnableVertexAttribArray(6);
     glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+
+    glEnableVertexAttribArray(7);
+    glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
+
+    glEnableVertexAttribArray(8);
+    glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
+
+    glEnableVertexAttribArray(9);
+    glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
 }
 } // namespace
 

@@ -8,9 +8,11 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <filesystem>
 #include <vector>
+#include <nlohmann/json.hpp>
 #include "../third_party/stb/stb_image.h"
 #include "../world/Block.h"
 
@@ -292,6 +294,8 @@ void ResourceMgr::shutdown() {
     m_blockAtlasPixels.clear();
     m_itemAtlasPixels.clear();
     m_itemTextureIndices.clear();
+    m_textureArrayLayers.clear();
+    m_declaredTextureAnimations.clear();
 }
 
 Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {
@@ -385,6 +389,32 @@ constexpr GLenum kMaxTextureMaxAnisotropyPName = 0;
 
 inline bool supportsAnisotropicFiltering() {
     return kTextureMaxAnisotropyPName != 0 && kMaxTextureMaxAnisotropyPName != 0;
+}
+
+namespace {
+int computeTextureArrayLayerCount(const std::filesystem::path& imagePath,
+                                  const int tileSize,
+                                  const std::unordered_map<std::string, TextureAnimationInfo>& declaredAnimations) {
+    const std::string textureName = imagePath.stem().string();
+    const auto declaredIt = declaredAnimations.find(textureName);
+    if (declaredIt == declaredAnimations.end() || !declaredIt->second.isAnimated || declaredIt->second.frameCount <= 1) {
+        return 1;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    if (!stbi_info(imagePath.string().c_str(), &width, &height, &channels)) {
+        return 1;
+    }
+
+    const TextureAnimationInfo& animation = declaredIt->second;
+    if (width != tileSize || height != tileSize * animation.frameCount) {
+        return 1;
+    }
+
+    return animation.frameCount;
+}
 }
 
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
@@ -570,6 +600,10 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         glDeleteTextures(1, &m_textureArray.textureID);
         m_textureArray.textureID = 0;
     }
+    m_textureArrayLayers.clear();
+    for (auto& [_, animation] : m_declaredTextureAnimations) {
+        animation.firstLayer = 0;
+    }
 
     std::vector<fs::path> imagePaths;
 
@@ -594,7 +628,15 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         return;
     }
 
-    const int numLayers = static_cast<int>(imagePaths.size());
+    std::vector<int> layersPerImage;
+    layersPerImage.reserve(imagePaths.size());
+
+    int numLayers = 0;
+    for (const fs::path& imagePath : imagePaths) {
+        const int layerCount = computeTextureArrayLayerCount(imagePath, tileSize, m_declaredTextureAnimations);
+        layersPerImage.push_back(layerCount);
+        numLayers += layerCount;
+    }
 
     GLuint textureID = 0;
     glGenTextures(1, &textureID);
@@ -606,49 +648,82 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
     stbi_set_flip_vertically_on_load(true);
 
-    for (int i = 0; i < numLayers; ++i) {
+    int currentLayer = 0;
+    for (size_t imageIndex = 0; imageIndex < imagePaths.size(); ++imageIndex) {
+        const fs::path& imagePath = imagePaths[imageIndex];
+        const std::string textureName = imagePath.stem().string();
+        m_textureArrayLayers[textureName] = currentLayer;
+
+        auto declaredIt = m_declaredTextureAnimations.find(textureName);
+        const int declaredFrames = (declaredIt != m_declaredTextureAnimations.end()) ? declaredIt->second.frameCount : 1;
+        const bool useAnimationFrames = layersPerImage[imageIndex] > 1;
+        if (declaredIt != m_declaredTextureAnimations.end()) {
+            declaredIt->second.firstLayer = currentLayer;
+            declaredIt->second.isAnimated = useAnimationFrames && declaredIt->second.frameCount > 1;
+        }
+
         int width = 0;
         int height = 0;
         int channels = 0;
-        unsigned char* data = stbi_load(imagePaths[i].string().c_str(), &width, &height, &channels, 4);
+        unsigned char* data = stbi_load(imagePath.string().c_str(), &width, &height, &channels, 4);
 
         if (!data) {
 #ifndef NDEBUG
-            std::cerr << "Failed to load image for texture array: " << imagePaths[i] << "\n";
+            std::cerr << "Failed to load image for texture array: " << imagePath << "\n";
 #endif
+            currentLayer += layersPerImage[imageIndex];
             continue;
         }
 
-        if (width != tileSize || height != tileSize) {
-#ifndef NDEBUG
-            std::cerr << "Warning: Texture size mismatch in texture array! " << imagePaths[i] << "\n";
-#endif
-        }
+        const auto uploadLayer = [&](const int targetLayer, const unsigned char* srcPixels, const int srcWidth, const int srcHeight) {
+            const int copyWidth = std::min(tileSize, srcWidth);
+            const int copyHeight = std::min(tileSize, srcHeight);
+            if (copyWidth == tileSize && copyHeight == tileSize) {
+                glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
+                                tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, srcPixels);
+                return;
+            }
 
-        const int copyWidth = std::min(tileSize, width);
-        const int copyHeight = std::min(tileSize, height);
-
-        if (copyWidth == tileSize && copyHeight == tileSize) {
-            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
-                            tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        } else {
-            // Upload into a temporary full-size buffer if the source was smaller.
             std::vector<unsigned char> padded(static_cast<size_t>(tileSize) * tileSize * 4, 0);
             for (int y = 0; y < copyHeight; ++y) {
                 for (int x = 0; x < copyWidth; ++x) {
                     const int dstIdx = (y * tileSize + x) * 4;
-                    const int srcIdx = (y * width + x) * 4;
-                    padded[dstIdx + 0] = data[srcIdx + 0];
-                    padded[dstIdx + 1] = data[srcIdx + 1];
-                    padded[dstIdx + 2] = data[srcIdx + 2];
-                    padded[dstIdx + 3] = data[srcIdx + 3];
+                    const int srcIdx = (y * srcWidth + x) * 4;
+                    padded[dstIdx + 0] = srcPixels[srcIdx + 0];
+                    padded[dstIdx + 1] = srcPixels[srcIdx + 1];
+                    padded[dstIdx + 2] = srcPixels[srcIdx + 2];
+                    padded[dstIdx + 3] = srcPixels[srcIdx + 3];
                 }
             }
-            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i,
+
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
                             tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, padded.data());
+        };
+
+        if (useAnimationFrames) {
+            if (width != tileSize || height != tileSize * declaredFrames) {
+#ifndef NDEBUG
+                std::cerr << "Warning: Animated texture size mismatch in texture array: " << imagePath << "\n";
+#endif
+                uploadLayer(currentLayer, data, width, height);
+            } else {
+                for (int frame = 0; frame < declaredFrames; ++frame) {
+                    const int flippedFrameIndex = declaredFrames - 1 - frame;
+                    const unsigned char* framePixels = data + static_cast<size_t>(flippedFrameIndex * tileSize * width) * 4;
+                    uploadLayer(currentLayer + frame, framePixels, width, tileSize);
+                }
+            }
+        } else {
+            if (width != tileSize || height != tileSize) {
+#ifndef NDEBUG
+                std::cerr << "Warning: Texture size mismatch in texture array! " << imagePath << "\n";
+#endif
+            }
+            uploadLayer(currentLayer, data, width, height);
         }
 
         stbi_image_free(data);
+        currentLayer += layersPerImage[imageIndex];
     }
 
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
@@ -675,6 +750,79 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
 const TextureArray& ResourceMgr::getTextureArray() const {
     return m_textureArray;
+}
+
+void ResourceMgr::preloadTextureAnimationsFromConfig(const std::string& blocksConfigPath) {
+    m_declaredTextureAnimations.clear();
+
+    std::ifstream file(blocksConfigPath);
+    if (!file.is_open()) {
+        return;
+    }
+
+    nlohmann::json root;
+    try {
+        file >> root;
+    } catch (const std::exception&) {
+        return;
+    }
+
+    const auto blocksIt = root.find("blocks");
+    if (blocksIt == root.end() || !blocksIt->is_array()) {
+        return;
+    }
+
+    for (const auto& blockJson : *blocksIt) {
+        const auto animationsIt = blockJson.find("animatedTextures");
+        if (animationsIt == blockJson.end() || !animationsIt->is_object()) {
+            continue;
+        }
+
+        for (auto it = animationsIt->begin(); it != animationsIt->end(); ++it) {
+            if (!it.value().is_object()) {
+                continue;
+            }
+
+            const auto textureIt = it.value().find("texture");
+            const auto framesIt = it.value().find("frames");
+            const auto fpsIt = it.value().find("fps");
+            if (textureIt == it.value().end() || !textureIt->is_string() ||
+                framesIt == it.value().end() || !framesIt->is_number_integer() ||
+                fpsIt == it.value().end() || !fpsIt->is_number()) {
+                continue;
+            }
+
+            TextureAnimationInfo info;
+            info.firstLayer = 0;
+            info.frameCount = std::max(1, framesIt->get<int>());
+            info.fps = std::max(0.0f, fpsIt->get<float>());
+            info.isAnimated = info.frameCount > 1;
+
+            m_declaredTextureAnimations[textureIt->get<std::string>()] = info;
+        }
+    }
+}
+
+int ResourceMgr::getTextureArrayLayer(const std::string& name) const {
+    const auto it = m_textureArrayLayers.find(name);
+    if (it != m_textureArrayLayers.end()) {
+        return it->second;
+    }
+    return 0;
+}
+
+TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) const {
+    const auto it = m_declaredTextureAnimations.find(name);
+    if (it != m_declaredTextureAnimations.end()) {
+        return it->second;
+    }
+
+    TextureAnimationInfo fallback;
+    fallback.firstLayer = getTextureArrayLayer(name);
+    fallback.frameCount = 1;
+    fallback.fps = 0.0f;
+    fallback.isAnimated = false;
+    return fallback;
 }
 
 namespace {

@@ -24,6 +24,9 @@ struct BlockVertex {
     float blockLight;
     float ao;
     float layer;
+    float animationFrameCount;
+    float animationFps;
+    float animated;
 };
 
 struct SubChunkMesh {

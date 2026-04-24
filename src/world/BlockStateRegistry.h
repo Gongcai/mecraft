@@ -24,6 +24,12 @@ struct StateTextureIndices {
     int texRight = 0;
     int texFront = 0;
     int texBack = 0;
+    AnimatedTextureRef worldTop;
+    AnimatedTextureRef worldBottom;
+    AnimatedTextureRef worldLeft;
+    AnimatedTextureRef worldRight;
+    AnimatedTextureRef worldFront;
+    AnimatedTextureRef worldBack;
 };
 
 struct BlockStateEntry {

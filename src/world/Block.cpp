@@ -27,6 +27,24 @@ bool BlockRegistry::s_initialized = false;
 namespace {
 constexpr const char* kBlocksConfigPath = BLOCKS_CONFIG_PATH;
 
+AnimatedTextureRef makeStaticWorldTexture(const int layer) {
+    AnimatedTextureRef ref;
+    ref.firstLayer = layer;
+    ref.frameCount = 1;
+    ref.fps = 0.0f;
+    ref.isAnimated = false;
+    return ref;
+}
+
+void setAllWorldFaces(BlockDef& def, const AnimatedTextureRef& ref) {
+    def.worldTop = ref;
+    def.worldBottom = ref;
+    def.worldLeft = ref;
+    def.worldRight = ref;
+    def.worldFront = ref;
+    def.worldBack = ref;
+}
+
 void setAllFaces(BlockDef& def, int tex) {
     def.texTop = tex;
     def.texBottom = tex;
@@ -34,6 +52,7 @@ void setAllFaces(BlockDef& def, int tex) {
     def.texRight = tex;
     def.texFront = tex;
     def.texBack = tex;
+    setAllWorldFaces(def, makeStaticWorldTexture(std::max(0, tex)));
 }
 
 BlockID resolveDefinitionBlockId(const BlockID id) {
@@ -174,6 +193,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.renderShapeTag = 0;
         def.placementStrategy = "simple";
         def.supportRule.clear();
+        def.namedTextureAnimations.clear();
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -246,15 +266,30 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 #endif
             };
 
+            auto resolveWorldTexture = [&](const char* key) -> AnimatedTextureRef {
+#ifdef MECRAFT_NO_TEXTURES
+                return makeStaticWorldTexture(0);
+#else
+                if (!tex.contains(key) || !tex[key].is_string() || resourceMgr == nullptr) {
+                    return makeStaticWorldTexture(0);
+                }
+                const std::string name = tex[key].get<std::string>();
+                return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
+#endif
+            };
+
             if (tex.contains("all")) {
                 const int idx = resolveTexName("all");
                 setAllFaces(def, idx);
+                setAllWorldFaces(def, resolveWorldTexture("all"));
             }
             if (tex.contains("top")) {
                 def.texTop = resolveTexName("top");
+                def.worldTop = resolveWorldTexture("top");
             }
             if (tex.contains("bottom")) {
                 def.texBottom = resolveTexName("bottom");
+                def.worldBottom = resolveWorldTexture("bottom");
             }
             if (tex.contains("side")) {
                 const int idx = resolveTexName("side");
@@ -262,18 +297,64 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 def.texRight = idx;
                 def.texFront = idx;
                 def.texBack  = idx;
+                const AnimatedTextureRef ref = resolveWorldTexture("side");
+                def.worldLeft = ref;
+                def.worldRight = ref;
+                def.worldFront = ref;
+                def.worldBack = ref;
             }
             if (tex.contains("left")) {
                 def.texLeft = resolveTexName("left");
+                def.worldLeft = resolveWorldTexture("left");
             }
             if (tex.contains("right")) {
                 def.texRight = resolveTexName("right");
+                def.worldRight = resolveWorldTexture("right");
             }
             if (tex.contains("front")) {
                 def.texFront = resolveTexName("front");
+                def.worldFront = resolveWorldTexture("front");
             }
             if (tex.contains("back")) {
                 def.texBack = resolveTexName("back");
+                def.worldBack = resolveWorldTexture("back");
+            }
+        }
+
+        if (blockJson.contains("animatedTextures") && blockJson["animatedTextures"].is_object()) {
+            for (auto it = blockJson["animatedTextures"].begin(); it != blockJson["animatedTextures"].end(); ++it) {
+                if (!it.value().is_object()) {
+                    continue;
+                }
+                const auto textureIt = it.value().find("texture");
+                const auto framesIt = it.value().find("frames");
+                const auto fpsIt = it.value().find("fps");
+                if (textureIt == it.value().end() || !textureIt->is_string() ||
+                    framesIt == it.value().end() || !framesIt->is_number_integer() ||
+                    fpsIt == it.value().end() || !fpsIt->is_number()) {
+                    continue;
+                }
+
+                NamedTextureAnimation animation;
+                animation.textureName = textureIt->get<std::string>();
+                animation.ref.frameCount = static_cast<uint16_t>(std::max(1, framesIt->get<int>()));
+                animation.ref.fps = std::max(0.0f, fpsIt->get<float>());
+                animation.ref.isAnimated = animation.ref.frameCount > 1;
+
+#ifndef MECRAFT_NO_TEXTURES
+                if (resourceMgr != nullptr) {
+                    const TextureAnimationInfo resolved = resourceMgr->getTextureAnimation(animation.textureName);
+                    animation.ref.firstLayer = resolved.firstLayer;
+                    if (resolved.isAnimated) {
+                        animation.ref.frameCount = static_cast<uint16_t>(resolved.frameCount);
+                        animation.ref.fps = resolved.fps;
+                        animation.ref.isAnimated = true;
+                    } else {
+                        animation.ref.firstLayer = resourceMgr->getTextureArrayLayer(animation.textureName);
+                    }
+                }
+#endif
+                def.namedTextureAnimations[it.key()] = animation;
             }
         }
 

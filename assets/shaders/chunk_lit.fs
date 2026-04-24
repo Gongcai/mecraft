@@ -8,6 +8,9 @@
     in float vAO;
     in float vNormal;
     in float vLayer;
+    in float vAnimationFrameCount;
+    in float vAnimationFps;
+    in float vAnimated;
     in float vFogDist;
 
     uniform sampler2DArray texArray;
@@ -23,6 +26,8 @@
     uniform float uFogDensity;
     uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
     uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
+    uniform float uWindTime;
+    uniform float uAnimationTime;
 
     // Ambient Occlusion brightness levels
     // Level 0 (fully occluded corner) = 0.72, level 3 (open) = 1.0
@@ -72,7 +77,13 @@
         // Cross vegetation alpha-cutout mips can darken noticeably at distance.
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
         bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
-        vec3 sampleCoord = vec3(vUV, vLayer);
+        float sampledLayer = vLayer;
+        if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
+            float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
+            sampledLayer += frame;
+        }
+
+        vec3 sampleCoord = vec3(vUV, sampledLayer);
         vec4 texColor = forceBaseLod
             ? textureLod(texArray, sampleCoord, 0.0)
             : texture(texArray, sampleCoord);

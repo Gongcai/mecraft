@@ -120,6 +120,18 @@
         "level": "0",
         "falling": "false"
       },
+      "animatedTextures": {
+        "still": {
+          "texture": "water_still",
+          "frames": 32,
+          "fps": 6
+        },
+        "flow": {
+          "texture": "water_flow",
+          "frames": 32,
+          "fps": 8
+        }
+      },
       "textures": {
         "all": "water_still"
       }

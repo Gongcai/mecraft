@@ -31,6 +31,13 @@ struct TextureArray {
     int layerCount = 0;
 };
 
+struct TextureAnimationInfo {
+    int firstLayer = 0;
+    int frameCount = 1;
+    float fps = 0.0f;
+    bool isAnimated = false;
+};
+
 class ResourceMgr {
 public:
     void init();
@@ -56,6 +63,9 @@ public:
     // 纹理数组 (方块渲染使用)
     void buildTextureArray(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureArray& getTextureArray() const;
+    void preloadTextureAnimationsFromConfig(const std::string& blocksConfigPath);
+    [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
+    [[nodiscard]] TextureAnimationInfo getTextureAnimation(const std::string& name) const;
 
     // Lightmap textures (16x16, maps blockLight x skyLight -> RGB brightness)
     void loadLightmapTextures(const std::string& dayPath, const std::string& nightPath);
@@ -90,6 +100,8 @@ private:
     std::vector<unsigned char> m_blockAtlasPixels;
     std::vector<unsigned char> m_itemAtlasPixels;
     std::unordered_map<std::string, int> m_itemTextureIndices;
+    std::unordered_map<std::string, int> m_textureArrayLayers;
+    std::unordered_map<std::string, TextureAnimationInfo> m_declaredTextureAnimations;
     float m_atlasAnisotropy = 1.0f;
     float m_atlasMaxAnisotropy = 1.0f;
 };

@@ -34,6 +34,18 @@ enum class BlockRenderShape : uint8_t {
     Custom = 2
 };
 
+struct AnimatedTextureRef {
+    int firstLayer = 0;
+    uint16_t frameCount = 1;
+    float fps = 0.0f;
+    bool isAnimated = false;
+};
+
+struct NamedTextureAnimation {
+    std::string textureName;
+    AnimatedTextureRef ref;
+};
+
 struct BlockDef {
     NamespacedId namespacedId = NamespacedId("minecraft", "unknown");
     bool isSolid        = true;
@@ -56,6 +68,13 @@ struct BlockDef {
     int texRight = 0;
     int texFront = 0;
     int texBack = 0;
+    AnimatedTextureRef worldTop;
+    AnimatedTextureRef worldBottom;
+    AnimatedTextureRef worldLeft;
+    AnimatedTextureRef worldRight;
+    AnimatedTextureRef worldFront;
+    AnimatedTextureRef worldBack;
+    std::unordered_map<std::string, NamedTextureAnimation> namedTextureAnimations;
 };
 
 class BlockRegistry {

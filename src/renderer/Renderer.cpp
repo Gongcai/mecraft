@@ -40,6 +40,10 @@ struct MeshingCandidate {
 constexpr float kWindStrength = 0.06f;
 constexpr float kWindSpeed = 1.8f;
 constexpr float kWindSpatialFreq = 0.22f;
+// Current world block animations loop on 32-frame strips at 6 fps and 8 fps.
+// 16 seconds is a common multiple of both animation periods, so wrapping here
+// preserves seamless looping while keeping the shader time uniform in a stable range.
+constexpr double kWorldAnimationLoopSeconds = 16.0;
 
 void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
@@ -354,6 +358,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setFloat("uFogEnd", fogEnd);
     m_chunkShader->setFloat("uFogDensity", m_fogSettings.density);
     m_chunkShader->setFloat("uWindTime", static_cast<float>(Time::getGameTime()));
+    m_chunkShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), kWorldAnimationLoopSeconds)));
     m_chunkShader->setFloat("uWindStrength", kWindStrength);
     m_chunkShader->setFloat("uWindSpeed", kWindSpeed);
     m_chunkShader->setFloat("uWindSpatialFreq", kWindSpatialFreq);

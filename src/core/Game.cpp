@@ -35,6 +35,7 @@ void Game::init(int width, int height, const char *title) {
     // 初始化资源管理器，加载着色器/贴图
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
+    m_resourceMgr.preloadTextureAnimationsFromConfig(BLOCKS_CONFIG_PATH);
     m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
     m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH,
                                         LIGHTMAP_NIGHT_PATH);

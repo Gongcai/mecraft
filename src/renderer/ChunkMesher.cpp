@@ -35,6 +35,9 @@ struct FaceRenderData {
     std::array<VertexLightData, 4> vertices{};
     int tileIndex = 0;
     float layer = 0.0f;
+    float animationFrameCount = 1.0f;
+    float animationFps = 0.0f;
+    float animated = 0.0f;
     bool flipDiagonal = false;
     uint8_t uvQuarterTurns = 0;
 };
@@ -374,6 +377,18 @@ int getFaceTextureIndex(const StateTextureIndices& textures, const int face) {
     }
 }
 
+const AnimatedTextureRef& getFaceTextureRef(const StateTextureIndices& textures, const int face) {
+    switch (face) {
+        case FACE_TOP:    return textures.worldTop;
+        case FACE_BOTTOM: return textures.worldBottom;
+        case FACE_FRONT:  return textures.worldFront;
+        case FACE_BACK:   return textures.worldBack;
+        case FACE_LEFT:   return textures.worldLeft;
+        case FACE_RIGHT:  return textures.worldRight;
+        default:          return textures.worldTop;
+    }
+}
+
 uint8_t getFaceUvQuarterTurns(const BlockID blockId, const int face) {
     if (PropIndices::AXIS == PropIndices::INVALID) {
         return 0;
@@ -419,8 +434,12 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     FaceRenderData renderData;
     static_cast<void>(def);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    renderData.tileIndex = std::max(0, getFaceTextureIndex(textures, face));
-    renderData.layer = static_cast<float>(renderData.tileIndex);
+    const AnimatedTextureRef& faceTexture = getFaceTextureRef(textures, face);
+    renderData.tileIndex = std::max(0, faceTexture.firstLayer);
+    renderData.layer = static_cast<float>(faceTexture.firstLayer);
+    renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
+    renderData.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
+    renderData.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
     renderData.vertices = computeFaceVertexData(snapshot, x, y, z, face);
     renderData.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
 
@@ -755,7 +774,10 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
             renderData.vertices[static_cast<size_t>(index)].sunNormalized,
             renderData.vertices[static_cast<size_t>(index)].blockNormalized,
             static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
-            renderData.layer
+            renderData.layer,
+            renderData.animationFrameCount,
+            renderData.animationFps,
+            renderData.animated
         });
     }
 }
@@ -1077,7 +1099,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
     const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
         FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
         if (face == FACE_TOP) {
-            renderData.uvQuarterTurns = computeWaterTopQuarterTurns(snapshot, x, y, z);
+            renderData.uvQuarterTurns = 0;
         }
         emitCustomFace(meshData.transparentVertices, corners, face, renderData);
         expandBoundsForCorners(meshData, corners);
@@ -1354,12 +1376,7 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                           const SubChunkMeshingSnapshot& snapshot) {
     static_cast<void>(def);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    int tileIndex = textures.texTop;
-    if (tileIndex < 0) {
-        tileIndex = 0;
-    }
-
-    const float layer = static_cast<float>(tileIndex);
+    const float layer = static_cast<float>(textures.worldTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -1496,7 +1513,10 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                 sunNorm,
                 blockNorm,
                 3.0f,
-                layer
+                layer,
+                1.0f,
+                0.0f,
+                0.0f
             });
         }
     };
@@ -1574,11 +1594,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                        const int z,
                        const SubChunkMeshingSnapshot& snapshot) {
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    int tileIndex = textures.texTop;
-    if (tileIndex < 0) {
-        tileIndex = 0;
-    }
-    const float layer = static_cast<float>(tileIndex);
+    const float layer = static_cast<float>(textures.worldTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -1628,7 +1644,10 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                 sunNorm,
                 blockNorm,
                 3.0f,
-                layer
+                layer,
+                1.0f,
+                0.0f,
+                0.0f
             });
         }
     };
@@ -1789,7 +1808,10 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
             sunNorm,
             blockNorm,
             3.0f,
-            layer
+            layer,
+            1.0f,
+            0.0f,
+            0.0f
         });
     }
 }
@@ -1872,11 +1894,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                           const int z,
                           const SubChunkMeshingSnapshot& snapshot) {
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    int tileIndex = textures.texTop;
-    if (tileIndex < 0) {
-        tileIndex = 0;
-    }
-    const float layer = static_cast<float>(tileIndex);
+    const float layer = static_cast<float>(textures.worldTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);

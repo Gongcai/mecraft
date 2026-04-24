@@ -5,6 +5,8 @@
 #include <limits>
 #include <sstream>
 
+#include "PropIndices.h"
+
 std::vector<std::string> BlockStateRegistry::s_propertyNamePool{};
 std::unordered_map<std::string, uint16_t> BlockStateRegistry::s_propertyNameLookup{};
 std::vector<std::vector<std::string>> BlockStateRegistry::s_propertyValuePool{};
@@ -19,6 +21,23 @@ std::unordered_map<BlockID, BlockStateRegistry::BlockPropertyLayout> BlockStateR
 StateTextureIndices BlockStateRegistry::s_fallbackTextures{};
 
 namespace {
+AnimatedTextureRef makeStaticWorldRef(const int layer) {
+    AnimatedTextureRef ref;
+    ref.firstLayer = layer;
+    ref.frameCount = 1;
+    ref.fps = 0.0f;
+    ref.isAnimated = false;
+    return ref;
+}
+
+AnimatedTextureRef chooseWaterAnimation(const BlockDef& def, const char* alias) {
+    const auto it = def.namedTextureAnimations.find(alias);
+    if (it != def.namedTextureAnimations.end()) {
+        return it->second.ref;
+    }
+    return makeStaticWorldRef(0);
+}
+
 StateTextureIndices makeTexturesForBlock(const BlockID blockId) {
     const BlockDef& def = BlockRegistry::getFast(blockId);
     StateTextureIndices textures;
@@ -28,12 +47,19 @@ StateTextureIndices makeTexturesForBlock(const BlockID blockId) {
     textures.texRight = def.texRight;
     textures.texFront = def.texFront;
     textures.texBack = def.texBack;
+    textures.worldTop = def.worldTop;
+    textures.worldBottom = def.worldBottom;
+    textures.worldLeft = def.worldLeft;
+    textures.worldRight = def.worldRight;
+    textures.worldFront = def.worldFront;
+    textures.worldBack = def.worldBack;
     return textures;
 }
 
 StateTextureIndices makeTexturesForState(const BlockID blockId,
                                          const std::vector<PropertyKey>& props) {
     StateTextureIndices textures = makeTexturesForBlock(blockId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
 
     for (const PropertyKey& prop : props) {
         const std::string& name = BlockStateRegistry::getPropertyName(prop.nameIndex);
@@ -50,6 +76,14 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
         if (sideTexture == endTexture) {
             sideTexture = textures.texBottom;
         }
+        const AnimatedTextureRef endWorld = def.worldTop;
+        AnimatedTextureRef sideWorld = def.worldFront;
+        if (def.texFront == endTexture) {
+            sideWorld = def.worldLeft;
+        }
+        if (def.texFront == endTexture && def.texLeft == endTexture) {
+            sideWorld = def.worldBottom;
+        }
 
         if (value == "x") {
             textures.texTop = sideTexture;
@@ -58,6 +92,12 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
             textures.texBack = sideTexture;
             textures.texLeft = endTexture;
             textures.texRight = endTexture;
+            textures.worldTop = sideWorld;
+            textures.worldBottom = sideWorld;
+            textures.worldFront = sideWorld;
+            textures.worldBack = sideWorld;
+            textures.worldLeft = endWorld;
+            textures.worldRight = endWorld;
         } else if (value == "z") {
             textures.texTop = sideTexture;
             textures.texBottom = sideTexture;
@@ -65,6 +105,12 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
             textures.texRight = sideTexture;
             textures.texFront = endTexture;
             textures.texBack = endTexture;
+            textures.worldTop = sideWorld;
+            textures.worldBottom = sideWorld;
+            textures.worldLeft = sideWorld;
+            textures.worldRight = sideWorld;
+            textures.worldFront = endWorld;
+            textures.worldBack = endWorld;
         } else {
             textures.texTop = endTexture;
             textures.texBottom = endTexture;
@@ -72,8 +118,40 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
             textures.texRight = sideTexture;
             textures.texFront = sideTexture;
             textures.texBack = sideTexture;
+            textures.worldTop = def.worldTop;
+            textures.worldBottom = def.worldBottom;
+            textures.worldLeft = def.worldLeft;
+            textures.worldRight = def.worldRight;
+            textures.worldFront = def.worldFront;
+            textures.worldBack = def.worldBack;
         }
         break;
+    }
+
+    if (def.namespacedId == NamespacedId("minecraft", "water")) {
+        bool isSource = true;
+        bool isFalling = false;
+
+        for (const PropertyKey& prop : props) {
+            const std::string& name = BlockStateRegistry::getPropertyName(prop.nameIndex);
+            const std::string& value = BlockStateRegistry::getPropertyValue(prop.nameIndex, prop.valueIndex);
+            if (name == "level") {
+                isSource = (value == "0");
+            } else if (name == "falling") {
+                isFalling = (value == "true");
+            }
+        }
+
+        const AnimatedTextureRef still = chooseWaterAnimation(def, "still");
+
+        static_cast<void>(isSource);
+        static_cast<void>(isFalling);
+        textures.worldTop = still;
+        textures.worldBottom = still;
+        textures.worldLeft = still;
+        textures.worldRight = still;
+        textures.worldFront = still;
+        textures.worldBack = still;
     }
 
     return textures;
