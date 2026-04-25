@@ -251,3 +251,4 @@ add_mecraft_test(light_solver_cross_chunk_block_rules_test tests/light_solver_cr
 add_mecraft_test(light_solver_perf_test tests/light_solver_perf_test.cpp)
 add_mecraft_test(light_service_cross_chunk_block_test tests/light_service_cross_chunk_block_test.cpp)
 add_mecraft_test(light_service_scheduler_test tests/light_service_scheduler_test.cpp)
+

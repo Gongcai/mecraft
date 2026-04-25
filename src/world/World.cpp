@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "../core/Time.h"
+#include "FluidRegistry.h"
 #include "FluidState.h"
 
 namespace {
@@ -18,6 +19,15 @@ void markChunkSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, con
     if (localY == Chunk::SUB_CHUNK_SIZE - 1) {
         chunk.markSubChunkDirty(scy + 1);
     }
+}
+
+bool canWaterOccupyBlockLayer(const StateID state) {
+    const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
+    return FluidState::canReplace(waterDesc, state) || FluidState::canCoexist(waterDesc, state);
+}
+
+bool changesFluidPathing(const StateID oldState, const StateID newState) {
+    return canWaterOccupyBlockLayer(oldState) != canWaterOccupyBlockLayer(newState);
 }
 }
 void World::init(uint32_t seed) {
@@ -306,7 +316,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
         if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
-    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z));
+    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), changesFluidPathing(oldId, id));
 }
 
 void World::setThreadPool(ThreadPool* pool) {

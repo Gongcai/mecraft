@@ -24,7 +24,7 @@ public:
 
     void reset();
 
-    void onBlockChanged(glm::ivec3 pos);
+    void onBlockChanged(glm::ivec3 pos, bool scheduleSlopeSearchNeighborhood = false);
     void scheduleBlockTick(glm::ivec3 pos, uint64_t dueTick);
     void scheduleNeighborsForFluidUpdate(glm::ivec3 pos, uint64_t dueTick);
     void processScheduledBlockTicks(uint64_t currentTick, uint32_t budget = 4096);
@@ -53,6 +53,7 @@ private:
     };
 
     void updateFluidCell(const glm::ivec3& pos);
+    void scheduleSlopeSearchNeighborhoodForFluidUpdate(glm::ivec3 pos, uint64_t dueTick);
     [[nodiscard]] StateID computeTargetFluidState(const glm::ivec3& pos, BlockID currentId) const;
     [[nodiscard]] uint64_t resolveNeighborhoodTickDelay(const glm::ivec3& pos) const;
 

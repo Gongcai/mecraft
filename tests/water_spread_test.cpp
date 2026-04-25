@@ -48,14 +48,8 @@ int main() {
     uint64_t currentTick = 0;
 
     const int baseY = 96;
-    for (int x = -1; x <= 2; ++x) {
-        for (int z = -1; z <= 1; ++z) {
-            for (int y = baseY; y <= baseY + 2; ++y) {
-                world.setBlock(x, y, z, BlockIds::AIR);
-            }
-            world.setBlock(x, baseY - 1, z, BlockIds::STONE);
-        }
-    }
+    fillBox(world, -6, 7, baseY, baseY + 2, -6, 6, BlockIds::AIR);
+    fillBox(world, -6, 7, baseY - 1, baseY - 1, -6, 6, BlockIds::STONE);
     advanceTicks(world, currentTick, 12);
 
     const StateID source = FluidState::makeWater(0, false);
@@ -88,7 +82,9 @@ int main() {
     if (!FluidState::isWater(fallingBelow) || !FluidState::isFalling(fallingBelow)) {
         return fail("water should prioritize falling into newly opened space");
     }
+    world.setBlock(2, baseY - 1, 0, BlockIds::AIR);
     world.setBlock(1, baseY - 2, 0, BlockIds::STONE);
+    world.setBlock(2, baseY - 2, 0, BlockIds::STONE);
     advanceTicks(world, currentTick, 12);
     if (!FluidState::isWater(world.getBlock(2, baseY - 1, 0))) {
         return fail("falling water should spread outward after landing on support");
@@ -118,6 +114,29 @@ int main() {
     }
 
     {
+        const int rerouteY = 160;
+        fillBox(world, -6, 6, rerouteY, rerouteY + 2, -6, 6, BlockIds::AIR);
+        fillBox(world, -6, 6, rerouteY - 1, rerouteY - 1, -6, 6, BlockIds::STONE);
+        world.setBlock(3, rerouteY - 1, 0, BlockIds::AIR);
+        world.setBlock(0, rerouteY - 1, 4, BlockIds::AIR);
+        advanceTicks(world, currentTick, 4);
+
+        world.setBlock(0, rerouteY, 0, source);
+        advanceTicks(world, currentTick, 12);
+        if (!FluidState::isWater(world.getBlock(1, rerouteY, 0)) ||
+            FluidState::isWater(world.getBlock(0, rerouteY, 1))) {
+            return fail("water should initially prefer the closest downhill hole");
+        }
+
+        world.setBlock(3, rerouteY - 1, 0, BlockIds::STONE);
+        advanceTicks(world, currentTick, 24);
+        if (!FluidState::isWater(world.getBlock(0, rerouteY, 1)) ||
+            world.getBlock(1, rerouteY, 0) != BlockIds::AIR) {
+            return fail("water should reroute when the closest downhill hole is blocked");
+        }
+    }
+
+    {
         const int forkY = 120;
         fillBox(world, 8, 16, forkY, forkY + 2, -2, 2, BlockIds::AIR);
         fillBox(world, 8, 16, forkY - 1, forkY - 1, -2, 2, BlockIds::STONE);
@@ -137,8 +156,8 @@ int main() {
 
     {
         const int flatY = 136;
-        fillBox(world, 18, 24, flatY, flatY + 2, -2, 2, BlockIds::AIR);
-        fillBox(world, 18, 24, flatY - 1, flatY - 1, -2, 2, BlockIds::STONE);
+        fillBox(world, 15, 27, flatY, flatY + 2, -6, 6, BlockIds::AIR);
+        fillBox(world, 15, 27, flatY - 1, flatY - 1, -6, 6, BlockIds::STONE);
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(21, flatY, 0, source);
@@ -152,29 +171,29 @@ int main() {
 
     {
         const int infiniteY = 144;
-        fillBox(world, 28, 34, infiniteY, infiniteY + 2, -1, 1, BlockIds::AIR);
-        fillBox(world, 28, 34, infiniteY - 1, infiniteY - 1, -1, 1, BlockIds::STONE);
+        fillBox(world, 19, 31, infiniteY, infiniteY + 2, -6, 6, BlockIds::AIR);
+        fillBox(world, 19, 31, infiniteY - 1, infiniteY - 1, -6, 6, BlockIds::STONE);
         advanceTicks(world, currentTick, 4);
 
-        world.setBlock(30, infiniteY, 0, source);
-        world.setBlock(32, infiniteY, 0, source);
+        world.setBlock(24, infiniteY, 0, source);
+        world.setBlock(26, infiniteY, 0, source);
         advanceTicks(world, currentTick, 12);
-        if (!FluidState::isSource(world.getBlock(31, infiniteY, 0))) {
+        if (!FluidState::isSource(world.getBlock(25, infiniteY, 0))) {
             return fail("two adjacent sources with support below should regenerate the middle source");
         }
     }
 
     {
         const int unsupportedInfiniteY = 152;
-        fillBox(world, 36, 42, unsupportedInfiniteY, unsupportedInfiniteY + 2, -1, 1, BlockIds::AIR);
-        fillBox(world, 36, 42, unsupportedInfiniteY - 1, unsupportedInfiniteY - 1, -1, 1, BlockIds::STONE);
-        world.setBlock(39, unsupportedInfiniteY - 1, 0, BlockIds::AIR);
+        fillBox(world, 19, 31, unsupportedInfiniteY, unsupportedInfiniteY + 2, -6, 6, BlockIds::AIR);
+        fillBox(world, 19, 31, unsupportedInfiniteY - 1, unsupportedInfiniteY - 1, -6, 6, BlockIds::STONE);
+        world.setBlock(25, unsupportedInfiniteY - 1, 0, BlockIds::AIR);
         advanceTicks(world, currentTick, 4);
 
-        world.setBlock(38, unsupportedInfiniteY, 0, source);
-        world.setBlock(40, unsupportedInfiniteY, 0, source);
+        world.setBlock(24, unsupportedInfiniteY, 0, source);
+        world.setBlock(26, unsupportedInfiniteY, 0, source);
         advanceTicks(world, currentTick, 12);
-        if (FluidState::isSource(world.getBlock(39, unsupportedInfiniteY, 0))) {
+        if (FluidState::isSource(world.getBlock(25, unsupportedInfiniteY, 0))) {
             return fail("unsupported middle cells should not become infinite water sources");
         }
     }

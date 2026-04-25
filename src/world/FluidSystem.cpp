@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <queue>
@@ -236,8 +237,12 @@ void FluidSystem::reset() {
     m_lastProcessedGameTick = 0;
 }
 
-void FluidSystem::onBlockChanged(const glm::ivec3 pos) {
-    scheduleNeighborsForFluidUpdate(pos, m_lastProcessedGameTick + resolveNeighborhoodTickDelay(pos));
+void FluidSystem::onBlockChanged(const glm::ivec3 pos, const bool scheduleSlopeSearchNeighborhood) {
+    const uint64_t dueTick = m_lastProcessedGameTick + resolveNeighborhoodTickDelay(pos);
+    scheduleNeighborsForFluidUpdate(pos, dueTick);
+    if (scheduleSlopeSearchNeighborhood) {
+        scheduleSlopeSearchNeighborhoodForFluidUpdate(pos, dueTick);
+    }
 }
 
 void FluidSystem::scheduleBlockTick(const glm::ivec3 pos, const uint64_t dueTick) {
@@ -258,6 +263,26 @@ void FluidSystem::scheduleBlockTick(const glm::ivec3 pos, const uint64_t dueTick
 void FluidSystem::scheduleNeighborsForFluidUpdate(const glm::ivec3 pos, const uint64_t dueTick) {
     for (const glm::ivec3& offset : kFluidUpdateOffsets) {
         scheduleBlockTick(pos + offset, dueTick);
+    }
+}
+
+void FluidSystem::scheduleSlopeSearchNeighborhoodForFluidUpdate(const glm::ivec3 pos, const uint64_t dueTick) {
+    const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
+    const int radius = static_cast<int>(waterDesc.slopeSearchDistance);
+    if (radius <= 1) {
+        return;
+    }
+
+    for (int dx = -radius; dx <= radius; ++dx) {
+        for (int dz = -radius; dz <= radius; ++dz) {
+            if (std::abs(dx) + std::abs(dz) > radius) {
+                continue;
+            }
+
+            const glm::ivec3 horizontalOffset(dx, 0, dz);
+            scheduleBlockTick(pos + horizontalOffset, dueTick);
+            scheduleBlockTick(pos + horizontalOffset + glm::ivec3(0, 1, 0), dueTick);
+        }
     }
 }
 
