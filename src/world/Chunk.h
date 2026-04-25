@@ -29,6 +29,7 @@ public:
 
     // --- Block access (column-local coordinates, y in [0, 256)) ---
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
+    [[nodiscard]] BlockID getFluidState(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
     void setBlockWithoutMeshDirty(int x, int y, int z, BlockID id);
     void setBlockFast(int x, int y, int z, BlockID id);

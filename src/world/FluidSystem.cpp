@@ -52,7 +52,19 @@ bool canFluidReplaceAt(const World& world, const glm::ivec3& pos, const FluidDes
     if (!isPositionLoaded(world, pos)) {
         return false;
     }
-    return FluidState::canReplace(desc, world.getBlockState(pos.x, pos.y, pos.z));
+    const FluidCellView cell = world.getCombinedCell(pos.x, pos.y, pos.z);
+    // Can replace if air, same fluid, or waterlogged block that can accept this fluid
+    if (cell.isEmpty()) {
+        return true;
+    }
+    if (FluidState::decode(cell.fluidState).kind == desc.kind) {
+        return true;
+    }
+    if (cell.hasBlock() && cell.fluidState == BlockIds::AIR &&
+        FluidState::canCoexist(desc, cell.blockState)) {
+        return true;
+    }
+    return FluidState::canReplace(desc, cell.blockState);
 }
 
 bool hasSupportBelow(const World& world, const glm::ivec3& pos, const FluidDesc& desc) {
@@ -60,18 +72,29 @@ bool hasSupportBelow(const World& world, const glm::ivec3& pos, const FluidDesc&
     if (!isPositionLoaded(world, belowPos)) {
         return true;
     }
-    return !FluidState::canReplace(desc, world.getBlockState(belowPos.x, belowPos.y, belowPos.z));
+    const FluidCellView cell = world.getCombinedCell(belowPos.x, belowPos.y, belowPos.z);
+    // A position has support if there's a solid block (not passable by fluid)
+    if (cell.isEmpty()) {
+        return false;
+    }
+    if (cell.hasBlock() && !FluidState::canReplace(desc, cell.blockState) &&
+        !FluidState::canCoexist(desc, cell.blockState)) {
+        return true;
+    }
+    return false;
 }
 
 FluidKind resolveTargetFluidKind(const World& world, const glm::ivec3& pos, const BlockID currentId) {
-    const DecodedFluid current = FluidState::decode(currentId);
-    if (current.kind != FluidKind::None) {
-        return current.kind;
+    // Check fluid state first (covers both pure fluid and waterlogged blocks)
+    const StateID currentFluidState = world.getFluidState(pos.x, pos.y, pos.z);
+    const DecodedFluid currentFluid = FluidState::decode(currentFluidState);
+    if (currentFluid.kind != FluidKind::None) {
+        return currentFluid.kind;
     }
 
     const glm::ivec3 abovePos = pos + glm::ivec3(0, 1, 0);
     if (isPositionLoaded(world, abovePos)) {
-        const FluidKind aboveKind = FluidState::decode(world.getBlockState(abovePos.x, abovePos.y, abovePos.z)).kind;
+        const FluidKind aboveKind = FluidState::decode(world.getFluidState(abovePos.x, abovePos.y, abovePos.z)).kind;
         if (aboveKind != FluidKind::None) {
             return aboveKind;
         }
@@ -83,7 +106,7 @@ FluidKind resolveTargetFluidKind(const World& world, const glm::ivec3& pos, cons
             continue;
         }
         const FluidKind neighborKind = FluidState::decode(
-            world.getBlockState(neighborPos.x, neighborPos.y, neighborPos.z)).kind;
+            world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z)).kind;
         if (neighborKind != FluidKind::None) {
             return neighborKind;
         }
@@ -197,7 +220,7 @@ int countHorizontalSourceNeighbors(const World& world,
         }
 
         const DecodedFluid neighbor = FluidState::decode(
-            world.getBlockState(neighborPos.x, neighborPos.y, neighborPos.z));
+            world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z));
         if (neighbor.kind == kind && neighbor.isSource) {
             ++sourceCount;
         }
@@ -272,25 +295,35 @@ void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
         return;
     }
 
-    const BlockID currentId = m_world.getBlockState(pos.x, pos.y, pos.z);
-    const FluidKind targetKind = resolveTargetFluidKind(m_world, pos, currentId);
-    if (targetKind == FluidKind::None) {
-        if (currentId != BlockIds::AIR && FluidState::decode(currentId).kind == FluidKind::None) {
-            return;
-        }
-    } else {
-        const FluidDesc& desc = FluidRegistry::get(targetKind);
-        if (!FluidState::canReplace(desc, currentId) && !FluidState::isFluidOf(currentId, targetKind)) {
-            return;
-        }
-    }
+    const FluidCellView cell = m_world.getCombinedCell(pos.x, pos.y, pos.z);
+    const StateID currentFluidState = cell.fluidState;
+    const StateID currentBlockState = cell.blockState;
+    const BlockID effectiveCurrentId = (currentFluidState != BlockIds::AIR) ? currentFluidState : currentBlockState;
 
-    const StateID targetState = computeTargetFluidState(pos, currentId);
-    if (targetState == currentId) {
+    const FluidKind targetKind = resolveTargetFluidKind(m_world, pos, effectiveCurrentId);
+    if (targetKind == FluidKind::None) {
+        if (currentFluidState != BlockIds::AIR) {
+            // Fluid should retract — clear the fluid layer
+            m_world.setFluidState(pos.x, pos.y, pos.z, BlockIds::AIR);
+        }
         return;
     }
 
-    m_world.setBlockState(pos.x, pos.y, pos.z, targetState);
+    const FluidDesc& desc = FluidRegistry::get(targetKind);
+    // Check if this cell can accept fluid
+    if (cell.hasBlock() && currentFluidState == BlockIds::AIR) {
+        // Non-fluid block — can only accept fluid if it allows coexistence
+        if (!FluidState::canCoexist(desc, currentBlockState)) {
+            return;
+        }
+    }
+
+    const StateID targetState = computeTargetFluidState(pos, effectiveCurrentId);
+    if (targetState == currentFluidState || targetState == effectiveCurrentId) {
+        return;
+    }
+
+    m_world.setFluidState(pos.x, pos.y, pos.z, targetState);
 }
 
 StateID FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockID currentId) const {
@@ -307,15 +340,18 @@ StateID FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockI
     if (current.isSource) {
         return FluidState::encode(DecodedFluid{kind, 0, false, true});
     }
-    if (current.kind == FluidKind::None && !FluidState::canReplace(desc, currentId)) {
-        return currentId;
+    if (current.kind == FluidKind::None) {
+        // Check if the block at this position can accept fluid
+        const FluidCellView cell = m_world.getCombinedCell(pos.x, pos.y, pos.z);
+        if (cell.hasBlock() && !FluidState::canCoexist(desc, cell.blockState)) {
+            return currentId;
+        }
     }
 
-    const glm::ivec3 belowPos = pos + glm::ivec3(0, -1, 0);
     const bool supportBelow = hasSupportBelow(m_world, pos, desc);
     const glm::ivec3 abovePos = pos + glm::ivec3(0, 1, 0);
-    const BlockID aboveState = isPositionLoaded(m_world, abovePos)
-        ? m_world.getBlockState(abovePos.x, abovePos.y, abovePos.z)
+    const StateID aboveState = isPositionLoaded(m_world, abovePos)
+        ? m_world.getFluidState(abovePos.x, abovePos.y, abovePos.z)
         : BlockIds::AIR;
     const DecodedFluid above = FluidState::decode(aboveState);
 
@@ -341,8 +377,8 @@ StateID FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockI
             continue;
         }
 
-        const BlockID neighborState = m_world.getBlockState(neighborPos.x, neighborPos.y, neighborPos.z);
-        const DecodedFluid neighbor = FluidState::decode(neighborState);
+        const StateID neighborFluidState = m_world.getFluidState(neighborPos.x, neighborPos.y, neighborPos.z);
+        const DecodedFluid neighbor = FluidState::decode(neighborFluidState);
         if (neighbor.kind != kind || neighbor.falling || neighbor.level >= desc.maxLevel) {
             continue;
         }
@@ -380,7 +416,7 @@ uint64_t FluidSystem::resolveNeighborhoodTickDelay(const glm::ivec3& pos) const 
         }
 
         const DecodedFluid fluid = FluidState::decode(
-            m_world.getBlockState(samplePos.x, samplePos.y, samplePos.z));
+            m_world.getFluidState(samplePos.x, samplePos.y, samplePos.z));
         if (fluid.kind == FluidKind::None) {
             continue;
         }

@@ -35,19 +35,17 @@ bool isSolidBlock(const World& world, const int x, const int y, const int z) {
 }
 
 bool isWaterBlock(const World& world, const int x, const int y, const int z) {
-    const BlockID id = world.getBlock(x, y, z);
-    if (id == 0) {
-        return false;
-    }
-    return FluidState::isWater(id);
+    // Check fluid layer first (waterlogged blocks), then block layer (pure water)
+    const StateID fluidState = world.getFluidState(x, y, z);
+    return FluidState::isWater(fluidState);
 }
 
 float waterTopY(const World& world, const int x, const int y, const int z) {
-    const BlockID id = world.getBlock(x, y, z);
-    if (!FluidState::isWater(id)) {
+    const StateID fluidState = world.getFluidState(x, y, z);
+    if (!FluidState::isWater(fluidState)) {
         return static_cast<float>(y);
     }
-    return static_cast<float>(y) + FluidState::surfaceHeight(id);
+    return static_cast<float>(y) + FluidState::surfaceHeight(fluidState);
 }
 
 
@@ -151,12 +149,12 @@ bool queryEyesInWater(const PhysicsBody& body, const World& world) {
     const int blockX = static_cast<int>(std::floor(eyePos.x));
     const int blockY = static_cast<int>(std::floor(eyePos.y));
     const int blockZ = static_cast<int>(std::floor(eyePos.z));
-    const BlockID id = world.getBlock(blockX, blockY, blockZ);
-    if (!FluidState::isWater(id)) {
+    const StateID fluidState = world.getFluidState(blockX, blockY, blockZ);
+    if (!FluidState::isWater(fluidState)) {
         return false;
     }
     const float localEyeY = eyePos.y - static_cast<float>(blockY);
-    return localEyeY <= FluidState::surfaceHeight(id) + 0.0001f;
+    return localEyeY <= FluidState::surfaceHeight(fluidState) + 0.0001f;
 }
 
 bool hasGroundSupportAt(const PhysicsBody& body, const World& world, const glm::vec3& position) {

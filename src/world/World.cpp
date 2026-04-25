@@ -90,6 +90,66 @@ StateID World::getBlockState(const int x, const int y, const int z) const {
     return getBlock(x, y, z);
 }
 
+StateID World::getFluidState(const int x, const int y, const int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) return BlockIds::AIR;
+
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+    const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it == m_chunks.end()) {
+        return BlockIds::AIR;
+    }
+
+    const int localX = x - chunkX * Chunk::SIZE_X;
+    const int localZ = z - chunkZ * Chunk::SIZE_Z;
+    const int scy = Chunk::toSubChunkIndex(y);
+    const SubChunk* sc = it->second->getSubChunk(scy);
+    if (!sc) {
+        return BlockIds::AIR;
+    }
+
+    // First check the dedicated fluid layer
+    const int localY = Chunk::toSubChunkLocalY(y);
+    const BlockID fluidLayer = sc->getFluidLayer(localX, localY, localZ);
+    if (fluidLayer != BlockIds::AIR) {
+        return fluidLayer;
+    }
+
+    // Fallback: block layer may contain fluid (pure water positions)
+    return FluidState::getFluidState(sc->getBlock(localX, localY, localZ));
+}
+
+FluidCellView World::getCombinedCell(const int x, const int y, const int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) return {};
+
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+    const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it == m_chunks.end()) {
+        return {};
+    }
+
+    const int localX = x - chunkX * Chunk::SIZE_X;
+    const int localZ = z - chunkZ * Chunk::SIZE_Z;
+    const int scy = Chunk::toSubChunkIndex(y);
+    const SubChunk* sc = it->second->getSubChunk(scy);
+    if (!sc) {
+        return {};
+    }
+
+    const int localY = Chunk::toSubChunkLocalY(y);
+    const BlockID blockState = sc->getBlock(localX, localY, localZ);
+    const BlockID fluidLayer = sc->getFluidLayer(localX, localY, localZ);
+
+    const DecodedFluid blockFluid = FluidState::decode(blockState);
+    if (blockFluid.kind != FluidKind::None) {
+        // Pure fluid position (block layer IS the fluid)
+        return FluidCellView{BlockIds::AIR, blockState};
+    }
+    // Block position (possibly waterlogged)
+    return FluidCellView{blockState, fluidLayer};
+}
+
 BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const {
     if (y < 0 || y >= Chunk::SIZE_Y) {
         return 0;
@@ -109,6 +169,82 @@ BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const
 
 void World::setBlock(int x, int y, int z, BlockID id) {
     setBlockState(x, y, z, id);
+}
+
+void World::setFluidState(const int x, const int y, const int z, const StateID stateId) {
+    if (y < 0 || y >= Chunk::SIZE_Y) return;
+
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+    const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it == m_chunks.end()) {
+        return;
+    }
+
+    const int localX = x - chunkX * Chunk::SIZE_X;
+    const int localZ = z - chunkZ * Chunk::SIZE_Z;
+    Chunk& chunk = *it->second;
+    const int scy = Chunk::toSubChunkIndex(y);
+    SubChunk* sc = chunk.getOrCreateSubChunk(scy);
+    if (!sc) {
+        return;
+    }
+
+    const int localY = Chunk::toSubChunkLocalY(y);
+    const DecodedFluid newFluid = FluidState::decode(stateId);
+    const BlockID currentBlock = sc->getBlock(localX, localY, localZ);
+    const DecodedFluid currentBlockFluid = FluidState::decode(currentBlock);
+
+    if (currentBlockFluid.kind != FluidKind::None) {
+        // Current block layer IS fluid (pure water position).
+        // If new state is also fluid of same kind, update block layer directly.
+        // If new state is air/no-fluid, clear block layer to air.
+        const StateID targetBlockState = (newFluid.kind != FluidKind::None)
+            ? stateId
+            : BlockIds::AIR;
+        setBlockState(x, y, z, targetBlockState);
+        return;
+    }
+
+    // Block layer is a real block (possibly waterlogged).
+    if (newFluid.kind == FluidKind::None) {
+        // Removing fluid from this cell
+        const BlockID oldFluid = sc->getFluidLayer(localX, localY, localZ);
+        if (oldFluid == BlockIds::AIR) {
+            return;  // Nothing to do
+        }
+        sc->setFluidLayer(localX, localY, localZ, BlockIds::AIR);
+    } else {
+        // Adding/updating fluid in a waterlogged cell
+        if (BlockRegistry::getFast(currentBlock).allowsFluidCoexistence) {
+            sc->setFluidLayer(localX, localY, localZ, stateId);
+        } else {
+            // Block doesn't allow fluid coexistence — replace the block with fluid
+            setBlockState(x, y, z, stateId);
+            return;
+        }
+    }
+
+    // Mark dirty for remesh
+    markChunkSubChunkAndVerticalNeighborsDirty(chunk, scy, localY);
+    if (localX == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+    }
+    if (localX == Chunk::SIZE_X - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+    }
+    if (localZ == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+    }
+    if (localZ == Chunk::SIZE_Z - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, scy, localY);
+    }
+
+    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z));
 }
 
 bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {

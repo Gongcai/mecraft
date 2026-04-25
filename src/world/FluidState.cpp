@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "Block.h"
 #include "FluidRegistry.h"
 #include "PropIndices.h"
 
@@ -125,9 +126,13 @@ bool canReplace(const FluidDesc& desc, const StateID occupant) {
 }
 
 bool canCoexist(const FluidDesc& desc, const StateID occupant) {
-    static_cast<void>(desc);
-    static_cast<void>(occupant);
-    return false;
+    if (desc.kind == FluidKind::None || occupant == BlockIds::AIR) {
+        return false;
+    }
+    if (decode(occupant).kind != FluidKind::None) {
+        return false;
+    }
+    return BlockRegistry::getFast(occupant).allowsFluidCoexistence;
 }
 
 bool canWaterReplace(const BlockID id) {
@@ -136,6 +141,17 @@ bool canWaterReplace(const BlockID id) {
 
 bool isSameWater(const BlockID a, const BlockID b) {
     return isFluidOf(a, FluidKind::Water) && isFluidOf(b, FluidKind::Water);
+}
+
+StateID getFluidState(const StateID cellState) {
+    return decode(cellState).kind == FluidKind::None ? BlockIds::AIR : cellState;
+}
+
+FluidCellView getCombinedCell(const StateID cellState) {
+    if (decode(cellState).kind != FluidKind::None) {
+        return FluidCellView{BlockIds::AIR, cellState};
+    }
+    return FluidCellView{cellState, BlockIds::AIR};
 }
 
 }

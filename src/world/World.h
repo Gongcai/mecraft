@@ -10,6 +10,7 @@
 
 #include "Chunk.h"
 #include "DayNightSystem.h"
+#include "FluidState.h"
 #include "FluidSystem.h"
 #include "LightService.h"
 #include "TerrainGenerator.h"
@@ -23,9 +24,12 @@ public:
 
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
     [[nodiscard]] StateID getBlockState(int x, int y, int z) const;
+    [[nodiscard]] StateID getFluidState(int x, int y, int z) const;
+    [[nodiscard]] FluidCellView getCombinedCell(int x, int y, int z) const;
     [[nodiscard]] BlockID sampleGeneratedBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
     void setBlockState(int x, int y, int z, StateID stateId);
+    void setFluidState(int x, int y, int z, StateID stateId);
     [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const;
 
     [[nodiscard]] RayHit raycast(const PhysicsInfo& ray, float maxDist) const;

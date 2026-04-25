@@ -11,10 +11,13 @@ uint8_t clampLight(const uint8_t level) {
 }
 } // namespace
 
-SubChunk::SubChunk() {
+SubChunk::SubChunk()
+    : m_blockData(BLOCK_COUNT, 2)
+    , m_fluidData(BLOCK_COUNT, 1) {
     m_palette.getOrCreateIndex(0);  // AIR = RuntimeId 0
-    m_blockData = BitPackedArray(BLOCK_COUNT, 2);
     m_blockData.fill(0);  // All air
+    m_fluidPalette.getOrCreateIndex(0);  // AIR for fluid layer
+    m_fluidData.fill(0);
     m_lightMap.fill(0);
     m_blockCounts.emplace(0, static_cast<uint16_t>(BLOCK_COUNT));
 }
@@ -27,6 +30,8 @@ SubChunk::SubChunk(SubChunk&& other) noexcept
     : m_palette(std::move(other.m_palette))
     , m_blockData(std::move(other.m_blockData))
     , m_blockCounts(std::move(other.m_blockCounts))
+    , m_fluidPalette(std::move(other.m_fluidPalette))
+    , m_fluidData(std::move(other.m_fluidData))
     , m_lightMap(std::move(other.m_lightMap))
     , m_type(other.m_type)
     , m_dirty(other.m_dirty)
@@ -45,6 +50,8 @@ SubChunk& SubChunk::operator=(SubChunk&& other) noexcept {
         m_palette = std::move(other.m_palette);
         m_blockData = std::move(other.m_blockData);
         m_blockCounts = std::move(other.m_blockCounts);
+        m_fluidPalette = std::move(other.m_fluidPalette);
+        m_fluidData = std::move(other.m_fluidData);
         m_lightMap = std::move(other.m_lightMap);
         m_type = other.m_type;
         m_dirty = other.m_dirty;
@@ -187,6 +194,40 @@ void SubChunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
         const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(index));
         out[index] = m_palette.getRuntimeId(paletteIdx);
     }
+}
+
+BlockID SubChunk::getFluidLayer(const int x, const int y, const int z) const {
+    if (!isInBounds(x, y, z)) {
+        return 0;  // AIR
+    }
+    const size_t idx = toIndex(x, y, z);
+    const uint16_t paletteIdx = static_cast<uint16_t>(m_fluidData.get(idx));
+    return m_fluidPalette.getRuntimeId(paletteIdx);
+}
+
+void SubChunk::setFluidLayer(const int x, const int y, const int z, const BlockID id) {
+    if (!isInBounds(x, y, z)) {
+        return;
+    }
+
+    const size_t index = toIndex(x, y, z);
+    const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_fluidData.get(index));
+    const BlockID oldId = m_fluidPalette.getRuntimeId(oldPaletteIdx);
+    if (oldId == id) {
+        return;
+    }
+
+    const uint16_t paletteIdx = m_fluidPalette.getOrCreateIndex(id);
+    const uint8_t neededBits = m_fluidPalette.bitsPerEntry();
+    if (neededBits > m_fluidData.bitsPerEntry()) {
+        m_fluidData.resize(neededBits);
+    }
+
+    m_fluidData.set(index, paletteIdx);
+
+    // Fluid changes also require remesh
+    m_dirty = true;
+    ++m_meshRevision;
 }
 
 void SubChunk::optimizePalette() {

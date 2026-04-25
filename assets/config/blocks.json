@@ -295,6 +295,7 @@
       "isTransparent": true,
       "isLightSource": true,
       "lightLevel": 14,
+      "allowsFluidCoexistence": true,
       "placementStrategy": "attach_wall",
       "supportRule": "attached_face",
       "renderShape": "torch",

@@ -26,8 +26,10 @@ constexpr std::size_t SC_HALO_BLOCK_COUNT = static_cast<std::size_t>(SC_HALO_SIZ
 struct SubChunkMeshingSnapshot {
     // Core data (16x16x16)
     std::array<BlockID, SC_BLOCK_COUNT> blocks{};
+    std::array<BlockID, SC_BLOCK_COUNT> fluidBlocks{};  // Dedicated fluid layer
     std::array<uint8_t, SC_BLOCK_COUNT> lightMap{};
     std::array<BlockID, SC_HALO_BLOCK_COUNT> haloBlocks{};
+    std::array<BlockID, SC_HALO_BLOCK_COUNT> haloFluidBlocks{};  // Halo fluid layer
     std::array<uint8_t, SC_HALO_BLOCK_COUNT> haloLightMap{};
 
     // Horizontal borders (same as before, but now per-sub-chunk height slice)

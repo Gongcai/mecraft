@@ -99,6 +99,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].isSolid = true;
         s_blocks[i].isTransparent = false;
         s_blocks[i].isLightSource = false;
+        s_blocks[i].allowsFluidCoexistence = false;
         s_blocks[i].renderShape = BlockRenderShape::Cube;
         s_blocks[i].renderShapeName = "cube";
         s_blocks[i].renderShapeTag = 0;
@@ -249,6 +250,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("timeToBreak") && blockJson["timeToBreak"].is_number_integer()) {
             def.timeToBreak = blockJson["timeToBreak"].get<int>();
+        }
+        if (blockJson.contains("allowsFluidCoexistence") && blockJson["allowsFluidCoexistence"].is_boolean()) {
+            def.allowsFluidCoexistence = blockJson["allowsFluidCoexistence"].get<bool>();
         }
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {

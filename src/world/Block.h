@@ -52,6 +52,7 @@ struct BlockDef {
     bool isTransparent  = false;
     bool isLightSource  = false;
     bool isSelectable   = true;
+    bool allowsFluidCoexistence = false;
     BlockRenderShape renderShape = BlockRenderShape::Cube;
     std::string renderShapeName = "cube";
     uint8_t renderShapeTag = 0;

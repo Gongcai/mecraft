@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 
+#include "FluidState.h"
 #include "../renderer/ChunkMesher.h"
 
 namespace {
@@ -293,6 +294,27 @@ BlockID Chunk::getBlock(const int x, const int y, const int z) const {
         return 0;
     }
     return sc->getBlock(x, toSubChunkLocalY(y), z);
+}
+
+BlockID Chunk::getFluidState(const int x, const int y, const int z) const {
+    if (!isInBounds(x, y, z)) {
+        return 0;
+    }
+    const int scy = toSubChunkIndex(y);
+    const SubChunk* sc = getSubChunk(scy);
+    if (!sc) {
+        return 0;
+    }
+    const int localY = toSubChunkLocalY(y);
+    const BlockID fluidId = sc->getFluidLayer(x, localY, z);
+    if (fluidId != 0) {
+        return fluidId;
+    }
+    const BlockID blockId = sc->getBlock(x, localY, z);
+    if (FluidState::decode(blockId).kind != FluidKind::None) {
+        return blockId;
+    }
+    return 0;
 }
 
 void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id, const bool markMeshDirty) {

@@ -12,6 +12,15 @@ struct DecodedFluid {
     bool isSource = false;
 };
 
+struct FluidCellView {
+    StateID blockState = 0;  // AIR
+    StateID fluidState = 0;  // AIR
+
+    [[nodiscard]] bool hasBlock() const { return blockState != 0; }
+    [[nodiscard]] bool hasFluid() const { return fluidState != 0; }
+    [[nodiscard]] bool isEmpty() const { return !hasBlock() && !hasFluid(); }
+};
+
 namespace FluidState {
 
 DecodedFluid decode(StateID id);
@@ -27,5 +36,7 @@ bool canReplace(const FluidDesc& desc, StateID occupant);
 bool canCoexist(const FluidDesc& desc, StateID occupant);
 bool canWaterReplace(BlockID id);
 bool isSameWater(BlockID a, BlockID b);
+StateID getFluidState(StateID cellState);
+FluidCellView getCombinedCell(StateID cellState);
 
 }

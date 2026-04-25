@@ -85,6 +85,10 @@ public:
     void initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& blocks);
     void copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const;
 
+    // --- Fluid layer access (for waterlogged blocks) ---
+    [[nodiscard]] BlockID getFluidLayer(int x, int y, int z) const;
+    void setFluidLayer(int x, int y, int z, BlockID id);
+
     void optimizePalette();
 
     [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
@@ -126,6 +130,9 @@ private:
     Palette m_palette;
     BitPackedArray m_blockData;
     std::unordered_map<BlockID, uint16_t> m_blockCounts;
+
+    Palette m_fluidPalette;
+    BitPackedArray m_fluidData;
 
     SubChunkType m_type = SubChunkType::Air;
     bool m_dirty = true;

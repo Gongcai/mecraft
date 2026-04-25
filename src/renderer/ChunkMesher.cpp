@@ -189,6 +189,23 @@ BlockID getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y
     return snapshot.haloBlocks[haloToIndex(x, y, z)];
 }
 
+BlockID getResolvedFluidSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+    if (x < -1 || x > SubChunk::SIZE ||
+        y < -1 || y > SubChunk::SIZE ||
+        z < -1 || z > SubChunk::SIZE) {
+        return 0;
+    }
+    const BlockID fluidId = snapshot.haloFluidBlocks[haloToIndex(x, y, z)];
+    if (fluidId != 0) {
+        return fluidId;
+    }
+    const BlockID blockId = snapshot.haloBlocks[haloToIndex(x, y, z)];
+    if (FluidState::decode(blockId).kind != FluidKind::None) {
+        return blockId;
+    }
+    return 0;
+}
+
 uint8_t getResolvedLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (x < -1 || x > SubChunk::SIZE ||
         y < -1 || y > SubChunk::SIZE ||
@@ -605,6 +622,41 @@ BlockID sampleHaloBlock(const Chunk& chunk,
     return neighborPosZ ? neighborPosZ->getBlock(localX, worldY, 0) : 0;
 }
 
+BlockID sampleHaloFluid(const Chunk& chunk,
+                        const int localX,
+                        const int worldY,
+                        const int localZ,
+                        const Chunk* neighborPosX,
+                        const Chunk* neighborNegX,
+                        const Chunk* neighborPosZ,
+                        const Chunk* neighborNegZ,
+                        const World* world) {
+    const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
+    const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
+    if (xInRange && zInRange) {
+        return chunk.getFluidState(localX, worldY, localZ);
+    }
+
+    if (world != nullptr) {
+        const glm::ivec3 offset = chunk.getWorldOffset();
+        return world->getFluidState(offset.x + localX, worldY, offset.z + localZ);
+    }
+
+    if (!zInRange) {
+        return 0;
+    }
+    if (localX < 0) {
+        return neighborNegX ? neighborNegX->getFluidState(Chunk::SIZE_X - 1, worldY, localZ) : 0;
+    }
+    if (localX >= Chunk::SIZE_X) {
+        return neighborPosX ? neighborPosX->getFluidState(0, worldY, localZ) : 0;
+    }
+    if (localZ < 0) {
+        return neighborNegZ ? neighborNegZ->getFluidState(localX, worldY, Chunk::SIZE_Z - 1) : 0;
+    }
+    return neighborPosZ ? neighborPosZ->getFluidState(localX, worldY, 0) : 0;
+}
+
 uint8_t sampleHaloLight(const Chunk& chunk,
                         const int localX,
                         const int worldY,
@@ -658,6 +710,10 @@ void captureSubChunkHalo(const Chunk& chunk,
                                                                neighborPosX, neighborNegX,
                                                                neighborPosZ, neighborNegZ,
                                                                world);
+                snapshot.haloFluidBlocks[haloIdx] = sampleHaloFluid(chunk, lx, worldY, lz,
+                                                                    neighborPosX, neighborNegX,
+                                                                    neighborPosZ, neighborNegZ,
+                                                                    world);
                 snapshot.haloLightMap[haloIdx] = sampleHaloLight(chunk, lx, worldY, lz,
                                                                  neighborPosX, neighborNegX,
                                                                  neighborPosZ, neighborNegZ,
@@ -952,7 +1008,13 @@ bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
         FluidState::decode(neighborId).kind == currentFluid.kind) {
         return false;
     }
-    if (neighborId == BlockIds::AIR) {
+    // Check fluid layer for waterlogged neighbors
+    const BlockID neighborFluidId = getResolvedFluidSC(snapshot, nx, ny, nz);
+    if (currentFluid.kind != FluidKind::None &&
+        FluidState::decode(neighborFluidId).kind == currentFluid.kind) {
+        return false;
+    }
+    if (neighborId == BlockIds::AIR && neighborFluidId == 0) {
         return true;
     }
 
@@ -2111,6 +2173,15 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     // Copy block data
     sc->copyBlocksTo(snapshot->blocks);
 
+    // Copy fluid layer data
+    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+        for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
+            for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
+                snapshot->fluidBlocks[scToIndex(lx, ly, lz)] = sc->getFluidLayer(lx, ly, lz);
+            }
+        }
+    }
+
     // Copy light data
     for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
         for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
@@ -2148,27 +2219,36 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
     buildOpaqueGreedyFaces(snapshot, meshData);
     buildTransparentGreedyFaces(snapshot, meshData);
 
-    // Non-cube blocks (cross shapes, etc.)
+    // Non-cube blocks (cross shapes, etc.) and waterlogged fluid rendering
     constexpr int S = SubChunk::SIZE;
     for (int y = 0; y < S; ++y) {
         for (int z = 0; z < S; ++z) {
             for (int x = 0; x < S; ++x) {
                 const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-                if (blockId == 0) {
-                    continue;
+                const BlockID fluidId = snapshot.fluidBlocks[scToIndex(x, y, z)];
+
+                // Render the block (if any)
+                if (blockId != 0) {
+                    const BlockDef& def = BlockRegistry::getFast(blockId);
+
+                    if (!isOpaqueCubeCandidate(def) && !isTransparentCubeCandidate(def)) {
+                        MeshBuilderFn builder = MeshBuilderRegistry::getBuilder(def.renderShapeTag);
+                        if (builder == nullptr) {
+                            builder = &ChunkMeshBuilders::buildUnitFaces;
+                        }
+                        builder(meshData, snapshot, blockId, def, x, y, z);
+                    }
                 }
 
-                const BlockDef& def = BlockRegistry::getFast(blockId);
-
-                if (isOpaqueCubeCandidate(def) || isTransparentCubeCandidate(def)) {
-                    continue;
+                // Render waterlogged fluid overlay
+                if (fluidId != 0 && FluidState::decode(fluidId).kind != FluidKind::None) {
+                    // Only render water for waterlogged blocks (non-fluid block present)
+                    // Pure water positions are already handled by the water builder above
+                    if (blockId != 0 && FluidState::decode(blockId).kind == FluidKind::None) {
+                        const BlockDef& fluidDef = BlockRegistry::getFast(fluidId);
+                        ChunkMeshBuilders::buildWater(meshData, snapshot, fluidId, fluidDef, x, y, z);
+                    }
                 }
-
-                MeshBuilderFn builder = MeshBuilderRegistry::getBuilder(def.renderShapeTag);
-                if (builder == nullptr) {
-                    builder = &ChunkMeshBuilders::buildUnitFaces;
-                }
-                builder(meshData, snapshot, blockId, def, x, y, z);
             }
         }
     }
