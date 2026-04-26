@@ -110,7 +110,6 @@ private:
                 return false;
             }
         }
-
         if (primary == "time") {
             std::string secondary;
             iss >> secondary;
@@ -135,8 +134,10 @@ private:
                 return false;
             }
         }
-
+        m_deps.uiRenderer.appendWarningLine("Unknown command: " + primary);
         return false;
+
+
     }
 
     void switchToCreativeMode();

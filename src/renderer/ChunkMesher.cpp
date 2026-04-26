@@ -1119,11 +1119,7 @@ void expandBoundsForCorners(ChunkMeshData& meshData, const std::array<glm::vec3,
     expandBounds(meshData, boundsMin, boundsMax);
 }
 
-uint8_t computeWaterTopQuarterTurns(const SubChunkMeshingSnapshot& snapshot,
-                                    const int x,
-                                    const int y,
-                                    const int z) {
-    const glm::vec3 flow = computeFluidFlowVector(snapshot, x, y, z, FluidKind::Water);
+uint8_t computeWaterTopQuarterTurns(const glm::vec3& flow) {
     if (std::abs(flow.x) >= std::abs(flow.z)) {
         if (flow.x > 0.001f) {
             return 1;
@@ -1143,6 +1139,28 @@ uint8_t computeWaterTopQuarterTurns(const SubChunkMeshingSnapshot& snapshot,
     return 0;
 }
 
+bool isFlowingWaterVector(const glm::vec3& flow) {
+    return std::abs(flow.x) > 0.001f ||
+           std::abs(flow.y) > 0.001f ||
+           std::abs(flow.z) > 0.001f;
+}
+
+const AnimatedTextureRef* findNamedWaterTexture(const BlockDef& def, const char* alias) {
+    const auto it = def.namedTextureAnimations.find(alias);
+    if (it == def.namedTextureAnimations.end()) {
+        return nullptr;
+    }
+    return &it->second.ref;
+}
+
+void applyWaterTextureRef(FaceRenderData& renderData, const AnimatedTextureRef& texture) {
+    renderData.tileIndex = std::max(0, texture.firstLayer);
+    renderData.layer = static_cast<float>(texture.firstLayer);
+    renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, texture.frameCount));
+    renderData.animationFps = texture.isAnimated ? texture.fps : 0.0f;
+    renderData.animated = texture.isAnimated ? 1.0f : 0.0f;
+}
+
 void addWaterFacesImpl(ChunkMeshData& meshData,
                        const SubChunkMeshingSnapshot& snapshot,
                        const BlockID blockId,
@@ -1150,18 +1168,26 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
                        const int x,
                        const int y,
                        const int z) {
-    static_cast<void>(def);
-
     const float frontLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
     const float frontRight = computeWaterCornerHeight(snapshot, blockId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
     const float backRight = computeWaterCornerHeight(snapshot, blockId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
     const float backLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
 
+    const glm::vec3 flow = computeFluidFlowVector(snapshot, x, y, z, FluidKind::Water);
+    const bool flowing = isFlowingWaterVector(flow);
+    const uint8_t flowQuarterTurns = computeWaterTopQuarterTurns(flow);
+    const AnimatedTextureRef* waterTexture = findNamedWaterTexture(def, flowing ? "flow" : "still");
+
     const glm::vec3 pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
     const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
         FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        if (waterTexture != nullptr) {
+            applyWaterTextureRef(renderData, *waterTexture);
+        }
         if (face == FACE_TOP) {
-            renderData.uvQuarterTurns = 0;
+            renderData.uvQuarterTurns = flowing ? flowQuarterTurns : 0;
+        } else if (flow.y < -0.001f && (face == FACE_BACK || face == FACE_RIGHT)) {
+            renderData.uvQuarterTurns = 2;
         }
         emitCustomFace(meshData.transparentVertices, corners, face, renderData);
         expandBoundsForCorners(meshData, corners);
@@ -1826,9 +1852,9 @@ glm::mat4 buildWallTorchModelTransform(const uint16_t facingValue) {
 
     float yDegrees = 0.0f;
     if (facingValue == PropIndices::FACING_NORTH) {
-        yDegrees = 90.0f;
-    } else if (facingValue == PropIndices::FACING_SOUTH) {
         yDegrees = -90.0f;
+    } else if (facingValue == PropIndices::FACING_SOUTH) {
+        yDegrees = 90.0f;
     } else if (facingValue == PropIndices::FACING_WEST) {
         yDegrees = 180.0f;
     } else if (facingValue == PropIndices::FACING_EAST) {

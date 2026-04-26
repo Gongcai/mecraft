@@ -558,16 +558,150 @@ int main() {
         if (topFaceVertices.size() < 6) {
             return fail("expected water top-face vertices for flow-direction UV test");
         }
-        const bool hasStillAnimatedTopVertex = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
-                                                           [](const BlockVertex* vertex) {
-                                                               return vertex != nullptr &&
-                                                                      vertex->animated > 0.5f &&
-                                                                      vertex->animationFrameCount >= 32.0f &&
-                                                                      vertex->animationFps >= 6.0f &&
-                                                                      vertex->animationFps < 8.0f;
-                                                           });
-        if (!hasStillAnimatedTopVertex) {
-            return fail("water top face should keep still animation metadata after meshing");
+        const bool hasFlowAnimatedTopVertex = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
+                                                          [](const BlockVertex* vertex) {
+                                                              return vertex != nullptr &&
+                                                                     vertex->animated > 0.5f &&
+                                                                     vertex->animationFrameCount >= 32.0f &&
+                                                                     vertex->animationFps >= 8.0f;
+                                                          });
+        if (!hasFlowAnimatedTopVertex) {
+            return fail("flowing water top face should use flow animation metadata after meshing");
+        }
+
+        const bool hasEastFlowUv = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
+                                               [](const BlockVertex* vertex) {
+                                                   return vertex != nullptr &&
+                                                          approxEqual(vertex->x, 1.0f) &&
+                                                          approxEqual(vertex->z, 1.0f) &&
+                                                          approxEqual(vertex->u, 0.0f) &&
+                                                          approxEqual(vertex->v, 1.0f);
+                                               });
+        if (!hasEastFlowUv) {
+            return fail("east-flowing water top face should rotate UVs along the flow direction");
+        }
+    }
+
+    {
+        Chunk fallingChunk(0, 0);
+        fallingChunk.setBlock(0, 32, 0, FluidState::makeWater(0, true));
+        const ChunkMeshData meshData = buildMeshDataFor(fallingChunk);
+        const auto frontFaceVertices = collectFaceVertices(
+            meshData.transparentVertices,
+            2.0f,
+            0.0f, 1.0f,
+            32.0f, 33.0f,
+            1.0f, 1.0f);
+        if (frontFaceVertices.size() < 6) {
+            return fail("expected falling water front-face vertices for flow-direction UV test");
+        }
+
+        float minFallingY = frontFaceVertices[0]->y;
+        float maxFallingY = frontFaceVertices[0]->y;
+        for (const BlockVertex* vertex : frontFaceVertices) {
+            if (vertex == nullptr) {
+                continue;
+            }
+            minFallingY = std::min(minFallingY, vertex->y);
+            maxFallingY = std::max(maxFallingY, vertex->y);
+        }
+
+        const bool hasBottomLowV = std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(),
+                                               [minFallingY](const BlockVertex* vertex) {
+                                                   return vertex != nullptr &&
+                                                          approxEqual(vertex->y, minFallingY) &&
+                                                          approxEqual(vertex->v, 0.0f);
+                                               });
+        const bool hasTopHighV = std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(),
+                                             [maxFallingY](const BlockVertex* vertex) {
+                                                 return vertex != nullptr &&
+                                                        approxEqual(vertex->y, maxFallingY) &&
+                                                        approxEqual(vertex->v, 1.0f);
+                                             });
+        if (!hasBottomLowV || !hasTopHighV) {
+            return fail("falling water front face should keep its vertical UV direction");
+        }
+
+        const bool hasFlowAnimation = std::any_of(frontFaceVertices.begin(), frontFaceVertices.end(),
+                                                  [](const BlockVertex* vertex) {
+                                                      return vertex != nullptr &&
+                                                             vertex->animated > 0.5f &&
+                                                             vertex->animationFps >= 8.0f;
+                                                  });
+        if (!hasFlowAnimation) {
+            return fail("falling water side face should use flow animation metadata");
+        }
+
+        const auto backFaceVertices = collectFaceVertices(
+            meshData.transparentVertices,
+            3.0f,
+            0.0f, 1.0f,
+            32.0f, 33.0f,
+            0.0f, 0.0f);
+        if (backFaceVertices.size() < 6) {
+            return fail("expected falling water back-face vertices for flow-direction UV test");
+        }
+
+        float minBackY = backFaceVertices[0]->y;
+        float maxBackY = backFaceVertices[0]->y;
+        for (const BlockVertex* vertex : backFaceVertices) {
+            if (vertex == nullptr) {
+                continue;
+            }
+            minBackY = std::min(minBackY, vertex->y);
+            maxBackY = std::max(maxBackY, vertex->y);
+        }
+
+        const bool hasBackBottomHighV = std::any_of(backFaceVertices.begin(), backFaceVertices.end(),
+                                                    [minBackY](const BlockVertex* vertex) {
+                                                        return vertex != nullptr &&
+                                                               approxEqual(vertex->y, minBackY) &&
+                                                               approxEqual(vertex->v, 1.0f);
+                                                    });
+        const bool hasBackTopLowV = std::any_of(backFaceVertices.begin(), backFaceVertices.end(),
+                                                [maxBackY](const BlockVertex* vertex) {
+                                                    return vertex != nullptr &&
+                                                           approxEqual(vertex->y, maxBackY) &&
+                                                           approxEqual(vertex->v, 0.0f);
+                                                });
+        if (!hasBackBottomHighV || !hasBackTopLowV) {
+            return fail("falling water back face should flip vertical UVs to match flow direction");
+        }
+
+        const auto rightFaceVertices = collectFaceVertices(
+            meshData.transparentVertices,
+            5.0f,
+            1.0f, 1.0f,
+            32.0f, 33.0f,
+            0.0f, 1.0f);
+        if (rightFaceVertices.size() < 6) {
+            return fail("expected falling water right-face vertices for flow-direction UV test");
+        }
+
+        float minRightY = rightFaceVertices[0]->y;
+        float maxRightY = rightFaceVertices[0]->y;
+        for (const BlockVertex* vertex : rightFaceVertices) {
+            if (vertex == nullptr) {
+                continue;
+            }
+            minRightY = std::min(minRightY, vertex->y);
+            maxRightY = std::max(maxRightY, vertex->y);
+        }
+
+        const bool hasRightBottomHighV = std::any_of(rightFaceVertices.begin(), rightFaceVertices.end(),
+                                                     [minRightY](const BlockVertex* vertex) {
+                                                         return vertex != nullptr &&
+                                                                approxEqual(vertex->y, minRightY) &&
+                                                                approxEqual(vertex->v, 1.0f);
+                                                     });
+        const bool hasRightTopLowV = std::any_of(rightFaceVertices.begin(), rightFaceVertices.end(),
+                                                 [maxRightY](const BlockVertex* vertex) {
+                                                     return vertex != nullptr &&
+                                                            approxEqual(vertex->y, maxRightY) &&
+                                                            approxEqual(vertex->v, 0.0f);
+                                                 });
+        if (!hasRightBottomHighV || !hasRightTopLowV) {
+            return fail("falling water side faces should flip vertical UVs to match flow direction");
         }
     }
 

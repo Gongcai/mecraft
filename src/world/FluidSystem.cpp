@@ -85,6 +85,30 @@ bool hasSupportBelow(const World& world, const glm::ivec3& pos, const FluidDesc&
     return false;
 }
 
+bool isUnfilledDownhillPath(const World& world, const glm::ivec3& pos, const FluidDesc& desc) {
+    const glm::ivec3 belowPos = pos + glm::ivec3(0, -1, 0);
+    if (!isPositionLoaded(world, belowPos)) {
+        return false;
+    }
+
+    const FluidCellView below = world.getCombinedCell(belowPos.x, belowPos.y, belowPos.z);
+    const DecodedFluid belowFluid = FluidState::decode(below.fluidState);
+    if (belowFluid.kind == desc.kind) {
+        return false;
+    }
+    if (belowFluid.kind != FluidKind::None) {
+        return false;
+    }
+    if (below.isEmpty()) {
+        return true;
+    }
+    if (below.hasBlock()) {
+        return FluidState::canReplace(desc, below.blockState) ||
+               FluidState::canCoexist(desc, below.blockState);
+    }
+    return false;
+}
+
 FluidKind resolveTargetFluidKind(const World& world, const glm::ivec3& pos, const BlockID currentId) {
     // Check fluid state first (covers both pure fluid and waterlogged blocks)
     const StateID currentFluidState = world.getFluidState(pos.x, pos.y, pos.z);
@@ -135,7 +159,7 @@ FlowDirections computeFlowDirections(const World& world, const glm::ivec3& sourc
         result.hasAnyPassable = true;
         result.allowedMask |= static_cast<uint8_t>(1u << dirIndex);
 
-        if (!hasSupportBelow(world, firstStep, desc)) {
+        if (isUnfilledDownhillPath(world, firstStep, desc)) {
             holeDistances[dirIndex] = 1;
             result.foundHole = true;
             continue;
@@ -178,7 +202,7 @@ FlowDirections computeFlowDirections(const World& world, const glm::ivec3& sourc
                 visited[visitIndex] = 1;
 
                 const uint8_t nextDistance = static_cast<uint8_t>(node.distance + 1);
-                if (!hasSupportBelow(world, nextPos, desc)) {
+                if (isUnfilledDownhillPath(world, nextPos, desc)) {
                     holeDistances[dirIndex] = nextDistance;
                     result.foundHole = true;
                     while (!queue.empty()) {

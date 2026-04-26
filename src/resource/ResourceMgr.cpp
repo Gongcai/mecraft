@@ -707,8 +707,9 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 #endif
                 uploadLayer(currentLayer, data, width, height);
             } else {
+                const bool reverseFrameOrder = textureName == "water_flow";
                 for (int frame = 0; frame < declaredFrames; ++frame) {
-                    const int flippedFrameIndex = declaredFrames - 1 - frame;
+                    const int flippedFrameIndex = reverseFrameOrder ? frame : declaredFrames - 1 - frame;
                     const unsigned char* framePixels = data + static_cast<size_t>(flippedFrameIndex * tileSize * width) * 4;
                     uploadLayer(currentLayer + frame, framePixels, width, tileSize);
                 }

@@ -170,6 +170,25 @@ int main() {
     }
 
     {
+        const int naturalPoolY = 168;
+        fillBox(world, -4, 4, naturalPoolY - 1, naturalPoolY + 2, -2, 2, BlockIds::AIR);
+        fillBox(world, -4, 4, naturalPoolY - 2, naturalPoolY - 2, -2, 2, BlockIds::STONE);
+        fillBox(world, 1, 1, naturalPoolY, naturalPoolY + 1, 0, 0, BlockIds::STONE);
+        advanceTicks(world, currentTick, 4);
+
+        world.setBlock(-1, naturalPoolY - 1, 0, source);
+        world.setBlock(-1, naturalPoolY, 0, source);
+        world.setBlock(0, naturalPoolY, 0, source);
+        advanceTicks(world, currentTick, 8);
+
+        world.setBlock(1, naturalPoolY, 0, BlockIds::AIR);
+        advanceTicks(world, currentTick, 12);
+        if (!FluidState::isWater(world.getBlock(1, naturalPoolY, 0))) {
+            return fail("natural water should spread into newly exposed air instead of seeking filled water columns");
+        }
+    }
+
+    {
         const int infiniteY = 144;
         fillBox(world, 19, 31, infiniteY, infiniteY + 2, -6, 6, BlockIds::AIR);
         fillBox(world, 19, 31, infiniteY - 1, infiniteY - 1, -6, 6, BlockIds::STONE);
