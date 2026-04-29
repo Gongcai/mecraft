@@ -50,6 +50,7 @@ set(SRC_CORE
         src/core/states/CommandState.cpp
         src/core/NamespacedId.cpp
         src/core/IdRegistry.cpp
+        src/core/CameraController.cpp
         src/thread/ThreadPool.cpp
         src/resource/ResourceMgr.cpp
 )
@@ -88,6 +89,7 @@ set(SRC_RENDERER
         src/renderer/stb_image.cpp
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMeshingService.cpp
+        src/renderer/SteveRenderer.cpp
 )
 
 set(SRC_UI
@@ -112,6 +114,7 @@ set(SRC_UI
 # [实体与游戏系统]
 set(SRC_ECS
         src/ecs/GameplayScene.cpp
+        src/ecs/entity/SteveModelFactory.cpp
         src/ecs/systems/player/InputSamplingSystem.cpp
         src/ecs/systems/player/PlayerIntentBuildSystem.cpp
         src/ecs/systems/player/CharacterPhysicsSystem.cpp
@@ -131,6 +134,9 @@ set(SRC_ECS
         src/ecs/systems/audio/AudioSyncSystem.cpp
         src/ecs/systems/audio/PlayerAudioBridgeSystem.cpp
         src/ecs/systems/world/FluidTickSystem.cpp
+        src/ecs/systems/steve/SteveAnimationSystem.cpp
+        src/ecs/systems/steve/SteveSyncSystem.cpp
+        src/ecs/systems/steve/TransformHierarchySystem.cpp
 )
 
 # [其他子系统]

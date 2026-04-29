@@ -252,6 +252,7 @@ void ResourceMgr::init() {
     loadShader("particle", SHADERS_DIR "/particle.vs", SHADERS_DIR "/particle.fs");
     loadShader("postprocess", SHADERS_DIR "/postprocess.vs", SHADERS_DIR "/postprocess.fs");
     loadShader("item_model", SHADERS_DIR "/item_model.vs", SHADERS_DIR "/item_model.fs");
+    loadShader("steve", SHADERS_DIR "/steve.vs", SHADERS_DIR "/steve.fs");
 }
 
 void ResourceMgr::shutdown() {

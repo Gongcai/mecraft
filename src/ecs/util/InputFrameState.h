@@ -26,6 +26,7 @@ struct InputFrameState {
     bool inventory        = false;
     bool menu             = false;
     bool openCommand      = false;
+    bool toggleViewMode   = false;
     bool hotbar[9]        = {};
     bool hotbarScrollUp   = false;
     bool hotbarScrollDown = false;

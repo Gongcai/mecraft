@@ -19,6 +19,7 @@ Gameplay Hotbar9 Keyboard 9 Pressed -
 Gameplay HotbarScrollUp Scroll UP Pressed -
 Gameplay HotbarScrollDown Scroll DOWN Pressed -
 Gameplay OpenCommand Keyboard SLASH Pressed -
+Gameplay ToggleViewMode Keyboard F5 Pressed -
 
 UI Menu Keyboard ESCAPE Pressed -
 UI Cancel Keyboard ESCAPE Pressed -

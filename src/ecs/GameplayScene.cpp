@@ -14,6 +14,9 @@
 #include "systems/player/PlayerFacadeSyncSystem.h"
 #include "systems/audio/PlayerAudioBridgeSystem.h"
 #include "systems/world/FluidTickSystem.h"
+#include "systems/steve/SteveAnimationSystem.h"
+#include "systems/steve/SteveSyncSystem.h"
+#include "systems/steve/TransformHierarchySystem.h"
 #include "../player/Player.h"
 #include "../physics/PhysicsSystem.h"
 #include "../world/World.h"
@@ -109,6 +112,13 @@ void GameplayScene::runFixedUpdate(float dt) {
     if (m_services.audioEngine) {
         AudioSyncSystem::update(m_registry, *m_services.audioEngine);
     }
+
+    // Steve sync, animation, and transform hierarchy
+    if (m_services.cameraController) {
+        SteveSyncSystem::update(m_registry, *m_services.cameraController);
+    }
+    SteveAnimationSystem::update(m_registry, dt);
+    TransformHierarchySystem::update(m_registry);
 }
 
 void GameplayScene::runOneTick() {

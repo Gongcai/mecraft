@@ -36,4 +36,4 @@
 #define INVENTORY_TEX_PATH    GUI_TEXTURES_DIR "/inventory.png"
 #define FONT_ASCII_PATH       FONT_TEXTURES_DIR "/ascii.png"
 #define TEST_TEXTURE_PATH     BLOCKS_TEXTURES_DIR "/test.png"
-#define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "steve.png"
+#define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"

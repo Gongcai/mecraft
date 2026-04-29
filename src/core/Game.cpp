@@ -7,8 +7,10 @@
 #include "../world/Block.h"
 #include "../item/Item.h"
 #include "../audio/AudioListener.h"
+#include "../ecs/entity/SteveModelFactory.h"
 
 #include <algorithm>
+#include <GLFW/glfw3.h>
 
 #ifndef NDEBUG
 #include <chrono>
@@ -59,6 +61,7 @@ void Game::init(int width, int height, const char *title) {
     m_world.setThreadPool(m_renderer.getThreadPool());
     m_renderer.setFogEnabled(true);
     m_dropRenderer.init(m_resourceMgr);
+    m_steveRenderer.init(m_resourceMgr);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
     glEnable(GL_DEPTH_TEST);
@@ -83,6 +86,7 @@ void Game::init(int width, int height, const char *title) {
         svc.particleSystem     = &m_particleSystem;
         svc.uiRenderer         = &m_uiRenderer;
         svc.physicsSystem      = &m_physicsSystem;
+        svc.cameraController   = &m_cameraController;
 
 
     }
@@ -91,6 +95,22 @@ void Game::init(int width, int height, const char *title) {
 
     // Create local player entity in ECS
     m_gameplayScene.initLocalPlayer();
+
+    // Load Steve skin texture
+    m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
+
+    // Create Steve model entity for the local player
+    {
+        auto& reg = m_gameplayScene.registry();
+        auto steveRoot = ecs::SteveModelFactory::createSteve(reg, m_player.getPosition());
+        // Copy position from the existing local player entity
+        auto playerView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
+        for (auto e : playerView) {
+            auto& playerTransform = reg.get<ecs::TransformComponent>(e);
+            auto& steveAnim = reg.get<ecs::SteveAnimationStateComponent>(steveRoot);
+            steveAnim.lastPosition = playerTransform.position;
+        }
+    }
 
 
 
@@ -143,6 +163,7 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 
     // ECS pre-state stage: sample input and build intents before states consume them.
     m_gameplayScene.runFixedUpdate(static_cast<float>(fixedStep));
+
     m_gameplayScene.tickClock().advance(fixedStep);
     uint32_t ticksThisFrame = 0;
     while (m_gameplayScene.tickClock().shouldTick()
@@ -218,10 +239,18 @@ void Game::renderFrame(const float frameTime) {
     }
 
     m_postProcessRenderer.beginScene(m_window);
-    m_renderer.render(m_world, m_player.getCamera(), m_window, m_player);
-    m_dropRenderer.render(m_dropSystem, m_player.getCamera(), m_window);
-    m_particleSystem.render(m_player.getCamera().getProjectionMatrix(m_window.getAspectRatio()),
-                            m_player.getCamera().getViewMatrix());
+
+    Camera renderCamera = m_cameraController.computeRenderCamera(
+        m_player.getCamera(), m_player.getEyePosition());
+
+    m_renderer.render(m_world, renderCamera, m_window, m_player);
+    m_dropRenderer.render(m_dropSystem, renderCamera, m_window);
+
+    if (m_cameraController.shouldRenderPlayerModel()) {
+        m_steveRenderer.render(m_gameplayScene.registry(), renderCamera, m_window);
+    }
+    m_particleSystem.render(renderCamera.getProjectionMatrix(m_window.getAspectRatio()),
+                            renderCamera.getViewMatrix());
 
     PostProcessEffects effects;
     effects.underwaterEnabled = m_player.isEyesInWater();
@@ -386,6 +415,7 @@ void Game::shutdown() {
     m_particleSystem.shutdown();
     m_uiRenderer.shutdown();
     m_postProcessRenderer.shutdown();
+    m_steveRenderer.shutdown();
     m_dropRenderer.shutdown();
     m_renderer.shutdown();
 }

@@ -57,7 +57,8 @@ enum class Action {
     Left,
     Right,
     Backspace,
-    OpenCommand
+    OpenCommand,
+    ToggleViewMode
 };
 
 enum class InputDevice {

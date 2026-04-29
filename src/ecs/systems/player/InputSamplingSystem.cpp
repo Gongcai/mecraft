@@ -23,6 +23,7 @@ void InputSamplingSystem::update(GameplayRegistry& registry, const InputContextM
     frame.inventory     = inputCtx.isActionTriggered(Action::Inventory);
     frame.menu          = inputCtx.isActionTriggered(Action::Menu);
     frame.openCommand   = inputCtx.isActionTriggered(Action::OpenCommand);
+    frame.toggleViewMode = inputCtx.isActionTriggered(Action::ToggleViewMode);
 
     // Hotbar
     for (int i = 0; i < 9; ++i) {

@@ -10,6 +10,7 @@ class Player;
 class DropSystem;
 class ParticleSystem;
 class UIRenderer;
+class CameraController;
 
 namespace physics { class PhysicsSystem; }
 
@@ -25,6 +26,7 @@ struct GameplayServices {
     ParticleSystem*            particleSystem      = nullptr;
     UIRenderer*                uiRenderer          = nullptr;
     physics::PhysicsSystem*    physicsSystem       = nullptr;
+    CameraController*          cameraController    = nullptr;
 };
 
 } // namespace ecs

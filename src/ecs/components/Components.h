@@ -4,7 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <entt/entity/entity.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include "../../physics/PhysicsInfo.h"
 #include "../../item/Item.h"
 
@@ -176,6 +178,61 @@ struct AudioSourceComponent {
     float rolloff = 1.0f;
     bool desiredPlaying = false;
     bool followTransform = true;
+};
+
+// ── Milestone 6 Transform Hierarchy Components ──────────────────────────────
+
+struct ParentComponent {
+    entt::entity parent = entt::null;
+};
+
+struct ChildrenComponent {
+    std::vector<entt::entity> children;
+};
+
+struct LocalTransformComponent {
+    glm::vec3 localPosition{0.0f};
+    glm::vec3 localRotation{0.0f}; // Euler angles in degrees
+    glm::vec3 localScale{1.0f};
+
+    [[nodiscard]] glm::mat4 toMatrix() const {
+        glm::mat4 M(1.0f);
+        M = glm::translate(M, localPosition);
+        M = glm::rotate(M, glm::radians(localRotation.z), glm::vec3(0, 0, 1));
+        M = glm::rotate(M, glm::radians(localRotation.y), glm::vec3(0, 1, 0));
+        M = glm::rotate(M, glm::radians(localRotation.x), glm::vec3(1, 0, 0));
+        M = glm::scale(M, localScale);
+        return M;
+    }
+};
+
+struct WorldTransformComponent {
+    glm::mat4 worldMatrix{1.0f};
+};
+
+// ── Milestone 6 Steve Entity Components ──────────────────────────────────────
+
+struct SteveTag {};
+
+enum class StevePartType : uint8_t {
+    Torso,
+    Head,
+    RightArm,
+    LeftArm,
+    RightLeg,
+    LeftLeg
+};
+
+struct StevePartComponent {
+    StevePartType partType = StevePartType::Torso;
+};
+
+struct SteveAnimationStateComponent {
+    float walkCyclePhase = 0.0f;
+    float walkCycleSpeed = 8.0f;
+    bool isWalking = false;
+    bool isOnGround = true;
+    glm::vec3 lastPosition{0.0f};
 };
 
 } // namespace ecs

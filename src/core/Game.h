@@ -19,6 +19,8 @@
 #include "../renderer/Renderer.h"
 #include "../renderer/DropRenderer.h"
 #include "../renderer/PostProcessRenderer.h"
+#include "../renderer/SteveRenderer.h"
+#include "CameraController.h"
 #include "InputContextManager.h"
 #include "../player/ActionMap.h"
 #include "GameStateMachine.h"
@@ -56,6 +58,7 @@ private:
     physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;
     DropRenderer  m_dropRenderer;
+    SteveRenderer  m_steveRenderer;
     PostProcessRenderer m_postProcessRenderer;
     ResourceMgr    m_resourceMgr;
     AudioEngine   m_audioEngine;
@@ -84,6 +87,9 @@ private:
     static constexpr float kFallRollMaxRadians = 0.06f;
     static constexpr float kFallRollDurationSeconds = 0.24f;
     static constexpr float kFallRollPeakRatio = 0.35f;
+
+    // Camera controller (first/third person)
+    CameraController m_cameraController;
 
 #ifndef NDEBUG
     struct FrameProfilerDebug {
