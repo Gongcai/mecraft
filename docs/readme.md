@@ -1,9 +1,9 @@
  Mecraft: Modern Voxel Engine
 
-!https://img.shields.io/badge/Language-C++17-blue.svg?style=flat-square
-!https://img.shields.io/badge/Renderer-OpenGL%203.3%20Core-orange.svg?style=flat-square
-!https://img.shields.io/badge/Build-CMake%204.1-yellow.svg?style=flat-square
-!https://img.shields.io/badge/License-MIT-green.svg?style=flat-square
+![Language](https://img.shields.io/badge/Language-C++-17-blue.svg?style=flat-square)
+![Renderer](https://img.shields.io/badge/Renderer-OpenGL%203.3%20Core-orange.svg?style=flat-square)
+![Build](https://img.shields.io/badge/Build-CMake%204.1-yellow.svg?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)
 
 Welcome to Mecraft! This is a high-performance, Minecraft-style voxel game engine written from scratch in modern C++17 and OpenGL 3.3 Core. It features a highly modular ECS-like architecture, advanced rendering techniques, and a robust physics engine. Whether you are a graphics enthusiast, a game developer, or just curious about how voxel engines work under the hood, this project serves as an excellent reference.
 
