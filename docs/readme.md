@@ -40,23 +40,55 @@ Current Status: Actively developed. Latest feature: Steve Character Rendering & 
 🏛️ Architecture Overview
 
 Mecraft is built on a clean, decoupled architecture. The Game class orchestrates all subsystems, ensuring a clear separation of concerns between logic, rendering, and I/O.
-┌─────────────────────────────────────────────────────────┐
-│                      Game (Core Loop)                   │
-│  (Fixed-timestep logic @ 60Hz | Variable-rate rendering)│
-└──────┬──────┬──────┬──────┬──────┬──────┬───────┬───────┘
-       │      │      │      │      │      │       │
-       ▼      ▼      ▼      ▼      ▼      ▼       ▼
-   Window  Input  Render  World  Player Physics  Resource
-    (GLFW) (Mgr)  Engine  Mgr    Ctrl   Engine    Mgr
-       ▲      │      │      │       ▲       │         │
-       │      └──────┼──────┘       │       └─────────┘
-       │             ▼              │
-       └──────── Camera      ┌──────┴──────┐
-                             │ Chunk System │
-                             │ (Blocks, Mesh│
-                             │  Light, AABB)│
-                             └─────────────┘
 
+<div align="center">
+
+mermaid
+
+graph TD
+
+%% 定义样式
+
+classDef default fill:#f9f9f9,stroke:#333,stroke-width:1.5px;
+
+复制
+%% 顶层核心循环
+CoreLoop[Game (Core Loop) <br/> Fixed-timestep logic @ 60Hz | Variable-rate rendering] 
+
+%% 子系统层
+Subsystems[| | | | | | | |]
+
+%% 具体管理器
+Window[Window System]
+Input[Input Manager]
+Render[Render Engine]
+World[World Manager]
+Player[Player Ctrl Engine]
+Physics[Physics Engine]
+Res[Resource Manager (GLFW)]
+
+%% 底层组件
+Blocks[Blocks, Mesh]
+Light[Light, AABB]
+Camera[Camera]
+Chunk[Chunk]
+
+%% 连接关系
+CoreLoop --- Subsystems
+Subsystems --- Window
+Subsystems --- Input
+Subsystems --- Render
+Subsystems --- World
+Subsystems --- Player
+Subsystems --- Physics
+Subsystems --- Res
+
+Render --- Blocks
+World --- Light
+World --- Camera
+Player --- Chunk
+
+</div>
 
 🛠️ Tech Stack
 
