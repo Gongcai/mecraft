@@ -12,7 +12,6 @@
 #include "InputManager.h"
 #include "Window.h"
 #include "Time.h"
-#include "../player/Player.h"
 
 #include "../renderer/Renderer.h"
 #include "../renderer/DropRenderer.h"
@@ -51,7 +50,6 @@ private:
     ActionMap     m_actionMap; // Add ActionMap
     InputContextManager m_contextManager; // Add ContextManager
     GameStateMachine m_stateMachine; // Add StateMachine
-    Player        m_player;
     World         m_world;
     physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;

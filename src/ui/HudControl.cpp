@@ -6,7 +6,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../player/Player.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 #include "UILayout.h"
@@ -127,7 +126,7 @@ void HudControl::appendIconRow(std::vector<float>& verts,
 
 void HudControl::render(const UIRenderContext& context) const
 {
-    if (!m_visible || !context.player || !m_inventoryShader || !m_resourceMgr) {
+    if (!m_visible || !context.playerStats || !m_inventoryShader || !m_resourceMgr) {
         return;
     }
 
@@ -136,7 +135,7 @@ void HudControl::render(const UIRenderContext& context) const
         return;
     }
 
-    const Player& player = *context.player;
+    const PlayerStatsData& stats = *context.playerStats;
     const float screenW = static_cast<float>(context.screenWidth);
     const float screenH = static_cast<float>(context.screenHeight);
 
@@ -146,8 +145,8 @@ void HudControl::render(const UIRenderContext& context) const
 
     const float hudBaseY = HotbarLayout::kBottomMargin + HotbarLayout::kHeight + 4.0f;
 
-    const int heartMax = player.getMaxHealth();
-    const int foodMax = player.getMaxFood();
+    const int heartMax = stats.maxHealth;
+    const int foodMax = stats.maxFood;
 
     // Align with hotbar edges
     const float hotbarLeftX = (screenW - HotbarLayout::kWidth) * 0.5f;
@@ -163,16 +162,16 @@ void HudControl::render(const UIRenderContext& context) const
 
     // Health row
     appendIconRow(verts, atlas, heartStartX, hudBaseY,
-                  player.getHealth(), heartMax, m_heartFull, m_heartHalf, iconSize);
+                  stats.health, heartMax, m_heartFull, m_heartHalf, iconSize);
 
     // Food row (right side)
     appendIconRow(verts, atlas, foodStartX, hudBaseY,
-                  player.getFood(), foodMax, m_foodFull, m_foodHalf, iconSize);
+                  stats.food, foodMax, m_foodFull, m_foodHalf, iconSize);
 
     // Armor row (above hearts, only when armor > 0)
-    const int armorVal = player.getArmor();
+    const int armorVal = stats.armor;
     if (armorVal > 0) {
-        const int armorMax = player.getMaxArmor();
+        const int armorMax = stats.maxArmor;
         const float armorY = hudBaseY + iconSize + 2.0f;
         appendIconRow(verts, atlas, heartStartX, armorY,
                       armorVal, armorMax, m_armorFull, m_armorHalf, iconSize);

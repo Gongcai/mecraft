@@ -115,13 +115,14 @@ set(SRC_UI
 # [实体与游戏系统]
 set(SRC_ECS
         src/ecs/GameplayScene.cpp
+        src/ecs/util/PlayerQuery.cpp
         src/ecs/entity/SteveModelFactory.cpp
         src/ecs/entity/MobModelFactory.cpp
         src/ecs/systems/player/InputSamplingSystem.cpp
         src/ecs/systems/player/PlayerIntentBuildSystem.cpp
         src/ecs/systems/player/CharacterPhysicsSystem.cpp
         src/ecs/systems/player/PlayerRuntimeUpdateSystem.cpp
-        src/ecs/systems/player/PlayerFacadeSyncSystem.cpp
+        src/ecs/systems/player/ViewBobSystem.cpp
         src/ecs/systems/player/FallRollEffectSystem.cpp
         src/ecs/systems/interaction/BlockInteractionBridgeSystem.cpp
         src/ecs/systems/item/DropCollectionBridgeSystem.cpp
@@ -146,7 +147,6 @@ set(SRC_ECS
 
 # [其他子系统]
 set(SRC_PLAYER
-        src/player/Player.cpp
         src/player/ActionMap.cpp
         src/player/Inventory.cpp
 )
@@ -205,6 +205,9 @@ endif()
 # ===========================================================================
 add_executable(mecraft main.cpp)
 target_link_libraries(mecraft PRIVATE mecraft_core)
+if (MSVC)
+    target_compile_options(mecraft PRIVATE /utf-8)
+endif()
 
 # ===========================================================================
 # 5. 测试用例

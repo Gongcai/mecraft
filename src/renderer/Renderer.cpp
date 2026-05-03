@@ -7,7 +7,6 @@
 #include "ChunkMesher.h"
 #include "../core/Time.h"
 #include "../world/World.h"
-#include "../player/Player.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
@@ -132,9 +131,9 @@ void Renderer::shutdown() {
     m_breakOverlayCrossVertexCount = 0;
 }
 
-void Renderer::render(const World& world, const Camera &camera, const Window &window, const Player& player) {
+void Renderer::render(const World& world, const Camera &camera, const Window &window, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
     renderOpaqueAndCutout(world, camera, window);
-    renderTransparentAndOverlays(world, player, window);
+    renderTransparentAndOverlays(world, target, blockBreak, window);
 }
 
 void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
@@ -142,7 +141,7 @@ void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, c
     renderWorld(world);
 }
 
-void Renderer::renderTransparentAndOverlays(const World& world, const Player& player, const Window& window) {
+void Renderer::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window) {
     if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
         const TextureArray& texArray = m_resourceMgr->getTextureArray();
         bindChunkRenderState(world, texArray);
@@ -151,8 +150,8 @@ void Renderer::renderTransparentAndOverlays(const World& world, const Player& pl
         glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
-    renderBlockBreakOverlay(world, player);
-    renderBlockOutline(player);
+    renderBlockBreakOverlay(world, blockBreak);
+    renderBlockOutline(target);
     endFrame(window);
 }
 
@@ -964,15 +963,15 @@ void Renderer::initBreakOverlayMesh() {
     glBindVertexArray(0);
 }
 
-void Renderer::renderBlockOutline(const Player& player) {
-    if (m_outlineShader == nullptr || m_outlineVao == 0 || !player.hasTargetBlock()) {
+void Renderer::renderBlockOutline(const BlockTargetRenderData& target) {
+    if (m_outlineShader == nullptr || m_outlineVao == 0 || !target.hasTarget) {
         return;
     }
 
-    const glm::ivec3 target = player.getTargetBlock();
+    const glm::ivec3 targetBlock = target.targetBlock;
 
     glm::mat4 model(1.0f);
-    model = glm::translate(model, glm::vec3(target) + glm::vec3(0.5f));
+    model = glm::translate(model, glm::vec3(targetBlock) + glm::vec3(0.5f));
     model = glm::scale(model, glm::vec3(1.002f));
     model = glm::translate(model, glm::vec3(-0.5f));
 
@@ -994,17 +993,17 @@ void Renderer::renderBlockOutline(const Player& player) {
     ++drawCallCount;
 }
 
-void Renderer::renderBlockBreakOverlay(const World& world, const Player& player) {
-    if (m_breakOverlayShader == nullptr || m_breakOverlayVao == 0 || !player.hasBlockBreakProgress()) {
+void Renderer::renderBlockBreakOverlay(const World& world, const BlockBreakRenderData& blockBreak) {
+    if (m_breakOverlayShader == nullptr || m_breakOverlayVao == 0 || !blockBreak.active) {
         return;
     }
 
-    const float breakProgress = player.getBlockBreakProgress();
+    const float breakProgress = blockBreak.progress01;
     if (breakProgress <= 0.0f) {
         return;
     }
 
-    const glm::ivec3 target = player.getBreakTargetBlock();
+    const glm::ivec3 target = blockBreak.blockPos;
     const BlockID targetId = world.getBlock(target.x, target.y, target.z);
     const BlockDef& targetDef = BlockRegistry::get(targetId);
     const bool useCrossOverlay = (targetDef.renderShape == BlockRenderShape::Cross);

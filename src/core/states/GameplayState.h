@@ -8,7 +8,6 @@
 #include "GameplayModeRules.h"
 #include "InventoryState.h"
 #include "StateDependencies.h"
-#include "../../player/Player.h"
 #include "../../world/World.h"
 #include "../../world/Block.h"
 #include "../../world/DropSystem.h"
@@ -51,7 +50,7 @@ public:
 
         auto view = m_deps.ecsRegistry.view<ecs::LocalPlayerTag, ecs::InventoryComponent>();
         for (auto e : view) {
-            view.get<ecs::InventoryComponent>(e).selectedHotbarSlot = m_deps.player.getInventory().getSelectedSlot();
+            view.get<ecs::InventoryComponent>(e).selectedHotbarSlot = m_deps.inventory.getSelectedSlot();
         }
 
     }
@@ -122,7 +121,6 @@ private:
                 runtime.breakRequiredMs = 0.0f;
             }
         }
-        m_deps.player.clearBlockBreakProgress();
         m_deps.uiRenderer.setHeldItemPreviewActionAnimationActive(false);
     }
 

@@ -17,7 +17,8 @@
 #include "../core/Camera.h"
 #include "../core/Time.h"
 #include "../core/Window.h"
-#include "../player/Player.h"
+#include "../ecs/GameplayRegistry.h"
+#include "../ecs/util/PlayerQuery.h"
 #include "../world/World.h"
 #include "../renderer/Renderer.h"
 class UIRenderer;
@@ -48,11 +49,11 @@ public:
     Dashboard();
     ~Dashboard();
     void init(const Window& window);
-    void render(Player &player, World &world, Camera &camera, Renderer &render,
+    void render(ecs::GameplayRegistry& registry, World &world, Camera &camera, Renderer &render,
                 UIRenderer& uiRenderer, const FrameProfilerStats& profilerStats);
 private:
-    void showPlayerStats( Player& player);
-    void showWorldStats(World& world, const Player& player);
+    void showPlayerStats(ecs::GameplayRegistry& registry);
+    void showWorldStats(World& world, ecs::GameplayRegistry& registry);
     void showCameraStats( Camera& camera);
     void showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);

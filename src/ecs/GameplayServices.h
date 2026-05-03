@@ -6,7 +6,6 @@ class World;
 class AudioEngine;
 class InputContextManager;
 class ResourceMgr;
-class Player;
 class DropSystem;
 class ParticleSystem;
 class UIRenderer;
@@ -21,7 +20,6 @@ struct GameplayServices {
     AudioEngine*               audioEngine         = nullptr;
     InputContextManager*       inputContextManager  = nullptr;
     ResourceMgr*               resourceMgr         = nullptr;
-    Player*                    player              = nullptr;
     DropSystem*                dropSystem          = nullptr;
     ParticleSystem*            particleSystem      = nullptr;
     UIRenderer*                uiRenderer          = nullptr;

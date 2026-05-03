@@ -11,13 +11,13 @@
 #include "StateDependencies.h"
 #include "../../ui/KeyboardInputBox.h"
 #include "../../ui/UIRenderer.h"
-#include "../../player/Player.h"
 #include "../../world/World.h"
 #include "../../world/Block.h"
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../audio/AudioEngine.h"
 #include "../../ecs/GameplayRegistry.h"
+#include "../../ecs/util/PlayerQuery.h"
 #include "../../ecs/entity/MobModelFactory.h"
 #include <cstdlib>
 namespace physics {
@@ -139,7 +139,8 @@ private:
             std::string mobType;
             iss >> mobType;
             if (mobType == "zombie") {
-                glm::vec3 playerPos = m_deps.player.getPosition();
+                ecs::PlayerQuery query(m_deps.ecsRegistry);
+                glm::vec3 playerPos = query.getPosition();
                 ecs::MobModelFactory::createZombie(m_deps.ecsRegistry, playerPos);
                 m_deps.uiRenderer.appendCommandLine("Spawned zombie");
                 return false;

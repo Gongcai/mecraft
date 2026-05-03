@@ -1,6 +1,7 @@
 #ifndef MECRAFT_GAMEPLAY_SCENE_H
 #define MECRAFT_GAMEPLAY_SCENE_H
 
+#include <glm/glm.hpp>
 #include "GameplayRegistry.h"
 #include "GameplayServices.h"
 #include "util/GameTickClock.h"
@@ -19,7 +20,7 @@ public:
     const GameTickClock& tickClock() const { return m_tickClock; }
 
     /// Create the local player entity and attach intent components.
-    void initLocalPlayer();
+    void initLocalPlayer(const glm::vec3& spawnPos);
 
     /// Drive the 60 Hz fixed-step systems.
     void runFixedUpdate(float dt);

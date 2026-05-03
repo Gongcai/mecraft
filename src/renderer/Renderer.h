@@ -16,8 +16,20 @@
 #include <vector>
 
 class World;
-class Player;
 class Chunk;
+
+/// Decoupled data transfer structs for block interaction rendering.
+/// These allow Renderer to draw block outlines/overlays without depending on Player or ECS.
+struct BlockTargetRenderData {
+    bool hasTarget = false;
+    glm::ivec3 targetBlock{};
+};
+
+struct BlockBreakRenderData {
+    bool active = false;
+    float progress01 = 0.0f;
+    glm::ivec3 blockPos{};
+};
 
 class Renderer {
 public:
@@ -81,9 +93,9 @@ public:
     ~Renderer();
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void render(const World& world, const Camera &camera, const Window &window, const Player& player);
+    void render(const World& world, const Camera &camera, const Window &window, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak);
     void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
-    void renderTransparentAndOverlays(const World& world, const Player& player, const Window& window);
+    void renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window);
 
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
@@ -176,8 +188,8 @@ private:
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
     void initOutlineMesh();
     void initBreakOverlayMesh();
-    void renderBlockOutline(const Player& player);
-    void renderBlockBreakOverlay(const World& world, const Player& player);
+    void renderBlockOutline(const BlockTargetRenderData& target);
+    void renderBlockBreakOverlay(const World& world, const BlockBreakRenderData& blockBreak);
 #ifndef NDEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);

@@ -6,10 +6,11 @@
 #include "../InputContextManager.h"
 #include "GameplayModeRules.h"
 #include "StateDependencies.h"
-#include "../../player/Player.h"
+#include "../../player/Inventory.h"
 #include "../../ui/UIRenderer.h"
 #include "../../core/Time.h"
 #include "../../world/DropSystem.h"
+#include "../../ecs/util/PlayerQuery.h"
 #include <cmath>
 #include <vector>
 class InventoryState final : public IGameState {
@@ -104,7 +105,6 @@ public:
         if (secondaryPressed) {
             const auto& dragged = m_deps.input.getUIDragItem();
             if (dragged.active && dragged.itemId > 0) {
-                // Right-click with dragged item: place one item into the hovered inventory slot
                 handleSecondaryPlace();
                 return;
             }
@@ -112,7 +112,6 @@ public:
             return;
         }
 
-        // Right held + drag across slots: place one item per slot
         const bool secondaryHeld = m_deps.context.isActionHeld(Action::UISecondaryClick);
         if (secondaryHeld) {
             const auto& dragged = m_deps.input.getUIDragItem();
@@ -122,14 +121,8 @@ public:
             }
         }
 
-        // ── Left-button drag-distribute logic ──
-        // Use raw mouse button state to detect "held" without interfering with
-        // the Pressed-trigger action system (adding a Held binding would cause
-        // isActionTriggered(UIPrimaryClick) to fire every frame while held).
-        // GLFW_MOUSE_BUTTON_1 == 0 (left mouse button)
         const bool primaryHeld = snapshot.mouseButtons[0];
 
-        // Double-click: when no item is held, stack all same-item slots into the clicked slot
         if (snapshot.mouseButtonsDoubleTapped[0] && primaryPressed) {
             const auto& dragged = m_deps.input.getUIDragItem();
             if (!dragged.active) {
@@ -137,7 +130,7 @@ public:
                 const int dblGridIndex = m_deps.uiRenderer.getInventoryPanelLastActivatedSlot();
                 if (dblCraftingSlot < 0 && dblGridIndex >= 0) {
                     const int dblSlot = Inventory::toInventoryIndexFromGridSlot(dblGridIndex);
-                    Inventory& dblInv = m_deps.player.getInventory();
+                    Inventory& dblInv = m_deps.inventory;
                     if (dblInv.isValidSlot(dblSlot) && dblInv.getSlotItem(dblSlot) != 0) {
                         handleDoubleClickStack(dblSlot);
                         return;
@@ -146,13 +139,11 @@ public:
             }
         }
 
-        // On release: finalize primary drag distribution
         if (primaryReleased && m_primaryDragging) {
             handlePrimaryDragRelease();
             return;
         }
 
-        // While left is held and we have a dragged item, track hovered empty slots
         if (primaryHeld && m_primaryDragging) {
             const auto& dragged = m_deps.input.getUIDragItem();
             if (dragged.active && dragged.itemId > 0 && dragged.count > 0) {
@@ -177,7 +168,7 @@ public:
 
         const int activatedGridIndex = m_deps.uiRenderer.getInventoryPanelLastActivatedSlot();
         const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(activatedGridIndex);
-        Inventory& inventory = m_deps.player.getInventory();
+        Inventory& inventory = m_deps.inventory;
         if (!inventory.isValidSlot(inventorySlot)) {
             return;
         }
@@ -192,7 +183,6 @@ public:
             return;
         }
 
-        // Dragged item + left click on an empty slot: start drag-distribute tracking
         if (inventory.getSlotItem(inventorySlot) == 0) {
             m_primaryDragging = true;
             m_primaryDragEmptySlots.clear();
@@ -201,10 +191,8 @@ public:
             return;
         }
 
-        // Dragged item + left click on an occupied slot: merge if same item, otherwise swap
         const ItemStack targetStack = inventory.getSlotStack(inventorySlot);
         if (targetStack.itemId == static_cast<ItemID>(dragged.itemId)) {
-            // Same item: stack onto this slot up to maxStack
             const ItemDef& def = ItemRegistry::get(targetStack.itemId);
             const uint16_t freeSpace = (def.maxStack > targetStack.count)
                 ? static_cast<uint16_t>(def.maxStack - targetStack.count) : 0;
@@ -222,7 +210,6 @@ public:
             return;
         }
 
-        // Different items: swap
         inventory.setSlotItem(inventorySlot, static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
         m_deps.input.beginUIDragItem(static_cast<int>(targetStack.itemId), static_cast<int>(targetStack.count), inventorySlot);
     }
@@ -230,17 +217,21 @@ public:
 private:
     static constexpr int kCraftingSlotBase = 10000;
 
+    glm::vec3 getPlayerPosition() const {
+        ecs::PlayerQuery query(m_deps.ecsRegistry);
+        return query.getPosition();
+    }
+
     void returnDraggedItemToInventory() {
         const auto& dragged = m_deps.input.getUIDragItem();
         if (!dragged.active || dragged.itemId <= 0) {
             return;
         }
 
-        Inventory& inventory = m_deps.player.getInventory();
+        Inventory& inventory = m_deps.inventory;
         const ItemID itemId = static_cast<ItemID>(dragged.itemId);
         const uint16_t count = static_cast<uint16_t>(dragged.count);
 
-        // If the item came from an inventory slot, try to put it back there first
         if (dragged.sourceSlot >= 0 && dragged.sourceSlot < kCraftingSlotBase) {
             if (inventory.isValidSlot(dragged.sourceSlot) && inventory.getSlotItem(dragged.sourceSlot) == 0) {
                 inventory.setSlotItem(dragged.sourceSlot, itemId, count);
@@ -249,7 +240,6 @@ private:
             }
         }
 
-        // Otherwise, find an empty inventory slot
         for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
             if (inventory.getSlotItem(slot) == 0) {
                 inventory.setSlotItem(slot, itemId, count);
@@ -258,8 +248,7 @@ private:
             }
         }
 
-        // No room — spawn a drop item at the player's position
-        const glm::vec3 playerPos = m_deps.player.getPosition();
+        const glm::vec3 playerPos = getPlayerPosition();
         const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)),
                                    static_cast<int>(std::floor(playerPos.y)),
                                    static_cast<int>(std::floor(playerPos.z)));
@@ -281,7 +270,7 @@ private:
                 m_deps.uiRenderer.getCraftingGrid().setResultSlot(static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
             }
         } else {
-            Inventory& inventory = m_deps.player.getInventory();
+            Inventory& inventory = m_deps.inventory;
             if (inventory.isValidSlot(dragged.sourceSlot)) {
                 inventory.setSlotItem(dragged.sourceSlot, static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
             }
@@ -306,7 +295,6 @@ private:
         }
 
         if (!dragged.active) {
-            // No drag: pick up the item from the crafting slot with its count
             ItemID current = craftGrid.getCraftingSlot(slotIndex);
             if (current != 0) {
                 uint16_t currentCount = craftGrid.getCraftingSlotCount(slotIndex);
@@ -314,18 +302,15 @@ private:
                 m_deps.input.beginUIDragItem(static_cast<int>(current), static_cast<int>(currentCount), kCraftingSlotBase + slotIndex);
             }
         } else {
-            // Drag active: place dragged item into crafting slot
             ItemID current = craftGrid.getCraftingSlot(slotIndex);
             uint16_t currentCount = craftGrid.getCraftingSlotCount(slotIndex);
 
             if (current == 0) {
-                // Empty slot: start drag-distribute tracking (same as inventory behavior)
                 m_primaryDragging = true;
                 m_primaryDragEmptySlots.clear();
                 m_primaryDragEmptySlots.push_back(kCraftingSlotBase + slotIndex);
                 redistributePrimaryDrag();
             } else if (current == static_cast<ItemID>(dragged.itemId)) {
-                // Same item: merge up to maxStack
                 const ItemDef& def = ItemRegistry::get(current);
                 const uint16_t freeSpace = (def.maxStack > currentCount)
                     ? static_cast<uint16_t>(def.maxStack - currentCount) : 0;
@@ -341,7 +326,6 @@ private:
                     }
                 }
             } else {
-                // Different items: swap
                 craftGrid.setCraftingSlot(slotIndex, static_cast<ItemID>(dragged.itemId), static_cast<uint16_t>(dragged.count));
                 m_deps.input.beginUIDragItem(static_cast<int>(current), static_cast<int>(currentCount), kCraftingSlotBase + slotIndex);
             }
@@ -350,7 +334,7 @@ private:
 
     void returnCraftingGridToInventory() {
         CraftingGridControl& craftGrid = m_deps.uiRenderer.getCraftingGrid();
-        Inventory& inventory = m_deps.player.getInventory();
+        Inventory& inventory = m_deps.inventory;
 
         for (int i = 0; i < 4; ++i) {
             ItemID item = craftGrid.getCraftingSlot(i);
@@ -364,7 +348,6 @@ private:
         craftGrid.clearAll();
     }
 
-    // Try to place an item into an empty inventory slot. Returns true on success.
     static bool tryPlaceItemInInventory(Inventory& inventory, ItemID itemId, uint16_t count) {
         for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
             if (inventory.getSlotItem(slot) == 0) {
@@ -376,7 +359,7 @@ private:
     }
 
     void spawnItemDropAtPlayer(ItemID itemId, uint32_t count) {
-        const glm::vec3 playerPos = m_deps.player.getPosition();
+        const glm::vec3 playerPos = getPlayerPosition();
         const glm::ivec3 blockPos(static_cast<int>(std::floor(playerPos.x)),
                                    static_cast<int>(std::floor(playerPos.y)),
                                    static_cast<int>(std::floor(playerPos.z)));
@@ -390,7 +373,7 @@ private:
         }
 
         const int hoveredSlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
-        Inventory& inventory = m_deps.player.getInventory();
+        Inventory& inventory = m_deps.inventory;
         if (!inventory.isValidSlot(hoveredSlot)) {
             return;
         }
@@ -399,11 +382,7 @@ private:
         inventory.swapSlots(hoveredSlot, hotbarIndex);
     }
 
-    // Track a new empty slot encountered while left-dragging with a held item.
-    // Immediately redistributes the dragged item count evenly across all tracked slots.
-    // Works for both inventory slots and crafting grid slots (0-3).
     void trackPrimaryDragSlot() {
-        // Try crafting grid first
         const int hoveredCraftingSlot = m_deps.uiRenderer.getCraftingGridHoveredSlot();
         int unifiedSlot = -1;
 
@@ -420,7 +399,7 @@ private:
                 return;
             }
             const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
-            Inventory& inventory = m_deps.player.getInventory();
+            Inventory& inventory = m_deps.inventory;
             if (!inventory.isValidSlot(inventorySlot)) {
                 return;
             }
@@ -430,7 +409,6 @@ private:
             unifiedSlot = inventorySlot;
         }
 
-        // Only track slots that are not already in the list
         for (int slot : m_primaryDragEmptySlots) {
             if (slot == unifiedSlot) {
                 return;
@@ -440,9 +418,6 @@ private:
         redistributePrimaryDrag();
     }
 
-    // Redistribute dragged items evenly across all tracked empty slots.
-    // Called each time a new slot is added during left-drag.
-    // Supports both inventory slots and crafting grid slots.
     void redistributePrimaryDrag() {
         const auto& dragged = m_deps.input.getUIDragItem();
         if (!dragged.active || dragged.itemId <= 0 || dragged.count <= 0 || m_primaryDragEmptySlots.empty()) {
@@ -462,14 +437,12 @@ private:
                 m_deps.uiRenderer.getCraftingGrid().setCraftingSlot(
                     slot - kCraftingSlotBase, itemId, static_cast<uint16_t>(count));
             } else {
-                m_deps.player.getInventory().setSlotItem(
+                m_deps.inventory.setSlotItem(
                     slot, itemId, static_cast<uint16_t>(count));
             }
         }
     }
 
-    // On left-button release: finalize primary drag distribution.
-    // All items have already been placed into slots; just clear the drag state.
     void handlePrimaryDragRelease() {
         m_primaryDragging = false;
         if (!m_primaryDragEmptySlots.empty()) {
@@ -478,10 +451,8 @@ private:
         m_primaryDragEmptySlots.clear();
     }
 
-    // Double-click on an occupied slot with no item dragged: stack all matching
-    // items from other inventory slots into this slot (up to maxStack).
     void handleDoubleClickStack(int targetSlot) {
-        Inventory& inventory = m_deps.player.getInventory();
+        Inventory& inventory = m_deps.inventory;
         const ItemID targetItemId = inventory.getSlotItem(targetSlot);
         if (targetItemId == 0) {
             return;
@@ -494,7 +465,6 @@ private:
 
         uint16_t totalCount = inventory.getSlotStack(targetSlot).count;
 
-        // Scan all other slots and merge matching items into the target
         for (int i = 0; i < Inventory::INVENTORY_SIZE; ++i) {
             if (i == targetSlot) {
                 continue;
@@ -523,11 +493,7 @@ private:
         }
     }
 
-    // Right-click place: put one item from the drag payload into the hovered slot.
-    // Also called when right button is held and cursor moves to a new slot (spread-items behavior).
-    // Works for both inventory slots and crafting grid slots (0-3, not result).
     void handleSecondaryPlace() {
-        // Try crafting grid first
         const int hoveredCraftingSlot = m_deps.uiRenderer.getCraftingGridHoveredSlot();
         int unifiedSlot = -1;
 
@@ -545,7 +511,7 @@ private:
             }
 
             const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(hoveredGridIndex);
-            Inventory& inventory = m_deps.player.getInventory();
+            Inventory& inventory = m_deps.inventory;
             if (!inventory.isValidSlot(inventorySlot)) {
                 return;
             }
@@ -555,7 +521,6 @@ private:
             unifiedSlot = inventorySlot;
         }
 
-        // Avoid placing into the same slot twice while right button is held
         if (unifiedSlot == m_lastSecondaryPlaceSlot) {
             return;
         }
@@ -570,7 +535,7 @@ private:
         if (unifiedSlot >= kCraftingSlotBase) {
             m_deps.uiRenderer.getCraftingGrid().setCraftingSlot(unifiedSlot - kCraftingSlotBase, itemId, 1);
         } else {
-            m_deps.player.getInventory().setSlotItem(unifiedSlot, itemId, 1);
+            m_deps.inventory.setSlotItem(unifiedSlot, itemId, 1);
         }
 
         const int remaining = dragged.count - 1;
@@ -585,7 +550,6 @@ private:
     GameplayMode m_gameplayMode = GameplayMode::Survival;
     int m_lastSecondaryPlaceSlot = -1;
 
-    // Left-drag distribute state
     bool m_primaryDragging = false;
     std::vector<int> m_primaryDragEmptySlots;
 };

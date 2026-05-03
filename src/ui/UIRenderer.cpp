@@ -6,7 +6,6 @@
 #include "../core/InputManager.h"
 #include "../core/Window.h"
 #include "../player/Inventory.h"
-#include "../player/Player.h"
 #include "../resource/ResourceMgr.h"
 
 UIRenderer::UIRenderer() = default;
@@ -318,20 +317,22 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
 
 void UIRenderer::render(const Window& window,
                         const Inventory& inventory,
-                        const Player& player,
+                        const PlayerStatsData& playerStats,
+                        const HeldItemPreviewMotion& heldItemMotion,
                         const InputSnapshot& inputSnapshot)
 {
     m_crosshair.render(window);
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
     m_commandInput.setVisible(m_commandInputRequested);
-    renderControls(makeContextFromWindow(window, inventory, player, inputSnapshot));
+    renderControls(makeContextFromWindow(window, inventory, playerStats, heldItemMotion, inputSnapshot));
     m_commandInputRequested = false;
 }
 
 UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
                                                   const Inventory& inventory,
-                                                  const Player& player,
+                                                  const PlayerStatsData& playerStats,
+                                                  const HeldItemPreviewMotion& heldItemMotion,
                                                   const InputSnapshot& inputSnapshot) const
 {
     UIRenderContext context;
@@ -340,7 +341,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.timeSeconds = static_cast<float>(Time::getGameTime());
     context.resourceMgr = m_resourceMgr;
     context.inventory = &inventory;
-    context.player = &player;
+    context.playerStats = &playerStats;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.isVisible();
@@ -348,10 +349,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.pointerY = inputSnapshot.mousePosition.y;
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
-    context.heldItemPreviewMotion.moving = player.isMoving();
-    context.heldItemPreviewMotion.sprinting = player.isSprinting();
-    context.heldItemPreviewMotion.bobFrequency = player.getEyeBobFrequency();
-    context.heldItemPreviewMotion.bobPhaseOffset = player.getEyeBobPhaseOffset();
+    context.heldItemPreviewMotion = heldItemMotion;
     return context;
 }
 

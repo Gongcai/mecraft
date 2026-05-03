@@ -3,14 +3,12 @@
 
 #include "../../GameplayRegistry.h"
 
-class Player;
-
 namespace ecs {
 
 class FallRollEffectSystem {
 public:
     /// Consume classic hurt effect trigger and update fall-roll animation state.
-    static void update(GameplayRegistry& registry, Player& player, float dt);
+    static void update(GameplayRegistry& registry, float dt);
 };
 
 } // namespace ecs

@@ -3,7 +3,6 @@
 
 #include "../../GameplayRegistry.h"
 
-class Player;
 class World;
 class DropSystem;
 class UIRenderer;
@@ -15,7 +14,6 @@ public:
     /// Transitional bridge system:
     /// migrates block targeting/break/place behavior out of GameplayState into ECS fixed update chain.
     static void update(GameplayRegistry& registry,
-                       Player& player,
                        World& world,
                        DropSystem& dropSystem,
                        UIRenderer& uiRenderer,

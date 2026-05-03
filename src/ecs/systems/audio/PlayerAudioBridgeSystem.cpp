@@ -4,7 +4,7 @@
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../components/Components.h"
-#include "../../../player/Player.h"
+#include "../../util/PlayerQuery.h"
 
 namespace ecs {
 
@@ -13,30 +13,17 @@ constexpr float kMinFallSoundImpactSpeed = 6.0f;
 constexpr float kBigFallImpactSpeed = 10.0f;
 }
 
-void PlayerAudioBridgeSystem::update(GameplayRegistry& registry, Player& player, const float dt) {
+void PlayerAudioBridgeSystem::update(GameplayRegistry& registry, const float dt) {
     auto& audioEvents = ensureAudioEventBuffer(registry);
+    PlayerQuery query(registry);
+
     auto view = registry.view<LocalPlayerTag, FootstepStateComponent, LandingStateComponent>();
     for (auto e : view) {
         auto& footstep = view.get<FootstepStateComponent>(e);
         const auto& landing = view.get<LandingStateComponent>(e);
 
-        // if (!registry.has<AudioSourceComponent>(e)) {
-        //     auto& source = registry.emplace<AudioSourceComponent>(e);
-        //     source.clipName = "walk_grass";
-        //     source.loop = true;
-        //     source.volume = 0.12f;
-        //     source.pitch = 0.85f;
-        //     source.spatial = false;
-        //     source.referenceDistance = 8.0f;
-        //     source.rolloff = 0.0f;
-        //     source.desiredPlaying = false;
-        //     source.followTransform = false;
-        // }
-        // auto& underwaterLoop = registry.get<AudioSourceComponent>(e);
-        // underwaterLoop.desiredPlaying = player.isFullySubmerged();
-
-        if (player.isMoving()) {
-            const float stepInterval = player.isSprinting() ? 0.35f : 0.5f;
+        if (query.isMoving()) {
+            const float stepInterval = query.isSprinting() ? 0.35f : 0.5f;
             footstep.timer -= dt;
             if (footstep.timer <= 0.0f) {
                 const std::string soundName = "walk_grass" + std::to_string(footstep.clipIndex + 1);
@@ -57,9 +44,13 @@ void PlayerAudioBridgeSystem::update(GameplayRegistry& registry, Player& player,
 
         const bool isBigFall = impactSpeed >= kBigFallImpactSpeed;
         const char* clipName = isBigFall ? "classic-hurt" : "fallsmall";
-        audioEvents.playSoundEvents.push_back({clipName, player.getPosition(), true, 1.0f});
+        audioEvents.playSoundEvents.push_back({clipName, query.getPosition(), true, 1.0f});
         if (isBigFall) {
-            player.triggerClassicHurtEffect();
+            // Trigger classic hurt effect via ECS component
+            auto hurtView = registry.view<LocalPlayerTag, HurtEffectComponent>();
+            for (auto he : hurtView) {
+                hurtView.get<HurtEffectComponent>(he).classicHurtEffectPending = true;
+            }
         }
     }
 }

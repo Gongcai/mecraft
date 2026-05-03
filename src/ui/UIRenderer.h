@@ -21,7 +21,6 @@
 class Window;
 class ResourceMgr;
 class Inventory;
-class Player;
 class CraftingSystem;
  struct InputSnapshot;
 
@@ -36,7 +35,8 @@ public:
 
     void render(const Window& window,
                 const Inventory& inventory,
-                const Player& player,
+                const PlayerStatsData& playerStats,
+                const HeldItemPreviewMotion& heldItemMotion,
                 const InputSnapshot& inputSnapshot);
     void renderCommandInputBox(const std::string& text);
     void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
@@ -110,7 +110,8 @@ public:
 private:
     [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,
                                                         const Inventory& inventory,
-                                                        const Player& player,
+                                                        const PlayerStatsData& playerStats,
+                                                        const HeldItemPreviewMotion& heldItemMotion,
                                                         const InputSnapshot& inputSnapshot) const;
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     void renderControls(const UIRenderContext& context) const;

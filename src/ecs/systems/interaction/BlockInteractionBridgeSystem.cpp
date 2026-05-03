@@ -7,7 +7,6 @@
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../util/ParticleEventBuffer.h"
 #include "../../../core/states/GameplayModeRules.h"
-#include "../../../player/Player.h"
 #include "../../../world/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
@@ -84,7 +83,6 @@ void resetBreakSession(BlockBreakComponent& blockBreak,
 } // namespace
 
 void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
-                                          Player& player,
                                           World& world,
                                           DropSystem& dropSystem,
                                           UIRenderer& uiRenderer,
@@ -100,6 +98,7 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
                               PhysicsBodyComponent,
                               CameraStateComponent,
                               InventoryComponent,
+                              InventoryDataComponent,
                               BlockTargetComponent,
                               BlockBreakComponent>();
     for (auto e : view) {
@@ -112,13 +111,15 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
         auto& physicsBody = view.get<PhysicsBodyComponent>(e);
         auto& camera = view.get<CameraStateComponent>(e);
         auto& inventoryState = view.get<InventoryComponent>(e);
+        auto& inventoryData = view.get<InventoryDataComponent>(e);
         auto& target = view.get<BlockTargetComponent>(e);
         auto& blockBreak = view.get<BlockBreakComponent>(e);
 
         runtime.placeCooldownRemaining = std::max(0.0f, runtime.placeCooldownRemaining - dt);
         runtime.creativeBreakCooldownRemaining = std::max(0.0f, runtime.creativeBreakCooldownRemaining - dt);
 
-        player.getInventory().setSelectedSlot(inventoryState.selectedHotbarSlot);
+        // Sync selected slot to inventory
+        inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);
 
         const RayHit hit = world.raycast(buildPickRay(transform, camera), kPickDistance);
         const bool hasHit = hit.hit;
@@ -203,7 +204,7 @@ void BlockInteractionBridgeSystem::update(GameplayRegistry& registry,
             continue;
         }
 
-        Inventory& inventory = player.getInventory();
+        Inventory& inventory = inventoryData.inventory;
         const ItemID selectedItem = inventory.getSelectedItem();
         const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
         if (blockToPlace == 0) {

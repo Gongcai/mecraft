@@ -38,7 +38,7 @@ void Dashboard::init(const Window &window) {
     ImGui_ImplOpenGL3_Init();
 }
 
-void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &render,
+void Dashboard::render(ecs::GameplayRegistry &registry, World &world, Camera &camera, Renderer &render,
                        UIRenderer& uiRenderer, const FrameProfilerStats& profilerStats) {
     // (Your code calls glfwPollEvents())
     // ...
@@ -47,9 +47,9 @@ void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &r
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    showPlayerStats(player);
+    showPlayerStats(registry);
     showCameraStats(camera);
-    showWorldStats(world, player);
+    showWorldStats(world, registry);
     showPerformanceStats(world, render, profilerStats);
     showCrosshairSettings(uiRenderer);
     showHotbarSettings(uiRenderer);
@@ -64,67 +64,78 @@ void Dashboard::render(Player &player, World &world, Camera &camera, Renderer &r
     // (Your code calls glfwSwapBuffers() etc.)
 }
 
-void Dashboard::showPlayerStats( Player &player) {
+void Dashboard::showPlayerStats(ecs::GameplayRegistry &registry) {
     ImGui::Begin("Player Stats");
 
-    const glm::vec3 position = player.getPosition();
+    ecs::PlayerQuery query(registry);
+
+    const glm::vec3 position = query.getPosition();
     ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
-    ImGui::Text("Eye Height: %.3f", player.getEyeHeight());
-    ImGui::Text("Moving: %s", player.isMoving() ? "Yes" : "No");
-    ImGui::Text("Sprinting: %s", player.isSprinting() ? "Yes" : "No");
+    ImGui::Text("Eye Height: %.3f", query.getEyeHeight());
+    ImGui::Text("Moving: %s", query.isMoving() ? "Yes" : "No");
+    ImGui::Text("Sprinting: %s", query.isSprinting() ? "Yes" : "No");
 
-    float bobAmplitude = player.getEyeBobAmplitude();
-    if (ImGui::SliderFloat("Bob Amplitude", &bobAmplitude, 0.0f, 0.3f, "%.4f")) {
-        player.setEyeBobAmplitude(bobAmplitude);
+    // Read/write view bob parameters directly from ECS component
+    auto view = registry.view<ecs::LocalPlayerTag, ecs::ViewBobComponent>();
+    for (auto e : view) {
+        auto& viewBob = view.get<ecs::ViewBobComponent>(e);
+
+        float bobAmplitude = viewBob.amplitude;
+        if (ImGui::SliderFloat("Bob Amplitude", &bobAmplitude, 0.0f, 0.3f, "%.4f")) {
+            viewBob.amplitude = bobAmplitude;
+        }
+
+        float horizontalBobAmplitude = viewBob.horizontalAmplitude;
+        if (ImGui::SliderFloat("Horizontal Bob Amplitude", &horizontalBobAmplitude, 0.0f, 0.3f, "%.4f")) {
+            viewBob.horizontalAmplitude = horizontalBobAmplitude;
+        }
+
+        float bobFrequency = viewBob.frequency;
+        ImGui::Text("Bob Frequency: %.2f", bobFrequency);
+        if (ImGui::SliderFloat("Bob Frequency", &bobFrequency, 0.0f, 40.0f, "%.2f")) {
+            viewBob.frequency = bobFrequency;
+        }
+
+        constexpr float kPi = 3.14159265358979323846f;
+        constexpr float kRadToDeg = 180.0f / kPi;
+        constexpr float kDegToRad = kPi / 180.0f;
+        float phaseOffsetDegrees = viewBob.phaseOffset * kRadToDeg;
+        if (ImGui::SliderFloat("Horizontal Phase Offset (deg)", &phaseOffsetDegrees, -180.0f, 180.0f, "%.1f")) {
+            viewBob.phaseOffset = phaseOffsetDegrees * kDegToRad;
+        }
+
+        constexpr int kCurveSamples = 240;
+        constexpr float kPreviewSeconds = 4.0f;
+        constexpr float kMaxVerticalPreview = 0.09f; // 0.3^2 from slider upper bound.
+        constexpr float kMaxHorizontalPreview = 0.3f; // Matches horizontal amplitude slider upper bound.
+        std::array<float, kCurveSamples> verticalCurve{};
+        std::array<float, kCurveSamples> horizontalCurve{};
+        const float phaseOffset = viewBob.phaseOffset;
+        for (int i = 0; i < kCurveSamples; ++i) {
+            const float t = (kPreviewSeconds * static_cast<float>(i)) / static_cast<float>(kCurveSamples - 1);
+            const float phase = t * bobFrequency;
+            const float verticalRaw = bobAmplitude * static_cast<float>(std::sin(phase));
+            verticalCurve[static_cast<size_t>(i)] = verticalRaw * verticalRaw;
+            horizontalCurve[static_cast<size_t>(i)] = horizontalBobAmplitude * static_cast<float>(std::cos(phase + phaseOffset));
+        }
+
+        const float previewCycles = bobFrequency * kPreviewSeconds / (2.0f * kPi);
+        ImGui::Text("Preview Window: %.1fs (%.2f cycles)", kPreviewSeconds, previewCycles);
+        ImGui::PlotLines("Vertical Bob Curve", verticalCurve.data(), kCurveSamples, 0, nullptr,
+                         0.0f, kMaxVerticalPreview, ImVec2(0.0f, 90.0f));
+        ImGui::PlotLines("Horizontal Bob Curve", horizontalCurve.data(), kCurveSamples, 0, nullptr,
+                         -kMaxHorizontalPreview, kMaxHorizontalPreview, ImVec2(0.0f, 90.0f));
+
+        break; // Only one local player
     }
-
-    float horizontalBobAmplitude = player.getEyeBobHorizontalAmplitude();
-    if (ImGui::SliderFloat("Horizontal Bob Amplitude", &horizontalBobAmplitude, 0.0f, 0.3f, "%.4f")) {
-        player.setEyeBobHorizontalAmplitude(horizontalBobAmplitude);
-    }
-
-    float bobFrequency = player.getEyeBobFrequency();
-    ImGui::Text("Bob Frequency: %.2f", bobFrequency);
-    if (ImGui::SliderFloat("Bob Frequency", &bobFrequency, 0.0f, 40.0f, "%.2f")) {
-        player.setEyeBobFrequency(bobFrequency);
-    }
-
-    constexpr float kPi = 3.14159265358979323846f;
-    constexpr float kRadToDeg = 180.0f / kPi;
-    constexpr float kDegToRad = kPi / 180.0f;
-    float phaseOffsetDegrees = player.getEyeBobPhaseOffset() * kRadToDeg;
-    if (ImGui::SliderFloat("Horizontal Phase Offset (deg)", &phaseOffsetDegrees, -180.0f, 180.0f, "%.1f")) {
-        player.setEyeBobPhaseOffset(phaseOffsetDegrees * kDegToRad);
-    }
-
-    constexpr int kCurveSamples = 240;
-    constexpr float kPreviewSeconds = 4.0f;
-    constexpr float kMaxVerticalPreview = 0.09f; // 0.3^2 from slider upper bound.
-    constexpr float kMaxHorizontalPreview = 0.3f; // Matches horizontal amplitude slider upper bound.
-    std::array<float, kCurveSamples> verticalCurve{};
-    std::array<float, kCurveSamples> horizontalCurve{};
-    const float phaseOffset = player.getEyeBobPhaseOffset();
-    for (int i = 0; i < kCurveSamples; ++i) {
-        const float t = (kPreviewSeconds * static_cast<float>(i)) / static_cast<float>(kCurveSamples - 1);
-        const float phase = t * bobFrequency;
-        const float verticalRaw = bobAmplitude * static_cast<float>(std::sin(phase));
-        verticalCurve[static_cast<size_t>(i)] = verticalRaw * verticalRaw;
-        horizontalCurve[static_cast<size_t>(i)] = horizontalBobAmplitude * static_cast<float>(std::cos(phase + phaseOffset));
-    }
-
-    const float previewCycles = bobFrequency * kPreviewSeconds / (2.0f * kPi);
-    ImGui::Text("Preview Window: %.1fs (%.2f cycles)", kPreviewSeconds, previewCycles);
-    ImGui::PlotLines("Vertical Bob Curve", verticalCurve.data(), kCurveSamples, 0, nullptr,
-                     0.0f, kMaxVerticalPreview, ImVec2(0.0f, 90.0f));
-    ImGui::PlotLines("Horizontal Bob Curve", horizontalCurve.data(), kCurveSamples, 0, nullptr,
-                     -kMaxHorizontalPreview, kMaxHorizontalPreview, ImVec2(0.0f, 90.0f));
 
     ImGui::End();
 }
 
-void Dashboard::showWorldStats(World& world, const Player& player) {
+void Dashboard::showWorldStats(World& world, ecs::GameplayRegistry& registry) {
     ImGui::Begin("World Stats");
-    const glm::vec3 position = player.getPosition();
+    ecs::PlayerQuery query(registry);
+    const glm::vec3 position = query.getPosition();
     const int worldX = static_cast<int>(std::floor(position.x));
     const int worldZ = static_cast<int>(std::floor(position.z));
     const glm::ivec2 chunkCoords = world.getChunkCoords(worldX, worldZ);
@@ -165,7 +176,7 @@ void Dashboard::showCameraStats( Camera &camera) {
 void Dashboard::showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats) {
     ImGui::Begin("Performance Stats");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+    ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
     ImGui::Text("Loop Frame (clamped): %.3f ms", profilerStats.frameMs);
     ImGui::Text("Fixed Update: %.3f ms", profilerStats.fixedUpdateMs);
     ImGui::Text("  - Input Update: %.3f ms", profilerStats.fixedInputMs);
@@ -566,4 +577,3 @@ void Dashboard::showHeldItemPreviewSettings(UIRenderer& uiRenderer) {
 }
 
 #endif // NDEBUG
-

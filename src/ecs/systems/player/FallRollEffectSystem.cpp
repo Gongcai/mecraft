@@ -3,17 +3,18 @@
 #include <algorithm>
 
 #include "../../components/Components.h"
-#include "../../../player/Player.h"
 
 namespace ecs {
 
-void FallRollEffectSystem::update(GameplayRegistry& registry, Player& player, const float dt) {
-    auto view = registry.view<LocalPlayerTag, FallRollComponent>();
+void FallRollEffectSystem::update(GameplayRegistry& registry, const float dt) {
+    auto view = registry.view<LocalPlayerTag, FallRollComponent, HurtEffectComponent>();
     for (auto e : view) {
         auto& roll = view.get<FallRollComponent>(e);
+        auto& hurtEffect = view.get<HurtEffectComponent>(e);
 
         // Trigger the roll when the player has a pending classic hurt effect.
-        if (player.consumeClassicHurtEffect()) {
+        if (hurtEffect.classicHurtEffectPending) {
+            hurtEffect.classicHurtEffectPending = false;
             roll.active = true;
             roll.elapsed = 0.0f;
         }

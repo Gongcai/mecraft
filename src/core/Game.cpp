@@ -10,6 +10,7 @@
 #include "../ecs/entity/SteveModelFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/components/Components.h"
+#include "../ecs/util/PlayerQuery.h"
 
 #include <GLFW/glfw3.h>
 
@@ -74,11 +75,9 @@ void Game::initResources() {
 void Game::initWorld() {
     constexpr int kWorldSeed = 1234;
     constexpr int kRenderDistance = 12;
-    constexpr float kSpawnHeightOffset = 2.0f;
 
     m_world.init(kWorldSeed);
     m_world.setRenderDistance(kRenderDistance);
-    m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f});
 }
 
 void Game::initRenderers() {
@@ -105,7 +104,6 @@ void Game::initECS() {
     svc.audioEngine        = &m_audioEngine;
     svc.inputContextManager = &m_contextManager;
     svc.resourceMgr        = &m_resourceMgr;
-    svc.player             = &m_player;
     svc.dropSystem         = &m_dropSystem;
     svc.particleSystem     = &m_particleSystem;
     svc.uiRenderer         = &m_uiRenderer;
@@ -120,9 +118,14 @@ void Game::initECS() {
     m_dropSystem.bindRegistry(reg);
     m_particleSystem.bindRegistry(reg);
 
-    m_gameplayScene.initLocalPlayer();
+    constexpr float kSpawnHeightOffset = 2.0f;
+    const glm::vec3 spawnPos(0.0f,
+        static_cast<float>(m_world.getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f);
 
-    auto steveRoot = ecs::SteveModelFactory::createSteve(reg, m_player.getPosition());
+    m_gameplayScene.initLocalPlayer(spawnPos);
+
+    ecs::PlayerQuery query(reg);
+    auto steveRoot = ecs::SteveModelFactory::createSteve(reg, query.getPosition());
     reg.emplace<ecs::SkinTypeComponent>(steveRoot, ecs::SkinTypeComponent::Type::Player);
     auto playerView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
     for (auto e : playerView) {
@@ -133,7 +136,7 @@ void Game::initECS() {
 
 #ifndef NDEBUG
     constexpr float kTestMobOffsetX = 5.0f;
-    glm::vec3 playerPos = m_player.getPosition();
+    glm::vec3 playerPos = query.getPosition();
     ecs::MobModelFactory::createZombie(reg, glm::vec3(playerPos.x + kTestMobOffsetX, playerPos.y, playerPos.z));
 #endif
 }
@@ -144,9 +147,18 @@ double Game::clampFrameTime(const double dt) {
 }
 
 StateDependencies Game::makeStateDependencies() {
+    // Get inventory from ECS
+    auto& reg = m_gameplayScene.registry();
+    Inventory* inventory = nullptr;
+    auto view = reg.view<ecs::LocalPlayerTag, ecs::InventoryDataComponent>();
+    for (auto e : view) {
+        inventory = &view.get<ecs::InventoryDataComponent>(e).inventory;
+        break;
+    }
+
     return {
         m_stateMachine,
-        m_player,
+        *inventory,
         m_contextManager,
         m_input,
         m_uiRenderer,
@@ -191,7 +203,8 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     const auto worldStart = std::chrono::steady_clock::now();
 #endif
 
-    m_world.update(m_player.getPosition());
+    ecs::PlayerQuery query(m_gameplayScene.registry());
+    m_world.update(query.getPosition());
 #ifndef NDEBUG
     const auto worldEnd = std::chrono::steady_clock::now();
 #endif
@@ -217,19 +230,19 @@ void Game::syncAudioListener(const float deltaTime) {
     // Update BGM before AudioEngine cleanup so track-end detection keeps a valid source pointer.
     m_bgmSystem.update(deltaTime);
     m_audioEngine.update(deltaTime);
-    AudioListener::setPosition(m_player.getEyePosition());
+    ecs::PlayerQuery query(m_gameplayScene.registry());
+    AudioListener::setPosition(query.getEyePosition());
     AudioListener::setOrientation(
-        m_player.getCamera().getFront(),
-        m_player.getCamera().getUp()
+        query.getCameraFront(),
+        query.getCameraUp()
     );
-    //AudioListener::setGain(1.0f);
 }
 
 void Game::renderFrame(const float frameTime) {
     // Read fall-roll radians from ECS component.
     float fallRollRadians = 0.0f;
+    auto& reg = m_gameplayScene.registry();
     {
-        auto& reg = m_gameplayScene.registry();
         auto view = reg.view<ecs::LocalPlayerTag, ecs::FallRollComponent>();
         for (auto e : view) {
             fallRollRadians = reg.get<ecs::FallRollComponent>(e).currentRadians;
@@ -238,33 +251,99 @@ void Game::renderFrame(const float frameTime) {
 
     m_postProcessRenderer.beginScene(m_window);
 
-    Camera renderCamera = m_cameraController.computeRenderCamera(
-        m_player.getCamera(), m_player.getEyePosition());
+    // Build render camera from ECS state
+    Camera renderCamera;
+    glm::vec3 eyePosition(0.0f);
+    {
+        ecs::PlayerQuery query(reg);
+        const auto& camState = *reg.view<ecs::LocalPlayerTag, ecs::CameraStateComponent>().begin();
+        auto camView = reg.view<ecs::LocalPlayerTag, ecs::CameraStateComponent>();
+        auto transformView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
+        auto viewBobView = reg.view<ecs::LocalPlayerTag, ecs::ViewBobComponent>();
 
-    m_renderer.renderOpaqueAndCutout(m_world, renderCamera, m_window);
-    m_dropRenderer.render(m_dropSystem, renderCamera, m_window);
+        for (auto e : camView) {
+            const auto& cam = camView.get<ecs::CameraStateComponent>(e);
+            const auto& transform = transformView.get<ecs::TransformComponent>(e);
+            const auto& viewBob = viewBobView.get<ecs::ViewBobComponent>(e);
+
+            renderCamera.setYawPitch(cam.yaw, cam.pitch);
+            renderCamera.setFOV(cam.fov);
+
+            // Eye position with view bob offsets
+            eyePosition = transform.position +
+                glm::vec3(0.0f, transform.eyeHeight + viewBob.verticalOffset, 0.0f);
+
+            // Apply horizontal bob
+            glm::vec3 right = cam.right;
+            right.y = 0.0f;
+            if (glm::length(right) > 0.001f) {
+                right = glm::normalize(right);
+            } else {
+                right = glm::vec3(1.0f, 0.0f, 0.0f);
+            }
+            eyePosition += right * viewBob.horizontalOffset;
+
+            renderCamera.setPosition(eyePosition);
+            break;
+        }
+    }
+
+    Camera finalCamera = m_cameraController.computeRenderCamera(renderCamera, eyePosition);
+
+    m_renderer.renderOpaqueAndCutout(m_world, finalCamera, m_window);
+    m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
 
     if (m_cameraController.shouldRenderPlayerModel()) {
-        m_humanoidRenderer.render(m_gameplayScene.registry(), renderCamera, m_window,
+        m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
                                   HumanoidRenderer::kRenderAll);
     } else {
-        m_humanoidRenderer.render(m_gameplayScene.registry(), renderCamera, m_window,
+        m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
                                   HumanoidRenderer::kRenderMobsOnly);
     }
-    m_particleSystem.render(renderCamera.getProjectionMatrix(m_window.getAspectRatio()),
-                            renderCamera.getViewMatrix());
-    m_renderer.renderTransparentAndOverlays(m_world, m_player, m_window);
+    m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
+                            finalCamera.getViewMatrix());
 
+    // Read block interaction data from ECS and pass to Renderer
+    BlockTargetRenderData targetData;
+    BlockBreakRenderData breakData;
+    {
+        ecs::PlayerQuery playerQuery(reg);
+        targetData.hasTarget = playerQuery.hasTargetBlock();
+        targetData.targetBlock = playerQuery.getTargetBlock();
+        breakData.active = playerQuery.hasBlockBreakProgress();
+        breakData.progress01 = playerQuery.getBlockBreakProgress();
+        breakData.blockPos = playerQuery.getBreakTargetBlock();
+    }
+    m_renderer.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
+
+    ecs::PlayerQuery playerQuery(reg);
     PostProcessEffects effects;
-    effects.underwaterEnabled = m_player.isEyesInWater();
+    effects.underwaterEnabled = playerQuery.isEyesInWater();
     effects.screenRollRadians = fallRollRadians;
     m_postProcessRenderer.setEffects(effects);
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
-    m_uiRenderer.render(m_window, m_player.getInventory(), m_player, m_input.snapshot());
+    PlayerStatsData playerStats;
+    playerStats.health = playerQuery.getHealth();
+    playerStats.maxHealth = playerQuery.getMaxHealth();
+    playerStats.armor = playerQuery.getArmor();
+    playerStats.maxArmor = playerQuery.getMaxArmor();
+    playerStats.food = playerQuery.getFood();
+    playerStats.maxFood = playerQuery.getMaxFood();
+
+    HeldItemPreviewMotion heldItemMotion;
+    heldItemMotion.moving = playerQuery.isMoving();
+    heldItemMotion.sprinting = playerQuery.isSprinting();
+    heldItemMotion.bobFrequency = playerQuery.getEyeBobFrequency();
+    heldItemMotion.bobPhaseOffset = playerQuery.getEyeBobPhaseOffset();
+
+    // Get inventory from ECS
+    const Inventory& inventory = playerQuery.getInventory();
+
+    m_uiRenderer.render(m_window, inventory, playerStats, heldItemMotion, m_input.snapshot());
     m_stateMachine.render();
 #ifndef NDEBUG
-    m_dashboard.render(m_player, m_world, m_player.getCamera(), m_renderer, m_uiRenderer,
+    m_dashboard.render(reg, m_world, finalCamera, m_renderer, m_uiRenderer,
                        m_dashboardProfilerStats);
 #endif
     m_window.swapBuffers();

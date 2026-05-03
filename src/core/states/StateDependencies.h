@@ -4,7 +4,7 @@
 #include <string>
 
 class GameStateMachine;
-class Player;
+class Inventory;
 class InputContextManager;
 class InputManager;
 class UIRenderer;
@@ -23,7 +23,7 @@ class GameplayRegistry;
 
 struct StateDependencies {
     GameStateMachine& fsm;
-    Player& player;
+    Inventory& inventory;
     InputContextManager& context;
     InputManager& input;
     UIRenderer& uiRenderer;

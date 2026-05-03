@@ -5,7 +5,6 @@
 #include "IUIControl.h"
 
 class ResourceMgr;
-class Player;
 class Shader;
 struct TextureAtlas;
 

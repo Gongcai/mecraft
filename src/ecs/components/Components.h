@@ -9,6 +9,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "../../physics/PhysicsInfo.h"
 #include "../../item/Item.h"
+#include "../../player/Inventory.h"
 
 namespace ecs {
 
@@ -275,6 +276,33 @@ struct SteveAnimationStateComponent {
     bool isWalking = false;
     bool isOnGround = true;
     glm::vec3 lastPosition{0.0f};
+};
+
+// ── View Bob Component ──────────────────────────────────────────────────────
+
+struct ViewBobComponent {
+    float amplitude = 0.25f;
+    float horizontalAmplitude = 0.02f;
+    float frequency = 6.0f;
+    float phaseOffset = 0.0f;
+    float blend = 0.0f;
+    float fadeInSpeed = 10.0f;
+    float fadeOutSpeed = 8.0f;
+    // Computed offsets (written by ViewBobSystem, read by render code)
+    float verticalOffset = 0.0f;
+    float horizontalOffset = 0.0f;
+};
+
+// ── Hurt Effect Component ───────────────────────────────────────────────────
+
+struct HurtEffectComponent {
+    bool classicHurtEffectPending = false;
+};
+
+// ── Inventory Data Component ────────────────────────────────────────────────
+
+struct InventoryDataComponent {
+    Inventory inventory;
 };
 
 } // namespace ecs
