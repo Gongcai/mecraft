@@ -2,12 +2,18 @@
 #define MECRAFT_ECS_FALL_ROLL_EFFECT_SYSTEM_H
 
 #include "../../ISystem.h"
+#include "../../components/Components.h"
 
 namespace ecs {
 
 /// Consume classic hurt effect trigger and update fall-roll animation state.
 class FallRollEffectSystem : public ISystem {
 public:
+    using Dependencies = SystemDependency<
+        std::tuple<LocalPlayerTag, FallRollComponent, HurtEffectComponent>,
+        std::tuple<FallRollComponent, HurtEffectComponent>
+    >;
+
     void update(SystemContext& ctx) override;
 };
 

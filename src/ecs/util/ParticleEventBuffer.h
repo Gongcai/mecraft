@@ -21,18 +21,6 @@ inline ParticleEventBus& ensureParticleEventBus(GameplayRegistry& registry) {
     return ensureEventBus<BlockBreakParticleEvent>(registry);
 }
 
-/// Backward-compatible alias.  Prefer ParticleEventBus / ensureParticleEventBus().
-struct ParticleEventBuffer {
-    std::vector<BlockBreakParticleEvent> blockBreakEvents;
-};
-
-inline ParticleEventBuffer& ensureParticleEventBuffer(GameplayRegistry& registry) {
-    if (!registry.ctxHas<ParticleEventBuffer>()) {
-        registry.ctxSet<ParticleEventBuffer>();
-    }
-    return registry.ctxGet<ParticleEventBuffer>();
-}
-
 } // namespace ecs
 
 #endif // MECRAFT_ECS_PARTICLE_EVENT_BUFFER_H

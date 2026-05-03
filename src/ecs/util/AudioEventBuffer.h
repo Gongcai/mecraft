@@ -24,18 +24,6 @@ inline AudioEventBus& ensureAudioEventBus(GameplayRegistry& registry) {
     return ensureEventBus<PlaySoundEvent>(registry);
 }
 
-/// Backward-compatible alias.  Prefer AudioEventBus / ensureAudioEventBus().
-struct AudioEventBuffer {
-    std::vector<PlaySoundEvent> playSoundEvents;
-};
-
-inline AudioEventBuffer& ensureAudioEventBuffer(GameplayRegistry& registry) {
-    if (!registry.ctxHas<AudioEventBuffer>()) {
-        registry.ctxSet<AudioEventBuffer>();
-    }
-    return registry.ctxGet<AudioEventBuffer>();
-}
-
 } // namespace ecs
 
 #endif // MECRAFT_ECS_AUDIO_EVENT_BUFFER_H

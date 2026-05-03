@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 
 #include "../../ISystem.h"
+#include "../../components/Components.h"
 
 class Inventory;
 
@@ -13,6 +14,11 @@ namespace ecs {
 /// Queries LocalPlayer entity directly from the registry.
 class ItemPickupSystem : public ISystem {
 public:
+    using Dependencies = SystemDependency<
+        std::tuple<LocalPlayerTag, TransformComponent, DropItemTag, ItemComponent>,
+        std::tuple<InventoryDataComponent>
+    >;
+
     void update(SystemContext& ctx) override;
 
     /// Core pickup logic — can also be called directly.

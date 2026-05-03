@@ -2,6 +2,7 @@
 #define MECRAFT_ECS_PLAYER_FOOTSTEP_AUDIO_SYSTEM_H
 
 #include "../../ISystem.h"
+#include "../../components/Components.h"
 
 namespace ecs {
 
@@ -9,6 +10,11 @@ namespace ecs {
 /// Successor of PlayerAudioBridgeSystem with the unified ISystem interface.
 class PlayerFootstepAudioSystem : public ISystem {
 public:
+    using Dependencies = SystemDependency<
+        std::tuple<LocalPlayerTag, LandingStateComponent>,
+        std::tuple<FootstepStateComponent, HurtEffectComponent>
+    >;
+
     void update(SystemContext& ctx) override;
 };
 

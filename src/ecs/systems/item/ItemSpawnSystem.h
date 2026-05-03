@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 
 #include "../../ISystem.h"
+#include "../../components/Components.h"
 #include "../../GameplayRegistry.h"
 #include "../../../item/Item.h"
 
@@ -12,6 +13,11 @@ namespace ecs {
 
 class ItemSpawnSystem : public ISystem {
 public:
+    using Dependencies = SystemDependency<
+        std::tuple<DropItemTag, TransformComponent, ItemComponent, LifetimeComponent>,
+        std::tuple<DropItemTag, DropEntityIdComponent, TransformComponent, ItemComponent, VelocityComponent, BoundsComponent, LifetimeComponent, SpinVisualComponent, GroundedStateComponent>
+    >;
+
     void update(SystemContext& ctx) override;
 
     static void spawn(GameplayRegistry& registry,

@@ -21,18 +21,6 @@ inline DropSpawnEventBus& ensureDropSpawnEventBus(GameplayRegistry& registry) {
     return ensureEventBus<DropSpawnRequestEvent>(registry);
 }
 
-/// Backward-compatible alias.  Prefer DropSpawnEventBus / ensureDropSpawnEventBus().
-struct DropSpawnEventBuffer {
-    std::vector<DropSpawnRequestEvent> spawnRequests;
-};
-
-inline DropSpawnEventBuffer& ensureDropSpawnEventBuffer(GameplayRegistry& registry) {
-    if (!registry.ctxHas<DropSpawnEventBuffer>()) {
-        registry.ctxSet<DropSpawnEventBuffer>();
-    }
-    return registry.ctxGet<DropSpawnEventBuffer>();
-}
-
 } // namespace ecs
 
 #endif // MECRAFT_ECS_DROP_SPAWN_EVENT_BUFFER_H

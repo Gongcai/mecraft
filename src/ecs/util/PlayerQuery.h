@@ -1,6 +1,7 @@
 #ifndef MECRAFT_ECS_PLAYER_QUERY_H
 #define MECRAFT_ECS_PLAYER_QUERY_H
 
+#include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
 class Inventory;
@@ -74,6 +75,8 @@ public:
     [[nodiscard]] const Inventory& getInventory() const;
 
 private:
+    entt::entity findPlayer() const;
+
     const GameplayRegistry& m_registry;
 };
 
