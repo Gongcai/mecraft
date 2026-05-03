@@ -1,5 +1,5 @@
-#ifndef MECRAFT_STEVE_RENDERER_H
-#define MECRAFT_STEVE_RENDERER_H
+#ifndef MECRAFT_HUMANOID_RENDERER_H
+#define MECRAFT_HUMANOID_RENDERER_H
 
 #include <cstdint>
 #include <glad/glad.h>
@@ -15,11 +15,17 @@ namespace ecs {
 class GameplayRegistry;
 }
 
-class SteveRenderer {
+class HumanoidRenderer {
 public:
+    enum RenderMode : uint8_t {
+        kRenderAll,       // render both Steve (player) and mob entities
+        kRenderMobsOnly   // render only mob entities (first-person view)
+    };
+
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window);
+    void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
+                RenderMode mode = kRenderAll);
 
 private:
     struct PartMesh {
@@ -38,7 +44,7 @@ private:
         float u0, v0, u1, v1;
     };
 
-    // One mesh per StevePartType
+    // ── Player (64x64) meshes ──
     PartMesh m_torsoMesh;
     PartMesh m_headMesh;
     PartMesh m_rightArmMesh;
@@ -46,17 +52,23 @@ private:
     PartMesh m_rightLegMesh;
     PartMesh m_leftLegMesh;
 
+    // ── Mob (64x32) meshes ──
+    // Head and torso share the same UV layout as player.
+    // Right arm/leg use the same pixel coords as player.
+    // Left arm/leg are mirrored copies of right arm/leg.
+    PartMesh m_mobLeftArmMesh;
+    PartMesh m_mobLeftLegMesh;
+
     Shader* m_shader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 
     static void destroyMesh(PartMesh& mesh);
 
-    // Build a box mesh with the given dimensions and UV layout.
-    // The box is centered at (0,0,0) with the specified offset for pivot alignment.
     PartMesh buildBoxMesh(float hw, float hh, float hd,
                           float offsetY,
                           const FaceUvRect uv[6]) const;
 
+    // Player mesh builders (64x64 skin layout)
     PartMesh buildHeadMesh() const;
     PartMesh buildTorsoMesh() const;
     PartMesh buildRightArmMesh() const;
@@ -64,11 +76,14 @@ private:
     PartMesh buildRightLegMesh() const;
     PartMesh buildLeftLegMesh() const;
 
-    // Convert pixel coordinates in the original skin image to UV coords.
-    // Assumes texture was loaded with flip=true (standard OpenGL UV convention).
+    // Mob mirrored mesh builders (64x32 skin layout)
+    // Left arm/leg = right arm/leg with X-flip and UV left/right face swap
+    PartMesh buildMirroredArmMesh() const;
+    PartMesh buildMirroredLegMesh() const;
+
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
 
-    PartMesh* getMeshForPart(ecs::StevePartType partType);
+    PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::SkinTypeComponent::Type skinType);
 };
 
-#endif // MECRAFT_STEVE_RENDERER_H
+#endif // MECRAFT_HUMANOID_RENDERER_H

@@ -18,6 +18,7 @@
 #include "../../particle/ParticleSystem.h"
 #include "../../audio/AudioEngine.h"
 #include "../../ecs/GameplayRegistry.h"
+#include "../../ecs/entity/MobModelFactory.h"
 #include <cstdlib>
 namespace physics {
 class PhysicsSystem;
@@ -133,6 +134,18 @@ private:
                 m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
                 return false;
             }
+        }
+        if (primary == "spawn") {
+            std::string mobType;
+            iss >> mobType;
+            if (mobType == "zombie") {
+                glm::vec3 playerPos = m_deps.player.getPosition();
+                ecs::MobModelFactory::createZombie(m_deps.ecsRegistry, playerPos);
+                m_deps.uiRenderer.appendCommandLine("Spawned zombie");
+                return false;
+            }
+            m_deps.uiRenderer.appendWarningLine("Unknown mob: " + mobType);
+            return false;
         }
         m_deps.uiRenderer.appendWarningLine("Unknown command: " + primary);
         return false;

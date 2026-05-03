@@ -12,11 +12,14 @@
 #include "systems/particle/ParticleSimulationSystem.h"
 #include "systems/particle/ParticleSpawnSystem.h"
 #include "systems/player/PlayerFacadeSyncSystem.h"
+#include "systems/player/FallRollEffectSystem.h"
 #include "systems/audio/PlayerAudioBridgeSystem.h"
 #include "systems/world/FluidTickSystem.h"
 #include "systems/steve/SteveAnimationSystem.h"
 #include "systems/steve/SteveSyncSystem.h"
 #include "systems/steve/TransformHierarchySystem.h"
+#include "systems/mob/MobAISystem.h"
+#include "systems/mob/MobAnimationSystem.h"
 #include "../player/Player.h"
 #include "../physics/PhysicsSystem.h"
 #include "../world/World.h"
@@ -43,6 +46,7 @@ void GameplayScene::initLocalPlayer() {
     m_registry.emplace<FlightStateComponent>(m_localPlayer);
     m_registry.emplace<FootstepStateComponent>(m_localPlayer);
     m_registry.emplace<LandingStateComponent>(m_localPlayer);
+    m_registry.emplace<FallRollComponent>(m_localPlayer);
 
     if (m_services.player != nullptr) {
         Player& player = *m_services.player;
@@ -77,6 +81,8 @@ void GameplayScene::runFixedUpdate(float dt) {
 
     PlayerIntentBuildSystem::update(m_registry);
 
+    MobAISystem::update(m_registry, dt);
+
     if (m_services.physicsSystem) {
         CharacterPhysicsSystem::update(m_registry, *m_services.physicsSystem, dt);
     }
@@ -107,6 +113,7 @@ void GameplayScene::runFixedUpdate(float dt) {
     if (m_services.player) {
         PlayerFacadeSyncSystem::update(m_registry, *m_services.player, dt);
         PlayerAudioBridgeSystem::update(m_registry, *m_services.player, dt);
+        FallRollEffectSystem::update(m_registry, *m_services.player, dt);
     }
 
     if (m_services.audioEngine) {
@@ -118,6 +125,7 @@ void GameplayScene::runFixedUpdate(float dt) {
         SteveSyncSystem::update(m_registry, *m_services.cameraController);
     }
     SteveAnimationSystem::update(m_registry, dt);
+    MobAnimationSystem::update(m_registry, dt);
     TransformHierarchySystem::update(m_registry);
 }
 

@@ -117,6 +117,15 @@ struct LandingStateComponent {
     float impactSpeed = 0.0f;
 };
 
+struct FallRollComponent {
+    bool active = false;
+    float elapsed = 0.0f;
+    float currentRadians = 0.0f;
+    static constexpr float kMaxRadians = 0.06f;
+    static constexpr float kDurationSeconds = 0.24f;
+    static constexpr float kPeakRatio = 0.35f;
+};
+
 // ── Milestone 3 Drop ECS Components (bootstrap mirror) ──────────────────────
 
 struct DropItemTag {};
@@ -213,6 +222,21 @@ struct WorldTransformComponent {
 // ── Milestone 6 Steve Entity Components ──────────────────────────────────────
 
 struct SteveTag {};
+
+struct SkinTypeComponent {
+    enum class Type : uint8_t { Player, Mob };
+    Type type = Type::Player;
+};
+
+struct MobTag {};
+
+struct MobAIComponent {
+    float wanderTimer = 0.0f;
+    float wanderInterval = 3.0f;
+    glm::vec2 wanderDir{0.0f};
+    float wanderSpeed = 1.0f;
+    float yaw = 0.0f;
+};
 
 enum class StevePartType : uint8_t {
     Torso,

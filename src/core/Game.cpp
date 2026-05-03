@@ -8,8 +8,9 @@
 #include "../item/Item.h"
 #include "../audio/AudioListener.h"
 #include "../ecs/entity/SteveModelFactory.h"
+#include "../ecs/entity/MobModelFactory.h"
+#include "../ecs/components/Components.h"
 
-#include <algorithm>
 #include <GLFW/glfw3.h>
 
 #ifndef NDEBUG
@@ -20,110 +21,119 @@ Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world) 
 }
 
 void Game::init(int width, int height, const char *title) {
-    // 初始化opengl环境
-    if (m_window.init(width, height, title)) {
-        m_input.init(m_window.getHandle());
-        m_input.captureMouse(true);
-    }
-    else {
+    if (!initWindow(width, height, title)) return;
+    initResources();
+    initWorld();
+    initRenderers();
+    initAudio();
+    initECS();
+
+    m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
+
+#ifndef NDEBUG
+    m_dashboard.init(m_window);
+#endif
+}
+
+bool Game::initWindow(int width, int height, const char *title) {
+    if (!m_window.init(width, height, title)) {
         std::cerr << "Error while initializing the window." << std::endl;
+        return false;
     }
-    // Load bindings
+    m_input.init(m_window.getHandle());
+    m_input.captureMouse(true);
     m_actionMap.loadFromFile(KEYBINDINGS_PATH);
-
-
-    // 初始化时间
     Time::init();
-    // 初始化资源管理器，加载着色器/贴图
+    return true;
+}
+
+void Game::initResources() {
     m_resourceMgr.init();
     m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
     m_resourceMgr.preloadTextureAnimationsFromConfig(BLOCKS_CONFIG_PATH);
     m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
-    m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH,
-                                        LIGHTMAP_NIGHT_PATH);
+    m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
     m_resourceMgr.loadGuiTexture("font_ascii", FONT_ASCII_PATH, true);
+    m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
+    m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
+
     BlockRegistry::init(&m_resourceMgr);
     ItemRegistry::init();
     m_resourceMgr.buildBlockIconAtlas(64);
+
 #ifndef NDEBUG
     BlockRegistry::printAllBlocks();
 #endif
-    m_world.init(1234);
-    m_world.setRenderDistance(12);
-    // 初始化玩家
-    m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + 2), 0.0f});
-    // 初始化渲染器
+}
+
+void Game::initWorld() {
+    constexpr int kWorldSeed = 1234;
+    constexpr int kRenderDistance = 12;
+    constexpr float kSpawnHeightOffset = 2.0f;
+
+    m_world.init(kWorldSeed);
+    m_world.setRenderDistance(kRenderDistance);
+    m_player.init({0.0f, static_cast<float>(m_world.getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f});
+}
+
+void Game::initRenderers() {
     m_renderer.init(m_resourceMgr);
-    // LightService needs a live worker pool; reuse the renderer pool.
     m_world.setThreadPool(m_renderer.getThreadPool());
     m_renderer.setFogEnabled(true);
+
     m_dropRenderer.init(m_resourceMgr);
-    m_steveRenderer.init(m_resourceMgr);
+    m_humanoidRenderer.init(m_resourceMgr);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
+
     glEnable(GL_DEPTH_TEST);
+}
+
+void Game::initAudio() {
     m_audioEngine.init();
     m_bgmSystem.init(m_audioEngine);
-    // 初始化UI渲染器
+}
+
+void Game::initECS() {
+    auto& svc = m_gameplayScene.services();
+    svc.world              = &m_world;
+    svc.audioEngine        = &m_audioEngine;
+    svc.inputContextManager = &m_contextManager;
+    svc.resourceMgr        = &m_resourceMgr;
+    svc.player             = &m_player;
+    svc.dropSystem         = &m_dropSystem;
+    svc.particleSystem     = &m_particleSystem;
+    svc.uiRenderer         = &m_uiRenderer;
+    svc.physicsSystem      = &m_physicsSystem;
+    svc.cameraController   = &m_cameraController;
+
     m_uiRenderer.init(m_resourceMgr);
-    // 初始化合成系统
     m_craftingSystem.loadRecipes(RECIPES_CONFIG_PATH);
     m_uiRenderer.setCraftingSystem(&m_craftingSystem);
 
-    // Initialize GameplayScene services (ECS backbone)
-    {
-        auto& svc = m_gameplayScene.services();
-        svc.world              = &m_world;
-        svc.audioEngine        = &m_audioEngine;
-        svc.inputContextManager = &m_contextManager;
+    auto& reg = m_gameplayScene.registry();
+    m_dropSystem.bindRegistry(reg);
+    m_particleSystem.bindRegistry(reg);
 
-        svc.resourceMgr        = &m_resourceMgr;
-        svc.player             = &m_player;
-        svc.dropSystem         = &m_dropSystem;
-        svc.particleSystem     = &m_particleSystem;
-        svc.uiRenderer         = &m_uiRenderer;
-        svc.physicsSystem      = &m_physicsSystem;
-        svc.cameraController   = &m_cameraController;
-
-
-    }
-    m_dropSystem.bindRegistry(m_gameplayScene.registry());
-    m_particleSystem.bindRegistry(m_gameplayScene.registry());
-
-    // Create local player entity in ECS
     m_gameplayScene.initLocalPlayer();
 
-    // Load Steve skin texture
-    m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
-
-    // Create Steve model entity for the local player
-    {
-        auto& reg = m_gameplayScene.registry();
-        auto steveRoot = ecs::SteveModelFactory::createSteve(reg, m_player.getPosition());
-        // Copy position from the existing local player entity
-        auto playerView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
-        for (auto e : playerView) {
-            auto& playerTransform = reg.get<ecs::TransformComponent>(e);
-            auto& steveAnim = reg.get<ecs::SteveAnimationStateComponent>(steveRoot);
-            steveAnim.lastPosition = playerTransform.position;
-        }
+    auto steveRoot = ecs::SteveModelFactory::createSteve(reg, m_player.getPosition());
+    reg.emplace<ecs::SkinTypeComponent>(steveRoot, ecs::SkinTypeComponent::Type::Player);
+    auto playerView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
+    for (auto e : playerView) {
+        auto& playerTransform = reg.get<ecs::TransformComponent>(e);
+        auto& steveAnim = reg.get<ecs::SteveAnimationStateComponent>(steveRoot);
+        steveAnim.lastPosition = playerTransform.position;
     }
 
-
-
-    // Push initial Gameplay state
-    m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
-
-
-    // 初始化信息仪表盘 (仅Debug模式)
 #ifndef NDEBUG
-    m_dashboard.init(m_window);
+    constexpr float kTestMobOffsetX = 5.0f;
+    glm::vec3 playerPos = m_player.getPosition();
+    ecs::MobModelFactory::createZombie(reg, glm::vec3(playerPos.x + kTestMobOffsetX, playerPos.y, playerPos.z));
 #endif
-
-
 }
 
 double Game::clampFrameTime(const double dt) {
@@ -214,27 +224,13 @@ void Game::syncAudioListener(const float deltaTime) {
 }
 
 void Game::renderFrame(const float frameTime) {
-    if (m_player.consumeClassicHurtEffect()) {
-        m_fallRollActive = true;
-        m_fallRollElapsed = 0.0f;
-    }
-
-    if (m_fallRollActive) {
-        m_fallRollElapsed += frameTime;
-        float t = m_fallRollElapsed / kFallRollDurationSeconds;
-        t = std::clamp(t, 0.0f, 1.0f);
-
-        if (t < kFallRollPeakRatio) {
-            const float phase = t / kFallRollPeakRatio;
-            m_fallRollCurrentRadians = -kFallRollMaxRadians * phase;
-        } else {
-            const float phase = (t - kFallRollPeakRatio) / (1.0f - kFallRollPeakRatio);
-            m_fallRollCurrentRadians = -kFallRollMaxRadians * (1.0f - phase);
-        }
-
-        if (t >= 1.0f) {
-            m_fallRollActive = false;
-            m_fallRollCurrentRadians = 0.0f;
+    // Read fall-roll radians from ECS component.
+    float fallRollRadians = 0.0f;
+    {
+        auto& reg = m_gameplayScene.registry();
+        auto view = reg.view<ecs::LocalPlayerTag, ecs::FallRollComponent>();
+        for (auto e : view) {
+            fallRollRadians = reg.get<ecs::FallRollComponent>(e).currentRadians;
         }
     }
 
@@ -243,18 +239,23 @@ void Game::renderFrame(const float frameTime) {
     Camera renderCamera = m_cameraController.computeRenderCamera(
         m_player.getCamera(), m_player.getEyePosition());
 
-    m_renderer.render(m_world, renderCamera, m_window, m_player);
+    m_renderer.renderOpaqueAndCutout(m_world, renderCamera, m_window);
     m_dropRenderer.render(m_dropSystem, renderCamera, m_window);
 
     if (m_cameraController.shouldRenderPlayerModel()) {
-        m_steveRenderer.render(m_gameplayScene.registry(), renderCamera, m_window);
+        m_humanoidRenderer.render(m_gameplayScene.registry(), renderCamera, m_window,
+                                  HumanoidRenderer::kRenderAll);
+    } else {
+        m_humanoidRenderer.render(m_gameplayScene.registry(), renderCamera, m_window,
+                                  HumanoidRenderer::kRenderMobsOnly);
     }
     m_particleSystem.render(renderCamera.getProjectionMatrix(m_window.getAspectRatio()),
                             renderCamera.getViewMatrix());
+    m_renderer.renderTransparentAndOverlays(m_world, m_player, m_window);
 
     PostProcessEffects effects;
     effects.underwaterEnabled = m_player.isEyesInWater();
-    effects.screenRollRadians = m_fallRollCurrentRadians;
+    effects.screenRollRadians = fallRollRadians;
     m_postProcessRenderer.setEffects(effects);
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
@@ -415,7 +416,7 @@ void Game::shutdown() {
     m_particleSystem.shutdown();
     m_uiRenderer.shutdown();
     m_postProcessRenderer.shutdown();
-    m_steveRenderer.shutdown();
+    m_humanoidRenderer.shutdown();
     m_dropRenderer.shutdown();
     m_renderer.shutdown();
 }

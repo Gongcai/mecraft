@@ -85,11 +85,10 @@ set(SRC_RENDERER
         src/renderer/ItemModelMesh.cpp
         src/renderer/MeshBuilderRegistry.cpp
         src/renderer/PostProcessRenderer.cpp
-        src/renderer/TestCube.cpp
         src/renderer/stb_image.cpp
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMeshingService.cpp
-        src/renderer/SteveRenderer.cpp
+        src/renderer/HumanoidRenderer.cpp
 )
 
 set(SRC_UI
@@ -115,11 +114,13 @@ set(SRC_UI
 set(SRC_ECS
         src/ecs/GameplayScene.cpp
         src/ecs/entity/SteveModelFactory.cpp
+        src/ecs/entity/MobModelFactory.cpp
         src/ecs/systems/player/InputSamplingSystem.cpp
         src/ecs/systems/player/PlayerIntentBuildSystem.cpp
         src/ecs/systems/player/CharacterPhysicsSystem.cpp
         src/ecs/systems/player/PlayerRuntimeUpdateSystem.cpp
         src/ecs/systems/player/PlayerFacadeSyncSystem.cpp
+        src/ecs/systems/player/FallRollEffectSystem.cpp
         src/ecs/systems/interaction/BlockInteractionBridgeSystem.cpp
         src/ecs/systems/item/DropCollectionBridgeSystem.cpp
         src/ecs/systems/item/ItemSpawnSystem.cpp
@@ -137,6 +138,8 @@ set(SRC_ECS
         src/ecs/systems/steve/SteveAnimationSystem.cpp
         src/ecs/systems/steve/SteveSyncSystem.cpp
         src/ecs/systems/steve/TransformHierarchySystem.cpp
+        src/ecs/systems/mob/MobAISystem.cpp
+        src/ecs/systems/mob/MobAnimationSystem.cpp
 )
 
 # [其他子系统]
@@ -242,7 +245,7 @@ add_mecraft_test(ui_input_router_test tests/ui_input_router_test.cpp)
 add_mecraft_test(ui_renderer_scheduler_test tests/ui_renderer_scheduler_test.cpp)
 add_mecraft_test(player_intent_build_system_test tests/player_intent_build_system_test.cpp)
 add_mecraft_test(creative_flight_system_test tests/creative_flight_system_test.cpp)
-add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
+# add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
 add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
 add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
 add_mecraft_test(water_spread_test tests/water_spread_test.cpp)

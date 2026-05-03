@@ -24,6 +24,11 @@
 #define LIGHTMAP_DIR          TEXTURES_DIR "/lightmap"
 #define ENTITY_TEXTURE_DIR    TEXTURES_DIR "/entity"
 
+#define MOBS_TEXTURE_DIR       ENTITY_TEXTURE_DIR "/mobs"
+#define ICONS_TEXTURE_DIR      GUI_TEXTURES_DIR "/icons"
+
+
+
 #define BLOCKS_CONFIG_PATH    CONFIG_DIR "/blocks.json"
 #define FLUIDS_CONFIG_PATH    CONFIG_DIR "/fluids.json"
 #define ITEMS_CONFIG_PATH     CONFIG_DIR "/items.json"
@@ -37,3 +42,4 @@
 #define FONT_ASCII_PATH       FONT_TEXTURES_DIR "/ascii.png"
 #define TEST_TEXTURE_PATH     BLOCKS_TEXTURES_DIR "/test.png"
 #define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"
+#define ZOMBIE_TEXTURE_PATH    MOBS_TEXTURE_DIR  "/zombie.png"

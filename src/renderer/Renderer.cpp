@@ -133,8 +133,24 @@ void Renderer::shutdown() {
 }
 
 void Renderer::render(const World& world, const Camera &camera, const Window &window, const Player& player) {
+    renderOpaqueAndCutout(world, camera, window);
+    renderTransparentAndOverlays(world, player, window);
+}
+
+void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
     beginFrame(camera, window);
     renderWorld(world);
+}
+
+void Renderer::renderTransparentAndOverlays(const World& world, const Player& player, const Window& window) {
+    if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
+        const TextureArray& texArray = m_resourceMgr->getTextureArray();
+        bindChunkRenderState(world, texArray);
+        renderTransparentChunks(m_deferredTransparentEntries);
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    }
+
     renderBlockBreakOverlay(world, player);
     renderBlockOutline(player);
     endFrame(window);
@@ -310,6 +326,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
 
 void Renderer::renderWorld(const World& world) {
     if (m_chunkShader == nullptr || m_resourceMgr == nullptr) {
+        m_deferredTransparentEntries.clear();
         return;
     }
 
@@ -321,11 +338,10 @@ void Renderer::renderWorld(const World& world) {
 
     std::vector<ChunkRenderEntry> cutoutEntries;
     cutoutEntries.reserve(world.getActiveChunks().size() * 2);
-    std::vector<ChunkRenderEntry> transparentEntries;
-    transparentEntries.reserve(world.getActiveChunks().size() * 2);
-    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries);
+    m_deferredTransparentEntries.clear();
+    m_deferredTransparentEntries.reserve(world.getActiveChunks().size() * 2);
+    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, m_deferredTransparentEntries);
     renderCutoutChunks(cutoutEntries);
-    renderTransparentChunks(transparentEntries);
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);

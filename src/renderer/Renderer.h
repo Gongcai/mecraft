@@ -82,6 +82,8 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void render(const World& world, const Camera &camera, const Window &window, const Player& player);
+    void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
+    void renderTransparentAndOverlays(const World& world, const Player& player, const Window& window);
 
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
@@ -247,6 +249,7 @@ private:
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
+    std::vector<ChunkRenderEntry> m_deferredTransparentEntries;
     uint64_t m_chunkRenderColumnsRevision = 0;
     int m_chunkRenderColumnsRegionSize = 0;
 };

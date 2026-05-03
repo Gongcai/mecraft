@@ -13,13 +13,11 @@
 #include "Window.h"
 #include "Time.h"
 #include "../player/Player.h"
-#ifndef NDEBUG
-#include "../renderer/TestCube.h"
-#endif
+
 #include "../renderer/Renderer.h"
 #include "../renderer/DropRenderer.h"
 #include "../renderer/PostProcessRenderer.h"
-#include "../renderer/SteveRenderer.h"
+#include "../renderer/HumanoidRenderer.h"
 #include "CameraController.h"
 #include "InputContextManager.h"
 #include "../player/ActionMap.h"
@@ -58,7 +56,7 @@ private:
     physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;
     DropRenderer  m_dropRenderer;
-    SteveRenderer  m_steveRenderer;
+    HumanoidRenderer  m_humanoidRenderer;
     PostProcessRenderer m_postProcessRenderer;
     ResourceMgr    m_resourceMgr;
     AudioEngine   m_audioEngine;
@@ -78,15 +76,15 @@ private:
     [[nodiscard]] StateDependencies makeStateDependencies();
     void runFixedUpdate(double fixedStep, double& accumulator);
 
+    bool initWindow(int width, int height, const char* title);
+    void initResources();
+    void initWorld();
+    void initRenderers();
+    void initAudio();
+    void initECS();
+
     void syncAudioListener(float deltaTime);
     void renderFrame(float frameTime);
-
-    bool m_fallRollActive = false;
-    float m_fallRollElapsed = 0.0f;
-    float m_fallRollCurrentRadians = 0.0f;
-    static constexpr float kFallRollMaxRadians = 0.06f;
-    static constexpr float kFallRollDurationSeconds = 0.24f;
-    static constexpr float kFallRollPeakRatio = 0.35f;
 
     // Camera controller (first/third person)
     CameraController m_cameraController;

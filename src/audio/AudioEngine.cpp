@@ -292,7 +292,7 @@ bool AudioEngine::initDeviceSwitchExtension() {
     alcReopenDeviceSOFT = (LPALCREOPENDEVICESOFT)alcGetProcAddress(_device, "alcReopenDeviceSOFT");
 
     if (!alcEventCallbackSOFT || !alcEventControlSOFT || !alcReopenDeviceSOFT) {
-        std::cerr << u8"[Audio] 获取扩展函数指针失败" << std::endl;
+        std::cerr << "[Audio] 获取扩展函数指针失败" << std::endl;
         return false;
     }
 
