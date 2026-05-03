@@ -8,6 +8,7 @@
 #include "Dashboard.h"
 
 #include "UIRenderer.h"
+#include "../ecs/components/Components.h"
 
 #include <algorithm>
 #include <array>

@@ -1,15 +1,20 @@
 #ifndef MECRAFT_GAMEPLAY_SCENE_H
 #define MECRAFT_GAMEPLAY_SCENE_H
 
+#include <memory>
+#include <vector>
 #include <glm/glm.hpp>
 #include "GameplayRegistry.h"
 #include "GameplayServices.h"
+#include "ISystem.h"
 #include "util/GameTickClock.h"
 
 namespace ecs {
 
 class GameplayScene {
 public:
+    GameplayScene();
+
     GameplayRegistry& registry() { return m_registry; }
     const GameplayRegistry& registry() const { return m_registry; }
 
@@ -33,6 +38,9 @@ private:
     GameplayServices m_services;
     GameTickClock    m_tickClock;
     entt::entity     m_localPlayer = entt::null;
+
+    /// Fixed-update pipeline — execution order matches declaration order.
+    std::vector<std::unique_ptr<ISystem>> m_fixedUpdateSystems;
 };
 
 } // namespace ecs

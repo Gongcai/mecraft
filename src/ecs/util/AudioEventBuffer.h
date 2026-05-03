@@ -2,11 +2,10 @@
 #define MECRAFT_ECS_AUDIO_EVENT_BUFFER_H
 
 #include <string>
-#include <vector>
 
 #include <glm/vec3.hpp>
 
-#include "../GameplayRegistry.h"
+#include "EventBus.h"
 
 namespace ecs {
 
@@ -17,6 +16,7 @@ struct PlaySoundEvent {
     float volume = 1.0f;
 };
 
+/// Backward-compatible alias.  New code should prefer EventBus<PlaySoundEvent>.
 struct AudioEventBuffer {
     std::vector<PlaySoundEvent> playSoundEvents;
 };

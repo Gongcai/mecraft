@@ -7,6 +7,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/DropRuntimeState.h"
+#include "../../util/DropSpawnEventBuffer.h"
 
 namespace ecs {
 
@@ -85,7 +86,16 @@ bool tryMergeDropAtSpawn(GameplayRegistry& registry,
 } // namespace
 
 void ItemSpawnSystem::update(GameplayRegistry& registry) {
-    static_cast<void>(registry);
+    if (!registry.ctxHas<DropSpawnEventBuffer>()) return;
+    auto& buffer = registry.ctxGet<DropSpawnEventBuffer>();
+
+    for (const auto& req : buffer.spawnRequests) {
+        if (req.blockId == 0) continue;
+        const BlockDropEntry& drop = BlockDropTable::get(req.blockId);
+        if (drop.dropItem == 0) continue;
+        spawn(registry, drop.dropItem, req.blockPos, drop.minCount);
+    }
+    buffer.spawnRequests.clear();
 }
 
 void ItemSpawnSystem::spawn(GameplayRegistry& registry,

@@ -125,6 +125,9 @@ set(SRC_ECS
         src/ecs/systems/player/ViewBobSystem.cpp
         src/ecs/systems/player/FallRollEffectSystem.cpp
         src/ecs/systems/interaction/BlockInteractionBridgeSystem.cpp
+        src/ecs/systems/interaction/BlockTargetSystem.cpp
+        src/ecs/systems/interaction/BlockBreakSystem.cpp
+        src/ecs/systems/interaction/BlockPlaceSystem.cpp
         src/ecs/systems/item/DropCollectionBridgeSystem.cpp
         src/ecs/systems/item/ItemSpawnSystem.cpp
         src/ecs/systems/item/ItemPhysicsSystem.cpp
@@ -137,6 +140,7 @@ set(SRC_ECS
         src/ecs/systems/particle/ParticleCleanupSystem.cpp
         src/ecs/systems/audio/AudioSyncSystem.cpp
         src/ecs/systems/audio/PlayerAudioBridgeSystem.cpp
+        src/ecs/systems/audio/PlayerFootstepAudioSystem.cpp
         src/ecs/systems/world/FluidTickSystem.cpp
         src/ecs/systems/steve/SteveAnimationSystem.cpp
         src/ecs/systems/steve/SteveSyncSystem.cpp

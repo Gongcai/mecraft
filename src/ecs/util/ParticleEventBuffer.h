@@ -1,11 +1,9 @@
 #ifndef MECRAFT_ECS_PARTICLE_EVENT_BUFFER_H
 #define MECRAFT_ECS_PARTICLE_EVENT_BUFFER_H
 
-#include <vector>
-
 #include <glm/glm.hpp>
 
-#include "../GameplayRegistry.h"
+#include "EventBus.h"
 #include "../../world/Block.h"
 
 namespace ecs {
@@ -15,6 +13,7 @@ struct BlockBreakParticleEvent {
     BlockID blockType = 0;
 };
 
+/// Backward-compatible alias.  New code should prefer EventBus<BlockBreakParticleEvent>.
 struct ParticleEventBuffer {
     std::vector<BlockBreakParticleEvent> blockBreakEvents;
 };
