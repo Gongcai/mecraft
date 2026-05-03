@@ -18,7 +18,12 @@ constexpr float kHorizontalDamping = 0.92f;
 constexpr float kGroundFriction = 0.86f;
 }
 
-void ItemPhysicsSystem::update(GameplayRegistry& registry, const World& world, const float dt) {
+void ItemPhysicsSystem::update(SystemContext& ctx) {
+    if (!ctx.services.world) return;
+    auto& registry = ctx.registry;
+    const World& world = *ctx.services.world;
+    const float dt = ctx.dt;
+
     if (dt <= 0.0f) {
         return;
     }

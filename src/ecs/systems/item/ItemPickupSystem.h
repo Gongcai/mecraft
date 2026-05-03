@@ -3,18 +3,23 @@
 
 #include <glm/glm.hpp>
 
-#include "../../GameplayRegistry.h"
+#include "../../ISystem.h"
 
 class Inventory;
 
 namespace ecs {
 
-class ItemPickupSystem {
+/// Picks up nearby drop items for the local player.
+/// Queries LocalPlayer entity directly from the registry.
+class ItemPickupSystem : public ISystem {
 public:
-    static uint32_t update(GameplayRegistry& registry,
+    void update(SystemContext& ctx) override;
+
+    /// Core pickup logic — can also be called directly.
+    static uint32_t pickup(GameplayRegistry& registry,
                            const glm::vec3& position,
                            float radius,
-                           Inventory& inventory);
+                           class ::Inventory& inventory);
 };
 
 } // namespace ecs

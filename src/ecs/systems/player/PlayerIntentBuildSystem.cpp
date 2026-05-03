@@ -1,4 +1,5 @@
 #include "PlayerIntentBuildSystem.h"
+
 #include "../../util/InputFrameState.h"
 #include "../../components/Components.h"
 
@@ -6,7 +7,8 @@
 
 namespace ecs {
 
-void PlayerIntentBuildSystem::update(GameplayRegistry& registry) {
+void PlayerIntentBuildSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
     const InputFrameState& frame = registry.ctxGet<InputFrameState>();
 
     auto view = registry.view<LocalPlayerTag, MoveIntentComponent, LookIntentComponent,

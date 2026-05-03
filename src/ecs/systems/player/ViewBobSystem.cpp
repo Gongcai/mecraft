@@ -8,7 +8,10 @@
 
 namespace ecs {
 
-void ViewBobSystem::update(GameplayRegistry& registry, const float dt) {
+void ViewBobSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     auto view = registry.view<LocalPlayerTag,
                               MoveIntentComponent,
                               PhysicsBodyComponent,

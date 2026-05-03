@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "World.h"
+#include "../ecs/SystemContext.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/util/DropRuntimeState.h"
 #include "../ecs/GameplayRegistry.h"
@@ -74,6 +75,10 @@ void DropSystem::bindRegistry(ecs::GameplayRegistry& registry) {
     m_dropCache.clear();
 }
 
+void DropSystem::bindServices(ecs::GameplayServices& services) {
+    m_services = &services;
+}
+
 void DropSystem::spawnItemDrop(const ItemID itemId, const glm::ivec3& blockPos, const uint32_t stackCount) {
     if (m_registry == nullptr) {
         return;
@@ -101,20 +106,34 @@ void DropSystem::onBlockPlaced(const glm::ivec3& blockPos, const World& world) {
 }
 
 void DropSystem::update(const float dt, const World& world) {
-    if (m_registry == nullptr || dt <= 0.0f) {
+    if (m_registry == nullptr || dt <= 0.0f || m_services == nullptr) {
         return;
     }
 
-    ecs::ItemPhysicsSystem::update(*m_registry, world, dt);
-    ecs::ItemMergeSystem::update(*m_registry, dt);
-    ecs::ItemLifetimeSystem::update(*m_registry, dt);
+    // Ensure the world service is available for physics
+    ecs::OptionalService<World> savedWorld = m_services->world;
+    m_services->world = const_cast<World*>(&world);
+
+    ecs::SystemContext ctx{*m_registry, *m_services, dt, 0};
+
+    ecs::ItemPhysicsSystem physicsSys;
+    physicsSys.update(ctx);
+
+    ecs::ItemMergeSystem mergeSys;
+    mergeSys.update(ctx);
+
+    ecs::ItemLifetimeSystem lifetimeSys;
+    lifetimeSys.update(ctx);
+
+    // Restore original world pointer
+    m_services->world = savedWorld;
 }
 
 uint32_t DropSystem::collectNearbyDrops(const glm::vec3& position, const float radius, Inventory& inventory) {
     if (m_registry == nullptr) {
         return 0;
     }
-    return ecs::ItemPickupSystem::update(*m_registry, position, radius, inventory);
+    return ecs::ItemPickupSystem::pickup(*m_registry, position, radius, inventory);
 }
 
 void DropSystem::clear() {

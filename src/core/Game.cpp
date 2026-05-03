@@ -116,6 +116,7 @@ void Game::initECS() {
 
     auto& reg = m_gameplayScene.registry();
     m_dropSystem.bindRegistry(reg);
+    m_dropSystem.bindServices(svc);
     m_particleSystem.bindRegistry(reg);
 
     constexpr float kSpawnHeightOffset = 2.0f;

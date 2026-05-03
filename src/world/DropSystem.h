@@ -15,6 +15,7 @@ class Inventory;
 
 namespace ecs {
 class GameplayRegistry;
+class GameplayServices;
 }
 
 struct DropEntity {
@@ -37,6 +38,7 @@ struct DropEntity {
 class DropSystem {
 public:
     void bindRegistry(ecs::GameplayRegistry& registry);
+    void bindServices(ecs::GameplayServices& services);
 
     void spawnItemDrop(ItemID itemId, const glm::ivec3& blockPos, uint32_t stackCount = 1);
     void spawnBlockDrop(BlockID blockId, const glm::ivec3& blockPos);
@@ -49,6 +51,7 @@ public:
 
 private:
     ecs::GameplayRegistry*      m_registry = nullptr;
+    ecs::GameplayServices*     m_services = nullptr;
     mutable std::vector<DropEntity> m_dropCache;
 };
 

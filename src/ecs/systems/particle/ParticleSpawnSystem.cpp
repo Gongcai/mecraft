@@ -51,17 +51,19 @@ void pruneOverflowParticles(GameplayRegistry& registry, const size_t incomingCou
 
 } // namespace
 
-void ParticleSpawnSystem::update(GameplayRegistry& registry) {
-    auto& buffer = ensureParticleEventBuffer(registry);
-    if (buffer.blockBreakEvents.empty()) {
+void ParticleSpawnSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+
+    auto& particleBus = ensureParticleEventBus(registry);
+    if (particleBus.empty()) {
         return;
     }
 
-    const size_t incomingParticleCount = buffer.blockBreakEvents.size() * static_cast<size_t>(kParticlesPerBreak);
+    const size_t incomingParticleCount = particleBus.size() * static_cast<size_t>(kParticlesPerBreak);
     pruneOverflowParticles(registry, incomingParticleCount);
 
     auto& raw = registry.registry();
-    for (const BlockBreakParticleEvent& event : buffer.blockBreakEvents) {
+    for (const BlockBreakParticleEvent& event : particleBus.events) {
         if (event.blockType == 0) {
             continue;
         }
@@ -111,7 +113,7 @@ void ParticleSpawnSystem::update(GameplayRegistry& registry) {
         }
     }
 
-    buffer.blockBreakEvents.clear();
+    particleBus.clear();
 }
 
 } // namespace ecs

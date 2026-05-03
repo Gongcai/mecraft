@@ -6,6 +6,8 @@
 
 #include "../src/core/states/GameplayModeRules.h"
 #include "../src/ecs/GameplayRegistry.h"
+#include "../src/ecs/GameplayServices.h"
+#include "../src/ecs/SystemContext.h"
 #include "../src/ecs/components/Components.h"
 #include "../src/ecs/systems/player/CharacterPhysicsSystem.h"
 #include "../src/ecs/util/GameplayRuntimeContext.h"
@@ -44,6 +46,9 @@ int main() {
     runtime.modeRules = &CreativeModeRules::instance();
     runtime.gameplayMode = GameplayMode::Creative;
 
+    ecs::GameplayServices services;
+    services.physicsSystem = &physicsSystem;
+
     const auto entity = registry.create();
     auto& move = registry.emplace<ecs::MoveIntentComponent>(entity);
     auto& transform = registry.emplace<ecs::TransformComponent>(entity);
@@ -57,8 +62,11 @@ int main() {
     physicsBody.body.position = transform.position;
     physicsBody.body.eyeOffsetY = transform.eyeHeight;
 
+    ecs::CharacterPhysicsSystem sys;
+
     move.toggleFlightMode = true;
-    ecs::CharacterPhysicsSystem::update(registry, physicsSystem, kDt);
+    ecs::SystemContext ctx{registry, services, kDt, 0};
+    sys.update(ctx);
     if (!flight.isFlying) {
         return fail("creative double jump should toggle flying on");
     }
@@ -66,7 +74,7 @@ int main() {
     move = {};
     const float hoverStartY = transform.position.y;
     for (int i = 0; i < 120; ++i) {
-        ecs::CharacterPhysicsSystem::update(registry, physicsSystem, kDt);
+        sys.update(ctx);
     }
     if (std::abs(transform.position.y - hoverStartY) > 0.08f) {
         return fail("flying player should hover instead of falling");
@@ -74,7 +82,7 @@ int main() {
 
     move.wantsJump = true;
     for (int i = 0; i < 30; ++i) {
-        ecs::CharacterPhysicsSystem::update(registry, physicsSystem, kDt);
+        sys.update(ctx);
     }
     if (transform.position.y <= hoverStartY + 1.0f) {
         return fail("jump should move the flying player upward");
@@ -83,7 +91,7 @@ int main() {
     move = {};
     const float riseY = transform.position.y;
     for (int i = 0; i < 60; ++i) {
-        ecs::CharacterPhysicsSystem::update(registry, physicsSystem, kDt);
+        sys.update(ctx);
     }
     if (transform.position.y < riseY - 0.08f) {
         return fail("releasing jump while flying should keep altitude");
@@ -91,7 +99,7 @@ int main() {
 
     move.wantsCrouch = true;
     for (int i = 0; i < 30; ++i) {
-        ecs::CharacterPhysicsSystem::update(registry, physicsSystem, kDt);
+        sys.update(ctx);
     }
     if (transform.position.y >= riseY - 1.0f) {
         return fail("crouch should move the flying player downward");
@@ -103,7 +111,7 @@ int main() {
 
     const float fallStartY = transform.position.y;
     for (int i = 0; i < 30; ++i) {
-        ecs::CharacterPhysicsSystem::update(registry, physicsSystem, kDt);
+        sys.update(ctx);
     }
     if (flight.isFlying) {
         return fail("leaving creative mode should disable flight");

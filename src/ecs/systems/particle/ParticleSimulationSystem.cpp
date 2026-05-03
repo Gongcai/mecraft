@@ -8,7 +8,10 @@ namespace {
 constexpr float kGravity = -14.0f;
 }
 
-void ParticleSimulationSystem::update(GameplayRegistry& registry, const float dt) {
+void ParticleSimulationSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     if (dt <= 0.0f) {
         return;
     }

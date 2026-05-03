@@ -1,16 +1,14 @@
 #ifndef MECRAFT_ECS_STEVE_SYNC_SYSTEM_H
 #define MECRAFT_ECS_STEVE_SYNC_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
-
-class CameraController;
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class SteveSyncSystem {
+/// Handle view mode toggle from input, and sync player position/camera to Steve entity.
+class SteveSyncSystem : public ISystem {
 public:
-    /// Handle view mode toggle from input, and sync player position/camera to Steve entity.
-    static void update(GameplayRegistry& registry, CameraController& cameraController);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

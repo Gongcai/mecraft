@@ -67,9 +67,13 @@ glm::vec3 resolveAudioPosition(GameplayRegistry& registry,
 
 } // namespace
 
-void AudioSyncSystem::update(GameplayRegistry& registry, AudioEngine& audioEngine) {
-    auto& eventBuffer = ensureAudioEventBuffer(registry);
-    for (const auto& event : eventBuffer.playSoundEvents) {
+void AudioSyncSystem::update(SystemContext& ctx) {
+    if (!ctx.services.audioEngine) return;
+    auto& registry = ctx.registry;
+    auto& audioEngine = *ctx.services.audioEngine;
+
+    auto& audioBus = ensureAudioEventBus(registry);
+    for (const auto& event : audioBus.events) {
         if (event.clipName.empty()) {
             continue;
         }
@@ -79,7 +83,7 @@ void AudioSyncSystem::update(GameplayRegistry& registry, AudioEngine& audioEngin
             audioEngine.playSound2D(event.clipName, event.volume);
         }
     }
-    eventBuffer.playSoundEvents.clear();
+    audioBus.clear();
 
     auto& runtime = ensureAudioSyncRuntimeState(registry);
     auto& raw = registry.registry();

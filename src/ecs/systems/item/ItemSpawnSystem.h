@@ -4,14 +4,15 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
+#include "../../ISystem.h"
 #include "../../GameplayRegistry.h"
 #include "../../../item/Item.h"
 
 namespace ecs {
 
-class ItemSpawnSystem {
+class ItemSpawnSystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry);
+    void update(SystemContext& ctx) override;
 
     static void spawn(GameplayRegistry& registry,
                       ItemID itemId,

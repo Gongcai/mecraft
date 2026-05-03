@@ -1,16 +1,14 @@
 #ifndef MECRAFT_ECS_CHARACTER_PHYSICS_SYSTEM_H
 #define MECRAFT_ECS_CHARACTER_PHYSICS_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
-
-namespace physics { class PhysicsSystem; }
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class CharacterPhysicsSystem {
+/// Generic character locomotion system driven entirely by ECS components.
+class CharacterPhysicsSystem : public ISystem {
 public:
-    /// Generic character locomotion system driven entirely by ECS components.
-    static void update(GameplayRegistry& registry, physics::PhysicsSystem& physicsSystem, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

@@ -41,7 +41,10 @@ void applyHotbarIntent(const HotbarIntentComponent& hotbar, InventoryComponent& 
 
 } // namespace
 
-void PlayerRuntimeUpdateSystem::update(GameplayRegistry& registry, const float dt) {
+void PlayerRuntimeUpdateSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     auto view = registry.view<LocalPlayerTag,
                               LookIntentComponent,
                               HotbarIntentComponent,

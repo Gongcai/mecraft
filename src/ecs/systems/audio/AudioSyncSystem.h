@@ -1,15 +1,13 @@
 #ifndef MECRAFT_ECS_AUDIO_SYNC_SYSTEM_H
 #define MECRAFT_ECS_AUDIO_SYNC_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
-
-class AudioEngine;
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class AudioSyncSystem {
+class AudioSyncSystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry, AudioEngine& audioEngine);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

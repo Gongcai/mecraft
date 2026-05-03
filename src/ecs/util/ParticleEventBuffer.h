@@ -13,7 +13,15 @@ struct BlockBreakParticleEvent {
     BlockID blockType = 0;
 };
 
-/// Backward-compatible alias.  New code should prefer EventBus<BlockBreakParticleEvent>.
+/// Particle event bus — use EventBus<BlockBreakParticleEvent> directly.
+using ParticleEventBus = EventBus<BlockBreakParticleEvent>;
+
+/// Helper: ensure a ParticleEventBus exists in the registry context and return a reference.
+inline ParticleEventBus& ensureParticleEventBus(GameplayRegistry& registry) {
+    return ensureEventBus<BlockBreakParticleEvent>(registry);
+}
+
+/// Backward-compatible alias.  Prefer ParticleEventBus / ensureParticleEventBus().
 struct ParticleEventBuffer {
     std::vector<BlockBreakParticleEvent> blockBreakEvents;
 };

@@ -18,7 +18,10 @@ bool canMerge(const ItemComponent& a, const ItemComponent& b) {
 }
 }
 
-void ItemMergeSystem::update(GameplayRegistry& registry, const float dt) {
+void ItemMergeSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     if (dt <= 0.0f) {
         return;
     }

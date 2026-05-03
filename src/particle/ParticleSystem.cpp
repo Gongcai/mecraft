@@ -60,8 +60,8 @@ void ParticleSystem::emit(const glm::ivec3& blockPos, const BlockID blockType) {
         return;
     }
 
-    auto& buffer = ecs::ensureParticleEventBuffer(*m_registry);
-    buffer.blockBreakEvents.push_back({blockPos, blockType});
+    auto& bus = ecs::ensureParticleEventBus(*m_registry);
+    bus.push({blockPos, blockType});
 }
 
 void ParticleSystem::update(const float dt) {

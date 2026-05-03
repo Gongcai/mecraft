@@ -71,7 +71,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
     const float dt = ctx.dt;
 
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
-    auto& audioEvents = ensureAudioEventBuffer(registry);
+    auto& audioBus = ensureAudioEventBus(registry);
 
     auto view = registry.view<LocalPlayerTag,
                               BlockActionIntentComponent,
@@ -141,7 +141,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             static_cast<void>(inventory.consumeSelectedOne());
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
-        audioEvents.playSoundEvents.push_back(
+        audioBus.push(
             {gameplay_state_detail::getRandomName("put", 5), glm::vec3(placeBlock), true, 1.0f});
         uiRenderer.triggerHeldItemPreviewActionAnimation();
     }

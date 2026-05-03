@@ -16,7 +16,15 @@ struct PlaySoundEvent {
     float volume = 1.0f;
 };
 
-/// Backward-compatible alias.  New code should prefer EventBus<PlaySoundEvent>.
+/// Audio event bus — use EventBus<PlaySoundEvent> directly.
+using AudioEventBus = EventBus<PlaySoundEvent>;
+
+/// Helper: ensure an AudioEventBus exists in the registry context and return a reference.
+inline AudioEventBus& ensureAudioEventBus(GameplayRegistry& registry) {
+    return ensureEventBus<PlaySoundEvent>(registry);
+}
+
+/// Backward-compatible alias.  Prefer AudioEventBus / ensureAudioEventBus().
 struct AudioEventBuffer {
     std::vector<PlaySoundEvent> playSoundEvents;
 };

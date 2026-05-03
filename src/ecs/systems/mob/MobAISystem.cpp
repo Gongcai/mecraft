@@ -1,5 +1,5 @@
 #include "MobAISystem.h"
-#include "../../GameplayRegistry.h"
+
 #include "../../components/Components.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -8,7 +8,9 @@
 
 namespace ecs {
 
-void MobAISystem::update(GameplayRegistry& registry, float dt) {
+void MobAISystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    float dt = ctx.dt;
     if (dt <= 0.0f) return;
 
     auto& reg = registry.registry();

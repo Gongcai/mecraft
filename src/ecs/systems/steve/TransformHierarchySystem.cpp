@@ -1,11 +1,13 @@
 #include "TransformHierarchySystem.h"
+
 #include "../../components/Components.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 
 namespace ecs {
 
-void TransformHierarchySystem::update(GameplayRegistry& registry) {
+void TransformHierarchySystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
     auto& reg = registry.registry();
 
     // 1. Update root entities (those with WorldTransformComponent but no ParentComponent).

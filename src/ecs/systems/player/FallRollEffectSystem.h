@@ -1,14 +1,14 @@
 #ifndef MECRAFT_ECS_FALL_ROLL_EFFECT_SYSTEM_H
 #define MECRAFT_ECS_FALL_ROLL_EFFECT_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class FallRollEffectSystem {
+/// Consume classic hurt effect trigger and update fall-roll animation state.
+class FallRollEffectSystem : public ISystem {
 public:
-    /// Consume classic hurt effect trigger and update fall-roll animation state.
-    static void update(GameplayRegistry& registry, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

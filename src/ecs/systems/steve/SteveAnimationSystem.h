@@ -1,13 +1,13 @@
 #ifndef MECRAFT_STEVE_ANIMATION_SYSTEM_H
 #define MECRAFT_STEVE_ANIMATION_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class SteveAnimationSystem {
+class SteveAnimationSystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

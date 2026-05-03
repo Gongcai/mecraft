@@ -1,13 +1,13 @@
 #ifndef MECRAFT_ECS_ITEM_LIFETIME_SYSTEM_H
 #define MECRAFT_ECS_ITEM_LIFETIME_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class ItemLifetimeSystem {
+class ItemLifetimeSystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

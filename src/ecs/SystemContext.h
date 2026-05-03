@@ -12,6 +12,7 @@ struct SystemContext {
     GameplayRegistry& registry;
     GameplayServices& services;
     float dt = 0.0f;
+    uint64_t tickIndex = 0;  ///< Non-zero only during tick-rate pipeline
 };
 
 } // namespace ecs

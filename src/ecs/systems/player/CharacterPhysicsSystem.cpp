@@ -49,7 +49,12 @@ void updateEyeHeight(const MoveIntentComponent& moveIntent,
 
 } // namespace
 
-void CharacterPhysicsSystem::update(GameplayRegistry& registry, physics::PhysicsSystem& physicsSystem, const float dt) {
+void CharacterPhysicsSystem::update(SystemContext& ctx) {
+    if (!ctx.services.physicsSystem) return;
+    auto& registry = ctx.registry;
+    auto& physicsSystem = *ctx.services.physicsSystem;
+    const float dt = ctx.dt;
+
     auto view = registry.view<MoveIntentComponent, TransformComponent, PhysicsBodyComponent>();
     for (const auto entity : view) {
         const auto& moveIntent = view.get<MoveIntentComponent>(entity);

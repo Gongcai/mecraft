@@ -48,9 +48,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
     const float dt = ctx.dt;
 
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
-    auto& audioEvents = ensureAudioEventBuffer(registry);
-    auto& particleEvents = ensureParticleEventBuffer(registry);
-    auto& dropEvents = ensureDropSpawnEventBuffer(registry);
+    auto& audioBus = ensureAudioEventBus(registry);
+    auto& particleBus = ensureParticleEventBus(registry);
+    auto& dropBus = ensureDropSpawnEventBus(registry);
 
     auto view = registry.view<LocalPlayerTag,
                               BlockActionIntentComponent,
@@ -86,10 +86,10 @@ void BlockBreakSystem::update(SystemContext& ctx) {
 
             const BlockID brokenBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
-            audioEvents.playSoundEvents.push_back(
+            audioBus.push(
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
-            particleEvents.blockBreakEvents.push_back({hitBlock, brokenBlock});
-            dropEvents.spawnRequests.push_back({brokenBlock, hitBlock});
+            particleBus.push({hitBlock, brokenBlock});
+            dropBus.push({brokenBlock, hitBlock});
             runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
             resetBreakSession(blockBreak, uiRenderer, runtime);
             continue;
@@ -112,10 +112,10 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         if (runtime.breakElapsedMs >= runtime.breakRequiredMs) {
             const BlockID brokenBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
-            audioEvents.playSoundEvents.push_back(
+            audioBus.push(
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
-            particleEvents.blockBreakEvents.push_back({hitBlock, brokenBlock});
-            dropEvents.spawnRequests.push_back({brokenBlock, hitBlock});
+            particleBus.push({hitBlock, brokenBlock});
+            dropBus.push({brokenBlock, hitBlock});
             resetBreakSession(blockBreak, uiRenderer, runtime);
         }
     }

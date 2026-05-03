@@ -1,4 +1,5 @@
 #include "GameplayScene.h"
+
 #include "util/InputFrameState.h"
 #include "components/Components.h"
 #include "systems/player/CharacterPhysicsSystem.h"
@@ -32,118 +33,50 @@
 namespace ecs {
 
 GameplayScene::GameplayScene() {
+    m_fixedUpdateSystems.reserve(32);
+
     // ── Fixed-update pipeline — execution order matches declaration order ──
+    addFixedUpdateSystem<InputSamplingSystem>();
+    addFixedUpdateSystem<PlayerIntentBuildSystem>();
+    addFixedUpdateSystem<MobAISystem>();
+    addFixedUpdateSystem<CharacterPhysicsSystem>();
+    addFixedUpdateSystem<PlayerRuntimeUpdateSystem>();
+    addFixedUpdateSystem<ViewBobSystem>();
 
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        if (ctx.services.inputContextManager) {
-            InputSamplingSystem::update(ctx.registry, *ctx.services.inputContextManager);
-        }
-    }));
+    // ── Block interaction pipeline ──
+    addFixedUpdateSystem<BlockTargetSystem>();
+    addFixedUpdateSystem<BlockBreakSystem>();
+    addFixedUpdateSystem<BlockPlaceSystem>();
 
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        PlayerIntentBuildSystem::update(ctx.registry);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        MobAISystem::update(ctx.registry, ctx.dt);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        if (ctx.services.physicsSystem) {
-            CharacterPhysicsSystem::update(ctx.registry, *ctx.services.physicsSystem, ctx.dt);
-        }
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        PlayerRuntimeUpdateSystem::update(ctx.registry, ctx.dt);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ViewBobSystem::update(ctx.registry, ctx.dt);
-    }));
-
-    // ── Block interaction pipeline (was BlockInteractionBridgeSystem) ──
-    m_fixedUpdateSystems.push_back(std::make_unique<BlockTargetSystem>());
-    m_fixedUpdateSystems.push_back(std::make_unique<BlockBreakSystem>());
-    m_fixedUpdateSystems.push_back(std::make_unique<BlockPlaceSystem>());
-
-    // ── Item pipeline (was DropCollectionBridgeSystem) ──
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ItemSpawnSystem::update(ctx.registry);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        if (ctx.services.world) {
-            ItemPhysicsSystem::update(ctx.registry, *ctx.services.world, ctx.dt);
-        }
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ItemMergeSystem::update(ctx.registry, ctx.dt);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        constexpr float kDropCollectRadius = 1.35f;
-        auto playerView = ctx.registry.view<LocalPlayerTag, TransformComponent, InventoryDataComponent>();
-        for (auto e : playerView) {
-            const auto& transform = playerView.get<TransformComponent>(e);
-            auto& inventoryData = playerView.get<InventoryDataComponent>(e);
-            static_cast<void>(ItemPickupSystem::update(ctx.registry,
-                                                       transform.position,
-                                                       kDropCollectRadius,
-                                                       inventoryData.inventory));
-            break; // Only first local player
-        }
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ItemLifetimeSystem::update(ctx.registry, ctx.dt);
-    }));
+    // ── Item pipeline ──
+    addFixedUpdateSystem<ItemSpawnSystem>();
+    addFixedUpdateSystem<ItemPhysicsSystem>();
+    addFixedUpdateSystem<ItemMergeSystem>();
+    addFixedUpdateSystem<ItemPickupSystem>();
+    addFixedUpdateSystem<ItemLifetimeSystem>();
 
     // ── Particle pipeline ──
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ParticleSpawnSystem::update(ctx.registry);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ParticleSimulationSystem::update(ctx.registry, ctx.dt);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        ParticleCleanupSystem::update(ctx.registry);
-    }));
+    addFixedUpdateSystem<ParticleSpawnSystem>();
+    addFixedUpdateSystem<ParticleSimulationSystem>();
+    addFixedUpdateSystem<ParticleCleanupSystem>();
 
     // ── Audio pipeline ──
-    m_fixedUpdateSystems.push_back(std::make_unique<PlayerFootstepAudioSystem>());
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        FallRollEffectSystem::update(ctx.registry, ctx.dt);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        if (ctx.services.audioEngine) {
-            AudioSyncSystem::update(ctx.registry, *ctx.services.audioEngine);
-        }
-    }));
+    addFixedUpdateSystem<PlayerFootstepAudioSystem>();
+    addFixedUpdateSystem<FallRollEffectSystem>();
+    addFixedUpdateSystem<AudioSyncSystem>();
 
     // ── Steve sync, animation, and transform hierarchy ──
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        if (ctx.services.cameraController) {
-            SteveSyncSystem::update(ctx.registry, *ctx.services.cameraController);
-        }
-    }));
+    addFixedUpdateSystem<SteveSyncSystem>();
+    addFixedUpdateSystem<SteveAnimationSystem>();
+    addFixedUpdateSystem<MobAnimationSystem>();
+    addFixedUpdateSystem<TransformHierarchySystem>();
 
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        SteveAnimationSystem::update(ctx.registry, ctx.dt);
-    }));
+    // ── Tick-rate pipeline (20 TPS) ──
+    addTickSystem<FluidTickSystem>();
 
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        MobAnimationSystem::update(ctx.registry, ctx.dt);
-    }));
-
-    m_fixedUpdateSystems.push_back(makeLegacySystem([](SystemContext& ctx) {
-        TransformHierarchySystem::update(ctx.registry);
-    }));
+#ifndef NDEBUG
+    validateSystemOrder();
+#endif
 }
 
 void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
@@ -209,16 +142,55 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
 }
 
 void GameplayScene::runFixedUpdate(float dt) {
-    SystemContext ctx{m_registry, m_services, dt};
+    SystemContext ctx{m_registry, m_services, dt, 0};
     for (auto& system : m_fixedUpdateSystems) {
         system->update(ctx);
     }
 }
 
 void GameplayScene::runOneTick() {
-    if (m_services.world) {
-        FluidTickSystem::update(*m_services.world, m_tickClock.tickIndex());
+    SystemContext ctx{m_registry, m_services, 0.0f, m_tickClock.tickIndex()};
+    for (auto& system : m_tickSystems) {
+        system->update(ctx);
     }
 }
+
+#ifndef NDEBUG
+#include <iostream>
+#include <unordered_set>
+#include <unordered_map>
+
+void GameplayScene::validateSystemOrder() {
+    std::unordered_set<uint32_t> writtenSoFar;
+    std::unordered_map<uint32_t, const char*> componentWriters;
+
+    // Pre-pass to find all writers
+    for (const auto& info : m_systemDeps) {
+        for (uint32_t written : info.written) {
+            componentWriters[written] = info.systemName;
+        }
+    }
+
+    bool hasWarning = false;
+    // Validate order
+    for (const auto& info : m_systemDeps) {
+        for (uint32_t req : info.required) {
+            if (componentWriters.count(req) && writtenSoFar.count(req) == 0) {
+                std::cerr << "[ECS Order Warning] System " << info.systemName 
+                          << " requires a component written by " << componentWriters[req] 
+                          << ", but is scheduled BEFORE it.\n";
+                hasWarning = true;
+            }
+        }
+        for (uint32_t written : info.written) {
+            writtenSoFar.insert(written);
+        }
+    }
+
+    if (!hasWarning) {
+        // std::cout << "[ECS] System execution order validated successfully.\n";
+    }
+}
+#endif
 
 } // namespace ecs

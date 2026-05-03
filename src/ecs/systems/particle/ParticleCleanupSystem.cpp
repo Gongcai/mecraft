@@ -6,7 +6,9 @@
 
 namespace ecs {
 
-void ParticleCleanupSystem::update(GameplayRegistry& registry) {
+void ParticleCleanupSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+
     auto view = registry.view<ParticleTag, ParticleComponent>();
     std::vector<entt::entity> removed;
     for (const entt::entity e : view) {

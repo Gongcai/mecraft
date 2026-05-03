@@ -7,7 +7,20 @@
 
 namespace ecs {
 
-uint32_t ItemPickupSystem::update(GameplayRegistry& registry,
+void ItemPickupSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    constexpr float kDropCollectRadius = 1.35f;
+
+    auto playerView = registry.view<LocalPlayerTag, TransformComponent, InventoryDataComponent>();
+    for (auto e : playerView) {
+        const auto& transform = playerView.get<TransformComponent>(e);
+        auto& inventoryData = playerView.get<InventoryDataComponent>(e);
+        pickup(registry, transform.position, kDropCollectRadius, inventoryData.inventory);
+        break; // Only first local player
+    }
+}
+
+uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry,
                                   const glm::vec3& position,
                                   const float radius,
                                   Inventory& inventory) {

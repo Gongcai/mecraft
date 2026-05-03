@@ -13,7 +13,15 @@ struct DropSpawnRequestEvent {
     glm::ivec3 blockPos{};
 };
 
-/// Backward-compatible alias.  New code should prefer EventBus<DropSpawnRequestEvent>.
+/// Drop spawn event bus — use EventBus<DropSpawnRequestEvent> directly.
+using DropSpawnEventBus = EventBus<DropSpawnRequestEvent>;
+
+/// Helper: ensure a DropSpawnEventBus exists in the registry context and return a reference.
+inline DropSpawnEventBus& ensureDropSpawnEventBus(GameplayRegistry& registry) {
+    return ensureEventBus<DropSpawnRequestEvent>(registry);
+}
+
+/// Backward-compatible alias.  Prefer DropSpawnEventBus / ensureDropSpawnEventBus().
 struct DropSpawnEventBuffer {
     std::vector<DropSpawnRequestEvent> spawnRequests;
 };

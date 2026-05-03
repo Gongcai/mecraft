@@ -1,11 +1,16 @@
 #include "SteveSyncSystem.h"
+
 #include "../../components/Components.h"
 #include "../../util/InputFrameState.h"
 #include "../../../core/CameraController.h"
 
 namespace ecs {
 
-void SteveSyncSystem::update(GameplayRegistry& registry, CameraController& cameraController) {
+void SteveSyncSystem::update(SystemContext& ctx) {
+    if (!ctx.services.cameraController) return;
+    auto& registry = ctx.registry;
+    auto& cameraController = *ctx.services.cameraController;
+
     auto& reg = registry.registry();
 
     // 1. Handle view mode toggle from input

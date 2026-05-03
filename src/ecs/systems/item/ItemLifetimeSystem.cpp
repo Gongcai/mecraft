@@ -6,7 +6,10 @@
 
 namespace ecs {
 
-void ItemLifetimeSystem::update(GameplayRegistry& registry, const float dt) {
+void ItemLifetimeSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     if (dt <= 0.0f) {
         return;
     }

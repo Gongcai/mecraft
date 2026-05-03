@@ -1,10 +1,16 @@
 #include "InputSamplingSystem.h"
+
 #include "../../util/InputFrameState.h"
+#include "../../components/Components.h"
 #include "../../../core/InputContextManager.h"
 
 namespace ecs {
 
-void InputSamplingSystem::update(GameplayRegistry& registry, const InputContextManager& inputCtx) {
+void InputSamplingSystem::update(SystemContext& ctx) {
+    if (!ctx.services.inputContextManager) return;
+    auto& registry = ctx.registry;
+    const auto& inputCtx = *ctx.services.inputContextManager;
+
     auto& frame = registry.ctxGet<InputFrameState>();
 
     // Axes

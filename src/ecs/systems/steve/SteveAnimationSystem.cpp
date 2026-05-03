@@ -1,11 +1,15 @@
 #include "SteveAnimationSystem.h"
+
 #include "../../components/Components.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
 namespace ecs {
 
-void SteveAnimationSystem::update(GameplayRegistry& registry, float dt) {
+void SteveAnimationSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     if (dt <= 0.0f) return;
 
     auto& reg = registry.registry();

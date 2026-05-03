@@ -1,13 +1,13 @@
 #ifndef MECRAFT_ECS_PARTICLE_SIMULATION_SYSTEM_H
 #define MECRAFT_ECS_PARTICLE_SIMULATION_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class ParticleSimulationSystem {
+class ParticleSimulationSystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

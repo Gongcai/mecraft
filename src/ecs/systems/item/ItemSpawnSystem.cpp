@@ -85,17 +85,19 @@ bool tryMergeDropAtSpawn(GameplayRegistry& registry,
 
 } // namespace
 
-void ItemSpawnSystem::update(GameplayRegistry& registry) {
-    if (!registry.ctxHas<DropSpawnEventBuffer>()) return;
-    auto& buffer = registry.ctxGet<DropSpawnEventBuffer>();
+void ItemSpawnSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
 
-    for (const auto& req : buffer.spawnRequests) {
+    if (!registry.ctxHas<DropSpawnEventBus>()) return;
+    auto& dropBus = registry.ctxGet<DropSpawnEventBus>();
+
+    for (const auto& req : dropBus.events) {
         if (req.blockId == 0) continue;
         const BlockDropEntry& drop = BlockDropTable::get(req.blockId);
         if (drop.dropItem == 0) continue;
         spawn(registry, drop.dropItem, req.blockPos, drop.minCount);
     }
-    buffer.spawnRequests.clear();
+    dropBus.clear();
 }
 
 void ItemSpawnSystem::spawn(GameplayRegistry& registry,

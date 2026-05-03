@@ -17,7 +17,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
-    auto& audioEvents = ensureAudioEventBuffer(registry);
+    auto& audioBus = ensureAudioEventBus(registry);
     PlayerQuery query(registry);
 
     auto view = registry.view<LocalPlayerTag, FootstepStateComponent, LandingStateComponent>();
@@ -30,7 +30,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
             footstep.timer -= dt;
             if (footstep.timer <= 0.0f) {
                 const std::string soundName = "walk_grass" + std::to_string(footstep.clipIndex + 1);
-                audioEvents.playSoundEvents.push_back({soundName, glm::vec3(0.0f), false, 1.0f});
+                audioBus.push({soundName, glm::vec3(0.0f), false, 1.0f});
                 footstep.clipIndex = (footstep.clipIndex + 1) % 6;
                 footstep.timer = stepInterval;
             }
@@ -47,7 +47,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
 
         const bool isBigFall = impactSpeed >= kBigFallImpactSpeed;
         const char* clipName = isBigFall ? "classic-hurt" : "fallsmall";
-        audioEvents.playSoundEvents.push_back({clipName, query.getPosition(), true, 1.0f});
+        audioBus.push({clipName, query.getPosition(), true, 1.0f});
         if (isBigFall) {
             // Trigger classic hurt effect via ECS component
             auto hurtView = registry.view<LocalPlayerTag, HurtEffectComponent>();

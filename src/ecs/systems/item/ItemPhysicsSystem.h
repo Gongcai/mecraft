@@ -1,15 +1,13 @@
 #ifndef MECRAFT_ECS_ITEM_PHYSICS_SYSTEM_H
 #define MECRAFT_ECS_ITEM_PHYSICS_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
-
-class World;
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class ItemPhysicsSystem {
+class ItemPhysicsSystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry, const World& world, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

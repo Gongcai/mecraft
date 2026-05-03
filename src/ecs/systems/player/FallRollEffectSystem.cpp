@@ -6,7 +6,10 @@
 
 namespace ecs {
 
-void FallRollEffectSystem::update(GameplayRegistry& registry, const float dt) {
+void FallRollEffectSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     auto view = registry.view<LocalPlayerTag, FallRollComponent, HurtEffectComponent>();
     for (auto e : view) {
         auto& roll = view.get<FallRollComponent>(e);

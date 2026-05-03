@@ -1,5 +1,5 @@
 #include "MobAnimationSystem.h"
-#include "../../GameplayRegistry.h"
+
 #include "../../components/Components.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -7,7 +7,10 @@
 
 namespace ecs {
 
-void MobAnimationSystem::update(GameplayRegistry& registry, float dt) {
+void MobAnimationSystem::update(SystemContext& ctx) {
+    auto& registry = ctx.registry;
+    const float dt = ctx.dt;
+
     if (dt <= 0.0f) return;
 
     auto& reg = registry.registry();

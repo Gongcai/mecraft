@@ -1,14 +1,14 @@
 #ifndef MECRAFT_ECS_VIEW_BOB_SYSTEM_H
 #define MECRAFT_ECS_VIEW_BOB_SYSTEM_H
 
-#include "../../GameplayRegistry.h"
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class ViewBobSystem {
+/// Update view bob blend and offsets based on movement state.
+class ViewBobSystem : public ISystem {
 public:
-    /// Update view bob blend and offsets based on movement state.
-    static void update(GameplayRegistry& registry, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs

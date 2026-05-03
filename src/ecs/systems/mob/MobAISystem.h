@@ -1,15 +1,13 @@
 #ifndef MECRAFT_MOB_AI_SYSTEM_H
 #define MECRAFT_MOB_AI_SYSTEM_H
 
-namespace ecs {
-class GameplayRegistry;
-}
+#include "../../ISystem.h"
 
 namespace ecs {
 
-class MobAISystem {
+class MobAISystem : public ISystem {
 public:
-    static void update(GameplayRegistry& registry, float dt);
+    void update(SystemContext& ctx) override;
 };
 
 } // namespace ecs
