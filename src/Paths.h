@@ -25,7 +25,7 @@
 #define ENTITY_TEXTURE_DIR    TEXTURES_DIR "/entity"
 
 #define MOBS_TEXTURE_DIR       ENTITY_TEXTURE_DIR "/mobs"
-#define ICONS_TEXTURE_DIR      GUI_TEXTURES_DIR "/icons"
+#define ICONS_TEXTURE_DIR      GUI_TEXTURES_DIR "/hud"
 
 
 

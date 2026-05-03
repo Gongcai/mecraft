@@ -20,20 +20,20 @@ void PlayerAudioBridgeSystem::update(GameplayRegistry& registry, Player& player,
         auto& footstep = view.get<FootstepStateComponent>(e);
         const auto& landing = view.get<LandingStateComponent>(e);
 
-        if (!registry.has<AudioSourceComponent>(e)) {
-            auto& source = registry.emplace<AudioSourceComponent>(e);
-            source.clipName = "walk_grass";
-            source.loop = true;
-            source.volume = 0.12f;
-            source.pitch = 0.85f;
-            source.spatial = false;
-            source.referenceDistance = 8.0f;
-            source.rolloff = 0.0f;
-            source.desiredPlaying = false;
-            source.followTransform = false;
-        }
-        auto& underwaterLoop = registry.get<AudioSourceComponent>(e);
-        underwaterLoop.desiredPlaying = player.isFullySubmerged();
+        // if (!registry.has<AudioSourceComponent>(e)) {
+        //     auto& source = registry.emplace<AudioSourceComponent>(e);
+        //     source.clipName = "walk_grass";
+        //     source.loop = true;
+        //     source.volume = 0.12f;
+        //     source.pitch = 0.85f;
+        //     source.spatial = false;
+        //     source.referenceDistance = 8.0f;
+        //     source.rolloff = 0.0f;
+        //     source.desiredPlaying = false;
+        //     source.followTransform = false;
+        // }
+        // auto& underwaterLoop = registry.get<AudioSourceComponent>(e);
+        // underwaterLoop.desiredPlaying = player.isFullySubmerged();
 
         if (player.isMoving()) {
             const float stepInterval = player.isSprinting() ? 0.35f : 0.5f;

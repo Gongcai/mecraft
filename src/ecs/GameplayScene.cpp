@@ -47,6 +47,9 @@ void GameplayScene::initLocalPlayer() {
     m_registry.emplace<FootstepStateComponent>(m_localPlayer);
     m_registry.emplace<LandingStateComponent>(m_localPlayer);
     m_registry.emplace<FallRollComponent>(m_localPlayer);
+    m_registry.emplace<HealthComponent>(m_localPlayer);
+    m_registry.emplace<ArmorComponent>(m_localPlayer);
+    m_registry.emplace<FoodComponent>(m_localPlayer);
 
     if (m_services.player != nullptr) {
         Player& player = *m_services.player;

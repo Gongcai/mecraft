@@ -70,6 +70,16 @@ public:
     void triggerClassicHurtEffect();
     [[nodiscard]] bool consumeClassicHurtEffect();
 
+    [[nodiscard]] int getHealth() const;
+    [[nodiscard]] int getMaxHealth() const;
+    [[nodiscard]] int getArmor() const;
+    [[nodiscard]] int getMaxArmor() const;
+    [[nodiscard]] int getFood() const;
+    [[nodiscard]] int getMaxFood() const;
+    void setHealthStats(int current, int max);
+    void setArmorStats(int current, int max);
+    void setFoodStats(int current, int max);
+
 private:
     glm::vec3 m_position{};
     glm::vec3 m_velocity = {0.0f, 0.0f, 0.0f};
@@ -108,6 +118,10 @@ private:
     glm::ivec3 m_breakTargetBlock{};
     float m_blockBreakProgress = 0.0f;
     Inventory m_inventory;
+
+    int m_health = 20, m_maxHealth = 20;
+    int m_armor = 0, m_maxArmor = 20;
+    int m_food = 20, m_maxFood = 20;
 
     void handleMovement(const InputContextManager& inputContext);
     void handleMouseLook(const InputContextManager& inputContext);

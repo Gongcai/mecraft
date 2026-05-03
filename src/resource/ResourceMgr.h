@@ -82,6 +82,11 @@ public:
     [[nodiscard]] int getItemTextureIndex(const std::string& textureName) const;
     [[nodiscard]] const std::vector<unsigned char>& getItemTexturePixels() const;
 
+    // HUD icon atlas (hearts, armor, food, air) packed from assets/textures/gui/hud.
+    void buildHudIconAtlas(const std::string& directory, int iconSize = 8);
+    [[nodiscard]] const TextureAtlas& getHudIconAtlas() const;
+    [[nodiscard]] int getHudIconIndex(const std::string& iconName) const;
+
     // Atlas sampler controls (for world block atlas).
     void setAtlasAnisotropy(float anisotropy);
     [[nodiscard]] float getAtlasAnisotropy() const;
@@ -94,12 +99,14 @@ private:
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;
     TextureAtlas m_itemTextureAtlas;
+    TextureAtlas m_hudIconAtlas;
     TextureArray m_textureArray;
     GLuint m_lightmapDay = 0;
     GLuint m_lightmapNight = 0;
     std::vector<unsigned char> m_blockAtlasPixels;
     std::vector<unsigned char> m_itemAtlasPixels;
     std::unordered_map<std::string, int> m_itemTextureIndices;
+    std::unordered_map<std::string, int> m_hudIconIndices;
     std::unordered_map<std::string, int> m_textureArrayLayers;
     std::unordered_map<std::string, TextureAnimationInfo> m_declaredTextureAnimations;
     float m_atlasAnisotropy = 1.0f;

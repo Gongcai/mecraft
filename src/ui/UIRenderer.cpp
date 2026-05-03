@@ -26,6 +26,8 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_heldItemPreview.setVisible(true);
     m_hotbar.init(resourceMgr);
     m_hotbar.setVisible(true);
+    m_hud.init(resourceMgr);
+    m_hud.setVisible(true);
     m_inventoryPanel.init(resourceMgr);
     m_inventoryPanel.setVisible(false);
     m_commandInput.init(resourceMgr);
@@ -38,6 +40,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_controls = {
         &m_heldItemPreview,
         &m_hotbar,
+        &m_hud,
         &m_inventoryPanel,
         &m_console,
         &m_commandInput,
@@ -58,6 +61,7 @@ void UIRenderer::shutdown()
     m_inputRouter.clear();
     m_controls.clear();
     m_inventoryPanel.shutdown();
+    m_hud.shutdown();
     m_hotbar.shutdown();
     m_heldItemPreview.shutdown();
     m_commandInputRequested = false;
@@ -336,6 +340,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.timeSeconds = static_cast<float>(Time::getGameTime());
     context.resourceMgr = m_resourceMgr;
     context.inventory = &inventory;
+    context.player = &player;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.isVisible();

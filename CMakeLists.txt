@@ -97,7 +97,9 @@ set(SRC_UI
         src/ui/ConsoleDisplayBox.cpp
         src/ui/CrosshairControl.cpp
         src/ui/TextRenderer.cpp
+        src/ui/UILayout.cpp
         src/ui/HotbarControl.cpp
+        src/ui/HudControl.cpp
         src/ui/HeldItemPreviewControl.cpp
         src/ui/CommandInputOverlay.cpp
         src/ui/ConsoleOverlay.cpp

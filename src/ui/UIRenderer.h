@@ -11,6 +11,7 @@
 #include "CrosshairControl.h"
 #include "HeldItemPreviewControl.h"
 #include "HotbarControl.h"
+#include "HudControl.h"
 #include "InventoryPanelControl.h"
 #include "Pickable.h"
 #include "TextRenderer.h"
@@ -118,6 +119,7 @@ private:
     HeldItemPreviewControl m_heldItemPreview;
 
     HotbarControl m_hotbar;
+    HudControl m_hud;
     InventoryPanelControl m_inventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;

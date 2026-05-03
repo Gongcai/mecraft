@@ -1165,6 +1165,108 @@ const std::vector<unsigned char>& ResourceMgr::getItemTexturePixels() const {
     return m_itemAtlasPixels;
 }
 
+void ResourceMgr::buildHudIconAtlas(const std::string& directory, int iconSize) {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> imagePaths;
+    m_hudIconIndices.clear();
+
+    if (fs::exists(directory)) {
+        for (const auto& entry : fs::directory_iterator(directory)) {
+            if (entry.path().extension() == ".png") {
+                imagePaths.push_back(entry.path());
+            }
+        }
+    }
+
+    std::sort(imagePaths.begin(), imagePaths.end(),
+              [](const fs::path& a, const fs::path& b) {
+                  return a.filename().string() < b.filename().string();
+              });
+
+    if (imagePaths.empty()) {
+#ifndef NDEBUG
+        std::cerr << "HUD icon atlas generated with 0 images!\n";
+#endif
+        return;
+    }
+
+    const int numTiles = static_cast<int>(imagePaths.size());
+    // HUD icons are small (8x8), arrange in a single row for simplicity.
+    const int tilesPerRow = numTiles;
+    constexpr int kTilePadding = 0; // No padding needed — no mipmaps for HUD.
+    const int tileStride = iconSize + kTilePadding * 2;
+    const int atlasWidth = tilesPerRow * tileStride;
+    const int atlasHeight = tileStride;
+    std::vector<unsigned char> atlasPixels(static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight) * 4, 0);
+
+    stbi_set_flip_vertically_on_load(true);
+
+    for (int i = 0; i < numTiles; ++i) {
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        unsigned char* data = stbi_load(imagePaths[i].string().c_str(), &width, &height, &channels, 4);
+        if (!data) {
+            continue;
+        }
+
+        const int copyWidth = std::min(iconSize, width);
+        const int copyHeight = std::min(iconSize, height);
+
+        const int innerStartX = i * tileStride + kTilePadding;
+        const int innerStartY = kTilePadding;
+
+        for (int y = 0; y < copyHeight; ++y) {
+            for (int x = 0; x < copyWidth; ++x) {
+                const int dstIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
+                const int srcIndex = (y * width + x) * 4;
+                atlasPixels[dstIndex + 0] = data[srcIndex + 0];
+                atlasPixels[dstIndex + 1] = data[srcIndex + 1];
+                atlasPixels[dstIndex + 2] = data[srcIndex + 2];
+                atlasPixels[dstIndex + 3] = data[srcIndex + 3];
+            }
+        }
+
+        stbi_image_free(data);
+        m_hudIconIndices[imagePaths[i].stem().string()] = i;
+    }
+
+    if (m_hudIconAtlas.textureID != 0) {
+        glDeleteTextures(1, &m_hudIconAtlas.textureID);
+        m_hudIconAtlas.textureID = 0;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, atlasWidth, atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, atlasPixels.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_hudIconAtlas.textureID = textureID;
+    m_hudIconAtlas.atlasWidth = atlasWidth;
+    m_hudIconAtlas.atlasHeight = atlasHeight;
+    m_hudIconAtlas.tileSize = iconSize;
+    m_hudIconAtlas.tileStride = tileStride;
+    m_hudIconAtlas.tilePadding = kTilePadding;
+    m_hudIconAtlas.tilesPerRow = tilesPerRow;
+}
+
+const TextureAtlas& ResourceMgr::getHudIconAtlas() const {
+    return m_hudIconAtlas;
+}
+
+int ResourceMgr::getHudIconIndex(const std::string& iconName) const {
+    const auto it = m_hudIconIndices.find(iconName);
+    if (it == m_hudIconIndices.end()) {
+        return -1;
+    }
+    return it->second;
+}
+
 float ResourceMgr::getAtlasAnisotropy() const {
     return m_atlasAnisotropy;
 }

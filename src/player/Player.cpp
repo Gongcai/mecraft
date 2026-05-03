@@ -338,6 +338,28 @@ bool Player::consumeClassicHurtEffect() {
     return pending;
 }
 
+int Player::getHealth() const { return m_health; }
+int Player::getMaxHealth() const { return m_maxHealth; }
+int Player::getArmor() const { return m_armor; }
+int Player::getMaxArmor() const { return m_maxArmor; }
+int Player::getFood() const { return m_food; }
+int Player::getMaxFood() const { return m_maxFood; }
+
+void Player::setHealthStats(int current, int max) {
+    m_maxHealth = std::max(1, max);
+    m_health = std::clamp(current, 0, m_maxHealth);
+}
+
+void Player::setArmorStats(int current, int max) {
+    m_maxArmor = std::max(1, max);
+    m_armor = std::clamp(current, 0, m_maxArmor);
+}
+
+void Player::setFoodStats(int current, int max) {
+    m_maxFood = std::max(1, max);
+    m_food = std::clamp(current, 0, m_maxFood);
+}
+
 Inventory& Player::getInventory() {
     return m_inventory;
 }

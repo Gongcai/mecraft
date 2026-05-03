@@ -4,6 +4,7 @@
 
 class ResourceMgr;
 class Inventory;
+class Player;
 class TextRenderer;
 
 struct HeldItemPreviewMotion {
@@ -19,6 +20,7 @@ struct UIRenderContext {
     float timeSeconds = 0.0f;
     ResourceMgr* resourceMgr = nullptr;
     const Inventory* inventory = nullptr;
+    const Player* player = nullptr;
     const TextRenderer* textRenderer = nullptr;
     const std::string* commandInputText = nullptr;
     bool commandInputVisible = false;

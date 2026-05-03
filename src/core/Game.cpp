@@ -60,6 +60,8 @@ void Game::initResources() {
     m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
 
+    m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
+
     BlockRegistry::init(&m_resourceMgr);
     ItemRegistry::init();
     m_resourceMgr.buildBlockIconAtlas(64);

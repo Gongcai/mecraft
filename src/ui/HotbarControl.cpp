@@ -13,6 +13,7 @@
 #include "../world/Block.h"
 #include "../item/Item.h"
 #include "TextRenderer.h"
+#include "UILayout.h"
 
 void HotbarControl::init(ResourceMgr& resourceMgr)
 {
@@ -178,17 +179,13 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         return;
     }
 
-    constexpr float kWidgetsWidth = 182.0f;
-    constexpr float kWidgetsHeight = 46.0f;
-    constexpr float kBgHeight = 21.0f;
-    constexpr float kHighlightSize = 25.0f;
-    constexpr float kScale = 2.0f;
     constexpr int hotbarSlots = Inventory::HOTBAR_SIZE;
-    const float hotbarWidth = kWidgetsWidth * kScale;
-    const float hotbarHeight = kBgHeight * kScale;
+    const float hotbarWidth = HotbarLayout::kWidth;
+    const float hotbarHeight = HotbarLayout::kHeight;
 
-    const float startX = (screenW - hotbarWidth) * 0.5f;
-    const float startY = 8.0f;
+    const UILayout layout{Anchor::BottomCenter, 0.0f, HotbarLayout::kBottomMargin};
+    const float startX = layout.resolveX(screenW, hotbarWidth);
+    const float startY = layout.resolveY(screenH, hotbarHeight);
 
     const int selectedSlot = std::clamp(inventory.getSelectedSlot(), 0, hotbarSlots - 1);
 
@@ -204,12 +201,12 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         buf.push_back(x0); buf.push_back(y1); buf.push_back(u0); buf.push_back(v1);
     };
 
-    auto uvFromTopLeftPixels = [=](float x0, float y0, float x1, float y1)
+    auto uvFromTopLeftPixels = [](float x0, float y0, float x1, float y1)
     {
-        const float u0 = x0 / kWidgetsWidth;
-        const float u1 = x1 / kWidgetsWidth;
-        const float v0 = (kWidgetsHeight - y1) / kWidgetsHeight;
-        const float v1 = (kWidgetsHeight - y0) / kWidgetsHeight;
+        const float u0 = x0 / HotbarLayout::kWidgetsWidth;
+        const float u1 = x1 / HotbarLayout::kWidgetsWidth;
+        const float v0 = (HotbarLayout::kWidgetsHeight - y1) / HotbarLayout::kWidgetsHeight;
+        const float v1 = (HotbarLayout::kWidgetsHeight - y0) / HotbarLayout::kWidgetsHeight;
         return std::array<float, 4>{u0, v0, u1, v1};
     };
 
@@ -225,13 +222,13 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     std::vector<float> selectedVerts;
     {
         const auto uv = uvFromTopLeftPixels(0.0f, 21.0f, 25.0f, 46.0f);
-        const float slotStride = 20.0f * kScale;
-        const float selectorOffset = ((kHighlightSize - 20.0f) * 0.5f) * kScale;
+        const float slotStride = 20.0f * HotbarLayout::kScale;
+        const float selectorOffset = ((HotbarLayout::kHighlightSize - 20.0f) * 0.5f) * HotbarLayout::kScale;
         const float selX = startX + static_cast<float>(selectedSlot) * slotStride - selectorOffset + 2;
         const float selY = startY - 3.0f;
         addQuad(selectedVerts,
                 selX, selY,
-                selX + kHighlightSize * kScale, selY + kHighlightSize * kScale,
+                selX + HotbarLayout::kHighlightSize * HotbarLayout::kScale, selY + HotbarLayout::kHighlightSize * HotbarLayout::kScale,
                 uv[0], uv[1], uv[2], uv[3]);
     }
 
@@ -239,9 +236,9 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     std::vector<float> fallbackIconVerts;
     std::vector<float> legacyIconVerts;
     int slotCounts[hotbarSlots] = {};
-    constexpr float slotStride = 20.0f * kScale;
-    constexpr float iconInset = 2.0f * kScale;
-    constexpr float iconSize = 17.5f * kScale;
+    constexpr float slotStride = 20.0f * HotbarLayout::kScale;
+    constexpr float iconInset = 2.0f * HotbarLayout::kScale;
+    constexpr float iconSize = 17.5f * HotbarLayout::kScale;
     for (int i = 0; i < hotbarSlots; ++i)
     {
         const ItemStack stack = inventory.getSlotStack(i);
@@ -453,16 +450,10 @@ void HotbarControl::renderItemName(float screenW, float screenH, const Inventory
     }
 
     // Position: centered above the hotbar
-    constexpr float kWidgetsWidth = 182.0f;
-    constexpr float kScale = 2.0f;
-    constexpr float kBgHeight = 21.0f;
-    const float hotbarWidth = kWidgetsWidth * kScale;
-    const float hotbarHeight = kBgHeight * kScale;
-    const float hotbarY = 8.0f;
     const float hotbarCenterX = screenW * 0.5f;
 
     const float textScale = 1.5f;
-    const float textY = hotbarY + hotbarHeight + 6.0f;
+    const float textY = HotbarLayout::kBottomMargin + HotbarLayout::kHeight + 6.0f;
 
     const std::array<float, 4> textColor = {1.0f, 1.0f, 1.0f, alpha};
 

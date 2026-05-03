@@ -14,7 +14,10 @@ void PlayerFacadeSyncSystem::update(GameplayRegistry& registry, Player& player, 
                               InventoryComponent,
                               BlockTargetComponent,
                               BlockBreakComponent,
-                              LandingStateComponent>();
+                              LandingStateComponent,
+                              HealthComponent,
+                              ArmorComponent,
+                              FoodComponent>();
     for (auto e : view) {
         const auto& moveIntent = view.get<MoveIntentComponent>(e);
         const auto& transform = view.get<TransformComponent>(e);
@@ -34,6 +37,13 @@ void PlayerFacadeSyncSystem::update(GameplayRegistry& registry, Player& player, 
                            landing,
                            inventory,
                            dt);
+
+        const auto& health = view.get<HealthComponent>(e);
+        const auto& armor = view.get<ArmorComponent>(e);
+        const auto& food = view.get<FoodComponent>(e);
+        player.setHealthStats(health.current, health.max);
+        player.setArmorStats(armor.current, armor.max);
+        player.setFoodStats(food.current, food.max);
     }
 }
 

@@ -126,6 +126,24 @@ struct FallRollComponent {
     static constexpr float kPeakRatio = 0.35f;
 };
 
+// ── Player Stats Components ─────────────────────────────────────────────────
+
+struct HealthComponent {
+    int current = 20;   // 0-20 (half-hearts)
+    int max = 20;
+};
+
+struct ArmorComponent {
+    int current = 0;    // 0-20
+    int max = 20;
+};
+
+struct FoodComponent {
+    int current = 20;   // 0-20 (half-drumsticks)
+    int max = 20;
+    int saturation = 5;
+};
+
 // ── Milestone 3 Drop ECS Components (bootstrap mirror) ──────────────────────
 
 struct DropItemTag {};
