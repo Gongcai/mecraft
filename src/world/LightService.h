@@ -2,6 +2,7 @@
 #define MECRAFT_LIGHTSERVICE_H
 
 #include <array>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -12,6 +13,7 @@
 #include <glm/vec3.hpp>
 
 #include "LightTypes.h"
+#include "LightCache.h"
 
 class Chunk;
 class ThreadPool;
@@ -33,6 +35,8 @@ public:
     void drainCompleted(World& world, int mergeBudget = 32);
 
     [[nodiscard]] LightFrameStats getFrameStats() const;
+    [[nodiscard]] int countDirtyChunks() const;
+    [[nodiscard]] int completedCount() const { return m_completedCount.load(); }
 
 private:
     struct LightChunkState {
@@ -52,7 +56,6 @@ private:
     };
 
     static std::vector<BlockID> captureBlockSnapshot(const Chunk& chunk);
-    static std::vector<int16_t> captureHeightMapSnapshot(const Chunk& chunk);
     static std::vector<uint8_t> capturePackedLightSnapshot(const Chunk& chunk);
     static std::vector<BorderUpdateBatch> collectBoundaryInputs(const LightChunkState& state);
     static std::vector<BorderUpdateBatch> collectBoundaryInputs(
@@ -61,13 +64,23 @@ private:
     void markChunkDirty(int64_t chunkKey, LightDirtyReason reason);
     void onWorkerCompleted(CompletedTicket ticket);
 
+    // Base-light cache — incrementally maintained on the main thread so that
+    // workers never pay the full buildCurrentBasePacked() cost.
+    void ensureBaseLightCache(const std::shared_ptr<Chunk>& chunk);
+    void invalidateBaseLightCache(int64_t chunkKey);
+    void updateBaseLightCacheForBlockChange(const Chunk& chunk,
+                                            int localX, int y, int localZ,
+                                            BlockID oldId, BlockID newId);
+
     World& m_world;
     ThreadPool* m_pool = nullptr;
     LightFrameStats m_frameStats{};
     std::unordered_map<int64_t, LightChunkState> m_chunkStates;
+    std::unordered_map<int64_t, CachedBaseLight> m_baseLightCaches;
     std::queue<CompletedTicket> m_completed;
-    std::mutex m_stateMutex;
-    std::mutex m_completedMutex;
+    mutable std::mutex m_stateMutex;
+    mutable std::mutex m_completedMutex;
+    std::atomic<int> m_completedCount{0};
     bool m_running = false;
 };
 

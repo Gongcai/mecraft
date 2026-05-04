@@ -1,6 +1,6 @@
 #include "LightService.h"
 
-#include <cmath>
+#include <algorithm>
 #include <chrono>
 #include <limits>
 #include <utility>
@@ -52,6 +52,7 @@ void LightService::shutdown() {
     m_running = false;
     m_pool = nullptr;
     m_frameStats = {};
+    m_completedCount.store(0);
 
     std::lock_guard<std::mutex> stateLock(m_stateMutex);
     m_chunkStates.clear();
@@ -67,6 +68,7 @@ void LightService::onChunkLoaded(const std::shared_ptr<Chunk>& chunk) {
 
     const int64_t key = World::chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
     markChunkDirty(key, LightDirtyReason::ChunkLoaded);
+    ensureBaseLightCache(chunk);
 
     // New chunk and loaded neighbors both need one boundary synchronization pass.
     for (int direction = 0; direction < 4; ++direction) {
@@ -112,6 +114,7 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
     }
 
     m_chunkStates.erase(chunkKey);
+    invalidateBaseLightCache(chunkKey);
 }
 
 void LightService::onBlockChanged(const int wx, const int wy, const int wz,
@@ -128,6 +131,7 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz,
         const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
         it->second->recalcHeightMap(localX, localZ);
         it->second->bumpLightRevision();
+        updateBaseLightCacheForBlockChange(*it->second, localX, wy, localZ, oldId, newId);
 
         {
             std::lock_guard<std::mutex> lock(m_stateMutex);
@@ -163,6 +167,12 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
     m_frameStats.requeued = 0;
 
     if (!m_running || m_pool == nullptr || submitBudget <= 0) {
+        return;
+    }
+
+    // Backpressure: if the completed queue is backing up, skip submission
+    // this frame and let drainCompleted catch up first.
+    if (m_completedCount.load() > 64) {
         return;
     }
 
@@ -220,7 +230,6 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.neighborPosZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[2]);
                     job.neighborNegZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[3]);
                     job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
-                    job.heightMapSnapshot = captureHeightMapSnapshot(*chunkIt->second);
                     job.blockChanges = std::move(state.pendingBlockChanges);
                     state.pendingBlockChanges.clear();
                     job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
@@ -229,6 +238,13 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     state.pendingBoundaryChanged.fill(false);
                     job.inbox = collectBoundaryInputs(state);
                     job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
+
+                    // Snapshot the incrementally-maintained base-light cache so
+                    // the solver can skip the expensive buildCurrentBasePacked() scan.
+                    auto cacheIt = m_baseLightCaches.find(chunkKey);
+                    if (cacheIt != m_baseLightCaches.end()) {
+                        job.baseLightPacked = cacheIt->second.packed;
+                    }
 
                     state.inFlightRevision = job.revision;
                     chunkIt->second->setLightQueued(false);
@@ -285,6 +301,8 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
             ticket = std::move(m_completed.front());
             m_completed.pop();
         }
+
+        m_completedCount.fetch_sub(1);
 
         ++merged;
         ++m_frameStats.completed;
@@ -413,6 +431,82 @@ void LightService::markChunkDirty(const int64_t chunkKey, const LightDirtyReason
 void LightService::onWorkerCompleted(CompletedTicket ticket) {
     std::lock_guard<std::mutex> lock(m_completedMutex);
     m_completed.push(std::move(ticket));
+    m_completedCount.fetch_add(1);
+}
+
+int LightService::countDirtyChunks() const {
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    int count = 0;
+    for (const auto& entry : m_chunkStates) {
+        if (entry.second.dirty) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void LightService::ensureBaseLightCache(const std::shared_ptr<Chunk>& chunk) {
+    if (!chunk) {
+        return;
+    }
+    const int64_t key = World::chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
+    if (m_baseLightCaches.find(key) != m_baseLightCaches.end()) {
+        return;
+    }
+    m_baseLightCaches[key] = buildBaseLightFromChunk(*chunk);
+}
+
+void LightService::invalidateBaseLightCache(const int64_t chunkKey) {
+    m_baseLightCaches.erase(chunkKey);
+}
+
+void LightService::updateBaseLightCacheForBlockChange(const Chunk& chunk,
+                                                      const int localX,
+                                                      const int y,
+                                                      const int localZ,
+                                                      const BlockID oldId,
+                                                      const BlockID newId) {
+    const int64_t key = World::chunkKey(chunk.m_chunkX, chunk.m_chunkZ);
+    auto it = m_baseLightCaches.find(key);
+    if (it == m_baseLightCaches.end()) {
+        return;
+    }
+
+    CachedBaseLight& cache = it->second;
+    const uint8_t oldOpacity = BlockRegistry::getOpacityFast(oldId);
+    const uint8_t newOpacity = BlockRegistry::getOpacityFast(newId);
+
+    // Sky light: recompute the column if opacity changed.
+    if (oldOpacity != newOpacity) {
+        recomputeSkyColumn(chunk, localX, localZ, cache.packed);
+    }
+
+    // Block light: update the sparse sources list.
+    const bool wasSource = BlockRegistry::isLightSourceFast(oldId);
+    const bool isSource = BlockRegistry::isLightSourceFast(newId);
+
+    if (wasSource || isSource) {
+        const std::size_t idx = static_cast<std::size_t>(localX) +
+                                static_cast<std::size_t>(localZ) * Chunk::SIZE_X +
+                                static_cast<std::size_t>(y) * Chunk::SIZE_X * Chunk::SIZE_Z;
+
+        if (wasSource) {
+            // Remove old source entry.
+            cache.sources.erase(
+                std::remove_if(cache.sources.begin(), cache.sources.end(),
+                               [idx](const LightSourceEntry& e) { return e.packedIndex == idx; }),
+                cache.sources.end());
+        }
+
+        if (isSource) {
+            const uint8_t level = BlockRegistry::getLightLevelFast(newId);
+            if (level > 0) {
+                cache.sources.push_back({static_cast<uint16_t>(idx), level});
+            }
+        }
+
+        rebuildBlockLightFromSources(cache.sources, cache.packed);
+    }
 }
 
 std::vector<BlockID> LightService::captureBlockSnapshot(const Chunk& chunk) {
@@ -428,20 +522,6 @@ std::vector<BlockID> LightService::captureBlockSnapshot(const Chunk& chunk) {
     }
 
     return blocks;
-}
-
-std::vector<int16_t> LightService::captureHeightMapSnapshot(const Chunk& chunk) {
-    std::vector<int16_t> heights;
-    heights.resize(static_cast<size_t>(Chunk::SIZE_X) * static_cast<size_t>(Chunk::SIZE_Z));
-
-    for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-        for (int x = 0; x < Chunk::SIZE_X; ++x) {
-            const size_t idx = static_cast<size_t>(x) + static_cast<size_t>(z) * static_cast<size_t>(Chunk::SIZE_X);
-            heights[idx] = static_cast<int16_t>(chunk.getHeightMap(x, z));
-        }
-    }
-
-    return heights;
 }
 
 std::vector<uint8_t> LightService::capturePackedLightSnapshot(const Chunk& chunk) {

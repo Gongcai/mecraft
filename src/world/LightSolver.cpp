@@ -8,6 +8,7 @@
 
 #include "Block.h"
 #include "Chunk.h"
+#include "LightCache.h"
 
 namespace {
 #if defined(_MSC_VER)
@@ -51,6 +52,16 @@ public:
             m_head = 0;
         }
         return value;
+    }
+
+    // Reset without releasing capacity so the next solve() reuses the allocation.
+    void reclaim() {
+        m_items.clear();
+        m_head = 0;
+    }
+
+    [[nodiscard]] std::size_t capacity() const {
+        return m_items.capacity();
     }
 
 private:
@@ -753,6 +764,26 @@ bool hasChangedBoundary(const std::array<bool, 4>& changedDirections) {
                        [](const bool changed) { return changed; });
 }
 
+// Per-worker buffers reused across solve() calls to avoid ~3.5 MB of
+// heap allocations per job.
+struct SolverBuffers {
+    WorkQueue<RemovalNode> skyRemove;
+    WorkQueue<RemovalNode> blockRemove;
+    WorkQueue<LightNode> skyAdd;
+    WorkQueue<LightNode> blockAdd;
+};
+
+thread_local SolverBuffers t_buf;
+
+void ensureBuffersReserved() {
+    if (t_buf.skyRemove.capacity() == 0) {
+        t_buf.skyRemove.reserve(Chunk::BLOCK_COUNT);
+        t_buf.blockRemove.reserve(Chunk::BLOCK_COUNT);
+        t_buf.skyAdd.reserve(Chunk::BLOCK_COUNT);
+        t_buf.blockAdd.reserve(Chunk::BLOCK_COUNT);
+    }
+}
+
 LightResult solveByRebuild(SolverContext& context,
                            const std::vector<uint8_t>& originalPacked,
                            const std::chrono::steady_clock::time_point startTime) {
@@ -761,12 +792,20 @@ LightResult solveByRebuild(SolverContext& context,
     result.selfDelta.revision = context.job.revision;
     result.outgoing.reserve(4);
 
-    buildCurrentBasePacked(context, result.selfDelta.packedLight);
+    // Use incrementally-maintained base light when available; fall back to
+    // a full scan for jobs that predate the cache (or ChunkLoaded first build).
+    if (!context.job.baseLightPacked.empty()) {
+        result.selfDelta.packedLight = context.job.baseLightPacked;
+        applyBoundarySeeds(context, context.job.inbox, result.selfDelta.packedLight);
+    } else {
+        buildCurrentBasePacked(context, result.selfDelta.packedLight);
+    }
 
-    WorkQueue<LightNode> skyAddQueue;
-    WorkQueue<LightNode> blockAddQueue;
-    skyAddQueue.reserve(Chunk::BLOCK_COUNT);
-    blockAddQueue.reserve(Chunk::BLOCK_COUNT);
+    WorkQueue<LightNode>& skyAddQueue = t_buf.skyAdd;
+    WorkQueue<LightNode>& blockAddQueue = t_buf.blockAdd;
+    ensureBuffersReserved();
+    skyAddQueue.reclaim();
+    blockAddQueue.reclaim();
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
@@ -815,7 +854,13 @@ LightResult LightSolver::solve(const LightJob& job) {
     result.outgoing.reserve(4);
 
     std::vector<uint8_t> basePacked;
-    buildCurrentBasePacked(context, basePacked);
+    // Use incrementally-maintained base light when available.
+    if (!context.job.baseLightPacked.empty()) {
+        basePacked = context.job.baseLightPacked;
+        applyBoundarySeeds(context, context.job.inbox, basePacked);
+    } else {
+        buildCurrentBasePacked(context, basePacked);
+    }
 
     std::vector<uint8_t> previousBoundaryPacked(Chunk::BLOCK_COUNT, 0);
     std::vector<uint8_t> currentBoundaryPacked(Chunk::BLOCK_COUNT, 0);
@@ -824,14 +869,15 @@ LightResult LightSolver::solve(const LightJob& job) {
 
     result.selfDelta.packedLight = originalPacked;
 
-    WorkQueue<RemovalNode> skyRemoveQueue;
-    WorkQueue<RemovalNode> blockRemoveQueue;
-    WorkQueue<LightNode> skyAddQueue;
-    WorkQueue<LightNode> blockAddQueue;
-    skyRemoveQueue.reserve(Chunk::BLOCK_COUNT);
-    blockRemoveQueue.reserve(Chunk::BLOCK_COUNT);
-    skyAddQueue.reserve(Chunk::BLOCK_COUNT);
-    blockAddQueue.reserve(Chunk::BLOCK_COUNT);
+    ensureBuffersReserved();
+    WorkQueue<RemovalNode>& skyRemoveQueue = t_buf.skyRemove;
+    WorkQueue<RemovalNode>& blockRemoveQueue = t_buf.blockRemove;
+    WorkQueue<LightNode>& skyAddQueue = t_buf.skyAdd;
+    WorkQueue<LightNode>& blockAddQueue = t_buf.blockAdd;
+    skyRemoveQueue.reclaim();
+    blockRemoveQueue.reclaim();
+    skyAddQueue.reclaim();
+    blockAddQueue.reclaim();
 
     std::array<bool, Chunk::SIZE_X * Chunk::SIZE_Z> dirtySkyColumns{};
     for (const LocalLightChange& change : job.blockChanges) {

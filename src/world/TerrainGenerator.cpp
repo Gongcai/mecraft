@@ -902,7 +902,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 }
                 chunk.setHeightMap(localX, z, highestOpaqueY);
 
-                // Sky light initialization is deferred to LightEngine::onChunkLoaded
+                // Sky light initialization is deferred to LightService::onChunkLoaded
             }
 
             x += laneCount;

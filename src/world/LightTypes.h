@@ -54,8 +54,8 @@ struct LightJob {
     std::shared_ptr<const Chunk> neighborPosZ;
     std::shared_ptr<const Chunk> neighborNegZ;
     std::vector<BlockID> blockSnapshot;
-    std::vector<int16_t> heightMapSnapshot;
     std::vector<uint8_t> packedLightSnapshot;
+    std::vector<uint8_t> baseLightPacked; // pre-computed intrinsic base (no boundary seeds)
     std::vector<LocalLightChange> blockChanges;
     std::vector<BorderUpdateBatch> previousInbox;
     std::vector<BorderUpdateBatch> inbox;

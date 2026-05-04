@@ -76,8 +76,24 @@ void World::update(const glm::vec3& playerPos) {
     }
 
     if (m_lightService) {
-        m_lightService->submitJobs(playerPos, 8);
-        m_lightService->drainCompleted(*this, 32);
+        const int dirtyCount = m_lightService->countDirtyChunks();
+        const int completedDepth = m_lightService->completedCount();
+
+        // Scale submit budget with load, back off when the completed queue is deep.
+        int submitBudget = 8;
+        if (completedDepth > 48) {
+            submitBudget = 0;                // backpressure: let drain catch up
+        } else if (dirtyCount > 50) {
+            submitBudget = 16;               // many dirty chunks, increase throughput
+        } else if (dirtyCount < 5) {
+            submitBudget = 4;                // low load, conserve resources
+        }
+
+        // Drain more aggressively when results are piling up.
+        int mergeBudget = (completedDepth > 32) ? 64 : 32;
+
+        m_lightService->submitJobs(playerPos, submitBudget);
+        m_lightService->drainCompleted(*this, mergeBudget);
     }
 }
 

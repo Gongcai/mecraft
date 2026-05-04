@@ -65,6 +65,7 @@ set(SRC_WORLD
         src/world/BitPackedArray.cpp
         src/world/LightSolver.cpp
         src/world/LightService.cpp
+        src/world/LightCache.cpp
         src/world/Placement.cpp
         src/world/PropIndices.cpp
         src/world/FluidRegistry.cpp
