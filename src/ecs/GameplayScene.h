@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <typeinfo>
+#include <cstdint>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include "GameplayRegistry.h"

@@ -4,12 +4,12 @@
 #include "src/renderer/Shader.h"
 #include <iostream>
 
-#include "src/core/Game.h"
+#include "src/core/GameManager.h"
 
 int main() {
-    Game game;
-    game.init(1280, 720, "Mecraft");
-    game.run();
-    game.shutdown();
+    GameManager app;
+    app.init(1280, 720, "Mecraft");
+    app.run();
+    app.shutdown();
     return 0;
 }

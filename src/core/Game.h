@@ -34,21 +34,42 @@
 #include "../crafting/CraftingSystem.h"
 #include "../ecs/GameplayScene.h"
 #include "states/StateDependencies.h"
+struct GameInitParams {
+    Window* window = nullptr;
+    InputManager* input = nullptr;
+    ActionMap* actionMap = nullptr;
+    InputContextManager* contextManager = nullptr;
+    ResourceMgr* resourceMgr = nullptr;
+    AudioEngine* audioEngine = nullptr;
+    BgmSystem* bgmSystem = nullptr;
+    UIRenderer* uiRenderer = nullptr;
+    int seed = 1234;
+};
+
 class Game {
 
 public:
-    Game();
-    void init(int width, int height, const char* title);
-    void run();       // 主循环
+    explicit Game(const GameInitParams& params);
+    void init();
     void shutdown();
+
+    void runFixedUpdate(double fixedStep, double& accumulator);
+    void syncAudioListener(float deltaTime);
+    void renderFrame(float frameTime);
 
 private:
     static constexpr double TICK_RATE = 1.0 / 60.0;
 
-    Window        m_window;
-    InputManager  m_input;
-    ActionMap     m_actionMap; // Add ActionMap
-    InputContextManager m_contextManager; // Add ContextManager
+    GameInitParams m_params;
+    Window& m_window;
+    InputManager& m_input;
+    ActionMap& m_actionMap;
+    InputContextManager& m_contextManager;
+    ResourceMgr& m_resourceMgr;
+    AudioEngine& m_audioEngine;
+    BgmSystem& m_bgmSystem;
+    UIRenderer& m_uiRenderer;
+
     GameStateMachine m_stateMachine; // Add StateMachine
     World         m_world;
     physics::PhysicsSystem m_physicsSystem;
@@ -56,12 +77,8 @@ private:
     DropRenderer  m_dropRenderer;
     HumanoidRenderer  m_humanoidRenderer;
     PostProcessRenderer m_postProcessRenderer;
-    ResourceMgr    m_resourceMgr;
-    AudioEngine   m_audioEngine;
-    BgmSystem     m_bgmSystem;
     ParticleSystem m_particleSystem;
     DropSystem m_dropSystem;
-    UIRenderer    m_uiRenderer;
     CraftingSystem m_craftingSystem;
     ecs::GameplayScene m_gameplayScene;
     std::string m_lastSubmittedCommand;
@@ -70,19 +87,11 @@ private:
 #endif
 
 
-    [[nodiscard]] static double clampFrameTime(double dt);
     [[nodiscard]] StateDependencies makeStateDependencies();
-    void runFixedUpdate(double fixedStep, double& accumulator);
 
-    bool initWindow(int width, int height, const char* title);
-    void initResources();
     void initWorld();
     void initRenderers();
-    void initAudio();
     void initECS();
-
-    void syncAudioListener(float deltaTime);
-    void renderFrame(float frameTime);
 
     // Camera controller (first/third person)
     CameraController m_cameraController;

@@ -18,15 +18,22 @@
 #include <chrono>
 #endif
 
-Game::Game() : m_contextManager(m_actionMap,m_input), m_physicsSystem(&m_world) {
+Game::Game(const GameInitParams& params) 
+    : m_params(params),
+      m_window(*params.window),
+      m_input(*params.input),
+      m_actionMap(*params.actionMap),
+      m_contextManager(*params.contextManager),
+      m_resourceMgr(*params.resourceMgr),
+      m_audioEngine(*params.audioEngine),
+      m_bgmSystem(*params.bgmSystem),
+      m_uiRenderer(*params.uiRenderer),
+      m_physicsSystem(&m_world) {
 }
 
-void Game::init(int width, int height, const char *title) {
-    if (!initWindow(width, height, title)) return;
-    initResources();
+void Game::init() {
     initWorld();
     initRenderers();
-    initAudio();
     initECS();
 
     m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
@@ -36,47 +43,12 @@ void Game::init(int width, int height, const char *title) {
 #endif
 }
 
-bool Game::initWindow(int width, int height, const char *title) {
-    if (!m_window.init(width, height, title)) {
-        std::cerr << "Error while initializing the window." << std::endl;
-        return false;
-    }
-    m_input.init(m_window.getHandle());
-    m_input.captureMouse(true);
-    m_actionMap.loadFromFile(KEYBINDINGS_PATH);
-    Time::init();
-    return true;
-}
-
-void Game::initResources() {
-    m_resourceMgr.init();
-    m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
-    m_resourceMgr.preloadTextureAnimationsFromConfig(BLOCKS_CONFIG_PATH);
-    m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
-    m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
-    m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
-    m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
-    m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
-    m_resourceMgr.loadGuiTexture("font_ascii", FONT_ASCII_PATH, true);
-    m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
-    m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
-
-    m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
-
-    BlockRegistry::init(&m_resourceMgr);
-    ItemRegistry::init();
-    m_resourceMgr.buildBlockIconAtlas(64);
-
-#ifndef NDEBUG
-    BlockRegistry::printAllBlocks();
-#endif
-}
+// initWindow and initResources removed
 
 void Game::initWorld() {
-    constexpr int kWorldSeed = 1234;
     constexpr int kRenderDistance = 12;
 
-    m_world.init(kWorldSeed);
+    m_world.init(m_params.seed);
     m_world.setRenderDistance(kRenderDistance);
 }
 
@@ -93,10 +65,7 @@ void Game::initRenderers() {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Game::initAudio() {
-    m_audioEngine.init();
-    m_bgmSystem.init(m_audioEngine);
-}
+// initAudio removed
 
 void Game::initECS() {
     auto& svc = m_gameplayScene.services();
@@ -110,7 +79,7 @@ void Game::initECS() {
     svc.physicsSystem      = &m_physicsSystem;
     svc.cameraController   = &m_cameraController;
 
-    m_uiRenderer.init(m_resourceMgr);
+    // UIRenderer is initialized in GameManager
     m_craftingSystem.loadRecipes(RECIPES_CONFIG_PATH);
     m_uiRenderer.setCraftingSystem(&m_craftingSystem);
 
@@ -142,10 +111,7 @@ void Game::initECS() {
 #endif
 }
 
-double Game::clampFrameTime(const double dt) {
-    constexpr double kMaxFrameTime = 0.25;
-    return dt > kMaxFrameTime ? kMaxFrameTime : dt;
-}
+// clampFrameTime removed
 
 StateDependencies Game::makeStateDependencies() {
     // Get inventory from ECS
@@ -240,6 +206,7 @@ void Game::syncAudioListener(const float deltaTime) {
 }
 
 void Game::renderFrame(const float frameTime) {
+    (void)frameTime;
     // Read fall-roll radians from ECS component.
     float fallRollRadians = 0.0f;
     auto& reg = m_gameplayScene.registry();
@@ -257,7 +224,6 @@ void Game::renderFrame(const float frameTime) {
     glm::vec3 eyePosition(0.0f);
     {
         ecs::PlayerQuery query(reg);
-        const auto& camState = *reg.view<ecs::LocalPlayerTag, ecs::CameraStateComponent>().begin();
         auto camView = reg.view<ecs::LocalPlayerTag, ecs::CameraStateComponent>();
         auto transformView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
         auto viewBobView = reg.view<ecs::LocalPlayerTag, ecs::ViewBobComponent>();
@@ -455,48 +421,8 @@ void Game::publishDebugFrameProfiler(const double frameTime) {
 }
 #endif
 
-void Game::run() {
-    constexpr double kFixedStep = TICK_RATE;
-    double accumulator = 0.0;
-
-    while (!m_window.shouldClose()) {
-        // 1) Pump OS events and advance frame clock.
-        m_window.pollEvents();
-        Time::update();
-
-        const double frameTime = clampFrameTime(Time::deltaTime);
-        accumulator += frameTime;
-
-        // 2) Consume as many fixed simulation steps as needed.
-        while (accumulator >= kFixedStep) {
-            runFixedUpdate(kFixedStep, accumulator);
-        }
-
-        // 3) Sync listener and submit render passes.
-#ifndef NDEBUG
-        const auto audioStart = std::chrono::steady_clock::now();
-#endif
-        syncAudioListener(static_cast<float>(frameTime));
-#ifndef NDEBUG
-        const auto audioEnd = std::chrono::steady_clock::now();
-        const auto renderStart = std::chrono::steady_clock::now();
-#endif
-        renderFrame(static_cast<float>(frameTime));
-#ifndef NDEBUG
-        const auto renderEnd = std::chrono::steady_clock::now();
-
-        m_dashboardProfilerStats.audioMs = std::chrono::duration<double, std::milli>(audioEnd - audioStart).count();
-        m_dashboardProfilerStats.renderMs = std::chrono::duration<double, std::milli>(renderEnd - renderStart).count();
-        publishDebugFrameProfiler(frameTime);
-#endif
-    }
-}
-
 void Game::shutdown() {
-    m_bgmSystem.shutdown();
-    m_audioEngine.shutdown();
     m_particleSystem.shutdown();
-    m_uiRenderer.shutdown();
     m_postProcessRenderer.shutdown();
     m_humanoidRenderer.shutdown();
     m_dropRenderer.shutdown();

@@ -44,6 +44,9 @@ set(SRC_CORE
         src/core/Camera.cpp
         src/core/InputManager.cpp
         src/core/InputContextManager.cpp
+        src/core/GameManager.cpp
+        src/core/app_states/AppStateMachine.cpp
+        src/core/app_states/GameplayAppState.cpp
         src/core/Game.cpp
         src/core/Time.cpp
         src/core/GameStateMachine.cpp

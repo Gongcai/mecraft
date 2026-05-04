@@ -30,6 +30,12 @@
 #include "../physics/PhysicsSystem.h"
 #include "../world/World.h"
 
+#ifndef NDEBUG
+#include <iostream>
+#include <unordered_set>
+#include <unordered_map>
+#endif
+
 namespace ecs {
 
 GameplayScene::GameplayScene() {
@@ -156,10 +162,6 @@ void GameplayScene::runOneTick() {
 }
 
 #ifndef NDEBUG
-#include <iostream>
-#include <unordered_set>
-#include <unordered_map>
-
 void GameplayScene::validateSystemOrder() {
     std::unordered_set<uint32_t> writtenSoFar;
     std::unordered_map<uint32_t, const char*> componentWriters;

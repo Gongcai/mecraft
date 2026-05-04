@@ -1,0 +1,102 @@
+#include "GameManager.h"
+#include "app_states/MainMenuAppState.h"
+#include "Paths.h"
+#include "Time.h"
+#include "../world/Block.h"
+#include "../item/Item.h"
+#include <iostream>
+#include <GLFW/glfw3.h>
+
+GameManager::GameManager() 
+    : m_contextManager(m_actionMap, m_input) {
+}
+
+GameManager::~GameManager() = default;
+
+void GameManager::init(int width, int height, const char* title) {
+    if (!initWindow(width, height, title)) {
+        return;
+    }
+    initResources();
+    
+    m_audioEngine.init();
+    m_bgmSystem.init(m_audioEngine);
+    m_uiRenderer.init(m_resourceMgr);
+
+    m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
+}
+
+bool GameManager::initWindow(int width, int height, const char* title) {
+    if (!m_window.init(width, height, title)) {
+        std::cerr << "Error while initializing the window." << std::endl;
+        return false;
+    }
+    m_input.init(m_window.getHandle());
+    m_input.captureMouse(false);
+    
+    m_actionMap.loadFromFile(KEYBINDINGS_PATH);
+    Time::init();
+    return true;
+}
+
+void GameManager::initResources() {
+    m_resourceMgr.init();
+    m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
+    m_resourceMgr.preloadTextureAnimationsFromConfig(BLOCKS_CONFIG_PATH);
+    m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
+    m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
+    m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
+    m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
+    m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
+    m_resourceMgr.loadGuiTexture("font_ascii", FONT_ASCII_PATH, true);
+    m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
+    m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
+
+    m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
+
+    BlockRegistry::init(&m_resourceMgr);
+    ItemRegistry::init();
+    m_resourceMgr.buildBlockIconAtlas(64);
+}
+
+AppStateDependencies GameManager::makeAppStateDependencies() {
+    return {
+        m_appStateMachine,
+        m_window,
+        m_input,
+        m_actionMap,
+        m_contextManager,
+        m_resourceMgr,
+        m_audioEngine,
+        m_bgmSystem,
+        m_uiRenderer
+    };
+}
+
+double GameManager::clampFrameTime(const double dt) {
+    constexpr double kMaxFrameTime = 0.25;
+    return dt > kMaxFrameTime ? kMaxFrameTime : dt;
+}
+
+void GameManager::run() {
+    double accumulator = 0.0;
+    while (!m_window.shouldClose()) {
+        m_window.pollEvents();
+        Time::update();
+
+        const double frameTime = clampFrameTime(Time::deltaTime);
+        accumulator += frameTime;
+
+        m_appStateMachine.update(frameTime, accumulator);
+        m_appStateMachine.render(frameTime);
+    }
+}
+
+void GameManager::shutdown() {
+    while (!m_appStateMachine.isEmpty()) {
+        m_appStateMachine.popState();
+    }
+    m_uiRenderer.shutdown();
+    m_bgmSystem.shutdown();
+    m_audioEngine.shutdown();
+}
