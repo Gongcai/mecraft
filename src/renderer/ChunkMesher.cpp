@@ -1852,9 +1852,9 @@ glm::mat4 buildWallTorchModelTransform(const uint16_t facingValue) {
 
     float yDegrees = 0.0f;
     if (facingValue == PropIndices::FACING_NORTH) {
-        yDegrees = -90.0f;
-    } else if (facingValue == PropIndices::FACING_SOUTH) {
         yDegrees = 90.0f;
+    } else if (facingValue == PropIndices::FACING_SOUTH) {
+        yDegrees = -90.0f;
     } else if (facingValue == PropIndices::FACING_WEST) {
         yDegrees = 180.0f;
     } else if (facingValue == PropIndices::FACING_EAST) {

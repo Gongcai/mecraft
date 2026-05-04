@@ -217,6 +217,7 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                 auto chunkIt = m_world.getActiveChunks().find(chunkKey);
                 if (chunkIt != m_world.getActiveChunks().end() && chunkIt->second) {
                     pickedReason = state.reason;
+                    state.lastSubmitReason = pickedReason;
                     state.inFlight = true;
                     state.queued = false;
                     state.dirty = false;
@@ -230,12 +231,9 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.neighborPosZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[2]);
                     job.neighborNegZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[3]);
                     job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
-                    job.blockChanges = std::move(state.pendingBlockChanges);
-                    state.pendingBlockChanges.clear();
+                    job.blockChanges = state.pendingBlockChanges;
                     job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
-                    clearBoundaryInputs(state.pendingPreviousBoundaryCache);
                     job.changedBoundaryDirections = state.pendingBoundaryChanged;
-                    state.pendingBoundaryChanged.fill(false);
                     job.inbox = collectBoundaryInputs(state);
                     job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
 
@@ -333,6 +331,13 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                 if (shouldRequeue) {
                     state.queued = true;
                     ++m_frameStats.requeued;
+                    // If the dropped job was ChunkLoaded, preserve the reason so
+                    // the re-queued job triggers a full rebuild instead of an
+                    // incremental solve (which would miss sources that were never
+                    // seeded because packedLightSnapshot may be uninitialized).
+                    if (state.lastSubmitReason == LightDirtyReason::ChunkLoaded) {
+                        state.reason = LightDirtyReason::ChunkLoaded;
+                    }
                     if (chunkIt != world.getActiveChunks().end() && chunkIt->second) {
                         chunkIt->second->setLightQueued(true);
                     }
@@ -376,6 +381,14 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                 }
                 ++m_frameStats.boundarySync;
             }
+
+            // Clear inputs that were consumed by the successfully applied job.
+            // New inputs added between submission and drain (from concurrent
+            // onBlockChanged / boundary updates) are preserved because those
+            // events also bump dirty/reason, ensuring the chunk is re-queued.
+            state.pendingBlockChanges.clear();
+            clearBoundaryInputs(state.pendingPreviousBoundaryCache);
+            state.pendingBoundaryChanged.fill(false);
 
             state.inFlight = false;
             state.queued = false;

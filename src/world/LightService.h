@@ -49,6 +49,7 @@ private:
         std::array<std::optional<BorderUpdateBatch>, 4> pendingPreviousBoundaryCache;
         std::array<bool, 4> pendingBoundaryChanged{};
         LightDirtyReason reason = LightDirtyReason::NeighborBoundary;
+        LightDirtyReason lastSubmitReason = LightDirtyReason::NeighborBoundary;
     };
 
     struct CompletedTicket {
