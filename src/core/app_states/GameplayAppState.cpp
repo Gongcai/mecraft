@@ -1,4 +1,5 @@
 #include "GameplayAppState.h"
+#include "MainMenuAppState.h"
 
 GameplayAppState::GameplayAppState(AppStateDependencies deps) 
     : m_deps(deps) {
@@ -42,6 +43,13 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
         m_game->runFixedUpdate(kFixedStep, accumulator);
     }
     m_game->syncAudioListener(static_cast<float>(frameTime));
+
+    // Check if the pause menu requested quit-to-menu
+    if (m_game->isQuitToMenuRequested()) {
+        m_game->clearQuitToMenuRequest();
+        m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+        accumulator = 0.0;
+    }
 }
 
 void GameplayAppState::render(double frameTime) {

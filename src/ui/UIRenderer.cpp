@@ -7,6 +7,7 @@
 #include "../core/Window.h"
 #include "../player/Inventory.h"
 #include "../resource/ResourceMgr.h"
+#include "UIScene.h"
 
 UIRenderer::UIRenderer() = default;
 
@@ -262,6 +263,11 @@ void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
 
 UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
 {
+    // Active scene has priority (menu screens overlay gameplay controls)
+    if (m_activeScene && m_activeScene->isVisible()) {
+        UIEventResult sceneResult = m_activeScene->onInput(event);
+        if (sceneResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+    }
     return m_inputRouter.route(event);
 }
 
@@ -369,6 +375,37 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     return context;
 }
 
+void UIRenderer::setActiveScene(UIScene* scene)
+{
+    m_activeScene = scene;
+}
+
+UIScene* UIRenderer::getActiveScene() const
+{
+    return m_activeScene;
+}
+
+ResourceMgr* UIRenderer::getResourceMgr() const
+{
+    return m_resourceMgr;
+}
+
+void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot)
+{
+    UIRenderContext context;
+    context.screenWidth = window.getWidth();
+    context.screenHeight = window.getHeight();
+    context.timeSeconds = static_cast<float>(Time::getRawTime());
+    context.resourceMgr = m_resourceMgr;
+    context.textRenderer = &m_text;
+    context.pointerX = inputSnapshot.mousePosition.x;
+    context.pointerY = inputSnapshot.mousePosition.y;
+
+    if (m_activeScene && m_activeScene->isVisible()) {
+        m_activeScene->render(context);
+    }
+}
+
 void UIRenderer::renderControls(const UIRenderContext& context) const
 {
     for (const IUIControl* control : m_controls) {
@@ -376,5 +413,10 @@ void UIRenderer::renderControls(const UIRenderContext& context) const
             continue;
         }
         control->render(context);
+    }
+
+    // Render active scene on top of gameplay controls
+    if (m_activeScene && m_activeScene->isVisible()) {
+        m_activeScene->render(context);
     }
 }

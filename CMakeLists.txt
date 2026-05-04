@@ -114,6 +114,13 @@ set(SRC_UI
         src/ui/InventoryPanelControl.cpp
         src/ui/CraftingGridControl.cpp
         src/ui/UIRenderer.cpp
+        src/ui/UIPanel.cpp
+        src/ui/UIText.cpp
+        src/ui/UIButton.cpp
+        src/ui/UIScene.cpp
+        src/ui/ScreenTransition.cpp
+        src/ui/screens/MainMenuScreen.cpp
+        src/ui/screens/PauseMenuScreen.cpp
 )
 
 # [实体与游戏系统]

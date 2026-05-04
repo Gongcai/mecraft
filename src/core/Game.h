@@ -57,6 +57,9 @@ public:
     void syncAudioListener(float deltaTime);
     void renderFrame(float frameTime);
 
+    [[nodiscard]] bool isQuitToMenuRequested() const { return m_stateMachine.isQuitToMenuRequested(); }
+    void clearQuitToMenuRequest() { m_stateMachine.clearQuitToMenuRequest(); }
+
 private:
     static constexpr double TICK_RATE = 1.0 / 60.0;
 

@@ -22,7 +22,8 @@ class Window;
 class ResourceMgr;
 class Inventory;
 class CraftingSystem;
- struct InputSnapshot;
+struct InputSnapshot;
+class UIScene;
 
 class UIRenderer
 {
@@ -73,6 +74,12 @@ public:
 
     void setTextAdvanceFactor(float factor);
     [[nodiscard]] float getTextAdvanceFactor() const;
+
+    // Scene management for menu screens
+    void setActiveScene(UIScene* scene);
+    [[nodiscard]] UIScene* getActiveScene() const;
+    [[nodiscard]] ResourceMgr* getResourceMgr() const;
+    void renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot);
 
     void setCommandCaretBlinkPeriodMs(float periodMs);
     [[nodiscard]] float getCommandCaretBlinkPeriodMs() const;
@@ -128,6 +135,7 @@ private:
     UIInputRouter m_inputRouter;
     std::vector<IUIControl*> m_controls;
     ResourceMgr* m_resourceMgr = nullptr;
+    UIScene* m_activeScene = nullptr;
     bool m_commandInputRequested = false;
 
     std::size_t m_consoleMaxLines = 64;

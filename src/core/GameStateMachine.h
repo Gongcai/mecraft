@@ -26,8 +26,14 @@ public:
 
     [[nodiscard]] bool isEmpty() const { return m_states.empty(); }
 
+    // Quit-to-menu signaling
+    void requestQuitToMenu() { m_quitToMenuRequested = true; }
+    [[nodiscard]] bool isQuitToMenuRequested() const { return m_quitToMenuRequested; }
+    void clearQuitToMenuRequest() { m_quitToMenuRequested = false; }
+
 private:
     std::vector<std::unique_ptr<IGameState>> m_states;
+    bool m_quitToMenuRequested = false;
 };
 
 #endif //MECRAFT_GAMESTATEMACHINE_H
