@@ -9,6 +9,7 @@
 #include "../core/Window.h"
 #include "../player/Inventory.h"
 #include "../resource/ResourceMgr.h"
+#include "UIRenderUtils.h"
 #include "UIScene.h"
 
 UIRenderer::UIRenderer() = default;
@@ -40,12 +41,12 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_console.setMaxLines(m_consoleMaxLines);
 
     m_widgetControls = {
+        &m_heldItemPreview,
         &m_hud,
         &m_console,
         &m_commandInput,
         &m_hotbar,
         &m_inventoryPanel,
-        &m_heldItemPreview,
     };
 
     m_lastSceneContext = {};
@@ -447,6 +448,8 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
 
 void UIRenderer::renderControls(const UIRenderContext& context) const
 {
+    const UIRenderUtils::UIScopeGuard uiScope;
+
     for (const UIWidget* widget : m_widgetControls) {
         if (!widget || !widget->visible) {
             continue;

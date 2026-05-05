@@ -26,7 +26,8 @@ void UIPanel::initMesh() {
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 6 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // Pre-allocate for background (6 verts) + border (24 verts) = 30 verts * 2 floats
+    glBufferData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
@@ -45,17 +46,37 @@ void UIPanel::cleanupMesh() {
 }
 
 void UIPanel::rebuildMesh(float x0, float y0, float x1, float y1) const {
-    // Two triangles forming a quad
     float vertices[] = {
-        x0, y0,
-        x1, y0,
-        x1, y1,
-        x0, y0,
-        x1, y1,
-        x0, y1,
+        x0, y0,  x1, y0,  x1, y1,
+        x0, y0,  x1, y1,  x0, y1,
     };
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void UIPanel::rebuildBorderMesh(float x0, float y0, float x1, float y1, float bw) const {
+    // 4 border quads: top, bottom, left, right — each 6 vertices * 2 floats
+    float vertices[48];
+    // Top
+    vertices[0]  = x0;      vertices[1]  = y1 - bw;  vertices[2]  = x1;      vertices[3]  = y1 - bw;
+    vertices[4]  = x1;      vertices[5]  = y1;       vertices[6]  = x0;      vertices[7]  = y1 - bw;
+    vertices[8]  = x1;      vertices[9]  = y1;       vertices[10] = x0;      vertices[11] = y1;
+    // Bottom
+    vertices[12] = x0;      vertices[13] = y0;       vertices[14] = x1;      vertices[15] = y0;
+    vertices[16] = x1;      vertices[17] = y0 + bw;  vertices[18] = x0;      vertices[19] = y0;
+    vertices[20] = x1;      vertices[21] = y0 + bw;  vertices[22] = x0;      vertices[23] = y0 + bw;
+    // Left
+    vertices[24] = x0;      vertices[25] = y0;       vertices[26] = x0 + bw; vertices[27] = y0;
+    vertices[28] = x0 + bw; vertices[29] = y1;       vertices[30] = x0;      vertices[31] = y0;
+    vertices[32] = x0 + bw; vertices[33] = y1;       vertices[34] = x0;      vertices[35] = y1;
+    // Right
+    vertices[36] = x1 - bw; vertices[37] = y0;       vertices[38] = x1;      vertices[39] = y0;
+    vertices[40] = x1;      vertices[41] = y1;       vertices[42] = x1 - bw; vertices[43] = y0;
+    vertices[44] = x1;      vertices[45] = y1;       vertices[46] = x1 - bw; vertices[47] = y1;
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 6 * 2 * sizeof(float), sizeof(vertices), vertices);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
@@ -81,25 +102,13 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    // Render border if width > 0
+    // Render border if width > 0 (4 quads merged into single draw call)
     if (m_borderWidth > 0.0f) {
         std::array<float, 4> bc = m_borderColor;
         bc[3] *= alpha;
         m_shader->setVec4("uColor", glm::vec4(bc[0], bc[1], bc[2], bc[3]));
-        float bw = m_borderWidth;
-
-        // Top border
-        rebuildMesh(ax, ay + ah - bw, ax + aw, ay + ah);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        // Bottom border
-        rebuildMesh(ax, ay, ax + aw, ay + bw);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        // Left border
-        rebuildMesh(ax, ay, ax + bw, ay + ah);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        // Right border
-        rebuildMesh(ax + aw - bw, ay, ax + aw, ay + ah);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        rebuildBorderMesh(ax, ay, ax + aw, ay + ah, m_borderWidth);
+        glDrawArrays(GL_TRIANGLES, 0, 24);
     }
 
     glBindVertexArray(0);

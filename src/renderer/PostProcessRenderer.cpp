@@ -48,6 +48,8 @@ void PostProcessRenderer::beginScene(const Window& window) {
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneFbo);
     glViewport(0, 0, width, height);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
     m_sceneCaptured = true;
 }
 

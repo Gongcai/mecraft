@@ -31,6 +31,7 @@ private:
     void initMesh();
     void cleanupMesh();
     void rebuildMesh(float x0, float y0, float x1, float y1) const;
+    void rebuildBorderMesh(float x0, float y0, float x1, float y1, float bw) const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;

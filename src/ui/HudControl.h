@@ -39,4 +39,16 @@ private:
     int m_armorHalf = -1;
     int m_foodFull = -1;
     int m_foodHalf = -1;
+
+    // Dirty flag: skip vertex rebuild when stats haven't changed.
+    mutable bool m_dirty = true;
+    mutable int m_cachedVertCount = 0;
+    mutable int m_cachedHealth = -1;
+    mutable int m_cachedMaxHealth = -1;
+    mutable int m_cachedFood = -1;
+    mutable int m_cachedMaxFood = -1;
+    mutable int m_cachedArmor = -1;
+    mutable int m_cachedMaxArmor = -1;
+    mutable int m_cachedScreenW = 0;
+    mutable int m_cachedScreenH = 0;
 };

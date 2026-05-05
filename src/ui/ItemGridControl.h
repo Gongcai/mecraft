@@ -4,6 +4,7 @@
 
 #include "IUIControl.h"
 #include "Pickable.h"
+#include "../item/Item.h"
 
 class Shader;
 
@@ -28,6 +29,7 @@ public:
     [[nodiscard]] int getHoveredIndex() const;
     [[nodiscard]] int getLastActivatedIndex() const;
     void clearLastActivatedIndex();
+    [[nodiscard]] ItemID getHoveredItemId() const;
 
 private:
     int hitTest(float mouseX, float mouseY) const;

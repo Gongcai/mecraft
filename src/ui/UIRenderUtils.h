@@ -35,16 +35,41 @@ namespace UIRenderUtils
         buf.push_back(x0); buf.push_back(y1); buf.push_back(u0); buf.push_back(v1);
     }
 
+    // Thread-local UI render scope depth counter.
+    // When > 0, GLStateGuard skips glGet* queries and uses known UI defaults.
+    inline thread_local int s_uiRenderDepth = 0;
+
+    inline bool isInsideUIScope() { return s_uiRenderDepth > 0; }
+
+    // RAII guard that increments the UI render scope depth.
+    // Wrap the top-level UI render loop in this to enable nested GLStateGuard optimization.
+    class UIScopeGuard
+    {
+    public:
+        UIScopeGuard() { ++s_uiRenderDepth; }
+        ~UIScopeGuard() { --s_uiRenderDepth; }
+        UIScopeGuard(const UIScopeGuard&) = delete;
+        UIScopeGuard& operator=(const UIScopeGuard&) = delete;
+    };
+
     // RAII guard that saves GL depth/blend state on construction and restores on destruction.
+    // When inside a UI scope (UIScopeGuard active), skips glGet* queries and uses known defaults.
     class GLStateGuard
     {
     public:
         GLStateGuard()
         {
-            glGetBooleanv(GL_DEPTH_TEST, &m_depthTest);
-            glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthWrite);
-            glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrc);
-            glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDst);
+            if (isInsideUIScope()) {
+                m_depthTest = GL_FALSE;
+                m_depthWrite = GL_FALSE;
+                m_blendSrc = GL_SRC_ALPHA;
+                m_blendDst = GL_ONE_MINUS_SRC_ALPHA;
+            } else {
+                glGetBooleanv(GL_DEPTH_TEST, &m_depthTest);
+                glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthWrite);
+                glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrc);
+                glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDst);
+            }
 
             glDisable(GL_DEPTH_TEST);
             glDepthMask(GL_FALSE);
@@ -55,10 +80,17 @@ namespace UIRenderUtils
         // Construct with custom blend function.
         GLStateGuard(GLenum srcFactor, GLenum dstFactor)
         {
-            glGetBooleanv(GL_DEPTH_TEST, &m_depthTest);
-            glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthWrite);
-            glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrc);
-            glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDst);
+            if (isInsideUIScope()) {
+                m_depthTest = GL_FALSE;
+                m_depthWrite = GL_FALSE;
+                m_blendSrc = GL_SRC_ALPHA;
+                m_blendDst = GL_ONE_MINUS_SRC_ALPHA;
+            } else {
+                glGetBooleanv(GL_DEPTH_TEST, &m_depthTest);
+                glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthWrite);
+                glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrc);
+                glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDst);
+            }
 
             glDisable(GL_DEPTH_TEST);
             glDepthMask(GL_FALSE);

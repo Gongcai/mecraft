@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <string_view>
 #include <vector>
 
 #include <glad/glad.h>
@@ -33,6 +35,25 @@ void addQuad(std::vector<float>& vertices,
     vertices.push_back(x1); vertices.push_back(y1); vertices.push_back(u1); vertices.push_back(v1);
     vertices.push_back(x0); vertices.push_back(y1); vertices.push_back(u0); vertices.push_back(v1);
 }
+
+std::string displayNameFromPath(std::string_view path) {
+    // "diamond_sword" → "Diamond Sword"
+    std::string result;
+    result.reserve(path.size() + 4);
+    bool capitalizeNext = true;
+    for (char c : path) {
+        if (c == '_') {
+            result += ' ';
+            capitalizeNext = true;
+        } else if (capitalizeNext) {
+            result += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            capitalizeNext = false;
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
 }
 
 void InventoryPanelControl::init(ResourceMgr& resourceMgr)
@@ -54,6 +75,7 @@ void InventoryPanelControl::init(ResourceMgr& resourceMgr)
 
     m_itemGrid.init(resourceMgr);
     m_craftingGrid.init(resourceMgr);
+    m_tooltip.init(resourceMgr);
 }
 
 void InventoryPanelControl::shutdown()
@@ -67,6 +89,7 @@ void InventoryPanelControl::shutdown()
         m_vbo = 0;
     }
 
+    m_tooltip.shutdown();
     m_craftingGrid.shutdown();
     m_itemGrid.shutdown();
     m_inventory = nullptr;
@@ -94,6 +117,44 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
     m_craftingGrid.render(context);
     m_itemGrid.render(context);
     renderDraggedItem(context);
+
+    // Tooltip: show item name on hover, hide when dragging
+    if (context.hasDraggedItem) {
+        m_tooltip.cancelHover();
+        m_tooltipHoveredItemId = 0;
+    } else {
+        ItemID hoveredId = m_itemGrid.getHoveredItemId();
+        if (hoveredId == 0) {
+            // Check crafting grid hover
+            const int craftSlot = m_craftingGrid.getHoveredSlot();
+            if (craftSlot >= 0 && craftSlot < 4) {
+                hoveredId = m_craftingGrid.getCraftingSlot(craftSlot);
+            }
+        }
+
+        if (hoveredId != 0) {
+            if (hoveredId != m_tooltipHoveredItemId) {
+                m_tooltipHoveredItemId = hoveredId;
+                const ItemDef& def = ItemRegistry::get(hoveredId);
+                const std::string name = displayNameFromPath(def.namespacedId.path());
+                m_tooltip.startHover(name, context.pointerX, context.pointerY,
+                                     static_cast<float>(context.screenWidth),
+                                     static_cast<float>(context.screenHeight),
+                                     context.timeSeconds);
+            } else if (m_tooltip.isHovering()) {
+                const ItemDef& def = ItemRegistry::get(hoveredId);
+                const std::string name = displayNameFromPath(def.namespacedId.path());
+                m_tooltip.startHover(name, context.pointerX, context.pointerY,
+                                     static_cast<float>(context.screenWidth),
+                                     static_cast<float>(context.screenHeight),
+                                     context.timeSeconds);
+            }
+        } else {
+            m_tooltip.cancelHover();
+            m_tooltipHoveredItemId = 0;
+        }
+    }
+    m_tooltip.render(context);
 }
 
 UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/)

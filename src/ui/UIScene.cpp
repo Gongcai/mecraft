@@ -15,6 +15,9 @@ void UIScene::init(ResourceMgr& resourceMgr) {
 
 void UIScene::shutdown() {
     setFocusedWidget(nullptr);
+    m_focusEngaged = false;
+    m_lastPointerX = -1.0f;
+    m_lastPointerY = -1.0f;
     for (auto& root : m_roots) {
         root->shutdown();
     }
@@ -40,12 +43,24 @@ UIEventResult UIScene::onInput(const UIInputEvent& event) {
         return UIEventResult::Ignored;
     }
 
+    if (event.type == UIInputEventType::PointerMove) {
+        if (m_focusEngaged &&
+            (event.x != m_lastPointerX || event.y != m_lastPointerY)) {
+            m_focusEngaged = false;
+            setFocusedWidget(nullptr);
+        }
+        m_lastPointerX = event.x;
+        m_lastPointerY = event.y;
+    }
+
     if (event.type == UIInputEventType::KeyDown) {
         if (event.key == GLFW_KEY_UP || event.key == GLFW_KEY_LEFT) {
+            m_focusEngaged = true;
             moveFocusPrev();
             return UIEventResult::Handled;
         }
         if (event.key == GLFW_KEY_DOWN || event.key == GLFW_KEY_RIGHT) {
+            m_focusEngaged = true;
             moveFocusNext();
             return UIEventResult::Handled;
         }
@@ -89,6 +104,9 @@ void UIScene::setInputContext(const UIRenderContext& context) {
 
 void UIScene::enterScene() {
     m_phase = Phase::Entering;
+    m_focusEngaged = false;
+    m_lastPointerX = -1.0f;
+    m_lastPointerY = -1.0f;
     onSceneEnter();
     ensureFocusableSelection();
 }
@@ -163,7 +181,11 @@ void UIScene::ensureFocusableSelection() {
     }
 
     if (std::find(focusable.begin(), focusable.end(), m_focusedWidget) == focusable.end()) {
-        setFocusedWidget(focusable.front());
+        if (m_focusEngaged) {
+            setFocusedWidget(focusable.front());
+        } else {
+            setFocusedWidget(nullptr);
+        }
     }
 }
 

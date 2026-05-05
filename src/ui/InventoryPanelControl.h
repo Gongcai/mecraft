@@ -4,6 +4,7 @@
 
 #include "CraftingGridControl.h"
 #include "ItemGridControl.h"
+#include "UITooltip.h"
 #include "UIWidget.h"
 
 class Inventory;
@@ -88,5 +89,9 @@ private:
     unsigned int m_vbo = 0;
     int m_cachedScreenWidth = 1920;
     int m_cachedScreenHeight = 1080;
+
+    // Tooltip
+    mutable UITooltip m_tooltip;
+    mutable ItemID m_tooltipHoveredItemId = 0;
 };
 

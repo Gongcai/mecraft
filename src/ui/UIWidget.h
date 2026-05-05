@@ -35,13 +35,13 @@ public:
     [[nodiscard]] const std::vector<std::unique_ptr<UIWidget>>& getChildren() const { return m_children; }
 
     // Position and layout
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 0.0f;
-    float height = 0.0f;
-    Anchor anchor = Anchor::TopLeft;
-    float anchorOffsetX = 0.0f;
-    float anchorOffsetY = 0.0f;
+    mutable float x = 0.0f;
+    mutable float y = 0.0f;
+    mutable float width = 0.0f;
+    mutable float height = 0.0f;
+    mutable Anchor anchor = Anchor::TopLeft;
+    mutable float anchorOffsetX = 0.0f;
+    mutable float anchorOffsetY = 0.0f;
 
     // Transform
     float scaleX = 1.0f;
@@ -50,7 +50,7 @@ public:
     // Appearance
     std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};
     float alpha = 1.0f;
-    bool visible = true;
+    mutable bool visible = true;
     bool interactive = false;
     bool focusable = false;
 

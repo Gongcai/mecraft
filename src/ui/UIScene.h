@@ -64,4 +64,7 @@ private:
     mutable UIRenderContext m_currentContext;
     bool m_hasInputContext = false;
     UIWidget* m_focusedWidget = nullptr;
+    bool m_focusEngaged = false;
+    float m_lastPointerX = -1.0f;
+    float m_lastPointerY = -1.0f;
 };

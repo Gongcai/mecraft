@@ -64,35 +64,17 @@ float TextRenderer::getAdvanceFactor() const
     return m_textAdvanceFactor;
 }
 
-void TextRenderer::render(const std::string& text,
-                          float x,
-                          float y,
-                          float scale,
-                          const std::array<float, 4>& color,
-                          float screenWidth,
-                          float screenHeight) const
+void TextRenderer::generateQuads(const std::string& text,
+                                 float x,
+                                 float y,
+                                 float scale,
+                                 const std::array<float, 4>& color,
+                                 std::vector<float>& outVertices) const
 {
-    if (!m_textShader || m_fontTexture == 0 || m_textVao == 0 || m_textVbo == 0 || text.empty()) {
-        return;
-    }
+    (void)color; // color is applied at draw time via uniform, not per-vertex
 
     const float glyphSize = static_cast<float>(BitmapFont::kGlyphSizePx) * std::max(0.1f, scale);
     const float advance = glyphSize * m_textAdvanceFactor;
-
-    std::vector<float> vertices;
-    vertices.reserve(text.size() * 6 * 4);
-
-    auto addQuad = [](std::vector<float>& buf,
-                      float x0, float y0, float x1, float y1,
-                      float u0, float v0, float u1, float v1)
-    {
-        buf.push_back(x0); buf.push_back(y0); buf.push_back(u0); buf.push_back(v0);
-        buf.push_back(x1); buf.push_back(y0); buf.push_back(u1); buf.push_back(v0);
-        buf.push_back(x1); buf.push_back(y1); buf.push_back(u1); buf.push_back(v1);
-        buf.push_back(x0); buf.push_back(y0); buf.push_back(u0); buf.push_back(v0);
-        buf.push_back(x1); buf.push_back(y1); buf.push_back(u1); buf.push_back(v1);
-        buf.push_back(x0); buf.push_back(y1); buf.push_back(u0); buf.push_back(v1);
-    };
 
     const float originX = x;
     float cursorX = x;
@@ -116,9 +98,32 @@ void TextRenderer::render(const std::string& text,
         const float x1 = cursorX + glyphSize;
         const float y1 = cursorY + glyphSize;
 
-        addQuad(vertices, x0, y0, x1, y1, uv.first.x, uv.first.y, uv.second.x, uv.second.y);
+        outVertices.push_back(x0); outVertices.push_back(y0); outVertices.push_back(uv.first.x); outVertices.push_back(uv.first.y);
+        outVertices.push_back(x1); outVertices.push_back(y0); outVertices.push_back(uv.second.x); outVertices.push_back(uv.first.y);
+        outVertices.push_back(x1); outVertices.push_back(y1); outVertices.push_back(uv.second.x); outVertices.push_back(uv.second.y);
+        outVertices.push_back(x0); outVertices.push_back(y0); outVertices.push_back(uv.first.x); outVertices.push_back(uv.first.y);
+        outVertices.push_back(x1); outVertices.push_back(y1); outVertices.push_back(uv.second.x); outVertices.push_back(uv.second.y);
+        outVertices.push_back(x0); outVertices.push_back(y1); outVertices.push_back(uv.first.x); outVertices.push_back(uv.second.y);
+
         cursorX += advance;
     }
+}
+
+void TextRenderer::render(const std::string& text,
+                          float x,
+                          float y,
+                          float scale,
+                          const std::array<float, 4>& color,
+                          float screenWidth,
+                          float screenHeight) const
+{
+    if (!m_textShader || m_fontTexture == 0 || m_textVao == 0 || m_textVbo == 0 || text.empty()) {
+        return;
+    }
+
+    std::vector<float> vertices;
+    vertices.reserve(text.size() * 6 * 4);
+    generateQuads(text, x, y, scale, color, vertices);
 
     if (vertices.empty()) {
         return;
@@ -170,6 +175,90 @@ void TextRenderer::render(const std::string& text,
     } else {
         glDisable(GL_DEPTH_TEST);
     }
+}
+
+void TextRenderer::beginBatch(float screenWidth, float screenHeight) const
+{
+    m_batchActive = true;
+    m_batchScreenWidth = screenWidth;
+    m_batchScreenHeight = screenHeight;
+    m_batchVertices.clear();
+}
+
+void TextRenderer::batchRender(const std::string& text,
+                               float x,
+                               float y,
+                               float scale,
+                               const std::array<float, 4>& color) const
+{
+    if (!m_batchActive || text.empty()) {
+        return;
+    }
+    m_batchVertices.reserve(m_batchVertices.size() + text.size() * 6 * 4);
+    generateQuads(text, x, y, scale, color, m_batchVertices);
+}
+
+void TextRenderer::endBatch() const
+{
+    if (!m_batchActive) {
+        return;
+    }
+    m_batchActive = false;
+
+    if (m_batchVertices.empty() || !m_textShader || m_fontTexture == 0 ||
+        m_textVao == 0 || m_textVbo == 0) {
+        m_batchVertices.clear();
+        return;
+    }
+
+    const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+    const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+    GLboolean depthMaskWasEnabled = GL_TRUE;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskWasEnabled);
+    GLint blendSrcRgb = GL_ONE;
+    GLint blendDstRgb = GL_ZERO;
+    GLint blendSrcAlpha = GL_ONE;
+    GLint blendDstAlpha = GL_ZERO;
+    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrcRgb);
+    glGetIntegerv(GL_BLEND_DST_RGB, &blendDstRgb);
+    glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSrcAlpha);
+    glGetIntegerv(GL_BLEND_DST_ALPHA, &blendDstAlpha);
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    m_textShader->use();
+    m_textShader->setVec2("uScreenSize", glm::vec2(m_batchScreenWidth, m_batchScreenHeight));
+    m_textShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    m_textShader->setInt("uFont", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_fontTexture);
+
+    glBindVertexArray(m_textVao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(m_batchVertices.size() * sizeof(float)), m_batchVertices.data(), GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_batchVertices.size() / 4));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    if (blendWasEnabled) {
+        glBlendFuncSeparate(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha);
+    } else {
+        glDisable(GL_BLEND);
+    }
+    glDepthMask(depthMaskWasEnabled);
+    if (depthWasEnabled) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+
+    m_batchVertices.clear();
 }
 
 

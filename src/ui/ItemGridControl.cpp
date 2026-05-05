@@ -140,3 +140,11 @@ int ItemGridControl::hitTest(float mouseX, float mouseY) const
     return Pickable::hitTest(m_slots.data(), static_cast<int>(m_slots.size()), mouseX, mouseY);
 }
 
+ItemID ItemGridControl::getHoveredItemId() const
+{
+    if (m_hoveredIndex < 0 || m_hoveredIndex >= static_cast<int>(m_slots.size())) {
+        return 0;
+    }
+    return static_cast<ItemID>(m_slots[m_hoveredIndex].itemId);
+}
+

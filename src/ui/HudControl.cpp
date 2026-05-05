@@ -110,6 +110,31 @@ void HudControl::renderSelf(const UIRenderContext& context) const
     }
 
     const PlayerStatsData& stats = *context.playerStats;
+
+    // Check if stats changed since last build
+    if (!m_dirty &&
+        m_cachedHealth == stats.health && m_cachedMaxHealth == stats.maxHealth &&
+        m_cachedFood == stats.food && m_cachedMaxFood == stats.maxFood &&
+        m_cachedArmor == stats.armor && m_cachedMaxArmor == stats.maxArmor &&
+        m_cachedScreenW == context.screenWidth && m_cachedScreenH == context.screenHeight) {
+        // Nothing changed — just re-draw cached vertices
+        if (m_cachedVertCount > 0) {
+            const UIRenderUtils::GLStateGuard glState;
+            m_inventoryShader->use();
+            m_inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(context.screenWidth),
+                                                                static_cast<float>(context.screenHeight)));
+            m_inventoryShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+            glActiveTexture(GL_TEXTURE0);
+            m_inventoryShader->setInt("uAtlas", 0);
+            glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+            glBindVertexArray(m_vao);
+            glDrawArrays(GL_TRIANGLES, 0, m_cachedVertCount);
+            glBindVertexArray(0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        return;
+    }
+
     const float screenW = static_cast<float>(context.screenWidth);
     const float screenH = static_cast<float>(context.screenHeight);
 
@@ -151,11 +176,23 @@ void HudControl::renderSelf(const UIRenderContext& context) const
                       armorVal, armorMax, m_armorFull, m_armorHalf, iconSize);
     }
 
+    // Update cache
+    m_cachedHealth = stats.health;
+    m_cachedMaxHealth = stats.maxHealth;
+    m_cachedFood = stats.food;
+    m_cachedMaxFood = stats.maxFood;
+    m_cachedArmor = stats.armor;
+    m_cachedMaxArmor = stats.maxArmor;
+    m_cachedScreenW = context.screenWidth;
+    m_cachedScreenH = context.screenHeight;
+    m_dirty = false;
+
     if (verts.empty()) {
+        m_cachedVertCount = 0;
         return;
     }
 
-    const int vertCount = static_cast<int>(verts.size() / 4);
+    m_cachedVertCount = static_cast<int>(verts.size() / 4);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
@@ -172,7 +209,7 @@ void HudControl::renderSelf(const UIRenderContext& context) const
     glBindTexture(GL_TEXTURE_2D, atlas.textureID);
 
     glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLES, 0, vertCount);
+    glDrawArrays(GL_TRIANGLES, 0, m_cachedVertCount);
     glBindVertexArray(0);
 
     glBindTexture(GL_TEXTURE_2D, 0);

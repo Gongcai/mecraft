@@ -301,6 +301,7 @@ size_t Renderer::getMeshingHistoryCount() const {
 
 void Renderer::beginFrame(const Camera &camera, const Window &window) {
     glClearColor(m_fogSettings.color.r, m_fogSettings.color.g, m_fogSettings.color.b, 1.0f);
+    glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     m_projection = camera.getProjectionMatrix(window.getAspectRatio());
     m_view = camera.getViewMatrix();

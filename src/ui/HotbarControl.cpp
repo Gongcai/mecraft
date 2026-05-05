@@ -133,6 +133,76 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
         return;
     }
+
+    constexpr int hotbarSlots = Inventory::HOTBAR_SIZE;
+    constexpr float slotStride = 20.0f * HotbarLayout::kScale;
+
+    // Check if inventory state changed since last build
+    const int currentSelected = inventory.getSelectedSlot();
+    bool stateChanged = m_dirty || m_cachedSelectedSlot != currentSelected ||
+                        m_cachedScreenW != screenW || m_cachedScreenH != screenH;
+    if (!stateChanged) {
+        for (int i = 0; i < kHotbarSlots; ++i) {
+            const ItemStack stack = inventory.getSlotStack(i);
+            if (m_cachedSlotCounts[i] != static_cast<int>(stack.count) ||
+                m_cachedSlotItems[i] != stack.itemId) {
+                stateChanged = true;
+                break;
+            }
+        }
+    }
+
+    if (!stateChanged && m_cachedVertCount > 0) {
+        // Nothing changed — replay cached draw sequence
+        const UIRenderUtils::GLStateGuard glState;
+        m_inventoryShader->use();
+        m_inventoryShader->setVec2("uScreenSize", glm::vec2(screenW, screenH));
+        glActiveTexture(GL_TEXTURE0);
+        m_inventoryShader->setInt("uAtlas", 0);
+        glBindVertexArray(m_vao);
+
+        int offset = 0;
+        // Background
+        glBindTexture(GL_TEXTURE_2D, m_cachedBgTexture);
+        m_inventoryShader->setVec4("uTintColor", glm::vec4(m_bgColor[0], m_bgColor[1], m_bgColor[2], m_bgColor[3]));
+        glDrawArrays(GL_TRIANGLES, offset, m_cachedBgVertCount);
+        offset += m_cachedBgVertCount;
+        // Selected highlight
+        m_inventoryShader->setVec4("uTintColor", glm::vec4(m_borderColor[0], m_borderColor[1], m_borderColor[2], m_borderColor[3]));
+        glDrawArrays(GL_TRIANGLES, offset, m_cachedSelectedVertCount);
+        offset += m_cachedSelectedVertCount;
+        // Item icons (up to 3 batches: itemTexture, itemIcon, legacy)
+        m_inventoryShader->setVec4("uTintColor", glm::vec4(m_iconTintColor[0], m_iconTintColor[1], m_iconTintColor[2], m_iconTintColor[3]));
+        for (int b = 0; b < 3; ++b) {
+            if (m_cachedIconVertCounts[b] > 0) {
+                glBindTexture(GL_TEXTURE_2D, m_cachedIconTextures[b]);
+                glDrawArrays(GL_TRIANGLES, offset, m_cachedIconVertCounts[b]);
+                offset += m_cachedIconVertCounts[b];
+            }
+        }
+
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        // Render item count text using cached slot data
+        if (textRenderer) {
+            renderCountText(screenW, screenH, m_cachedSlotCounts, hotbarSlots, slotStride,
+                            m_cachedStartX, m_cachedStartY, *textRenderer);
+        }
+        return;
+    }
+
+    // ── Rebuild vertices ──
+    m_cachedSelectedSlot = currentSelected;
+    m_cachedScreenW = screenW;
+    m_cachedScreenH = screenH;
+    for (int i = 0; i < kHotbarSlots; ++i) {
+        const ItemStack stack = inventory.getSlotStack(i);
+        m_cachedSlotCounts[i] = static_cast<int>(stack.count);
+        m_cachedSlotItems[i] = stack.itemId;
+    }
+    m_dirty = false;
+
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
@@ -148,13 +218,16 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         return;
     }
 
-    constexpr int hotbarSlots = Inventory::HOTBAR_SIZE;
     const float hotbarWidth = HotbarLayout::kWidth;
     const float hotbarHeight = HotbarLayout::kHeight;
 
     const UILayout layout{Anchor::BottomCenter, 0.0f, HotbarLayout::kBottomMargin};
     const float startX = layout.resolveX(screenW, hotbarWidth);
     const float startY = layout.resolveY(screenH, hotbarHeight);
+
+    // Cache layout position for text rendering
+    m_cachedStartX = startX;
+    m_cachedStartY = startY;
 
     const int selectedSlot = std::clamp(inventory.getSelectedSlot(), 0, hotbarSlots - 1);
 
@@ -179,7 +252,6 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     std::vector<float> selectedVerts;
     {
         const auto uv = uvFromTopLeftPixels(0.0f, 21.0f, 25.0f, 46.0f);
-        const float slotStride = 20.0f * HotbarLayout::kScale;
         const float selectorOffset = ((HotbarLayout::kHighlightSize - 20.0f) * 0.5f) * HotbarLayout::kScale;
         const float selX = startX + static_cast<float>(selectedSlot) * slotStride - selectorOffset + 2;
         const float selY = startY - 3.0f;
@@ -192,15 +264,12 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     std::vector<float> iconVerts;
     std::vector<float> fallbackIconVerts;
     std::vector<float> legacyIconVerts;
-    int slotCounts[hotbarSlots] = {};
-    constexpr float slotStride = 20.0f * HotbarLayout::kScale;
     constexpr float iconInset = 2.0f * HotbarLayout::kScale;
     constexpr float iconSize = 17.5f * HotbarLayout::kScale;
     for (int i = 0; i < hotbarSlots; ++i)
     {
         const ItemStack stack = inventory.getSlotStack(i);
         const ItemID itemId = stack.itemId;
-        slotCounts[i] = static_cast<int>(stack.count);
         if (itemId == 0) {
             continue;
         }
@@ -315,40 +384,58 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
+
+        // Cache draw state for next frame
+        m_cachedBgVertCount = bgVertCount;
+        m_cachedSelectedVertCount = selectedVertCount;
+        m_cachedBgTexture = widgetsTexture;
+        m_cachedIconVertCounts[0] = iconVertCount;
+        m_cachedIconVertCounts[1] = fallbackIconVertCount;
+        m_cachedIconVertCounts[2] = legacyIconVertCount;
+        m_cachedIconTextures[0] = itemTextureAtlas.textureID;
+        m_cachedIconTextures[1] = itemIconAtlas.textureID;
+        m_cachedIconTextures[2] = atlas.textureID;
+        m_cachedVertCount = bgVertCount + selectedVertCount + iconVertCount + fallbackIconVertCount + legacyIconVertCount;
     }
 
-    // ── Render item count text (bottom-right of each slot) ──
-    if (textRenderer)
+    // ── Render item count text ──
+    if (textRenderer) {
+        renderCountText(screenW, screenH, m_cachedSlotCounts, hotbarSlots, slotStride,
+                        startX, startY, *textRenderer);
+    }
+}
+
+void HotbarControl::renderCountText(float screenW, float screenH, const int* slotCounts, int slotCount,
+                                     float slotStride, float startX, float startY, const TextRenderer& textRenderer) const
+{
+    constexpr float kBaseGlyphSize = 8.0f;
+    constexpr float kCountRightPaddingRatio = 0.05f;
+    constexpr float kCountBottomPaddingRatio = 0.03f;
+    constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
+    const float advanceFactor = textRenderer.getAdvanceFactor();
+    const float slotFullSize = slotStride;
+    const float textScale = m_countTextScale * slotFullSize / kBaseGlyphSize;
+    const float glyphSize = kBaseGlyphSize * textScale;
+    const float charAdvance = glyphSize * advanceFactor;
+
+    textRenderer.beginBatch(screenW, screenH);
+
+    for (int i = 0; i < slotCount; ++i)
     {
-        constexpr float kBaseGlyphSize = 8.0f;  // BitmapFont glyph pixel size
-        constexpr float kCountRightPaddingRatio = 0.05f;
-        constexpr float kCountBottomPaddingRatio = 0.03f;
-        constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
-        const float advanceFactor = textRenderer->getAdvanceFactor();
-        const float slotFullSize = slotStride;
-        // Scale text proportionally to slot size
-        const float textScale = m_countTextScale * slotFullSize / kBaseGlyphSize;
-        const float glyphSize = kBaseGlyphSize * textScale;
-        const float charAdvance = glyphSize * advanceFactor;
+        if (slotCounts[i] <= 1)
+            continue;
 
-        for (int i = 0; i < hotbarSlots; ++i)
-        {
-            if (slotCounts[i] <= 1)
-                continue;
+        const std::string countStr = std::to_string(slotCounts[i]);
+        const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
+        const float slotX = startX + static_cast<float>(i) * slotStride;
+        const float textRightX = slotX + slotFullSize - kCountRightPaddingRatio * slotFullSize;
+        const float textX = textRightX - textWidth;
+        const float textY = startY + kCountBottomPaddingRatio * slotFullSize;
 
-            const std::string countStr = std::to_string(slotCounts[i]);
-            const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
-            // Slot position in screen pixels (bottom-left origin for TextRenderer).
-            const float slotX = startX + static_cast<float>(i) * slotStride;
-            const float slotY = startY;
-            const float slotBottomY = slotY;
-            const float textRightX = slotX + slotFullSize - kCountRightPaddingRatio * slotFullSize;
-            const float textX = textRightX - textWidth;
-            const float textY = slotBottomY + kCountBottomPaddingRatio * slotFullSize;
-
-            textRenderer->render(countStr, textX, textY, textScale, kTextColor, screenW, screenH);
-        }
+        textRenderer.batchRender(countStr, textX, textY, textScale, kTextColor);
     }
+
+    textRenderer.endBatch();
 }
 
 void HotbarControl::checkSlotChange(const Inventory& inventory) const

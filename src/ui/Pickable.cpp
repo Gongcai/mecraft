@@ -19,7 +19,8 @@ void Pickable::initMesh(MeshHandles& mesh)
 
     glBindVertexArray(mesh.vao);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+    // Pre-allocate for one quad (hover background) to allow glBufferSubData
+    glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
@@ -154,7 +155,7 @@ void Pickable::render(const SlotInfo* slots, int count,
 
             glBindVertexArray(mesh.vao);
             glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(bgVerts), bgVerts, GL_DYNAMIC_DRAW);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(bgVerts), bgVerts);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             glBindBuffer(GL_ARRAY_BUFFER, 0);
             glBindVertexArray(0);
@@ -194,12 +195,14 @@ void Pickable::render(const SlotInfo* slots, int count,
         }
     }
 
-    // ── Pass 3: Item count text (bottom-right of slot) ──
+    // ── Pass 3: Item count text (batched into single draw call) ──
     if (textRenderer)
     {
-        constexpr float kBaseGlyphSize = 8.0f;  // BitmapFont glyph pixel size
+        constexpr float kBaseGlyphSize = 8.0f;
         constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
         const float advanceFactor = textRenderer->getAdvanceFactor();
+
+        textRenderer->beginBatch(static_cast<float>(screenW), static_cast<float>(screenH));
 
         for (int i = 0; i < count; ++i)
         {
@@ -207,20 +210,18 @@ void Pickable::render(const SlotInfo* slots, int count,
                 continue;
 
             const float slotSize = static_cast<float>(slots[i].size);
-            // Scale text proportionally to slot size
             const float textScale = params.countTextScale * slotSize / kBaseGlyphSize;
             const float glyphSize = kBaseGlyphSize * textScale;
             const float charAdvance = glyphSize * advanceFactor;
 
             const std::string countStr = std::to_string(slots[i].count);
             const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
-            // Position: bottom-right corner of the slot (offsets are ratio of slotSize)
-            // TextRenderer uses bottom-left pixel origin
             const float textX = static_cast<float>(slots[i].x + slots[i].size) - textWidth + params.countTextOffsetX * slotSize;
             const float textY = static_cast<float>(screenH - (slots[i].y + slots[i].size)) + params.countTextOffsetY * slotSize;
 
-            textRenderer->render(countStr, textX, textY, textScale, kTextColor,
-                                 static_cast<float>(screenW), static_cast<float>(screenH));
+            textRenderer->batchRender(countStr, textX, textY, textScale, kTextColor);
         }
+
+        textRenderer->endBatch();
     }
 }

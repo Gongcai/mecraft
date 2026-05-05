@@ -205,9 +205,9 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     const glm::mat4 view(1.0f);
     const glm::mat4 viewProj = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, -2.0f, 2.0f);
 
+    glDepthMask(GL_TRUE);
     glClear(GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 
     glActiveTexture(GL_TEXTURE0);
@@ -247,6 +247,12 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Restore UI depth/blend state for subsequent widgets
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 void HeldItemPreviewControl::setLayout(const HeldItemPreviewLayout& layout)

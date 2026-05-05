@@ -43,6 +43,8 @@ private:
     void initMesh();
     void cleanupMesh();
     void renderInternal(float screenW, float screenH, const Inventory& inventory, const TextRenderer* textRenderer = nullptr) const;
+    void renderCountText(float screenW, float screenH, const int* slotCounts, int slotCount,
+                         float slotStride, float startX, float startY, const TextRenderer& textRenderer) const;
     void renderItemName(float screenW, float screenH, const Inventory& inventory, const TextRenderer& textRenderer, float timeSeconds) const;
     void checkSlotChange(const Inventory& inventory) const;
 
@@ -66,5 +68,26 @@ private:
     mutable std::string m_itemName;
     mutable float m_itemNameShowTime = -100.0f;
     float m_itemNameDisplayDuration = 2.0f;
+
+    // Dirty flag: skip vertex rebuild when inventory hasn't changed.
+    static constexpr int kHotbarSlots = 10;
+    mutable bool m_dirty = true;
+    mutable int m_cachedVertCount = 0;
+    mutable int m_cachedSelectedSlot = -1;
+    mutable int m_cachedSlotCounts[kHotbarSlots] = {};
+    mutable ItemID m_cachedSlotItems[kHotbarSlots] = {};
+    mutable float m_cachedScreenW = 0.0f;
+    mutable float m_cachedScreenH = 0.0f;
+
+    // Cached draw state for replaying without vertex rebuild.
+    mutable int m_cachedBgVertCount = 0;
+    mutable int m_cachedSelectedVertCount = 0;
+    mutable GLuint m_cachedBgTexture = 0;
+    mutable int m_cachedIconVertCounts[3] = {};
+    mutable GLuint m_cachedIconTextures[3] = {};
+
+    // Cached layout position for text rendering in cache-hit path.
+    mutable float m_cachedStartX = 0.0f;
+    mutable float m_cachedStartY = 0.0f;
 };
 
