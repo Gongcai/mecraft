@@ -5,6 +5,7 @@
 #include "UIWidget.h"
 #include "UIPanel.h"
 #include "UIText.h"
+#include "UITheme.h"
 
 // A tooltip that follows the cursor and shows after a hover delay.
 // Composed of a UIPanel background and UIText label.
@@ -35,7 +36,7 @@ public:
             m_hoverText = text;
             m_hoverStartTime = currentTime;
             m_label.setText(text);
-            updateSize();
+            m_sizeDirty = true;
         }
         m_cursorX = cursorX;
         m_cursorY = cursorY;
@@ -66,14 +67,26 @@ public:
 protected:
     void renderSelf(const UIRenderContext& ctx) const override {
         if (!visible) return;
+        if (m_sizeDirty && ctx.textRenderer) {
+            updateSize(*ctx.textRenderer);
+            m_sizeDirty = false;
+            updatePosition();
+        }
+        // Apply tooltip-specific theme colors before rendering sub-widgets
+        if (ctx.theme) {
+            const_cast<UIPanel&>(m_panel).setBackgroundColor(ctx.theme->tooltipBackground);
+            const_cast<UIPanel&>(m_panel).setBorderColor(ctx.theme->tooltipBorder);
+            const_cast<UIPanel&>(m_panel).setBorderWidth(ctx.theme->tooltipBorderWidth);
+            const_cast<UIText&>(m_label).setTextColor(ctx.theme->textPrimary);
+        }
         m_panel.render(ctx);
         m_label.render(ctx);
     }
 
 private:
-    void updateSize() const {
-        const float textW = m_label.measureTextWidth();
-        const float textH = m_label.measureTextHeight();
+    void updateSize(const TextRenderer& tr) const {
+        const float textW = m_label.measureTextWidth(tr);
+        const float textH = m_label.measureTextHeight(tr);
         constexpr float padX = 8.0f;
         constexpr float padY = 4.0f;
         width = textW + padX * 2.0f;
@@ -124,6 +137,7 @@ private:
     float m_hoverDelay = 0.3f;
     mutable float m_hoverStartTime = 0.0f;
     mutable bool m_hovering = false;
+    mutable bool m_sizeDirty = false;
 
     mutable float m_cursorX = 0.0f;
     mutable float m_cursorY = 0.0f;

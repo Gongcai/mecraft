@@ -29,7 +29,6 @@ public:
         int textPadX = 10;
         int textPadY = 4;
         float textScale = 2.0f;
-        float textAdvanceFactor = 0.86f;
         std::size_t visibleBoxes = 6;
         float holdSeconds = 5.0f;
         float fadeEndSeconds = 8.0f;
@@ -39,8 +38,13 @@ public:
         std::array<float, 4> successTextColor{0.45f, 0.90f, 0.50f, 1.0f};
     };
 
+    struct TextMetricsResult {
+        float width = 0.0f;
+        float height = 0.0f;
+    };
     using DrawRectFn = std::function<void(int, int, int, int, const std::array<float, 4>&)>;
     using RenderTextFn = std::function<void(const std::string&, float, float, float, const std::array<float, 4>&, float, float)>;
+    using MeasureTextFn = std::function<TextMetricsResult(const std::string&, float)>;
 
     void appendLine(const std::string& message,
                     double createdAtSec,
@@ -52,7 +56,8 @@ public:
     void render(double nowSec,
                 const RenderParams& params,
                 const DrawRectFn& drawRect,
-                const RenderTextFn& renderText);
+                const RenderTextFn& renderText,
+                const MeasureTextFn& measureText);
 
 private:
     struct Line {

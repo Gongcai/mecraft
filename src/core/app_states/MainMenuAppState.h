@@ -20,6 +20,7 @@ public:
         m_deps.contextManager.pushContext(InputContextType::UI);
         m_deps.input.captureMouse(false);
 
+        m_screen.setLocaleManager(&m_deps.localeManager);
         m_screen.init(m_deps.resourceMgr);
         m_screen.onStartClicked = [this]() {
             m_transitioningToGame = true;

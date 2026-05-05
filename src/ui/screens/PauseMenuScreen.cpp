@@ -4,6 +4,7 @@
 #include "../UIText.h"
 #include "../UIButton.h"
 #include "../UIStackLayout.h"
+#include "../../locale/LocaleManager.h"
 
 void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     (void)resourceMgr;
@@ -20,13 +21,14 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // "PAUSED" title
     auto title = std::make_unique<UIText>();
-    title->setText("PAUSED");
+    title->setText(getLocaleManager() ? getLocaleManager()->tr("paused") : "PAUSED");
     title->setTextScale(4.0f);
     title->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::Center;
     title->anchorOffsetY = 120.0f;
-    title->width = title->measureTextWidth();
-    title->height = title->measureTextHeight();
+    title->width = 0.0f;
+    title->height = 0.0f;
     m_title = title.get();
 
     // Button stack
@@ -38,7 +40,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Resume button
     auto resumeBtn = std::make_unique<UIButton>();
-    resumeBtn->setText("RESUME");
+    resumeBtn->setText(getLocaleManager() ? getLocaleManager()->tr("resume") : "RESUME");
     resumeBtn->setTextScale(2.0f);
     resumeBtn->width = 250.0f;
     resumeBtn->height = 45.0f;
@@ -51,7 +53,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Quit to menu button
     auto quitBtn = std::make_unique<UIButton>();
-    quitBtn->setText("QUIT TO MENU");
+    quitBtn->setText(getLocaleManager() ? getLocaleManager()->tr("quit_to_menu") : "QUIT TO MENU");
     quitBtn->setTextScale(2.0f);
     quitBtn->width = 250.0f;
     quitBtn->height = 45.0f;

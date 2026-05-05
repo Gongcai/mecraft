@@ -7,6 +7,8 @@
 #include "UIWidget.h"
 #include "TweenGroup.h"
 
+class LocaleManager;
+
 class UIScene : public IUIControl {
 public:
     enum class Phase {
@@ -42,6 +44,9 @@ public:
     // Widget management
     void addRoot(std::unique_ptr<UIWidget> widget) { m_roots.push_back(std::move(widget)); }
 
+    // Locale
+    void setLocaleManager(const LocaleManager* locale) { m_locale = locale; }
+
 protected:
     // Subclasses override these to set up enter/exit animations
     virtual void onSceneEnter() {}
@@ -51,6 +56,7 @@ protected:
     virtual void buildUI(ResourceMgr& resourceMgr) { (void)resourceMgr; }
 
     [[nodiscard]] ResourceMgr* getResourceMgr() const { return m_resourceMgr; }
+    [[nodiscard]] const LocaleManager* getLocaleManager() const { return m_locale; }
 
 private:
     void ensureFocusableSelection();
@@ -61,6 +67,7 @@ private:
     TweenGroup m_animations;
     Phase m_phase = Phase::Active;
     ResourceMgr* m_resourceMgr = nullptr;
+    const LocaleManager* m_locale = nullptr;
     mutable UIRenderContext m_currentContext;
     bool m_hasInputContext = false;
     UIWidget* m_focusedWidget = nullptr;

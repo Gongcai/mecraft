@@ -6,6 +6,7 @@
 #include <glad/glad.h>
 
 #include "UIWidget.h"
+#include "UITheme.h"
 
 class ResourceMgr;
 class Shader;
@@ -36,7 +37,6 @@ private:
         float textX = 0.0f;
         float textY = 0.0f;
         float glyphSize = 0.0f;
-        float advance = 1.0f;
     };
 
     struct CaretRect {
@@ -52,11 +52,11 @@ private:
                                     int boxW,
                                     int boxH,
                                     float textScale,
-                                    float textAdvanceFactor);
-    static CaretRect computeCaretRect(const ClipInfo& info);
+                                    const TextRenderer& textRenderer);
+    static CaretRect computeCaretRect(const ClipInfo& info, const TextRenderer& textRenderer, float textScale);
     static bool isCaretVisible(double nowSec, float blinkPeriodMs);
 
-    void renderBox(const std::string& text, const TextRenderer& textRenderer) const;
+    void renderBox(const std::string& text, const TextRenderer& textRenderer, const UITheme* theme = nullptr) const;
     void drawOverlayRect(int screenW,
                          int screenH,
                          int x,
@@ -72,4 +72,3 @@ private:
     std::string m_text;
     const TextRenderer* m_textRenderer = nullptr;
 };
-

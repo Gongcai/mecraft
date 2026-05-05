@@ -28,6 +28,7 @@ Game::Game(const GameInitParams& params)
       m_audioEngine(*params.audioEngine),
       m_bgmSystem(*params.bgmSystem),
       m_uiRenderer(*params.uiRenderer),
+      m_localeManager(*params.localeManager),
       m_physicsSystem(&m_world) {
 }
 
@@ -135,7 +136,8 @@ StateDependencies Game::makeStateDependencies() {
         m_audioEngine,
         m_particleSystem,
         m_dropSystem,
-        m_gameplayScene.registry()
+        m_gameplayScene.registry(),
+        m_localeManager
     };
 }
 

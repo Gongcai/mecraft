@@ -16,10 +16,12 @@
 #include "Pickable.h"
 #include "TextRenderer.h"
 #include "UIRenderContext.h"
+#include "UITheme.h"
 
 class Window;
 class ResourceMgr;
 class Inventory;
+class LocaleManager;
 class CraftingSystem;
 struct InputSnapshot;
 class UIScene;
@@ -72,9 +74,6 @@ public:
                     float screenWidth,
                     float screenHeight);
 
-    void setTextAdvanceFactor(float factor);
-    [[nodiscard]] float getTextAdvanceFactor() const;
-
     // Scene management for menu screens
     void setActiveScene(UIScene* scene);
     [[nodiscard]] UIScene* getActiveScene() const;
@@ -83,6 +82,14 @@ public:
 
     void setCommandCaretBlinkPeriodMs(float periodMs);
     [[nodiscard]] float getCommandCaretBlinkPeriodMs() const;
+
+    // Theme
+    void setTheme(const UITheme& theme);
+    [[nodiscard]] const UITheme& getTheme() const;
+    [[nodiscard]] UITheme& getTheme();
+
+    // Locale
+    void setLocaleManager(const LocaleManager* localeManager);
 
     void setCrosshairSize(float size);
     [[nodiscard]] float getCrosshairSize() const;
@@ -135,6 +142,8 @@ private:
     std::vector<UIWidget*> m_widgetControls;
     ResourceMgr* m_resourceMgr = nullptr;
     UIScene* m_activeScene = nullptr;
+    UITheme m_theme;
+    const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
     bool m_commandInputRequested = false;
 

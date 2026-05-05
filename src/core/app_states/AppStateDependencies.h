@@ -9,6 +9,7 @@
 #include "../../audio/AudioEngine.h"
 #include "../../audio/BgmSystem.h"
 #include "../../ui/UIRenderer.h"
+#include "../../locale/LocaleManager.h"
 
 class AppStateMachine;
 
@@ -22,6 +23,7 @@ struct AppStateDependencies {
     AudioEngine& audioEngine;
     BgmSystem& bgmSystem;
     UIRenderer& uiRenderer;
+    LocaleManager& localeManager;
 };
 
 #endif //MECRAFT_APPSTATEDEPENDENCIES_H

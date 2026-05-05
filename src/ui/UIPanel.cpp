@@ -7,6 +7,7 @@
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 #include "UIRenderUtils.h"
+#include "UITheme.h"
 
 UIPanel::UIPanel() = default;
 UIPanel::~UIPanel() { shutdown(); }
@@ -83,6 +84,8 @@ void UIPanel::rebuildBorderMesh(float x0, float y0, float x1, float y1, float bw
 void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     if (!m_shader || m_vao == 0) return;
 
+    const UITheme* theme = ctx.theme;
+
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
@@ -95,7 +98,7 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
                                                 static_cast<float>(ctx.screenHeight)));
 
     // Render background
-    std::array<float, 4> bg = m_bgColor;
+    std::array<float, 4> bg = (theme && !m_hasLocalBgColor) ? theme->panelBackground : m_bgColor;
     bg[3] *= alpha;
     m_shader->setVec4("uColor", glm::vec4(bg[0], bg[1], bg[2], bg[3]));
     rebuildMesh(ax, ay, ax + aw, ay + ah);
@@ -103,11 +106,12 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // Render border if width > 0 (4 quads merged into single draw call)
-    if (m_borderWidth > 0.0f) {
-        std::array<float, 4> bc = m_borderColor;
+    float borderW = (theme && !m_hasLocalBorderColor && m_borderWidth > 0.0f) ? theme->panelBorderWidth : m_borderWidth;
+    if (borderW > 0.0f) {
+        std::array<float, 4> bc = (theme && !m_hasLocalBorderColor) ? theme->panelBorder : m_borderColor;
         bc[3] *= alpha;
         m_shader->setVec4("uColor", glm::vec4(bc[0], bc[1], bc[2], bc[3]));
-        rebuildBorderMesh(ax, ay, ax + aw, ay + ah, m_borderWidth);
+        rebuildBorderMesh(ax, ay, ax + aw, ay + ah, borderW);
         glDrawArrays(GL_TRIANGLES, 0, 24);
     }
 

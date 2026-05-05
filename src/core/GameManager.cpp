@@ -22,6 +22,8 @@ void GameManager::init(int width, int height, const char* title) {
     m_audioEngine.init();
     m_bgmSystem.init(m_audioEngine);
     m_uiRenderer.init(m_resourceMgr);
+    m_localeManager.loadSettings();
+    m_uiRenderer.setLocaleManager(&m_localeManager);
 
     m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
 }
@@ -48,7 +50,6 @@ void GameManager::initResources() {
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
-    m_resourceMgr.loadGuiTexture("font_ascii", FONT_ASCII_PATH, true);
     m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
 
@@ -69,7 +70,8 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
         m_resourceMgr,
         m_audioEngine,
         m_bgmSystem,
-        m_uiRenderer
+        m_uiRenderer,
+        m_localeManager
     };
 }
 

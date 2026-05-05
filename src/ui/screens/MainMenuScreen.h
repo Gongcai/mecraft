@@ -2,12 +2,15 @@
 
 #include <array>
 #include <functional>
+#include <vector>
+#include <string>
 
 #include "../UIScene.h"
 #include "../Tween.h"
 
 class UIText;
 class UIButton;
+class UIDropdown;
 
 class MainMenuScreen : public UIScene {
 public:
@@ -21,9 +24,14 @@ protected:
     void onSceneEnter() override;
 
 private:
+    void refreshTexts();
+
     UIText* m_title = nullptr;
     UIButton* m_startButton = nullptr;
     UIButton* m_quitButton = nullptr;
+    UIDropdown* m_langDropdown = nullptr;
+
+    std::vector<std::string> m_langCodes;
 
     // Title animation tweens
     Tween<float> m_titleY;

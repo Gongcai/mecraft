@@ -30,7 +30,6 @@ UI UIPrimaryRelease Mouse LEFT Released -
 UI UISecondaryRelease Mouse RIGHT Released -
 UI Confirm Keyboard ENTER Pressed -
 UI Confirm Keyboard KP_ENTER Pressed -
-UI Confirm Keyboard SPACE Pressed -
 UI Backspace Keyboard BACKSPACE Held -
 UI Up Keyboard UP Pressed -
 UI Down Keyboard DOWN Pressed -

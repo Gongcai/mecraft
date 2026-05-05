@@ -13,7 +13,9 @@
 #include "../item/Item.h"
 #include "TextRenderer.h"
 #include "UILayout.h"
+#include "../locale/LocaleManager.h"
 #include "UIRenderUtils.h"
+#include "UITheme.h"
 
 void HotbarControl::init(ResourceMgr& resourceMgr)
 {
@@ -42,14 +44,32 @@ void HotbarControl::renderSelf(const UIRenderContext& context) const
         return;
     }
 
+    // Apply theme colors if available
+    const UITheme* theme = context.theme;
+    auto savedBg = m_bgColor;
+    auto savedBorder = m_borderColor;
+    auto savedIcon = m_iconTintColor;
+    if (theme) {
+        const_cast<HotbarControl*>(this)->m_bgColor = theme->hotbarBackground;
+        const_cast<HotbarControl*>(this)->m_borderColor = theme->hotbarBorder;
+        const_cast<HotbarControl*>(this)->m_iconTintColor = theme->hotbarIconTint;
+    }
+
     renderInternal(static_cast<float>(context.screenWidth),
                    static_cast<float>(context.screenHeight),
                    *inventory,
                    context.textRenderer);
 
+    // Restore original colors
+    if (theme) {
+        const_cast<HotbarControl*>(this)->m_bgColor = savedBg;
+        const_cast<HotbarControl*>(this)->m_borderColor = savedBorder;
+        const_cast<HotbarControl*>(this)->m_iconTintColor = savedIcon;
+    }
+
     // Render item name popup above hotbar
     if (context.textRenderer) {
-        checkSlotChange(*inventory);
+        checkSlotChange(*inventory, context.localeManager);
         renderItemName(static_cast<float>(context.screenWidth),
                        static_cast<float>(context.screenHeight),
                        *inventory,
@@ -412,11 +432,8 @@ void HotbarControl::renderCountText(float screenW, float screenH, const int* slo
     constexpr float kCountRightPaddingRatio = 0.05f;
     constexpr float kCountBottomPaddingRatio = 0.03f;
     constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
-    const float advanceFactor = textRenderer.getAdvanceFactor();
     const float slotFullSize = slotStride;
     const float textScale = m_countTextScale * slotFullSize / kBaseGlyphSize;
-    const float glyphSize = kBaseGlyphSize * textScale;
-    const float charAdvance = glyphSize * advanceFactor;
 
     textRenderer.beginBatch(screenW, screenH);
 
@@ -426,7 +443,7 @@ void HotbarControl::renderCountText(float screenW, float screenH, const int* slo
             continue;
 
         const std::string countStr = std::to_string(slotCounts[i]);
-        const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
+        const float textWidth = textRenderer.measureText(countStr, textScale).width;
         const float slotX = startX + static_cast<float>(i) * slotStride;
         const float textRightX = slotX + slotFullSize - kCountRightPaddingRatio * slotFullSize;
         const float textX = textRightX - textWidth;
@@ -438,7 +455,7 @@ void HotbarControl::renderCountText(float screenW, float screenH, const int* slo
     textRenderer.endBatch();
 }
 
-void HotbarControl::checkSlotChange(const Inventory& inventory) const
+void HotbarControl::checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager) const
 {
     const int currentSlot = inventory.getSelectedSlot();
     const ItemID currentItem = inventory.getSelectedItem();
@@ -453,7 +470,11 @@ void HotbarControl::checkSlotChange(const Inventory& inventory) const
         m_lastSelectedSlot = currentSlot;
         m_lastSelectedItem = currentItem;
         if (currentItem != 0) {
-            m_itemName = std::string(ItemRegistry::get(currentItem).namespacedId.path());
+            if (localeManager) {
+                m_itemName = localeManager->getItemName(ItemRegistry::get(currentItem).namespacedId.path());
+            } else {
+                m_itemName = std::string(ItemRegistry::get(currentItem).namespacedId.path());
+            }
         } else {
             m_itemName.clear();
         }
@@ -498,10 +519,7 @@ void HotbarControl::renderItemName(float screenW, float screenH, const Inventory
     const std::array<float, 4> textColor = {1.0f, 1.0f, 1.0f, alpha};
 
     // Estimate text width for centering
-    const float advanceFactor = textRenderer.getAdvanceFactor();
-    const float glyphSize = 8.0f * textScale; // BitmapFont glyph is 8px
-    const float charAdvance = glyphSize * advanceFactor;
-    const float textWidth = static_cast<float>(m_itemName.size()) * charAdvance;
+    const float textWidth = textRenderer.measureText(m_itemName, textScale).width;
     const float textX = hotbarCenterX - textWidth * 0.5f;
 
     textRenderer.render(m_itemName, textX, textY, textScale, textColor, screenW, screenH);

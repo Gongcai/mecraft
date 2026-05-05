@@ -140,7 +140,7 @@ public:
     [[nodiscard]] const void* getDataContext() const { return m_dataContext; }
 
     // Rendering
-    void render(const UIRenderContext& ctx) const {
+    virtual void render(const UIRenderContext& ctx) const {
         if (!visible) return;
         renderSelf(ctx);
         for (const auto& child : m_children) {

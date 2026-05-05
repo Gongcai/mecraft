@@ -21,6 +21,8 @@ namespace ecs {
 class GameplayRegistry;
 }
 
+class LocaleManager;
+
 struct StateDependencies {
     GameStateMachine& fsm;
     Inventory& inventory;
@@ -34,6 +36,7 @@ struct StateDependencies {
     ParticleSystem& particleSystem;
     DropSystem& dropSystem;
     ecs::GameplayRegistry& ecsRegistry;
+    const LocaleManager& localeManager;
 };
 
 #endif // MECRAFT_STATE_DEPENDENCIES_H

@@ -21,6 +21,7 @@ void GameplayAppState::onEnter() {
     params.audioEngine = &m_deps.audioEngine;
     params.bgmSystem = &m_deps.bgmSystem;
     params.uiRenderer = &m_deps.uiRenderer;
+    params.localeManager = &m_deps.localeManager;
     params.seed = 1234;
 
     m_game = std::make_unique<Game>(params);

@@ -17,6 +17,7 @@ public:
 
     void setBackgroundColor(const std::array<float, 4>& c) { m_bgColor = c; }
     [[nodiscard]] const std::array<float, 4>& getBackgroundColor() const { return m_bgColor; }
+    void setUseLocalColors(bool v) { m_hasLocalBgColor = v; m_hasLocalBorderColor = v; }
 
     void setBorderColor(const std::array<float, 4>& c) { m_borderColor = c; }
     [[nodiscard]] const std::array<float, 4>& getBorderColor() const { return m_borderColor; }
@@ -40,4 +41,6 @@ private:
     std::array<float, 4> m_bgColor{0.2f, 0.2f, 0.2f, 0.8f};
     std::array<float, 4> m_borderColor{1.0f, 1.0f, 1.0f, 0.5f};
     float m_borderWidth = 0.0f;
+    bool m_hasLocalBgColor = false;
+    bool m_hasLocalBorderColor = false;
 };

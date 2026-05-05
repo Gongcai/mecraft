@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include <glad/glad.h>
-#include "BitmapFont.h"
 
 namespace {
 std::array<float, 4> textColorForType(ConsoleDisplayBox::MessageType type,
@@ -84,7 +83,8 @@ float ConsoleDisplayBox::computeLineAlpha(double ageSec, float holdSeconds, floa
 void ConsoleDisplayBox::render(double nowSec,
                                const RenderParams& params,
                                const DrawRectFn& drawRect,
-                               const RenderTextFn& renderText)
+                               const RenderTextFn& renderText,
+                               const MeasureTextFn& measureText)
 {
     if (!drawRect || !renderText || params.screenW <= 0 || params.screenH <= 0) {
         return;
@@ -100,11 +100,9 @@ void ConsoleDisplayBox::render(double nowSec,
                                        static_cast<int>(std::round(static_cast<float>(params.screenW) * params.boxWidthRatio))));
     const int clipW = std::max(1, boxW - params.textPadX * 2);
     const int clipH = std::max(1, params.boxH - params.textPadY * 2);
-    const float glyphSize = static_cast<float>(BitmapFont::kGlyphSizePx) * params.textScale;
-    const float advance = glyphSize * params.textAdvanceFactor;
-    const std::size_t maxVisibleChars = std::max<std::size_t>(
-        1,
-        static_cast<std::size_t>(std::floor((static_cast<float>(clipW) - 4.0f) / std::max(1.0f, advance))));
+
+    // Compute a representative glyph height for vertical centering
+    const float glyphHeight = measureText ? measureText("A", params.textScale).height : (8.0f * params.textScale);
 
     const int stackBaseY = params.inputY + params.inputBoxH + params.inputToFirstBoxGap;
 
@@ -137,13 +135,27 @@ void ConsoleDisplayBox::render(double nowSec,
         bgColor[3] *= alpha;
         drawRect(params.x, boxY, boxW, params.boxH, bgColor);
 
-        const std::size_t visibleStart = (it->text.size() > maxVisibleChars) ? (it->text.size() - maxVisibleChars) : 0;
-        const std::string visibleText = it->text.substr(visibleStart);
+        // Find visible trailing characters that fit in clip width
+        std::string visibleText = it->text;
+        if (measureText) {
+            const float clipContentW = static_cast<float>(clipW) - 4.0f;
+            size_t maxChars = 0;
+            float accW = 0.0f;
+            for (size_t ci = it->text.size(); ci > 0; --ci) {
+                const float cw = measureText(it->text.substr(ci - 1), params.textScale).width;
+                if (accW + cw > clipContentW) break;
+                accW += cw;
+                maxChars++;
+            }
+            maxChars = std::max<size_t>(1, maxChars);
+            const size_t visStart = (it->text.size() > maxChars) ? (it->text.size() - maxChars) : 0;
+            visibleText = it->text.substr(visStart);
+        }
 
         const int clipX = params.x + params.textPadX;
         const int clipY = boxY + params.textPadY;
         const float textX = static_cast<float>(clipX + 2);
-        const float textY = static_cast<float>(clipY) + (static_cast<float>(clipH) - glyphSize) * 0.5f;
+        const float textY = static_cast<float>(clipY) + (static_cast<float>(clipH) - glyphHeight) * 0.5f;
 
         glScissor(clipX, clipY, clipW, clipH);
         auto tintedTextColor = textColorForType(it->type, params);

@@ -12,6 +12,7 @@ class Inventory;
 class ResourceMgr;
 class Shader;
 class TextRenderer;
+class LocaleManager;
 
 class HotbarControl : public UIWidget
 {
@@ -46,7 +47,7 @@ private:
     void renderCountText(float screenW, float screenH, const int* slotCounts, int slotCount,
                          float slotStride, float startX, float startY, const TextRenderer& textRenderer) const;
     void renderItemName(float screenW, float screenH, const Inventory& inventory, const TextRenderer& textRenderer, float timeSeconds) const;
-    void checkSlotChange(const Inventory& inventory) const;
+    void checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager = nullptr) const;
 
     Shader* m_inventoryShader = nullptr;
     GLuint m_vao = 0;

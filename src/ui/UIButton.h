@@ -20,9 +20,10 @@ public:
     void setText(const std::string& text);
     void setOnClick(std::function<void()> callback) { m_onClick = std::move(callback); }
 
-    void setNormalColor(const std::array<float, 4>& c) { m_normalColor = c; }
-    void setHoverColor(const std::array<float, 4>& c) { m_hoverColor = c; }
+    void setNormalColor(const std::array<float, 4>& c) { m_normalColor = c; m_hasLocalColors = true; }
+    void setHoverColor(const std::array<float, 4>& c) { m_hoverColor = c; m_hasLocalColors = true; }
     void setTextColor(const std::array<float, 4>& c);
+    void clearLocalColors() { m_hasLocalColors = false; }
     void setTextScale(float scale);
 
     void setHoverScale(float scale) { m_hoverTargetScale = scale; }
@@ -52,6 +53,7 @@ private:
 
     bool m_hovered = false;
     bool m_pressed = false;
+    bool m_hasLocalColors = false;
 
     [[nodiscard]] static bool isConfirmKey(int key);
 };

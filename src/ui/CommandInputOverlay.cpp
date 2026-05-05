@@ -7,7 +7,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "BitmapFont.h"
 #include "TextRenderer.h"
 #include "UIRenderUtils.h"
 #include "../core/Time.h"
@@ -82,7 +81,7 @@ void CommandInputOverlay::renderSelf(const UIRenderContext& context) const
     }
 
     const std::string* text = context.commandInputText ? context.commandInputText : &m_text;
-    renderBox(*text, *textRenderer);
+    renderBox(*text, *textRenderer, context.theme);
 }
 
 void CommandInputOverlay::setCaretBlinkPeriodMs(float periodMs)
@@ -101,22 +100,31 @@ CommandInputOverlay::ClipInfo CommandInputOverlay::computeClipInfo(const std::st
                                                                    int boxW,
                                                                    int boxH,
                                                                    float textScale,
-                                                                   float textAdvanceFactor)
+                                                                   const TextRenderer& textRenderer)
 {
     constexpr int kTextClipPadX = 10;
     constexpr int kTextClipPadY = 4;
 
     ClipInfo info;
-    info.glyphSize = static_cast<float>(BitmapFont::kGlyphSizePx) * textScale;
-    info.advance = info.glyphSize * textAdvanceFactor;
+    info.glyphSize = 8.0f * textScale;
     info.clipX = boxX + kTextClipPadX;
     info.clipY = boxY + kTextClipPadY;
     info.clipW = std::max(1, boxW - kTextClipPadX * 2);
     info.clipH = std::max(1, boxH - kTextClipPadY * 2);
 
-    const size_t maxVisibleChars = std::max<size_t>(
-        1,
-        static_cast<size_t>(std::floor((static_cast<float>(info.clipW) - 4.0f) / std::max(1.0f, info.advance))));
+    const float clipContentW = static_cast<float>(info.clipW) - 4.0f;
+
+    // Find how many trailing characters fit in the clip width
+    size_t maxVisibleChars = 0;
+    float accumulatedW = 0.0f;
+    for (size_t i = text.size(); i > 0; --i) {
+        const float w = textRenderer.measureText(text.substr(i - 1), textScale).width;
+        if (accumulatedW + w > clipContentW) break;
+        accumulatedW += w;
+        maxVisibleChars++;
+    }
+    maxVisibleChars = std::max<size_t>(1, maxVisibleChars);
+
     const size_t visibleStart = (text.size() > maxVisibleChars) ? (text.size() - maxVisibleChars) : 0;
     info.visibleText = text.substr(visibleStart);
 
@@ -131,10 +139,13 @@ bool CommandInputOverlay::isCaretVisible(double nowSec, float blinkPeriodMs)
     return blinkPhaseMs < static_cast<double>(blinkPeriodMs * 0.5f);
 }
 
-CommandInputOverlay::CaretRect CommandInputOverlay::computeCaretRect(const ClipInfo& info)
+CommandInputOverlay::CaretRect CommandInputOverlay::computeCaretRect(const ClipInfo& info,
+                                                                     const TextRenderer& textRenderer,
+                                                                     float textScale)
 {
+    const float caretX = info.textX + textRenderer.measureText(info.visibleText, textScale).width;
     CaretRect rect;
-    rect.x = static_cast<int>(std::round(std::min(info.textX + static_cast<float>(info.visibleText.size()) * info.advance,
+    rect.x = static_cast<int>(std::round(std::min(caretX,
                                                   static_cast<float>(info.clipX + info.clipW - 3))));
     rect.y = static_cast<int>(std::floor(info.textY));
     rect.h = std::max(1, static_cast<int>(std::round(info.glyphSize)));
@@ -181,7 +192,7 @@ void CommandInputOverlay::drawOverlayRect(int screenW,
     glBindVertexArray(0);
 }
 
-void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer& textRenderer) const
+void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer& textRenderer, const UITheme* theme) const
 {
     if (!m_crosshairShader || m_vao == 0 || m_vbo == 0) {
         return;
@@ -200,7 +211,7 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
     const int x = 20;
     const int y = 20;
     const float textScale = 2.0f;
-    const auto clipInfo = computeClipInfo(text, x, y, boxW, boxH, textScale, textRenderer.getAdvanceFactor());
+    const auto clipInfo = computeClipInfo(text, x, y, boxW, boxH, textScale, textRenderer);
 
     GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
     GLint previousScissorBox[4] = {0, 0, screenW, screenH};
@@ -212,22 +223,25 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
     glEnable(GL_SCISSOR_TEST);
     glScissor(0, 0, screenW, screenH);
 
-    drawOverlayRect(screenW, screenH, x, y, boxW, boxH, {0.0f, 0.0f, 0.0f, 0.55f});
+    const auto& boxCol = theme ? theme->consoleBox : std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.55f};
+    const auto& textCol = theme ? theme->consoleTextNormal : std::array<float, 4>{0.95f, 0.95f, 0.95f, 1.0f};
+
+    drawOverlayRect(screenW, screenH, x, y, boxW, boxH, boxCol);
 
     glScissor(clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
     textRenderer.render(clipInfo.visibleText,
                         clipInfo.textX,
                         clipInfo.textY,
                         textScale,
-                        {0.95f, 0.95f, 0.95f, 1.0f},
+                        textCol,
                         static_cast<float>(screenW),
                         static_cast<float>(screenH));
 
     if (isCaretVisible(Time::getRawTime(), m_caretBlinkPeriodMs)) {
-        const CaretRect caret = computeCaretRect(clipInfo);
+        const CaretRect caret = computeCaretRect(clipInfo, textRenderer, textScale);
         applyOverlayBlendState();
         glScissor(clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
-        drawOverlayRect(screenW, screenH, caret.x, caret.y, caret.w, caret.h, {0.95f, 0.95f, 0.95f, 1.0f});
+        drawOverlayRect(screenW, screenH, caret.x, caret.y, caret.w, caret.h, textCol);
     }
 
     if (scissorWasEnabled) {
@@ -239,5 +253,3 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
-
-

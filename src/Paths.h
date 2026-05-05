@@ -15,6 +15,8 @@
 #define SOUNDS_DIR        ASSETS_DIR "/sounds"
 #define BGM_DIR           ASSETS_DIR "/bgm"
 #define CONFIG_DIR        ASSETS_DIR "/config"
+#define FONTS_DIR          ASSETS_DIR "/fonts"
+#define THEMES_DIR         ASSETS_DIR "/themes"
 
 // 常用资源路径
 #define BLOCKS_TEXTURES_DIR   TEXTURES_DIR "/blocks"
@@ -34,6 +36,8 @@
 #define ITEMS_CONFIG_PATH     CONFIG_DIR "/items.json"
 #define RECIPES_CONFIG_PATH   CONFIG_DIR "/recipes.json"
 #define KEYBINDINGS_PATH      CONFIG_DIR "/keybindings.txt"
+#define LOCALE_DIR            CONFIG_DIR "/locale"
+#define SETTINGS_PATH         CONFIG_DIR "/settings.json"
 
 #define LIGHTMAP_DAY_PATH     LIGHTMAP_DIR "/lightmap_day.png"
 #define LIGHTMAP_NIGHT_PATH   LIGHTMAP_DIR "/lightmap_night.png"
@@ -43,3 +47,5 @@
 #define TEST_TEXTURE_PATH     BLOCKS_TEXTURES_DIR "/test.png"
 #define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"
 #define ZOMBIE_TEXTURE_PATH    MOBS_TEXTURE_DIR  "/zombie.png"
+
+#define DEFAULT_FONT_PATH     FONTS_DIR "/msyhbd.ttc"

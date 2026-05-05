@@ -9,6 +9,7 @@
 
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
+#include "UITheme.h"
 
 void CrosshairControl::init(ResourceMgr& resourceMgr)
 {
@@ -129,8 +130,11 @@ void CrosshairControl::renderSelf(const UIRenderContext& ctx) const
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA);
 
+    const UITheme* theme = ctx.theme;
+    const auto& col = theme ? theme->crosshair : m_color;
+
     m_shader->use();
-    m_shader->setVec4("uColor", glm::vec4(m_color[0], m_color[1], m_color[2], m_color[3]));
+    m_shader->setVec4("uColor", glm::vec4(col[0], col[1], col[2], col[3]));
     m_shader->setVec2("uScreenSize", {screenW, screenH});
     // Mesh is centered at (0,0); offset to screen center for bottom-left-origin shader
     m_shader->setVec2("uOffset", {screenW * 0.5f, screenH * 0.5f});

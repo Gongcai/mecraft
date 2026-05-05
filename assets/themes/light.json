@@ -1,0 +1,71 @@
+{
+    "panelBackground":      [0.92, 0.92, 0.92, 0.95],
+    "panelBorder":          [0.6, 0.6, 0.6, 0.8],
+    "panelBorderWidth":     1.0,
+
+    "buttonNormal":         [0.85, 0.85, 0.85, 0.95],
+    "buttonHover":          [0.75, 0.75, 0.75, 1.0],
+    "buttonPressed":        [0.65, 0.65, 0.65, 1.0],
+    "buttonDisabled":       [0.88, 0.88, 0.88, 0.5],
+    "buttonBorder":         [0.5, 0.5, 0.5, 0.5],
+    "buttonBorderWidth":    2.0,
+
+    "textPrimary":          [0.1, 0.1, 0.1, 1.0],
+    "textSecondary":        [0.35, 0.35, 0.35, 1.0],
+    "textDisabled":         [0.6, 0.6, 0.6, 1.0],
+    "textLink":             [0.1, 0.45, 0.85, 1.0],
+
+    "tooltipBackground":    [0.95, 0.95, 0.95, 0.97],
+    "tooltipBorder":        [0.7, 0.7, 0.7, 0.9],
+    "tooltipBorderWidth":   1.0,
+
+    "sliderTrack":          [0.75, 0.75, 0.75, 1.0],
+    "sliderFill":           [0.2, 0.5, 0.9, 1.0],
+    "sliderHandle":         [0.2, 0.2, 0.2, 1.0],
+    "sliderHandleHover":    [0.1, 0.1, 0.1, 1.0],
+    "sliderTrackHeight":    4.0,
+    "sliderHandleSize":     14.0,
+
+    "checkboxBox":          [0.9, 0.9, 0.9, 0.95],
+    "checkboxBoxHover":     [0.82, 0.82, 0.82, 1.0],
+    "checkboxBoxBorder":    [0.5, 0.5, 0.5, 0.6],
+    "checkboxCheck":        [0.2, 0.7, 0.3, 1.0],
+    "checkboxSize":         20.0,
+
+    "dropdownBackground":   [0.95, 0.95, 0.95, 0.97],
+    "dropdownBorder":       [0.6, 0.6, 0.6, 0.8],
+    "dropdownItemHover":    [0.82, 0.82, 0.82, 1.0],
+    "dropdownArrow":        [0.3, 0.3, 0.3, 1.0],
+
+    "scrollbarTrack":       [0.85, 0.85, 0.85, 0.6],
+    "scrollbarThumb":       [0.55, 0.55, 0.55, 0.8],
+    "scrollbarThumbHover":  [0.4, 0.4, 0.4, 0.9],
+    "scrollbarWidth":       8.0,
+
+    "hotbarBackground":     [1.0, 1.0, 1.0, 1.0],
+    "hotbarBorder":         [0.3, 0.3, 0.3, 0.9],
+    "hotbarIconTint":       [1.0, 1.0, 1.0, 1.0],
+
+    "crosshair":            [0.1, 0.1, 0.1, 1.0],
+
+    "consoleBox":           [0.0, 0.0, 0.0, 0.7],
+    "consoleTextNormal":    [0.95, 0.95, 0.95, 1.0],
+    "consoleTextWarning":   [0.95, 0.35, 0.35, 1.0],
+    "consoleTextSuccess":   [0.45, 0.9, 0.5, 1.0],
+
+    "overlayDim":           [0.0, 0.0, 0.0, 0.4],
+
+    "accentPrimary":        [0.1, 0.55, 0.85, 1.0],
+    "accentSuccess":        [0.2, 0.6, 0.2, 1.0],
+    "accentDanger":         [0.8, 0.2, 0.2, 1.0],
+
+    "spacingSmall":         4.0,
+    "spacingMedium":        8.0,
+    "spacingLarge":         16.0,
+
+    "fontPixelHeight":      32,
+    "textScaleSmall":       1.0,
+    "textScaleMedium":      2.0,
+    "textScaleLarge":       4.0,
+    "textScaleTitle":       6.0
+}

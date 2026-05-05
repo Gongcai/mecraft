@@ -8,6 +8,7 @@
 #include "../../ui/UIRenderer.h"
 #include "../../ui/UIInputEvent.h"
 #include "../../ui/screens/PauseMenuScreen.h"
+#include "../../locale/LocaleManager.h"
 #include <GLFW/glfw3.h>
 
 class UIState : public IGameState {
@@ -21,6 +22,7 @@ public:
 
         ResourceMgr* rm = m_deps.uiRenderer.getResourceMgr();
         if (rm) {
+            m_pauseScreen.setLocaleManager(&m_deps.localeManager);
             m_pauseScreen.init(*rm);
             m_pauseScreen.onResume = [this]() {
                 m_deps.fsm.popState();

@@ -15,6 +15,7 @@
 #include "../ui/UIRenderer.h"
 #include "app_states/AppStateMachine.h"
 #include "app_states/AppStateDependencies.h"
+#include "../locale/LocaleManager.h"
 
 class GameManager {
 public:
@@ -41,6 +42,7 @@ private:
     AudioEngine m_audioEngine;
     BgmSystem m_bgmSystem;
     UIRenderer m_uiRenderer;
+    LocaleManager m_localeManager;
 
     AppStateMachine m_appStateMachine;
 };

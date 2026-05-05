@@ -11,6 +11,7 @@
 #include "../resource/ResourceMgr.h"
 #include "UIRenderUtils.h"
 #include "UIScene.h"
+#include "UIThemePresets.h"
 
 UIRenderer::UIRenderer() = default;
 
@@ -22,6 +23,7 @@ UIRenderer::~UIRenderer()
 void UIRenderer::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
+    m_theme = UIThemePresets::dark();
     m_crosshair.init(resourceMgr);
     m_text.init(resourceMgr);
 
@@ -181,16 +183,6 @@ void UIRenderer::setHeldItemPreviewActionAnimationActive(const bool active)
     m_heldItemPreview.setActionAnimationActive(active);
 }
 
-void UIRenderer::setTextAdvanceFactor(float factor)
-{
-    m_text.setAdvanceFactor(factor);
-}
-
-float UIRenderer::getTextAdvanceFactor() const
-{
-    return m_text.getAdvanceFactor();
-}
-
 void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs)
 {
     m_commandInput.setCaretBlinkPeriodMs(periodMs);
@@ -199,6 +191,26 @@ void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs)
 float UIRenderer::getCommandCaretBlinkPeriodMs() const
 {
     return m_commandInput.getCaretBlinkPeriodMs();
+}
+
+void UIRenderer::setTheme(const UITheme& theme)
+{
+    m_theme = theme;
+}
+
+void UIRenderer::setLocaleManager(const LocaleManager* localeManager)
+{
+    m_localeManager = localeManager;
+}
+
+const UITheme& UIRenderer::getTheme() const
+{
+    return m_theme;
+}
+
+UITheme& UIRenderer::getTheme()
+{
+    return m_theme;
 }
 
 void UIRenderer::appendCommandLine(const std::string& command)
@@ -391,6 +403,8 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
     context.heldItemPreviewMotion = heldItemMotion;
+    context.theme = &m_theme;
+    context.localeManager = m_localeManager;
     return context;
 }
 
@@ -407,6 +421,8 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.visible;
+    context.theme = &m_theme;
+    context.localeManager = m_localeManager;
     return context;
 }
 
@@ -438,6 +454,8 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     context.textRenderer = &m_text;
     context.pointerX = inputSnapshot.mousePosition.x;
     context.pointerY = inputSnapshot.mousePosition.y;
+    context.theme = &m_theme;
+    context.localeManager = m_localeManager;
     m_lastSceneContext = context;
 
     if (m_activeScene && m_activeScene->isVisible()) {

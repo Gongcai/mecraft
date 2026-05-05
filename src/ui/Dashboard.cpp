@@ -543,11 +543,6 @@ void Dashboard::showCraftingGridSettings(UIRenderer& uiRenderer) {
 void Dashboard::showTextSettings(UIRenderer& uiRenderer) {
     ImGui::Begin("Text Settings");
 
-    float advance = uiRenderer.getTextAdvanceFactor();
-    if (ImGui::SliderFloat("Advance Factor", &advance, 0.5f, 1.2f, "%.2f")) {
-        uiRenderer.setTextAdvanceFactor(advance);
-    }
-
     float caretBlinkMs = uiRenderer.getCommandCaretBlinkPeriodMs();
     if (ImGui::SliderFloat("Command Caret Blink (ms)", &caretBlinkMs, 120.0f, 1500.0f, "%.0f")) {
         uiRenderer.setCommandCaretBlinkPeriodMs(caretBlinkMs);

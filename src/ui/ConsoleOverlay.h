@@ -8,6 +8,7 @@
 
 #include "ConsoleDisplayBox.h"
 #include "UIWidget.h"
+#include "UITheme.h"
 
 class ResourceMgr;
 class Shader;
@@ -32,7 +33,7 @@ protected:
     void renderSelf(const UIRenderContext& context) const override;
 
 private:
-    void renderMessages(double nowSec, const TextRenderer& textRenderer) const;
+    void renderMessages(double nowSec, const TextRenderer& textRenderer, const UITheme* theme = nullptr) const;
     void drawOverlayRect(int screenW,
                          int screenH,
                          int x,

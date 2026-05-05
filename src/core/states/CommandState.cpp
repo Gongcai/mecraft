@@ -9,10 +9,10 @@
 
 void CommandState::switchToCreativeMode() {
     m_deps.fsm.changeState(std::make_unique<CreativeModeState>(m_deps));
-    m_deps.uiRenderer.appendSuccessLine("Switched to Creative Mode");
+    m_deps.uiRenderer.appendSuccessLine(m_deps.localeManager.tr("switched_creative"));
 }
 
 void CommandState::switchToSurvivalMode() {
     m_deps.fsm.changeState(std::make_unique<GameplayState>(m_deps));
-    m_deps.uiRenderer.appendSuccessLine("Switched to Survive Mode");
+    m_deps.uiRenderer.appendSuccessLine(m_deps.localeManager.tr("switched_survival"));
 }

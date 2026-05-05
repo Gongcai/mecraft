@@ -200,7 +200,6 @@ void Pickable::render(const SlotInfo* slots, int count,
     {
         constexpr float kBaseGlyphSize = 8.0f;
         constexpr std::array<float, 4> kTextColor = {1.0f, 1.0f, 1.0f, 1.0f};
-        const float advanceFactor = textRenderer->getAdvanceFactor();
 
         textRenderer->beginBatch(static_cast<float>(screenW), static_cast<float>(screenH));
 
@@ -211,11 +210,9 @@ void Pickable::render(const SlotInfo* slots, int count,
 
             const float slotSize = static_cast<float>(slots[i].size);
             const float textScale = params.countTextScale * slotSize / kBaseGlyphSize;
-            const float glyphSize = kBaseGlyphSize * textScale;
-            const float charAdvance = glyphSize * advanceFactor;
 
             const std::string countStr = std::to_string(slots[i].count);
-            const float textWidth = static_cast<float>(countStr.size()) * charAdvance;
+            const float textWidth = textRenderer->measureText(countStr, textScale).width;
             const float textX = static_cast<float>(slots[i].x + slots[i].size) - textWidth + params.countTextOffsetX * slotSize;
             const float textY = static_cast<float>(screenH - (slots[i].y + slots[i].size)) + params.countTextOffsetY * slotSize;
 

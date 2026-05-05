@@ -6,14 +6,42 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "BitmapFont.h"
+#include "../Paths.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
+
+static uint32_t decodeUtf8(const char*& ptr, const char* end) {
+    auto c = static_cast<unsigned char>(*ptr);
+    if (c < 0x80) { ptr += 1; return c; }
+    if ((c & 0xE0) == 0xC0) {
+        if (end - ptr < 2) { ptr += 1; return 0xFFFD; }
+        ptr += 2;
+        return static_cast<uint32_t>((c & 0x1F) << 6) |
+               (static_cast<unsigned char>(ptr[-1]) & 0x3F);
+    }
+    if ((c & 0xF0) == 0xE0) {
+        if (end - ptr < 3) { ptr += 1; return 0xFFFD; }
+        ptr += 3;
+        return static_cast<uint32_t>((c & 0x0F) << 12) |
+               (static_cast<uint32_t>(static_cast<unsigned char>(ptr[-2]) & 0x3F) << 6) |
+               (static_cast<unsigned char>(ptr[-1]) & 0x3F);
+    }
+    if ((c & 0xF8) == 0xF0) {
+        if (end - ptr < 4) { ptr += 1; return 0xFFFD; }
+        ptr += 4;
+        return static_cast<uint32_t>((c & 0x07) << 18) |
+               (static_cast<uint32_t>(static_cast<unsigned char>(ptr[-3]) & 0x3F) << 12) |
+               (static_cast<uint32_t>(static_cast<unsigned char>(ptr[-2]) & 0x3F) << 6) |
+               (static_cast<unsigned char>(ptr[-1]) & 0x3F);
+    }
+    ptr += 1;
+    return 0xFFFD;
+}
 
 void TextRenderer::init(ResourceMgr& resourceMgr)
 {
     m_textShader = resourceMgr.getShader("text");
-    m_fontTexture = resourceMgr.getGuiTexture("font_ascii");
+    m_atlas.init(DEFAULT_FONT_PATH, 32);
     initMesh();
 }
 
@@ -21,7 +49,7 @@ void TextRenderer::shutdown()
 {
     cleanupMesh();
     m_textShader = nullptr;
-    m_fontTexture = 0;
+    m_atlas.shutdown();
 }
 
 void TextRenderer::initMesh()
@@ -54,14 +82,37 @@ void TextRenderer::cleanupMesh()
     }
 }
 
-void TextRenderer::setAdvanceFactor(float factor)
+TextRenderer::TextMetrics TextRenderer::measureText(const std::string& text, float scale) const
 {
-    m_textAdvanceFactor = std::clamp(factor, 0.5f, 1.2f);
-}
+    TextMetrics result{};
+    if (text.empty()) return result;
 
-float TextRenderer::getAdvanceFactor() const
-{
-    return m_textAdvanceFactor;
+    const float renderScale = std::max(0.1f, scale);
+    const float pixelScale = (8.0f * renderScale) / static_cast<float>(m_atlas.getPixelHeight());
+    const float lineHeight = static_cast<float>(m_atlas.getLineHeight()) * pixelScale;
+    float maxWidth = 0.0f;
+    float currentWidth = 0.0f;
+    int lineCount = 1;
+
+    const char* ptr = text.data();
+    const char* end = ptr + text.size();
+    while (ptr < end) {
+        if (*ptr == '\n') {
+            maxWidth = std::max(maxWidth, currentWidth);
+            currentWidth = 0.0f;
+            lineCount++;
+            ptr++;
+            continue;
+        }
+        uint32_t code = decodeUtf8(ptr, end);
+        const GlyphInfo& g = m_atlas.getGlyph(code);
+        currentWidth += static_cast<float>(g.advanceX >> 6) * pixelScale;
+    }
+    maxWidth = std::max(maxWidth, currentWidth);
+
+    result.width = maxWidth;
+    result.height = lineHeight * static_cast<float>(lineCount);
+    return result;
 }
 
 void TextRenderer::generateQuads(const std::string& text,
@@ -71,41 +122,47 @@ void TextRenderer::generateQuads(const std::string& text,
                                  const std::array<float, 4>& color,
                                  std::vector<float>& outVertices) const
 {
-    (void)color; // color is applied at draw time via uniform, not per-vertex
+    (void)color;
 
-    const float glyphSize = static_cast<float>(BitmapFont::kGlyphSizePx) * std::max(0.1f, scale);
-    const float advance = glyphSize * m_textAdvanceFactor;
+    const float renderScale = std::max(0.1f, scale);
+    const float pixelScale = (8.0f * renderScale) / static_cast<float>(m_atlas.getPixelHeight());
+    const float lineHeight = static_cast<float>(m_atlas.getLineHeight()) * pixelScale;
+
+    // cursorY = baseline position. Place baseline at y + descent so that the
+    // text bottom (baseline - descent) aligns with the caller's y coordinate.
+    const float descent = static_cast<float>(m_atlas.getDescent()) * pixelScale;
 
     const float originX = x;
     float cursorX = x;
-    float cursorY = y;
+    float cursorY = y + descent;
 
-    for (char ch : text) {
-        if (ch == '\n') {
+    const char* ptr = text.data();
+    const char* end = ptr + text.size();
+    while (ptr < end) {
+        if (*ptr == '\n') {
             cursorX = originX;
-            cursorY -= glyphSize;
+            cursorY -= lineHeight;
+            ptr++;
             continue;
         }
 
-        auto code = static_cast<unsigned char>(ch);
-        if (code < 32 || code > 126) {
-            code = static_cast<unsigned char>('?');
-        }
+        uint32_t code = decodeUtf8(ptr, end);
 
-        const auto uv = BitmapFont::glyphUV(code);
-        const float x0 = cursorX;
-        const float y0 = cursorY;
-        const float x1 = cursorX + glyphSize;
-        const float y1 = cursorY + glyphSize;
+        const GlyphInfo& g = m_atlas.getGlyph(code);
 
-        outVertices.push_back(x0); outVertices.push_back(y0); outVertices.push_back(uv.first.x); outVertices.push_back(uv.first.y);
-        outVertices.push_back(x1); outVertices.push_back(y0); outVertices.push_back(uv.second.x); outVertices.push_back(uv.first.y);
-        outVertices.push_back(x1); outVertices.push_back(y1); outVertices.push_back(uv.second.x); outVertices.push_back(uv.second.y);
-        outVertices.push_back(x0); outVertices.push_back(y0); outVertices.push_back(uv.first.x); outVertices.push_back(uv.first.y);
-        outVertices.push_back(x1); outVertices.push_back(y1); outVertices.push_back(uv.second.x); outVertices.push_back(uv.second.y);
-        outVertices.push_back(x0); outVertices.push_back(y1); outVertices.push_back(uv.first.x); outVertices.push_back(uv.second.y);
+        const float xPos = cursorX + static_cast<float>(g.bearingX) * pixelScale;
+        const float yPos = cursorY - static_cast<float>(g.bitmapHeight - g.bearingY) * pixelScale;
+        const float w = static_cast<float>(g.bitmapWidth) * pixelScale;
+        const float h = static_cast<float>(g.bitmapHeight) * pixelScale;
 
-        cursorX += advance;
+        outVertices.push_back(xPos);     outVertices.push_back(yPos);     outVertices.push_back(g.uvMinX); outVertices.push_back(g.uvMinY);
+        outVertices.push_back(xPos + w); outVertices.push_back(yPos);     outVertices.push_back(g.uvMaxX); outVertices.push_back(g.uvMinY);
+        outVertices.push_back(xPos + w); outVertices.push_back(yPos + h); outVertices.push_back(g.uvMaxX); outVertices.push_back(g.uvMaxY);
+        outVertices.push_back(xPos);     outVertices.push_back(yPos);     outVertices.push_back(g.uvMinX); outVertices.push_back(g.uvMinY);
+        outVertices.push_back(xPos + w); outVertices.push_back(yPos + h); outVertices.push_back(g.uvMaxX); outVertices.push_back(g.uvMaxY);
+        outVertices.push_back(xPos);     outVertices.push_back(yPos + h); outVertices.push_back(g.uvMinX); outVertices.push_back(g.uvMaxY);
+
+        cursorX += static_cast<float>(g.advanceX >> 6) * pixelScale;
     }
 }
 
@@ -117,7 +174,7 @@ void TextRenderer::render(const std::string& text,
                           float screenWidth,
                           float screenHeight) const
 {
-    if (!m_textShader || m_fontTexture == 0 || m_textVao == 0 || m_textVbo == 0 || text.empty()) {
+    if (!m_textShader || m_atlas.getTexture() == 0 || m_textVao == 0 || m_textVbo == 0 || text.empty()) {
         return;
     }
 
@@ -153,7 +210,7 @@ void TextRenderer::render(const std::string& text,
     m_textShader->setInt("uFont", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_fontTexture);
+    glBindTexture(GL_TEXTURE_2D, m_atlas.getTexture());
 
     glBindVertexArray(m_textVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
@@ -205,7 +262,7 @@ void TextRenderer::endBatch() const
     }
     m_batchActive = false;
 
-    if (m_batchVertices.empty() || !m_textShader || m_fontTexture == 0 ||
+    if (m_batchVertices.empty() || !m_textShader || m_atlas.getTexture() == 0 ||
         m_textVao == 0 || m_textVbo == 0) {
         m_batchVertices.clear();
         return;
@@ -235,7 +292,7 @@ void TextRenderer::endBatch() const
     m_textShader->setInt("uFont", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_fontTexture);
+    glBindTexture(GL_TEXTURE_2D, m_atlas.getTexture());
 
     glBindVertexArray(m_textVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
@@ -260,5 +317,3 @@ void TextRenderer::endBatch() const
 
     m_batchVertices.clear();
 }
-
-

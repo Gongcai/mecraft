@@ -2,7 +2,10 @@
 
 #include <string>
 
+#include "UITheme.h"
+
 class ResourceMgr;
+class LocaleManager;
 class Inventory;
 class TextRenderer;
 
@@ -37,4 +40,6 @@ struct UIRenderContext {
     bool hasDraggedItem = false;
     int draggedItemId = 0;
     HeldItemPreviewMotion heldItemPreviewMotion;
+    const UITheme* theme = nullptr;
+    const LocaleManager* localeManager = nullptr;
 };

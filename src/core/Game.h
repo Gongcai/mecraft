@@ -34,6 +34,7 @@
 #include "../crafting/CraftingSystem.h"
 #include "../ecs/GameplayScene.h"
 #include "states/StateDependencies.h"
+#include "../locale/LocaleManager.h"
 struct GameInitParams {
     Window* window = nullptr;
     InputManager* input = nullptr;
@@ -43,6 +44,7 @@ struct GameInitParams {
     AudioEngine* audioEngine = nullptr;
     BgmSystem* bgmSystem = nullptr;
     UIRenderer* uiRenderer = nullptr;
+    LocaleManager* localeManager = nullptr;
     int seed = 1234;
 };
 
@@ -72,6 +74,7 @@ private:
     AudioEngine& m_audioEngine;
     BgmSystem& m_bgmSystem;
     UIRenderer& m_uiRenderer;
+    LocaleManager& m_localeManager;
 
     GameStateMachine m_stateMachine; // Add StateMachine
     World         m_world;

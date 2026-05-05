@@ -2,32 +2,34 @@
 
 #include "../UIButton.h"
 #include "../UIText.h"
-#include "../UIPanel.h"
+#include "../UIDropdown.h"
+#include "../../locale/LocaleManager.h"
 
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     (void)resourceMgr;
 
     // Title text "MECRAFT"
     auto title = std::make_unique<UIText>();
-    title->setText("MECRAFT");
+    title->setText(getLocaleManager() ? getLocaleManager()->tr("mecraft") : "MECRAFT");
     title->setTextScale(6.0f);
     title->setTextColor({0.2f, 0.8f, 1.0f, 1.0f});
+    title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::Center;
     title->anchorOffsetY = 80.0f;
-    title->width = title->measureTextWidth();
-    title->height = title->measureTextHeight();
+    title->width = 0.0f;
+    title->height = 0.0f;
     m_title = title.get();
 
     // Start button
     auto startBtn = std::make_unique<UIButton>();
-    startBtn->setText("START GAME");
+    startBtn->setText(getLocaleManager() ? getLocaleManager()->tr("start_game") : "START GAME");
     startBtn->setTextScale(2.0f);
     startBtn->width = 280.0f;
     startBtn->height = 50.0f;
     startBtn->anchor = Anchor::Center;
     startBtn->anchorOffsetY = -20.0f;
-    startBtn->setNormalColor({0.25f, 0.25f, 0.25f, 0.9f});
-    startBtn->setHoverColor({0.4f, 0.4f, 0.4f, 1.0f});
+    startBtn->setNormalColor({0.2f, 0.6f, 0.2f, 0.9f});
+    startBtn->setHoverColor({0.3f, 0.8f, 0.3f, 1.0f});
     startBtn->setOnClick([this]() {
         if (onStartClicked) onStartClicked();
     });
@@ -35,27 +37,64 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Quit button
     auto quitBtn = std::make_unique<UIButton>();
-    quitBtn->setText("QUIT");
+    quitBtn->setText(getLocaleManager() ? getLocaleManager()->tr("quit") : "QUIT");
     quitBtn->setTextScale(2.0f);
     quitBtn->width = 280.0f;
     quitBtn->height = 50.0f;
     quitBtn->anchor = Anchor::Center;
     quitBtn->anchorOffsetY = -80.0f;
-    quitBtn->setNormalColor({0.25f, 0.25f, 0.25f, 0.9f});
-    quitBtn->setHoverColor({0.4f, 0.4f, 0.4f, 1.0f});
+    quitBtn->setNormalColor({0.4f, 0.2f, 0.2f, 0.9f});
+    quitBtn->setHoverColor({0.6f, 0.3f, 0.3f, 1.0f});
     quitBtn->setOnClick([this]() {
         if (onQuitClicked) onQuitClicked();
     });
     m_quitButton = quitBtn.get();
 
+    // Language dropdown
+    auto langDropdown = std::make_unique<UIDropdown>();
+    langDropdown->width = 180.0f;
+    langDropdown->height = 30.0f;
+    langDropdown->anchor = Anchor::BottomRight;
+    langDropdown->anchorOffsetX = -10.0f;
+    langDropdown->anchorOffsetY = 10.0f;
+    if (getLocaleManager()) {
+        m_langCodes = LocaleManager::getAvailableLanguages();
+        std::vector<std::string> displayNames;
+        int selectedIndex = 0;
+        for (size_t i = 0; i < m_langCodes.size(); ++i) {
+            displayNames.push_back(LocaleManager::getLanguageDisplayName(m_langCodes[i]));
+            if (m_langCodes[i] == getLocaleManager()->getLanguage()) {
+                selectedIndex = static_cast<int>(i);
+            }
+        }
+        langDropdown->setOptions(std::move(displayNames));
+        langDropdown->setSelectedIndex(selectedIndex);
+    }
+    langDropdown->setOnSelectionChanged([this](int idx, const std::string&) {
+        if (getLocaleManager() && idx >= 0 && idx < static_cast<int>(m_langCodes.size())) {
+            const_cast<LocaleManager*>(getLocaleManager())->setLanguage(m_langCodes[idx]);
+            const_cast<LocaleManager*>(getLocaleManager())->saveSettings();
+            refreshTexts();
+        }
+    });
+    m_langDropdown = langDropdown.get();
+
     // Add root widgets
     addRoot(std::move(title));
     addRoot(std::move(startBtn));
     addRoot(std::move(quitBtn));
+    addRoot(std::move(langDropdown));
 
     // Register tweens
     registerFloatTween(m_titleY);
     registerFloatTween(m_titleGlow);
+}
+
+void MainMenuScreen::refreshTexts() {
+    if (!getLocaleManager()) return;
+    if (m_title) m_title->setText(getLocaleManager()->tr("mecraft"));
+    if (m_startButton) m_startButton->setText(getLocaleManager()->tr("start_game"));
+    if (m_quitButton) m_quitButton->setText(getLocaleManager()->tr("quit"));
 }
 
 void MainMenuScreen::onSceneEnter() {

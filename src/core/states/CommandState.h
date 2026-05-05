@@ -19,6 +19,7 @@
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/util/PlayerQuery.h"
 #include "../../ecs/entity/MobModelFactory.h"
+#include "../../locale/LocaleManager.h"
 #include <cstdlib>
 namespace physics {
 class PhysicsSystem;
@@ -107,7 +108,7 @@ private:
                 switchToSurvivalMode();
                 return true;
             } else {
-                m_deps.uiRenderer.appendWarningLine("Usage: /gamemode <creative|survival>");
+                m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_gamemode"));
                 return false;
             }
         }
@@ -118,20 +119,20 @@ private:
                 std::string valueStr;
                 iss >> valueStr;
                 if (valueStr.empty()) {
-                    m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                    m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
                     return false;
                 }
                 char* endPtr = nullptr;
                 const float value = std::strtof(valueStr.c_str(), &endPtr);
                 if (endPtr == valueStr.c_str() || value < 0.0f || value > 1200.0f) {
-                    m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                    m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
                     return false;
                 }
                 m_deps.world.getDayNightSystem().setTimeOfDay(value);
-                m_deps.uiRenderer.appendCommandLine("Time set to " + std::to_string(static_cast<int>(value)));
+                m_deps.uiRenderer.appendCommandLine(m_deps.localeManager.tr("time_set_to") + std::to_string(static_cast<int>(value)));
                 return false;
             } else {
-                m_deps.uiRenderer.appendWarningLine("Usage: /time set <0-1200>");
+                m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
                 return false;
             }
         }
@@ -142,13 +143,13 @@ private:
                 ecs::PlayerQuery query(m_deps.ecsRegistry);
                 glm::vec3 playerPos = query.getPosition();
                 ecs::MobModelFactory::createZombie(m_deps.ecsRegistry, playerPos);
-                m_deps.uiRenderer.appendCommandLine("Spawned zombie");
+                m_deps.uiRenderer.appendCommandLine(m_deps.localeManager.tr("spawned_zombie"));
                 return false;
             }
-            m_deps.uiRenderer.appendWarningLine("Unknown mob: " + mobType);
+            m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("unknown_mob") + mobType);
             return false;
         }
-        m_deps.uiRenderer.appendWarningLine("Unknown command: " + primary);
+        m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("unknown_command") + primary);
         return false;
 
 

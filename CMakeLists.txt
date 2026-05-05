@@ -56,6 +56,7 @@ set(SRC_CORE
         src/core/CameraController.cpp
         src/thread/ThreadPool.cpp
         src/resource/ResourceMgr.cpp
+        src/locale/LocaleManager.cpp
 )
 
 # [世界与地形]
@@ -101,6 +102,7 @@ set(SRC_UI
         src/ui/ConsoleDisplayBox.cpp
         src/ui/CrosshairControl.cpp
         src/ui/TextRenderer.cpp
+        src/ui/GlyphAtlas.cpp
         src/ui/UILayout.cpp
         src/ui/HotbarControl.cpp
         src/ui/HudControl.cpp
@@ -119,6 +121,12 @@ set(SRC_UI
         src/ui/UIButton.cpp
         src/ui/UIScene.cpp
         src/ui/ScreenTransition.cpp
+        src/ui/UITheme.cpp
+        src/ui/UIThemePresets.cpp
+        src/ui/UISlider.cpp
+        src/ui/UICheckbox.cpp
+        src/ui/UIDropdown.cpp
+        src/ui/UIScrollArea.cpp
         src/ui/screens/MainMenuScreen.cpp
         src/ui/screens/PauseMenuScreen.cpp
 )

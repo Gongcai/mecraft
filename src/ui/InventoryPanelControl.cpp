@@ -16,6 +16,7 @@
 #include "../player/Inventory.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
+#include "../locale/LocaleManager.h"
 
 namespace {
 void addQuad(std::vector<float>& vertices,
@@ -34,25 +35,6 @@ void addQuad(std::vector<float>& vertices,
     vertices.push_back(x0); vertices.push_back(y0); vertices.push_back(u0); vertices.push_back(v0);
     vertices.push_back(x1); vertices.push_back(y1); vertices.push_back(u1); vertices.push_back(v1);
     vertices.push_back(x0); vertices.push_back(y1); vertices.push_back(u0); vertices.push_back(v1);
-}
-
-std::string displayNameFromPath(std::string_view path) {
-    // "diamond_sword" → "Diamond Sword"
-    std::string result;
-    result.reserve(path.size() + 4);
-    bool capitalizeNext = true;
-    for (char c : path) {
-        if (c == '_') {
-            result += ' ';
-            capitalizeNext = true;
-        } else if (capitalizeNext) {
-            result += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-            capitalizeNext = false;
-        } else {
-            result += c;
-        }
-    }
-    return result;
 }
 }
 
@@ -133,17 +115,17 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
         }
 
         if (hoveredId != 0) {
+            const ItemDef& def = ItemRegistry::get(hoveredId);
+            const std::string name = context.localeManager
+                ? context.localeManager->getItemName(def.namespacedId.path())
+                : std::string(def.namespacedId.path());
             if (hoveredId != m_tooltipHoveredItemId) {
                 m_tooltipHoveredItemId = hoveredId;
-                const ItemDef& def = ItemRegistry::get(hoveredId);
-                const std::string name = displayNameFromPath(def.namespacedId.path());
                 m_tooltip.startHover(name, context.pointerX, context.pointerY,
                                      static_cast<float>(context.screenWidth),
                                      static_cast<float>(context.screenHeight),
                                      context.timeSeconds);
             } else if (m_tooltip.isHovering()) {
-                const ItemDef& def = ItemRegistry::get(hoveredId);
-                const std::string name = displayNameFromPath(def.namespacedId.path());
                 m_tooltip.startHover(name, context.pointerX, context.pointerY,
                                      static_cast<float>(context.screenWidth),
                                      static_cast<float>(context.screenHeight),

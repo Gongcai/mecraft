@@ -13,21 +13,17 @@ int fail(const char* message) {
 int main() {
     TextRenderer text;
 
-    text.setAdvanceFactor(-1.0f);
-    if (text.getAdvanceFactor() != 0.5f) {
-        return fail("advance factor should clamp to minimum");
-    }
-
-    text.setAdvanceFactor(9.0f);
-    if (text.getAdvanceFactor() != 1.2f) {
-        return fail("advance factor should clamp to maximum");
-    }
-
     // Smoke: empty text should early return even without init.
     text.render("", 0.0f, 0.0f, 1.0f, {1.0f, 1.0f, 1.0f, 1.0f}, 1280.0f, 720.0f);
+
+    // measureText on empty string should return zero.
+    auto m = text.measureText("", 1.0f);
+    if (m.width != 0.0f || m.height != 0.0f) {
+        return fail("measureText on empty string should return zero");
+    }
+
     text.shutdown();
 
     std::cout << "[text_renderer_test] PASS\n";
     return EXIT_SUCCESS;
 }
-

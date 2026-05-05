@@ -83,7 +83,7 @@ void ConsoleOverlay::renderSelf(const UIRenderContext& context) const
         return;
     }
 
-    renderMessages(static_cast<double>(context.timeSeconds), *textRenderer);
+    renderMessages(static_cast<double>(context.timeSeconds), *textRenderer, context.theme);
 }
 
 void ConsoleOverlay::drawOverlayRect(int screenW,
@@ -126,7 +126,7 @@ void ConsoleOverlay::drawOverlayRect(int screenW,
     glBindVertexArray(0);
 }
 
-void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRenderer) const
+void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRenderer, const UITheme* theme) const
 {
     if (m_display.empty()) {
         return;
@@ -146,7 +146,13 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
     params.visibleBoxes = m_visibleBoxes;
     params.holdSeconds = m_holdSeconds;
     params.fadeEndSeconds = m_fadeEndSeconds;
-    params.textAdvanceFactor = textRenderer.getAdvanceFactor();
+
+    if (theme) {
+        params.boxColor = theme->consoleBox;
+        params.normalTextColor = theme->consoleTextNormal;
+        params.warningTextColor = theme->consoleTextWarning;
+        params.successTextColor = theme->consoleTextSuccess;
+    }
 
     m_display.setMaxLines(m_maxLines);
     m_display.render(
@@ -164,6 +170,10 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
                                           float,
                                           float) {
             textRenderer.render(line, x, y, scale, color, static_cast<float>(screenW), static_cast<float>(screenH));
+        },
+        [&textRenderer](const std::string& text, float scale) -> ConsoleDisplayBox::TextMetricsResult {
+            auto m = textRenderer.measureText(text, scale);
+            return {m.width, m.height};
         });
 }
 

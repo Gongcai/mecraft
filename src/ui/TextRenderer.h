@@ -5,12 +5,19 @@
 #include <vector>
 #include <glad/glad.h>
 
+#include "GlyphAtlas.h"
+
 class ResourceMgr;
 class Shader;
 
 class TextRenderer
 {
 public:
+    struct TextMetrics {
+        float width = 0.0f;
+        float height = 0.0f;
+    };
+
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
@@ -32,8 +39,10 @@ public:
                      const std::array<float, 4>& color) const;
     void endBatch() const;
 
-    void setAdvanceFactor(float factor);
-    [[nodiscard]] float getAdvanceFactor() const;
+    // Text measurement using per-glyph metrics from FreeType.
+    [[nodiscard]] TextMetrics measureText(const std::string& text, float scale) const;
+
+    [[nodiscard]] const GlyphAtlas& getAtlas() const { return m_atlas; }
 
 private:
     void initMesh();
@@ -46,10 +55,10 @@ private:
                        std::vector<float>& outVertices) const;
 
     Shader* m_textShader = nullptr;
+    GlyphAtlas m_atlas;
+
     GLuint m_textVao = 0;
     GLuint m_textVbo = 0;
-    GLuint m_fontTexture = 0;
-    float m_textAdvanceFactor = 0.70f;
 
     // Batch state (mutable for const batch methods).
     mutable bool m_batchActive = false;
@@ -57,4 +66,3 @@ private:
     mutable float m_batchScreenHeight = 0.0f;
     mutable std::vector<float> m_batchVertices;
 };
-
