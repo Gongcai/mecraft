@@ -1,6 +1,7 @@
 #include "TextRenderer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include <glm/vec2.hpp>
@@ -132,9 +133,9 @@ void TextRenderer::generateQuads(const std::string& text,
     // text bottom (baseline - descent) aligns with the caller's y coordinate.
     const float descent = static_cast<float>(m_atlas.getDescent()) * pixelScale;
 
-    const float originX = x;
-    float cursorX = x;
-    float cursorY = y + descent;
+    const float originX = std::round(x);
+    float cursorX = originX;
+    float cursorY = std::round(y + descent);
 
     const char* ptr = text.data();
     const char* end = ptr + text.size();
@@ -150,8 +151,8 @@ void TextRenderer::generateQuads(const std::string& text,
 
         const GlyphInfo& g = m_atlas.getGlyph(code);
 
-        const float xPos = cursorX + static_cast<float>(g.bearingX) * pixelScale;
-        const float yPos = cursorY - static_cast<float>(g.bitmapHeight - g.bearingY) * pixelScale;
+        const float xPos = std::round(cursorX + static_cast<float>(g.bearingX) * pixelScale);
+        const float yPos = std::round(cursorY - static_cast<float>(g.bitmapHeight - g.bearingY) * pixelScale);
         const float w = static_cast<float>(g.bitmapWidth) * pixelScale;
         const float h = static_cast<float>(g.bitmapHeight) * pixelScale;
 
@@ -185,6 +186,8 @@ void TextRenderer::render(const std::string& text,
     if (vertices.empty()) {
         return;
     }
+
+    m_atlas.uploadPending();
 
     const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
@@ -267,6 +270,8 @@ void TextRenderer::endBatch() const
         m_batchVertices.clear();
         return;
     }
+
+    m_atlas.uploadPending();
 
     const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
     const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);

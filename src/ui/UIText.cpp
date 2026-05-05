@@ -35,6 +35,18 @@ void UIText::renderSelf(const UIRenderContext& ctx) const {
     std::array<float, 4> col = (m_hasLocalTextColor || !theme) ? m_textColor : theme->textPrimary;
     col[3] *= alpha;
 
+    if (m_shadowEnabled) {
+        std::array<float, 4> shadow = m_shadowColor;
+        shadow[3] *= alpha;
+        ctx.textRenderer->render(m_text,
+                                 ax + m_shadowOffsetX,
+                                 ay + m_shadowOffsetY,
+                                 m_textScale,
+                                 shadow,
+                                 static_cast<float>(ctx.screenWidth),
+                                 static_cast<float>(ctx.screenHeight));
+    }
+
     ctx.textRenderer->render(m_text, ax, ay, m_textScale, col,
                              static_cast<float>(ctx.screenWidth),
                              static_cast<float>(ctx.screenHeight));

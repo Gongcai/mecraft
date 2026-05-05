@@ -28,6 +28,11 @@ public:
     void clearLocalTextColor() { m_hasLocalTextColor = false; }
     [[nodiscard]] bool hasLocalTextColor() const { return m_hasLocalTextColor; }
 
+    void setShadowEnabled(bool enabled) { m_shadowEnabled = enabled; }
+    [[nodiscard]] bool isShadowEnabled() const { return m_shadowEnabled; }
+    void setShadowColor(const std::array<float, 4>& c) { m_shadowColor = c; }
+    void setShadowOffset(float x, float y) { m_shadowOffsetX = x; m_shadowOffsetY = y; }
+
     void setAlignment(TextAlignment alignment) { m_alignment = alignment; }
     [[nodiscard]] TextAlignment getAlignment() const { return m_alignment; }
 
@@ -42,6 +47,10 @@ private:
     std::string m_text;
     float m_textScale = 1.0f;
     std::array<float, 4> m_textColor{1.0f, 1.0f, 1.0f, 1.0f};
+    std::array<float, 4> m_shadowColor{0.0f, 0.0f, 0.0f, 0.65f};
+    float m_shadowOffsetX = 1.0f;
+    float m_shadowOffsetY = -1.0f;
     TextAlignment m_alignment = TextAlignment::Left;
     bool m_hasLocalTextColor = false;
+    bool m_shadowEnabled = false;
 };

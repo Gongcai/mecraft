@@ -16,8 +16,11 @@ public:
     void init(ResourceMgr& resourceMgr) override {
         m_panel.init(resourceMgr);
         m_label.init(resourceMgr);
-        m_label.setTextScale(1.0f);
+        m_label.setTextScale(2.0f);
         m_label.setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+        m_label.setShadowEnabled(true);
+        m_label.setShadowColor({0.0f, 0.0f, 0.0f, 0.75f});
+        m_label.setShadowOffset(1.0f, -1.0f);
         m_panel.setBackgroundColor({0.15f, 0.15f, 0.15f, 0.92f});
         m_panel.setBorderColor({0.4f, 0.4f, 0.4f, 0.8f});
         m_panel.setBorderWidth(1.0f);
@@ -87,8 +90,8 @@ private:
     void updateSize(const TextRenderer& tr) const {
         const float textW = m_label.measureTextWidth(tr);
         const float textH = m_label.measureTextHeight(tr);
-        constexpr float padX = 8.0f;
-        constexpr float padY = 4.0f;
+        constexpr float padX = 10.0f;
+        constexpr float padY = 6.0f;
         width = textW + padX * 2.0f;
         height = textH + padY * 2.0f;
         m_panel.width = width;
@@ -126,8 +129,8 @@ private:
         m_label.anchor = Anchor::BottomLeft;
         m_label.anchorOffsetX = 0;
         m_label.anchorOffsetY = 0;
-        m_label.x = wx + 8.0f;
-        m_label.y = wy + 4.0f;
+        m_label.x = wx + 10.0f;
+        m_label.y = wy + 6.0f;
     }
 
     mutable UIPanel m_panel;

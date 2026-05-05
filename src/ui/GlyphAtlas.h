@@ -25,6 +25,7 @@ public:
     void shutdown();
 
     const GlyphInfo& getGlyph(uint32_t codepoint) const;
+    void uploadPending() const;
     GLuint getTexture() const { return m_texture; }
     int getLineHeight() const { return m_lineHeight; }
     int getDescent() const { return m_descent; }

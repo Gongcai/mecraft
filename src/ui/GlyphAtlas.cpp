@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cstddef>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -68,10 +69,14 @@ const GlyphInfo& GlyphAtlas::getGlyph(uint32_t codepoint) const
         return it->second;
     }
     rasterizeGlyph(codepoint);
+    return m_glyphs[codepoint];
+}
+
+void GlyphAtlas::uploadPending() const
+{
     if (m_dirty) {
         uploadAtlas();
     }
-    return m_glyphs[codepoint];
 }
 
 void GlyphAtlas::rasterizeGlyph(uint32_t codepoint) const
@@ -141,11 +146,22 @@ void GlyphAtlas::rasterizeGlyph(uint32_t codepoint) const
     // Store rows in reverse order: FreeType row 0 (glyph top) → highest atlas row,
     // so that OpenGL's V=0 (texel row 0) holds the glyph bottom and V=1 holds the glyph top.
     const unsigned char* src = slot->bitmap.buffer;
+    const int pitch = static_cast<int>(slot->bitmap.pitch);
+    const int rowStride = pitch < 0 ? -pitch : pitch;
+    if (!src || rowStride < bmpW) {
+        m_glyphs[codepoint] = info;
+        return;
+    }
+    const unsigned char* srcTop = pitch < 0
+        ? src + static_cast<std::size_t>(bmpH - 1) * static_cast<std::size_t>(rowStride)
+        : src;
     for (int row = 0; row < bmpH; ++row) {
         const int dstRow = m_cursorY + (bmpH - 1 - row);
         const size_t dstOffset = static_cast<size_t>(dstRow) * static_cast<size_t>(m_atlasWidth) + static_cast<size_t>(m_cursorX);
-        std::memcpy(&m_pixelData[dstOffset], &src[static_cast<size_t>(row) * static_cast<size_t>(slot->bitmap.pitch)],
-                    static_cast<size_t>(bmpW));
+        const unsigned char* srcRow = pitch < 0
+            ? srcTop - static_cast<std::size_t>(row) * static_cast<std::size_t>(rowStride)
+            : srcTop + static_cast<std::size_t>(row) * static_cast<std::size_t>(rowStride);
+        std::memcpy(&m_pixelData[dstOffset], srcRow, static_cast<size_t>(bmpW));
     }
 
     m_glyphs[codepoint] = info;
@@ -156,12 +172,22 @@ void GlyphAtlas::rasterizeGlyph(uint32_t codepoint) const
 
 void GlyphAtlas::uploadAtlas() const
 {
+    if (m_pixelData.empty() || m_atlasWidth <= 0 || m_atlasHeight <= 0) {
+        return;
+    }
+
     if (m_texture == 0) {
         glGenTextures(1, &m_texture);
     }
 
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 4;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glBindTexture(GL_TEXTURE_2D, m_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, m_atlasWidth, m_atlasHeight, 0,
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_atlasWidth, m_atlasHeight, 0,
                  GL_RED, GL_UNSIGNED_BYTE, m_pixelData.data());
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -172,6 +198,7 @@ void GlyphAtlas::uploadAtlas() const
     GLint swizzle[] = {GL_RED, GL_RED, GL_RED, GL_RED};
     glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
     m_dirty = false;
 }
