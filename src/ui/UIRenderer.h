@@ -15,7 +15,6 @@
 #include "InventoryPanelControl.h"
 #include "Pickable.h"
 #include "TextRenderer.h"
-#include "UIInputRouter.h"
 #include "UIRenderContext.h"
 
 class Window;
@@ -24,6 +23,7 @@ class Inventory;
 class CraftingSystem;
 struct InputSnapshot;
 class UIScene;
+class UIWidget;
 
 class UIRenderer
 {
@@ -132,8 +132,7 @@ private:
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;
     ConsoleOverlay m_console;
-    UIInputRouter m_inputRouter;
-    std::vector<IUIControl*> m_controls;
+    std::vector<UIWidget*> m_widgetControls;
     ResourceMgr* m_resourceMgr = nullptr;
     UIScene* m_activeScene = nullptr;
     mutable UIRenderContext m_lastSceneContext;

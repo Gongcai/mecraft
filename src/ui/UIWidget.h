@@ -124,6 +124,21 @@ public:
         }
     }
 
+    // Per-frame logic update (override in subclasses)
+    virtual void onUpdate(float dt) { (void)dt; }
+
+    // Recursively update this widget and all children
+    void update(float dt) {
+        onUpdate(dt);
+        for (auto& child : m_children) {
+            child->update(dt);
+        }
+    }
+
+    // Data context injection (type-erased pointer to domain-specific data)
+    void setDataContext(const void* data) { m_dataContext = data; }
+    [[nodiscard]] const void* getDataContext() const { return m_dataContext; }
+
     // Rendering
     void render(const UIRenderContext& ctx) const {
         if (!visible) return;
@@ -203,4 +218,5 @@ private:
     std::vector<std::unique_ptr<UIWidget>> m_children;
     bool m_focused = false;
     bool m_focusRequested = false;
+    const void* m_dataContext = nullptr;
 };

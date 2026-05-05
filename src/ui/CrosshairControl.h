@@ -4,23 +4,25 @@
 
 #include <glad/glad.h>
 
-class Window;
+#include "UIWidget.h"
+
 class ResourceMgr;
 class Shader;
 
-class CrosshairControl
+class CrosshairControl : public UIWidget
 {
 public:
-    void init(ResourceMgr& resourceMgr);
-    void shutdown();
-
-    void render(const Window& window) const;
+    void init(ResourceMgr& resourceMgr) override;
+    void shutdown() override;
 
     void setSize(float size);
     [[nodiscard]] float getSize() const;
 
     void setColor(const std::array<float, 4>& color);
     [[nodiscard]] const std::array<float, 4>& getColor() const;
+
+protected:
+    void renderSelf(const UIRenderContext& ctx) const override;
 
 private:
     void initMesh();

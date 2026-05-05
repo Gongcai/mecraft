@@ -9,6 +9,7 @@
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 #include "UILayout.h"
+#include "UIRenderUtils.h"
 
 void HudControl::init(ResourceMgr& resourceMgr)
 {
@@ -30,21 +31,6 @@ void HudControl::shutdown()
     cleanupMesh();
     m_inventoryShader = nullptr;
     m_resourceMgr = nullptr;
-}
-
-void HudControl::setVisible(bool visible)
-{
-    m_visible = visible;
-}
-
-bool HudControl::isVisible() const
-{
-    return m_visible;
-}
-
-UIEventResult HudControl::onInput(const UIInputEvent&)
-{
-    return UIEventResult::Ignored;
 }
 
 void HudControl::initMesh()
@@ -100,33 +86,21 @@ void HudControl::appendIconRow(std::vector<float>& verts,
     for (int i = 0; i < fullIcons; ++i) {
         const float x0 = startX + static_cast<float>(i) * iconSize;
         const float y0 = startY;
-        const float x1 = x0 + iconSize;
-        const float y1 = y0 + iconSize;
-        verts.push_back(x0); verts.push_back(y0); verts.push_back(fullUV.first.x);  verts.push_back(fullUV.first.y);
-        verts.push_back(x1); verts.push_back(y0); verts.push_back(fullUV.second.x); verts.push_back(fullUV.first.y);
-        verts.push_back(x1); verts.push_back(y1); verts.push_back(fullUV.second.x); verts.push_back(fullUV.second.y);
-        verts.push_back(x0); verts.push_back(y0); verts.push_back(fullUV.first.x);  verts.push_back(fullUV.first.y);
-        verts.push_back(x1); verts.push_back(y1); verts.push_back(fullUV.second.x); verts.push_back(fullUV.second.y);
-        verts.push_back(x0); verts.push_back(y1); verts.push_back(fullUV.first.x);  verts.push_back(fullUV.second.y);
+        UIRenderUtils::pushTexturedQuad(verts, x0, y0, x0 + iconSize, y0 + iconSize,
+                                        fullUV.first.x, fullUV.first.y, fullUV.second.x, fullUV.second.y);
     }
 
     if (hasHalf) {
         const float x0 = startX + static_cast<float>(fullIcons) * iconSize;
         const float y0 = startY;
-        const float x1 = x0 + iconSize;
-        const float y1 = y0 + iconSize;
-        verts.push_back(x0); verts.push_back(y0); verts.push_back(halfUV.first.x);  verts.push_back(halfUV.first.y);
-        verts.push_back(x1); verts.push_back(y0); verts.push_back(halfUV.second.x); verts.push_back(halfUV.first.y);
-        verts.push_back(x1); verts.push_back(y1); verts.push_back(halfUV.second.x); verts.push_back(halfUV.second.y);
-        verts.push_back(x0); verts.push_back(y0); verts.push_back(halfUV.first.x);  verts.push_back(halfUV.first.y);
-        verts.push_back(x1); verts.push_back(y1); verts.push_back(halfUV.second.x); verts.push_back(halfUV.second.y);
-        verts.push_back(x0); verts.push_back(y1); verts.push_back(halfUV.first.x);  verts.push_back(halfUV.second.y);
+        UIRenderUtils::pushTexturedQuad(verts, x0, y0, x0 + iconSize, y0 + iconSize,
+                                        halfUV.first.x, halfUV.first.y, halfUV.second.x, halfUV.second.y);
     }
 }
 
-void HudControl::render(const UIRenderContext& context) const
+void HudControl::renderSelf(const UIRenderContext& context) const
 {
-    if (!m_visible || !context.playerStats || !m_inventoryShader || !m_resourceMgr) {
+    if (!visible || !context.playerStats || !m_inventoryShader || !m_resourceMgr) {
         return;
     }
 
@@ -187,10 +161,7 @@ void HudControl::render(const UIRenderContext& context) const
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const UIRenderUtils::GLStateGuard glState;
 
     m_inventoryShader->use();
     m_inventoryShader->setVec2("uScreenSize", glm::vec2(screenW, screenH));
@@ -205,7 +176,4 @@ void HudControl::render(const UIRenderContext& context) const
     glBindVertexArray(0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
 }

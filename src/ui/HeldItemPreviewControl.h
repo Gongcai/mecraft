@@ -5,7 +5,7 @@
 
 #include <glad/glad.h>
 
-#include "IUIControl.h"
+#include "UIWidget.h"
 #include "../world/Block.h"
 #include "../item/Item.h"
 
@@ -21,20 +21,18 @@ struct HeldItemPreviewLayout {
     float swayAmplitudeY = 0.020f;
 };
 
-class HeldItemPreviewControl : public IUIControl {
+class HeldItemPreviewControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
-    void render(const UIRenderContext& context) const override;
-    UIEventResult onInput(const UIInputEvent& event) override;
-    [[nodiscard]] bool isVisible() const override;
-
-    void setVisible(bool visible);
     void setLayout(const HeldItemPreviewLayout& layout);
     [[nodiscard]] const HeldItemPreviewLayout& getLayout() const;
     void triggerActionAnimation();
     void setActionAnimationActive(bool active);
+
+protected:
+    void renderSelf(const UIRenderContext& context) const override;
 
 private:
     struct Mesh {
@@ -63,5 +61,4 @@ private:
     mutable bool m_actionAnimActive = false;
     mutable bool m_actionAnimContinuous = false;
     mutable float m_actionAnimElapsed = 0.0f;
-    bool m_visible = true;
 };

@@ -7,6 +7,12 @@
 
 class TextRenderer;
 
+enum class TextAlignment {
+    Left,
+    Center,
+    Right,
+};
+
 class UIText : public UIWidget {
 public:
     UIText() = default;
@@ -19,6 +25,9 @@ public:
 
     void setTextColor(const std::array<float, 4>& c) { m_textColor = c; }
     [[nodiscard]] const std::array<float, 4>& getTextColor() const { return m_textColor; }
+
+    void setAlignment(TextAlignment alignment) { m_alignment = alignment; }
+    [[nodiscard]] TextAlignment getAlignment() const { return m_alignment; }
 
     // Measure text dimensions in pixels (at current scale)
     [[nodiscard]] float measureTextWidth() const {
@@ -42,4 +51,5 @@ private:
     std::string m_text;
     float m_textScale = 1.0f;
     std::array<float, 4> m_textColor{1.0f, 1.0f, 1.0f, 1.0f};
+    TextAlignment m_alignment = TextAlignment::Left;
 };

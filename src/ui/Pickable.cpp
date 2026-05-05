@@ -6,6 +6,7 @@
 #include "../renderer/Shader.h"
 #include "../item/Item.h"
 #include "TextRenderer.h"
+#include "UIRenderUtils.h"
 
 void Pickable::initMesh(MeshHandles& mesh)
 {
@@ -74,8 +75,6 @@ void Pickable::render(const SlotInfo* slots, int count,
 
     const bool hasBakedItemIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
     const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
-    const float halfW = static_cast<float>(screenW) * 0.5f;
-    const float halfH = static_cast<float>(screenH) * 0.5f;
 
     // ── Collect icon vertices (pass 2) ──
     std::vector<float> iconVerts;
@@ -125,81 +124,75 @@ void Pickable::render(const SlotInfo* slots, int count,
     if (!hasBg && !hasIcons)
         return;
 
-    // ── GL state ──
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // ── Pass 1: Hovered background (solid color, crosshair shader) ──
-    if (hasBg && crosshairShader)
     {
-        const auto& s = slots[hoveredIndex];
-        // crosshair shader expects centered coordinates with Y-up.
-        const float x0 = static_cast<float>(s.x) - halfW;
-        const float y0 = static_cast<float>(screenH - (s.y + s.size)) - halfH;
-        const float x1 = static_cast<float>(s.x + s.size) - halfW;
-        const float y1 = static_cast<float>(screenH - s.y) - halfH;
+        const UIRenderUtils::GLStateGuard glState;
 
-        const float bgVerts[] = {
-            x0, y0, 0.0f, 0.0f,
-            x1, y0, 0.0f, 0.0f,
-            x1, y1, 0.0f, 0.0f,
-            x0, y0, 0.0f, 0.0f,
-            x1, y1, 0.0f, 0.0f,
-            x0, y1, 0.0f, 0.0f,
-        };
+        // ── Pass 1: Hovered background (solid color, crosshair shader) ──
+        if (hasBg && crosshairShader)
+        {
+            const auto& s = slots[hoveredIndex];
+            // Bottom-left origin (same as inventory/text/ui_color shaders)
+            const float x0 = static_cast<float>(s.x);
+            const float y0 = static_cast<float>(screenH - (s.y + s.size));
+            const float x1 = static_cast<float>(s.x + s.size);
+            const float y1 = static_cast<float>(screenH - s.y);
 
-        crosshairShader->use();
-        crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
-        crosshairShader->setVec4("uColor", glm::vec4(params.hoverBgColor[0], params.hoverBgColor[1],
-                                                      params.hoverBgColor[2], params.hoverBgColor[3]));
+            const float bgVerts[] = {
+                x0, y0, 0.0f, 0.0f,
+                x1, y0, 0.0f, 0.0f,
+                x1, y1, 0.0f, 0.0f,
+                x0, y0, 0.0f, 0.0f,
+                x1, y1, 0.0f, 0.0f,
+                x0, y1, 0.0f, 0.0f,
+            };
 
-        glBindVertexArray(mesh.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(bgVerts), bgVerts, GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-    }
+            crosshairShader->use();
+            crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+            crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
+            crosshairShader->setVec4("uColor", glm::vec4(params.hoverBgColor[0], params.hoverBgColor[1],
+                                                          params.hoverBgColor[2], params.hoverBgColor[3]));
 
-    // ── Pass 2: Item icons (textured, inventory shader) ──
-    if (hasIcons && inventoryShader)
-    {
-        inventoryShader->use();
-        inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
-        inventoryShader->setVec4("uTintColor", glm::vec4(params.iconTintColor[0], params.iconTintColor[1],
-                                                          params.iconTintColor[2], params.iconTintColor[3]));
-        inventoryShader->setInt("uAtlas", 0);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindVertexArray(mesh.vao);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-
-        if (!iconVerts.empty()) {
-            glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
-            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(iconVerts.size() * sizeof(float)),
-                         iconVerts.data(), GL_DYNAMIC_DRAW);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(iconVerts.size() / 4));
+            glBindVertexArray(mesh.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(bgVerts), bgVerts, GL_DYNAMIC_DRAW);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
         }
 
-        if (!fallbackIconVerts.empty()) {
-            glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
-            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(fallbackIconVerts.size() * sizeof(float)),
-                         fallbackIconVerts.data(), GL_DYNAMIC_DRAW);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(fallbackIconVerts.size() / 4));
+        // ── Pass 2: Item icons (textured, inventory shader) ──
+        if (hasIcons && inventoryShader)
+        {
+            inventoryShader->use();
+            inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+            inventoryShader->setVec4("uTintColor", glm::vec4(params.iconTintColor[0], params.iconTintColor[1],
+                                                              params.iconTintColor[2], params.iconTintColor[3]));
+            inventoryShader->setInt("uAtlas", 0);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindVertexArray(mesh.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+
+            if (!iconVerts.empty()) {
+                glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(iconVerts.size() * sizeof(float)),
+                             iconVerts.data(), GL_DYNAMIC_DRAW);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(iconVerts.size() / 4));
+            }
+
+            if (!fallbackIconVerts.empty()) {
+                glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(fallbackIconVerts.size() * sizeof(float)),
+                             fallbackIconVerts.data(), GL_DYNAMIC_DRAW);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(fallbackIconVerts.size() / 4));
+            }
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-
-        glBindTexture(GL_TEXTURE_2D, 0);
     }
-
-    // ── Restore GL state ──
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
 
     // ── Pass 3: Item count text (bottom-right of slot) ──
     if (textRenderer)

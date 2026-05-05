@@ -103,9 +103,9 @@ void HeldItemPreviewControl::shutdown()
     m_actionAnimElapsed = 0.0f;
 }
 
-void HeldItemPreviewControl::render(const UIRenderContext& context) const
+void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
 {
-    if (!m_visible || !m_resourceMgr || !context.inventory) {
+    if (!m_resourceMgr || !context.inventory) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
@@ -247,21 +247,6 @@ void HeldItemPreviewControl::render(const UIRenderContext& context) const
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-UIEventResult HeldItemPreviewControl::onInput(const UIInputEvent&)
-{
-    return UIEventResult::Ignored;
-}
-
-bool HeldItemPreviewControl::isVisible() const
-{
-    return m_visible;
-}
-
-void HeldItemPreviewControl::setVisible(const bool visible)
-{
-    m_visible = visible;
 }
 
 void HeldItemPreviewControl::setLayout(const HeldItemPreviewLayout& layout)

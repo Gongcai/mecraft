@@ -3,8 +3,8 @@
 #include <array>
 
 #include "CraftingGridControl.h"
-#include "IUIControl.h"
 #include "ItemGridControl.h"
+#include "UIWidget.h"
 
 class Inventory;
 class Shader;
@@ -35,16 +35,14 @@ struct InventoryPanelLayout {
     CraftingGridLayout craftingGrid;
 };
 
-class InventoryPanelControl : public IUIControl {
+class InventoryPanelControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
-    void render(const UIRenderContext& context) const override;
-    UIEventResult onInput(const UIInputEvent& event) override;
-    [[nodiscard]] bool isVisible() const override;
+    UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
 
-    void setVisible(bool visible);
+    void setVisible(bool isVisible);
     void setSlots(const Pickable::SlotInfo* slots, int count);
     void setInventorySource(const Inventory* inventory);
     void setLayout(const InventoryPanelLayout& layout);
@@ -58,6 +56,9 @@ public:
 
     // Set the crafting system for recipe lookup
     void setCraftingSystem(const CraftingSystem* craftingSystem);
+
+protected:
+    void renderSelf(const UIRenderContext& context) const override;
 
 private:
     struct ResolvedPanelRect {
@@ -74,7 +75,6 @@ private:
     void renderBackground(const UIRenderContext& context) const;
     void renderDraggedItem(const UIRenderContext& context) const;
 
-    bool m_visible = false;
     const Inventory* m_inventory = nullptr;
     const CraftingSystem* m_craftingSystem = nullptr;
     InventoryPanelLayout m_layout;

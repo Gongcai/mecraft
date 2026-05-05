@@ -7,13 +7,13 @@
 #include <glad/glad.h>
 
 #include "ConsoleDisplayBox.h"
-#include "IUIControl.h"
+#include "UIWidget.h"
 
 class ResourceMgr;
 class Shader;
 class TextRenderer;
 
-class ConsoleOverlay : public IUIControl
+class ConsoleOverlay : public UIWidget
 {
 public:
     void init(ResourceMgr& resourceMgr) override;
@@ -27,16 +27,12 @@ public:
 
     void setMaxLines(std::size_t maxLines);
     void setTextRenderer(const TextRenderer* textRenderer);
-    void setVisible(bool visible);
-    [[nodiscard]] bool isVisible() const override;
 
-    void render(const UIRenderContext& context) const override;
-    UIEventResult onInput(const UIInputEvent& event) override;
-
-    // Backward-compatible API.
-    void render(double nowSec, const TextRenderer& textRenderer) const;
+protected:
+    void renderSelf(const UIRenderContext& context) const override;
 
 private:
+    void renderMessages(double nowSec, const TextRenderer& textRenderer) const;
     void drawOverlayRect(int screenW,
                          int screenH,
                          int x,
@@ -51,7 +47,6 @@ private:
 
     mutable ConsoleDisplayBox m_display;
     const TextRenderer* m_textRenderer = nullptr;
-    bool m_visible = true;
     std::size_t m_maxLines = 64;
     std::size_t m_visibleBoxes = 6;
     float m_holdSeconds = 5.0f;

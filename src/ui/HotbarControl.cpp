@@ -6,7 +6,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../core/Window.h"
 #include "../player/Inventory.h"
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
@@ -14,6 +13,7 @@
 #include "../item/Item.h"
 #include "TextRenderer.h"
 #include "UILayout.h"
+#include "UIRenderUtils.h"
 
 void HotbarControl::init(ResourceMgr& resourceMgr)
 {
@@ -35,27 +35,8 @@ void HotbarControl::setInventorySource(const Inventory* inventory)
     m_inventory = inventory;
 }
 
-void HotbarControl::setVisible(bool visible)
+void HotbarControl::renderSelf(const UIRenderContext& context) const
 {
-    m_visible = visible;
-}
-
-bool HotbarControl::isVisible() const
-{
-    return m_visible;
-}
-
-UIEventResult HotbarControl::onInput(const UIInputEvent&)
-{
-    return UIEventResult::Ignored;
-}
-
-void HotbarControl::render(const UIRenderContext& context) const
-{
-    if (!m_visible) {
-        return;
-    }
-
     const Inventory* inventory = context.inventory ? context.inventory : m_inventory;
     if (!inventory || context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
@@ -147,18 +128,6 @@ float HotbarControl::getCountTextScale() const
     return m_countTextScale;
 }
 
-void HotbarControl::render(const Window& window, const Inventory& inventory) const
-{
-    if (!m_visible) {
-        return;
-    }
-
-    renderInternal(static_cast<float>(window.getWidth()),
-                   static_cast<float>(window.getHeight()),
-                   inventory,
-                   nullptr);
-}
-
 void HotbarControl::renderInternal(float screenW, float screenH, const Inventory& inventory, const TextRenderer* textRenderer) const
 {
     if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
@@ -189,18 +158,6 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 
     const int selectedSlot = std::clamp(inventory.getSelectedSlot(), 0, hotbarSlots - 1);
 
-    auto addQuad = [](std::vector<float>& buf,
-                      float x0, float y0, float x1, float y1,
-                      float u0, float v0, float u1, float v1)
-    {
-        buf.push_back(x0); buf.push_back(y0); buf.push_back(u0); buf.push_back(v0);
-        buf.push_back(x1); buf.push_back(y0); buf.push_back(u1); buf.push_back(v0);
-        buf.push_back(x1); buf.push_back(y1); buf.push_back(u1); buf.push_back(v1);
-        buf.push_back(x0); buf.push_back(y0); buf.push_back(u0); buf.push_back(v0);
-        buf.push_back(x1); buf.push_back(y1); buf.push_back(u1); buf.push_back(v1);
-        buf.push_back(x0); buf.push_back(y1); buf.push_back(u0); buf.push_back(v1);
-    };
-
     auto uvFromTopLeftPixels = [](float x0, float y0, float x1, float y1)
     {
         const float u0 = x0 / HotbarLayout::kWidgetsWidth;
@@ -213,7 +170,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     std::vector<float> bgVerts;
     {
         const auto uv = uvFromTopLeftPixels(1.0f, 0.0f, 182.0f, 21.0f);
-        addQuad(bgVerts,
+        UIRenderUtils::pushTexturedQuad(bgVerts,
                 startX, startY,
                 startX + hotbarWidth, startY + hotbarHeight,
                 uv[0], uv[1], uv[2], uv[3]);
@@ -226,7 +183,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         const float selectorOffset = ((HotbarLayout::kHighlightSize - 20.0f) * 0.5f) * HotbarLayout::kScale;
         const float selX = startX + static_cast<float>(selectedSlot) * slotStride - selectorOffset + 2;
         const float selY = startY - 3.0f;
-        addQuad(selectedVerts,
+        UIRenderUtils::pushTexturedQuad(selectedVerts,
                 selX, selY,
                 selX + HotbarLayout::kHighlightSize * HotbarLayout::kScale, selY + HotbarLayout::kHighlightSize * HotbarLayout::kScale,
                 uv[0], uv[1], uv[2], uv[3]);
@@ -297,7 +254,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         const float ix = sx + iconInset;
         const float iy = startY + iconInset;
 
-        addQuad(*targetBuffer, ix, iy, ix + iconSize, iy + iconSize, uvMin.x, uvMin.y, uvMax.x, uvMax.y);
+        UIRenderUtils::pushTexturedQuad(*targetBuffer, ix, iy, ix + iconSize, iy + iconSize, uvMin.x, uvMin.y, uvMax.x, uvMax.y);
     }
 
     std::vector<float> vertices;
@@ -318,51 +275,47 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    {
+        const UIRenderUtils::GLStateGuard glState;
 
-    m_inventoryShader->use();
-    m_inventoryShader->setVec2("uScreenSize", glm::vec2(screenW, screenH));
+        m_inventoryShader->use();
+        m_inventoryShader->setVec2("uScreenSize", glm::vec2(screenW, screenH));
 
-    glActiveTexture(GL_TEXTURE0);
-    m_inventoryShader->setInt("uAtlas", 0);
+        glActiveTexture(GL_TEXTURE0);
+        m_inventoryShader->setInt("uAtlas", 0);
 
-    glBindVertexArray(m_vao);
+        glBindVertexArray(m_vao);
 
-    int offset = 0;
+        int offset = 0;
 
-    glBindTexture(GL_TEXTURE_2D, widgetsTexture);
-    m_inventoryShader->setVec4("uTintColor", glm::vec4(m_bgColor[0], m_bgColor[1], m_bgColor[2], m_bgColor[3]));
-    glDrawArrays(GL_TRIANGLES, offset, bgVertCount);
-    offset += bgVertCount;
+        glBindTexture(GL_TEXTURE_2D, widgetsTexture);
+        m_inventoryShader->setVec4("uTintColor", glm::vec4(m_bgColor[0], m_bgColor[1], m_bgColor[2], m_bgColor[3]));
+        glDrawArrays(GL_TRIANGLES, offset, bgVertCount);
+        offset += bgVertCount;
 
-    m_inventoryShader->setVec4("uTintColor", glm::vec4(m_borderColor[0], m_borderColor[1], m_borderColor[2], m_borderColor[3]));
-    glDrawArrays(GL_TRIANGLES, offset, selectedVertCount);
-    offset += selectedVertCount;
+        m_inventoryShader->setVec4("uTintColor", glm::vec4(m_borderColor[0], m_borderColor[1], m_borderColor[2], m_borderColor[3]));
+        glDrawArrays(GL_TRIANGLES, offset, selectedVertCount);
+        offset += selectedVertCount;
 
-    m_inventoryShader->setVec4("uTintColor", glm::vec4(m_iconTintColor[0], m_iconTintColor[1], m_iconTintColor[2], m_iconTintColor[3]));
-    if (iconVertCount > 0) {
-        glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
-        glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
+        m_inventoryShader->setVec4("uTintColor", glm::vec4(m_iconTintColor[0], m_iconTintColor[1], m_iconTintColor[2], m_iconTintColor[3]));
+        if (iconVertCount > 0) {
+            glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
+            glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
+        }
+        offset += iconVertCount;
+        if (fallbackIconVertCount > 0) {
+            glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+            glDrawArrays(GL_TRIANGLES, offset, fallbackIconVertCount);
+        }
+        offset += fallbackIconVertCount;
+        if (legacyIconVertCount > 0) {
+            glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+            glDrawArrays(GL_TRIANGLES, offset, legacyIconVertCount);
+        }
+
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
-    offset += iconVertCount;
-    if (fallbackIconVertCount > 0) {
-        glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
-        glDrawArrays(GL_TRIANGLES, offset, fallbackIconVertCount);
-    }
-    offset += fallbackIconVertCount;
-    if (legacyIconVertCount > 0) {
-        glBindTexture(GL_TEXTURE_2D, atlas.textureID);
-        glDrawArrays(GL_TRIANGLES, offset, legacyIconVertCount);
-    }
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
 
     // ── Render item count text (bottom-right of each slot) ──
     if (textRenderer)

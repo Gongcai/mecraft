@@ -7,7 +7,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../core/Window.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 
@@ -116,11 +115,14 @@ void CrosshairControl::cleanupMesh()
     m_vertexCount = 0;
 }
 
-void CrosshairControl::render(const Window& window) const
+void CrosshairControl::renderSelf(const UIRenderContext& ctx) const
 {
     if (!m_shader || m_vertexCount == 0) {
         return;
     }
+
+    const float screenW = static_cast<float>(ctx.screenWidth);
+    const float screenH = static_cast<float>(ctx.screenHeight);
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -129,7 +131,9 @@ void CrosshairControl::render(const Window& window) const
 
     m_shader->use();
     m_shader->setVec4("uColor", glm::vec4(m_color[0], m_color[1], m_color[2], m_color[3]));
-    m_shader->setVec2("uScreenSize", {static_cast<float>(window.getWidth()), static_cast<float>(window.getHeight())});
+    m_shader->setVec2("uScreenSize", {screenW, screenH});
+    // Mesh is centered at (0,0); offset to screen center for bottom-left-origin shader
+    m_shader->setVec2("uOffset", {screenW * 0.5f, screenH * 0.5f});
 
     glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, m_vertexCount);

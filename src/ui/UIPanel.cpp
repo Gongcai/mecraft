@@ -6,6 +6,7 @@
 
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
+#include "UIRenderUtils.h"
 
 UIPanel::UIPanel() = default;
 UIPanel::~UIPanel() { shutdown(); }
@@ -66,16 +67,7 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     float aw = width * scaleX;
     float ah = height * scaleY;
 
-    // Save GL state
-    GLboolean depthTest;
-    glGetBooleanv(GL_DEPTH_TEST, &depthTest);
-    GLint blendSrc, blendDst;
-    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrc);
-    glGetIntegerv(GL_BLEND_DST_RGB, &blendDst);
-
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const UIRenderUtils::GLStateGuard glState;
 
     m_shader->use();
     m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
@@ -111,8 +103,4 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     }
 
     glBindVertexArray(0);
-
-    // Restore GL state
-    if (depthTest) glEnable(GL_DEPTH_TEST);
-    glBlendFunc(blendSrc, blendDst);
 }

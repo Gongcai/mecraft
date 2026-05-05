@@ -25,32 +25,28 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_text.init(resourceMgr);
 
     m_heldItemPreview.init(resourceMgr);
-    m_heldItemPreview.setVisible(true);
+    m_heldItemPreview.visible = true;
     m_hotbar.init(resourceMgr);
-    m_hotbar.setVisible(true);
+    m_hotbar.visible = true;
     m_hud.init(resourceMgr);
-    m_hud.setVisible(true);
+    m_hud.visible = true;
     m_inventoryPanel.init(resourceMgr);
-    m_inventoryPanel.setVisible(false);
+    m_inventoryPanel.visible = false;
     m_commandInput.init(resourceMgr);
-    m_commandInput.setVisible(false);
+    m_commandInput.visible = false;
     m_console.init(resourceMgr);
-    m_console.setVisible(true);
+    m_console.visible = true;
     m_console.setTextRenderer(&m_text);
     m_console.setMaxLines(m_consoleMaxLines);
 
-    m_controls = {
-        &m_heldItemPreview,
-        &m_hotbar,
+    m_widgetControls = {
         &m_hud,
-        &m_inventoryPanel,
         &m_console,
         &m_commandInput,
+        &m_hotbar,
+        &m_inventoryPanel,
+        &m_heldItemPreview,
     };
-
-    for (IUIControl* control : m_controls) {
-        m_inputRouter.registerControl(control);
-    }
 
     m_lastSceneContext = {};
     m_lastSceneContext.resourceMgr = m_resourceMgr;
@@ -64,8 +60,6 @@ void UIRenderer::shutdown()
     m_console.shutdown();
     m_commandInput.shutdown();
     m_text.shutdown();
-    m_inputRouter.clear();
-    m_controls.clear();
     m_inventoryPanel.shutdown();
     m_hud.shutdown();
     m_hotbar.shutdown();
@@ -249,7 +243,7 @@ void UIRenderer::renderText(const std::string& text,
 void UIRenderer::renderCommandInputBox(const std::string& text)
 {
     m_commandInput.setText(text);
-    m_commandInput.setVisible(true);
+    m_commandInput.visible =(true);
     m_commandInputRequested = true;
 }
 
@@ -260,10 +254,9 @@ void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
         return;
     }
 
-    const bool wasVisible = m_inventoryPanel.isVisible();
+    const bool wasVisible = m_inventoryPanel.visible;
     m_inventoryPanel.setVisible(true);
     m_inventoryPanel.setSlots(slots, count);
-    static_cast<void>(m_inputRouter.route({UIInputEventType::PointerMove, mouseX, mouseY, UIPointerButton::None}));
     m_inventoryPanel.render(makeContextFromViewport());
     m_inventoryPanel.setVisible(wasVisible);
 }
@@ -293,13 +286,20 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
         }
     }
 
-    const UIEventResult controlsResult = m_inputRouter.route(event);
-    if (controlsResult == UIEventResult::Consumed) {
-        return UIEventResult::Consumed;
+    // Dispatch to UIWidget-based controls
+    for (UIWidget* widget : m_widgetControls) {
+        if (!widget || !widget->visible) {
+            continue;
+        }
+        const UIEventResult widgetResult = widget->onInput(event, m_lastSceneContext);
+        if (widgetResult == UIEventResult::Consumed) {
+            return UIEventResult::Consumed;
+        }
+        if (widgetResult == UIEventResult::Handled) {
+            aggregate = UIEventResult::Handled;
+        }
     }
-    if (controlsResult == UIEventResult::Handled) {
-        return UIEventResult::Handled;
-    }
+
     return aggregate;
 }
 
@@ -359,12 +359,12 @@ void UIRenderer::render(const Window& window,
                         const HeldItemPreviewMotion& heldItemMotion,
                         const InputSnapshot& inputSnapshot)
 {
-    m_crosshair.render(window);
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
-    m_commandInput.setVisible(m_commandInputRequested);
+    m_commandInput.visible =(m_commandInputRequested);
     const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, heldItemMotion, inputSnapshot);
     m_lastSceneContext = context;
+    m_crosshair.render(context);
     renderControls(context);
     m_commandInputRequested = false;
 }
@@ -384,7 +384,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.playerStats = &playerStats;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
-    context.commandInputVisible = m_commandInput.isVisible();
+    context.commandInputVisible = m_commandInput.visible;
     context.pointerX = inputSnapshot.mousePosition.x;
     context.pointerY = inputSnapshot.mousePosition.y;
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
@@ -405,7 +405,7 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     context.resourceMgr = m_resourceMgr;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
-    context.commandInputVisible = m_commandInput.isVisible();
+    context.commandInputVisible = m_commandInput.visible;
     return context;
 }
 
@@ -447,11 +447,11 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
 
 void UIRenderer::renderControls(const UIRenderContext& context) const
 {
-    for (const IUIControl* control : m_controls) {
-        if (!control || !control->isVisible()) {
+    for (const UIWidget* widget : m_widgetControls) {
+        if (!widget || !widget->visible) {
             continue;
         }
-        control->render(context);
+        widget->render(context);
     }
 
     // Render active scene on top of gameplay controls

@@ -4,6 +4,7 @@
 #include <glm/vec4.hpp>
 
 #include "TextRenderer.h"
+#include "UIRenderUtils.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 
@@ -75,33 +76,14 @@ void ConsoleOverlay::setTextRenderer(const TextRenderer* textRenderer)
     m_textRenderer = textRenderer;
 }
 
-void ConsoleOverlay::setVisible(bool visible)
+void ConsoleOverlay::renderSelf(const UIRenderContext& context) const
 {
-    m_visible = visible;
-}
-
-bool ConsoleOverlay::isVisible() const
-{
-    return m_visible;
-}
-
-UIEventResult ConsoleOverlay::onInput(const UIInputEvent&)
-{
-    return UIEventResult::Ignored;
-}
-
-void ConsoleOverlay::render(const UIRenderContext& context) const
-{
-    if (!m_visible) {
-        return;
-    }
-
     const TextRenderer* textRenderer = context.textRenderer ? context.textRenderer : m_textRenderer;
     if (!textRenderer) {
         return;
     }
 
-    render(static_cast<double>(context.timeSeconds), *textRenderer);
+    renderMessages(static_cast<double>(context.timeSeconds), *textRenderer);
 }
 
 void ConsoleOverlay::drawOverlayRect(int screenW,
@@ -116,12 +98,11 @@ void ConsoleOverlay::drawOverlayRect(int screenW,
         return;
     }
 
-    const float halfW = static_cast<float>(screenW) * 0.5f;
-    const float halfH = static_cast<float>(screenH) * 0.5f;
-    const float x0 = static_cast<float>(x) - halfW;
-    const float y0 = static_cast<float>(y) - halfH;
-    const float x1 = static_cast<float>(x + w) - halfW;
-    const float y1 = static_cast<float>(y + h) - halfH;
+    // Bottom-left origin (same as inventory/text/ui_color shaders)
+    const float x0 = static_cast<float>(x);
+    const float y0 = static_cast<float>(y);
+    const float x1 = static_cast<float>(x + w);
+    const float y1 = static_cast<float>(y + h);
 
     const float rectVerts[] = {
         x0, y0, 0.0f, 0.0f,
@@ -134,6 +115,7 @@ void ConsoleOverlay::drawOverlayRect(int screenW,
 
     m_crosshairShader->use();
     m_crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+    m_crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
     m_crosshairShader->setVec4("uColor", glm::vec4(color[0], color[1], color[2], color[3]));
 
     glBindVertexArray(m_vao);
@@ -144,12 +126,8 @@ void ConsoleOverlay::drawOverlayRect(int screenW,
     glBindVertexArray(0);
 }
 
-void ConsoleOverlay::render(double nowSec, const TextRenderer& textRenderer) const
+void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRenderer) const
 {
-    if (!m_visible) {
-        return;
-    }
-
     if (m_display.empty()) {
         return;
     }
@@ -175,10 +153,7 @@ void ConsoleOverlay::render(double nowSec, const TextRenderer& textRenderer) con
         nowSec,
         params,
         [this, screenW, screenH](int x, int y, int w, int h, const std::array<float, 4>& color) {
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            const UIRenderUtils::GLStateGuard glState;
             drawOverlayRect(screenW, screenH, x, y, w, h, color);
         },
         [&textRenderer, screenW, screenH](const std::string& line,

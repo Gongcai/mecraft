@@ -75,12 +75,8 @@ void InventoryPanelControl::shutdown()
     m_resourceMgr = nullptr;
 }
 
-void InventoryPanelControl::render(const UIRenderContext& context) const
+void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
 {
-    if (!m_visible) {
-        return;
-    }
-
     auto* self = const_cast<InventoryPanelControl*>(this);
     self->m_cachedScreenWidth = context.screenWidth;
     self->m_cachedScreenHeight = context.screenHeight;
@@ -100,9 +96,9 @@ void InventoryPanelControl::render(const UIRenderContext& context) const
     renderDraggedItem(context);
 }
 
-UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event)
+UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/)
 {
-    if (!m_visible) {
+    if (!visible) {
         return UIEventResult::Ignored;
     }
     syncSlotsFromInventory();
@@ -129,16 +125,11 @@ UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event)
     return result;
 }
 
-bool InventoryPanelControl::isVisible() const
+void InventoryPanelControl::setVisible(bool isVisible)
 {
-    return m_visible;
-}
-
-void InventoryPanelControl::setVisible(bool visible)
-{
-    m_visible = visible;
-    m_itemGrid.setVisible(visible);
-    m_craftingGrid.setVisible(visible);
+    visible = isVisible;
+    m_itemGrid.setVisible(isVisible);
+    m_craftingGrid.setVisible(isVisible);
 }
 
 void InventoryPanelControl::setSlots(const Pickable::SlotInfo* slots, int count)

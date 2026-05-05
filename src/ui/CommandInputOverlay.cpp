@@ -9,6 +9,7 @@
 
 #include "BitmapFont.h"
 #include "TextRenderer.h"
+#include "UIRenderUtils.h"
 #include "../core/Time.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
@@ -58,21 +59,6 @@ void CommandInputOverlay::shutdown()
     m_text.clear();
 }
 
-UIEventResult CommandInputOverlay::onInput(const UIInputEvent&)
-{
-    return UIEventResult::Ignored;
-}
-
-bool CommandInputOverlay::isVisible() const
-{
-    return m_visible;
-}
-
-void CommandInputOverlay::setVisible(bool visible)
-{
-    m_visible = visible;
-}
-
 void CommandInputOverlay::setText(std::string text)
 {
     m_text = std::move(text);
@@ -83,10 +69,10 @@ const std::string& CommandInputOverlay::getText() const
     return m_text;
 }
 
-void CommandInputOverlay::render(const UIRenderContext& context) const
+void CommandInputOverlay::renderSelf(const UIRenderContext& context) const
 {
-    const bool visible = context.commandInputVisible || m_visible;
-    if (!visible) {
+    const bool show = context.commandInputVisible || visible;
+    if (!show) {
         return;
     }
 
@@ -96,7 +82,7 @@ void CommandInputOverlay::render(const UIRenderContext& context) const
     }
 
     const std::string* text = context.commandInputText ? context.commandInputText : &m_text;
-    render(*text, *textRenderer);
+    renderBox(*text, *textRenderer);
 }
 
 void CommandInputOverlay::setCaretBlinkPeriodMs(float periodMs)
@@ -167,12 +153,11 @@ void CommandInputOverlay::drawOverlayRect(int screenW,
         return;
     }
 
-    const float halfW = static_cast<float>(screenW) * 0.5f;
-    const float halfH = static_cast<float>(screenH) * 0.5f;
-    const float x0 = static_cast<float>(x) - halfW;
-    const float y0 = static_cast<float>(y) - halfH;
-    const float x1 = static_cast<float>(x + w) - halfW;
-    const float y1 = static_cast<float>(y + h) - halfH;
+    // Bottom-left origin (same as inventory/text/ui_color shaders)
+    const float x0 = static_cast<float>(x);
+    const float y0 = static_cast<float>(y);
+    const float x1 = static_cast<float>(x + w);
+    const float y1 = static_cast<float>(y + h);
 
     const float rectVerts[] = {
         x0, y0, 0.0f, 0.0f,
@@ -185,6 +170,7 @@ void CommandInputOverlay::drawOverlayRect(int screenW,
 
     m_crosshairShader->use();
     m_crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
+    m_crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
     m_crosshairShader->setVec4("uColor", glm::vec4(color[0], color[1], color[2], color[3]));
 
     glBindVertexArray(m_vao);
@@ -195,7 +181,7 @@ void CommandInputOverlay::drawOverlayRect(int screenW,
     glBindVertexArray(0);
 }
 
-void CommandInputOverlay::render(const std::string& text, const TextRenderer& textRenderer) const
+void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer& textRenderer) const
 {
     if (!m_crosshairShader || m_vao == 0 || m_vbo == 0) {
         return;
