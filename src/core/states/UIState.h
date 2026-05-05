@@ -46,6 +46,13 @@ public:
         // Route UI input to the pause screen
         const float mx = snapshot.mousePosition.x;
         const float my = snapshot.mousePosition.y;
+        auto routeKeyPress = [this, mx, my](int keyCode) {
+            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::KeyDown, mx, my, UIPointerButton::None, keyCode}));
+            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::KeyUp, mx, my, UIPointerButton::None, keyCode}));
+        };
+        auto routeKeyDown = [this, mx, my](int keyCode) {
+            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::KeyDown, mx, my, UIPointerButton::None, keyCode}));
+        };
 
         static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::PointerMove, mx, my, UIPointerButton::None}));
 
@@ -56,10 +63,32 @@ public:
             static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::PointerUp, mx, my, UIPointerButton::Primary}));
         }
 
+        const bool navUp = m_deps.context.isActionTriggered(Action::Up);
+        const bool navDown = m_deps.context.isActionTriggered(Action::Down);
+        const bool navLeft = m_deps.context.isActionTriggered(Action::Left);
+        const bool navRight = m_deps.context.isActionTriggered(Action::Right);
+        const bool confirm = m_deps.context.isActionTriggered(Action::Confirm);
+        const bool cancel = m_deps.context.isActionTriggered(Action::Cancel);
+        const bool menu = m_deps.context.isActionTriggered(Action::Menu);
+
+        if (navUp) {
+            routeKeyDown(GLFW_KEY_UP);
+        }
+        if (navDown) {
+            routeKeyDown(GLFW_KEY_DOWN);
+        }
+        if (navLeft) {
+            routeKeyDown(GLFW_KEY_LEFT);
+        } else if (navRight) {
+            routeKeyDown(GLFW_KEY_RIGHT);
+        }
+        if (confirm) {
+            routeKeyPress(GLFW_KEY_ENTER);
+        }
+
         m_pauseScreen.updateAnimations(dt);
 
-        if (m_deps.context.isActionTriggered(Action::Menu) ||
-            m_deps.context.isActionTriggered(Action::Cancel)) {
+        if (menu || cancel) {
             m_deps.fsm.popState();
             return;
         }

@@ -6,9 +6,10 @@
 #include "../UIStackLayout.h"
 
 void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
+    (void)resourceMgr;
+
     // Dark overlay covering the whole screen
     auto overlay = std::make_unique<UIPanel>();
-    overlay->init(resourceMgr);
     overlay->setBackgroundColor({0.0f, 0.0f, 0.0f, 0.0f}); // alpha animated
     overlay->anchor = Anchor::BottomLeft;
     overlay->x = 0.0f;
@@ -37,7 +38,6 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Resume button
     auto resumeBtn = std::make_unique<UIButton>();
-    resumeBtn->init(resourceMgr);
     resumeBtn->setText("RESUME");
     resumeBtn->setTextScale(2.0f);
     resumeBtn->width = 250.0f;
@@ -51,7 +51,6 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Quit to menu button
     auto quitBtn = std::make_unique<UIButton>();
-    quitBtn->init(resourceMgr);
     quitBtn->setText("QUIT TO MENU");
     quitBtn->setTextScale(2.0f);
     quitBtn->width = 250.0f;

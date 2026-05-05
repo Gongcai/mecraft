@@ -1,5 +1,7 @@
 #include "UIRenderer.h"
 
+#include <algorithm>
+
 #include <glad/glad.h>
 
 #include "../core/Time.h"
@@ -49,6 +51,10 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     for (IUIControl* control : m_controls) {
         m_inputRouter.registerControl(control);
     }
+
+    m_lastSceneContext = {};
+    m_lastSceneContext.resourceMgr = m_resourceMgr;
+    m_lastSceneContext.textRenderer = &m_text;
 }
 
 void UIRenderer::shutdown()
@@ -65,6 +71,7 @@ void UIRenderer::shutdown()
     m_hotbar.shutdown();
     m_heldItemPreview.shutdown();
     m_commandInputRequested = false;
+    m_lastSceneContext = {};
     m_resourceMgr = nullptr;
 }
 
@@ -263,12 +270,37 @@ void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
 
 UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
 {
+    UIEventResult aggregate = UIEventResult::Ignored;
+
     // Active scene has priority (menu screens overlay gameplay controls)
     if (m_activeScene && m_activeScene->isVisible()) {
+        if (m_lastSceneContext.screenWidth <= 0 || m_lastSceneContext.screenHeight <= 0) {
+            GLint viewport[4] = {0, 0, 0, 0};
+            glGetIntegerv(GL_VIEWPORT, viewport);
+            m_lastSceneContext.screenWidth = std::max(1, viewport[2]);
+            m_lastSceneContext.screenHeight = std::max(1, viewport[3]);
+        }
+        m_lastSceneContext.resourceMgr = m_resourceMgr;
+        m_lastSceneContext.textRenderer = &m_text;
+        m_lastSceneContext.pointerX = event.x;
+        m_lastSceneContext.pointerY = event.y;
+        m_activeScene->setInputContext(m_lastSceneContext);
+
         UIEventResult sceneResult = m_activeScene->onInput(event);
         if (sceneResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+        if (sceneResult == UIEventResult::Handled) {
+            aggregate = UIEventResult::Handled;
+        }
     }
-    return m_inputRouter.route(event);
+
+    const UIEventResult controlsResult = m_inputRouter.route(event);
+    if (controlsResult == UIEventResult::Consumed) {
+        return UIEventResult::Consumed;
+    }
+    if (controlsResult == UIEventResult::Handled) {
+        return UIEventResult::Handled;
+    }
+    return aggregate;
 }
 
 void UIRenderer::setInventoryPanelVisible(bool visible)
@@ -331,7 +363,9 @@ void UIRenderer::render(const Window& window,
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
     m_commandInput.setVisible(m_commandInputRequested);
-    renderControls(makeContextFromWindow(window, inventory, playerStats, heldItemMotion, inputSnapshot));
+    const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, heldItemMotion, inputSnapshot);
+    m_lastSceneContext = context;
+    renderControls(context);
     m_commandInputRequested = false;
 }
 
@@ -378,6 +412,9 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
 void UIRenderer::setActiveScene(UIScene* scene)
 {
     m_activeScene = scene;
+    if (m_activeScene) {
+        m_activeScene->setInputContext(m_lastSceneContext);
+    }
 }
 
 UIScene* UIRenderer::getActiveScene() const
@@ -400,8 +437,10 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     context.textRenderer = &m_text;
     context.pointerX = inputSnapshot.mousePosition.x;
     context.pointerY = inputSnapshot.mousePosition.y;
+    m_lastSceneContext = context;
 
     if (m_activeScene && m_activeScene->isVisible()) {
+        m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }
 }
@@ -417,6 +456,7 @@ void UIRenderer::renderControls(const UIRenderContext& context) const
 
     // Render active scene on top of gameplay controls
     if (m_activeScene && m_activeScene->isVisible()) {
+        m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }
 }

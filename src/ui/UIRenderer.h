@@ -136,6 +136,7 @@ private:
     std::vector<IUIControl*> m_controls;
     ResourceMgr* m_resourceMgr = nullptr;
     UIScene* m_activeScene = nullptr;
+    mutable UIRenderContext m_lastSceneContext;
     bool m_commandInputRequested = false;
 
     std::size_t m_consoleMaxLines = 64;

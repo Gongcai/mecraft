@@ -241,6 +241,8 @@ static int stringToKey(const std::string& str) {
     if (str == "SLASH") return GLFW_KEY_SLASH;
     if (str == "UP") return GLFW_KEY_UP;
     if (str == "DOWN") return GLFW_KEY_DOWN;
+    if (str == "LEFT") return GLFW_KEY_LEFT;
+    if (str == "RIGHT") return GLFW_KEY_RIGHT;
     // Function keys
     if (str.length() >= 2 && str.length() <= 3 && str[0] == 'F') {
         int num = std::atoi(str.c_str() + 1);

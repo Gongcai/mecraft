@@ -1,9 +1,15 @@
 #pragma once
 
+#include <cstdint>
+
 enum class UIInputEventType {
     PointerMove,
     PointerDown,
     PointerUp,
+    KeyDown,
+    KeyUp,
+    TextInput,
+    Scroll,
 };
 
 enum class UIPointerButton {
@@ -17,5 +23,9 @@ struct UIInputEvent {
     float x = 0.0f;
     float y = 0.0f;
     UIPointerButton button = UIPointerButton::None;
+    int key = 0;
+    std::uint32_t codepoint = 0;
+    float scrollX = 0.0f;
+    float scrollY = 0.0f;
 };
 

@@ -5,6 +5,8 @@
 #include "../UIPanel.h"
 
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
+    (void)resourceMgr;
+
     // Title text "MECRAFT"
     auto title = std::make_unique<UIText>();
     title->setText("MECRAFT");
@@ -18,7 +20,6 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Start button
     auto startBtn = std::make_unique<UIButton>();
-    startBtn->init(resourceMgr);
     startBtn->setText("START GAME");
     startBtn->setTextScale(2.0f);
     startBtn->width = 280.0f;
@@ -34,7 +35,6 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Quit button
     auto quitBtn = std::make_unique<UIButton>();
-    quitBtn->init(resourceMgr);
     quitBtn->setText("QUIT");
     quitBtn->setTextScale(2.0f);
     quitBtn->width = 280.0f;

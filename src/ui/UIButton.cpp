@@ -1,7 +1,12 @@
 #include "UIButton.h"
 
+#include <algorithm>
+
+#include <GLFW/glfw3.h>
+
 UIButton::UIButton() {
     interactive = true;
+    focusable = true;
 }
 
 void UIButton::init(ResourceMgr& resourceMgr) {
@@ -43,10 +48,15 @@ void UIButton::updateAnimations(float dt) {
 }
 
 void UIButton::renderSelf(const UIRenderContext& ctx) const {
+    const bool highlighted = m_hovered || isFocused();
+
     // Apply hover scale from center
     float cx = getAbsoluteX(ctx) + width * 0.5f;
     float cy = getAbsoluteY(ctx) + height * 0.5f;
     float s = m_hoverScaleTween.value();
+    if (highlighted) {
+        s = std::max(s, m_hoverTargetScale);
+    }
     float hw = width * s * 0.5f;
     float hh = height * s * 0.5f;
 
@@ -55,7 +65,8 @@ void UIButton::renderSelf(const UIRenderContext& ctx) const {
     const_cast<UIPanel&>(m_background).anchorOffsetY = cy - hh;
     const_cast<UIPanel&>(m_background).width = hw * 2.0f;
     const_cast<UIPanel&>(m_background).height = hh * 2.0f;
-    const_cast<UIPanel&>(m_background).setBackgroundColor(m_hoverColorTween.value());
+    const auto bgColor = highlighted ? m_hoverColor : m_hoverColorTween.value();
+    const_cast<UIPanel&>(m_background).setBackgroundColor(bgColor);
     const_cast<UIPanel&>(m_background).alpha = alpha;
     m_background.render(ctx);
 
@@ -93,6 +104,7 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
         case UIInputEventType::PointerDown: {
             if (event.button == UIPointerButton::Primary && inside) {
                 m_pressed = true;
+                requestFocus();
                 return UIEventResult::Handled;
             }
             break;
@@ -106,7 +118,29 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
             m_pressed = false;
             break;
         }
+        case UIInputEventType::KeyDown: {
+            if (isFocused() && isConfirmKey(event.key)) {
+                m_pressed = true;
+                return UIEventResult::Handled;
+            }
+            break;
+        }
+        case UIInputEventType::KeyUp: {
+            if (isFocused() && isConfirmKey(event.key) && m_pressed) {
+                m_pressed = false;
+                if (m_onClick) m_onClick();
+                return UIEventResult::Consumed;
+            }
+            break;
+        }
+        case UIInputEventType::TextInput:
+        case UIInputEventType::Scroll:
+            break;
     }
 
     return UIEventResult::Ignored;
+}
+
+bool UIButton::isConfirmKey(const int key) {
+    return key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER || key == GLFW_KEY_SPACE;
 }

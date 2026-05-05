@@ -24,6 +24,9 @@ public:
     void render(const UIRenderContext& context) const override;
     UIEventResult onInput(const UIInputEvent& event) override;
     [[nodiscard]] bool isVisible() const override { return true; }
+    void setInputContext(const UIRenderContext& context);
+    void moveFocusNext();
+    void moveFocusPrev();
 
     // Scene lifecycle
     void enterScene();
@@ -50,9 +53,15 @@ protected:
     [[nodiscard]] ResourceMgr* getResourceMgr() const { return m_resourceMgr; }
 
 private:
+    void ensureFocusableSelection();
+    void applyPendingFocusRequests();
+    void setFocusedWidget(UIWidget* widget);
+
     std::vector<std::unique_ptr<UIWidget>> m_roots;
     TweenGroup m_animations;
     Phase m_phase = Phase::Active;
     ResourceMgr* m_resourceMgr = nullptr;
     mutable UIRenderContext m_currentContext;
+    bool m_hasInputContext = false;
+    UIWidget* m_focusedWidget = nullptr;
 };

@@ -14,8 +14,16 @@ public:
     virtual ~UIWidget() = default;
 
     // Lifecycle
-    virtual void init(ResourceMgr& resourceMgr) { (void)resourceMgr; }
-    virtual void shutdown() {}
+    virtual void init(ResourceMgr& resourceMgr) {
+        for (auto& child : m_children) {
+            child->init(resourceMgr);
+        }
+    }
+    virtual void shutdown() {
+        for (auto& child : m_children) {
+            child->shutdown();
+        }
+    }
 
     // Tree management
     void addChild(std::unique_ptr<UIWidget> child) {
@@ -44,24 +52,58 @@ public:
     float alpha = 1.0f;
     bool visible = true;
     bool interactive = false;
+    bool focusable = false;
+
+    [[nodiscard]] bool isFocused() const { return m_focused; }
+    virtual void setFocused(bool focused) { m_focused = focused; }
+
+    void requestFocus() { m_focusRequested = true; }
+    [[nodiscard]] bool consumeFocusRequest() {
+        const bool requested = m_focusRequested;
+        m_focusRequested = false;
+        return requested;
+    }
+
+    [[nodiscard]] UIWidget* consumeRequestedFocusDeep() {
+        for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+            if (UIWidget* requested = (*it)->consumeRequestedFocusDeep()) {
+                return requested;
+            }
+        }
+        if (consumeFocusRequest() && focusable && visible) {
+            return this;
+        }
+        return nullptr;
+    }
+
+    void collectFocusableWidgets(std::vector<UIWidget*>& out) {
+        if (visible && focusable) {
+            out.push_back(this);
+        }
+        for (auto& child : m_children) {
+            child->collectFocusableWidgets(out);
+        }
+    }
 
     // Absolute position resolution
     [[nodiscard]] float getAbsoluteX(const UIRenderContext& ctx) const {
+        const float localOffsetX = anchorOffsetX + x;
         if (m_parent) {
             float px = m_parent->getAbsoluteX(ctx);
             float pw = m_parent->width * m_parent->scaleX;
-            return resolveInParent(px, pw, width * scaleX, anchor, anchorOffsetX);
+            return resolveInParent(px, pw, width * scaleX, anchor, localOffsetX);
         }
-        return resolveInParent(0.0f, static_cast<float>(ctx.screenWidth), width * scaleX, anchor, anchorOffsetX);
+        return resolveInParent(0.0f, static_cast<float>(ctx.screenWidth), width * scaleX, anchor, localOffsetX);
     }
 
     [[nodiscard]] float getAbsoluteY(const UIRenderContext& ctx) const {
+        const float localOffsetY = anchorOffsetY + y;
         if (m_parent) {
             float py = m_parent->getAbsoluteY(ctx);
             float ph = m_parent->height * m_parent->scaleY;
-            return resolveInParentY(py, ph, height * scaleY, anchor, anchorOffsetY);
+            return resolveInParentY(py, ph, height * scaleY, anchor, localOffsetY);
         }
-        return resolveInParentY(0.0f, static_cast<float>(ctx.screenHeight), height * scaleY, anchor, anchorOffsetY);
+        return resolveInParentY(0.0f, static_cast<float>(ctx.screenHeight), height * scaleY, anchor, localOffsetY);
     }
 
     [[nodiscard]] bool hitTest(float px, float py, const UIRenderContext& ctx) const {
@@ -94,12 +136,16 @@ public:
     // Input
     virtual UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
         if (!visible) return UIEventResult::Ignored;
+        UIEventResult aggregate = UIEventResult::Ignored;
         // Reverse order child dispatch (top-most first)
         for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
             UIEventResult result = (*it)->onInput(event, ctx);
             if (result == UIEventResult::Consumed) return UIEventResult::Consumed;
+            if (result == UIEventResult::Handled) {
+                aggregate = UIEventResult::Handled;
+            }
         }
-        return UIEventResult::Ignored;
+        return aggregate;
     }
 
 protected:
@@ -155,4 +201,6 @@ protected:
 private:
     UIWidget* m_parent = nullptr;
     std::vector<std::unique_ptr<UIWidget>> m_children;
+    bool m_focused = false;
+    bool m_focusRequested = false;
 };

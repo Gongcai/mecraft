@@ -52,4 +52,6 @@ private:
 
     bool m_hovered = false;
     bool m_pressed = false;
+
+    [[nodiscard]] static bool isConfirmKey(int key);
 };
