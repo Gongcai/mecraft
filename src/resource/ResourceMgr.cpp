@@ -267,9 +267,9 @@ void ResourceMgr::init() {
 }
 
 void ResourceMgr::shutdown() {
-    for (auto& [_, textureId] : m_guiTextures) {
-        if (textureId != 0) {
-            glDeleteTextures(1, &textureId);
+    for (auto& [_, texInfo] : m_guiTextures) {
+        if (texInfo.textureID != 0) {
+            glDeleteTextures(1, &texInfo.textureID);
         }
     }
     m_guiTextures.clear();
@@ -346,7 +346,9 @@ GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& p
 GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
     auto existing = m_guiTextures.find(name);
     if (existing != m_guiTextures.end()) {
-        return existing->second;
+        outWidth = existing->second.width;
+        outHeight = existing->second.height;
+        return existing->second.textureID;
     }
 
     int width = 0;
@@ -378,14 +380,18 @@ GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& p
 
     stbi_image_free(data);
 
-    m_guiTextures[name] = textureID;
+    GuiTextureInfo info;
+    info.textureID = textureID;
+    info.width = width;
+    info.height = height;
+    m_guiTextures[name] = info;
     return textureID;
 }
 
 GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
     auto it = m_guiTextures.find(name);
     if (it != m_guiTextures.end()) {
-        return it->second;
+        return it->second.textureID;
     }
     return 0;
 }

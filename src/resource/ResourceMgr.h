@@ -31,6 +31,13 @@ struct TextureArray {
     int layerCount = 0;
 };
 
+// Metadata for cached GUI textures: store GL id plus original image size.
+struct GuiTextureInfo {
+    GLuint textureID = 0;
+    int width = 0;
+    int height = 0;
+};
+
 struct TextureAnimationInfo {
     int firstLayer = 0;
     int frameCount = 1;
@@ -103,7 +110,7 @@ public:
 private:
     std::unordered_map<std::string, std::unique_ptr<Shader>> m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
-    std::unordered_map<std::string, GLuint> m_guiTextures;
+    std::unordered_map<std::string, GuiTextureInfo> m_guiTextures;
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;
     TextureAtlas m_itemTextureAtlas;
