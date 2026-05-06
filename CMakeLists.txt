@@ -94,6 +94,7 @@ set(SRC_RENDERER
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMeshingService.cpp
         src/renderer/HumanoidRenderer.cpp
+        src/renderer/SkyboxRenderer.cpp
 )
 
 set(SRC_UI

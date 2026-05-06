@@ -254,6 +254,16 @@ void ResourceMgr::init() {
     loadShader("item_model", SHADERS_DIR "/item_model.vs", SHADERS_DIR "/item_model.fs");
     loadShader("steve", SHADERS_DIR "/steve.vs", SHADERS_DIR "/steve.fs");
     loadShader("ui_color", SHADERS_DIR "/ui_color.vs", SHADERS_DIR "/ui_color.fs");
+    loadShader("skybox", SHADERS_DIR "/skybox.vs", SHADERS_DIR "/skybox.fs");
+    loadShader("blur", SHADERS_DIR "/blur.vs", SHADERS_DIR "/blur.fs");
+
+    loadCubemap("menu_skybox",
+                SKYBOX_TEXTURES_DIR "/right.png",
+                SKYBOX_TEXTURES_DIR "/left.png",
+                SKYBOX_TEXTURES_DIR "/top.png",
+                SKYBOX_TEXTURES_DIR "/bottom.png",
+                SKYBOX_TEXTURES_DIR "/front.png",
+                SKYBOX_TEXTURES_DIR "/back.png");
 }
 
 void ResourceMgr::shutdown() {
@@ -292,6 +302,13 @@ void ResourceMgr::shutdown() {
         glDeleteTextures(1, &m_lightmapNight);
         m_lightmapNight = 0;
     }
+
+    for (auto& [_, texId] : m_cubemaps) {
+        if (texId != 0) {
+            glDeleteTextures(1, &texId);
+        }
+    }
+    m_cubemaps.clear();
 
     m_blockAtlasPixels.clear();
     m_itemAtlasPixels.clear();
@@ -879,6 +896,62 @@ GLuint ResourceMgr::getLightmapDay() const {
 
 GLuint ResourceMgr::getLightmapNight() const {
     return m_lightmapNight;
+}
+
+GLuint ResourceMgr::loadCubemap(const std::string& name,
+                                 const std::string& rightPath, const std::string& leftPath,
+                                 const std::string& topPath, const std::string& bottomPath,
+                                 const std::string& frontPath, const std::string& backPath) {
+    auto existing = m_cubemaps.find(name);
+    if (existing != m_cubemaps.end()) {
+        return existing->second;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    const std::string paths[6] = { rightPath, leftPath, topPath, bottomPath, frontPath, backPath };
+    const GLenum faces[6] = {
+        GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
+        GL_TEXTURE_CUBE_MAP_POSITIVE_Y, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
+        GL_TEXTURE_CUBE_MAP_POSITIVE_Z, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
+    };
+
+    stbi_set_flip_vertically_on_load(false);
+
+    for (int i = 0; i < 6; ++i) {
+        int width = 0, height = 0, channels = 0;
+        unsigned char* data = stbi_load(paths[i].c_str(), &width, &height, &channels, 4);
+        if (!data) {
+#ifndef NDEBUG
+            std::cerr << "Failed to load cubemap face: " << paths[i] << "\n";
+#endif
+            glDeleteTextures(1, &textureID);
+            return 0;
+        }
+        glTexImage2D(faces[i], 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        stbi_image_free(data);
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+    m_cubemaps[name] = textureID;
+    return textureID;
+}
+
+GLuint ResourceMgr::getCubemap(const std::string& name) const {
+    auto it = m_cubemaps.find(name);
+    if (it != m_cubemaps.end()) {
+        return it->second;
+    }
+    return 0;
 }
 
 void ResourceMgr::buildBlockIconAtlas(int iconSize) {

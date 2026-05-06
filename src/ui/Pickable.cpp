@@ -214,7 +214,11 @@ void Pickable::render(const SlotInfo* slots, int count,
             const std::string countStr = std::to_string(slots[i].count);
             const float textWidth = textRenderer->measureText(countStr, textScale).width;
             const float textX = static_cast<float>(slots[i].x + slots[i].size) - textWidth + params.countTextOffsetX * slotSize;
-            const float textY = static_cast<float>(screenH - (slots[i].y + slots[i].size)) + params.countTextOffsetY * slotSize;
+            const float pixelScale = (kBaseGlyphSize * textScale) /
+                                     static_cast<float>(textRenderer->getAtlas().getPixelHeight());
+            const float descent = static_cast<float>(textRenderer->getAtlas().getDescent()) * pixelScale;
+            const float textY = static_cast<float>(screenH - (slots[i].y + slots[i].size)) +
+                                params.countTextOffsetY * slotSize - descent;
 
             textRenderer->batchRender(countStr, textX, textY, textScale, kTextColor);
         }

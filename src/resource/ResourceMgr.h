@@ -72,6 +72,13 @@ public:
     [[nodiscard]] GLuint getLightmapDay() const;
     [[nodiscard]] GLuint getLightmapNight() const;
 
+    // Cubemap texture (6 face textures for skybox rendering)
+    GLuint loadCubemap(const std::string& name,
+                       const std::string& rightPath, const std::string& leftPath,
+                       const std::string& topPath, const std::string& bottomPath,
+                       const std::string& frontPath, const std::string& backPath);
+    [[nodiscard]] GLuint getCubemap(const std::string& name) const;
+
     // Prebaked block item icons (isometric-like) packed in a single atlas texture.
     void buildBlockIconAtlas(int iconSize = 64);
     [[nodiscard]] const TextureAtlas& getItemIconAtlas() const;
@@ -111,6 +118,7 @@ private:
     std::unordered_map<std::string, TextureAnimationInfo> m_declaredTextureAnimations;
     float m_atlasAnisotropy = 1.0f;
     float m_atlasMaxAnisotropy = 1.0f;
+    std::unordered_map<std::string, GLuint> m_cubemaps;
 };
 
 

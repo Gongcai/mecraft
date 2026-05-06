@@ -8,6 +8,7 @@
 #include "../../ui/screens/MainMenuScreen.h"
 #include "../../ui/ScreenTransition.h"
 #include "../../ui/UIInputEvent.h"
+#include "../../renderer/SkyboxRenderer.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
@@ -22,6 +23,8 @@ public:
 
         m_screen.setLocaleManager(&m_deps.localeManager);
         m_screen.init(m_deps.resourceMgr);
+        m_skyboxRenderer.init(m_deps.resourceMgr);
+        m_skyboxYaw = 0.0f;
         m_screen.onStartClicked = [this]() {
             m_transitioningToGame = true;
             m_transition.startFadeOut(0.5f);
@@ -38,6 +41,7 @@ public:
 
     void onExit() override {
         m_deps.uiRenderer.setActiveScene(nullptr);
+        m_skyboxRenderer.shutdown();
         m_screen.shutdown();
         m_transition.shutdown();
         m_deps.contextManager.popContext();
@@ -97,6 +101,7 @@ public:
         }
 
         m_screen.updateAnimations(static_cast<float>(frameTime));
+        m_skyboxYaw += static_cast<float>(frameTime) * 3.0f;
 
         if (m_transitioningToGame) {
             m_transition.tick(static_cast<float>(frameTime));
@@ -111,8 +116,10 @@ public:
 
     void render(double frameTime) override {
         (void)frameTime;
-        glClearColor(0.05f, 0.05f, 0.1f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        m_skyboxRenderer.render(m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f);
 
         m_deps.uiRenderer.renderSceneOnly(m_deps.window, m_deps.input.snapshot());
 
@@ -128,6 +135,8 @@ private:
     MainMenuScreen m_screen;
     ScreenTransition m_transition;
     bool m_transitioningToGame = false;
+    SkyboxRenderer m_skyboxRenderer;
+    float m_skyboxYaw = 0.0f;
 };
 
 #endif // MECRAFT_MAINMENUAPPSTATE_H

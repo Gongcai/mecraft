@@ -25,6 +25,7 @@
 #define FONT_TEXTURES_DIR     TEXTURES_DIR "/font"
 #define LIGHTMAP_DIR          TEXTURES_DIR "/lightmap"
 #define ENTITY_TEXTURE_DIR    TEXTURES_DIR "/entity"
+#define SKYBOX_TEXTURES_DIR   TEXTURES_DIR "/skybox"
 
 #define MOBS_TEXTURE_DIR       ENTITY_TEXTURE_DIR "/mobs"
 #define ICONS_TEXTURE_DIR      GUI_TEXTURES_DIR "/hud"
