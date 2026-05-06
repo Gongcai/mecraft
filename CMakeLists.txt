@@ -112,6 +112,7 @@ set(SRC_UI
         src/ui/ConsoleOverlay.cpp
         src/ui/PickableOverlay.cpp
         src/ui/Pickable.cpp
+        src/ui/UIInputAdapter.cpp
         src/ui/UIInputRouter.cpp
         src/ui/ItemGridControl.cpp
         src/ui/InventoryPanelControl.cpp

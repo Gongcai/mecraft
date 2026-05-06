@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
@@ -373,23 +372,23 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
                 }
                 break;
             }
-            case UIInputEventType::KeyDown: {
-                if (event.key == GLFW_KEY_ESCAPE) {
+            case UIInputEventType::Command: {
+                if (event.command == UICommand::Cancel) {
                     m_expanded = false;
                     m_hoveredOption = -1;
                     m_scrollOffset = 0.0f;
                     return UIEventResult::Consumed;
                 }
-                if (event.key == GLFW_KEY_UP) {
+                if (event.command == UICommand::NavigateUp) {
                     m_hoveredOption = std::max(0, (m_hoveredOption < 0 ? m_selectedIndex : m_hoveredOption) - 1);
                     return UIEventResult::Consumed;
                 }
-                if (event.key == GLFW_KEY_DOWN) {
+                if (event.command == UICommand::NavigateDown) {
                     int maxIdx = static_cast<int>(m_options.size()) - 1;
                     m_hoveredOption = std::min(maxIdx, (m_hoveredOption < 0 ? m_selectedIndex : m_hoveredOption) + 1);
                     return UIEventResult::Consumed;
                 }
-                if ((event.key == GLFW_KEY_ENTER || event.key == GLFW_KEY_KP_ENTER) && m_hoveredOption >= 0) {
+                if (event.command == UICommand::Activate && m_hoveredOption >= 0) {
                     m_selectedIndex = m_hoveredOption;
                     m_expanded = false;
                     m_hoveredOption = -1;
@@ -418,8 +417,8 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
             }
             break;
         }
-        case UIInputEventType::KeyDown: {
-            if (isFocused() && (event.key == GLFW_KEY_ENTER || event.key == GLFW_KEY_KP_ENTER || event.key == GLFW_KEY_SPACE)) {
+        case UIInputEventType::Command: {
+            if (isFocused() && event.command == UICommand::Activate) {
                 m_expanded = true;
                 m_hoveredOption = m_selectedIndex;
                 return UIEventResult::Consumed;

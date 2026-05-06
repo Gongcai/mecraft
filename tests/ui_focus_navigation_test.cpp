@@ -2,8 +2,6 @@
 #include <iostream>
 #include <memory>
 
-#include <GLFW/glfw3.h>
-
 #include "../src/ui/UIButton.h"
 #include "../src/ui/UIScene.h"
 
@@ -16,12 +14,13 @@ int fail(const char* message) {
 
 class TestScene final : public UIScene {};
 
-UIInputEvent keyDown(float x, float y, int key) {
-    return {UIInputEventType::KeyDown, x, y, UIPointerButton::None, key};
-}
-
-UIInputEvent keyUp(float x, float y, int key) {
-    return {UIInputEventType::KeyUp, x, y, UIPointerButton::None, key};
+UIInputEvent command(float x, float y, UICommand command) {
+    UIInputEvent event;
+    event.type = UIInputEventType::Command;
+    event.x = x;
+    event.y = y;
+    event.command = command;
+    return event;
 }
 
 } // namespace
@@ -63,21 +62,18 @@ int main() {
         return fail("first focusable widget should receive initial focus");
     }
 
-    if (scene.onInput(keyDown(0.0f, 0.0f, GLFW_KEY_DOWN)) != UIEventResult::Handled) {
-        return fail("down key should move focus and be handled");
+    if (scene.onInput(command(0.0f, 0.0f, UICommand::NavigateDown)) != UIEventResult::Handled) {
+        return fail("navigate down should move focus and be handled");
     }
     if (!secondPtr->isFocused()) {
-        return fail("down key should move focus to next widget");
+        return fail("navigate down should move focus to next widget");
     }
 
-    if (scene.onInput(keyDown(0.0f, 0.0f, GLFW_KEY_ENTER)) != UIEventResult::Handled) {
-        return fail("enter keydown should be handled by focused button");
-    }
-    if (scene.onInput(keyUp(0.0f, 0.0f, GLFW_KEY_ENTER)) != UIEventResult::Consumed) {
-        return fail("enter keyup should click focused button");
+    if (scene.onInput(command(0.0f, 0.0f, UICommand::Activate)) != UIEventResult::Consumed) {
+        return fail("activate should click focused button");
     }
     if (secondClicks != 1 || firstClicks != 0) {
-        return fail("enter should click currently focused widget only");
+        return fail("activate should click currently focused widget only");
     }
 
     // Pointer coordinates are top-left origin. This lands inside the first button.
@@ -89,11 +85,8 @@ int main() {
         return fail("pointer interaction should request and acquire focus");
     }
 
-    if (scene.onInput(keyDown(0.0f, 0.0f, GLFW_KEY_ENTER)) != UIEventResult::Handled) {
-        return fail("enter keydown should be handled by newly focused widget");
-    }
-    if (scene.onInput(keyUp(0.0f, 0.0f, GLFW_KEY_ENTER)) != UIEventResult::Consumed) {
-        return fail("enter keyup should click newly focused widget");
+    if (scene.onInput(command(0.0f, 0.0f, UICommand::Activate)) != UIEventResult::Consumed) {
+        return fail("activate should click newly focused widget");
     }
     if (firstClicks != 1) {
         return fail("focused widget should receive enter click after focus change");

@@ -9,6 +9,7 @@
 #include "InventoryDragController.h"
 #include "CraftingGridController.h"
 #include "../../player/Inventory.h"
+#include "../../ui/UIInputAdapter.h"
 #include "../../ui/UIRenderer.h"
 #include "../../core/Time.h"
 #include "../../world/DropSystem.h"
@@ -46,52 +47,15 @@ public:
         const bool primaryReleased = m_deps.context.isActionTriggered(Action::UIPrimaryRelease);
         const bool secondaryReleased = m_deps.context.isActionTriggered(Action::UISecondaryRelease);
 
-        // Route pointer events to UI widgets
-        static_cast<void>(m_deps.uiRenderer.routeUIInput({
-            UIInputEventType::PointerMove,
-            snapshot.mousePosition.x,
-            snapshot.mousePosition.y,
-            UIPointerButton::None
-        }));
-
-        UIEventResult primaryDownResult = UIEventResult::Ignored;
-        if (primaryPressed) {
-            primaryDownResult = m_deps.uiRenderer.routeUIInput({
-                UIInputEventType::PointerDown,
-                snapshot.mousePosition.x,
-                snapshot.mousePosition.y,
-                UIPointerButton::Primary
-            });
-        }
-        if (secondaryPressed) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({
-                UIInputEventType::PointerDown,
-                snapshot.mousePosition.x,
-                snapshot.mousePosition.y,
-                UIPointerButton::Secondary
-            }));
-        }
-        if (primaryReleased) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({
-                UIInputEventType::PointerUp,
-                snapshot.mousePosition.x,
-                snapshot.mousePosition.y,
-                UIPointerButton::Primary
-            }));
-        }
-        if (secondaryReleased) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({
-                UIInputEventType::PointerUp,
-                snapshot.mousePosition.x,
-                snapshot.mousePosition.y,
-                UIPointerButton::Secondary
-            }));
-        }
+        const UIInputRouteResult uiRouteResult =
+            UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
+        const UIEventResult primaryDownResult = uiRouteResult.primaryDown;
 
         // Close inventory
         if (m_deps.context.isActionTriggered(Action::Inventory) ||
             m_deps.context.isActionTriggered(Action::Menu) ||
-            m_deps.context.isActionTriggered(Action::Cancel)) {
+            (m_deps.context.isActionTriggered(Action::Cancel) &&
+             uiRouteResult.aggregate != UIEventResult::Consumed)) {
             m_deps.fsm.popState();
             return;
         }

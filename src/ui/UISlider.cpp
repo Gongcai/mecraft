@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
@@ -259,27 +258,27 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
             }
             break;
         }
-        case UIInputEventType::KeyDown: {
+        case UIInputEventType::Command: {
             if (isFocused()) {
                 float stepVal = m_step > 0.0f ? m_step : (m_max - m_min) * 0.05f;
-                if (event.key == GLFW_KEY_LEFT || event.key == GLFW_KEY_DOWN) {
+                if (event.command == UICommand::NavigateLeft || event.command == UICommand::NavigateDown) {
                     m_value = std::max(m_min, m_value - stepVal);
                     applyStep();
                     if (m_onValueChanged) m_onValueChanged(m_value);
                     return UIEventResult::Consumed;
                 }
-                if (event.key == GLFW_KEY_RIGHT || event.key == GLFW_KEY_UP) {
+                if (event.command == UICommand::NavigateRight || event.command == UICommand::NavigateUp) {
                     m_value = std::min(m_max, m_value + stepVal);
                     applyStep();
                     if (m_onValueChanged) m_onValueChanged(m_value);
                     return UIEventResult::Consumed;
                 }
-                if (event.key == GLFW_KEY_HOME) {
+                if (event.command == UICommand::Home) {
                     m_value = m_min;
                     if (m_onValueChanged) m_onValueChanged(m_value);
                     return UIEventResult::Consumed;
                 }
-                if (event.key == GLFW_KEY_END) {
+                if (event.command == UICommand::End) {
                     m_value = m_max;
                     if (m_onValueChanged) m_onValueChanged(m_value);
                     return UIEventResult::Consumed;

@@ -7,7 +7,7 @@
 #include "GameplayAppState.h"
 #include "../../ui/screens/MainMenuScreen.h"
 #include "../../ui/ScreenTransition.h"
-#include "../../ui/UIInputEvent.h"
+#include "../../ui/UIInputAdapter.h"
 #include "../../renderer/SkyboxRenderer.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -51,50 +51,13 @@ public:
         m_deps.input.update();
         const auto& snapshot = m_deps.input.snapshot();
 
-        // Route UI input to the screen
-        const float mx = snapshot.mousePosition.x;
-        const float my = snapshot.mousePosition.y;
-        auto routeKeyPress = [this, mx, my](int keyCode) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::KeyDown, mx, my, UIPointerButton::None, keyCode}));
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::KeyUp, mx, my, UIPointerButton::None, keyCode}));
-        };
-        auto routeKeyDown = [this, mx, my](int keyCode) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::KeyDown, mx, my, UIPointerButton::None, keyCode}));
-        };
+        const UIInputRouteResult uiRouteResult =
+            UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.contextManager);
 
-        static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::PointerMove, mx, my, UIPointerButton::None}));
-
-        if (snapshot.mouseButtonsJustPressed[GLFW_MOUSE_BUTTON_LEFT]) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::PointerDown, mx, my, UIPointerButton::Primary}));
-        }
-        if (snapshot.mouseButtonsJustReleased[GLFW_MOUSE_BUTTON_LEFT]) {
-            static_cast<void>(m_deps.uiRenderer.routeUIInput({UIInputEventType::PointerUp, mx, my, UIPointerButton::Primary}));
-        }
-
-        const bool navUp = m_deps.contextManager.isActionTriggered(Action::Up);
-        const bool navDown = m_deps.contextManager.isActionTriggered(Action::Down);
-        const bool navLeft = m_deps.contextManager.isActionTriggered(Action::Left);
-        const bool navRight = m_deps.contextManager.isActionTriggered(Action::Right);
-        const bool confirm = m_deps.contextManager.isActionTriggered(Action::Confirm);
         const bool cancel = m_deps.contextManager.isActionTriggered(Action::Cancel);
         const bool menu = m_deps.contextManager.isActionTriggered(Action::Menu);
 
-        if (navUp) {
-            routeKeyDown(GLFW_KEY_UP);
-        }
-        if (navDown) {
-            routeKeyDown(GLFW_KEY_DOWN);
-        }
-        if (navLeft) {
-            routeKeyDown(GLFW_KEY_LEFT);
-        } else if (navRight) {
-            routeKeyDown(GLFW_KEY_RIGHT);
-        }
-        if (confirm) {
-            routeKeyPress(GLFW_KEY_ENTER);
-        }
-
-        if (menu || cancel) {
+        if ((menu || cancel) && uiRouteResult.aggregate != UIEventResult::Consumed) {
             glfwSetWindowShouldClose(m_deps.window.getHandle(), true);
             accumulator = 0.0;
             return;

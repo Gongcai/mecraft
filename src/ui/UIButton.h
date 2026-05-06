@@ -55,5 +55,5 @@ private:
     bool m_pressed = false;
     bool m_hasLocalColors = false;
 
-    [[nodiscard]] static bool isConfirmKey(int key);
+    [[nodiscard]] static bool isActivateCommand(const UIInputEvent& event);
 };

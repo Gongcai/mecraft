@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
@@ -220,14 +219,8 @@ UIEventResult UICheckbox::onInput(const UIInputEvent& event, const UIRenderConte
             }
             break;
         }
-        case UIInputEventType::KeyDown: {
-            if (isFocused() && (event.key == GLFW_KEY_ENTER || event.key == GLFW_KEY_KP_ENTER || event.key == GLFW_KEY_SPACE)) {
-                return UIEventResult::Handled;
-            }
-            break;
-        }
-        case UIInputEventType::KeyUp: {
-            if (isFocused() && (event.key == GLFW_KEY_ENTER || event.key == GLFW_KEY_KP_ENTER || event.key == GLFW_KEY_SPACE)) {
+        case UIInputEventType::Command: {
+            if (isFocused() && event.command == UICommand::Activate) {
                 m_checked = !m_checked;
                 m_checkScaleTween.start(m_checked ? 0.0f : 1.0f,
                                         m_checked ? 1.0f : 0.0f,

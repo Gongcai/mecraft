@@ -8,8 +8,21 @@ enum class UIInputEventType {
     PointerUp,
     KeyDown,
     KeyUp,
+    Command,
     TextInput,
     Scroll,
+};
+
+enum class UICommand {
+    None,
+    NavigateUp,
+    NavigateDown,
+    NavigateLeft,
+    NavigateRight,
+    Activate,
+    Cancel,
+    Home,
+    End,
 };
 
 enum class UIPointerButton {
@@ -24,6 +37,7 @@ struct UIInputEvent {
     float y = 0.0f;
     UIPointerButton button = UIPointerButton::None;
     int key = 0;
+    UICommand command = UICommand::None;
     std::uint32_t codepoint = 0;
     float scrollX = 0.0f;
     float scrollY = 0.0f;

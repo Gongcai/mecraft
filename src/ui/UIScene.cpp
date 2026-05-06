@@ -1,7 +1,5 @@
 #include "UIScene.h"
 
-#include <GLFW/glfw3.h>
-
 #include <algorithm>
 
 void UIScene::init(ResourceMgr& resourceMgr) {
@@ -53,23 +51,11 @@ UIEventResult UIScene::onInput(const UIInputEvent& event) {
         m_lastPointerY = event.y;
     }
 
-    if (event.type == UIInputEventType::KeyDown) {
-        if (event.key == GLFW_KEY_UP || event.key == GLFW_KEY_LEFT) {
-            m_focusEngaged = true;
-            moveFocusPrev();
-            return UIEventResult::Handled;
-        }
-        if (event.key == GLFW_KEY_DOWN || event.key == GLFW_KEY_RIGHT) {
-            m_focusEngaged = true;
-            moveFocusNext();
-            return UIEventResult::Handled;
-        }
-    }
-
     UIEventResult aggregate = UIEventResult::Ignored;
     if (m_focusedWidget &&
         (event.type == UIInputEventType::KeyDown ||
          event.type == UIInputEventType::KeyUp ||
+         event.type == UIInputEventType::Command ||
          event.type == UIInputEventType::TextInput ||
          event.type == UIInputEventType::Scroll)) {
         const UIEventResult focusedResult = m_focusedWidget->onInput(event, m_currentContext);
@@ -80,6 +66,19 @@ UIEventResult UIScene::onInput(const UIInputEvent& event) {
         }
         if (focusedResult == UIEventResult::Handled) {
             aggregate = UIEventResult::Handled;
+        }
+    }
+
+    if (event.type == UIInputEventType::Command) {
+        if (event.command == UICommand::NavigateUp || event.command == UICommand::NavigateLeft) {
+            m_focusEngaged = true;
+            moveFocusPrev();
+            return UIEventResult::Handled;
+        }
+        if (event.command == UICommand::NavigateDown || event.command == UICommand::NavigateRight) {
+            m_focusEngaged = true;
+            moveFocusNext();
+            return UIEventResult::Handled;
         }
     }
 

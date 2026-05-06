@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include <GLFW/glfw3.h>
-
 #include "UITheme.h"
 
 UIButton::UIButton() {
@@ -137,21 +135,15 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
             m_pressed = false;
             break;
         }
-        case UIInputEventType::KeyDown: {
-            if (isFocused() && isConfirmKey(event.key)) {
-                m_pressed = true;
-                return UIEventResult::Handled;
-            }
-            break;
-        }
-        case UIInputEventType::KeyUp: {
-            if (isFocused() && isConfirmKey(event.key) && m_pressed) {
-                m_pressed = false;
+        case UIInputEventType::Command: {
+            if (isFocused() && isActivateCommand(event)) {
                 if (m_onClick) m_onClick();
                 return UIEventResult::Consumed;
             }
             break;
         }
+        case UIInputEventType::KeyDown:
+        case UIInputEventType::KeyUp:
         case UIInputEventType::TextInput:
         case UIInputEventType::Scroll:
             break;
@@ -160,6 +152,6 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
     return UIEventResult::Ignored;
 }
 
-bool UIButton::isConfirmKey(const int key) {
-    return key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER || key == GLFW_KEY_SPACE;
+bool UIButton::isActivateCommand(const UIInputEvent& event) {
+    return event.command == UICommand::Activate;
 }
