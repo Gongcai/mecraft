@@ -32,7 +32,25 @@ public:
     void clearQuitToMenuRequest() { m_quitToMenuRequested = false; }
 
 private:
+    enum class PendingOpType {
+        Push,
+        Pop,
+        Change
+    };
+
+    struct PendingOp {
+        PendingOpType type = PendingOpType::Pop;
+        std::unique_ptr<IGameState> state;
+    };
+
+    void pushStateNow(std::unique_ptr<IGameState> state);
+    void popStateNow();
+    void changeStateNow(std::unique_ptr<IGameState> state);
+    void applyPendingOps();
+
     std::vector<std::unique_ptr<IGameState>> m_states;
+    std::vector<PendingOp> m_pendingOps;
+    bool m_dispatching = false;
     bool m_quitToMenuRequested = false;
 };
 

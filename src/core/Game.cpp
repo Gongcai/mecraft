@@ -47,7 +47,7 @@ void Game::init() {
 // initWindow and initResources removed
 
 void Game::initWorld() {
-    constexpr int kRenderDistance = 8;
+    constexpr int kRenderDistance = 32;
 
     m_world.init(m_params.seed);
     m_world.setRenderDistance(kRenderDistance);
@@ -167,6 +167,9 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     }
 
     m_stateMachine.update(static_cast<float>(fixedStep), inputSnapshot);
+    if (m_stateMachine.isQuitToMenuRequested()) {
+        return;
+    }
 #ifndef NDEBUG
     const auto stateEnd = std::chrono::steady_clock::now();
     const auto worldStart = std::chrono::steady_clock::now();

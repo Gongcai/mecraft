@@ -59,7 +59,7 @@ public:
     // --- Column-level aggregated mesh access (opaque + cutout) ---
     [[nodiscard]] const SubChunkMesh& getColumnMesh() const;
     [[nodiscard]] SubChunkMesh& getColumnMesh();
-    void updateColumnAggregateData(int scy, const ChunkMeshData& meshData);
+    void updateColumnAggregateData(int scy, const ChunkMeshData& meshData, bool skipGlUpload = false);
     void ensureColumnMeshBuilt();
 
     // --- Light access (column-local coordinates) ---

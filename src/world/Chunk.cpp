@@ -536,7 +536,7 @@ SubChunkMesh& Chunk::getColumnMesh() {
     return m_columnMesh;
 }
 
-void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshData) {
+void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshData, const bool skipGlUpload) {
     if (scy < 0 || scy >= NUM_SUB_CHUNKS) {
         return;
     }
@@ -545,25 +545,50 @@ void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshDa
     slice.opaqueVertices = meshData.opaqueVertices;
     slice.cutoutVertices = meshData.cutoutVertices;
 
-    const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
+    const glm::ivec3 worldOffset = getWorldOffset();
+    const float xOff = static_cast<float>(worldOffset.x);
+    const float yOff = static_cast<float>(scy * SubChunk::SIZE + worldOffset.y);
+    const float zOff = static_cast<float>(worldOffset.z);
+    const glm::vec3 boundsOffset(xOff, static_cast<float>(worldOffset.y), zOff);
     for (BlockVertex& vertex : slice.opaqueVertices) {
-        vertex.y += yOffset;
+        vertex.x += xOff;
+        vertex.y += yOff;
+        vertex.z += zOff;
     }
     for (BlockVertex& vertex : slice.cutoutVertices) {
-        vertex.y += yOffset;
+        vertex.x += xOff;
+        vertex.y += yOff;
+        vertex.z += zOff;
     }
 
     slice.hasBounds = meshData.hasBounds && (!slice.opaqueVertices.empty() || !slice.cutoutVertices.empty());
     if (slice.hasBounds) {
-        const glm::vec3 offset(0.0f, yOffset, 0.0f);
-        slice.boundsMin = meshData.boundsMin + offset;
-        slice.boundsMax = meshData.boundsMax + offset;
+        slice.boundsMin = meshData.boundsMin + boundsOffset;
+        slice.boundsMax = meshData.boundsMax + boundsOffset;
     } else {
         slice.boundsMin = glm::vec3(0.0f);
         slice.boundsMax = glm::vec3(0.0f);
     }
 
     m_columnMeshDirty = true;
+    if (skipGlUpload) {
+        // In MDI mode, skip VBO rebuild but still update bounds for culling.
+        bool hasBounds = false;
+        glm::vec3 boundsMin(0.0f);
+        glm::vec3 boundsMax(0.0f);
+        for (const ColumnAggregateSlice& s : m_columnAggregateSlices) {
+            if (s.hasBounds) {
+                expandBounds(boundsMin, boundsMax, hasBounds, s.boundsMin, s.boundsMax);
+            }
+        }
+        m_columnMesh.vertexCount = 0;
+        m_columnMesh.cutoutVertexCount = 0;
+        m_columnMesh.hasBounds = hasBounds;
+        m_columnMesh.boundsMin = hasBounds ? boundsMin : glm::vec3(0.0f);
+        m_columnMesh.boundsMax = hasBounds ? boundsMax : glm::vec3(0.0f);
+        m_columnMeshDirty = false;
+        return;
+    }
     rebuildColumnMesh();
 }
 

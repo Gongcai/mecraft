@@ -19,7 +19,25 @@ public:
     [[nodiscard]] bool isEmpty() const { return m_states.empty(); }
 
 private:
+    enum class PendingOpType {
+        Push,
+        Pop,
+        Change
+    };
+
+    struct PendingOp {
+        PendingOpType type = PendingOpType::Pop;
+        std::unique_ptr<IAppState> state;
+    };
+
+    void pushStateNow(std::unique_ptr<IAppState> state);
+    void popStateNow();
+    void changeStateNow(std::unique_ptr<IAppState> state);
+    void applyPendingOps();
+
     std::vector<std::unique_ptr<IAppState>> m_states;
+    std::vector<PendingOp> m_pendingOps;
+    bool m_dispatching = false;
 };
 
 #endif //MECRAFT_APPSTATEMACHINE_H

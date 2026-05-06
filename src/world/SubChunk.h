@@ -13,6 +13,25 @@
 #include "Palette.h"
 #include "BitPackedArray.h"
 
+// GPU buffer range handle used by the global vertex pool (MDI path).
+struct GpuMeshRange {
+    uint32_t firstVertex = 0;
+    uint32_t vertexCount = 0;
+    uint64_t generation = 0;
+};
+
+// Logical handle for a sub-chunk mesh in the global GPU buffer pool.
+struct WorldGpuMesh {
+    GpuMeshRange opaque;
+    GpuMeshRange cutout;
+    GpuMeshRange transparent;
+    bool hasBounds = false;
+    glm::vec3 boundsMin{};
+    glm::vec3 boundsMax{};
+};
+
+class WorldRenderBuffer;
+
 struct BlockVertex {
     float x;
     float y;
@@ -48,6 +67,12 @@ struct SubChunkMesh {
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);
     glm::vec3 boundsMax = glm::vec3(0.0f);
+
+    // MDI path: GPU ranges in the global buffer pool
+    GpuMeshRange opaqueRange;
+    GpuMeshRange cutoutRange;
+    GpuMeshRange transparentRange;
+    bool inGlobalPool = false;
 
     void upload(const std::vector<BlockVertex>& vertices);
     void uploadCutout(const std::vector<BlockVertex>& cutoutVerts);

@@ -477,6 +477,18 @@ void SubChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparent
 }
 
 void SubChunkMesh::destroy() {
+    if (inGlobalPool) {
+        // GPU memory is owned by WorldRenderBuffer — just clear the handles.
+        opaqueRange = {};
+        cutoutRange = {};
+        transparentRange = {};
+        vertexCount = 0;
+        cutoutVertexCount = 0;
+        transparentVertexCount = 0;
+        hasBounds = false;
+        inGlobalPool = false;
+        return;
+    }
     if (vbo != 0) {
         glDeleteBuffers(1, &vbo);
         vbo = 0;

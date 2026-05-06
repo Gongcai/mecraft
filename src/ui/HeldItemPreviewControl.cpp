@@ -220,6 +220,7 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     } else {
         m_shader->use();
         m_shader->setMat4("model", model);
+        m_shader->setInt("uUseModel", 1);
         m_shader->setMat4("view", view);
         m_shader->setMat4("viewProj", viewProj);
         m_shader->setFloat("uWindTime", 0.0f);
@@ -247,6 +248,9 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
+    if (useBlockMesh) {
+        m_shader->setInt("uUseModel", 0);
+    }
 
     // Restore UI depth/blend state for subsequent widgets
     glDisable(GL_DEPTH_TEST);

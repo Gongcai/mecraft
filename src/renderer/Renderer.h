@@ -10,9 +10,12 @@
 #include "../core/Window.h"
 #include "ChunkMeshingService.h"
 #include "Shader.h"
+#include "WorldRenderBuffer.h"
+#include "WorldDrawBatch.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 class World;
@@ -130,6 +133,8 @@ public:
     // 视锥剔除
     void updateFrustum(const glm::mat4& viewProj);
     [[nodiscard]] int getDrawCallCount() const;
+    [[nodiscard]] bool isMultiDrawIndirectEnabled() const { return m_useMultiDrawIndirect; }
+    [[nodiscard]] int getGlSubmitCount() const;
     [[nodiscard]] float getAtlasAnisotropy() const;
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
 private:
@@ -172,6 +177,27 @@ private:
         int transparentCount = 0;
     };
 
+    struct MdiMeshAllocation {
+        WorldGpuMesh mesh;
+    };
+
+    struct SubChunkGpuKey {
+        int64_t chunkKey = 0;
+        int scy = 0;
+
+        bool operator==(const SubChunkGpuKey& other) const {
+            return chunkKey == other.chunkKey && scy == other.scy;
+        }
+    };
+
+    struct SubChunkGpuKeyHash {
+        size_t operator()(const SubChunkGpuKey& key) const {
+            const uint64_t chunk = static_cast<uint64_t>(key.chunkKey);
+            const uint64_t mixed = chunk ^ (static_cast<uint64_t>(key.scy) + 0x9e3779b97f4a7c15ULL + (chunk << 6) + (chunk >> 2));
+            return static_cast<size_t>(mixed);
+        }
+    };
+
 
     void recordMeshingHistory();
     void drainMeshingResults(const World& world);
@@ -186,6 +212,8 @@ private:
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void syncChunkRenderColumns(const World& world);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
+    void releaseStaleMdiAllocations(const World& world);
+    void releaseMdiAllocation(const SubChunkGpuKey& key);
     void initOutlineMesh();
     void initBreakOverlayMesh();
     void renderBlockOutline(const BlockTargetRenderData& target);
@@ -201,6 +229,9 @@ private:
     void endFrame(const Window &window);
 
     int drawCallCount = 0;
+
+    WorldRenderBuffer m_worldRenderBuffer;
+    bool m_useMultiDrawIndirect = true;
 
     Shader* m_chunkShader = nullptr;
    // Shader* m_uiShader = nullptr;
@@ -261,7 +292,9 @@ private:
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
+    std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
     std::vector<ChunkRenderEntry> m_deferredTransparentEntries;
+    std::vector<DrawBatchEntry> m_deferredTransparentBatch;  // MDI path
     uint64_t m_chunkRenderColumnsRevision = 0;
     int m_chunkRenderColumnsRegionSize = 0;
 };

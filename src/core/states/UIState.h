@@ -59,11 +59,9 @@ public:
 
         if (m_quitToMenu) {
             m_quitToMenu = false;
-            // Pop this state first, then signal quit to the game
-            m_deps.fsm.popState();
-            // The quit-to-menu signal is handled by GameplayAppState
-            // via the GameStateMachine's state change
             m_deps.fsm.requestQuitToMenu();
+            m_deps.fsm.popState();
+            return;
         }
     }
 

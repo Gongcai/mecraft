@@ -42,6 +42,12 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
     constexpr double kFixedStep = 1.0 / 60.0;
     while (accumulator >= kFixedStep) {
         m_game->runFixedUpdate(kFixedStep, accumulator);
+        if (m_game->isQuitToMenuRequested()) {
+            m_game->clearQuitToMenuRequest();
+            m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+            accumulator = 0.0;
+            return;
+        }
     }
     m_game->syncAudioListener(static_cast<float>(frameTime));
 
@@ -54,5 +60,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 }
 
 void GameplayAppState::render(double frameTime) {
-    m_game->renderFrame(static_cast<float>(frameTime));
+    if (m_game) {
+        m_game->renderFrame(static_cast<float>(frameTime));
+    }
 }

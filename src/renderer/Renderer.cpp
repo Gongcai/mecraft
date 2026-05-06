@@ -36,14 +36,6 @@ struct MeshingCandidate {
     std::shared_ptr<Chunk> neighborNegZ;
 };
 
-constexpr float kWindStrength = 0.06f;
-constexpr float kWindSpeed = 1.8f;
-constexpr float kWindSpatialFreq = 0.22f;
-// Current world block animations loop on 32-frame strips at 6 fps and 8 fps.
-// 16 seconds is a common multiple of both animation periods, so wrapping here
-// preserves seamless looping while keeping the shader time uniform in a stable range.
-constexpr double kWorldAnimationLoopSeconds = 16.0;
-
 void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
     if (!hasBounds) {
@@ -81,6 +73,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
     initOutlineMesh();
     initBreakOverlayMesh();
+    m_worldRenderBuffer.init();
     m_threadPool.start();
     if (!m_meshingSubmitBudgetOverridden) {
         const int workerCount = std::max(1, m_threadPool.numWorkers());
@@ -100,6 +93,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
 }
 
 void Renderer::shutdown() {
+    m_mdiMeshAllocations.clear();
+    m_worldRenderBuffer.shutdown();
     m_meshingService.shutdown();
     m_threadPool.shutdown();
     m_meshingInFlight.clear();
@@ -330,7 +325,11 @@ void Renderer::renderWorld(const World& world) {
         return;
     }
 
+    releaseStaleMdiAllocations(world);
     drainMeshingResults(world);
+
+    m_worldRenderBuffer.beginFrame();
+    m_deferredTransparentBatch.clear();
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     bindChunkRenderState(world, texArray);
@@ -341,6 +340,9 @@ void Renderer::renderWorld(const World& world) {
     m_deferredTransparentEntries.clear();
     m_deferredTransparentEntries.reserve(world.getActiveChunks().size() * 2);
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, m_deferredTransparentEntries);
+    if (m_useMultiDrawIndirect) {
+        m_worldRenderBuffer.flushOpaque();
+    }
     renderCutoutChunks(cutoutEntries);
 
     glBindVertexArray(0);
@@ -362,6 +364,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->use();
     m_chunkShader->setMat4("view", m_view);
     m_chunkShader->setMat4("viewProj", m_projection * m_view);
+    m_chunkShader->setInt("uUseModel", 0);
     m_chunkShader->setInt("texArray", 0);
     m_chunkShader->setInt("uLightmapDay", 1);
     m_chunkShader->setInt("uLightmapNight", 2);
@@ -373,11 +376,7 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setFloat("uFogStart", fogStart);
     m_chunkShader->setFloat("uFogEnd", fogEnd);
     m_chunkShader->setFloat("uFogDensity", m_fogSettings.density);
-    m_chunkShader->setFloat("uWindTime", static_cast<float>(Time::getGameTime()));
-    m_chunkShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), kWorldAnimationLoopSeconds)));
-    m_chunkShader->setFloat("uWindStrength", kWindStrength);
-    m_chunkShader->setFloat("uWindSpeed", kWindSpeed);
-    m_chunkShader->setFloat("uWindSpatialFreq", kWindSpatialFreq);
+    m_chunkShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
     m_chunkShader->setInt("uDebugLightMode", m_debugLightMode);
     m_chunkShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
 
@@ -499,8 +498,6 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
         return;
     }
 
-    const int modelLoc = m_chunkShader->getUniformLocation("model");
-
     GLuint lastOpaqueVao = 0;
 
     size_t regionBegin = 0;
@@ -577,60 +574,85 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             }
 #endif
 
-            if (column.aggregatedPresent) {
-#ifndef NDEBUG
-                ++m_chunkTestsThisFrame;
-                if (!isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
-                                      m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
-                    if (m_chunkCullingDebugEnabled) {
-                        recordChunkCull(culledPlane, 1);
+            if (m_useMultiDrawIndirect) {
+                // MDI path: iterate per-sub-chunk meshes directly.
+                const glm::ivec3 offset = column.chunk->getWorldOffset();
+                for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                    const SubChunk* sc = column.chunk->getSubChunk(scy);
+                    if (!sc) continue;
+                    const SubChunkMesh& mesh = sc->getMesh();
+                    if (!mesh.inGlobalPool) continue;
+
+                    if (mesh.opaqueRange.vertexCount > 0) {
+                        m_worldRenderBuffer.addOpaque(mesh.opaqueRange);
                     }
-                } else {
+                    if (mesh.cutoutRange.vertexCount > 0) {
+                        m_worldRenderBuffer.addCutout(mesh.cutoutRange);
+                    }
+                    if (mesh.transparentRange.vertexCount > 0) {
+                        const int yBase = scy * SubChunk::SIZE;
+                        const glm::vec3 sectionCenter(
+                            static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                            static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
+                            static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                        const glm::vec3 toCamera = sectionCenter - m_cameraPos;
+                        m_deferredTransparentBatch.push_back({mesh.transparentRange, glm::dot(toCamera, toCamera)});
+                    }
+                }
+            } else {
+                // Old path: draw from column aggregate.
+                if (column.aggregatedPresent) {
+#ifndef NDEBUG
+                    ++m_chunkTestsThisFrame;
+                    if (!isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
+                                          m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                        if (m_chunkCullingDebugEnabled) {
+                            recordChunkCull(culledPlane, 1);
+                        }
+                    } else {
+                        ++m_chunkPassedThisFrame;
+#else
+                    if (isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
+#endif
+                        const SubChunkMesh& mesh = column.chunk->getColumnMesh();
+
+                        if (column.aggregatedHasOpaque && mesh.vertexCount > 0) {
+                            if (lastOpaqueVao != mesh.vao) {
+                                glBindVertexArray(mesh.vao);
+                                lastOpaqueVao = mesh.vao;
+                            }
+                            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
+                            ++drawCallCount;
+                        }
+
+                        if (column.aggregatedHasCutout && mesh.cutoutVertexCount > 0) {
+                            cutoutEntries.push_back({column.chunk, -1, true});
+                        }
+                    }
+                }
+
+                for (int transparentIndex = 0; transparentIndex < column.transparentCount; ++transparentIndex) {
+                    const int scy = column.transparentScys[transparentIndex];
+                    const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
+
+#ifndef NDEBUG
+                    ++m_chunkTestsThisFrame;
+                    if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax,
+                                          m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                        if (m_chunkCullingDebugEnabled) {
+                            recordChunkCull(culledPlane, 1);
+                        }
+                        continue;
+                    }
                     ++m_chunkPassedThisFrame;
 #else
-                if (isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
-#endif
-                    const SubChunkMesh& mesh = column.chunk->getColumnMesh();
-                    glm::mat4 model(1.0f);
-                    model = glm::translate(model, column.worldOffset);
-                    m_chunkShader->setMat4(modelLoc, model);
-
-                    if (column.aggregatedHasOpaque && mesh.vertexCount > 0) {
-                        if (lastOpaqueVao != mesh.vao) {
-                            glBindVertexArray(mesh.vao);
-                            lastOpaqueVao = mesh.vao;
-                        }
-                        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
-                        ++drawCallCount;
+                    if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax)) {
+                        continue;
                     }
-
-                    if (column.aggregatedHasCutout && mesh.cutoutVertexCount > 0) {
-                        cutoutEntries.push_back({column.chunk, -1, true});
-                    }
-                }
-            }
-
-            for (int transparentIndex = 0; transparentIndex < column.transparentCount; ++transparentIndex) {
-                const int scy = column.transparentScys[transparentIndex];
-                const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
-
-#ifndef NDEBUG
-                ++m_chunkTestsThisFrame;
-                if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax,
-                                      m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
-                    if (m_chunkCullingDebugEnabled) {
-                        recordChunkCull(culledPlane, 1);
-                    }
-                    continue;
-                }
-                ++m_chunkPassedThisFrame;
-#else
-                if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax)) {
-                    continue;
-                }
 #endif
 
-                transparentEntries.push_back({column.chunk, scy, false});
+                    transparentEntries.push_back({column.chunk, scy, false});
+                }
             }
         }
 
@@ -684,6 +706,46 @@ void Renderer::syncChunkRenderColumns(const World& world) {
     m_chunkRenderColumnsRegionSize = regionChunkSize;
 }
 
+void Renderer::releaseMdiAllocation(const SubChunkGpuKey& key) {
+    const auto it = m_mdiMeshAllocations.find(key);
+    if (it == m_mdiMeshAllocations.end()) {
+        return;
+    }
+    m_worldRenderBuffer.free(it->second.mesh);
+    m_mdiMeshAllocations.erase(it);
+}
+
+void Renderer::releaseStaleMdiAllocations(const World& world) {
+    if (m_mdiMeshAllocations.empty()) {
+        return;
+    }
+
+    const auto& activeChunks = world.getActiveChunks();
+    for (auto it = m_mdiMeshAllocations.begin(); it != m_mdiMeshAllocations.end(); ) {
+        const auto chunkIt = activeChunks.find(it->first.chunkKey);
+        bool release = (chunkIt == activeChunks.end() || !chunkIt->second);
+        if (!release) {
+            const SubChunk* sc = chunkIt->second->getSubChunk(it->first.scy);
+            if (sc == nullptr || !sc->getMesh().inGlobalPool) {
+                release = true;
+            } else {
+                const SubChunkMesh& current = sc->getMesh();
+                release =
+                    current.opaqueRange.generation != it->second.mesh.opaque.generation ||
+                    current.cutoutRange.generation != it->second.mesh.cutout.generation ||
+                    current.transparentRange.generation != it->second.mesh.transparent.generation;
+            }
+        }
+
+        if (release) {
+            m_worldRenderBuffer.free(it->second.mesh);
+            it = m_mdiMeshAllocations.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
     if (column.chunk == nullptr) {
         return;
@@ -709,12 +771,15 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
     column.aggregatedHasCutout = columnMesh.cutoutVertexCount > 0;
     column.aggregatedPresent = column.aggregatedHasOpaque || column.aggregatedHasCutout;
 
-    if (column.aggregatedPresent) {
+    const bool columnBoundsPresent = m_useMultiDrawIndirect
+        ? columnMesh.hasBounds
+        : column.aggregatedPresent;
+    if (columnBoundsPresent) {
         column.aggregatedBoundsMin = columnMesh.hasBounds
-            ? columnMesh.boundsMin + column.worldOffset
+            ? columnMesh.boundsMin
             : column.worldOffset;
         column.aggregatedBoundsMax = columnMesh.hasBounds
-            ? columnMesh.boundsMax + column.worldOffset
+            ? columnMesh.boundsMax
             : column.worldOffset + glm::vec3(Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z);
     } else {
         column.aggregatedBoundsMin = glm::vec3(0.0f);
@@ -724,7 +789,7 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
     bool columnHasBounds = false;
     glm::vec3 columnMin(0.0f);
     glm::vec3 columnMax(0.0f);
-    if (column.aggregatedPresent) {
+    if (columnBoundsPresent) {
         expandBounds(columnMin, columnMax, columnHasBounds,
                      column.aggregatedBoundsMin, column.aggregatedBoundsMax);
     }
@@ -743,12 +808,21 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
 
         const int yBase = scy * SubChunk::SIZE;
         TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
-        transparent.boundsMin = mesh.hasBounds
-            ? mesh.boundsMin + column.worldOffset
-            : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
-        transparent.boundsMax = mesh.hasBounds
-            ? mesh.boundsMax + column.worldOffset
-            : column.worldOffset + glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
+        if (m_useMultiDrawIndirect) {
+            transparent.boundsMin = mesh.hasBounds
+                ? mesh.boundsMin
+                : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
+            transparent.boundsMax = mesh.hasBounds
+                ? mesh.boundsMax
+                : column.worldOffset + glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
+        } else {
+            transparent.boundsMin = mesh.hasBounds
+                ? mesh.boundsMin + column.worldOffset
+                : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
+            transparent.boundsMax = mesh.hasBounds
+                ? mesh.boundsMax + column.worldOffset
+                : column.worldOffset + glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
+        }
 
         column.transparentScys[column.transparentCount++] = scy;
         expandBounds(columnMin, columnMax, columnHasBounds,
@@ -762,11 +836,18 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
 }
 
 void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {
-    if (cutoutEntries.empty()) {
+    if (m_useMultiDrawIndirect) {
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+        m_chunkShader->setInt("uForceBaseLod", 1);
+        m_worldRenderBuffer.flushCutout();
+        m_chunkShader->setInt("uForceBaseLod", 0);
         return;
     }
 
-    const int modelLoc = m_chunkShader->getUniformLocation("model");
+    if (cutoutEntries.empty()) {
+        return;
+    }
 
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
@@ -776,21 +857,14 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
         if (entry.chunk == nullptr) continue;
 
         const SubChunkMesh* mesh = nullptr;
-        int yBase = 0;
         if (entry.aggregated) {
             mesh = &entry.chunk->getColumnMesh();
         } else {
             const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
             if (!sc) continue;
             mesh = &sc->getMesh();
-            yBase = entry.scy * SubChunk::SIZE;
         }
         if (mesh->cutoutVertexCount == 0) continue;
-
-        glm::mat4 model(1.0f);
-        const glm::ivec3 offset = entry.chunk->getWorldOffset();
-        model = glm::translate(model, glm::vec3(offset.x, offset.y + yBase, offset.z));
-        m_chunkShader->setMat4(modelLoc, model);
 
         glBindVertexArray(mesh->cutoutVao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutVertexCount));
@@ -802,11 +876,34 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
 
 
 void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
-    if (transparentEntries.empty()) {
+    if (m_useMultiDrawIndirect) {
+        if (m_deferredTransparentBatch.empty()) return;
+
+        m_chunkShader->setInt("uForceBaseLod", 1);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
+        // Sort back-to-front
+        std::sort(m_deferredTransparentBatch.begin(), m_deferredTransparentBatch.end(),
+                  [](const DrawBatchEntry& a, const DrawBatchEntry& b) {
+                      return a.distanceSq > b.distanceSq;
+                  });
+
+        for (const DrawBatchEntry& entry : m_deferredTransparentBatch) {
+            m_worldRenderBuffer.addTransparent(entry.range);
+        }
+        m_worldRenderBuffer.flushTransparent();
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+        m_chunkShader->setInt("uForceBaseLod", 0);
         return;
     }
 
-    const int modelLoc = m_chunkShader->getUniformLocation("model");
+    if (transparentEntries.empty()) {
+        return;
+    }
 
     // Sort by distance (back-to-front) for alpha blending
     struct TransparentSubChunkItem {
@@ -847,12 +944,6 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
         if (!sc) continue;
         const SubChunkMesh& mesh = sc->getMesh();
         if (mesh.transparentVertexCount == 0) continue;
-
-        glm::mat4 model(1.0f);
-        const glm::ivec3 offset = entry.chunk->getWorldOffset();
-        const int yBase = entry.scy * SubChunk::SIZE;
-        model = glm::translate(model, glm::vec3(offset.x, offset.y + yBase, offset.z));
-        m_chunkShader->setMat4(modelLoc, model);
 
         glBindVertexArray(mesh.transparentVao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
@@ -1105,14 +1196,75 @@ void Renderer::drainMeshingResults(const World& world) {
 
         // Upload per-sub-chunk mesh and refresh column-level aggregate for opaque/cutout.
         SubChunkMesh mesh;
-        mesh.upload(result.meshData.opaqueVertices);
-        mesh.uploadCutout(result.meshData.cutoutVertices);
-        mesh.uploadTransparent(result.meshData.transparentVertices);
-        mesh.hasBounds = result.meshData.hasBounds;
-        mesh.boundsMin = result.meshData.boundsMin;
-        mesh.boundsMax = result.meshData.boundsMax;
-        chunk.setSubChunkMesh(result.scy, mesh);
-        chunk.updateColumnAggregateData(result.scy, result.meshData);
+
+        const glm::ivec3 worldOff = chunk.getWorldOffset();
+        const float txOff = static_cast<float>(worldOff.x);
+        const float tyOff = static_cast<float>(worldOff.y);
+        const float tzOff = static_cast<float>(worldOff.z);
+        const float scyYOff = static_cast<float>(result.scy * SubChunk::SIZE);
+
+        auto bakeWorldOffset = [&](std::vector<BlockVertex>& verts) {
+            for (BlockVertex& v : verts) {
+                v.x += txOff;
+                v.y += tyOff + scyYOff;
+                v.z += tzOff;
+            }
+        };
+
+        if (m_useMultiDrawIndirect) {
+            // MDI path: bake world offset and upload to global buffer pool.
+            std::vector<BlockVertex> opaqueVerts = result.meshData.opaqueVertices;
+            std::vector<BlockVertex> cutoutVerts = result.meshData.cutoutVertices;
+            std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
+            bakeWorldOffset(opaqueVerts);
+            bakeWorldOffset(cutoutVerts);
+            bakeWorldOffset(transparentVerts);
+
+            const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
+            WorldGpuMesh gpu = m_worldRenderBuffer.uploadSubChunk(
+                opaqueVerts, cutoutVerts, transparentVerts,
+                result.meshData.hasBounds,
+                result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
+                result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
+            if ((!opaqueVerts.empty() && gpu.opaque.vertexCount == 0) ||
+                (!cutoutVerts.empty() && gpu.cutout.vertexCount == 0) ||
+                (!transparentVerts.empty() && gpu.transparent.vertexCount == 0)) {
+                continue;
+            }
+
+            mesh.opaqueRange = gpu.opaque;
+            mesh.cutoutRange = gpu.cutout;
+            mesh.transparentRange = gpu.transparent;
+            mesh.vertexCount = gpu.opaque.vertexCount;
+            mesh.cutoutVertexCount = gpu.cutout.vertexCount;
+            mesh.transparentVertexCount = gpu.transparent.vertexCount;
+            mesh.hasBounds = result.meshData.hasBounds;
+            mesh.boundsMin = gpu.boundsMin;
+            mesh.boundsMax = gpu.boundsMax;
+            mesh.inGlobalPool = true;
+
+            const SubChunkGpuKey gpuKey{result.chunkKey, result.scy};
+            releaseMdiAllocation(gpuKey);
+            m_mdiMeshAllocations[gpuKey] = MdiMeshAllocation{gpu};
+            chunk.setSubChunkMesh(result.scy, mesh);
+
+            // Update column aggregate for culling bounds only (skip VBO rebuild in MDI mode).
+            chunk.updateColumnAggregateData(result.scy, result.meshData, true);
+        } else {
+            // Old path: per-mesh VAOs.
+            mesh.upload(result.meshData.opaqueVertices);
+            mesh.uploadCutout(result.meshData.cutoutVertices);
+
+            std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
+            bakeWorldOffset(transparentVerts);
+            mesh.uploadTransparent(transparentVerts);
+
+            mesh.hasBounds = result.meshData.hasBounds;
+            mesh.boundsMin = result.meshData.boundsMin;
+            mesh.boundsMax = result.meshData.boundsMax;
+            chunk.setSubChunkMesh(result.scy, mesh);
+            chunk.updateColumnAggregateData(result.scy, result.meshData);
+        }
 
     }
 }
@@ -1196,5 +1348,12 @@ bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chun
 }
 
 int Renderer::getDrawCallCount() const {
+    return drawCallCount;
+}
+
+int Renderer::getGlSubmitCount() const {
+    if (m_useMultiDrawIndirect) {
+        return m_worldRenderBuffer.glSubmitCount();
+    }
     return drawCallCount;
 }
