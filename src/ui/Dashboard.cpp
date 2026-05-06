@@ -48,16 +48,19 @@ void Dashboard::render(ecs::GameplayRegistry &registry, World &world, Camera &ca
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    showPlayerStats(registry);
-    showCameraStats(camera);
-    showWorldStats(world, registry);
-    showPerformanceStats(world, render, profilerStats);
-    showCrosshairSettings(uiRenderer);
-    showHotbarSettings(uiRenderer);
-    showInventoryPanelSettings(uiRenderer);
-    showCraftingGridSettings(uiRenderer);
-    showHeldItemPreviewSettings(uiRenderer);
-    showTextSettings(uiRenderer);
+    if (ImGui::Begin("Debug Dashboard")) {
+        showPlayerStats(registry);
+        showCameraStats(camera);
+        showWorldStats(world, registry);
+        showPerformanceStats(world, render, profilerStats);
+        showCrosshairSettings(uiRenderer);
+        showHotbarSettings(uiRenderer);
+        showInventoryPanelSettings(uiRenderer);
+        showCraftingGridSettings(uiRenderer);
+        showHeldItemPreviewSettings(uiRenderer);
+        showTextSettings(uiRenderer);
+        ImGui::End();
+    }
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
@@ -66,510 +69,499 @@ void Dashboard::render(ecs::GameplayRegistry &registry, World &world, Camera &ca
 }
 
 void Dashboard::showPlayerStats(ecs::GameplayRegistry &registry) {
-    ImGui::Begin("Player Stats");
+    if (ImGui::CollapsingHeader("Player Stats")) {
+        ecs::PlayerQuery query(registry);
 
-    ecs::PlayerQuery query(registry);
+        const glm::vec3 position = query.getPosition();
+        ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
+        ImGui::Text("Eye Height: %.3f", query.getEyeHeight());
+        ImGui::Text("Moving: %s", query.isMoving() ? "Yes" : "No");
+        ImGui::Text("Sprinting: %s", query.isSprinting() ? "Yes" : "No");
 
-    const glm::vec3 position = query.getPosition();
-    ImGui::Text("Position: (%.2f, %.2f, %.2f)", position.x, position.y, position.z);
-    ImGui::Text("Eye Height: %.3f", query.getEyeHeight());
-    ImGui::Text("Moving: %s", query.isMoving() ? "Yes" : "No");
-    ImGui::Text("Sprinting: %s", query.isSprinting() ? "Yes" : "No");
+        // Read/write view bob parameters directly from ECS component
+        auto view = registry.view<ecs::LocalPlayerTag, ecs::ViewBobComponent>();
+        for (auto e : view) {
+            auto& viewBob = view.get<ecs::ViewBobComponent>(e);
 
-    // Read/write view bob parameters directly from ECS component
-    auto view = registry.view<ecs::LocalPlayerTag, ecs::ViewBobComponent>();
-    for (auto e : view) {
-        auto& viewBob = view.get<ecs::ViewBobComponent>(e);
+            float bobAmplitude = viewBob.amplitude;
+            if (ImGui::SliderFloat("Bob Amplitude", &bobAmplitude, 0.0f, 0.3f, "%.4f")) {
+                viewBob.amplitude = bobAmplitude;
+            }
 
-        float bobAmplitude = viewBob.amplitude;
-        if (ImGui::SliderFloat("Bob Amplitude", &bobAmplitude, 0.0f, 0.3f, "%.4f")) {
-            viewBob.amplitude = bobAmplitude;
+            float horizontalBobAmplitude = viewBob.horizontalAmplitude;
+            if (ImGui::SliderFloat("Horizontal Bob Amplitude", &horizontalBobAmplitude, 0.0f, 0.3f, "%.4f")) {
+                viewBob.horizontalAmplitude = horizontalBobAmplitude;
+            }
+
+            float bobFrequency = viewBob.frequency;
+            ImGui::Text("Bob Frequency: %.2f", bobFrequency);
+            if (ImGui::SliderFloat("Bob Frequency", &bobFrequency, 0.0f, 40.0f, "%.2f")) {
+                viewBob.frequency = bobFrequency;
+            }
+
+            constexpr float kPi = 3.14159265358979323846f;
+            constexpr float kRadToDeg = 180.0f / kPi;
+            constexpr float kDegToRad = kPi / 180.0f;
+            float phaseOffsetDegrees = viewBob.phaseOffset * kRadToDeg;
+            if (ImGui::SliderFloat("Horizontal Phase Offset (deg)", &phaseOffsetDegrees, -180.0f, 180.0f, "%.1f")) {
+                viewBob.phaseOffset = phaseOffsetDegrees * kDegToRad;
+            }
+
+            constexpr int kCurveSamples = 240;
+            constexpr float kPreviewSeconds = 4.0f;
+            constexpr float kMaxVerticalPreview = 0.09f; // 0.3^2 from slider upper bound.
+            constexpr float kMaxHorizontalPreview = 0.3f; // Matches horizontal amplitude slider upper bound.
+            std::array<float, kCurveSamples> verticalCurve{};
+            std::array<float, kCurveSamples> horizontalCurve{};
+            const float phaseOffset = viewBob.phaseOffset;
+            for (int i = 0; i < kCurveSamples; ++i) {
+                const float t = (kPreviewSeconds * static_cast<float>(i)) / static_cast<float>(kCurveSamples - 1);
+                const float phase = t * bobFrequency;
+                const float verticalRaw = bobAmplitude * static_cast<float>(std::sin(phase));
+                verticalCurve[static_cast<size_t>(i)] = verticalRaw * verticalRaw;
+                horizontalCurve[static_cast<size_t>(i)] = horizontalBobAmplitude * static_cast<float>(std::cos(phase + phaseOffset));
+            }
+
+            const float previewCycles = bobFrequency * kPreviewSeconds / (2.0f * kPi);
+            ImGui::Text("Preview Window: %.1fs (%.2f cycles)", kPreviewSeconds, previewCycles);
+            ImGui::PlotLines("Vertical Bob Curve", verticalCurve.data(), kCurveSamples, 0, nullptr,
+                             0.0f, kMaxVerticalPreview, ImVec2(0.0f, 90.0f));
+            ImGui::PlotLines("Horizontal Bob Curve", horizontalCurve.data(), kCurveSamples, 0, nullptr,
+                             -kMaxHorizontalPreview, kMaxHorizontalPreview, ImVec2(0.0f, 90.0f));
+
+            break; // Only one local player
         }
-
-        float horizontalBobAmplitude = viewBob.horizontalAmplitude;
-        if (ImGui::SliderFloat("Horizontal Bob Amplitude", &horizontalBobAmplitude, 0.0f, 0.3f, "%.4f")) {
-            viewBob.horizontalAmplitude = horizontalBobAmplitude;
-        }
-
-        float bobFrequency = viewBob.frequency;
-        ImGui::Text("Bob Frequency: %.2f", bobFrequency);
-        if (ImGui::SliderFloat("Bob Frequency", &bobFrequency, 0.0f, 40.0f, "%.2f")) {
-            viewBob.frequency = bobFrequency;
-        }
-
-        constexpr float kPi = 3.14159265358979323846f;
-        constexpr float kRadToDeg = 180.0f / kPi;
-        constexpr float kDegToRad = kPi / 180.0f;
-        float phaseOffsetDegrees = viewBob.phaseOffset * kRadToDeg;
-        if (ImGui::SliderFloat("Horizontal Phase Offset (deg)", &phaseOffsetDegrees, -180.0f, 180.0f, "%.1f")) {
-            viewBob.phaseOffset = phaseOffsetDegrees * kDegToRad;
-        }
-
-        constexpr int kCurveSamples = 240;
-        constexpr float kPreviewSeconds = 4.0f;
-        constexpr float kMaxVerticalPreview = 0.09f; // 0.3^2 from slider upper bound.
-        constexpr float kMaxHorizontalPreview = 0.3f; // Matches horizontal amplitude slider upper bound.
-        std::array<float, kCurveSamples> verticalCurve{};
-        std::array<float, kCurveSamples> horizontalCurve{};
-        const float phaseOffset = viewBob.phaseOffset;
-        for (int i = 0; i < kCurveSamples; ++i) {
-            const float t = (kPreviewSeconds * static_cast<float>(i)) / static_cast<float>(kCurveSamples - 1);
-            const float phase = t * bobFrequency;
-            const float verticalRaw = bobAmplitude * static_cast<float>(std::sin(phase));
-            verticalCurve[static_cast<size_t>(i)] = verticalRaw * verticalRaw;
-            horizontalCurve[static_cast<size_t>(i)] = horizontalBobAmplitude * static_cast<float>(std::cos(phase + phaseOffset));
-        }
-
-        const float previewCycles = bobFrequency * kPreviewSeconds / (2.0f * kPi);
-        ImGui::Text("Preview Window: %.1fs (%.2f cycles)", kPreviewSeconds, previewCycles);
-        ImGui::PlotLines("Vertical Bob Curve", verticalCurve.data(), kCurveSamples, 0, nullptr,
-                         0.0f, kMaxVerticalPreview, ImVec2(0.0f, 90.0f));
-        ImGui::PlotLines("Horizontal Bob Curve", horizontalCurve.data(), kCurveSamples, 0, nullptr,
-                         -kMaxHorizontalPreview, kMaxHorizontalPreview, ImVec2(0.0f, 90.0f));
-
-        break; // Only one local player
     }
-
-    ImGui::End();
 }
 
 void Dashboard::showWorldStats(World& world, ecs::GameplayRegistry& registry) {
-    ImGui::Begin("World Stats");
-    ecs::PlayerQuery query(registry);
-    const glm::vec3 position = query.getPosition();
-    const int worldX = static_cast<int>(std::floor(position.x));
-    const int worldZ = static_cast<int>(std::floor(position.z));
-    const glm::ivec2 chunkCoords = world.getChunkCoords(worldX, worldZ);
-    const TerrainBiome biome = world.getBiome(worldX, worldZ);
+    if (ImGui::CollapsingHeader("World Stats")) {
+        ecs::PlayerQuery query(registry);
+        const glm::vec3 position = query.getPosition();
+        const int worldX = static_cast<int>(std::floor(position.x));
+        const int worldZ = static_cast<int>(std::floor(position.z));
+        const glm::ivec2 chunkCoords = world.getChunkCoords(worldX, worldZ);
+        const TerrainBiome biome = world.getBiome(worldX, worldZ);
 
-    ImGui::Text("Render Distance: %d chunks", world.getRenderDistance());
-    ImGui::Text("Loaded Chunks: %zu", world.getActiveChunks().size());
-    ImGui::Text("Total Vertices: %zu", world.getTotalVertexCount());
-    ImGui::Text("Current Chunk: (%d, %d)", chunkCoords.x, chunkCoords.y);
-    ImGui::Text("Current Biome: %s", World::biomeToString(biome));
-    if (ImGui::Button("Increase Render Distance")) {
-        world.setRenderDistance(world.getRenderDistance() + 1);
-    }ImGui::SameLine();
-    if (ImGui::Button("Decrease Render Distance")) {
-        world.setRenderDistance(world.getRenderDistance() - 1);
+        ImGui::Text("Render Distance: %d chunks", world.getRenderDistance());
+        ImGui::Text("Loaded Chunks: %zu", world.getActiveChunks().size());
+        ImGui::Text("Total Vertices: %zu", world.getTotalVertexCount());
+        ImGui::Text("Current Chunk: (%d, %d)", chunkCoords.x, chunkCoords.y);
+        ImGui::Text("Current Biome: %s", World::biomeToString(biome));
+        if (ImGui::Button("Increase Render Distance")) {
+            world.setRenderDistance(world.getRenderDistance() + 1);
+        }ImGui::SameLine();
+        if (ImGui::Button("Decrease Render Distance")) {
+            world.setRenderDistance(world.getRenderDistance() - 1);
+        }
     }
-    ImGui::End();
 }
 
 void Dashboard::showCameraStats( Camera &camera) {
-    ImGui::Begin("Camera Stats");
-    ImGui::Text("Position: (%.2f, %.2f, %.2f)", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
-    ImGui::Text("FOV: %.2f", camera.getFOV());ImGui::SameLine();
-    static float fov = camera.getFOV();
-    if (ImGui::SliderFloat("##FOV", &fov, 30.0f, 120.0f))
-        camera.setFOV(fov);
-    ImGui::Text("Near: %.2f", camera.getNear());ImGui::SameLine();
-    static float near = camera.getNear();
-    if (ImGui::SliderFloat("##Near", &near, 0.0f, 100.0f))
-        camera.setNear(near);
-    ImGui::Text("Far: %.2f", camera.getFar());ImGui::SameLine();
-    static float far = camera.getFar();
-    if (ImGui::SliderFloat("##Far", &far, 0.0f, 100.0f))
-        camera.setFar(far);
-    ImGui::End();
+    if (ImGui::CollapsingHeader("Camera Stats")) {
+        ImGui::Text("Position: (%.2f, %.2f, %.2f)", camera.getPosition().x, camera.getPosition().y, camera.getPosition().z);
+        ImGui::Text("FOV: %.2f", camera.getFOV());ImGui::SameLine();
+        static float fov = camera.getFOV();
+        if (ImGui::SliderFloat("##FOV", &fov, 30.0f, 120.0f))
+            camera.setFOV(fov);
+        ImGui::Text("Near: %.2f", camera.getNear());ImGui::SameLine();
+        static float near = camera.getNear();
+        if (ImGui::SliderFloat("##Near", &near, 0.0f, 100.0f))
+            camera.setNear(near);
+        ImGui::Text("Far: %.2f", camera.getFar());ImGui::SameLine();
+        static float far = camera.getFar();
+        if (ImGui::SliderFloat("##Far", &far, 0.0f, 100.0f))
+            camera.setFar(far);
+    }
 }
 
 void Dashboard::showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats) {
-    ImGui::Begin("Performance Stats");
-    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
-    ImGui::Text("Loop Frame (clamped): %.3f ms", profilerStats.frameMs);
-    ImGui::Text("Fixed Update: %.3f ms", profilerStats.fixedUpdateMs);
-    ImGui::Text("  - Input Update: %.3f ms", profilerStats.fixedInputMs);
-    ImGui::Text("  - State Update: %.3f ms", profilerStats.fixedStateUpdateMs);
-    ImGui::Text("  - Particle Update: %.3f ms", profilerStats.fixedParticleUpdateMs);
-    ImGui::Text("  - Drop Update: %.3f ms", profilerStats.fixedDropUpdateMs);
-    ImGui::Text("  - World Update: %.3f ms", profilerStats.fixedWorldUpdateMs);
-    ImGui::Text("Audio Sync: %.3f ms", profilerStats.audioMs);
-    ImGui::Text("Render Submit: %.3f ms", profilerStats.renderMs);
+    if (ImGui::CollapsingHeader("Performance Stats")) {
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
+        ImGui::Text("Loop Frame (clamped): %.3f ms", profilerStats.frameMs);
+        ImGui::Text("Fixed Update: %.3f ms", profilerStats.fixedUpdateMs);
+        ImGui::Text("  - Input Update: %.3f ms", profilerStats.fixedInputMs);
+        ImGui::Text("  - State Update: %.3f ms", profilerStats.fixedStateUpdateMs);
+        ImGui::Text("  - Particle Update: %.3f ms", profilerStats.fixedParticleUpdateMs);
+        ImGui::Text("  - Drop Update: %.3f ms", profilerStats.fixedDropUpdateMs);
+        ImGui::Text("  - World Update: %.3f ms", profilerStats.fixedWorldUpdateMs);
+        ImGui::Text("Audio Sync: %.3f ms", profilerStats.audioMs);
+        ImGui::Text("Render Submit: %.3f ms", profilerStats.renderMs);
 
-    if (profilerStats.fixedHistoryCount > 1) {
-        auto historyMax = [&](const std::array<float, FrameProfilerStats::kFixedHistorySamples>& history) {
-            float maxValue = 0.0f;
-            for (size_t i = 0; i < profilerStats.fixedHistoryCount; ++i) {
-                if (history[i] > maxValue) {
-                    maxValue = history[i];
+        if (profilerStats.fixedHistoryCount > 1) {
+            auto historyMax = [&](const std::array<float, FrameProfilerStats::kFixedHistorySamples>& history) {
+                float maxValue = 0.0f;
+                for (size_t i = 0; i < profilerStats.fixedHistoryCount; ++i) {
+                    if (history[i] > maxValue) {
+                        maxValue = history[i];
+                    }
                 }
+                return std::max(maxValue * 1.1f, 0.1f);
+            };
+
+            ImGui::Separator();
+            ImGui::Text("Fixed Update History (ms/step)");
+            ImGui::PlotLines("Fixed Total", profilerStats.fixedUpdateHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fixedUpdateHistory), ImVec2(0.0f, 65.0f));
+            ImGui::PlotLines("Input", profilerStats.fixedInputHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fixedInputHistory), ImVec2(0.0f, 55.0f));
+            ImGui::PlotLines("State", profilerStats.fixedStateHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fixedStateHistory), ImVec2(0.0f, 55.0f));
+            ImGui::PlotLines("Particle", profilerStats.fixedParticleHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fixedParticleHistory), ImVec2(0.0f, 55.0f));
+            ImGui::PlotLines("Drop", profilerStats.fixedDropHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fixedDropHistory), ImVec2(0.0f, 55.0f));
+            ImGui::PlotLines("World", profilerStats.fixedWorldHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fixedWorldHistory), ImVec2(0.0f, 55.0f));
+        }
+
+        if (render.isMultiDrawIndirectEnabled()) {
+            ImGui::Text("GL Submissions: %d (MDI)", render.getGlSubmitCount());
+        } else {
+            ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
+        }
+        ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
+        bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();
+        if (ImGui::Checkbox("Chunk Culling Debug", &chunkCullingDebugEnabled)) {
+            render.setChunkCullingDebugEnabled(chunkCullingDebugEnabled);
+        }
+        static float timeSpeed = Time::getTimeSpeed();
+        if (ImGui::SliderFloat("Game Time Speed", &timeSpeed, 0.0f, 10.0f)) {
+            Time::setTimeSpeed(timeSpeed);
+        }
+        int submitBudget = render.getMeshingSubmitBudget();
+        if (ImGui::SliderInt("Meshing Submit Budget", &submitBudget, 1, 64)) {
+            render.setMeshingSubmitBudget(submitBudget);
+        }
+
+        int regionChunkSize = render.getRegionChunkSize();
+        if (ImGui::SliderInt("Region Chunk Size", &regionChunkSize, 1, 16)) {
+            render.setRegionChunkSize(regionChunkSize);
+        }
+
+        const float maxAnisotropy = render.getAtlasMaxAnisotropy();
+        if (maxAnisotropy > 1.0f) {
+            float anisotropy = render.getAtlasAnisotropy();
+            if (ImGui::SliderFloat("Atlas Anisotropy", &anisotropy, 1.0f, maxAnisotropy, "%.1fx")) {
+                render.setAtlasAnisotropy(anisotropy);
             }
-            return std::max(maxValue * 1.1f, 0.1f);
-        };
+        } else {
+            ImGui::Text("Atlas Anisotropy: not supported");
+        }
 
         ImGui::Separator();
-        ImGui::Text("Fixed Update History (ms/step)");
-        ImGui::PlotLines("Fixed Total", profilerStats.fixedUpdateHistory.data(),
-                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                         0.0f, historyMax(profilerStats.fixedUpdateHistory), ImVec2(0.0f, 65.0f));
-        ImGui::PlotLines("Input", profilerStats.fixedInputHistory.data(),
-                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                         0.0f, historyMax(profilerStats.fixedInputHistory), ImVec2(0.0f, 55.0f));
-        ImGui::PlotLines("State", profilerStats.fixedStateHistory.data(),
-                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                         0.0f, historyMax(profilerStats.fixedStateHistory), ImVec2(0.0f, 55.0f));
-        ImGui::PlotLines("Particle", profilerStats.fixedParticleHistory.data(),
-                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                         0.0f, historyMax(profilerStats.fixedParticleHistory), ImVec2(0.0f, 55.0f));
-        ImGui::PlotLines("Drop", profilerStats.fixedDropHistory.data(),
-                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                         0.0f, historyMax(profilerStats.fixedDropHistory), ImVec2(0.0f, 55.0f));
-        ImGui::PlotLines("World", profilerStats.fixedWorldHistory.data(),
-                         static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                         0.0f, historyMax(profilerStats.fixedWorldHistory), ImVec2(0.0f, 55.0f));
-    }
-
-    ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
-    ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
-    bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();
-    if (ImGui::Checkbox("Chunk Culling Debug", &chunkCullingDebugEnabled)) {
-        render.setChunkCullingDebugEnabled(chunkCullingDebugEnabled);
-    }
-    static float timeSpeed = Time::getTimeSpeed();
-    if (ImGui::SliderFloat("Game Time Speed", &timeSpeed, 0.0f, 10.0f)) {
-        Time::setTimeSpeed(timeSpeed);
-    }
-    int submitBudget = render.getMeshingSubmitBudget();
-    if (ImGui::SliderInt("Meshing Submit Budget", &submitBudget, 1, 64)) {
-        render.setMeshingSubmitBudget(submitBudget);
-    }
-
-    int regionChunkSize = render.getRegionChunkSize();
-    if (ImGui::SliderInt("Region Chunk Size", &regionChunkSize, 1, 16)) {
-        render.setRegionChunkSize(regionChunkSize);
-    }
-
-    const float maxAnisotropy = render.getAtlasMaxAnisotropy();
-    if (maxAnisotropy > 1.0f) {
-        float anisotropy = render.getAtlasAnisotropy();
-        if (ImGui::SliderFloat("Atlas Anisotropy", &anisotropy, 1.0f, maxAnisotropy, "%.1fx")) {
-            render.setAtlasAnisotropy(anisotropy);
+        ImGui::Text("Distance Fog");
+        Renderer::FogSettings fog = render.getFogSettings();
+        bool fogPresetApplied = false;
+        if (ImGui::Button("Natural Distance")) {
+            render.setFogEnabled(true);
+            render.setFogMode(Renderer::FogMode::Linear);
+            render.setFogAutoDistanceEnabled(true);
+            render.setFogAutoStartOffsetChunks(-0.25f);
+            render.setFogAutoFadeWidthChunks(2.4f);
+            render.setFogDensity(0.006f);
+            fogPresetApplied = true;
         }
-    } else {
-        ImGui::Text("Atlas Anisotropy: not supported");
+        ImGui::SameLine();
+        if (ImGui::Button("Cinematic Haze")) {
+            render.setFogEnabled(true);
+            render.setFogMode(Renderer::FogMode::Exp2);
+            render.setFogAutoDistanceEnabled(true);
+            render.setFogAutoStartOffsetChunks(-0.9f);
+            render.setFogAutoFadeWidthChunks(3.2f);
+            render.setFogDensity(0.020f);
+            fogPresetApplied = true;
+        }
+        if (fogPresetApplied) {
+            fog = render.getFogSettings();
+        }
+
+        bool fogEnabled = fog.enabled;
+        if (ImGui::Checkbox("Enable Fog", &fogEnabled)) {
+            render.setFogEnabled(fogEnabled);
+            fog.enabled = fogEnabled;
+        }
+
+        int fogMode = static_cast<int>(fog.mode);
+        static constexpr const char* kFogModeItems[] = { "Linear", "Exp", "Exp2" };
+        if (ImGui::Combo("Fog Mode", &fogMode, kFogModeItems, IM_ARRAYSIZE(kFogModeItems))) {
+            render.setFogMode(static_cast<Renderer::FogMode>(fogMode));
+        }
+
+        float fogColor[3] = { fog.color.x, fog.color.y, fog.color.z };
+        if (ImGui::ColorEdit3("Fog Color", fogColor)) {
+            render.setFogColor(glm::vec3(fogColor[0], fogColor[1], fogColor[2]));
+        }
+
+        bool fogAutoDistance = fog.autoDistanceByRenderDistance;
+        if (ImGui::Checkbox("Auto Distance (Render Distance)", &fogAutoDistance)) {
+            render.setFogAutoDistanceEnabled(fogAutoDistance);
+            fog.autoDistanceByRenderDistance = fogAutoDistance;
+        }
+
+        float fogAutoStartOffset = fog.autoStartOffsetChunks;
+        if (ImGui::SliderFloat("Auto Start Offset (chunks)", &fogAutoStartOffset, -1.5f, 1.5f, "%.2f")) {
+            render.setFogAutoStartOffsetChunks(fogAutoStartOffset);
+            fog.autoStartOffsetChunks = fogAutoStartOffset;
+        }
+
+        float fogAutoFadeWidth = fog.autoFadeWidthChunks;
+        if (ImGui::SliderFloat("Auto Fade Width (chunks)", &fogAutoFadeWidth, 0.25f, 4.0f, "%.2f")) {
+            render.setFogAutoFadeWidthChunks(fogAutoFadeWidth);
+            fog.autoFadeWidthChunks = fogAutoFadeWidth;
+        }
+
+        if (fog.autoDistanceByRenderDistance) {
+            const float chunkSize = static_cast<float>(Chunk::SIZE_X);
+            const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
+            const float autoStart = std::max(0.0f, (renderDistanceChunks + fog.autoStartOffsetChunks) * chunkSize);
+            const float autoEnd = autoStart + fog.autoFadeWidthChunks * chunkSize;
+            ImGui::Text("Auto Fog Range: %.1f -> %.1f", autoStart, autoEnd);
+        }
+
+        float fogStart = fog.startDistance;
+        float fogEnd = fog.endDistance;
+        bool fogDistanceChanged = false;
+        if (fog.autoDistanceByRenderDistance) {
+            ImGui::BeginDisabled();
+        }
+        fogDistanceChanged |= ImGui::SliderFloat("Fog Start", &fogStart, 0.0f, 600.0f, "%.1f");
+        fogDistanceChanged |= ImGui::SliderFloat("Fog End", &fogEnd, 1.0f, 800.0f, "%.1f");
+        if (fog.autoDistanceByRenderDistance) {
+            ImGui::EndDisabled();
+        }
+        if (fogDistanceChanged) {
+            render.setFogLinearDistances(fogStart, fogEnd);
+        }
+
+        float fogDensity = fog.density;
+        if (ImGui::SliderFloat("Fog Density", &fogDensity, 0.001f, 0.05f, "%.4f")) {
+            render.setFogDensity(fogDensity);
+        }
+
+        const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
+        ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
+        ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
+        ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);
+        ImGui::Text("Meshing Build: last %.3f ms, avg %.3f ms", meshingStats.lastBuildMs, meshingStats.averageBuildMs);
+
+        const LightFrameStats lightStats = world.getLightFrameStats();
+        ImGui::Text("Light Submitted: %d / frame", lightStats.submitted);
+        ImGui::Text("Light Completed: %d / frame", lightStats.completed);
+        ImGui::Text("Light In-Flight: %d", lightStats.inFlight);
+        ImGui::Text("Light Boundary Sync: %d", lightStats.boundarySync);
+        ImGui::Text("Light Nodes Visited: %d", lightStats.nodesVisited);
+        ImGui::Text("Light Stale Dropped: %d", lightStats.staleDropped);
+        ImGui::Text("Light Requeued: %d", lightStats.requeued);
+        ImGui::Text("Light Worker: %.3f ms, Merge: %.3f ms", lightStats.workerMs, lightStats.mergeMs);
+
+        const uint32_t greedyBefore = meshingStats.lastOpaqueFacesBeforeGreedy;
+        const uint32_t greedyAfter = meshingStats.lastOpaqueFacesAfterGreedy;
+        const float greedyReduction = greedyBefore > 0
+            ? (100.0f * static_cast<float>(greedyBefore - greedyAfter) / static_cast<float>(greedyBefore))
+            : 0.0f;
+        ImGui::Text("Opaque Faces: %u -> %u (%.1f%% fewer)", greedyBefore, greedyAfter, greedyReduction);
+
+        const uint32_t transparentGreedyBefore = meshingStats.lastTransparentFacesBeforeGreedy;
+        const uint32_t transparentGreedyAfter = meshingStats.lastTransparentFacesAfterGreedy;
+        const float transparentGreedyReduction = transparentGreedyBefore > 0
+            ? (100.0f * static_cast<float>(transparentGreedyBefore - transparentGreedyAfter) / static_cast<float>(transparentGreedyBefore))
+            : 0.0f;
+        ImGui::Text("Transparent Faces: %u -> %u (%.1f%% fewer)",
+                    transparentGreedyBefore,
+                    transparentGreedyAfter,
+                    transparentGreedyReduction);
+        ImGui::Text("Opaque Vertices: %u", meshingStats.lastOpaqueVertexCount);
+
+        const size_t historyCount = render.getMeshingHistoryCount();
+        if (historyCount > 1) {
+            const auto& submittedHistory = render.getMeshingSubmittedHistory();
+            const auto& completedHistory = render.getMeshingCompletedHistory();
+            const auto& inFlightHistory = render.getMeshingInFlightHistory();
+
+            ImGui::PlotLines("Submitted History", submittedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
+            ImGui::PlotLines("Completed History", completedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
+            ImGui::PlotLines("In-Flight History", inFlightHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 256.0f, ImVec2(0.0f, 60.0f));
+        }
+
+        const Renderer::CullingFrameStats cullingStats = render.getCullingFrameStats();
+        const float regionPassRate = cullingStats.regionTests > 0
+            ? (100.0f * static_cast<float>(cullingStats.regionPassed) / static_cast<float>(cullingStats.regionTests))
+            : 0.0f;
+        const float columnPassRate = cullingStats.columnTests > 0
+            ? (100.0f * static_cast<float>(cullingStats.columnPassed) / static_cast<float>(cullingStats.columnTests))
+            : 0.0f;
+        const float chunkPassRate = cullingStats.chunkTests > 0
+            ? (100.0f * static_cast<float>(cullingStats.chunkPassed) / static_cast<float>(cullingStats.chunkTests))
+            : 0.0f;
+
+        ImGui::Separator();
+        ImGui::Text("Culling Stats");
+        ImGui::Text("Region Tests: %d, Pass: %.1f%%", cullingStats.regionTests, regionPassRate);
+        ImGui::Text("Column Tests: %d, Pass: %.1f%%", cullingStats.columnTests, columnPassRate);
+        ImGui::Text("Chunk Tests: %d, Pass: %.1f%%", cullingStats.chunkTests, chunkPassRate);
+        ImGui::Text("Chunk Culled: %d", cullingStats.chunkCulled);
+        if (chunkCullingDebugEnabled) {
+            ImGui::Indent();
+            ImGui::Text("Left:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Left)]);
+            ImGui::Text("Right:  %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Right)]);
+            ImGui::Text("Bottom: %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Bottom)]);
+            ImGui::Text("Top:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Top)]);
+            ImGui::Text("Near:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Near)]);
+            ImGui::Text("Far:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Far)]);
+            ImGui::Unindent();
+        }
     }
-
-    ImGui::Separator();
-    ImGui::Text("Distance Fog");
-    Renderer::FogSettings fog = render.getFogSettings();
-    bool fogPresetApplied = false;
-    if (ImGui::Button("Natural Distance")) {
-        render.setFogEnabled(true);
-        render.setFogMode(Renderer::FogMode::Linear);
-        render.setFogAutoDistanceEnabled(true);
-        render.setFogAutoStartOffsetChunks(-0.25f);
-        render.setFogAutoFadeWidthChunks(2.4f);
-        render.setFogDensity(0.006f);
-        fogPresetApplied = true;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Cinematic Haze")) {
-        render.setFogEnabled(true);
-        render.setFogMode(Renderer::FogMode::Exp2);
-        render.setFogAutoDistanceEnabled(true);
-        render.setFogAutoStartOffsetChunks(-0.9f);
-        render.setFogAutoFadeWidthChunks(3.2f);
-        render.setFogDensity(0.020f);
-        fogPresetApplied = true;
-    }
-    if (fogPresetApplied) {
-        fog = render.getFogSettings();
-    }
-
-    bool fogEnabled = fog.enabled;
-    if (ImGui::Checkbox("Enable Fog", &fogEnabled)) {
-        render.setFogEnabled(fogEnabled);
-        fog.enabled = fogEnabled;
-    }
-
-    int fogMode = static_cast<int>(fog.mode);
-    static constexpr const char* kFogModeItems[] = { "Linear", "Exp", "Exp2" };
-    if (ImGui::Combo("Fog Mode", &fogMode, kFogModeItems, IM_ARRAYSIZE(kFogModeItems))) {
-        render.setFogMode(static_cast<Renderer::FogMode>(fogMode));
-    }
-
-    float fogColor[3] = { fog.color.x, fog.color.y, fog.color.z };
-    if (ImGui::ColorEdit3("Fog Color", fogColor)) {
-        render.setFogColor(glm::vec3(fogColor[0], fogColor[1], fogColor[2]));
-    }
-
-    bool fogAutoDistance = fog.autoDistanceByRenderDistance;
-    if (ImGui::Checkbox("Auto Distance (Render Distance)", &fogAutoDistance)) {
-        render.setFogAutoDistanceEnabled(fogAutoDistance);
-        fog.autoDistanceByRenderDistance = fogAutoDistance;
-    }
-
-    float fogAutoStartOffset = fog.autoStartOffsetChunks;
-    if (ImGui::SliderFloat("Auto Start Offset (chunks)", &fogAutoStartOffset, -1.5f, 1.5f, "%.2f")) {
-        render.setFogAutoStartOffsetChunks(fogAutoStartOffset);
-        fog.autoStartOffsetChunks = fogAutoStartOffset;
-    }
-
-    float fogAutoFadeWidth = fog.autoFadeWidthChunks;
-    if (ImGui::SliderFloat("Auto Fade Width (chunks)", &fogAutoFadeWidth, 0.25f, 4.0f, "%.2f")) {
-        render.setFogAutoFadeWidthChunks(fogAutoFadeWidth);
-        fog.autoFadeWidthChunks = fogAutoFadeWidth;
-    }
-
-    if (fog.autoDistanceByRenderDistance) {
-        const float chunkSize = static_cast<float>(Chunk::SIZE_X);
-        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
-        const float autoStart = std::max(0.0f, (renderDistanceChunks + fog.autoStartOffsetChunks) * chunkSize);
-        const float autoEnd = autoStart + fog.autoFadeWidthChunks * chunkSize;
-        ImGui::Text("Auto Fog Range: %.1f -> %.1f", autoStart, autoEnd);
-    }
-
-    float fogStart = fog.startDistance;
-    float fogEnd = fog.endDistance;
-    bool fogDistanceChanged = false;
-    if (fog.autoDistanceByRenderDistance) {
-        ImGui::BeginDisabled();
-    }
-    fogDistanceChanged |= ImGui::SliderFloat("Fog Start", &fogStart, 0.0f, 600.0f, "%.1f");
-    fogDistanceChanged |= ImGui::SliderFloat("Fog End", &fogEnd, 1.0f, 800.0f, "%.1f");
-    if (fog.autoDistanceByRenderDistance) {
-        ImGui::EndDisabled();
-    }
-    if (fogDistanceChanged) {
-        render.setFogLinearDistances(fogStart, fogEnd);
-    }
-
-    float fogDensity = fog.density;
-    if (ImGui::SliderFloat("Fog Density", &fogDensity, 0.001f, 0.05f, "%.4f")) {
-        render.setFogDensity(fogDensity);
-    }
-
-    const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
-    ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
-    ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
-    ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);
-    ImGui::Text("Meshing Build: last %.3f ms, avg %.3f ms", meshingStats.lastBuildMs, meshingStats.averageBuildMs);
-
-    const LightFrameStats lightStats = world.getLightFrameStats();
-    ImGui::Text("Light Submitted: %d / frame", lightStats.submitted);
-    ImGui::Text("Light Completed: %d / frame", lightStats.completed);
-    ImGui::Text("Light In-Flight: %d", lightStats.inFlight);
-    ImGui::Text("Light Boundary Sync: %d", lightStats.boundarySync);
-    ImGui::Text("Light Nodes Visited: %d", lightStats.nodesVisited);
-    ImGui::Text("Light Stale Dropped: %d", lightStats.staleDropped);
-    ImGui::Text("Light Requeued: %d", lightStats.requeued);
-    ImGui::Text("Light Worker: %.3f ms, Merge: %.3f ms", lightStats.workerMs, lightStats.mergeMs);
-
-    const uint32_t greedyBefore = meshingStats.lastOpaqueFacesBeforeGreedy;
-    const uint32_t greedyAfter = meshingStats.lastOpaqueFacesAfterGreedy;
-    const float greedyReduction = greedyBefore > 0
-        ? (100.0f * static_cast<float>(greedyBefore - greedyAfter) / static_cast<float>(greedyBefore))
-        : 0.0f;
-    ImGui::Text("Opaque Faces: %u -> %u (%.1f%% fewer)", greedyBefore, greedyAfter, greedyReduction);
-
-    const uint32_t transparentGreedyBefore = meshingStats.lastTransparentFacesBeforeGreedy;
-    const uint32_t transparentGreedyAfter = meshingStats.lastTransparentFacesAfterGreedy;
-    const float transparentGreedyReduction = transparentGreedyBefore > 0
-        ? (100.0f * static_cast<float>(transparentGreedyBefore - transparentGreedyAfter) / static_cast<float>(transparentGreedyBefore))
-        : 0.0f;
-    ImGui::Text("Transparent Faces: %u -> %u (%.1f%% fewer)",
-                transparentGreedyBefore,
-                transparentGreedyAfter,
-                transparentGreedyReduction);
-    ImGui::Text("Opaque Vertices: %u", meshingStats.lastOpaqueVertexCount);
-
-    const size_t historyCount = render.getMeshingHistoryCount();
-    if (historyCount > 1) {
-        const auto& submittedHistory = render.getMeshingSubmittedHistory();
-        const auto& completedHistory = render.getMeshingCompletedHistory();
-        const auto& inFlightHistory = render.getMeshingInFlightHistory();
-
-        ImGui::PlotLines("Submitted History", submittedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
-        ImGui::PlotLines("Completed History", completedHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 64.0f, ImVec2(0.0f, 60.0f));
-        ImGui::PlotLines("In-Flight History", inFlightHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 256.0f, ImVec2(0.0f, 60.0f));
-    }
-
-    const Renderer::CullingFrameStats cullingStats = render.getCullingFrameStats();
-    const float regionPassRate = cullingStats.regionTests > 0
-        ? (100.0f * static_cast<float>(cullingStats.regionPassed) / static_cast<float>(cullingStats.regionTests))
-        : 0.0f;
-    const float columnPassRate = cullingStats.columnTests > 0
-        ? (100.0f * static_cast<float>(cullingStats.columnPassed) / static_cast<float>(cullingStats.columnTests))
-        : 0.0f;
-    const float chunkPassRate = cullingStats.chunkTests > 0
-        ? (100.0f * static_cast<float>(cullingStats.chunkPassed) / static_cast<float>(cullingStats.chunkTests))
-        : 0.0f;
-
-    ImGui::Separator();
-    ImGui::Text("Culling Stats");
-    ImGui::Text("Region Tests: %d, Pass: %.1f%%", cullingStats.regionTests, regionPassRate);
-    ImGui::Text("Column Tests: %d, Pass: %.1f%%", cullingStats.columnTests, columnPassRate);
-    ImGui::Text("Chunk Tests: %d, Pass: %.1f%%", cullingStats.chunkTests, chunkPassRate);
-    ImGui::Text("Chunk Culled: %d", cullingStats.chunkCulled);
-    if (chunkCullingDebugEnabled) {
-        ImGui::Indent();
-        ImGui::Text("Left:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Left)]);
-        ImGui::Text("Right:  %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Right)]);
-        ImGui::Text("Bottom: %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Bottom)]);
-        ImGui::Text("Top:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Top)]);
-        ImGui::Text("Near:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Near)]);
-        ImGui::Text("Far:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Far)]);
-        ImGui::Unindent();
-    }
-
-    ImGui::End();
 }
 
 void Dashboard::showCrosshairSettings(UIRenderer& uiRenderer) {
-    ImGui::Begin("Crosshair Settings");
+    if (ImGui::CollapsingHeader("Crosshair Settings")) {
+        float size = uiRenderer.getCrosshairSize();
+        if (ImGui::SliderFloat("Size", &size, 0.5f, 4.0f)) {
+            uiRenderer.setCrosshairSize(size);
+        }
 
-    float size = uiRenderer.getCrosshairSize();
-    if (ImGui::SliderFloat("Size", &size, 0.5f, 4.0f)) {
-        uiRenderer.setCrosshairSize(size);
+        const auto& currentColor = uiRenderer.getCrosshairColor();
+        float color[4] = {
+            currentColor[0],
+            currentColor[1],
+            currentColor[2],
+            currentColor[3]
+        };
+        if (ImGui::ColorEdit4("Color", color)) {
+            uiRenderer.setCrosshairColor({color[0], color[1], color[2], color[3]});
+        }
     }
-
-    const auto& currentColor = uiRenderer.getCrosshairColor();
-    float color[4] = {
-        currentColor[0],
-        currentColor[1],
-        currentColor[2],
-        currentColor[3]
-    };
-    if (ImGui::ColorEdit4("Color", color)) {
-        uiRenderer.setCrosshairColor({color[0], color[1], color[2], color[3]});
-    }
-
-    ImGui::End();
 }
 
 void Dashboard::showHotbarSettings(UIRenderer& uiRenderer) {
-    ImGui::Begin("Hotbar Settings");
+    if (ImGui::CollapsingHeader("Hotbar Settings")) {
+        const auto& bgColor = uiRenderer.getHotbarBgColor();
+        float bg[4] = { bgColor[0], bgColor[1], bgColor[2], bgColor[3] };
+        if (ImGui::ColorEdit4("Background Color", bg)) {
+            uiRenderer.setHotbarBgColor({ bg[0], bg[1], bg[2], bg[3] });
+        }
 
-    const auto& bgColor = uiRenderer.getHotbarBgColor();
-    float bg[4] = { bgColor[0], bgColor[1], bgColor[2], bgColor[3] };
-    if (ImGui::ColorEdit4("Background Color", bg)) {
-        uiRenderer.setHotbarBgColor({ bg[0], bg[1], bg[2], bg[3] });
+        const auto& borderColor = uiRenderer.getHotbarBorderColor();
+        float border[4] = { borderColor[0], borderColor[1], borderColor[2], borderColor[3] };
+        if (ImGui::ColorEdit4("Selection Border Color", border)) {
+            uiRenderer.setHotbarBorderColor({ border[0], border[1], border[2], border[3] });
+        }
+
+        const auto& iconTint = uiRenderer.getHotbarIconTintColor();
+        float icon[4] = { iconTint[0], iconTint[1], iconTint[2], iconTint[3] };
+        if (ImGui::ColorEdit4("Icon Tint Color", icon)) {
+            uiRenderer.setHotbarIconTintColor({ icon[0], icon[1], icon[2], icon[3] });
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Count Text");
+        float countScale = uiRenderer.getHotbarCountTextScale();
+        if (ImGui::SliderFloat("Count Scale", &countScale, 0.05f, 1.0f, "%.3f")) {
+            uiRenderer.setHotbarCountTextScale(countScale);
+        }
     }
-
-    const auto& borderColor = uiRenderer.getHotbarBorderColor();
-    float border[4] = { borderColor[0], borderColor[1], borderColor[2], borderColor[3] };
-    if (ImGui::ColorEdit4("Selection Border Color", border)) {
-        uiRenderer.setHotbarBorderColor({ border[0], border[1], border[2], border[3] });
-    }
-
-    const auto& iconTint = uiRenderer.getHotbarIconTintColor();
-    float icon[4] = { iconTint[0], iconTint[1], iconTint[2], iconTint[3] };
-    if (ImGui::ColorEdit4("Icon Tint Color", icon)) {
-        uiRenderer.setHotbarIconTintColor({ icon[0], icon[1], icon[2], icon[3] });
-    }
-
-    ImGui::Separator();
-    ImGui::Text("Count Text");
-    float countScale = uiRenderer.getHotbarCountTextScale();
-    if (ImGui::SliderFloat("Count Scale", &countScale, 0.05f, 1.0f, "%.3f")) {
-        uiRenderer.setHotbarCountTextScale(countScale);
-    }
-
-    ImGui::End();
 }
 
 void Dashboard::showInventoryPanelSettings(UIRenderer& uiRenderer) {
-    ImGui::Begin("Inventory Panel Settings");
+    if (ImGui::CollapsingHeader("Inventory Panel Settings")) {
+        InventoryPanelLayout layout = uiRenderer.getInventoryPanelLayout();
+        bool changed = false;
 
-    InventoryPanelLayout layout = uiRenderer.getInventoryPanelLayout();
-    bool changed = false;
+        changed |= ImGui::SliderFloat("Anchor X", &layout.anchorX, 0.0f, 1.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Anchor Y", &layout.anchorY, 0.0f, 1.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Offset X", &layout.offsetX, -1200.0f, 1200.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Offset Y", &layout.offsetY, -1200.0f, 1200.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Panel Scale", &layout.panelScale, 0.5f, 4.0f, "%.2f");
+        ImGui::Text("Texture Base: %.0fx%.0f", InventoryPanelLayout::kTextureWidth, InventoryPanelLayout::kTextureHeight);
+        ImGui::Separator();
+        changed |= ImGui::SliderFloat("Grid Offset X", &layout.gridOffsetX, -40.0f, 120.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Grid Offset Y", &layout.gridOffsetY, -40.0f, 120.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Slot Size", &layout.slotSize, 6.0f, 36.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Column Gap", &layout.columnGap, -4.0f, 16.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Row Gap", &layout.rowGap, -4.0f, 16.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Row4 Extra Gap", &layout.row4ExtraGap, -4.0f, 40.0f, "%.1f");
 
-    changed |= ImGui::SliderFloat("Anchor X", &layout.anchorX, 0.0f, 1.0f, "%.3f");
-    changed |= ImGui::SliderFloat("Anchor Y", &layout.anchorY, 0.0f, 1.0f, "%.3f");
-    changed |= ImGui::SliderFloat("Offset X", &layout.offsetX, -1200.0f, 1200.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Offset Y", &layout.offsetY, -1200.0f, 1200.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Panel Scale", &layout.panelScale, 0.5f, 4.0f, "%.2f");
-    ImGui::Text("Texture Base: %.0fx%.0f", InventoryPanelLayout::kTextureWidth, InventoryPanelLayout::kTextureHeight);
-    ImGui::Separator();
-    changed |= ImGui::SliderFloat("Grid Offset X", &layout.gridOffsetX, -40.0f, 120.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Grid Offset Y", &layout.gridOffsetY, -40.0f, 120.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Slot Size", &layout.slotSize, 6.0f, 36.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Column Gap", &layout.columnGap, -4.0f, 16.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Row Gap", &layout.rowGap, -4.0f, 16.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Row4 Extra Gap", &layout.row4ExtraGap, -4.0f, 40.0f, "%.1f");
+        if (changed) {
+            uiRenderer.setInventoryPanelLayout(layout);
+        }
 
-    if (changed) {
-        uiRenderer.setInventoryPanelLayout(layout);
+        ImGui::Separator();
+        ImGui::Text("Count Text");
+        float invCountOffsetX = uiRenderer.getInventoryCountTextOffsetX();
+        if (ImGui::SliderFloat("Inv Count Offset X", &invCountOffsetX, -1.0f, 1.0f, "%.3f")) {
+            uiRenderer.setInventoryCountTextOffsetX(invCountOffsetX);
+        }
+        float invCountOffsetY = uiRenderer.getInventoryCountTextOffsetY();
+        if (ImGui::SliderFloat("Inv Count Offset Y", &invCountOffsetY, -1.0f, 1.0f, "%.3f")) {
+            uiRenderer.setInventoryCountTextOffsetY(invCountOffsetY);
+        }
+        float invCountScale = uiRenderer.getInventoryCountTextScale();
+        if (ImGui::SliderFloat("Inv Count Scale", &invCountScale, 0.05f, 1.0f, "%.3f")) {
+            uiRenderer.setInventoryCountTextScale(invCountScale);
+        }
     }
-
-    ImGui::Separator();
-    ImGui::Text("Count Text");
-    float invCountOffsetX = uiRenderer.getInventoryCountTextOffsetX();
-    if (ImGui::SliderFloat("Inv Count Offset X", &invCountOffsetX, -1.0f, 1.0f, "%.3f")) {
-        uiRenderer.setInventoryCountTextOffsetX(invCountOffsetX);
-    }
-    float invCountOffsetY = uiRenderer.getInventoryCountTextOffsetY();
-    if (ImGui::SliderFloat("Inv Count Offset Y", &invCountOffsetY, -1.0f, 1.0f, "%.3f")) {
-        uiRenderer.setInventoryCountTextOffsetY(invCountOffsetY);
-    }
-    float invCountScale = uiRenderer.getInventoryCountTextScale();
-    if (ImGui::SliderFloat("Inv Count Scale", &invCountScale, 0.05f, 1.0f, "%.3f")) {
-        uiRenderer.setInventoryCountTextScale(invCountScale);
-    }
-
-    ImGui::End();
 }
 
 void Dashboard::showCraftingGridSettings(UIRenderer& uiRenderer) {
-    ImGui::Begin("Crafting Grid Settings");
+    if (ImGui::CollapsingHeader("Crafting Grid Settings")) {
+        InventoryPanelLayout panelLayout = uiRenderer.getInventoryPanelLayout();
+        CraftingGridLayout craftLayout = panelLayout.craftingGrid;
+        bool changed = false;
 
-    InventoryPanelLayout panelLayout = uiRenderer.getInventoryPanelLayout();
-    CraftingGridLayout craftLayout = panelLayout.craftingGrid;
-    bool changed = false;
+        ImGui::Text("2x2 Crafting Grid");
+        changed |= ImGui::SliderFloat("Craft Offset X", &craftLayout.offsetX, -40.0f, 170.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Craft Offset Y", &craftLayout.offsetY, -40.0f, 170.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Craft Slot Size", &craftLayout.slotSize, 6.0f, 36.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Craft Column Gap", &craftLayout.columnGap, -4.0f, 16.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Craft Row Gap", &craftLayout.rowGap, -4.0f, 16.0f, "%.1f");
 
-    ImGui::Text("2x2 Crafting Grid");
-    changed |= ImGui::SliderFloat("Craft Offset X", &craftLayout.offsetX, -40.0f, 170.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Craft Offset Y", &craftLayout.offsetY, -40.0f, 170.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Craft Slot Size", &craftLayout.slotSize, 6.0f, 36.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Craft Column Gap", &craftLayout.columnGap, -4.0f, 16.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Craft Row Gap", &craftLayout.rowGap, -4.0f, 16.0f, "%.1f");
+        ImGui::Separator();
+        ImGui::Text("Result Slot");
+        changed |= ImGui::SliderFloat("Result Offset X", &craftLayout.resultOffsetX, -40.0f, 170.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Result Offset Y", &craftLayout.resultOffsetY, -40.0f, 170.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Result Slot Size", &craftLayout.resultSlotSize, 6.0f, 36.0f, "%.1f");
 
-    ImGui::Separator();
-    ImGui::Text("Result Slot");
-    changed |= ImGui::SliderFloat("Result Offset X", &craftLayout.resultOffsetX, -40.0f, 170.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Result Offset Y", &craftLayout.resultOffsetY, -40.0f, 170.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Result Slot Size", &craftLayout.resultSlotSize, 6.0f, 36.0f, "%.1f");
-
-    if (changed) {
-        panelLayout.craftingGrid = craftLayout;
-        uiRenderer.setInventoryPanelLayout(panelLayout);
+        if (changed) {
+            panelLayout.craftingGrid = craftLayout;
+            uiRenderer.setInventoryPanelLayout(panelLayout);
+        }
     }
-
-    ImGui::End();
 }
 
 void Dashboard::showTextSettings(UIRenderer& uiRenderer) {
-    ImGui::Begin("Text Settings");
-
-    float caretBlinkMs = uiRenderer.getCommandCaretBlinkPeriodMs();
-    if (ImGui::SliderFloat("Command Caret Blink (ms)", &caretBlinkMs, 120.0f, 1500.0f, "%.0f")) {
-        uiRenderer.setCommandCaretBlinkPeriodMs(caretBlinkMs);
+    if (ImGui::CollapsingHeader("Text Settings")) {
+        float caretBlinkMs = uiRenderer.getCommandCaretBlinkPeriodMs();
+        if (ImGui::SliderFloat("Command Caret Blink (ms)", &caretBlinkMs, 120.0f, 1500.0f, "%.0f")) {
+            uiRenderer.setCommandCaretBlinkPeriodMs(caretBlinkMs);
+        }
     }
-
-    ImGui::End();
 }
 
 void Dashboard::showHeldItemPreviewSettings(UIRenderer& uiRenderer) {
-    ImGui::Begin("Held Item Preview Settings");
+    if (ImGui::CollapsingHeader("Held Item Preview Settings")) {
+        HeldItemPreviewLayout layout = uiRenderer.getHeldItemPreviewLayout();
+        bool changed = false;
 
-    HeldItemPreviewLayout layout = uiRenderer.getHeldItemPreviewLayout();
-    bool changed = false;
+        changed |= ImGui::SliderFloat("Center X", &layout.centerXRatio, 0.0f, 1.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Center Y", &layout.centerYRatio, 0.0f, 1.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Size Ratio", &layout.sizeRatio, 0.02f, 0.6f, "%.3f");
+        changed |= ImGui::SliderFloat("Pitch (deg)", &layout.pitchDegrees, -89.0f, 89.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Yaw (deg)", &layout.yawDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Sway Amplitude X", &layout.swayAmplitudeX, 0.0f, 0.08f, "%.4f");
+        changed |= ImGui::SliderFloat("Sway Amplitude Y", &layout.swayAmplitudeY, 0.0f, 0.08f, "%.4f");
 
-    changed |= ImGui::SliderFloat("Center X", &layout.centerXRatio, 0.0f, 1.0f, "%.3f");
-    changed |= ImGui::SliderFloat("Center Y", &layout.centerYRatio, 0.0f, 1.0f, "%.3f");
-    changed |= ImGui::SliderFloat("Size Ratio", &layout.sizeRatio, 0.02f, 0.6f, "%.3f");
-    changed |= ImGui::SliderFloat("Pitch (deg)", &layout.pitchDegrees, -89.0f, 89.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Yaw (deg)", &layout.yawDegrees, -180.0f, 180.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Sway Amplitude X", &layout.swayAmplitudeX, 0.0f, 0.08f, "%.4f");
-    changed |= ImGui::SliderFloat("Sway Amplitude Y", &layout.swayAmplitudeY, 0.0f, 0.08f, "%.4f");
-
-    if (changed) {
-        uiRenderer.setHeldItemPreviewLayout(layout);
+        if (changed) {
+            uiRenderer.setHeldItemPreviewLayout(layout);
+        }
     }
-
-    ImGui::End();
 }
 
 #endif // NDEBUG
