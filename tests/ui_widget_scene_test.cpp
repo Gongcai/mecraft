@@ -116,7 +116,7 @@ int main() {
     ContextAwareWidget* sceneWidgetPtr = sceneWidget.get();
     scene.addRoot(std::move(sceneWidget));
 
-    if (scene.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
+    if (scene.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, context) != UIEventResult::Ignored) {
         return fail("UIScene should ignore input before any context is set");
     }
     if (sceneWidgetPtr->callCount() != 0) {
@@ -124,7 +124,7 @@ int main() {
     }
 
     scene.setInputContext(context);
-    if (scene.onInput({UIInputEventType::PointerMove, 1.0f, 1.0f, UIPointerButton::None}) != UIEventResult::Handled) {
+    if (scene.onInput({UIInputEventType::PointerMove, 1.0f, 1.0f, UIPointerButton::None}, context) != UIEventResult::Handled) {
         return fail("UIScene should dispatch input with an explicit context");
     }
     if (sceneWidgetPtr->callCount() != 1) {
@@ -137,7 +137,7 @@ int main() {
     FixedResultWidget* consumedRootPtr = consumedRootWidget.get();
     scene.addRoot(std::move(handledRoot));
     scene.addRoot(std::move(consumedRootWidget));
-    if (scene.onInput({UIInputEventType::PointerUp, 0.0f, 0.0f, UIPointerButton::Primary}) != UIEventResult::Consumed) {
+    if (scene.onInput({UIInputEventType::PointerUp, 0.0f, 0.0f, UIPointerButton::Primary}, context) != UIEventResult::Consumed) {
         return fail("UIScene should return Consumed when top-most root consumes input");
     }
     if (consumedRootPtr->callCount() != 1 || handledRootPtr->callCount() != 0) {

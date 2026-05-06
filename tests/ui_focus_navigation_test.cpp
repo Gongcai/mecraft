@@ -62,14 +62,14 @@ int main() {
         return fail("first focusable widget should receive initial focus");
     }
 
-    if (scene.onInput(command(0.0f, 0.0f, UICommand::NavigateDown)) != UIEventResult::Handled) {
+    if (scene.onInput(command(0.0f, 0.0f, UICommand::NavigateDown), context) != UIEventResult::Handled) {
         return fail("navigate down should move focus and be handled");
     }
     if (!secondPtr->isFocused()) {
         return fail("navigate down should move focus to next widget");
     }
 
-    if (scene.onInput(command(0.0f, 0.0f, UICommand::Activate)) != UIEventResult::Consumed) {
+    if (scene.onInput(command(0.0f, 0.0f, UICommand::Activate), context) != UIEventResult::Consumed) {
         return fail("activate should click focused button");
     }
     if (secondClicks != 1 || firstClicks != 0) {
@@ -77,7 +77,7 @@ int main() {
     }
 
     // Pointer coordinates are top-left origin. This lands inside the first button.
-    const UIEventResult pointerDown = scene.onInput({UIInputEventType::PointerDown, 20.0f, 80.0f, UIPointerButton::Primary});
+    const UIEventResult pointerDown = scene.onInput({UIInputEventType::PointerDown, 20.0f, 80.0f, UIPointerButton::Primary}, context);
     if (pointerDown != UIEventResult::Handled) {
         return fail("pointer down inside button should be handled");
     }
@@ -85,7 +85,7 @@ int main() {
         return fail("pointer interaction should request and acquire focus");
     }
 
-    if (scene.onInput(command(0.0f, 0.0f, UICommand::Activate)) != UIEventResult::Consumed) {
+    if (scene.onInput(command(0.0f, 0.0f, UICommand::Activate), context) != UIEventResult::Consumed) {
         return fail("activate should click newly focused widget");
     }
     if (firstClicks != 1) {

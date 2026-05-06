@@ -93,10 +93,12 @@ bool UITheme::loadFromFile(const std::string& path) {
     checkboxSize      = readFloat(j, "checkboxSize",      checkboxSize);
 
     // Dropdown
-    dropdownBackground = readColor(j, "dropdownBackground", dropdownBackground);
-    dropdownBorder     = readColor(j, "dropdownBorder",     dropdownBorder);
-    dropdownItemHover  = readColor(j, "dropdownItemHover",  dropdownItemHover);
-    dropdownArrow      = readColor(j, "dropdownArrow",      dropdownArrow);
+    dropdownBackground   = readColor(j, "dropdownBackground",   dropdownBackground);
+    dropdownBorder       = readColor(j, "dropdownBorder",       dropdownBorder);
+    dropdownItemHover    = readColor(j, "dropdownItemHover",    dropdownItemHover);
+    dropdownItemSelected = readColor(j, "dropdownItemSelected", dropdownItemSelected);
+    dropdownSeparator    = readColor(j, "dropdownSeparator",    dropdownSeparator);
+    dropdownArrow        = readColor(j, "dropdownArrow",        dropdownArrow);
 
     // Scrollbar
     scrollbarTrack      = readColor(j, "scrollbarTrack",      scrollbarTrack);

@@ -24,6 +24,7 @@ void UIDropdown::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("ui_color");
     initMesh();
     m_expandTween.setImmediate(0.0f);
+    m_hoverColorTween.setImmediate({0.30f, 0.30f, 0.30f, 1.0f});
 }
 
 void UIDropdown::shutdown() {
@@ -61,6 +62,7 @@ void UIDropdown::setOnSelectionChanged(std::function<void(int, const std::string
 
 void UIDropdown::updateAnimations(float dt) {
     m_expandTween.tick(dt);
+    m_hoverColorTween.tick(dt);
     UIWidget::updateAnimations(dt);
 }
 
@@ -69,9 +71,10 @@ void UIDropdown::initMesh() {
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Enough for: bg (6) + border (24) + arrow (6) + options panel bg (6) + option highlights (8*6) + border (24)
-    // ~80 verts * 2 floats = 640 bytes, pre-allocate generously
-    glBufferData(GL_ARRAY_BUFFER, 120 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // Collapsed: bg (6) + border (24) + arrow (6) = 36
+    // Expanded: panel bg (6) + panel border (24) + per-item: base(8*6) + selected(8*6) + bar(8*6) + sep(8*6) + hover(8*6)
+    // ~320 verts * 2 floats, pre-allocate generously
+    glBufferData(GL_ARRAY_BUFFER, 320 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
@@ -192,11 +195,27 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
 void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     if (m_options.empty()) return;
 
+    // Re-bind our shader/VAO — renderCollapsed's TextRenderer call clobbers them
+    m_shader->use();
+    m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
+                                                static_cast<float>(ctx.screenHeight)));
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+
     const UITheme* theme = ctx.theme;
     const auto& bgCol = theme ? theme->dropdownBackground : m_bgColor;
     const auto& borderCol = theme ? theme->dropdownBorder : m_borderColor;
     const auto& hoverCol = theme ? theme->dropdownItemHover : m_itemHoverColor;
+    const auto& selectedCol = theme ? theme->dropdownItemSelected : std::array<float, 4>{0.15f, 0.45f, 0.55f, 0.35f};
+    const auto& separatorCol = theme ? theme->dropdownSeparator : std::array<float, 4>{0.35f, 0.35f, 0.35f, 0.4f};
+    const auto& accentCol = theme ? theme->accentPrimary : std::array<float, 4>{0.2f, 0.8f, 1.0f, 1.0f};
     const auto& textCol = theme ? theme->textPrimary : std::array<float, 4>{1, 1, 1, 1};
+
+    // Item base background: slightly brighter than panel bg
+    std::array<float, 4> itemBgCol = bgCol;
+    itemBgCol[0] = std::min(1.0f, itemBgCol[0] + 0.04f);
+    itemBgCol[1] = std::min(1.0f, itemBgCol[1] + 0.04f);
+    itemBgCol[2] = std::min(1.0f, itemBgCol[2] + 0.04f);
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -205,9 +224,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
 
     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
     float panelH = visibleCount * m_itemHeight;
-    float panelY = ay - panelH - 2.0f; // below the collapsed widget
+    float panelY = ay - panelH - 2.0f;
 
-    // If panel would go below screen, render above
     if (panelY < 0.0f) {
         panelY = ay + ah + 2.0f;
     }
@@ -252,32 +270,100 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
 
     // Option items
     int scrollItems = static_cast<int>(m_scrollOffset / m_itemHeight);
+    constexpr int kItemBaseOffset = 63;   // per-item base bg
+    constexpr int kItemSelectedOffset = 111; // per-item selected bg
+    constexpr int kItemBarOffset = 159;   // per-item selected left bar
+    constexpr int kItemSepOffset = 207;   // per-item separator
+    constexpr int kItemHoverOffset = 255; // per-item hover highlight
+
     for (int i = 0; i < visibleCount && (scrollItems + i) < static_cast<int>(m_options.size()); ++i) {
         int optIdx = scrollItems + i;
         float itemY = panelY + panelH - (i + 1) * m_itemHeight;
+        bool isSelected = (optIdx == m_selectedIndex);
+        bool isHovered = (optIdx == m_hoveredOption);
 
-        // Hover highlight
-        if (optIdx == m_hoveredOption) {
-            std::array<float, 4> c = hoverCol;
+        // 1. Per-item base background
+        {
+            std::array<float, 4> c = itemBgCol;
             c[3] *= alpha * expandAlpha;
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax + 1.0f, itemY,  ax + aw - 1.0f, itemY,  ax + aw - 1.0f, itemY + m_itemHeight,
-                ax + 1.0f, itemY,  ax + aw - 1.0f, itemY + m_itemHeight,  ax + 1.0f, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
             };
-            glBufferSubData(GL_ARRAY_BUFFER, 63 * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, 63, 6);
+            glBufferSubData(GL_ARRAY_BUFFER, (kItemBaseOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
+            glDrawArrays(GL_TRIANGLES, kItemBaseOffset + i * 6, 6);
         }
 
-        // Option text
-        if (ctx.textRenderer) {
+        // 2. Selected item background
+        if (isSelected) {
+            std::array<float, 4> c = selectedCol;
+            c[3] *= alpha * expandAlpha;
+            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
+            float verts[] = {
+                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+            };
+            glBufferSubData(GL_ARRAY_BUFFER, (kItemSelectedOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
+            glDrawArrays(GL_TRIANGLES, kItemSelectedOffset + i * 6, 6);
+        }
+
+        // 3. Selected left accent bar
+        if (isSelected) {
+            std::array<float, 4> c = accentCol;
+            c[3] *= alpha * expandAlpha;
+            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
+            float barW = 2.0f;
+            float verts[] = {
+                ax, itemY,  ax + barW, itemY,  ax + barW, itemY + m_itemHeight,
+                ax, itemY,  ax + barW, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+            };
+            glBufferSubData(GL_ARRAY_BUFFER, (kItemBarOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
+            glDrawArrays(GL_TRIANGLES, kItemBarOffset + i * 6, 6);
+        }
+
+        // 4. Hover highlight (on top of selected bg)
+        if (isHovered) {
+            std::array<float, 4> c = m_hoverColorTween.isRunning() ? m_hoverColorTween.value() : hoverCol;
+            c[3] *= alpha * expandAlpha;
+            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
+            float verts[] = {
+                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+            };
+            glBufferSubData(GL_ARRAY_BUFFER, (kItemHoverOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
+            glDrawArrays(GL_TRIANGLES, kItemHoverOffset + i * 6, 6);
+        }
+
+        // 5. Separator line (not after last visible item)
+        if (i < visibleCount - 1 && (scrollItems + i + 1) < static_cast<int>(m_options.size())) {
+            std::array<float, 4> c = separatorCol;
+            c[3] *= alpha * expandAlpha;
+            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
+            float verts[] = {
+                ax + 4.0f, itemY,  ax + aw - 4.0f, itemY,  ax + aw - 4.0f, itemY + 1.0f,
+                ax + 4.0f, itemY,  ax + aw - 4.0f, itemY + 1.0f,  ax + 4.0f, itemY + 1.0f,
+            };
+            glBufferSubData(GL_ARRAY_BUFFER, (kItemSepOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
+            glDrawArrays(GL_TRIANGLES, kItemSepOffset + i * 6, 6);
+        }
+    }
+
+    // Text pass: render after all geometry to avoid TextRenderer clobbering GL state
+    if (ctx.textRenderer) {
+        for (int i = 0; i < visibleCount && (scrollItems + i) < static_cast<int>(m_options.size()); ++i) {
+            int optIdx = scrollItems + i;
+            float itemY = panelY + panelH - (i + 1) * m_itemHeight;
+            bool isSelected = (optIdx == m_selectedIndex);
+
             std::array<float, 4> tc = textCol;
             tc[3] *= alpha * expandAlpha;
-            if (optIdx == m_selectedIndex) {
-                tc = theme ? theme->accentPrimary : std::array<float, 4>{0.2f, 0.8f, 1.0f, tc[3]};
+            if (isSelected) {
+                tc = {accentCol[0], accentCol[1], accentCol[2], tc[3]};
             }
+            float textX = isSelected ? ax + 10.0f : ax + 8.0f;
             float textY = itemY + (m_itemHeight - ctx.textRenderer->measureText(m_options[optIdx], 2.0f).height) * 0.5f;
-            ctx.textRenderer->render(m_options[optIdx], ax + 8.0f, textY, 2.0f, tc,
+            ctx.textRenderer->render(m_options[optIdx], textX, textY, 2.0f, tc,
                                      static_cast<float>(ctx.screenWidth),
                                      static_cast<float>(ctx.screenHeight));
         }
@@ -339,7 +425,16 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
     if (m_expanded) {
         switch (event.type) {
             case UIInputEventType::PointerMove: {
-                m_hoveredOption = hitTestOption(event.x, event.y, ctx);
+                int newHovered = hitTestOption(event.x, event.y, ctx);
+                if (newHovered != m_hoveredOption) {
+                    m_prevHoveredOption = m_hoveredOption;
+                    m_hoveredOption = newHovered;
+                    const auto& hoverCol = ctx.theme ? ctx.theme->dropdownItemHover : m_itemHoverColor;
+                    if (m_hoveredOption >= 0) {
+                        auto fromCol = (m_prevHoveredOption >= 0) ? hoverCol : std::array<float, 4>{hoverCol[0], hoverCol[1], hoverCol[2], 0.0f};
+                        m_hoverColorTween.start(fromCol, hoverCol, 0.1f, EasingType::EaseOut);
+                    }
+                }
                 return UIEventResult::Handled;
             }
             case UIInputEventType::PointerDown: {

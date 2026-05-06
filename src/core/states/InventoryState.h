@@ -42,14 +42,13 @@ public:
     }
 
     void update(float /*dt*/, const InputSnapshot& snapshot) override {
-        const bool primaryPressed = m_deps.context.isActionTriggered(Action::UIPrimaryClick);
-        const bool secondaryPressed = m_deps.context.isActionTriggered(Action::UISecondaryClick);
-        const bool primaryReleased = m_deps.context.isActionTriggered(Action::UIPrimaryRelease);
-        const bool secondaryReleased = m_deps.context.isActionTriggered(Action::UISecondaryRelease);
-
         const UIInputRouteResult uiRouteResult =
             UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
         const UIEventResult primaryDownResult = uiRouteResult.primaryDown;
+        const bool primaryPressed = uiRouteResult.primaryPressed;
+        const bool secondaryPressed = uiRouteResult.secondaryPressed;
+        const bool primaryReleased = uiRouteResult.primaryReleased;
+        const bool secondaryReleased = uiRouteResult.secondaryReleased;
 
         // Close inventory
         if (m_deps.context.isActionTriggered(Action::Inventory) ||

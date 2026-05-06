@@ -3,13 +3,12 @@
 #include <memory>
 #include <vector>
 
-#include "IUIControl.h"
 #include "UIWidget.h"
 #include "TweenGroup.h"
 
 class LocaleManager;
 
-class UIScene : public IUIControl {
+class UIScene : public UIWidget {
 public:
     enum class Phase {
         Entering,
@@ -17,18 +16,16 @@ public:
         Exiting,
     };
 
-    UIScene() = default;
+    UIScene() { visible = true; }
     ~UIScene() override = default;
 
-    // IUIControl interface
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
     void render(const UIRenderContext& context) const override;
-    UIEventResult onInput(const UIInputEvent& event) override;
-    [[nodiscard]] bool isVisible() const override { return true; }
+    UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
     void setInputContext(const UIRenderContext& context);
-    void moveFocusNext();
-    void moveFocusPrev();
+    void moveFocusNext(const std::vector<UIWidget*>* cached = nullptr);
+    void moveFocusPrev(const std::vector<UIWidget*>* cached = nullptr);
 
     // Scene lifecycle
     void enterScene();
@@ -37,7 +34,7 @@ public:
     [[nodiscard]] Phase getPhase() const { return m_phase; }
 
     // Animation management
-    virtual void updateAnimations(float dt);
+    void updateAnimations(float dt) override;
     void registerFloatTween(Tween<float>& tween) { m_animations.addFloat(tween); }
     void registerColorTween(Tween<std::array<float, 4>>& tween) { m_animations.addColor(tween); }
 
@@ -59,7 +56,8 @@ protected:
     [[nodiscard]] const LocaleManager* getLocaleManager() const { return m_locale; }
 
 private:
-    void ensureFocusableSelection();
+    void ensureFocusableSelection(const std::vector<UIWidget*>* cached = nullptr);
+    void collectAllFocusable(std::vector<UIWidget*>& out) const;
     void applyPendingFocusRequests();
     void setFocusedWidget(UIWidget* widget);
 

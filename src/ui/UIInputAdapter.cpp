@@ -70,13 +70,35 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
                                               const InputContextManager& context) {
     UIInputRouteResult routeResult;
 
-    mergeResult(routeResult.aggregate,
-                renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerMove,
-                                                       snapshot,
-                                                       UIPointerButton::None)));
-
     const int primaryButton = static_cast<int>(UIPointerButton::Primary);
     const int secondaryButton = static_cast<int>(UIPointerButton::Secondary);
+
+    routeResult.primaryPressed = snapshot.isMouseButtonJustPressed(primaryButton);
+    routeResult.secondaryPressed = snapshot.isMouseButtonJustPressed(secondaryButton);
+    routeResult.primaryReleased = snapshot.isMouseButtonJustReleased(primaryButton);
+    routeResult.secondaryReleased = snapshot.isMouseButtonJustReleased(secondaryButton);
+
+    const bool hasButtonEvent = routeResult.primaryPressed ||
+                                routeResult.secondaryPressed ||
+                                routeResult.primaryReleased ||
+                                routeResult.secondaryReleased;
+
+    // Only send PointerMove when mouse actually moved or a button event needs
+    // up-to-date hover state. Skips redundant hit-testing on stationary frames.
+    static float lastX = -1.0f;
+    static float lastY = -1.0f;
+    const float curX = snapshot.mousePosition.x;
+    const float curY = snapshot.mousePosition.y;
+    const bool pointerMoved = (curX != lastX || curY != lastY);
+    lastX = curX;
+    lastY = curY;
+
+    if (pointerMoved || hasButtonEvent) {
+        mergeResult(routeResult.aggregate,
+                    renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerMove,
+                                                           snapshot,
+                                                           UIPointerButton::None)));
+    }
 
     if (snapshot.isMouseButtonJustPressed(primaryButton)) {
         routeResult.primaryDown = renderer.routeUIInput(makePointerEvent(UIInputEventType::PointerDown,

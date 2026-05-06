@@ -279,7 +279,7 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
     UIEventResult aggregate = UIEventResult::Ignored;
 
     // Active scene has priority (menu screens overlay gameplay controls)
-    if (m_activeScene && m_activeScene->isVisible()) {
+    if (m_activeScene && m_activeScene->visible) {
         if (m_lastSceneContext.screenWidth <= 0 || m_lastSceneContext.screenHeight <= 0) {
             GLint viewport[4] = {0, 0, 0, 0};
             glGetIntegerv(GL_VIEWPORT, viewport);
@@ -292,7 +292,7 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
         m_lastSceneContext.pointerY = event.y;
         m_activeScene->setInputContext(m_lastSceneContext);
 
-        UIEventResult sceneResult = m_activeScene->onInput(event);
+        UIEventResult sceneResult = m_activeScene->onInput(event, m_lastSceneContext);
         if (sceneResult == UIEventResult::Consumed) return UIEventResult::Consumed;
         if (sceneResult == UIEventResult::Handled) {
             aggregate = UIEventResult::Handled;
@@ -458,7 +458,7 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     context.localeManager = m_localeManager;
     m_lastSceneContext = context;
 
-    if (m_activeScene && m_activeScene->isVisible()) {
+    if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }
@@ -476,7 +476,7 @@ void UIRenderer::renderControls(const UIRenderContext& context) const
     }
 
     // Render active scene on top of gameplay controls
-    if (m_activeScene && m_activeScene->isVisible()) {
+    if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }

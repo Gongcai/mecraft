@@ -139,7 +139,7 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
     m_tooltip.render(context);
 }
 
-UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/)
+UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx)
 {
     if (!visible) {
         return UIEventResult::Ignored;
@@ -150,7 +150,7 @@ UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UI
     syncCraftingGridPosition(panelRect);
 
     // Crafting grid gets input priority (rendered on top)
-    UIEventResult result = m_craftingGrid.onInput(event);
+    UIEventResult result = m_craftingGrid.onInput(event, ctx);
     if (result == UIEventResult::Consumed) {
         // Clear inventory grid's activation to avoid stale state
         m_itemGrid.clearLastActivatedIndex();
@@ -160,7 +160,7 @@ UIEventResult InventoryPanelControl::onInput(const UIInputEvent& event, const UI
         return result;
     }
 
-    result = m_itemGrid.onInput(event);
+    result = m_itemGrid.onInput(event, ctx);
     if (result == UIEventResult::Consumed) {
         // Clear crafting grid's activation to avoid stale state
         m_craftingGrid.clearActivation();

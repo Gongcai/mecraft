@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include "IUIControl.h"
+#include "UIWidget.h"
 #include "ItemGridControl.h"
 #include "../item/Item.h"
 
@@ -27,16 +27,14 @@ struct CraftingGridLayout {
     float resultSlotSize = 18.0f;
 };
 
-class CraftingGridControl : public IUIControl {
+class CraftingGridControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
-    void render(const UIRenderContext& context) const override;
-    UIEventResult onInput(const UIInputEvent& event) override;
-    [[nodiscard]] bool isVisible() const override;
+    UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
 
-    void setVisible(bool visible);
+    void setVisible(bool v);
     void setLayout(const CraftingGridLayout& layout);
     [[nodiscard]] const CraftingGridLayout& getLayout() const;
 
@@ -62,6 +60,9 @@ public:
     // Set the panel origin (resolved screen coordinates) for positioning
     void setPanelOrigin(float x, float y, float scale);
 
+protected:
+    void renderSelf(const UIRenderContext& context) const override;
+
 private:
     void syncSlotPositions();
 
@@ -76,7 +77,6 @@ private:
     float m_panelY = 0.0f;
     float m_panelScale = 1.0f;
 
-    bool m_visible = false;
     int m_cachedScreenWidth = 1920;
     int m_cachedScreenHeight = 1080;
 };

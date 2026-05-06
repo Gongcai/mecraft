@@ -14,11 +14,12 @@ int fail(const char* message) {
 int main() {
     ConsoleOverlay console;
     TextRenderer textRenderer;
+    UIRenderContext ctx{};
 
-    if (!console.isVisible()) {
+    if (!console.visible) {
         return fail("console should default to visible");
     }
-    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
+    if (console.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) != UIEventResult::Ignored) {
         return fail("console should ignore pointer input");
     }
 

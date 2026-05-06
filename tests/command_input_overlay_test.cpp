@@ -14,15 +14,16 @@ int fail(const char* message) {
 int main() {
     CommandInputOverlay overlay;
     TextRenderer textRenderer;
+    UIRenderContext ctx{};
 
-    if (overlay.isVisible()) {
+    if (overlay.visible) {
         return fail("command input should default to hidden");
     }
     overlay.setText("/help");
     if (overlay.getText() != "/help") {
         return fail("command input text setter/getter mismatch");
     }
-    if (overlay.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
+    if (overlay.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) != UIEventResult::Ignored) {
         return fail("command input overlay should ignore pointer input");
     }
 

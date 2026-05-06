@@ -62,4 +62,6 @@ private:
 
     std::function<void(int, const std::string&)> m_onSelectionChanged;
     Tween<float> m_expandTween;
+    Tween<std::array<float, 4>> m_hoverColorTween;
+    int m_prevHoveredOption = -1;
 };

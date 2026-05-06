@@ -12,11 +12,12 @@ int fail(const char* message) {
 
 int main() {
     HotbarControl hotbar;
+    UIRenderContext ctx{};
 
-    if (!hotbar.isVisible()) {
+    if (!hotbar.visible) {
         return fail("hotbar should default to visible");
     }
-    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}) != UIEventResult::Ignored) {
+    if (hotbar.onInput({UIInputEventType::PointerMove, 0.0f, 0.0f, UIPointerButton::None}, ctx) != UIEventResult::Ignored) {
         return fail("hotbar should ignore pointer input by default");
     }
 

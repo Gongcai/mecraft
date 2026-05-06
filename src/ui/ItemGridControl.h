@@ -2,22 +2,20 @@
 
 #include <vector>
 
-#include "IUIControl.h"
+#include "UIWidget.h"
 #include "Pickable.h"
 #include "../item/Item.h"
 
 class Shader;
 
-class ItemGridControl : public IUIControl {
+class ItemGridControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
-    void render(const UIRenderContext& context) const override;
-    UIEventResult onInput(const UIInputEvent& event) override;
-    [[nodiscard]] bool isVisible() const override;
+    UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
 
-    void setVisible(bool visible);
+    void setVisible(bool v);
     void setSlots(const Pickable::SlotInfo* slots, int count);
     void clearSlots();
 
@@ -31,6 +29,9 @@ public:
     void clearLastActivatedIndex();
     [[nodiscard]] ItemID getHoveredItemId() const;
 
+protected:
+    void renderSelf(const UIRenderContext& context) const override;
+
 private:
     int hitTest(float mouseX, float mouseY) const;
 
@@ -40,7 +41,6 @@ private:
     Pickable::MeshHandles m_mesh;
     Pickable::RenderParams m_renderParams;
     std::vector<Pickable::SlotInfo> m_slots;
-    bool m_visible = true;
     int m_hoveredIndex = -1;
     int m_lastActivatedIndex = -1;
 };

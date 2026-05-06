@@ -10,6 +10,10 @@ class UIRenderer;
 struct UIInputRouteResult {
     UIEventResult aggregate = UIEventResult::Ignored;
     UIEventResult primaryDown = UIEventResult::Ignored;
+    bool primaryPressed = false;
+    bool secondaryPressed = false;
+    bool primaryReleased = false;
+    bool secondaryReleased = false;
 };
 
 namespace UIInputAdapter {

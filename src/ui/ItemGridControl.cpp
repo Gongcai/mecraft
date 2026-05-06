@@ -21,9 +21,9 @@ void ItemGridControl::shutdown()
     m_lastActivatedIndex = -1;
 }
 
-void ItemGridControl::render(const UIRenderContext& context) const
+void ItemGridControl::renderSelf(const UIRenderContext& context) const
 {
-    if (!m_visible || !m_resourceMgr || m_slots.empty()) {
+    if (!visible || !m_resourceMgr || m_slots.empty()) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
@@ -45,9 +45,9 @@ void ItemGridControl::render(const UIRenderContext& context) const
                      context.textRenderer);
 }
 
-UIEventResult ItemGridControl::onInput(const UIInputEvent& event)
+UIEventResult ItemGridControl::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/)
 {
-    if (!m_visible || m_slots.empty()) {
+    if (!visible || m_slots.empty()) {
         m_hoveredIndex = -1;
         return UIEventResult::Ignored;
     }
@@ -67,15 +67,10 @@ UIEventResult ItemGridControl::onInput(const UIInputEvent& event)
     return m_hoveredIndex >= 0 ? UIEventResult::Handled : UIEventResult::Ignored;
 }
 
-bool ItemGridControl::isVisible() const
+void ItemGridControl::setVisible(bool v)
 {
-    return m_visible;
-}
-
-void ItemGridControl::setVisible(bool visible)
-{
-    m_visible = visible;
-    if (!m_visible) {
+    visible = v;
+    if (!visible) {
         m_hoveredIndex = -1;
     }
 }

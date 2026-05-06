@@ -17,9 +17,9 @@ void CraftingGridControl::shutdown()
     m_itemGrid.shutdown();
 }
 
-void CraftingGridControl::render(const UIRenderContext& context) const
+void CraftingGridControl::renderSelf(const UIRenderContext& context) const
 {
-    if (!m_visible) {
+    if (!visible) {
         return;
     }
 
@@ -30,24 +30,19 @@ void CraftingGridControl::render(const UIRenderContext& context) const
     m_itemGrid.render(context);
 }
 
-UIEventResult CraftingGridControl::onInput(const UIInputEvent& event)
+UIEventResult CraftingGridControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx)
 {
-    if (!m_visible) {
+    if (!visible) {
         return UIEventResult::Ignored;
     }
     syncSlotPositions();
-    return m_itemGrid.onInput(event);
+    return m_itemGrid.onInput(event, ctx);
 }
 
-bool CraftingGridControl::isVisible() const
+void CraftingGridControl::setVisible(bool v)
 {
-    return m_visible;
-}
-
-void CraftingGridControl::setVisible(bool visible)
-{
-    m_visible = visible;
-    m_itemGrid.setVisible(visible);
+    visible = v;
+    m_itemGrid.setVisible(v);
 }
 
 void CraftingGridControl::setLayout(const CraftingGridLayout& layout)

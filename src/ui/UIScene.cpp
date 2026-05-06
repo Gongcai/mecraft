@@ -36,7 +36,7 @@ void UIScene::render(const UIRenderContext& context) const {
     }
 }
 
-UIEventResult UIScene::onInput(const UIInputEvent& event) {
+UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/) {
     if (!m_hasInputContext) {
         return UIEventResult::Ignored;
     }
@@ -51,6 +51,7 @@ UIEventResult UIScene::onInput(const UIInputEvent& event) {
         m_lastPointerY = event.y;
     }
 
+    // Focused widget gets priority for keyboard, command, text, and scroll events
     UIEventResult aggregate = UIEventResult::Ignored;
     if (m_focusedWidget &&
         (event.type == UIInputEventType::KeyDown ||
@@ -69,25 +70,34 @@ UIEventResult UIScene::onInput(const UIInputEvent& event) {
         }
     }
 
-    if (event.type == UIInputEventType::Command) {
-        if (event.command == UICommand::NavigateUp || event.command == UICommand::NavigateLeft) {
-            m_focusEngaged = true;
-            moveFocusPrev();
-            return UIEventResult::Handled;
-        }
-        if (event.command == UICommand::NavigateDown || event.command == UICommand::NavigateRight) {
-            m_focusEngaged = true;
-            moveFocusNext();
-            return UIEventResult::Handled;
-        }
-    }
-
     // Dispatch to roots in reverse order (top-most first)
     for (auto it = m_roots.rbegin(); it != m_roots.rend(); ++it) {
         UIEventResult result = (*it)->onInput(event, m_currentContext);
         if (result == UIEventResult::Consumed) return UIEventResult::Consumed;
         if (result == UIEventResult::Handled) {
             aggregate = UIEventResult::Handled;
+        }
+    }
+
+    // Navigation commands move focus only if nothing else handled the event
+    if (event.type == UIInputEventType::Command && aggregate == UIEventResult::Ignored) {
+        std::vector<UIWidget*> focusable;
+        focusable.reserve(16);
+        collectAllFocusable(focusable);
+
+        if (event.command == UICommand::NavigateUp || event.command == UICommand::NavigateLeft) {
+            m_focusEngaged = true;
+            moveFocusPrev(&focusable);
+            applyPendingFocusRequests();
+            ensureFocusableSelection(&focusable);
+            return UIEventResult::Handled;
+        }
+        if (event.command == UICommand::NavigateDown || event.command == UICommand::NavigateRight) {
+            m_focusEngaged = true;
+            moveFocusNext(&focusable);
+            applyPendingFocusRequests();
+            ensureFocusableSelection(&focusable);
+            return UIEventResult::Handled;
         }
     }
 
@@ -122,12 +132,20 @@ void UIScene::updateAnimations(float dt) {
     }
 }
 
-void UIScene::moveFocusNext() {
-    std::vector<UIWidget*> focusable;
-    focusable.reserve(16);
+void UIScene::collectAllFocusable(std::vector<UIWidget*>& out) const {
     for (auto& root : m_roots) {
-        root->collectFocusableWidgets(focusable);
+        root->collectFocusableWidgets(out);
     }
+}
+
+void UIScene::moveFocusNext(const std::vector<UIWidget*>* cached) {
+    std::vector<UIWidget*> local;
+    if (!cached) {
+        local.reserve(16);
+        collectAllFocusable(local);
+        cached = &local;
+    }
+    const auto& focusable = *cached;
 
     if (focusable.empty()) {
         setFocusedWidget(nullptr);
@@ -144,12 +162,14 @@ void UIScene::moveFocusNext() {
     setFocusedWidget(focusable[(index + 1) % focusable.size()]);
 }
 
-void UIScene::moveFocusPrev() {
-    std::vector<UIWidget*> focusable;
-    focusable.reserve(16);
-    for (auto& root : m_roots) {
-        root->collectFocusableWidgets(focusable);
+void UIScene::moveFocusPrev(const std::vector<UIWidget*>* cached) {
+    std::vector<UIWidget*> local;
+    if (!cached) {
+        local.reserve(16);
+        collectAllFocusable(local);
+        cached = &local;
     }
+    const auto& focusable = *cached;
 
     if (focusable.empty()) {
         setFocusedWidget(nullptr);
@@ -167,12 +187,14 @@ void UIScene::moveFocusPrev() {
     setFocusedWidget(focusable[prevIndex]);
 }
 
-void UIScene::ensureFocusableSelection() {
-    std::vector<UIWidget*> focusable;
-    focusable.reserve(16);
-    for (auto& root : m_roots) {
-        root->collectFocusableWidgets(focusable);
+void UIScene::ensureFocusableSelection(const std::vector<UIWidget*>* cached) {
+    std::vector<UIWidget*> local;
+    if (!cached) {
+        local.reserve(16);
+        collectAllFocusable(local);
+        cached = &local;
     }
+    const auto& focusable = *cached;
 
     if (focusable.empty()) {
         setFocusedWidget(nullptr);

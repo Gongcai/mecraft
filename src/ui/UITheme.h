@@ -53,6 +53,8 @@ struct UITheme {
     Color dropdownBackground   {0.22f, 0.22f, 0.22f, 0.95f};
     Color dropdownBorder       {0.40f, 0.40f, 0.40f, 0.7f};
     Color dropdownItemHover    {0.30f, 0.30f, 0.30f, 1.0f};
+    Color dropdownItemSelected {0.15f, 0.45f, 0.55f, 0.35f};
+    Color dropdownSeparator    {0.35f, 0.35f, 0.35f, 0.4f};
     Color dropdownArrow        {0.7f, 0.7f, 0.7f, 1.0f};
 
     // --- Scrollbar ---
