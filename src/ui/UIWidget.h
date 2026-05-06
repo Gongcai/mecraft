@@ -46,6 +46,7 @@ public:
     // Transform
     float scaleX = 1.0f;
     float scaleY = 1.0f;
+    void setScale(float s) { scaleX = scaleY = s; }
 
     // Appearance
     std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};

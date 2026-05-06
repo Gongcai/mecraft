@@ -142,7 +142,7 @@ void ConsoleDisplayBox::render(double nowSec,
             size_t maxChars = 0;
             float accW = 0.0f;
             for (size_t ci = it->text.size(); ci > 0; --ci) {
-                const float cw = measureText(it->text.substr(ci - 1), params.textScale).width;
+                const float cw = measureText(it->text.substr(ci - 1, 1), params.textScale).width;
                 if (accW + cw > clipContentW) break;
                 accW += cw;
                 maxChars++;

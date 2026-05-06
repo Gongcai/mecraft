@@ -128,6 +128,7 @@ set(SRC_UI
         src/ui/UICheckbox.cpp
         src/ui/UIDropdown.cpp
         src/ui/UIScrollArea.cpp
+        src/ui/UIImage.cpp
         src/ui/screens/MainMenuScreen.cpp
         src/ui/screens/PauseMenuScreen.cpp
 )

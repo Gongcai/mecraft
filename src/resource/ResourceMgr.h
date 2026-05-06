@@ -54,6 +54,7 @@ public:
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
     GLuint loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
+    GLuint loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
     [[nodiscard]] GLuint getGuiTexture(const std::string& name) const;
 
     // 纹理图集 (UI 使用)

@@ -8,7 +8,7 @@
 #include "../UIScene.h"
 #include "../Tween.h"
 
-class UIText;
+class UIImage;
 class UIButton;
 class UIDropdown;
 
@@ -26,7 +26,7 @@ protected:
 private:
     void refreshTexts();
 
-    UIText* m_title = nullptr;
+    UIImage* m_title = nullptr;
     UIButton* m_startButton = nullptr;
     UIButton* m_quitButton = nullptr;
     UIDropdown* m_langDropdown = nullptr;

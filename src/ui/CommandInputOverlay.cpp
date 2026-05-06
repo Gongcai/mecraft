@@ -118,7 +118,7 @@ CommandInputOverlay::ClipInfo CommandInputOverlay::computeClipInfo(const std::st
     size_t maxVisibleChars = 0;
     float accumulatedW = 0.0f;
     for (size_t i = text.size(); i > 0; --i) {
-        const float w = textRenderer.measureText(text.substr(i - 1), textScale).width;
+        const float w = textRenderer.measureText(text.substr(i - 1, 1), textScale).width;
         if (accumulatedW + w > clipContentW) break;
         accumulatedW += w;
         maxVisibleChars++;

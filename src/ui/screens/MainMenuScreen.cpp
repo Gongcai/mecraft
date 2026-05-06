@@ -1,23 +1,20 @@
 #include "MainMenuScreen.h"
 
 #include "../UIButton.h"
-#include "../UIText.h"
+#include "../UIImage.h"
 #include "../UIDropdown.h"
+#include "../../Paths.h"
+#include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"
 
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
-    (void)resourceMgr;
-
-    // Title text "MECRAFT"
-    auto title = std::make_unique<UIText>();
-    title->setText(getLocaleManager() ? getLocaleManager()->tr("mecraft") : "MECRAFT");
-    title->setTextScale(6.0f);
-    title->setTextColor({0.2f, 0.8f, 1.0f, 1.0f});
-    title->setAlignment(TextAlignment::Center);
+    // Title image
+    auto title = std::make_unique<UIImage>();
+    title->init(resourceMgr);
+    title->loadTexture(resourceMgr, "title", TITLE_TEXTURE_PATH);
+    title->setScale(2.0f);
     title->anchor = Anchor::Center;
     title->anchorOffsetY = 80.0f;
-    title->width = 0.0f;
-    title->height = 0.0f;
     m_title = title.get();
 
     // Start button
@@ -92,7 +89,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
 void MainMenuScreen::refreshTexts() {
     if (!getLocaleManager()) return;
-    if (m_title) m_title->setText(getLocaleManager()->tr("mecraft"));
+    // Title is an image, no text to refresh
     if (m_startButton) m_startButton->setText(getLocaleManager()->tr("start_game"));
     if (m_quitButton) m_quitButton->setText(getLocaleManager()->tr("quit"));
 }

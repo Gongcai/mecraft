@@ -339,6 +339,11 @@ GLuint ResourceMgr::loadTexture(const std::string &path, bool alpha) {
 }
 
 GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
+    int dummyW = 0, dummyH = 0;
+    return loadGuiTexture(name, path, dummyW, dummyH, flipVertically);
+}
+
+GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
     auto existing = m_guiTextures.find(name);
     if (existing != m_guiTextures.end()) {
         return existing->second;
@@ -355,6 +360,9 @@ GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& p
 #endif
         return 0;
     }
+
+    outWidth = width;
+    outHeight = height;
 
     GLuint textureID = 0;
     glGenTextures(1, &textureID);

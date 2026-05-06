@@ -48,5 +48,6 @@
 #define TEST_TEXTURE_PATH     BLOCKS_TEXTURES_DIR "/test.png"
 #define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"
 #define ZOMBIE_TEXTURE_PATH    MOBS_TEXTURE_DIR  "/zombie.png"
+#define TITLE_TEXTURE_PATH     GUI_TEXTURES_DIR "/title.png"
 
 #define DEFAULT_FONT_PATH     FONTS_DIR "/msyhbd.ttc"

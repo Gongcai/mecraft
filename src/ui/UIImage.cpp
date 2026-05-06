@@ -19,6 +19,16 @@ void UIImage::shutdown() {
     m_colorShader = nullptr;
 }
 
+void UIImage::loadTexture(ResourceMgr& resourceMgr, const std::string& name, const std::string& path) {
+    int imgW = 0, imgH = 0;
+    GLuint tex = resourceMgr.loadGuiTexture(name, path, imgW, imgH);
+    setTexture(tex, 0.0f, 0.0f, 1.0f, 1.0f);
+    if (imgW > 0 && imgH > 0) {
+        width = static_cast<float>(imgW);
+        height = static_cast<float>(imgH);
+    }
+}
+
 void UIImage::setAtlasTile(const TextureAtlas& atlas, int tileIndex) {
     if (atlas.textureID == 0 || tileIndex < 0) {
         m_textureID = 0;

@@ -12,10 +12,13 @@ struct TextureAtlas;
 class UIImage : public UIWidget {
 public:
     UIImage() = default;
-    ~UIImage() override { shutdown(); }
+    ~UIImage() override { UIImage::shutdown(); }
 
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
+
+    // Load a named GUI texture by path, automatically sets widget size to image dimensions
+    void loadTexture(ResourceMgr& resourceMgr, const std::string& name, const std::string& path);
 
     // Set texture from an atlas tile index
     void setAtlasTile(const TextureAtlas& atlas, int tileIndex);
