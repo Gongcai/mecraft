@@ -1167,7 +1167,8 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
                        const BlockDef& def,
                        const int x,
                        const int y,
-                       const int z) {
+                       const int z,
+                       const bool skipTopFace = false) {
     const float frontLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
     const float frontRight = computeWaterCornerHeight(snapshot, blockId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
     const float backRight = computeWaterCornerHeight(snapshot, blockId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
@@ -1195,7 +1196,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         ++meshData.transparentFaceCountAfterGreedy;
     };
 
-    if (shouldRenderWaterFace(snapshot, x, y + 1, z, blockId)) {
+    if (!skipTopFace && shouldRenderWaterFace(snapshot, x, y + 1, z, blockId)) {
         emitWaterFace(FACE_TOP, {{
             pos + glm::vec3(0.0f, frontLeft, 1.0f),
             pos + glm::vec3(1.0f, frontRight, 1.0f),
@@ -1452,6 +1453,170 @@ void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkM
                          meshData.transparentFaceCountBeforeGreedy,
                          meshData.transparentFaceCountAfterGreedy,
                          populateTransparentFaceCell);
+}
+
+using WaterTopMask = std::array<bool, SC_BLOCK_COUNT>;
+
+struct WaterTopCell {
+    bool valid = false;
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    float height = 0.0f;
+    uint16_t heightKey = 0;
+    FaceRenderData renderData{};
+    FaceMergeKey key{};
+};
+
+bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
+                              const int x,
+                              const int y,
+                              const int z,
+                              BlockID& outBlockId,
+                              const BlockDef*& outDef,
+                              float& outHeight,
+                              uint16_t& outHeightKey) {
+    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+    if (!FluidState::isWater(blockId) || !FluidState::isSource(blockId) || FluidState::isFalling(blockId)) {
+        return false;
+    }
+    if (!shouldRenderWaterFace(snapshot, x, y + 1, z, blockId)) {
+        return false;
+    }
+    if (isFlowingWaterVector(computeFluidFlowVector(snapshot, x, y, z, FluidKind::Water))) {
+        return false;
+    }
+
+    const float frontLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
+    const float frontRight = computeWaterCornerHeight(snapshot, blockId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
+    const float backRight = computeWaterCornerHeight(snapshot, blockId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
+    const float backLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
+    constexpr float kHeightEpsilon = 1.0f / 1024.0f;
+    if (std::abs(frontLeft - frontRight) > kHeightEpsilon ||
+        std::abs(frontLeft - backRight) > kHeightEpsilon ||
+        std::abs(frontLeft - backLeft) > kHeightEpsilon) {
+        return false;
+    }
+
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    outBlockId = blockId;
+    outDef = &def;
+    outHeight = frontLeft;
+    outHeightKey = static_cast<uint16_t>(std::clamp(frontLeft, 0.0f, 1.0f) * 1024.0f + 0.5f);
+    return true;
+}
+
+void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
+                                   ChunkMeshData& meshData,
+                                   WaterTopMask& mergedTopFaces) {
+    mergedTopFaces.fill(false);
+
+    constexpr int S = SubChunk::SIZE;
+    std::array<WaterTopCell, static_cast<size_t>(S) * S> plane{};
+    std::array<bool, static_cast<size_t>(S) * S> consumed{};
+
+    for (int y = 0; y < S; ++y) {
+        for (WaterTopCell& cell : plane) {
+            cell.valid = false;
+        }
+        consumed.fill(false);
+
+        for (int z = 0; z < S; ++z) {
+            for (int x = 0; x < S; ++x) {
+                BlockID blockId = 0;
+                const BlockDef* def = nullptr;
+                float height = 0.0f;
+                uint16_t heightKey = 0;
+                if (!isMergeableStillWaterTop(snapshot, x, y, z, blockId, def, height, heightKey)) {
+                    continue;
+                }
+
+                WaterTopCell& cell = plane[static_cast<size_t>(x) + static_cast<size_t>(z) * S];
+                cell.valid = true;
+                cell.x = x;
+                cell.y = y;
+                cell.z = z;
+                cell.height = height;
+                cell.heightKey = heightKey;
+                cell.renderData = buildFaceRenderData(snapshot, blockId, *def, x, y, z, FACE_TOP);
+                if (const AnimatedTextureRef* waterTexture = findNamedWaterTexture(*def, "still")) {
+                    applyWaterTextureRef(cell.renderData, *waterTexture);
+                }
+                cell.renderData.uvQuarterTurns = 0;
+                cell.key = buildFaceMergeKey(blockId, cell.renderData);
+                ++meshData.transparentFaceCountBeforeGreedy;
+            }
+        }
+
+        for (int z = 0; z < S; ++z) {
+            for (int x = 0; x < S; ++x) {
+                const size_t startIndex = static_cast<size_t>(x) + static_cast<size_t>(z) * S;
+                if (consumed[startIndex] || !plane[startIndex].valid) {
+                    continue;
+                }
+
+                const uint64_t startHash = plane[startIndex].key.hash;
+                int runWidth = 1;
+                while (x + runWidth < S) {
+                    const size_t nextIndex = static_cast<size_t>(x + runWidth) + static_cast<size_t>(z) * S;
+                    if (consumed[nextIndex] || !plane[nextIndex].valid ||
+                        plane[nextIndex].key.hash != startHash ||
+                        plane[nextIndex].heightKey != plane[startIndex].heightKey ||
+                        !sameMergeKey(plane[startIndex].key, plane[nextIndex].key)) {
+                        break;
+                    }
+                    ++runWidth;
+                }
+
+                int runHeight = 1;
+                bool canGrow = true;
+                while (z + runHeight < S && canGrow) {
+                    for (int dx = 0; dx < runWidth; ++dx) {
+                        const size_t candidateIndex = static_cast<size_t>(x + dx) +
+                                                      static_cast<size_t>(z + runHeight) * S;
+                        if (consumed[candidateIndex] || !plane[candidateIndex].valid ||
+                            plane[candidateIndex].key.hash != startHash ||
+                            plane[candidateIndex].heightKey != plane[startIndex].heightKey ||
+                            !sameMergeKey(plane[startIndex].key, plane[candidateIndex].key)) {
+                            canGrow = false;
+                            break;
+                        }
+                    }
+                    if (canGrow) {
+                        ++runHeight;
+                    }
+                }
+
+                for (int dz = 0; dz < runHeight; ++dz) {
+                    for (int dx = 0; dx < runWidth; ++dx) {
+                        const size_t index = static_cast<size_t>(x + dx) + static_cast<size_t>(z + dz) * S;
+                        consumed[index] = true;
+                        mergedTopFaces[scToIndex(x + dx, y, z + dz)] = true;
+                    }
+                }
+
+                const WaterTopCell& start = plane[startIndex];
+                const float x0 = static_cast<float>(start.x);
+                const float x1 = static_cast<float>(start.x + runWidth);
+                const float z0 = static_cast<float>(start.z);
+                const float z1 = static_cast<float>(start.z + runHeight);
+                const float topY = static_cast<float>(start.y) + start.height;
+                const std::array<glm::vec3, 4> corners = {{
+                    {x0, topY, z1},
+                    {x1, topY, z1},
+                    {x1, topY, z0},
+                    {x0, topY, z0}
+                }};
+                const std::array<glm::vec2, 4> faceUV = buildFaceUv(
+                    static_cast<float>(runWidth),
+                    static_cast<float>(runHeight),
+                    start.renderData.uvQuarterTurns);
+                appendFaceVertices(meshData.transparentVertices, corners, faceUV, FACE_TOP, start.renderData);
+                expandBoundsForCorners(meshData, corners);
+                ++meshData.transparentFaceCountAfterGreedy;
+            }
+        }
+    }
 }
 
 void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
@@ -2141,6 +2306,17 @@ void ChunkMeshBuilders::buildWater(ChunkMeshData& meshData,
     addWaterFacesImpl(meshData, snapshot, blockId, def, x, y, z);
 }
 
+void buildWaterSkippingTop(ChunkMeshData& meshData,
+                           const SubChunkMeshingSnapshot& snapshot,
+                           const BlockID blockId,
+                           const BlockDef& def,
+                           const int x,
+                           const int y,
+                           const int z,
+                           const bool skipTopFace) {
+    addWaterFacesImpl(meshData, snapshot, blockId, def, x, y, z, skipTopFace);
+}
+
 void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
                                        const SubChunkMeshingSnapshot& snapshot,
                                        const BlockID blockId,
@@ -2244,6 +2420,8 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
 
     buildOpaqueGreedyFaces(snapshot, meshData);
     buildTransparentGreedyFaces(snapshot, meshData);
+    WaterTopMask mergedWaterTopFaces{};
+    buildStillWaterTopGreedyFaces(snapshot, meshData, mergedWaterTopFaces);
 
     // Non-cube blocks (cross shapes, etc.) and waterlogged fluid rendering
     constexpr int S = SubChunk::SIZE;
@@ -2262,7 +2440,18 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
                         if (builder == nullptr) {
                             builder = &ChunkMeshBuilders::buildUnitFaces;
                         }
-                        builder(meshData, snapshot, blockId, def, x, y, z);
+                        if (FluidState::isWater(blockId)) {
+                            buildWaterSkippingTop(meshData,
+                                                  snapshot,
+                                                  blockId,
+                                                  def,
+                                                  x,
+                                                  y,
+                                                  z,
+                                                  mergedWaterTopFaces[scToIndex(x, y, z)]);
+                        } else {
+                            builder(meshData, snapshot, blockId, def, x, y, z);
+                        }
                     }
                 }
 
