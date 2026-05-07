@@ -15,21 +15,9 @@
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 #include "../item/Item.h"
+#include "../world/SubChunk.h"
 
 namespace {
-struct BlockVertex {
-    float x;
-    float y;
-    float z;
-    float u;
-    float v;
-    float normal;
-    float sunlight;
-    float blockLight;
-    float ao;
-    float layer;
-};
-
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
     {{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}},
     {{{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}},
@@ -347,7 +335,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
             for (const int idx : kFaceIndices) {
                 const glm::vec3& pos = corners[idx];
                 const glm::vec2& uvCoord = quadUV[idx];
-                vertices.push_back({
+                vertices.push_back(makeBlockVertex(
                     pos.x,
                     pos.y,
                     pos.z,
@@ -358,7 +346,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
                     layer
-                });
+                ));
             }
         };
 
@@ -399,7 +387,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
             for (const int idx : kFaceIndices) {
                 const glm::vec3& pos = corners[idx];
                 const glm::vec2& uvCoord = uv[idx];
-                vertices.push_back({
+                vertices.push_back(makeBlockVertex(
                     pos.x,
                     pos.y,
                     pos.z,
@@ -410,7 +398,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     0.0f,
                     3.0f,
                     layer
-                });
+                ));
             }
         };
 
@@ -463,7 +451,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
             for (const int idx : kFaceIndices) {
                 const glm::vec3& pos = kFaceCorners[face][idx];
                 const glm::vec2& uvCoord = faceUV[idx];
-                vertices.push_back({
+                vertices.push_back(makeBlockVertex(
                     pos.x,
                     pos.y,
                     pos.z,
@@ -474,7 +462,7 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
                     layer
-                });
+                ));
             }
         }
     }
@@ -499,15 +487,21 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
+    glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
+    glVertexAttribPointer(3, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
     glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
+    glVertexAttribPointer(4, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
     glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
+    glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
     glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+    glVertexAttribPointer(6, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
+    glEnableVertexAttribArray(7);
+    glVertexAttribPointer(7, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
+    glEnableVertexAttribArray(8);
+    glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
+    glEnableVertexAttribArray(9);
+    glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

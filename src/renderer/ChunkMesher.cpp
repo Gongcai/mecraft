@@ -820,7 +820,7 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
         : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
-        vertices.push_back({
+        vertices.push_back(makeBlockVertex(
             corners[static_cast<size_t>(index)].x,
             corners[static_cast<size_t>(index)].y,
             corners[static_cast<size_t>(index)].z,
@@ -834,7 +834,7 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
             renderData.animationFrameCount,
             renderData.animationFps,
             renderData.animated
-        });
+        ));
     }
 }
 
@@ -1484,7 +1484,7 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
 
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {
-            vertices.push_back({
+            vertices.push_back(makeBlockVertex(
                 pos.x + corners[static_cast<size_t>(index)].x,
                 pos.y + corners[static_cast<size_t>(index)].y,
                 pos.z + corners[static_cast<size_t>(index)].z,
@@ -1495,7 +1495,7 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                 blockNormalized,
                 3.0f,
                 layer
-            });
+            ));
         }
     };
 
@@ -1591,7 +1591,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                               const int face,
                               const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
-            vertices.push_back({
+            vertices.push_back(makeBlockVertex(
                 pos.x + corners[static_cast<size_t>(idx)].x,
                 pos.y + corners[static_cast<size_t>(idx)].y,
                 pos.z + corners[static_cast<size_t>(idx)].z,
@@ -1605,7 +1605,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                 1.0f,
                 0.0f,
                 0.0f
-            });
+            ));
         }
     };
 
@@ -1722,7 +1722,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                               const int face,
                               const std::array<glm::vec2, 4>& uv) {
         for (const int idx : indices) {
-            vertices.push_back({
+            vertices.push_back(makeBlockVertex(
                 pos.x + corners[static_cast<size_t>(idx)].x,
                 pos.y + corners[static_cast<size_t>(idx)].y,
                 pos.z + corners[static_cast<size_t>(idx)].z,
@@ -1736,7 +1736,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                 1.0f,
                 0.0f,
                 0.0f
-            });
+            ));
         }
     };
 
@@ -1886,7 +1886,7 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
 
     for (const int idx : indices) {
         const glm::vec3 localPos = transformTorchModelPoint(transform, localCorners[static_cast<size_t>(idx)]);
-        vertices.push_back({
+        vertices.push_back(makeBlockVertex(
             pos.x + localPos.x,
             pos.y + localPos.y,
             pos.z + localPos.z,
@@ -1900,7 +1900,7 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
             1.0f,
             0.0f,
             0.0f
-        });
+        ));
     }
 }
 

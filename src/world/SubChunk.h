@@ -38,15 +38,62 @@ struct BlockVertex {
     float z;
     float u;
     float v;
-    float normal;
-    float sunlight;
-    float blockLight;
-    float ao;
-    float layer;
-    float animationFrameCount;
-    float animationFps;
-    float animated;
+    int8_t normal;
+    uint8_t sunlight;
+    uint8_t blockLight;
+    uint8_t ao;
+    uint16_t layer;
+    uint16_t animationFrameCount;
+    uint8_t animationFps;
+    uint8_t animated;
 };
+
+inline uint8_t packBlockVertexNormalizedByte(float value) {
+    value = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+    return static_cast<uint8_t>(value * 255.0f + 0.5f);
+}
+
+inline uint8_t packBlockVertexByte(float value) {
+    value = value < 0.0f ? 0.0f : (value > 255.0f ? 255.0f : value);
+    return static_cast<uint8_t>(value + 0.5f);
+}
+
+inline uint16_t packBlockVertexU16(float value) {
+    value = value < 0.0f ? 0.0f : (value > 65535.0f ? 65535.0f : value);
+    return static_cast<uint16_t>(value + 0.5f);
+}
+
+inline BlockVertex makeBlockVertex(float x,
+                                   float y,
+                                   float z,
+                                   float u,
+                                   float v,
+                                   float normal,
+                                   float sunlight,
+                                   float blockLight,
+                                   float ao,
+                                   float layer,
+                                   float animationFrameCount = 1.0f,
+                                   float animationFps = 0.0f,
+                                   float animated = 0.0f) {
+    return {
+        x,
+        y,
+        z,
+        u,
+        v,
+        static_cast<int8_t>(normal),
+        packBlockVertexNormalizedByte(sunlight),
+        packBlockVertexNormalizedByte(blockLight),
+        packBlockVertexByte(ao),
+        packBlockVertexU16(layer),
+        packBlockVertexU16(animationFrameCount),
+        packBlockVertexByte(animationFps),
+        animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0)
+    };
+}
+
+static_assert(sizeof(BlockVertex) <= 32, "BlockVertex should stay bandwidth-friendly");
 
 struct SubChunkMesh {
     GLuint vao = 0;
