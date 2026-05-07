@@ -114,6 +114,9 @@ private:
     GLuint m_opaqueVao = 0;
     GLuint m_cutoutVao = 0;
     GLuint m_transparentVao = 0;
+    GLuint m_opaqueVaoBoundVbo = 0;
+    GLuint m_cutoutVaoBoundVbo = 0;
+    GLuint m_transparentVaoBoundVbo = 0;
 
     GLuint m_opaqueIndirectBuf = 0;
     GLuint m_cutoutIndirectBuf = 0;
@@ -132,10 +135,11 @@ private:
     uint64_t m_cutoutVertexCount = 0;
     uint64_t m_transparentVertexCount = 0;
 
+    void ensureVaoVertexBuffer(GLuint vao, GLuint vbo, GLuint& cachedVbo);
     void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
                                 GLuint& buf, size_t& capacity, size_t needed);
     void flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                   GLuint indirectBuf, GLuint vao, GLuint vbo);
+                   GLuint indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo);
 };
 
 #endif // MECRAFT_WORLDRENDERBUFFER_H

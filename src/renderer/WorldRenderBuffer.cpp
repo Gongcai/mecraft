@@ -383,18 +383,21 @@ void WorldRenderBuffer::init() {
     glBindVertexArray(m_opaqueVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_opaquePool.vbo());
     setupVertexLayout();
+    m_opaqueVaoBoundVbo = m_opaquePool.vbo();
     glBindVertexArray(0);
 
     glGenVertexArrays(1, &m_cutoutVao);
     glBindVertexArray(m_cutoutVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_cutoutPool.vbo());
     setupVertexLayout();
+    m_cutoutVaoBoundVbo = m_cutoutPool.vbo();
     glBindVertexArray(0);
 
     glGenVertexArrays(1, &m_transparentVao);
     glBindVertexArray(m_transparentVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_transparentPool.vbo());
     setupVertexLayout();
+    m_transparentVaoBoundVbo = m_transparentPool.vbo();
     glBindVertexArray(0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -437,6 +440,9 @@ void WorldRenderBuffer::shutdown() {
     if (m_opaqueVao != 0) { glDeleteVertexArrays(1, &m_opaqueVao); m_opaqueVao = 0; }
     if (m_cutoutVao != 0) { glDeleteVertexArrays(1, &m_cutoutVao); m_cutoutVao = 0; }
     if (m_transparentVao != 0) { glDeleteVertexArrays(1, &m_transparentVao); m_transparentVao = 0; }
+    m_opaqueVaoBoundVbo = 0;
+    m_cutoutVaoBoundVbo = 0;
+    m_transparentVaoBoundVbo = 0;
 
     if (m_opaqueIndirectBuf != 0) { glDeleteBuffers(1, &m_opaqueIndirectBuf); m_opaqueIndirectBuf = 0; }
     if (m_cutoutIndirectBuf != 0) { glDeleteBuffers(1, &m_cutoutIndirectBuf); m_cutoutIndirectBuf = 0; }
@@ -518,15 +524,27 @@ void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
 }
 
 void WorldRenderBuffer::flushOpaque() {
-    flushPass(m_opaqueCommands, m_opaqueIndirectBuf, m_opaqueVao, m_opaquePool.vbo());
+    flushPass(m_opaqueCommands, m_opaqueIndirectBuf, m_opaqueVao, m_opaquePool.vbo(), m_opaqueVaoBoundVbo);
 }
 
 void WorldRenderBuffer::flushCutout() {
-    flushPass(m_cutoutCommands, m_cutoutIndirectBuf, m_cutoutVao, m_cutoutPool.vbo());
+    flushPass(m_cutoutCommands, m_cutoutIndirectBuf, m_cutoutVao, m_cutoutPool.vbo(), m_cutoutVaoBoundVbo);
 }
 
 void WorldRenderBuffer::flushTransparent() {
-    flushPass(m_transparentCommands, m_transparentIndirectBuf, m_transparentVao, m_transparentPool.vbo());
+    flushPass(m_transparentCommands, m_transparentIndirectBuf, m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
+}
+
+void WorldRenderBuffer::ensureVaoVertexBuffer(const GLuint vao, const GLuint vbo, GLuint& cachedVbo) {
+    if (cachedVbo == vbo) {
+        return;
+    }
+
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    setupVertexLayout();
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    cachedVbo = vbo;
 }
 
 void WorldRenderBuffer::ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
@@ -541,7 +559,7 @@ void WorldRenderBuffer::ensureIndirectCapacity(std::vector<DrawArraysIndirectCom
 }
 
 void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                                   GLuint indirectBuf, GLuint vao, GLuint vbo) {
+                                   GLuint indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo) {
     if (commands.empty()) return;
 
     ensureIndirectCapacity(commands, indirectBuf,
@@ -555,6 +573,7 @@ void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& comman
                     static_cast<GLsizeiptr>(commands.size() * sizeof(DrawArraysIndirectCommand)),
                     commands.data());
 
+    ensureVaoVertexBuffer(vao, vbo, cachedVbo);
     glBindVertexArray(vao);
     glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, static_cast<GLsizei>(commands.size()), 0);
     glBindVertexArray(0);

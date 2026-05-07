@@ -47,7 +47,7 @@ void Game::init() {
 // initWindow and initResources removed
 
 void Game::initWorld() {
-    constexpr int kRenderDistance = 1;
+    constexpr int kRenderDistance = 16;
 
     m_world.init(m_params.seed);
     m_world.setRenderDistance(kRenderDistance);
