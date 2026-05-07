@@ -126,7 +126,12 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
 
 void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_shader = resourceMgr.getShader("chunk_lit");
+    m_shader = resourceMgr.getShader("drop_block");
+    m_blockShaderUsesModelSwitch = false;
+    if (m_shader == nullptr) {
+        m_shader = resourceMgr.getShader("chunk_lit");
+        m_blockShaderUsesModelSwitch = (m_shader != nullptr);
+    }
     m_itemShader = resourceMgr.getShader("item_model");
 }
 
@@ -142,6 +147,7 @@ void DropRenderer::shutdown() {
     m_shader = nullptr;
     m_itemShader = nullptr;
     m_resourceMgr = nullptr;
+    m_blockShaderUsesModelSwitch = false;
 }
 
 void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, const Window& window) {
@@ -170,6 +176,9 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_shader->use();
         m_shader->setMat4("view", camera.getViewMatrix());
         m_shader->setMat4(blockViewProjLoc, viewProj);
+        if (m_blockShaderUsesModelSwitch) {
+            m_shader->setInt("uUseModel", 1);
+        }
         m_shader->setInt("texArray", 0);
         m_shader->setInt("uForceBaseLod", 0);
         m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
@@ -240,6 +249,15 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
     }
 
     glBindVertexArray(0);
+    if (canRenderBlocks && m_blockShaderUsesModelSwitch) {
+        m_shader->use();
+        m_shader->setInt("uUseModel", 0);
+    }
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 }

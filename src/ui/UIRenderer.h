@@ -30,6 +30,9 @@ class UIWidget;
 class UIRenderer
 {
 public:
+    static constexpr float kRefScreenWidth = 1280.0f;
+    static constexpr float kRefScreenHeight = 720.0f;
+
     UIRenderer();
     ~UIRenderer();
 

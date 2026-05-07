@@ -55,6 +55,8 @@ void TextRenderer::shutdown()
 
 void TextRenderer::initMesh()
 {
+    constexpr GLsizei kVertexStride = 8 * sizeof(float);
+
     glGenVertexArrays(1, &m_textVao);
     glGenBuffers(1, &m_textVbo);
 
@@ -63,9 +65,11 @@ void TextRenderer::initMesh()
     glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
 
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, kVertexStride, nullptr);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, kVertexStride, reinterpret_cast<void*>(2 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, kVertexStride, reinterpret_cast<void*>(4 * sizeof(float)));
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -123,8 +127,6 @@ void TextRenderer::generateQuads(const std::string& text,
                                  const std::array<float, 4>& color,
                                  std::vector<float>& outVertices) const
 {
-    (void)color;
-
     const float renderScale = std::max(0.1f, scale);
     const float pixelScale = (8.0f * renderScale) / static_cast<float>(m_atlas.getPixelHeight());
     const float lineHeight = static_cast<float>(m_atlas.getLineHeight()) * pixelScale;
@@ -156,15 +158,32 @@ void TextRenderer::generateQuads(const std::string& text,
         const float w = static_cast<float>(g.bitmapWidth) * pixelScale;
         const float h = static_cast<float>(g.bitmapHeight) * pixelScale;
 
-        outVertices.push_back(xPos);     outVertices.push_back(yPos);     outVertices.push_back(g.uvMinX); outVertices.push_back(g.uvMinY);
-        outVertices.push_back(xPos + w); outVertices.push_back(yPos);     outVertices.push_back(g.uvMaxX); outVertices.push_back(g.uvMinY);
-        outVertices.push_back(xPos + w); outVertices.push_back(yPos + h); outVertices.push_back(g.uvMaxX); outVertices.push_back(g.uvMaxY);
-        outVertices.push_back(xPos);     outVertices.push_back(yPos);     outVertices.push_back(g.uvMinX); outVertices.push_back(g.uvMinY);
-        outVertices.push_back(xPos + w); outVertices.push_back(yPos + h); outVertices.push_back(g.uvMaxX); outVertices.push_back(g.uvMaxY);
-        outVertices.push_back(xPos);     outVertices.push_back(yPos + h); outVertices.push_back(g.uvMinX); outVertices.push_back(g.uvMaxY);
+        appendVertex(outVertices, xPos,     yPos,     g.uvMinX, g.uvMinY, color);
+        appendVertex(outVertices, xPos + w, yPos,     g.uvMaxX, g.uvMinY, color);
+        appendVertex(outVertices, xPos + w, yPos + h, g.uvMaxX, g.uvMaxY, color);
+        appendVertex(outVertices, xPos,     yPos,     g.uvMinX, g.uvMinY, color);
+        appendVertex(outVertices, xPos + w, yPos + h, g.uvMaxX, g.uvMaxY, color);
+        appendVertex(outVertices, xPos,     yPos + h, g.uvMinX, g.uvMaxY, color);
 
         cursorX += static_cast<float>(g.advanceX >> 6) * pixelScale;
     }
+}
+
+void TextRenderer::appendVertex(std::vector<float>& outVertices,
+                                float x,
+                                float y,
+                                float u,
+                                float v,
+                                const std::array<float, 4>& color)
+{
+    outVertices.push_back(x);
+    outVertices.push_back(y);
+    outVertices.push_back(u);
+    outVertices.push_back(v);
+    outVertices.push_back(color[0]);
+    outVertices.push_back(color[1]);
+    outVertices.push_back(color[2]);
+    outVertices.push_back(color[3]);
 }
 
 void TextRenderer::render(const std::string& text,
@@ -180,7 +199,7 @@ void TextRenderer::render(const std::string& text,
     }
 
     std::vector<float> vertices;
-    vertices.reserve(text.size() * 6 * 4);
+    vertices.reserve(text.size() * 6 * 8);
     generateQuads(text, x, y, scale, color, vertices);
 
     if (vertices.empty()) {
@@ -209,7 +228,6 @@ void TextRenderer::render(const std::string& text,
 
     m_textShader->use();
     m_textShader->setVec2("uScreenSize", glm::vec2(screenWidth, screenHeight));
-    m_textShader->setVec4("uTintColor", glm::vec4(color[0], color[1], color[2], color[3]));
     m_textShader->setInt("uFont", 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -218,7 +236,7 @@ void TextRenderer::render(const std::string& text,
     glBindVertexArray(m_textVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data(), GL_DYNAMIC_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 4));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 8));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -254,7 +272,7 @@ void TextRenderer::batchRender(const std::string& text,
     if (!m_batchActive || text.empty()) {
         return;
     }
-    m_batchVertices.reserve(m_batchVertices.size() + text.size() * 6 * 4);
+    m_batchVertices.reserve(m_batchVertices.size() + text.size() * 6 * 8);
     generateQuads(text, x, y, scale, color, m_batchVertices);
 }
 
@@ -293,7 +311,6 @@ void TextRenderer::endBatch() const
 
     m_textShader->use();
     m_textShader->setVec2("uScreenSize", glm::vec2(m_batchScreenWidth, m_batchScreenHeight));
-    m_textShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
     m_textShader->setInt("uFont", 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -302,7 +319,7 @@ void TextRenderer::endBatch() const
     glBindVertexArray(m_textVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(m_batchVertices.size() * sizeof(float)), m_batchVertices.data(), GL_DYNAMIC_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_batchVertices.size() / 4));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_batchVertices.size() / 8));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

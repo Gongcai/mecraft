@@ -53,6 +53,12 @@ private:
                        float scale,
                        const std::array<float, 4>& color,
                        std::vector<float>& outVertices) const;
+    static void appendVertex(std::vector<float>& outVertices,
+                             float x,
+                             float y,
+                             float u,
+                             float v,
+                             const std::array<float, 4>& color);
 
     Shader* m_textShader = nullptr;
     GlyphAtlas m_atlas;

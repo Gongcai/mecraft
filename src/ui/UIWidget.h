@@ -108,8 +108,8 @@ public:
     }
 
     [[nodiscard]] bool hitTest(float px, float py, const UIRenderContext& ctx) const {
-        // Input coordinates (from GLFW) have Y=0 at top; widget coords have Y=0 at bottom.
-        // Flip the input Y to match widget coordinate space.
+        // Input coordinates are already in reference space (converted by routeUIInput).
+        // Flip Y (GLFW Y=0 at top → widget coords Y=0 at bottom).
         float flippedY = static_cast<float>(ctx.screenHeight) - py;
         float ax = getAbsoluteX(ctx);
         float ay = getAbsoluteY(ctx);

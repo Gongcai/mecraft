@@ -278,21 +278,32 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
 {
     UIEventResult aggregate = UIEventResult::Ignored;
 
+    // Convert event coordinates from actual pixels to reference space
+    UIInputEvent refEvent = event;
+    if (m_lastSceneContext.uiScale > 0.0f) {
+        refEvent.x /= m_lastSceneContext.uiScale;
+        refEvent.y /= m_lastSceneContext.uiScale;
+    }
+
     // Active scene has priority (menu screens overlay gameplay controls)
     if (m_activeScene && m_activeScene->visible) {
         if (m_lastSceneContext.screenWidth <= 0 || m_lastSceneContext.screenHeight <= 0) {
             GLint viewport[4] = {0, 0, 0, 0};
             glGetIntegerv(GL_VIEWPORT, viewport);
-            m_lastSceneContext.screenWidth = std::max(1, viewport[2]);
-            m_lastSceneContext.screenHeight = std::max(1, viewport[3]);
+            const float vpW = static_cast<float>(std::max(1, viewport[2]));
+            const float vpH = static_cast<float>(std::max(1, viewport[3]));
+            const float vpScale = std::min(vpW / kRefScreenWidth, vpH / kRefScreenHeight);
+            m_lastSceneContext.uiScale = vpScale;
+            m_lastSceneContext.screenWidth = static_cast<int>(std::round(vpW / vpScale));
+            m_lastSceneContext.screenHeight = static_cast<int>(std::round(vpH / vpScale));
         }
         m_lastSceneContext.resourceMgr = m_resourceMgr;
         m_lastSceneContext.textRenderer = &m_text;
-        m_lastSceneContext.pointerX = event.x;
-        m_lastSceneContext.pointerY = event.y;
+        m_lastSceneContext.pointerX = refEvent.x;
+        m_lastSceneContext.pointerY = refEvent.y;
         m_activeScene->setInputContext(m_lastSceneContext);
 
-        UIEventResult sceneResult = m_activeScene->onInput(event, m_lastSceneContext);
+        UIEventResult sceneResult = m_activeScene->onInput(refEvent, m_lastSceneContext);
         if (sceneResult == UIEventResult::Consumed) return UIEventResult::Consumed;
         if (sceneResult == UIEventResult::Handled) {
             aggregate = UIEventResult::Handled;
@@ -304,7 +315,7 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
         if (!widget || !widget->visible) {
             continue;
         }
-        const UIEventResult widgetResult = widget->onInput(event, m_lastSceneContext);
+        const UIEventResult widgetResult = widget->onInput(refEvent, m_lastSceneContext);
         if (widgetResult == UIEventResult::Consumed) {
             return UIEventResult::Consumed;
         }
@@ -389,8 +400,11 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
                                                   const InputSnapshot& inputSnapshot) const
 {
     UIRenderContext context;
-    context.screenWidth = window.getWidth();
-    context.screenHeight = window.getHeight();
+    const float actualW = static_cast<float>(window.getWidth());
+    const float actualH = static_cast<float>(window.getHeight());
+    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
+    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getGameTime());
     context.resourceMgr = m_resourceMgr;
     context.inventory = &inventory;
@@ -398,8 +412,8 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.visible;
-    context.pointerX = inputSnapshot.mousePosition.x;
-    context.pointerY = inputSnapshot.mousePosition.y;
+    context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
+    context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
     context.heldItemPreviewMotion = heldItemMotion;
@@ -414,8 +428,11 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     glGetIntegerv(GL_VIEWPORT, viewport);
 
     UIRenderContext context;
-    context.screenWidth = viewport[2];
-    context.screenHeight = viewport[3];
+    const float actualW = static_cast<float>(viewport[2]);
+    const float actualH = static_cast<float>(viewport[3]);
+    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
+    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
     context.textRenderer = &m_text;
@@ -447,13 +464,16 @@ ResourceMgr* UIRenderer::getResourceMgr() const
 void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot)
 {
     UIRenderContext context;
-    context.screenWidth = window.getWidth();
-    context.screenHeight = window.getHeight();
+    const float actualW = static_cast<float>(window.getWidth());
+    const float actualH = static_cast<float>(window.getHeight());
+    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
+    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
     context.textRenderer = &m_text;
-    context.pointerX = inputSnapshot.mousePosition.x;
-    context.pointerY = inputSnapshot.mousePosition.y;
+    context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
+    context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
     context.theme = &m_theme;
     context.localeManager = m_localeManager;
     m_lastSceneContext = context;

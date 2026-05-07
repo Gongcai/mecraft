@@ -1,16 +1,16 @@
 #version 330 core
 in vec2 vUV;
+in vec4 vColor;
 
 out vec4 FragColor;
 
 uniform sampler2D uFont;
-uniform vec4 uTintColor;
 
 void main()
 {
-    vec4 texColor = texture(uFont, vUV);
-    if (texColor.a < 0.1)
+    float coverage = texture(uFont, vUV).r;
+    if (coverage <= 0.001)
         discard;
-    FragColor = texColor * uTintColor;
+    FragColor = vec4(vColor.rgb, vColor.a * coverage);
 }
 

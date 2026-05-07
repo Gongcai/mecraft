@@ -28,6 +28,7 @@ struct PlayerStatsData {
 struct UIRenderContext {
     int screenWidth = 0;
     int screenHeight = 0;
+    float uiScale = 1.0f;
     float timeSeconds = 0.0f;
     ResourceMgr* resourceMgr = nullptr;
     const Inventory* inventory = nullptr;
