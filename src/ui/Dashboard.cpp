@@ -227,6 +227,56 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         } else {
             ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
         }
+
+        Renderer::GpuFrameStats gpuStats = render.getGpuFrameStats();
+        bool gpuTimerEnabled = render.isGpuTimerEnabled();
+        if (ImGui::Checkbox("GPU Timer Query", &gpuTimerEnabled)) {
+            render.setGpuTimerEnabled(gpuTimerEnabled);
+        }
+        if (!gpuStats.supported) {
+            ImGui::Text("GPU Timers: unsupported");
+        } else if (!gpuStats.valid) {
+            ImGui::Text("GPU Timers: waiting");
+        } else {
+            ImGui::Text("GPU Opaque: %.3f ms", gpuStats.opaqueMs);
+            ImGui::Text("GPU Cutout: %.3f ms", gpuStats.cutoutMs);
+            ImGui::Text("GPU Transparent: %.3f ms", gpuStats.transparentMs);
+        }
+
+        Renderer::RenderWorkStats renderWork = render.getRenderWorkStats();
+        const double vertexBytes = static_cast<double>(renderWork.blockVertexBytes);
+        const auto toMiB = [&](const uint64_t vertices) {
+            return static_cast<double>(vertices) * vertexBytes / (1024.0 * 1024.0);
+        };
+
+        ImGui::Separator();
+        ImGui::Text("Render Work");
+        ImGui::Text("BlockVertex: %llu bytes", static_cast<unsigned long long>(renderWork.blockVertexBytes));
+        ImGui::Text("MDI Commands O/C/T: %llu / %llu / %llu",
+                    static_cast<unsigned long long>(renderWork.opaqueCommands),
+                    static_cast<unsigned long long>(renderWork.cutoutCommands),
+                    static_cast<unsigned long long>(renderWork.transparentCommands));
+        ImGui::Text("Vertices O/C/T: %llu / %llu / %llu",
+                    static_cast<unsigned long long>(renderWork.opaqueVertices),
+                    static_cast<unsigned long long>(renderWork.cutoutVertices),
+                    static_cast<unsigned long long>(renderWork.transparentVertices));
+        ImGui::Text("Vertex Read O/C/T: %.2f / %.2f / %.2f MiB",
+                    toMiB(renderWork.opaqueVertices),
+                    toMiB(renderWork.cutoutVertices),
+                    toMiB(renderWork.transparentVertices));
+
+        bool cutoutDistanceLimit = render.isCutoutDistanceLimitEnabled();
+        if (ImGui::Checkbox("Cutout Distance Limit", &cutoutDistanceLimit)) {
+            render.setCutoutDistanceLimitEnabled(cutoutDistanceLimit);
+        }
+        float cutoutDistanceChunks = render.getCutoutRenderDistanceChunks();
+        if (ImGui::SliderFloat("Cutout Distance (chunks)", &cutoutDistanceChunks, 1.0f, 16.0f, "%.1f")) {
+            render.setCutoutRenderDistanceChunks(cutoutDistanceChunks);
+        }
+        ImGui::Text("Cutout Skipped: %d / %d",
+                    renderWork.cutoutSkippedByDistance,
+                    renderWork.cutoutCandidates);
+
         ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
         bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();
         if (ImGui::Checkbox("Chunk Culling Debug", &chunkCullingDebugEnabled)) {

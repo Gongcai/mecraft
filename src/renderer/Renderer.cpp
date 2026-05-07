@@ -11,6 +11,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -74,6 +75,9 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     initOutlineMesh();
     initBreakOverlayMesh();
     m_worldRenderBuffer.init();
+#ifdef MECRAFT_DEBUG
+    initGpuTimers();
+#endif
     m_threadPool.start();
     if (!m_meshingSubmitBudgetOverridden) {
         const int workerCount = std::max(1, m_threadPool.numWorkers());
@@ -93,6 +97,9 @@ void Renderer::init(ResourceMgr &resourceMgr) {
 }
 
 void Renderer::shutdown() {
+#ifdef MECRAFT_DEBUG
+    shutdownGpuTimers();
+#endif
     m_mdiMeshAllocations.clear();
     m_worldRenderBuffer.shutdown();
     m_meshingService.shutdown();
@@ -277,6 +284,48 @@ Renderer::CullingFrameStats Renderer::getCullingFrameStats() const {
     return stats;
 }
 
+Renderer::GpuFrameStats Renderer::getGpuFrameStats() const {
+    return m_gpuFrameStats;
+}
+
+Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
+    RenderWorkStats stats;
+    stats.blockVertexBytes = sizeof(BlockVertex);
+    stats.opaqueCommands = m_worldRenderBuffer.opaqueCommandCount();
+    stats.cutoutCommands = m_worldRenderBuffer.cutoutCommandCount();
+    stats.transparentCommands = m_worldRenderBuffer.transparentCommandCount();
+    stats.opaqueVertices = m_worldRenderBuffer.opaqueVertexCount();
+    stats.cutoutVertices = m_worldRenderBuffer.cutoutVertexCount();
+    stats.transparentVertices = m_worldRenderBuffer.transparentVertexCount();
+    stats.cutoutCandidates = m_cutoutCandidatesThisFrame;
+    stats.cutoutSkippedByDistance = m_cutoutSkippedByDistanceThisFrame;
+    return stats;
+}
+
+void Renderer::setGpuTimerEnabled(const bool enabled) {
+    m_gpuTimerEnabled = enabled;
+}
+
+bool Renderer::isGpuTimerEnabled() const {
+    return m_gpuTimerEnabled;
+}
+
+void Renderer::setCutoutDistanceLimitEnabled(const bool enabled) {
+    m_cutoutDistanceLimitEnabled = enabled;
+}
+
+bool Renderer::isCutoutDistanceLimitEnabled() const {
+    return m_cutoutDistanceLimitEnabled;
+}
+
+void Renderer::setCutoutRenderDistanceChunks(const float distanceChunks) {
+    m_cutoutRenderDistanceChunks = std::clamp(distanceChunks, 1.0f, 32.0f);
+}
+
+float Renderer::getCutoutRenderDistanceChunks() const {
+    return m_cutoutRenderDistanceChunks;
+}
+
 const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingSubmittedHistory() const {
     return m_meshingSubmittedHistory;
 }
@@ -316,6 +365,9 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_chunkPassedThisFrame = 0;
     m_chunkCulledThisFrame = 0;
     m_chunkCulledByPlaneThisFrame.fill(0);
+    m_cutoutCandidatesThisFrame = 0;
+    m_cutoutSkippedByDistanceThisFrame = 0;
+    beginGpuTimerFrame();
 #endif
 }
 
@@ -341,7 +393,13 @@ void Renderer::renderWorld(const World& world) {
     m_deferredTransparentEntries.reserve(world.getActiveChunks().size() * 2);
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, m_deferredTransparentEntries);
     if (m_useMultiDrawIndirect) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Opaque);
+#endif
         m_worldRenderBuffer.flushOpaque();
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Opaque);
+#endif
     }
     renderCutoutChunks(cutoutEntries);
 
@@ -577,6 +635,8 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             if (m_useMultiDrawIndirect) {
                 // MDI path: iterate per-sub-chunk meshes directly.
                 const glm::ivec3 offset = column.chunk->getWorldOffset();
+                const float cutoutLimitBlocks = m_cutoutRenderDistanceChunks * static_cast<float>(Chunk::SIZE_X);
+                const float cutoutLimitSq = cutoutLimitBlocks * cutoutLimitBlocks;
                 for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
                     const SubChunk* sc = column.chunk->getSubChunk(scy);
                     if (!sc) continue;
@@ -587,7 +647,25 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                         m_worldRenderBuffer.addOpaque(mesh.opaqueRange);
                     }
                     if (mesh.cutoutRange.vertexCount > 0) {
-                        m_worldRenderBuffer.addCutout(mesh.cutoutRange);
+                        const int yBase = scy * SubChunk::SIZE;
+                        const glm::vec3 sectionCenter(
+                            static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                            static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
+                            static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                        const glm::vec2 toCameraXZ(sectionCenter.x - m_cameraPos.x,
+                                                   sectionCenter.z - m_cameraPos.z);
+                        const float distanceSq = glm::dot(toCameraXZ, toCameraXZ);
+#ifdef MECRAFT_DEBUG
+                        ++m_cutoutCandidatesThisFrame;
+#endif
+                        if (!m_cutoutDistanceLimitEnabled || distanceSq <= cutoutLimitSq) {
+                            m_worldRenderBuffer.addCutout(mesh.cutoutRange);
+                        }
+#ifdef MECRAFT_DEBUG
+                        else {
+                            ++m_cutoutSkippedByDistanceThisFrame;
+                        }
+#endif
                     }
                     if (mesh.transparentRange.vertexCount > 0) {
                         const int yBase = scy * SubChunk::SIZE;
@@ -840,7 +918,13 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
         m_chunkShader->setInt("uForceBaseLod", 1);
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Cutout);
+#endif
         m_worldRenderBuffer.flushCutout();
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Cutout);
+#endif
         m_chunkShader->setInt("uForceBaseLod", 0);
         return;
     }
@@ -853,6 +937,9 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
     glDepthMask(GL_TRUE);
     m_chunkShader->setInt("uForceBaseLod", 1);
 
+#ifdef MECRAFT_DEBUG
+    beginGpuTimer(GpuTimerPass::Cutout);
+#endif
     for (const ChunkRenderEntry& entry : cutoutEntries) {
         if (entry.chunk == nullptr) continue;
 
@@ -870,6 +957,9 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutVertexCount));
         ++drawCallCount;
     }
+#ifdef MECRAFT_DEBUG
+    endGpuTimer(GpuTimerPass::Cutout);
+#endif
 
     m_chunkShader->setInt("uForceBaseLod", 0);
 }
@@ -893,7 +983,13 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
         for (const DrawBatchEntry& entry : m_deferredTransparentBatch) {
             m_worldRenderBuffer.addTransparent(entry.range);
         }
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Transparent);
+#endif
         m_worldRenderBuffer.flushTransparent();
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Transparent);
+#endif
 
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
@@ -938,6 +1034,9 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
+#ifdef MECRAFT_DEBUG
+    beginGpuTimer(GpuTimerPass::Transparent);
+#endif
     for (const TransparentSubChunkItem& item : items) {
         const ChunkRenderEntry& entry = *item.entry;
         const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
@@ -949,6 +1048,9 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
         ++drawCallCount;
     }
+#ifdef MECRAFT_DEBUG
+    endGpuTimer(GpuTimerPass::Transparent);
+#endif
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -1314,6 +1416,134 @@ void Renderer::recordChunkCull(const FrustumPlane plane, const int count) {
     if (planeIndex < m_chunkCulledByPlaneThisFrame.size()) {
         m_chunkCulledByPlaneThisFrame[planeIndex] += count;
     }
+}
+
+void Renderer::initGpuTimers() {
+    if (m_gpuTimersInitialized) {
+        return;
+    }
+
+    m_gpuFrameStats.supported = GLAD_GL_VERSION_3_3 != 0;
+    if (!m_gpuFrameStats.supported) {
+        return;
+    }
+
+    for (auto& slot : m_gpuTimerQueries) {
+        glGenQueries(static_cast<GLsizei>(slot.size()), slot.data());
+    }
+    for (auto& issued : m_gpuTimerIssued) {
+        issued.fill(false);
+    }
+    m_gpuTimersInitialized = true;
+}
+
+void Renderer::shutdownGpuTimers() {
+    if (!m_gpuTimersInitialized) {
+        return;
+    }
+    if (m_gpuTimerActive) {
+        glEndQuery(GL_TIME_ELAPSED);
+        m_gpuTimerActive = false;
+    }
+
+    for (auto& slot : m_gpuTimerQueries) {
+        glDeleteQueries(static_cast<GLsizei>(slot.size()), slot.data());
+        slot.fill(0);
+    }
+    for (auto& issued : m_gpuTimerIssued) {
+        issued.fill(false);
+    }
+    m_gpuTimersInitialized = false;
+    m_gpuFrameStats.valid = false;
+}
+
+void Renderer::beginGpuTimerFrame() {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled) {
+        m_gpuFrameStats.supported = m_gpuTimersInitialized && m_gpuFrameStats.supported;
+        m_gpuFrameStats.valid = false;
+        m_gpuTimerCanIssueThisFrame = false;
+        return;
+    }
+
+    const size_t readIndex = (m_gpuTimerWriteIndex + 1) % GPU_TIMER_RING_SIZE;
+    bool allIssued = false;
+    for (const bool issued : m_gpuTimerIssued[readIndex]) {
+        allIssued = allIssued || issued;
+    }
+
+    if (allIssued) {
+        bool allAvailable = true;
+        for (size_t pass = 0; pass < static_cast<size_t>(GpuTimerPass::Count); ++pass) {
+            if (!m_gpuTimerIssued[readIndex][pass]) {
+                continue;
+            }
+            GLint available = GL_FALSE;
+            glGetQueryObjectiv(m_gpuTimerQueries[readIndex][pass], GL_QUERY_RESULT_AVAILABLE, &available);
+            if (available == GL_FALSE) {
+                allAvailable = false;
+                break;
+            }
+        }
+
+        if (allAvailable) {
+            auto readMs = [&](const GpuTimerPass pass) {
+                const size_t passIndex = static_cast<size_t>(pass);
+                if (!m_gpuTimerIssued[readIndex][passIndex]) {
+                    return 0.0;
+                }
+                GLuint64 elapsedNs = 0;
+                glGetQueryObjectui64v(m_gpuTimerQueries[readIndex][passIndex], GL_QUERY_RESULT, &elapsedNs);
+                return static_cast<double>(elapsedNs) / 1000000.0;
+            };
+
+            m_gpuFrameStats.supported = true;
+            m_gpuFrameStats.valid = true;
+            m_gpuFrameStats.opaqueMs = readMs(GpuTimerPass::Opaque);
+            m_gpuFrameStats.cutoutMs = readMs(GpuTimerPass::Cutout);
+            m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
+            m_gpuTimerIssued[readIndex].fill(false);
+        }
+    }
+
+    bool slotStillPending = false;
+    for (const bool issued : m_gpuTimerIssued[readIndex]) {
+        if (issued) {
+            slotStillPending = true;
+            break;
+        }
+    }
+    m_gpuTimerCanIssueThisFrame = !slotStillPending;
+    if (!m_gpuTimerCanIssueThisFrame) {
+        return;
+    }
+
+    if (m_gpuTimerActive) {
+        glEndQuery(GL_TIME_ELAPSED);
+        m_gpuTimerActive = false;
+    }
+    m_gpuTimerWriteIndex = (m_gpuTimerWriteIndex + 1) % GPU_TIMER_RING_SIZE;
+    m_gpuTimerIssued[m_gpuTimerWriteIndex].fill(false);
+}
+
+void Renderer::beginGpuTimer(const GpuTimerPass pass) {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame || m_gpuTimerActive) {
+        return;
+    }
+
+    const size_t passIndex = static_cast<size_t>(pass);
+    glBeginQuery(GL_TIME_ELAPSED, m_gpuTimerQueries[m_gpuTimerWriteIndex][passIndex]);
+    m_gpuTimerActive = true;
+    m_activeGpuTimerPass = pass;
+}
+
+void Renderer::endGpuTimer(const GpuTimerPass pass) {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerActive || m_activeGpuTimerPass != pass) {
+        return;
+    }
+
+    glEndQuery(GL_TIME_ELAPSED);
+    m_gpuTimerIssued[m_gpuTimerWriteIndex][static_cast<size_t>(pass)] = true;
+    m_gpuTimerActive = false;
 }
 
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax, FrustumPlane* culledPlane) const {

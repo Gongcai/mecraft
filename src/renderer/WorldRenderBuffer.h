@@ -97,6 +97,12 @@ public:
     void flushTransparent();
 
     int glSubmitCount() const { return m_glSubmitCount; }
+    size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
+    size_t cutoutCommandCount() const { return m_cutoutCommands.size(); }
+    size_t transparentCommandCount() const { return m_transparentCommands.size(); }
+    uint64_t opaqueVertexCount() const { return m_opaqueVertexCount; }
+    uint64_t cutoutVertexCount() const { return m_cutoutVertexCount; }
+    uint64_t transparentVertexCount() const { return m_transparentVertexCount; }
 
 private:
     static void setupVertexLayout();
@@ -122,6 +128,9 @@ private:
     std::vector<DrawArraysIndirectCommand> m_transparentCommands;
 
     int m_glSubmitCount = 0;
+    uint64_t m_opaqueVertexCount = 0;
+    uint64_t m_cutoutVertexCount = 0;
+    uint64_t m_transparentVertexCount = 0;
 
     void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
                                 GLuint& buf, size_t& capacity, size_t needed);

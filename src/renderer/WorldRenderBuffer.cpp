@@ -494,21 +494,27 @@ void WorldRenderBuffer::beginFrame() {
     m_cutoutCommands.clear();
     m_transparentCommands.clear();
     m_glSubmitCount = 0;
+    m_opaqueVertexCount = 0;
+    m_cutoutVertexCount = 0;
+    m_transparentVertexCount = 0;
 }
 
 void WorldRenderBuffer::addOpaque(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_opaqueCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_opaqueVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::addCutout(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_cutoutCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_cutoutVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_transparentCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_transparentVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::flushOpaque() {

@@ -90,6 +90,26 @@ public:
         std::array<int, static_cast<size_t>(FrustumPlane::Count)> chunkCulledByPlane{};
     };
 
+    struct GpuFrameStats {
+        bool supported = false;
+        bool valid = false;
+        double opaqueMs = 0.0;
+        double cutoutMs = 0.0;
+        double transparentMs = 0.0;
+    };
+
+    struct RenderWorkStats {
+        size_t blockVertexBytes = 0;
+        size_t opaqueCommands = 0;
+        size_t cutoutCommands = 0;
+        size_t transparentCommands = 0;
+        uint64_t opaqueVertices = 0;
+        uint64_t cutoutVertices = 0;
+        uint64_t transparentVertices = 0;
+        int cutoutCandidates = 0;
+        int cutoutSkippedByDistance = 0;
+    };
+
     static constexpr size_t MESHING_HISTORY_SIZE = 120;
 #endif
 
@@ -124,6 +144,14 @@ public:
     [[nodiscard]] bool isChunkCullingDebugEnabled() const;
     [[nodiscard]] MeshingFrameStats getMeshingFrameStats() const;
     [[nodiscard]] CullingFrameStats getCullingFrameStats() const;
+    [[nodiscard]] GpuFrameStats getGpuFrameStats() const;
+    [[nodiscard]] RenderWorkStats getRenderWorkStats() const;
+    void setGpuTimerEnabled(bool enabled);
+    [[nodiscard]] bool isGpuTimerEnabled() const;
+    void setCutoutDistanceLimitEnabled(bool enabled);
+    [[nodiscard]] bool isCutoutDistanceLimitEnabled() const;
+    void setCutoutRenderDistanceChunks(float distanceChunks);
+    [[nodiscard]] float getCutoutRenderDistanceChunks() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingSubmittedHistory() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingCompletedHistory() const;
     [[nodiscard]] const std::array<float, MESHING_HISTORY_SIZE>& getMeshingInFlightHistory() const;
@@ -221,6 +249,17 @@ private:
 #ifdef MECRAFT_DEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
+    enum class GpuTimerPass : size_t {
+        Opaque = 0,
+        Cutout = 1,
+        Transparent = 2,
+        Count = 3
+    };
+    void initGpuTimers();
+    void shutdownGpuTimers();
+    void beginGpuTimerFrame();
+    void beginGpuTimer(GpuTimerPass pass);
+    void endGpuTimer(GpuTimerPass pass);
 #endif
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax) const;
     //TODO: 传入 World 和 UI 数据进行渲染
@@ -281,6 +320,18 @@ private:
     std::array<float, MESHING_HISTORY_SIZE> m_meshingSubmittedHistory{};
     std::array<float, MESHING_HISTORY_SIZE> m_meshingCompletedHistory{};
     std::array<float, MESHING_HISTORY_SIZE> m_meshingInFlightHistory{};
+    static constexpr size_t GPU_TIMER_RING_SIZE = 4;
+    std::array<std::array<GLuint, static_cast<size_t>(GpuTimerPass::Count)>, GPU_TIMER_RING_SIZE> m_gpuTimerQueries{};
+    std::array<std::array<bool, static_cast<size_t>(GpuTimerPass::Count)>, GPU_TIMER_RING_SIZE> m_gpuTimerIssued{};
+    GpuFrameStats m_gpuFrameStats{};
+    size_t m_gpuTimerWriteIndex = 0;
+    bool m_gpuTimersInitialized = false;
+    bool m_gpuTimerEnabled = true;
+    bool m_gpuTimerActive = false;
+    bool m_gpuTimerCanIssueThisFrame = true;
+    GpuTimerPass m_activeGpuTimerPass = GpuTimerPass::Opaque;
+    int m_cutoutCandidatesThisFrame = 0;
+    int m_cutoutSkippedByDistanceThisFrame = 0;
 #endif
 
     glm::mat4 m_projection = glm::mat4(1.0f);
@@ -289,6 +340,8 @@ private:
     glm::vec3 m_cameraPos = glm::vec3(0.0f);
     FogSettings m_fogSettings{};
     int m_debugLightMode = 0;
+    bool m_cutoutDistanceLimitEnabled = true;
+    float m_cutoutRenderDistanceChunks = 4.0f;
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
