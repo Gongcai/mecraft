@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include "../core/Time.h"
+#include "BlockSelection.h"
 #include "FluidRegistry.h"
 #include "FluidState.h"
 
@@ -28,6 +29,66 @@ bool canWaterOccupyBlockLayer(const StateID state) {
 
 bool changesFluidPathing(const StateID oldState, const StateID newState) {
     return canWaterOccupyBlockLayer(oldState) != canWaterOccupyBlockLayer(newState);
+}
+
+bool rayIntersectsAabb(const glm::vec3& rayOrigin,
+                       const glm::vec3& rayDir,
+                       const glm::vec3& boxMin,
+                       const glm::vec3& boxMax,
+                       const float maxDist,
+                       float& tHit,
+                       glm::ivec3& normal) {
+    constexpr float kEpsilon = 1e-6f;
+    float tMin = 0.0f;
+    float tMax = maxDist;
+    glm::ivec3 enterNormal(0);
+
+    const auto testAxis = [&](const float origin,
+                              const float dir,
+                              const float minValue,
+                              const float maxValue,
+                              const glm::ivec3& negNormal,
+                              const glm::ivec3& posNormal) {
+        if (std::abs(dir) < kEpsilon) {
+            return origin >= minValue && origin <= maxValue;
+        }
+
+        float t1 = (minValue - origin) / dir;
+        float t2 = (maxValue - origin) / dir;
+        glm::ivec3 axisNormal = negNormal;
+        if (t1 > t2) {
+            std::swap(t1, t2);
+            axisNormal = posNormal;
+        }
+
+        if (t1 > tMin) {
+            tMin = t1;
+            enterNormal = axisNormal;
+        }
+        tMax = std::min(tMax, t2);
+        return tMin <= tMax;
+    };
+
+    if (!testAxis(rayOrigin.x, rayDir.x, boxMin.x, boxMax.x,
+                  glm::ivec3(-1, 0, 0), glm::ivec3(1, 0, 0))) {
+        return false;
+    }
+    if (!testAxis(rayOrigin.y, rayDir.y, boxMin.y, boxMax.y,
+                  glm::ivec3(0, -1, 0), glm::ivec3(0, 1, 0))) {
+        return false;
+    }
+    if (!testAxis(rayOrigin.z, rayDir.z, boxMin.z, boxMax.z,
+                  glm::ivec3(0, 0, -1), glm::ivec3(0, 0, 1))) {
+        return false;
+    }
+
+    if (tMax < 0.0f || tMin > maxDist) {
+        return false;
+    }
+
+    tHit = std::max(0.0f, tMin);
+    normal = (tMin > 0.0f) ? enterNormal : glm::ivec3(0);
+    return true;
 }
 }
 void World::init(uint32_t seed) {
@@ -389,11 +450,20 @@ RayHit World::raycast(const PhysicsInfo& ray, const float maxDist) const {
     while (dist <= maxDist) {
         const BlockID block = getBlock(x, y, z);
         if (block != BlockIds::AIR && !FluidState::isWater(block)) {
-            hitResult.hit = true;
-            hitResult.blockPos = glm::ivec3(x, y, z);
-            hitResult.normal = hitNormal;
-            hitResult.distance = dist;
-            return hitResult;
+            const StateID stateId = getBlockState(x, y, z);
+            const BlockSelectionBox selectionBox = BlockSelection::getBox(stateId);
+            const glm::vec3 boxMin = glm::vec3(x, y, z) + selectionBox.min;
+            const glm::vec3 boxMax = glm::vec3(x, y, z) + selectionBox.max;
+
+            float aabbDistance = 0.0f;
+            glm::ivec3 aabbNormal(0);
+            if (rayIntersectsAabb(rayOri, rayDir, boxMin, boxMax, maxDist, aabbDistance, aabbNormal)) {
+                hitResult.hit = true;
+                hitResult.blockPos = glm::ivec3(x, y, z);
+                hitResult.normal = (aabbNormal.x != 0 || aabbNormal.y != 0 || aabbNormal.z != 0) ? aabbNormal : hitNormal;
+                hitResult.distance = aabbDistance;
+                return hitResult;
+            }
         }
 
         if (tMaxX < tMaxY) {

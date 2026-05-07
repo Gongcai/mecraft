@@ -246,7 +246,7 @@ private:
     void releaseMdiAllocation(const SubChunkGpuKey& key);
     void initOutlineMesh();
     void initBreakOverlayMesh();
-    void renderBlockOutline(const BlockTargetRenderData& target);
+    void renderBlockOutline(const World& world, const BlockTargetRenderData& target);
     void renderBlockBreakOverlay(const World& world, const BlockBreakRenderData& blockBreak);
 #ifdef MECRAFT_DEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;

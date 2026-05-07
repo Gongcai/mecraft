@@ -6,6 +6,7 @@
 
 #include "ChunkMesher.h"
 #include "../core/Time.h"
+#include "../world/BlockSelection.h"
 #include "../world/World.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -153,7 +154,7 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
     }
 
     renderBlockBreakOverlay(world, blockBreak);
-    renderBlockOutline(target);
+    renderBlockOutline(world, target);
     endFrame(window);
 }
 
@@ -1196,16 +1197,20 @@ void Renderer::initBreakOverlayMesh() {
     glBindVertexArray(0);
 }
 
-void Renderer::renderBlockOutline(const BlockTargetRenderData& target) {
+void Renderer::renderBlockOutline(const World& world, const BlockTargetRenderData& target) {
     if (m_outlineShader == nullptr || m_outlineVao == 0 || !target.hasTarget) {
         return;
     }
 
     const glm::ivec3 targetBlock = target.targetBlock;
+    const StateID targetState = world.getBlockState(targetBlock.x, targetBlock.y, targetBlock.z);
+    const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
+    const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
+    const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
 
     glm::mat4 model(1.0f);
-    model = glm::translate(model, glm::vec3(targetBlock) + glm::vec3(0.5f));
-    model = glm::scale(model, glm::vec3(1.002f));
+    model = glm::translate(model, glm::vec3(targetBlock) + boxCenter);
+    model = glm::scale(model, boxSize + glm::vec3(0.002f));
     model = glm::translate(model, glm::vec3(-0.5f));
 
     m_outlineShader->use();
@@ -1240,10 +1245,14 @@ void Renderer::renderBlockBreakOverlay(const World& world, const BlockBreakRende
     const BlockID targetId = world.getBlock(target.x, target.y, target.z);
     const BlockDef& targetDef = BlockRegistry::get(targetId);
     const bool useCrossOverlay = (targetDef.renderShape == BlockRenderShape::Cross);
+    const StateID targetState = world.getBlockState(target.x, target.y, target.z);
+    const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
+    const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
+    const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
 
     glm::mat4 model(1.0f);
-    model = glm::translate(model, glm::vec3(target) + glm::vec3(0.5f));
-    model = glm::scale(model, glm::vec3(1.001f));
+    model = glm::translate(model, glm::vec3(target) + boxCenter);
+    model = glm::scale(model, boxSize + glm::vec3(0.001f));
     model = glm::translate(model, glm::vec3(-0.5f));
 
     m_breakOverlayShader->use();

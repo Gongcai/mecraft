@@ -62,6 +62,7 @@ set(SRC_CORE
 # [世界与地形]
 set(SRC_WORLD
         src/world/Block.cpp
+        src/world/BlockSelection.cpp
         src/world/BlockStateRegistry.cpp
         src/world/Chunk.cpp
         src/world/SubChunk.cpp
@@ -258,6 +259,7 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 # 测试列表
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
 add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
+add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
 add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
 add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
