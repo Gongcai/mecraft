@@ -108,6 +108,8 @@ public:
         uint64_t transparentVertices = 0;
         int cutoutCandidates = 0;
         int cutoutSkippedByDistance = 0;
+        int mdiSubChunkTests = 0;
+        int mdiSubChunksCulled = 0;
     };
 
     static constexpr size_t MESHING_HISTORY_SIZE = 120;
@@ -332,6 +334,8 @@ private:
     GpuTimerPass m_activeGpuTimerPass = GpuTimerPass::Opaque;
     int m_cutoutCandidatesThisFrame = 0;
     int m_cutoutSkippedByDistanceThisFrame = 0;
+    int m_mdiSubChunkTestsThisFrame = 0;
+    int m_mdiSubChunksCulledThisFrame = 0;
 #endif
 
     glm::mat4 m_projection = glm::mat4(1.0f);

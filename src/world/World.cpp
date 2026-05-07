@@ -36,6 +36,7 @@ void World::init(uint32_t seed) {
     m_chunks.clear();
     m_loadQueue.clear();
     m_fluidSystem.reset();
+    m_neighborUpdateQueue.clear();
     ++m_activeChunkRevision;
     m_lightService = std::make_unique<LightService>(*this);
     m_lightService->start(m_threadPool);
@@ -333,6 +334,16 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     }
 
     m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), changesFluidPathing(oldId, id));
+
+    // Enqueue 6 neighbors for support-rule validation (block tick physics).
+    static constexpr glm::ivec3 kNeighborOffsets[6] = {
+        { 1,  0,  0}, {-1,  0,  0},
+        { 0,  1,  0}, { 0, -1,  0},
+        { 0,  0,  1}, { 0,  0, -1},
+    };
+    for (const auto& off : kNeighborOffsets) {
+        m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
+    }
 }
 
 void World::setThreadPool(ThreadPool* pool) {

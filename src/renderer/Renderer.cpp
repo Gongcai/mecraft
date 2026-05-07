@@ -299,6 +299,8 @@ Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
     stats.transparentVertices = m_worldRenderBuffer.transparentVertexCount();
     stats.cutoutCandidates = m_cutoutCandidatesThisFrame;
     stats.cutoutSkippedByDistance = m_cutoutSkippedByDistanceThisFrame;
+    stats.mdiSubChunkTests = m_mdiSubChunkTestsThisFrame;
+    stats.mdiSubChunksCulled = m_mdiSubChunksCulledThisFrame;
     return stats;
 }
 
@@ -367,6 +369,8 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_chunkCulledByPlaneThisFrame.fill(0);
     m_cutoutCandidatesThisFrame = 0;
     m_cutoutSkippedByDistanceThisFrame = 0;
+    m_mdiSubChunkTestsThisFrame = 0;
+    m_mdiSubChunksCulledThisFrame = 0;
     beginGpuTimerFrame();
 #endif
 }
@@ -642,12 +646,48 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     if (!sc) continue;
                     const SubChunkMesh& mesh = sc->getMesh();
                     if (!mesh.inGlobalPool) continue;
+                    if (mesh.opaqueRange.vertexCount == 0 &&
+                        mesh.cutoutRange.vertexCount == 0 &&
+                        mesh.transparentRange.vertexCount == 0) {
+                        continue;
+                    }
+
+#ifdef MECRAFT_DEBUG
+                    ++m_mdiSubChunkTestsThisFrame;
+                    ++m_chunkTestsThisFrame;
+#endif
+                    const int yBase = scy * SubChunk::SIZE;
+                    const glm::vec3 fallbackMin(
+                        static_cast<float>(offset.x),
+                        static_cast<float>(offset.y + yBase),
+                        static_cast<float>(offset.z));
+                    const glm::vec3 fallbackMax(
+                        static_cast<float>(offset.x + Chunk::SIZE_X),
+                        static_cast<float>(offset.y + yBase + SubChunk::SIZE),
+                        static_cast<float>(offset.z + Chunk::SIZE_Z));
+                    const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : fallbackMin;
+                    const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
+#ifdef MECRAFT_DEBUG
+                    FrustumPlane subChunkCulledPlane = FrustumPlane::Count;
+                    if (!isChunkInFrustum(boundsMin, boundsMax,
+                                          m_chunkCullingDebugEnabled ? &subChunkCulledPlane : nullptr)) {
+                        ++m_mdiSubChunksCulledThisFrame;
+                        if (m_chunkCullingDebugEnabled) {
+                            recordChunkCull(subChunkCulledPlane, 1);
+                        }
+                        continue;
+                    }
+                    ++m_chunkPassedThisFrame;
+#else
+                    if (!isChunkInFrustum(boundsMin, boundsMax)) {
+                        continue;
+                    }
+#endif
 
                     if (mesh.opaqueRange.vertexCount > 0) {
                         m_worldRenderBuffer.addOpaque(mesh.opaqueRange);
                     }
                     if (mesh.cutoutRange.vertexCount > 0) {
-                        const int yBase = scy * SubChunk::SIZE;
                         const glm::vec3 sectionCenter(
                             static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
                             static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
@@ -668,7 +708,6 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 #endif
                     }
                     if (mesh.transparentRange.vertexCount > 0) {
-                        const int yBase = scy * SubChunk::SIZE;
                         const glm::vec3 sectionCenter(
                             static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
                             static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,

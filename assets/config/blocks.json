@@ -152,6 +152,7 @@
       "isTransparent": true,
       "timeToBreak": 10,
       "renderShape": "cross",
+      "supportRule": "ground",
       "useGrassTint": true,
       "textures": {
         "all": "tall_grass_bottom"
@@ -163,6 +164,7 @@
       "isSolid": false,
       "isTransparent": true,
       "renderShape": "cross",
+      "supportRule": "ground",
       "useGrassTint": false,
       "timeToBreak": 30,
       "textures": {
@@ -310,6 +312,7 @@
       "isSolid": false,
       "isTransparent": true,
       "renderShape": "cross",
+      "supportRule": "ground",
       "timeToBreak": 10,
       "textures": {
         "all": "brown_mushroom"

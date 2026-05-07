@@ -76,6 +76,7 @@ set(SRC_WORLD
         src/world/FluidState.cpp
         src/world/FluidFlow.cpp
         src/world/FluidSystem.cpp
+        src/world/BlockNeighborUpdateQueue.cpp
         src/world/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
@@ -161,6 +162,7 @@ set(SRC_ECS
         src/ecs/systems/audio/AudioSyncSystem.cpp
         src/ecs/systems/audio/PlayerFootstepAudioSystem.cpp
         src/ecs/systems/world/FluidTickSystem.cpp
+        src/ecs/systems/world/BlockSupportSystem.cpp
         src/ecs/systems/steve/SteveAnimationSystem.cpp
         src/ecs/systems/steve/SteveSyncSystem.cpp
         src/ecs/systems/steve/TransformHierarchySystem.cpp

@@ -276,6 +276,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::Text("Cutout Skipped: %d / %d",
                     renderWork.cutoutSkippedByDistance,
                     renderWork.cutoutCandidates);
+        ImGui::Text("MDI SubChunk Culled: %d / %d",
+                    renderWork.mdiSubChunksCulled,
+                    renderWork.mdiSubChunkTests);
 
         ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
         bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();

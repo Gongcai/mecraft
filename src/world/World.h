@@ -8,6 +8,7 @@
 
 #include <glm/glm.hpp>
 
+#include "BlockNeighborUpdateQueue.h"
 #include "Chunk.h"
 #include "DayNightSystem.h"
 #include "FluidState.h"
@@ -59,6 +60,9 @@ public:
     FluidSystem& fluidSystem() { return m_fluidSystem; }
     const FluidSystem& fluidSystem() const { return m_fluidSystem; }
 
+    BlockNeighborUpdateQueue& neighborUpdateQueue() { return m_neighborUpdateQueue; }
+    const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
+
 private:
     std::unordered_map<int64_t, std::shared_ptr<Chunk>> m_chunks;
 
@@ -66,6 +70,7 @@ private:
     std::unique_ptr<LightService> m_lightService;
     DayNightSystem m_dayNightSystem;
     FluidSystem m_fluidSystem{*this};
+    BlockNeighborUpdateQueue m_neighborUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
 
     int m_renderDistance = 8;

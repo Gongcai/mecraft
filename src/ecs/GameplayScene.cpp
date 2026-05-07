@@ -22,6 +22,7 @@
 #include "systems/player/FallRollEffectSystem.h"
 #include "systems/audio/PlayerFootstepAudioSystem.h"
 #include "systems/world/FluidTickSystem.h"
+#include "systems/world/BlockSupportSystem.h"
 #include "systems/steve/SteveAnimationSystem.h"
 #include "systems/steve/SteveSyncSystem.h"
 #include "systems/steve/TransformHierarchySystem.h"
@@ -79,6 +80,7 @@ GameplayScene::GameplayScene() {
 
     // ── Tick-rate pipeline (20 TPS) ──
     addTickSystem<FluidTickSystem>();
+    addTickSystem<BlockSupportSystem>();
 
 #ifdef MECRAFT_DEBUG
     validateSystemOrder();
