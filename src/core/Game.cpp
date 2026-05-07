@@ -14,7 +14,7 @@
 
 #include <GLFW/glfw3.h>
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 #include <chrono>
 #endif
 
@@ -39,7 +39,7 @@ void Game::init() {
 
     m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     m_dashboard.init(m_window);
 #endif
 }
@@ -105,7 +105,7 @@ void Game::initECS() {
         steveAnim.lastPosition = playerTransform.position;
     }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     constexpr float kTestMobOffsetX = 5.0f;
     glm::vec3 playerPos = query.getPosition();
     ecs::MobModelFactory::createZombie(reg, glm::vec3(playerPos.x + kTestMobOffsetX, playerPos.y, playerPos.z));
@@ -143,12 +143,12 @@ StateDependencies Game::makeStateDependencies() {
 
 
 void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     const auto inputStart = std::chrono::steady_clock::now();
 #endif
     m_input.update();
     const InputSnapshot& inputSnapshot = m_input.snapshot();
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     const auto inputEnd = std::chrono::steady_clock::now();
     const auto stateStart = std::chrono::steady_clock::now();
 #endif
@@ -170,20 +170,20 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     if (m_stateMachine.isQuitToMenuRequested()) {
         return;
     }
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     const auto stateEnd = std::chrono::steady_clock::now();
     const auto worldStart = std::chrono::steady_clock::now();
 #endif
 
     ecs::PlayerQuery query(m_gameplayScene.registry());
     m_world.update(query.getPosition());
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     const auto worldEnd = std::chrono::steady_clock::now();
 #endif
 
 
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 
     m_frameProfilerDebug.fixedInputAccumMs += std::chrono::duration<double, std::milli>(inputEnd - inputStart).count();
     m_frameProfilerDebug.fixedStateAccumMs += std::chrono::duration<double, std::milli>(stateEnd - stateStart).count();
@@ -314,14 +314,14 @@ void Game::renderFrame(const float frameTime) {
 
     m_uiRenderer.render(m_window, inventory, playerStats, heldItemMotion, m_input.snapshot());
     m_stateMachine.render();
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     m_dashboard.render(reg, m_world, finalCamera, m_renderer, m_uiRenderer,
                        m_dashboardProfilerStats);
 #endif
     m_window.swapBuffers();
 }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 void Game::publishDebugFrameProfiler(const double frameTime) {
     const auto pushHistory = [](std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples>& history,
                                 const size_t index,

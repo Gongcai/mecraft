@@ -30,7 +30,7 @@
 #include "../physics/PhysicsSystem.h"
 #include "../world/World.h"
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
@@ -80,7 +80,7 @@ GameplayScene::GameplayScene() {
     // ── Tick-rate pipeline (20 TPS) ──
     addTickSystem<FluidTickSystem>();
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     validateSystemOrder();
 #endif
 }
@@ -161,7 +161,7 @@ void GameplayScene::runOneTick() {
     }
 }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 void GameplayScene::validateSystemOrder() {
     std::unordered_set<uint32_t> writtenSoFar;
     std::unordered_map<uint32_t, const char*> componentWriters;

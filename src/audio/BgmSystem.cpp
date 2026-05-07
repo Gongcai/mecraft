@@ -88,7 +88,7 @@ void BgmSystem::buildPlaylist() {
 
     std::sort(m_playlist.begin(), m_playlist.end());
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from " << bgmDir << std::endl;
 #endif
 }

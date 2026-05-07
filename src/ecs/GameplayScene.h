@@ -48,7 +48,7 @@ private:
     /// Tick-rate pipeline — runs at 20 TPS.
     std::vector<std::unique_ptr<ISystem>> m_tickSystems;
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     struct SystemDepInfo {
         const char* systemName;
         std::vector<uint32_t> required;
@@ -80,7 +80,7 @@ private:
     template <typename TSystem>
     void addFixedUpdateSystem() {
         m_fixedUpdateSystems.push_back(std::make_unique<TSystem>());
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         registerSystemDep<TSystem>();
 #endif
     }
@@ -88,7 +88,7 @@ private:
     template <typename TSystem>
     void addTickSystem() {
         m_tickSystems.push_back(std::make_unique<TSystem>());
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         registerSystemDep<TSystem>();
 #endif
     }

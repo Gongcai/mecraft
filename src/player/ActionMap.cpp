@@ -271,7 +271,7 @@ static TriggerType stringToTrigger(const std::string& str) {
 void ActionMap::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "Failed to open keybindings file: " << path << std::endl;
 #endif
         return;

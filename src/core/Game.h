@@ -24,7 +24,7 @@
 #include "../world/World.h"
 #include "../world/DropSystem.h"
 #include "../physics/PhysicsSystem.h"
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 #include "../ui/Dashboard.h"
 #endif
 #include "../ui/UIRenderer.h"
@@ -88,7 +88,7 @@ private:
     CraftingSystem m_craftingSystem;
     ecs::GameplayScene m_gameplayScene;
     std::string m_lastSubmittedCommand;
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     Dashboard      m_dashboard;
 #endif
 
@@ -102,7 +102,7 @@ private:
     // Camera controller (first/third person)
     CameraController m_cameraController;
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     struct FrameProfilerDebug {
         double fixedUpdateMs = 0.0;
         double fixedInputMs = 0.0;

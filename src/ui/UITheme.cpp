@@ -37,7 +37,7 @@ static int readInt(const nlohmann::json& j, const char* key, int fallback) {
 bool UITheme::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[UITheme] Failed to open: " << path << std::endl;
 #endif
         return false;
@@ -47,7 +47,7 @@ bool UITheme::loadFromFile(const std::string& path) {
     try {
         file >> j;
     } catch (const std::exception& e) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[UITheme] Failed to parse: " << path << " - " << e.what() << std::endl;
 #endif
         return false;

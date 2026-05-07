@@ -214,7 +214,10 @@ target_link_libraries(mecraft_core PUBLIC
 )
 
 # 统一宏定义
-target_compile_definitions(mecraft_core PUBLIC GLFW_INCLUDE_NONE)
+target_compile_definitions(mecraft_core PUBLIC
+        GLFW_INCLUDE_NONE
+        $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
+)
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
 if (MSVC)

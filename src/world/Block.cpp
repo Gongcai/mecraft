@@ -131,7 +131,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[BlockRegistry] Failed to open config: " << kBlocksConfigPath << std::endl;
 #endif
         s_initialized = true;
@@ -143,7 +143,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     try {
         file >> root;
     } catch (const std::exception& e) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[BlockRegistry] Failed to parse blocks.json: " << e.what() << std::endl;
 #endif
         s_initialized = true;
@@ -152,7 +152,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     }
 
     if (!root.contains("blocks") || !root["blocks"].is_array()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[BlockRegistry] Invalid blocks.json: missing 'blocks' array." << std::endl;
 #endif
         s_initialized = true;
@@ -486,7 +486,7 @@ const NamespacedId& BlockRegistry::getNamespacedId(BlockID runtimeId) {
 }
 
 void BlockRegistry::printAllBlocks() {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     for (size_t i = 0; i < s_blocks.size(); ++i) {
         std::cout << i << " → " << s_blocks[i].namespacedId.full() << std::endl;
     }

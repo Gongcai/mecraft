@@ -16,7 +16,7 @@ bool LocaleManager::loadLanguage(const std::string& langCode) {
     const std::string path = localePath(langCode.c_str());
     std::ifstream file(path);
     if (!file.is_open()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[LocaleManager] Failed to open: " << path << std::endl;
 #endif
         return false;
@@ -26,7 +26,7 @@ bool LocaleManager::loadLanguage(const std::string& langCode) {
     try {
         file >> j;
     } catch (const std::exception& e) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "[LocaleManager] Failed to parse: " << path << " - " << e.what() << std::endl;
 #endif
         return false;

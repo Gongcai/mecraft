@@ -6,7 +6,7 @@
 #define MECRAFT_DASHBOARD_H
 
 // Dashboard 调试 UI 仅在 Debug 模式下可用
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 
 #include <array>
 #include <cstddef>

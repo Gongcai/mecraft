@@ -64,7 +64,7 @@ public:
         Count = 6
     };
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     struct MeshingFrameStats {
         int submitBudget = 0;
         int submitted = 0;
@@ -117,7 +117,7 @@ public:
     void setDebugLightMode(int mode);
     [[nodiscard]] int getDebugLightMode() const;
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
     [[nodiscard]] int getRegionChunkSize() const;
@@ -218,7 +218,7 @@ private:
     void initBreakOverlayMesh();
     void renderBlockOutline(const BlockTargetRenderData& target);
     void renderBlockBreakOverlay(const World& world, const BlockBreakRenderData& blockBreak);
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
 #endif
@@ -258,7 +258,7 @@ private:
     int m_meshingDrainBudget = 2;
     double m_meshingDrainTimeBudgetMs = 1.0;
     int m_regionChunkSize = 4;
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     bool m_chunkCullingDebugEnabled = false;
     int m_meshingSubmittedThisFrame = 0;
     int m_meshingCompletedThisFrame = 0;

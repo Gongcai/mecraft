@@ -3,7 +3,7 @@
 //
 
 // Dashboard 调试 UI 仅在 Debug 模式下编译
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 
 #include "Dashboard.h"
 

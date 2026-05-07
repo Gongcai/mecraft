@@ -79,7 +79,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
         const int workerCount = std::max(1, m_threadPool.numWorkers());
         m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);
         m_meshingMaxInFlight = std::max(4, workerCount * 2);
-#ifdef NDEBUG
+#ifndef MECRAFT_DEBUG
         m_meshingSubmitTimeBudgetMs = 1.0;
         m_meshingDrainBudget = std::max(2, workerCount);
         m_meshingDrainTimeBudgetMs = 1.25;
@@ -229,7 +229,7 @@ float Renderer::getAtlasMaxAnisotropy() const {
     return m_resourceMgr->getAtlasMaxAnisotropy();
 }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
     m_chunkCullingDebugEnabled = enabled;
 }
@@ -304,7 +304,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     m_meshingSubmittedThisFrame = 0;
     m_meshingCompletedThisFrame = 0;
     m_meshingBuildMsThisFrame = 0.0;
@@ -484,7 +484,7 @@ void Renderer::submitMeshingJobs(const World& world) {
 
         const int64_t flightKey = subChunkFlightKey(candidate.chunkKey, candidate.scy);
         m_meshingInFlight.insert(flightKey);
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         ++m_meshingSubmittedThisFrame;
 #endif
     }
@@ -531,7 +531,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             continue;
         }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         ++m_regionTestsThisFrame;
         FrustumPlane culledPlane = FrustumPlane::Count;
         if (!isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
@@ -557,7 +557,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 
             const int columnCandidateCount = (column.aggregatedPresent ? 1 : 0) + column.transparentCount;
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
             ++m_columnTestsThisFrame;
             FrustumPlane culledPlane = FrustumPlane::Count;
             if (!isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax,
@@ -602,7 +602,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             } else {
                 // Old path: draw from column aggregate.
                 if (column.aggregatedPresent) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
                     ++m_chunkTestsThisFrame;
                     if (!isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
                                           m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
@@ -635,7 +635,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     const int scy = column.transparentScys[transparentIndex];
                     const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
                     ++m_chunkTestsThisFrame;
                     if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax,
                                           m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
@@ -1126,7 +1126,7 @@ void Renderer::renderBlockBreakOverlay(const World& world, const BlockBreakRende
 }
 
 void Renderer::recordMeshingHistory() {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     if (m_meshingHistoryCount < MESHING_HISTORY_SIZE) {
         m_meshingSubmittedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingSubmittedThisFrame);
         m_meshingCompletedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingCompletedThisFrame);
@@ -1166,7 +1166,7 @@ void Renderer::drainMeshingResults(const World& world) {
             break;
         }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         ++m_meshingCompletedThisFrame;
 #endif
         ++drainedCount;
@@ -1184,7 +1184,7 @@ void Renderer::drainMeshingResults(const World& world) {
             continue;
         }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         m_meshingBuildMsThisFrame += result.meshData.buildTimeMs;
         m_lastMeshingBuildMs = result.meshData.buildTimeMs;
         m_lastOpaqueFacesBeforeGreedy = result.meshData.opaqueFaceCountBeforeGreedy;
@@ -1299,7 +1299,7 @@ void Renderer::updateFrustum(const glm::mat4 &viewProj) {
     }
 }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
 bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
     return isChunkInFrustum(chunkMin, chunkMax, nullptr);
 }
@@ -1329,7 +1329,7 @@ bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chun
         );
 
         if (glm::dot(plane.n, positive) + plane.d < 0.0f) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
             if (culledPlane != nullptr) {
                 *culledPlane = kPlaneFromIndex(static_cast<size_t>(&plane - m_frustumPlanes.data()));
             }
@@ -1338,7 +1338,7 @@ bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chun
         }
     }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
     if (culledPlane != nullptr) {
         *culledPlane = FrustumPlane::Count;
     }

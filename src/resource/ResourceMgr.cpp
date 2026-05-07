@@ -357,7 +357,7 @@ GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& p
     stbi_set_flip_vertically_on_load(flipVertically ? 1 : 0);
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!data) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "Failed to load GUI texture: " << path << "\n";
 #endif
         return 0;
@@ -470,7 +470,7 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
               });
 
     if (imagePaths.empty()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "Texture Atlas generated with 0 images!\n";
 #endif
         return;
@@ -497,14 +497,14 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
         unsigned char* data = stbi_load(imagePaths[i].string().c_str(), &width, &height, &channels, 4);
 
         if (!data) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
             std::cerr << "Failed to load image: " << imagePaths[i] << "\n";
 #endif
             continue;
         }
 
         if (width != tileSize || height != tileSize) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
             std::cerr << "Warning: Texture size mismatch! " << imagePaths[i] << "\n";
 #endif
         }
@@ -655,7 +655,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
               });
 
     if (imagePaths.empty()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "Texture Array generated with 0 images!\n";
 #endif
         return;
@@ -701,7 +701,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         unsigned char* data = stbi_load(imagePath.string().c_str(), &width, &height, &channels, 4);
 
         if (!data) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
             std::cerr << "Failed to load image for texture array: " << imagePath << "\n";
 #endif
             currentLayer += layersPerImage[imageIndex];
@@ -735,7 +735,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
         if (useAnimationFrames) {
             if (width != tileSize || height != tileSize * declaredFrames) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
                 std::cerr << "Warning: Animated texture size mismatch in texture array: " << imagePath << "\n";
 #endif
                 uploadLayer(currentLayer, data, width, height);
@@ -749,7 +749,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
             }
         } else {
             if (width != tileSize || height != tileSize) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
                 std::cerr << "Warning: Texture size mismatch in texture array! " << imagePath << "\n";
 #endif
             }
@@ -867,7 +867,7 @@ GLuint loadLightmapTexture(const std::string& path) {
     stbi_set_flip_vertically_on_load(0);
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!data) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "Failed to load lightmap texture: " << path << "\n";
 #endif
         return 0;
@@ -938,7 +938,7 @@ GLuint ResourceMgr::loadCubemap(const std::string& name,
         int width = 0, height = 0, channels = 0;
         unsigned char* data = stbi_load(paths[i].c_str(), &width, &height, &channels, 4);
         if (!data) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
             std::cerr << "Failed to load cubemap face: " << paths[i] << "\n";
 #endif
             glDeleteTextures(1, &textureID);
@@ -1122,7 +1122,7 @@ void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSi
               });
 
     if (imagePaths.empty()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "Item texture atlas generated with 0 images!\n";
 #endif
         return;
@@ -1272,7 +1272,7 @@ void ResourceMgr::buildHudIconAtlas(const std::string& directory, int iconSize) 
               });
 
     if (imagePaths.empty()) {
-#ifndef NDEBUG
+#ifdef MECRAFT_DEBUG
         std::cerr << "HUD icon atlas generated with 0 images!\n";
 #endif
         return;
