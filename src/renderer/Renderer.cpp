@@ -1315,9 +1315,12 @@ void Renderer::drainMeshingResults(const World& world) {
 
         if (m_useMultiDrawIndirect) {
             // MDI path: bake world offset and upload to global buffer pool.
-            std::vector<BlockVertex> opaqueVerts = result.meshData.opaqueVertices;
-            std::vector<BlockVertex> cutoutVerts = result.meshData.cutoutVertices;
-            std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
+            const bool hasOpaqueOrCutout =
+                !result.meshData.opaqueVertices.empty() ||
+                !result.meshData.cutoutVertices.empty();
+            std::vector<BlockVertex> opaqueVerts = std::move(result.meshData.opaqueVertices);
+            std::vector<BlockVertex> cutoutVerts = std::move(result.meshData.cutoutVertices);
+            std::vector<BlockVertex> transparentVerts = std::move(result.meshData.transparentVertices);
             bakeWorldOffset(opaqueVerts);
             bakeWorldOffset(cutoutVerts);
             bakeWorldOffset(transparentVerts);
@@ -1350,8 +1353,8 @@ void Renderer::drainMeshingResults(const World& world) {
             m_mdiMeshAllocations[gpuKey] = MdiMeshAllocation{gpu};
             chunk.setSubChunkMesh(result.scy, mesh);
 
-            // Update column aggregate for culling bounds only (skip VBO rebuild in MDI mode).
-            chunk.updateColumnAggregateData(result.scy, result.meshData, true);
+            // MDI mode only needs column bounds for hierarchical frustum culling.
+            chunk.updateColumnAggregateBoundsOnly(result.scy, result.meshData, hasOpaqueOrCutout);
         } else {
             // Old path: per-mesh VAOs.
             mesh.upload(result.meshData.opaqueVertices);

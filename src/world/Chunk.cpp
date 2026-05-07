@@ -592,6 +592,48 @@ void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshDa
     rebuildColumnMesh();
 }
 
+void Chunk::updateColumnAggregateBoundsOnly(const int scy,
+                                            const ChunkMeshData& meshData,
+                                            const bool hasRenderableVertices) {
+    if (scy < 0 || scy >= NUM_SUB_CHUNKS) {
+        return;
+    }
+
+    ColumnAggregateSlice& slice = m_columnAggregateSlices[scy];
+    slice.opaqueVertices.clear();
+    slice.cutoutVertices.clear();
+
+    slice.hasBounds = meshData.hasBounds && hasRenderableVertices;
+    if (slice.hasBounds) {
+        const glm::ivec3 worldOffset = getWorldOffset();
+        const glm::vec3 boundsOffset(
+            static_cast<float>(worldOffset.x),
+            static_cast<float>(worldOffset.y),
+            static_cast<float>(worldOffset.z));
+        slice.boundsMin = meshData.boundsMin + boundsOffset;
+        slice.boundsMax = meshData.boundsMax + boundsOffset;
+    } else {
+        slice.boundsMin = glm::vec3(0.0f);
+        slice.boundsMax = glm::vec3(0.0f);
+    }
+
+    bool hasBounds = false;
+    glm::vec3 boundsMin(0.0f);
+    glm::vec3 boundsMax(0.0f);
+    for (const ColumnAggregateSlice& s : m_columnAggregateSlices) {
+        if (s.hasBounds) {
+            expandBounds(boundsMin, boundsMax, hasBounds, s.boundsMin, s.boundsMax);
+        }
+    }
+
+    m_columnMesh.vertexCount = 0;
+    m_columnMesh.cutoutVertexCount = 0;
+    m_columnMesh.hasBounds = hasBounds;
+    m_columnMesh.boundsMin = hasBounds ? boundsMin : glm::vec3(0.0f);
+    m_columnMesh.boundsMax = hasBounds ? boundsMax : glm::vec3(0.0f);
+    m_columnMeshDirty = false;
+}
+
 void Chunk::ensureColumnMeshBuilt() {
     if (!m_columnMeshDirty) {
         return;

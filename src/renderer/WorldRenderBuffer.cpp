@@ -556,11 +556,8 @@ void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& comman
                     commands.data());
 
     glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    setupVertexLayout();
     glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, static_cast<GLsizei>(commands.size()), 0);
     glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
 
     ++m_glSubmitCount;

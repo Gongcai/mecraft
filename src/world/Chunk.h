@@ -60,6 +60,7 @@ public:
     [[nodiscard]] const SubChunkMesh& getColumnMesh() const;
     [[nodiscard]] SubChunkMesh& getColumnMesh();
     void updateColumnAggregateData(int scy, const ChunkMeshData& meshData, bool skipGlUpload = false);
+    void updateColumnAggregateBoundsOnly(int scy, const ChunkMeshData& meshData, bool hasRenderableVertices);
     void ensureColumnMeshBuilt();
 
     // --- Light access (column-local coordinates) ---
