@@ -23,6 +23,15 @@ public:
     // Get the sun/sky light intensity multiplier [0.0, 1.0]
     float getSkyIntensity() const;
 
+    // Get current day progress in [0.0, 1.0)
+    float getDayProgress01() const;
+
+    // Get the celestial rotation angle in radians for sun/moon placement.
+    float getCelestialAngleRadians() const;
+
+    // Get moon phase index in [0, 7].
+    int getMoonPhaseIndex() const;
+
 private:
     double m_totalGameTime;
     float m_timeOfDay;

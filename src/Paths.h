@@ -26,6 +26,7 @@
 #define LIGHTMAP_DIR          TEXTURES_DIR "/lightmap"
 #define ENTITY_TEXTURE_DIR    TEXTURES_DIR "/entity"
 #define SKYBOX_TEXTURES_DIR   TEXTURES_DIR "/skybox"
+#define ENVIRONMENT_TEXTURES_DIR TEXTURES_DIR "/environment"
 
 #define MOBS_TEXTURE_DIR       ENTITY_TEXTURE_DIR "/mobs"
 #define ICONS_TEXTURE_DIR      GUI_TEXTURES_DIR "/hud"
@@ -49,5 +50,8 @@
 #define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"
 #define ZOMBIE_TEXTURE_PATH    MOBS_TEXTURE_DIR  "/zombie.png"
 #define TITLE_TEXTURE_PATH     GUI_TEXTURES_DIR "/title.png"
+#define SUN_TEXTURE_PATH       ENVIRONMENT_TEXTURES_DIR "/sun.png"
+#define MOON_TEXTURE_PATH      ENVIRONMENT_TEXTURES_DIR "/moon_phases.png"
+#define CLOUD_TEXTURE_PATH     ENVIRONMENT_TEXTURES_DIR "/clouds.png"
 
 #define DEFAULT_FONT_PATH     FONTS_DIR "/msyhbd.ttc"

@@ -52,6 +52,8 @@ void GameManager::initResources() {
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
     m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
+    m_resourceMgr.loadGuiTexture("sun", SUN_TEXTURE_PATH, false);
+    m_resourceMgr.loadGuiTexture("moon_phases", MOON_TEXTURE_PATH, false);
 
     m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
 

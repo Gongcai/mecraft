@@ -76,6 +76,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     initOutlineMesh();
     initBreakOverlayMesh();
     m_worldRenderBuffer.init();
+    m_gameplaySkyRenderer.init(resourceMgr);
 #ifdef MECRAFT_DEBUG
     initGpuTimers();
 #endif
@@ -102,6 +103,7 @@ void Renderer::shutdown() {
     shutdownGpuTimers();
 #endif
     m_mdiMeshAllocations.clear();
+    m_gameplaySkyRenderer.shutdown();
     m_worldRenderBuffer.shutdown();
     m_meshingService.shutdown();
     m_threadPool.shutdown();
@@ -141,6 +143,8 @@ void Renderer::render(const World& world, const Camera &camera, const Window &wi
 
 void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
     beginFrame(camera, window);
+    m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem());
+    m_fogSettings.color = m_gameplaySkyRenderer.getLastFogColor();
     renderWorld(world);
 }
 

@@ -9,6 +9,7 @@
 #include "../thread/ThreadPool.h"
 #include "../core/Window.h"
 #include "ChunkMeshingService.h"
+#include "GameplaySkyRenderer.h"
 #include "Shader.h"
 #include "WorldRenderBuffer.h"
 #include "WorldDrawBatch.h"
@@ -291,6 +292,7 @@ private:
 
     ThreadPool m_threadPool;
     ChunkMeshingService m_meshingService;
+    GameplaySkyRenderer m_gameplaySkyRenderer;
     std::unordered_set<int64_t> m_meshingInFlight;
     int m_meshingSubmitBudget = 8;
     bool m_meshingSubmitBudgetOverridden = false;

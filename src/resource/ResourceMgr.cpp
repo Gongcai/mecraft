@@ -256,6 +256,7 @@ void ResourceMgr::init() {
     loadShader("steve", SHADERS_DIR "/steve.vs", SHADERS_DIR "/steve.fs");
     loadShader("ui_color", SHADERS_DIR "/ui_color.vs", SHADERS_DIR "/ui_color.fs");
     loadShader("skybox", SHADERS_DIR "/skybox.vs", SHADERS_DIR "/skybox.fs");
+    loadShader("gameplay_sky", SHADERS_DIR "/gameplay_sky.vs", SHADERS_DIR "/gameplay_sky.fs");
     loadShader("blur", SHADERS_DIR "/blur.vs", SHADERS_DIR "/blur.fs");
 
     loadCubemap("menu_skybox",

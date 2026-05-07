@@ -73,3 +73,16 @@ int DayNightSystem::getElapsedDays() const {
 float DayNightSystem::getSkyIntensity() const {
     return m_skyIntensity;
 }
+
+float DayNightSystem::getDayProgress01() const {
+    return std::clamp(m_timeOfDay / SECONDS_PER_DAY, 0.0f, 0.999999f);
+}
+
+float DayNightSystem::getCelestialAngleRadians() const {
+    constexpr float kTwoPi = 6.28318530717958647692f;
+    return getDayProgress01() * kTwoPi;
+}
+
+int DayNightSystem::getMoonPhaseIndex() const {
+    return m_elapsedDays % 8;
+}

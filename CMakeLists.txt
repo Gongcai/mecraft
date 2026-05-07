@@ -95,6 +95,7 @@ set(SRC_RENDERER
         src/renderer/stb_image.cpp
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMeshingService.cpp
+        src/renderer/GameplaySkyRenderer.cpp
         src/renderer/HumanoidRenderer.cpp
         src/renderer/SkyboxRenderer.cpp
         src/renderer/WorldRenderBuffer.cpp
@@ -263,6 +264,8 @@ add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
 add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
 add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
+add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
+add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
 
 add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
 add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
