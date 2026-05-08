@@ -23,6 +23,7 @@ struct PlayerStatsData {
     int maxArmor = 20;
     int food = 20;
     int maxFood = 20;
+    bool showSurvivalStats = true;  // false in creative mode
 };
 
 struct UIRenderContext {

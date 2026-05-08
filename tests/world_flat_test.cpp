@@ -47,8 +47,8 @@ int main() {
     }
 
     const auto& chunks = world.getActiveChunks();
-    if (chunks.size() != 9) {
-        return fail("unexpected active chunk count for render distance 1");
+    if (chunks.size() != 5) {
+        return fail("unexpected active chunk count for circular render distance 1");
     }
 
     const int surfaceY = world.getSurfaceY(0, 0);
@@ -80,8 +80,8 @@ int main() {
         return fail("deep layer should include STONE");
     }
 
-    const int negSurfaceY = world.getSurfaceY(-1, -1);
-    if (world.getBlock(-1, negSurfaceY, -1) == BlockIds::AIR) {
+    const int negSurfaceY = world.getSurfaceY(-1, 0);
+    if (world.getBlock(-1, negSurfaceY, 0) == BlockIds::AIR) {
         return fail("negative world coordinate mapping failed");
     }
 

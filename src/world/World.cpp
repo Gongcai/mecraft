@@ -31,6 +31,16 @@ bool changesFluidPathing(const StateID oldState, const StateID newState) {
     return canWaterOccupyBlockLayer(oldState) != canWaterOccupyBlockLayer(newState);
 }
 
+bool isWithinChunkRenderDistance(const int cx,
+                                 const int cz,
+                                 const int playerChunkX,
+                                 const int playerChunkZ,
+                                 const int renderDistance) {
+    const int dx = cx - playerChunkX;
+    const int dz = cz - playerChunkZ;
+    return dx * dx + dz * dz <= renderDistance * renderDistance;
+}
+
 bool rayIntersectsAabb(const glm::vec3& rayOrigin,
                        const glm::vec3& rayDir,
                        const glm::vec3& boxMin,
@@ -116,7 +126,7 @@ void World::update(const glm::vec3& playerPos) {
     for (const auto& pair : m_chunks) {
         int cx = static_cast<int>(pair.first >> 32);
         int cz = static_cast<int>(pair.first & 0xFFFFFFFF);
-        if (std::abs(cx - playerChunkX) > m_renderDistance || std::abs(cz - playerChunkZ) > m_renderDistance) {
+        if (!isWithinChunkRenderDistance(cx, cz, playerChunkX, playerChunkZ, m_renderDistance)) {
             toUnload.push_back(pair.first);
         }
     }
@@ -659,6 +669,9 @@ void World::updateLoadQueue(int playerChunkX, int playerChunkZ) {
 
     for (int dx = -m_renderDistance; dx <= m_renderDistance; ++dx) {
         for (int dz = -m_renderDistance; dz <= m_renderDistance; ++dz) {
+            if (dx * dx + dz * dz > m_renderDistance * m_renderDistance) {
+                continue;
+            }
             int cx = playerChunkX + dx;
             int cz = playerChunkZ + dz;
             if (m_chunks.find(chunkKey(cx, cz)) == m_chunks.end()) {

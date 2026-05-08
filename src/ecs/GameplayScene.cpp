@@ -19,7 +19,9 @@
 #include "systems/particle/ParticleCleanupSystem.h"
 #include "systems/particle/ParticleSimulationSystem.h"
 #include "systems/particle/ParticleSpawnSystem.h"
+#include "systems/player/FallDamageSystem.h"
 #include "systems/player/FallRollEffectSystem.h"
+#include "systems/player/HungerDepletionSystem.h"
 #include "systems/audio/PlayerFootstepAudioSystem.h"
 #include "systems/world/FluidTickSystem.h"
 #include "systems/world/BlockSupportSystem.h"
@@ -48,6 +50,7 @@ GameplayScene::GameplayScene() {
     addFixedUpdateSystem<MobAISystem>();
     addFixedUpdateSystem<CharacterPhysicsSystem>();
     addFixedUpdateSystem<PlayerRuntimeUpdateSystem>();
+    addFixedUpdateSystem<FallDamageSystem>();
     addFixedUpdateSystem<ViewBobSystem>();
 
     // ── Block interaction pipeline ──
@@ -66,6 +69,9 @@ GameplayScene::GameplayScene() {
     addFixedUpdateSystem<ParticleSpawnSystem>();
     addFixedUpdateSystem<ParticleSimulationSystem>();
     addFixedUpdateSystem<ParticleCleanupSystem>();
+
+    // ── Hunger depletion ──
+    addFixedUpdateSystem<HungerDepletionSystem>();
 
     // ── Audio pipeline ──
     addFixedUpdateSystem<PlayerFootstepAudioSystem>();

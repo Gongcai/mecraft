@@ -3,6 +3,43 @@
 #include <algorithm>
 #include <cstring>
 
+namespace {
+void mergeAdjacentCommands(std::vector<DrawArraysIndirectCommand>& commands) {
+    if (commands.size() < 2) {
+        return;
+    }
+
+    std::sort(commands.begin(), commands.end(),
+              [](const DrawArraysIndirectCommand& a, const DrawArraysIndirectCommand& b) {
+                  return a.first < b.first;
+              });
+
+    size_t writeIndex = 0;
+    for (size_t readIndex = 1; readIndex < commands.size(); ++readIndex) {
+        DrawArraysIndirectCommand& current = commands[writeIndex];
+        const DrawArraysIndirectCommand& next = commands[readIndex];
+
+        const bool canMerge =
+            current.instanceCount == 1 &&
+            next.instanceCount == 1 &&
+            current.baseInstance == next.baseInstance &&
+            current.first + current.count == next.first;
+
+        if (canMerge) {
+            current.count += next.count;
+            continue;
+        }
+
+        ++writeIndex;
+        if (writeIndex != readIndex) {
+            commands[writeIndex] = next;
+        }
+    }
+
+    commands.resize(writeIndex + 1);
+}
+}
+
 // ---------------------------------------------------------------------------
 // VertexPoolAllocator
 // ---------------------------------------------------------------------------
@@ -375,8 +412,8 @@ void WorldRenderBuffer::setupVertexLayout() {
 
 void WorldRenderBuffer::init() {
     m_opaquePool.init(kInitialPoolVertices);
-    m_cutoutPool.init(kInitialPoolVertices / 4);
-    m_transparentPool.init(kInitialPoolVertices / 4);
+    m_cutoutPool.init(kInitialCutoutPoolVertices);
+    m_transparentPool.init(kInitialTransparentPoolVertices);
 
     // Create three VAOs (one per pool)
     glGenVertexArrays(1, &m_opaqueVao);
@@ -500,6 +537,9 @@ void WorldRenderBuffer::beginFrame() {
     m_cutoutCommands.clear();
     m_transparentCommands.clear();
     m_glSubmitCount = 0;
+    m_opaqueLogicalCommandCount = 0;
+    m_cutoutLogicalCommandCount = 0;
+    m_transparentLogicalCommandCount = 0;
     m_opaqueVertexCount = 0;
     m_cutoutVertexCount = 0;
     m_transparentVertexCount = 0;
@@ -508,26 +548,31 @@ void WorldRenderBuffer::beginFrame() {
 void WorldRenderBuffer::addOpaque(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_opaqueCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    ++m_opaqueLogicalCommandCount;
     m_opaqueVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::addCutout(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_cutoutCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    ++m_cutoutLogicalCommandCount;
     m_cutoutVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_transparentCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    ++m_transparentLogicalCommandCount;
     m_transparentVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::flushOpaque() {
+    mergeAdjacentCommands(m_opaqueCommands);
     flushPass(m_opaqueCommands, m_opaqueIndirectBuf, m_opaqueVao, m_opaquePool.vbo(), m_opaqueVaoBoundVbo);
 }
 
 void WorldRenderBuffer::flushCutout() {
+    mergeAdjacentCommands(m_cutoutCommands);
     flushPass(m_cutoutCommands, m_cutoutIndirectBuf, m_cutoutVao, m_cutoutPool.vbo(), m_cutoutVaoBoundVbo);
 }
 

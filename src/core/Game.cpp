@@ -11,6 +11,7 @@
 #include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/util/PlayerQuery.h"
+#include "../ecs/util/GameplayRuntimeContext.h"
 
 #include <GLFW/glfw3.h>
 
@@ -302,6 +303,11 @@ void Game::renderFrame(const float frameTime) {
     playerStats.maxArmor = playerQuery.getMaxArmor();
     playerStats.food = playerQuery.getFood();
     playerStats.maxFood = playerQuery.getMaxFood();
+
+    // Hide survival stats in creative mode
+    if (reg.ctxHas<ecs::GameplayRuntimeContext>()) {
+        playerStats.showSurvivalStats = reg.ctxGet<ecs::GameplayRuntimeContext>().gameplayMode != GameplayMode::Creative;
+    }
 
     HeldItemPreviewMotion heldItemMotion;
     heldItemMotion.moving = playerQuery.isMoving();

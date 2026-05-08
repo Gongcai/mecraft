@@ -24,11 +24,11 @@ constexpr float kHaloSize = 2.60f;
 constexpr float kBlackKeyThreshold = 0.035f;
 constexpr float kBlackKeySoftness = 0.22f;
 constexpr float kCloudHeight = 128.0f;
-constexpr int kCloudMaskSample = 6;
+constexpr int kCloudMaskSample = 8;
 constexpr float kCloudCellSize = 6.0f;
 constexpr float kCloudThickness = 4.0f;
 constexpr float kCloudDriftSpeed = 0.35f;
-constexpr unsigned char kCloudAlphaThreshold = 80;
+constexpr unsigned char kCloudAlphaThreshold = 120;
 constexpr int kCloudSolidNumerator = 3;
 constexpr int kCloudSolidDenominator = 5;
 

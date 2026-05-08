@@ -36,6 +36,7 @@ struct FoodComponent {
     int current = 20;   // 0-20 (half-drumsticks)
     int max = 20;
     int saturation = 5;
+    double lastHungerTick = 0.0;  // last game-time (seconds) when hunger was depleted
 };
 
 struct HurtEffectComponent {

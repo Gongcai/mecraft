@@ -111,6 +111,13 @@ void HudControl::renderSelf(const UIRenderContext& context) const
 
     const PlayerStatsData& stats = *context.playerStats;
 
+    // In creative mode, hide health/food/armor bars
+    if (!stats.showSurvivalStats) {
+        m_cachedVertCount = 0;
+        m_dirty = true;
+        return;
+    }
+
     // Check if stats changed since last build
     if (!m_dirty &&
         m_cachedHealth == stats.health && m_cachedMaxHealth == stats.maxHealth &&

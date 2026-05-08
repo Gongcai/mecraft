@@ -68,7 +68,9 @@ private:
 
 class WorldRenderBuffer {
 public:
-    static constexpr size_t kInitialPoolVertices = 1 << 20;   // 1M vertices ≈ 44 MB
+    static constexpr size_t kInitialPoolVertices = 1 << 20;   // 1M vertices = 32 MiB with current BlockVertex.
+    static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
+    static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
     static constexpr float kDefragmentThreshold = 0.35f;
 
@@ -100,6 +102,18 @@ public:
     size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
     size_t cutoutCommandCount() const { return m_cutoutCommands.size(); }
     size_t transparentCommandCount() const { return m_transparentCommands.size(); }
+    size_t opaqueLogicalCommandCount() const { return m_opaqueLogicalCommandCount; }
+    size_t cutoutLogicalCommandCount() const { return m_cutoutLogicalCommandCount; }
+    size_t transparentLogicalCommandCount() const { return m_transparentLogicalCommandCount; }
+    size_t opaqueCapacityVertices() const { return m_opaquePool.capacityVertices(); }
+    size_t cutoutCapacityVertices() const { return m_cutoutPool.capacityVertices(); }
+    size_t transparentCapacityVertices() const { return m_transparentPool.capacityVertices(); }
+    size_t opaqueUsedVertices() const { return m_opaquePool.usedVertices(); }
+    size_t cutoutUsedVertices() const { return m_cutoutPool.usedVertices(); }
+    size_t transparentUsedVertices() const { return m_transparentPool.usedVertices(); }
+    float opaqueFragmentationRatio() const { return m_opaquePool.fragmentationRatio(); }
+    float cutoutFragmentationRatio() const { return m_cutoutPool.fragmentationRatio(); }
+    float transparentFragmentationRatio() const { return m_transparentPool.fragmentationRatio(); }
     uint64_t opaqueVertexCount() const { return m_opaqueVertexCount; }
     uint64_t cutoutVertexCount() const { return m_cutoutVertexCount; }
     uint64_t transparentVertexCount() const { return m_transparentVertexCount; }
@@ -131,6 +145,9 @@ private:
     std::vector<DrawArraysIndirectCommand> m_transparentCommands;
 
     int m_glSubmitCount = 0;
+    size_t m_opaqueLogicalCommandCount = 0;
+    size_t m_cutoutLogicalCommandCount = 0;
+    size_t m_transparentLogicalCommandCount = 0;
     uint64_t m_opaqueVertexCount = 0;
     uint64_t m_cutoutVertexCount = 0;
     uint64_t m_transparentVertexCount = 0;

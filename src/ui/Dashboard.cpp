@@ -248,6 +248,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         const auto toMiB = [&](const uint64_t vertices) {
             return static_cast<double>(vertices) * vertexBytes / (1024.0 * 1024.0);
         };
+        const auto toPoolMiB = [&](const size_t vertices) {
+            return static_cast<double>(vertices) * vertexBytes / (1024.0 * 1024.0);
+        };
 
         ImGui::Separator();
         ImGui::Text("Render Work");
@@ -256,6 +259,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
                     static_cast<unsigned long long>(renderWork.opaqueCommands),
                     static_cast<unsigned long long>(renderWork.cutoutCommands),
                     static_cast<unsigned long long>(renderWork.transparentCommands));
+        ImGui::Text("Logical Commands O/C/T: %llu / %llu / %llu",
+                    static_cast<unsigned long long>(renderWork.opaqueLogicalCommands),
+                    static_cast<unsigned long long>(renderWork.cutoutLogicalCommands),
+                    static_cast<unsigned long long>(renderWork.transparentLogicalCommands));
         ImGui::Text("Vertices O/C/T: %llu / %llu / %llu",
                     static_cast<unsigned long long>(renderWork.opaqueVertices),
                     static_cast<unsigned long long>(renderWork.cutoutVertices),
@@ -264,6 +271,18 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
                     toMiB(renderWork.opaqueVertices),
                     toMiB(renderWork.cutoutVertices),
                     toMiB(renderWork.transparentVertices));
+        ImGui::Text("Pool Used O/C/T: %.2f / %.2f / %.2f MiB",
+                    toPoolMiB(renderWork.opaquePoolUsedVertices),
+                    toPoolMiB(renderWork.cutoutPoolUsedVertices),
+                    toPoolMiB(renderWork.transparentPoolUsedVertices));
+        ImGui::Text("Pool Capacity O/C/T: %.2f / %.2f / %.2f MiB",
+                    toPoolMiB(renderWork.opaquePoolCapacityVertices),
+                    toPoolMiB(renderWork.cutoutPoolCapacityVertices),
+                    toPoolMiB(renderWork.transparentPoolCapacityVertices));
+        ImGui::Text("Pool Fragmentation O/C/T: %.1f%% / %.1f%% / %.1f%%",
+                    renderWork.opaquePoolFragmentation * 100.0f,
+                    renderWork.cutoutPoolFragmentation * 100.0f,
+                    renderWork.transparentPoolFragmentation * 100.0f);
 
         bool cutoutDistanceLimit = render.isCutoutDistanceLimitEnabled();
         if (ImGui::Checkbox("Cutout Distance Limit", &cutoutDistanceLimit)) {

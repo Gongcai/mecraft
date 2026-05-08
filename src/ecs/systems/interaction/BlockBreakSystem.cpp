@@ -89,7 +89,6 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             audioBus.push(
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
-            dropBus.push({brokenBlock, hitBlock});
             runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
             resetBreakSession(blockBreak, uiRenderer, runtime);
             continue;

@@ -148,7 +148,9 @@ set(SRC_ECS
         src/ecs/systems/player/CharacterPhysicsSystem.cpp
         src/ecs/systems/player/PlayerRuntimeUpdateSystem.cpp
         src/ecs/systems/player/ViewBobSystem.cpp
+        src/ecs/systems/player/FallDamageSystem.cpp
         src/ecs/systems/player/FallRollEffectSystem.cpp
+        src/ecs/systems/player/HungerDepletionSystem.cpp
         src/ecs/systems/interaction/BlockTargetSystem.cpp
         src/ecs/systems/interaction/BlockBreakSystem.cpp
         src/ecs/systems/interaction/BlockPlaceSystem.cpp
