@@ -61,6 +61,8 @@ int main() {
     const BlockID topBlock = world.getBlock(0, surfaceY, 0);
     if (topBlock != BlockIds::GRASS && topBlock != BlockIds::SAND &&
         topBlock != BlockIds::DIRT && topBlock != BlockIds::STONE &&
+        topBlock != BlockIds::WOOD && topBlock != BlockIds::BIRCH_LOG &&
+        topBlock != BlockIds::OAK_LEAVES && topBlock != BlockIds::BIRCH_LEAVES &&
         !FluidState::isWater(topBlock) && topBlock != BlockIds::TALL_GRASS &&
         topBlock != BlockIds::ROSE) {
         return fail("surface block should be a valid generated terrain block");

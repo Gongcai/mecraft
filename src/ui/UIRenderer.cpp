@@ -35,6 +35,8 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_hud.visible = true;
     m_inventoryPanel.init(resourceMgr);
     m_inventoryPanel.visible = false;
+    m_creativeInventoryPanel.init(resourceMgr);
+    m_creativeInventoryPanel.visible = false;
     m_commandInput.init(resourceMgr);
     m_commandInput.visible = false;
     m_console.init(resourceMgr);
@@ -49,10 +51,12 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
         &m_commandInput,
         &m_hotbar,
         &m_inventoryPanel,
+        &m_creativeInventoryPanel,
     };
 
     m_lastSceneContext = {};
     m_lastSceneContext.resourceMgr = m_resourceMgr;
+    m_lastSceneContext.humanoidRenderer = m_humanoidRenderer;
     m_lastSceneContext.textRenderer = &m_text;
 }
 
@@ -63,6 +67,7 @@ void UIRenderer::shutdown()
     m_console.shutdown();
     m_commandInput.shutdown();
     m_text.shutdown();
+    m_creativeInventoryPanel.shutdown();
     m_inventoryPanel.shutdown();
     m_hud.shutdown();
     m_hotbar.shutdown();
@@ -70,6 +75,7 @@ void UIRenderer::shutdown()
     m_commandInputRequested = false;
     m_lastSceneContext = {};
     m_resourceMgr = nullptr;
+    m_humanoidRenderer = nullptr;
 }
 
 void UIRenderer::setCrosshairSize(float size)
@@ -330,6 +336,15 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
 void UIRenderer::setInventoryPanelVisible(bool visible)
 {
     m_inventoryPanel.setVisible(visible);
+    if (visible) {
+        m_creativeInventoryPanel.setVisible(false);
+    }
+}
+
+void UIRenderer::setHumanoidRenderer(HumanoidRenderer* humanoidRenderer)
+{
+    m_humanoidRenderer = humanoidRenderer;
+    m_lastSceneContext.humanoidRenderer = humanoidRenderer;
 }
 
 void UIRenderer::setInventoryPanelLayout(const InventoryPanelLayout& layout)
@@ -350,6 +365,44 @@ int UIRenderer::getInventoryPanelLastActivatedSlot() const
 int UIRenderer::getInventoryPanelHoveredSlot() const
 {
     return m_inventoryPanel.itemGrid().getHoveredIndex();
+}
+
+void UIRenderer::setCreativeInventoryVisible(const bool visible)
+{
+    m_creativeInventoryPanel.setVisible(visible);
+    if (visible) {
+        m_inventoryPanel.setVisible(false);
+    }
+}
+
+void UIRenderer::setCreativeInventoryTab(const CreativeInventoryTab tab)
+{
+    m_creativeInventoryPanel.setTab(tab);
+}
+
+CreativeInventoryTab UIRenderer::getCreativeInventoryTab() const
+{
+    return m_creativeInventoryPanel.getTab();
+}
+
+int UIRenderer::getCreativeInventoryLastActivatedSlot() const
+{
+    return m_creativeInventoryPanel.getLastActivatedSlot();
+}
+
+ItemID UIRenderer::getCreativeInventoryLastActivatedCreativeItem() const
+{
+    return m_creativeInventoryPanel.getLastActivatedCreativeItem();
+}
+
+int UIRenderer::getCreativeInventoryHoveredInventorySlot() const
+{
+    return m_creativeInventoryPanel.getHoveredInventorySlot();
+}
+
+void UIRenderer::clearCreativeInventoryActivations()
+{
+    m_creativeInventoryPanel.clearActivations();
 }
 
 int UIRenderer::getCraftingGridLastActivatedSlot() const
@@ -385,6 +438,7 @@ void UIRenderer::render(const Window& window,
 {
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
+    m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);
     const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, heldItemMotion, inputSnapshot);
     m_lastSceneContext = context;
@@ -407,6 +461,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getGameTime());
     context.resourceMgr = m_resourceMgr;
+    context.humanoidRenderer = m_humanoidRenderer;
     context.inventory = &inventory;
     context.playerStats = &playerStats;
     context.textRenderer = &m_text;
@@ -435,6 +490,7 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
+    context.humanoidRenderer = m_humanoidRenderer;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.visible;
@@ -471,6 +527,7 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
+    context.humanoidRenderer = m_humanoidRenderer;
     context.textRenderer = &m_text;
     context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
     context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;

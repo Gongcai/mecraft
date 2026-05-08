@@ -58,7 +58,7 @@ struct BlockDef {
     uint8_t renderShapeTag = 0;
     std::string placementStrategy = "simple";
     std::string supportRule;
-    bool useGrassTint = false;
+    bool useBiomeTint = false;
     uint8_t lightLevel  = 0;
     uint8_t opacity     = 0;
     uint16_t timeToBreak = 1000;

@@ -8,6 +8,7 @@ class ResourceMgr;
 class LocaleManager;
 class Inventory;
 class TextRenderer;
+class HumanoidRenderer;
 
 struct HeldItemPreviewMotion {
     bool moving = false;
@@ -32,6 +33,7 @@ struct UIRenderContext {
     float uiScale = 1.0f;
     float timeSeconds = 0.0f;
     ResourceMgr* resourceMgr = nullptr;
+    HumanoidRenderer* humanoidRenderer = nullptr;
     const Inventory* inventory = nullptr;
     const PlayerStatsData* playerStats = nullptr;
     const TextRenderer* textRenderer = nullptr;

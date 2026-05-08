@@ -166,22 +166,22 @@ void drawCrossPlantIcon(std::vector<unsigned char>& iconAtlasPixels,
                         const int iconOriginX,
                         const int iconOriginY,
                         const float unit,
-                        const bool useGrassTint) {
-    constexpr float kGrassTintR = 0.50f;
-    constexpr float kGrassTintG = 0.78f;
-    constexpr float kGrassTintB = 0.34f;
+                        const bool useBiomeTint) {
+    constexpr float kBiomeTintR = 0.50f;
+    constexpr float kBiomeTintG = 0.78f;
+    constexpr float kBiomeTintB = 0.34f;
 
     std::vector<unsigned char> tintedPixels;
-    if (useGrassTint) {
+    if (useBiomeTint) {
         tintedPixels = srcPixels;
         for (size_t i = 0; i + 3 < tintedPixels.size(); i += 4) {
-            tintedPixels[i + 0] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 0]) * kGrassTintR, 0.0f, 255.0f)));
-            tintedPixels[i + 1] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 1]) * kGrassTintG, 0.0f, 255.0f)));
-            tintedPixels[i + 2] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 2]) * kGrassTintB, 0.0f, 255.0f)));
+            tintedPixels[i + 0] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 0]) * kBiomeTintR, 0.0f, 255.0f)));
+            tintedPixels[i + 1] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 1]) * kBiomeTintG, 0.0f, 255.0f)));
+            tintedPixels[i + 2] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 2]) * kBiomeTintB, 0.0f, 255.0f)));
         }
     }
 
-    const std::vector<unsigned char>& iconPixels = useGrassTint ? tintedPixels : srcPixels;
+    const std::vector<unsigned char>& iconPixels = useBiomeTint ? tintedPixels : srcPixels;
 
     const Vec2f a1 { 8.0f * unit, 5.0f * unit };
     const Vec2f b1 { 22.0f * unit, 11.0f * unit };
@@ -1030,7 +1030,7 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
                                iconOriginX,
                                iconOriginY,
                                unit,
-                               def.useGrassTint);
+                               def.useBiomeTint);
             continue;
         }
 

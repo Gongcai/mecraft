@@ -24,13 +24,14 @@
 #define GUI_TEXTURES_DIR      TEXTURES_DIR "/gui"
 #define FONT_TEXTURES_DIR     TEXTURES_DIR "/font"
 #define LIGHTMAP_DIR          TEXTURES_DIR "/lightmap"
+#define COLORMAP_DIR          TEXTURES_DIR "/colormap"
 #define ENTITY_TEXTURE_DIR    TEXTURES_DIR "/entity"
 #define SKYBOX_TEXTURES_DIR   TEXTURES_DIR "/skybox"
 #define ENVIRONMENT_TEXTURES_DIR TEXTURES_DIR "/environment"
 
 #define MOBS_TEXTURE_DIR       ENTITY_TEXTURE_DIR "/mobs"
 #define ICONS_TEXTURE_DIR      GUI_TEXTURES_DIR "/hud"
-
+#define CREATIVE_TEXTURE_DIR   GUI_TEXTURES_DIR "/creative_inventory"
 
 
 #define BLOCKS_CONFIG_PATH    CONFIG_DIR "/blocks.json"
@@ -53,5 +54,9 @@
 #define SUN_TEXTURE_PATH       ENVIRONMENT_TEXTURES_DIR "/sun.png"
 #define MOON_TEXTURE_PATH      ENVIRONMENT_TEXTURES_DIR "/moon_phases.png"
 #define CLOUD_TEXTURE_PATH     ENVIRONMENT_TEXTURES_DIR "/clouds.png"
-
+#define CREATIVE_INVENTORY_PATH CREATIVE_TEXTURE_DIR "/tab_inventory.png"
+#define CREATIVE_TABS_PATH     CREATIVE_TEXTURE_DIR "/tabs"
+#define CREATIVE_TAB_ITEMS_PATH    CREATIVE_TEXTURE_DIR "/tab_items.png"
 #define DEFAULT_FONT_PATH     FONTS_DIR "/msyhbd.ttc"
+#define FOLIAGE_TEXTURE_PATH    COLORMAP_DIR "foliage.png"
+#define GRASS_TEXTURE_PATH      COLORMAP_DIR "grass.png"

@@ -105,7 +105,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].renderShapeTag = 0;
         s_blocks[i].placementStrategy = "simple";
         s_blocks[i].supportRule.clear();
-        s_blocks[i].useGrassTint = false;
+        s_blocks[i].useBiomeTint = false;
         s_blocks[i].lightLevel = 0;
         s_blocks[i].opacity = 15;
         setAllFaces(s_blocks[i], 0);
@@ -245,8 +245,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
             def.supportRule = blockJson["supportRule"].get<std::string>();
         }
-        if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
-            def.useGrassTint = blockJson["useGrassTint"].get<bool>();
+        if (blockJson.contains("useBiomeTint") && blockJson["useBiomeTint"].is_boolean()) {
+            def.useBiomeTint = blockJson["useBiomeTint"].get<bool>();
+        } else if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
+            def.useBiomeTint = blockJson["useGrassTint"].get<bool>();
         }
         if (blockJson.contains("timeToBreak") && blockJson["timeToBreak"].is_number_integer()) {
             def.timeToBreak = blockJson["timeToBreak"].get<int>();

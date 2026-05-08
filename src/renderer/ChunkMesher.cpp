@@ -39,6 +39,7 @@ struct FaceRenderData {
     float animationFps = 0.0f;
     float animated = 0.0f;
     bool flipDiagonal = false;
+    bool useBiomeTint = false;
     uint8_t uvQuarterTurns = 0;
 };
 
@@ -46,6 +47,7 @@ struct FaceMergeKey {
     BlockID blockId = 0;
     int tileIndex = 0;
     bool flipDiagonal = false;
+    bool useBiomeTint = false;
     uint8_t uvQuarterTurns = 0;
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
@@ -68,8 +70,9 @@ constexpr int FACE_FRONT = 2;
 constexpr int FACE_BACK = 3;
 constexpr int FACE_LEFT = 4;
 constexpr int FACE_RIGHT = 5;
-constexpr float CROSS_GRASS_MARKER = -1.0f;
+constexpr float CROSS_BIOME_TINT_MARKER = -1.0f;
 constexpr float CROSS_FLOWER_MARKER = -2.0f;
+constexpr float CUBE_BIOME_TINT_MARKER = -3.0f;
 constexpr float kNormalizedQuantizationScale = 180.0f;
 constexpr float kGreedyFaceOverlapEpsilon = 1.0f / 1024.0f;
 
@@ -457,6 +460,7 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
     renderData.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
     renderData.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
+    renderData.useBiomeTint = def.useBiomeTint;
     renderData.vertices = computeFaceVertexData(snapshot, x, y, z, face);
     renderData.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
 
@@ -490,6 +494,7 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
     mix(static_cast<uint64_t>(key.blockId));
     mix(static_cast<uint64_t>(key.tileIndex));
     mix(static_cast<uint64_t>(key.flipDiagonal));
+    mix(static_cast<uint64_t>(key.useBiomeTint));
     mix(static_cast<uint64_t>(key.uvQuarterTurns));
     for (size_t i = 0; i < 4; ++i) {
         mix(static_cast<uint64_t>(key.ao[i]));
@@ -508,6 +513,7 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
     key.blockId = blockId;
     key.tileIndex = renderData.tileIndex;
     key.flipDiagonal = renderData.flipDiagonal;
+    key.useBiomeTint = renderData.useBiomeTint;
     key.uvQuarterTurns = renderData.uvQuarterTurns;
     for (size_t i = 0; i < renderData.vertices.size(); ++i) {
         key.ao[i] = renderData.vertices[i].ao;
@@ -523,6 +529,7 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.blockId == rhs.blockId &&
            lhs.tileIndex == rhs.tileIndex &&
            lhs.flipDiagonal == rhs.flipDiagonal &&
+           lhs.useBiomeTint == rhs.useBiomeTint &&
            lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
            lhs.ao == rhs.ao &&
            lhs.sun == rhs.sun &&
@@ -820,13 +827,16 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
         : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
+        const float normalMarker = renderData.useBiomeTint
+                                       ? CUBE_BIOME_TINT_MARKER
+                                       : static_cast<float>(face);
         vertices.push_back(makeBlockVertex(
             corners[static_cast<size_t>(index)].x,
             corners[static_cast<size_t>(index)].y,
             corners[static_cast<size_t>(index)].z,
             faceUV[static_cast<size_t>(index)].x,
             faceUV[static_cast<size_t>(index)].y,
-            static_cast<float>(face),
+            normalMarker,
             renderData.vertices[static_cast<size_t>(index)].sunNormalized,
             renderData.vertices[static_cast<size_t>(index)].blockNormalized,
             static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
@@ -1646,7 +1656,7 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
 
     const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
-    const float crossMarker = def.useGrassTint ? CROSS_GRASS_MARKER : CROSS_FLOWER_MARKER;
+    const float crossMarker = def.useBiomeTint ? CROSS_BIOME_TINT_MARKER : CROSS_FLOWER_MARKER;
 
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {

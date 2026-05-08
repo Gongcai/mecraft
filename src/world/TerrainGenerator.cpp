@@ -51,11 +51,17 @@ constexpr uint32_t kOreSaltIron = 0xfedcba98U;
 constexpr uint32_t kOreSaltCoal = 0x2468ace0U;
 constexpr uint32_t kDecorSaltDensity = 0x4a3c2f1dU;
 constexpr uint32_t kDecorSaltFlower = 0xc13f7e59U;
+constexpr uint32_t kTreeSaltDensity = 0x7b9d3f25U;
+constexpr uint32_t kTreeSaltSpecies = 0x2f4c8a91U;
+constexpr uint32_t kTreeSaltHeight = 0x5e6b1c37U;
 
 constexpr uint32_t kOreCutoffDiamond = static_cast<uint32_t>(0.0045 * 4294967295.0);
 constexpr uint32_t kOreCutoffGold = static_cast<uint32_t>(0.0080 * 4294967295.0);
 constexpr uint32_t kOreCutoffIron = static_cast<uint32_t>(0.0160 * 4294967295.0);
 constexpr uint32_t kOreCutoffCoal = static_cast<uint32_t>(0.0240 * 4294967295.0);
+
+constexpr int kTreeLeafRadius = 2;
+constexpr int kTreeScanRadius = kTreeLeafRadius;
 
 double hashToUnit(uint32_t value) {
     return static_cast<double>(value) / static_cast<double>(0xFFFFFFFFU);
@@ -549,6 +555,141 @@ void sampleSurfaceAndMoisture2(int worldX0, int worldX1, int worldZ, uint32_t se
 #endif
 }
 
+struct TreeCandidate {
+    bool valid = false;
+    int worldX = 0;
+    int worldZ = 0;
+    int surfaceY = 0;
+    int height = 0;
+    BlockID log = 0;
+    BlockID leaves = 0;
+};
+
+uint32_t hashColumn(int worldX, int worldZ, uint32_t seed) {
+    uint32_t h = seed;
+    h ^= hash32(static_cast<uint32_t>(worldX) * kOreXMul);
+    h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
+    return h;
+}
+
+bool surfaceCanHostTree(TerrainBiome biome, double moisture, int seaLevel, int surfaceY) {
+    if (surfaceY < seaLevel || moisture < 0.38) {
+        return false;
+    }
+
+    switch (biome) {
+        case TerrainBiome::Temperate:
+        case TerrainBiome::Mountain:
+            return true;
+        case TerrainBiome::Arid:
+        case TerrainBiome::HighMountain:
+        default:
+            return false;
+    }
+}
+
+TreeCandidate sampleTreeCandidate(int worldX, int worldZ, uint32_t seed, int seaLevel) {
+    int surfaceY = 0;
+    double moisture = 0.0;
+    double ruggedness = 0.0;
+    TerrainBiome biome = TerrainBiome::Temperate;
+    sampleSurfaceAndMoistureScalar(worldX, worldZ, seed, seaLevel,
+                                   surfaceY, moisture, biome, ruggedness);
+
+    if (!surfaceCanHostTree(biome, moisture, seaLevel, surfaceY)) {
+        return {};
+    }
+
+    const double density = biome == TerrainBiome::Temperate
+                               ? (0.012 + moisture * 0.018)
+                               : (0.004 + moisture * 0.008);
+    const uint32_t h = hashColumn(worldX, worldZ, seed);
+    if (hash32(h ^ kTreeSaltDensity) > probabilityToCutoff(density)) {
+        return {};
+    }
+
+    const int height = 4 + static_cast<int>(hash32(h ^ kTreeSaltHeight) % 3U);
+    if (surfaceY + height + 1 >= Chunk::SIZE_Y) {
+        return {};
+    }
+
+    const bool birch = hash32(h ^ kTreeSaltSpecies) < probabilityToCutoff(0.42);
+    TreeCandidate candidate;
+    candidate.valid = true;
+    candidate.worldX = worldX;
+    candidate.worldZ = worldZ;
+    candidate.surfaceY = surfaceY;
+    candidate.height = height;
+    candidate.log = birch ? BlockIds::BIRCH_LOG : BlockIds::WOOD;
+    candidate.leaves = birch ? BlockIds::BIRCH_LEAVES : BlockIds::OAK_LEAVES;
+    return candidate;
+}
+
+BlockID sampleTreeBlockFromCandidate(const TreeCandidate& tree, int worldX, int y, int worldZ) {
+    if (!tree.valid) {
+        return 0;
+    }
+
+    const int dx = worldX - tree.worldX;
+    const int dz = worldZ - tree.worldZ;
+    const int absDx = std::abs(dx);
+    const int absDz = std::abs(dz);
+    if (absDx > kTreeLeafRadius || absDz > kTreeLeafRadius) {
+        return 0;
+    }
+
+    const int trunkMinY = tree.surfaceY + 1;
+    const int trunkMaxY = tree.surfaceY + tree.height;
+    if (dx == 0 && dz == 0 && y >= trunkMinY && y <= trunkMaxY) {
+        return tree.log;
+    }
+
+    const int leafY = y - trunkMaxY;
+    if (leafY < -2 || leafY > 1) {
+        return 0;
+    }
+
+    const int radius = leafY >= 0 ? 1 : 2;
+    if (absDx > radius || absDz > radius) {
+        return 0;
+    }
+    if (radius == 2 && absDx == 2 && absDz == 2) {
+        return 0;
+    }
+    return tree.leaves;
+}
+
+BlockID sampleTreeBlock(int worldX, int y, int worldZ, uint32_t seed, int seaLevel) {
+    BlockID firstLeaves = 0;
+    for (int anchorX = worldX - kTreeScanRadius; anchorX <= worldX + kTreeScanRadius; ++anchorX) {
+        for (int anchorZ = worldZ - kTreeScanRadius; anchorZ <= worldZ + kTreeScanRadius; ++anchorZ) {
+            const TreeCandidate tree = sampleTreeCandidate(anchorX, anchorZ, seed, seaLevel);
+            const BlockID block = sampleTreeBlockFromCandidate(tree, worldX, y, worldZ);
+            if (block == tree.log && block != 0) {
+                return block;
+            }
+            if (firstLeaves == 0 && block != 0) {
+                firstLeaves = block;
+            }
+        }
+    }
+    return firstLeaves;
+}
+
+bool canTreeLogReplace(BlockID id) {
+    return id == 0 ||
+           id == BlockIds::TALL_GRASS ||
+           id == BlockIds::ROSE ||
+           id == BlockIds::OAK_LEAVES ||
+           id == BlockIds::BIRCH_LEAVES;
+}
+
+bool canTreeLeavesReplace(BlockID id) {
+    return id == 0 ||
+           id == BlockIds::TALL_GRASS ||
+           id == BlockIds::ROSE;
+}
+
 BlockID sampleVegetationBlock(int worldX,
                               int worldZ,
                               uint32_t seed,
@@ -574,9 +715,7 @@ BlockID sampleVegetationBlock(int worldX,
             return 0;
     }
 
-    uint32_t h = seed;
-    h ^= hash32(static_cast<uint32_t>(worldX) * kOreXMul);
-    h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
+    const uint32_t h = hashColumn(worldX, worldZ, seed);
 
     if (hash32(h ^ kDecorSaltDensity) > probabilityToCutoff(density)) {
         return 0;
@@ -660,6 +799,13 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
         }
     } else if (y <= m_seaLevel) {
         id = BlockIds::WATER;
+    }
+
+    if (id == 0) {
+        const BlockID treeBlock = sampleTreeBlock(worldX, y, worldZ, m_seed, m_seaLevel);
+        if (treeBlock != 0) {
+            return treeBlock;
+        }
     }
 
     const int vegetationY = surfaceY + 1;
@@ -906,6 +1052,57 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
             }
 
             x += laneCount;
+        }
+    }
+
+    for (int anchorX = offset.x - kTreeScanRadius; anchorX < offset.x + Chunk::SIZE_X + kTreeScanRadius; ++anchorX) {
+        for (int anchorZ = offset.z - kTreeScanRadius; anchorZ < offset.z + Chunk::SIZE_Z + kTreeScanRadius; ++anchorZ) {
+            const TreeCandidate tree = sampleTreeCandidate(anchorX, anchorZ, m_seed, m_seaLevel);
+            if (!tree.valid) {
+                continue;
+            }
+
+            for (int dz = -kTreeLeafRadius; dz <= kTreeLeafRadius; ++dz) {
+                const int worldZ = tree.worldZ + dz;
+                const int localZ = worldZ - offset.z;
+                if (localZ < 0 || localZ >= Chunk::SIZE_Z) {
+                    continue;
+                }
+
+                for (int dx = -kTreeLeafRadius; dx <= kTreeLeafRadius; ++dx) {
+                    const int worldX = tree.worldX + dx;
+                    const int localX = worldX - offset.x;
+                    if (localX < 0 || localX >= Chunk::SIZE_X) {
+                        continue;
+                    }
+
+                    const int minY = tree.surfaceY + 1;
+                    const int maxY = tree.surfaceY + tree.height + 1;
+                    for (int y = minY; y <= maxY && y < Chunk::SIZE_Y; ++y) {
+                        const BlockID treeBlock = sampleTreeBlockFromCandidate(tree, worldX, y, worldZ);
+                        if (treeBlock == 0) {
+                            continue;
+                        }
+
+                        const int scy = Chunk::toSubChunkIndex(y);
+                        const int index = SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(y), localZ);
+                        const BlockID current = generatedBlocks[scy][index];
+                        const bool canReplace = treeBlock == tree.log
+                                                    ? canTreeLogReplace(current)
+                                                    : canTreeLeavesReplace(current);
+                        if (!canReplace) {
+                            continue;
+                        }
+
+                        generatedBlocks[scy][index] = treeBlock;
+                        hasGeneratedBlocks[scy] = true;
+                        if (BlockRegistry::getOpacityFast(treeBlock) >= 15) {
+                            chunk.setHeightMap(localX, localZ,
+                                               std::max(chunk.getHeightMap(localX, localZ), y));
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -6,7 +6,7 @@
 namespace ecs {
 
 namespace {
-constexpr float kSafeImpactSpeed = 3.0f;  // no damage below this speed
+constexpr float kSafeImpactSpeed = 10.0f;  // no damage below this speed (~3 blocks fall)
 } // namespace
 
 void FallDamageSystem::update(SystemContext& ctx) {

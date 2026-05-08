@@ -5,6 +5,7 @@
 #include "../world/Block.h"
 #include "../item/Item.h"
 #include <iostream>
+#include <string>
 #include <GLFW/glfw3.h>
 
 GameManager::GameManager() 
@@ -50,6 +51,25 @@ void GameManager::initResources() {
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
+    m_resourceMgr.loadGuiTexture("creative_tab_inventory", CREATIVE_INVENTORY_PATH, true);
+    m_resourceMgr.loadGuiTexture("creative_tab_items", CREATIVE_TAB_ITEMS_PATH, true);
+    for (int i = 1; i <= 7; ++i) {
+        const std::string suffix = std::to_string(i) + ".png";
+        m_resourceMgr.loadGuiTexture("creative_tab_top_selected_" + std::to_string(i),
+                                     std::string(CREATIVE_TABS_PATH) + "/tab_top_selected_" + suffix,
+                                     true);
+        m_resourceMgr.loadGuiTexture("creative_tab_top_unselected_" + std::to_string(i),
+                                     std::string(CREATIVE_TABS_PATH) + "/tab_top_unselected_" + suffix,
+                                     true);
+        m_resourceMgr.loadGuiTexture("creative_tab_bottom_selected_" + std::to_string(i),
+                                     std::string(CREATIVE_TABS_PATH) + "/tab_bottom_selected_" + suffix,
+                                     true);
+        m_resourceMgr.loadGuiTexture("creative_tab_bottom_unselected_" + std::to_string(i),
+                                     std::string(CREATIVE_TABS_PATH) + "/tab_bottom_unselected_" + suffix,
+                                     true);
+    }
+    m_resourceMgr.loadGuiTexture("creative_scroller", std::string(CREATIVE_TABS_PATH) + "/scroller.png", true);
+    m_resourceMgr.loadGuiTexture("creative_scroller_disabled", std::string(CREATIVE_TABS_PATH) + "/scroller_disabled.png", true);
     m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("sun", SUN_TEXTURE_PATH, false);

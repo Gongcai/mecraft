@@ -8,7 +8,8 @@ in float vFogDist;
 
 uniform sampler2DArray texArray;
 uniform int uForceBaseLod;
-uniform vec3 uGrassTintColor;
+uniform vec3 uBiomeTintColor;
+uniform vec3 uFoliageTintColor;
 uniform int uFogEnabled;
 uniform int uFogMode;
 uniform vec3 uFogColor;
@@ -33,7 +34,8 @@ float computeFogFactor(float fogDistance) {
 void main() {
     // Cross vegetation alpha-cutout mips can darken noticeably at distance.
     // Keep plants on base LOD while leaving terrain blocks on regular mip sampling.
-    bool forceBaseLod = (uForceBaseLod != 0) || (vNormal < -0.5);
+    bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
+    bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
     vec3 sampleCoord = vec3(vUV, vLayer);
     vec4 texColor = forceBaseLod
         ? textureLod(texArray, sampleCoord, 0.0)
@@ -43,7 +45,9 @@ void main() {
         discard;
 
     if (abs(vNormal + 1.0) < 0.001) {
-        texColor.rgb *= uGrassTintColor;
+        texColor.rgb *= uBiomeTintColor;
+    } else if (abs(vNormal + 3.0) < 0.001) {
+        texColor.rgb *= uFoliageTintColor;
     }
 
     if (uFogEnabled == 0) {

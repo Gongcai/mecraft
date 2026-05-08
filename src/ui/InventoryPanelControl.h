@@ -32,6 +32,12 @@ struct InventoryPanelLayout {
     float rowGap = 0.0f;
     float row4ExtraGap = 4.0f;
 
+    // Player preview frame in source texture pixels, using top-left texture coordinates.
+    float playerPreviewX0 = 25.0f;
+    float playerPreviewY0 = 8.0f;
+    float playerPreviewX1 = 78.0f;
+    float playerPreviewY1 = 78.0f;
+
     // Crafting grid layout
     CraftingGridLayout craftingGrid;
 };
@@ -74,6 +80,7 @@ private:
     void syncSlotsFromInventory();
     void syncCraftingGridPosition(const ResolvedPanelRect& panelRect);
     void renderBackground(const UIRenderContext& context) const;
+    void renderPlayerPreview(const UIRenderContext& context, const ResolvedPanelRect& panelRect) const;
     void renderDraggedItem(const UIRenderContext& context) const;
 
     const Inventory* m_inventory = nullptr;

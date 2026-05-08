@@ -107,37 +107,37 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
         vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMin.y);
         vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(particle.grassTintFactor);
+        vertices.push_back(particle.biomeTintFactor);
 
         vertices.push_back(c1.x); vertices.push_back(c1.y); vertices.push_back(c1.z);
         vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMin.y);
         vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(particle.grassTintFactor);
+        vertices.push_back(particle.biomeTintFactor);
 
         vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
         vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMax.y);
         vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(particle.grassTintFactor);
+        vertices.push_back(particle.biomeTintFactor);
 
         vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
         vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMin.y);
         vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(particle.grassTintFactor);
+        vertices.push_back(particle.biomeTintFactor);
 
         vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
         vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMax.y);
         vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(particle.grassTintFactor);
+        vertices.push_back(particle.biomeTintFactor);
 
         vertices.push_back(c3.x); vertices.push_back(c3.y); vertices.push_back(c3.z);
         vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMax.y);
         vertices.push_back(particle.layer);
         vertices.push_back(alpha);
-        vertices.push_back(particle.grassTintFactor);
+        vertices.push_back(particle.biomeTintFactor);
 
         ++emittedParticles;
     }
@@ -149,7 +149,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     m_shader->use();
     m_shader->setMat4("viewProj", projection * view);
     m_shader->setInt("texArray", 0);
-    m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+    m_shader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_texArray->textureID);

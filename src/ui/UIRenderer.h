@@ -8,6 +8,7 @@
 #include "CommandInputOverlay.h"
 #include "ConsoleDisplayBox.h"
 #include "ConsoleOverlay.h"
+#include "CreativeInventoryPanelControl.h"
 #include "CrosshairControl.h"
 #include "HeldItemPreviewControl.h"
 #include "HotbarControl.h"
@@ -23,6 +24,7 @@ class ResourceMgr;
 class Inventory;
 class LocaleManager;
 class CraftingSystem;
+class HumanoidRenderer;
 struct InputSnapshot;
 class UIScene;
 class UIWidget;
@@ -48,10 +50,19 @@ public:
     void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
     [[nodiscard]] UIEventResult routeUIInput(const UIInputEvent& event) const;
     void setInventoryPanelVisible(bool visible);
+    void setHumanoidRenderer(HumanoidRenderer* humanoidRenderer);
     void setInventoryPanelLayout(const InventoryPanelLayout& layout);
     [[nodiscard]] const InventoryPanelLayout& getInventoryPanelLayout() const;
     [[nodiscard]] int getInventoryPanelLastActivatedSlot() const;
     [[nodiscard]] int getInventoryPanelHoveredSlot() const;
+
+    void setCreativeInventoryVisible(bool visible);
+    void setCreativeInventoryTab(CreativeInventoryTab tab);
+    [[nodiscard]] CreativeInventoryTab getCreativeInventoryTab() const;
+    [[nodiscard]] int getCreativeInventoryLastActivatedSlot() const;
+    [[nodiscard]] ItemID getCreativeInventoryLastActivatedCreativeItem() const;
+    [[nodiscard]] int getCreativeInventoryHoveredInventorySlot() const;
+    void clearCreativeInventoryActivations();
 
     // Crafting grid slot access
     [[nodiscard]] int getCraftingGridLastActivatedSlot() const;
@@ -139,11 +150,13 @@ private:
     HotbarControl m_hotbar;
     HudControl m_hud;
     InventoryPanelControl m_inventoryPanel;
+    CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;
     ConsoleOverlay m_console;
     std::vector<UIWidget*> m_widgetControls;
     ResourceMgr* m_resourceMgr = nullptr;
+    HumanoidRenderer* m_humanoidRenderer = nullptr;
     UIScene* m_activeScene = nullptr;
     UITheme m_theme;
     const LocaleManager* m_localeManager = nullptr;

@@ -153,7 +153,7 @@
       "timeToBreak": 10,
       "renderShape": "cross",
       "supportRule": "ground",
-      "useGrassTint": true,
+      "useBiomeTint": true,
       "textures": {
         "all": "tall_grass_bottom"
       }
@@ -165,7 +165,7 @@
       "isTransparent": true,
       "renderShape": "cross",
       "supportRule": "ground",
-      "useGrassTint": false,
+      "useBiomeTint": false,
       "timeToBreak": 30,
       "textures": {
         "all": "rose_bush_bottom"
@@ -324,6 +324,30 @@
       "timeToBreak": 1000,
       "textures": {
         "all": "blue_wool"
+      }
+    },
+    {
+      "id": "minecraft:birch_leaves",
+      "drop": "minecraft:birch_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "useBiomeTint": true,
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "birch_leaves"
+      }
+    },
+    {
+      "id": "minecraft:oak_leaves",
+      "drop": "minecraft:oak_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "useBiomeTint": true,
+      "timeToBreak": 300,
+      "opacity": 0,
+      "textures": {
+        "all": "oak_leaves"
       }
     }
   ]

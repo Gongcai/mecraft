@@ -1,6 +1,8 @@
 #include "HumanoidRenderer.h"
 #include "Shader.h"
 
+#include <algorithm>
+#include <cmath>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -402,6 +404,150 @@ void HumanoidRenderer::shutdown() {
     destroyMesh(m_mobLeftLegMesh);
     m_shader = nullptr;
     m_resourceMgr = nullptr;
+}
+
+void HumanoidRenderer::renderInventoryPreview(const float x,
+                                              const float y,
+                                              const float width,
+                                              const float height,
+                                              const float uiScale,
+                                              const float pointerX,
+                                              const float pointerY,
+                                              const float timeSeconds) {
+    if (m_shader == nullptr || m_resourceMgr == nullptr || uiScale <= 0.0f || width <= 0.0f || height <= 0.0f) {
+        return;
+    }
+
+    const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
+    if (steveTex == 0) {
+        return;
+    }
+
+    const GLint viewportX = static_cast<GLint>(std::lround(x * uiScale));
+    const GLint viewportY = static_cast<GLint>(std::lround(y * uiScale));
+    const GLsizei viewportW = std::max<GLsizei>(1, static_cast<GLsizei>(std::lround(width * uiScale)));
+    const GLsizei viewportH = std::max<GLsizei>(1, static_cast<GLsizei>(std::lround(height * uiScale)));
+
+    GLint oldViewport[4] = {0, 0, 0, 0};
+    GLint oldScissorBox[4] = {0, 0, 0, 0};
+    GLint oldCullFace = GL_BACK;
+    GLint oldDepthFunc = GL_LESS;
+    GLint oldBlendSrc = GL_SRC_ALPHA;
+    GLint oldBlendDst = GL_ONE_MINUS_SRC_ALPHA;
+    GLint oldActiveTexture = GL_TEXTURE0;
+    GLboolean oldScissor = GL_FALSE;
+    GLboolean oldDepthTest = GL_FALSE;
+    GLboolean oldDepthMask = GL_TRUE;
+    GLboolean oldCull = GL_FALSE;
+    GLboolean oldBlend = GL_FALSE;
+    GLdouble oldDepthClear = 1.0;
+    glGetIntegerv(GL_VIEWPORT, oldViewport);
+    glGetIntegerv(GL_SCISSOR_BOX, oldScissorBox);
+    oldScissor = glIsEnabled(GL_SCISSOR_TEST);
+    oldDepthTest = glIsEnabled(GL_DEPTH_TEST);
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &oldDepthMask);
+    oldCull = glIsEnabled(GL_CULL_FACE);
+    oldBlend = glIsEnabled(GL_BLEND);
+    glGetIntegerv(GL_CULL_FACE_MODE, &oldCullFace);
+    glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunc);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &oldBlendSrc);
+    glGetIntegerv(GL_BLEND_DST_RGB, &oldBlendDst);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
+    glGetDoublev(GL_DEPTH_CLEAR_VALUE, &oldDepthClear);
+
+    glViewport(viewportX, viewportY, viewportW, viewportH);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(viewportX, viewportY, viewportW, viewportH);
+    glDepthMask(GL_TRUE);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    const float aspect = static_cast<float>(viewportW) / static_cast<float>(viewportH);
+    const glm::mat4 projection = glm::perspective(glm::radians(28.0f), aspect, 0.1f, 20.0f);
+    const glm::mat4 view = glm::lookAt(glm::vec3(0.0f, -0.02f, 4.9f),
+                                       glm::vec3(0.0f, -0.02f, 0.0f),
+                                       glm::vec3(0.0f, 1.0f, 0.0f));
+    const float previewCenterX = x + width * 0.5f;
+    const float previewCenterY = y + height * 0.58f;
+    const float lookX = std::clamp((pointerX - previewCenterX) / std::max(1.0f, width * 1.2f), -1.0f, 1.0f);
+    const float lookY = std::clamp((pointerY - previewCenterY) / std::max(1.0f, height * 1.2f), -1.0f, 1.0f);
+    const float dt = m_inventoryPreviewLastTime >= 0.0f
+        ? std::clamp(timeSeconds - m_inventoryPreviewLastTime, 0.0f, 0.1f)
+        : 0.0f;
+    m_inventoryPreviewLastTime = timeSeconds;
+
+    const float headAlpha = (dt > 0.0f) ? (1.0f - std::exp(-dt * 18.0f)) : 1.0f;
+    const float bodyAlpha = (dt > 0.0f) ? (1.0f - std::exp(-dt * 7.0f)) : 1.0f;
+    m_inventoryPreviewHeadLookX += (lookX - m_inventoryPreviewHeadLookX) * headAlpha;
+    m_inventoryPreviewHeadLookY += (lookY - m_inventoryPreviewHeadLookY) * headAlpha;
+    m_inventoryPreviewBodyLookX += (lookX - m_inventoryPreviewBodyLookX) * bodyAlpha;
+    m_inventoryPreviewBodyLookY += (lookY - m_inventoryPreviewBodyLookY) * bodyAlpha;
+
+    const float bodyYaw = glm::radians(12.0f) * m_inventoryPreviewBodyLookX;
+    const float bodyPitch = glm::radians(-5.0f) * m_inventoryPreviewBodyLookY;
+    const float headYaw = glm::radians(28.0f) * m_inventoryPreviewHeadLookX;
+    const float headPitch = glm::radians(-13.0f) * m_inventoryPreviewHeadLookY;
+
+    const glm::mat4 root =
+        glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.96f, 0.0f))
+        * glm::rotate(glm::mat4(1.0f), bodyYaw, glm::vec3(0.0f, 1.0f, 0.0f))
+        * glm::rotate(glm::mat4(1.0f), bodyPitch, glm::vec3(1.0f, 0.0f, 0.0f));
+    const glm::mat4 torso = root * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.125f, 0.0f));
+
+    const int modelLoc = m_shader->getUniformLocation("model");
+    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
+
+    m_shader->use();
+    m_shader->setMat4(viewProjLoc, projection * view);
+    m_shader->setInt("uTexture", 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, steveTex);
+
+    const auto drawPart = [&](ecs::StevePartType partType, const glm::mat4& model) {
+        PartMesh* mesh = getMeshForPart(partType, ecs::SkinTypeComponent::Type::Player);
+        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
+            return;
+        }
+        m_shader->setMat4(modelLoc, model);
+        glBindVertexArray(mesh->vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    };
+
+    drawPart(ecs::StevePartType::Torso, torso);
+    drawPart(ecs::StevePartType::Head,
+             torso
+             * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.375f, 0.0f))
+             * glm::rotate(glm::mat4(1.0f), headYaw, glm::vec3(0.0f, 1.0f, 0.0f))
+             * glm::rotate(glm::mat4(1.0f), headPitch, glm::vec3(1.0f, 0.0f, 0.0f)));
+    drawPart(ecs::StevePartType::RightArm,
+             torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.3125f, 0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::LeftArm,
+             torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.3125f, 0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::RightLeg,
+             torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.125f, -0.375f, 0.0f)));
+    drawPart(ecs::StevePartType::LeftLeg,
+             torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
+    glScissor(oldScissorBox[0], oldScissorBox[1], oldScissorBox[2], oldScissorBox[3]);
+    if (oldScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+    if (oldDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    glDepthMask(oldDepthMask);
+    glDepthFunc(oldDepthFunc);
+    if (oldCull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
+    glCullFace(oldCullFace);
+    if (oldBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+    glBlendFunc(oldBlendSrc, oldBlendDst);
+    glClearDepth(oldDepthClear);
+    glActiveTexture(static_cast<GLenum>(oldActiveTexture));
 }
 
 void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,

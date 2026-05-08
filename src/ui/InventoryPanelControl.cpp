@@ -14,6 +14,7 @@
 #include "../crafting/CraftingSystem.h"
 #include "../item/Item.h"
 #include "../player/Inventory.h"
+#include "../renderer/HumanoidRenderer.h"
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 #include "../locale/LocaleManager.h"
@@ -96,6 +97,7 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
     }
 
     renderBackground(context);
+    renderPlayerPreview(context, panelRect);
     m_craftingGrid.render(context);
     m_itemGrid.render(context);
     renderDraggedItem(context);
@@ -322,6 +324,30 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+}
+
+void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
+                                                const ResolvedPanelRect& panelRect) const
+{
+    if (!context.humanoidRenderer || context.uiScale <= 0.0f) {
+        return;
+    }
+
+    const float previewWidth = std::max(1.0f, (m_layout.playerPreviewX1 - m_layout.playerPreviewX0) * panelRect.scale);
+    const float previewHeight = std::max(1.0f, (m_layout.playerPreviewY1 - m_layout.playerPreviewY0) * panelRect.scale);
+    const float previewX = panelRect.x + m_layout.playerPreviewX0 * panelRect.scale;
+    const float previewY = panelRect.y
+        + (InventoryPanelLayout::kTextureHeight - m_layout.playerPreviewY1) * panelRect.scale;
+    const float pointerBottomY = static_cast<float>(context.screenHeight) - context.pointerY;
+
+    context.humanoidRenderer->renderInventoryPreview(previewX,
+                                                     previewY,
+                                                     previewWidth,
+                                                     previewHeight,
+                                                     context.uiScale,
+                                                     context.pointerX,
+                                                     pointerBottomY,
+                                                     context.timeSeconds);
 }
 
 void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const

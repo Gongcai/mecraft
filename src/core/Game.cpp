@@ -61,6 +61,7 @@ void Game::initRenderers() {
 
     m_dropRenderer.init(m_resourceMgr);
     m_humanoidRenderer.init(m_resourceMgr);
+    m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
 

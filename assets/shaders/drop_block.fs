@@ -17,7 +17,8 @@ uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
 uniform int uForceBaseLod;
-uniform vec3 uGrassTintColor;
+uniform vec3 uBiomeTintColor;
+uniform vec3 uFoliageTintColor;
 uniform int uFogEnabled;
 uniform int uFogMode;
 uniform vec3 uFogColor;
@@ -86,7 +87,9 @@ void main() {
     }
 
     if (abs(vNormal + 1.0) < 0.001) {
-        texColor.rgb *= uGrassTintColor;
+        texColor.rgb *= uBiomeTintColor;
+    } else if (abs(vNormal + 3.0) < 0.001) {
+        texColor.rgb *= uFoliageTintColor;
     }
 
     float aoIdx = clamp(vAO, 0.0, 3.0);

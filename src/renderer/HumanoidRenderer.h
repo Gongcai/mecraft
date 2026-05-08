@@ -26,6 +26,14 @@ public:
     void shutdown();
     void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
                 RenderMode mode = kRenderAll);
+    void renderInventoryPreview(float x,
+                                float y,
+                                float width,
+                                float height,
+                                float uiScale,
+                                float pointerX,
+                                float pointerY,
+                                float timeSeconds);
 
 private:
     struct PartMesh {
@@ -61,6 +69,11 @@ private:
 
     Shader* m_shader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
+    float m_inventoryPreviewHeadLookX = 0.0f;
+    float m_inventoryPreviewHeadLookY = 0.0f;
+    float m_inventoryPreviewBodyLookX = 0.0f;
+    float m_inventoryPreviewBodyLookY = 0.0f;
+    float m_inventoryPreviewLastTime = -1.0f;
 
     static void destroyMesh(PartMesh& mesh);
 

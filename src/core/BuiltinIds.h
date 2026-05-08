@@ -31,7 +31,9 @@
     X(BIRCH_LOG, "birch_log") \
     X(TORCH, "torch") \
     X(BROWN_MUSHROOM, "brown_mushroom") \
-    X(BLUE_WOOL, "blue_wool")
+    X(BLUE_WOOL, "blue_wool") \
+    X(OAK_LEAVES, "oak_leaves") \
+    X(BIRCH_LEAVES, "birch_leaves")
 
 #define MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(X) \
     X(COAL, "coal") \

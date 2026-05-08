@@ -50,6 +50,7 @@ set(SRC_CORE
         src/core/Game.cpp
         src/core/Time.cpp
         src/core/GameStateMachine.cpp
+        src/core/states/GameplayState.cpp
         src/core/states/CommandState.cpp
         src/core/NamespacedId.cpp
         src/core/IdRegistry.cpp
@@ -119,6 +120,7 @@ set(SRC_UI
         src/ui/UIInputAdapter.cpp
         src/ui/ItemGridControl.cpp
         src/ui/InventoryPanelControl.cpp
+        src/ui/CreativeInventoryPanelControl.cpp
         src/ui/CraftingGridControl.cpp
         src/ui/UIRenderer.cpp
         src/ui/UIPanel.cpp
@@ -261,6 +263,7 @@ add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 
 # 测试列表
 add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
+add_mecraft_test(terrain_tree_generation_test tests/terrain_tree_generation_test.cpp)
 add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
 add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
 add_mecraft_test(audio_test tests/audio_test.cpp)
@@ -280,6 +283,7 @@ add_mecraft_test(console_overlay_test tests/console_overlay_test.cpp)
 add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
 add_mecraft_test(item_grid_control_test tests/item_grid_control_test.cpp)
 add_mecraft_test(inventory_panel_control_test tests/inventory_panel_control_test.cpp)
+add_mecraft_test(creative_inventory_panel_control_test tests/creative_inventory_panel_control_test.cpp)
 add_mecraft_test(inventory_drag_logic_test tests/inventory_drag_logic_test.cpp)
 add_mecraft_test(ui_renderer_scheduler_test tests/ui_renderer_scheduler_test.cpp)
 add_mecraft_test(ui_widget_scene_test tests/ui_widget_scene_test.cpp)

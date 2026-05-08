@@ -447,7 +447,8 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setInt("texArray", 0);
     m_chunkShader->setInt("uLightmapDay", 1);
     m_chunkShader->setInt("uLightmapNight", 2);
-    m_chunkShader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+    m_chunkShader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+    m_chunkShader->setVec3("uFoliageTintColor", glm::vec3(0.43f, 0.68f, 0.28f));
     m_chunkShader->setInt("uForceBaseLod", 0);
     m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
     m_chunkShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));

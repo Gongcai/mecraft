@@ -29,8 +29,9 @@ constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.
 constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 
 constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
-constexpr float kCrossGrassMarker = -1.0f;
+constexpr float kCrossBiomeTintMarker = -1.0f;
 constexpr float kCrossFlowerMarker = -2.0f;
+constexpr float kCubeBiomeTintMarker = -3.0f;
 // Torch opaque texels occupy inclusive pixel coordinates:
 // left=7, right=8, top=6, bottom=15 on a 16x16 tile.
 // We sample at texel centers to avoid pulling in the transparent neighbors.
@@ -181,7 +182,8 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         }
         m_shader->setInt("texArray", 0);
         m_shader->setInt("uForceBaseLod", 0);
-        m_shader->setVec3("uGrassTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+        m_shader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+        m_shader->setVec3("uFoliageTintColor", glm::vec3(0.43f, 0.68f, 0.28f));
         m_shader->setFloat("uWindStrength", 0.0f);
         m_shader->setFloat("uWindSpeed", 0.0f);
         m_shader->setFloat("uWindSpatialFreq", 1.0f);
@@ -349,7 +351,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
 
         const float layer = static_cast<float>(tileIndex);
         const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-        const float crossMarker = def.useGrassTint ? kCrossGrassMarker : kCrossFlowerMarker;
+        const float crossMarker = def.useBiomeTint ? kCrossBiomeTintMarker : kCrossFlowerMarker;
 
         const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
             for (const int idx : kFaceIndices) {
@@ -441,7 +443,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     pos.z,
                     uvCoord.x,
                     uvCoord.y,
-                    static_cast<float>(face),
+                    def.useBiomeTint ? kCubeBiomeTintMarker : static_cast<float>(face),
                     1.0f,  // sunlight: full brightness for drop items
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
