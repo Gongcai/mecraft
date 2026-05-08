@@ -630,20 +630,142 @@ BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y
     return world->sampleGeneratedBlock(wx, y, wz);
 }
 
-uint8_t sampleMissingNeighborLight(const World* world, const int wx, const int y, const int wz) {
+bool trySampleWorldLight(const World* world, const int wx, const int y, const int wz, uint8_t& outLight) {
+    outLight = 0;
     if (world == nullptr || y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
+        return false;
     }
 
     const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
     const auto it = world->getActiveChunks().find(World::chunkKey(chunkCoords.x, chunkCoords.y));
     if (it == world->getActiveChunks().end() || !it->second) {
-        return 0;
+        return false;
     }
 
     const int localX = wx - chunkCoords.x * Chunk::SIZE_X;
     const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
-    return it->second->getPackedLight(localX, y, localZ);
+    outLight = it->second->getPackedLight(localX, y, localZ);
+    return true;
+}
+
+const Chunk* getDirectHorizontalNeighbor(const int dx,
+                                         const int dz,
+                                         const Chunk* neighborPosX,
+                                         const Chunk* neighborNegX,
+                                         const Chunk* neighborPosZ,
+                                         const Chunk* neighborNegZ) {
+    if (dx > 0) return neighborPosX;
+    if (dx < 0) return neighborNegX;
+    if (dz > 0) return neighborPosZ;
+    if (dz < 0) return neighborNegZ;
+    return nullptr;
+}
+
+int horizontalNeighborDirection(const int dx, const int dz) {
+    if (dx > 0) return 0;
+    if (dx < 0) return 1;
+    if (dz > 0) return 2;
+    if (dz < 0) return 3;
+    return -1;
+}
+
+uint8_t maxPackedLightComponents(const uint8_t lhs, const uint8_t rhs) {
+    const uint8_t sky = std::max(static_cast<uint8_t>((lhs >> 4) & 0x0F),
+                                 static_cast<uint8_t>((rhs >> 4) & 0x0F));
+    const uint8_t block = std::max(static_cast<uint8_t>(lhs & 0x0F),
+                                   static_cast<uint8_t>(rhs & 0x0F));
+    return static_cast<uint8_t>((sky << 4) | block);
+}
+
+const Chunk* resolveHorizontalSampleChunk(const int localX,
+                                          const int localZ,
+                                          const Chunk* neighborPosX,
+                                          const Chunk* neighborNegX,
+                                          const Chunk* neighborPosZ,
+                                          const Chunk* neighborNegZ,
+                                          int& outLocalX,
+                                          int& outLocalZ) {
+    const int dx = localX < 0 ? -1 : (localX >= Chunk::SIZE_X ? 1 : 0);
+    const int dz = localZ < 0 ? -1 : (localZ >= Chunk::SIZE_Z ? 1 : 0);
+    outLocalX = std::clamp(localX, 0, Chunk::SIZE_X - 1);
+    outLocalZ = std::clamp(localZ, 0, Chunk::SIZE_Z - 1);
+
+    if (dx == 0 && dz == 0) {
+        return nullptr;
+    }
+
+    if (dx != 0) {
+        outLocalX = dx > 0 ? 0 : Chunk::SIZE_X - 1;
+    }
+    if (dz != 0) {
+        outLocalZ = dz > 0 ? 0 : Chunk::SIZE_Z - 1;
+    }
+
+    if (dx == 0 || dz == 0) {
+        return getDirectHorizontalNeighbor(dx, dz,
+                                           neighborPosX, neighborNegX,
+                                           neighborPosZ, neighborNegZ);
+    }
+
+    const Chunk* xNeighbor = getDirectHorizontalNeighbor(dx, 0,
+                                                         neighborPosX, neighborNegX,
+                                                         neighborPosZ, neighborNegZ);
+    if (xNeighbor) {
+        const int zDirection = horizontalNeighborDirection(0, dz);
+        const Chunk* diagonal = zDirection >= 0 ? xNeighbor->neighbors[zDirection] : nullptr;
+        if (diagonal) {
+            return diagonal;
+        }
+    }
+
+    const Chunk* zNeighbor = getDirectHorizontalNeighbor(0, dz,
+                                                         neighborPosX, neighborNegX,
+                                                         neighborPosZ, neighborNegZ);
+    if (zNeighbor) {
+        const int xDirection = horizontalNeighborDirection(dx, 0);
+        const Chunk* diagonal = xDirection >= 0 ? zNeighbor->neighbors[xDirection] : nullptr;
+        if (diagonal) {
+            return diagonal;
+        }
+    }
+
+    return nullptr;
+}
+
+uint8_t fallbackHorizontalEdgeLight(const Chunk& chunk,
+                                    const int localX,
+                                    const int worldY,
+                                    const int localZ,
+                                    const Chunk* neighborPosX,
+                                    const Chunk* neighborNegX,
+                                    const Chunk* neighborPosZ,
+                                    const Chunk* neighborNegZ) {
+    if (worldY < 0 || worldY >= Chunk::SIZE_Y) {
+        return 0;
+    }
+
+    const int clampedX = std::clamp(localX, 0, Chunk::SIZE_X - 1);
+    const int clampedZ = std::clamp(localZ, 0, Chunk::SIZE_Z - 1);
+    uint8_t best = chunk.getPackedLight(clampedX, worldY, clampedZ);
+
+    const bool xOut = localX < 0 || localX >= Chunk::SIZE_X;
+    const bool zOut = localZ < 0 || localZ >= Chunk::SIZE_Z;
+    if (xOut) {
+        const Chunk* xNeighbor = localX < 0 ? neighborNegX : neighborPosX;
+        if (xNeighbor) {
+            const int nx = localX < 0 ? Chunk::SIZE_X - 1 : 0;
+            best = maxPackedLightComponents(best, xNeighbor->getPackedLight(nx, worldY, clampedZ));
+        }
+    }
+    if (zOut) {
+        const Chunk* zNeighbor = localZ < 0 ? neighborNegZ : neighborPosZ;
+        if (zNeighbor) {
+            const int nz = localZ < 0 ? Chunk::SIZE_Z - 1 : 0;
+            best = maxPackedLightComponents(best, zNeighbor->getPackedLight(clampedX, worldY, nz));
+        }
+    }
+
+    return best;
 }
 
 BlockID sampleHaloBlock(const Chunk& chunk,
@@ -664,6 +786,15 @@ BlockID sampleHaloBlock(const Chunk& chunk,
 
     if (world != nullptr) {
         return world->sampleGeneratedBlock(offset.x + localX, worldY, offset.z + localZ);
+    }
+
+    int sampleX = 0;
+    int sampleZ = 0;
+    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ,
+                                                                neighborPosX, neighborNegX,
+                                                                neighborPosZ, neighborNegZ,
+                                                                sampleX, sampleZ)) {
+        return sampleChunk->getBlock(sampleX, worldY, sampleZ);
     }
 
     if (!zInRange) {
@@ -701,6 +832,15 @@ BlockID sampleHaloFluid(const Chunk& chunk,
         return world->getFluidState(offset.x + localX, worldY, offset.z + localZ);
     }
 
+    int sampleX = 0;
+    int sampleZ = 0;
+    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ,
+                                                                neighborPosX, neighborNegX,
+                                                                neighborPosZ, neighborNegZ,
+                                                                sampleX, sampleZ)) {
+        return sampleChunk->getFluidState(sampleX, worldY, sampleZ);
+    }
+
     if (!zInRange) {
         return 0;
     }
@@ -732,8 +872,27 @@ uint8_t sampleHaloLight(const Chunk& chunk,
         return chunk.getPackedLight(localX, worldY, localZ);
     }
 
+    int sampleX = 0;
+    int sampleZ = 0;
+    if (const Chunk* sampleChunk = resolveHorizontalSampleChunk(localX, localZ,
+                                                                neighborPosX, neighborNegX,
+                                                                neighborPosZ, neighborNegZ,
+                                                                sampleX, sampleZ)) {
+        return sampleChunk->getPackedLight(sampleX, worldY, sampleZ);
+    }
+
     if (world != nullptr) {
-        return sampleMissingNeighborLight(world, offset.x + localX, worldY, offset.z + localZ);
+        uint8_t sampledLight = 0;
+        if (trySampleWorldLight(world, offset.x + localX, worldY, offset.z + localZ, sampledLight)) {
+            return sampledLight;
+        }
+    }
+
+    if (localX < 0 || localX >= Chunk::SIZE_X ||
+        localZ < 0 || localZ >= Chunk::SIZE_Z) {
+        return fallbackHorizontalEdgeLight(chunk, localX, worldY, localZ,
+                                           neighborPosX, neighborNegX,
+                                           neighborPosZ, neighborNegZ);
     }
 
     if (!zInRange) {

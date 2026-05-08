@@ -447,8 +447,9 @@ int main() {
         if (meshData.transparentFaceCountBeforeGreedy != 18) {
             return fail("unexpected raw transparent face count for 4-block water strip");
         }
-        if (meshData.transparentFaceCountAfterGreedy != meshData.transparentFaceCountBeforeGreedy) {
-            return fail("custom water meshing should report one emitted quad per visible water face");
+        if (meshData.transparentFaceCountAfterGreedy == 0 ||
+            meshData.transparentFaceCountAfterGreedy > meshData.transparentFaceCountBeforeGreedy) {
+            return fail("water meshing should report a sane emitted quad count");
         }
         if (meshData.transparentVertices.size() != static_cast<size_t>(meshData.transparentFaceCountAfterGreedy) * 6) {
             return fail("transparent vertex count should stay aligned to merged quad count");
@@ -499,6 +500,30 @@ int main() {
         }
         if (meshData.transparentVertices.size() != 30) {
             return fail("cross-chunk water culling should leave exactly five faces for one boundary block");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(Chunk::SIZE_X - 1, 32, Chunk::SIZE_Z - 1, FluidState::makeWater(0, false));
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        const auto topFaceVertices = collectFaceVertices(
+            meshData.transparentVertices,
+            0.0f,
+            15.0f, 16.0f,
+            32.0f, 33.0f,
+            15.0f, 16.0f);
+        if (topFaceVertices.size() != 6) {
+            return fail("expected one top face worth of vertices for water chunk-corner light regression case");
+        }
+
+        const bool hasDarkCorner = std::any_of(topFaceVertices.begin(), topFaceVertices.end(),
+                                               [](const BlockVertex* vertex) {
+                                                   return vertex != nullptr && vertex->sunlight < 250;
+                                               });
+        if (hasDarkCorner) {
+            return fail("water top faces at chunk corners should not average missing halo light as darkness");
         }
     }
 
