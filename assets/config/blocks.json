@@ -150,10 +150,11 @@
       "drop": "minecraft:air",
       "isSolid": false,
       "isTransparent": true,
+      "renderLayer": "cutout",
       "timeToBreak": 10,
       "renderShape": "cross",
       "supportRule": "ground",
-      "useBiomeTint": true,
+      "biomeTint": "grass",
       "textures": {
         "all": "tall_grass_bottom"
       }
@@ -163,9 +164,10 @@
       "drop": "minecraft:rose",
       "isSolid": false,
       "isTransparent": true,
+      "renderLayer": "cutout",
       "renderShape": "cross",
       "supportRule": "ground",
-      "useBiomeTint": false,
+      "biomeTint": "none",
       "timeToBreak": 30,
       "textures": {
         "all": "rose_bush_bottom"
@@ -311,6 +313,7 @@
       "drop": "minecraft:brown_mushroom",
       "isSolid": false,
       "isTransparent": true,
+      "renderLayer": "cutout",
       "renderShape": "cross",
       "supportRule": "ground",
       "timeToBreak": 10,
@@ -331,7 +334,9 @@
       "drop": "minecraft:birch_leaves",
       "isSolid": true,
       "isTransparent": true,
-      "useBiomeTint": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "biomeTint": "foliage",
       "opacity": 0,
       "timeToBreak": 300,
       "textures": {
@@ -342,8 +347,10 @@
       "id": "minecraft:oak_leaves",
       "drop": "minecraft:oak_leaves",
       "isSolid": true,
-      "isTransparent": true,
-      "useBiomeTint": true,
+      "isTransparent": true ,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "biomeTint": "foliage",
       "timeToBreak": 300,
       "opacity": 0,
       "textures": {

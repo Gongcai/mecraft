@@ -33,7 +33,6 @@ constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
 
 constexpr float kCrossBiomeTintMarker = -1.0f;
 constexpr float kCrossFlowerMarker = -2.0f;
-constexpr float kCubeBiomeTintMarker = -3.0f;
 constexpr float kTorchU0 = 7.0f / 16.0f;
 constexpr float kTorchU1 = 9.0f / 16.0f;
 constexpr float kTorchV0 = 6.0f / 16.0f;
@@ -150,16 +149,17 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     m_prevTimeSeconds = now;
     m_hasPrevSample = true;
 
-    const float targetBlend = context.heldItemPreviewMotion.moving ? 1.0f : 0.0f;
-    const float blendSpeed = context.heldItemPreviewMotion.moving ? 10.0f : 8.0f;
+    constexpr HeldItemPreviewMotion motion{};
+    const float targetBlend = motion.moving ? 1.0f : 0.0f;
+    const float blendSpeed = motion.moving ? 10.0f : 8.0f;
     const float blendT = std::clamp(dt * blendSpeed, 0.0f, 1.0f);
     m_motionBlend += (targetBlend - m_motionBlend) * blendT;
 
-    const float bobFrequency = std::max(0.0f, context.heldItemPreviewMotion.bobFrequency);
+    const float bobFrequency = std::max(0.0f, motion.bobFrequency);
     const float phase = now * bobFrequency;
-    const float sprintMul = context.heldItemPreviewMotion.sprinting ? 1.25f : 1.0f;
+    const float sprintMul = motion.sprinting ? 1.25f : 1.0f;
 
-    const float targetSwayX = std::cos(phase + context.heldItemPreviewMotion.bobPhaseOffset) * m_layout.swayAmplitudeX * m_motionBlend * sprintMul;
+    const float targetSwayX = std::cos(phase + motion.bobPhaseOffset) * m_layout.swayAmplitudeX * m_motionBlend * sprintMul;
     const float targetSwayY = std::sin(phase) * m_layout.swayAmplitudeY * m_motionBlend * sprintMul;
 
     const float swayT = std::clamp(dt * 18.0f, 0.0f, 1.0f);
@@ -218,8 +218,8 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
         m_shader->setFloat("uWindSpatialFreq", 1.0f);
         m_shader->setInt("texArray", 0);
         m_shader->setInt("uForceBaseLod", 1);
-        m_shader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
-        m_shader->setVec3("uFoliageTintColor", glm::vec3(0.43f, 0.68f, 0.28f));
+        m_shader->setInt("uGrassColormap", 3);
+        m_shader->setInt("uFoliageColormap", 4);
         m_shader->setInt("uFogEnabled", 0);
         m_shader->setFloat("uSkyIntensity", 1.0f);
         m_shader->setInt("uLightmapDay", 1);
@@ -230,13 +230,28 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
     }
 
     glBindVertexArray(mesh->vao);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
 
     glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    if (useBlockMesh) {
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
     if (useBlockMesh) {
         m_shader->setInt("uUseModel", 0);
@@ -331,7 +346,11 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
 
         const float layer = static_cast<float>(tileIndex);
         const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-        const float crossMarker = def.useBiomeTint ? kCrossBiomeTintMarker : kCrossFlowerMarker;
+        uint8_t tintU = 0;
+        uint8_t tintV = 0;
+        computeDefaultBlockTintMapPosition(tintU, tintV);
+        const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
+        const float crossMarker = tintKind != BlockTintKinds::NONE ? kCrossBiomeTintMarker : kCrossFlowerMarker;
 
         const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
             for (const int idx : kFaceIndices) {
@@ -347,7 +366,13 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     1.0f,  // sunlight: full brightness for UI
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
-                    layer
+                    layer,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    tintKind,
+                    tintU,
+                    tintV
                 ));
             }
         };
@@ -449,6 +474,10 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
 
             const float layer = static_cast<float>(tileIndex);
             const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+            uint8_t tintU = 0;
+            uint8_t tintV = 0;
+            computeDefaultBlockTintMapPosition(tintU, tintV);
+            const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
 
             for (const int idx : kFaceIndices) {
                 const glm::vec3& pos = kFaceCorners[face][idx];
@@ -459,11 +488,17 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
                     pos.z,
                     uvCoord.x,
                     uvCoord.y,
-                    def.useBiomeTint ? kCubeBiomeTintMarker : static_cast<float>(face),
+                    static_cast<float>(face),
                     1.0f,  // sunlight: full brightness for UI
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
-                    layer
+                    layer,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    tintKind,
+                    tintU,
+                    tintV
                 ));
             }
         }
@@ -504,6 +539,9 @@ HeldItemPreviewControl::Mesh HeldItemPreviewControl::buildBlockMesh(const BlockI
     glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
     glEnableVertexAttribArray(9);
     glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
+
+    glEnableVertexAttribArray(10);
+    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

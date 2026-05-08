@@ -48,6 +48,7 @@ void GameManager::initResources() {
     m_resourceMgr.preloadTextureAnimationsFromConfig(BLOCKS_CONFIG_PATH);
     m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
     m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
+    m_resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);

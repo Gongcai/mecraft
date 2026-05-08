@@ -166,13 +166,13 @@ void drawCrossPlantIcon(std::vector<unsigned char>& iconAtlasPixels,
                         const int iconOriginX,
                         const int iconOriginY,
                         const float unit,
-                        const bool useBiomeTint) {
+                        const bool applyBiomeTint) {
     constexpr float kBiomeTintR = 0.50f;
     constexpr float kBiomeTintG = 0.78f;
     constexpr float kBiomeTintB = 0.34f;
 
     std::vector<unsigned char> tintedPixels;
-    if (useBiomeTint) {
+    if (applyBiomeTint) {
         tintedPixels = srcPixels;
         for (size_t i = 0; i + 3 < tintedPixels.size(); i += 4) {
             tintedPixels[i + 0] = static_cast<unsigned char>(std::round(std::clamp(static_cast<float>(tintedPixels[i + 0]) * kBiomeTintR, 0.0f, 255.0f)));
@@ -181,7 +181,7 @@ void drawCrossPlantIcon(std::vector<unsigned char>& iconAtlasPixels,
         }
     }
 
-    const std::vector<unsigned char>& iconPixels = useBiomeTint ? tintedPixels : srcPixels;
+    const std::vector<unsigned char>& iconPixels = applyBiomeTint ? tintedPixels : srcPixels;
 
     const Vec2f a1 { 8.0f * unit, 5.0f * unit };
     const Vec2f b1 { 22.0f * unit, 11.0f * unit };
@@ -303,6 +303,14 @@ void ResourceMgr::shutdown() {
     if (m_lightmapNight != 0) {
         glDeleteTextures(1, &m_lightmapNight);
         m_lightmapNight = 0;
+    }
+    if (m_grassColormap != 0) {
+        glDeleteTextures(1, &m_grassColormap);
+        m_grassColormap = 0;
+    }
+    if (m_foliageColormap != 0) {
+        glDeleteTextures(1, &m_foliageColormap);
+        m_foliageColormap = 0;
     }
 
     for (auto& [_, texId] : m_cubemaps) {
@@ -890,6 +898,52 @@ GLuint loadLightmapTexture(const std::string& path) {
     stbi_image_free(data);
     return textureID;
 }
+
+GLuint loadColormapTexture(const std::string& path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(0);
+    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (!data) {
+#ifdef MECRAFT_DEBUG
+        std::cerr << "Failed to load colormap texture: " << path << "\n";
+#endif
+        return 0;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    stbi_image_free(data);
+    return textureID;
+}
+
+GLuint createWhiteColormapTexture() {
+    constexpr unsigned char whitePixel[4] = {255, 255, 255, 255};
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return textureID;
+}
 }
 
 void ResourceMgr::loadLightmapTextures(const std::string& dayPath, const std::string& nightPath) {
@@ -912,6 +966,34 @@ GLuint ResourceMgr::getLightmapDay() const {
 
 GLuint ResourceMgr::getLightmapNight() const {
     return m_lightmapNight;
+}
+
+void ResourceMgr::loadColormapTextures(const std::string& grassPath, const std::string& foliagePath) {
+    if (m_grassColormap != 0) {
+        glDeleteTextures(1, &m_grassColormap);
+        m_grassColormap = 0;
+    }
+    if (m_foliageColormap != 0) {
+        glDeleteTextures(1, &m_foliageColormap);
+        m_foliageColormap = 0;
+    }
+
+    m_grassColormap = loadColormapTexture(grassPath);
+    m_foliageColormap = loadColormapTexture(foliagePath);
+    if (m_grassColormap == 0) {
+        m_grassColormap = createWhiteColormapTexture();
+    }
+    if (m_foliageColormap == 0) {
+        m_foliageColormap = createWhiteColormapTexture();
+    }
+}
+
+GLuint ResourceMgr::getGrassColormap() const {
+    return m_grassColormap;
+}
+
+GLuint ResourceMgr::getFoliageColormap() const {
+    return m_foliageColormap;
 }
 
 GLuint ResourceMgr::loadCubemap(const std::string& name,
@@ -1030,7 +1112,7 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
                                iconOriginX,
                                iconOriginY,
                                unit,
-                               def.useBiomeTint);
+                               def.biomeTint != BiomeTintKind::None);
             continue;
         }
 

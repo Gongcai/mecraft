@@ -106,7 +106,7 @@ void ParticleSpawnSystem::update(SystemContext& ctx) {
             particle.maxLife = randomFloat(0.4f, 0.8f);
             particle.life = particle.maxLife;
             particle.size = randomFloat(0.06f, 0.14f);
-            particle.biomeTintFactor = blockDef.useBiomeTint ? 1.0f : 0.0f;
+            particle.biomeTintFactor = blockDef.biomeTint != BiomeTintKind::None ? 1.0f : 0.0f;
             particle.layer = static_cast<float>(texIdx);
             particle.uvMin = glm::vec2(uSubMin, vSubMin);
             particle.uvMax = glm::vec2(uSubMin + 0.5f, vSubMin + 0.5f);

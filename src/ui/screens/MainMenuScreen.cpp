@@ -8,9 +8,14 @@
 #include "../../locale/LocaleManager.h"
 
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
+    m_title = nullptr;
+    m_startButton = nullptr;
+    m_quitButton = nullptr;
+    m_langDropdown = nullptr;
+    m_langCodes.clear();
+
     // Title image
     auto title = std::make_unique<UIImage>();
-    title->init(resourceMgr);
     title->loadTexture(resourceMgr, "title", TITLE_TEXTURE_PATH);
     title->setScale(2.0f);
     title->anchor = Anchor::Center;
@@ -55,8 +60,13 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     langDropdown->anchorOffsetX = -10.0f;
     langDropdown->anchorOffsetY = 10.0f;
     if (getLocaleManager()) {
-        m_langCodes = LocaleManager::getAvailableLanguages();
+        auto availableLanguages = LocaleManager::getAvailableLanguages();
+        if (availableLanguages.empty()) {
+            availableLanguages.push_back(getLocaleManager()->getLanguage());
+        }
+        m_langCodes.swap(availableLanguages);
         std::vector<std::string> displayNames;
+        displayNames.reserve(m_langCodes.size());
         int selectedIndex = 0;
         for (size_t i = 0; i < m_langCodes.size(); ++i) {
             displayNames.push_back(LocaleManager::getLanguageDisplayName(m_langCodes[i]));

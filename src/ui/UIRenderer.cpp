@@ -28,7 +28,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_text.init(resourceMgr);
 
     m_heldItemPreview.init(resourceMgr);
-    m_heldItemPreview.visible = true;
+    m_heldItemPreview.visible = false;
     m_hotbar.init(resourceMgr);
     m_hotbar.visible = true;
     m_hud.init(resourceMgr);
@@ -45,7 +45,6 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_console.setMaxLines(m_consoleMaxLines);
 
     m_widgetControls = {
-        &m_heldItemPreview,
         &m_hud,
         &m_console,
         &m_commandInput,
@@ -76,6 +75,8 @@ void UIRenderer::shutdown()
     m_lastSceneContext = {};
     m_resourceMgr = nullptr;
     m_humanoidRenderer = nullptr;
+    m_heldItemPreviewSwingTriggered = false;
+    m_heldItemPreviewActionAnimationActive = false;
 }
 
 void UIRenderer::setCrosshairSize(float size)
@@ -181,12 +182,26 @@ const HeldItemPreviewLayout& UIRenderer::getHeldItemPreviewLayout() const
 
 void UIRenderer::triggerHeldItemPreviewActionAnimation()
 {
+    m_heldItemPreviewSwingTriggered = true;
     m_heldItemPreview.triggerActionAnimation();
 }
 
 void UIRenderer::setHeldItemPreviewActionAnimationActive(const bool active)
 {
+    m_heldItemPreviewActionAnimationActive = active;
     m_heldItemPreview.setActionAnimationActive(active);
+}
+
+bool UIRenderer::consumeHeldItemPreviewSwingTrigger()
+{
+    const bool triggered = m_heldItemPreviewSwingTriggered;
+    m_heldItemPreviewSwingTriggered = false;
+    return triggered;
+}
+
+bool UIRenderer::isHeldItemPreviewActionAnimationActive() const
+{
+    return m_heldItemPreviewActionAnimationActive;
 }
 
 void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs)
@@ -471,7 +486,6 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
-    context.heldItemPreviewMotion = heldItemMotion;
     context.theme = &m_theme;
     context.localeManager = m_localeManager;
     return context;
@@ -519,20 +533,9 @@ ResourceMgr* UIRenderer::getResourceMgr() const
 
 void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot)
 {
-    UIRenderContext context;
-    const float actualW = static_cast<float>(window.getWidth());
-    const float actualH = static_cast<float>(window.getHeight());
-    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
-    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
-    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
-    context.timeSeconds = static_cast<float>(Time::getRawTime());
-    context.resourceMgr = m_resourceMgr;
-    context.humanoidRenderer = m_humanoidRenderer;
-    context.textRenderer = &m_text;
+    UIRenderContext context = makeContextFromViewport();
     context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
     context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
-    context.theme = &m_theme;
-    context.localeManager = m_localeManager;
     m_lastSceneContext = context;
 
     if (m_activeScene && m_activeScene->visible) {

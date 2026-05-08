@@ -3,15 +3,22 @@
 #include <algorithm>
 
 void UIScene::init(ResourceMgr& resourceMgr) {
+    if (m_initialized) {
+        shutdown();
+    }
     m_resourceMgr = &resourceMgr;
     buildUI(resourceMgr);
     for (auto& root : m_roots) {
         root->init(resourceMgr);
     }
     ensureFocusableSelection();
+    m_initialized = true;
 }
 
 void UIScene::shutdown() {
+    if (!m_initialized && m_roots.empty() && m_resourceMgr == nullptr) {
+        return;
+    }
     setFocusedWidget(nullptr);
     m_focusEngaged = false;
     m_lastPointerX = -1.0f;
@@ -23,6 +30,7 @@ void UIScene::shutdown() {
     m_animations.clear();
     m_resourceMgr = nullptr;
     m_currentContext = {};
+    m_initialized = false;
     m_hasInputContext = false;
 }
 

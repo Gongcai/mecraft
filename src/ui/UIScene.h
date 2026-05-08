@@ -67,6 +67,7 @@ private:
     ResourceMgr* m_resourceMgr = nullptr;
     const LocaleManager* m_locale = nullptr;
     mutable UIRenderContext m_currentContext;
+    bool m_initialized = false;
     bool m_hasInputContext = false;
     UIWidget* m_focusedWidget = nullptr;
     bool m_focusEngaged = false;

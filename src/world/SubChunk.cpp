@@ -411,6 +411,9 @@ void setupSubChunkVertexLayout() {
 
     glEnableVertexAttribArray(9);
     glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
+
+    glEnableVertexAttribArray(10);
+    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
 }
 } // namespace
 
@@ -516,6 +519,7 @@ void SubChunkMesh::destroy() {
         vertexCount = 0;
         cutoutVertexCount = 0;
         transparentVertexCount = 0;
+        cutoutCanSkipByDistance = true;
         hasBounds = false;
         inGlobalPool = false;
         return;
@@ -551,6 +555,7 @@ void SubChunkMesh::destroy() {
     vertexCount = 0;
     transparentVertexCount = 0;
     cutoutVertexCount = 0;
+    cutoutCanSkipByDistance = true;
     hasBounds = false;
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);

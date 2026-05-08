@@ -39,7 +39,9 @@ struct FaceRenderData {
     float animationFps = 0.0f;
     float animated = 0.0f;
     bool flipDiagonal = false;
-    bool useBiomeTint = false;
+    uint8_t tintKind = BlockTintKinds::NONE;
+    uint8_t tintU = 0;
+    uint8_t tintV = 0;
     uint8_t uvQuarterTurns = 0;
 };
 
@@ -47,7 +49,9 @@ struct FaceMergeKey {
     BlockID blockId = 0;
     int tileIndex = 0;
     bool flipDiagonal = false;
-    bool useBiomeTint = false;
+    uint8_t tintKind = BlockTintKinds::NONE;
+    uint8_t tintU = 0;
+    uint8_t tintV = 0;
     uint8_t uvQuarterTurns = 0;
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
@@ -72,7 +76,6 @@ constexpr int FACE_LEFT = 4;
 constexpr int FACE_RIGHT = 5;
 constexpr float CROSS_BIOME_TINT_MARKER = -1.0f;
 constexpr float CROSS_FLOWER_MARKER = -2.0f;
-constexpr float CUBE_BIOME_TINT_MARKER = -3.0f;
 constexpr float kNormalizedQuantizationScale = 180.0f;
 constexpr float kGreedyFaceOverlapEpsilon = 1.0f / 1024.0f;
 
@@ -257,6 +260,46 @@ float computeVertexNormalized(const uint8_t base,
         avg = static_cast<float>(base + s1 + s2 + cn) / 4.0f;
     }
     return avg / 15.0f;
+}
+
+void computeTintMapPosition(const SubChunkMeshingSnapshot& snapshot,
+                            const int x,
+                            const int z,
+                            uint8_t& outU,
+                            uint8_t& outV) {
+    const int worldX = snapshot.worldOffsetX + x;
+    const int worldZ = snapshot.worldOffsetZ + z;
+    double temperature = 0.70;
+    double moisture = 0.65;
+
+    if (snapshot.world != nullptr) {
+        switch (snapshot.world->getBiome(worldX, worldZ)) {
+            case TerrainBiome::Arid:
+                temperature = 0.95;
+                moisture = 0.18;
+                break;
+            case TerrainBiome::Mountain:
+                temperature = 0.55;
+                moisture = 0.50;
+                break;
+            case TerrainBiome::HighMountain:
+                temperature = 0.35;
+                moisture = 0.40;
+                break;
+            case TerrainBiome::Temperate:
+            default:
+                temperature = 0.70;
+                moisture = 0.65;
+                break;
+        }
+
+        const double detail = std::sin(static_cast<double>(worldX) * 0.071 + static_cast<double>(worldZ) * 0.043) * 0.035;
+        temperature = std::clamp(temperature + detail, 0.0, 1.0);
+        moisture = std::clamp(moisture - detail, 0.0, 1.0);
+    }
+
+    outU = static_cast<uint8_t>(std::lround((1.0 - temperature) * 255.0));
+    outV = static_cast<uint8_t>(std::lround((1.0 - moisture * temperature) * 255.0));
 }
 
 // Check if coordinates fall in a "gap" that the 6-direction border data cannot
@@ -460,7 +503,10 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
     renderData.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
     renderData.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
-    renderData.useBiomeTint = def.useBiomeTint;
+    renderData.tintKind = blockTintKindFromBiomeTint(def.biomeTint);
+    if (renderData.tintKind != BlockTintKinds::NONE) {
+        computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
+    }
     renderData.vertices = computeFaceVertexData(snapshot, x, y, z, face);
     renderData.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
 
@@ -494,7 +540,9 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
     mix(static_cast<uint64_t>(key.blockId));
     mix(static_cast<uint64_t>(key.tileIndex));
     mix(static_cast<uint64_t>(key.flipDiagonal));
-    mix(static_cast<uint64_t>(key.useBiomeTint));
+    mix(static_cast<uint64_t>(key.tintKind));
+    mix(static_cast<uint64_t>(key.tintU));
+    mix(static_cast<uint64_t>(key.tintV));
     mix(static_cast<uint64_t>(key.uvQuarterTurns));
     for (size_t i = 0; i < 4; ++i) {
         mix(static_cast<uint64_t>(key.ao[i]));
@@ -513,7 +561,9 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
     key.blockId = blockId;
     key.tileIndex = renderData.tileIndex;
     key.flipDiagonal = renderData.flipDiagonal;
-    key.useBiomeTint = renderData.useBiomeTint;
+    key.tintKind = renderData.tintKind;
+    key.tintU = renderData.tintU;
+    key.tintV = renderData.tintV;
     key.uvQuarterTurns = renderData.uvQuarterTurns;
     for (size_t i = 0; i < renderData.vertices.size(); ++i) {
         key.ao[i] = renderData.vertices[i].ao;
@@ -529,7 +579,9 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.blockId == rhs.blockId &&
            lhs.tileIndex == rhs.tileIndex &&
            lhs.flipDiagonal == rhs.flipDiagonal &&
-           lhs.useBiomeTint == rhs.useBiomeTint &&
+           lhs.tintKind == rhs.tintKind &&
+           lhs.tintU == rhs.tintU &&
+           lhs.tintV == rhs.tintV &&
            lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
            lhs.ao == rhs.ao &&
            lhs.sun == rhs.sun &&
@@ -827,23 +879,23 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
         : std::array<int, 6>{{0, 1, 2, 0, 2, 3}};
 
     for (const int index : indices) {
-        const float normalMarker = renderData.useBiomeTint
-                                       ? CUBE_BIOME_TINT_MARKER
-                                       : static_cast<float>(face);
         vertices.push_back(makeBlockVertex(
             corners[static_cast<size_t>(index)].x,
             corners[static_cast<size_t>(index)].y,
             corners[static_cast<size_t>(index)].z,
             faceUV[static_cast<size_t>(index)].x,
             faceUV[static_cast<size_t>(index)].y,
-            normalMarker,
+            static_cast<float>(face),
             renderData.vertices[static_cast<size_t>(index)].sunNormalized,
             renderData.vertices[static_cast<size_t>(index)].blockNormalized,
             static_cast<float>(renderData.vertices[static_cast<size_t>(index)].ao),
             renderData.layer,
             renderData.animationFrameCount,
             renderData.animationFps,
-            renderData.animated
+            renderData.animated,
+            renderData.tintKind,
+            renderData.tintU,
+            renderData.tintV
         ));
     }
 }
@@ -1267,11 +1319,21 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
 }
 
 bool isOpaqueCubeCandidate(const BlockDef& def) {
-    return def.renderShape == BlockRenderShape::Cube && !def.isTransparent;
+    return def.renderShape == BlockRenderShape::Cube && def.renderLayer == BlockRenderLayer::Opaque;
+}
+
+bool isCutoutCubeCandidate(const BlockDef& def) {
+    return def.renderShape == BlockRenderShape::Cube && def.renderLayer == BlockRenderLayer::Cutout;
 }
 
 bool isTransparentCubeCandidate(const BlockDef& def) {
-    return def.renderShape == BlockRenderShape::Cube && def.isTransparent;
+    return def.renderShape == BlockRenderShape::Cube && def.renderLayer == BlockRenderLayer::Transparent;
+}
+
+void noteCutoutDistancePolicy(ChunkMeshData& meshData, const BlockDef& def) {
+    if (def.renderLayer == BlockRenderLayer::Cutout && !def.cutoutDistanceCull) {
+        meshData.cutoutCanSkipByDistance = false;
+    }
 }
 
 bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
@@ -1317,6 +1379,36 @@ bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
 
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (!isTransparentCubeCandidate(def)) {
+        return false;
+    }
+
+    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
+        return false;
+    }
+
+    outCell.valid = true;
+    outCell.x = x;
+    outCell.y = y;
+    outCell.z = z;
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    return true;
+}
+
+bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
+                            const int face,
+                            const int x,
+                            const int y,
+                            const int z,
+                            FaceCell& outCell) {
+    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+    if (blockId == 0) {
+        return false;
+    }
+
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (!isCutoutCubeCandidate(def)) {
         return false;
     }
 
@@ -1464,6 +1556,31 @@ void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkM
                          meshData.transparentFaceCountBeforeGreedy,
                          meshData.transparentFaceCountAfterGreedy,
                          populateTransparentFaceCell);
+}
+
+void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
+    buildCubeGreedyFaces(snapshot,
+                         meshData,
+                         meshData.cutoutVertices,
+                         meshData.transparentFaceCountBeforeGreedy,
+                         meshData.transparentFaceCountAfterGreedy,
+                         populateCutoutFaceCell);
+
+    constexpr int S = SubChunk::SIZE;
+    for (int y = 0; y < S; ++y) {
+        for (int z = 0; z < S; ++z) {
+            for (int x = 0; x < S; ++x) {
+                const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+                if (blockId == 0) {
+                    continue;
+                }
+                const BlockDef& def = BlockRegistry::getFast(blockId);
+                if (isCutoutCubeCandidate(def)) {
+                    noteCutoutDistancePolicy(meshData, def);
+                }
+            }
+        }
+    }
 }
 
 using WaterTopMask = std::array<bool, SC_BLOCK_COUNT>;
@@ -1656,7 +1773,13 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
 
     const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
-    const float crossMarker = def.useBiomeTint ? CROSS_BIOME_TINT_MARKER : CROSS_FLOWER_MARKER;
+    uint8_t tintU = 0;
+    uint8_t tintV = 0;
+    const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
+    if (tintKind != BlockTintKinds::NONE) {
+        computeTintMapPosition(snapshot, x, z, tintU, tintV);
+    }
+    const float crossMarker = tintKind != BlockTintKinds::NONE ? CROSS_BIOME_TINT_MARKER : CROSS_FLOWER_MARKER;
 
     const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
         for (const int index : indices) {
@@ -1670,7 +1793,13 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                 sunNormalized,
                 blockNormalized,
                 3.0f,
-                layer
+                layer,
+                1.0f,
+                0.0f,
+                0.0f,
+                tintKind,
+                tintU,
+                tintV
             ));
         }
     };
@@ -2284,6 +2413,7 @@ void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
                                    const int x,
                                    const int y,
                                    const int z) {
+    noteCutoutDistancePolicy(meshData, def);
     addCrossedQuadsImpl(meshData.cutoutVertices,
                         glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                         blockId, def, x, y, z, snapshot);
@@ -2295,10 +2425,11 @@ void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
 void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
                                     const SubChunkMeshingSnapshot& snapshot,
                                     const BlockID blockId,
-                                    const BlockDef& /*def*/,
+                                    const BlockDef& def,
                                     const int x,
                                     const int y,
                                     const int z) {
+    noteCutoutDistancePolicy(meshData, def);
     addTorchTemplateImpl(meshData.cutoutVertices,
                       glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                       blockId, x, y, z, snapshot);
@@ -2335,7 +2466,6 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
                                        const int x,
                                        const int y,
                                        const int z) {
-    const bool transparent = def.isTransparent;
     for (int face = 0; face < 6; ++face) {
         const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
         const int nx = x + normal.x;
@@ -2346,7 +2476,12 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
             continue;
         }
 
-        auto& target = transparent ? meshData.transparentVertices : meshData.opaqueVertices;
+        auto& target = def.renderLayer == BlockRenderLayer::Transparent
+            ? meshData.transparentVertices
+            : (def.renderLayer == BlockRenderLayer::Cutout
+                ? meshData.cutoutVertices
+                : meshData.opaqueVertices);
+        noteCutoutDistancePolicy(meshData, def);
         FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
         emitUnitFace(target,
                      glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
@@ -2373,6 +2508,10 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     snapshot->yBase = scy * SubChunk::SIZE;
     snapshot->isTopSection = (scy == Chunk::NUM_SUB_CHUNKS - 1);
     snapshot->isBottomSection = (scy == 0);
+    snapshot->world = world;
+    const glm::ivec3 chunkOffset = chunk.getWorldOffset();
+    snapshot->worldOffsetX = chunkOffset.x;
+    snapshot->worldOffsetZ = chunkOffset.z;
 
     const SubChunk* sc = chunk.getSubChunk(scy);
     if (!sc) {
@@ -2430,6 +2569,7 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
     meshData.transparentVertices.reserve(1024);
 
     buildOpaqueGreedyFaces(snapshot, meshData);
+    buildCutoutGreedyFaces(snapshot, meshData);
     buildTransparentGreedyFaces(snapshot, meshData);
     WaterTopMask mergedWaterTopFaces{};
     buildStillWaterTopGreedyFaces(snapshot, meshData, mergedWaterTopFaces);
@@ -2446,7 +2586,9 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
                 if (blockId != 0) {
                     const BlockDef& def = BlockRegistry::getFast(blockId);
 
-                    if (!isOpaqueCubeCandidate(def) && !isTransparentCubeCandidate(def)) {
+                    if (!isOpaqueCubeCandidate(def) &&
+                        !isCutoutCubeCandidate(def) &&
+                        !isTransparentCubeCandidate(def)) {
                         MeshBuilderFn builder = MeshBuilderRegistry::getBuilder(def.renderShapeTag);
                         if (builder == nullptr) {
                             builder = &ChunkMeshBuilders::buildUnitFaces;

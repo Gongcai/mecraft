@@ -90,6 +90,7 @@ set(SRC_RENDERER
         src/renderer/Shader.cpp
         src/renderer/Renderer.cpp
         src/renderer/DropRenderer.cpp
+        src/renderer/FirstPersonHeldItemRenderer.cpp
         src/renderer/ItemModelMesh.cpp
         src/renderer/MeshBuilderRegistry.cpp
         src/renderer/PostProcessRenderer.cpp

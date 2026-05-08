@@ -66,6 +66,44 @@ BlockID resolveDefinitionBlockId(const BlockID id) {
 
     return BlockIds::AIR;
 }
+
+BiomeTintKind parseBiomeTintKind(const nlohmann::json& blockJson) {
+    if (blockJson.contains("biomeTint") && blockJson["biomeTint"].is_string()) {
+        const std::string tint = blockJson["biomeTint"].get<std::string>();
+        if (tint == "grass") {
+            return BiomeTintKind::Grass;
+        }
+        if (tint == "foliage") {
+            return BiomeTintKind::Foliage;
+        }
+        return BiomeTintKind::None;
+    }
+
+    if (blockJson.contains("useBiomeTint") && blockJson["useBiomeTint"].is_boolean()) {
+        return blockJson["useBiomeTint"].get<bool>() ? BiomeTintKind::Grass : BiomeTintKind::None;
+    }
+    if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
+        return blockJson["useGrassTint"].get<bool>() ? BiomeTintKind::Grass : BiomeTintKind::None;
+    }
+    return BiomeTintKind::None;
+}
+
+BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool isTransparent) {
+    if (blockJson.contains("renderLayer") && blockJson["renderLayer"].is_string()) {
+        const std::string layer = blockJson["renderLayer"].get<std::string>();
+        if (layer == "opaque") {
+            return BlockRenderLayer::Opaque;
+        }
+        if (layer == "cutout") {
+            return BlockRenderLayer::Cutout;
+        }
+        if (layer == "transparent") {
+            return BlockRenderLayer::Transparent;
+        }
+    }
+
+    return isTransparent ? BlockRenderLayer::Transparent : BlockRenderLayer::Opaque;
+}
 }
 
 // Initialize BlockIds constants
@@ -101,11 +139,13 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].isLightSource = false;
         s_blocks[i].allowsFluidCoexistence = false;
         s_blocks[i].renderShape = BlockRenderShape::Cube;
+        s_blocks[i].renderLayer = BlockRenderLayer::Opaque;
+        s_blocks[i].cutoutDistanceCull = true;
         s_blocks[i].renderShapeName = "cube";
         s_blocks[i].renderShapeTag = 0;
         s_blocks[i].placementStrategy = "simple";
         s_blocks[i].supportRule.clear();
-        s_blocks[i].useBiomeTint = false;
+        s_blocks[i].biomeTint = BiomeTintKind::None;
         s_blocks[i].lightLevel = 0;
         s_blocks[i].opacity = 15;
         setAllFaces(s_blocks[i], 0);
@@ -115,6 +155,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     // Override AIR defaults
     s_blocks[0].isSolid = false;
     s_blocks[0].isTransparent = true;
+    s_blocks[0].renderLayer = BlockRenderLayer::Transparent;
     s_blocks[0].isSelectable = false;
     s_blocks[0].opacity = 0;
     setAllFaces(s_blocks[0], -1);
@@ -190,6 +231,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         BlockDef def = s_blocks[id];
         def.namespacedId = s_idRegistry.getNamespacedId(id);
         def.renderShape = BlockRenderShape::Cube;
+        def.renderLayer = BlockRenderLayer::Opaque;
+        def.cutoutDistanceCull = true;
         def.renderShapeName = "cube";
         def.renderShapeTag = 0;
         def.placementStrategy = "simple";
@@ -201,6 +244,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("isTransparent") && blockJson["isTransparent"].is_boolean()) {
             def.isTransparent = blockJson["isTransparent"].get<bool>();
+        }
+        def.renderLayer = parseRenderLayer(blockJson, def.isTransparent);
+        if (blockJson.contains("cutoutDistanceCull") && blockJson["cutoutDistanceCull"].is_boolean()) {
+            def.cutoutDistanceCull = blockJson["cutoutDistanceCull"].get<bool>();
         }
         if (blockJson.contains("isLightSource") && blockJson["isLightSource"].is_boolean()) {
             def.isLightSource = blockJson["isLightSource"].get<bool>();
@@ -245,11 +292,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
             def.supportRule = blockJson["supportRule"].get<std::string>();
         }
-        if (blockJson.contains("useBiomeTint") && blockJson["useBiomeTint"].is_boolean()) {
-            def.useBiomeTint = blockJson["useBiomeTint"].get<bool>();
-        } else if (blockJson.contains("useGrassTint") && blockJson["useGrassTint"].is_boolean()) {
-            def.useBiomeTint = blockJson["useGrassTint"].get<bool>();
-        }
+        def.biomeTint = parseBiomeTintKind(blockJson);
         if (blockJson.contains("timeToBreak") && blockJson["timeToBreak"].is_number_integer()) {
             def.timeToBreak = blockJson["timeToBreak"].get<int>();
         }

@@ -34,6 +34,18 @@ enum class BlockRenderShape : uint8_t {
     Custom = 2
 };
 
+enum class BiomeTintKind : uint8_t {
+    None = 0,
+    Grass = 1,
+    Foliage = 2,
+};
+
+enum class BlockRenderLayer : uint8_t {
+    Opaque = 0,
+    Cutout = 1,
+    Transparent = 2,
+};
+
 struct AnimatedTextureRef {
     int firstLayer = 0;
     uint16_t frameCount = 1;
@@ -54,11 +66,13 @@ struct BlockDef {
     bool isSelectable   = true;
     bool allowsFluidCoexistence = false;
     BlockRenderShape renderShape = BlockRenderShape::Cube;
+    BlockRenderLayer renderLayer = BlockRenderLayer::Opaque;
+    bool cutoutDistanceCull = true;
     std::string renderShapeName = "cube";
     uint8_t renderShapeTag = 0;
     std::string placementStrategy = "simple";
     std::string supportRule;
-    bool useBiomeTint = false;
+    BiomeTintKind biomeTint = BiomeTintKind::None;
     uint8_t lightLevel  = 0;
     uint8_t opacity     = 0;
     uint16_t timeToBreak = 1000;

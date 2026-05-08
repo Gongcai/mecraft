@@ -31,7 +31,6 @@ constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.
 constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
 constexpr float kCrossBiomeTintMarker = -1.0f;
 constexpr float kCrossFlowerMarker = -2.0f;
-constexpr float kCubeBiomeTintMarker = -3.0f;
 // Torch opaque texels occupy inclusive pixel coordinates:
 // left=7, right=8, top=6, bottom=15 on a 16x16 tile.
 // We sample at texel centers to avoid pulling in the transparent neighbors.
@@ -182,8 +181,8 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         }
         m_shader->setInt("texArray", 0);
         m_shader->setInt("uForceBaseLod", 0);
-        m_shader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
-        m_shader->setVec3("uFoliageTintColor", glm::vec3(0.43f, 0.68f, 0.28f));
+        m_shader->setInt("uGrassColormap", 3);
+        m_shader->setInt("uFoliageColormap", 4);
         m_shader->setFloat("uWindStrength", 0.0f);
         m_shader->setFloat("uWindSpeed", 0.0f);
         m_shader->setFloat("uWindSpatialFreq", 1.0f);
@@ -246,6 +245,10 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }
@@ -255,6 +258,10 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_shader->use();
         m_shader->setInt("uUseModel", 0);
     }
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1);
@@ -351,7 +358,11 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
 
         const float layer = static_cast<float>(tileIndex);
         const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-        const float crossMarker = def.useBiomeTint ? kCrossBiomeTintMarker : kCrossFlowerMarker;
+        uint8_t tintU = 0;
+        uint8_t tintV = 0;
+        computeDefaultBlockTintMapPosition(tintU, tintV);
+        const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
+        const float crossMarker = tintKind != BlockTintKinds::NONE ? kCrossBiomeTintMarker : kCrossFlowerMarker;
 
         const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
             for (const int idx : kFaceIndices) {
@@ -367,7 +378,13 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     1.0f,  // sunlight: full brightness for drop items
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
-                    layer
+                    layer,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    tintKind,
+                    tintU,
+                    tintV
                 ));
             }
         };
@@ -433,6 +450,10 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
 
             const float layer = static_cast<float>(tileIndex);
             const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
+            uint8_t tintU = 0;
+            uint8_t tintV = 0;
+            computeDefaultBlockTintMapPosition(tintU, tintV);
+            const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
 
             for (const int idx : kFaceIndices) {
                 const glm::vec3& pos = kFaceCorners[face][idx];
@@ -443,11 +464,17 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     pos.z,
                     uvCoord.x,
                     uvCoord.y,
-                    def.useBiomeTint ? kCubeBiomeTintMarker : static_cast<float>(face),
+                    static_cast<float>(face),
                     1.0f,  // sunlight: full brightness for drop items
                     0.0f,   // blockLight
                     3.0f,   // ao: no occlusion
-                    layer
+                    layer,
+                    1.0f,
+                    0.0f,
+                    0.0f,
+                    tintKind,
+                    tintU,
+                    tintV
                 ));
             }
         }
@@ -488,6 +515,9 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
     glEnableVertexAttribArray(9);
     glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
+
+    glEnableVertexAttribArray(10);
+    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

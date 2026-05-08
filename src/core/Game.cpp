@@ -14,6 +14,7 @@
 #include "../ecs/util/GameplayRuntimeContext.h"
 
 #include <GLFW/glfw3.h>
+#include <stdexcept>
 
 #ifdef MECRAFT_DEBUG
 #include <chrono>
@@ -34,6 +35,10 @@ Game::Game(const GameInitParams& params)
 }
 
 void Game::init() {
+    if (m_initialized) {
+        return;
+    }
+    m_initialized = true;
     initWorld();
     initRenderers();
     initECS();
@@ -42,6 +47,7 @@ void Game::init() {
 
 #ifdef MECRAFT_DEBUG
     m_dashboard.init(m_window);
+    m_dashboard.setFirstPersonHeldItemRenderer(&m_firstPersonHeldItemRenderer);
 #endif
 }
 
@@ -60,6 +66,7 @@ void Game::initRenderers() {
     m_renderer.setFogEnabled(true);
 
     m_dropRenderer.init(m_resourceMgr);
+    m_firstPersonHeldItemRenderer.init(m_resourceMgr);
     m_humanoidRenderer.init(m_resourceMgr);
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
@@ -124,6 +131,9 @@ StateDependencies Game::makeStateDependencies() {
     for (auto e : view) {
         inventory = &view.get<ecs::InventoryDataComponent>(e).inventory;
         break;
+    }
+    if (inventory == nullptr) {
+        throw std::runtime_error("Local player inventory is not initialized.");
     }
 
     return {
@@ -213,6 +223,9 @@ void Game::syncAudioListener(const float deltaTime) {
 }
 
 void Game::renderFrame(const float frameTime) {
+    if (!m_initialized) {
+        return;
+    }
     (void)frameTime;
     // Read fall-roll radians from ECS component.
     float fallRollRadians = 0.0f;
@@ -295,6 +308,31 @@ void Game::renderFrame(const float frameTime) {
     effects.underwaterEnabled = playerQuery.isEyesInWater();
     effects.screenRollRadians = fallRollRadians;
     m_postProcessRenderer.setEffects(effects);
+
+    HeldItemPreviewMotion heldItemMotion;
+    heldItemMotion.moving = playerQuery.isMoving();
+    heldItemMotion.sprinting = playerQuery.isSprinting();
+    heldItemMotion.bobFrequency = playerQuery.getEyeBobFrequency();
+    heldItemMotion.bobPhaseOffset = playerQuery.getEyeBobPhaseOffset();
+    heldItemMotion.cameraYawDegrees = playerQuery.getCameraYaw();
+    heldItemMotion.cameraPitchDegrees = playerQuery.getCameraPitch();
+
+    const Inventory& inventory = playerQuery.getInventory();
+
+    if (m_cameraController.isFirstPerson()) {
+        if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
+            m_firstPersonHeldItemRenderer.triggerSwing();
+        }
+        m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
+        m_firstPersonHeldItemRenderer.render(m_window,
+                                             inventory,
+                                             heldItemMotion,
+                                             static_cast<float>(Time::getGameTime()));
+    } else {
+        static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
+        m_firstPersonHeldItemRenderer.setContinuousSwing(false);
+    }
+
     m_postProcessRenderer.endSceneAndComposite(m_window);
 
     PlayerStatsData playerStats;
@@ -310,19 +348,14 @@ void Game::renderFrame(const float frameTime) {
         playerStats.showSurvivalStats = reg.ctxGet<ecs::GameplayRuntimeContext>().gameplayMode != GameplayMode::Creative;
     }
 
-    HeldItemPreviewMotion heldItemMotion;
-    heldItemMotion.moving = playerQuery.isMoving();
-    heldItemMotion.sprinting = playerQuery.isSprinting();
-    heldItemMotion.bobFrequency = playerQuery.getEyeBobFrequency();
-    heldItemMotion.bobPhaseOffset = playerQuery.getEyeBobPhaseOffset();
-
-    // Get inventory from ECS
-    const Inventory& inventory = playerQuery.getInventory();
-
     m_uiRenderer.render(m_window, inventory, playerStats, heldItemMotion, m_input.snapshot());
     m_stateMachine.render();
 #ifdef MECRAFT_DEBUG
-    m_dashboard.render(reg, m_world, finalCamera, m_renderer, m_uiRenderer,
+    m_dashboard.render(reg,
+                       m_world,
+                       finalCamera,
+                       m_renderer,
+                       m_uiRenderer,
                        m_dashboardProfilerStats);
 #endif
     m_window.swapBuffers();
@@ -434,9 +467,14 @@ void Game::publishDebugFrameProfiler(const double frameTime) {
 #endif
 
 void Game::shutdown() {
+    if (!m_initialized) {
+        return;
+    }
     m_particleSystem.shutdown();
     m_postProcessRenderer.shutdown();
     m_humanoidRenderer.shutdown();
+    m_firstPersonHeldItemRenderer.shutdown();
     m_dropRenderer.shutdown();
     m_renderer.shutdown();
+    m_initialized = false;
 }

@@ -46,7 +46,33 @@ struct BlockVertex {
     uint16_t animationFrameCount;
     uint8_t animationFps;
     uint8_t animated;
+    uint16_t tintPacked;
 };
+
+namespace BlockTintKinds {
+constexpr uint8_t NONE = 0;
+constexpr uint8_t GRASS = 1;
+constexpr uint8_t FOLIAGE = 2;
+}
+
+inline uint8_t blockTintKindFromBiomeTint(const BiomeTintKind tintKind) {
+    switch (tintKind) {
+        case BiomeTintKind::Grass:
+            return BlockTintKinds::GRASS;
+        case BiomeTintKind::Foliage:
+            return BlockTintKinds::FOLIAGE;
+        case BiomeTintKind::None:
+        default:
+            return BlockTintKinds::NONE;
+    }
+}
+
+inline void computeDefaultBlockTintMapPosition(uint8_t& outU, uint8_t& outV) {
+    constexpr double temperature = 0.70;
+    constexpr double moisture = 0.65;
+    outU = static_cast<uint8_t>((1.0 - temperature) * 255.0 + 0.5);
+    outV = static_cast<uint8_t>((1.0 - moisture * temperature) * 255.0 + 0.5);
+}
 
 inline uint8_t packBlockVertexNormalizedByte(float value) {
     value = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
@@ -63,6 +89,13 @@ inline uint16_t packBlockVertexU16(float value) {
     return static_cast<uint16_t>(value + 0.5f);
 }
 
+inline uint16_t packBlockVertexTint(uint8_t kind, uint8_t u, uint8_t v) {
+    const uint16_t packedKind = static_cast<uint16_t>(kind & 0x03U);
+    const uint16_t packedU = static_cast<uint16_t>((u >> 1U) & 0x7FU);
+    const uint16_t packedV = static_cast<uint16_t>((v >> 1U) & 0x7FU);
+    return static_cast<uint16_t>((packedKind << 14U) | (packedU << 7U) | packedV);
+}
+
 inline BlockVertex makeBlockVertex(float x,
                                    float y,
                                    float z,
@@ -75,7 +108,10 @@ inline BlockVertex makeBlockVertex(float x,
                                    float layer,
                                    float animationFrameCount = 1.0f,
                                    float animationFps = 0.0f,
-                                   float animated = 0.0f) {
+                                   float animated = 0.0f,
+                                   uint8_t tintKind = BlockTintKinds::NONE,
+                                   uint8_t tintU = 0,
+                                   uint8_t tintV = 0) {
     return {
         x,
         y,
@@ -89,7 +125,8 @@ inline BlockVertex makeBlockVertex(float x,
         packBlockVertexU16(layer),
         packBlockVertexU16(animationFrameCount),
         packBlockVertexByte(animationFps),
-        animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0)
+        animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0),
+        packBlockVertexTint(tintKind, tintU, tintV)
     };
 }
 
@@ -110,6 +147,7 @@ struct SubChunkMesh {
     GLuint cutoutVbo = 0;
     uint32_t cutoutVertexCount = 0;
     GLsizeiptr cutoutVboCapacity = 0;
+    bool cutoutCanSkipByDistance = true;
 
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);

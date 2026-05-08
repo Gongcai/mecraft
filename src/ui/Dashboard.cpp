@@ -9,6 +9,7 @@
 
 #include "UIRenderer.h"
 #include "../ecs/components/Components.h"
+#include "../renderer/FirstPersonHeldItemRenderer.h"
 
 #include <algorithm>
 #include <array>
@@ -39,8 +40,16 @@ void Dashboard::init(const Window &window) {
     ImGui_ImplOpenGL3_Init();
 }
 
-void Dashboard::render(ecs::GameplayRegistry &registry, World &world, Camera &camera, Renderer &render,
-                       UIRenderer& uiRenderer, const FrameProfilerStats& profilerStats) {
+void Dashboard::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer) {
+    m_firstPersonHeldItemRenderer = renderer;
+}
+
+void Dashboard::render(ecs::GameplayRegistry &registry,
+                       World &world,
+                       Camera &camera,
+                       Renderer &render,
+                       UIRenderer& uiRenderer,
+                       const FrameProfilerStats& profilerStats) {
     // (Your code calls glfwPollEvents())
     // ...
     // Start the Dear ImGui frame
@@ -57,10 +66,12 @@ void Dashboard::render(ecs::GameplayRegistry &registry, World &world, Camera &ca
         showHotbarSettings(uiRenderer);
         showInventoryPanelSettings(uiRenderer);
         showCraftingGridSettings(uiRenderer);
-        showHeldItemPreviewSettings(uiRenderer);
+        if (m_firstPersonHeldItemRenderer != nullptr) {
+            showHeldItemPreviewSettings(*m_firstPersonHeldItemRenderer);
+        }
         showTextSettings(uiRenderer);
-        ImGui::End();
     }
+    ImGui::End();
     // Rendering
     // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
@@ -617,21 +628,76 @@ void Dashboard::showTextSettings(UIRenderer& uiRenderer) {
     }
 }
 
-void Dashboard::showHeldItemPreviewSettings(UIRenderer& uiRenderer) {
-    if (ImGui::CollapsingHeader("Held Item Preview Settings")) {
-        HeldItemPreviewLayout layout = uiRenderer.getHeldItemPreviewLayout();
+void Dashboard::showHeldItemPreviewSettings(FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer) {
+    if (ImGui::CollapsingHeader("First Person Held Item")) {
+        FirstPersonHeldItemRenderer::Config config = firstPersonHeldItemRenderer.getConfig();
         bool changed = false;
 
-        changed |= ImGui::SliderFloat("Center X", &layout.centerXRatio, 0.0f, 1.0f, "%.3f");
-        changed |= ImGui::SliderFloat("Center Y", &layout.centerYRatio, 0.0f, 1.0f, "%.3f");
-        changed |= ImGui::SliderFloat("Size Ratio", &layout.sizeRatio, 0.02f, 0.6f, "%.3f");
-        changed |= ImGui::SliderFloat("Pitch (deg)", &layout.pitchDegrees, -89.0f, 89.0f, "%.1f");
-        changed |= ImGui::SliderFloat("Yaw (deg)", &layout.yawDegrees, -180.0f, 180.0f, "%.1f");
-        changed |= ImGui::SliderFloat("Sway Amplitude X", &layout.swayAmplitudeX, 0.0f, 0.08f, "%.4f");
-        changed |= ImGui::SliderFloat("Sway Amplitude Y", &layout.swayAmplitudeY, 0.0f, 0.08f, "%.4f");
+        changed |= ImGui::SliderFloat("FOV", &config.fovDegrees, 20.0f, 120.0f, "%.1f");
+
+        ImGui::Separator();
+        ImGui::Text("Arm");
+        changed |= ImGui::SliderFloat("Arm X", &config.armPosX, -2.0f, 2.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Arm Y", &config.armPosY, -2.0f, 2.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Arm Z", &config.armPosZ, -4.0f, -0.05f, "%.3f");
+        changed |= ImGui::SliderFloat("Arm Pitch", &config.armPitchDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Arm Yaw", &config.armYawDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Arm Roll", &config.armRollDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Arm Scale", &config.armScale, 0.05f, 3.0f, "%.3f");
+
+        ImGui::Separator();
+        ImGui::Text("Item");
+        changed |= ImGui::SliderFloat("Item X", &config.itemPosX, -2.0f, 2.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Item Y", &config.itemPosY, -2.0f, 2.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Item Z", &config.itemPosZ, -4.0f, -0.05f, "%.3f");
+        changed |= ImGui::SliderFloat("Item Pitch", &config.itemPitchDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Item Yaw", &config.itemYawDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Item Roll", &config.itemRollDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Item Scale", &config.itemScale, 0.05f, 3.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Block Pitch", &config.blockPitchDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Block Yaw", &config.blockYawDegrees, -180.0f, 180.0f, "%.1f");
+        changed |= ImGui::SliderFloat("Block Scale", &config.blockScale, 0.05f, 3.0f, "%.3f");
+
+        ImGui::Separator();
+        ImGui::Text("Motion");
+        changed |= ImGui::SliderFloat("Equip Drop", &config.equipDrop, 0.0f, 3.0f, "%.3f");
+        changed |= ImGui::SliderFloat("Equip Speed", &config.equipSpeed, 0.1f, 30.0f, "%.2f");
+        changed |= ImGui::SliderFloat("Bob X", &config.bobOffsetX, -0.3f, 0.3f, "%.4f");
+        changed |= ImGui::SliderFloat("Bob Y", &config.bobOffsetY, -0.3f, 0.3f, "%.4f");
+        changed |= ImGui::SliderFloat("Bob Roll", &config.bobRollDegrees, -20.0f, 20.0f, "%.2f");
+        changed |= ImGui::SliderFloat("View Lag Speed", &config.viewLagFollowSpeed, 0.1f, 40.0f, "%.2f");
+        changed |= ImGui::SliderFloat("View Lag Max", &config.viewLagMaxDegrees, 0.0f, 45.0f, "%.1f");
+        changed |= ImGui::SliderFloat("View Lag X", &config.viewLagOffsetX, -0.05f, 0.05f, "%.4f");
+        changed |= ImGui::SliderFloat("View Lag Y", &config.viewLagOffsetY, -0.05f, 0.05f, "%.4f");
+        changed |= ImGui::SliderFloat("View Lag Yaw", &config.viewLagYawDegrees, -2.0f, 2.0f, "%.3f");
+        changed |= ImGui::SliderFloat("View Lag Pitch", &config.viewLagPitchDegrees, -2.0f, 2.0f, "%.3f");
+
+        if (ImGui::TreeNode("Swing")) {
+            changed |= ImGui::SliderFloat("Swing Duration", &config.swingDurationSeconds, 0.05f, 2.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Arm Swing X", &config.armSwingX, -1.0f, 1.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Arm Swing Y", &config.armSwingY, -1.0f, 1.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Arm Swing Z", &config.armSwingZ, -1.0f, 1.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Arm Swing Pitch", &config.armSwingPitchDegrees, -180.0f, 180.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Arm Swing Yaw", &config.armSwingYawDegrees, -180.0f, 180.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Arm Swing Roll", &config.armSwingRollDegrees, -180.0f, 180.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Item Swing X", &config.itemSwingX, -1.0f, 1.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Item Swing Y", &config.itemSwingY, -1.0f, 1.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Item Swing Z", &config.itemSwingZ, -1.0f, 1.0f, "%.3f");
+            changed |= ImGui::SliderFloat("Item Swing Pitch", &config.itemSwingPitchDegrees, -180.0f, 180.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Item Swing Yaw", &config.itemSwingYawDegrees, -180.0f, 180.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Item Swing Roll", &config.itemSwingRollDegrees, -180.0f, 180.0f, "%.1f");
+            ImGui::TreePop();
+        }
 
         if (changed) {
-            uiRenderer.setHeldItemPreviewLayout(layout);
+            firstPersonHeldItemRenderer.setConfig(config);
+        }
+        if (ImGui::Button("Reset Held Item Defaults")) {
+            firstPersonHeldItemRenderer.resetConfig();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save Held Item Config")) {
+            firstPersonHeldItemRenderer.saveConfig();
         }
     }
 }

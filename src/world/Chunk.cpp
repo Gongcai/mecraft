@@ -544,6 +544,7 @@ void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshDa
     ColumnAggregateSlice& slice = m_columnAggregateSlices[scy];
     slice.opaqueVertices = meshData.opaqueVertices;
     slice.cutoutVertices = meshData.cutoutVertices;
+    slice.cutoutCanSkipByDistance = meshData.cutoutCanSkipByDistance;
 
     const glm::ivec3 worldOffset = getWorldOffset();
     const float xOff = static_cast<float>(worldOffset.x);
@@ -583,6 +584,13 @@ void Chunk::updateColumnAggregateData(const int scy, const ChunkMeshData& meshDa
         }
         m_columnMesh.vertexCount = 0;
         m_columnMesh.cutoutVertexCount = 0;
+        m_columnMesh.cutoutCanSkipByDistance = true;
+        for (const ColumnAggregateSlice& s : m_columnAggregateSlices) {
+            if (!s.cutoutVertices.empty() && !s.cutoutCanSkipByDistance) {
+                m_columnMesh.cutoutCanSkipByDistance = false;
+                break;
+            }
+        }
         m_columnMesh.hasBounds = hasBounds;
         m_columnMesh.boundsMin = hasBounds ? boundsMin : glm::vec3(0.0f);
         m_columnMesh.boundsMax = hasBounds ? boundsMax : glm::vec3(0.0f);
@@ -602,6 +610,7 @@ void Chunk::updateColumnAggregateBoundsOnly(const int scy,
     ColumnAggregateSlice& slice = m_columnAggregateSlices[scy];
     slice.opaqueVertices.clear();
     slice.cutoutVertices.clear();
+    slice.cutoutCanSkipByDistance = meshData.cutoutCanSkipByDistance;
 
     slice.hasBounds = meshData.hasBounds && hasRenderableVertices;
     if (slice.hasBounds) {
@@ -628,6 +637,13 @@ void Chunk::updateColumnAggregateBoundsOnly(const int scy,
 
     m_columnMesh.vertexCount = 0;
     m_columnMesh.cutoutVertexCount = 0;
+    m_columnMesh.cutoutCanSkipByDistance = true;
+    for (const ColumnAggregateSlice& s : m_columnAggregateSlices) {
+        if (s.hasBounds && !s.cutoutCanSkipByDistance) {
+            m_columnMesh.cutoutCanSkipByDistance = false;
+            break;
+        }
+    }
     m_columnMesh.hasBounds = hasBounds;
     m_columnMesh.boundsMin = hasBounds ? boundsMin : glm::vec3(0.0f);
     m_columnMesh.boundsMax = hasBounds ? boundsMax : glm::vec3(0.0f);
@@ -644,6 +660,7 @@ void Chunk::ensureColumnMeshBuilt() {
 void Chunk::rebuildColumnMesh() {
     size_t totalOpaqueVertices = 0;
     size_t totalCutoutVertices = 0;
+    bool cutoutCanSkipByDistance = true;
     bool hasBounds = false;
     glm::vec3 boundsMin(0.0f);
     glm::vec3 boundsMax(0.0f);
@@ -651,6 +668,9 @@ void Chunk::rebuildColumnMesh() {
     for (const ColumnAggregateSlice& slice : m_columnAggregateSlices) {
         totalOpaqueVertices += slice.opaqueVertices.size();
         totalCutoutVertices += slice.cutoutVertices.size();
+        if (!slice.cutoutVertices.empty() && !slice.cutoutCanSkipByDistance) {
+            cutoutCanSkipByDistance = false;
+        }
         if (slice.hasBounds) {
             expandBounds(boundsMin, boundsMax, hasBounds, slice.boundsMin, slice.boundsMax);
         }
@@ -668,6 +688,7 @@ void Chunk::rebuildColumnMesh() {
 
     m_columnMesh.upload(opaqueVertices);
     m_columnMesh.uploadCutout(cutoutVertices);
+    m_columnMesh.cutoutCanSkipByDistance = cutoutCanSkipByDistance;
     m_columnMesh.hasBounds = hasBounds;
     m_columnMesh.boundsMin = hasBounds ? boundsMin : glm::vec3(0.0f);
     m_columnMesh.boundsMax = hasBounds ? boundsMax : glm::vec3(0.0f);

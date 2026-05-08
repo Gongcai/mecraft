@@ -4,6 +4,7 @@ layout (location = 1) in vec2 aUV;
 layout (location = 2) in float aNormal;
 layout (location = 3) in float aWindWeight;
 layout (location = 4) in float aLayer;
+layout (location = 10) in uint aTintPacked;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -17,6 +18,8 @@ out vec2 vUV;
 out float vLayer;
 out float vNormal;
 out float vFogDist;
+flat out float vTintKind;
+out vec2 vTintUV;
 
 void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
@@ -35,5 +38,11 @@ void main() {
     vLayer = aLayer;
     vNormal = aNormal;
     vFogDist = max(0.0, -viewPos.z);
+
+    uint tintKind = (aTintPacked >> 14u) & 3u;
+    uint tintU = (aTintPacked >> 7u) & 127u;
+    uint tintV = aTintPacked & 127u;
+    vTintKind = float(tintKind);
+    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 128.0;
 }
 

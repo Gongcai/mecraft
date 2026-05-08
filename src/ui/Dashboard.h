@@ -21,6 +21,7 @@
 #include "../ecs/util/PlayerQuery.h"
 #include "../world/World.h"
 #include "../renderer/Renderer.h"
+class FirstPersonHeldItemRenderer;
 class UIRenderer;
 class Dashboard {
 public:
@@ -49,8 +50,13 @@ public:
     Dashboard();
     ~Dashboard();
     void init(const Window& window);
-    void render(ecs::GameplayRegistry& registry, World &world, Camera &camera, Renderer &render,
-                UIRenderer& uiRenderer, const FrameProfilerStats& profilerStats);
+    void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer);
+    void render(ecs::GameplayRegistry& registry,
+                World &world,
+                Camera &camera,
+                Renderer &render,
+                UIRenderer& uiRenderer,
+                const FrameProfilerStats& profilerStats);
 private:
     void showPlayerStats(ecs::GameplayRegistry& registry);
     void showWorldStats(World& world, ecs::GameplayRegistry& registry);
@@ -60,8 +66,10 @@ private:
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);
     void showCraftingGridSettings(UIRenderer& uiRenderer);
-    void showHeldItemPreviewSettings(UIRenderer& uiRenderer);
+    void showHeldItemPreviewSettings(FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer);
     void showTextSettings(UIRenderer& uiRenderer);
+
+    FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
 };
 
 #endif // NDEBUG

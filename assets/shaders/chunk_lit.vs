@@ -9,6 +9,7 @@ layout (location = 6) in float aLayer;
 layout (location = 7) in float aAnimationFrameCount;
 layout (location = 8) in float aAnimationFps;
 layout (location = 9) in float aAnimated;
+layout (location = 10) in uint aTintPacked;
 
 uniform mat4 view;
 uniform mat4 viewProj;
@@ -26,6 +27,8 @@ out float vAnimationFrameCount;
 out float vAnimationFps;
 out float vAnimated;
 out float vFogDist;
+flat out float vTintKind;
+out vec2 vTintUV;
 
 void main() {
     vec4 localPos = vec4(aPos, 1.0);
@@ -48,4 +51,10 @@ void main() {
     vAnimationFps = aAnimationFps;
     vAnimated = aAnimated;
     vFogDist = max(0.0, -viewPos.z);
+
+    uint tintKind = (aTintPacked >> 14u) & 3u;
+    uint tintU = (aTintPacked >> 7u) & 127u;
+    uint tintV = aTintPacked & 127u;
+    vTintKind = float(tintKind);
+    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 128.0;
 }

@@ -15,6 +15,7 @@
 
 #include "../renderer/Renderer.h"
 #include "../renderer/DropRenderer.h"
+#include "../renderer/FirstPersonHeldItemRenderer.h"
 #include "../renderer/PostProcessRenderer.h"
 #include "../renderer/HumanoidRenderer.h"
 #include "CameraController.h"
@@ -81,6 +82,7 @@ private:
     physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;
     DropRenderer  m_dropRenderer;
+    FirstPersonHeldItemRenderer m_firstPersonHeldItemRenderer;
     HumanoidRenderer  m_humanoidRenderer;
     PostProcessRenderer m_postProcessRenderer;
     ParticleSystem m_particleSystem;
@@ -101,6 +103,7 @@ private:
 
     // Camera controller (first/third person)
     CameraController m_cameraController;
+    bool m_initialized = false;
 
 #ifdef MECRAFT_DEBUG
     struct FrameProfilerDebug {

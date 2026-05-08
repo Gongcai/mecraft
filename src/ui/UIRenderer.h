@@ -134,6 +134,8 @@ public:
     [[nodiscard]] const HeldItemPreviewLayout& getHeldItemPreviewLayout() const;
     void triggerHeldItemPreviewActionAnimation();
     void setHeldItemPreviewActionAnimationActive(bool active);
+    [[nodiscard]] bool consumeHeldItemPreviewSwingTrigger();
+    [[nodiscard]] bool isHeldItemPreviewActionAnimationActive() const;
 
 private:
     [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,
@@ -162,6 +164,8 @@ private:
     const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
     bool m_commandInputRequested = false;
+    bool m_heldItemPreviewSwingTriggered = false;
+    bool m_heldItemPreviewActionAnimationActive = false;
 
     std::size_t m_consoleMaxLines = 64;
 };

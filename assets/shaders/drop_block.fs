@@ -12,13 +12,15 @@ in float vAnimationFrameCount;
 in float vAnimationFps;
 in float vAnimated;
 in float vFogDist;
+flat in float vTintKind;
+in vec2 vTintUV;
 
 uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
+uniform sampler2D uGrassColormap;
+uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
-uniform vec3 uBiomeTintColor;
-uniform vec3 uFoliageTintColor;
 uniform int uFogEnabled;
 uniform int uFogMode;
 uniform vec3 uFogColor;
@@ -86,10 +88,10 @@ void main() {
         discard;
     }
 
-    if (abs(vNormal + 1.0) < 0.001) {
-        texColor.rgb *= uBiomeTintColor;
-    } else if (abs(vNormal + 3.0) < 0.001) {
-        texColor.rgb *= uFoliageTintColor;
+    if (vTintKind > 0.5 && vTintKind < 1.5) {
+        texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+    } else if (vTintKind > 1.5 && vTintKind < 2.5) {
+        texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
     }
 
     float aoIdx = clamp(vAO, 0.0, 3.0);

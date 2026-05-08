@@ -154,6 +154,15 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
         bindChunkRenderState(world, texArray);
         renderTransparentChunks(m_deferredTransparentEntries);
         glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
 
@@ -425,6 +434,15 @@ void Renderer::renderWorld(const World& world) {
     renderCutoutChunks(cutoutEntries);
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
@@ -447,8 +465,8 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     m_chunkShader->setInt("texArray", 0);
     m_chunkShader->setInt("uLightmapDay", 1);
     m_chunkShader->setInt("uLightmapNight", 2);
-    m_chunkShader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
-    m_chunkShader->setVec3("uFoliageTintColor", glm::vec3(0.43f, 0.68f, 0.28f));
+    m_chunkShader->setInt("uGrassColormap", 3);
+    m_chunkShader->setInt("uFoliageColormap", 4);
     m_chunkShader->setInt("uForceBaseLod", 0);
     m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
     m_chunkShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
@@ -468,6 +486,10 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
 }
 
 void Renderer::submitMeshingJobs(const World& world) {
@@ -716,7 +738,9 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 #ifdef MECRAFT_DEBUG
                         ++m_cutoutCandidatesThisFrame;
 #endif
-                        if (!m_cutoutDistanceLimitEnabled || distanceSq <= cutoutLimitSq) {
+                        if (!m_cutoutDistanceLimitEnabled ||
+                            !mesh.cutoutCanSkipByDistance ||
+                            distanceSq <= cutoutLimitSq) {
                             m_worldRenderBuffer.addCutout(mesh.cutoutRange);
                         }
 #ifdef MECRAFT_DEBUG
@@ -1408,6 +1432,7 @@ void Renderer::drainMeshingResults(const World& world) {
             mesh.vertexCount = gpu.opaque.vertexCount;
             mesh.cutoutVertexCount = gpu.cutout.vertexCount;
             mesh.transparentVertexCount = gpu.transparent.vertexCount;
+            mesh.cutoutCanSkipByDistance = result.meshData.cutoutCanSkipByDistance;
             mesh.hasBounds = result.meshData.hasBounds;
             mesh.boundsMin = gpu.boundsMin;
             mesh.boundsMax = gpu.boundsMax;
@@ -1424,6 +1449,7 @@ void Renderer::drainMeshingResults(const World& world) {
             // Old path: per-mesh VAOs.
             mesh.upload(result.meshData.opaqueVertices);
             mesh.uploadCutout(result.meshData.cutoutVertices);
+            mesh.cutoutCanSkipByDistance = result.meshData.cutoutCanSkipByDistance;
 
             std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
             bakeWorldOffset(transparentVerts);

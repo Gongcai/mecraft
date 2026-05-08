@@ -408,6 +408,9 @@ void WorldRenderBuffer::setupVertexLayout() {
 
     glEnableVertexAttribArray(9);
     glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
+
+    glEnableVertexAttribArray(10);
+    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
 }
 
 void WorldRenderBuffer::init() {

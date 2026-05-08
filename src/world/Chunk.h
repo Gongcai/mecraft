@@ -116,6 +116,7 @@ private:
     struct ColumnAggregateSlice {
         std::vector<BlockVertex> opaqueVertices;
         std::vector<BlockVertex> cutoutVertices;
+        bool cutoutCanSkipByDistance = true;
         bool hasBounds = false;
         glm::vec3 boundsMin = glm::vec3(0.0f);
         glm::vec3 boundsMax = glm::vec3(0.0f);

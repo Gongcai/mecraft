@@ -41,6 +41,7 @@
 #define KEYBINDINGS_PATH      CONFIG_DIR "/keybindings.txt"
 #define LOCALE_DIR            CONFIG_DIR "/locale"
 #define SETTINGS_PATH         CONFIG_DIR "/settings.json"
+#define FIRST_PERSON_HELD_ITEM_CONFIG_PATH CONFIG_DIR "/first_person_held_item.json"
 
 #define LIGHTMAP_DAY_PATH     LIGHTMAP_DIR "/lightmap_day.png"
 #define LIGHTMAP_NIGHT_PATH   LIGHTMAP_DIR "/lightmap_night.png"
@@ -58,5 +59,5 @@
 #define CREATIVE_TABS_PATH     CREATIVE_TEXTURE_DIR "/tabs"
 #define CREATIVE_TAB_ITEMS_PATH    CREATIVE_TEXTURE_DIR "/tab_items.png"
 #define DEFAULT_FONT_PATH     FONTS_DIR "/msyhbd.ttc"
-#define FOLIAGE_TEXTURE_PATH    COLORMAP_DIR "foliage.png"
-#define GRASS_TEXTURE_PATH      COLORMAP_DIR "grass.png"
+#define FOLIAGE_TEXTURE_PATH    COLORMAP_DIR "/foliage.png"
+#define GRASS_TEXTURE_PATH      COLORMAP_DIR "/grass.png"

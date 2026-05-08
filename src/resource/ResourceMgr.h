@@ -80,6 +80,10 @@ public:
     [[nodiscard]] GLuint getLightmapDay() const;
     [[nodiscard]] GLuint getLightmapNight() const;
 
+    void loadColormapTextures(const std::string& grassPath, const std::string& foliagePath);
+    [[nodiscard]] GLuint getGrassColormap() const;
+    [[nodiscard]] GLuint getFoliageColormap() const;
+
     // Cubemap texture (6 face textures for skybox rendering)
     GLuint loadCubemap(const std::string& name,
                        const std::string& rightPath, const std::string& leftPath,
@@ -118,6 +122,8 @@ private:
     TextureArray m_textureArray;
     GLuint m_lightmapDay = 0;
     GLuint m_lightmapNight = 0;
+    GLuint m_grassColormap = 0;
+    GLuint m_foliageColormap = 0;
     std::vector<unsigned char> m_blockAtlasPixels;
     std::vector<unsigned char> m_itemAtlasPixels;
     std::unordered_map<std::string, int> m_itemTextureIndices;

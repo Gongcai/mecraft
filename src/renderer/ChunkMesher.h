@@ -50,6 +50,9 @@ struct SubChunkMeshingSnapshot {
 
     // Column-relative Y base (scy * 16)
     int yBase = 0;
+    int worldOffsetX = 0;
+    int worldOffsetZ = 0;
+    const World* world = nullptr;
     // Sub-chunk index within the column (0..15)
     int scy = 0;
     // Whether this is the topmost sub-chunk (for sky light at y=256)
@@ -70,6 +73,7 @@ struct ChunkMeshData {
     uint32_t transparentFaceCountBeforeGreedy = 0;
     uint32_t transparentFaceCountAfterGreedy = 0;
     uint32_t opaqueVertexCount = 0;
+    bool cutoutCanSkipByDistance = true;
     double buildTimeMs = 0.0;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);

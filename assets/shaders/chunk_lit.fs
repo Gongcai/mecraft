@@ -12,13 +12,15 @@
     in float vAnimationFps;
     in float vAnimated;
     in float vFogDist;
+    flat in float vTintKind;
+    in vec2 vTintUV;
 
     uniform sampler2DArray texArray;
     uniform sampler2D uLightmapDay;
     uniform sampler2D uLightmapNight;
+    uniform sampler2D uGrassColormap;
+    uniform sampler2D uFoliageColormap;
     uniform int uForceBaseLod;
-    uniform vec3 uBiomeTintColor;
-    uniform vec3 uFoliageTintColor;
     uniform int uFogEnabled;
     uniform int uFogMode;
     uniform vec3 uFogColor;
@@ -77,8 +79,6 @@
 
         // Cross vegetation alpha-cutout mips can darken noticeably at distance.
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
-        bool usePlantTint = abs(vNormal + 1.0) < 0.001;
-        bool useFoliageTint = abs(vNormal + 3.0) < 0.001;
         bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
         float sampledLayer = vLayer;
         if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
@@ -94,10 +94,10 @@
         if (texColor.a < 0.1)
             discard;
 
-        if (usePlantTint) {
-            texColor.rgb *= uBiomeTintColor;
-        } else if (useFoliageTint) {
-            texColor.rgb *= uFoliageTintColor;
+        if (vTintKind > 0.5 && vTintKind < 1.5) {
+            texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+        } else if (vTintKind > 1.5 && vTintKind < 2.5) {
+            texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
         }
 
         // AO: bilinear interpolate through the discrete AO levels
