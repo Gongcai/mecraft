@@ -1030,8 +1030,8 @@ float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot,
                                      const int x,
                                      const int y,
                                      const int z) {
-    const BlockID aboveId = getResolvedBlockSC(snapshot, x, y + 1, z);
-    const BlockID id = getResolvedBlockSC(snapshot, x, y, z);
+    const BlockID aboveId = getResolvedFluidSC(snapshot, x, y + 1, z);
+    const BlockID id = getResolvedFluidSC(snapshot, x, y, z);
     const DecodedFluid fluid = FluidState::decode(id);
     if (fluid.kind == FluidKind::None) {
         return 0.0f;
@@ -1075,12 +1075,12 @@ float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
     float liquidPercentSum = 0.0f;
     int weightSum = 0;
     for (const glm::ivec2& sample : samples) {
-        const BlockID aboveId = getResolvedBlockSC(snapshot, sample.x, y + 1, sample.y);
+        const BlockID aboveId = getResolvedFluidSC(snapshot, sample.x, y + 1, sample.y);
         if (FluidState::isWater(aboveId)) {
             return 1.0f;
         }
 
-        const BlockID sampleId = getResolvedBlockSC(snapshot, sample.x, y, sample.y);
+        const BlockID sampleId = getResolvedFluidSC(snapshot, sample.x, y, sample.y);
         if (FluidState::isWater(sampleId)) {
             const float liquidPercent = static_cast<float>(FluidState::level(sampleId) + 1) / 9.0f;
             const int weight = (FluidState::level(sampleId) == 0) ? 10 : 1;
@@ -1092,7 +1092,8 @@ float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
             continue;
         }
 
-        if (isOpenWaterSurfaceSample(sampleId)) {
+        const BlockID sampleBlockId = getResolvedBlockSC(snapshot, sample.x, y, sample.y);
+        if (isOpenWaterSurfaceSample(sampleBlockId)) {
             liquidPercentSum += 1.0f;
             ++weightSum;
         }
@@ -1476,7 +1477,7 @@ bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
                               const BlockDef*& outDef,
                               float& outHeight,
                               uint16_t& outHeightKey) {
-    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+    const BlockID blockId = getResolvedFluidSC(snapshot, x, y, z);
     if (!FluidState::isWater(blockId) || !FluidState::isSource(blockId) || FluidState::isFalling(blockId)) {
         return false;
     }
@@ -2457,11 +2458,18 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
 
                 // Render waterlogged fluid overlay
                 if (fluidId != 0 && FluidState::decode(fluidId).kind != FluidKind::None) {
-                    // Only render water for waterlogged blocks (non-fluid block present)
-                    // Pure water positions are already handled by the water builder above
-                    if (blockId != 0 && FluidState::decode(blockId).kind == FluidKind::None) {
+                    // Render water for waterlogged blocks and tolerate fluid-only cells.
+                    // Pure water in the block layer is already handled by the water builder above.
+                    if (FluidState::decode(blockId).kind == FluidKind::None) {
                         const BlockDef& fluidDef = BlockRegistry::getFast(fluidId);
-                        ChunkMeshBuilders::buildWater(meshData, snapshot, fluidId, fluidDef, x, y, z);
+                        buildWaterSkippingTop(meshData,
+                                              snapshot,
+                                              fluidId,
+                                              fluidDef,
+                                              x,
+                                              y,
+                                              z,
+                                              mergedWaterTopFaces[scToIndex(x, y, z)]);
                     }
                 }
             }

@@ -111,6 +111,17 @@ int main() {
         return fail("setBlock/getBlock mismatch");
     }
 
+    const int waterloggedY = surfaceY + 2;
+    world.setBlock(0, waterloggedY, 0, BlockIds::TORCH);
+    world.setFluidState(0, waterloggedY, 0, FluidState::makeWater(0, false));
+    world.setBlock(0, waterloggedY, 0, BlockIds::AIR);
+    if (!FluidState::isWater(world.getBlock(0, waterloggedY, 0))) {
+        return fail("breaking a waterlogged block should restore pure water in the block layer");
+    }
+    if (world.getFluidState(0, waterloggedY, 0) != world.getBlock(0, waterloggedY, 0)) {
+        return fail("restored water should not remain only in the dedicated fluid layer");
+    }
+
     world.update(glm::vec3(static_cast<float>(Chunk::SIZE_X), 0.0f, 0.0f));
     for (int i = 0; i < 8; ++i) {
         world.update(glm::vec3(static_cast<float>(Chunk::SIZE_X), 0.0f, 0.0f));

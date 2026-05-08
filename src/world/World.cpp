@@ -370,22 +370,43 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     const int localZ = z - chunkZ * Chunk::SIZE_Z;
     Chunk& chunk = *it->second;
 
+    const int editedScy = Chunk::toSubChunkIndex(y);
+    const int localY = Chunk::toSubChunkLocalY(y);
+    const SubChunk* existingSubChunk = chunk.getSubChunk(editedScy);
     const BlockID oldId = chunk.getBlock(localX, y, localZ);
-    if (oldId == id) {
+    const BlockID oldFluidLayer = existingSubChunk
+        ? existingSubChunk->getFluidLayer(localX, localY, localZ)
+        : BlockIds::AIR;
+
+    StateID targetState = id;
+    const bool uncoverFluidLayer =
+        id == BlockIds::AIR &&
+        oldFluidLayer != BlockIds::AIR &&
+        FluidState::decode(oldId).kind == FluidKind::None &&
+        FluidState::decode(oldFluidLayer).kind != FluidKind::None;
+    if (uncoverFluidLayer) {
+        targetState = oldFluidLayer;
+    }
+
+    if (oldId == targetState && !uncoverFluidLayer) {
         return;
     }
 
     if (m_lightService) {
-        chunk.setBlockWithoutMeshDirty(localX, y, localZ, id);
-        m_lightService->onBlockChanged(x, y, z, oldId, id);
+        chunk.setBlockWithoutMeshDirty(localX, y, localZ, targetState);
+        m_lightService->onBlockChanged(x, y, z, oldId, targetState);
     } else {
-        chunk.setBlock(localX, y, localZ, id);
+        chunk.setBlock(localX, y, localZ, targetState);
+    }
+
+    if (uncoverFluidLayer) {
+        if (SubChunk* sc = chunk.getSubChunk(editedScy)) {
+            sc->setFluidLayer(localX, localY, localZ, BlockIds::AIR);
+        }
     }
 
 
     // Geometry edits must always trigger remesh, regardless of lighting pipeline.
-    const int editedScy = Chunk::toSubChunkIndex(y);
-    const int localY = Chunk::toSubChunkLocalY(y);
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
@@ -404,7 +425,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
         if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
-    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), changesFluidPathing(oldId, id));
+    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), changesFluidPathing(oldId, targetState));
 
     // Enqueue 6 neighbors for support-rule validation (block tick physics).
     static constexpr glm::ivec3 kNeighborOffsets[6] = {

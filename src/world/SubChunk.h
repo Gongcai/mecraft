@@ -205,6 +205,7 @@ private:
 
     Palette m_fluidPalette;
     BitPackedArray m_fluidData;
+    std::unordered_map<BlockID, uint16_t> m_fluidCounts;
 
     SubChunkType m_type = SubChunkType::Air;
     bool m_dirty = true;

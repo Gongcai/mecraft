@@ -20,6 +20,7 @@ SubChunk::SubChunk()
     m_fluidData.fill(0);
     m_lightMap.fill(0);
     m_blockCounts.emplace(0, static_cast<uint16_t>(BLOCK_COUNT));
+    m_fluidCounts.emplace(0, static_cast<uint16_t>(BLOCK_COUNT));
 }
 
 SubChunk::~SubChunk() {
@@ -32,6 +33,7 @@ SubChunk::SubChunk(SubChunk&& other) noexcept
     , m_blockCounts(std::move(other.m_blockCounts))
     , m_fluidPalette(std::move(other.m_fluidPalette))
     , m_fluidData(std::move(other.m_fluidData))
+    , m_fluidCounts(std::move(other.m_fluidCounts))
     , m_lightMap(std::move(other.m_lightMap))
     , m_type(other.m_type)
     , m_dirty(other.m_dirty)
@@ -52,6 +54,7 @@ SubChunk& SubChunk::operator=(SubChunk&& other) noexcept {
         m_blockCounts = std::move(other.m_blockCounts);
         m_fluidPalette = std::move(other.m_fluidPalette);
         m_fluidData = std::move(other.m_fluidData);
+        m_fluidCounts = std::move(other.m_fluidCounts);
         m_lightMap = std::move(other.m_lightMap);
         m_type = other.m_type;
         m_dirty = other.m_dirty;
@@ -172,6 +175,8 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockID
 void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& blocks) {
     m_palette.clear();
     m_blockCounts.clear();
+    m_fluidPalette.clear();
+    m_fluidCounts.clear();
 
     std::array<uint16_t, BLOCK_COUNT> paletteIndices{};
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
@@ -184,6 +189,11 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
         m_blockData.set(index, paletteIndices[index]);
     }
+
+    m_fluidPalette.getOrCreateIndex(BlockIds::AIR);
+    m_fluidData = BitPackedArray(BLOCK_COUNT, 1);
+    m_fluidData.fill(0);
+    m_fluidCounts.emplace(BlockIds::AIR, static_cast<uint16_t>(BLOCK_COUNT));
 
     inferType();
     m_dirty = true;
@@ -224,6 +234,22 @@ void SubChunk::setFluidLayer(const int x, const int y, const int z, const BlockI
     }
 
     m_fluidData.set(index, paletteIdx);
+
+    auto decrementCount = [&](const BlockID blockId) {
+        auto it = m_fluidCounts.find(blockId);
+        if (it == m_fluidCounts.end()) {
+            return;
+        }
+        if (it->second <= 1) {
+            m_fluidCounts.erase(it);
+        } else {
+            --it->second;
+        }
+    };
+    decrementCount(oldId);
+    ++m_fluidCounts[id];
+
+    inferType();
 
     // Fluid changes also require remesh
     m_dirty = true;
@@ -310,6 +336,11 @@ void SubChunk::setBlockLight(const int x, const int y, const int z, const uint8_
 }
 
 void SubChunk::inferType() {
+    if (m_fluidCounts.size() > 1 || m_fluidCounts.find(BlockIds::AIR) == m_fluidCounts.end()) {
+        m_type = SubChunkType::Normal;
+        return;
+    }
+
     if (m_blockCounts.empty()) {
         m_type = SubChunkType::Air;
         return;
