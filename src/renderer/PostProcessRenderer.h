@@ -2,6 +2,7 @@
 #define MECRAFT_POSTPROCESSRENDERER_H
 
 #include <glad/glad.h>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 class ResourceMgr;
@@ -16,6 +17,10 @@ struct PostProcessEffects {
     bool bloomEnabled = true;
     float bloomThreshold = 0.82f;
     float bloomStrength = 0.18f;
+    bool sunRaysEnabled = true;
+    glm::vec2 sunScreenPos = glm::vec2(0.5f);
+    float sunVisibility = 0.0f;
+    float sunRayStrength = 0.14f;
     float exposure = 1.0f;
     float gamma = 2.2f;
     float saturation = 1.0f;

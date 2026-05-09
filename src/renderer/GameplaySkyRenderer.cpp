@@ -20,7 +20,7 @@ constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = kPi * 2.0f;
 constexpr float kSunSize = 1.15f;
 constexpr float kMoonSize = 1.05f;
-constexpr float kHaloSize = 2.60f;
+constexpr float kHaloSize = 3.25f;
 constexpr float kBlackKeyThreshold = 0.035f;
 constexpr float kBlackKeySoftness = 0.22f;
 constexpr float kCloudHeight = 128.0f;
@@ -273,27 +273,46 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNightSystem& dayNight) const {
     const float skyIntensity = dayNight.getSkyIntensity();
     const float progress = dayNight.getDayProgress01();
+    const glm::vec3 sunDirection = directionFromAngle(dayNight.getCelestialAngleRadians());
+    const float sunHeight = std::clamp(sunDirection.y, -0.25f, 1.0f);
     const float sunriseWindow = 1.0f - std::abs(progress - 0.0f) / 0.07f;
     const float sunriseWrapWindow = 1.0f - std::abs(progress - 1.0f) / 0.07f;
     const float sunsetWindow = 1.0f - std::abs(progress - 0.5f) / 0.08f;
     const float warmWindow = std::clamp(std::max(std::max(sunriseWindow, sunriseWrapWindow), sunsetWindow), 0.0f, 1.0f);
     const float warm = warmWindow * warmWindow * (3.0f - 2.0f * warmWindow);
 
-    const glm::vec3 dayTop(0.46f, 0.70f, 1.0f);
-    const glm::vec3 dayHorizon(0.68f, 0.84f, 1.0f);
-    const glm::vec3 nightTop(0.015f, 0.028f, 0.070f);
-    const glm::vec3 nightHorizon(0.040f, 0.055f, 0.105f);
-    const glm::vec3 duskTop(0.30f, 0.40f, 0.62f);
-    const glm::vec3 duskHorizon(1.0f, 0.45f, 0.16f);
+    const glm::vec3 dayTop(0.38f, 0.66f, 1.0f);
+    const glm::vec3 dayHorizon(0.70f, 0.88f, 1.0f);
+    const glm::vec3 nightTop(0.010f, 0.020f, 0.060f);
+    const glm::vec3 nightHorizon(0.030f, 0.045f, 0.095f);
+    const glm::vec3 duskTop(0.24f, 0.34f, 0.58f);
+    const glm::vec3 duskHorizon(1.0f, 0.38f, 0.13f);
+    const glm::vec3 goldenScatter(1.0f, 0.52f, 0.16f);
+    const glm::vec3 noonScatter(0.62f, 0.80f, 1.0f);
+    const glm::vec3 noonSunLight(1.0f, 0.98f, 0.92f);
+    const glm::vec3 warmSunLight(1.0f, 0.58f, 0.28f);
+    const glm::vec3 nightSunLight(0.36f, 0.44f, 0.72f);
 
     SkyColors colors;
     colors.top = lerp(nightTop, dayTop, skyIntensity);
     colors.horizon = lerp(nightHorizon, dayHorizon, skyIntensity);
     colors.top = lerp(colors.top, duskTop, warm * 0.65f);
     colors.horizon = lerp(colors.horizon, duskHorizon, warm);
-    colors.fog = colors.horizon;
-    colors.haloStrength = warm;
-    colors.halo = glm::vec4(1.0f, 0.42f, 0.08f, 0.72f * warm);
+    colors.fog = lerp(colors.horizon, glm::vec3(0.80f, 0.90f, 1.0f), skyIntensity * (1.0f - warm) * 0.22f);
+    colors.sunDirection = sunDirection;
+    colors.sunScatter = lerp(noonScatter, goldenScatter, warm);
+    colors.sunLightColor = lerp(nightSunLight, noonSunLight, skyIntensity);
+    colors.sunLightColor = lerp(colors.sunLightColor, warmSunLight, warm * 0.58f);
+    colors.horizonHaze = std::clamp(0.28f + 0.44f * warm + 0.16f * (1.0f - skyIntensity), 0.0f, 0.85f);
+    colors.sunGlare = std::clamp(0.18f * skyIntensity + 0.78f * warm, 0.0f, 1.0f);
+    colors.haloStrength = std::clamp(warm + smoothstep(0.05f, 0.35f, sunHeight) * skyIntensity * 0.28f, 0.0f, 1.0f);
+    colors.halo = glm::vec4(colors.sunScatter, 0.30f * skyIntensity + 0.68f * warm);
+
+    const glm::vec3 cloudDayColor = lerp(colors.horizon, glm::vec3(1.0f), 0.84f);
+    const glm::vec3 cloudNightColor(0.14f, 0.16f, 0.25f);
+    const glm::vec3 cloudWarmColor(1.0f, 0.58f, 0.24f);
+    colors.cloudColor = lerp(cloudNightColor, cloudDayColor, skyIntensity);
+    colors.cloudColor = lerp(colors.cloudColor, cloudWarmColor, warm * 0.42f);
     return colors;
 }
 
@@ -559,6 +578,10 @@ void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float as
     m_shader->setMat4("uModel", glm::mat4(1.0f));
     m_shader->setVec3("uSkyTopColor", colors.top);
     m_shader->setVec3("uSkyHorizonColor", colors.horizon);
+    m_shader->setVec3("uSunDirection", colors.sunDirection);
+    m_shader->setVec3("uSunScatterColor", colors.sunScatter);
+    m_shader->setFloat("uHorizonHaze", colors.horizonHaze);
+    m_shader->setFloat("uSunGlare", colors.sunGlare);
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
@@ -578,11 +601,6 @@ void GameplaySkyRenderer::renderClouds(const Camera& camera,
         return;
     }
 
-    const float skyIntensity = std::clamp(dayNight.getSkyIntensity(), 0.0f, 1.0f);
-    const glm::vec3 cloudDayColor = lerp(colors.horizon, glm::vec3(1.0f), 0.82f);
-    const glm::vec3 cloudNightColor(0.18f, 0.20f, 0.28f);
-    const glm::vec3 cloudColor = lerp(cloudNightColor, cloudDayColor, skyIntensity);
-
     const glm::vec3 cameraPos = camera.getPosition();
     const float cloudY = kCloudHeight;
     if (cameraPos.y >= cloudY - 2.0f) {
@@ -598,7 +616,7 @@ void GameplaySkyRenderer::renderClouds(const Camera& camera,
     m_shader->setInt("uMode", 3);
     m_shader->setMat4("uView", camera.getViewMatrix());
     m_shader->setMat4("uProjection", glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 1200.0f));
-    m_shader->setVec4("uTintColor", glm::vec4(cloudColor, 1.0f));
+    m_shader->setVec4("uTintColor", glm::vec4(colors.cloudColor, 1.0f));
 
     GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
     GLboolean depthMaskWasEnabled = GL_TRUE;
@@ -723,7 +741,7 @@ glm::mat4 GameplaySkyRenderer::buildSkyView(const Camera& camera) const {
 }
 
 glm::vec3 GameplaySkyRenderer::directionFromAngle(const float angleRadians) const {
-    return safeNormalize(glm::vec3(0.0f, std::sin(angleRadians), -std::cos(angleRadians)),
+    return safeNormalize(glm::vec3(0.25f, std::sin(angleRadians), -std::cos(angleRadians)),
                          glm::vec3(0.0f, 1.0f, 0.0f));
 }
 

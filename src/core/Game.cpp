@@ -14,6 +14,8 @@
 #include "../ecs/util/GameplayRuntimeContext.h"
 
 #include <GLFW/glfw3.h>
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 #ifdef MECRAFT_DEBUG
@@ -309,10 +311,32 @@ void Game::renderFrame(const float frameTime) {
     effects.screenRollRadians = fallRollRadians;
     const Renderer::RenderPipelineSettings pipelineSettings = m_renderer.getRenderPipelineSettings();
     effects.bloomEnabled = pipelineSettings.bloomEnabled;
+    effects.sunRaysEnabled = pipelineSettings.sunRaysEnabled;
+    effects.sunRayStrength = pipelineSettings.sunRayStrength;
     effects.exposure = pipelineSettings.exposure;
     effects.gamma = pipelineSettings.gamma;
     effects.saturation = pipelineSettings.saturation;
     effects.contrast = pipelineSettings.contrast;
+    {
+        const float sunAngle = m_world.getDayNightSystem().getCelestialAngleRadians();
+        glm::vec3 sunDirection(0.25f, std::sin(sunAngle), -std::cos(sunAngle));
+        if (glm::length(sunDirection) > 0.0001f) {
+            sunDirection = glm::normalize(sunDirection);
+        } else {
+            sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+
+        const glm::mat4 viewProj = finalCamera.getProjectionMatrix(m_window.getAspectRatio()) * finalCamera.getViewMatrix();
+        const glm::vec4 clip = viewProj * glm::vec4(finalCamera.getPosition() + sunDirection * 256.0f, 1.0f);
+        if (clip.w > 0.0001f) {
+            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f);
+            const float onScreenX = 1.0f - std::clamp(std::abs(effects.sunScreenPos.x - 0.5f) * 2.0f, 0.0f, 1.0f);
+            const float onScreenY = 1.0f - std::clamp(std::abs(effects.sunScreenPos.y - 0.5f) * 2.0f, 0.0f, 1.0f);
+            const float horizonFade = std::clamp((sunDirection.y + 0.05f) / 0.45f, 0.0f, 1.0f);
+            effects.sunVisibility = std::clamp(onScreenX * onScreenY * horizonFade, 0.0f, 1.0f);
+        }
+    }
     m_postProcessRenderer.setEffects(effects);
 
     HeldItemPreviewMotion heldItemMotion;

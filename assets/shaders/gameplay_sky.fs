@@ -9,7 +9,11 @@ uniform int uMode;
 uniform sampler2D uTexture;
 uniform vec3 uSkyTopColor;
 uniform vec3 uSkyHorizonColor;
+uniform vec3 uSunDirection;
+uniform vec3 uSunScatterColor;
 uniform vec4 uTintColor;
+uniform float uHorizonHaze;
+uniform float uSunGlare;
 uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
 
@@ -19,9 +23,19 @@ vec3 srgbToLinear(vec3 color) {
 
 void main() {
     if (uMode == 0) {
-        float height = clamp(normalize(vWorldDir).y * 0.5 + 0.5, 0.0, 1.0);
-        height = smoothstep(0.0, 1.0, height);
-        vec3 color = mix(uSkyHorizonColor, uSkyTopColor, height);
+        vec3 dir = normalize(vWorldDir);
+        float height = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+        float gradient = smoothstep(0.0, 1.0, height);
+        vec3 color = mix(uSkyHorizonColor, uSkyTopColor, gradient);
+
+        float horizon = pow(1.0 - clamp(abs(dir.y), 0.0, 1.0), 2.25);
+        color = mix(color, uSkyHorizonColor * 1.12, horizon * clamp(uHorizonHaze, 0.0, 1.0));
+
+        float sunDot = max(dot(dir, normalize(uSunDirection)), 0.0);
+        float glow = pow(sunDot, 24.0) * uSunGlare;
+        float wideGlow = pow(sunDot, 4.0) * uSunGlare * 0.22;
+        color += uSunScatterColor * (glow + wideGlow) * smoothstep(-0.08, 0.18, uSunDirection.y);
+
         FragColor = vec4(srgbToLinear(color), 1.0);
         return;
     }

@@ -34,6 +34,10 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.underwaterStrength = std::clamp(m_effects.underwaterStrength, 0.0f, 1.0f);
     m_effects.bloomThreshold = std::clamp(m_effects.bloomThreshold, 0.0f, 4.0f);
     m_effects.bloomStrength = std::clamp(m_effects.bloomStrength, 0.0f, 2.0f);
+    m_effects.sunScreenPos.x = std::clamp(m_effects.sunScreenPos.x, -1.0f, 2.0f);
+    m_effects.sunScreenPos.y = std::clamp(m_effects.sunScreenPos.y, -1.0f, 2.0f);
+    m_effects.sunVisibility = std::clamp(m_effects.sunVisibility, 0.0f, 1.0f);
+    m_effects.sunRayStrength = std::clamp(m_effects.sunRayStrength, 0.0f, 1.0f);
     m_effects.exposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
     m_effects.gamma = std::clamp(m_effects.gamma, 1.0f, 3.5f);
     m_effects.saturation = std::clamp(m_effects.saturation, 0.0f, 3.0f);
@@ -118,6 +122,10 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     m_postProcessShader->setInt("uBloomTex", 1);
     m_postProcessShader->setBool("uBloomEnabled", hasBloom);
     m_postProcessShader->setFloat("uBloomStrength", m_effects.bloomStrength);
+    m_postProcessShader->setBool("uSunRaysEnabled", m_effects.sunRaysEnabled && hasBloom);
+    m_postProcessShader->setVec2("uSunScreenPos", m_effects.sunScreenPos);
+    m_postProcessShader->setFloat("uSunVisibility", m_effects.sunVisibility);
+    m_postProcessShader->setFloat("uSunRayStrength", m_effects.sunRayStrength);
     m_postProcessShader->setBool("uUnderwaterEnabled", m_effects.underwaterEnabled);
     m_postProcessShader->setVec3("uUnderwaterTint", m_effects.underwaterTint);
     m_postProcessShader->setFloat("uUnderwaterStrength", m_effects.underwaterStrength);

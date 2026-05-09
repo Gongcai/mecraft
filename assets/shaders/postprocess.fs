@@ -8,6 +8,10 @@ uniform sampler2D uBloomTex;
 
 uniform bool uBloomEnabled;
 uniform float uBloomStrength;
+uniform bool uSunRaysEnabled;
+uniform vec2 uSunScreenPos;
+uniform float uSunVisibility;
+uniform float uSunRayStrength;
 uniform bool uUnderwaterEnabled;
 uniform vec3 uUnderwaterTint;
 uniform float uUnderwaterStrength;
@@ -39,7 +43,25 @@ void main() {
 
     vec3 color = texture(uSceneTex, rolledUv).rgb;
     if (uBloomEnabled) {
-        color += texture(uBloomTex, rolledUv).rgb * uBloomStrength;
+        vec3 bloom = texture(uBloomTex, rolledUv).rgb;
+        color += bloom * uBloomStrength;
+
+        if (uSunRaysEnabled && uSunVisibility > 0.001 && uSunRayStrength > 0.001) {
+            vec2 toSun = uSunScreenPos - rolledUv;
+            float screenFade = 1.0 - smoothstep(0.55, 1.15, length(uSunScreenPos - vec2(0.5)));
+            float rayMask = clamp(uSunVisibility * screenFade, 0.0, 1.0);
+            vec3 rays = vec3(0.0);
+            float weight = 0.16;
+            for (int i = 1; i <= 8; ++i) {
+                float t = float(i) / 8.0;
+                vec2 sampleUv = rolledUv + toSun * t * 0.86;
+                vec2 inBounds = step(vec2(0.0), sampleUv) * step(sampleUv, vec2(1.0));
+                float valid = inBounds.x * inBounds.y;
+                rays += texture(uBloomTex, sampleUv).rgb * weight * valid;
+                weight *= 0.82;
+            }
+            color += rays * uSunRayStrength * rayMask;
+        }
     }
 
     if (uUnderwaterEnabled) {

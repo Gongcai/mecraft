@@ -274,6 +274,12 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings = settings;
     m_pipelineSettings.shadowResolution = std::clamp(m_pipelineSettings.shadowResolution, 256, 8192);
     m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 16.0f, 512.0f);
+    m_pipelineSettings.shadowSoftness = std::clamp(m_pipelineSettings.shadowSoftness, 0.1f, 8.0f);
+    m_pipelineSettings.shadowConstantBias = std::clamp(m_pipelineSettings.shadowConstantBias, 0.0f, 0.01f);
+    m_pipelineSettings.shadowSlopeBias = std::clamp(m_pipelineSettings.shadowSlopeBias, 0.0f, 0.03f);
+    m_pipelineSettings.shadowNormalOffset = std::clamp(m_pipelineSettings.shadowNormalOffset, 0.0f, 0.25f);
+    m_pipelineSettings.contactShadowStrength = std::clamp(m_pipelineSettings.contactShadowStrength, 0.0f, 1.0f);
+    m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.ssaoRadius = std::clamp(m_pipelineSettings.ssaoRadius, 0.1f, 16.0f);
     m_pipelineSettings.ssaoStrength = std::clamp(m_pipelineSettings.ssaoStrength, 0.0f, 4.0f);
     m_pipelineSettings.exposure = std::clamp(m_pipelineSettings.exposure, 0.05f, 8.0f);
@@ -555,6 +561,8 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
     shader.setInt("uDebugLightMode", m_debugLightMode);
     shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    shader.setVec3("uSunLightColor", skyColors.sunLightColor);
     shader.setVec3("uCameraPos", m_cameraPos);
     bindWaterEffectUniforms(shader, false);
 
@@ -772,12 +780,22 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uLightmapNight", 5);
     m_deferredLightingShader->setInt("uShadowMap", 6);
     m_deferredLightingShader->setInt("uSsaoTex", 7);
+    m_deferredLightingShader->setMat4("uViewProj", m_projection * m_view);
     m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredLightingShader->setVec3("uCameraPos", m_cameraPos);
+    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     m_deferredLightingShader->setVec3("uSunDirection", currentSunDirection(world));
+    m_deferredLightingShader->setVec3("uSunLightColor", skyColors.sunLightColor);
     m_deferredLightingShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
+    m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
+    m_deferredLightingShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
+    m_deferredLightingShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
+    m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
+    m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
     m_deferredLightingShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
@@ -851,9 +869,20 @@ glm::vec3 Renderer::currentSunDirection(const World& world) const {
 
 glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
-    const glm::vec3 center = camera.getPosition() + camera.getFront() * (distance * 0.35f);
-    const glm::vec3 lightPos = center + sunDirection * distance;
-    const glm::mat4 view = glm::lookAt(lightPos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+    const float extent = distance;
+    glm::vec3 center = camera.getPosition() + camera.getFront() * (distance * 0.35f);
+    const glm::vec3 lightForward = glm::normalize(-sunDirection);
+    const glm::vec3 lightPos = center - lightForward * distance;
+    glm::mat4 view = glm::lookAt(lightPos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+
+    const float resolution = static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
+    const float worldUnitsPerTexel = (extent * 2.0f) / resolution;
+    glm::vec4 centerLight = view * glm::vec4(center, 1.0f);
+    centerLight.x = std::round(centerLight.x / worldUnitsPerTexel) * worldUnitsPerTexel;
+    centerLight.y = std::round(centerLight.y / worldUnitsPerTexel) * worldUnitsPerTexel;
+    const glm::vec3 snappedCenter = glm::vec3(glm::inverse(view) * centerLight);
+    view = glm::lookAt(snappedCenter - lightForward * distance, snappedCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+
     const glm::mat4 proj = glm::ortho(-distance, distance, -distance, distance, 0.1f, distance * 2.5f);
     return proj * view;
 }

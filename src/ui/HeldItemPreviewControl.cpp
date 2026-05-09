@@ -64,7 +64,7 @@ bool isTorchShape(const BlockDef& def) {
 void HeldItemPreviewControl::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
-    m_shader = resourceMgr.getShader("chunk_lit");
+    m_shader = resourceMgr.getShader("block_item_lit");
     m_itemShader = resourceMgr.getShader("item_model");
 }
 

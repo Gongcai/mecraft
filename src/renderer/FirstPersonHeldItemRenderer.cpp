@@ -189,7 +189,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr) {
         shutdown();
     }
     m_resourceMgr = &resourceMgr;
-    m_blockShader = resourceMgr.getShader("chunk_lit");
+    m_blockShader = resourceMgr.getShader("block_item_lit");
     m_itemShader = resourceMgr.getShader("item_model");
     m_steveShader = resourceMgr.getShader("steve");
     loadConfig();

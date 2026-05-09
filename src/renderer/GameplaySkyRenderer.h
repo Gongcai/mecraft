@@ -18,7 +18,13 @@ public:
         glm::vec3 horizon = glm::vec3(0.70f, 0.86f, 1.0f);
         glm::vec3 fog = glm::vec3(0.70f, 0.86f, 1.0f);
         glm::vec4 halo = glm::vec4(1.0f, 0.42f, 0.10f, 0.0f);
+        glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 sunScatter = glm::vec3(1.0f, 0.55f, 0.20f);
+        glm::vec3 sunLightColor = glm::vec3(1.0f);
+        glm::vec3 cloudColor = glm::vec3(1.0f);
         float haloStrength = 0.0f;
+        float horizonHaze = 0.35f;
+        float sunGlare = 0.0f;
     };
 
     void init(ResourceMgr& resourceMgr);

@@ -32,6 +32,7 @@ uniform float uFogEnd;
 uniform float uFogDensity;
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
 uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
+uniform vec3 uSunLightColor;
 uniform float uWindTime;
 uniform float uAnimationTime;
 uniform int uWaterEffectsEnabled;
@@ -202,6 +203,8 @@ uniform vec3 uCameraPos;
         vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
         vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
         vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
+        float skyLightMask = clamp(vSunlight * uSkyIntensity, 0.0, 1.0);
+        lightColor *= mix(vec3(1.0), uSunLightColor, skyLightMask * 0.35);
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;

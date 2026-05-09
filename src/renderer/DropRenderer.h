@@ -37,7 +37,6 @@ private:
 	ResourceMgr* m_resourceMgr = nullptr;
 	Shader* m_shader = nullptr;
 	Shader* m_itemShader = nullptr;
-	bool m_blockShaderUsesModelSwitch = false;
 	std::unordered_map<BlockID, Mesh> m_blockMeshes;
 	std::unordered_map<ItemID, Mesh> m_itemMeshes;
 };
