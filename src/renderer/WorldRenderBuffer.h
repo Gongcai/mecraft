@@ -167,7 +167,7 @@ private:
     void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
                                 GLuint& buf, size_t& capacity, size_t needed);
     void flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                   GLuint indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo);
+                   GLuint& indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo);
 };
 
 #endif // MECRAFT_WORLDRENDERBUFFER_H

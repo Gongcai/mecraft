@@ -32,6 +32,7 @@ bool Window::init(int width, int height, const char *title) {
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(Window::debugMessageCallback, nullptr);
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
+        glDebugMessageControl(GL_DONT_CARE, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
     }
 #endif
     int framebufferWidth = width;
@@ -115,11 +116,10 @@ void APIENTRY Window::debugMessageCallback(GLenum source,
                                            const GLchar* message,
                                            const void* userParam) {
     (void)source;
-    (void)type;
     (void)id;
     (void)length;
     (void)userParam;
-    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
+    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION || type == GL_DEBUG_TYPE_PERFORMANCE) {
         return;
     }
     std::cerr << "OpenGL debug: " << (message != nullptr ? message : "") << "\n";

@@ -249,8 +249,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         } else if (!gpuStats.valid) {
             ImGui::Text("GPU Timers: waiting");
         } else {
-            ImGui::Text("GPU Opaque: %.3f ms", gpuStats.opaqueMs);
-            ImGui::Text("GPU Cutout: %.3f ms", gpuStats.cutoutMs);
+            ImGui::Text("GPU GBuffer: %.3f ms", gpuStats.gbufferMs);
+            ImGui::Text("GPU Shadow: %.3f ms", gpuStats.shadowMs);
+            ImGui::Text("GPU SSAO: %.3f ms", gpuStats.ssaoMs);
+            ImGui::Text("GPU Lighting: %.3f ms", gpuStats.lightingMs);
             ImGui::Text("GPU Transparent: %.3f ms", gpuStats.transparentMs);
         }
 
@@ -355,7 +357,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Exposure", &pipeline.exposure, 0.2f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.2f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.0f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Saturation", &pipeline.saturation, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Contrast", &pipeline.contrast, 0.5f, 2.0f, "%.2f");
         ImGui::Text("Hybrid Deferred: %s", render.isHybridDeferredReady() ? "ready" : "not ready");

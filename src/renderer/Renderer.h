@@ -58,10 +58,10 @@ public:
         float shadowDistance = 96.0f;
         float ssaoRadius = 2.25f;
         float ssaoStrength = 0.75f;
-        float exposure = 1.05f;
-        float gamma = 2.2f;
-        float saturation = 1.08f;
-        float contrast = 1.05f;
+        float exposure = 1.0f;
+        float gamma = 1.0f;
+        float saturation = 1.0f;
+        float contrast = 1.0f;
     };
 
 
@@ -116,8 +116,10 @@ public:
     struct GpuFrameStats {
         bool supported = false;
         bool valid = false;
-        double opaqueMs = 0.0;
-        double cutoutMs = 0.0;
+        double gbufferMs = 0.0;
+        double shadowMs = 0.0;
+        double ssaoMs = 0.0;
+        double lightingMs = 0.0;
         double transparentMs = 0.0;
     };
 
@@ -308,10 +310,12 @@ private:
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
     enum class GpuTimerPass : size_t {
-        Opaque = 0,
-        Cutout = 1,
-        Transparent = 2,
-        Count = 3
+        GBuffer = 0,
+        Shadow = 1,
+        Ssao = 2,
+        Lighting = 3,
+        Transparent = 4,
+        Count = 5
     };
     void initGpuTimers();
     void shutdownGpuTimers();
@@ -403,7 +407,7 @@ private:
     bool m_gpuTimerEnabled = true;
     bool m_gpuTimerActive = false;
     bool m_gpuTimerCanIssueThisFrame = true;
-    GpuTimerPass m_activeGpuTimerPass = GpuTimerPass::Opaque;
+    GpuTimerPass m_activeGpuTimerPass = GpuTimerPass::GBuffer;
     int m_cutoutCandidatesThisFrame = 0;
     int m_cutoutSkippedByDistanceThisFrame = 0;
     int m_mdiSubChunkTestsThisFrame = 0;

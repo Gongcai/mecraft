@@ -61,10 +61,8 @@ void VertexPoolAllocator::init(const size_t initialCapacityVertices) {
     shutdown();
 
     const size_t bytes = initialCapacityVertices * sizeof(BlockVertex);
-    glGenBuffers(1, &m_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(bytes), nullptr, GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glCreateBuffers(1, &m_vbo);
+    glNamedBufferStorage(m_vbo, static_cast<GLsizeiptr>(bytes), nullptr, GL_DYNAMIC_STORAGE_BIT);
 
     m_capacityVertices = initialCapacityVertices;
     m_usedVertices = 0;
@@ -185,8 +183,7 @@ bool VertexPoolAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& out
         curr = block.next;
     }
 
-    // No block fits — skip defragment (GPU copy stalls), go straight to expand.
-    // This avoids unpredictable glCopyBufferSubData spikes on the main thread.
+    // No block fits: skip defragment and grow the pool.
     const size_t newCapacity = std::max<size_t>(
         m_capacityVertices + vertexCount,
         m_capacityVertices == 0 ? vertexCount : m_capacityVertices * 2);
@@ -232,12 +229,10 @@ void VertexPoolAllocator::free(const GpuMeshRange& range) {
 void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<BlockVertex>& vertices) {
     if (vertices.empty()) return;
     const size_t bytes = vertices.size() * sizeof(BlockVertex);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER,
-                    static_cast<GLintptr>(range.firstVertex) * sizeof(BlockVertex),
-                    static_cast<GLsizeiptr>(bytes),
-                    vertices.data());
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glNamedBufferSubData(m_vbo,
+                         static_cast<GLintptr>(range.firstVertex) * sizeof(BlockVertex),
+                         static_cast<GLsizeiptr>(bytes),
+                         vertices.data());
     m_uploadedBytesThisFrame += bytes;
 }
 
@@ -246,18 +241,15 @@ void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
     ++m_expandCountThisFrame;
 
     GLuint newVbo = 0;
-    glGenBuffers(1, &newVbo);
-    glBindBuffer(GL_ARRAY_BUFFER, newVbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(newCapacityVertices * sizeof(BlockVertex)),
-                 nullptr, GL_DYNAMIC_DRAW);
+    glCreateBuffers(1, &newVbo);
+    glNamedBufferStorage(newVbo,
+                         static_cast<GLsizeiptr>(newCapacityVertices * sizeof(BlockVertex)),
+                         nullptr,
+                         GL_DYNAMIC_STORAGE_BIT);
 
-    // Copy old data
     if (m_vbo != 0 && m_capacityVertices > 0) {
-        glBindBuffer(GL_COPY_READ_BUFFER, m_vbo);
-        glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_ARRAY_BUFFER, 0, 0,
-                            static_cast<GLsizeiptr>(m_capacityVertices * sizeof(BlockVertex)));
-        glBindBuffer(GL_COPY_READ_BUFFER, 0);
+        glCopyNamedBufferSubData(m_vbo, newVbo, 0, 0,
+                                 static_cast<GLsizeiptr>(m_capacityVertices * sizeof(BlockVertex)));
         glDeleteBuffers(1, &m_vbo);
     }
 
@@ -373,29 +365,25 @@ void WorldRenderBuffer::init() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     // Create indirect buffers
-    glGenBuffers(1, &m_opaqueIndirectBuf);
-    glGenBuffers(1, &m_cutoutIndirectBuf);
-    glGenBuffers(1, &m_transparentIndirectBuf);
-
     m_opaqueIndirectCapacity = kInitialIndirectCapacity;
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_opaqueIndirectBuf);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER,
-                 static_cast<GLsizeiptr>(kInitialIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                 nullptr, GL_DYNAMIC_DRAW);
-
     m_cutoutIndirectCapacity = kInitialIndirectCapacity;
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_cutoutIndirectBuf);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER,
-                 static_cast<GLsizeiptr>(kInitialIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                 nullptr, GL_DYNAMIC_DRAW);
-
     m_transparentIndirectCapacity = kInitialIndirectCapacity;
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_transparentIndirectBuf);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER,
-                 static_cast<GLsizeiptr>(kInitialIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                 nullptr, GL_DYNAMIC_DRAW);
 
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    glCreateBuffers(1, &m_opaqueIndirectBuf);
+    glNamedBufferStorage(m_opaqueIndirectBuf,
+                         static_cast<GLsizeiptr>(m_opaqueIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
+                         nullptr,
+                         GL_DYNAMIC_STORAGE_BIT);
+    glCreateBuffers(1, &m_cutoutIndirectBuf);
+    glNamedBufferStorage(m_cutoutIndirectBuf,
+                         static_cast<GLsizeiptr>(m_cutoutIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
+                         nullptr,
+                         GL_DYNAMIC_STORAGE_BIT);
+    glCreateBuffers(1, &m_transparentIndirectBuf);
+    glNamedBufferStorage(m_transparentIndirectBuf,
+                         static_cast<GLsizeiptr>(m_transparentIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
+                         nullptr,
+                         GL_DYNAMIC_STORAGE_BIT);
 
     m_opaqueCommands.reserve(kInitialIndirectCapacity);
     m_cutoutCommands.reserve(kInitialIndirectCapacity);
@@ -543,15 +531,18 @@ void WorldRenderBuffer::ensureIndirectCapacity(std::vector<DrawArraysIndirectCom
                                                 GLuint& buf, size_t& capacity, const size_t needed) {
     if (needed <= capacity) return;
     capacity = std::max(needed, capacity * 2);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buf);
-    glBufferData(GL_DRAW_INDIRECT_BUFFER,
-                 static_cast<GLsizeiptr>(capacity * sizeof(DrawArraysIndirectCommand)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+    if (buf != 0) {
+        glDeleteBuffers(1, &buf);
+    }
+    glCreateBuffers(1, &buf);
+    glNamedBufferStorage(buf,
+                         static_cast<GLsizeiptr>(capacity * sizeof(DrawArraysIndirectCommand)),
+                         nullptr,
+                         GL_DYNAMIC_STORAGE_BIT);
 }
 
 void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                                   GLuint indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo) {
+                                   GLuint& indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo) {
     if (commands.empty()) return;
 
     ensureIndirectCapacity(commands, indirectBuf,
@@ -560,10 +551,10 @@ void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& comman
                            m_transparentIndirectCapacity,
                            commands.size());
 
+    glNamedBufferSubData(indirectBuf, 0,
+                         static_cast<GLsizeiptr>(commands.size() * sizeof(DrawArraysIndirectCommand)),
+                         commands.data());
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuf);
-    glBufferSubData(GL_DRAW_INDIRECT_BUFFER, 0,
-                    static_cast<GLsizeiptr>(commands.size() * sizeof(DrawArraysIndirectCommand)),
-                    commands.data());
 
     ensureVaoVertexBuffer(vao, vbo, cachedVbo);
     glBindVertexArray(vao);

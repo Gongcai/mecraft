@@ -178,8 +178,15 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
     if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
         const TextureArray& texArray = m_resourceMgr->getTextureArray();
         bindChunkRenderState(world, texArray);
+        if (m_deferredFrameActive) {
+            m_chunkShader->setInt("uDepthSofteningEnabled", 1);
+            glActiveTexture(GL_TEXTURE5);
+            glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+        }
         renderTransparentChunks(m_deferredTransparentEntries);
         glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE3);
@@ -487,13 +494,7 @@ void Renderer::renderWorldForward(const World& world) {
     m_deferredTransparentEntries.reserve(world.getActiveChunks().size() * 2);
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, m_deferredTransparentEntries);
     if (m_useMultiDrawIndirect) {
-#ifdef MECRAFT_DEBUG
-        beginGpuTimer(GpuTimerPass::Opaque);
-#endif
         m_worldRenderBuffer.flushOpaque();
-#ifdef MECRAFT_DEBUG
-        endGpuTimer(GpuTimerPass::Opaque);
-#endif
     }
     renderCutoutChunks(cutoutEntries);
 
@@ -541,7 +542,9 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uLightmapNight", 2);
     shader.setInt("uGrassColormap", 3);
     shader.setInt("uFoliageColormap", 4);
+    shader.setInt("uOpaqueDepthTex", 5);
     shader.setInt("uForceBaseLod", 0);
+    shader.setInt("uDepthSofteningEnabled", 0);
     shader.setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
     shader.setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
     shader.setVec3("uFogColor", m_fogSettings.color);
@@ -564,6 +567,8 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, const Window& window) {
@@ -582,15 +587,39 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
     }
 
     m_deferredFrameActive = true;
+#ifdef MECRAFT_DEBUG
+    beginGpuTimer(GpuTimerPass::GBuffer);
+#endif
     renderGBufferTerrain(world);
+#ifdef MECRAFT_DEBUG
+    endGpuTimer(GpuTimerPass::GBuffer);
+#endif
     if (m_pipelineSettings.shadowsEnabled && m_shadowDepthShader != nullptr) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Shadow);
+#endif
         renderShadowMap(world, camera);
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Shadow);
+#endif
     }
     if (m_pipelineSettings.ssaoEnabled) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Ssao);
+#endif
         renderSsaoPass(camera, window);
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Ssao);
+#endif
     }
     restoreCapturedFramebufferViewport(window);
+#ifdef MECRAFT_DEBUG
+    beginGpuTimer(GpuTimerPass::Lighting);
+#endif
     renderDeferredLightingPass(world);
+#ifdef MECRAFT_DEBUG
+    endGpuTimer(GpuTimerPass::Lighting);
+#endif
     m_deferredTargets.blitDepthTo(m_capturedFramebuffer, window.getWidth(), window.getHeight());
     restoreCapturedFramebufferViewport(window);
     return true;
@@ -1334,13 +1363,7 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
         m_chunkShader->setInt("uForceBaseLod", 1);
-#ifdef MECRAFT_DEBUG
-        beginGpuTimer(GpuTimerPass::Cutout);
-#endif
         m_worldRenderBuffer.flushCutout();
-#ifdef MECRAFT_DEBUG
-        endGpuTimer(GpuTimerPass::Cutout);
-#endif
         m_chunkShader->setInt("uForceBaseLod", 0);
         return;
     }
@@ -1353,9 +1376,6 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
     glDepthMask(GL_TRUE);
     m_chunkShader->setInt("uForceBaseLod", 1);
 
-#ifdef MECRAFT_DEBUG
-    beginGpuTimer(GpuTimerPass::Cutout);
-#endif
     for (const ChunkRenderEntry& entry : cutoutEntries) {
         if (entry.chunk == nullptr) continue;
 
@@ -1390,10 +1410,6 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
             }
         }
     }
-#ifdef MECRAFT_DEBUG
-    endGpuTimer(GpuTimerPass::Cutout);
-#endif
-
     m_chunkShader->setInt("uForceBaseLod", 0);
 }
 
@@ -2009,8 +2025,10 @@ void Renderer::beginGpuTimerFrame() {
 
             m_gpuFrameStats.supported = true;
             m_gpuFrameStats.valid = true;
-            m_gpuFrameStats.opaqueMs = readMs(GpuTimerPass::Opaque);
-            m_gpuFrameStats.cutoutMs = readMs(GpuTimerPass::Cutout);
+            m_gpuFrameStats.gbufferMs = readMs(GpuTimerPass::GBuffer);
+            m_gpuFrameStats.shadowMs = readMs(GpuTimerPass::Shadow);
+            m_gpuFrameStats.ssaoMs = readMs(GpuTimerPass::Ssao);
+            m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);
             m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
             m_gpuTimerIssued[readIndex].fill(false);
         }

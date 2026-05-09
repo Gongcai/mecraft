@@ -1,36 +1,38 @@
-    #version 330 core
-    out vec4 FragColor;
+#version 450 core
+out vec4 FragColor;
 
-    in vec2 vUV;
-    in float vLight;
-    in float vSunlight;
-    in float vBlockLight;
-    in float vAO;
-    in float vNormal;
-    in float vLayer;
-    in float vAnimationFrameCount;
-    in float vAnimationFps;
-    in float vAnimated;
-    in float vFogDist;
-    flat in float vTintKind;
-    in vec2 vTintUV;
+in vec2 vUV;
+in float vLight;
+in float vSunlight;
+in float vBlockLight;
+in float vAO;
+in float vNormal;
+in float vLayer;
+in float vAnimationFrameCount;
+in float vAnimationFps;
+in float vAnimated;
+in float vFogDist;
+flat in float vTintKind;
+in vec2 vTintUV;
 
-    uniform sampler2DArray texArray;
-    uniform sampler2D uLightmapDay;
-    uniform sampler2D uLightmapNight;
-    uniform sampler2D uGrassColormap;
-    uniform sampler2D uFoliageColormap;
-    uniform int uForceBaseLod;
-    uniform int uFogEnabled;
-    uniform int uFogMode;
-    uniform vec3 uFogColor;
-    uniform float uFogStart;
-    uniform float uFogEnd;
-    uniform float uFogDensity;
-    uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
-    uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
-    uniform float uWindTime;
-    uniform float uAnimationTime;
+uniform sampler2DArray texArray;
+uniform sampler2D uLightmapDay;
+uniform sampler2D uLightmapNight;
+uniform sampler2D uGrassColormap;
+uniform sampler2D uFoliageColormap;
+uniform sampler2D uOpaqueDepthTex;
+uniform int uForceBaseLod;
+uniform int uDepthSofteningEnabled;
+uniform int uFogEnabled;
+uniform int uFogMode;
+uniform vec3 uFogColor;
+uniform float uFogStart;
+uniform float uFogEnd;
+uniform float uFogDensity;
+uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
+uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
+uniform float uWindTime;
+uniform float uAnimationTime;
 
     // Ambient Occlusion brightness levels
     // Level 0 (fully occluded corner) = 0.72, level 3 (open) = 1.0
@@ -128,5 +130,18 @@
             finalColor = mix(uFogColor, finalColor, fogFactor);
         }
 
-        FragColor = vec4(finalColor, texColor.a);
+        float alpha = texColor.a;
+        if (uDepthSofteningEnabled != 0 && alpha < 0.999) {
+            vec2 screenUv = gl_FragCoord.xy / vec2(textureSize(uOpaqueDepthTex, 0));
+            float opaqueDepth = texture(uOpaqueDepthTex, screenUv).r;
+            if (opaqueDepth < 1.0) {
+                float depthGap = max(opaqueDepth - gl_FragCoord.z, 0.0);
+                float nearSoftening = 1.0 - smoothstep(36.0, 72.0, vFogDist);
+                float contactFade = smoothstep(0.000005, 0.00035, depthGap);
+                float softenedAlpha = mix(alpha, alpha * contactFade, nearSoftening * 0.45);
+                alpha = max(softenedAlpha, texColor.a * 0.65);
+            }
+        }
+
+        FragColor = vec4(finalColor, alpha);
     }
