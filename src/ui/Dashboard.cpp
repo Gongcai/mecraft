@@ -340,6 +340,30 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         }
 
         ImGui::Separator();
+        ImGui::Text("Render Pipeline");
+        Renderer::RenderPipelineSettings pipeline = render.getRenderPipelineSettings();
+        int pipelineMode = static_cast<int>(pipeline.mode);
+        static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
+        bool pipelineChanged = false;
+        pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
+        pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
+        pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
+        pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
+        pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &pipeline.shadowResolution, 512, 4096);
+        pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 24.0f, 192.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Exposure", &pipeline.exposure, 0.2f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.2f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Saturation", &pipeline.saturation, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Contrast", &pipeline.contrast, 0.5f, 2.0f, "%.2f");
+        ImGui::Text("Hybrid Deferred: %s", render.isHybridDeferredReady() ? "ready" : "not ready");
+        if (pipelineChanged) {
+            render.setRenderPipelineSettings(pipeline);
+        }
+
+        ImGui::Separator();
         ImGui::Text("Distance Fog");
         Renderer::FogSettings fog = render.getFogSettings();
         bool fogPresetApplied = false;

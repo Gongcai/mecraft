@@ -66,16 +66,21 @@ Renderer::~Renderer() {
 
 void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_chunkShader = resourceMgr.getShader("chunk_lit");
-    if (m_chunkShader == nullptr) {
-        m_chunkShader = resourceMgr.getShader("chunk_lit");
-    }
+    m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
+    m_chunkShader = m_chunkForwardShader;
+    m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
+    m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
+    m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
+    m_ssaoShader = resourceMgr.getShader("ssao");
+    m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
+    m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
     initOutlineMesh();
     initBreakOverlayMesh();
     m_worldRenderBuffer.init();
+    m_deferredTargets.init();
     m_gameplaySkyRenderer.init(resourceMgr);
 #ifdef MECRAFT_DEBUG
     initGpuTimers();
@@ -104,6 +109,7 @@ void Renderer::shutdown() {
 #endif
     m_mdiMeshAllocations.clear();
     m_gameplaySkyRenderer.shutdown();
+    m_deferredTargets.shutdown();
     m_worldRenderBuffer.shutdown();
     m_meshingService.shutdown();
     m_threadPool.shutdown();
@@ -135,6 +141,15 @@ void Renderer::shutdown() {
     }
     m_breakOverlayVertexCount = 0;
     m_breakOverlayCrossVertexCount = 0;
+    m_chunkShader = nullptr;
+    m_chunkForwardShader = nullptr;
+    m_chunkGBufferShader = nullptr;
+    m_shadowDepthShader = nullptr;
+    m_deferredLightingShader = nullptr;
+    m_ssaoShader = nullptr;
+    m_bloomExtractShader = nullptr;
+    m_bloomBlurShader = nullptr;
+    m_deferredFrameActive = false;
 }
 
 void Renderer::render(const World& world, const Camera &camera, const Window &window, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
@@ -146,10 +161,20 @@ void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, c
     beginFrame(camera, window);
     m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem());
     m_fogSettings.color = m_gameplaySkyRenderer.getLastFogColor();
-    renderWorld(world);
+    if (m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred && renderWorldDeferred(world, camera, window)) {
+        return;
+    }
+    m_chunkShader = m_chunkForwardShader;
+    m_deferredFrameActive = false;
+    renderWorldForward(world);
 }
 
 void Renderer::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window) {
+    if (m_deferredFrameActive) {
+        restoreCapturedFramebufferViewport(window);
+    }
+
+    m_chunkShader = m_chunkForwardShader;
     if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
         const TextureArray& texArray = m_resourceMgr->getTextureArray();
         bindChunkRenderState(world, texArray);
@@ -235,6 +260,30 @@ void Renderer::setDebugLightMode(const int mode) {
 
 int Renderer::getDebugLightMode() const {
     return m_debugLightMode;
+}
+
+void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings) {
+    m_pipelineSettings = settings;
+    m_pipelineSettings.shadowResolution = std::clamp(m_pipelineSettings.shadowResolution, 256, 8192);
+    m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 16.0f, 512.0f);
+    m_pipelineSettings.ssaoRadius = std::clamp(m_pipelineSettings.ssaoRadius, 0.1f, 16.0f);
+    m_pipelineSettings.ssaoStrength = std::clamp(m_pipelineSettings.ssaoStrength, 0.0f, 4.0f);
+    m_pipelineSettings.exposure = std::clamp(m_pipelineSettings.exposure, 0.05f, 8.0f);
+    m_pipelineSettings.gamma = std::clamp(m_pipelineSettings.gamma, 1.0f, 3.5f);
+    m_pipelineSettings.saturation = std::clamp(m_pipelineSettings.saturation, 0.0f, 3.0f);
+    m_pipelineSettings.contrast = std::clamp(m_pipelineSettings.contrast, 0.25f, 3.0f);
+}
+
+Renderer::RenderPipelineSettings Renderer::getRenderPipelineSettings() const {
+    return m_pipelineSettings;
+}
+
+bool Renderer::isHybridDeferredReady() const {
+    return m_deferredTargets.isReady() &&
+           m_chunkGBufferShader != nullptr &&
+           m_shadowDepthShader != nullptr &&
+           m_deferredLightingShader != nullptr &&
+           m_ssaoShader != nullptr;
 }
 
 float Renderer::getAtlasAnisotropy() const {
@@ -413,6 +462,10 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
 }
 
 void Renderer::renderWorld(const World& world) {
+    renderWorldForward(world);
+}
+
+void Renderer::renderWorldForward(const World& world) {
     if (m_chunkShader == nullptr || m_resourceMgr == nullptr) {
         m_deferredTransparentEntries.clear();
         return;
@@ -458,6 +511,13 @@ void Renderer::renderWorld(const World& world) {
 }
 
 void Renderer::bindChunkRenderState(const World& world, const TextureArray& texArray) const {
+    if (m_chunkShader == nullptr) {
+        return;
+    }
+    bindChunkRenderStateForShader(world, texArray, *m_chunkShader);
+}
+
+void Renderer::bindChunkRenderStateForShader(const World& world, const TextureArray& texArray, Shader& shader) const {
 
     float fogStart = m_fogSettings.startDistance;
     float fogEnd = m_fogSettings.endDistance;
@@ -472,25 +532,25 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     }
     fogEnd = std::max(fogEnd, fogStart + 0.1f);
 
-    m_chunkShader->use();
-    m_chunkShader->setMat4("view", m_view);
-    m_chunkShader->setMat4("viewProj", m_projection * m_view);
-    m_chunkShader->setInt("uUseModel", 0);
-    m_chunkShader->setInt("texArray", 0);
-    m_chunkShader->setInt("uLightmapDay", 1);
-    m_chunkShader->setInt("uLightmapNight", 2);
-    m_chunkShader->setInt("uGrassColormap", 3);
-    m_chunkShader->setInt("uFoliageColormap", 4);
-    m_chunkShader->setInt("uForceBaseLod", 0);
-    m_chunkShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
-    m_chunkShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
-    m_chunkShader->setVec3("uFogColor", m_fogSettings.color);
-    m_chunkShader->setFloat("uFogStart", fogStart);
-    m_chunkShader->setFloat("uFogEnd", fogEnd);
-    m_chunkShader->setFloat("uFogDensity", m_fogSettings.density);
-    m_chunkShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
-    m_chunkShader->setInt("uDebugLightMode", m_debugLightMode);
-    m_chunkShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    shader.use();
+    shader.setMat4("view", m_view);
+    shader.setMat4("viewProj", m_projection * m_view);
+    shader.setInt("uUseModel", 0);
+    shader.setInt("texArray", 0);
+    shader.setInt("uLightmapDay", 1);
+    shader.setInt("uLightmapNight", 2);
+    shader.setInt("uGrassColormap", 3);
+    shader.setInt("uFoliageColormap", 4);
+    shader.setInt("uForceBaseLod", 0);
+    shader.setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
+    shader.setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
+    shader.setVec3("uFogColor", m_fogSettings.color);
+    shader.setFloat("uFogStart", fogStart);
+    shader.setFloat("uFogEnd", fogEnd);
+    shader.setFloat("uFogDensity", m_fogSettings.density);
+    shader.setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
+    shader.setInt("uDebugLightMode", m_debugLightMode);
+    shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
@@ -504,6 +564,261 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+}
+
+bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, const Window& window) {
+    if (m_resourceMgr == nullptr ||
+        m_chunkGBufferShader == nullptr ||
+        m_deferredLightingShader == nullptr ||
+        m_ssaoShader == nullptr ||
+        !m_deferredTargets.init()) {
+        return false;
+    }
+
+    captureCurrentFramebuffer();
+    if (!m_deferredTargets.ensureSize(window.getWidth(), window.getHeight(), m_pipelineSettings.shadowResolution)) {
+        restoreCapturedFramebufferViewport(window);
+        return false;
+    }
+
+    m_deferredFrameActive = true;
+    renderGBufferTerrain(world);
+    if (m_pipelineSettings.shadowsEnabled && m_shadowDepthShader != nullptr) {
+        renderShadowMap(world, camera);
+    }
+    if (m_pipelineSettings.ssaoEnabled) {
+        renderSsaoPass(camera, window);
+    }
+    restoreCapturedFramebufferViewport(window);
+    renderDeferredLightingPass(world);
+    m_deferredTargets.blitDepthTo(m_capturedFramebuffer, window.getWidth(), window.getHeight());
+    restoreCapturedFramebufferViewport(window);
+    return true;
+}
+
+void Renderer::renderGBufferTerrain(const World& world) {
+    m_deferredTargets.bindGBuffer();
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    constexpr GLfloat clearAlbedo[] = {0.0f, 0.0f, 0.0f, 0.0f};
+    constexpr GLfloat clearNormal[] = {0.5f, 0.5f, 1.0f, 1.0f};
+    constexpr GLfloat clearLight[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    glClearBufferfv(GL_COLOR, 0, clearAlbedo);
+    glClearBufferfv(GL_COLOR, 1, clearNormal);
+    glClearBufferfv(GL_COLOR, 2, clearLight);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    releaseStaleMdiAllocations(world);
+    drainMeshingResults(world);
+    m_worldRenderBuffer.beginFrame();
+    m_deferredTransparentBatch.clear();
+
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    m_chunkShader = m_chunkGBufferShader;
+    bindChunkRenderStateForShader(world, texArray, *m_chunkGBufferShader);
+    submitMeshingJobs(world);
+
+    std::vector<ChunkRenderEntry> cutoutEntries;
+    cutoutEntries.reserve(world.getActiveChunks().size() * 2);
+    m_deferredTransparentEntries.clear();
+    m_deferredTransparentEntries.reserve(world.getActiveChunks().size() * 2);
+    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, m_deferredTransparentEntries);
+    if (m_useMultiDrawIndirect) {
+        m_worldRenderBuffer.flushOpaque();
+    }
+    renderCutoutChunks(cutoutEntries);
+
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+}
+
+void Renderer::renderShadowMap(const World& world, const Camera& camera) {
+    if (m_shadowDepthShader == nullptr) {
+        return;
+    }
+    std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
+    m_shadowViewProj = buildShadowViewProj(camera, currentSunDirection(world));
+    m_deferredTargets.bindShadowMap();
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    m_worldRenderBuffer.beginFrame();
+    std::vector<ChunkRenderEntry> cutoutEntries;
+    cutoutEntries.reserve(world.getActiveChunks().size() * 2);
+    std::vector<ChunkRenderEntry> transparentEntries;
+    transparentEntries.reserve(world.getActiveChunks().size() * 2);
+
+    m_chunkShader = m_shadowDepthShader;
+    m_shadowDepthShader->use();
+    m_shadowDepthShader->setMat4("viewProj", m_shadowViewProj);
+    m_shadowDepthShader->setInt("uUseModel", 0);
+    m_shadowDepthShader->setInt("uForceBaseLod", 1);
+    m_shadowDepthShader->setInt("texArray", 0);
+    m_shadowDepthShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
+    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries);
+    if (m_useMultiDrawIndirect) {
+        m_worldRenderBuffer.flushOpaque();
+    }
+    renderCutoutChunks(cutoutEntries);
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    m_deferredTransparentBatch = std::move(preservedTransparentBatch);
+}
+
+void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
+    if (m_ssaoShader == nullptr) {
+        return;
+    }
+    m_deferredTargets.bindSsao();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_ssaoShader->use();
+    m_ssaoShader->setInt("uDepthTex", 0);
+    m_ssaoShader->setInt("uNormalAoTex", 1);
+    m_ssaoShader->setMat4("uProjection", camera.getProjectionMatrix(window.getAspectRatio()));
+    m_ssaoShader->setFloat("uRadius", m_pipelineSettings.ssaoRadius);
+    m_ssaoShader->setFloat("uStrength", m_pipelineSettings.ssaoStrength);
+    m_ssaoShader->setVec2("uInvResolution", glm::vec2(1.0f / std::max(1, window.getWidth()), 1.0f / std::max(1, window.getHeight())));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    renderFullscreen(*m_ssaoShader);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Renderer::renderDeferredLightingPass(const World& world) {
+    if (m_deferredLightingShader == nullptr) {
+        return;
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_deferredLightingShader->use();
+    m_deferredLightingShader->setInt("uAlbedoTex", 0);
+    m_deferredLightingShader->setInt("uNormalAoTex", 1);
+    m_deferredLightingShader->setInt("uVoxelLightTex", 2);
+    m_deferredLightingShader->setInt("uDepthTex", 3);
+    m_deferredLightingShader->setInt("uLightmapDay", 4);
+    m_deferredLightingShader->setInt("uLightmapNight", 5);
+    m_deferredLightingShader->setInt("uShadowMap", 6);
+    m_deferredLightingShader->setInt("uSsaoTex", 7);
+    m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
+    m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
+    m_deferredLightingShader->setVec3("uCameraPos", m_cameraPos);
+    m_deferredLightingShader->setVec3("uSunDirection", currentSunDirection(world));
+    m_deferredLightingShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
+    m_deferredLightingShader->setVec3("uFogColor", m_fogSettings.color);
+    float fogStart = m_fogSettings.startDistance;
+    float fogEnd = m_fogSettings.endDistance;
+    if (m_fogSettings.autoDistanceByRenderDistance) {
+        const float chunkSize = static_cast<float>(Chunk::SIZE_X);
+        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
+        fogEnd = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoEndOffsetChunks) * chunkSize);
+        fogStart = std::max(0.0f, fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
+    }
+    fogEnd = std::max(fogEnd, fogStart + 0.1f);
+    m_deferredLightingShader->setFloat("uFogStart", fogStart);
+    m_deferredLightingShader->setFloat("uFogEnd", fogEnd);
+    m_deferredLightingShader->setFloat("uFogDensity", m_fogSettings.density);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    renderFullscreen(*m_deferredLightingShader);
+
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderFullscreen(Shader& shader) const {
+    shader.use();
+    glBindVertexArray(m_deferredTargets.fullscreenVao());
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+}
+
+glm::vec3 Renderer::currentSunDirection(const World& world) const {
+    const float angle = world.getDayNightSystem().getCelestialAngleRadians();
+    glm::vec3 direction(0.25f, std::sin(angle), -std::cos(angle));
+    if (direction.y < 0.08f) {
+        direction.y = 0.08f;
+    }
+    return glm::normalize(direction);
+}
+
+glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const {
+    const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
+    const glm::vec3 center = camera.getPosition() + camera.getFront() * (distance * 0.35f);
+    const glm::vec3 lightPos = center + sunDirection * distance;
+    const glm::mat4 view = glm::lookAt(lightPos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::mat4 proj = glm::ortho(-distance, distance, -distance, distance, 0.1f, distance * 2.5f);
+    return proj * view;
+}
+
+void Renderer::captureCurrentFramebuffer() {
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_capturedFramebuffer);
+    glGetIntegerv(GL_VIEWPORT, m_capturedViewport);
+}
+
+void Renderer::restoreCapturedFramebufferViewport(const Window& window) {
+    const int fallbackWidth = std::max(1, window.getWidth());
+    const int fallbackHeight = std::max(1, window.getHeight());
+    const int width = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : fallbackWidth;
+    const int height = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : fallbackHeight;
+    m_deferredTargets.bindDefaultLike(m_capturedFramebuffer, width, height);
 }
 
 void Renderer::submitMeshingJobs(const World& world) {
@@ -1177,7 +1492,9 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
 
 
 void Renderer::endFrame(const Window &window) {
+    (void)window;
     recordMeshingHistory();
+    m_deferredFrameActive = false;
 }
 
 void Renderer::initOutlineMesh() {

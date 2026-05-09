@@ -32,6 +32,13 @@ private:
 
     // 窗口级回调 (仅处理窗口本身的事件)
     static void framebufferSizeCallback(GLFWwindow* w, int width, int height);
+    static void APIENTRY debugMessageCallback(GLenum source,
+                                              GLenum type,
+                                              GLuint id,
+                                              GLenum severity,
+                                              GLsizei length,
+                                              const GLchar* message,
+                                              const void* userParam);
 };
 
 

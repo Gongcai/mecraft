@@ -9,6 +9,7 @@
 #include "../thread/ThreadPool.h"
 #include "../core/Window.h"
 #include "ChunkMeshingService.h"
+#include "DeferredRenderTargets.h"
 #include "GameplaySkyRenderer.h"
 #include "Shader.h"
 #include "WorldRenderBuffer.h"
@@ -37,11 +38,32 @@ struct BlockBreakRenderData {
 
 class Renderer {
 public:
+    enum class RenderPipelineMode : int {
+        ForwardLegacy = 0,
+        HybridDeferred = 1
+    };
+
     enum class FogMode : int {
         Linear = 0,
         Exp = 1,
         Exp2 = 2
     };
+
+    struct RenderPipelineSettings {
+        RenderPipelineMode mode = RenderPipelineMode::HybridDeferred;
+        bool shadowsEnabled = true;
+        bool ssaoEnabled = true;
+        bool bloomEnabled = true;
+        int shadowResolution = 2048;
+        float shadowDistance = 96.0f;
+        float ssaoRadius = 2.25f;
+        float ssaoStrength = 0.75f;
+        float exposure = 1.05f;
+        float gamma = 2.2f;
+        float saturation = 1.08f;
+        float contrast = 1.05f;
+    };
+
 
     struct FogSettings {
         bool enabled = true;
@@ -157,6 +179,9 @@ public:
     // Debug light visualization: 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
     void setDebugLightMode(int mode);
     [[nodiscard]] int getDebugLightMode() const;
+    void setRenderPipelineSettings(const RenderPipelineSettings& settings);
+    [[nodiscard]] RenderPipelineSettings getRenderPipelineSettings() const;
+    [[nodiscard]] bool isHybridDeferredReady() const;
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
@@ -253,6 +278,18 @@ private:
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
     void bindChunkRenderState(const World& world, const TextureArray& texArray) const;
+    void bindChunkRenderStateForShader(const World& world, const TextureArray& texArray, Shader& shader) const;
+    void renderWorldForward(const World& world);
+    bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window);
+    void renderGBufferTerrain(const World& world);
+    void renderShadowMap(const World& world, const Camera& camera);
+    void renderSsaoPass(const Camera& camera, const Window& window);
+    void renderDeferredLightingPass(const World& world);
+    void renderFullscreen(Shader& shader) const;
+    glm::vec3 currentSunDirection(const World& world) const;
+    glm::mat4 buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const;
+    void captureCurrentFramebuffer();
+    void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);
     void renderOpaqueChunksAndCollectPasses(const World& world,
                                             std::vector<ChunkRenderEntry>& cutoutEntries,
@@ -294,6 +331,13 @@ private:
     bool m_useMultiDrawIndirect = true;
 
     Shader* m_chunkShader = nullptr;
+    Shader* m_chunkForwardShader = nullptr;
+    Shader* m_chunkGBufferShader = nullptr;
+    Shader* m_shadowDepthShader = nullptr;
+    Shader* m_deferredLightingShader = nullptr;
+    Shader* m_ssaoShader = nullptr;
+    Shader* m_bloomExtractShader = nullptr;
+    Shader* m_bloomBlurShader = nullptr;
    // Shader* m_uiShader = nullptr;
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;
@@ -311,6 +355,12 @@ private:
     ThreadPool m_threadPool;
     ChunkMeshingService m_meshingService;
     GameplaySkyRenderer m_gameplaySkyRenderer;
+    DeferredRenderTargets m_deferredTargets;
+    RenderPipelineSettings m_pipelineSettings{};
+    GLint m_capturedFramebuffer = 0;
+    GLint m_capturedViewport[4] = {0, 0, 0, 0};
+    glm::mat4 m_shadowViewProj = glm::mat4(1.0f);
+    bool m_deferredFrameActive = false;
     std::unordered_set<int64_t> m_meshingInFlight;
     std::vector<SubChunkMeshingResult> m_deferredMeshResults;
     int m_meshingSubmitBudget = 8;

@@ -307,6 +307,12 @@ void Game::renderFrame(const float frameTime) {
     PostProcessEffects effects;
     effects.underwaterEnabled = playerQuery.isEyesInWater();
     effects.screenRollRadians = fallRollRadians;
+    const Renderer::RenderPipelineSettings pipelineSettings = m_renderer.getRenderPipelineSettings();
+    effects.bloomEnabled = pipelineSettings.bloomEnabled;
+    effects.exposure = pipelineSettings.exposure;
+    effects.gamma = pipelineSettings.gamma;
+    effects.saturation = pipelineSettings.saturation;
+    effects.contrast = pipelineSettings.contrast;
     m_postProcessRenderer.setEffects(effects);
 
     HeldItemPreviewMotion heldItemMotion;

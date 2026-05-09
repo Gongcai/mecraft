@@ -1,0 +1,66 @@
+#ifndef MECRAFT_DEFERRED_RENDER_TARGETS_H
+#define MECRAFT_DEFERRED_RENDER_TARGETS_H
+
+#include <glad/glad.h>
+
+class DeferredRenderTargets {
+public:
+    ~DeferredRenderTargets();
+
+    bool init();
+    void shutdown();
+
+    bool ensureSize(int width, int height, int shadowResolution);
+
+    void bindGBuffer();
+    void bindShadowMap();
+    void bindSsao();
+    void bindDefaultLike(GLint framebuffer, int width, int height);
+    void blitDepthTo(GLint framebuffer, int width, int height) const;
+
+    [[nodiscard]] GLuint albedoTexture() const { return m_gAlbedo; }
+    [[nodiscard]] GLuint normalAoTexture() const { return m_gNormalAo; }
+    [[nodiscard]] GLuint voxelLightTexture() const { return m_gVoxelLight; }
+    [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
+    [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
+    [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
+    [[nodiscard]] GLuint fullscreenVao() const { return m_fullscreenVao; }
+    [[nodiscard]] int width() const { return m_width; }
+    [[nodiscard]] int height() const { return m_height; }
+    [[nodiscard]] int shadowResolution() const { return m_shadowResolution; }
+    [[nodiscard]] bool isReady() const { return m_ready; }
+
+private:
+    static GLuint createTexture2D(GLenum internalFormat,
+                                  int width,
+                                  int height,
+                                  GLenum format,
+                                  GLenum type,
+                                  GLenum minFilter,
+                                  GLenum magFilter,
+                                  GLenum wrap);
+    static bool checkFramebufferComplete(GLuint framebuffer, const char* label);
+    void destroyFramebuffers();
+    void destroyFullscreenTriangle();
+
+    GLuint m_gBufferFbo = 0;
+    GLuint m_gAlbedo = 0;
+    GLuint m_gNormalAo = 0;
+    GLuint m_gVoxelLight = 0;
+    GLuint m_gDepth = 0;
+
+    GLuint m_shadowFbo = 0;
+    GLuint m_shadowDepth = 0;
+
+    GLuint m_ssaoFbo = 0;
+    GLuint m_ssaoTex = 0;
+
+    GLuint m_fullscreenVao = 0;
+
+    int m_width = 0;
+    int m_height = 0;
+    int m_shadowResolution = 0;
+    bool m_ready = false;
+};
+
+#endif // MECRAFT_DEFERRED_RENDER_TARGETS_H

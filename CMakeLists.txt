@@ -94,6 +94,7 @@ set(SRC_RENDERER
         src/renderer/ItemModelMesh.cpp
         src/renderer/MeshBuilderRegistry.cpp
         src/renderer/PostProcessRenderer.cpp
+        src/renderer/DeferredRenderTargets.cpp
         src/renderer/stb_image.cpp
         src/renderer/ChunkMesher.cpp
         src/renderer/ChunkMeshingService.cpp

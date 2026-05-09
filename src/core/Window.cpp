@@ -1,5 +1,8 @@
 #include "Window.h"
 
+#include <iostream>
+#include <stdexcept>
+
 bool Window::init(int width, int height, const char *title) {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -15,6 +18,22 @@ bool Window::init(int width, int height, const char *title) {
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         return false;
     }
+    const auto* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const auto* glslVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+    std::cout << "OpenGL: " << (glVersion != nullptr ? glVersion : "unknown") << "\n";
+    std::cout << "GLSL: " << (glslVersion != nullptr ? glslVersion : "unknown") << "\n";
+    std::cout << "GLAD OpenGL 4.5: " << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << "\n";
+    if (!GLAD_GL_VERSION_4_5) {
+        throw std::runtime_error("OpenGL 4.5 core is required for the hybrid deferred renderer.");
+    }
+#ifdef MECRAFT_DEBUG
+    if (GLAD_GL_VERSION_4_3) {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(Window::debugMessageCallback, nullptr);
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
+    }
+#endif
     int framebufferWidth = width;
     int framebufferHeight = height;
     glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
@@ -88,3 +107,20 @@ void Window::framebufferSizeCallback(GLFWwindow *w, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+void APIENTRY Window::debugMessageCallback(GLenum source,
+                                           GLenum type,
+                                           GLuint id,
+                                           GLenum severity,
+                                           GLsizei length,
+                                           const GLchar* message,
+                                           const void* userParam) {
+    (void)source;
+    (void)type;
+    (void)id;
+    (void)length;
+    (void)userParam;
+    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
+        return;
+    }
+    std::cerr << "OpenGL debug: " << (message != nullptr ? message : "") << "\n";
+}

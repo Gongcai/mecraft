@@ -13,6 +13,13 @@ struct PostProcessEffects {
     glm::vec3 underwaterTint = glm::vec3(0.42f, 0.62f, 0.95f);
     float underwaterStrength = 0.845f;
     float screenRollRadians = 0.0f;
+    bool bloomEnabled = true;
+    float bloomThreshold = 0.82f;
+    float bloomStrength = 0.18f;
+    float exposure = 1.0f;
+    float gamma = 2.2f;
+    float saturation = 1.0f;
+    float contrast = 1.0f;
 };
 
 class PostProcessRenderer {
@@ -37,10 +44,14 @@ private:
     void destroyFullscreenTriangle();
 
     Shader* m_postProcessShader = nullptr;
+    Shader* m_bloomExtractShader = nullptr;
+    Shader* m_bloomBlurShader = nullptr;
 
     GLuint m_sceneFbo = 0;
     GLuint m_sceneColorTex = 0;
-    GLuint m_sceneDepthStencilRbo = 0;
+    GLuint m_sceneDepthRbo = 0;
+    GLuint m_bloomFbos[2] = {0, 0};
+    GLuint m_bloomTex[2] = {0, 0};
 
     GLuint m_fullscreenVao = 0;
 
