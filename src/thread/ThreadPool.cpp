@@ -15,7 +15,7 @@ void ThreadPool::start() {
         return;
     }
 
-    // Auto-detect thread count if not explicitly set: max(2, hw_concurrency - 1), capped at 8
+    // Auto-detect thread count if not explicitly set: max(2, hw_concurrency - 1), capped at 12
     if (m_numThreads <= 0) {
         const int hw = static_cast<int>(std::thread::hardware_concurrency());
         m_numThreads = std::max(2, hw - 1);

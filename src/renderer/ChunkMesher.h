@@ -67,13 +67,13 @@ struct ChunkMeshData {
 
     std::vector<BlockVertex> opaqueVertices;
     std::vector<BlockVertex> cutoutVertices;
+    std::vector<BlockVertex> cutoutDistanceVertices;
     std::vector<BlockVertex> transparentVertices;
     uint32_t opaqueFaceCountBeforeGreedy = 0;
     uint32_t opaqueFaceCountAfterGreedy = 0;
     uint32_t transparentFaceCountBeforeGreedy = 0;
     uint32_t transparentFaceCountAfterGreedy = 0;
     uint32_t opaqueVertexCount = 0;
-    bool cutoutCanSkipByDistance = true;
     double buildTimeMs = 0.0;
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);

@@ -24,6 +24,7 @@ struct GpuMeshRange {
 struct WorldGpuMesh {
     GpuMeshRange opaque;
     GpuMeshRange cutout;
+    GpuMeshRange cutoutDistance;
     GpuMeshRange transparent;
     bool hasBounds = false;
     glm::vec3 boundsMin{};
@@ -147,7 +148,11 @@ struct SubChunkMesh {
     GLuint cutoutVbo = 0;
     uint32_t cutoutVertexCount = 0;
     GLsizeiptr cutoutVboCapacity = 0;
-    bool cutoutCanSkipByDistance = true;
+
+    GLuint cutoutDistanceVao = 0;
+    GLuint cutoutDistanceVbo = 0;
+    uint32_t cutoutDistanceVertexCount = 0;
+    GLsizeiptr cutoutDistanceVboCapacity = 0;
 
     bool hasBounds = false;
     glm::vec3 boundsMin = glm::vec3(0.0f);
@@ -156,11 +161,13 @@ struct SubChunkMesh {
     // MDI path: GPU ranges in the global buffer pool
     GpuMeshRange opaqueRange;
     GpuMeshRange cutoutRange;
+    GpuMeshRange cutoutDistanceRange;
     GpuMeshRange transparentRange;
     bool inGlobalPool = false;
 
     void upload(const std::vector<BlockVertex>& vertices);
     void uploadCutout(const std::vector<BlockVertex>& cutoutVerts);
+    void uploadCutoutDistance(const std::vector<BlockVertex>& cutoutDistanceVerts);
     void uploadTransparent(const std::vector<BlockVertex>& transparentVerts);
     void destroy();
 };

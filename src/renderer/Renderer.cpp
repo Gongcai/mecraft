@@ -688,6 +688,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     if (!mesh.inGlobalPool) continue;
                     if (mesh.opaqueRange.vertexCount == 0 &&
                         mesh.cutoutRange.vertexCount == 0 &&
+                        mesh.cutoutDistanceRange.vertexCount == 0 &&
                         mesh.transparentRange.vertexCount == 0) {
                         continue;
                     }
@@ -728,6 +729,9 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                         m_worldRenderBuffer.addOpaque(mesh.opaqueRange);
                     }
                     if (mesh.cutoutRange.vertexCount > 0) {
+                        m_worldRenderBuffer.addCutout(mesh.cutoutRange);
+                    }
+                    if (mesh.cutoutDistanceRange.vertexCount > 0) {
                         const glm::vec3 sectionCenter(
                             static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
                             static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
@@ -738,10 +742,8 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 #ifdef MECRAFT_DEBUG
                         ++m_cutoutCandidatesThisFrame;
 #endif
-                        if (!m_cutoutDistanceLimitEnabled ||
-                            !mesh.cutoutCanSkipByDistance ||
-                            distanceSq <= cutoutLimitSq) {
-                            m_worldRenderBuffer.addCutout(mesh.cutoutRange);
+                        if (!m_cutoutDistanceLimitEnabled || distanceSq <= cutoutLimitSq) {
+                            m_worldRenderBuffer.addCutout(mesh.cutoutDistanceRange);
                         }
 #ifdef MECRAFT_DEBUG
                         else {
@@ -784,7 +786,8 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                             ++drawCallCount;
                         }
 
-                        if (column.aggregatedHasCutout && mesh.cutoutVertexCount > 0) {
+                        if (column.aggregatedHasCutout &&
+                            (mesh.cutoutVertexCount > 0 || mesh.cutoutDistanceVertexCount > 0)) {
                             cutoutEntries.push_back({column.chunk, -1, true});
                         }
                     }
@@ -892,6 +895,7 @@ void Renderer::releaseStaleMdiAllocations(const World& world) {
                 release =
                     current.opaqueRange.generation != it->second.mesh.opaque.generation ||
                     current.cutoutRange.generation != it->second.mesh.cutout.generation ||
+                    current.cutoutDistanceRange.generation != it->second.mesh.cutoutDistance.generation ||
                     current.transparentRange.generation != it->second.mesh.transparent.generation;
             }
         }
@@ -927,7 +931,9 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
 
     const SubChunkMesh& columnMesh = column.chunk->getColumnMesh();
     column.aggregatedHasOpaque = columnMesh.vertexCount > 0;
-    column.aggregatedHasCutout = columnMesh.cutoutVertexCount > 0;
+    column.aggregatedHasCutout =
+        columnMesh.cutoutVertexCount > 0 ||
+        columnMesh.cutoutDistanceVertexCount > 0;
     column.aggregatedPresent = column.aggregatedHasOpaque || column.aggregatedHasCutout;
 
     const bool columnBoundsPresent = m_useMultiDrawIndirect
@@ -1032,11 +1038,28 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
             if (!sc) continue;
             mesh = &sc->getMesh();
         }
-        if (mesh->cutoutVertexCount == 0) continue;
+        if (mesh->cutoutVertexCount > 0) {
+            glBindVertexArray(mesh->cutoutVao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutVertexCount));
+            ++drawCallCount;
+        }
 
-        glBindVertexArray(mesh->cutoutVao);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutVertexCount));
-        ++drawCallCount;
+        if (mesh->cutoutDistanceVertexCount > 0) {
+            bool shouldDrawDistanceCutout = true;
+            if (m_cutoutDistanceLimitEnabled) {
+                const glm::vec3 center = (mesh->boundsMin + mesh->boundsMax) * 0.5f;
+                const glm::vec2 toCameraXZ(center.x - m_cameraPos.x, center.z - m_cameraPos.z);
+                const float distanceSq = glm::dot(toCameraXZ, toCameraXZ);
+                const float cutoutLimitBlocks = m_cutoutRenderDistanceChunks * static_cast<float>(Chunk::SIZE_X);
+                shouldDrawDistanceCutout = distanceSq <= cutoutLimitBlocks * cutoutLimitBlocks;
+            }
+
+            if (shouldDrawDistanceCutout) {
+                glBindVertexArray(mesh->cutoutDistanceVao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->cutoutDistanceVertexCount));
+                ++drawCallCount;
+            }
+        }
     }
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Cutout);
@@ -1406,33 +1429,38 @@ void Renderer::drainMeshingResults(const World& world) {
             // MDI path: bake world offset and upload to global buffer pool.
             const bool hasOpaqueOrCutout =
                 !result.meshData.opaqueVertices.empty() ||
-                !result.meshData.cutoutVertices.empty();
+                !result.meshData.cutoutVertices.empty() ||
+                !result.meshData.cutoutDistanceVertices.empty();
             std::vector<BlockVertex> opaqueVerts = std::move(result.meshData.opaqueVertices);
             std::vector<BlockVertex> cutoutVerts = std::move(result.meshData.cutoutVertices);
+            std::vector<BlockVertex> cutoutDistanceVerts = std::move(result.meshData.cutoutDistanceVertices);
             std::vector<BlockVertex> transparentVerts = std::move(result.meshData.transparentVertices);
             bakeWorldOffset(opaqueVerts);
             bakeWorldOffset(cutoutVerts);
+            bakeWorldOffset(cutoutDistanceVerts);
             bakeWorldOffset(transparentVerts);
 
             const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
             WorldGpuMesh gpu = m_worldRenderBuffer.uploadSubChunk(
-                opaqueVerts, cutoutVerts, transparentVerts,
+                opaqueVerts, cutoutVerts, cutoutDistanceVerts, transparentVerts,
                 result.meshData.hasBounds,
                 result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
                 result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
             if ((!opaqueVerts.empty() && gpu.opaque.vertexCount == 0) ||
                 (!cutoutVerts.empty() && gpu.cutout.vertexCount == 0) ||
+                (!cutoutDistanceVerts.empty() && gpu.cutoutDistance.vertexCount == 0) ||
                 (!transparentVerts.empty() && gpu.transparent.vertexCount == 0)) {
                 continue;
             }
 
             mesh.opaqueRange = gpu.opaque;
             mesh.cutoutRange = gpu.cutout;
+            mesh.cutoutDistanceRange = gpu.cutoutDistance;
             mesh.transparentRange = gpu.transparent;
             mesh.vertexCount = gpu.opaque.vertexCount;
             mesh.cutoutVertexCount = gpu.cutout.vertexCount;
+            mesh.cutoutDistanceVertexCount = gpu.cutoutDistance.vertexCount;
             mesh.transparentVertexCount = gpu.transparent.vertexCount;
-            mesh.cutoutCanSkipByDistance = result.meshData.cutoutCanSkipByDistance;
             mesh.hasBounds = result.meshData.hasBounds;
             mesh.boundsMin = gpu.boundsMin;
             mesh.boundsMax = gpu.boundsMax;
@@ -1449,7 +1477,7 @@ void Renderer::drainMeshingResults(const World& world) {
             // Old path: per-mesh VAOs.
             mesh.upload(result.meshData.opaqueVertices);
             mesh.uploadCutout(result.meshData.cutoutVertices);
-            mesh.cutoutCanSkipByDistance = result.meshData.cutoutCanSkipByDistance;
+            mesh.uploadCutoutDistance(result.meshData.cutoutDistanceVertices);
 
             std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
             bakeWorldOffset(transparentVerts);

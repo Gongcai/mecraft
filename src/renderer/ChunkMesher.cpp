@@ -1489,10 +1489,8 @@ bool isTransparentCubeCandidate(const BlockDef& def) {
     return def.renderShape == BlockRenderShape::Cube && def.renderLayer == BlockRenderLayer::Transparent;
 }
 
-void noteCutoutDistancePolicy(ChunkMeshData& meshData, const BlockDef& def) {
-    if (def.renderLayer == BlockRenderLayer::Cutout && !def.cutoutDistanceCull) {
-        meshData.cutoutCanSkipByDistance = false;
-    }
+std::vector<BlockVertex>& cutoutTargetFor(ChunkMeshData& meshData, const BlockDef& def) {
+    return def.cutoutDistanceCull ? meshData.cutoutDistanceVertices : meshData.cutoutVertices;
 }
 
 bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
@@ -1567,7 +1565,37 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
     }
 
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isCutoutCubeCandidate(def)) {
+    if (!isCutoutCubeCandidate(def) || def.cutoutDistanceCull) {
+        return false;
+    }
+
+    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
+        return false;
+    }
+
+    outCell.valid = true;
+    outCell.x = x;
+    outCell.y = y;
+    outCell.z = z;
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    return true;
+}
+
+bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
+                                    const int face,
+                                    const int x,
+                                    const int y,
+                                    const int z,
+                                    FaceCell& outCell) {
+    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+    if (blockId == 0) {
+        return false;
+    }
+
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (!isCutoutCubeCandidate(def) || !def.cutoutDistanceCull) {
         return false;
     }
 
@@ -1724,22 +1752,12 @@ void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshDa
                          meshData.transparentFaceCountBeforeGreedy,
                          meshData.transparentFaceCountAfterGreedy,
                          populateCutoutFaceCell);
-
-    constexpr int S = SubChunk::SIZE;
-    for (int y = 0; y < S; ++y) {
-        for (int z = 0; z < S; ++z) {
-            for (int x = 0; x < S; ++x) {
-                const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-                if (blockId == 0) {
-                    continue;
-                }
-                const BlockDef& def = BlockRegistry::getFast(blockId);
-                if (isCutoutCubeCandidate(def)) {
-                    noteCutoutDistancePolicy(meshData, def);
-                }
-            }
-        }
-    }
+    buildCubeGreedyFaces(snapshot,
+                         meshData,
+                         meshData.cutoutDistanceVertices,
+                         meshData.transparentFaceCountBeforeGreedy,
+                         meshData.transparentFaceCountAfterGreedy,
+                         populateCutoutDistanceFaceCell);
 }
 
 using WaterTopMask = std::array<bool, SC_BLOCK_COUNT>;
@@ -2572,8 +2590,7 @@ void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
                                    const int x,
                                    const int y,
                                    const int z) {
-    noteCutoutDistancePolicy(meshData, def);
-    addCrossedQuadsImpl(meshData.cutoutVertices,
+    addCrossedQuadsImpl(cutoutTargetFor(meshData, def),
                         glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                         blockId, def, x, y, z, snapshot);
     expandBounds(meshData,
@@ -2588,8 +2605,7 @@ void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
                                     const int x,
                                     const int y,
                                     const int z) {
-    noteCutoutDistancePolicy(meshData, def);
-    addTorchTemplateImpl(meshData.cutoutVertices,
+    addTorchTemplateImpl(cutoutTargetFor(meshData, def),
                       glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                       blockId, x, y, z, snapshot);
     expandBounds(meshData,
@@ -2638,9 +2654,8 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
         auto& target = def.renderLayer == BlockRenderLayer::Transparent
             ? meshData.transparentVertices
             : (def.renderLayer == BlockRenderLayer::Cutout
-                ? meshData.cutoutVertices
+                ? cutoutTargetFor(meshData, def)
                 : meshData.opaqueVertices);
-        noteCutoutDistancePolicy(meshData, def);
         FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
         emitUnitFace(target,
                      glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
@@ -2725,6 +2740,7 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
     ChunkMeshData meshData;
     meshData.opaqueVertices.reserve(2048);
     meshData.cutoutVertices.reserve(512);
+    meshData.cutoutDistanceVertices.reserve(512);
     meshData.transparentVertices.reserve(1024);
 
     buildOpaqueGreedyFaces(snapshot, meshData);
@@ -2806,6 +2822,7 @@ void ChunkMesher::generateSubChunkMesh(Chunk& chunk, const int scy) {
     SubChunkMesh mesh;
     mesh.upload(meshData.opaqueVertices);
     mesh.uploadCutout(meshData.cutoutVertices);
+    mesh.uploadCutoutDistance(meshData.cutoutDistanceVertices);
     mesh.uploadTransparent(meshData.transparentVertices);
     mesh.hasBounds = meshData.hasBounds;
     mesh.boundsMin = meshData.boundsMin;

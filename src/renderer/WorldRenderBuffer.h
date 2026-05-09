@@ -82,6 +82,7 @@ public:
 
     WorldGpuMesh uploadSubChunk(const std::vector<BlockVertex>& opaque,
                                 const std::vector<BlockVertex>& cutout,
+                                const std::vector<BlockVertex>& cutoutDistance,
                                 const std::vector<BlockVertex>& transparent,
                                 bool hasBounds,
                                 const glm::vec3& boundsMin,

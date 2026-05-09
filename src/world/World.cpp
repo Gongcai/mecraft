@@ -677,6 +677,7 @@ size_t World::getTotalVertexCount() const {
                 if (sc) {
                     total += sc->getMesh().vertexCount;
                     total += sc->getMesh().cutoutVertexCount;
+                    total += sc->getMesh().cutoutDistanceVertexCount;
                     total += sc->getMesh().transparentVertexCount;
                 }
             }

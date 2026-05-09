@@ -496,6 +496,7 @@ void WorldRenderBuffer::shutdown() {
 WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
     const std::vector<BlockVertex>& opaque,
     const std::vector<BlockVertex>& cutout,
+    const std::vector<BlockVertex>& cutoutDistance,
     const std::vector<BlockVertex>& transparent,
     const bool hasBounds, const glm::vec3& boundsMin, const glm::vec3& boundsMax)
 {
@@ -514,10 +515,19 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
         }
         m_cutoutPool.upload(result.cutout, cutout);
     }
+    if (!cutoutDistance.empty()) {
+        if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutoutDistance.size()), result.cutoutDistance)) {
+            m_opaquePool.free(result.opaque);
+            m_cutoutPool.free(result.cutout);
+            return {};
+        }
+        m_cutoutPool.upload(result.cutoutDistance, cutoutDistance);
+    }
     if (!transparent.empty()) {
         if (!m_transparentPool.allocate(static_cast<uint32_t>(transparent.size()), result.transparent)) {
             m_opaquePool.free(result.opaque);
             m_cutoutPool.free(result.cutout);
+            m_cutoutPool.free(result.cutoutDistance);
             return {};
         }
         m_transparentPool.upload(result.transparent, transparent);
@@ -532,6 +542,7 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
 void WorldRenderBuffer::free(const WorldGpuMesh& mesh) {
     m_opaquePool.free(mesh.opaque);
     m_cutoutPool.free(mesh.cutout);
+    m_cutoutPool.free(mesh.cutoutDistance);
     m_transparentPool.free(mesh.transparent);
 }
 

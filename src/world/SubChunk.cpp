@@ -479,6 +479,37 @@ void SubChunkMesh::uploadCutout(const std::vector<BlockVertex>& cutoutVerts) {
     glBindVertexArray(0);
 }
 
+void SubChunkMesh::uploadCutoutDistance(const std::vector<BlockVertex>& cutoutDistanceVerts) {
+    cutoutDistanceVertexCount = static_cast<uint32_t>(cutoutDistanceVerts.size());
+
+    if (cutoutDistanceVao == 0) {
+        glGenVertexArrays(1, &cutoutDistanceVao);
+    }
+    if (cutoutDistanceVbo == 0) {
+        glGenBuffers(1, &cutoutDistanceVbo);
+    }
+
+    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(cutoutDistanceVerts.size() * sizeof(BlockVertex));
+
+    glBindVertexArray(cutoutDistanceVao);
+    glBindBuffer(GL_ARRAY_BUFFER, cutoutDistanceVbo);
+
+    if (dataSize <= cutoutDistanceVboCapacity) {
+        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+                        cutoutDistanceVerts.empty() ? nullptr : cutoutDistanceVerts.data());
+    } else {
+        cutoutDistanceVboCapacity = dataSize + dataSize / 2;
+        glBufferData(GL_ARRAY_BUFFER, cutoutDistanceVboCapacity, nullptr, GL_STATIC_DRAW);
+        if (!cutoutDistanceVerts.empty()) {
+            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, cutoutDistanceVerts.data());
+        }
+    }
+    setupSubChunkVertexLayout();
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
 void SubChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparentVerts) {
     transparentVertexCount = static_cast<uint32_t>(transparentVerts.size());
 
@@ -515,11 +546,12 @@ void SubChunkMesh::destroy() {
         // GPU memory is owned by WorldRenderBuffer — just clear the handles.
         opaqueRange = {};
         cutoutRange = {};
+        cutoutDistanceRange = {};
         transparentRange = {};
         vertexCount = 0;
         cutoutVertexCount = 0;
+        cutoutDistanceVertexCount = 0;
         transparentVertexCount = 0;
-        cutoutCanSkipByDistance = true;
         hasBounds = false;
         inGlobalPool = false;
         return;
@@ -551,11 +583,20 @@ void SubChunkMesh::destroy() {
         cutoutVao = 0;
     }
     cutoutVboCapacity = 0;
+    if (cutoutDistanceVbo != 0) {
+        glDeleteBuffers(1, &cutoutDistanceVbo);
+        cutoutDistanceVbo = 0;
+    }
+    if (cutoutDistanceVao != 0) {
+        glDeleteVertexArrays(1, &cutoutDistanceVao);
+        cutoutDistanceVao = 0;
+    }
+    cutoutDistanceVboCapacity = 0;
 
     vertexCount = 0;
     transparentVertexCount = 0;
     cutoutVertexCount = 0;
-    cutoutCanSkipByDistance = true;
+    cutoutDistanceVertexCount = 0;
     hasBounds = false;
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);
