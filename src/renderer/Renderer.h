@@ -54,6 +54,7 @@ public:
         bool shadowsEnabled = true;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
+        bool waterEffectsEnabled = true;
         int shadowResolution = 2048;
         float shadowDistance = 96.0f;
         float ssaoRadius = 2.25f;
@@ -281,6 +282,7 @@ private:
     void renderWorld(const World& world);
     void bindChunkRenderState(const World& world, const TextureArray& texArray) const;
     void bindChunkRenderStateForShader(const World& world, const TextureArray& texArray, Shader& shader) const;
+    void bindWaterEffectUniforms(Shader& shader, bool enabled) const;
     void renderWorldForward(const World& world);
     bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window);
     void renderGBufferTerrain(const World& world);

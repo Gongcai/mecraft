@@ -183,6 +183,7 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
             glActiveTexture(GL_TEXTURE5);
             glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
         }
+        bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
         renderTransparentChunks(m_deferredTransparentEntries);
         glBindVertexArray(0);
         glActiveTexture(GL_TEXTURE5);
@@ -554,6 +555,8 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
     shader.setInt("uDebugLightMode", m_debugLightMode);
     shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    shader.setVec3("uCameraPos", m_cameraPos);
+    bindWaterEffectUniforms(shader, false);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
@@ -569,6 +572,24 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Renderer::bindWaterEffectUniforms(Shader& shader, const bool enabled) const {
+    shader.setInt("uWaterEffectsEnabled", enabled ? 1 : 0);
+    if (m_resourceMgr == nullptr) {
+        shader.setFloat("uWaterStillFirstLayer", 0.0f);
+        shader.setFloat("uWaterStillLayerCount", 0.0f);
+        shader.setFloat("uWaterFlowFirstLayer", 0.0f);
+        shader.setFloat("uWaterFlowLayerCount", 0.0f);
+        return;
+    }
+
+    const TextureAnimationInfo still = m_resourceMgr->getTextureAnimation("water_still");
+    const TextureAnimationInfo flow = m_resourceMgr->getTextureAnimation("water_flow");
+    shader.setFloat("uWaterStillFirstLayer", static_cast<float>(still.firstLayer));
+    shader.setFloat("uWaterStillLayerCount", static_cast<float>(std::max(1, still.frameCount)));
+    shader.setFloat("uWaterFlowFirstLayer", static_cast<float>(flow.firstLayer));
+    shader.setFloat("uWaterFlowLayerCount", static_cast<float>(std::max(1, flow.frameCount)));
 }
 
 bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, const Window& window) {

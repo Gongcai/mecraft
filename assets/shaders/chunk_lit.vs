@@ -27,6 +27,7 @@ out float vAnimationFrameCount;
 out float vAnimationFps;
 out float vAnimated;
 out float vFogDist;
+out vec3 vWorldPos;
 flat out float vTintKind;
 out vec2 vTintUV;
 
@@ -51,6 +52,7 @@ void main() {
     vAnimationFps = aAnimationFps;
     vAnimated = aAnimated;
     vFogDist = max(0.0, -viewPos.z);
+    vWorldPos = worldPos.xyz;
 
     uint tintKind = (aTintPacked >> 14u) & 3u;
     uint tintU = (aTintPacked >> 7u) & 127u;
