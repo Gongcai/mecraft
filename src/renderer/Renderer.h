@@ -78,6 +78,12 @@ public:
         float colorLumaR = 1.02f;
         float colorLumaG = 1.00f;
         float colorLumaB = 0.96f;
+        float albedoDesaturation = 0.18f;
+        float sunWarmth = 0.34f;
+        float skyCoolness = 0.18f;
+        float shadowDesaturation = 0.22f;
+        float splitToneStrength = 0.28f;
+        float vignetteStrength = 0.08f;
         float shadowTintStrength = 0.28f;
         float directSunStrength = 1.18f;
         float skyAmbientStrength = 0.46f;

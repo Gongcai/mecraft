@@ -31,6 +31,10 @@ uniform float uShadowMinLight;
 uniform float uShadowContrast;
 uniform float uBlockLightStrength;
 uniform float uFakeBounceStrength;
+uniform float uAlbedoDesaturation;
+uniform float uSunWarmth;
+uniform float uSkyCoolness;
+uniform float uShadowDesaturation;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform int uShadowsEnabled;
@@ -53,6 +57,11 @@ const float kTwoPi = 6.28318530718;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
+vec3 desaturateLinear(vec3 color, float amount) {
+    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
 }
 
 float computeFogFactor(float fogDistance) {
@@ -205,6 +214,7 @@ void main() {
 
     vec4 albedoMaterial = texture(uAlbedoTex, vTexCoord);
     vec3 albedo = albedoMaterial.rgb;
+    albedo = desaturateLinear(albedo, uAlbedoDesaturation);
     float emissiveHint = albedoMaterial.a;
     vec4 normalAo = texture(uNormalAoTex, vTexCoord);
     vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
@@ -226,15 +236,17 @@ void main() {
     shadow *= contactShadow(worldPos, normal, voxelLight, shadow);
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
 
-    vec3 directSun = uSunLightColor * diffuse * shadow * skyLightMask * uDirectSunStrength;
-    vec3 skyAmbient = uSkyAmbientColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
+    vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
+    vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
+    vec3 directSun = warmSunColor * diffuse * shadow * skyLightMask * uDirectSunStrength;
+    vec3 skyAmbient = coolSkyColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
     skyAmbient *= mix(vec3(1.0), uShadowTintColor, (1.0 - shadow) * clamp(uShadowTintStrength, 0.0, 1.0));
 
     float minimumAmbientMask = mix(0.35, 1.0, skyLightMask);
     vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask;
 
     float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
-    vec3 fakeBounce = uSunLightColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
+    vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
 
     vec3 blockLightColor = mix(vec3(1.0, 0.70, 0.42), vanillaLight, 0.22);
     vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
@@ -243,6 +255,8 @@ void main() {
     totalLight = mix(totalLight, vanillaLight, 0.07);
 
     vec3 color = albedo * totalLight * vertexAo * mix(1.0, ssao, 0.65);
+    float shadowMask = (1.0 - shadow) * skyLightMask;
+    color = desaturateLinear(color, shadowMask * uShadowDesaturation);
     color += albedo * emissiveHint * emissiveHint * (0.35 + 0.45 * uBlockLightStrength);
 
     if (uFogEnabled != 0) {
@@ -255,7 +269,7 @@ void main() {
             float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.65);
             float heightFade = 1.0 - smoothstep(96.0, 192.0, worldPos.y);
             vec3 scatter = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
-            scatter += uSunLightColor * sunForward * 0.26 * clamp(uHorizonScatterStrength, 0.0, 2.0);
+            scatter += warmSunColor * sunForward * 0.26 * clamp(uHorizonScatterStrength, 0.0, 2.0);
             fogColor = mix(fogColor, scatter, clamp(uAerialStrength, 0.0, 2.0) * heightFade);
         }
         color = mix(fogColor, color, fogFactor);

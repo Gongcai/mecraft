@@ -290,6 +290,12 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.colorLumaR = std::clamp(m_pipelineSettings.colorLumaR, 0.5f, 1.5f);
     m_pipelineSettings.colorLumaG = std::clamp(m_pipelineSettings.colorLumaG, 0.5f, 1.5f);
     m_pipelineSettings.colorLumaB = std::clamp(m_pipelineSettings.colorLumaB, 0.5f, 1.5f);
+    m_pipelineSettings.albedoDesaturation = std::clamp(m_pipelineSettings.albedoDesaturation, 0.0f, 0.8f);
+    m_pipelineSettings.sunWarmth = std::clamp(m_pipelineSettings.sunWarmth, 0.0f, 1.5f);
+    m_pipelineSettings.skyCoolness = std::clamp(m_pipelineSettings.skyCoolness, 0.0f, 1.0f);
+    m_pipelineSettings.shadowDesaturation = std::clamp(m_pipelineSettings.shadowDesaturation, 0.0f, 1.0f);
+    m_pipelineSettings.splitToneStrength = std::clamp(m_pipelineSettings.splitToneStrength, 0.0f, 1.0f);
+    m_pipelineSettings.vignetteStrength = std::clamp(m_pipelineSettings.vignetteStrength, 0.0f, 0.5f);
     m_pipelineSettings.shadowTintStrength = std::clamp(m_pipelineSettings.shadowTintStrength, 0.0f, 1.0f);
     m_pipelineSettings.directSunStrength = std::clamp(m_pipelineSettings.directSunStrength, 0.0f, 4.0f);
     m_pipelineSettings.skyAmbientStrength = std::clamp(m_pipelineSettings.skyAmbientStrength, 0.0f, 2.5f);
@@ -594,6 +600,10 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uMinimumAmbient", m_pipelineSettings.minimumAmbient);
     shader.setFloat("uBlockLightStrength", m_pipelineSettings.blockLightStrength);
     shader.setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
+    shader.setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
+    shader.setFloat("uSunWarmth", m_pipelineSettings.sunWarmth);
+    shader.setFloat("uSkyCoolness", m_pipelineSettings.skyCoolness);
+    shader.setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     shader.setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     shader.setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     shader.setVec3("uCameraPos", m_cameraPos);
@@ -833,6 +843,10 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setFloat("uShadowContrast", m_pipelineSettings.shadowContrast);
     m_deferredLightingShader->setFloat("uBlockLightStrength", m_pipelineSettings.blockLightStrength);
     m_deferredLightingShader->setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
+    m_deferredLightingShader->setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
+    m_deferredLightingShader->setFloat("uSunWarmth", m_pipelineSettings.sunWarmth);
+    m_deferredLightingShader->setFloat("uSkyCoolness", m_pipelineSettings.skyCoolness);
+    m_deferredLightingShader->setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     m_deferredLightingShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     m_deferredLightingShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);

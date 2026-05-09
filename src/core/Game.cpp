@@ -325,6 +325,8 @@ void Game::renderFrame(const float frameTime) {
     effects.colorLuma = glm::vec3(pipelineSettings.colorLumaR,
                                   pipelineSettings.colorLumaG,
                                   pipelineSettings.colorLumaB);
+    effects.splitToneStrength = pipelineSettings.splitToneStrength;
+    effects.vignetteStrength = pipelineSettings.vignetteStrength;
     effects.noiseDitherStrength = pipelineSettings.noiseDitherStrength;
     effects.exposure = pipelineSettings.exposure;
     effects.gamma = pipelineSettings.gamma;

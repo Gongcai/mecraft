@@ -22,6 +22,8 @@ uniform float uHighlightCompression;
 uniform float uFilmEmulationStrength;
 uniform float uRedModifierStrength;
 uniform vec3 uColorLuma;
+uniform float uSplitToneStrength;
+uniform float uVignetteStrength;
 uniform float uNoiseDitherStrength;
 uniform bool uUnderwaterEnabled;
 uniform vec3 uUnderwaterTint;
@@ -228,19 +230,41 @@ vec3 applyKappaTonemap(vec3 color) {
     return mix(fallback, mapped, saturate(uKappaGradingStrength));
 }
 
+vec3 applySplitTone(vec3 color) {
+    float lum = luma709(color);
+    vec3 shadowTint = vec3(0.88, 0.94, 1.08);
+    vec3 highlightTint = vec3(1.10, 1.035, 0.90);
+    float shadowWeight = smoothstep(0.55, 0.02, lum);
+    float highlightWeight = smoothstep(0.38, 1.0, lum);
+    vec3 toned = color;
+    toned *= mix(vec3(1.0), shadowTint, shadowWeight * 0.42);
+    toned *= mix(vec3(1.0), highlightTint, highlightWeight * 0.50);
+    return mix(color, toned, saturate(uSplitToneStrength));
+}
+
+vec3 applyVignette(vec3 color, vec2 uv) {
+    vec2 p = uv * 2.0 - 1.0;
+    p.x *= 1.15;
+    float radial = dot(p, p);
+    float fade = 1.0 - smoothstep(0.35, 1.42, radial) * uVignetteStrength;
+    return color * clamp(fade, 0.5, 1.0);
+}
+
 vec3 applyGrade(vec3 color) {
     color *= max(uExposure, 0.001);
     if (uShaderpackGradingEnabled) {
         color = applyColorTemperature(color);
         color = applyKappaHdrGrade(color);
         color = applyKappaTonemap(color);
+        color = applySplitTone(color);
     } else {
         color = vec3(1.0) - exp(-color);
     }
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
     color = mix(vec3(luminance), color, uSaturation);
     color = (color - 0.5) * uContrast + 0.5;
-    return pow(max(color, vec3(0.0)), vec3(1.0 / max(uGamma, 0.001)));
+    color = pow(max(color, vec3(0.0)), vec3(1.0 / max(uGamma, 0.001)));
+    return color;
 }
 
 void main() {
@@ -285,6 +309,9 @@ void main() {
     }
 
     vec3 graded = applyGrade(color);
+    if (uShaderpackGradingEnabled) {
+        graded = applyVignette(graded, rolledUv);
+    }
     if (uNoiseDitherStrength > 0.0) {
         float noise = texture(uNoiseTex, gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0))).r - 0.5;
         graded += noise * uNoiseDitherStrength;

@@ -30,6 +30,8 @@ struct PostProcessEffects {
     float filmEmulationStrength = 0.55f;
     float redModifierStrength = 0.35f;
     glm::vec3 colorLuma = glm::vec3(1.02f, 1.0f, 0.96f);
+    float splitToneStrength = 0.28f;
+    float vignetteStrength = 0.08f;
     float noiseDitherStrength = 0.015f;
     float exposure = 1.0f;
     float gamma = 2.2f;

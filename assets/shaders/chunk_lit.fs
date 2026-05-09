@@ -43,6 +43,10 @@ uniform float uSkyAmbientStrength;
 uniform float uMinimumAmbient;
 uniform float uBlockLightStrength;
 uniform float uFakeBounceStrength;
+uniform float uAlbedoDesaturation;
+uniform float uSunWarmth;
+uniform float uSkyCoolness;
+uniform float uShadowDesaturation;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uWindTime;
@@ -56,6 +60,11 @@ uniform vec3 uCameraPos;
 
     vec3 srgbToLinear(vec3 color) {
         return pow(max(color, vec3(0.0)), vec3(2.2));
+    }
+
+    vec3 desaturateLinear(vec3 color, float amount) {
+        float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
     }
 
     bool layerInRange(float layer, float firstLayer, float layerCount) {
@@ -208,6 +217,7 @@ uniform vec3 uCameraPos;
         } else if (vTintKind > 1.5 && vTintKind < 2.5) {
             albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
         }
+        albedo = desaturateLinear(albedo, uAlbedoDesaturation);
 
         // AO: bilinear interpolate through the discrete AO levels
         // GPU smoothly interpolates vAO between vertex values (e.g., 2.3),
@@ -234,11 +244,13 @@ uniform vec3 uCameraPos;
         vec3 sunDir = normalize(uSunDirection);
         float diffuse = pow(max(dot(normal, sunDir), 0.0), 0.82);
 
-        vec3 directSun = uSunLightColor * diffuse * skyLightMask * uDirectSunStrength;
-        vec3 skyAmbient = uSkyAmbientColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
+        vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
+        vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
+        vec3 directSun = warmSunColor * diffuse * skyLightMask * uDirectSunStrength;
+        vec3 skyAmbient = coolSkyColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
         vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.35, 1.0, skyLightMask);
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
-        vec3 fakeBounce = uSunLightColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
+        vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
         vec3 blockLightColor = mix(vec3(1.0, 0.70, 0.42), vanillaLight, 0.22);
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
         vec3 lightColor = directSun + skyAmbient + minimumAmbient + fakeBounce + blockLight;
@@ -246,6 +258,7 @@ uniform vec3 uCameraPos;
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;
+        finalColor = desaturateLinear(finalColor, (1.0 - diffuse) * skyLightMask * uShadowDesaturation * 0.45);
 
         if (uFogEnabled != 0) {
             float fogFactor = computeFogFactor(vFogDist);
@@ -256,7 +269,7 @@ uniform vec3 uCameraPos;
                 float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.65);
                 float heightFade = 1.0 - smoothstep(96.0, 192.0, vWorldPos.y);
                 vec3 scatter = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
-                scatter += uSunLightColor * sunForward * 0.24 * clamp(uHorizonScatterStrength, 0.0, 2.0);
+                scatter += warmSunColor * sunForward * 0.24 * clamp(uHorizonScatterStrength, 0.0, 2.0);
                 fogColor = mix(fogColor, scatter, clamp(uAerialStrength, 0.0, 2.0) * heightFade);
             }
             finalColor = mix(fogColor, finalColor, fogFactor);
