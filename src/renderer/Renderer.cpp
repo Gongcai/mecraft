@@ -1364,6 +1364,7 @@ void Renderer::recordMeshingHistory() {
 void Renderer::drainMeshingResults(const World& world) {
     const auto drainStartTime = std::chrono::steady_clock::now();
     int drainedCount = 0;
+    int uploadedVerticesThisFrame = 0;
 
     auto subChunkFlightKey = [](int64_t chunkKey, int scy) -> int64_t {
         return (chunkKey & 0x00FFFFFFFFFFFFFFLL) | (static_cast<int64_t>(scy) << 56);
@@ -1379,6 +1380,17 @@ void Renderer::drainMeshingResults(const World& world) {
         if (!m_meshingService.tryPopCompleted(result)) {
             break;
         }
+
+        // Compute vertex count for budget check
+        const int currentVertices =
+            static_cast<int>(result.meshData.opaqueVertices.size()) +
+            static_cast<int>(result.meshData.cutoutVertices.size()) +
+            static_cast<int>(result.meshData.cutoutDistanceVertices.size()) +
+            static_cast<int>(result.meshData.transparentVertices.size());
+
+        // Soft vertex budget: process this result (already dequeued) but break
+        // afterwards to defer remaining uploads to the next frame.
+        const bool overBudget = uploadedVerticesThisFrame + currentVertices > m_meshingDrainVertexBudget;
 
 #ifdef MECRAFT_DEBUG
         ++m_meshingCompletedThisFrame;
@@ -1488,6 +1500,11 @@ void Renderer::drainMeshingResults(const World& world) {
             mesh.boundsMax = result.meshData.boundsMax;
             chunk.setSubChunkMesh(result.scy, mesh);
             chunk.updateColumnAggregateData(result.scy, result.meshData);
+        }
+
+        uploadedVerticesThisFrame += currentVertices;
+        if (overBudget) {
+            break;
         }
 
     }

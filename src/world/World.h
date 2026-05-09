@@ -3,7 +3,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -80,9 +82,17 @@ private:
 
     void loadChunk(int cx, int cz);
     void unloadChunk(int cx, int cz);
+    void submitChunkLoad(int cx, int cz);
+    void finalizeChunkLoad(std::shared_ptr<Chunk> chunk);
 
     std::vector<glm::ivec2> m_loadQueue;
     void updateLoadQueue(int playerChunkX, int playerChunkZ);
+
+    std::unordered_set<int64_t> m_generationInFlight;
+    std::mutex m_completedGenMutex;
+    std::vector<std::shared_ptr<Chunk>> m_completedGenQueue;
+
+    static constexpr int kMaxGenerationInFlight = 4;
 };
 
 #endif //MECRAFT_WORLD_H

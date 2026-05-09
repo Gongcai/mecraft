@@ -106,6 +106,11 @@ void World::init(uint32_t seed) {
     m_terrainGen.init(seed, m_flatSurfaceY);
     m_chunks.clear();
     m_loadQueue.clear();
+    m_generationInFlight.clear();
+    {
+        std::lock_guard<std::mutex> lock(m_completedGenMutex);
+        m_completedGenQueue.clear();
+    }
     m_fluidSystem.reset();
     m_neighborUpdateQueue.clear();
     ++m_activeChunkRevision;
@@ -136,15 +141,32 @@ void World::update(const glm::vec3& playerPos) {
         unloadChunk(cx, cz);
     }
 
-    // Keep per-frame chunk creation conservative to reduce visible frame spikes.
-    constexpr int kMaxChunkLoadsPerFrame = 2;
-    int loaded = 0;
-    while (!m_loadQueue.empty() && loaded < kMaxChunkLoadsPerFrame) {
+    // Submit chunk generation jobs to thread pool (async terrain generation).
+    constexpr int kMaxChunkLoadsPerFrame = 4;
+    int submitted = 0;
+    while (!m_loadQueue.empty() && submitted < kMaxChunkLoadsPerFrame) {
+        if (static_cast<int>(m_generationInFlight.size()) >= kMaxGenerationInFlight) {
+            break;
+        }
 
         auto pos = m_loadQueue.back();
         m_loadQueue.pop_back();
-        loadChunk(pos.x, pos.y);
-        loaded++;
+        submitChunkLoad(pos.x, pos.y);
+        submitted++;
+    }
+
+    // Finalize completed generation results on the main thread.
+    {
+        std::vector<std::shared_ptr<Chunk>> completed;
+        {
+            std::lock_guard<std::mutex> lock(m_completedGenMutex);
+            completed.swap(m_completedGenQueue);
+        }
+        for (auto& chunk : completed) {
+            const int64_t key = chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
+            m_generationInFlight.erase(key);
+            finalizeChunkLoad(std::move(chunk));
+        }
     }
 
     if (m_lightService) {
@@ -590,6 +612,75 @@ int64_t World::chunkKey(int cx, int cz) {
     return (static_cast<int64_t>(cx) << 32) | (static_cast<int64_t>(cz) & 0xFFFFFFFF);
 }
 
+void World::submitChunkLoad(int cx, int cz) {
+    int64_t key = chunkKey(cx, cz);
+    if (m_chunks.find(key) != m_chunks.end()) return;
+    if (m_generationInFlight.count(key)) return;
+    if (!m_threadPool) {
+        // No thread pool — fall back to synchronous load
+        loadChunk(cx, cz);
+        return;
+    }
+
+    m_generationInFlight.insert(key);
+
+    auto chunk = std::make_shared<Chunk>(cx, cz);
+    TerrainGenerator* terrainGen = &m_terrainGen;
+
+    m_threadPool->submit([chunk, terrainGen, this]() {
+        terrainGen->generateChunk(*chunk);
+        chunk->seedInitialLightMap();
+
+        {
+            std::lock_guard<std::mutex> lock(m_completedGenMutex);
+            m_completedGenQueue.push_back(chunk);
+        }
+    }, 0);
+}
+
+void World::finalizeChunkLoad(std::shared_ptr<Chunk> chunk) {
+    const int cx = chunk->m_chunkX;
+    const int cz = chunk->m_chunkZ;
+    const int64_t key = chunkKey(cx, cz);
+
+    // Guard against duplicate finalization (e.g. if loadChunk was called directly)
+    if (m_chunks.find(key) != m_chunks.end()) return;
+
+    m_chunks[key] = std::move(chunk);
+    ++m_activeChunkRevision;
+
+    // Wire up neighbor pointers for the new chunk and its existing neighbors
+    Chunk* cur = m_chunks[key].get();
+    auto markNeighborBorderDirty = [&](Chunk& neighbor) {
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (cur->getSubChunk(scy) || neighbor.getSubChunk(scy)) {
+                neighbor.markSubChunkDirty(scy);
+            }
+        }
+    };
+    auto linkNeighbor = [&](int ncx, int ncz, int selfIdx, int neighborIdx) {
+        auto it = m_chunks.find(chunkKey(ncx, ncz));
+        if (it == m_chunks.end()) {
+            return;
+        }
+
+        Chunk* neighbor = it->second.get();
+        cur->neighbors[selfIdx] = neighbor;
+        neighbor->neighbors[neighborIdx] = cur;
+        cur->linkExistingSubChunksWithNeighbor(selfIdx);
+        markNeighborBorderDirty(*neighbor);
+    };
+    linkNeighbor(cx + 1, cz, 0, 1);
+    linkNeighbor(cx - 1, cz, 1, 0);
+    linkNeighbor(cx, cz + 1, 2, 3);
+    linkNeighbor(cx, cz - 1, 3, 2);
+
+    // Initialize lighting after terrain generation and neighbor linking
+    if (m_lightService) {
+        m_lightService->onChunkLoaded(m_chunks[key]);
+    }
+}
+
 void World::loadChunk(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
     if (m_chunks.find(key) != m_chunks.end()) return;
@@ -696,7 +787,8 @@ void World::updateLoadQueue(int playerChunkX, int playerChunkZ) {
             }
             int cx = playerChunkX + dx;
             int cz = playerChunkZ + dz;
-            if (m_chunks.find(chunkKey(cx, cz)) == m_chunks.end()) {
+            const int64_t key = chunkKey(cx, cz);
+            if (m_chunks.find(key) == m_chunks.end() && !m_generationInFlight.count(key)) {
                 m_loadQueue.push_back(glm::ivec2(cx, cz));
             }
         }

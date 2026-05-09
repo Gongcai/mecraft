@@ -312,6 +312,7 @@ private:
     double m_meshingSubmitTimeBudgetMs = 0.75;
     int m_meshingDrainBudget = 2;
     double m_meshingDrainTimeBudgetMs = 1.0;
+    int m_meshingDrainVertexBudget = 65536;  // ~2MB vertex data per frame upload limit
     int m_regionChunkSize = 4;
 #ifdef MECRAFT_DEBUG
     bool m_chunkCullingDebugEnabled = false;

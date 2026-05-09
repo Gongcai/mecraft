@@ -68,7 +68,7 @@ private:
 
 class WorldRenderBuffer {
 public:
-    static constexpr size_t kInitialPoolVertices = 1 << 18;   // Grows on demand; keep startup allocation modest.
+    static constexpr size_t kInitialPoolVertices = 1 << 21;   // ~2M vertices (~64MB), avoids early expand/defrag stalls
     static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
