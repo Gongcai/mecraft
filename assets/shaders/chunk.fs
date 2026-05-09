@@ -1,4 +1,4 @@
-#version 330 core
+#version 450 core
 out vec4 FragColor;
 
 in vec2 vUV;
@@ -18,6 +18,10 @@ uniform vec3 uFogColor;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
+
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
 
 float computeFogFactor(float fogDistance) {
     if (uFogMode == 1) {
@@ -46,18 +50,19 @@ void main() {
     if (texColor.a < 0.1)
         discard;
 
+    vec3 albedo = srgbToLinear(texColor.rgb);
     if (vTintKind > 0.5 && vTintKind < 1.5) {
-        texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+        albedo *= srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
     } else if (vTintKind > 1.5 && vTintKind < 2.5) {
-        texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
+        albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
     }
 
     if (uFogEnabled == 0) {
-        FragColor = texColor;
+        FragColor = vec4(albedo, texColor.a);
         return;
     }
 
     float fogFactor = computeFogFactor(vFogDist);
-    vec3 finalColor = mix(uFogColor, texColor.rgb, fogFactor);
+    vec3 finalColor = mix(srgbToLinear(uFogColor), albedo, fogFactor);
     FragColor = vec4(finalColor, texColor.a);
 }

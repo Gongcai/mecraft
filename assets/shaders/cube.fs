@@ -1,4 +1,4 @@
-#version 330 core
+#version 450 core
 
 in vec3 vNormal;
 in vec2 vTexCoord;
@@ -8,10 +8,14 @@ out vec4 FragColor;
 uniform sampler2D uMainTex;
 uniform float uNormalVizMix;
 
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
 void main()
 {
     vec3 normalColor = normalize(vNormal) * 0.5 + 0.5;
-    vec3 texColor = texture(uMainTex, vTexCoord).rgb;
+    vec3 texColor = srgbToLinear(texture(uMainTex, vTexCoord).rgb);
 
     // Keep texture as the base output while still allowing normal debug overlay.
     vec3 color = mix(texColor, normalColor, uNormalVizMix);

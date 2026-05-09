@@ -10,14 +10,14 @@ class Window;
 
 struct PostProcessEffects {
     bool underwaterEnabled = false;
-    glm::vec3 underwaterTint = glm::vec3(0.42f, 0.62f, 0.95f);
-    float underwaterStrength = 0.845f;
+    glm::vec3 underwaterTint = glm::vec3(0.24f, 0.46f, 0.72f);
+    float underwaterStrength = 0.68f;
     float screenRollRadians = 0.0f;
     bool bloomEnabled = true;
     float bloomThreshold = 0.82f;
     float bloomStrength = 0.18f;
     float exposure = 1.0f;
-    float gamma = 1.0f;
+    float gamma = 2.2f;
     float saturation = 1.0f;
     float contrast = 1.0f;
 };

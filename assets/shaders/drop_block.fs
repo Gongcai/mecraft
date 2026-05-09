@@ -1,4 +1,4 @@
-#version 330 core
+#version 450 core
 out vec4 FragColor;
 
 in vec2 vUV;
@@ -30,6 +30,10 @@ uniform float uFogDensity;
 uniform int uDebugLightMode;
 uniform float uSkyIntensity;
 uniform float uAnimationTime;
+
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
 
 const float aoLevels[4] = float[](0.72, 0.82, 0.91, 1.0);
 
@@ -88,10 +92,11 @@ void main() {
         discard;
     }
 
+    vec3 albedo = srgbToLinear(texColor.rgb);
     if (vTintKind > 0.5 && vTintKind < 1.5) {
-        texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+        albedo *= srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
     } else if (vTintKind > 1.5 && vTintKind < 2.5) {
-        texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
+        albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
     }
 
     float aoIdx = clamp(vAO, 0.0, 3.0);
@@ -100,14 +105,14 @@ void main() {
     float aoFactor = mix(aoLevels[aoLow], aoLevels[aoHigh], fract(aoIdx));
 
     vec2 lightmapUV = vec2(vBlockLight, 1.0 - vSunlight);
-    vec3 dayLight = texture(uLightmapDay, lightmapUV).rgb;
-    vec3 nightLight = texture(uLightmapNight, lightmapUV).rgb;
+    vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
+    vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
     vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
-    vec3 finalColor = texColor.rgb * lightColor * aoFactor;
+    vec3 finalColor = albedo * lightColor * aoFactor;
 
     if (uFogEnabled != 0) {
         float fogFactor = computeFogFactor(vFogDist);
-        finalColor = mix(uFogColor, finalColor, fogFactor);
+        finalColor = mix(srgbToLinear(uFogColor), finalColor, fogFactor);
     }
 
     FragColor = vec4(finalColor, texColor.a);

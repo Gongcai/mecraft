@@ -26,6 +26,10 @@ uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
 
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
 float computeFogFactor(float fogDistance) {
     if (uFogMode == 1) {
         return clamp(exp(-uFogDensity * fogDistance), 0.0, 1.0);
@@ -82,8 +86,8 @@ void main() {
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
-    vec3 dayLight = texture(uLightmapDay, lightmapUV).rgb;
-    vec3 nightLight = texture(uLightmapNight, lightmapUV).rgb;
+    vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
+    vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
     vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
 
     float sunFacing = clamp(dot(normal, normalize(uSunDirection)) * 0.45 + 0.55, 0.25, 1.0);
@@ -96,7 +100,7 @@ void main() {
     if (uFogEnabled != 0) {
         float fogDistance = length(worldPos - uCameraPos);
         float fogFactor = computeFogFactor(fogDistance);
-        color = mix(uFogColor, color, fogFactor);
+        color = mix(srgbToLinear(uFogColor), color, fogFactor);
     }
 
     FragColor = vec4(max(color, vec3(0.0)), 1.0);

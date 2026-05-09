@@ -17,6 +17,10 @@ uniform float uGamma;
 uniform float uSaturation;
 uniform float uContrast;
 
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
 vec3 applyGrade(vec3 color) {
     color = vec3(1.0) - exp(-color * max(uExposure, 0.001));
     float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -40,11 +44,12 @@ void main() {
 
     if (uUnderwaterEnabled) {
         float strength = clamp(uUnderwaterStrength, 0.0, 1.0);
-        vec3 tinted = color * uUnderwaterTint;
+        vec3 underwaterTint = srgbToLinear(uUnderwaterTint);
+        vec3 tinted = color * underwaterTint;
         color = mix(color, tinted, strength);
 
-        float fog = clamp((1.0 - vTexCoord.y) * 0.15 * strength, 0.0, 0.2);
-        color = mix(color, uUnderwaterTint, fog);
+        float fog = clamp((1.0 - vTexCoord.y) * 0.10 * strength, 0.0, 0.12);
+        color = mix(color, underwaterTint, fog);
     }
 
     FragColor = vec4(applyGrade(color), 1.0);

@@ -34,6 +34,10 @@ uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
 uniform float uWindTime;
 uniform float uAnimationTime;
 
+    vec3 srgbToLinear(vec3 color) {
+        return pow(max(color, vec3(0.0)), vec3(2.2));
+    }
+
     // Ambient Occlusion brightness levels
     // Level 0 (fully occluded corner) = 0.72, level 3 (open) = 1.0
     // Keep the range narrow so corners are darkened but never go jet-black.
@@ -96,10 +100,11 @@ uniform float uAnimationTime;
         if (texColor.a < 0.1)
             discard;
 
+        vec3 albedo = srgbToLinear(texColor.rgb);
         if (vTintKind > 0.5 && vTintKind < 1.5) {
-            texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+            albedo *= srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
         } else if (vTintKind > 1.5 && vTintKind < 2.5) {
-            texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
+            albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
         }
 
         // AO: bilinear interpolate through the discrete AO levels
@@ -118,16 +123,16 @@ uniform float uAnimationTime;
         // OpenGL V=0 is the top of the image (sky=15, brightest), V=1 is bottom (sky=0, darkest).
         // So we invert vSunlight: high sky level -> low V -> top of texture -> bright.
         vec2 lightmapUV = vec2(vBlockLight, 1.0 - vSunlight);
-        vec3 dayLight = texture(uLightmapDay, lightmapUV).rgb;
-        vec3 nightLight = texture(uLightmapNight, lightmapUV).rgb;
+        vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
+        vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
         vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
 
         // Combine texture, lightmap color, and AO
-        vec3 finalColor = texColor.rgb * lightColor * aoFactor;
+        vec3 finalColor = albedo * lightColor * aoFactor;
 
         if (uFogEnabled != 0) {
             float fogFactor = computeFogFactor(vFogDist);
-            finalColor = mix(uFogColor, finalColor, fogFactor);
+            finalColor = mix(srgbToLinear(uFogColor), finalColor, fogFactor);
         }
 
         float alpha = texColor.a;

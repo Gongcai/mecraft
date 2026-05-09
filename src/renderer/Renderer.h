@@ -59,7 +59,7 @@ public:
         float ssaoRadius = 2.25f;
         float ssaoStrength = 0.75f;
         float exposure = 1.0f;
-        float gamma = 1.0f;
+        float gamma = 2.2f;
         float saturation = 1.0f;
         float contrast = 1.0f;
     };

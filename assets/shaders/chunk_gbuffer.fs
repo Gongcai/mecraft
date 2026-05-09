@@ -23,6 +23,10 @@ uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform float uAnimationTime;
 
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
 vec3 decodeFaceNormal(float face) {
     if (face > -2.5 && face < -0.5) {
         return normalize(vec3(0.0, 1.0, 0.0));
@@ -52,17 +56,18 @@ void main() {
         discard;
     }
 
+    vec3 albedo = srgbToLinear(texColor.rgb);
     if (vTintKind > 0.5 && vTintKind < 1.5) {
-        texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+        albedo *= srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
     } else if (vTintKind > 1.5 && vTintKind < 2.5) {
-        texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
+        albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
     }
 
     vec3 normal = decodeFaceNormal(vNormal);
     float ao = clamp(vAO / 3.0, 0.0, 1.0);
     float emissiveHint = clamp(vBlockLight * 1.25, 0.0, 1.0);
 
-    GAlbedoMaterial = vec4(texColor.rgb, emissiveHint);
+    GAlbedoMaterial = vec4(albedo, emissiveHint);
     GNormalAo = vec4(normal * 0.5 + 0.5, ao);
     GVoxelLight = vec4(clamp(vSunlight, 0.0, 1.0), clamp(vBlockLight, 0.0, 1.0), 0.0, 1.0);
 }
