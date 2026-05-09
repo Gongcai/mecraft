@@ -280,6 +280,13 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.shadowNormalOffset = std::clamp(m_pipelineSettings.shadowNormalOffset, 0.0f, 0.25f);
     m_pipelineSettings.contactShadowStrength = std::clamp(m_pipelineSettings.contactShadowStrength, 0.0f, 1.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
+    m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 2);
+    m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
+    m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
+    m_pipelineSettings.shadowTintStrength = std::clamp(m_pipelineSettings.shadowTintStrength, 0.0f, 1.0f);
+    m_pipelineSettings.aerialStrength = std::clamp(m_pipelineSettings.aerialStrength, 0.0f, 2.0f);
+    m_pipelineSettings.horizonScatterStrength = std::clamp(m_pipelineSettings.horizonScatterStrength, 0.0f, 2.0f);
+    m_pipelineSettings.noiseDitherStrength = std::clamp(m_pipelineSettings.noiseDitherStrength, 0.0f, 0.08f);
     m_pipelineSettings.ssaoRadius = std::clamp(m_pipelineSettings.ssaoRadius, 0.1f, 16.0f);
     m_pipelineSettings.ssaoStrength = std::clamp(m_pipelineSettings.ssaoStrength, 0.0f, 4.0f);
     m_pipelineSettings.exposure = std::clamp(m_pipelineSettings.exposure, 0.05f, 8.0f);
@@ -562,7 +569,13 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uDebugLightMode", m_debugLightMode);
     shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    shader.setVec3("uSunDirection", currentSunDirection(world));
     shader.setVec3("uSunLightColor", skyColors.sunLightColor);
+    shader.setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
+    shader.setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
+    shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
+    shader.setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
+    shader.setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     shader.setVec3("uCameraPos", m_cameraPos);
     bindWaterEffectUniforms(shader, false);
 
@@ -787,7 +800,14 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     m_deferredLightingShader->setVec3("uSunDirection", currentSunDirection(world));
     m_deferredLightingShader->setVec3("uSunLightColor", skyColors.sunLightColor);
+    m_deferredLightingShader->setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
+    m_deferredLightingShader->setVec3("uShadowTintColor", skyColors.shadowTintColor);
+    m_deferredLightingShader->setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
     m_deferredLightingShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
+    m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
+    m_deferredLightingShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
+    m_deferredLightingShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);

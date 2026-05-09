@@ -33,6 +33,12 @@ uniform float uFogDensity;
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
 uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
 uniform vec3 uSunLightColor;
+uniform vec3 uSkyAmbientColor;
+uniform vec3 uHorizonScatterColor;
+uniform vec3 uSunDirection;
+uniform int uAerialPerspectiveEnabled;
+uniform float uAerialStrength;
+uniform float uHorizonScatterStrength;
 uniform float uWindTime;
 uniform float uAnimationTime;
 uniform int uWaterEffectsEnabled;
@@ -205,13 +211,24 @@ uniform vec3 uCameraPos;
         vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
         float skyLightMask = clamp(vSunlight * uSkyIntensity, 0.0, 1.0);
         lightColor *= mix(vec3(1.0), uSunLightColor, skyLightMask * 0.35);
+        lightColor += uSkyAmbientColor * skyLightMask * 0.045;
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;
 
         if (uFogEnabled != 0) {
             float fogFactor = computeFogFactor(vFogDist);
-            finalColor = mix(srgbToLinear(uFogColor), finalColor, fogFactor);
+            vec3 fogColor = srgbToLinear(uFogColor);
+            if (uAerialPerspectiveEnabled != 0) {
+                vec3 viewDir = normalize(vWorldPos - uCameraPos);
+                float sunForward = pow(max(dot(viewDir, normalize(uSunDirection)), 0.0), 2.0);
+                float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.65);
+                float heightFade = 1.0 - smoothstep(96.0, 192.0, vWorldPos.y);
+                vec3 scatter = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
+                scatter += uSunLightColor * sunForward * 0.24 * clamp(uHorizonScatterStrength, 0.0, 2.0);
+                fogColor = mix(fogColor, scatter, clamp(uAerialStrength, 0.0, 2.0) * heightFade);
+            }
+            finalColor = mix(fogColor, finalColor, fogFactor);
         }
 
         float alpha = texColor.a;

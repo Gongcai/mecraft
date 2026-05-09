@@ -15,6 +15,7 @@ void PostProcessRenderer::init(ResourceMgr& resourceMgr) {
     m_postProcessShader = resourceMgr.getShader("postprocess");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
+    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
     initFullscreenTriangle();
 }
 
@@ -24,6 +25,7 @@ void PostProcessRenderer::shutdown() {
     m_postProcessShader = nullptr;
     m_bloomExtractShader = nullptr;
     m_bloomBlurShader = nullptr;
+    m_noiseTexture = 0;
     m_sceneCaptured = false;
     m_targetWidth = 0;
     m_targetHeight = 0;
@@ -38,6 +40,10 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.sunScreenPos.y = std::clamp(m_effects.sunScreenPos.y, -1.0f, 2.0f);
     m_effects.sunVisibility = std::clamp(m_effects.sunVisibility, 0.0f, 1.0f);
     m_effects.sunRayStrength = std::clamp(m_effects.sunRayStrength, 0.0f, 1.0f);
+    m_effects.tonemapMode = std::clamp(m_effects.tonemapMode, 0, 2);
+    m_effects.colorTemperature = std::clamp(m_effects.colorTemperature, 0.0f, 2.0f);
+    m_effects.vibrance = std::clamp(m_effects.vibrance, -1.0f, 1.0f);
+    m_effects.noiseDitherStrength = std::clamp(m_effects.noiseDitherStrength, 0.0f, 0.08f);
     m_effects.exposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
     m_effects.gamma = std::clamp(m_effects.gamma, 1.0f, 3.5f);
     m_effects.saturation = std::clamp(m_effects.saturation, 0.0f, 3.0f);
@@ -120,12 +126,21 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     m_postProcessShader->use();
     m_postProcessShader->setInt("uSceneTex", 0);
     m_postProcessShader->setInt("uBloomTex", 1);
+    m_postProcessShader->setInt("uNoiseTex", 2);
     m_postProcessShader->setBool("uBloomEnabled", hasBloom);
     m_postProcessShader->setFloat("uBloomStrength", m_effects.bloomStrength);
     m_postProcessShader->setBool("uSunRaysEnabled", m_effects.sunRaysEnabled && hasBloom);
     m_postProcessShader->setVec2("uSunScreenPos", m_effects.sunScreenPos);
     m_postProcessShader->setFloat("uSunVisibility", m_effects.sunVisibility);
     m_postProcessShader->setFloat("uSunRayStrength", m_effects.sunRayStrength);
+    m_postProcessShader->setBool("uShaderpackGradingEnabled", m_effects.shaderpackGradingEnabled);
+    m_postProcessShader->setInt("uTonemapMode", m_effects.tonemapMode);
+    m_postProcessShader->setFloat("uColorTemperature", m_effects.colorTemperature);
+    m_postProcessShader->setFloat("uVibrance", m_effects.vibrance);
+    const float noiseDitherStrength = (m_effects.shaderpackGradingEnabled && m_noiseTexture != 0)
+        ? m_effects.noiseDitherStrength
+        : 0.0f;
+    m_postProcessShader->setFloat("uNoiseDitherStrength", noiseDitherStrength);
     m_postProcessShader->setBool("uUnderwaterEnabled", m_effects.underwaterEnabled);
     m_postProcessShader->setVec3("uUnderwaterTint", m_effects.underwaterTint);
     m_postProcessShader->setFloat("uUnderwaterStrength", m_effects.underwaterStrength);
@@ -139,10 +154,14 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[0] : 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);

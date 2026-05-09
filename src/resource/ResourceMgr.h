@@ -57,6 +57,13 @@ public:
     Shader *getShader(const std::string &name);
 
     GLuint loadTexture(const std::string& path, bool alpha = false);
+    GLuint loadTexture2D(const std::string& name,
+                         const std::string& path,
+                         bool srgb = false,
+                         bool repeat = false,
+                         bool linear = true,
+                         bool flipVertically = false);
+    [[nodiscard]] GLuint getTexture2D(const std::string& name) const;
     [[nodiscard]] GLuint getTexture(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
@@ -114,6 +121,7 @@ public:
 private:
     std::unordered_map<std::string, std::unique_ptr<Shader>> m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
+    std::unordered_map<std::string, GLuint> m_texture2D;
     std::unordered_map<std::string, GuiTextureInfo> m_guiTextures;
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;

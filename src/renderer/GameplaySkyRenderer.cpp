@@ -292,6 +292,12 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     const glm::vec3 noonSunLight(1.0f, 0.98f, 0.92f);
     const glm::vec3 warmSunLight(1.0f, 0.58f, 0.28f);
     const glm::vec3 nightSunLight(0.36f, 0.44f, 0.72f);
+    const glm::vec3 dayAmbient(0.68f, 0.82f, 1.0f);
+    const glm::vec3 nightAmbient(0.12f, 0.16f, 0.28f);
+    const glm::vec3 warmAmbient(0.92f, 0.54f, 0.30f);
+    const glm::vec3 dayShadowTint(0.56f, 0.64f, 0.88f);
+    const glm::vec3 nightShadowTint(0.10f, 0.13f, 0.24f);
+    const glm::vec3 warmHorizonScatter(1.0f, 0.36f, 0.13f);
 
     SkyColors colors;
     colors.top = lerp(nightTop, dayTop, skyIntensity);
@@ -303,6 +309,11 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     colors.sunScatter = lerp(noonScatter, goldenScatter, warm);
     colors.sunLightColor = lerp(nightSunLight, noonSunLight, skyIntensity);
     colors.sunLightColor = lerp(colors.sunLightColor, warmSunLight, warm * 0.58f);
+    colors.skyAmbientColor = lerp(nightAmbient, dayAmbient, skyIntensity);
+    colors.skyAmbientColor = lerp(colors.skyAmbientColor, warmAmbient, warm * 0.32f);
+    colors.shadowTintColor = lerp(nightShadowTint, dayShadowTint, skyIntensity);
+    colors.shadowTintColor = lerp(colors.shadowTintColor, glm::vec3(0.34f, 0.28f, 0.44f), warm * 0.35f);
+    colors.horizonScatterColor = lerp(colors.horizon, warmHorizonScatter, warm * 0.85f);
     colors.horizonHaze = std::clamp(0.28f + 0.44f * warm + 0.16f * (1.0f - skyIntensity), 0.0f, 0.85f);
     colors.sunGlare = std::clamp(0.18f * skyIntensity + 0.78f * warm, 0.0f, 1.0f);
     colors.haloStrength = std::clamp(warm + smoothstep(0.05f, 0.35f, sunHeight) * skyIntensity * 0.28f, 0.0f, 1.0f);

@@ -313,6 +313,11 @@ void Game::renderFrame(const float frameTime) {
     effects.bloomEnabled = pipelineSettings.bloomEnabled;
     effects.sunRaysEnabled = pipelineSettings.sunRaysEnabled;
     effects.sunRayStrength = pipelineSettings.sunRayStrength;
+    effects.shaderpackGradingEnabled = pipelineSettings.shaderpackGradingEnabled;
+    effects.tonemapMode = pipelineSettings.tonemapMode;
+    effects.colorTemperature = pipelineSettings.colorTemperature;
+    effects.vibrance = pipelineSettings.vibrance;
+    effects.noiseDitherStrength = pipelineSettings.noiseDitherStrength;
     effects.exposure = pipelineSettings.exposure;
     effects.gamma = pipelineSettings.gamma;
     effects.saturation = pipelineSettings.saturation;

@@ -21,6 +21,11 @@ struct PostProcessEffects {
     glm::vec2 sunScreenPos = glm::vec2(0.5f);
     float sunVisibility = 0.0f;
     float sunRayStrength = 0.14f;
+    bool shaderpackGradingEnabled = true;
+    int tonemapMode = 1;
+    float colorTemperature = 1.0f;
+    float vibrance = 0.18f;
+    float noiseDitherStrength = 0.015f;
     float exposure = 1.0f;
     float gamma = 2.2f;
     float saturation = 1.0f;
@@ -51,6 +56,7 @@ private:
     Shader* m_postProcessShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
+    GLuint m_noiseTexture = 0;
 
     GLuint m_sceneFbo = 0;
     GLuint m_sceneColorTex = 0;

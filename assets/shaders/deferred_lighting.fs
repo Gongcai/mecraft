@@ -18,7 +18,14 @@ uniform mat4 uShadowViewProj;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uSunLightColor;
+uniform vec3 uSkyAmbientColor;
+uniform vec3 uShadowTintColor;
+uniform vec3 uHorizonScatterColor;
 uniform float uSkyIntensity;
+uniform int uAerialPerspectiveEnabled;
+uniform float uShadowTintStrength;
+uniform float uAerialStrength;
+uniform float uHorizonScatterStrength;
 uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
 uniform int uContactShadowsEnabled;
@@ -154,6 +161,7 @@ void main() {
     vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
     float skyLightMask = clamp(voxelLight.r * uSkyIntensity, 0.0, 1.0);
     lightColor *= mix(vec3(1.0), uSunLightColor, skyLightMask * 0.35);
+    lightColor += uSkyAmbientColor * skyLightMask * 0.055;
 
     float sunFacing = clamp(dot(normal, normalize(uSunDirection)) * 0.45 + 0.55, 0.25, 1.0);
     float shadow = shadowFactor(worldPos, normal);
@@ -161,12 +169,24 @@ void main() {
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
     vec3 color = albedo * lightColor * vertexAo * mix(1.0, ssao, 0.65);
     color *= mix(1.0, sunFacing * shadow, skyLightMask * 0.45);
+    float shadowAmount = (1.0 - shadow) * skyLightMask * clamp(uShadowTintStrength, 0.0, 1.0);
+    color = mix(color, color * uShadowTintColor, shadowAmount);
     color += albedo * emissiveHint * emissiveHint * 0.35;
 
     if (uFogEnabled != 0) {
         float fogDistance = length(worldPos - uCameraPos);
         float fogFactor = computeFogFactor(fogDistance);
-        color = mix(srgbToLinear(uFogColor), color, fogFactor);
+        vec3 fogColor = srgbToLinear(uFogColor);
+        if (uAerialPerspectiveEnabled != 0) {
+            vec3 viewDir = normalize(worldPos - uCameraPos);
+            float sunForward = pow(max(dot(viewDir, normalize(uSunDirection)), 0.0), 2.0);
+            float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.65);
+            float heightFade = 1.0 - smoothstep(96.0, 192.0, worldPos.y);
+            vec3 scatter = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
+            scatter += uSunLightColor * sunForward * 0.26 * clamp(uHorizonScatterStrength, 0.0, 2.0);
+            fogColor = mix(fogColor, scatter, clamp(uAerialStrength, 0.0, 2.0) * heightFade);
+        }
+        color = mix(fogColor, color, fogFactor);
     }
 
     FragColor = vec4(max(color, vec3(0.0)), 1.0);

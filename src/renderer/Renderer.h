@@ -58,6 +58,9 @@ public:
         bool bloomEnabled = true;
         bool sunRaysEnabled = true;
         bool waterEffectsEnabled = true;
+        bool shaderpackGradingEnabled = true;
+        bool aerialPerspectiveEnabled = true;
+        int tonemapMode = 1; // 0=Reinhard, 1=ACES, 2=Filmic
         int shadowResolution = 2048;
         float shadowDistance = 96.0f;
         float shadowSoftness = 1.6f;
@@ -66,6 +69,12 @@ public:
         float shadowNormalOffset = 0.035f;
         float contactShadowStrength = 0.22f;
         float sunRayStrength = 0.14f;
+        float colorTemperature = 1.0f;
+        float vibrance = 0.18f;
+        float shadowTintStrength = 0.22f;
+        float aerialStrength = 0.55f;
+        float horizonScatterStrength = 0.65f;
+        float noiseDitherStrength = 0.015f;
         float ssaoRadius = 2.25f;
         float ssaoStrength = 0.75f;
         float exposure = 1.0f;

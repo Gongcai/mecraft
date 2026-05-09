@@ -320,6 +320,13 @@ void ResourceMgr::shutdown() {
         m_foliageColormap = 0;
     }
 
+    for (auto& [_, texId] : m_texture2D) {
+        if (texId != 0) {
+            glDeleteTextures(1, &texId);
+        }
+    }
+    m_texture2D.clear();
+
     for (auto& [_, texId] : m_cubemaps) {
         if (texId != 0) {
             glDeleteTextures(1, &texId);
@@ -352,6 +359,65 @@ Shader *ResourceMgr::getShader(const std::string &name) {
 
 GLuint ResourceMgr::loadTexture(const std::string &path, bool alpha) {
     //TODO: 完善贴图读取
+    return 0;
+}
+
+GLuint ResourceMgr::loadTexture2D(const std::string& name,
+                                  const std::string& path,
+                                  const bool srgb,
+                                  const bool repeat,
+                                  const bool linear,
+                                  const bool flipVertically) {
+    auto existing = m_texture2D.find(name);
+    if (existing != m_texture2D.end()) {
+        return existing->second;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(flipVertically ? 1 : 0);
+    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (!data || width <= 0 || height <= 0) {
+#ifdef MECRAFT_DEBUG
+        std::cerr << "Failed to load texture2D '" << name << "': " << path << "\n";
+#endif
+        if (data != nullptr) {
+            stbi_image_free(data);
+        }
+        return 0;
+    }
+
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linear ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linear ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8,
+                 width,
+                 height,
+                 0,
+                 GL_RGBA,
+                 GL_UNSIGNED_BYTE,
+                 data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(data);
+
+    m_texture2D[name] = textureID;
+    return textureID;
+}
+
+GLuint ResourceMgr::getTexture2D(const std::string& name) const {
+    auto it = m_texture2D.find(name);
+    if (it != m_texture2D.end()) {
+        return it->second;
+    }
     return 0;
 }
 

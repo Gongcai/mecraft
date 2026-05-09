@@ -345,7 +345,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::Text("Render Pipeline");
         Renderer::RenderPipelineSettings pipeline = render.getRenderPipelineSettings();
         int pipelineMode = static_cast<int>(pipeline.mode);
+        int tonemapMode = pipeline.tonemapMode;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
+        static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
@@ -356,6 +358,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);
         pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
+        pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
+        pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
+        pipeline.tonemapMode = tonemapMode;
         pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &pipeline.shadowResolution, 512, 4096);
         pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 24.0f, 192.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Softness", &pipeline.shadowSoftness, 0.1f, 4.0f, "%.2f");
@@ -364,6 +370,12 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("Shadow Normal Offset", &pipeline.shadowNormalOffset, 0.0f, 0.12f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("Contact Shadow Strength", &pipeline.contactShadowStrength, 0.0f, 0.6f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Tint", &pipeline.shadowTintStrength, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &pipeline.aerialStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &pipeline.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Noise Dither", &pipeline.noiseDitherStrength, 0.0f, 0.05f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Exposure", &pipeline.exposure, 0.2f, 3.0f, "%.2f");
