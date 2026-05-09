@@ -34,9 +34,10 @@ public:
     size_t usedVertices() const { return m_usedVertices; }
     float fragmentationRatio() const;
 
-    // Register/unregister active ranges for defrag remapping
-    void registerRange(GpuMeshRange* range);
-    void unregisterRange(GpuMeshRange* range);
+    // Per-frame stats (reset by beginFrame)
+    void beginFrame();
+    size_t expandCountThisFrame() const { return m_expandCountThisFrame; }
+    size_t uploadedBytesThisFrame() const { return m_uploadedBytesThisFrame; }
 
 private:
     struct FreeBlock {
@@ -46,7 +47,6 @@ private:
     };
 
     void expand(size_t newCapacityVertices);
-    void defragment();
 
     static constexpr size_t kFreeBlockPoolSize = 256;
     std::vector<FreeBlock> m_freeBlocks;
@@ -59,7 +59,9 @@ private:
     uint64_t m_generationCounter = 1;
     std::unordered_set<uint64_t> m_liveAllocations;
 
-    std::vector<GpuMeshRange*> m_activeRanges;
+    // Per-frame stats
+    size_t m_expandCountThisFrame = 0;
+    size_t m_uploadedBytesThisFrame = 0;
 
     int allocFreeBlockNode();
     void returnFreeBlockNode(int nodeIdx);
@@ -68,11 +70,11 @@ private:
 
 class WorldRenderBuffer {
 public:
-    static constexpr size_t kInitialPoolVertices = 1 << 21;   // ~2M vertices (~64MB), avoids early expand/defrag stalls
+    static constexpr size_t kInitialPoolVertices = 1 << 21;   // ~2M vertices (~64MB), avoids early expand stalls
     static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
-    static constexpr float kDefragmentThreshold = 0.35f;
+    static constexpr size_t kCommandMergeThreshold = 4096;  // Skip merge sort when commands exceed this
 
     WorldRenderBuffer();
     ~WorldRenderBuffer();
@@ -118,6 +120,14 @@ public:
     uint64_t opaqueVertexCount() const { return m_opaqueVertexCount; }
     uint64_t cutoutVertexCount() const { return m_cutoutVertexCount; }
     uint64_t transparentVertexCount() const { return m_transparentVertexCount; }
+
+    // Per-frame pool stats
+    size_t opaqueExpandCount() const { return m_opaquePool.expandCountThisFrame(); }
+    size_t cutoutExpandCount() const { return m_cutoutPool.expandCountThisFrame(); }
+    size_t transparentExpandCount() const { return m_transparentPool.expandCountThisFrame(); }
+    size_t opaqueUploadedBytes() const { return m_opaquePool.uploadedBytesThisFrame(); }
+    size_t cutoutUploadedBytes() const { return m_cutoutPool.uploadedBytesThisFrame(); }
+    size_t transparentUploadedBytes() const { return m_transparentPool.uploadedBytesThisFrame(); }
 
 private:
     static void setupVertexLayout();

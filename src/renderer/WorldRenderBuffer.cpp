@@ -38,6 +38,13 @@ void mergeAdjacentCommands(std::vector<DrawArraysIndirectCommand>& commands) {
 
     commands.resize(writeIndex + 1);
 }
+
+void maybeMergeAdjacentCommands(std::vector<DrawArraysIndirectCommand>& commands, size_t threshold) {
+    if (commands.size() <= threshold) {
+        mergeAdjacentCommands(commands);
+    }
+    // Above threshold: skip merge to avoid O(N log N) sort cost
+}
 }
 
 // ---------------------------------------------------------------------------
@@ -85,8 +92,9 @@ void VertexPoolAllocator::shutdown() {
     m_freeHead = -1;
     m_capacityVertices = 0;
     m_usedVertices = 0;
-    m_activeRanges.clear();
     m_liveAllocations.clear();
+    m_expandCountThisFrame = 0;
+    m_uploadedBytesThisFrame = 0;
 }
 
 int VertexPoolAllocator::allocFreeBlockNode() {
@@ -177,30 +185,8 @@ bool VertexPoolAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& out
         curr = block.next;
     }
 
-    // No block fits. Only compact when active ranges are registered; otherwise
-    // resetting the free list would let new uploads overwrite meshes still in use.
-    if (!m_activeRanges.empty() || m_usedVertices == 0) {
-        defragment();
-    }
-    if (m_freeHead != -1) {
-        FreeBlock& head = m_freeBlocks[m_freeHead];
-        if (head.size >= vertexCount) {
-            const uint32_t offset = head.offset;
-            head.offset += vertexCount;
-            head.size -= vertexCount;
-            if (head.size == 0) {
-                const int next = head.next;
-                returnFreeBlockNode(m_freeHead);
-                m_freeHead = next;
-            }
-            m_usedVertices += vertexCount;
-            outRange = {offset, vertexCount, m_generationCounter++};
-            m_liveAllocations.insert(outRange.generation);
-            return true;
-        }
-    }
-
-    // Expand
+    // No block fits — skip defragment (GPU copy stalls), go straight to expand.
+    // This avoids unpredictable glCopyBufferSubData spikes on the main thread.
     const size_t newCapacity = std::max<size_t>(
         m_capacityVertices + vertexCount,
         m_capacityVertices == 0 ? vertexCount : m_capacityVertices * 2);
@@ -252,10 +238,12 @@ void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<Bl
                     static_cast<GLsizeiptr>(bytes),
                     vertices.data());
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+    m_uploadedBytesThisFrame += bytes;
 }
 
 void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
     if (newCapacityVertices <= m_capacityVertices) return;
+    ++m_expandCountThisFrame;
 
     GLuint newVbo = 0;
     glGenBuffers(1, &newVbo);
@@ -288,55 +276,9 @@ void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
-void VertexPoolAllocator::defragment() {
-    if (m_activeRanges.empty()) {
-        // No active ranges — reset the whole buffer as one free block
-        while (m_freeHead != -1) {
-            const int next = m_freeBlocks[m_freeHead].next;
-            returnFreeBlockNode(m_freeHead);
-            m_freeHead = next;
-        }
-        const int node = allocFreeBlockNode();
-        m_freeBlocks[node] = {0, static_cast<uint32_t>(m_capacityVertices), -1};
-        m_freeHead = node;
-        return;
-    }
-
-    // Sort active ranges by offset
-    std::sort(m_activeRanges.begin(), m_activeRanges.end(),
-              [](const GpuMeshRange* a, const GpuMeshRange* b) {
-                  return a->firstVertex < b->firstVertex;
-              });
-
-    // Compact: move each block to its new position
-    uint32_t writeOffset = 0;
-    for (GpuMeshRange* range : m_activeRanges) {
-        if (range->firstVertex != writeOffset) {
-            // Copy vertex data to new position
-            glBindBuffer(GL_COPY_READ_BUFFER, m_vbo);
-            glBindBuffer(GL_COPY_WRITE_BUFFER, m_vbo);
-            glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER,
-                                static_cast<GLintptr>(range->firstVertex) * sizeof(BlockVertex),
-                                static_cast<GLintptr>(writeOffset) * sizeof(BlockVertex),
-                                static_cast<GLsizeiptr>(range->vertexCount) * sizeof(BlockVertex));
-            glBindBuffer(GL_COPY_READ_BUFFER, 0);
-            glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
-            range->firstVertex = writeOffset;
-        }
-        writeOffset += range->vertexCount;
-    }
-
-    // Rebuild free list as one block after the last used vertex
-    while (m_freeHead != -1) {
-        const int next = m_freeBlocks[m_freeHead].next;
-        returnFreeBlockNode(m_freeHead);
-        m_freeHead = next;
-    }
-    if (writeOffset < m_capacityVertices) {
-        const int node = allocFreeBlockNode();
-        m_freeBlocks[node] = {writeOffset, static_cast<uint32_t>(m_capacityVertices - writeOffset), -1};
-        m_freeHead = node;
-    }
+void VertexPoolAllocator::beginFrame() {
+    m_expandCountThisFrame = 0;
+    m_uploadedBytesThisFrame = 0;
 }
 
 float VertexPoolAllocator::fragmentationRatio() const {
@@ -354,18 +296,6 @@ float VertexPoolAllocator::fragmentationRatio() const {
 
     if (largestBlock == 0) return 1.0f;
     return 1.0f - static_cast<float>(largestBlock) / static_cast<float>(freeVertices);
-}
-
-void VertexPoolAllocator::registerRange(GpuMeshRange* range) {
-    m_activeRanges.push_back(range);
-}
-
-void VertexPoolAllocator::unregisterRange(GpuMeshRange* range) {
-    auto it = std::find(m_activeRanges.begin(), m_activeRanges.end(), range);
-    if (it != m_activeRanges.end()) {
-        *it = m_activeRanges.back();
-        m_activeRanges.pop_back();
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +487,9 @@ void WorldRenderBuffer::beginFrame() {
     m_opaqueVertexCount = 0;
     m_cutoutVertexCount = 0;
     m_transparentVertexCount = 0;
+    m_opaquePool.beginFrame();
+    m_cutoutPool.beginFrame();
+    m_transparentPool.beginFrame();
 }
 
 void WorldRenderBuffer::addOpaque(const GpuMeshRange& range) {
@@ -581,12 +514,12 @@ void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
 }
 
 void WorldRenderBuffer::flushOpaque() {
-    mergeAdjacentCommands(m_opaqueCommands);
+    maybeMergeAdjacentCommands(m_opaqueCommands, kCommandMergeThreshold);
     flushPass(m_opaqueCommands, m_opaqueIndirectBuf, m_opaqueVao, m_opaquePool.vbo(), m_opaqueVaoBoundVbo);
 }
 
 void WorldRenderBuffer::flushCutout() {
-    mergeAdjacentCommands(m_cutoutCommands);
+    maybeMergeAdjacentCommands(m_cutoutCommands, kCommandMergeThreshold);
     flushPass(m_cutoutCommands, m_cutoutIndirectBuf, m_cutoutVao, m_cutoutPool.vbo(), m_cutoutVaoBoundVbo);
 }
 

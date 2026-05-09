@@ -653,7 +653,11 @@ void World::finalizeChunkLoad(std::shared_ptr<Chunk> chunk) {
     Chunk* cur = m_chunks[key].get();
     auto markNeighborBorderDirty = [&](Chunk& neighbor) {
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-            if (cur->getSubChunk(scy) || neighbor.getSubChunk(scy)) {
+            // Only mark dirty when both sides have content — if the new chunk
+            // has no subchunk here, its border is all-air and the neighbor's
+            // faces are already correct. If the neighbor has no subchunk, there
+            // is nothing to remesh.
+            if (cur->getSubChunk(scy) && neighbor.getSubChunk(scy)) {
                 neighbor.markSubChunkDirty(scy);
             }
         }
@@ -697,7 +701,7 @@ void World::loadChunk(int cx, int cz) {
     Chunk* cur = m_chunks[key].get();
     auto markNeighborBorderDirty = [&](Chunk& neighbor) {
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-            if (cur->getSubChunk(scy) || neighbor.getSubChunk(scy)) {
+            if (cur->getSubChunk(scy) && neighbor.getSubChunk(scy)) {
                 neighbor.markSubChunkDirty(scy);
             }
         }
@@ -742,7 +746,9 @@ void World::unloadChunk(int cx, int cz) {
         }
 
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-            if (chunk->getSubChunk(scy) || neighbor->getSubChunk(scy)) {
+            // Only mark neighbor dirty if the unloading chunk had content at
+            // this level that could have been hiding the neighbor's border faces.
+            if (chunk->getSubChunk(scy) && neighbor->getSubChunk(scy)) {
                 neighbor->markSubChunkDirty(scy);
             }
         }

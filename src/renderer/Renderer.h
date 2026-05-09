@@ -123,6 +123,12 @@ public:
         int cutoutSkippedByDistance = 0;
         int mdiSubChunkTests = 0;
         int mdiSubChunksCulled = 0;
+        // Upload budget stats
+        size_t meshUploadBytesThisFrame = 0;
+        size_t meshUploadVerticesThisFrame = 0;
+        size_t meshUploadDeferredCount = 0;
+        size_t worldBufferExpandCount = 0;
+        double worldBufferUploadMs = 0.0;
     };
 
     static constexpr size_t MESHING_HISTORY_SIZE = 120;
@@ -306,6 +312,7 @@ private:
     ChunkMeshingService m_meshingService;
     GameplaySkyRenderer m_gameplaySkyRenderer;
     std::unordered_set<int64_t> m_meshingInFlight;
+    std::vector<SubChunkMeshingResult> m_deferredMeshResults;
     int m_meshingSubmitBudget = 8;
     bool m_meshingSubmitBudgetOverridden = false;
     int m_meshingMaxInFlight = 16;
@@ -352,6 +359,11 @@ private:
     int m_mdiSubChunkTestsThisFrame = 0;
     int m_mdiSubChunksCulledThisFrame = 0;
 #endif
+    size_t m_meshUploadVerticesThisFrame = 0;
+    size_t m_meshUploadBytesThisFrame = 0;
+    size_t m_meshUploadDeferredCount = 0;
+    size_t m_worldBufferExpandCountThisFrame = 0;
+    double m_worldBufferUploadMsThisFrame = 0.0;
 
     glm::mat4 m_projection = glm::mat4(1.0f);
     glm::mat4 m_view = glm::mat4(1.0f);

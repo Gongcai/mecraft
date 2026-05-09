@@ -108,6 +108,7 @@ void Renderer::shutdown() {
     m_meshingService.shutdown();
     m_threadPool.shutdown();
     m_meshingInFlight.clear();
+    m_deferredMeshResults.clear();
     if (m_outlineVbo != 0) {
         glDeleteBuffers(1, &m_outlineVbo);
         m_outlineVbo = 0;
@@ -327,6 +328,11 @@ Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
     stats.cutoutSkippedByDistance = m_cutoutSkippedByDistanceThisFrame;
     stats.mdiSubChunkTests = m_mdiSubChunkTestsThisFrame;
     stats.mdiSubChunksCulled = m_mdiSubChunksCulledThisFrame;
+    stats.meshUploadBytesThisFrame = m_meshUploadBytesThisFrame;
+    stats.meshUploadVerticesThisFrame = m_meshUploadVerticesThisFrame;
+    stats.meshUploadDeferredCount = m_meshUploadDeferredCount;
+    stats.worldBufferExpandCount = m_worldBufferExpandCountThisFrame;
+    stats.worldBufferUploadMs = m_worldBufferUploadMsThisFrame;
     return stats;
 }
 
@@ -399,6 +405,11 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_mdiSubChunksCulledThisFrame = 0;
     beginGpuTimerFrame();
 #endif
+    m_meshUploadVerticesThisFrame = 0;
+    m_meshUploadBytesThisFrame = 0;
+    m_meshUploadDeferredCount = 0;
+    m_worldBufferExpandCountThisFrame = 0;
+    m_worldBufferUploadMsThisFrame = 0.0;
 }
 
 void Renderer::renderWorld(const World& world) {
@@ -1362,40 +1373,61 @@ void Renderer::recordMeshingHistory() {
 }
 
 void Renderer::drainMeshingResults(const World& world) {
+    // Phase 1: Drain all completed results from the service into the deferred buffer.
+    // This avoids interleaving tryPopCompleted with budget checks, and lets us
+    // process results in order with strict vertex/time budgets.
+    {
+        SubChunkMeshingResult result;
+        while (m_meshingService.tryPopCompleted(result)) {
+            m_deferredMeshResults.push_back(std::move(result));
+        }
+    }
+
+    if (m_deferredMeshResults.empty()) {
+        return;
+    }
+
     const auto drainStartTime = std::chrono::steady_clock::now();
-    int drainedCount = 0;
-    int uploadedVerticesThisFrame = 0;
+    int uploadedCount = 0;
 
     auto subChunkFlightKey = [](int64_t chunkKey, int scy) -> int64_t {
         return (chunkKey & 0x00FFFFFFFFFFFFFFLL) | (static_cast<int64_t>(scy) << 56);
     };
 
-    SubChunkMeshingResult result;
-    while (drainedCount < m_meshingDrainBudget) {
+    // Phase 2: Process from deferred buffer respecting budgets.
+    // Over-budget results stay in the buffer for the next frame.
+    size_t processIdx = 0;
+    while (processIdx < m_deferredMeshResults.size()) {
         const double elapsedMs = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - drainStartTime).count();
         if (elapsedMs >= m_meshingDrainTimeBudgetMs) {
             break;
         }
-        if (!m_meshingService.tryPopCompleted(result)) {
-            break;
-        }
 
-        // Compute vertex count for budget check
+        SubChunkMeshingResult& result = m_deferredMeshResults[processIdx];
+
+        // Compute vertex count for budget check BEFORE uploading
         const int currentVertices =
             static_cast<int>(result.meshData.opaqueVertices.size()) +
             static_cast<int>(result.meshData.cutoutVertices.size()) +
             static_cast<int>(result.meshData.cutoutDistanceVertices.size()) +
             static_cast<int>(result.meshData.transparentVertices.size());
 
-        // Soft vertex budget: process this result (already dequeued) but break
-        // afterwards to defer remaining uploads to the next frame.
-        const bool overBudget = uploadedVerticesThisFrame + currentVertices > m_meshingDrainVertexBudget;
+        // Hard vertex budget: if this result would push us over, allow at most
+        // one over-budget upload then stop for this frame.
+        const bool overBudget = m_meshUploadVerticesThisFrame + currentVertices > m_meshingDrainVertexBudget;
+        if (overBudget && uploadedCount > 0) {
+            break;  // Already uploaded something; defer the rest
+        }
+
+        // Count result as processed (whether we upload or discard it)
+        ++processIdx;
+        ++uploadedCount;
 
 #ifdef MECRAFT_DEBUG
         ++m_meshingCompletedThisFrame;
 #endif
-        ++drainedCount;
+
         const int64_t flightKey = subChunkFlightKey(result.chunkKey, result.scy);
         m_meshingInFlight.erase(flightKey);
 
@@ -1502,12 +1534,32 @@ void Renderer::drainMeshingResults(const World& world) {
             chunk.updateColumnAggregateData(result.scy, result.meshData);
         }
 
-        uploadedVerticesThisFrame += currentVertices;
-        if (overBudget) {
-            break;
-        }
+        m_meshUploadVerticesThisFrame += currentVertices;
+        m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) * sizeof(BlockVertex);
 
+        if (overBudget) {
+            break;  // Allow one over-budget upload, then stop
+        }
     }
+
+    // Record upload time
+    m_worldBufferUploadMsThisFrame = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - drainStartTime).count();
+
+    // Record pool expand count
+    m_worldBufferExpandCountThisFrame =
+        m_worldRenderBuffer.opaqueExpandCount() +
+        m_worldRenderBuffer.cutoutExpandCount() +
+        m_worldRenderBuffer.transparentExpandCount();
+
+    // Remove processed results, keep deferred ones
+    if (processIdx > 0) {
+        m_deferredMeshResults.erase(
+            m_deferredMeshResults.begin(),
+            m_deferredMeshResults.begin() + static_cast<ptrdiff_t>(processIdx));
+    }
+
+    m_meshUploadDeferredCount = m_deferredMeshResults.size();
 }
 
 void Renderer::updateFrustum(const glm::mat4 &viewProj) {

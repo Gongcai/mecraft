@@ -705,6 +705,9 @@ void Chunk::markMeshClean() {
 }
 
 void Chunk::markSubChunkDirty(const int scy) {
+    if ((m_dirtySubChunkMask & (1u << scy)) != 0u) {
+        return;  // Already dirty, skip redundant work
+    }
     SubChunk* sc = getSubChunk(scy);
     if (!sc) {
         return;
