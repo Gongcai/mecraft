@@ -14,6 +14,7 @@
 #include "../ecs/util/GameplayRuntimeContext.h"
 
 #include <GLFW/glfw3.h>
+#include <glm/vec3.hpp>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -317,6 +318,13 @@ void Game::renderFrame(const float frameTime) {
     effects.tonemapMode = pipelineSettings.tonemapMode;
     effects.colorTemperature = pipelineSettings.colorTemperature;
     effects.vibrance = pipelineSettings.vibrance;
+    effects.kappaGradingStrength = pipelineSettings.kappaGradingStrength;
+    effects.highlightCompression = pipelineSettings.highlightCompression;
+    effects.filmEmulationStrength = pipelineSettings.filmEmulationStrength;
+    effects.redModifierStrength = pipelineSettings.redModifierStrength;
+    effects.colorLuma = glm::vec3(pipelineSettings.colorLumaR,
+                                  pipelineSettings.colorLumaG,
+                                  pipelineSettings.colorLumaB);
     effects.noiseDitherStrength = pipelineSettings.noiseDitherStrength;
     effects.exposure = pipelineSettings.exposure;
     effects.gamma = pipelineSettings.gamma;

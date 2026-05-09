@@ -25,6 +25,11 @@ struct PostProcessEffects {
     int tonemapMode = 1;
     float colorTemperature = 1.0f;
     float vibrance = 0.0f;
+    float kappaGradingStrength = 0.65f;
+    float highlightCompression = 0.72f;
+    float filmEmulationStrength = 0.55f;
+    float redModifierStrength = 0.35f;
+    glm::vec3 colorLuma = glm::vec3(1.02f, 1.0f, 0.96f);
     float noiseDitherStrength = 0.015f;
     float exposure = 1.0f;
     float gamma = 2.2f;

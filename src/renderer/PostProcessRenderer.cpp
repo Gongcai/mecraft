@@ -43,6 +43,13 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.tonemapMode = std::clamp(m_effects.tonemapMode, 0, 2);
     m_effects.colorTemperature = std::clamp(m_effects.colorTemperature, 0.0f, 2.0f);
     m_effects.vibrance = std::clamp(m_effects.vibrance, -1.0f, 1.0f);
+    m_effects.kappaGradingStrength = std::clamp(m_effects.kappaGradingStrength, 0.0f, 1.0f);
+    m_effects.highlightCompression = std::clamp(m_effects.highlightCompression, 0.0f, 1.5f);
+    m_effects.filmEmulationStrength = std::clamp(m_effects.filmEmulationStrength, 0.0f, 1.0f);
+    m_effects.redModifierStrength = std::clamp(m_effects.redModifierStrength, 0.0f, 1.0f);
+    m_effects.colorLuma.x = std::clamp(m_effects.colorLuma.x, 0.5f, 1.5f);
+    m_effects.colorLuma.y = std::clamp(m_effects.colorLuma.y, 0.5f, 1.5f);
+    m_effects.colorLuma.z = std::clamp(m_effects.colorLuma.z, 0.5f, 1.5f);
     m_effects.noiseDitherStrength = std::clamp(m_effects.noiseDitherStrength, 0.0f, 0.08f);
     m_effects.exposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
     m_effects.gamma = std::clamp(m_effects.gamma, 1.0f, 3.5f);
@@ -137,6 +144,11 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     m_postProcessShader->setInt("uTonemapMode", m_effects.tonemapMode);
     m_postProcessShader->setFloat("uColorTemperature", m_effects.colorTemperature);
     m_postProcessShader->setFloat("uVibrance", m_effects.vibrance);
+    m_postProcessShader->setFloat("uKappaGradingStrength", m_effects.kappaGradingStrength);
+    m_postProcessShader->setFloat("uHighlightCompression", m_effects.highlightCompression);
+    m_postProcessShader->setFloat("uFilmEmulationStrength", m_effects.filmEmulationStrength);
+    m_postProcessShader->setFloat("uRedModifierStrength", m_effects.redModifierStrength);
+    m_postProcessShader->setVec3("uColorLuma", m_effects.colorLuma);
     const float noiseDitherStrength = (m_effects.shaderpackGradingEnabled && m_noiseTexture != 0)
         ? m_effects.noiseDitherStrength
         : 0.0f;

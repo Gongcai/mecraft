@@ -71,6 +71,13 @@ public:
         float sunRayStrength = 0.14f;
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
+        float kappaGradingStrength = 0.65f;
+        float highlightCompression = 0.72f;
+        float filmEmulationStrength = 0.55f;
+        float redModifierStrength = 0.35f;
+        float colorLumaR = 1.02f;
+        float colorLumaG = 1.00f;
+        float colorLumaB = 0.96f;
         float shadowTintStrength = 0.28f;
         float directSunStrength = 1.18f;
         float skyAmbientStrength = 0.46f;
