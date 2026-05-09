@@ -53,7 +53,7 @@ public:
         RenderPipelineMode mode = RenderPipelineMode::HybridDeferred;
         bool shadowsEnabled = true;
         bool softShadowsEnabled = true;
-        bool contactShadowsEnabled = true;
+        bool contactShadowsEnabled = false;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
         bool sunRaysEnabled = true;

@@ -22,10 +22,16 @@ out float vAnimationFps;
 out float vAnimated;
 out float vNormal;
 
+float calculateShadowWarp(vec2 coord) {
+    return length(coord * 1.169) * 0.85 + 0.15;
+}
+
 void main() {
     vec4 localPos = vec4(aPos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
-    gl_Position = viewProj * worldPos;
+    vec4 clipPos = viewProj * worldPos;
+    clipPos.xy /= calculateShadowWarp(clipPos.xy);
+    gl_Position = clipPos;
     vUV = aUV;
     vLayer = aLayer;
     vAnimationFrameCount = aAnimationFrameCount;

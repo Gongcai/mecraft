@@ -49,6 +49,8 @@ uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
 
+const float kTwoPi = 6.28318530718;
+
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
@@ -107,6 +109,20 @@ float compareShadowBilinear(vec3 proj, vec2 offsetTexels, float bias) {
     return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
 }
 
+vec2 r2(float n) {
+    return fract(vec2(n * 0.7548776662, n * 0.5698402909));
+}
+
+vec2 r2Disk(float n) {
+    vec2 u = r2(n);
+    float angle = u.x * kTwoPi;
+    return vec2(cos(angle), sin(angle)) * sqrt(u.y);
+}
+
+float calculateShadowWarp(vec2 coord) {
+    return length(coord * 1.169) * 0.85 + 0.15;
+}
+
 float shapeShadowVisibility(float lit) {
     lit = clamp(lit, 0.0, 1.0);
     float contrasted = pow(lit, max(uShadowContrast, 0.001));
@@ -118,8 +134,13 @@ float shadowFactor(vec3 worldPos, vec3 normal) {
         return 1.0;
     }
     vec3 sunDir = normalize(uSunDirection);
-    vec4 lightClip = uShadowViewProj * vec4(worldPos + normal * uShadowNormalOffset, 1.0);
+    float viewDistanceForBias = length(worldPos - uCameraPos);
+    float normalOffset = uShadowNormalOffset * (1.0 + clamp(viewDistanceForBias / 220.0, 0.0, 1.5)) *
+                         (1.0 + 0.65 * (1.0 - max(dot(normal, sunDir), 0.0)));
+    vec4 lightClip = uShadowViewProj * vec4(worldPos + normal * normalOffset, 1.0);
     vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
+    float warpDensity = calculateShadowWarp(proj.xy);
+    proj.xy /= warpDensity;
     proj = proj * 0.5 + 0.5;
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
@@ -131,21 +152,18 @@ float shadowFactor(vec3 worldPos, vec3 normal) {
         return shapeShadowVisibility(compareShadowTexel(proj, ivec2(0), bias));
     }
 
-    float viewDistance = length(worldPos - uCameraPos);
+    float viewDistance = viewDistanceForBias;
     float distanceSoftness = smoothstep(18.0, 96.0, viewDistance);
     float grazingSoftness = 1.0 - ndotl;
-    float radius = clamp(max(uShadowSoftness, 0.1) * (0.95 + 0.42 * distanceSoftness + 0.22 * grazingSoftness), 1.2, 5.5);
-    const vec2 kernel[16] = vec2[](
-        vec2(-0.75, -0.75), vec2(-0.25, -0.75), vec2( 0.25, -0.75), vec2( 0.75, -0.75),
-        vec2(-0.75, -0.25), vec2(-0.25, -0.25), vec2( 0.25, -0.25), vec2( 0.75, -0.25),
-        vec2(-0.75,  0.25), vec2(-0.25,  0.25), vec2( 0.25,  0.25), vec2( 0.75,  0.25),
-        vec2(-0.75,  0.75), vec2(-0.25,  0.75), vec2( 0.25,  0.75), vec2( 0.75,  0.75)
-    );
+    vec2 centeredShadow = proj.xy * 2.0 - 1.0;
+    float filterWarpDensity = calculateShadowWarp(centeredShadow);
+    float radius = clamp(max(uShadowSoftness, 0.1) * (1.20 + 0.42 * distanceSoftness + 0.22 * grazingSoftness) * filterWarpDensity,
+                         2.0, 7.5);
     float lit = 0.0;
-    for (int i = 0; i < 16; ++i) {
-        lit += compareShadowBilinear(proj, kernel[i] * radius, bias);
+    for (int i = 0; i < 24; ++i) {
+        lit += compareShadowBilinear(proj, r2Disk(float(i) + 0.37) * radius, bias);
     }
-    return shapeShadowVisibility(lit / 16.0);
+    return shapeShadowVisibility(lit / 24.0);
 }
 
 float contactShadow(vec3 worldPos, vec3 normal, vec2 voxelLight, float shadowVisibility) {
