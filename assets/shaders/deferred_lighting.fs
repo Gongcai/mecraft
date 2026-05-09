@@ -78,9 +78,33 @@ vec2 projectWorldToUv(vec3 worldPos, out float ndcDepth) {
     return ndc.xy * 0.5 + 0.5;
 }
 
-float compareShadow(vec3 proj, vec2 offset, float bias) {
-    float closest = texture(uShadowMap, proj.xy + offset).r;
+float compareShadowTexelAt(vec3 proj, ivec2 texelCoord, float bias) {
+    ivec2 size = textureSize(uShadowMap, 0);
+    if (texelCoord.x < 0 || texelCoord.y < 0 || texelCoord.x >= size.x || texelCoord.y >= size.y) {
+        return 1.0;
+    }
+    float closest = texelFetch(uShadowMap, texelCoord, 0).r;
     return (proj.z - bias <= closest) ? 1.0 : 0.0;
+}
+
+float compareShadowTexel(vec3 proj, ivec2 offset, float bias) {
+    ivec2 size = textureSize(uShadowMap, 0);
+    ivec2 texelCoord = ivec2(floor(proj.xy * vec2(size))) + offset;
+    return compareShadowTexelAt(proj, texelCoord, bias);
+}
+
+float compareShadowBilinear(vec3 proj, vec2 offsetTexels, float bias) {
+    ivec2 size = textureSize(uShadowMap, 0);
+    vec2 texelPos = proj.xy * vec2(size) - vec2(0.5) + offsetTexels;
+    ivec2 base = ivec2(floor(texelPos));
+    vec2 f = fract(texelPos);
+
+    float s00 = compareShadowTexelAt(proj, base, bias);
+    float s10 = compareShadowTexelAt(proj, base + ivec2(1, 0), bias);
+    float s01 = compareShadowTexelAt(proj, base + ivec2(0, 1), bias);
+    float s11 = compareShadowTexelAt(proj, base + ivec2(1, 1), bias);
+
+    return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
 }
 
 float shapeShadowVisibility(float lit) {
@@ -100,37 +124,39 @@ float shadowFactor(vec3 worldPos, vec3 normal) {
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
-    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
     float ndotl = clamp(dot(normal, sunDir), 0.0, 1.0);
     float bias = uShadowConstantBias + uShadowSlopeBias * (1.0 - ndotl);
 
     if (uSoftShadowsEnabled == 0) {
-        return shapeShadowVisibility(compareShadow(proj, vec2(0.0), bias));
+        return shapeShadowVisibility(compareShadowTexel(proj, ivec2(0), bias));
     }
 
-    const vec2 poisson[12] = vec2[](
-        vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696,  0.457),
-        vec2(-0.203,  0.621), vec2( 0.285,  0.350), vec2( 0.709,  0.129),
-        vec2( 0.522, -0.542), vec2( 0.185, -0.893), vec2(-0.118, -0.168),
-        vec2( 0.064,  0.078), vec2( 0.398, -0.181), vec2(-0.461,  0.012)
+    float viewDistance = length(worldPos - uCameraPos);
+    float distanceSoftness = smoothstep(18.0, 96.0, viewDistance);
+    float grazingSoftness = 1.0 - ndotl;
+    float radius = clamp(max(uShadowSoftness, 0.1) * (0.95 + 0.42 * distanceSoftness + 0.22 * grazingSoftness), 1.2, 5.5);
+    const vec2 kernel[16] = vec2[](
+        vec2(-0.75, -0.75), vec2(-0.25, -0.75), vec2( 0.25, -0.75), vec2( 0.75, -0.75),
+        vec2(-0.75, -0.25), vec2(-0.25, -0.25), vec2( 0.25, -0.25), vec2( 0.75, -0.25),
+        vec2(-0.75,  0.25), vec2(-0.25,  0.25), vec2( 0.25,  0.25), vec2( 0.75,  0.25),
+        vec2(-0.75,  0.75), vec2(-0.25,  0.75), vec2( 0.25,  0.75), vec2( 0.75,  0.75)
     );
-    float receiverDistance = clamp((proj.z - texture(uShadowMap, proj.xy).r) * 80.0, 0.0, 1.0);
-    float radius = max(uShadowSoftness, 0.1) * mix(0.75, 1.35, receiverDistance);
     float lit = 0.0;
-    for (int i = 0; i < 12; ++i) {
-        lit += compareShadow(proj, poisson[i] * texel * radius, bias);
+    for (int i = 0; i < 16; ++i) {
+        lit += compareShadowBilinear(proj, kernel[i] * radius, bias);
     }
-    return shapeShadowVisibility(lit / 12.0);
+    return shapeShadowVisibility(lit / 16.0);
 }
 
-float contactShadow(vec3 worldPos, vec3 normal, vec2 voxelLight) {
+float contactShadow(vec3 worldPos, vec3 normal, vec2 voxelLight, float shadowVisibility) {
     if (uShadowsEnabled == 0 || uContactShadowsEnabled == 0 || uContactShadowStrength <= 0.001) {
         return 1.0;
     }
     vec3 sunDir = normalize(uSunDirection);
-    float sunTerm = clamp(dot(normal, sunDir) * 0.5 + 0.5, 0.0, 1.0);
+    float sunTerm = max(dot(normal, sunDir), 0.0);
     float skyTerm = clamp(voxelLight.r * uSkyIntensity, 0.0, 1.0);
-    if (sunTerm * skyTerm <= 0.02) {
+    float litGate = smoothstep(0.55, 0.92, shadowVisibility);
+    if (sunTerm * skyTerm * litGate <= 0.02) {
         return 1.0;
     }
 
@@ -145,12 +171,12 @@ float contactShadow(vec3 worldPos, vec3 normal, vec2 voxelLight) {
             continue;
         }
         float sceneDepth = texture(uDepthTex, sampleUv).r;
-        if (sceneDepth < sampleProjectedDepth - 0.00035) {
-            occlusion += 1.0 - t * 0.45;
-        }
+        float depthDelta = sampleProjectedDepth - sceneDepth;
+        float hit = smoothstep(0.00030, 0.00120, depthDelta);
+        occlusion += hit * (1.0 - t * 0.45);
     }
     occlusion = clamp(occlusion / 4.0, 0.0, 1.0);
-    return 1.0 - occlusion * uContactShadowStrength * sunTerm * skyTerm;
+    return 1.0 - occlusion * uContactShadowStrength * sunTerm * skyTerm * litGate;
 }
 
 void main() {
@@ -179,7 +205,7 @@ void main() {
     float ndotl = max(dot(normal, sunDir), 0.0);
     float diffuse = pow(ndotl, 0.82);
     float shadow = shadowFactor(worldPos, normal);
-    shadow *= contactShadow(worldPos, normal, voxelLight);
+    shadow *= contactShadow(worldPos, normal, voxelLight, shadow);
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
 
     vec3 directSun = uSunLightColor * diffuse * shadow * skyLightMask * uDirectSunStrength;

@@ -49,6 +49,49 @@ vec3 tonemapFilmic(vec3 color) {
     return clamp((color * (6.2 * color + 0.5)) / (color * (6.2 * color + 1.7) + 0.06), 0.0, 1.0);
 }
 
+float tonemapReinhardScalar(float value) {
+    return value / (value + 1.0);
+}
+
+float tonemapAcesScalar(float value) {
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((value * (a * value + b)) / (value * (c * value + d) + e), 0.0, 1.0);
+}
+
+float tonemapFilmicScalar(float value) {
+    value = max(0.0, value - 0.004);
+    return clamp((value * (6.2 * value + 0.5)) / (value * (6.2 * value + 1.7) + 0.06), 0.0, 1.0);
+}
+
+vec3 tonemapPreserveLuma(vec3 color) {
+    color = max(color, vec3(0.0));
+    float lumaIn = max(dot(color, vec3(0.2126, 0.7152, 0.0722)), 0.00001);
+    float lumaOut;
+    if (uTonemapMode == 1) {
+        lumaOut = tonemapAcesScalar(lumaIn);
+    } else if (uTonemapMode == 2) {
+        lumaOut = tonemapFilmicScalar(lumaIn);
+    } else {
+        lumaOut = tonemapReinhardScalar(lumaIn);
+    }
+
+    vec3 lumaMapped = color * (lumaOut / lumaIn);
+    vec3 channelMapped;
+    if (uTonemapMode == 1) {
+        channelMapped = tonemapAces(color);
+    } else if (uTonemapMode == 2) {
+        channelMapped = tonemapFilmic(color);
+    } else {
+        channelMapped = tonemapReinhard(color);
+    }
+    float highlight = smoothstep(0.35, 2.5, lumaIn);
+    return clamp(mix(channelMapped, lumaMapped, 0.72 + 0.18 * highlight), 0.0, 1.0);
+}
+
 vec3 applyColorTemperature(vec3 color) {
     float t = clamp(uColorTemperature, 0.0, 2.0) - 1.0;
     vec3 warm = vec3(1.08, 1.00, 0.90);
@@ -69,13 +112,7 @@ vec3 applyGrade(vec3 color) {
     color *= max(uExposure, 0.001);
     if (uShaderpackGradingEnabled) {
         color = applyColorTemperature(color);
-        if (uTonemapMode == 1) {
-            color = tonemapAces(color);
-        } else if (uTonemapMode == 2) {
-            color = tonemapFilmic(color);
-        } else {
-            color = tonemapReinhard(color);
-        }
+        color = tonemapPreserveLuma(color);
         color = applyVibrance(color);
     } else {
         color = vec3(1.0) - exp(-color);

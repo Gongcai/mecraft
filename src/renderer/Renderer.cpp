@@ -910,7 +910,7 @@ glm::vec3 Renderer::currentSunDirection(const World& world) const {
 glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
     const float extent = distance;
-    glm::vec3 center = camera.getPosition() + camera.getFront() * (distance * 0.35f);
+    glm::vec3 center = camera.getPosition();
     const glm::vec3 lightForward = glm::normalize(-sunDirection);
     const glm::vec3 lightPos = center - lightForward * distance;
     glm::mat4 view = glm::lookAt(lightPos, center, glm::vec3(0.0f, 1.0f, 0.0f));

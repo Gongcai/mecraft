@@ -57,7 +57,7 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 
     glCreateFramebuffers(1, &m_shadowFbo);
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
-                                   GL_DEPTH_COMPONENT, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_BORDER);
+                                   GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
     glTextureParameterfv(m_shadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
     glNamedFramebufferTexture(m_shadowFbo, GL_DEPTH_ATTACHMENT, m_shadowDepth, 0);

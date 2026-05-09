@@ -362,6 +362,53 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
+        if (ImGui::Button("Preset Neutral")) {
+            pipeline.directSunStrength = 1.0f;
+            pipeline.skyAmbientStrength = 0.55f;
+            pipeline.minimumAmbient = 0.09f;
+            pipeline.shadowMinLight = 0.18f;
+            pipeline.shadowContrast = 1.0f;
+            pipeline.shadowTintStrength = 0.18f;
+            pipeline.blockLightStrength = 1.0f;
+            pipeline.fakeBounceStrength = 0.04f;
+            pipeline.exposure = 1.0f;
+            pipeline.vibrance = 0.0f;
+            pipeline.saturation = 1.0f;
+            pipeline.contrast = 1.0f;
+            pipelineChanged = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Preset Natural")) {
+            pipeline.directSunStrength = 1.18f;
+            pipeline.skyAmbientStrength = 0.46f;
+            pipeline.minimumAmbient = 0.07f;
+            pipeline.shadowMinLight = 0.12f;
+            pipeline.shadowContrast = 1.10f;
+            pipeline.shadowTintStrength = 0.28f;
+            pipeline.blockLightStrength = 1.0f;
+            pipeline.fakeBounceStrength = 0.06f;
+            pipeline.exposure = 1.0f;
+            pipeline.vibrance = 0.0f;
+            pipeline.saturation = 1.0f;
+            pipeline.contrast = 1.0f;
+            pipelineChanged = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Preset Contrast")) {
+            pipeline.directSunStrength = 1.42f;
+            pipeline.skyAmbientStrength = 0.34f;
+            pipeline.minimumAmbient = 0.05f;
+            pipeline.shadowMinLight = 0.08f;
+            pipeline.shadowContrast = 1.35f;
+            pipeline.shadowTintStrength = 0.34f;
+            pipeline.blockLightStrength = 1.05f;
+            pipeline.fakeBounceStrength = 0.08f;
+            pipeline.exposure = 0.95f;
+            pipeline.vibrance = 0.04f;
+            pipeline.saturation = 1.0f;
+            pipeline.contrast = 1.06f;
+            pipelineChanged = true;
+        }
         pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &pipeline.shadowResolution, 512, 4096);
         pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 24.0f, 192.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Softness", &pipeline.shadowSoftness, 0.1f, 4.0f, "%.2f");
