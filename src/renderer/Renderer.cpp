@@ -217,8 +217,8 @@ void Renderer::setFogAutoDistanceEnabled(const bool enabled) {
     m_fogSettings.autoDistanceByRenderDistance = enabled;
 }
 
-void Renderer::setFogAutoStartOffsetChunks(const float offsetChunks) {
-    m_fogSettings.autoStartOffsetChunks = std::clamp(offsetChunks, -1.5f, 1.5f);
+void Renderer::setFogAutoEndOffsetChunks(const float offsetChunks) {
+    m_fogSettings.autoEndOffsetChunks = std::clamp(offsetChunks, -2.0f, 1.0f);
 }
 
 void Renderer::setFogAutoFadeWidthChunks(const float fadeWidthChunks) {
@@ -464,8 +464,11 @@ void Renderer::bindChunkRenderState(const World& world, const TextureArray& texA
     if (m_fogSettings.autoDistanceByRenderDistance) {
         const float chunkSize = static_cast<float>(Chunk::SIZE_X);
         const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
-        fogStart = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoStartOffsetChunks) * chunkSize);
-        fogEnd = fogStart + m_fogSettings.autoFadeWidthChunks * chunkSize;
+        // Circular loading: boundary at renderDistance chunks (Euclidean) from player.
+        // fogEnd = where fog becomes fully opaque, should be before the chunk boundary
+        // so that edge geometry is fully hidden.
+        fogEnd = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoEndOffsetChunks) * chunkSize);
+        fogStart = std::max(0.0f, fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
     }
     fogEnd = std::max(fogEnd, fogStart + 0.1f);
 

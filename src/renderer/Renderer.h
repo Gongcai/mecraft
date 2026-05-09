@@ -51,8 +51,8 @@ public:
         float endDistance = 260.0f;
         float density = 0.01f;
         bool autoDistanceByRenderDistance = true;
-        float autoStartOffsetChunks = -1.5f;
-        float autoFadeWidthChunks = 1.5f;
+        float autoEndOffsetChunks = -0.5f;
+        float autoFadeWidthChunks = 2.0f;
     };
 
     enum class FrustumPlane : size_t {
@@ -150,7 +150,7 @@ public:
     void setFogLinearDistances(float startDistance, float endDistance);
     void setFogDensity(float density);
     void setFogAutoDistanceEnabled(bool enabled);
-    void setFogAutoStartOffsetChunks(float offsetChunks);
+    void setFogAutoEndOffsetChunks(float offsetChunks);
     void setFogAutoFadeWidthChunks(float fadeWidthChunks);
     [[nodiscard]] FogSettings getFogSettings() const;
 

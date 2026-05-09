@@ -347,8 +347,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             render.setFogEnabled(true);
             render.setFogMode(Renderer::FogMode::Linear);
             render.setFogAutoDistanceEnabled(true);
-            render.setFogAutoStartOffsetChunks(-0.25f);
-            render.setFogAutoFadeWidthChunks(2.4f);
+            render.setFogAutoEndOffsetChunks(-0.25f);
+            render.setFogAutoFadeWidthChunks(2.5f);
             render.setFogDensity(0.006f);
             fogPresetApplied = true;
         }
@@ -357,8 +357,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             render.setFogEnabled(true);
             render.setFogMode(Renderer::FogMode::Exp2);
             render.setFogAutoDistanceEnabled(true);
-            render.setFogAutoStartOffsetChunks(-0.9f);
-            render.setFogAutoFadeWidthChunks(3.2f);
+            render.setFogAutoEndOffsetChunks(-0.8f);
+            render.setFogAutoFadeWidthChunks(3.0f);
             render.setFogDensity(0.020f);
             fogPresetApplied = true;
         }
@@ -389,10 +389,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             fog.autoDistanceByRenderDistance = fogAutoDistance;
         }
 
-        float fogAutoStartOffset = fog.autoStartOffsetChunks;
-        if (ImGui::SliderFloat("Auto Start Offset (chunks)", &fogAutoStartOffset, -1.5f, 1.5f, "%.2f")) {
-            render.setFogAutoStartOffsetChunks(fogAutoStartOffset);
-            fog.autoStartOffsetChunks = fogAutoStartOffset;
+        float fogAutoEndOffset = fog.autoEndOffsetChunks;
+        if (ImGui::SliderFloat("Auto End Offset (chunks)", &fogAutoEndOffset, -2.0f, 1.0f, "%.2f")) {
+            render.setFogAutoEndOffsetChunks(fogAutoEndOffset);
+            fog.autoEndOffsetChunks = fogAutoEndOffset;
         }
 
         float fogAutoFadeWidth = fog.autoFadeWidthChunks;
@@ -404,8 +404,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (fog.autoDistanceByRenderDistance) {
             const float chunkSize = static_cast<float>(Chunk::SIZE_X);
             const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
-            const float autoStart = std::max(0.0f, (renderDistanceChunks + fog.autoStartOffsetChunks) * chunkSize);
-            const float autoEnd = autoStart + fog.autoFadeWidthChunks * chunkSize;
+            const float autoEnd = std::max(0.0f, (renderDistanceChunks + fog.autoEndOffsetChunks) * chunkSize);
+            const float autoStart = std::max(0.0f, autoEnd - fog.autoFadeWidthChunks * chunkSize);
             ImGui::Text("Auto Fog Range: %.1f -> %.1f", autoStart, autoEnd);
         }
 
