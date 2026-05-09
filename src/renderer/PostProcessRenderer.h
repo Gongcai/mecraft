@@ -17,7 +17,7 @@ struct PostProcessEffects {
     float bloomThreshold = 0.82f;
     float bloomStrength = 0.18f;
     float exposure = 1.0f;
-    float gamma = 2.2f;
+    float gamma = 1.0f;
     float saturation = 1.0f;
     float contrast = 1.0f;
 };
