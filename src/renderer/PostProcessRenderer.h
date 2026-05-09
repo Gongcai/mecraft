@@ -24,12 +24,12 @@ struct PostProcessEffects {
     bool shaderpackGradingEnabled = true;
     int tonemapMode = 1;
     float colorTemperature = 1.0f;
-    float vibrance = 0.18f;
+    float vibrance = 0.06f;
     float noiseDitherStrength = 0.015f;
     float exposure = 1.0f;
     float gamma = 2.2f;
     float saturation = 1.0f;
-    float contrast = 1.0f;
+    float contrast = 1.10f;
 };
 
 class PostProcessRenderer {

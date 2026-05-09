@@ -70,8 +70,15 @@ public:
         float contactShadowStrength = 0.22f;
         float sunRayStrength = 0.14f;
         float colorTemperature = 1.0f;
-        float vibrance = 0.18f;
-        float shadowTintStrength = 0.22f;
+        float vibrance = 0.06f;
+        float shadowTintStrength = 0.35f;
+        float directSunStrength = 1.60f;
+        float skyAmbientStrength = 0.38f;
+        float minimumAmbient = 0.05f;
+        float shadowMinLight = 0.08f;
+        float shadowContrast = 1.45f;
+        float blockLightStrength = 1.10f;
+        float fakeBounceStrength = 0.08f;
         float aerialStrength = 0.55f;
         float horizonScatterStrength = 0.65f;
         float noiseDitherStrength = 0.015f;
@@ -80,7 +87,7 @@ public:
         float exposure = 1.0f;
         float gamma = 2.2f;
         float saturation = 1.0f;
-        float contrast = 1.0f;
+        float contrast = 1.10f;
     };
 
 

@@ -373,6 +373,13 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Tint", &pipeline.shadowTintStrength, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Direct Sun", &pipeline.directSunStrength, 0.0f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Sky Ambient", &pipeline.skyAmbientStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Minimum Ambient", &pipeline.minimumAmbient, 0.0f, 0.4f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Min Light", &pipeline.shadowMinLight, 0.0f, 0.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Contrast", &pipeline.shadowContrast, 0.5f, 2.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Block Light", &pipeline.blockLightStrength, 0.0f, 2.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Fake Bounce", &pipeline.fakeBounceStrength, 0.0f, 0.3f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &pipeline.aerialStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &pipeline.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Noise Dither", &pipeline.noiseDitherStrength, 0.0f, 0.05f, "%.3f");

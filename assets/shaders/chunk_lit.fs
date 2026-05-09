@@ -34,9 +34,15 @@ uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatma
 uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
 uniform vec3 uSunLightColor;
 uniform vec3 uSkyAmbientColor;
+uniform vec3 uShadowTintColor;
 uniform vec3 uHorizonScatterColor;
 uniform vec3 uSunDirection;
 uniform int uAerialPerspectiveEnabled;
+uniform float uDirectSunStrength;
+uniform float uSkyAmbientStrength;
+uniform float uMinimumAmbient;
+uniform float uBlockLightStrength;
+uniform float uFakeBounceStrength;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uWindTime;
@@ -129,6 +135,19 @@ uniform vec3 uCameraPos;
         return clamp((uFogEnd - fogDistance) / linearRange, 0.0, 1.0);
     }
 
+    vec3 decodeFaceNormal(float face) {
+        if (face > -2.5 && face < -0.5) {
+            return normalize(vec3(0.0, 1.0, 0.0));
+        }
+        int idx = int(round(face));
+        if (idx == 0) return vec3(0.0, 1.0, 0.0);
+        if (idx == 1) return vec3(0.0,-1.0, 0.0);
+        if (idx == 2) return vec3(0.0, 0.0, 1.0);
+        if (idx == 3) return vec3(0.0, 0.0,-1.0);
+        if (idx == 4) return vec3(-1.0,0.0, 0.0);
+        return vec3(1.0, 0.0, 0.0);
+    }
+
     void main() {
         // Debug light visualization modes
         if (uDebugLightMode != 0) {
@@ -208,10 +227,22 @@ uniform vec3 uCameraPos;
         vec2 lightmapUV = vec2(vBlockLight, 1.0 - vSunlight);
         vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
         vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
-        vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
+        vec3 vanillaLight = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
         float skyLightMask = clamp(vSunlight * uSkyIntensity, 0.0, 1.0);
-        lightColor *= mix(vec3(1.0), uSunLightColor, skyLightMask * 0.35);
-        lightColor += uSkyAmbientColor * skyLightMask * 0.045;
+        float blockLightMask = clamp(vBlockLight, 0.0, 1.0);
+        vec3 normal = decodeFaceNormal(vNormal);
+        vec3 sunDir = normalize(uSunDirection);
+        float diffuse = pow(max(dot(normal, sunDir), 0.0), 0.82);
+
+        vec3 directSun = uSunLightColor * diffuse * skyLightMask * uDirectSunStrength;
+        vec3 skyAmbient = uSkyAmbientColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
+        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.35, 1.0, skyLightMask);
+        float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
+        vec3 fakeBounce = uSunLightColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
+        vec3 blockLightColor = mix(vec3(1.0, 0.70, 0.42), vanillaLight, 0.22);
+        vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
+        vec3 lightColor = directSun + skyAmbient + minimumAmbient + fakeBounce + blockLight;
+        lightColor = mix(lightColor, vanillaLight, 0.10);
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;
