@@ -332,8 +332,8 @@ private:
     void renderDeferredLightingPass(const World& world);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
-    glm::vec3 currentSunDirection(const World& world) const;
-    glm::mat4 buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const;
+    glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
+    glm::mat4 buildShadowViewProj(const Camera& camera, const glm::vec3& lightDirection) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);

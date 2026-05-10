@@ -186,6 +186,8 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
         bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
         renderTransparentChunks(m_deferredTransparentEntries);
         glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE4);
@@ -535,6 +537,10 @@ void Renderer::renderWorldForward(const World& world) {
     renderCutoutChunks(cutoutEntries);
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE3);
@@ -579,6 +585,8 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uGrassColormap", 3);
     shader.setInt("uFoliageColormap", 4);
     shader.setInt("uOpaqueDepthTex", 5);
+    shader.setInt("uSkyCaptureTex", 6);
+    shader.setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     shader.setInt("uForceBaseLod", 0);
     shader.setInt("uDepthSofteningEnabled", 0);
     shader.setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
@@ -592,11 +600,14 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     shader.setVec3("uSunDirection", skyColors.sunDirection);
+    shader.setVec3("uMoonDirection", skyColors.moonDirection);
     shader.setVec3("uSunLightColor", skyColors.sunLightColor);
+    shader.setVec3("uMoonLightColor", skyColors.moonLightColor);
     shader.setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
     shader.setVec3("uShadowTintColor", skyColors.shadowTintColor);
     shader.setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
     shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
+    shader.setFloat("uMoonVisibility", skyColors.moonVisibility);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
     shader.setFloat("uMinimumAmbient", m_pipelineSettings.minimumAmbient);
@@ -625,6 +636,8 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, m_deferredFrameActive ? m_deferredTargets.skyCaptureTexture() : 0);
 }
 
 void Renderer::bindWaterEffectUniforms(Shader& shader, const bool enabled) const {
@@ -739,6 +752,10 @@ void Renderer::renderGBufferTerrain(const World& world) {
     renderCutoutChunks(cutoutEntries);
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE3);
@@ -756,7 +773,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera) {
         return;
     }
     std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
-    m_shadowViewProj = buildShadowViewProj(camera, currentSunDirection(world));
+    m_shadowViewProj = buildShadowViewProj(camera, currentShadowLightDirection(world));
     m_deferredTargets.bindShadowMap();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -841,11 +858,17 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setVec3("uCameraPos", m_cameraPos);
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     m_deferredLightingShader->setVec3("uSunDirection", skyColors.sunDirection);
+    m_deferredLightingShader->setVec3("uMoonDirection", skyColors.moonDirection);
     m_deferredLightingShader->setVec3("uSunLightColor", skyColors.sunLightColor);
+    m_deferredLightingShader->setVec3("uMoonLightColor", skyColors.moonLightColor);
     m_deferredLightingShader->setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
     m_deferredLightingShader->setVec3("uShadowTintColor", skyColors.shadowTintColor);
     m_deferredLightingShader->setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
     m_deferredLightingShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    m_deferredLightingShader->setFloat("uMoonVisibility", skyColors.moonVisibility);
+    bool moonShadowActive = false;
+    currentShadowLightDirection(world, &moonShadowActive);
+    m_deferredLightingShader->setInt("uShadowLightMode", moonShadowActive ? 1 : 0);
     m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
     m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
     m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
@@ -949,19 +972,24 @@ void Renderer::renderFullscreen(Shader& shader) const {
     glBindVertexArray(0);
 }
 
-glm::vec3 Renderer::currentSunDirection(const World& world) const {
-    glm::vec3 direction = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()).sunDirection;
+glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonShadowActive) const {
+    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    const bool useMoonShadow = skyColors.moonVisibility > skyColors.sunVisibility;
+    glm::vec3 direction = useMoonShadow ? skyColors.moonDirection : skyColors.sunDirection;
     if (direction.y < 0.08f) {
         direction.y = 0.08f;
+    }
+    if (moonShadowActive != nullptr) {
+        *moonShadowActive = useMoonShadow;
     }
     return glm::normalize(direction);
 }
 
-glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const {
+glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& lightDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
     const float extent = distance;
     glm::vec3 center = camera.getPosition();
-    const glm::vec3 lightForward = glm::normalize(-sunDirection);
+    const glm::vec3 lightForward = glm::normalize(-lightDirection);
     const glm::vec3 lightPos = center - lightForward * distance;
     glm::mat4 view = glm::lookAt(lightPos, center, glm::vec3(0.0f, 1.0f, 0.0f));
 

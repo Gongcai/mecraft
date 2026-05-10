@@ -23,6 +23,8 @@ uniform sampler2D uLightmapNight;
 uniform sampler2D uGrassColormap;
 uniform sampler2D uFoliageColormap;
 uniform sampler2D uOpaqueDepthTex;
+uniform sampler2D uSkyCaptureTex;
+uniform int uSkyCaptureEnabled;
 uniform int uForceBaseLod;
 uniform int uDepthSofteningEnabled;
 uniform int uFogEnabled;
@@ -38,6 +40,9 @@ uniform vec3 uSkyAmbientColor;
 uniform vec3 uShadowTintColor;
 uniform vec3 uHorizonScatterColor;
 uniform vec3 uSunDirection;
+uniform vec3 uMoonDirection;
+uniform vec3 uMoonLightColor;
+uniform float uMoonVisibility;
 uniform int uAerialPerspectiveEnabled;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
@@ -59,6 +64,8 @@ uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
 uniform vec3 uCameraPos;
 
+    const float kTwoPi = 6.28318530718;
+
     vec3 srgbToLinear(vec3 color) {
         return pow(max(color, vec3(0.0)), vec3(2.2));
     }
@@ -66,6 +73,41 @@ uniform vec3 uCameraPos;
     vec3 desaturateLinear(vec3 color, float amount) {
         float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
         return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
+    }
+
+    vec2 directionToSkyCaptureUv(vec3 dir) {
+        dir = normalize(dir);
+        float phi = atan(dir.x, -dir.z);
+        float u = phi / kTwoPi + 0.5;
+        float v = dir.y * 0.5 + 0.5;
+        return vec2(fract(u), clamp(v, 0.0, 1.0));
+    }
+
+    vec3 sampleSkyCapture(vec3 dir) {
+        return texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb;
+    }
+
+    vec3 sampleSkyIrradiance(vec3 normal) {
+        normal = normalize(normal);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+        vec3 north = normalize(vec3(0.0, 0.45, -1.0));
+        vec3 south = normalize(vec3(0.0, 0.45, 1.0));
+        vec3 east = normalize(vec3(1.0, 0.45, 0.0));
+        vec3 west = normalize(vec3(-1.0, 0.45, 0.0));
+
+        float wUp = 0.34 + 0.34 * max(dot(normal, up), 0.0);
+        float wNorth = 0.16 + 0.20 * max(dot(normal, north), 0.0);
+        float wSouth = 0.16 + 0.20 * max(dot(normal, south), 0.0);
+        float wEast = 0.16 + 0.20 * max(dot(normal, east), 0.0);
+        float wWest = 0.16 + 0.20 * max(dot(normal, west), 0.0);
+        float weightSum = wUp + wNorth + wSouth + wEast + wWest;
+
+        vec3 irradiance = sampleSkyCapture(up) * wUp;
+        irradiance += sampleSkyCapture(north) * wNorth;
+        irradiance += sampleSkyCapture(south) * wSouth;
+        irradiance += sampleSkyCapture(east) * wEast;
+        irradiance += sampleSkyCapture(west) * wWest;
+        return irradiance / max(weightSum, 0.0001);
     }
 
     bool layerInRange(float layer, float firstLayer, float layerCount) {
@@ -240,21 +282,31 @@ uniform vec3 uCameraPos;
         vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
         vec3 vanillaLight = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
         float skyLightMask = clamp(vSunlight * uSkyIntensity, 0.0, 1.0);
+        float nightSkyMask = clamp(vSunlight * uMoonVisibility, 0.0, 1.0);
+        float outdoorSkyMask = max(skyLightMask, nightSkyMask);
         float blockLightMask = clamp(vBlockLight, 0.0, 1.0);
         vec3 normal = decodeFaceNormal(vNormal);
         vec3 sunDir = normalize(uSunDirection);
+        vec3 moonDir = normalize(uMoonDirection);
         float diffuse = pow(max(dot(normal, sunDir), 0.0), 0.82);
+        float moonDiffuse = pow(max(dot(normal, moonDir), 0.0), 0.68);
 
         vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
         vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
+        vec3 capturedSky = (uSkyCaptureEnabled != 0) ? sampleSkyIrradiance(normal) : coolSkyColor;
+        float skyCaptureInfluence = (uSkyCaptureEnabled != 0) ? mix(0.12, 0.34, 1.0 - clamp(uSkyIntensity, 0.0, 1.0)) : 0.0;
+        coolSkyColor = mix(coolSkyColor, capturedSky, skyCaptureInfluence);
         vec3 directSun = warmSunColor * diffuse * skyLightMask * uDirectSunStrength;
-        vec3 skyAmbient = coolSkyColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
-        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.35, 1.0, skyLightMask);
+        float moonMask = nightSkyMask;
+        vec3 moonFill = uMoonLightColor * moonMask * (0.026 + 0.052 * uSkyAmbientStrength);
+        vec3 directMoon = uMoonLightColor * moonDiffuse * moonMask * (0.36 + 0.18 * uSkyAmbientStrength);
+        vec3 skyAmbient = coolSkyColor * (0.10 + 0.90 * outdoorSkyMask) * uSkyAmbientStrength + moonFill;
+        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.35, 1.0, outdoorSkyMask);
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
         vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
         vec3 blockLightColor = mix(vec3(1.0, 0.84, 0.58), vanillaLight, 0.18);
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
-        vec3 lightColor = directSun + skyAmbient + minimumAmbient + fakeBounce + blockLight;
+        vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight;
         lightColor = mix(lightColor, vanillaLight, 0.10);
 
         // Combine texture, lightmap color, and AO
@@ -266,7 +318,7 @@ uniform vec3 uCameraPos;
             vec3 emissionColor = mix(albedo, vec3(1.0, 0.88, 0.64) * max(emissionLuma, 0.45), 0.42);
             finalColor += emissionColor * emissionMask * (0.42 + 0.64 * uBlockLightStrength);
         }
-        finalColor = desaturateLinear(finalColor, (1.0 - diffuse) * skyLightMask * uShadowDesaturation * 0.45);
+        finalColor = desaturateLinear(finalColor, (1.0 - max(diffuse, moonDiffuse * 0.65)) * outdoorSkyMask * uShadowDesaturation * 0.45);
 
         if (uFogEnabled != 0) {
             float fogFactor = computeFogFactor(vFogDist);
@@ -276,6 +328,9 @@ uniform vec3 uCameraPos;
                 float sunForward = pow(max(dot(viewDir, normalize(uSunDirection)), 0.0), 2.0);
                 float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.65);
                 float heightFade = 1.0 - smoothstep(96.0, 192.0, vWorldPos.y);
+                vec3 capturedFog = (uSkyCaptureEnabled != 0) ? sampleSkyCapture(normalize(vec3(viewDir.x, viewDir.y * 0.35, viewDir.z))) : fogColor;
+                float captureFogInfluence = (uSkyCaptureEnabled != 0) ? mix(0.18, 0.42, 1.0 - clamp(uSkyIntensity, 0.0, 1.0)) : 0.0;
+                fogColor = mix(fogColor, capturedFog, captureFogInfluence);
                 vec3 scatter = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
                 scatter += warmSunColor * sunForward * 0.24 * clamp(uHorizonScatterStrength, 0.0, 2.0);
                 fogColor = mix(fogColor, scatter, clamp(uAerialStrength, 0.0, 2.0) * heightFade);

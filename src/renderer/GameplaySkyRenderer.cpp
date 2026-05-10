@@ -380,7 +380,7 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     colors.sunScatter = lerp(noonScatter, goldenScatter, warm);
     colors.sunLightColor = lerp(nightSunLight, noonSunLight, skyIntensity);
     colors.sunLightColor = lerp(colors.sunLightColor, warmSunLight, warm * 0.58f);
-    colors.moonLightColor = glm::vec3(0.30f, 0.38f, 0.68f);
+    colors.moonLightColor = glm::vec3(0.42f, 0.52f, 0.95f);
     colors.skyAmbientColor = lerp(nightAmbient, dayAmbient, skyIntensity);
     colors.skyAmbientColor = lerp(colors.skyAmbientColor, warmAmbient, warm * 0.32f);
     colors.shadowTintColor = lerp(nightShadowTint, dayShadowTint, skyIntensity);
