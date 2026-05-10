@@ -216,6 +216,11 @@ World HDR Scene FBO
   - 8 tap blocker search。
   - 16 到 24 tap PCF。
   - 半影半径随 blocker/receiver 距离变化。
+- PCSS foundation V2：
+  - blocker search 独立为 `pcssBlockerSearch`，使用 8 tap golden-angle spiral disk，采样旋转由 shadow texel 坐标稳定生成，不绑定屏幕像素或相机视角。
+  - PCF 采样从随机 R2 disk 改为同样稳定的 24 tap spiral disk，减少视角移动时边缘形状变化。
+  - 半影半径改用 receiver/blocker depth delta、`shadowProjectionInverse` depth scale、shadow texel world size 和 distortion factor 共同估算，避免纯经验深度常数。
+  - 仍只使用单 depth shadow map；彩色阴影、透明阴影与 SSS depth 复用后续需要第二张 shadow depth/color target。
 - 屏幕空间接触阴影：
   - 沿太阳方向 6 到 12 步。
   - 只补近距离细节，避免替代主 shadow map。

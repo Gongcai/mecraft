@@ -236,14 +236,17 @@ float compareShadowBilinear(vec3 proj, vec2 offsetTexels, float bias) {
     return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
 }
 
-vec2 r2(float n) {
-    return fract(vec2(n * 0.7548776662, n * 0.5698402909));
+float stableShadowJitter(vec3 proj) {
+    ivec2 size = textureSize(uShadowMap, 0);
+    vec2 shadowTexel = floor(proj.xy * vec2(size));
+    return fract(52.9829189 * fract(dot(shadowTexel, vec2(0.06711056, 0.00583715))));
 }
 
-vec2 r2Disk(float n) {
-    vec2 u = r2(n);
-    float angle = u.x * kTwoPi;
-    return vec2(cos(angle), sin(angle)) * sqrt(u.y);
+vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
+    float fi = float(index) + jitter;
+    float radius = sqrt((float(index) + 0.5) / max(float(sampleCount), 1.0));
+    float angle = fi * 2.39996323 + jitter * kTwoPi;
+    return vec2(cos(angle), sin(angle)) * radius;
 }
 
 float calculateShadowWarp(vec2 coord) {
@@ -280,30 +283,48 @@ float shadowProjectionFade(vec3 proj) {
     return clamp(edgeFade * farFade, 0.0, 1.0);
 }
 
-float pcssFilterRadius(vec3 proj, float baseRadius, float bias) {
-    if (uPcssShadowsEnabled == 0 || uShadowPcssStrength <= 0.001) {
-        return baseRadius;
-    }
-
+vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) {
     float blockerDepthSum = 0.0;
     float blockerCount = 0.0;
-    float projectionScale = max(abs(uShadowProjection[0][0]), 0.0001);
-    float searchRadius = clamp(baseRadius * 0.78 * projectionScale * max(uShadowExtent, 1.0), 1.0, 5.5);
     for (int i = 0; i < 8; ++i) {
-        float blockerDepth = sampleShadowDepthAt(proj, r2Disk(float(i) + 6.13) * searchRadius);
-        float isBlocker = step(blockerDepth, proj.z - bias);
+        vec2 offset = spiralDiskSample(i, 8, jitter) * searchRadius;
+        float blockerDepth = sampleShadowDepthAt(proj, offset);
+        float isBlocker = step(blockerDepth, proj.z - bias) * (1.0 - step(0.9999, blockerDepth));
         blockerDepthSum += blockerDepth * isBlocker;
         blockerCount += isBlocker;
     }
 
-    if (blockerCount < 0.5) {
-        return 1.15;
+    float averageBlockerDepth = blockerDepthSum / max(blockerCount, 0.0001);
+    return vec2(averageBlockerDepth, blockerCount);
+}
+
+float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensity, float jitter) {
+    if (uPcssShadowsEnabled == 0 || uShadowPcssStrength <= 0.001) {
+        return baseRadius;
     }
 
-    float averageBlockerDepth = blockerDepthSum / blockerCount;
+    float projectionScale = max(abs(uShadowProjection[0][0]), 0.0001);
+    float projectionRadiusScale = projectionScale * max(uShadowExtent, 1.0);
+    float searchRadius = clamp(baseRadius * (0.78 + 0.22 * projectionRadiusScale) / max(warpDensity, 0.25),
+                               1.25,
+                               7.0);
+    vec2 blockerSearch = pcssBlockerSearch(proj, bias, searchRadius, jitter);
+    float averageBlockerDepth = blockerSearch.x;
+    float blockerCount = blockerSearch.y;
+
+    if (blockerCount < 0.5) {
+        return min(baseRadius, 1.15);
+    }
+
     float receiverToBlocker = max(proj.z - averageBlockerDepth, 0.0);
-    float penumbra = clamp(receiverToBlocker * 260.0 * uShadowPcssStrength, 0.0, 1.0);
-    return mix(1.15, baseRadius, penumbra);
+    float shadowDepthWorldScale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    float receiverToBlockerWorld = receiverToBlocker * shadowDepthWorldScale;
+    float penumbraTexels = receiverToBlockerWorld / max(uShadowTexelWorldSize, 0.0001);
+    penumbraTexels *= 0.11 * uShadowPcssStrength / max(warpDensity, 0.25);
+
+    float blockerConfidence = smoothstep(0.5, 3.5, blockerCount);
+    float adaptiveRadius = clamp(1.05 + penumbraTexels, 1.05, baseRadius);
+    return mix(min(baseRadius, 1.15), adaptiveRadius, blockerConfidence);
 }
 
 float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
@@ -344,10 +365,11 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float filterWarpDensity = calculateShadowWarp(centeredShadow);
     float radius = clamp(max(uShadowSoftness, 0.1) * (1.20 + 0.42 * distanceSoftness + 0.22 * grazingSoftness) * filterWarpDensity,
                          2.0, 7.5);
-    radius = pcssFilterRadius(proj, radius, bias);
+    float jitter = stableShadowJitter(proj);
+    radius = pcssFilterRadius(proj, radius, bias, warpDensity, jitter);
     float lit = 0.0;
     for (int i = 0; i < 24; ++i) {
-        lit += compareShadowBilinear(proj, r2Disk(float(i) + 0.37) * radius, bias);
+        lit += compareShadowBilinear(proj, spiralDiskSample(i, 24, jitter) * radius, bias);
     }
     return mix(1.0, shapeShadowVisibility(lit / 24.0), projectionFade * distanceFade);
 }
