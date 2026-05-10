@@ -72,6 +72,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
     m_ssaoShader = resourceMgr.getShader("ssao");
+    m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
+    m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     //m_uiShader = resourceMgr.getShader("ui");
@@ -147,6 +149,8 @@ void Renderer::shutdown() {
     m_shadowDepthShader = nullptr;
     m_deferredLightingShader = nullptr;
     m_ssaoShader = nullptr;
+    m_volumetricFogShader = nullptr;
+    m_volumetricCompositeShader = nullptr;
     m_bloomExtractShader = nullptr;
     m_bloomBlurShader = nullptr;
     m_deferredFrameActive = false;
@@ -316,6 +320,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.fakeBounceStrength = std::clamp(m_pipelineSettings.fakeBounceStrength, 0.0f, 0.5f);
     m_pipelineSettings.aerialStrength = std::clamp(m_pipelineSettings.aerialStrength, 0.0f, 2.0f);
     m_pipelineSettings.horizonScatterStrength = std::clamp(m_pipelineSettings.horizonScatterStrength, 0.0f, 2.0f);
+    m_pipelineSettings.volumetricFogStrength = std::clamp(m_pipelineSettings.volumetricFogStrength, 0.0f, 2.0f);
     m_pipelineSettings.noiseDitherStrength = std::clamp(m_pipelineSettings.noiseDitherStrength, 0.0f, 0.08f);
     m_pipelineSettings.sharpenStrength = std::clamp(m_pipelineSettings.sharpenStrength, 0.0f, 1.0f);
     m_pipelineSettings.ssaoRadius = std::clamp(m_pipelineSettings.ssaoRadius, 0.1f, 16.0f);
@@ -717,7 +722,19 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
-    m_deferredTargets.blitSceneLightingTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    bool compositedToCapturedFramebuffer = false;
+    if (m_pipelineSettings.volumetricFogEnabled &&
+        m_pipelineSettings.aerialPerspectiveEnabled &&
+        m_pipelineSettings.volumetricFogStrength > 0.001f &&
+        m_volumetricFogShader != nullptr &&
+        m_volumetricCompositeShader != nullptr) {
+        renderVolumetricFogPass(world);
+        compositeVolumetricFogPass(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        compositedToCapturedFramebuffer = true;
+    }
+    if (!compositedToCapturedFramebuffer) {
+        m_deferredTargets.blitSceneLightingTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    }
     m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     restoreCapturedFramebufferViewport(window);
     return true;
@@ -967,6 +984,68 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderVolumetricFogPass(const World& world) {
+    m_deferredTargets.bindHalfRes();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    m_volumetricFogShader->use();
+    m_volumetricFogShader->setInt("uDepthTex", 0);
+    m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
+    m_volumetricFogShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
+    m_volumetricFogShader->setVec3("uCameraPos", m_cameraPos);
+    m_volumetricFogShader->setVec3("uSunDirection", skyColors.sunDirection);
+    m_volumetricFogShader->setVec3("uMoonDirection", skyColors.moonDirection);
+    m_volumetricFogShader->setVec3("uSunLightColor", skyColors.sunLightColor);
+    m_volumetricFogShader->setVec3("uMoonLightColor", skyColors.moonLightColor);
+    m_volumetricFogShader->setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
+    m_volumetricFogShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
+    m_volumetricFogShader->setFloat("uMoonVisibility", skyColors.moonVisibility);
+    m_volumetricFogShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
+    m_volumetricFogShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
+    m_volumetricFogShader->setFloat("uVolumetricFogStrength", m_pipelineSettings.volumetricFogStrength);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    renderFullscreen(*m_volumetricFogShader);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::compositeVolumetricFogPass(const GLint framebuffer, const int width, const int height) {
+    m_deferredTargets.bindDefaultLike(framebuffer, width, height);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_volumetricCompositeShader->use();
+    m_volumetricCompositeShader->setInt("uSceneTex", 0);
+    m_volumetricCompositeShader->setInt("uVolumetricTex", 1);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    renderFullscreen(*m_volumetricCompositeShader);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }

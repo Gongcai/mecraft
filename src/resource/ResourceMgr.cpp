@@ -249,6 +249,8 @@ void ResourceMgr::init() {
     loadShader("shadow_depth", SHADERS_DIR "/shadow_depth.vs", SHADERS_DIR "/shadow_depth.fs");
     loadShader("deferred_lighting", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/deferred_lighting.fs");
     loadShader("ssao", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/ssao.fs");
+    loadShader("volumetric_fog", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/volumetric_fog.fs");
+    loadShader("volumetric_composite", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/volumetric_composite.fs");
     loadShader("bloom_extract", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_extract.fs");
     loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_blur.fs");
     loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/exposure_downsample.fs");

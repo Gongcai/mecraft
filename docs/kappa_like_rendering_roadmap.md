@@ -358,6 +358,13 @@ Bruneton LUT 后置条件：
 - 仍依赖现有 fog 开关与距离参数；洞穴通过 outdoor sky mask 抑制空气透视，避免室内凭空泛白。
 - 本阶段不是完整 half-res ray marching，后续再接散射/transmittance target。
 
+阶段 5B Low：
+
+- 使用已预留的 half-res HDR target 输出 RGB scattering / A transmittance。
+- 基于 depth 重建 world position，做低成本指数高度雾和日/月方向散射。
+- 合成到 scene lighting：`scene.rgb = scene.rgb * transmittance + scattering`。
+- 本阶段暂不采样 shadow map，不加入 noise2D 伪 3D 噪声，不做深度感知双边上采样；这些进入 5C/5D。
+
 关键任务：
 
 - 新增 half-res volumetric target：

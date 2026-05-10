@@ -68,6 +68,7 @@ public:
         bool waterEffectsEnabled = true;
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
+        bool volumetricFogEnabled = true;
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
         int shadowWarpMode = 2; // 0=Radial debug, 1=Derivative quartic debug, 2=No warp
         int shadowResolution = 2048;
@@ -104,6 +105,7 @@ public:
         float fakeBounceStrength = 0.06f;
         float aerialStrength = 0.65f;
         float horizonScatterStrength = 0.78f;
+        float volumetricFogStrength = 0.35f;
         float noiseDitherStrength = 0.015f;
         float sharpenStrength = 0.08f;
         float ssaoRadius = 2.25f;
@@ -338,6 +340,8 @@ private:
     void renderShadowMap(const World& world, const Camera& camera);
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const World& world);
+    void renderVolumetricFogPass(const World& world);
+    void compositeVolumetricFogPass(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
@@ -393,6 +397,8 @@ private:
     Shader* m_shadowDepthShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;
     Shader* m_ssaoShader = nullptr;
+    Shader* m_volumetricFogShader = nullptr;
+    Shader* m_volumetricCompositeShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
    // Shader* m_uiShader = nullptr;

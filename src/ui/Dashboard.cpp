@@ -370,6 +370,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
+        pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
         pipelineChanged |= ImGui::Combo("Shadow Warp", &shadowWarpMode, kShadowWarpModes, IM_ARRAYSIZE(kShadowWarpModes));
@@ -387,6 +388,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.fakeBounceStrength = 0.04f;
             pipeline.aerialStrength = 0.25f;
             pipeline.horizonScatterStrength = 0.35f;
+            pipeline.volumetricFogStrength = 0.0f;
             pipeline.bloomThreshold = 1.05f;
             pipeline.bloomStrength = 0.10f;
             pipeline.autoExposureEnabled = false;
@@ -428,6 +430,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.fakeBounceStrength = 0.06f;
             pipeline.aerialStrength = 0.65f;
             pipeline.horizonScatterStrength = 0.78f;
+            pipeline.volumetricFogStrength = 0.35f;
             pipeline.bloomThreshold = 0.82f;
             pipeline.bloomStrength = 0.18f;
             pipeline.autoExposureEnabled = true;
@@ -469,6 +472,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.fakeBounceStrength = 0.08f;
             pipeline.aerialStrength = 0.78f;
             pipeline.horizonScatterStrength = 0.90f;
+            pipeline.volumetricFogStrength = 0.48f;
             pipeline.bloomThreshold = 0.72f;
             pipeline.bloomStrength = 0.24f;
             pipeline.autoExposureEnabled = true;
@@ -530,6 +534,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("Fake Bounce", &pipeline.fakeBounceStrength, 0.0f, 0.3f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &pipeline.aerialStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &pipeline.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Volumetric Fog Strength", &pipeline.volumetricFogStrength, 0.0f, 1.2f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Noise Dither", &pipeline.noiseDitherStrength, 0.0f, 0.05f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("CAS Sharpen", &pipeline.sharpenStrength, 0.0f, 0.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
