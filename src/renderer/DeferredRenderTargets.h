@@ -25,6 +25,7 @@ public:
     [[nodiscard]] GLuint albedoTexture() const { return m_gAlbedo; }
     [[nodiscard]] GLuint normalAoTexture() const { return m_gNormalAo; }
     [[nodiscard]] GLuint voxelLightTexture() const { return m_gVoxelLight; }
+    [[nodiscard]] GLuint materialTexture() const { return m_gMaterial; }
     [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
@@ -53,6 +54,7 @@ private:
     GLuint m_gAlbedo = 0;
     GLuint m_gNormalAo = 0;
     GLuint m_gVoxelLight = 0;
+    GLuint m_gMaterial = 0;
     GLuint m_gDepth = 0;
 
     GLuint m_shadowFbo = 0;

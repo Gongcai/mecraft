@@ -90,11 +90,12 @@ inline uint16_t packBlockVertexU16(float value) {
     return static_cast<uint16_t>(value + 0.5f);
 }
 
-inline uint16_t packBlockVertexTint(uint8_t kind, uint8_t u, uint8_t v) {
+inline uint16_t packBlockVertexTint(uint8_t kind, uint8_t u, uint8_t v, uint8_t materialKind = BlockMaterialKinds::DEFAULT) {
     const uint16_t packedKind = static_cast<uint16_t>(kind & 0x03U);
-    const uint16_t packedU = static_cast<uint16_t>((u >> 1U) & 0x7FU);
-    const uint16_t packedV = static_cast<uint16_t>((v >> 1U) & 0x7FU);
-    return static_cast<uint16_t>((packedKind << 14U) | (packedU << 7U) | packedV);
+    const uint16_t packedMaterial = static_cast<uint16_t>(materialKind & 0x0FU);
+    const uint16_t packedU = static_cast<uint16_t>((u >> 3U) & 0x1FU);
+    const uint16_t packedV = static_cast<uint16_t>((v >> 3U) & 0x1FU);
+    return static_cast<uint16_t>((packedKind << 14U) | (packedMaterial << 10U) | (packedU << 5U) | packedV);
 }
 
 inline BlockVertex makeBlockVertex(float x,
@@ -112,7 +113,8 @@ inline BlockVertex makeBlockVertex(float x,
                                    float animated = 0.0f,
                                    uint8_t tintKind = BlockTintKinds::NONE,
                                    uint8_t tintU = 0,
-                                   uint8_t tintV = 0) {
+                                   uint8_t tintV = 0,
+                                   uint8_t materialKind = BlockMaterialKinds::DEFAULT) {
     return {
         x,
         y,
@@ -127,7 +129,7 @@ inline BlockVertex makeBlockVertex(float x,
         packBlockVertexU16(animationFrameCount),
         packBlockVertexByte(animationFps),
         animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0),
-        packBlockVertexTint(tintKind, tintU, tintV)
+        packBlockVertexTint(tintKind, tintU, tintV, materialKind)
     };
 }
 

@@ -42,6 +42,7 @@ struct FaceRenderData {
     uint8_t tintKind = BlockTintKinds::NONE;
     uint8_t tintU = 0;
     uint8_t tintV = 0;
+    uint8_t materialKind = BlockMaterialKinds::DEFAULT;
     uint8_t uvQuarterTurns = 0;
 };
 
@@ -52,6 +53,7 @@ struct FaceMergeKey {
     uint8_t tintKind = BlockTintKinds::NONE;
     uint8_t tintU = 0;
     uint8_t tintV = 0;
+    uint8_t materialKind = BlockMaterialKinds::DEFAULT;
     uint8_t uvQuarterTurns = 0;
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
@@ -504,6 +506,7 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     renderData.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
     renderData.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
     renderData.tintKind = blockTintKindFromBiomeTint(def.biomeTint);
+    renderData.materialKind = def.materialKind;
     if (renderData.tintKind != BlockTintKinds::NONE) {
         computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
     }
@@ -543,6 +546,7 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
     mix(static_cast<uint64_t>(key.tintKind));
     mix(static_cast<uint64_t>(key.tintU));
     mix(static_cast<uint64_t>(key.tintV));
+    mix(static_cast<uint64_t>(key.materialKind));
     mix(static_cast<uint64_t>(key.uvQuarterTurns));
     for (size_t i = 0; i < 4; ++i) {
         mix(static_cast<uint64_t>(key.ao[i]));
@@ -564,6 +568,7 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
     key.tintKind = renderData.tintKind;
     key.tintU = renderData.tintU;
     key.tintV = renderData.tintV;
+    key.materialKind = renderData.materialKind;
     key.uvQuarterTurns = renderData.uvQuarterTurns;
     for (size_t i = 0; i < renderData.vertices.size(); ++i) {
         key.ao[i] = renderData.vertices[i].ao;
@@ -582,6 +587,7 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.tintKind == rhs.tintKind &&
            lhs.tintU == rhs.tintU &&
            lhs.tintV == rhs.tintV &&
+           lhs.materialKind == rhs.materialKind &&
            lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
            lhs.ao == rhs.ao &&
            lhs.sun == rhs.sun &&
@@ -630,22 +636,33 @@ BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y
     return world->sampleGeneratedBlock(wx, y, wz);
 }
 
-bool trySampleWorldLight(const World* world, const int wx, const int y, const int wz, uint8_t& outLight) {
-    outLight = 0;
-    if (world == nullptr || y < 0 || y >= Chunk::SIZE_Y) {
-        return false;
-    }
+bool matchesChunkCoords(const Chunk* chunk, const int cx, const int cz) {
+    return chunk != nullptr && chunk->m_chunkX == cx && chunk->m_chunkZ == cz;
+}
 
-    const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
-    const auto it = world->getActiveChunks().find(World::chunkKey(chunkCoords.x, chunkCoords.y));
-    if (it == world->getActiveChunks().end() || !it->second) {
-        return false;
+const Chunk* resolveHeldChunkByCoords(const Chunk& chunk,
+                                      const int cx,
+                                      const int cz,
+                                      const Chunk* neighborPosX,
+                                      const Chunk* neighborNegX,
+                                      const Chunk* neighborPosZ,
+                                      const Chunk* neighborNegZ) {
+    if (matchesChunkCoords(&chunk, cx, cz)) {
+        return &chunk;
     }
-
-    const int localX = wx - chunkCoords.x * Chunk::SIZE_X;
-    const int localZ = wz - chunkCoords.y * Chunk::SIZE_Z;
-    outLight = it->second->getPackedLight(localX, y, localZ);
-    return true;
+    if (matchesChunkCoords(neighborPosX, cx, cz)) {
+        return neighborPosX;
+    }
+    if (matchesChunkCoords(neighborNegX, cx, cz)) {
+        return neighborNegX;
+    }
+    if (matchesChunkCoords(neighborPosZ, cx, cz)) {
+        return neighborPosZ;
+    }
+    if (matchesChunkCoords(neighborNegZ, cx, cz)) {
+        return neighborNegZ;
+    }
+    return nullptr;
 }
 
 const Chunk* getDirectHorizontalNeighbor(const int dx,
@@ -659,14 +676,6 @@ const Chunk* getDirectHorizontalNeighbor(const int dx,
     if (dz > 0) return neighborPosZ;
     if (dz < 0) return neighborNegZ;
     return nullptr;
-}
-
-int horizontalNeighborDirection(const int dx, const int dz) {
-    if (dx > 0) return 0;
-    if (dx < 0) return 1;
-    if (dz > 0) return 2;
-    if (dz < 0) return 3;
-    return -1;
 }
 
 uint8_t maxPackedLightComponents(const uint8_t lhs, const uint8_t rhs) {
@@ -705,28 +714,6 @@ const Chunk* resolveHorizontalSampleChunk(const int localX,
         return getDirectHorizontalNeighbor(dx, dz,
                                            neighborPosX, neighborNegX,
                                            neighborPosZ, neighborNegZ);
-    }
-
-    const Chunk* xNeighbor = getDirectHorizontalNeighbor(dx, 0,
-                                                         neighborPosX, neighborNegX,
-                                                         neighborPosZ, neighborNegZ);
-    if (xNeighbor) {
-        const int zDirection = horizontalNeighborDirection(0, dz);
-        const Chunk* diagonal = zDirection >= 0 ? xNeighbor->neighbors[zDirection] : nullptr;
-        if (diagonal) {
-            return diagonal;
-        }
-    }
-
-    const Chunk* zNeighbor = getDirectHorizontalNeighbor(0, dz,
-                                                         neighborPosX, neighborNegX,
-                                                         neighborPosZ, neighborNegZ);
-    if (zNeighbor) {
-        const int xDirection = horizontalNeighborDirection(dx, 0);
-        const Chunk* diagonal = xDirection >= 0 ? zNeighbor->neighbors[xDirection] : nullptr;
-        if (diagonal) {
-            return diagonal;
-        }
     }
 
     return nullptr;
@@ -785,7 +772,17 @@ BlockID sampleHaloBlock(const Chunk& chunk,
     }
 
     if (world != nullptr) {
-        return world->sampleGeneratedBlock(offset.x + localX, worldY, offset.z + localZ);
+        const int wx = offset.x + localX;
+        const int wz = offset.z + localZ;
+        const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
+        if (const Chunk* heldChunk = resolveHeldChunkByCoords(chunk, chunkCoords.x, chunkCoords.y,
+                                                              neighborPosX, neighborNegX,
+                                                              neighborPosZ, neighborNegZ)) {
+            const int sampleX = wx - chunkCoords.x * Chunk::SIZE_X;
+            const int sampleZ = wz - chunkCoords.y * Chunk::SIZE_Z;
+            return heldChunk->getBlock(sampleX, worldY, sampleZ);
+        }
+        return world->sampleGeneratedBlock(wx, worldY, wz);
     }
 
     int sampleX = 0;
@@ -829,7 +826,17 @@ BlockID sampleHaloFluid(const Chunk& chunk,
 
     if (world != nullptr) {
         const glm::ivec3 offset = chunk.getWorldOffset();
-        return world->getFluidState(offset.x + localX, worldY, offset.z + localZ);
+        const int wx = offset.x + localX;
+        const int wz = offset.z + localZ;
+        const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
+        if (const Chunk* heldChunk = resolveHeldChunkByCoords(chunk, chunkCoords.x, chunkCoords.y,
+                                                              neighborPosX, neighborNegX,
+                                                              neighborPosZ, neighborNegZ)) {
+            const int sampleX = wx - chunkCoords.x * Chunk::SIZE_X;
+            const int sampleZ = wz - chunkCoords.y * Chunk::SIZE_Z;
+            return heldChunk->getFluidState(sampleX, worldY, sampleZ);
+        }
+        return 0;
     }
 
     int sampleX = 0;
@@ -879,13 +886,6 @@ uint8_t sampleHaloLight(const Chunk& chunk,
                                                                 neighborPosZ, neighborNegZ,
                                                                 sampleX, sampleZ)) {
         return sampleChunk->getPackedLight(sampleX, worldY, sampleZ);
-    }
-
-    if (world != nullptr) {
-        uint8_t sampledLight = 0;
-        if (trySampleWorldLight(world, offset.x + localX, worldY, offset.z + localZ, sampledLight)) {
-            return sampledLight;
-        }
     }
 
     if (localX < 0 || localX >= Chunk::SIZE_X ||
@@ -1054,7 +1054,8 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
             renderData.animated,
             renderData.tintKind,
             renderData.tintU,
-            renderData.tintV
+            renderData.tintV,
+            renderData.materialKind
         ));
     }
 }
@@ -1976,7 +1977,8 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                 0.0f,
                 tintKind,
                 tintU,
-                tintV
+                tintV,
+                def.materialKind
             ));
         }
     };
@@ -2027,6 +2029,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                         const int y,
                         const int z,
                         const SubChunkMeshingSnapshot& snapshot) {
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
     int tileIndex = textures.texTop;
     if (tileIndex < 0) tileIndex = 0;
@@ -2086,7 +2089,11 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                 layer,
                 1.0f,
                 0.0f,
-                0.0f
+                0.0f,
+                BlockTintKinds::NONE,
+                0,
+                0,
+                def.materialKind
             ));
         }
     };
@@ -2163,6 +2170,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                        const int y,
                        const int z,
                        const SubChunkMeshingSnapshot& snapshot) {
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
     const float layer = static_cast<float>(textures.worldTop.firstLayer);
 
@@ -2217,7 +2225,11 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                 layer,
                 1.0f,
                 0.0f,
-                0.0f
+                0.0f,
+                BlockTintKinds::NONE,
+                0,
+                0,
+                def.materialKind
             ));
         }
     };
@@ -2357,6 +2369,7 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
                         const int face,
                         const std::array<glm::vec3, 4>& localCorners,
                         const TorchModelUvRect& uvRect,
+                        const uint8_t materialKind,
                         const glm::mat4& transform = glm::mat4(1.0f)) {
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
     const std::array<glm::vec2, 4> uv = {{
@@ -2381,7 +2394,11 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
             layer,
             1.0f,
             0.0f,
-            0.0f
+            0.0f,
+            BlockTintKinds::NONE,
+            0,
+            0,
+            materialKind
         ));
     }
 }
@@ -2405,14 +2422,15 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
                                const bool emitLeft,
                                const TorchModelUvRect& leftUv,
                                const bool emitRight,
-                               const TorchModelUvRect& rightUv) {
+                               const TorchModelUvRect& rightUv,
+                               const uint8_t materialKind) {
     if (emitTop) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_TOP, {{
             {from.x, to.y, to.z},
             {to.x, to.y, to.z},
             {to.x, to.y, from.z},
             {from.x, to.y, from.z}
-        }}, topUv, transform);
+        }}, topUv, materialKind, transform);
     }
     if (emitBottom) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BOTTOM, {{
@@ -2420,7 +2438,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {to.x, from.y, from.z},
             {to.x, from.y, to.z},
             {from.x, from.y, to.z}
-        }}, bottomUv, transform);
+        }}, bottomUv, materialKind, transform);
     }
     if (emitFront) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_FRONT, {{
@@ -2428,7 +2446,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {to.x, from.y, to.z},
             {to.x, to.y, to.z},
             {from.x, to.y, to.z}
-        }}, frontUv, transform);
+        }}, frontUv, materialKind, transform);
     }
     if (emitBack) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BACK, {{
@@ -2436,7 +2454,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {from.x, from.y, from.z},
             {from.x, to.y, from.z},
             {to.x, to.y, from.z}
-        }}, backUv, transform);
+        }}, backUv, materialKind, transform);
     }
     if (emitLeft) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_LEFT, {{
@@ -2444,7 +2462,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {from.x, from.y, to.z},
             {from.x, to.y, to.z},
             {from.x, to.y, from.z}
-        }}, leftUv, transform);
+        }}, leftUv, materialKind, transform);
     }
     if (emitRight) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_RIGHT, {{
@@ -2452,7 +2470,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {to.x, from.y, from.z},
             {to.x, to.y, from.z},
             {to.x, to.y, to.z}
-        }}, rightUv, transform);
+        }}, rightUv, materialKind, transform);
     }
 }
 
@@ -2463,6 +2481,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                           const int y,
                           const int z,
                           const SubChunkMeshingSnapshot& snapshot) {
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
     const float layer = static_cast<float>(textures.worldTop.firstLayer);
 
@@ -2504,7 +2523,8 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                                   false, kTorchFullUv,
                                   false, kTorchFullUv,
                                   false, kTorchFullUv,
-                                  false, kTorchFullUv);
+                                  false, kTorchFullUv,
+                                  def.materialKind);
         emitTorchModelCuboidFaces(vertices,
                                   pos,
                                   layer,
@@ -2518,7 +2538,8 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                                   false, kTorchFullUv,
                                   false, kTorchFullUv,
                                   true, kTorchFullUv,
-                                  true, kTorchFullUv);
+                                  true, kTorchFullUv,
+                                  def.materialKind);
         emitTorchModelCuboidFaces(vertices,
                                   pos,
                                   layer,
@@ -2532,7 +2553,8 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                                   true, kTorchFullUv,
                                   true, kTorchFullUv,
                                   false, kTorchFullUv,
-                                  false, kTorchFullUv);
+                                  false, kTorchFullUv,
+                                  def.materialKind);
         return;
     }
 
@@ -2550,7 +2572,8 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               false, kTorchFullUv,
                               false, kTorchFullUv,
                               false, kTorchFullUv,
-                              false, kTorchFullUv);
+                              false, kTorchFullUv,
+                              def.materialKind);
     emitTorchModelCuboidFaces(vertices,
                               pos,
                               layer,
@@ -2564,7 +2587,8 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               false, kTorchFullUv,
                               false, kTorchFullUv,
                               true, kTorchFullUv,
-                              true, kTorchFullUv);
+                              true, kTorchFullUv,
+                              def.materialKind);
     emitTorchModelCuboidFaces(vertices,
                               pos,
                               layer,
@@ -2578,7 +2602,8 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               true, kTorchFullUv,
                               true, kTorchFullUv,
                               false, kTorchFullUv,
-                              false, kTorchFullUv);
+                              false, kTorchFullUv,
+                              def.materialKind);
 }
 
 } // anonymous namespace

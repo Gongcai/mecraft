@@ -26,6 +26,7 @@ out float vAnimationFrameCount;
 out float vAnimationFps;
 out float vAnimated;
 flat out float vTintKind;
+flat out float vMaterialKind;
 out vec2 vTintUV;
 out vec3 vWorldPos;
 
@@ -46,8 +47,10 @@ void main() {
     vWorldPos = worldPos.xyz;
 
     uint tintKind = (aTintPacked >> 14u) & 3u;
-    uint tintU = (aTintPacked >> 7u) & 127u;
-    uint tintV = aTintPacked & 127u;
+    uint materialKind = (aTintPacked >> 10u) & 15u;
+    uint tintU = (aTintPacked >> 5u) & 31u;
+    uint tintV = aTintPacked & 31u;
     vTintKind = float(tintKind);
-    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 128.0;
+    vMaterialKind = float(materialKind);
+    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 32.0;
 }

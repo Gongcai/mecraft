@@ -6,6 +6,7 @@ out vec4 FragColor;
 uniform sampler2D uAlbedoTex;
 uniform sampler2D uNormalAoTex;
 uniform sampler2D uVoxelLightTex;
+uniform sampler2D uMaterialTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
@@ -57,6 +58,7 @@ uniform float uFogEnd;
 uniform float uFogDensity;
 
 const float kTwoPi = 6.28318530718;
+const float kPi = 3.14159265359;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -65,6 +67,37 @@ vec3 srgbToLinear(vec3 color) {
 vec3 desaturateLinear(vec3 color, float amount) {
     float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
     return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
+}
+
+float ggxDistribution(float ndoth, float roughness) {
+    float a = max(roughness * roughness, 0.002);
+    float a2 = a * a;
+    float denom = ndoth * ndoth * (a2 - 1.0) + 1.0;
+    return a2 / max(kPi * denom * denom, 0.00001);
+}
+
+float smithG1(float ndotv, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) * 0.125;
+    return ndotv / max(ndotv * (1.0 - k) + k, 0.00001);
+}
+
+vec3 fresnelSchlick(float vdoth, vec3 f0) {
+    return f0 + (1.0 - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+}
+
+vec3 blackbodyApprox(float temperatureKelvin) {
+    float t = clamp(temperatureKelvin, 1000.0, 12000.0) / 1000.0;
+    vec3 color;
+    if (t <= 6.6) {
+        color.r = 1.0;
+        color.g = clamp(0.39008158 * log(t) - 0.63184144, 0.0, 1.0);
+    } else {
+        color.r = clamp(1.29293619 * pow(t - 6.0, -0.13320476), 0.0, 1.0);
+        color.g = clamp(1.12989086 * pow(t - 6.0, -0.07551485), 0.0, 1.0);
+    }
+    color.b = t >= 6.6 ? 1.0 : (t <= 1.9 ? 0.0 : clamp(0.54320679 * log(t - 1.0) - 1.19625409, 0.0, 1.0));
+    return color;
 }
 
 float computeFogFactor(float fogDistance) {
@@ -263,6 +296,11 @@ void main() {
     vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
     float vertexAo = mix(0.72, 1.0, normalAo.a);
     vec2 voxelLight = texture(uVoxelLightTex, vTexCoord).rg;
+    vec4 material = texture(uMaterialTex, vTexCoord);
+    float roughness = clamp(material.r, 0.03, 1.0);
+    float f0Scalar = clamp(material.g, 0.02, 0.35);
+    float materialEmission = clamp(material.b, 0.0, 1.0);
+    float sss = clamp(material.a, 0.0, 1.0);
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
@@ -273,7 +311,12 @@ void main() {
     float blockLightMask = clamp(voxelLight.g, 0.0, 1.0);
 
     vec3 sunDir = normalize(uSunDirection);
+    vec3 viewDir = normalize(uCameraPos - worldPos);
+    vec3 halfDir = normalize(sunDir + viewDir);
     float ndotl = max(dot(normal, sunDir), 0.0);
+    float ndotv = max(dot(normal, viewDir), 0.04);
+    float ndoth = max(dot(normal, halfDir), 0.0);
+    float vdoth = max(dot(viewDir, halfDir), 0.0);
     float diffuse = pow(ndotl, 0.82);
     float shadow = shadowFactor(worldPos, normal);
     shadow *= contactShadow(worldPos, normal, voxelLight, shadow);
@@ -282,8 +325,16 @@ void main() {
     vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
     vec3 directSun = warmSunColor * diffuse * shadow * skyLightMask * uDirectSunStrength;
+    vec3 f0 = vec3(f0Scalar);
+    vec3 specF = fresnelSchlick(vdoth, f0);
+    float specD = ggxDistribution(ndoth, roughness);
+    float specG = smithG1(ndotl, roughness) * smithG1(ndotv, roughness);
+    vec3 directSpecular = warmSunColor * specF * (specD * specG / max(4.0 * ndotl * ndotv, 0.0001));
+    directSpecular *= ndotl * shadow * skyLightMask * uDirectSunStrength;
+    directSpecular *= mix(1.0, 0.28, roughness);
     vec3 skyAmbient = coolSkyColor * (0.10 + 0.90 * skyLightMask) * uSkyAmbientStrength;
     skyAmbient *= mix(vec3(1.0), uShadowTintColor, (1.0 - shadow) * clamp(uShadowTintStrength, 0.0, 1.0));
+    vec3 skySpecular = coolSkyColor * specF * pow(1.0 - roughness, 2.2) * (0.025 + 0.075 * skyLightMask);
 
     float minimumAmbientMask = mix(0.35, 1.0, skyLightMask);
     vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask;
@@ -291,16 +342,26 @@ void main() {
     float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
     vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
 
-    vec3 blockLightColor = mix(vec3(1.0, 0.70, 0.42), vanillaLight, 0.22);
-    vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
+    float blockLightCurve = pow(blockLightMask, 2.05);
+    vec3 warmBlockLight = vec3(1.0, 0.84, 0.58);
+    vec3 blockLightColor = mix(warmBlockLight, vanillaLight, 0.18);
+    vec3 blockLight = blockLightColor * blockLightCurve * uBlockLightStrength;
 
     vec3 totalLight = directSun + skyAmbient + minimumAmbient + fakeBounce + blockLight;
     totalLight = mix(totalLight, vanillaLight, 0.07);
 
     vec3 color = albedo * totalLight * vertexAo * mix(1.0, ssao, 0.65);
+    float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * shadow;
+    color += albedo * warmSunColor * backScatter * sss * 0.34;
+    float specularSurfaceMask = smoothstep(0.025, 0.14, f0Scalar) * (1.0 - roughness * 0.45);
+    color += (directSpecular + skySpecular) * vertexAo * mix(1.0, ssao, 0.35) * (0.72 + 0.58 * specularSurfaceMask);
     float shadowMask = (1.0 - shadow) * skyLightMask;
     color = desaturateLinear(color, shadowMask * uShadowDesaturation);
-    color += albedo * emissiveHint * emissiveHint * (0.35 + 0.45 * uBlockLightStrength);
+    float emissionStrength = max(emissiveHint * emissiveHint, materialEmission);
+    float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+    vec3 emissionTint = vec3(1.0, 0.88, 0.64);
+    vec3 emissionColor = mix(albedo, emissionTint * max(emissionLuma, 0.45), 0.42);
+    color += emissionColor * emissionStrength * (0.55 + 0.82 * uBlockLightStrength);
 
     if (uFogEnabled != 0) {
         float fogDistance = length(worldPos - uCameraPos);

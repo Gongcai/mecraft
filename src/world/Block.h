@@ -28,6 +28,22 @@ namespace BlockIds {
     void init();  // Called after BlockRegistry::init()
 }
 
+namespace BlockMaterialKinds {
+constexpr uint8_t DEFAULT = 0;
+constexpr uint8_t STONE = 1;
+constexpr uint8_t DIRT = 2;
+constexpr uint8_t GRASS = 3;
+constexpr uint8_t WOOD = 4;
+constexpr uint8_t LEAVES = 5;
+constexpr uint8_t PLANT = 6;
+constexpr uint8_t SAND = 7;
+constexpr uint8_t GLASS = 8;
+constexpr uint8_t WATER = 9;
+constexpr uint8_t ORE = 10;
+constexpr uint8_t EMISSIVE = 11;
+constexpr uint8_t METAL = 12;
+}
+
 enum class BlockRenderShape : uint8_t {
     Cube = 0,
     Cross = 1,
@@ -70,6 +86,7 @@ struct BlockDef {
     bool cutoutDistanceCull = true;
     std::string renderShapeName = "cube";
     uint8_t renderShapeTag = 0;
+    uint8_t materialKind = 0;
     std::string placementStrategy = "simple";
     std::string supportRule;
     BiomeTintKind biomeTint = BiomeTintKind::None;

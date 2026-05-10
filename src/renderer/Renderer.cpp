@@ -710,9 +710,11 @@ void Renderer::renderGBufferTerrain(const World& world) {
     constexpr GLfloat clearAlbedo[] = {0.0f, 0.0f, 0.0f, 0.0f};
     constexpr GLfloat clearNormal[] = {0.5f, 0.5f, 1.0f, 1.0f};
     constexpr GLfloat clearLight[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    constexpr GLfloat clearMaterial[] = {0.86f, 0.035f, 0.0f, 0.0f};
     glClearBufferfv(GL_COLOR, 0, clearAlbedo);
     glClearBufferfv(GL_COLOR, 1, clearNormal);
     glClearBufferfv(GL_COLOR, 2, clearLight);
+    glClearBufferfv(GL_COLOR, 3, clearMaterial);
     glClear(GL_DEPTH_BUFFER_BIT);
 
     releaseStaleMdiAllocations(world);
@@ -825,11 +827,12 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uAlbedoTex", 0);
     m_deferredLightingShader->setInt("uNormalAoTex", 1);
     m_deferredLightingShader->setInt("uVoxelLightTex", 2);
-    m_deferredLightingShader->setInt("uDepthTex", 3);
-    m_deferredLightingShader->setInt("uLightmapDay", 4);
-    m_deferredLightingShader->setInt("uLightmapNight", 5);
-    m_deferredLightingShader->setInt("uShadowMap", 6);
-    m_deferredLightingShader->setInt("uSsaoTex", 7);
+    m_deferredLightingShader->setInt("uMaterialTex", 3);
+    m_deferredLightingShader->setInt("uDepthTex", 4);
+    m_deferredLightingShader->setInt("uLightmapDay", 5);
+    m_deferredLightingShader->setInt("uLightmapNight", 6);
+    m_deferredLightingShader->setInt("uShadowMap", 7);
+    m_deferredLightingShader->setInt("uSsaoTex", 8);
     m_deferredLightingShader->setMat4("uViewProj", m_projection * m_view);
     m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
@@ -891,17 +894,21 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
+    glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
     renderFullscreen(*m_deferredLightingShader);
 
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);

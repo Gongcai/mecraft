@@ -42,14 +42,16 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_gAlbedo = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gNormalAo = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gVoxelLight = createTexture2D(GL_RG8, m_width, m_height, GL_RG, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    m_gMaterial = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
 
     glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT0, m_gAlbedo, 0);
     glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT1, m_gNormalAo, 0);
     glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT2, m_gVoxelLight, 0);
+    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT3, m_gMaterial, 0);
     glNamedFramebufferTexture(m_gBufferFbo, GL_DEPTH_ATTACHMENT, m_gDepth, 0);
-    const GLenum gBufferDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
-    glNamedFramebufferDrawBuffers(m_gBufferFbo, 3, gBufferDrawBuffers);
+    const GLenum gBufferDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
+    glNamedFramebufferDrawBuffers(m_gBufferFbo, 4, gBufferDrawBuffers);
     if (!checkFramebufferComplete(m_gBufferFbo, "GBuffer")) {
         shutdown();
         return false;
@@ -108,8 +110,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 void DeferredRenderTargets::bindGBuffer() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_gBufferFbo);
     glViewport(0, 0, m_width, m_height);
-    const GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
-    glDrawBuffers(3, drawBuffers);
+    const GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
+    glDrawBuffers(4, drawBuffers);
 }
 
 void DeferredRenderTargets::bindShadowMap() {
@@ -218,6 +220,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_gAlbedo,
         m_gNormalAo,
         m_gVoxelLight,
+        m_gMaterial,
         m_gDepth,
         m_shadowDepth,
         m_ssaoTex,
@@ -233,6 +236,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gAlbedo = 0;
     m_gNormalAo = 0;
     m_gVoxelLight = 0;
+    m_gMaterial = 0;
     m_gDepth = 0;
     m_shadowDepth = 0;
     m_ssaoTex = 0;

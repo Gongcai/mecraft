@@ -12,9 +12,11 @@
 
 #include <algorithm>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <map>
 #include <string>
+#include <string_view>
 
 #include "../resource/ResourceMgr.h"
 
@@ -88,6 +90,62 @@ BiomeTintKind parseBiomeTintKind(const nlohmann::json& blockJson) {
     return BiomeTintKind::None;
 }
 
+bool containsToken(const std::string_view value, const std::string_view token) {
+    return value.find(token) != std::string_view::npos;
+}
+
+bool containsAnyToken(const std::string_view value, std::initializer_list<std::string_view> tokens) {
+    for (const std::string_view token : tokens) {
+        if (containsToken(value, token)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint8_t inferBlockMaterialKind(const BlockDef& def) {
+    const std::string_view path = def.namespacedId.path();
+    if (def.isLightSource || def.lightLevel > 0 || containsAnyToken(path, {"torch", "lava", "glowstone", "sea_lantern", "lantern", "magma", "shroomlight"})) {
+        return BlockMaterialKinds::EMISSIVE;
+    }
+    if (def.renderShape == BlockRenderShape::Cross) {
+        return BlockMaterialKinds::PLANT;
+    }
+    if (def.renderLayer == BlockRenderLayer::Transparent) {
+        if (containsToken(path, "water")) {
+            return BlockMaterialKinds::WATER;
+        }
+        if (containsToken(path, "glass")) {
+            return BlockMaterialKinds::GLASS;
+        }
+    }
+    if (def.biomeTint == BiomeTintKind::Foliage || containsToken(path, "leaves")) {
+        return BlockMaterialKinds::LEAVES;
+    }
+    if (def.biomeTint == BiomeTintKind::Grass || path == "grass_block" || path == "grass") {
+        return BlockMaterialKinds::GRASS;
+    }
+    if (containsAnyToken(path, {"ore", "diamond", "coal", "emerald", "lapis", "redstone", "amethyst"})) {
+        return BlockMaterialKinds::ORE;
+    }
+    if (containsAnyToken(path, {"iron_block", "gold_block", "copper_block", "cut_copper", "raw_iron_block", "raw_gold_block", "raw_copper_block"})) {
+        return BlockMaterialKinds::METAL;
+    }
+    if (containsAnyToken(path, {"log", "wood", "planks", "stem", "hyphae", "bamboo"})) {
+        return BlockMaterialKinds::WOOD;
+    }
+    if (containsAnyToken(path, {"sand", "gravel"})) {
+        return BlockMaterialKinds::SAND;
+    }
+    if (containsAnyToken(path, {"dirt", "mud", "clay", "podzol", "mycelium"})) {
+        return BlockMaterialKinds::DIRT;
+    }
+    if (containsAnyToken(path, {"stone", "bedrock", "deepslate", "andesite", "diorite", "granite", "tuff", "basalt", "brick", "concrete"})) {
+        return BlockMaterialKinds::STONE;
+    }
+    return BlockMaterialKinds::DEFAULT;
+}
+
 BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool isTransparent) {
     if (blockJson.contains("renderLayer") && blockJson["renderLayer"].is_string()) {
         const std::string layer = blockJson["renderLayer"].get<std::string>();
@@ -143,6 +201,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].cutoutDistanceCull = true;
         s_blocks[i].renderShapeName = "cube";
         s_blocks[i].renderShapeTag = 0;
+        s_blocks[i].materialKind = BlockMaterialKinds::DEFAULT;
         s_blocks[i].placementStrategy = "simple";
         s_blocks[i].supportRule.clear();
         s_blocks[i].biomeTint = BiomeTintKind::None;
@@ -235,6 +294,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.cutoutDistanceCull = true;
         def.renderShapeName = "cube";
         def.renderShapeTag = 0;
+        def.materialKind = BlockMaterialKinds::DEFAULT;
         def.placementStrategy = "simple";
         def.supportRule.clear();
         def.namedTextureAnimations.clear();
@@ -298,6 +358,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("allowsFluidCoexistence") && blockJson["allowsFluidCoexistence"].is_boolean()) {
             def.allowsFluidCoexistence = blockJson["allowsFluidCoexistence"].get<bool>();
+        }
+        if (blockJson.contains("materialKind") && blockJson["materialKind"].is_number_integer()) {
+            const int materialKind = blockJson["materialKind"].get<int>();
+            def.materialKind = static_cast<uint8_t>(std::clamp(materialKind, 0, 15));
         }
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
@@ -444,6 +508,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             if (!properties.empty()) {
                 BlockStateRegistry::registerBlockProperties(id, std::move(properties), std::move(defaultState));
             }
+        }
+
+        if (!(blockJson.contains("materialKind") && blockJson["materialKind"].is_number_integer())) {
+            def.materialKind = inferBlockMaterialKind(def);
         }
 
         s_blocks[id] = def;

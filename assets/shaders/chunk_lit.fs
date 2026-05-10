@@ -14,6 +14,7 @@ in float vAnimated;
 in float vFogDist;
 in vec3 vWorldPos;
 flat in float vTintKind;
+flat in float vMaterialKind;
 in vec2 vTintUV;
 
 uniform sampler2DArray texArray;
@@ -251,13 +252,20 @@ uniform vec3 uCameraPos;
         vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.35, 1.0, skyLightMask);
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
         vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
-        vec3 blockLightColor = mix(vec3(1.0, 0.70, 0.42), vanillaLight, 0.22);
+        vec3 blockLightColor = mix(vec3(1.0, 0.84, 0.58), vanillaLight, 0.18);
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
         vec3 lightColor = directSun + skyAmbient + minimumAmbient + fakeBounce + blockLight;
         lightColor = mix(lightColor, vanillaLight, 0.10);
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;
+        if (int(round(vMaterialKind)) == 11) {
+            float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+            float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);
+            float emissionMask = smoothstep(0.34, 0.72, max(emissionLuma, emissionPeak * 0.72));
+            vec3 emissionColor = mix(albedo, vec3(1.0, 0.88, 0.64) * max(emissionLuma, 0.45), 0.42);
+            finalColor += emissionColor * emissionMask * (0.42 + 0.64 * uBlockLightStrength);
+        }
         finalColor = desaturateLinear(finalColor, (1.0 - diffuse) * skyLightMask * uShadowDesaturation * 0.45);
 
         if (uFogEnabled != 0) {
