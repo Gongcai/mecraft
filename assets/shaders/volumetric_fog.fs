@@ -6,7 +6,9 @@ out vec4 FragColor;
 uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
+uniform sampler2D uShadowMap;
 uniform mat4 uInvViewProj;
+uniform mat4 uShadowViewProj;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
@@ -21,6 +23,12 @@ uniform float uVolumetricFogStrength;
 uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
+uniform float uShadowDistance;
+uniform float uShadowConstantBias;
+uniform float uShadowSlopeBias;
+uniform float uVolumetricLightStrength;
+uniform int uShadowsEnabled;
+uniform int uShadowLightMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 
@@ -102,6 +110,47 @@ float henyeyGreenstein(float cosTheta, float g) {
     return 0.0795775 * (1.0 - g2) / (denom * sqrt(denom));
 }
 
+float shadowProjectionFade(vec3 proj) {
+    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
+    float edgeFade = smoothstep(0.010, 0.060, min(edgeDistance.x, edgeDistance.y));
+    float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
+    return clamp(edgeFade * farFade, 0.0, 1.0);
+}
+
+float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
+    if (uShadowsEnabled == 0) {
+        return 1.0;
+    }
+
+    float viewDistance = length(worldPos - uCameraPos);
+    float distanceFade = 1.0 - smoothstep(uShadowDistance * 0.58, uShadowDistance * 0.92, viewDistance);
+    if (distanceFade <= 0.001) {
+        return 1.0;
+    }
+
+    vec3 offsetPos = worldPos + normalize(lightDir) * 0.10;
+    vec4 lightClip = uShadowViewProj * vec4(offsetPos, 1.0);
+    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
+    proj = proj * 0.5 + 0.5;
+    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
+        return 1.0;
+    }
+
+    ivec2 size = textureSize(uShadowMap, 0);
+    vec2 texel = 1.0 / vec2(size);
+    float slopeBias = uShadowSlopeBias * 0.35 * (1.0 + clamp(viewDistance / 220.0, 0.0, 1.0));
+    float bias = max(uShadowConstantBias * 2.0, slopeBias);
+    float lit = 0.0;
+    lit += (proj.z - bias <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
+    lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2( texel.x, 0.0)).r) ? 1.0 : 0.0;
+    lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2(-texel.x, 0.0)).r) ? 1.0 : 0.0;
+    lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2(0.0,  texel.y)).r) ? 1.0 : 0.0;
+    lit *= 0.25;
+
+    float visibility = mix(1.0, lit, shadowProjectionFade(proj) * distanceFade);
+    return clamp(visibility, 0.0, 1.0);
+}
+
 void main() {
     float depth = texture(uDepthTex, vTexCoord).r;
     if (depth >= 1.0) {
@@ -133,11 +182,15 @@ void main() {
     float moonForward = pow(moonDot, 10.0) * clamp(uMoonVisibility, 0.0, 1.0);
     float sunPhase = rayleighPhase(dot(viewDir, sunDir)) * 0.35 + henyeyGreenstein(dot(viewDir, sunDir), 0.58) * 0.65;
     float moonPhase = rayleighPhase(dot(viewDir, moonDir)) * 0.55 + henyeyGreenstein(dot(viewDir, moonDir), 0.36) * 0.45;
-    fogColor += uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
-                sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
-    fogColor += uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
+    vec3 sunScatterColor = uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
+                           sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
+    vec3 moonScatterColor = uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
+    fogColor += sunScatterColor + moonScatterColor;
     float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
     fogColor = mix(fogColor, fogColor * vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
+    vec3 shadowLightDir = uShadowLightMode == 1 ? moonDir : sunDir;
+    float directLightWeight = clamp(sunVisibility + clamp(uMoonVisibility, 0.0, 1.0) * nightFactor, 0.0, 1.0);
+    vec3 directFogColor = sunScatterColor + moonScatterColor;
 
     float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
     float baseDensity = (0.00010 + 0.00024 * horizon) *
@@ -165,7 +218,12 @@ void main() {
         float stepTransmittance = exp(-opticalStep);
         float stepOpacity = clamp(1.0 - stepTransmittance, 0.0, 0.18);
         float powder = 1.0 - exp(-structure * heightDensity * 0.65);
-        vec3 stepColor = fogColor * (0.86 + powder * 0.28);
+        float shadowVisibility = sampleVolumetricShadow(samplePos, shadowLightDir);
+        vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
+        vec3 stepColor = fogColor * (0.72 + powder * 0.18);
+        stepColor += shadowedDirect * (0.45 + powder * 0.65) *
+                     clamp(uVolumetricLightStrength, 0.0, 2.0) *
+                     directLightWeight;
         scattering += transmittance * stepColor * stepOpacity;
         transmittance *= stepTransmittance;
     }

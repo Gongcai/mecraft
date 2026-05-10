@@ -374,7 +374,13 @@ Bruneton LUT 后置条件：
 - 降低 deferred/forward aerial perspective 的晴天白雾基底，避免体积雾开关被普通远景雾淹没。
 - 雾输出仍保持 RGB scattering / A transmittance，合成公式不变。
 - `volumetric_composite.fs` 加入基于 full-res depth 的 5-tap 空间上采样，降低 half-res 雾在方块边缘的漏光和白糊。
-- 本阶段仍不采样 shadow map；shadowed volumetric light / 丁达尔光束进入 5D。
+
+阶段 5D Low：
+
+- 体积雾步进中加入低成本 shadow map 采样，使用当前稳定的 no-warp shadow view-proj，不启用 DerivativeMain warp。
+- 按 shadow distance 与 shadow atlas 边缘淡出，避免远处或阴影边缘出现硬块。
+- 先复用 `Sun Ray Strength` 控制 direct volumetric scattering 强度，不新增复杂 UI。
+- 本阶段仍不做 DerivativeMain 的 4 级多重散射和沿光方向 optical-depth 子步进；这些进入 5D/5E High。
 
 关键任务：
 

@@ -1032,7 +1032,9 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->setInt("uDepthTex", 0);
     m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
     m_volumetricFogShader->setInt("uNoiseTex", 2);
+    m_volumetricFogShader->setInt("uShadowMap", 3);
     m_volumetricFogShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
+    m_volumetricFogShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_volumetricFogShader->setVec3("uCameraPos", m_cameraPos);
     m_volumetricFogShader->setVec3("uSunDirection", skyColors.sunDirection);
     m_volumetricFogShader->setVec3("uMoonDirection", skyColors.moonDirection);
@@ -1048,6 +1050,14 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->setFloat("uWeatherMist", weather.mist);
     m_volumetricFogShader->setFloat("uWeatherWetness", weather.wetness);
     m_volumetricFogShader->setFloat("uWeatherStorm", weather.storm);
+    m_volumetricFogShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    m_volumetricFogShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
+    m_volumetricFogShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
+    m_volumetricFogShader->setFloat("uVolumetricLightStrength", m_pipelineSettings.sunRayStrength);
+    bool moonShadowActive = false;
+    currentShadowLightDirection(world, &moonShadowActive);
+    m_volumetricFogShader->setInt("uShadowLightMode", moonShadowActive ? 1 : 0);
+    m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_volumetricFogShader->setFloat("uTime", static_cast<float>(std::fmod(Time::getGameTime(), 8192.0)));
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
@@ -1058,7 +1068,11 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
     renderFullscreen(*m_volumetricFogShader);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1);
