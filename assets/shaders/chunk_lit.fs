@@ -172,6 +172,40 @@ uniform vec3 uCameraPos;
         return max(color, vec3(0.0));
     }
 
+    float materialRoughness(float materialKind) {
+        int kind = int(round(materialKind));
+        if (kind == 1) return 0.78;
+        if (kind == 2) return 0.96;
+        if (kind == 3) return 0.88;
+        if (kind == 4) return 0.68;
+        if (kind == 5) return 0.74;
+        if (kind == 6) return 0.82;
+        if (kind == 7) return 0.92;
+        if (kind == 8) return 0.08;
+        if (kind == 9) return 0.03;
+        if (kind == 10) return 0.42;
+        if (kind == 11) return 0.44;
+        if (kind == 12) return 0.30;
+        return 0.84;
+    }
+
+    float materialSss(float materialKind) {
+        int kind = int(round(materialKind));
+        if (kind == 3) return 0.26;
+        if (kind == 5) return 0.72;
+        if (kind == 6) return 0.78;
+        return 0.0;
+    }
+
+    float hammonDiffuseApprox(float ndotl, float ndotv, float roughness) {
+        float facing = ndotl * 0.5 + 0.5;
+        float viewWrap = ndotv * 0.5 + 0.5;
+        float roughWrap = mix(0.05, 0.28, clamp(roughness, 0.0, 1.0));
+        return pow(max(facing, 0.0), mix(1.25, 0.72, roughness)) *
+               mix(1.0, viewWrap, 0.22) *
+               (1.0 + roughWrap * (1.0 - ndotl));
+    }
+
     // Ambient Occlusion brightness levels
     // Level 0 (fully occluded corner) = 0.72, level 3 (open) = 1.0
     // Keep the range narrow so corners are darkened but never go jet-black.
@@ -348,29 +382,40 @@ uniform vec3 uCameraPos;
         vec3 normal = decodeFaceNormal(vNormal);
         vec3 sunDir = normalize(uSunDirection);
         vec3 moonDir = normalize(uMoonDirection);
-        float diffuse = pow(max(dot(normal, sunDir), 0.0), 0.82);
-        float moonDiffuse = pow(max(dot(normal, moonDir), 0.0), 0.68);
+        vec3 viewDir = normalize(uCameraPos - vWorldPos);
+        float roughness = materialRoughness(vMaterialKind);
+        float sss = materialSss(vMaterialKind);
+        float ndotl = max(dot(normal, sunDir), 0.0);
+        float ndotv = max(dot(normal, viewDir), 0.04);
+        float diffuse = hammonDiffuseApprox(ndotl, ndotv, roughness);
+        float moonDiffuse = pow(max(dot(normal, moonDir) * 0.5 + 0.5, 0.0), 1.15);
 
         vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
         vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
         vec3 capturedSky = (uSkyCaptureEnabled != 0) ? sampleSkyIrradiance(normal) : coolSkyColor;
         float skyCaptureInfluence = (uSkyCaptureEnabled != 0) ? mix(0.12, 0.34, 1.0 - clamp(uSkyIntensity, 0.0, 1.0)) : 0.0;
         coolSkyColor = mix(coolSkyColor, capturedSky, skyCaptureInfluence);
-        vec3 directSun = warmSunColor * diffuse * skyLightMask * uDirectSunStrength;
+        vec3 directSun = warmSunColor * diffuse * skyLightMask * uDirectSunStrength * (1.18 + 0.20 * (1.0 - roughness));
         float moonMask = nightSkyMask;
         vec3 moonFill = uMoonLightColor * moonMask * (0.026 + 0.052 * uSkyAmbientStrength);
         vec3 directMoon = uMoonLightColor * moonDiffuse * moonMask * (0.36 + 0.18 * uSkyAmbientStrength);
-        vec3 skyAmbient = coolSkyColor * (0.10 + 0.90 * outdoorSkyMask) * uSkyAmbientStrength + moonFill;
-        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.35, 1.0, outdoorSkyMask);
+        float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 skyAmbient = coolSkyColor * (0.045 + 0.78 * outdoorSkyMask) *
+                          uSkyAmbientStrength *
+                          mix(0.48, 1.0, upward) +
+                          moonFill;
+        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.28, 0.92, outdoorSkyMask);
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
         vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
         vec3 blockLightColor = mix(vec3(1.0, 0.84, 0.58), vanillaLight, 0.18);
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
         vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight;
-        lightColor = mix(lightColor, vanillaLight, 0.10);
+        lightColor = mix(lightColor, vanillaLight, 0.035);
 
         // Combine texture, lightmap color, and AO
         vec3 finalColor = albedo * lightColor * aoFactor;
+        float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask;
+        finalColor += albedo * warmSunColor * backScatter * sss * (0.38 + 0.16 * uDirectSunStrength);
         if (int(round(vMaterialKind)) == 11) {
             float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
             float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);

@@ -43,36 +43,36 @@ vec3 decodeFaceNormal(float face) {
 }
 
 vec4 vanillaMaterialParams(float materialKind, float emissiveHint) {
-    float roughness = 0.86;
-    float f0 = 0.035;
+    float roughness = 0.84;
+    float f0 = 0.040;
     float emission = 0.0;
     float sss = 0.0;
     int kind = int(round(materialKind));
 
     if (kind == 1) {          // stone
-        roughness = 0.92;
-        f0 = 0.040;
+        roughness = 0.78;
+        f0 = 0.055;
     } else if (kind == 2) {   // dirt
-        roughness = 0.98;
-        f0 = 0.025;
+        roughness = 0.96;
+        f0 = 0.030;
     } else if (kind == 3) {   // grass
-        roughness = 0.94;
-        f0 = 0.030;
-        sss = 0.14;
-    } else if (kind == 4) {   // wood
-        roughness = 0.76;
-        f0 = 0.040;
-    } else if (kind == 5) {   // leaves
         roughness = 0.88;
-        f0 = 0.030;
-        sss = 0.42;
+        f0 = 0.035;
+        sss = 0.26;
+    } else if (kind == 4) {   // wood
+        roughness = 0.68;
+        f0 = 0.050;
+    } else if (kind == 5) {   // leaves
+        roughness = 0.74;
+        f0 = 0.040;
+        sss = 0.72;
     } else if (kind == 6) {   // plant
-        roughness = 0.90;
-        f0 = 0.025;
-        sss = 0.55;
+        roughness = 0.82;
+        f0 = 0.032;
+        sss = 0.78;
     } else if (kind == 7) {   // sand
-        roughness = 1.00;
-        f0 = 0.020;
+        roughness = 0.92;
+        f0 = 0.026;
     } else if (kind == 8) {   // glass
         roughness = 0.08;
         f0 = 0.060;
@@ -80,15 +80,15 @@ vec4 vanillaMaterialParams(float materialKind, float emissiveHint) {
         roughness = 0.03;
         f0 = 0.020;
     } else if (kind == 10) {  // ore
-        roughness = 0.50;
-        f0 = 0.090;
+        roughness = 0.42;
+        f0 = 0.120;
     } else if (kind == 11) {  // emissive
-        roughness = 0.52;
-        f0 = 0.050;
-        emission = emissiveHint;
+        roughness = 0.44;
+        f0 = 0.060;
+        emission = pow(emissiveHint, 1.35);
     } else if (kind == 12) {  // metal-ish vanilla blocks
-        roughness = 0.38;
-        f0 = 0.180;
+        roughness = 0.30;
+        f0 = 0.260;
     }
 
     return vec4(roughness, f0, emission, sss);

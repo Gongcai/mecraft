@@ -253,6 +253,13 @@ World HDR Scene FBO
   - 矿石高亮可先用颜色通道对比度检测，后续改 registry。
   - leaves/grass 使用 SSS factor。
 
+阶段 2B.1 光照/材质基线：
+
+- 当前工程已有 4-bit `materialKind` 顶点打包与 `GMaterial`，先沿用这条轻量 registry 路线。
+- 调整默认 vanilla material 参数：草/叶/植物提高 SSS，石头/矿石/金属提高 specular response，木头/沙/土保持较高粗糙度但不再完全哑光。
+- deferred 与 forward 透明路径改用更有方向性的粗糙漫反射近似，减少 vanilla light 回混，让太阳直射、阴影区和天空环境光拉开。
+- 细化材质推断规则，减少花草、苔藓、矿物类落入默认材质。
+
 验收标准：
 
 - 石头、泥土、草、树叶、水、玻璃、矿石、火把在同一光照下响应不同。

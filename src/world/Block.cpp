@@ -108,7 +108,7 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     if (def.isLightSource || def.lightLevel > 0 || containsAnyToken(path, {"torch", "lava", "glowstone", "sea_lantern", "lantern", "magma", "shroomlight"})) {
         return BlockMaterialKinds::EMISSIVE;
     }
-    if (def.renderShape == BlockRenderShape::Cross) {
+    if (def.renderShape == BlockRenderShape::Cross || containsAnyToken(path, {"flower", "rose", "dandelion", "fern", "sapling", "bush"})) {
         return BlockMaterialKinds::PLANT;
     }
     if (def.renderLayer == BlockRenderLayer::Transparent) {
@@ -122,10 +122,10 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     if (def.biomeTint == BiomeTintKind::Foliage || containsToken(path, "leaves")) {
         return BlockMaterialKinds::LEAVES;
     }
-    if (def.biomeTint == BiomeTintKind::Grass || path == "grass_block" || path == "grass") {
+    if (def.biomeTint == BiomeTintKind::Grass || path == "grass_block" || path == "grass" || containsAnyToken(path, {"moss", "vine"})) {
         return BlockMaterialKinds::GRASS;
     }
-    if (containsAnyToken(path, {"ore", "diamond", "coal", "emerald", "lapis", "redstone", "amethyst"})) {
+    if (containsAnyToken(path, {"ore", "diamond", "coal", "emerald", "lapis", "redstone", "amethyst", "quartz"})) {
         return BlockMaterialKinds::ORE;
     }
     if (containsAnyToken(path, {"iron_block", "gold_block", "copper_block", "cut_copper", "raw_iron_block", "raw_gold_block", "raw_copper_block"})) {
