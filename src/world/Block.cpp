@@ -146,6 +146,26 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     return BlockMaterialKinds::DEFAULT;
 }
 
+bool parseMaterialKind(const nlohmann::json& blockJson, uint8_t& outKind) {
+    const auto materialIt = blockJson.find("materialKind");
+    if (materialIt == blockJson.end()) {
+        return false;
+    }
+
+    if (materialIt->is_number_integer()) {
+        const int materialKind = materialIt->get<int>();
+        outKind = static_cast<uint8_t>(std::clamp(materialKind, 0, static_cast<int>(BlockMaterialKinds::MAX_BUILTIN)));
+        return true;
+    }
+
+    if (materialIt->is_string()) {
+        const std::string materialName = materialIt->get<std::string>();
+        return BlockMaterials::tryParseKindName(materialName, outKind);
+    }
+
+    return false;
+}
+
 BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool isTransparent) {
     if (blockJson.contains("renderLayer") && blockJson["renderLayer"].is_string()) {
         const std::string layer = blockJson["renderLayer"].get<std::string>();
@@ -359,10 +379,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("allowsFluidCoexistence") && blockJson["allowsFluidCoexistence"].is_boolean()) {
             def.allowsFluidCoexistence = blockJson["allowsFluidCoexistence"].get<bool>();
         }
-        if (blockJson.contains("materialKind") && blockJson["materialKind"].is_number_integer()) {
-            const int materialKind = blockJson["materialKind"].get<int>();
-            def.materialKind = static_cast<uint8_t>(std::clamp(materialKind, 0, 15));
-        }
+        const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
             const auto& tex = blockJson["textures"];
@@ -510,7 +527,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
 
-        if (!(blockJson.contains("materialKind") && blockJson["materialKind"].is_number_integer())) {
+        if (!hasExplicitMaterialKind) {
             def.materialKind = inferBlockMaterialKind(def);
         }
 

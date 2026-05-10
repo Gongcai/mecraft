@@ -1524,12 +1524,13 @@ bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
     return true;
 }
 
-bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
-                                 const int face,
-                                 const int x,
-                                 const int y,
-                                 const int z,
-                                 FaceCell& outCell) {
+bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapshot,
+                                          const int face,
+                                          const int x,
+                                          const int y,
+                                          const int z,
+                                          const bool waterTarget,
+                                          FaceCell& outCell) {
     const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
     if (blockId == 0) {
         return false;
@@ -1537,6 +1538,9 @@ bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
 
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (!isTransparentCubeCandidate(def)) {
+        return false;
+    }
+    if (usesWaterRendering(def) != waterTarget) {
         return false;
     }
 
@@ -1552,6 +1556,24 @@ bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
     outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
     return true;
+}
+
+bool populateTransparentFaceCell(const SubChunkMeshingSnapshot& snapshot,
+                                 const int face,
+                                 const int x,
+                                 const int y,
+                                 const int z,
+                                 FaceCell& outCell) {
+    return populateTransparentFaceCellForTarget(snapshot, face, x, y, z, false, outCell);
+}
+
+bool populateWaterMaterialFaceCell(const SubChunkMeshingSnapshot& snapshot,
+                                   const int face,
+                                   const int x,
+                                   const int y,
+                                   const int z,
+                                   FaceCell& outCell) {
+    return populateTransparentFaceCellForTarget(snapshot, face, x, y, z, true, outCell);
 }
 
 bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
@@ -1744,6 +1766,12 @@ void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkM
                          meshData.transparentFaceCountBeforeGreedy,
                          meshData.transparentFaceCountAfterGreedy,
                          populateTransparentFaceCell);
+    buildCubeGreedyFaces(snapshot,
+                         meshData,
+                         meshData.waterVertices,
+                         meshData.transparentFaceCountBeforeGreedy,
+                         meshData.transparentFaceCountAfterGreedy,
+                         populateWaterMaterialFaceCell);
 }
 
 void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
@@ -2677,7 +2705,7 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
         }
 
         auto& target = def.renderLayer == BlockRenderLayer::Transparent
-            ? meshData.transparentVertices
+            ? (usesWaterRendering(def) ? meshData.waterVertices : meshData.transparentVertices)
             : (def.renderLayer == BlockRenderLayer::Cutout
                 ? cutoutTargetFor(meshData, def)
                 : meshData.opaqueVertices);
