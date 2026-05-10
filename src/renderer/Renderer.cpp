@@ -476,6 +476,8 @@ Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
     stats.opaqueCommands = m_worldRenderBuffer.opaqueCommandCount();
     stats.cutoutCommands = m_worldRenderBuffer.cutoutCommandCount();
     stats.transparentCommands = m_worldRenderBuffer.transparentCommandCount();
+    stats.transparentGenericCommands = m_transparentPassPlan.genericCommands;
+    stats.transparentWaterCommands = m_transparentPassPlan.waterCommands;
     stats.opaqueLogicalCommands = m_worldRenderBuffer.opaqueLogicalCommandCount();
     stats.cutoutLogicalCommands = m_worldRenderBuffer.cutoutLogicalCommandCount();
     stats.transparentLogicalCommands = m_worldRenderBuffer.transparentLogicalCommandCount();
@@ -491,6 +493,8 @@ Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
     stats.opaqueVertices = m_worldRenderBuffer.opaqueVertexCount();
     stats.cutoutVertices = m_worldRenderBuffer.cutoutVertexCount();
     stats.transparentVertices = m_worldRenderBuffer.transparentVertexCount();
+    stats.transparentGenericVertices = m_transparentPassPlan.genericVertices;
+    stats.transparentWaterVertices = m_transparentPassPlan.waterVertices;
     stats.cutoutCandidates = m_cutoutCandidatesThisFrame;
     stats.cutoutSkippedByDistance = m_cutoutSkippedByDistanceThisFrame;
     stats.mdiSubChunkTests = m_mdiSubChunkTestsThisFrame;
@@ -596,6 +600,7 @@ void Renderer::renderWorldForward(const World& world, const RenderFrameData& fra
 
     m_worldRenderBuffer.beginFrame();
     m_deferredTransparentBatch.clear();
+    m_transparentPassPlan.clear();
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     bindChunkRenderState(frame, texArray);
@@ -906,6 +911,7 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     drainMeshingResults(world);
     m_worldRenderBuffer.beginFrame();
     m_deferredTransparentBatch.clear();
+    m_transparentPassPlan.clear();
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     m_chunkShader = m_chunkGBufferShader;
@@ -944,6 +950,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         return;
     }
     std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
+    const TransparentPassPlan preservedTransparentPlan = m_transparentPassPlan;
     const ShadowProjectionData shadowProjectionData =
         buildShadowProjectionData(camera, shadowLightDirectionFromSkyColors(frame.skyColors));
     m_shadowModelView = shadowProjectionData.modelView;
@@ -987,6 +994,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     m_deferredTransparentBatch = std::move(preservedTransparentBatch);
+    m_transparentPassPlan = preservedTransparentPlan;
 }
 
 void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
@@ -1612,7 +1620,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                             static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
                             static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
                         const glm::vec3 toCamera = sectionCenter - m_cameraPos;
-                        m_deferredTransparentBatch.push_back({mesh.transparentRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Generic});
+                        addTransparentBatch(mesh.transparentRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Generic);
                     }
                     if (mesh.waterRange.vertexCount > 0) {
                         const glm::vec3 sectionCenter(
@@ -1620,7 +1628,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                             static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
                             static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
                         const glm::vec3 toCamera = sectionCenter - m_cameraPos;
-                        m_deferredTransparentBatch.push_back({mesh.waterRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Water});
+                        addTransparentBatch(mesh.waterRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Water);
                     }
                 }
             } else {
@@ -1918,10 +1926,27 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
     m_chunkShader->setInt("uForceBaseLod", 0);
 }
 
+void Renderer::addTransparentBatch(const GpuMeshRange& range,
+                                   const float distanceSq,
+                                   const TransparentBatchKind kind) {
+    if (range.vertexCount == 0) {
+        return;
+    }
+
+    m_deferredTransparentBatch.push_back({range, distanceSq, kind});
+    if (kind == TransparentBatchKind::Water) {
+        ++m_transparentPassPlan.waterCommands;
+        m_transparentPassPlan.waterVertices += range.vertexCount;
+    } else {
+        ++m_transparentPassPlan.genericCommands;
+        m_transparentPassPlan.genericVertices += range.vertexCount;
+    }
+}
+
 
 void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
     if (m_useMultiDrawIndirect) {
-        if (m_deferredTransparentBatch.empty()) return;
+        if (!m_transparentPassPlan.hasAny()) return;
 
         m_chunkShader->setInt("uForceBaseLod", 1);
         glEnable(GL_BLEND);

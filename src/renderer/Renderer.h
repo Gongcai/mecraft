@@ -187,6 +187,8 @@ public:
         size_t opaqueCommands = 0;
         size_t cutoutCommands = 0;
         size_t transparentCommands = 0;
+        size_t transparentGenericCommands = 0;
+        size_t transparentWaterCommands = 0;
         size_t opaqueLogicalCommands = 0;
         size_t cutoutLogicalCommands = 0;
         size_t transparentLogicalCommands = 0;
@@ -202,6 +204,8 @@ public:
         uint64_t opaqueVertices = 0;
         uint64_t cutoutVertices = 0;
         uint64_t transparentVertices = 0;
+        uint64_t transparentGenericVertices = 0;
+        uint64_t transparentWaterVertices = 0;
         int cutoutCandidates = 0;
         int cutoutSkippedByDistance = 0;
         int mdiSubChunkTests = 0;
@@ -322,6 +326,24 @@ private:
         bool moonShadowActive = false;
     };
 
+    struct TransparentPassPlan {
+        size_t genericCommands = 0;
+        size_t waterCommands = 0;
+        uint64_t genericVertices = 0;
+        uint64_t waterVertices = 0;
+
+        void clear() {
+            genericCommands = 0;
+            waterCommands = 0;
+            genericVertices = 0;
+            waterVertices = 0;
+        }
+
+        [[nodiscard]] bool hasGeneric() const { return genericCommands > 0; }
+        [[nodiscard]] bool hasWater() const { return waterCommands > 0; }
+        [[nodiscard]] bool hasAny() const { return hasGeneric() || hasWater(); }
+    };
+
     struct ChunkRenderColumnCache {
         Chunk* chunk = nullptr;
         int64_t chunkKey = 0;
@@ -405,6 +427,7 @@ private:
                                             bool frustumCull = true);
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
+    void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);
     void syncChunkRenderColumns(const World& world);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
     void releaseStaleMdiAllocations(const World& world);
@@ -551,6 +574,7 @@ private:
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
     std::vector<ChunkRenderEntry> m_deferredTransparentEntries;
     std::vector<DrawBatchEntry> m_deferredTransparentBatch;  // MDI path
+    TransparentPassPlan m_transparentPassPlan;
     uint64_t m_chunkRenderColumnsRevision = 0;
     int m_chunkRenderColumnsRegionSize = 0;
 };

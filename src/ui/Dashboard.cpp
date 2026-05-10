@@ -272,6 +272,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
                     static_cast<unsigned long long>(renderWork.opaqueCommands),
                     static_cast<unsigned long long>(renderWork.cutoutCommands),
                     static_cast<unsigned long long>(renderWork.transparentCommands));
+        ImGui::Text("Transparent Batches Generic/Water: %llu / %llu",
+                    static_cast<unsigned long long>(renderWork.transparentGenericCommands),
+                    static_cast<unsigned long long>(renderWork.transparentWaterCommands));
         ImGui::Text("Logical Commands O/C/T: %llu / %llu / %llu",
                     static_cast<unsigned long long>(renderWork.opaqueLogicalCommands),
                     static_cast<unsigned long long>(renderWork.cutoutLogicalCommands),
@@ -280,6 +283,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
                     static_cast<unsigned long long>(renderWork.opaqueVertices),
                     static_cast<unsigned long long>(renderWork.cutoutVertices),
                     static_cast<unsigned long long>(renderWork.transparentVertices));
+        ImGui::Text("Transparent Vertices Generic/Water: %llu / %llu",
+                    static_cast<unsigned long long>(renderWork.transparentGenericVertices),
+                    static_cast<unsigned long long>(renderWork.transparentWaterVertices));
         ImGui::Text("Vertex Read O/C/T: %.2f / %.2f / %.2f MiB",
                     toMiB(renderWork.opaqueVertices),
                     toMiB(renderWork.cutoutVertices),
