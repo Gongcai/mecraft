@@ -102,6 +102,16 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    glCreateFramebuffers(1, &m_skyCaptureFbo);
+    m_skyCaptureTex = createTexture2D(GL_RGBA16F, kSkyCaptureWidth, kSkyCaptureHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_skyCaptureFbo, GL_COLOR_ATTACHMENT0, m_skyCaptureTex, 0);
+    const GLenum skyCaptureDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_skyCaptureFbo, 1, &skyCaptureDrawBuffer);
+    if (!checkFramebufferComplete(m_skyCaptureFbo, "SkyCapture")) {
+        shutdown();
+        return false;
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     m_ready = true;
     return true;
@@ -225,7 +235,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_shadowDepth,
         m_ssaoTex,
         m_sceneLightingTex,
-        m_halfResTex
+        m_halfResTex,
+        m_skyCaptureTex
     };
     for (const GLuint texture : textures) {
         if (texture != 0) {
@@ -242,8 +253,9 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoTex = 0;
     m_sceneLightingTex = 0;
     m_halfResTex = 0;
+    m_skyCaptureTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_halfResFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_halfResFbo, m_skyCaptureFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -255,6 +267,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoFbo = 0;
     m_sceneLightingFbo = 0;
     m_halfResFbo = 0;
+    m_skyCaptureFbo = 0;
     m_ready = false;
 }
 

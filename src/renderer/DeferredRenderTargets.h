@@ -31,6 +31,10 @@ public:
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] GLuint halfResTexture() const { return m_halfResTex; }
+    [[nodiscard]] GLuint skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
+    [[nodiscard]] GLuint skyCaptureTexture() const { return m_skyCaptureTex; }
+    [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
+    [[nodiscard]] int skyCaptureHeight() const { return kSkyCaptureHeight; }
     [[nodiscard]] GLuint fullscreenVao() const { return m_fullscreenVao; }
     [[nodiscard]] int width() const { return m_width; }
     [[nodiscard]] int height() const { return m_height; }
@@ -38,6 +42,9 @@ public:
     [[nodiscard]] bool isReady() const { return m_ready; }
 
 private:
+    static constexpr int kSkyCaptureWidth = 256;
+    static constexpr int kSkyCaptureHeight = 128;
+
     static GLuint createTexture2D(GLenum internalFormat,
                                   int width,
                                   int height,
@@ -68,6 +75,9 @@ private:
 
     GLuint m_halfResFbo = 0;
     GLuint m_halfResTex = 0;
+
+    GLuint m_skyCaptureFbo = 0;
+    GLuint m_skyCaptureTex = 0;
 
     GLuint m_fullscreenVao = 0;
 

@@ -63,6 +63,9 @@ public:
                          bool repeat = false,
                          bool linear = true,
                          bool flipVertically = false);
+    bool probeAtmosphereLut(const std::string& name,
+                            const std::string& path,
+                            size_t expectedBytes = 0) const;
     [[nodiscard]] GLuint getTexture2D(const std::string& name) const;
     [[nodiscard]] GLuint getTexture(const std::string& name) const;
 

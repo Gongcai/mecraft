@@ -591,7 +591,7 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uDebugLightMode", m_debugLightMode);
     shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    shader.setVec3("uSunDirection", currentSunDirection(world));
+    shader.setVec3("uSunDirection", skyColors.sunDirection);
     shader.setVec3("uSunLightColor", skyColors.sunLightColor);
     shader.setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
     shader.setVec3("uShadowTintColor", skyColors.shadowTintColor);
@@ -659,6 +659,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
         restoreCapturedFramebufferViewport(window);
         return false;
     }
+    renderSkyCapturePass(world);
 
     m_deferredFrameActive = true;
 #ifdef MECRAFT_DEBUG
@@ -838,7 +839,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredLightingShader->setVec3("uCameraPos", m_cameraPos);
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    m_deferredLightingShader->setVec3("uSunDirection", currentSunDirection(world));
+    m_deferredLightingShader->setVec3("uSunDirection", skyColors.sunDirection);
     m_deferredLightingShader->setVec3("uSunLightColor", skyColors.sunLightColor);
     m_deferredLightingShader->setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
     m_deferredLightingShader->setVec3("uShadowTintColor", skyColors.shadowTintColor);
@@ -929,6 +930,13 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::renderSkyCapturePass(const World& world) {
+    m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),
+                                           m_deferredTargets.skyCaptureFramebuffer(),
+                                           m_deferredTargets.skyCaptureWidth(),
+                                           m_deferredTargets.skyCaptureHeight());
+}
+
 void Renderer::renderFullscreen(Shader& shader) const {
     shader.use();
     glBindVertexArray(m_deferredTargets.fullscreenVao());
@@ -937,8 +945,7 @@ void Renderer::renderFullscreen(Shader& shader) const {
 }
 
 glm::vec3 Renderer::currentSunDirection(const World& world) const {
-    const float angle = world.getDayNightSystem().getCelestialAngleRadians();
-    glm::vec3 direction(0.25f, std::sin(angle), -std::cos(angle));
+    glm::vec3 direction = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()).sunDirection;
     if (direction.y < 0.08f) {
         direction.y = 0.08f;
     }

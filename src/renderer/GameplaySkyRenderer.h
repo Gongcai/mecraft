@@ -25,14 +25,25 @@ public:
         glm::vec3 shadowTintColor = glm::vec3(0.55f, 0.62f, 0.88f);
         glm::vec3 horizonScatterColor = glm::vec3(0.80f, 0.88f, 1.0f);
         glm::vec3 cloudColor = glm::vec3(1.0f);
+        glm::vec3 moonDirection = glm::vec3(0.0f, -1.0f, 0.0f);
+        glm::vec3 moonLightColor = glm::vec3(0.32f, 0.40f, 0.70f);
         float haloStrength = 0.0f;
         float horizonHaze = 0.35f;
         float sunGlare = 0.0f;
+        float sunVisibility = 1.0f;
+        float moonVisibility = 0.0f;
+        float dayFactor = 1.0f;
+        float nightFactor = 0.0f;
+        float horizonFactor = 0.0f;
+        float rainFactor = 0.0f;
+        float wetnessFactor = 0.0f;
+        float cloudinessFactor = 0.0f;
     };
 
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void render(const Camera& camera, float aspect, const DayNightSystem& dayNight);
+    void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height);
 
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
     [[nodiscard]] glm::vec3 getLastFogColor() const;

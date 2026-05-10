@@ -330,6 +330,7 @@ private:
     void renderShadowMap(const World& world, const Camera& camera);
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const World& world);
+    void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentSunDirection(const World& world) const;
     glm::mat4 buildShadowViewProj(const Camera& camera, const glm::vec3& sunDirection) const;

@@ -413,6 +413,35 @@ GLuint ResourceMgr::loadTexture2D(const std::string& name,
     return textureID;
 }
 
+bool ResourceMgr::probeAtmosphereLut(const std::string& name,
+                                     const std::string& path,
+                                     const size_t expectedBytes) const {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path lutPath(path);
+    const bool exists = fs::exists(lutPath, ec);
+    if (ec || !exists) {
+        std::cerr << "Atmosphere LUT missing: " << name << " at " << path << "\n";
+        return false;
+    }
+
+    const uintmax_t size = fs::file_size(lutPath, ec);
+    if (ec) {
+        std::cerr << "Atmosphere LUT unreadable: " << name << " at " << path << "\n";
+        return false;
+    }
+
+    std::cerr << "Atmosphere LUT: " << name << " bytes=" << size;
+    if (expectedBytes > 0) {
+        std::cerr << " expected=" << expectedBytes;
+        if (size != static_cast<uintmax_t>(expectedBytes)) {
+            std::cerr << " mismatch";
+        }
+    }
+    std::cerr << "\n";
+    return expectedBytes == 0 || size == static_cast<uintmax_t>(expectedBytes);
+}
+
 GLuint ResourceMgr::getTexture2D(const std::string& name) const {
     auto it = m_texture2D.find(name);
     if (it != m_texture2D.end()) {

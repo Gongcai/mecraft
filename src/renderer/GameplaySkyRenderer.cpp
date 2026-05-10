@@ -270,10 +270,80 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
     glDepthMask(depthMaskWasEnabled);
 }
 
+void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
+                                           const GLuint framebuffer,
+                                           const int width,
+                                           const int height) {
+    m_lastColors = computeSkyColors(dayNight);
+    if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || width <= 0 || height <= 0) {
+        return;
+    }
+
+    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
+    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+    GLint viewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    GLint previousFramebuffer = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glViewport(0, 0, width, height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+
+    m_shader->use();
+    m_shader->setInt("uMode", 4);
+    m_shader->setMat4("uView", glm::mat4(1.0f));
+    m_shader->setMat4("uProjection", glm::mat4(1.0f));
+    m_shader->setMat4("uModel", glm::mat4(1.0f));
+    m_shader->setVec3("uSkyTopColor", m_lastColors.top);
+    m_shader->setVec3("uSkyHorizonColor", m_lastColors.horizon);
+    m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
+    m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
+    m_shader->setVec3("uSunScatterColor", m_lastColors.sunScatter);
+    m_shader->setVec3("uMoonLightColor", m_lastColors.moonLightColor);
+    m_shader->setFloat("uHorizonHaze", m_lastColors.horizonHaze);
+    m_shader->setFloat("uSunGlare", m_lastColors.sunGlare);
+    m_shader->setFloat("uSunVisibility", m_lastColors.sunVisibility);
+    m_shader->setFloat("uMoonVisibility", m_lastColors.moonVisibility);
+    m_shader->setFloat("uNightFactor", m_lastColors.nightFactor);
+    m_shader->setVec4("uTintColor", glm::vec4(1.0f));
+    m_shader->setVec2("uUvMin", glm::vec2(0.0f));
+    m_shader->setVec2("uUvMax", glm::vec2(1.0f));
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindVertexArray(m_skyVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    if (blendWasEnabled) {
+        glEnable(GL_BLEND);
+    } else {
+        glDisable(GL_BLEND);
+    }
+    if (cullFaceWasEnabled) {
+        glEnable(GL_CULL_FACE);
+    } else {
+        glDisable(GL_CULL_FACE);
+    }
+    if (depthTestWasEnabled) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+}
+
 GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNightSystem& dayNight) const {
     const float skyIntensity = dayNight.getSkyIntensity();
     const float progress = dayNight.getDayProgress01();
     const glm::vec3 sunDirection = directionFromAngle(dayNight.getCelestialAngleRadians());
+    const glm::vec3 moonDirection = directionFromAngle(std::fmod(dayNight.getCelestialAngleRadians() + kPi, kTwoPi));
     const float sunHeight = std::clamp(sunDirection.y, -0.25f, 1.0f);
     const float sunriseWindow = 1.0f - std::abs(progress - 0.0f) / 0.07f;
     const float sunriseWrapWindow = 1.0f - std::abs(progress - 1.0f) / 0.07f;
@@ -306,9 +376,11 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     colors.horizon = lerp(colors.horizon, duskHorizon, warm);
     colors.fog = lerp(colors.horizon, glm::vec3(0.80f, 0.90f, 1.0f), skyIntensity * (1.0f - warm) * 0.22f);
     colors.sunDirection = sunDirection;
+    colors.moonDirection = moonDirection;
     colors.sunScatter = lerp(noonScatter, goldenScatter, warm);
     colors.sunLightColor = lerp(nightSunLight, noonSunLight, skyIntensity);
     colors.sunLightColor = lerp(colors.sunLightColor, warmSunLight, warm * 0.58f);
+    colors.moonLightColor = glm::vec3(0.30f, 0.38f, 0.68f);
     colors.skyAmbientColor = lerp(nightAmbient, dayAmbient, skyIntensity);
     colors.skyAmbientColor = lerp(colors.skyAmbientColor, warmAmbient, warm * 0.32f);
     colors.shadowTintColor = lerp(nightShadowTint, dayShadowTint, skyIntensity);
@@ -318,6 +390,14 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     colors.sunGlare = std::clamp(0.18f * skyIntensity + 0.78f * warm, 0.0f, 1.0f);
     colors.haloStrength = std::clamp(warm + smoothstep(0.05f, 0.35f, sunHeight) * skyIntensity * 0.28f, 0.0f, 1.0f);
     colors.halo = glm::vec4(colors.sunScatter, 0.30f * skyIntensity + 0.68f * warm);
+    colors.sunVisibility = smoothstep(-0.08f, 0.18f, sunDirection.y) * skyIntensity;
+    colors.moonVisibility = smoothstep(-0.08f, 0.18f, moonDirection.y) * (1.0f - skyIntensity);
+    colors.dayFactor = skyIntensity;
+    colors.nightFactor = 1.0f - skyIntensity;
+    colors.horizonFactor = std::clamp(1.0f - std::abs(sunDirection.y), 0.0f, 1.0f);
+    colors.rainFactor = 0.0f;
+    colors.wetnessFactor = 0.0f;
+    colors.cloudinessFactor = m_cloudMeshInfo.valid ? 0.35f : 0.0f;
 
     const glm::vec3 cloudDayColor = lerp(colors.horizon, glm::vec3(1.0f), 0.84f);
     const glm::vec3 cloudNightColor(0.14f, 0.16f, 0.25f);
@@ -590,9 +670,14 @@ void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float as
     m_shader->setVec3("uSkyTopColor", colors.top);
     m_shader->setVec3("uSkyHorizonColor", colors.horizon);
     m_shader->setVec3("uSunDirection", colors.sunDirection);
+    m_shader->setVec3("uMoonDirection", colors.moonDirection);
     m_shader->setVec3("uSunScatterColor", colors.sunScatter);
+    m_shader->setVec3("uMoonLightColor", colors.moonLightColor);
     m_shader->setFloat("uHorizonHaze", colors.horizonHaze);
     m_shader->setFloat("uSunGlare", colors.sunGlare);
+    m_shader->setFloat("uSunVisibility", colors.sunVisibility);
+    m_shader->setFloat("uMoonVisibility", colors.moonVisibility);
+    m_shader->setFloat("uNightFactor", colors.nightFactor);
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
