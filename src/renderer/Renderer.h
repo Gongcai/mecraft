@@ -67,6 +67,7 @@ public:
         float autoExposureBias = 0.0f;
         bool sunRaysEnabled = true;
         bool waterEffectsEnabled = true;
+        bool transparentCompositeEnabled = true;
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
@@ -352,6 +353,7 @@ private:
     void bindWaterEffectUniforms(Shader& shader, bool enabled) const;
     void renderWorldForward(const World& world);
     bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window);
+    void renderTransparentCompositePass(const World& world, const Window& window);
     void renderGBufferTerrain(const World& world);
     void renderShadowMap(const World& world, const Camera& camera);
     void renderSsaoPass(const Camera& camera, const Window& window);

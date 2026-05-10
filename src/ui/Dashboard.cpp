@@ -390,6 +390,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Bias", &pipeline.autoExposureBias, -2.0f, 2.0f, "%.2f EV");
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);
         pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Transparent Composite", &pipeline.transparentCompositeEnabled);
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);

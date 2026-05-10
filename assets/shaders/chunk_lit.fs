@@ -24,7 +24,9 @@ uniform sampler2D uGrassColormap;
 uniform sampler2D uFoliageColormap;
 uniform sampler2D uOpaqueDepthTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler2D uSceneColorTex;
 uniform int uSkyCaptureEnabled;
+uniform int uCompositeInputsEnabled;
 uniform int uForceBaseLod;
 uniform int uDepthSofteningEnabled;
 uniform int uFogEnabled;
@@ -147,7 +149,7 @@ uniform vec3 uCameraPos;
         return n / 1.76;
     }
 
-    vec3 waterEnhance(vec3 color, float alpha, float faceNormal, float depthGap) {
+    vec3 waterEnhance(vec3 color, float alpha, float faceNormal, float depthGap, vec2 screenUv) {
         float topFace = step(-0.5, faceNormal) * step(faceNormal, 0.5);
         vec2 p = vWorldPos.xz;
         float n = waterNoise(p, uAnimationTime);
@@ -165,6 +167,14 @@ uniform vec3 uCameraPos;
         float absorption = clamp(depthGap * 280.0, 0.0, 1.0);
         float distanceAbsorption = smoothstep(12.0, 84.0, vFogDist);
         vec3 waterTint = mix(shallowTint, deepTint, max(absorption, distanceAbsorption * 0.45));
+
+        if (uCompositeInputsEnabled != 0) {
+            vec2 refractUv = clamp(screenUv + vec2(wave, nFine - 0.5) * (0.0015 + 0.0040 * fresnel) * topFace,
+                                   vec2(0.0),
+                                   vec2(1.0));
+            vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb;
+            color = mix(color, sceneColor * waterTint, (0.08 + 0.14 * absorption) * topFace);
+        }
 
         color = mix(color, color * waterTint, 0.34 + absorption * 0.26);
         color += shallowTint * (0.038 + 0.024 * wave + 0.055 * shimmer) * topFace;
@@ -449,8 +459,12 @@ uniform vec3 uCameraPos;
 
         float alpha = texColor.a;
         float waterDepthGap = 0.0;
+        vec2 screenUv = vec2(0.0);
+        if (uDepthSofteningEnabled != 0 || uCompositeInputsEnabled != 0) {
+            vec2 opaqueDepthSize = max(vec2(textureSize(uOpaqueDepthTex, 0)), vec2(1.0));
+            screenUv = gl_FragCoord.xy / opaqueDepthSize;
+        }
         if (uDepthSofteningEnabled != 0 && alpha < 0.999) {
-            vec2 screenUv = gl_FragCoord.xy / vec2(textureSize(uOpaqueDepthTex, 0));
             float opaqueDepth = texture(uOpaqueDepthTex, screenUv).r;
             if (opaqueDepth < 1.0) {
                 float depthGap = max(opaqueDepth - gl_FragCoord.z, 0.0);
@@ -463,7 +477,7 @@ uniform vec3 uCameraPos;
         }
 
         if (waterLayer) {
-            finalColor = waterEnhance(finalColor, alpha, vNormal, waterDepthGap);
+            finalColor = waterEnhance(finalColor, alpha, vNormal, waterDepthGap, screenUv);
             alpha = clamp(alpha + 0.08, texColor.a * 0.70, 0.92);
         }
 

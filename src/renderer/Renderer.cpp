@@ -196,22 +196,46 @@ void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, c
 }
 
 void Renderer::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window) {
+    renderTransparentCompositePass(world, window);
+
+    renderBlockBreakOverlay(world, blockBreak);
+    renderBlockOutline(world, target);
+    endFrame(window);
+}
+
+void Renderer::renderTransparentCompositePass(const World& world, const Window& window) {
     if (m_deferredFrameActive) {
         restoreCapturedFramebufferViewport(window);
     }
 
     m_chunkShader = m_chunkForwardShader;
     if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
+        const bool deferredInputsEnabled = m_deferredFrameActive && m_deferredTargets.isReady();
+        const bool compositeInputsEnabled = deferredInputsEnabled && m_pipelineSettings.transparentCompositeEnabled;
+        if (compositeInputsEnabled) {
+            const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
+            const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+            m_deferredTargets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
+            restoreCapturedFramebufferViewport(window);
+        }
+
         const TextureArray& texArray = m_resourceMgr->getTextureArray();
         bindChunkRenderState(world, texArray);
-        if (m_deferredFrameActive) {
+        m_chunkShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
+        if (deferredInputsEnabled) {
             m_chunkShader->setInt("uDepthSofteningEnabled", 1);
             glActiveTexture(GL_TEXTURE5);
             glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
         }
+        if (compositeInputsEnabled) {
+            glActiveTexture(GL_TEXTURE7);
+            glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+        }
         bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
         renderTransparentChunks(m_deferredTransparentEntries);
         glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE5);
@@ -227,10 +251,6 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
-
-    renderBlockBreakOverlay(world, blockBreak);
-    renderBlockOutline(world, target);
-    endFrame(window);
 }
 
 void Renderer::setMeshingSubmitBudget(const int budget) {
@@ -626,7 +646,9 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uFoliageColormap", 4);
     shader.setInt("uOpaqueDepthTex", 5);
     shader.setInt("uSkyCaptureTex", 6);
+    shader.setInt("uSceneColorTex", 7);
     shader.setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
+    shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uForceBaseLod", 0);
     shader.setInt("uDepthSofteningEnabled", 0);
     shader.setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
