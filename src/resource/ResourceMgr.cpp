@@ -251,6 +251,7 @@ void ResourceMgr::init() {
     loadShader("ssao", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/ssao.fs");
     loadShader("bloom_extract", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_extract.fs");
     loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_blur.fs");
+    loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/exposure_downsample.fs");
     loadShader("drop_block", SHADERS_DIR "/drop_block.vs", SHADERS_DIR "/drop_block.fs");
     loadShader("outline", SHADERS_DIR "/outline.vs", SHADERS_DIR "/outline.fs");
     loadShader("break_overlay", SHADERS_DIR "/break_overlay.vs", SHADERS_DIR "/break_overlay.fs");

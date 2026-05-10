@@ -361,6 +361,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.1f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Bloom Strength", &pipeline.bloomStrength, 0.0f, 1.2f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("Auto Exposure", &pipeline.autoExposureEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Min", &pipeline.autoExposureMin, 0.1f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Max", &pipeline.autoExposureMax, 0.2f, 4.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Speed", &pipeline.autoExposureSpeed, 0.1f, 6.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Bias", &pipeline.autoExposureBias, -2.0f, 2.0f, "%.2f EV");
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);
         pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
@@ -382,6 +387,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.fakeBounceStrength = 0.04f;
             pipeline.bloomThreshold = 1.05f;
             pipeline.bloomStrength = 0.10f;
+            pipeline.autoExposureEnabled = false;
+            pipeline.autoExposureMin = 0.70f;
+            pipeline.autoExposureMax = 1.40f;
+            pipeline.autoExposureSpeed = 1.0f;
+            pipeline.autoExposureBias = 0.0f;
             pipeline.exposure = 1.0f;
             pipeline.vibrance = 0.0f;
             pipeline.kappaGradingStrength = 0.0f;
@@ -415,6 +425,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.fakeBounceStrength = 0.06f;
             pipeline.bloomThreshold = 0.82f;
             pipeline.bloomStrength = 0.18f;
+            pipeline.autoExposureEnabled = true;
+            pipeline.autoExposureMin = 0.55f;
+            pipeline.autoExposureMax = 1.60f;
+            pipeline.autoExposureSpeed = 1.4f;
+            pipeline.autoExposureBias = -0.10f;
             pipeline.exposure = 1.0f;
             pipeline.vibrance = 0.0f;
             pipeline.kappaGradingStrength = 0.65f;
@@ -448,6 +463,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.fakeBounceStrength = 0.08f;
             pipeline.bloomThreshold = 0.72f;
             pipeline.bloomStrength = 0.24f;
+            pipeline.autoExposureEnabled = true;
+            pipeline.autoExposureMin = 0.45f;
+            pipeline.autoExposureMax = 1.75f;
+            pipeline.autoExposureSpeed = 1.7f;
+            pipeline.autoExposureBias = -0.15f;
             pipeline.exposure = 0.95f;
             pipeline.vibrance = 0.04f;
             pipeline.kappaGradingStrength = 0.82f;

@@ -314,6 +314,12 @@ void Game::renderFrame(const float frameTime) {
     effects.bloomEnabled = pipelineSettings.bloomEnabled;
     effects.bloomThreshold = pipelineSettings.bloomThreshold;
     effects.bloomStrength = pipelineSettings.bloomStrength;
+    effects.autoExposureEnabled = pipelineSettings.autoExposureEnabled;
+    effects.autoExposureMin = pipelineSettings.autoExposureMin;
+    effects.autoExposureMax = pipelineSettings.autoExposureMax;
+    effects.autoExposureSpeed = pipelineSettings.autoExposureSpeed;
+    effects.autoExposureBias = pipelineSettings.autoExposureBias;
+    effects.autoExposureDayFactor = m_world.getDayNightSystem().getSkyIntensity();
     effects.sunRaysEnabled = pipelineSettings.sunRaysEnabled;
     effects.sunRayStrength = pipelineSettings.sunRayStrength;
     effects.shaderpackGradingEnabled = pipelineSettings.shaderpackGradingEnabled;
@@ -380,7 +386,7 @@ void Game::renderFrame(const float frameTime) {
         m_firstPersonHeldItemRenderer.setContinuousSwing(false);
     }
 
-    m_postProcessRenderer.endSceneAndComposite(m_window);
+    m_postProcessRenderer.endSceneAndComposite(m_window, frameTime);
 
     PlayerStatsData playerStats;
     playerStats.health = playerQuery.getHealth();

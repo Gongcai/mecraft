@@ -5,6 +5,7 @@
 #include "../resource/ResourceMgr.h"
 
 #include <algorithm>
+#include <cmath>
 #include <glm/vec2.hpp>
 
 PostProcessRenderer::~PostProcessRenderer() {
@@ -15,6 +16,7 @@ void PostProcessRenderer::init(ResourceMgr& resourceMgr) {
     m_postProcessShader = resourceMgr.getShader("postprocess");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
+    m_exposureDownsampleShader = resourceMgr.getShader("exposure_downsample");
     m_noiseTexture = resourceMgr.getTexture2D("shader_bayer256");
     if (m_noiseTexture == 0) {
         m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
@@ -28,6 +30,7 @@ void PostProcessRenderer::shutdown() {
     m_postProcessShader = nullptr;
     m_bloomExtractShader = nullptr;
     m_bloomBlurShader = nullptr;
+    m_exposureDownsampleShader = nullptr;
     m_noiseTexture = 0;
     m_sceneCaptured = false;
     m_targetWidth = 0;
@@ -39,6 +42,11 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.underwaterStrength = std::clamp(m_effects.underwaterStrength, 0.0f, 1.0f);
     m_effects.bloomThreshold = std::clamp(m_effects.bloomThreshold, 0.0f, 4.0f);
     m_effects.bloomStrength = std::clamp(m_effects.bloomStrength, 0.0f, 2.0f);
+    m_effects.autoExposureMin = std::clamp(m_effects.autoExposureMin, 0.05f, 8.0f);
+    m_effects.autoExposureMax = std::clamp(m_effects.autoExposureMax, m_effects.autoExposureMin, 8.0f);
+    m_effects.autoExposureSpeed = std::clamp(m_effects.autoExposureSpeed, 0.05f, 12.0f);
+    m_effects.autoExposureBias = std::clamp(m_effects.autoExposureBias, -3.0f, 3.0f);
+    m_effects.autoExposureDayFactor = std::clamp(m_effects.autoExposureDayFactor, 0.0f, 1.0f);
     m_effects.sunScreenPos.x = std::clamp(m_effects.sunScreenPos.x, -1.0f, 2.0f);
     m_effects.sunScreenPos.y = std::clamp(m_effects.sunScreenPos.y, -1.0f, 2.0f);
     m_effects.sunVisibility = std::clamp(m_effects.sunVisibility, 0.0f, 1.0f);
@@ -86,7 +94,7 @@ void PostProcessRenderer::beginScene(const Window& window) {
     m_sceneCaptured = true;
 }
 
-void PostProcessRenderer::endSceneAndComposite(const Window& window) {
+void PostProcessRenderer::endSceneAndComposite(const Window& window, const float frameTime) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
@@ -98,6 +106,9 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    const float resolvedExposure = updateAutoExposure(frameTime);
 
     bool hasBloom = false;
     if (m_effects.bloomEnabled && m_bloomExtractShader != nullptr && m_bloomBlurShader != nullptr &&
@@ -222,7 +233,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     m_postProcessShader->setVec3("uUnderwaterTint", m_effects.underwaterTint);
     m_postProcessShader->setFloat("uUnderwaterStrength", m_effects.underwaterStrength);
     m_postProcessShader->setFloat("uScreenRollRadians", m_effects.screenRollRadians);
-    m_postProcessShader->setFloat("uExposure", m_effects.exposure);
+    m_postProcessShader->setFloat("uExposure", resolvedExposure);
     m_postProcessShader->setFloat("uGamma", m_effects.gamma);
     m_postProcessShader->setFloat("uSaturation", m_effects.saturation);
     m_postProcessShader->setFloat("uContrast", m_effects.contrast);
@@ -246,6 +257,78 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+}
+
+float PostProcessRenderer::updateAutoExposure(const float frameTime) {
+    const float manualExposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
+    if (!m_effects.autoExposureEnabled || m_exposureDownsampleShader == nullptr ||
+        m_exposureMipCount <= 0 || m_sceneColorTex == 0 || m_fullscreenVao == 0) {
+        m_autoExposureInitialized = false;
+        m_adaptedExposure = 1.0f;
+        return manualExposure;
+    }
+
+    m_exposureDownsampleShader->use();
+    m_exposureDownsampleShader->setInt("uInputTex", 0);
+    glBindVertexArray(m_fullscreenVao);
+
+    GLuint sourceTex = m_sceneColorTex;
+    glm::ivec2 sourceSize(m_targetWidth, m_targetHeight);
+    bool sourceIsScene = true;
+    int finalMip = 0;
+    for (int mip = 0; mip < m_exposureMipCount; ++mip) {
+        if (m_exposureFbos[mip] == 0 || m_exposureTex[mip] == 0) {
+            break;
+        }
+        finalMip = mip;
+        glBindFramebuffer(GL_FRAMEBUFFER, m_exposureFbos[mip]);
+        glViewport(0, 0, m_exposureMipSize[mip].x, m_exposureMipSize[mip].y);
+        glClear(GL_COLOR_BUFFER_BIT);
+        m_exposureDownsampleShader->setBool("uSourceIsScene", sourceIsScene);
+        m_exposureDownsampleShader->setVec2("uSourceSize", glm::vec2(sourceSize));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sourceTex);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        sourceTex = m_exposureTex[mip];
+        sourceSize = m_exposureMipSize[mip];
+        sourceIsScene = false;
+        if (m_exposureMipSize[mip].x == 1 && m_exposureMipSize[mip].y == 1) {
+            break;
+        }
+    }
+
+    float exposureData[2] = {0.0f, 0.0f};
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_exposureFbos[finalMip]);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glReadPixels(0, 0, 1, 1, GL_RG, GL_FLOAT, exposureData);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindVertexArray(0);
+
+    const float weightedLogLum = exposureData[0];
+    const float weightSum = std::max(exposureData[1], 1e-4f);
+    const float averageLogLum = weightedLogLum / weightSum;
+    const float averageLum = std::max(std::exp(averageLogLum), 1e-5f);
+
+    const float dayFactor = m_effects.autoExposureDayFactor;
+    const float targetKey = (0.30f + 0.12f * dayFactor) * std::exp2(m_effects.autoExposureBias);
+    const float nightAwareMax = std::max(m_effects.autoExposureMin,
+                                         std::min(m_effects.autoExposureMax, 1.05f + 0.80f * dayFactor));
+    float targetExposure = targetKey / std::pow(averageLum, 0.85f);
+    targetExposure = std::clamp(targetExposure, m_effects.autoExposureMin, nightAwareMax);
+
+    if (!m_autoExposureInitialized) {
+        m_adaptedExposure = targetExposure;
+        m_autoExposureInitialized = true;
+    } else {
+        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 1.55f : 1.0f);
+        const float alpha = 1.0f - std::exp(-std::max(frameTime, 0.0f) * speed);
+        m_adaptedExposure += (targetExposure - m_adaptedExposure) * std::clamp(alpha, 0.0f, 1.0f);
+    }
+
+    return std::clamp(manualExposure * m_adaptedExposure, 0.05f, 8.0f);
 }
 
 bool PostProcessRenderer::ensureRenderTargets(const int width, const int height) {
@@ -305,8 +388,34 @@ bool PostProcessRenderer::ensureRenderTargets(const int width, const int height)
         }
     }
 
+    glm::ivec2 exposureSize(std::max(1, width / 2), std::max(1, height / 2));
+    m_exposureMipCount = 0;
+    for (int mip = 0; mip < kExposureMipCount; ++mip) {
+        m_exposureMipSize[mip] = exposureSize;
+        glCreateFramebuffers(1, &m_exposureFbos[mip]);
+        glCreateTextures(GL_TEXTURE_2D, 1, &m_exposureTex[mip]);
+        glTextureStorage2D(m_exposureTex[mip], 1, GL_RG16F, exposureSize.x, exposureSize.y);
+        glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glNamedFramebufferTexture(m_exposureFbos[mip], GL_COLOR_ATTACHMENT0, m_exposureTex[mip], 0);
+        const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+        glNamedFramebufferDrawBuffers(m_exposureFbos[mip], 1, &drawBuffer);
+        if (glCheckNamedFramebufferStatus(m_exposureFbos[mip], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            destroyRenderTargets();
+            return false;
+        }
+        ++m_exposureMipCount;
+        if (exposureSize.x == 1 && exposureSize.y == 1) {
+            break;
+        }
+        exposureSize = glm::ivec2(std::max(1, exposureSize.x / 2), std::max(1, exposureSize.y / 2));
+    }
+
     m_targetWidth = width;
     m_targetHeight = height;
+    m_autoExposureInitialized = false;
     return true;
 }
 
@@ -336,6 +445,19 @@ void PostProcessRenderer::destroyRenderTargets() {
             }
         }
     }
+    for (int mip = 0; mip < kExposureMipCount; ++mip) {
+        m_exposureMipSize[mip] = glm::ivec2(0);
+        if (m_exposureTex[mip] != 0) {
+            glDeleteTextures(1, &m_exposureTex[mip]);
+            m_exposureTex[mip] = 0;
+        }
+        if (m_exposureFbos[mip] != 0) {
+            glDeleteFramebuffers(1, &m_exposureFbos[mip]);
+            m_exposureFbos[mip] = 0;
+        }
+    }
+    m_exposureMipCount = 0;
+    m_autoExposureInitialized = false;
 }
 
 void PostProcessRenderer::initFullscreenTriangle() {

@@ -17,6 +17,12 @@ struct PostProcessEffects {
     bool bloomEnabled = true;
     float bloomThreshold = 0.82f;
     float bloomStrength = 0.18f;
+    bool autoExposureEnabled = true;
+    float autoExposureMin = 0.55f;
+    float autoExposureMax = 1.85f;
+    float autoExposureSpeed = 1.4f;
+    float autoExposureBias = 0.0f;
+    float autoExposureDayFactor = 1.0f;
     bool sunRaysEnabled = true;
     glm::vec2 sunScreenPos = glm::vec2(0.5f);
     float sunVisibility = 0.0f;
@@ -50,21 +56,24 @@ public:
     void beginScene(const Window& window);
 
     // Composite captured scene to back buffer with active effects.
-    void endSceneAndComposite(const Window& window);
+    void endSceneAndComposite(const Window& window, float frameTime);
 
     void setEffects(const PostProcessEffects& effects);
 
 private:
     static constexpr int kBloomMipCount = 5;
+    static constexpr int kExposureMipCount = 13;
 
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();
     void initFullscreenTriangle();
     void destroyFullscreenTriangle();
+    float updateAutoExposure(float frameTime);
 
     Shader* m_postProcessShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
+    Shader* m_exposureDownsampleShader = nullptr;
     GLuint m_noiseTexture = 0;
 
     GLuint m_sceneFbo = 0;
@@ -73,12 +82,18 @@ private:
     GLuint m_bloomFbos[kBloomMipCount][2] = {};
     GLuint m_bloomTex[kBloomMipCount][2] = {};
     glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};
+    GLuint m_exposureFbos[kExposureMipCount] = {};
+    GLuint m_exposureTex[kExposureMipCount] = {};
+    glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
+    int m_exposureMipCount = 0;
 
     GLuint m_fullscreenVao = 0;
 
     int m_targetWidth = 0;
     int m_targetHeight = 0;
     bool m_sceneCaptured = false;
+    bool m_autoExposureInitialized = false;
+    float m_adaptedExposure = 1.0f;
 
     PostProcessEffects m_effects{};
 };

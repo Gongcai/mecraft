@@ -321,6 +321,7 @@ Bruneton LUT 后置条件：
   - temporal adaptation。
   - 变暗速度快于变亮速度。
   - manual/auto 切换。
+  - 当前 4C 初版采用 GPU 小 mip 链降采样到 1x1，再 CPU 读回单个曝光数据做 temporal adaptation；后续如出现读回 stall，再升级为 GPU history texture 或 histogram/compute path。
 - Tonemap：
   - ACES AcademyFit。
   - AgX Minimal。

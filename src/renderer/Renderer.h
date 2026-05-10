@@ -59,6 +59,11 @@ public:
         bool bloomEnabled = true;
         float bloomThreshold = 0.82f;
         float bloomStrength = 0.18f;
+        bool autoExposureEnabled = true;
+        float autoExposureMin = 0.55f;
+        float autoExposureMax = 1.60f;
+        float autoExposureSpeed = 1.4f;
+        float autoExposureBias = 0.0f;
         bool sunRaysEnabled = true;
         bool waterEffectsEnabled = true;
         bool shaderpackGradingEnabled = true;
