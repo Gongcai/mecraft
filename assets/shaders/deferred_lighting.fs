@@ -119,6 +119,15 @@ vec3 blackbodyApprox(float temperatureKelvin) {
     return color;
 }
 
+vec3 artisticSunIlluminance(vec3 sunColor, vec3 sunDir) {
+    float elevation = clamp(sunDir.y, 0.0, 1.0);
+    vec3 noonWarmth = vec3(1.10, 1.00, 0.84);
+    vec3 lowSunWarmth = vec3(1.38, 0.82, 0.42);
+    vec3 tint = mix(lowSunWarmth, noonWarmth, smoothstep(0.08, 0.62, elevation));
+    float energy = mix(1.35, 1.08, smoothstep(0.04, 0.70, elevation));
+    return max(sunColor * tint * energy, vec3(0.0));
+}
+
 vec2 directionToSkyCaptureUv(vec3 dir) {
     dir = normalize(dir);
     float phi = atan(dir.x, -dir.z);
@@ -459,13 +468,14 @@ void main() {
     float sunShadow = (uShadowLightMode == 0) ? shadow : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadow, 0.82) : 1.0;
 
-    vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
+    vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
+    warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
     vec3 capturedZenith = sampleSkyCapture(vec3(0.0, 1.0, 0.0));
     vec3 capturedNormalSky = sampleSkyIrradiance(normal);
     float skyCaptureInfluence = mix(0.18, 0.46, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
     coolSkyColor = mix(coolSkyColor, mix(capturedZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
-    float directEnergy = 1.18 + 0.20 * (1.0 - roughness);
+    float directEnergy = 1.42 + 0.28 * (1.0 - roughness);
     vec3 directSun = warmSunColor * diffuse * sunShadow * skyLightMask * uDirectSunStrength * directEnergy;
     float moonMask = nightSkyMask;
     vec3 moonFill = uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
@@ -478,7 +488,7 @@ void main() {
     directSpecular *= ndotl * sunShadow * skyLightMask * uDirectSunStrength;
     directSpecular *= mix(1.18, 0.18, roughness);
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 skyAmbient = coolSkyColor * (0.045 + 0.78 * outdoorSkyMask) *
+    vec3 skyAmbient = coolSkyColor * (0.032 + 0.62 * outdoorSkyMask) *
                       uSkyAmbientStrength *
                       mix(0.48, 1.0, upward) +
                       moonFill;
@@ -486,7 +496,7 @@ void main() {
     vec3 skySpecular = coolSkyColor * specF * pow(1.0 - roughness, 1.65) * (0.018 + 0.105 * outdoorSkyMask);
 
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
-    vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask;
+    vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.78;
 
     float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
     vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);

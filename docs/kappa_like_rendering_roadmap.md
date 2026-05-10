@@ -258,6 +258,7 @@ World HDR Scene FBO
 - 当前工程已有 4-bit `materialKind` 顶点打包与 `GMaterial`，先沿用这条轻量 registry 路线。
 - 调整默认 vanilla material 参数：草/叶/植物提高 SSS，石头/矿石/金属提高 specular response，木头/沙/土保持较高粗糙度但不再完全哑光。
 - deferred 与 forward 透明路径改用更有方向性的粗糙漫反射近似，减少 vanilla light 回混，让太阳直射、阴影区和天空环境光拉开。
+- 太阳直射增加独立色温函数：午间保留轻微暖色，低角度转金色；默认 preset 提高 direct sun、降低 sky ambient，避免光照只显示贴图本色。
 - 细化材质推断规则，减少花草、苔藓、矿物类落入默认材质。
 
 验收标准：

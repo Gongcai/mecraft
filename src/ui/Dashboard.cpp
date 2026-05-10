@@ -425,9 +425,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 3;
             pipeline.shadowWarpMode = 2;
-            pipeline.directSunStrength = 1.18f;
-            pipeline.skyAmbientStrength = 0.46f;
-            pipeline.minimumAmbient = 0.07f;
+            pipeline.directSunStrength = 1.36f;
+            pipeline.skyAmbientStrength = 0.36f;
+            pipeline.minimumAmbient = 0.055f;
             pipeline.shadowMinLight = 0.12f;
             pipeline.shadowContrast = 1.10f;
             pipeline.shadowTintStrength = 0.28f;
@@ -468,9 +468,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 3;
             pipeline.shadowWarpMode = 2;
-            pipeline.directSunStrength = 1.42f;
-            pipeline.skyAmbientStrength = 0.34f;
-            pipeline.minimumAmbient = 0.05f;
+            pipeline.directSunStrength = 1.58f;
+            pipeline.skyAmbientStrength = 0.28f;
+            pipeline.minimumAmbient = 0.04f;
             pipeline.shadowMinLight = 0.08f;
             pipeline.shadowContrast = 1.35f;
             pipeline.shadowTintStrength = 0.34f;

@@ -97,9 +97,9 @@ public:
         float splitToneStrength = 0.28f;
         float vignetteStrength = 0.08f;
         float shadowTintStrength = 0.28f;
-        float directSunStrength = 1.18f;
-        float skyAmbientStrength = 0.46f;
-        float minimumAmbient = 0.07f;
+        float directSunStrength = 1.36f;
+        float skyAmbientStrength = 0.36f;
+        float minimumAmbient = 0.055f;
         float shadowMinLight = 0.12f;
         float shadowContrast = 1.10f;
         float blockLightStrength = 1.00f;
