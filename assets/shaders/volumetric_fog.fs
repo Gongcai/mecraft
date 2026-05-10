@@ -117,9 +117,11 @@ float henyeyGreenstein(float cosTheta, float g) {
 
 float shadowProjectionFade(vec3 proj) {
     vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
-    float edgeFade = smoothstep(0.010, 0.060, min(edgeDistance.x, edgeDistance.y));
+    float texelUv = 1.0 / max(float(textureSize(uShadowMap, 0).x), 1.0);
+    float edgeFade = smoothstep(texelUv * 8.0, texelUv * 36.0, min(edgeDistance.x, edgeDistance.y));
+    float nearFade = smoothstep(0.002, 0.016, proj.z);
     float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
-    return clamp(edgeFade * farFade, 0.0, 1.0);
+    return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
 }
 
 vec3 worldToShadowProj(vec3 worldPos) {
@@ -127,6 +129,14 @@ vec3 worldToShadowProj(vec3 worldPos) {
     vec4 lightClip = uShadowProjection * lightView;
     vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
     return proj * 0.5 + 0.5;
+}
+
+float shadowDepthWorldScale() {
+    return max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+}
+
+float shadowDepthBiasFromWorld(float worldUnits) {
+    return worldUnits / shadowDepthWorldScale();
 }
 
 float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
@@ -140,7 +150,8 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
         return 1.0;
     }
 
-    vec3 offsetPos = worldPos + normalize(lightDir) * 0.10;
+    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
+    vec3 offsetPos = worldPos + normalize(lightDir) * texelWorld * 0.65;
     vec3 proj = worldToShadowProj(offsetPos);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
@@ -148,9 +159,10 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
 
     ivec2 size = textureSize(uShadowMap, 0);
     vec2 texel = 1.0 / vec2(size);
-    float texelBiasScale = clamp(uShadowTexelWorldSize / 0.09375, 0.65, 2.5);
-    float slopeBias = uShadowSlopeBias * 0.35 * (1.0 + clamp(viewDistance / 220.0, 0.0, 1.0));
-    float bias = max(uShadowConstantBias * 2.0, slopeBias) * texelBiasScale;
+    float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
+    float biasWorld = texelWorld * distanceScale *
+                      max(uShadowConstantBias * 72.0, uShadowSlopeBias * 32.0);
+    float bias = shadowDepthBiasFromWorld(biasWorld);
     float lit = 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2( texel.x, 0.0)).r) ? 1.0 : 0.0;

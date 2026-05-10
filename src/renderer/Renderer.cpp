@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cmath>
 #include <utility>
+#include <array>
 #include <vector>
 
 namespace {
@@ -1220,7 +1221,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
-    // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
+    // Projection V2 keeps runtime sampling on the stable no-warp path; radial/quartic remain debug-only.
     const int effectiveShadowWarpMode = 2;
     m_shadowDepthShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
@@ -1309,13 +1310,12 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uCloudShadowsEnabled", m_pipelineSettings.cloudShadowsEnabled ? 1 : 0);
-    // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
+    // Projection V2 keeps runtime sampling on the stable no-warp path; radial/quartic remain debug-only.
     const int effectiveShadowWarpMode = 2;
     m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
-    const float shadowDistanceScale = std::clamp(m_pipelineSettings.shadowDistance / 96.0f, 0.35f, 1.0f);
-    m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset * shadowDistanceScale);
+    m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
     m_deferredLightingShader->setFloat("uCloudShadowStrength", m_pipelineSettings.cloudShadowStrength);
     m_deferredLightingShader->setFloat("uCloudShadowScale", m_pipelineSettings.cloudShadowScale);
@@ -1482,6 +1482,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
     m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
+    m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
 
@@ -1558,17 +1559,52 @@ glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer:
 
 Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
-    const float extent = distance + std::max(8.0f, distance * 0.12f);
+    const float aspect = (std::abs(m_projection[0][0]) > 0.0001f)
+        ? std::clamp(std::abs(m_projection[1][1] / m_projection[0][0]), 0.25f, 4.0f)
+        : 1.0f;
+    const float nearPlane = std::max(0.01f, camera.getNear());
+    const float farPlane = std::clamp(distance, nearPlane + 1.0f, std::max(nearPlane + 1.0f, camera.getFar()));
+    const glm::mat4 cameraSliceProjection =
+        glm::perspective(glm::radians(camera.getFOV()), aspect, nearPlane, farPlane);
+    const glm::mat4 invCameraSliceViewProj = glm::inverse(cameraSliceProjection * camera.getViewMatrix());
+
+    std::array<glm::vec3, 8> frustumCorners{};
+    size_t cornerIndex = 0;
+    for (int z = 0; z < 2; ++z) {
+        for (int y = 0; y < 2; ++y) {
+            for (int x = 0; x < 2; ++x) {
+                const glm::vec4 clip(
+                    x == 0 ? -1.0f : 1.0f,
+                    y == 0 ? -1.0f : 1.0f,
+                    z == 0 ? -1.0f : 1.0f,
+                    1.0f);
+                glm::vec4 world = invCameraSliceViewProj * clip;
+                world /= std::max(std::abs(world.w), 0.00001f);
+                frustumCorners[cornerIndex++] = glm::vec3(world);
+            }
+        }
+    }
+
+    glm::vec3 center(0.0f);
+    for (const glm::vec3& corner : frustumCorners) {
+        center += corner;
+    }
+    center /= static_cast<float>(frustumCorners.size());
+
+    float radius = 0.0f;
+    for (const glm::vec3& corner : frustumCorners) {
+        radius = std::max(radius, glm::length(corner - center));
+    }
+    const float extent = std::max(16.0f, radius + std::max(6.0f, distance * 0.06f));
     const glm::vec3 lightForward = glm::normalize(-lightDirection);
     const glm::vec3 fallbackUp =
         (std::abs(glm::dot(lightForward, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.96f)
             ? glm::vec3(0.0f, 0.0f, 1.0f)
             : glm::vec3(0.0f, 1.0f, 0.0f);
 
-    // Keep the first shadowProjection foundation independent from camera yaw/pitch.
-    // View-dependent centering made the shadow boundary visibly reshape while turning.
-    glm::vec3 center = camera.getPosition();
-    const glm::vec3 lightPos = center - lightForward * distance;
+    const float casterDepth = extent + distance * 0.78f;
+    const float receiverDepth = extent + distance * 0.58f;
+    const glm::vec3 lightPos = center - lightForward * casterDepth;
     glm::mat4 view = glm::lookAt(lightPos, center, fallbackUp);
 
     const float resolution = static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
@@ -1577,9 +1613,9 @@ Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera&
     centerLight.x = std::round(centerLight.x / worldUnitsPerTexel) * worldUnitsPerTexel;
     centerLight.y = std::round(centerLight.y / worldUnitsPerTexel) * worldUnitsPerTexel;
     const glm::vec3 snappedCenter = glm::vec3(glm::inverse(view) * centerLight);
-    view = glm::lookAt(snappedCenter - lightForward * distance, snappedCenter, fallbackUp);
+    view = glm::lookAt(snappedCenter - lightForward * casterDepth, snappedCenter, fallbackUp);
 
-    const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, 0.1f, distance * 2.5f);
+    const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, 1.0f, casterDepth + receiverDepth);
     ShadowProjectionData data;
     data.modelView = view;
     data.projection = proj;

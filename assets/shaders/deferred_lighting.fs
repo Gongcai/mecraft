@@ -309,9 +309,35 @@ float shapeShadowVisibility(float lit) {
 
 float shadowProjectionFade(vec3 proj) {
     vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
-    float edgeFade = smoothstep(0.010, 0.055, min(edgeDistance.x, edgeDistance.y));
+    float texelUv = 1.0 / max(float(textureSize(uShadowMap, 0).x), 1.0);
+    float edgeFade = smoothstep(texelUv * 8.0, texelUv * 36.0, min(edgeDistance.x, edgeDistance.y));
+    float nearFade = smoothstep(0.002, 0.016, proj.z);
     float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
-    return clamp(edgeFade * farFade, 0.0, 1.0);
+    return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
+}
+
+float shadowDepthWorldScale() {
+    return max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+}
+
+float shadowDepthBiasFromWorld(float worldUnits) {
+    return worldUnits / shadowDepthWorldScale();
+}
+
+float shadowWorldBias(float ndotl, float viewDistance) {
+    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
+    float slope = 1.0 - clamp(ndotl, 0.0, 1.0);
+    float receiverScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
+    return texelWorld * receiverScale *
+           (uShadowConstantBias * 48.0 + uShadowSlopeBias * 64.0 * slope);
+}
+
+float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
+    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
+    float grazing = 1.0 - clamp(ndotl, 0.0, 1.0);
+    float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
+    float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
+    return texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
 }
 
 vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) {
@@ -334,11 +360,10 @@ float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensit
         return baseRadius;
     }
 
-    float projectionScale = max(abs(uShadowProjection[0][0]), 0.0001);
-    float projectionRadiusScale = projectionScale * max(uShadowExtent, 1.0);
-    float searchRadius = clamp(baseRadius * (0.78 + 0.22 * projectionRadiusScale) / max(warpDensity, 0.25),
-                               1.25,
-                               7.0);
+    float texelRadiusFromSoftness = max(uShadowSoftness, 0.1);
+    float searchRadius = clamp(baseRadius * (0.62 + texelRadiusFromSoftness * 0.16) / max(warpDensity, 0.25),
+                               1.0,
+                               8.0);
     vec2 blockerSearch = pcssBlockerSearch(proj, bias, searchRadius, jitter);
     float averageBlockerDepth = blockerSearch.x;
     float blockerCount = blockerSearch.y;
@@ -348,13 +373,12 @@ float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensit
     }
 
     float receiverToBlocker = max(proj.z - averageBlockerDepth, 0.0);
-    float shadowDepthWorldScale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
-    float receiverToBlockerWorld = receiverToBlocker * shadowDepthWorldScale;
+    float receiverToBlockerWorld = receiverToBlocker * shadowDepthWorldScale();
     float penumbraTexels = receiverToBlockerWorld / max(uShadowTexelWorldSize, 0.0001);
-    penumbraTexels *= 0.11 * uShadowPcssStrength / max(warpDensity, 0.25);
+    penumbraTexels *= 0.10 * uShadowPcssStrength / max(warpDensity, 0.25);
 
     float blockerConfidence = smoothstep(0.5, 3.5, blockerCount);
-    float adaptiveRadius = clamp(1.05 + penumbraTexels, 1.05, baseRadius);
+    float adaptiveRadius = clamp(0.85 + penumbraTexels, 0.85, max(baseRadius, 1.0));
     return mix(min(baseRadius, 1.15), adaptiveRadius, blockerConfidence);
 }
 
@@ -368,16 +392,14 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     if (distanceFade <= 0.001) {
         return 1.0;
     }
-    float normalOffset = uShadowNormalOffset * (1.0 + clamp(viewDistanceForBias / 220.0, 0.0, 1.5)) *
-                         (1.0 + 0.65 * (1.0 - max(dot(normal, lightDir), 0.0)));
+    float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistanceForBias);
     float warpDensity = 1.0;
     vec3 proj = worldToShadowProj(worldPos + normal * normalOffset, warpDensity);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
-    float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float texelBiasScale = clamp(uShadowTexelWorldSize / 0.09375, 0.65, 2.5);
-    float bias = (uShadowConstantBias + uShadowSlopeBias * (1.0 - ndotl)) * texelBiasScale;
+    float bias = shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistanceForBias));
 
     float projectionFade = shadowProjectionFade(proj);
     if (projectionFade <= 0.001) {
@@ -394,8 +416,8 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float grazingSoftness = 1.0 - ndotl;
     vec2 centeredShadow = proj.xy * 2.0 - 1.0;
     float filterWarpDensity = calculateShadowWarp(centeredShadow);
-    float radius = clamp(max(uShadowSoftness, 0.1) * (1.20 + 0.42 * distanceSoftness + 0.22 * grazingSoftness) * filterWarpDensity,
-                         2.0, 7.5);
+    float radius = clamp(max(uShadowSoftness, 0.1) * (1.05 + 0.34 * distanceSoftness + 0.20 * grazingSoftness) * filterWarpDensity,
+                         1.25, 7.5);
     float jitter = stableShadowJitter(proj);
     radius = pcssFilterRadius(proj, radius, bias, warpDensity, jitter);
     float lit = 0.0;

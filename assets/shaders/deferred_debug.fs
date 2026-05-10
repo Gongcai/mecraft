@@ -21,6 +21,7 @@ uniform sampler2D uHistorySceneTex;
 uniform mat4 uShadowViewProj;
 uniform mat4 uInvViewProj;
 uniform float uShadowExtent;
+uniform float uShadowTexelWorldSize;
 uniform float uShadowMapSize;
 uniform int uDebugViewMode;
 
@@ -128,21 +129,33 @@ void main() {
         return;
     }
     if (uDebugViewMode == 18) {
-        // Shadow Projection debug: visualize frustum coverage and texel density
-        vec4 worldPos = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 0.5, 1.0);
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec4 worldPos = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
         worldPos /= max(worldPos.w, 0.0001);
         vec4 shadowClip = uShadowViewProj * worldPos;
-        vec2 shadowUv = shadowClip.xy / max(shadowClip.w, 0.0001) * 0.5 + 0.5;
+        vec3 shadowUv = shadowClip.xyz / max(shadowClip.w, 0.0001) * 0.5 + 0.5;
 
         vec3 outOfBounds = vec3(0.0);
-        if (shadowUv.x < 0.0 || shadowUv.x > 1.0 || shadowUv.y < 0.0 || shadowUv.y > 1.0)
+        if (shadowUv.x < 0.0 || shadowUv.x > 1.0 ||
+            shadowUv.y < 0.0 || shadowUv.y > 1.0 ||
+            shadowUv.z < 0.0 || shadowUv.z > 1.0)
             outOfBounds = vec3(1.0, 0.0, 0.0);
 
-        float texelDensity = uShadowExtent / max(uShadowMapSize, 1.0);
-        float densityHeat = clamp(texelDensity * 2.0, 0.0, 1.0);
+        float texelDensity = uShadowTexelWorldSize > 0.0
+            ? uShadowTexelWorldSize
+            : (uShadowExtent * 2.0) / max(uShadowMapSize, 1.0);
+        float densityHeat = clamp((texelDensity - 0.025) / 0.20, 0.0, 1.0);
+        float edge = min(min(shadowUv.x, 1.0 - shadowUv.x), min(shadowUv.y, 1.0 - shadowUv.y));
+        float edgeWarning = 1.0 - smoothstep(0.015, 0.075, edge);
 
         vec3 coverageColor = heatmap(densityHeat);
-        FragColor = vec4(mix(coverageColor, outOfBounds, 0.6), 1.0);
+        coverageColor = mix(coverageColor, vec3(1.0, 0.55, 0.05), edgeWarning * 0.65);
+        FragColor = vec4(mix(coverageColor, outOfBounds, 0.75), 1.0);
         return;
     }
 
