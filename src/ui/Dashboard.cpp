@@ -359,6 +359,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &pipeline.contactShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Cloud Shadows", &pipeline.cloudShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.1f, 3.0f, "%.2f");
@@ -382,6 +383,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 2;
+            pipeline.contactShadowsEnabled = false;
+            pipeline.cloudShadowsEnabled = false;
             pipeline.directSunStrength = 1.0f;
             pipeline.skyAmbientStrength = 0.55f;
             pipeline.minimumAmbient = 0.09f;
@@ -425,10 +428,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 3;
             pipeline.shadowWarpMode = 2;
+            pipeline.contactShadowsEnabled = true;
+            pipeline.cloudShadowsEnabled = true;
             pipeline.directSunStrength = 1.36f;
             pipeline.skyAmbientStrength = 0.36f;
             pipeline.minimumAmbient = 0.055f;
-            pipeline.contactShadowStrength = 0.18f;
+            pipeline.contactShadowStrength = 0.24f;
+            pipeline.cloudShadowStrength = 0.16f;
+            pipeline.cloudShadowScale = 0.0045f;
+            pipeline.cloudShadowSpeed = 0.018f;
             pipeline.shadowMinLight = 0.08f;
             pipeline.shadowContrast = 1.28f;
             pipeline.shadowTintStrength = 0.28f;
@@ -469,10 +477,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 3;
             pipeline.shadowWarpMode = 2;
+            pipeline.contactShadowsEnabled = true;
+            pipeline.cloudShadowsEnabled = true;
             pipeline.directSunStrength = 1.58f;
             pipeline.skyAmbientStrength = 0.28f;
             pipeline.minimumAmbient = 0.04f;
-            pipeline.contactShadowStrength = 0.22f;
+            pipeline.contactShadowStrength = 0.30f;
+            pipeline.cloudShadowStrength = 0.24f;
+            pipeline.cloudShadowScale = 0.0055f;
+            pipeline.cloudShadowSpeed = 0.020f;
             pipeline.shadowMinLight = 0.055f;
             pipeline.shadowContrast = 1.52f;
             pipeline.shadowTintStrength = 0.34f;
@@ -517,6 +530,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("Shadow Slope Bias", &pipeline.shadowSlopeBias, 0.0f, 0.012f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Normal Offset", &pipeline.shadowNormalOffset, 0.0f, 0.12f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("Contact Shadow Strength", &pipeline.contactShadowStrength, 0.0f, 0.6f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &pipeline.cloudShadowStrength, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &pipeline.cloudShadowScale, 0.001f, 0.02f, "%.4f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Speed", &pipeline.cloudShadowSpeed, 0.0f, 0.08f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");

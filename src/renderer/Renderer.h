@@ -54,7 +54,8 @@ public:
         bool shadowsEnabled = true;
         bool softShadowsEnabled = true;
         bool pcssShadowsEnabled = true;
-        bool contactShadowsEnabled = false;
+        bool contactShadowsEnabled = true;
+        bool cloudShadowsEnabled = true;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
         float bloomThreshold = 0.82f;
@@ -79,7 +80,10 @@ public:
         float shadowConstantBias = 0.0007f;
         float shadowSlopeBias = 0.0022f;
         float shadowNormalOffset = 0.035f;
-        float contactShadowStrength = 0.18f;
+        float contactShadowStrength = 0.24f;
+        float cloudShadowStrength = 0.16f;
+        float cloudShadowScale = 0.0045f;
+        float cloudShadowSpeed = 0.018f;
         float sunRayStrength = 0.14f;
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;

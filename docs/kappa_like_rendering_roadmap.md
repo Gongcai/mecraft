@@ -224,12 +224,24 @@ World HDR Scene FBO
 - 屏幕空间接触阴影：
   - 沿太阳方向 6 到 12 步。
   - 只补近距离细节，避免替代主 shadow map。
+- Contact shadow V2：
+  - contact shadow 改为沿当前 active shadow light（日间太阳、夜间月亮）追踪，不再只绑定太阳方向。
+  - 步数从 4 提高到 8，使用二次分布把更多采样放在接触近处。
+  - 遮挡判断从非线性 depth delta 改为重建 sample world position 后按世界空间厚度判断，降低不同距离下强度不一致的问题。
+  - 仍保持屏幕空间近距离补偿定位；离屏遮挡、远距离大阴影和主阴影覆盖仍由 shadow map 负责。
 - 云影预留：
   - 先用 2D noise 投射到地面。
   - 后续接体积云 density。
+- Cloud shadow V1：
+  - 使用已加载的 `shader_noise2d` 做高空平面投影云影，先只衰减太阳/月亮直射和直接高光，不影响天空环境光。
+  - 新增 `Cloud Shadows` 开关，以及 strength/scale/speed 参数；Natural/Contrast preset 默认开启，Neutral preset 关闭。
+  - 当前云影是低成本路线，用于给后续体积云 density/cloud coverage 接入预留接口；不是最终体积云阴影。
 - 植物/树叶透光：
   - 基于 material id 或 block registry 给 leaves/grass SSS factor。
   - 背光时提高绿色/暖色透射，阴影中不死黑。
+- Plant SSS V2：
+  - SSS 不再只是最终额外加色；它参与太阳/月亮直射项，在背光和 shadowed 区域提供有限透射填充。
+  - 透射仍受 skylight/moonlight mask 和 cloud shadow 影响，避免洞穴或完全遮蔽处凭空发亮。
 
 验收标准：
 

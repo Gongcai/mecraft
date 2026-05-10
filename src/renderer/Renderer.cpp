@@ -306,6 +306,9 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.shadowSlopeBias = std::clamp(m_pipelineSettings.shadowSlopeBias, 0.0f, 0.03f);
     m_pipelineSettings.shadowNormalOffset = std::clamp(m_pipelineSettings.shadowNormalOffset, 0.0f, 0.25f);
     m_pipelineSettings.contactShadowStrength = std::clamp(m_pipelineSettings.contactShadowStrength, 0.0f, 1.0f);
+    m_pipelineSettings.cloudShadowStrength = std::clamp(m_pipelineSettings.cloudShadowStrength, 0.0f, 1.0f);
+    m_pipelineSettings.cloudShadowScale = std::clamp(m_pipelineSettings.cloudShadowScale, 0.0005f, 0.04f);
+    m_pipelineSettings.cloudShadowSpeed = std::clamp(m_pipelineSettings.cloudShadowSpeed, 0.0f, 0.20f);
     m_pipelineSettings.bloomThreshold = std::clamp(m_pipelineSettings.bloomThreshold, 0.0f, 4.0f);
     m_pipelineSettings.bloomStrength = std::clamp(m_pipelineSettings.bloomStrength, 0.0f, 2.0f);
     m_pipelineSettings.autoExposureMin = std::clamp(m_pipelineSettings.autoExposureMin, 0.05f, 8.0f);
@@ -914,6 +917,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uShadowMap", 7);
     m_deferredLightingShader->setInt("uSsaoTex", 8);
     m_deferredLightingShader->setInt("uSkyCaptureTex", 9);
+    m_deferredLightingShader->setInt("uNoiseTex", 10);
     m_deferredLightingShader->setMat4("uViewProj", m_projection * m_view);
     m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
@@ -958,6 +962,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uCloudShadowsEnabled", m_pipelineSettings.cloudShadowsEnabled ? 1 : 0);
     // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
     const int effectiveShadowWarpMode = 2;
     m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
@@ -971,6 +976,10 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     const float shadowDistanceScale = std::clamp(m_pipelineSettings.shadowDistance / 96.0f, 0.35f, 1.0f);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset * shadowDistanceScale);
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
+    m_deferredLightingShader->setFloat("uCloudShadowStrength", m_pipelineSettings.cloudShadowStrength);
+    m_deferredLightingShader->setFloat("uCloudShadowScale", m_pipelineSettings.cloudShadowScale);
+    m_deferredLightingShader->setFloat("uCloudShadowSpeed", m_pipelineSettings.cloudShadowSpeed);
+    m_deferredLightingShader->setFloat("uTime", static_cast<float>(std::fmod(Time::getGameTime(), 8192.0)));
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
     m_deferredLightingShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
@@ -1008,8 +1017,12 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
     renderFullscreen(*m_deferredLightingShader);
 
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE8);

@@ -13,6 +13,7 @@ uniform sampler2D uLightmapNight;
 uniform sampler2D uShadowMap;
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler2D uNoiseTex;
 
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
@@ -53,6 +54,7 @@ uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
 uniform int uPcssShadowsEnabled;
 uniform int uContactShadowsEnabled;
+uniform int uCloudShadowsEnabled;
 uniform int uShadowWarpMode;
 uniform int uShadowLightMode;
 uniform float uShadowDistance;
@@ -64,6 +66,10 @@ uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uShadowNormalOffset;
 uniform float uContactShadowStrength;
+uniform float uCloudShadowStrength;
+uniform float uCloudShadowScale;
+uniform float uCloudShadowSpeed;
+uniform float uTime;
 uniform int uSsaoEnabled;
 uniform int uFogEnabled;
 uniform int uFogMode;
@@ -242,6 +248,30 @@ float stableShadowJitter(vec3 proj) {
     return fract(52.9829189 * fract(dot(shadowTexel, vec2(0.06711056, 0.00583715))));
 }
 
+float noise2D(vec2 uv) {
+    return texture(uNoiseTex, uv).r;
+}
+
+float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
+    if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
+        return 1.0;
+    }
+
+    lightDir = normalize(lightDir);
+    float layerHeight = 176.0;
+    float denom = max(abs(lightDir.y), 0.18);
+    float t = (layerHeight - worldPos.y) / denom;
+    vec2 cloudPos = (worldPos.xz + lightDir.xz * t) * max(uCloudShadowScale, 0.0001);
+    vec2 wind = vec2(0.73, 0.31) * uTime * uCloudShadowSpeed;
+
+    float large = noise2D(cloudPos + wind);
+    float medium = noise2D(cloudPos * 2.37 - wind * 1.7);
+    float coverage = smoothstep(0.48, 0.78, large * 0.72 + medium * 0.28);
+    float weatherBoost = clamp(uWeatherMist * 0.25 + uWeatherWetness * 0.32 + uWeatherStorm * 0.58, 0.0, 0.65);
+    float strength = uCloudShadowStrength * outdoorMask * (1.0 + weatherBoost);
+    return 1.0 - coverage * clamp(strength, 0.0, 0.85);
+}
+
 vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
     float fi = float(index) + jitter;
     float radius = sqrt((float(index) + 0.5) / max(float(sampleCount), 1.0));
@@ -374,35 +404,52 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     return mix(1.0, shapeShadowVisibility(lit / 24.0), projectionFade * distanceFade);
 }
 
-float contactShadow(vec3 worldPos, vec3 normal, vec2 voxelLight, float shadowVisibility) {
+float contactShadow(vec3 worldPos,
+                    vec3 normal,
+                    vec3 lightDir,
+                    float lightMask,
+                    float shadowVisibility) {
     if (uShadowsEnabled == 0 || uContactShadowsEnabled == 0 || uContactShadowStrength <= 0.001) {
         return 1.0;
     }
-    vec3 sunDir = normalize(uSunDirection);
-    float sunTerm = max(dot(normal, sunDir), 0.0);
-    float skyTerm = clamp(voxelLight.r * uSkyIntensity, 0.0, 1.0);
+    lightDir = normalize(lightDir);
+    float lightTerm = max(dot(normal, lightDir), 0.0);
+    lightMask = clamp(lightMask, 0.0, 1.0);
     float litGate = smoothstep(0.55, 0.92, shadowVisibility);
-    if (sunTerm * skyTerm * litGate <= 0.02) {
+    if (lightTerm * lightMask * litGate <= 0.02) {
         return 1.0;
     }
 
     float occlusion = 0.0;
-    const float maxDistance = 1.25;
-    for (int i = 1; i <= 4; ++i) {
-        float t = float(i) / 4.0;
-        vec3 sampleWorld = worldPos + sunDir * (t * maxDistance);
+    float weightSum = 0.0;
+    vec3 rayOrigin = worldPos + normal * 0.035 + lightDir * 0.045;
+    const float maxDistance = 1.65;
+    for (int i = 0; i < 8; ++i) {
+        float step01 = (float(i) + 0.72) / 8.0;
+        float rayDistance = step01 * step01 * maxDistance + 0.045;
+        vec3 sampleWorld = rayOrigin + lightDir * rayDistance;
         float sampleProjectedDepth = 1.0;
         vec2 sampleUv = projectWorldToUv(sampleWorld, sampleProjectedDepth);
-        if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
+        if (sampleUv.x <= 0.001 || sampleUv.y <= 0.001 || sampleUv.x >= 0.999 || sampleUv.y >= 0.999) {
             continue;
         }
+
         float sceneDepth = texture(uDepthTex, sampleUv).r;
-        float depthDelta = sampleProjectedDepth - sceneDepth;
-        float hit = smoothstep(0.00030, 0.00120, depthDelta);
-        occlusion += hit * (1.0 - t * 0.45);
+        if (sceneDepth >= 1.0 || sceneDepth >= sampleProjectedDepth - 0.00008) {
+            continue;
+        }
+
+        vec3 sceneWorld = reconstructWorldPosition(sampleUv, sceneDepth);
+        float worldSeparation = length(sceneWorld - sampleWorld);
+        float thickness = mix(0.12, 0.72, step01);
+        float hit = 1.0 - smoothstep(thickness * 0.45, thickness, worldSeparation);
+        float forwardWeight = 1.0 - step01 * 0.55;
+        occlusion += hit * forwardWeight;
+        weightSum += forwardWeight;
     }
-    occlusion = clamp(occlusion / 4.0, 0.0, 1.0);
-    return 1.0 - occlusion * uContactShadowStrength * sunTerm * skyTerm * litGate;
+    occlusion = clamp(occlusion / max(weightSum, 0.0001), 0.0, 1.0);
+    float grazingBoost = 0.55 + 0.45 * pow(1.0 - lightTerm, 0.65);
+    return 1.0 - occlusion * uContactShadowStrength * lightTerm * lightMask * litGate * grazingBoost;
 }
 
 vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSunColor) {
@@ -506,7 +553,9 @@ void main() {
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
     vec3 shadowLightDir = (uShadowLightMode == 1) ? moonDir : sunDir;
     float shadow = shadowFactor(worldPos, normal, shadowLightDir);
-    shadow *= contactShadow(worldPos, normal, voxelLight, shadow);
+    float activeShadowLightMask = (uShadowLightMode == 1) ? nightSkyMask : skyLightMask;
+    shadow *= contactShadow(worldPos, normal, shadowLightDir, activeShadowLightMask, shadow);
+    float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? shadow : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadow, 0.82) : 1.0;
 
@@ -519,16 +568,23 @@ void main() {
     coolSkyColor = mix(coolSkyColor, mix(capturedZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
     float directEnergy = 1.56 + 0.28 * (1.0 - roughness);
     float terminatorFill = roughTerminatorFill(rawNdotL, roughness) * sunShadow;
-    vec3 directSun = warmSunColor * (diffuse * sunShadow + terminatorFill) * skyLightMask * uDirectSunStrength * directEnergy;
+    float sssSunTransmittance = sss * smoothstep(-0.35, 0.18, -rawNdotL);
+    float sssSunShadowFill = sssSunTransmittance * mix(0.18, 0.46, 1.0 - sunShadow) * cloudShadow;
+    vec3 directSun = warmSunColor *
+                     ((diffuse * sunShadow + terminatorFill) * cloudShadow + sssSunShadowFill) *
+                     skyLightMask * uDirectSunStrength * directEnergy;
     float moonMask = nightSkyMask;
     vec3 moonFill = uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
-    vec3 directMoon = uMoonLightColor * pow(ndotm * 0.5 + 0.5, 1.15) * moonShadow * moonMask * (0.38 + 0.18 * uSkyAmbientStrength);
+    float sssMoonTransmittance = sss * smoothstep(-0.30, 0.16, -rawNdotM);
+    vec3 directMoon = uMoonLightColor *
+                      (pow(ndotm * 0.5 + 0.5, 1.15) * moonShadow * cloudShadow + sssMoonTransmittance * 0.16) *
+                      moonMask * (0.38 + 0.18 * uSkyAmbientStrength);
     vec3 f0 = vec3(f0Scalar);
     vec3 specF = fresnelSchlick(vdoth, f0);
     float specD = ggxDistribution(ndoth, roughness);
     float specG = smithG1(ndotl, roughness) * smithG1(ndotv, roughness);
     vec3 directSpecular = warmSunColor * specF * (specD * specG / max(4.0 * ndotl * ndotv, 0.0001));
-    directSpecular *= ndotl * sunShadow * skyLightMask * uDirectSunStrength;
+    directSpecular *= ndotl * sunShadow * cloudShadow * skyLightMask * uDirectSunStrength;
     directSpecular *= mix(1.18, 0.18, roughness);
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 skyAmbient = coolSkyColor * (0.026 + 0.54 * outdoorSkyMask) *
@@ -554,7 +610,7 @@ void main() {
 
     vec3 color = albedo * totalLight * vertexAo * mix(1.0, ssao, 0.65);
     float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * mix(0.35, 1.0, sunShadow);
-    color += albedo * warmSunColor * backScatter * sss * (0.46 + 0.20 * uDirectSunStrength);
+    color += albedo * warmSunColor * backScatter * sss * cloudShadow * (0.46 + 0.20 * uDirectSunStrength);
     float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * moonMask;
     color += albedo * uMoonLightColor * moonBackScatter * sss * 0.12;
     float specularSurfaceMask = smoothstep(0.025, 0.14, f0Scalar) * (1.0 - roughness * 0.45);
