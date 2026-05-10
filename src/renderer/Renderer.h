@@ -105,6 +105,7 @@ public:
         float aerialStrength = 0.55f;
         float horizonScatterStrength = 0.65f;
         float noiseDitherStrength = 0.015f;
+        float sharpenStrength = 0.08f;
         float ssaoRadius = 2.25f;
         float ssaoStrength = 0.75f;
         float exposure = 1.0f;

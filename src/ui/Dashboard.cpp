@@ -407,6 +407,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowDesaturation = 0.0f;
             pipeline.splitToneStrength = 0.0f;
             pipeline.vignetteStrength = 0.0f;
+            pipeline.sharpenStrength = 0.0f;
             pipeline.saturation = 1.0f;
             pipeline.contrast = 1.0f;
             pipelineChanged = true;
@@ -445,6 +446,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowDesaturation = 0.22f;
             pipeline.splitToneStrength = 0.28f;
             pipeline.vignetteStrength = 0.08f;
+            pipeline.sharpenStrength = 0.08f;
             pipeline.saturation = 1.0f;
             pipeline.contrast = 1.0f;
             pipelineChanged = true;
@@ -483,6 +485,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowDesaturation = 0.34f;
             pipeline.splitToneStrength = 0.42f;
             pipeline.vignetteStrength = 0.12f;
+            pipeline.sharpenStrength = 0.12f;
             pipeline.saturation = 1.0f;
             pipeline.contrast = 1.06f;
             pipelineChanged = true;
@@ -522,6 +525,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &pipeline.aerialStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &pipeline.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Noise Dither", &pipeline.noiseDitherStrength, 0.0f, 0.05f, "%.3f");
+        pipelineChanged |= ImGui::SliderFloat("CAS Sharpen", &pipeline.sharpenStrength, 0.0f, 0.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Exposure", &pipeline.exposure, 0.2f, 3.0f, "%.2f");

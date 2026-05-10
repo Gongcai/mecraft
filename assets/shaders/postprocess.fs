@@ -25,6 +25,7 @@ uniform vec3 uColorLuma;
 uniform float uSplitToneStrength;
 uniform float uVignetteStrength;
 uniform float uNoiseDitherStrength;
+uniform float uSharpenStrength;
 uniform bool uUnderwaterEnabled;
 uniform vec3 uUnderwaterTint;
 uniform float uUnderwaterStrength;
@@ -326,6 +327,54 @@ vec3 applyGrade(vec3 color) {
     return color;
 }
 
+vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
+    vec3 color = texture(uSceneTex, sampleUv).rgb;
+    if (uBloomEnabled) {
+        color += texture(uBloomTex, sampleUv).rgb * uBloomStrength;
+    }
+
+    if (uUnderwaterEnabled) {
+        float strength = clamp(uUnderwaterStrength, 0.0, 1.0);
+        vec3 underwaterTint = srgbToLinear(uUnderwaterTint);
+        vec3 tinted = color * underwaterTint;
+        color = mix(color, tinted, strength);
+
+        float fog = clamp((1.0 - screenUv.y) * 0.10 * strength, 0.0, 0.12);
+        color = mix(color, underwaterTint, fog);
+    }
+    return color;
+}
+
+vec3 resolveGradedColor(vec2 sampleUv, vec2 screenUv) {
+    vec3 graded = applyGrade(resolveHdrColor(sampleUv, screenUv));
+    if (uShaderpackGradingEnabled) {
+        graded = applyVignette(graded, sampleUv);
+    }
+    return graded;
+}
+
+vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
+    float strength = saturate(uSharpenStrength);
+    if (strength <= 0.0001) {
+        return center;
+    }
+
+    vec2 texel = 1.0 / vec2(textureSize(uSceneTex, 0));
+    vec3 left = resolveGradedColor(clamp(sampleUv - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)),
+                                   clamp(screenUv - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)));
+    vec3 right = resolveGradedColor(clamp(sampleUv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)),
+                                    clamp(screenUv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)));
+    vec3 down = resolveGradedColor(clamp(sampleUv - vec2(0.0, texel.y), vec2(0.0), vec2(1.0)),
+                                   clamp(screenUv - vec2(0.0, texel.y), vec2(0.0), vec2(1.0)));
+    vec3 up = resolveGradedColor(clamp(sampleUv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)),
+                                 clamp(screenUv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)));
+    vec3 blur = (left + right + down + up) * 0.25;
+
+    float contrastGate = smoothstep(0.015, 0.18, abs(luma709(center) - luma709(blur)));
+    vec3 sharpened = center + (center - blur) * (0.45 * strength * contrastGate);
+    return clamp(sharpened, 0.0, 1.0);
+}
+
 void main() {
     vec2 centeredUv = vTexCoord - vec2(0.5, 0.5);
     float c = cos(uScreenRollRadians);
@@ -334,11 +383,8 @@ void main() {
                     s,  c);
     vec2 rolledUv = rot * centeredUv + vec2(0.5, 0.5);
 
-    vec3 color = texture(uSceneTex, rolledUv).rgb;
+    vec3 color = resolveHdrColor(rolledUv, vTexCoord);
     if (uBloomEnabled) {
-        vec3 bloom = texture(uBloomTex, rolledUv).rgb;
-        color += bloom * uBloomStrength;
-
         if (uSunRaysEnabled && uSunVisibility > 0.001 && uSunRayStrength > 0.001) {
             vec2 toSun = uSunScreenPos - rolledUv;
             float screenFade = 1.0 - smoothstep(0.55, 1.15, length(uSunScreenPos - vec2(0.5)));
@@ -357,20 +403,11 @@ void main() {
         }
     }
 
-    if (uUnderwaterEnabled) {
-        float strength = clamp(uUnderwaterStrength, 0.0, 1.0);
-        vec3 underwaterTint = srgbToLinear(uUnderwaterTint);
-        vec3 tinted = color * underwaterTint;
-        color = mix(color, tinted, strength);
-
-        float fog = clamp((1.0 - vTexCoord.y) * 0.10 * strength, 0.0, 0.12);
-        color = mix(color, underwaterTint, fog);
-    }
-
     vec3 graded = applyGrade(color);
     if (uShaderpackGradingEnabled) {
         graded = applyVignette(graded, rolledUv);
     }
+    graded = applyCasLikeSharpen(graded, rolledUv, vTexCoord);
     if (uNoiseDitherStrength > 0.0) {
         float noise = texture(uNoiseTex, gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0))).r - 0.5;
         graded += noise * uNoiseDitherStrength;

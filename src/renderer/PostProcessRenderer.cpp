@@ -64,6 +64,7 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.splitToneStrength = std::clamp(m_effects.splitToneStrength, 0.0f, 1.0f);
     m_effects.vignetteStrength = std::clamp(m_effects.vignetteStrength, 0.0f, 0.5f);
     m_effects.noiseDitherStrength = std::clamp(m_effects.noiseDitherStrength, 0.0f, 0.08f);
+    m_effects.sharpenStrength = std::clamp(m_effects.sharpenStrength, 0.0f, 1.0f);
     m_effects.exposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
     m_effects.gamma = std::clamp(m_effects.gamma, 1.0f, 3.5f);
     m_effects.saturation = std::clamp(m_effects.saturation, 0.0f, 3.0f);
@@ -225,6 +226,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setVec3("uColorLuma", m_effects.colorLuma);
     m_postProcessShader->setFloat("uSplitToneStrength", m_effects.splitToneStrength);
     m_postProcessShader->setFloat("uVignetteStrength", m_effects.vignetteStrength);
+    m_postProcessShader->setFloat("uSharpenStrength", m_effects.sharpenStrength);
     const float noiseDitherStrength = (m_effects.shaderpackGradingEnabled && m_noiseTexture != 0)
         ? m_effects.noiseDitherStrength
         : 0.0f;

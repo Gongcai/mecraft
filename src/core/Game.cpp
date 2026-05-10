@@ -336,6 +336,7 @@ void Game::renderFrame(const float frameTime) {
     effects.splitToneStrength = pipelineSettings.splitToneStrength;
     effects.vignetteStrength = pipelineSettings.vignetteStrength;
     effects.noiseDitherStrength = pipelineSettings.noiseDitherStrength;
+    effects.sharpenStrength = pipelineSettings.sharpenStrength;
     effects.exposure = pipelineSettings.exposure;
     effects.gamma = pipelineSettings.gamma;
     effects.saturation = pipelineSettings.saturation;

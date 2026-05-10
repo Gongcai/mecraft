@@ -39,6 +39,7 @@ struct PostProcessEffects {
     float splitToneStrength = 0.28f;
     float vignetteStrength = 0.08f;
     float noiseDitherStrength = 0.015f;
+    float sharpenStrength = 0.08f;
     float exposure = 1.0f;
     float gamma = 2.2f;
     float saturation = 1.0f;
