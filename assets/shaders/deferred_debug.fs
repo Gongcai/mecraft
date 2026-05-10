@@ -19,10 +19,19 @@ uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uVelocityTex;
 uniform sampler2D uHistorySceneTex;
 uniform mat4 uShadowViewProj;
+uniform mat4 uShadowProjectionInverse;
 uniform mat4 uInvViewProj;
+uniform vec3 uCameraPos;
+uniform vec3 uSunDirection;
+uniform vec3 uMoonDirection;
 uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
 uniform float uShadowMapSize;
+uniform float uShadowDistance;
+uniform float uShadowConstantBias;
+uniform float uShadowSlopeBias;
+uniform float uShadowNormalOffset;
+uniform int uShadowLightMode;
 uniform int uDebugViewMode;
 
 vec3 tonemapPreview(vec3 color) {
@@ -47,6 +56,46 @@ float linearizeDepthPreview(float depth) {
     float farPlane = 512.0;
     float linearDepth = (2.0 * nearPlane * farPlane) / max(farPlane + nearPlane - ndc * (farPlane - nearPlane), 0.0001);
     return clamp(linearDepth / 192.0, 0.0, 1.0);
+}
+
+vec3 reconstructWorldPosition(vec2 uv, float depth) {
+    vec4 world = uInvViewProj * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    return world.xyz / max(world.w, 0.0001);
+}
+
+vec3 shadowUvFromWorld(vec3 worldPos) {
+    vec4 shadowClip = uShadowViewProj * vec4(worldPos, 1.0);
+    return shadowClip.xyz / max(shadowClip.w, 0.0001) * 0.5 + 0.5;
+}
+
+float shadowDepthWorldScale() {
+    return max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+}
+
+float shadowDepthBiasFromWorld(float worldUnits) {
+    return worldUnits / shadowDepthWorldScale();
+}
+
+float shadowWorldBias(float ndotl, float viewDistance) {
+    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
+    float slope = 1.0 - clamp(ndotl, 0.0, 1.0);
+    float receiverScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
+    return texelWorld * receiverScale *
+           (uShadowConstantBias * 48.0 + uShadowSlopeBias * 64.0 * slope);
+}
+
+float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
+    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
+    float grazing = 1.0 - clamp(ndotl, 0.0, 1.0);
+    float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
+    float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
+    return texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
+}
+
+bool shadowUvOutOfBounds(vec3 shadowUv) {
+    return shadowUv.x < 0.0 || shadowUv.x > 1.0 ||
+           shadowUv.y < 0.0 || shadowUv.y > 1.0 ||
+           shadowUv.z < 0.0 || shadowUv.z > 1.0;
 }
 
 void main() {
@@ -135,15 +184,11 @@ void main() {
             return;
         }
 
-        vec4 worldPos = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-        worldPos /= max(worldPos.w, 0.0001);
-        vec4 shadowClip = uShadowViewProj * worldPos;
-        vec3 shadowUv = shadowClip.xyz / max(shadowClip.w, 0.0001) * 0.5 + 0.5;
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 shadowUv = shadowUvFromWorld(worldPos);
 
         vec3 outOfBounds = vec3(0.0);
-        if (shadowUv.x < 0.0 || shadowUv.x > 1.0 ||
-            shadowUv.y < 0.0 || shadowUv.y > 1.0 ||
-            shadowUv.z < 0.0 || shadowUv.z > 1.0)
+        if (shadowUvOutOfBounds(shadowUv))
             outOfBounds = vec3(1.0, 0.0, 0.0);
 
         float texelDensity = uShadowTexelWorldSize > 0.0
@@ -156,6 +201,54 @@ void main() {
         vec3 coverageColor = heatmap(densityHeat);
         coverageColor = mix(coverageColor, vec3(1.0, 0.55, 0.05), edgeWarning * 0.65);
         FragColor = vec4(mix(coverageColor, outOfBounds, 0.75), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 19) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 lightDir = normalize(uShadowLightMode == 1 ? uMoonDirection : uSunDirection);
+        float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        float viewDistance = length(worldPos - uCameraPos);
+        float offsetWorld = shadowNormalOffsetWorld(ndotl, viewDistance);
+        vec3 shadowUv = shadowUvFromWorld(worldPos + normal * offsetWorld);
+
+        if (shadowUvOutOfBounds(shadowUv)) {
+            FragColor = vec4(0.95, 0.08, 0.02, 1.0);
+            return;
+        }
+
+        float shadowDepth = texture(uShadowMap, shadowUv.xy).r;
+        float bias = shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistance));
+        float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
+        float margin = (shadowDepth - (shadowUv.z - bias)) * shadowDepthWorldScale();
+        float nearAcne = 1.0 - smoothstep(0.0, max(uShadowTexelWorldSize * 1.25, 0.0001), abs(margin));
+        vec3 litColor = mix(vec3(0.08, 0.12, 0.25), vec3(0.88, 0.92, 1.0), lit);
+        FragColor = vec4(mix(litColor, vec3(1.0, 0.58, 0.04), nearAcne * 0.65), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 20) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 lightDir = normalize(uShadowLightMode == 1 ? uMoonDirection : uSunDirection);
+        float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        float viewDistance = length(worldPos - uCameraPos);
+        float biasWorld = shadowWorldBias(ndotl, viewDistance);
+        float offsetWorld = shadowNormalOffsetWorld(ndotl, viewDistance);
+        float biasTexels = biasWorld / max(uShadowTexelWorldSize, 0.0001);
+        float offsetTexels = offsetWorld / max(uShadowTexelWorldSize, 0.0001);
+        FragColor = vec4(heatmap(biasTexels / 4.0).r, heatmap(offsetTexels / 4.0).g, clamp(1.0 - ndotl, 0.0, 1.0), 1.0);
         return;
     }
 

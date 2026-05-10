@@ -380,7 +380,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Sky Capture",
             "Velocity",
             "History Scene",
-            "Shadow Projection"
+            "Shadow Projection",
+            "Shadow Visibility",
+            "Shadow Bias"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;

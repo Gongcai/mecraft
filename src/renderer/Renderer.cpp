@@ -560,7 +560,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 18);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 20);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -1480,10 +1480,19 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uVelocityTex", 12);
     m_deferredDebugShader->setInt("uHistorySceneTex", 13);
     m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
+    m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
+    m_deferredDebugShader->setVec3("uCameraPos", m_currentFrameDataValid ? m_currentFrameData.cameraPos : m_cameraPos);
+    m_deferredDebugShader->setVec3("uSunDirection", m_currentFrameDataValid ? m_currentFrameData.skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
+    m_deferredDebugShader->setVec3("uMoonDirection", m_currentFrameDataValid ? m_currentFrameData.skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
     m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
     m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
+    m_deferredDebugShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    m_deferredDebugShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
+    m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
+    m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
+    m_deferredDebugShader->setInt("uShadowLightMode", (m_currentFrameDataValid && m_currentFrameData.moonShadowActive) ? 1 : 0);
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
 
     glActiveTexture(GL_TEXTURE0);
