@@ -39,9 +39,11 @@ uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
+uniform int uPcssShadowsEnabled;
 uniform int uContactShadowsEnabled;
 uniform int uShadowWarpMode;
 uniform float uShadowSoftness;
+uniform float uShadowPcssStrength;
 uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uShadowNormalOffset;
@@ -99,6 +101,15 @@ float compareShadowTexelAt(vec3 proj, ivec2 texelCoord, float bias) {
     return (proj.z - bias <= closest) ? 1.0 : 0.0;
 }
 
+float sampleShadowDepthAt(vec3 proj, vec2 offsetTexels) {
+    ivec2 size = textureSize(uShadowMap, 0);
+    vec2 uv = proj.xy + offsetTexels / vec2(size);
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return 1.0;
+    }
+    return texture(uShadowMap, uv).r;
+}
+
 float compareShadowTexel(vec3 proj, ivec2 offset, float bias) {
     ivec2 size = textureSize(uShadowMap, 0);
     ivec2 texelCoord = ivec2(floor(proj.xy * vec2(size))) + offset;
@@ -144,6 +155,31 @@ float shapeShadowVisibility(float lit) {
     return mix(clamp(uShadowMinLight, 0.0, 0.8), 1.0, contrasted);
 }
 
+float pcssFilterRadius(vec3 proj, float baseRadius, float bias) {
+    if (uPcssShadowsEnabled == 0 || uShadowPcssStrength <= 0.001) {
+        return baseRadius;
+    }
+
+    float blockerDepthSum = 0.0;
+    float blockerCount = 0.0;
+    float searchRadius = clamp(baseRadius * 0.78, 1.0, 5.5);
+    for (int i = 0; i < 8; ++i) {
+        float blockerDepth = sampleShadowDepthAt(proj, r2Disk(float(i) + 6.13) * searchRadius);
+        float isBlocker = step(blockerDepth, proj.z - bias);
+        blockerDepthSum += blockerDepth * isBlocker;
+        blockerCount += isBlocker;
+    }
+
+    if (blockerCount < 0.5) {
+        return 1.15;
+    }
+
+    float averageBlockerDepth = blockerDepthSum / blockerCount;
+    float receiverToBlocker = max(proj.z - averageBlockerDepth, 0.0);
+    float penumbra = clamp(receiverToBlocker * 260.0 * uShadowPcssStrength, 0.0, 1.0);
+    return mix(1.15, baseRadius, penumbra);
+}
+
 float shadowFactor(vec3 worldPos, vec3 normal) {
     if (uShadowsEnabled == 0) {
         return 1.0;
@@ -174,6 +210,7 @@ float shadowFactor(vec3 worldPos, vec3 normal) {
     float filterWarpDensity = calculateShadowWarp(centeredShadow);
     float radius = clamp(max(uShadowSoftness, 0.1) * (1.20 + 0.42 * distanceSoftness + 0.22 * grazingSoftness) * filterWarpDensity,
                          2.0, 7.5);
+    radius = pcssFilterRadius(proj, radius, bias);
     float lit = 0.0;
     for (int i = 0; i < 24; ++i) {
         lit += compareShadowBilinear(proj, r2Disk(float(i) + 0.37) * radius, bias);

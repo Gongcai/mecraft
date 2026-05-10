@@ -355,6 +355,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
         pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &pipeline.contactShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
@@ -455,6 +456,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &pipeline.shadowResolution, 512, 4096);
         pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 24.0f, 192.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Softness", &pipeline.shadowSoftness, 0.1f, 4.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("PCSS Strength", &pipeline.shadowPcssStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Const Bias", &pipeline.shadowConstantBias, 0.0f, 0.004f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Slope Bias", &pipeline.shadowSlopeBias, 0.0f, 0.012f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Normal Offset", &pipeline.shadowNormalOffset, 0.0f, 0.12f, "%.3f");

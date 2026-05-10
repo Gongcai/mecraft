@@ -53,6 +53,7 @@ public:
         RenderPipelineMode mode = RenderPipelineMode::HybridDeferred;
         bool shadowsEnabled = true;
         bool softShadowsEnabled = true;
+        bool pcssShadowsEnabled = true;
         bool contactShadowsEnabled = false;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
@@ -65,6 +66,7 @@ public:
         int shadowResolution = 2048;
         float shadowDistance = 96.0f;
         float shadowSoftness = 1.6f;
+        float shadowPcssStrength = 0.72f;
         float shadowConstantBias = 0.0007f;
         float shadowSlopeBias = 0.0022f;
         float shadowNormalOffset = 0.035f;
