@@ -254,6 +254,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             ImGui::Text("GPU SSAO: %.3f ms", gpuStats.ssaoMs);
             ImGui::Text("GPU Lighting: %.3f ms", gpuStats.lightingMs);
             ImGui::Text("GPU Transparent: %.3f ms", gpuStats.transparentMs);
+            ImGui::Text("GPU Volumetric: %.3f ms", gpuStats.volumetricMs);
+            ImGui::Text("GPU Water: %.3f ms", gpuStats.waterMs);
+            ImGui::Text("GPU Post: %.3f ms", gpuStats.postMs);
         }
 
         Renderer::RenderWorkStats renderWork = render.getRenderWorkStats();
@@ -374,7 +377,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Transparent Depth",
             "Volumetric RGB",
             "Volumetric Transmittance",
-            "Sky Capture"
+            "Sky Capture",
+            "Velocity",
+            "History Scene",
+            "Shadow Projection"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;

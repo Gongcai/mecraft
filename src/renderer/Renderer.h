@@ -180,6 +180,9 @@ public:
         double ssaoMs = 0.0;
         double lightingMs = 0.0;
         double transparentMs = 0.0;
+        double volumetricMs = 0.0;
+        double waterMs = 0.0;
+        double postMs = 0.0;
     };
 
     struct RenderWorkStats {
@@ -324,6 +327,14 @@ private:
         float weatherStorm = 0.0f;
         float aerialReduction = 0.55f;
         bool moonShadowActive = false;
+        // Temporal foundation
+        uint64_t frameIndex = 0;
+        glm::vec2 jitter = glm::vec2(0.0f);
+        glm::mat4 previousView = glm::mat4(1.0f);
+        glm::mat4 previousProjection = glm::mat4(1.0f);
+        glm::mat4 previousViewProj = glm::mat4(1.0f);
+        glm::mat4 previousInvViewProj = glm::mat4(1.0f);
+        float deltaTime = 0.0f;
     };
 
     struct TransparentPassPlan {
@@ -405,6 +416,7 @@ private:
     void renderWorldForward(const World& world, const RenderFrameData& frame);
     bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window, const RenderFrameData& frame);
     void renderTransparentCompositePass(const World& world, const Window& window);
+    void renderWaterCompositePass(const World& world, const Window& window);
     void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
     void renderSsaoPass(const Camera& camera, const Window& window);
@@ -445,7 +457,10 @@ private:
         Ssao = 2,
         Lighting = 3,
         Transparent = 4,
-        Count = 5
+        Volumetric = 5,
+        Water = 6,
+        Post = 7,
+        Count = 8
     };
     void initGpuTimers();
     void shutdownGpuTimers();
@@ -467,6 +482,7 @@ private:
     Shader* m_chunkShader = nullptr;
     Shader* m_chunkForwardShader = nullptr;
     Shader* m_transparentCompositeShader = nullptr;
+    Shader* m_waterCompositeShader = nullptr;
     Shader* m_chunkGBufferShader = nullptr;
     Shader* m_shadowDepthShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;
@@ -497,6 +513,8 @@ private:
     RenderPipelineSettings m_pipelineSettings{};
     RenderFrameData m_currentFrameData{};
     bool m_currentFrameDataValid = false;
+    uint64_t m_frameCounter = 0;
+    RenderFrameData m_previousFrameData{};
     GLint m_capturedFramebuffer = 0;
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     glm::mat4 m_shadowModelView = glm::mat4(1.0f);

@@ -103,6 +103,7 @@ public:
     void flushCutout();
     void flushTransparent();
 
+    GLuint transparentVao() const { return m_transparentVao; }
     int glSubmitCount() const { return m_glSubmitCount; }
     size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
     size_t cutoutCommandCount() const { return m_cutoutCommands.size(); }

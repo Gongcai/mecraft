@@ -88,6 +88,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
     m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
+    m_waterCompositeShader = resourceMgr.getShader("water_composite");
     if (m_transparentCompositeShader == nullptr) {
         m_transparentCompositeShader = m_chunkForwardShader;
     }
@@ -171,6 +172,7 @@ void Renderer::shutdown() {
     m_chunkShader = nullptr;
     m_chunkForwardShader = nullptr;
     m_transparentCompositeShader = nullptr;
+    m_waterCompositeShader = nullptr;
     m_chunkGBufferShader = nullptr;
     m_shadowDepthShader = nullptr;
     m_deferredLightingShader = nullptr;
@@ -208,12 +210,173 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
 
     renderBlockBreakOverlay(world, blockBreak);
     renderBlockOutline(world, target);
+#ifdef MECRAFT_DEBUG
+    beginGpuTimer(GpuTimerPass::Post);
+#endif
     endFrame(window);
+#ifdef MECRAFT_DEBUG
+    endGpuTimer(GpuTimerPass::Post);
+#endif
+}
+
+void Renderer::renderWaterCompositePass(const World& world, const Window& window) {
+    if (!m_transparentPassPlan.hasWater() || m_waterCompositeShader == nullptr || m_resourceMgr == nullptr) {
+        return;
+    }
+
+    const bool deferredInputsEnabled = m_deferredFrameActive && m_deferredTargets.isReady();
+    const bool compositeInputsEnabled = deferredInputsEnabled && m_pipelineSettings.transparentCompositeEnabled;
+    const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
+    const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+
+    if (compositeInputsEnabled) {
+        m_deferredTargets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        m_deferredTargets.copyFramebufferColorToTransparentComposite(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        m_deferredTargets.copyDepthToTransparentComposite();
+        m_deferredTargets.bindTransparentComposite();
+    } else if (m_deferredFrameActive) {
+        restoreCapturedFramebufferViewport(window);
+    }
+
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    const RenderFrameData frame = m_currentFrameDataValid ? m_currentFrameData : buildRenderFrameData(world);
+
+    m_waterCompositeShader->use();
+    m_waterCompositeShader->setMat4("view", frame.view);
+    m_waterCompositeShader->setMat4("viewProj", frame.viewProj);
+    m_waterCompositeShader->setMat4("model", glm::mat4(1.0f));
+    m_waterCompositeShader->setInt("uUseModel", 0);
+    m_waterCompositeShader->setInt("texArray", 0);
+    m_waterCompositeShader->setInt("uOpaqueDepthTex", 5);
+    m_waterCompositeShader->setInt("uSkyCaptureTex", 6);
+    m_waterCompositeShader->setInt("uSceneColorTex", 7);
+    m_waterCompositeShader->setInt("uWaterNoiseTex", 8);
+    m_waterCompositeShader->setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
+    m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
+    m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
+    m_waterCompositeShader->setInt("uDepthSofteningEnabled", deferredInputsEnabled ? 1 : 0);
+    m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
+    m_waterCompositeShader->setFloat("uWindTime", frame.shaderTime * 0.003f);
+    m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
+    m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(1.0f));
+
+    if (m_resourceMgr) {
+        const TextureAnimationInfo still = m_resourceMgr->getTextureAnimation("water_still");
+        const TextureAnimationInfo flow = m_resourceMgr->getTextureAnimation("water_flow");
+        m_waterCompositeShader->setFloat("uWaterStillFirstLayer", static_cast<float>(still.firstLayer));
+        m_waterCompositeShader->setFloat("uWaterStillLayerCount", static_cast<float>(std::max(1, still.frameCount)));
+        m_waterCompositeShader->setFloat("uWaterFlowFirstLayer", static_cast<float>(flow.firstLayer));
+        m_waterCompositeShader->setFloat("uWaterFlowLayerCount", static_cast<float>(std::max(1, flow.frameCount)));
+    }
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+
+#ifdef MECRAFT_DEBUG
+    beginGpuTimer(GpuTimerPass::Water);
+#endif
+    if (m_useMultiDrawIndirect) {
+        // Sort water entries back-to-front
+        std::vector<const DrawBatchEntry*> waterEntries;
+        for (const auto& entry : m_deferredTransparentBatch) {
+            if (entry.kind == TransparentBatchKind::Water) {
+                waterEntries.push_back(&entry);
+            }
+        }
+        std::sort(waterEntries.begin(), waterEntries.end(),
+            [](const DrawBatchEntry* a, const DrawBatchEntry* b) {
+                return a->distanceSq > b->distanceSq;
+            });
+
+        glBindVertexArray(m_worldRenderBuffer.transparentVao());
+        for (const auto* entry : waterEntries) {
+            glDrawArrays(GL_TRIANGLES,
+                         static_cast<GLint>(entry->range.firstVertex),
+                         static_cast<GLsizei>(entry->range.vertexCount));
+            ++drawCallCount;
+        }
+    } else {
+        // Non-MDI: sort and draw water sub-chunks
+        struct WaterItem {
+            const ChunkRenderEntry* entry = nullptr;
+            float distanceSq = 0.0f;
+        };
+        std::vector<WaterItem> waterItems;
+        for (const auto& entry : m_deferredTransparentEntries) {
+            if (!entry.chunk) continue;
+            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+            if (!sc || sc->getMesh().waterVertexCount == 0) continue;
+            const glm::ivec3 offset = entry.chunk->getWorldOffset();
+            const int yBase = entry.scy * SubChunk::SIZE;
+            const glm::vec3 center(
+                static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                static_cast<float>(yBase + offset.y) + SubChunk::SIZE * 0.5f,
+                static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+            const glm::vec3 toCamera = center - m_cameraPos;
+            waterItems.push_back({&entry, glm::dot(toCamera, toCamera)});
+        }
+        std::sort(waterItems.begin(), waterItems.end(),
+            [](const WaterItem& a, const WaterItem& b) {
+                return a.distanceSq > b.distanceSq;
+            });
+        for (const auto& item : waterItems) {
+            const SubChunk* sc = item.entry->chunk->getSubChunk(item.entry->scy);
+            glBindVertexArray(sc->getMesh().transparentVao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(sc->getMesh().waterVertexCount));
+            ++drawCallCount;
+        }
+    }
+
+#ifdef MECRAFT_DEBUG
+    endGpuTimer(GpuTimerPass::Water);
+#endif
+    glBindVertexArray(0);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
+    if (compositeInputsEnabled) {
+        m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        restoreCapturedFramebufferViewport(window);
+    }
+
+    for (int unit = 8; unit >= 5; --unit) {
+        glActiveTexture(GL_TEXTURE0 + unit);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
 void Renderer::renderTransparentCompositePass(const World& world, const Window& window) {
+    // Step 1: Render water with dedicated shader
+    renderWaterCompositePass(world, window);
+
+    // Step 2: Render generic transparent
     if (m_deferredFrameActive) {
         restoreCapturedFramebufferViewport(window);
+    }
+
+    if (!m_transparentPassPlan.hasGeneric()) {
+        if (m_deferredFrameActive && m_pipelineSettings.transparentCompositeEnabled && m_deferredTargets.isReady()) {
+            const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
+            const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+            m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+            restoreCapturedFramebufferViewport(window);
+        }
+        return;
     }
 
     m_chunkShader = m_transparentCompositeShader != nullptr ? m_transparentCompositeShader : m_chunkForwardShader;
@@ -238,8 +401,53 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         bindChunkRenderState(frame, texArray);
         bindTransparentCompositeInputs(*m_chunkShader, deferredInputsEnabled, compositeInputsEnabled);
         glEnable(GL_DEPTH_TEST);
-        bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
-        renderTransparentChunks(m_deferredTransparentEntries);
+        // Render generic transparent only -- water was handled in renderWaterCompositePass
+        if (m_useMultiDrawIndirect) {
+            if (!m_deferredTransparentBatch.empty()) {
+                m_chunkShader->setInt("uForceBaseLod", 1);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glDepthMask(GL_FALSE);
+
+                std::sort(m_deferredTransparentBatch.begin(), m_deferredTransparentBatch.end(),
+                          [](const DrawBatchEntry& a, const DrawBatchEntry& b) {
+                              return a.distanceSq > b.distanceSq;
+                          });
+
+                for (const auto& entry : m_deferredTransparentBatch) {
+                    if (entry.kind == TransparentBatchKind::Generic) {
+                        m_worldRenderBuffer.addTransparent(entry.range);
+                    }
+                }
+#ifdef MECRAFT_DEBUG
+                beginGpuTimer(GpuTimerPass::Transparent);
+#endif
+                m_worldRenderBuffer.flushTransparent();
+#ifdef MECRAFT_DEBUG
+                endGpuTimer(GpuTimerPass::Transparent);
+#endif
+                m_chunkShader->setInt("uForceBaseLod", 0);
+                glDepthMask(GL_TRUE);
+                glDisable(GL_BLEND);
+            }
+        } else {
+            // Non-MDI: filter to generic transparent only
+            std::vector<ChunkRenderEntry> genericEntries;
+            for (const auto& entry : m_deferredTransparentEntries) {
+                if (!entry.chunk) continue;
+                const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+                if (!sc) continue;
+                const SubChunkMesh& mesh = sc->getMesh();
+                // Non-MDI path: water vertex count is tracked, generic = total - water
+                if (mesh.transparentVertexCount > mesh.waterVertexCount) {
+                    genericEntries.push_back(entry);
+                }
+            }
+            // Render generic entries with the composite shader, but without water layer effects
+            bindWaterEffectUniforms(*m_chunkShader, false);
+            renderTransparentChunks(genericEntries);
+        }
+
         if (compositeInputsEnabled) {
             m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
             restoreCapturedFramebufferViewport(window);
@@ -351,7 +559,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 15);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 18);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -549,6 +757,7 @@ size_t Renderer::getMeshingHistoryCount() const {
 #endif
 
 void Renderer::beginFrame(const Camera &camera, const Window &window) {
+    ++m_frameCounter;
     glClearColor(m_fogSettings.color.r, m_fogSettings.color.g, m_fogSettings.color.b, 1.0f);
     glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -647,6 +856,31 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.viewProj = m_projection * m_view;
     frame.invViewProj = glm::inverse(frame.viewProj);
     frame.cameraPos = m_cameraPos;
+
+    // Temporal foundation
+    frame.frameIndex = m_frameCounter;
+    frame.deltaTime = static_cast<float>(Time::deltaTime);
+
+    // Halton(2,3) sequence for 8-sample jitter base
+    {
+        constexpr int kHaltonBase = 8;
+        const uint64_t idx = m_frameCounter % static_cast<uint64_t>(kHaltonBase);
+        float haltonX = 0.0f, haltonY = 0.0f;
+        float f2 = 1.0f, f3 = 1.0f;
+        uint64_t n = idx;
+        while (n > 0) { f2 /= 2.0f; haltonX += f2 * static_cast<float>(n % 2); n /= 2; }
+        n = idx;
+        while (n > 0) { f3 /= 3.0f; haltonY += f3 * static_cast<float>(n % 3); n /= 3; }
+        const float invW = 1.0f / static_cast<float>(std::max(1, m_deferredTargets.width()));
+        const float invH = 1.0f / static_cast<float>(std::max(1, m_deferredTargets.height()));
+        frame.jitter.x = (haltonX * 2.0f - 1.0f) * invW;
+        frame.jitter.y = (haltonY * 2.0f - 1.0f) * invH;
+    }
+
+    frame.previousView = m_previousFrameData.view;
+    frame.previousProjection = m_previousFrameData.projection;
+    frame.previousViewProj = m_previousFrameData.viewProj;
+    frame.previousInvViewProj = m_previousFrameData.invViewProj;
     frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
     const double gameTime = Time::getGameTime();
@@ -878,8 +1112,14 @@ bool Renderer::renderWorldDeferred(const World& world,
         m_pipelineSettings.volumetricFogStrength > 0.001f &&
         m_volumetricFogShader != nullptr &&
         m_volumetricCompositeShader != nullptr) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Volumetric);
+#endif
         renderVolumetricFogPass(frame);
         compositeVolumetricFogPass(m_capturedFramebuffer, capturedWidth, capturedHeight);
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Volumetric);
+#endif
         compositedToCapturedFramebuffer = true;
     }
     if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
@@ -1237,6 +1477,12 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uTransparentCompositeDepthTex", 9);
     m_deferredDebugShader->setInt("uVolumetricTex", 10);
     m_deferredDebugShader->setInt("uSkyCaptureTex", 11);
+    m_deferredDebugShader->setInt("uVelocityTex", 12);
+    m_deferredDebugShader->setInt("uHistorySceneTex", 13);
+    m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
+    m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
+    m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
+    m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
 
     glActiveTexture(GL_TEXTURE0);
@@ -1263,9 +1509,13 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    glActiveTexture(GL_TEXTURE13);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
     renderFullscreen(*m_deferredDebugShader);
 
-    for (int unit = 11; unit >= 0; --unit) {
+    for (int unit = 13; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -2043,6 +2293,9 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
 
 void Renderer::endFrame(const Window &window) {
     (void)window;
+    if (m_currentFrameDataValid) {
+        m_previousFrameData = m_currentFrameData;
+    }
     recordMeshingHistory();
     m_currentFrameDataValid = false;
     m_deferredFrameActive = false;
@@ -2572,6 +2825,9 @@ void Renderer::beginGpuTimerFrame() {
             m_gpuFrameStats.ssaoMs = readMs(GpuTimerPass::Ssao);
             m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);
             m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
+            m_gpuFrameStats.volumetricMs = readMs(GpuTimerPass::Volumetric);
+            m_gpuFrameStats.waterMs = readMs(GpuTimerPass::Water);
+            m_gpuFrameStats.postMs = readMs(GpuTimerPass::Post);
             m_gpuTimerIssued[readIndex].fill(false);
         }
     }

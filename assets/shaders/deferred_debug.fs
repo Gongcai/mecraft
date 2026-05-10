@@ -16,6 +16,12 @@ uniform sampler2D uTransparentCompositeTex;
 uniform sampler2D uTransparentCompositeDepthTex;
 uniform sampler2D uVolumetricTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler2D uVelocityTex;
+uniform sampler2D uHistorySceneTex;
+uniform mat4 uShadowViewProj;
+uniform mat4 uInvViewProj;
+uniform float uShadowExtent;
+uniform float uShadowMapSize;
 uniform int uDebugViewMode;
 
 vec3 tonemapPreview(vec3 color) {
@@ -109,6 +115,34 @@ void main() {
     }
     if (uDebugViewMode == 15) {
         FragColor = vec4(tonemapPreview(texture(uSkyCaptureTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 16) {
+        vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
+        float speed = length(velocity);
+        FragColor = vec4(heatmap(speed * 50.0), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 17) {
+        FragColor = vec4(tonemapPreview(texture(uHistorySceneTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 18) {
+        // Shadow Projection debug: visualize frustum coverage and texel density
+        vec4 worldPos = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 0.5, 1.0);
+        worldPos /= max(worldPos.w, 0.0001);
+        vec4 shadowClip = uShadowViewProj * worldPos;
+        vec2 shadowUv = shadowClip.xy / max(shadowClip.w, 0.0001) * 0.5 + 0.5;
+
+        vec3 outOfBounds = vec3(0.0);
+        if (shadowUv.x < 0.0 || shadowUv.x > 1.0 || shadowUv.y < 0.0 || shadowUv.y > 1.0)
+            outOfBounds = vec3(1.0, 0.0, 0.0);
+
+        float texelDensity = uShadowExtent / max(uShadowMapSize, 1.0);
+        float densityHeat = clamp(texelDensity * 2.0, 0.0, 1.0);
+
+        vec3 coverageColor = heatmap(densityHeat);
+        FragColor = vec4(mix(coverageColor, outOfBounds, 0.6), 1.0);
         return;
     }
 

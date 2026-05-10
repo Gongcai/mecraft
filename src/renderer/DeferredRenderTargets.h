@@ -42,6 +42,14 @@ public:
     [[nodiscard]] GLuint skyCaptureTexture() const { return m_skyCaptureTex; }
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
     [[nodiscard]] int skyCaptureHeight() const { return kSkyCaptureHeight; }
+    // History ping-pong for temporal accumulation
+    [[nodiscard]] GLuint historySceneTexture() const { return m_historySceneTex[m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historySceneTexturePrev() const { return m_historySceneTex[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historyDepthTexture() const { return m_historyDepthTex[m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historyDepthTexturePrev() const { return m_historyDepthTex[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint velocityTexture() const { return m_velocityTex; }
+    [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
+    void swapHistory() { m_currentHistoryIndex = 1 - m_currentHistoryIndex; }
     [[nodiscard]] GLuint fullscreenVao() const { return m_fullscreenVao; }
     [[nodiscard]] int width() const { return m_width; }
     [[nodiscard]] int height() const { return m_height; }
@@ -99,6 +107,16 @@ private:
 
     GLuint m_skyCaptureFbo = 0;
     GLuint m_skyCaptureTex = 0;
+
+    // History ping-pong for temporal accumulation
+    GLuint m_historySceneFbo[2] = {0, 0};
+    GLuint m_historySceneTex[2] = {0, 0};
+    GLuint m_historyDepthTex[2] = {0, 0};
+    int m_currentHistoryIndex = 0;
+
+    // Velocity buffer (RG16F encodes screen-space velocity xy)
+    GLuint m_velocityFbo = 0;
+    GLuint m_velocityTex = 0;
 
     GLuint m_fullscreenVao = 0;
 

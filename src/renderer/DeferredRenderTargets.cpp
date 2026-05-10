@@ -17,6 +17,7 @@ bool DeferredRenderTargets::init() {
 void DeferredRenderTargets::shutdown() {
     destroyFramebuffers();
     destroyFullscreenTriangle();
+    m_currentHistoryIndex = 0;
     m_width = 0;
     m_height = 0;
     m_shadowResolution = 0;
@@ -126,6 +127,36 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     const GLenum skyCaptureDrawBuffer = GL_COLOR_ATTACHMENT0;
     glNamedFramebufferDrawBuffers(m_skyCaptureFbo, 1, &skyCaptureDrawBuffer);
     if (!checkFramebufferComplete(m_skyCaptureFbo, "SkyCapture")) {
+        shutdown();
+        return false;
+    }
+
+    // History scene FBO ping-pong (RGBA16F color + depth)
+    for (int i = 0; i < 2; ++i) {
+        glCreateFramebuffers(1, &m_historySceneFbo[i]);
+        m_historySceneTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
+                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+        m_historyDepthTex[i] = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT,
+                                               GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+        glNamedFramebufferTexture(m_historySceneFbo[i], GL_COLOR_ATTACHMENT0, m_historySceneTex[i], 0);
+        glNamedFramebufferTexture(m_historySceneFbo[i], GL_DEPTH_ATTACHMENT, m_historyDepthTex[i], 0);
+        const GLenum historyDrawBuffer = GL_COLOR_ATTACHMENT0;
+        glNamedFramebufferDrawBuffers(m_historySceneFbo[i], 1, &historyDrawBuffer);
+        if (!checkFramebufferComplete(m_historySceneFbo[i], "HistoryScene")) {
+            shutdown();
+            return false;
+        }
+    }
+    m_currentHistoryIndex = 0;
+
+    // Velocity buffer (RG16F)
+    glCreateFramebuffers(1, &m_velocityFbo);
+    m_velocityTex = createTexture2D(GL_RG16F, m_width, m_height, GL_RG, GL_FLOAT,
+                                    GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_velocityFbo, GL_COLOR_ATTACHMENT0, m_velocityTex, 0);
+    const GLenum velocityDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_velocityFbo, 1, &velocityDrawBuffer);
+    if (!checkFramebufferComplete(m_velocityFbo, "Velocity")) {
         shutdown();
         return false;
     }
@@ -316,7 +347,10 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_transparentCompositeTex,
         m_transparentCompositeDepth,
         m_halfResTex,
-        m_skyCaptureTex
+        m_skyCaptureTex,
+        m_historySceneTex[0], m_historySceneTex[1],
+        m_historyDepthTex[0], m_historyDepthTex[1],
+        m_velocityTex
     };
     for (const GLuint texture : textures) {
         if (texture != 0) {
@@ -336,8 +370,11 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_transparentCompositeDepth = 0;
     m_halfResTex = 0;
     m_skyCaptureTex = 0;
+    m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;
+    m_historyDepthTex[0] = 0; m_historyDepthTex[1] = 0;
+    m_velocityTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_skyCaptureFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_velocityFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -351,6 +388,9 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_transparentCompositeFbo = 0;
     m_halfResFbo = 0;
     m_skyCaptureFbo = 0;
+    m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
+    m_velocityFbo = 0;
+    m_currentHistoryIndex = 0;
     m_ready = false;
 }
 
