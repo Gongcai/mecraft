@@ -70,6 +70,7 @@ public:
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
+        int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
         int shadowWarpMode = 2; // 0=Radial debug, 1=Derivative quartic debug, 2=No warp
@@ -357,6 +358,7 @@ private:
     void renderDeferredLightingPass(const World& world);
     void renderVolumetricFogPass(const World& world);
     void compositeVolumetricFogPass(GLint framebuffer, int width, int height);
+    void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
@@ -411,6 +413,7 @@ private:
     Shader* m_chunkGBufferShader = nullptr;
     Shader* m_shadowDepthShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;
+    Shader* m_deferredDebugShader = nullptr;
     Shader* m_ssaoShader = nullptr;
     Shader* m_volumetricFogShader = nullptr;
     Shader* m_volumetricCompositeShader = nullptr;

@@ -347,14 +347,33 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int pipelineMode = static_cast<int>(pipeline.mode);
         int tonemapMode = pipeline.tonemapMode;
         int shadowWarpMode = pipeline.shadowWarpMode;
+        int debugViewMode = pipeline.debugViewMode;
         int weatherPreset = pipeline.weatherPreset;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic", "AgX"};
         static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative Debug", "No Warp"};
+        static constexpr const char* kDebugViewModes[] = {
+            "Off",
+            "GBuffer Albedo",
+            "GBuffer Normal",
+            "GBuffer Vertex AO",
+            "Voxel Light",
+            "Material Rough/F0/Emission",
+            "Material SSS",
+            "Depth",
+            "Shadow Depth",
+            "SSAO",
+            "Scene Lighting",
+            "Volumetric RGB",
+            "Volumetric Transmittance",
+            "Sky Capture"
+        };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
+        pipelineChanged |= ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));
+        pipeline.debugViewMode = debugViewMode;
         pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
