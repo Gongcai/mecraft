@@ -5,6 +5,7 @@ out vec4 FragColor;
 
 uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler2D uNoiseTex;
 uniform mat4 uInvViewProj;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
@@ -17,8 +18,11 @@ uniform float uMoonVisibility;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uVolumetricFogStrength;
+uniform float uTime;
+uniform bool uNoiseEnabled;
 
 const float kTwoPi = 6.28318530718;
+const int kFogSteps = 8;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -42,6 +46,57 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
+float hash13(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+float sampleNoise2D(vec2 uv, float slice, int channel) {
+    vec4 n = texture(uNoiseTex, uv + vec2(slice * 0.071, slice * 0.113));
+    if (channel == 0) {
+        return n.r;
+    }
+    if (channel == 1) {
+        return n.g;
+    }
+    return n.b;
+}
+
+float pseudo3DNoise(vec3 p, float scale, vec2 wind) {
+    if (!uNoiseEnabled) {
+        return hash13(p * scale);
+    }
+
+    vec3 q = p * scale;
+    float slice = q.y * 7.0 + q.z * 1.7;
+    float slice0 = floor(slice);
+    float blend = smoothstep(0.0, 1.0, fract(slice));
+    vec2 uv = q.xz + wind;
+    float n0 = sampleNoise2D(uv, slice0, 0);
+    float n1 = sampleNoise2D(uv, slice0 + 1.0, 1);
+    return mix(n0, n1, blend);
+}
+
+float structuredFogDensity(vec3 worldPos) {
+    vec2 wind = vec2(uTime * 0.004, uTime * 0.002);
+    float base = pseudo3DNoise(worldPos, 0.030, wind);
+    float detail = pseudo3DNoise(worldPos + vec3(37.0, 11.0, -19.0), 0.105, -wind * 1.65);
+    float broad = smoothstep(0.18, 0.88, base * 0.95 + detail * 0.30);
+    float fineVoids = smoothstep(0.24, 0.78, base - detail * 0.22);
+    return mix(0.30, 1.55, broad) * mix(0.72, 1.18, fineVoids);
+}
+
+float rayleighPhase(float cosTheta) {
+    return 0.0596831 * (1.0 + cosTheta * cosTheta);
+}
+
+float henyeyGreenstein(float cosTheta, float g) {
+    float g2 = g * g;
+    float denom = max(1.0 + g2 - 2.0 * g * cosTheta, 0.001);
+    return 0.0795775 * (1.0 - g2) / (denom * sqrt(denom));
+}
+
 void main() {
     float depth = texture(uDepthTex, vTexCoord).r;
     if (depth >= 1.0) {
@@ -53,18 +108,11 @@ void main() {
     vec3 ray = worldPos - uCameraPos;
     float distance = length(ray);
     vec3 viewDir = ray / max(distance, 0.0001);
+    float marchDistance = min(distance, 260.0);
 
     float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
     float nightFactor = 1.0 - dayFactor;
     float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.45);
-    float heightDensity = 1.0 - smoothstep(92.0, 230.0, worldPos.y);
-    float density = (0.00028 + 0.00072 * horizon) *
-                    clamp(uAerialStrength, 0.0, 2.0) *
-                    clamp(uVolumetricFogStrength, 0.0, 2.0) *
-                    heightDensity;
-    float opticalDepth = distance * density;
-    float transmittance = exp(-opticalDepth);
-    float opacity = clamp(1.0 - transmittance, 0.0, 0.30);
 
     vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.30, viewDir.z));
     vec3 skyColor = sampleSkyCapture(captureDir);
@@ -73,13 +121,45 @@ void main() {
     vec3 sunDir = normalize(uSunDirection);
     vec3 moonDir = normalize(uMoonDirection);
     float sunVisibility = smoothstep(-0.08, 0.18, sunDir.y) * dayFactor;
-    float sunForward = pow(max(dot(viewDir, sunDir), 0.0), 18.0);
-    float sunWide = pow(max(dot(viewDir, sunDir), 0.0), 4.0);
-    float moonForward = pow(max(dot(viewDir, moonDir), 0.0), 10.0) * clamp(uMoonVisibility, 0.0, 1.0);
-    fogColor += uSunLightColor * (sunWide * 0.12 + sunForward * 0.42) *
+    float sunDot = max(dot(viewDir, sunDir), 0.0);
+    float moonDot = max(dot(viewDir, moonDir), 0.0);
+    float sunForward = pow(sunDot, 18.0);
+    float sunWide = pow(sunDot, 4.0);
+    float moonForward = pow(moonDot, 10.0) * clamp(uMoonVisibility, 0.0, 1.0);
+    float sunPhase = rayleighPhase(dot(viewDir, sunDir)) * 0.35 + henyeyGreenstein(dot(viewDir, sunDir), 0.58) * 0.65;
+    float moonPhase = rayleighPhase(dot(viewDir, moonDir)) * 0.55 + henyeyGreenstein(dot(viewDir, moonDir), 0.36) * 0.45;
+    fogColor += uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                 sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
-    fogColor += uMoonLightColor * moonForward * nightFactor * 0.18;
+    fogColor += uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
 
-    vec3 scattering = max(fogColor, vec3(0.0)) * opacity;
-    FragColor = vec4(scattering, 1.0 - opacity);
+    float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
+    float baseDensity = (0.00013 + 0.00036 * horizon) * strength;
+    float jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
+    float stepLength = marchDistance / float(kFogSteps);
+    vec3 scattering = vec3(0.0);
+    float transmittance = 1.0;
+
+    for (int i = 0; i < kFogSteps; ++i) {
+        float t = (float(i) + jitter) / float(kFogSteps);
+        vec3 samplePos = uCameraPos + viewDir * (t * marchDistance);
+        float heightDensity = exp2(min((92.0 - samplePos.y) * 0.022, 0.35));
+        heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
+        heightDensity = clamp(heightDensity, 0.035, 1.45);
+
+        float structure = structuredFogDensity(samplePos);
+        float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
+        float sampleDensity = baseDensity * heightDensity * structure * nearFade;
+        float opticalStep = sampleDensity * stepLength;
+        float stepTransmittance = exp(-opticalStep);
+        float stepOpacity = clamp(1.0 - stepTransmittance, 0.0, 0.18);
+        float powder = 1.0 - exp(-structure * heightDensity * 0.65);
+        vec3 stepColor = fogColor * (0.86 + powder * 0.28);
+        scattering += transmittance * stepColor * stepOpacity;
+        transmittance *= stepTransmittance;
+    }
+
+    float opacity = clamp(1.0 - transmittance, 0.0, 0.34);
+    float rawOpacity = max(1.0 - transmittance, 0.0001);
+    scattering *= opacity / rawOpacity;
+    FragColor = vec4(max(scattering, vec3(0.0)), 1.0 - opacity);
 }

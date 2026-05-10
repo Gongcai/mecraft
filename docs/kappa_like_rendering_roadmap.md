@@ -365,6 +365,14 @@ Bruneton LUT 后置条件：
 - 合成到 scene lighting：`scene.rgb = scene.rgb * transmittance + scattering`。
 - 本阶段暂不采样 shadow map，不加入 noise2D 伪 3D 噪声，不做深度感知双边上采样；这些进入 5C/5D。
 
+阶段 5C Medium：
+
+- `volumetric_fog.fs` 从单次高度雾升级为低步数屏幕空间 ray marching。
+- 使用 `shader_noise2d` 构造两层 pseudo-3D density，并加入低速风场偏移。
+- 雾输出仍保持 RGB scattering / A transmittance，合成公式不变。
+- `volumetric_composite.fs` 加入基于 full-res depth 的 5-tap 空间上采样，降低 half-res 雾在方块边缘的漏光和白糊。
+- 本阶段仍不采样 shadow map；shadowed volumetric light / 丁达尔光束进入 5D。
+
 关键任务：
 
 - 新增 half-res volumetric target：

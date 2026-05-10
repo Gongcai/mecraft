@@ -1000,6 +1000,7 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->use();
     m_volumetricFogShader->setInt("uDepthTex", 0);
     m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
+    m_volumetricFogShader->setInt("uNoiseTex", 2);
     m_volumetricFogShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_volumetricFogShader->setVec3("uCameraPos", m_cameraPos);
     m_volumetricFogShader->setVec3("uSunDirection", skyColors.sunDirection);
@@ -1012,12 +1013,19 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     m_volumetricFogShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     m_volumetricFogShader->setFloat("uVolumetricFogStrength", m_pipelineSettings.volumetricFogStrength);
+    m_volumetricFogShader->setFloat("uTime", static_cast<float>(std::fmod(Time::getGameTime(), 8192.0)));
+    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
+    m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, noiseTexture);
     renderFullscreen(*m_volumetricFogShader);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
@@ -1036,11 +1044,20 @@ void Renderer::compositeVolumetricFogPass(const GLint framebuffer, const int wid
     m_volumetricCompositeShader->use();
     m_volumetricCompositeShader->setInt("uSceneTex", 0);
     m_volumetricCompositeShader->setInt("uVolumetricTex", 1);
+    m_volumetricCompositeShader->setInt("uDepthTex", 2);
+    m_volumetricCompositeShader->setVec2(
+        "uInvFullResolution",
+        glm::vec2(1.0f / static_cast<float>(std::max(1, width)),
+                  1.0f / static_cast<float>(std::max(1, height))));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     renderFullscreen(*m_volumetricCompositeShader);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
