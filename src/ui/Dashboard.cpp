@@ -385,6 +385,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.18f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.04f;
+            pipeline.aerialStrength = 0.25f;
+            pipeline.horizonScatterStrength = 0.35f;
             pipeline.bloomThreshold = 1.05f;
             pipeline.bloomStrength = 0.10f;
             pipeline.autoExposureEnabled = false;
@@ -424,6 +426,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.28f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.06f;
+            pipeline.aerialStrength = 0.65f;
+            pipeline.horizonScatterStrength = 0.78f;
             pipeline.bloomThreshold = 0.82f;
             pipeline.bloomStrength = 0.18f;
             pipeline.autoExposureEnabled = true;
@@ -463,6 +467,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.34f;
             pipeline.blockLightStrength = 1.05f;
             pipeline.fakeBounceStrength = 0.08f;
+            pipeline.aerialStrength = 0.78f;
+            pipeline.horizonScatterStrength = 0.90f;
             pipeline.bloomThreshold = 0.72f;
             pipeline.bloomStrength = 0.24f;
             pipeline.autoExposureEnabled = true;

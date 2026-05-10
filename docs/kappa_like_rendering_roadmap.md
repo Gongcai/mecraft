@@ -351,6 +351,13 @@ Bruneton LUT 后置条件：
 
 目标：实现 DerivativeMain 高性价比的半分辨率体积雾/光。
 
+阶段 5A 基础层：
+
+- 先把现有 distance fog/aerial perspective 收敛成统一函数。
+- deferred 不透明与 forward 透明/水共用同一套天空捕获雾色、日/月方向散射和户外 skylight mask。
+- 仍依赖现有 fog 开关与距离参数；洞穴通过 outdoor sky mask 抑制空气透视，避免室内凭空泛白。
+- 本阶段不是完整 half-res ray marching，后续再接散射/transmittance target。
+
 关键任务：
 
 - 新增 half-res volumetric target：

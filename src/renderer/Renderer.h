@@ -102,8 +102,8 @@ public:
         float shadowContrast = 1.10f;
         float blockLightStrength = 1.00f;
         float fakeBounceStrength = 0.06f;
-        float aerialStrength = 0.55f;
-        float horizonScatterStrength = 0.65f;
+        float aerialStrength = 0.65f;
+        float horizonScatterStrength = 0.78f;
         float noiseDitherStrength = 0.015f;
         float sharpenStrength = 0.08f;
         float ssaoRadius = 2.25f;
