@@ -93,12 +93,17 @@ float smithG1(float ndotv, float roughness) {
 }
 
 float hammonDiffuseApprox(float ndotl, float ndotv, float roughness) {
-    float facing = ndotl * 0.5 + 0.5;
+    float lit = max(ndotl, 0.0);
     float viewWrap = ndotv * 0.5 + 0.5;
-    float roughWrap = mix(0.05, 0.28, clamp(roughness, 0.0, 1.0));
-    return pow(max(facing, 0.0), mix(1.25, 0.72, roughness)) *
-           mix(1.0, viewWrap, 0.22) *
-           (1.0 + roughWrap * (1.0 - ndotl));
+    float roughBoost = mix(0.0, 0.18, clamp(roughness, 0.0, 1.0));
+    return pow(lit, mix(1.18, 0.78, roughness)) *
+           mix(0.92, 1.08, viewWrap) *
+           (1.0 + roughBoost * (1.0 - lit));
+}
+
+float roughTerminatorFill(float ndotl, float roughness) {
+    float terminator = smoothstep(-0.18, 0.12, ndotl) * (1.0 - smoothstep(0.10, 0.55, ndotl));
+    return terminator * roughness * 0.16;
 }
 
 vec3 fresnelSchlick(float vdoth, vec3 f0) {
@@ -455,12 +460,14 @@ void main() {
     vec3 moonDir = normalize(uMoonDirection);
     vec3 viewDir = normalize(uCameraPos - worldPos);
     vec3 halfDir = normalize(sunDir + viewDir);
-    float ndotl = max(dot(normal, sunDir), 0.0);
-    float ndotm = max(dot(normal, moonDir), 0.0);
+    float rawNdotL = dot(normal, sunDir);
+    float rawNdotM = dot(normal, moonDir);
+    float ndotl = max(rawNdotL, 0.0);
+    float ndotm = max(rawNdotM, 0.0);
     float ndotv = max(dot(normal, viewDir), 0.04);
     float ndoth = max(dot(normal, halfDir), 0.0);
     float vdoth = max(dot(viewDir, halfDir), 0.0);
-    float diffuse = hammonDiffuseApprox(ndotl, ndotv, roughness);
+    float diffuse = hammonDiffuseApprox(rawNdotL, ndotv, roughness);
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
     vec3 shadowLightDir = (uShadowLightMode == 1) ? moonDir : sunDir;
     float shadow = shadowFactor(worldPos, normal, shadowLightDir);
@@ -475,8 +482,9 @@ void main() {
     vec3 capturedNormalSky = sampleSkyIrradiance(normal);
     float skyCaptureInfluence = mix(0.18, 0.46, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
     coolSkyColor = mix(coolSkyColor, mix(capturedZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
-    float directEnergy = 1.42 + 0.28 * (1.0 - roughness);
-    vec3 directSun = warmSunColor * diffuse * sunShadow * skyLightMask * uDirectSunStrength * directEnergy;
+    float directEnergy = 1.56 + 0.28 * (1.0 - roughness);
+    float terminatorFill = roughTerminatorFill(rawNdotL, roughness) * sunShadow;
+    vec3 directSun = warmSunColor * (diffuse * sunShadow + terminatorFill) * skyLightMask * uDirectSunStrength * directEnergy;
     float moonMask = nightSkyMask;
     vec3 moonFill = uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
     vec3 directMoon = uMoonLightColor * pow(ndotm * 0.5 + 0.5, 1.15) * moonShadow * moonMask * (0.38 + 0.18 * uSkyAmbientStrength);
@@ -488,7 +496,7 @@ void main() {
     directSpecular *= ndotl * sunShadow * skyLightMask * uDirectSunStrength;
     directSpecular *= mix(1.18, 0.18, roughness);
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 skyAmbient = coolSkyColor * (0.032 + 0.62 * outdoorSkyMask) *
+    vec3 skyAmbient = coolSkyColor * (0.026 + 0.54 * outdoorSkyMask) *
                       uSkyAmbientStrength *
                       mix(0.48, 1.0, upward) +
                       moonFill;
@@ -496,10 +504,10 @@ void main() {
     vec3 skySpecular = coolSkyColor * specF * pow(1.0 - roughness, 1.65) * (0.018 + 0.105 * outdoorSkyMask);
 
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
-    vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.78;
+    vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
 
     float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
-    vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
+    vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing) * (0.35 + 0.65 * (1.0 - sunShadow));
 
     float blockLightCurve = pow(blockLightMask, 2.05);
     vec3 warmBlockLight = vec3(1.0, 0.84, 0.58);
@@ -510,7 +518,7 @@ void main() {
     totalLight = mix(totalLight, vanillaLight, 0.025);
 
     vec3 color = albedo * totalLight * vertexAo * mix(1.0, ssao, 0.65);
-    float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * sunShadow;
+    float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * mix(0.35, 1.0, sunShadow);
     color += albedo * warmSunColor * backScatter * sss * (0.46 + 0.20 * uDirectSunStrength);
     float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * moonMask;
     color += albedo * uMoonLightColor * moonBackScatter * sss * 0.12;

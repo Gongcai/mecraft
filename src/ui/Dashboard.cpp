@@ -428,8 +428,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.directSunStrength = 1.36f;
             pipeline.skyAmbientStrength = 0.36f;
             pipeline.minimumAmbient = 0.055f;
-            pipeline.shadowMinLight = 0.12f;
-            pipeline.shadowContrast = 1.10f;
+            pipeline.contactShadowStrength = 0.18f;
+            pipeline.shadowMinLight = 0.08f;
+            pipeline.shadowContrast = 1.28f;
             pipeline.shadowTintStrength = 0.28f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.06f;
@@ -471,8 +472,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.directSunStrength = 1.58f;
             pipeline.skyAmbientStrength = 0.28f;
             pipeline.minimumAmbient = 0.04f;
-            pipeline.shadowMinLight = 0.08f;
-            pipeline.shadowContrast = 1.35f;
+            pipeline.contactShadowStrength = 0.22f;
+            pipeline.shadowMinLight = 0.055f;
+            pipeline.shadowContrast = 1.52f;
             pipeline.shadowTintStrength = 0.34f;
             pipeline.blockLightStrength = 1.05f;
             pipeline.fakeBounceStrength = 0.08f;

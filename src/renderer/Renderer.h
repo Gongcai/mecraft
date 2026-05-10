@@ -79,7 +79,7 @@ public:
         float shadowConstantBias = 0.0007f;
         float shadowSlopeBias = 0.0022f;
         float shadowNormalOffset = 0.035f;
-        float contactShadowStrength = 0.12f;
+        float contactShadowStrength = 0.18f;
         float sunRayStrength = 0.14f;
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
@@ -100,8 +100,8 @@ public:
         float directSunStrength = 1.36f;
         float skyAmbientStrength = 0.36f;
         float minimumAmbient = 0.055f;
-        float shadowMinLight = 0.12f;
-        float shadowContrast = 1.10f;
+        float shadowMinLight = 0.08f;
+        float shadowContrast = 1.28f;
         float blockLightStrength = 1.00f;
         float fakeBounceStrength = 0.06f;
         float aerialStrength = 0.65f;

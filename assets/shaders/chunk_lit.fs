@@ -198,12 +198,17 @@ uniform vec3 uCameraPos;
     }
 
     float hammonDiffuseApprox(float ndotl, float ndotv, float roughness) {
-        float facing = ndotl * 0.5 + 0.5;
+        float lit = max(ndotl, 0.0);
         float viewWrap = ndotv * 0.5 + 0.5;
-        float roughWrap = mix(0.05, 0.28, clamp(roughness, 0.0, 1.0));
-        return pow(max(facing, 0.0), mix(1.25, 0.72, roughness)) *
-               mix(1.0, viewWrap, 0.22) *
-               (1.0 + roughWrap * (1.0 - ndotl));
+        float roughBoost = mix(0.0, 0.18, clamp(roughness, 0.0, 1.0));
+        return pow(lit, mix(1.18, 0.78, roughness)) *
+               mix(0.92, 1.08, viewWrap) *
+               (1.0 + roughBoost * (1.0 - lit));
+    }
+
+    float roughTerminatorFill(float ndotl, float roughness) {
+        float terminator = smoothstep(-0.18, 0.12, ndotl) * (1.0 - smoothstep(0.10, 0.55, ndotl));
+        return terminator * roughness * 0.16;
     }
 
     vec3 artisticSunIlluminance(vec3 sunColor, vec3 sunDir) {
@@ -394,10 +399,12 @@ uniform vec3 uCameraPos;
         vec3 viewDir = normalize(uCameraPos - vWorldPos);
         float roughness = materialRoughness(vMaterialKind);
         float sss = materialSss(vMaterialKind);
-        float ndotl = max(dot(normal, sunDir), 0.0);
+        float rawNdotL = dot(normal, sunDir);
+        float rawNdotM = dot(normal, moonDir);
+        float ndotl = max(rawNdotL, 0.0);
         float ndotv = max(dot(normal, viewDir), 0.04);
-        float diffuse = hammonDiffuseApprox(ndotl, ndotv, roughness);
-        float moonDiffuse = pow(max(dot(normal, moonDir) * 0.5 + 0.5, 0.0), 1.15);
+        float diffuse = hammonDiffuseApprox(rawNdotL, ndotv, roughness);
+        float moonDiffuse = pow(max(rawNdotM, 0.0), 0.90);
 
         vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
         warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
@@ -405,18 +412,19 @@ uniform vec3 uCameraPos;
         vec3 capturedSky = (uSkyCaptureEnabled != 0) ? sampleSkyIrradiance(normal) : coolSkyColor;
         float skyCaptureInfluence = (uSkyCaptureEnabled != 0) ? mix(0.12, 0.34, 1.0 - clamp(uSkyIntensity, 0.0, 1.0)) : 0.0;
         coolSkyColor = mix(coolSkyColor, capturedSky, skyCaptureInfluence);
-        vec3 directSun = warmSunColor * diffuse * skyLightMask * uDirectSunStrength * (1.42 + 0.28 * (1.0 - roughness));
+        float terminatorFill = roughTerminatorFill(rawNdotL, roughness);
+        vec3 directSun = warmSunColor * (diffuse + terminatorFill) * skyLightMask * uDirectSunStrength * (1.56 + 0.28 * (1.0 - roughness));
         float moonMask = nightSkyMask;
         vec3 moonFill = uMoonLightColor * moonMask * (0.026 + 0.052 * uSkyAmbientStrength);
         vec3 directMoon = uMoonLightColor * moonDiffuse * moonMask * (0.36 + 0.18 * uSkyAmbientStrength);
         float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-        vec3 skyAmbient = coolSkyColor * (0.032 + 0.62 * outdoorSkyMask) *
+        vec3 skyAmbient = coolSkyColor * (0.026 + 0.54 * outdoorSkyMask) *
                           uSkyAmbientStrength *
                           mix(0.48, 1.0, upward) +
                           moonFill;
-        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.28, 0.92, outdoorSkyMask) * 0.78;
+        vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.28, 0.92, outdoorSkyMask) * 0.62;
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
-        vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.35 + 0.65 * groundFacing);
+        vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing);
         vec3 blockLightColor = mix(vec3(1.0, 0.84, 0.58), vanillaLight, 0.18);
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
         vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight;
