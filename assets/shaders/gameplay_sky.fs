@@ -29,6 +29,49 @@ vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+vec2 hash22(vec2 p) {
+    float x = hash12(p + vec2(17.13, 3.71));
+    float y = hash12(p + vec2(5.29, 41.37));
+    return vec2(x, y);
+}
+
+vec3 starDirectionFromCell(vec2 cell) {
+    vec2 jitter = hash22(cell);
+    vec2 uv = (cell + jitter) / vec2(160.0, 80.0);
+    float phi = uv.x * kTwoPi - kPi;
+    float cosTheta = uv.y * 2.0 - 1.0;
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+    return normalize(vec3(sin(phi) * sinTheta, cosTheta, -cos(phi) * sinTheta));
+}
+
+float starField(vec3 dir) {
+    float upperSky = smoothstep(0.04, 0.42, dir.y);
+    vec2 sphereUv = vec2(atan(dir.x, -dir.z) / kTwoPi + 0.5, dir.y * 0.5 + 0.5);
+    vec2 baseCell = floor(sphereUv * vec2(160.0, 80.0));
+    float stars = 0.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            vec2 cell = baseCell + vec2(float(x), float(y));
+            vec2 wrappedCell = vec2(mod(cell.x, 160.0), clamp(cell.y, 0.0, 79.0));
+            float rnd = hash12(wrappedCell);
+            float visible = smoothstep(0.982, 0.998, rnd);
+            vec3 starDir = starDirectionFromCell(wrappedCell);
+            float angular = max(dot(normalize(dir), starDir), 0.0);
+            float size = mix(0.9999985, 0.9999920, hash12(wrappedCell + vec2(7.7, 91.3)));
+            float core = smoothstep(size, 1.0, angular);
+            float twinkle = mix(0.70, 1.18, hash12(wrappedCell + vec2(19.7, 4.2)));
+            stars += visible * core * twinkle;
+        }
+    }
+    return min(stars, 1.0) * upperSky;
+}
+
 vec3 evaluateSkyRadiance(vec3 dir) {
     float height = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
     float gradient = smoothstep(0.0, 1.0, height);
@@ -43,11 +86,13 @@ vec3 evaluateSkyRadiance(vec3 dir) {
     color += uSunScatterColor * (glow + wideGlow) * smoothstep(-0.08, 0.18, uSunDirection.y);
 
     float moonDot = max(dot(dir, normalize(uMoonDirection)), 0.0);
-    float moonGlow = pow(moonDot, 36.0) * 0.24 + pow(moonDot, 8.0) * 0.045;
+    float moonGlow = pow(moonDot, 36.0) * 0.32 + pow(moonDot, 8.0) * 0.070;
     color += uMoonLightColor * moonGlow * clamp(uMoonVisibility, 0.0, 1.0);
 
     float nightHorizon = horizon * clamp(uNightFactor, 0.0, 1.0);
     color += vec3(0.04, 0.08, 0.12) * nightHorizon;
+    float stars = starField(dir) * clamp(uNightFactor, 0.0, 1.0) * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
+    color += vec3(0.72, 0.82, 1.0) * stars * 1.15;
     return color;
 }
 

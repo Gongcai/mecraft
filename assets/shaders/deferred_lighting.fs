@@ -12,6 +12,7 @@ uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
 uniform sampler2D uShadowMap;
 uniform sampler2D uSsaoTex;
+uniform sampler2D uSkyCaptureTex;
 
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
@@ -98,6 +99,18 @@ vec3 blackbodyApprox(float temperatureKelvin) {
     }
     color.b = t >= 6.6 ? 1.0 : (t <= 1.9 ? 0.0 : clamp(0.54320679 * log(t - 1.0) - 1.19625409, 0.0, 1.0));
     return color;
+}
+
+vec2 directionToSkyCaptureUv(vec3 dir) {
+    dir = normalize(dir);
+    float phi = atan(dir.x, -dir.z);
+    float u = phi / kTwoPi + 0.5;
+    float v = dir.y * 0.5 + 0.5;
+    return vec2(fract(u), clamp(v, 0.0, 1.0));
+}
+
+vec3 sampleSkyCapture(vec3 dir) {
+    return texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb;
 }
 
 float computeFogFactor(float fogDistance) {
@@ -324,6 +337,10 @@ void main() {
 
     vec3 warmSunColor = mix(uSunLightColor, uSunLightColor * vec3(1.22, 1.04, 0.78), clamp(uSunWarmth, 0.0, 1.5));
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
+    vec3 capturedZenith = sampleSkyCapture(vec3(0.0, 1.0, 0.0));
+    vec3 capturedNormalSky = sampleSkyCapture(normal + vec3(0.0, 0.35, 0.0));
+    float skyCaptureInfluence = mix(0.18, 0.46, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
+    coolSkyColor = mix(coolSkyColor, mix(capturedZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
     vec3 directSun = warmSunColor * diffuse * shadow * skyLightMask * uDirectSunStrength;
     vec3 f0 = vec3(f0Scalar);
     vec3 specF = fresnelSchlick(vdoth, f0);
@@ -372,6 +389,9 @@ void main() {
             float sunForward = pow(max(dot(viewDir, normalize(uSunDirection)), 0.0), 2.0);
             float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.65);
             float heightFade = 1.0 - smoothstep(96.0, 192.0, worldPos.y);
+            vec3 capturedFog = sampleSkyCapture(normalize(vec3(viewDir.x, viewDir.y * 0.35, viewDir.z)));
+            float captureFogInfluence = mix(0.24, 0.52, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
+            fogColor = mix(fogColor, capturedFog, captureFogInfluence);
             vec3 scatter = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
             scatter += warmSunColor * sunForward * 0.26 * clamp(uHorizonScatterStrength, 0.0, 2.0);
             fogColor = mix(fogColor, scatter, clamp(uAerialStrength, 0.0, 2.0) * heightFade);

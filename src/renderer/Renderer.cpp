@@ -834,6 +834,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uLightmapNight", 6);
     m_deferredLightingShader->setInt("uShadowMap", 7);
     m_deferredLightingShader->setInt("uSsaoTex", 8);
+    m_deferredLightingShader->setInt("uSkyCaptureTex", 9);
     m_deferredLightingShader->setMat4("uViewProj", m_projection * m_view);
     m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
@@ -906,8 +907,12 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     renderFullscreen(*m_deferredLightingShader);
 
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE7);

@@ -20,7 +20,7 @@ void main() {
     if (uMode == 0) {
         vec2 clip = aPos.xy;
         vec4 viewNear = inverse(uProjection) * vec4(clip, 1.0, 1.0);
-        vec3 viewDir = normalize(viewNear.xyz / viewNear.w);
+        vec3 viewDir = viewNear.xyz / viewNear.w;
         vWorldDir = mat3(transpose(uView)) * viewDir;
         gl_Position = vec4(clip, 0.0, 1.0);
         return;
