@@ -1,4 +1,5 @@
 #version 450 core
+#include "gbuffer_contract.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -61,13 +62,13 @@ void main() {
         return;
     }
     if (uDebugViewMode == 5) {
-        vec4 material = texture(uMaterialTex, vTexCoord);
-        FragColor = vec4(material.r, material.g * 3.0, material.b, 1.0);
+        SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
+        FragColor = vec4(material.roughness, material.f0 * 3.0, material.emission, 1.0);
         return;
     }
     if (uDebugViewMode == 6) {
-        float sss = texture(uMaterialTex, vTexCoord).a;
-        FragColor = vec4(heatmap(sss), 1.0);
+        SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
+        FragColor = vec4(heatmap(material.sss), 1.0);
         return;
     }
     if (uDebugViewMode == 7) {

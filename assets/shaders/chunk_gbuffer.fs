@@ -1,4 +1,5 @@
 #version 450 core
+#include "gbuffer_contract.glsl"
 
 layout (location = 0) out vec4 GAlbedoMaterial;
 layout (location = 1) out vec4 GNormalAo;
@@ -42,58 +43,6 @@ vec3 decodeFaceNormal(float face) {
     return vec3(1.0, 0.0, 0.0);
 }
 
-vec4 vanillaMaterialParams(float materialKind, float emissiveHint) {
-    float roughness = 0.84;
-    float f0 = 0.040;
-    float emission = 0.0;
-    float sss = 0.0;
-    int kind = int(round(materialKind));
-
-    if (kind == 1) {          // stone
-        roughness = 0.78;
-        f0 = 0.055;
-    } else if (kind == 2) {   // dirt
-        roughness = 0.96;
-        f0 = 0.030;
-    } else if (kind == 3) {   // grass
-        roughness = 0.88;
-        f0 = 0.035;
-        sss = 0.26;
-    } else if (kind == 4) {   // wood
-        roughness = 0.68;
-        f0 = 0.050;
-    } else if (kind == 5) {   // leaves
-        roughness = 0.74;
-        f0 = 0.040;
-        sss = 0.72;
-    } else if (kind == 6) {   // plant
-        roughness = 0.82;
-        f0 = 0.032;
-        sss = 0.78;
-    } else if (kind == 7) {   // sand
-        roughness = 0.92;
-        f0 = 0.026;
-    } else if (kind == 8) {   // glass
-        roughness = 0.08;
-        f0 = 0.060;
-    } else if (kind == 9) {   // water
-        roughness = 0.03;
-        f0 = 0.020;
-    } else if (kind == 10) {  // ore
-        roughness = 0.42;
-        f0 = 0.120;
-    } else if (kind == 11) {  // emissive
-        roughness = 0.44;
-        f0 = 0.060;
-        emission = pow(emissiveHint, 1.35);
-    } else if (kind == 12) {  // metal-ish vanilla blocks
-        roughness = 0.30;
-        f0 = 0.260;
-    }
-
-    return vec4(roughness, f0, emission, sss);
-}
-
 void main() {
     bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
     bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
@@ -119,7 +68,7 @@ void main() {
 
     vec3 normal = decodeFaceNormal(vNormal);
     float ao = clamp(vAO / 3.0, 0.0, 1.0);
-    bool isEmissiveMaterial = int(round(vMaterialKind)) == 11;
+    bool isEmissiveMaterial = isMaterialKind(vMaterialKind, MATERIAL_EMISSIVE);
     float emissiveLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     float emissivePeak = max(max(albedo.r, albedo.g), albedo.b);
     float emissiveMask = smoothstep(0.34, 0.72, max(emissiveLuma, emissivePeak * 0.72));
@@ -128,5 +77,5 @@ void main() {
     GAlbedoMaterial = vec4(albedo, emissiveHint);
     GNormalAo = vec4(normal * 0.5 + 0.5, ao);
     GVoxelLight = vec4(clamp(vSunlight, 0.0, 1.0), clamp(vBlockLight, 0.0, 1.0), 0.0, 1.0);
-    GMaterial = vanillaMaterialParams(vMaterialKind, emissiveHint);
+    GMaterial = packGBufferMaterial(surfaceMaterialForKind(vMaterialKind, emissiveHint));
 }

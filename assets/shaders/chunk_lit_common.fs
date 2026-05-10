@@ -1,4 +1,5 @@
 out vec4 FragColor;
+#include "gbuffer_contract.glsl"
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
 #define MECRAFT_TRANSPARENT_COMPOSITE 0
@@ -207,31 +208,6 @@ uniform vec3 uCameraPos;
         return max(color, vec3(0.0));
     }
 
-    float materialRoughness(float materialKind) {
-        int kind = int(round(materialKind));
-        if (kind == 1) return 0.78;
-        if (kind == 2) return 0.96;
-        if (kind == 3) return 0.88;
-        if (kind == 4) return 0.68;
-        if (kind == 5) return 0.74;
-        if (kind == 6) return 0.82;
-        if (kind == 7) return 0.92;
-        if (kind == 8) return 0.08;
-        if (kind == 9) return 0.03;
-        if (kind == 10) return 0.42;
-        if (kind == 11) return 0.44;
-        if (kind == 12) return 0.30;
-        return 0.84;
-    }
-
-    float materialSss(float materialKind) {
-        int kind = int(round(materialKind));
-        if (kind == 3) return 0.26;
-        if (kind == 5) return 0.72;
-        if (kind == 6) return 0.78;
-        return 0.0;
-    }
-
     float hammonDiffuseApprox(float ndotl, float ndotv, float roughness) {
         float lit = max(ndotl, 0.0);
         float viewWrap = ndotv * 0.5 + 0.5;
@@ -432,8 +408,9 @@ uniform vec3 uCameraPos;
         vec3 sunDir = normalize(uSunDirection);
         vec3 moonDir = normalize(uMoonDirection);
         vec3 viewDir = normalize(uCameraPos - vWorldPos);
-        float roughness = materialRoughness(vMaterialKind);
-        float sss = materialSss(vMaterialKind);
+        SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, 0.0);
+        float roughness = material.roughness;
+        float sss = material.sss;
         float rawNdotL = dot(normal, sunDir);
         float rawNdotM = dot(normal, moonDir);
         float ndotl = max(rawNdotL, 0.0);
@@ -469,7 +446,7 @@ uniform vec3 uCameraPos;
         vec3 finalColor = albedo * lightColor * aoFactor;
         float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask;
         finalColor += albedo * warmSunColor * backScatter * sss * (0.38 + 0.16 * uDirectSunStrength);
-        if (int(round(vMaterialKind)) == 11) {
+        if (isMaterialKind(vMaterialKind, MATERIAL_EMISSIVE)) {
             float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
             float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);
             float emissionMask = smoothstep(0.34, 0.72, max(emissionLuma, emissionPeak * 0.72));

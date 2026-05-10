@@ -45,13 +45,18 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_gMaterial = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
 
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT0, m_gAlbedo, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT1, m_gNormalAo, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT2, m_gVoxelLight, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT3, m_gMaterial, 0);
+    glNamedFramebufferTexture(m_gBufferFbo, kGAlbedoAttachment, m_gAlbedo, 0);
+    glNamedFramebufferTexture(m_gBufferFbo, kGNormalAoAttachment, m_gNormalAo, 0);
+    glNamedFramebufferTexture(m_gBufferFbo, kGVoxelLightAttachment, m_gVoxelLight, 0);
+    glNamedFramebufferTexture(m_gBufferFbo, kGMaterialAttachment, m_gMaterial, 0);
     glNamedFramebufferTexture(m_gBufferFbo, GL_DEPTH_ATTACHMENT, m_gDepth, 0);
-    const GLenum gBufferDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
-    glNamedFramebufferDrawBuffers(m_gBufferFbo, 4, gBufferDrawBuffers);
+    const GLenum gBufferDrawBuffers[] = {
+        kGAlbedoAttachment,
+        kGNormalAoAttachment,
+        kGVoxelLightAttachment,
+        kGMaterialAttachment
+    };
+    glNamedFramebufferDrawBuffers(m_gBufferFbo, kGBufferAttachmentCount, gBufferDrawBuffers);
     if (!checkFramebufferComplete(m_gBufferFbo, "GBuffer")) {
         shutdown();
         return false;
@@ -133,8 +138,13 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 void DeferredRenderTargets::bindGBuffer() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_gBufferFbo);
     glViewport(0, 0, m_width, m_height);
-    const GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
-    glDrawBuffers(4, drawBuffers);
+    const GLenum drawBuffers[] = {
+        kGAlbedoAttachment,
+        kGNormalAoAttachment,
+        kGVoxelLightAttachment,
+        kGMaterialAttachment
+    };
+    glDrawBuffers(kGBufferAttachmentCount, drawBuffers);
 }
 
 void DeferredRenderTargets::bindShadowMap() {

@@ -51,6 +51,11 @@ public:
 private:
     static constexpr int kSkyCaptureWidth = 256;
     static constexpr int kSkyCaptureHeight = 128;
+    static constexpr GLenum kGAlbedoAttachment = GL_COLOR_ATTACHMENT0;
+    static constexpr GLenum kGNormalAoAttachment = GL_COLOR_ATTACHMENT1;
+    static constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;
+    static constexpr GLenum kGMaterialAttachment = GL_COLOR_ATTACHMENT3;
+    static constexpr GLsizei kGBufferAttachmentCount = 4;
 
     static GLuint createTexture2D(GLenum internalFormat,
                                   int width,
@@ -64,6 +69,11 @@ private:
     void destroyFramebuffers();
     void destroyFullscreenTriangle();
 
+    // G-buffer contract:
+    // 0 RGBA8    = linear albedo.rgb, emissive hint.a
+    // 1 RGBA16F  = encoded world normal.rgb, vertex AO.a
+    // 2 RG8      = sky light.r, block light.g
+    // 3 RGBA8    = roughness.r, f0.g, emission.b, subsurface.a
     GLuint m_gBufferFbo = 0;
     GLuint m_gAlbedo = 0;
     GLuint m_gNormalAo = 0;

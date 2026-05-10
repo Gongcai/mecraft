@@ -1,4 +1,5 @@
 #version 450 core
+#include "gbuffer_contract.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -514,19 +515,20 @@ void main() {
         discard;
     }
 
-    vec4 albedoMaterial = texture(uAlbedoTex, vTexCoord);
-    vec3 albedo = albedoMaterial.rgb;
+    GBufferSurface surface = unpackGBufferSurface(texture(uAlbedoTex, vTexCoord),
+                                                  texture(uNormalAoTex, vTexCoord),
+                                                  texture(uVoxelLightTex, vTexCoord),
+                                                  texture(uMaterialTex, vTexCoord));
+    vec3 albedo = surface.albedo;
     albedo = desaturateLinear(albedo, uAlbedoDesaturation);
-    float emissiveHint = albedoMaterial.a;
-    vec4 normalAo = texture(uNormalAoTex, vTexCoord);
-    vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
-    float vertexAo = mix(0.72, 1.0, normalAo.a);
-    vec2 voxelLight = texture(uVoxelLightTex, vTexCoord).rg;
-    vec4 material = texture(uMaterialTex, vTexCoord);
-    float roughness = clamp(material.r, 0.03, 1.0);
-    float f0Scalar = clamp(material.g, 0.02, 0.35);
-    float materialEmission = clamp(material.b, 0.0, 1.0);
-    float sss = clamp(material.a, 0.0, 1.0);
+    float emissiveHint = surface.emissiveHint;
+    vec3 normal = surface.normal;
+    float vertexAo = surface.vertexAo;
+    vec2 voxelLight = surface.voxelLight;
+    float roughness = surface.material.roughness;
+    float f0Scalar = surface.material.f0;
+    float materialEmission = surface.material.emission;
+    float sss = surface.material.sss;
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
