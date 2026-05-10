@@ -17,6 +17,9 @@ uniform sampler2D uSkyCaptureTex;
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
 uniform mat4 uShadowViewProj;
+uniform mat4 uShadowModelView;
+uniform mat4 uShadowProjection;
+uniform mat4 uShadowProjectionInverse;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
@@ -53,6 +56,8 @@ uniform int uContactShadowsEnabled;
 uniform int uShadowWarpMode;
 uniform int uShadowLightMode;
 uniform float uShadowDistance;
+uniform float uShadowExtent;
+uniform float uShadowTexelWorldSize;
 uniform float uShadowSoftness;
 uniform float uShadowPcssStrength;
 uniform float uShadowConstantBias;
@@ -253,6 +258,15 @@ float calculateShadowWarp(vec2 coord) {
     return length(coord * 1.169) * 0.85 + 0.15;
 }
 
+vec3 worldToShadowProj(vec3 worldPos, out float warpDensity) {
+    vec4 lightView = uShadowModelView * vec4(worldPos, 1.0);
+    vec4 lightClip = uShadowProjection * lightView;
+    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
+    warpDensity = calculateShadowWarp(proj.xy);
+    proj.xy /= warpDensity;
+    return proj * 0.5 + 0.5;
+}
+
 float shapeShadowVisibility(float lit) {
     lit = clamp(lit, 0.0, 1.0);
     float contrasted = pow(lit, max(uShadowContrast, 0.001));
@@ -273,7 +287,8 @@ float pcssFilterRadius(vec3 proj, float baseRadius, float bias) {
 
     float blockerDepthSum = 0.0;
     float blockerCount = 0.0;
-    float searchRadius = clamp(baseRadius * 0.78, 1.0, 5.5);
+    float projectionScale = max(abs(uShadowProjection[0][0]), 0.0001);
+    float searchRadius = clamp(baseRadius * 0.78 * projectionScale * max(uShadowExtent, 1.0), 1.0, 5.5);
     for (int i = 0; i < 8; ++i) {
         float blockerDepth = sampleShadowDepthAt(proj, r2Disk(float(i) + 6.13) * searchRadius);
         float isBlocker = step(blockerDepth, proj.z - bias);
@@ -303,16 +318,14 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     }
     float normalOffset = uShadowNormalOffset * (1.0 + clamp(viewDistanceForBias / 220.0, 0.0, 1.5)) *
                          (1.0 + 0.65 * (1.0 - max(dot(normal, lightDir), 0.0)));
-    vec4 lightClip = uShadowViewProj * vec4(worldPos + normal * normalOffset, 1.0);
-    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
-    float warpDensity = calculateShadowWarp(proj.xy);
-    proj.xy /= warpDensity;
-    proj = proj * 0.5 + 0.5;
+    float warpDensity = 1.0;
+    vec3 proj = worldToShadowProj(worldPos + normal * normalOffset, warpDensity);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
     float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float bias = uShadowConstantBias + uShadowSlopeBias * (1.0 - ndotl);
+    float texelBiasScale = clamp(uShadowTexelWorldSize / 0.09375, 0.65, 2.5);
+    float bias = (uShadowConstantBias + uShadowSlopeBias * (1.0 - ndotl)) * texelBiasScale;
 
     float projectionFade = shadowProjectionFade(proj);
     if (projectionFade <= 0.001) {

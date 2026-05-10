@@ -205,6 +205,13 @@ World HDR Scene FBO
   - 需要明确 coverage 边界处理：cascade-like 覆盖、projection fade 或等价机制，不能让 warped projection 边界在地面上形成可见曲线。
   - 采样端和 shadow depth pass 必须使用同一套 shadowProjection 与 warp 参数，不允许各自近似。
   - 验证标准：低/高 shadow distance 下，方块直线阴影不会随视角弯曲，边缘不会出现跟随摄像机移动的凸点/拐点。
+- shadowProjection foundation V1：
+  - `Renderer` 新增 `ShadowProjectionData`，开始显式保存 `shadowModelView`、`shadowProjection`、`shadowProjectionInverse`、`viewProj`、覆盖半径与 texel world size。
+  - shadow depth pass、deferred lighting、volumetric fog 都接收同一套 shadow projection uniforms；运行时采样入口收敛到 `worldToShadowProj`。
+  - 第一版仍保持 No Warp，不重新启用 DerivativeMain quartic distortion；V1 的目标是先对齐 Iris/OptiFine shaderpack 常见 uniform 结构，避免继续在单个 `viewProj` 上堆逻辑。
+  - 当前 snapping 仍在 light-space 正交投影域完成，并刻意不随 camera yaw/pitch 前探，以免转动视角时阴影边界重分配。
+  - projection scale / texel world size 已进入 PCSS search radius 与 bias 标定，后续可继续扩展到 normal offset、PCF radius、edge fade 和 distortion compensation。
+  - 后续 V2：加入更完整的 receiver coverage 计算、稳定 shadow camera/cascade 或 pseudo-cascade、warped projection 域 snapping、debug view，再考虑恢复 quartic warp。
 - PCSS 初版：
   - 8 tap blocker search。
   - 16 到 24 tap PCF。

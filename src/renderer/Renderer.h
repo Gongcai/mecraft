@@ -283,6 +283,16 @@ private:
         glm::vec3 boundsMax = glm::vec3(0.0f);
     };
 
+    struct ShadowProjectionData {
+        glm::mat4 modelView = glm::mat4(1.0f);
+        glm::mat4 projection = glm::mat4(1.0f);
+        glm::mat4 projectionInverse = glm::mat4(1.0f);
+        glm::mat4 viewProj = glm::mat4(1.0f);
+        glm::vec3 center = glm::vec3(0.0f);
+        float extent = 1.0f;
+        float texelWorldSize = 1.0f;
+    };
+
     struct ChunkRenderColumnCache {
         Chunk* chunk = nullptr;
         int64_t chunkKey = 0;
@@ -346,7 +356,7 @@ private:
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
-    glm::mat4 buildShadowViewProj(const Camera& camera, const glm::vec3& lightDirection) const;
+    ShadowProjectionData buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);
@@ -423,7 +433,12 @@ private:
     RenderPipelineSettings m_pipelineSettings{};
     GLint m_capturedFramebuffer = 0;
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
+    glm::mat4 m_shadowModelView = glm::mat4(1.0f);
+    glm::mat4 m_shadowProjection = glm::mat4(1.0f);
+    glm::mat4 m_shadowProjectionInverse = glm::mat4(1.0f);
     glm::mat4 m_shadowViewProj = glm::mat4(1.0f);
+    float m_shadowExtent = 1.0f;
+    float m_shadowTexelWorldSize = 1.0f;
     bool m_deferredFrameActive = false;
     std::unordered_set<int64_t> m_meshingInFlight;
     std::vector<SubChunkMeshingResult> m_deferredMeshResults;

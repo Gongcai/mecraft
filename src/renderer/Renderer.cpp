@@ -823,7 +823,14 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera) {
         return;
     }
     std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
-    m_shadowViewProj = buildShadowViewProj(camera, currentShadowLightDirection(world));
+    const ShadowProjectionData shadowProjectionData =
+        buildShadowProjectionData(camera, currentShadowLightDirection(world));
+    m_shadowModelView = shadowProjectionData.modelView;
+    m_shadowProjection = shadowProjectionData.projection;
+    m_shadowProjectionInverse = shadowProjectionData.projectionInverse;
+    m_shadowViewProj = shadowProjectionData.viewProj;
+    m_shadowExtent = shadowProjectionData.extent;
+    m_shadowTexelWorldSize = shadowProjectionData.texelWorldSize;
     m_deferredTargets.bindShadowMap();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -839,6 +846,9 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera) {
     m_chunkShader = m_shadowDepthShader;
     m_shadowDepthShader->use();
     m_shadowDepthShader->setMat4("viewProj", m_shadowViewProj);
+    m_shadowDepthShader->setMat4("uShadowModelView", m_shadowModelView);
+    m_shadowDepthShader->setMat4("uShadowProjection", m_shadowProjection);
+    m_shadowDepthShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
@@ -907,6 +917,9 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setMat4("uViewProj", m_projection * m_view);
     m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
+    m_deferredLightingShader->setMat4("uShadowModelView", m_shadowModelView);
+    m_deferredLightingShader->setMat4("uShadowProjection", m_shadowProjection);
+    m_deferredLightingShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_deferredLightingShader->setVec3("uCameraPos", m_cameraPos);
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     m_deferredLightingShader->setVec3("uSunDirection", skyColors.sunDirection);
@@ -949,6 +962,8 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     const int effectiveShadowWarpMode = 2;
     m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
     m_deferredLightingShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    m_deferredLightingShader->setFloat("uShadowExtent", m_shadowExtent);
+    m_deferredLightingShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
@@ -1035,6 +1050,9 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->setInt("uShadowMap", 3);
     m_volumetricFogShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
     m_volumetricFogShader->setMat4("uShadowViewProj", m_shadowViewProj);
+    m_volumetricFogShader->setMat4("uShadowModelView", m_shadowModelView);
+    m_volumetricFogShader->setMat4("uShadowProjection", m_shadowProjection);
+    m_volumetricFogShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_volumetricFogShader->setVec3("uCameraPos", m_cameraPos);
     m_volumetricFogShader->setVec3("uSunDirection", skyColors.sunDirection);
     m_volumetricFogShader->setVec3("uMoonDirection", skyColors.moonDirection);
@@ -1051,6 +1069,8 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->setFloat("uWeatherWetness", weather.wetness);
     m_volumetricFogShader->setFloat("uWeatherStorm", weather.storm);
     m_volumetricFogShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    m_volumetricFogShader->setFloat("uShadowExtent", m_shadowExtent);
+    m_volumetricFogShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_volumetricFogShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_volumetricFogShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     m_volumetricFogShader->setFloat("uVolumetricLightStrength", m_pipelineSettings.sunRayStrength);
@@ -1143,13 +1163,20 @@ glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonSh
     return glm::normalize(direction);
 }
 
-glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& lightDirection) const {
+Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
     const float extent = distance + std::max(8.0f, distance * 0.12f);
-    glm::vec3 center = camera.getPosition();
     const glm::vec3 lightForward = glm::normalize(-lightDirection);
+    const glm::vec3 fallbackUp =
+        (std::abs(glm::dot(lightForward, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.96f)
+            ? glm::vec3(0.0f, 0.0f, 1.0f)
+            : glm::vec3(0.0f, 1.0f, 0.0f);
+
+    // Keep the first shadowProjection foundation independent from camera yaw/pitch.
+    // View-dependent centering made the shadow boundary visibly reshape while turning.
+    glm::vec3 center = camera.getPosition();
     const glm::vec3 lightPos = center - lightForward * distance;
-    glm::mat4 view = glm::lookAt(lightPos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 view = glm::lookAt(lightPos, center, fallbackUp);
 
     const float resolution = static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
     const float worldUnitsPerTexel = (extent * 2.0f) / resolution;
@@ -1157,10 +1184,18 @@ glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& l
     centerLight.x = std::round(centerLight.x / worldUnitsPerTexel) * worldUnitsPerTexel;
     centerLight.y = std::round(centerLight.y / worldUnitsPerTexel) * worldUnitsPerTexel;
     const glm::vec3 snappedCenter = glm::vec3(glm::inverse(view) * centerLight);
-    view = glm::lookAt(snappedCenter - lightForward * distance, snappedCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+    view = glm::lookAt(snappedCenter - lightForward * distance, snappedCenter, fallbackUp);
 
     const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, 0.1f, distance * 2.5f);
-    return proj * view;
+    ShadowProjectionData data;
+    data.modelView = view;
+    data.projection = proj;
+    data.projectionInverse = glm::inverse(proj);
+    data.viewProj = proj * view;
+    data.center = snappedCenter;
+    data.extent = extent;
+    data.texelWorldSize = worldUnitsPerTexel;
+    return data;
 }
 
 void Renderer::captureCurrentFramebuffer() {

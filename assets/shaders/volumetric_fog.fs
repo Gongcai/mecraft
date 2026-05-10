@@ -9,6 +9,9 @@ uniform sampler2D uNoiseTex;
 uniform sampler2D uShadowMap;
 uniform mat4 uInvViewProj;
 uniform mat4 uShadowViewProj;
+uniform mat4 uShadowModelView;
+uniform mat4 uShadowProjection;
+uniform mat4 uShadowProjectionInverse;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
@@ -24,6 +27,8 @@ uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uShadowDistance;
+uniform float uShadowExtent;
+uniform float uShadowTexelWorldSize;
 uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uVolumetricLightStrength;
@@ -117,6 +122,13 @@ float shadowProjectionFade(vec3 proj) {
     return clamp(edgeFade * farFade, 0.0, 1.0);
 }
 
+vec3 worldToShadowProj(vec3 worldPos) {
+    vec4 lightView = uShadowModelView * vec4(worldPos, 1.0);
+    vec4 lightClip = uShadowProjection * lightView;
+    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
+    return proj * 0.5 + 0.5;
+}
+
 float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     if (uShadowsEnabled == 0) {
         return 1.0;
@@ -129,17 +141,16 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     }
 
     vec3 offsetPos = worldPos + normalize(lightDir) * 0.10;
-    vec4 lightClip = uShadowViewProj * vec4(offsetPos, 1.0);
-    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
-    proj = proj * 0.5 + 0.5;
+    vec3 proj = worldToShadowProj(offsetPos);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
 
     ivec2 size = textureSize(uShadowMap, 0);
     vec2 texel = 1.0 / vec2(size);
+    float texelBiasScale = clamp(uShadowTexelWorldSize / 0.09375, 0.65, 2.5);
     float slopeBias = uShadowSlopeBias * 0.35 * (1.0 + clamp(viewDistance / 220.0, 0.0, 1.0));
-    float bias = max(uShadowConstantBias * 2.0, slopeBias);
+    float bias = max(uShadowConstantBias * 2.0, slopeBias) * texelBiasScale;
     float lit = 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2( texel.x, 0.0)).r) ? 1.0 : 0.0;

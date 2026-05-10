@@ -12,6 +12,9 @@ layout (location = 9) in float aAnimated;
 layout (location = 10) in uint aTintPacked;
 
 uniform mat4 viewProj;
+uniform mat4 uShadowModelView;
+uniform mat4 uShadowProjection;
+uniform mat4 uShadowProjectionInverse;
 uniform mat4 model;
 uniform int uUseModel;
 uniform int uShadowWarpMode;
@@ -38,7 +41,7 @@ float calculateShadowWarp(vec2 coord) {
 void main() {
     vec4 localPos = vec4(aPos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
-    vec4 clipPos = viewProj * worldPos;
+    vec4 clipPos = uShadowProjection * (uShadowModelView * worldPos);
     clipPos.xy /= calculateShadowWarp(clipPos.xy);
     gl_Position = clipPos;
     vUV = aUV;
