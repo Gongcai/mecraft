@@ -232,16 +232,7 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
 
         const TextureArray& texArray = m_resourceMgr->getTextureArray();
         bindChunkRenderState(world, texArray);
-        m_chunkShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
-        if (deferredInputsEnabled) {
-            m_chunkShader->setInt("uDepthSofteningEnabled", 1);
-            glActiveTexture(GL_TEXTURE5);
-            glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-        }
-        if (compositeInputsEnabled) {
-            glActiveTexture(GL_TEXTURE7);
-            glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
-        }
+        bindTransparentCompositeInputs(*m_chunkShader, deferredInputsEnabled, compositeInputsEnabled);
         glEnable(GL_DEPTH_TEST);
         bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
         renderTransparentChunks(m_deferredTransparentEntries);
@@ -251,6 +242,8 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         }
         glBindVertexArray(0);
         glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_2D, 0);
         glActiveTexture(GL_TEXTURE6);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -663,8 +656,10 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uOpaqueDepthTex", 5);
     shader.setInt("uSkyCaptureTex", 6);
     shader.setInt("uSceneColorTex", 7);
+    shader.setInt("uWaterNoiseTex", 8);
     shader.setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     shader.setInt("uCompositeInputsEnabled", 0);
+    shader.setInt("uWaterCompositeEnabled", 0);
     shader.setInt("uForceBaseLod", 0);
     shader.setInt("uDepthSofteningEnabled", 0);
     shader.setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
@@ -703,6 +698,7 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uWeatherStorm", weather.storm);
     shader.setFloat("uAerialReduction", weather.aerialReduction);
     shader.setVec3("uCameraPos", m_cameraPos);
+    shader.setVec3("uWaterAbsorption", glm::vec3(1.0f));
     bindWaterEffectUniforms(shader, false);
 
     glActiveTexture(GL_TEXTURE0);
@@ -739,6 +735,24 @@ void Renderer::bindWaterEffectUniforms(Shader& shader, const bool enabled) const
     shader.setFloat("uWaterStillLayerCount", static_cast<float>(std::max(1, still.frameCount)));
     shader.setFloat("uWaterFlowFirstLayer", static_cast<float>(flow.firstLayer));
     shader.setFloat("uWaterFlowLayerCount", static_cast<float>(std::max(1, flow.frameCount)));
+}
+
+void Renderer::bindTransparentCompositeInputs(Shader& shader,
+                                              const bool deferredInputsEnabled,
+                                              const bool compositeInputsEnabled) const {
+    shader.setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
+    shader.setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
+    if (deferredInputsEnabled) {
+        shader.setInt("uDepthSofteningEnabled", 1);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    }
+    if (compositeInputsEnabled && m_resourceMgr != nullptr) {
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+        glActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
+    }
 }
 
 bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, const Window& window) {

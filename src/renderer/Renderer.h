@@ -351,6 +351,7 @@ private:
     void bindChunkRenderState(const World& world, const TextureArray& texArray) const;
     void bindChunkRenderStateForShader(const World& world, const TextureArray& texArray, Shader& shader) const;
     void bindWaterEffectUniforms(Shader& shader, bool enabled) const;
+    void bindTransparentCompositeInputs(Shader& shader, bool deferredInputsEnabled, bool compositeInputsEnabled) const;
     void renderWorldForward(const World& world);
     bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window);
     void renderTransparentCompositePass(const World& world, const Window& window);

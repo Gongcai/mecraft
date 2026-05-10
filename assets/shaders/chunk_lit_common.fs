@@ -28,8 +28,10 @@ uniform sampler2D uFoliageColormap;
 uniform sampler2D uOpaqueDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uSceneColorTex;
+uniform sampler2D uWaterNoiseTex;
 uniform int uSkyCaptureEnabled;
 uniform int uCompositeInputsEnabled;
+uniform int uWaterCompositeEnabled;
 uniform int uForceBaseLod;
 uniform int uDepthSofteningEnabled;
 uniform int uFogEnabled;
@@ -71,6 +73,7 @@ uniform float uWaterStillFirstLayer;
 uniform float uWaterStillLayerCount;
 uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
+uniform vec3 uWaterAbsorption;
 uniform vec3 uCameraPos;
 
     const float kTwoPi = 6.28318530718;
@@ -156,11 +159,26 @@ uniform vec3 uCameraPos;
         return (MECRAFT_TRANSPARENT_COMPOSITE != 0) && (uCompositeInputsEnabled != 0);
     }
 
-    vec3 waterEnhance(vec3 color, float alpha, float faceNormal, float depthGap, vec2 screenUv) {
+    float sampleWaterCompositeNoise(vec2 proceduralP, vec2 textureUv, vec2 wind, float timeScale) {
+        float procedural = waterNoise(proceduralP, uAnimationTime * timeScale);
+        if (uWaterCompositeEnabled == 0) {
+            return procedural;
+        }
+        float externalNoise = texture(uWaterNoiseTex, textureUv + wind).r;
+        return mix(procedural, externalNoise, 0.0);
+    }
+
+    vec3 applyWaterComposite(vec3 color, float alpha, float faceNormal, float depthGap, vec2 screenUv) {
         float topFace = step(-0.5, faceNormal) * step(faceNormal, 0.5);
         vec2 p = vWorldPos.xz;
-        float n = waterNoise(p, uAnimationTime);
-        float nFine = waterNoise(p * 2.35 + vec2(17.2, -9.4), uAnimationTime * 1.37);
+        float n = sampleWaterCompositeNoise(p,
+                                            p * 0.018,
+                                            vec2(uAnimationTime * 0.006, -uAnimationTime * 0.004),
+                                            1.0);
+        float nFine = sampleWaterCompositeNoise(p * 2.35 + vec2(17.2, -9.4),
+                                                (p + vec2(17.2, -9.4)) * 0.046,
+                                                vec2(-uAnimationTime * 0.010, uAnimationTime * 0.008),
+                                                1.37);
         float wave = (n - 0.5) * 2.0;
         float shimmer = smoothstep(0.62, 0.90, nFine) *
                         (1.0 - smoothstep(96.0, 180.0, vFogDist));
@@ -170,7 +188,7 @@ uniform vec3 uCameraPos;
         float fresnel = pow(1.0 - facing, 3.0);
 
         vec3 shallowTint = srgbToLinear(vec3(0.34, 0.66, 0.88));
-        vec3 deepTint = srgbToLinear(vec3(0.06, 0.24, 0.42));
+        vec3 deepTint = max(srgbToLinear(vec3(0.06, 0.24, 0.42)) * max(uWaterAbsorption, vec3(0.001)), vec3(0.0));
         float absorption = clamp(depthGap * 280.0, 0.0, 1.0);
         float distanceAbsorption = smoothstep(12.0, 84.0, vFogDist);
         vec3 waterTint = mix(shallowTint, deepTint, max(absorption, distanceAbsorption * 0.45));
@@ -484,7 +502,7 @@ uniform vec3 uCameraPos;
         }
 
         if (waterLayer) {
-            finalColor = waterEnhance(finalColor, alpha, vNormal, waterDepthGap, screenUv);
+            finalColor = applyWaterComposite(finalColor, alpha, vNormal, waterDepthGap, screenUv);
             alpha = clamp(alpha + 0.08, texColor.a * 0.70, 0.92);
         }
 
