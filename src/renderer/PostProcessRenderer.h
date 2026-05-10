@@ -55,6 +55,8 @@ public:
     void setEffects(const PostProcessEffects& effects);
 
 private:
+    static constexpr int kBloomMipCount = 5;
+
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();
     void initFullscreenTriangle();
@@ -68,8 +70,9 @@ private:
     GLuint m_sceneFbo = 0;
     GLuint m_sceneColorTex = 0;
     GLuint m_sceneDepthRbo = 0;
-    GLuint m_bloomFbos[2] = {0, 0};
-    GLuint m_bloomTex[2] = {0, 0};
+    GLuint m_bloomFbos[kBloomMipCount][2] = {};
+    GLuint m_bloomTex[kBloomMipCount][2] = {};
+    glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};
 
     GLuint m_fullscreenVao = 0;
 

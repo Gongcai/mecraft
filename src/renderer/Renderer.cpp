@@ -282,9 +282,11 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.shadowSlopeBias = std::clamp(m_pipelineSettings.shadowSlopeBias, 0.0f, 0.03f);
     m_pipelineSettings.shadowNormalOffset = std::clamp(m_pipelineSettings.shadowNormalOffset, 0.0f, 0.25f);
     m_pipelineSettings.contactShadowStrength = std::clamp(m_pipelineSettings.contactShadowStrength, 0.0f, 1.0f);
+    m_pipelineSettings.bloomThreshold = std::clamp(m_pipelineSettings.bloomThreshold, 0.0f, 4.0f);
+    m_pipelineSettings.bloomStrength = std::clamp(m_pipelineSettings.bloomStrength, 0.0f, 2.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
-    m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 1);
+    m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
     m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
     m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
     m_pipelineSettings.kappaGradingStrength = std::clamp(m_pipelineSettings.kappaGradingStrength, 0.0f, 1.0f);
@@ -792,11 +794,13 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera) {
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
-    m_shadowDepthShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
+    // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
+    const int effectiveShadowWarpMode = 2;
+    m_shadowDepthShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
     m_shadowDepthShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
-    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries);
+    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false);
     if (m_useMultiDrawIndirect) {
         m_worldRenderBuffer.flushOpaque();
     }
@@ -888,12 +892,16 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
+    // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
+    const int effectiveShadowWarpMode = 2;
+    m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
+    m_deferredLightingShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_deferredLightingShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
-    m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
+    const float shadowDistanceScale = std::clamp(m_pipelineSettings.shadowDistance / 96.0f, 0.35f, 1.0f);
+    m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset * shadowDistanceScale);
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
@@ -987,7 +995,7 @@ glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonSh
 
 glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& lightDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
-    const float extent = distance;
+    const float extent = distance + std::max(8.0f, distance * 0.12f);
     glm::vec3 center = camera.getPosition();
     const glm::vec3 lightForward = glm::normalize(-lightDirection);
     const glm::vec3 lightPos = center - lightForward * distance;
@@ -1001,7 +1009,7 @@ glm::mat4 Renderer::buildShadowViewProj(const Camera& camera, const glm::vec3& l
     const glm::vec3 snappedCenter = glm::vec3(glm::inverse(view) * centerLight);
     view = glm::lookAt(snappedCenter - lightForward * distance, snappedCenter, glm::vec3(0.0f, 1.0f, 0.0f));
 
-    const glm::mat4 proj = glm::ortho(-distance, distance, -distance, distance, 0.1f, distance * 2.5f);
+    const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, 0.1f, distance * 2.5f);
     return proj * view;
 }
 
@@ -1120,7 +1128,8 @@ void Renderer::submitMeshingJobs(const World& world) {
 
 void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                   std::vector<ChunkRenderEntry>& cutoutEntries,
-                                                  std::vector<ChunkRenderEntry>& transparentEntries) {
+                                                  std::vector<ChunkRenderEntry>& transparentEntries,
+                                                  const bool frustumCull) {
     syncChunkRenderColumns(world);
     if (m_chunkRenderColumns.empty()) {
         return;
@@ -1162,7 +1171,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 #ifdef MECRAFT_DEBUG
         ++m_regionTestsThisFrame;
         FrustumPlane culledPlane = FrustumPlane::Count;
-        if (!isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+        if (frustumCull && !isChunkInFrustum(regionMin, regionMax, m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
             if (m_chunkCullingDebugEnabled) {
                 recordChunkCull(culledPlane, regionCandidateCount);
             }
@@ -1171,7 +1180,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
         }
         ++m_regionPassedThisFrame;
 #else
-        if (!isChunkInFrustum(regionMin, regionMax)) {
+        if (frustumCull && !isChunkInFrustum(regionMin, regionMax)) {
             regionBegin = regionEnd;
             continue;
         }
@@ -1188,7 +1197,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 #ifdef MECRAFT_DEBUG
             ++m_columnTestsThisFrame;
             FrustumPlane culledPlane = FrustumPlane::Count;
-            if (!isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax,
+            if (frustumCull && !isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax,
                                   m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                 if (m_chunkCullingDebugEnabled) {
                     recordChunkCull(culledPlane, columnCandidateCount);
@@ -1197,7 +1206,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             }
             ++m_columnPassedThisFrame;
 #else
-            if (!isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax)) {
+            if (frustumCull && !isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax)) {
                 continue;
             }
 #endif
@@ -1236,7 +1245,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
 #ifdef MECRAFT_DEBUG
                     FrustumPlane subChunkCulledPlane = FrustumPlane::Count;
-                    if (!isChunkInFrustum(boundsMin, boundsMax,
+                    if (frustumCull && !isChunkInFrustum(boundsMin, boundsMax,
                                           m_chunkCullingDebugEnabled ? &subChunkCulledPlane : nullptr)) {
                         ++m_mdiSubChunksCulledThisFrame;
                         if (m_chunkCullingDebugEnabled) {
@@ -1246,7 +1255,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     }
                     ++m_chunkPassedThisFrame;
 #else
-                    if (!isChunkInFrustum(boundsMin, boundsMax)) {
+                    if (frustumCull && !isChunkInFrustum(boundsMin, boundsMax)) {
                         continue;
                     }
 #endif
@@ -1291,7 +1300,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                 if (column.aggregatedPresent) {
 #ifdef MECRAFT_DEBUG
                     ++m_chunkTestsThisFrame;
-                    if (!isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
+                    if (frustumCull && !isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
                                           m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                         if (m_chunkCullingDebugEnabled) {
                             recordChunkCull(culledPlane, 1);
@@ -1299,7 +1308,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     } else {
                         ++m_chunkPassedThisFrame;
 #else
-                    if (isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
+                    if (!frustumCull || isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
 #endif
                         const SubChunkMesh& mesh = column.chunk->getColumnMesh();
 
@@ -1325,7 +1334,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 
 #ifdef MECRAFT_DEBUG
                     ++m_chunkTestsThisFrame;
-                    if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax,
+                    if (frustumCull && !isChunkInFrustum(transparent.boundsMin, transparent.boundsMax,
                                           m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
                         if (m_chunkCullingDebugEnabled) {
                             recordChunkCull(culledPlane, 1);
@@ -1334,7 +1343,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     }
                     ++m_chunkPassedThisFrame;
 #else
-                    if (!isChunkInFrustum(transparent.boundsMin, transparent.boundsMax)) {
+                    if (frustumCull && !isChunkInFrustum(transparent.boundsMin, transparent.boundsMax)) {
                         continue;
                     }
 #endif

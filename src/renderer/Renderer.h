@@ -57,12 +57,14 @@ public:
         bool contactShadowsEnabled = false;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
+        float bloomThreshold = 0.82f;
+        float bloomStrength = 0.18f;
         bool sunRaysEnabled = true;
         bool waterEffectsEnabled = true;
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
-        int shadowWarpMode = 1; // 0=Radial, 1=Derivative quartic
+        int shadowWarpMode = 2; // 0=Radial debug, 1=Derivative quartic debug, 2=No warp
         int shadowResolution = 2048;
         float shadowDistance = 96.0f;
         float shadowSoftness = 1.6f;
@@ -339,7 +341,8 @@ private:
     void submitMeshingJobs(const World& world);
     void renderOpaqueChunksAndCollectPasses(const World& world,
                                             std::vector<ChunkRenderEntry>& cutoutEntries,
-                                            std::vector<ChunkRenderEntry>& transparentEntries);
+                                            std::vector<ChunkRenderEntry>& transparentEntries,
+                                            bool frustumCull = true);
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void syncChunkRenderColumns(const World& world);

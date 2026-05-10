@@ -48,6 +48,7 @@ uniform int uPcssShadowsEnabled;
 uniform int uContactShadowsEnabled;
 uniform int uShadowWarpMode;
 uniform int uShadowLightMode;
+uniform float uShadowDistance;
 uniform float uShadowSoftness;
 uniform float uShadowPcssStrength;
 uniform float uShadowConstantBias;
@@ -214,6 +215,9 @@ vec2 r2Disk(float n) {
 }
 
 float calculateShadowWarp(vec2 coord) {
+    if (uShadowWarpMode == 2) {
+        return 1.0;
+    }
     if (uShadowWarpMode == 1) {
         vec2 scaled = coord * 1.165;
         float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
@@ -226,6 +230,13 @@ float shapeShadowVisibility(float lit) {
     lit = clamp(lit, 0.0, 1.0);
     float contrasted = pow(lit, max(uShadowContrast, 0.001));
     return mix(clamp(uShadowMinLight, 0.0, 0.8), 1.0, contrasted);
+}
+
+float shadowProjectionFade(vec3 proj) {
+    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
+    float edgeFade = smoothstep(0.010, 0.055, min(edgeDistance.x, edgeDistance.y));
+    float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
+    return clamp(edgeFade * farFade, 0.0, 1.0);
 }
 
 float pcssFilterRadius(vec3 proj, float baseRadius, float bias) {
@@ -259,6 +270,10 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     }
     lightDir = normalize(lightDir);
     float viewDistanceForBias = length(worldPos - uCameraPos);
+    float distanceFade = 1.0 - smoothstep(uShadowDistance * 0.58, uShadowDistance * 0.82, viewDistanceForBias);
+    if (distanceFade <= 0.001) {
+        return 1.0;
+    }
     float normalOffset = uShadowNormalOffset * (1.0 + clamp(viewDistanceForBias / 220.0, 0.0, 1.5)) *
                          (1.0 + 0.65 * (1.0 - max(dot(normal, lightDir), 0.0)));
     vec4 lightClip = uShadowViewProj * vec4(worldPos + normal * normalOffset, 1.0);
@@ -272,8 +287,14 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
     float bias = uShadowConstantBias + uShadowSlopeBias * (1.0 - ndotl);
 
+    float projectionFade = shadowProjectionFade(proj);
+    if (projectionFade <= 0.001) {
+        return 1.0;
+    }
+
     if (uSoftShadowsEnabled == 0) {
-        return shapeShadowVisibility(compareShadowTexel(proj, ivec2(0), bias));
+        float hardShadow = shapeShadowVisibility(compareShadowTexel(proj, ivec2(0), bias));
+        return mix(1.0, hardShadow, projectionFade * distanceFade);
     }
 
     float viewDistance = viewDistanceForBias;
@@ -288,7 +309,7 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     for (int i = 0; i < 24; ++i) {
         lit += compareShadowBilinear(proj, r2Disk(float(i) + 0.37) * radius, bias);
     }
-    return shapeShadowVisibility(lit / 24.0);
+    return mix(1.0, shapeShadowVisibility(lit / 24.0), projectionFade * distanceFade);
 }
 
 float contactShadow(vec3 worldPos, vec3 normal, vec2 voxelLight, float shadowVisibility) {

@@ -195,9 +195,16 @@ World HDR Scene FBO
 
 关键任务：
 
-- 将当前 radial shadow warp 改为或增加 DerivativeMain quartic warp：
-  - `quarticLength(shadowClip.xy * 1.165) * bias + 1 - bias`。
-  - 保留当前 Kappa warp 作为 debug 对照模式。
+- 当前正式阴影路径保持 No Warp：
+  - radial warp 与 DerivativeMain quartic warp 只作为 debug/研究模式保留。
+  - 不再把 quartic warp 直接应用到当前单 shadow camera 的 clip-space 投影上；在高阴影距离下，这会让阴影边界出现随摄像机移动的异常弯曲。
+- 后续补齐完整 shadowProjection 体系后，再恢复 DerivativeMain quartic warp：
+  - 建立稳定的 light-space shadow projection，区分 shadow model-view、shadow projection、shadow projection inverse 与 runtime 采样坐标。
+  - projection snapping 要在最终 shadowProjection/warped projection 域内完成，避免采样格点随摄像机旋转漂移。
+  - warp distortion factor 需要参与 bias、normal offset、PCSS blocker search radius、PCF radius 和 shadow edge fade 的计算。
+  - 需要明确 coverage 边界处理：cascade-like 覆盖、projection fade 或等价机制，不能让 warped projection 边界在地面上形成可见曲线。
+  - 采样端和 shadow depth pass 必须使用同一套 shadowProjection 与 warp 参数，不允许各自近似。
+  - 验证标准：低/高 shadow distance 下，方块直线阴影不会随视角弯曲，边缘不会出现跟随摄像机移动的凸点/拐点。
 - PCSS 初版：
   - 8 tap blocker search。
   - 16 到 24 tap PCF。

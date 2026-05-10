@@ -101,32 +101,90 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
 
     bool hasBloom = false;
     if (m_effects.bloomEnabled && m_bloomExtractShader != nullptr && m_bloomBlurShader != nullptr &&
-        m_bloomFbos[0] != 0 && m_bloomFbos[1] != 0 && m_bloomTex[0] != 0 && m_bloomTex[1] != 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[0]);
-        glViewport(0, 0, std::max(1, width / 2), std::max(1, height / 2));
+        m_bloomFbos[0][0] != 0 && m_bloomFbos[0][1] != 0 && m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[0][0]);
+        glViewport(0, 0, m_bloomMipSize[0].x, m_bloomMipSize[0].y);
         glClear(GL_COLOR_BUFFER_BIT);
         m_bloomExtractShader->use();
         m_bloomExtractShader->setInt("uSceneTex", 0);
         m_bloomExtractShader->setFloat("uThreshold", m_effects.bloomThreshold);
+        m_bloomExtractShader->setFloat("uIntensity", 1.0f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
         glBindVertexArray(m_fullscreenVao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        bool horizontal = true;
-        constexpr int kBlurPasses = 6;
-        for (int i = 0; i < kBlurPasses; ++i) {
-            const int writeIndex = horizontal ? 1 : 0;
-            const int readIndex = horizontal ? 0 : 1;
-            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[writeIndex]);
+        m_bloomBlurShader->use();
+        m_bloomBlurShader->setInt("uImage", 0);
+        m_bloomBlurShader->setFloat("uWeight", 1.0f);
+        for (int mip = 0; mip < kBloomMipCount; ++mip) {
+            if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip][1] == 0) {
+                break;
+            }
+            if (mip > 0) {
+                glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
+                glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
+                glClear(GL_COLOR_BUFFER_BIT);
+                m_bloomBlurShader->setVec2("uDirection", glm::vec2(0.0f));
+                m_bloomBlurShader->setFloat("uWeight", 0.68f);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip - 1][0]);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+                m_bloomBlurShader->setFloat("uWeight", 1.0f);
+            }
+
+            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][1]);
+            glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
+            glClear(GL_COLOR_BUFFER_BIT);
             m_bloomBlurShader->use();
             m_bloomBlurShader->setInt("uImage", 0);
-            m_bloomBlurShader->setVec2("uDirection", horizontal ? glm::vec2(1.0f, 0.0f) : glm::vec2(0.0f, 1.0f));
+            m_bloomBlurShader->setVec2("uDirection", glm::vec2(1.0f, 0.0f));
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_bloomTex[readIndex]);
+            glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][0]);
             glDrawArrays(GL_TRIANGLES, 0, 3);
-            horizontal = !horizontal;
+
+            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
+            glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
+            glClear(GL_COLOR_BUFFER_BIT);
+            m_bloomBlurShader->setVec2("uDirection", glm::vec2(0.0f, 1.0f));
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][1]);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
         }
+
+        const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+        GLint previousBlendSrcRgb = GL_ONE;
+        GLint previousBlendDstRgb = GL_ZERO;
+        GLint previousBlendSrcAlpha = GL_ONE;
+        GLint previousBlendDstAlpha = GL_ZERO;
+        glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlendSrcRgb);
+        glGetIntegerv(GL_BLEND_DST_RGB, &previousBlendDstRgb);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &previousBlendSrcAlpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &previousBlendDstAlpha);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        m_bloomBlurShader->setVec2("uDirection", glm::vec2(0.0f));
+        for (int mip = kBloomMipCount - 1; mip > 0; --mip) {
+            if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip - 1][0] == 0) {
+                continue;
+            }
+            const float weight = 0.24f + 0.10f * static_cast<float>(mip);
+            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip - 1][0]);
+            glViewport(0, 0, m_bloomMipSize[mip - 1].x, m_bloomMipSize[mip - 1].y);
+            m_bloomBlurShader->setFloat("uWeight", weight);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][0]);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+        glBlendFuncSeparate(previousBlendSrcRgb, previousBlendDstRgb, previousBlendSrcAlpha, previousBlendDstAlpha);
+        if (blendWasEnabled) {
+            glEnable(GL_BLEND);
+        } else {
+            glDisable(GL_BLEND);
+        }
+        m_bloomBlurShader->setFloat("uWeight", 1.0f);
+
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         hasBloom = true;
@@ -172,7 +230,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[0] : 0);
+    glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[0][0] : 0);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
@@ -226,22 +284,24 @@ bool PostProcessRenderer::ensureRenderTargets(const int width, const int height)
         return false;
     }
 
-    const int bloomWidth = std::max(1, width / 2);
-    const int bloomHeight = std::max(1, height / 2);
-    glCreateFramebuffers(2, m_bloomFbos);
-    glCreateTextures(GL_TEXTURE_2D, 2, m_bloomTex);
-    for (int i = 0; i < 2; ++i) {
-        glTextureStorage2D(m_bloomTex[i], 1, GL_RGBA16F, bloomWidth, bloomHeight);
-        glTextureParameteri(m_bloomTex[i], GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTextureParameteri(m_bloomTex[i], GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTextureParameteri(m_bloomTex[i], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_bloomTex[i], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_bloomFbos[i], GL_COLOR_ATTACHMENT0, m_bloomTex[i], 0);
-        const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-        glNamedFramebufferDrawBuffers(m_bloomFbos[i], 1, &drawBuffer);
-        if (glCheckNamedFramebufferStatus(m_bloomFbos[i], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            destroyRenderTargets();
-            return false;
+    for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        const int divisor = 1 << (mip + 1);
+        m_bloomMipSize[mip] = glm::ivec2(std::max(1, width / divisor), std::max(1, height / divisor));
+        for (int ping = 0; ping < 2; ++ping) {
+            glCreateFramebuffers(1, &m_bloomFbos[mip][ping]);
+            glCreateTextures(GL_TEXTURE_2D, 1, &m_bloomTex[mip][ping]);
+            glTextureStorage2D(m_bloomTex[mip][ping], 1, GL_RGBA16F, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
+            glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glNamedFramebufferTexture(m_bloomFbos[mip][ping], GL_COLOR_ATTACHMENT0, m_bloomTex[mip][ping], 0);
+            const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+            glNamedFramebufferDrawBuffers(m_bloomFbos[mip][ping], 1, &drawBuffer);
+            if (glCheckNamedFramebufferStatus(m_bloomFbos[mip][ping], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                destroyRenderTargets();
+                return false;
+            }
         }
     }
 
@@ -263,14 +323,17 @@ void PostProcessRenderer::destroyRenderTargets() {
         glDeleteFramebuffers(1, &m_sceneFbo);
         m_sceneFbo = 0;
     }
-    for (int i = 0; i < 2; ++i) {
-        if (m_bloomTex[i] != 0) {
-            glDeleteTextures(1, &m_bloomTex[i]);
-            m_bloomTex[i] = 0;
-        }
-        if (m_bloomFbos[i] != 0) {
-            glDeleteFramebuffers(1, &m_bloomFbos[i]);
-            m_bloomFbos[i] = 0;
+    for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        m_bloomMipSize[mip] = glm::ivec2(0);
+        for (int ping = 0; ping < 2; ++ping) {
+            if (m_bloomTex[mip][ping] != 0) {
+                glDeleteTextures(1, &m_bloomTex[mip][ping]);
+                m_bloomTex[mip][ping] = 0;
+            }
+            if (m_bloomFbos[mip][ping] != 0) {
+                glDeleteFramebuffers(1, &m_bloomFbos[mip][ping]);
+                m_bloomFbos[mip][ping] = 0;
+            }
         }
     }
 }

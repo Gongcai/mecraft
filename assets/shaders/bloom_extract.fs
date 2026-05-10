@@ -5,6 +5,7 @@ out vec4 FragColor;
 
 uniform sampler2D uSceneTex;
 uniform float uThreshold;
+uniform float uIntensity;
 
 void main() {
     vec3 color = texture(uSceneTex, vTexCoord).rgb;
@@ -16,5 +17,5 @@ void main() {
     float soft = (excess * excess) / max(4.0 * softKnee, 0.001);
     float contribution = max(brightness - uThreshold, soft);
     float mask = clamp(contribution / max(brightness, 0.001), 0.0, 1.0);
-    FragColor = vec4(color * mask, 1.0);
+    FragColor = vec4(color * mask * uIntensity, 1.0);
 }

@@ -312,6 +312,8 @@ void Game::renderFrame(const float frameTime) {
     effects.screenRollRadians = fallRollRadians;
     const Renderer::RenderPipelineSettings pipelineSettings = m_renderer.getRenderPipelineSettings();
     effects.bloomEnabled = pipelineSettings.bloomEnabled;
+    effects.bloomThreshold = pipelineSettings.bloomThreshold;
+    effects.bloomStrength = pipelineSettings.bloomStrength;
     effects.sunRaysEnabled = pipelineSettings.sunRaysEnabled;
     effects.sunRayStrength = pipelineSettings.sunRayStrength;
     effects.shaderpackGradingEnabled = pipelineSettings.shaderpackGradingEnabled;

@@ -24,6 +24,9 @@ out float vAnimated;
 out float vNormal;
 
 float calculateShadowWarp(vec2 coord) {
+    if (uShadowWarpMode == 2) {
+        return 1.0;
+    }
     if (uShadowWarpMode == 1) {
         vec2 scaled = coord * 1.165;
         float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);

@@ -349,7 +349,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int shadowWarpMode = pipeline.shadowWarpMode;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic", "AgX"};
-        static constexpr const char* kShadowWarpModes[] = {"Radial", "Derivative Quartic"};
+        static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative Debug", "No Warp"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
@@ -359,6 +359,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &pipeline.contactShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.1f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Bloom Strength", &pipeline.bloomStrength, 0.0f, 1.2f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);
         pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
@@ -369,6 +371,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipeline.shadowWarpMode = shadowWarpMode;
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
+            pipeline.shadowWarpMode = 2;
             pipeline.directSunStrength = 1.0f;
             pipeline.skyAmbientStrength = 0.55f;
             pipeline.minimumAmbient = 0.09f;
@@ -377,6 +380,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.18f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.04f;
+            pipeline.bloomThreshold = 1.05f;
+            pipeline.bloomStrength = 0.10f;
             pipeline.exposure = 1.0f;
             pipeline.vibrance = 0.0f;
             pipeline.kappaGradingStrength = 0.0f;
@@ -399,6 +404,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 3;
+            pipeline.shadowWarpMode = 2;
             pipeline.directSunStrength = 1.18f;
             pipeline.skyAmbientStrength = 0.46f;
             pipeline.minimumAmbient = 0.07f;
@@ -407,6 +413,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.28f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.06f;
+            pipeline.bloomThreshold = 0.82f;
+            pipeline.bloomStrength = 0.18f;
             pipeline.exposure = 1.0f;
             pipeline.vibrance = 0.0f;
             pipeline.kappaGradingStrength = 0.65f;
@@ -429,6 +437,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 3;
+            pipeline.shadowWarpMode = 2;
             pipeline.directSunStrength = 1.42f;
             pipeline.skyAmbientStrength = 0.34f;
             pipeline.minimumAmbient = 0.05f;
@@ -437,6 +446,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.34f;
             pipeline.blockLightStrength = 1.05f;
             pipeline.fakeBounceStrength = 0.08f;
+            pipeline.bloomThreshold = 0.72f;
+            pipeline.bloomStrength = 0.24f;
             pipeline.exposure = 0.95f;
             pipeline.vibrance = 0.04f;
             pipeline.kappaGradingStrength = 0.82f;
