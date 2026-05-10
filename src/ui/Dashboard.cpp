@@ -346,8 +346,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         Renderer::RenderPipelineSettings pipeline = render.getRenderPipelineSettings();
         int pipelineMode = static_cast<int>(pipeline.mode);
         int tonemapMode = pipeline.tonemapMode;
+        int shadowWarpMode = pipeline.shadowWarpMode;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic"};
+        static constexpr const char* kShadowWarpModes[] = {"Radial", "Derivative Quartic"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
@@ -362,6 +364,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
+        pipelineChanged |= ImGui::Combo("Shadow Warp", &shadowWarpMode, kShadowWarpModes, IM_ARRAYSIZE(kShadowWarpModes));
+        pipeline.shadowWarpMode = shadowWarpMode;
         if (ImGui::Button("Preset Neutral")) {
             pipeline.directSunStrength = 1.0f;
             pipeline.skyAmbientStrength = 0.55f;

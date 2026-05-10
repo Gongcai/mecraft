@@ -14,6 +14,7 @@ layout (location = 10) in uint aTintPacked;
 uniform mat4 viewProj;
 uniform mat4 model;
 uniform int uUseModel;
+uniform int uShadowWarpMode;
 
 out vec2 vUV;
 out float vLayer;
@@ -23,6 +24,11 @@ out float vAnimated;
 out float vNormal;
 
 float calculateShadowWarp(vec2 coord) {
+    if (uShadowWarpMode == 1) {
+        vec2 scaled = coord * 1.165;
+        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
+        return quarticLength * 0.85 + 0.15;
+    }
     return length(coord * 1.169) * 0.85 + 0.15;
 }
 

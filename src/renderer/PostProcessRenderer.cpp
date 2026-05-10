@@ -15,7 +15,10 @@ void PostProcessRenderer::init(ResourceMgr& resourceMgr) {
     m_postProcessShader = resourceMgr.getShader("postprocess");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2D("shader_bayer256");
+    if (m_noiseTexture == 0) {
+        m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    }
     initFullscreenTriangle();
 }
 

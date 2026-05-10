@@ -40,6 +40,7 @@ uniform float uHorizonScatterStrength;
 uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
 uniform int uContactShadowsEnabled;
+uniform int uShadowWarpMode;
 uniform float uShadowSoftness;
 uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
@@ -129,6 +130,11 @@ vec2 r2Disk(float n) {
 }
 
 float calculateShadowWarp(vec2 coord) {
+    if (uShadowWarpMode == 1) {
+        vec2 scaled = coord * 1.165;
+        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
+        return quarticLength * 0.85 + 0.15;
+    }
     return length(coord * 1.169) * 0.85 + 0.15;
 }
 

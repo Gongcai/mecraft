@@ -78,6 +78,28 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    glCreateFramebuffers(1, &m_sceneLightingFbo);
+    m_sceneLightingTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_sceneLightingFbo, GL_COLOR_ATTACHMENT0, m_sceneLightingTex, 0);
+    const GLenum sceneLightingDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_sceneLightingFbo, 1, &sceneLightingDrawBuffer);
+    if (!checkFramebufferComplete(m_sceneLightingFbo, "SceneLighting")) {
+        shutdown();
+        return false;
+    }
+
+    glCreateFramebuffers(1, &m_halfResFbo);
+    const int halfWidth = std::max(1, m_width / 2);
+    const int halfHeight = std::max(1, m_height / 2);
+    m_halfResTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_halfResFbo, GL_COLOR_ATTACHMENT0, m_halfResTex, 0);
+    const GLenum halfResDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_halfResFbo, 1, &halfResDrawBuffer);
+    if (!checkFramebufferComplete(m_halfResFbo, "HalfRes")) {
+        shutdown();
+        return false;
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     m_ready = true;
     return true;
@@ -104,9 +126,47 @@ void DeferredRenderTargets::bindSsao() {
     glDrawBuffers(1, &drawBuffer);
 }
 
+void DeferredRenderTargets::bindSceneLighting() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindHalfRes() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_halfResFbo);
+    glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
 void DeferredRenderTargets::bindDefaultLike(const GLint framebuffer, const int width, const int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
     glViewport(0, 0, std::max(1, width), std::max(1, height));
+}
+
+void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const GLint framebuffer, const int width, const int height) const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneLightingFbo);
+    glBlitFramebuffer(0, 0, std::max(1, width), std::max(1, height),
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
+}
+
+void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, std::max(1, width), std::max(1, height),
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
 void DeferredRenderTargets::blitDepthTo(const GLint framebuffer, const int width, const int height) const {
@@ -154,7 +214,16 @@ bool DeferredRenderTargets::checkFramebufferComplete(const GLuint framebuffer, c
 }
 
 void DeferredRenderTargets::destroyFramebuffers() {
-    const GLuint textures[] = {m_gAlbedo, m_gNormalAo, m_gVoxelLight, m_gDepth, m_shadowDepth, m_ssaoTex};
+    const GLuint textures[] = {
+        m_gAlbedo,
+        m_gNormalAo,
+        m_gVoxelLight,
+        m_gDepth,
+        m_shadowDepth,
+        m_ssaoTex,
+        m_sceneLightingTex,
+        m_halfResTex
+    };
     for (const GLuint texture : textures) {
         if (texture != 0) {
             GLuint mutableTexture = texture;
@@ -167,8 +236,10 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gDepth = 0;
     m_shadowDepth = 0;
     m_ssaoTex = 0;
+    m_sceneLightingTex = 0;
+    m_halfResTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_halfResFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -178,6 +249,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gBufferFbo = 0;
     m_shadowFbo = 0;
     m_ssaoFbo = 0;
+    m_sceneLightingFbo = 0;
+    m_halfResFbo = 0;
     m_ready = false;
 }
 

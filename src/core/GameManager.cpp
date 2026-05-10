@@ -49,12 +49,10 @@ void GameManager::initResources() {
     m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
     m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     m_resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
-    m_resourceMgr.loadTexture2D("shader_noise2d",
-                                ASSETS_DIR "/textures/shaderpacks/noise2D.png",
-                                false,
-                                true,
-                                true,
-                                false);
+    m_resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);
+    m_resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH, false, true, false, false);
+    m_resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH, false, true, true, false);
+    m_resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH, false, false, true, false);
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);

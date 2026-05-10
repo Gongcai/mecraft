@@ -15,7 +15,11 @@ public:
     void bindGBuffer();
     void bindShadowMap();
     void bindSsao();
+    void bindSceneLighting();
+    void bindHalfRes();
     void bindDefaultLike(GLint framebuffer, int width, int height);
+    void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
+    void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
     void blitDepthTo(GLint framebuffer, int width, int height) const;
 
     [[nodiscard]] GLuint albedoTexture() const { return m_gAlbedo; }
@@ -24,6 +28,8 @@ public:
     [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
+    [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
+    [[nodiscard]] GLuint halfResTexture() const { return m_halfResTex; }
     [[nodiscard]] GLuint fullscreenVao() const { return m_fullscreenVao; }
     [[nodiscard]] int width() const { return m_width; }
     [[nodiscard]] int height() const { return m_height; }
@@ -54,6 +60,12 @@ private:
 
     GLuint m_ssaoFbo = 0;
     GLuint m_ssaoTex = 0;
+
+    GLuint m_sceneLightingFbo = 0;
+    GLuint m_sceneLightingTex = 0;
+
+    GLuint m_halfResFbo = 0;
+    GLuint m_halfResTex = 0;
 
     GLuint m_fullscreenVao = 0;
 

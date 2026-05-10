@@ -281,6 +281,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.contactShadowStrength = std::clamp(m_pipelineSettings.contactShadowStrength, 0.0f, 1.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 2);
+    m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 1);
     m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
     m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
     m_pipelineSettings.kappaGradingStrength = std::clamp(m_pipelineSettings.kappaGradingStrength, 0.0f, 1.0f);
@@ -684,7 +685,9 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
         endGpuTimer(GpuTimerPass::Ssao);
 #endif
     }
-    restoreCapturedFramebufferViewport(window);
+    const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
+    const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+    m_deferredTargets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
 #ifdef MECRAFT_DEBUG
     beginGpuTimer(GpuTimerPass::Lighting);
 #endif
@@ -692,7 +695,8 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
-    m_deferredTargets.blitDepthTo(m_capturedFramebuffer, window.getWidth(), window.getHeight());
+    m_deferredTargets.blitSceneLightingTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     restoreCapturedFramebufferViewport(window);
     return true;
 }
@@ -767,6 +771,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera) {
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
+    m_shadowDepthShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_shadowDepthShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
@@ -810,6 +815,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
         return;
     }
 
+    m_deferredTargets.bindSceneLighting();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -852,6 +858,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_deferredLightingShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
