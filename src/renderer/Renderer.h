@@ -69,6 +69,7 @@ public:
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
+        int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
         int shadowWarpMode = 2; // 0=Radial debug, 1=Derivative quartic debug, 2=No warp
         int shadowResolution = 2048;

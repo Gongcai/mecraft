@@ -369,6 +369,9 @@ Bruneton LUT 后置条件：
 
 - `volumetric_fog.fs` 从单次高度雾升级为低步数屏幕空间 ray marching。
 - 使用 `shader_noise2d` 构造两层 pseudo-3D density，并加入低速风场偏移。
+- 在真实天气系统完成前，渲染管线先提供 Clear / Mist / Rain / Storm 预设，展开为 mist、wetness、storm 等因子参与体积雾和空气透视计算。
+- 密度函数改为 DerivativeMain Medium 风格的阈值团雾：晴天大部分空间接近空，Mist/Storm 降低阈值增加团雾覆盖。
+- 降低 deferred/forward aerial perspective 的晴天白雾基底，避免体积雾开关被普通远景雾淹没。
 - 雾输出仍保持 RGB scattering / A transmittance，合成公式不变。
 - `volumetric_composite.fs` 加入基于 full-res depth 的 5-tap 空间上采样，降低 half-res 雾在方块边缘的漏光和白糊。
 - 本阶段仍不采样 shadow map；shadowed volumetric light / 丁达尔光束进入 5D。

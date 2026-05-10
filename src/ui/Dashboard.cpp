@@ -347,9 +347,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int pipelineMode = static_cast<int>(pipeline.mode);
         int tonemapMode = pipeline.tonemapMode;
         int shadowWarpMode = pipeline.shadowWarpMode;
+        int weatherPreset = pipeline.weatherPreset;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic", "AgX"};
         static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative Debug", "No Warp"};
+        static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
@@ -371,6 +373,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
+        pipelineChanged |= ImGui::Combo("Weather Preset", &weatherPreset, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets));
+        pipeline.weatherPreset = weatherPreset;
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
         pipelineChanged |= ImGui::Combo("Shadow Warp", &shadowWarpMode, kShadowWarpModes, IM_ARRAYSIZE(kShadowWarpModes));
@@ -386,6 +390,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.18f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.04f;
+            pipeline.weatherPreset = 0;
             pipeline.aerialStrength = 0.25f;
             pipeline.horizonScatterStrength = 0.35f;
             pipeline.volumetricFogStrength = 0.0f;
@@ -428,9 +433,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.28f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.06f;
-            pipeline.aerialStrength = 0.65f;
-            pipeline.horizonScatterStrength = 0.78f;
-            pipeline.volumetricFogStrength = 0.35f;
+            pipeline.weatherPreset = 0;
+            pipeline.aerialStrength = 0.48f;
+            pipeline.horizonScatterStrength = 0.70f;
+            pipeline.volumetricFogStrength = 0.52f;
             pipeline.bloomThreshold = 0.82f;
             pipeline.bloomStrength = 0.18f;
             pipeline.autoExposureEnabled = true;
@@ -470,9 +476,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.shadowTintStrength = 0.34f;
             pipeline.blockLightStrength = 1.05f;
             pipeline.fakeBounceStrength = 0.08f;
-            pipeline.aerialStrength = 0.78f;
-            pipeline.horizonScatterStrength = 0.90f;
-            pipeline.volumetricFogStrength = 0.48f;
+            pipeline.weatherPreset = 1;
+            pipeline.aerialStrength = 0.58f;
+            pipeline.horizonScatterStrength = 0.82f;
+            pipeline.volumetricFogStrength = 0.68f;
             pipeline.bloomThreshold = 0.72f;
             pipeline.bloomStrength = 0.24f;
             pipeline.autoExposureEnabled = true;

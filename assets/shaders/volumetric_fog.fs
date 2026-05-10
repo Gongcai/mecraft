@@ -18,6 +18,9 @@ uniform float uMoonVisibility;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uVolumetricFogStrength;
+uniform float uWeatherMist;
+uniform float uWeatherWetness;
+uniform float uWeatherStorm;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 
@@ -78,13 +81,15 @@ float pseudo3DNoise(vec3 p, float scale, vec2 wind) {
     return mix(n0, n1, blend);
 }
 
-float structuredFogDensity(vec3 worldPos) {
+float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCoverage) {
     vec2 wind = vec2(uTime * 0.004, uTime * 0.002);
-    float base = pseudo3DNoise(worldPos, 0.030, wind);
-    float detail = pseudo3DNoise(worldPos + vec3(37.0, 11.0, -19.0), 0.105, -wind * 1.65);
-    float broad = smoothstep(0.18, 0.88, base * 0.95 + detail * 0.30);
-    float fineVoids = smoothstep(0.24, 0.78, base - detail * 0.22);
-    return mix(0.30, 1.55, broad) * mix(0.72, 1.18, fineVoids);
+    vec3 p = worldPos * 0.070 + vec3(wind.x, 0.0, wind.y);
+    float base = pseudo3DNoise(p, 1.0, vec2(0.0)) * 4.0;
+    float detail = pseudo3DNoise(p * 4.0 + vec3(wind.x, 0.0, wind.y), 1.0, vec2(0.0));
+    float threshold = mix(5.25, 3.55, clamp(weatherCoverage, 0.0, 1.0));
+    float cloudy = clamp((base - detail) * 4.0 * heightDensity - threshold, 0.0, 1.0);
+    float fineShape = smoothstep(0.05, 0.85, base * 0.22 + detail * 0.35);
+    return cloudy * mix(0.85, 1.45, fineShape);
 }
 
 float rayleighPhase(float cosTheta) {
@@ -131,9 +136,13 @@ void main() {
     fogColor += uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                 sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
     fogColor += uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
+    float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+    fogColor = mix(fogColor, fogColor * vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
 
     float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
-    float baseDensity = (0.00013 + 0.00036 * horizon) * strength;
+    float baseDensity = (0.00010 + 0.00024 * horizon) *
+                        strength *
+                        (0.58 + weatherHaze * 1.45);
     float jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
     float stepLength = marchDistance / float(kFogSteps);
     vec3 scattering = vec3(0.0);
@@ -146,7 +155,10 @@ void main() {
         heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
         heightDensity = clamp(heightDensity, 0.035, 1.45);
 
-        float structure = structuredFogDensity(samplePos);
+        float coverage = 0.08 + uWeatherMist * 0.72 + uWeatherWetness * 0.32 + uWeatherStorm * 0.82;
+        float structure = structuredFogDensity(samplePos, heightDensity, coverage);
+        float clearAir = 0.06 + weatherHaze * 0.18;
+        structure += clearAir;
         float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
         float sampleDensity = baseDensity * heightDensity * structure * nearFade;
         float opticalStep = sampleDensity * stepLength;

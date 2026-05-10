@@ -42,6 +42,10 @@ uniform float uSkyCoolness;
 uniform float uShadowDesaturation;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
+uniform float uWeatherMist;
+uniform float uWeatherWetness;
+uniform float uWeatherStorm;
+uniform float uAerialReduction;
 uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
 uniform int uPcssShadowsEnabled;
@@ -383,9 +387,17 @@ vec3 applyAerialPerspective(vec3 sceneColor,
 
     float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
     float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-    float airDensity = (0.0012 + 0.0022 * horizon) * clamp(uAerialStrength, 0.0, 2.0);
+    float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+    float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
+    float airDensity = (0.00048 + 0.00105 * horizon) *
+                       clamp(uAerialStrength, 0.0, 2.0) *
+                       clearAirScale *
+                       (1.0 + weatherHaze * 0.85);
     float aerialOpacity = (1.0 - exp(-fogDistance * airDensity)) * outdoorMask * heightDensity;
-    float fogOpacity = clamp(max(distanceFogOpacity, aerialOpacity * 0.62), 0.0, 0.94);
+    float fogOpacity = clamp(max(distanceFogOpacity * mix(0.55, 0.95, clamp(weatherHaze, 0.0, 1.0)),
+                                 aerialOpacity * 0.48),
+                             0.0,
+                             0.88);
 
     vec3 fogColor = aerialFogColor(baseFogColor, viewDir, horizon, warmSunColor);
     return mix(sceneColor, fogColor, fogOpacity);

@@ -58,6 +58,26 @@ void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
 constexpr Renderer::FrustumPlane kPlaneFromIndex(const size_t index) {
     return static_cast<Renderer::FrustumPlane>(index);
 }
+
+struct RenderWeatherFactors {
+    float mist = 0.0f;
+    float wetness = 0.0f;
+    float storm = 0.0f;
+    float aerialReduction = 0.55f;
+};
+
+RenderWeatherFactors weatherFactorsForPreset(const int preset) {
+    switch (std::clamp(preset, 0, 3)) {
+    case 1:
+        return {0.55f, 0.15f, 0.0f, 0.42f};
+    case 2:
+        return {0.38f, 0.72f, 0.18f, 0.34f};
+    case 3:
+        return {0.72f, 1.0f, 0.85f, 0.28f};
+    default:
+        return {0.0f, 0.0f, 0.0f, 0.55f};
+    }
+}
 }
 
 Renderer::~Renderer() {
@@ -293,6 +313,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
+    m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
     m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
@@ -631,6 +652,11 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     shader.setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     shader.setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
+    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
+    shader.setFloat("uWeatherMist", weather.mist);
+    shader.setFloat("uWeatherWetness", weather.wetness);
+    shader.setFloat("uWeatherStorm", weather.storm);
+    shader.setFloat("uAerialReduction", weather.aerialReduction);
     shader.setVec3("uCameraPos", m_cameraPos);
     bindWaterEffectUniforms(shader, false);
 
@@ -910,6 +936,11 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     m_deferredLightingShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     m_deferredLightingShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
+    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
+    m_deferredLightingShader->setFloat("uWeatherMist", weather.mist);
+    m_deferredLightingShader->setFloat("uWeatherWetness", weather.wetness);
+    m_deferredLightingShader->setFloat("uWeatherStorm", weather.storm);
+    m_deferredLightingShader->setFloat("uAerialReduction", weather.aerialReduction);
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
@@ -1013,6 +1044,10 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     m_volumetricFogShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     m_volumetricFogShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     m_volumetricFogShader->setFloat("uVolumetricFogStrength", m_pipelineSettings.volumetricFogStrength);
+    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
+    m_volumetricFogShader->setFloat("uWeatherMist", weather.mist);
+    m_volumetricFogShader->setFloat("uWeatherWetness", weather.wetness);
+    m_volumetricFogShader->setFloat("uWeatherStorm", weather.storm);
     m_volumetricFogShader->setFloat("uTime", static_cast<float>(std::fmod(Time::getGameTime(), 8192.0)));
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
