@@ -56,6 +56,38 @@ vec3 tonemapFilmic(vec3 color) {
     return clamp((color * (6.2 * color + 0.5)) / (color * (6.2 * color + 1.7) + 0.06), 0.0, 1.0);
 }
 
+vec3 agxInset(vec3 color) {
+    return vec3(
+        dot(color, vec3(0.856627153, 0.137318972, 0.111898212)),
+        dot(color, vec3(0.095121240, 0.761241990, 0.076799418)),
+        dot(color, vec3(0.048251607, 0.101439038, 0.811302370))
+    );
+}
+
+vec3 agxOutset(vec3 color) {
+    return vec3(
+        dot(color, vec3(1.127100581, -0.141329763, -0.141329763)),
+        dot(color, vec3(-0.110606643, 1.157823702, -0.110606643)),
+        dot(color, vec3(-0.016493938, -0.016493938, 1.251936406))
+    );
+}
+
+vec3 agxContrastApprox(vec3 x) {
+    vec3 x2 = x * x;
+    vec3 x4 = x2 * x2;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+}
+
+vec3 tonemapAgx(vec3 color) {
+    color = agxInset(max(color, vec3(0.0)));
+    color = clamp(log2(max(color, vec3(1e-6))), -12.47393, 4.026069);
+    color = (color + 12.47393) / 16.5;
+    color = agxContrastApprox(color);
+    color = agxOutset(color);
+    color = pow(max(color, vec3(0.0)), vec3(2.2));
+    return clamp(color, 0.0, 1.0);
+}
+
 float saturate(float value) {
     return clamp(value, 0.0, 1.0);
 }
@@ -175,11 +207,17 @@ float tonemapFilmicScalar(float value) {
     return clamp((value * (6.2 * value + 0.5)) / (value * (6.2 * value + 1.7) + 0.06), 0.0, 1.0);
 }
 
+float tonemapAgxScalar(float value) {
+    return luma709(tonemapAgx(vec3(value)));
+}
+
 vec3 tonemapPreserveLuma(vec3 color) {
     color = max(color, vec3(0.0));
     float lumaIn = max(dot(color, vec3(0.2126, 0.7152, 0.0722)), 0.00001);
     float lumaOut;
-    if (uTonemapMode == 1) {
+    if (uTonemapMode == 3) {
+        lumaOut = tonemapAgxScalar(lumaIn);
+    } else if (uTonemapMode == 1) {
         lumaOut = tonemapAcesScalar(lumaIn);
     } else if (uTonemapMode == 2) {
         lumaOut = tonemapFilmicScalar(lumaIn);
@@ -189,7 +227,9 @@ vec3 tonemapPreserveLuma(vec3 color) {
 
     vec3 lumaMapped = color * (lumaOut / lumaIn);
     vec3 channelMapped;
-    if (uTonemapMode == 1) {
+    if (uTonemapMode == 3) {
+        channelMapped = tonemapAgx(color);
+    } else if (uTonemapMode == 1) {
         channelMapped = tonemapAces(color);
     } else if (uTonemapMode == 2) {
         channelMapped = tonemapFilmic(color);
@@ -225,6 +265,11 @@ vec3 applyKappaHdrGrade(vec3 color) {
 }
 
 vec3 applyKappaTonemap(vec3 color) {
+    if (uTonemapMode == 3) {
+        vec3 agxMapped = tonemapPreserveLuma(color);
+        vec3 kappaMapped = kappaAcesApprox(color);
+        return mix(agxMapped, kappaMapped, saturate(uKappaGradingStrength) * 0.28);
+    }
     vec3 mapped = kappaAcesApprox(color);
     vec3 fallback = tonemapPreserveLuma(color);
     return mix(fallback, mapped, saturate(uKappaGradingStrength));
@@ -242,6 +287,17 @@ vec3 applySplitTone(vec3 color) {
     return mix(color, toned, saturate(uSplitToneStrength));
 }
 
+vec3 applyAgxLook(vec3 color) {
+    float lum = luma709(color);
+    float chromaBoost = mix(1.09, 1.03, smoothstep(0.18, 0.85, lum));
+    color = mix(vec3(lum), color, chromaBoost);
+    vec3 coolShadows = vec3(0.92, 0.98, 1.08);
+    vec3 warmHighlights = vec3(1.06, 1.025, 0.94);
+    color *= mix(vec3(1.0), coolShadows, smoothstep(0.34, 0.02, lum) * 0.16);
+    color *= mix(vec3(1.0), warmHighlights, smoothstep(0.42, 1.0, lum) * 0.10);
+    return saturate(color);
+}
+
 vec3 applyVignette(vec3 color, vec2 uv) {
     vec2 p = uv * 2.0 - 1.0;
     p.x *= 1.15;
@@ -256,6 +312,9 @@ vec3 applyGrade(vec3 color) {
         color = applyColorTemperature(color);
         color = applyKappaHdrGrade(color);
         color = applyKappaTonemap(color);
+        if (uTonemapMode == 3) {
+            color = applyAgxLook(color);
+        }
         color = applySplitTone(color);
     } else {
         color = vec3(1.0) - exp(-color);

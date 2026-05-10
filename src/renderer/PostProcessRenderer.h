@@ -22,7 +22,7 @@ struct PostProcessEffects {
     float sunVisibility = 0.0f;
     float sunRayStrength = 0.14f;
     bool shaderpackGradingEnabled = true;
-    int tonemapMode = 1;
+    int tonemapMode = 3;
     float colorTemperature = 1.0f;
     float vibrance = 0.0f;
     float kappaGradingStrength = 0.65f;

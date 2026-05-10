@@ -348,7 +348,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int tonemapMode = pipeline.tonemapMode;
         int shadowWarpMode = pipeline.shadowWarpMode;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
-        static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic"};
+        static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic", "AgX"};
         static constexpr const char* kShadowWarpModes[] = {"Radial", "Derivative Quartic"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
@@ -368,6 +368,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Combo("Shadow Warp", &shadowWarpMode, kShadowWarpModes, IM_ARRAYSIZE(kShadowWarpModes));
         pipeline.shadowWarpMode = shadowWarpMode;
         if (ImGui::Button("Preset Neutral")) {
+            pipeline.tonemapMode = 1;
             pipeline.directSunStrength = 1.0f;
             pipeline.skyAmbientStrength = 0.55f;
             pipeline.minimumAmbient = 0.09f;
@@ -397,6 +398,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
+            pipeline.tonemapMode = 3;
             pipeline.directSunStrength = 1.18f;
             pipeline.skyAmbientStrength = 0.46f;
             pipeline.minimumAmbient = 0.07f;
@@ -426,6 +428,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
+            pipeline.tonemapMode = 3;
             pipeline.directSunStrength = 1.42f;
             pipeline.skyAmbientStrength = 0.34f;
             pipeline.minimumAmbient = 0.05f;

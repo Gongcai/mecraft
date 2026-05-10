@@ -61,7 +61,7 @@ public:
         bool waterEffectsEnabled = true;
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
-        int tonemapMode = 1; // 0=Reinhard, 1=ACES, 2=Filmic
+        int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
         int shadowWarpMode = 1; // 0=Radial, 1=Derivative quartic
         int shadowResolution = 2048;
         float shadowDistance = 96.0f;
