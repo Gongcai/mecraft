@@ -1413,7 +1413,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         } else if (flow.y < -0.001f && (face == FACE_BACK || face == FACE_RIGHT)) {
             renderData.uvQuarterTurns = 2;
         }
-        emitCustomFace(meshData.transparentVertices, corners, face, renderData);
+        emitCustomFace(meshData.waterVertices, corners, face, renderData);
         expandBoundsForCorners(meshData, corners);
         ++meshData.transparentFaceCountBeforeGreedy;
         ++meshData.transparentFaceCountAfterGreedy;
@@ -1917,7 +1917,7 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                     static_cast<float>(runWidth),
                     static_cast<float>(runHeight),
                     start.renderData.uvQuarterTurns);
-                appendFaceVertices(meshData.transparentVertices, corners, faceUV, FACE_TOP, start.renderData);
+                appendFaceVertices(meshData.waterVertices, corners, faceUV, FACE_TOP, start.renderData);
                 expandBoundsForCorners(meshData, corners);
                 ++meshData.transparentFaceCountAfterGreedy;
             }

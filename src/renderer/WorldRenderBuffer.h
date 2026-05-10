@@ -86,6 +86,7 @@ public:
                                 const std::vector<BlockVertex>& cutout,
                                 const std::vector<BlockVertex>& cutoutDistance,
                                 const std::vector<BlockVertex>& transparent,
+                                const std::vector<BlockVertex>& water,
                                 bool hasBounds,
                                 const glm::vec3& boundsMin,
                                 const glm::vec3& boundsMax);
@@ -96,6 +97,7 @@ public:
     void addOpaque(const GpuMeshRange& range);
     void addCutout(const GpuMeshRange& range);
     void addTransparent(const GpuMeshRange& range);
+    void addWater(const GpuMeshRange& range);
 
     void flushOpaque();
     void flushCutout();

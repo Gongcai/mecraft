@@ -412,6 +412,7 @@ private:
 
     Shader* m_chunkShader = nullptr;
     Shader* m_chunkForwardShader = nullptr;
+    Shader* m_transparentCompositeShader = nullptr;
     Shader* m_chunkGBufferShader = nullptr;
     Shader* m_shadowDepthShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;

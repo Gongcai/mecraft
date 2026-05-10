@@ -548,10 +548,12 @@ void SubChunkMesh::destroy() {
         cutoutRange = {};
         cutoutDistanceRange = {};
         transparentRange = {};
+        waterRange = {};
         vertexCount = 0;
         cutoutVertexCount = 0;
         cutoutDistanceVertexCount = 0;
         transparentVertexCount = 0;
+        waterVertexCount = 0;
         hasBounds = false;
         inGlobalPool = false;
         return;
@@ -595,8 +597,10 @@ void SubChunkMesh::destroy() {
 
     vertexCount = 0;
     transparentVertexCount = 0;
+    waterVertexCount = 0;
     cutoutVertexCount = 0;
     cutoutDistanceVertexCount = 0;
+    waterRange = {};
     hasBounds = false;
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);

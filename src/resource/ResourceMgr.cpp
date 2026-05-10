@@ -244,6 +244,7 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
 void ResourceMgr::init() {
     loadShader("chunk", SHADERS_DIR "/chunk.vs", SHADERS_DIR "/chunk.fs");
     loadShader("chunk_lit", SHADERS_DIR "/chunk_lit.vs", SHADERS_DIR "/chunk_lit.fs");
+    loadShader("transparent_composite", SHADERS_DIR "/chunk_lit.vs", SHADERS_DIR "/chunk_lit.fs");
     loadShader("block_item_lit", SHADERS_DIR "/chunk_lit.vs", SHADERS_DIR "/block_item_lit.fs");
     loadShader("chunk_gbuffer", SHADERS_DIR "/chunk_gbuffer.vs", SHADERS_DIR "/chunk_gbuffer.fs");
     loadShader("shadow_depth", SHADERS_DIR "/shadow_depth.vs", SHADERS_DIR "/shadow_depth.fs");

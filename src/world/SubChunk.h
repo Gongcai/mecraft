@@ -26,6 +26,7 @@ struct WorldGpuMesh {
     GpuMeshRange cutout;
     GpuMeshRange cutoutDistance;
     GpuMeshRange transparent;
+    GpuMeshRange water;
     bool hasBounds = false;
     glm::vec3 boundsMin{};
     glm::vec3 boundsMax{};
@@ -165,6 +166,8 @@ struct SubChunkMesh {
     GpuMeshRange cutoutRange;
     GpuMeshRange cutoutDistanceRange;
     GpuMeshRange transparentRange;
+    GpuMeshRange waterRange;
+    uint32_t waterVertexCount = 0;
     bool inGlobalPool = false;
 
     void upload(const std::vector<BlockVertex>& vertices);

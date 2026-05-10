@@ -69,6 +69,7 @@ struct ChunkMeshData {
     std::vector<BlockVertex> cutoutVertices;
     std::vector<BlockVertex> cutoutDistanceVertices;
     std::vector<BlockVertex> transparentVertices;
+    std::vector<BlockVertex> waterVertices;
     uint32_t opaqueFaceCountBeforeGreedy = 0;
     uint32_t opaqueFaceCountAfterGreedy = 0;
     uint32_t transparentFaceCountBeforeGreedy = 0;

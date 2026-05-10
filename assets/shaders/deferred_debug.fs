@@ -11,6 +11,8 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uShadowMap;
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSceneLightingTex;
+uniform sampler2D uTransparentCompositeTex;
+uniform sampler2D uTransparentCompositeDepthTex;
 uniform sampler2D uVolumetricTex;
 uniform sampler2D uSkyCaptureTex;
 uniform int uDebugViewMode;
@@ -86,16 +88,25 @@ void main() {
         return;
     }
     if (uDebugViewMode == 11) {
+        FragColor = vec4(tonemapPreview(texture(uTransparentCompositeTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 12) {
+        float depth = texture(uTransparentCompositeDepthTex, vTexCoord).r;
+        FragColor = vec4(heatmap(1.0 - linearizeDepthPreview(depth)), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 13) {
         vec4 volumetric = texture(uVolumetricTex, vTexCoord);
         FragColor = vec4(tonemapPreview(volumetric.rgb * 4.0), 1.0);
         return;
     }
-    if (uDebugViewMode == 12) {
+    if (uDebugViewMode == 14) {
         float transmittance = texture(uVolumetricTex, vTexCoord).a;
         FragColor = vec4(vec3(transmittance), 1.0);
         return;
     }
-    if (uDebugViewMode == 13) {
+    if (uDebugViewMode == 15) {
         FragColor = vec4(tonemapPreview(texture(uSkyCaptureTex, vTexCoord).rgb), 1.0);
         return;
     }

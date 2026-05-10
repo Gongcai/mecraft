@@ -416,6 +416,7 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
     const std::vector<BlockVertex>& cutout,
     const std::vector<BlockVertex>& cutoutDistance,
     const std::vector<BlockVertex>& transparent,
+    const std::vector<BlockVertex>& water,
     const bool hasBounds, const glm::vec3& boundsMin, const glm::vec3& boundsMax)
 {
     WorldGpuMesh result;
@@ -450,6 +451,16 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
         }
         m_transparentPool.upload(result.transparent, transparent);
     }
+    if (!water.empty()) {
+        if (!m_transparentPool.allocate(static_cast<uint32_t>(water.size()), result.water)) {
+            m_opaquePool.free(result.opaque);
+            m_cutoutPool.free(result.cutout);
+            m_cutoutPool.free(result.cutoutDistance);
+            m_transparentPool.free(result.transparent);
+            return {};
+        }
+        m_transparentPool.upload(result.water, water);
+    }
 
     result.hasBounds = hasBounds;
     result.boundsMin = boundsMin;
@@ -462,6 +473,7 @@ void WorldRenderBuffer::free(const WorldGpuMesh& mesh) {
     m_cutoutPool.free(mesh.cutout);
     m_cutoutPool.free(mesh.cutoutDistance);
     m_transparentPool.free(mesh.transparent);
+    m_transparentPool.free(mesh.water);
 }
 
 void WorldRenderBuffer::beginFrame() {
@@ -499,6 +511,10 @@ void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
     m_transparentCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
     ++m_transparentLogicalCommandCount;
     m_transparentVertexCount += range.vertexCount;
+}
+
+void WorldRenderBuffer::addWater(const GpuMeshRange& range) {
+    addTransparent(range);
 }
 
 void WorldRenderBuffer::flushOpaque() {

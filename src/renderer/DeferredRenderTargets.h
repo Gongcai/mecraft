@@ -16,10 +16,15 @@ public:
     void bindShadowMap();
     void bindSsao();
     void bindSceneLighting();
+    void bindTransparentComposite();
     void bindHalfRes();
     void bindDefaultLike(GLint framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
+    void copyFramebufferColorToTransparentComposite(GLint framebuffer, int width, int height) const;
+    void copySceneLightingToTransparentComposite() const;
+    void copyDepthToTransparentComposite() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
+    void blitTransparentCompositeTo(GLint framebuffer, int width, int height) const;
     void blitDepthTo(GLint framebuffer, int width, int height) const;
 
     [[nodiscard]] GLuint albedoTexture() const { return m_gAlbedo; }
@@ -30,6 +35,8 @@ public:
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
+    [[nodiscard]] GLuint transparentCompositeTexture() const { return m_transparentCompositeTex; }
+    [[nodiscard]] GLuint transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
     [[nodiscard]] GLuint halfResTexture() const { return m_halfResTex; }
     [[nodiscard]] GLuint skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
     [[nodiscard]] GLuint skyCaptureTexture() const { return m_skyCaptureTex; }
@@ -72,6 +79,10 @@ private:
 
     GLuint m_sceneLightingFbo = 0;
     GLuint m_sceneLightingTex = 0;
+
+    GLuint m_transparentCompositeFbo = 0;
+    GLuint m_transparentCompositeTex = 0;
+    GLuint m_transparentCompositeDepth = 0;
 
     GLuint m_halfResFbo = 0;
     GLuint m_halfResTex = 0;

@@ -87,6 +87,10 @@ Renderer::~Renderer() {
 void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
+    m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
+    if (m_transparentCompositeShader == nullptr) {
+        m_transparentCompositeShader = m_chunkForwardShader;
+    }
     m_chunkShader = m_chunkForwardShader;
     m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
@@ -166,6 +170,7 @@ void Renderer::shutdown() {
     m_breakOverlayCrossVertexCount = 0;
     m_chunkShader = nullptr;
     m_chunkForwardShader = nullptr;
+    m_transparentCompositeShader = nullptr;
     m_chunkGBufferShader = nullptr;
     m_shadowDepthShader = nullptr;
     m_deferredLightingShader = nullptr;
@@ -208,14 +213,20 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         restoreCapturedFramebufferViewport(window);
     }
 
-    m_chunkShader = m_chunkForwardShader;
+    m_chunkShader = m_transparentCompositeShader != nullptr ? m_transparentCompositeShader : m_chunkForwardShader;
     if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
         const bool deferredInputsEnabled = m_deferredFrameActive && m_deferredTargets.isReady();
         const bool compositeInputsEnabled = deferredInputsEnabled && m_pipelineSettings.transparentCompositeEnabled;
-        if (compositeInputsEnabled) {
-            const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
-            const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+        const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
+        const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+        if (deferredInputsEnabled) {
             m_deferredTargets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        }
+        if (compositeInputsEnabled) {
+            m_deferredTargets.copyFramebufferColorToTransparentComposite(m_capturedFramebuffer, capturedWidth, capturedHeight);
+            m_deferredTargets.copyDepthToTransparentComposite();
+            m_deferredTargets.bindTransparentComposite();
+        } else if (m_deferredFrameActive) {
             restoreCapturedFramebufferViewport(window);
         }
 
@@ -231,8 +242,13 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
             glActiveTexture(GL_TEXTURE7);
             glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
         }
+        glEnable(GL_DEPTH_TEST);
         bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
         renderTransparentChunks(m_deferredTransparentEntries);
+        if (compositeInputsEnabled) {
+            m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+            restoreCapturedFramebufferViewport(window);
+        }
         glBindVertexArray(0);
         glActiveTexture(GL_TEXTURE7);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -338,7 +354,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 13);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 15);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -777,6 +793,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
+    m_deferredTargets.copySceneLightingToTransparentComposite();
     bool compositedToCapturedFramebuffer = false;
     if (m_pipelineSettings.volumetricFogEnabled &&
         m_pipelineSettings.aerialPerspectiveEnabled &&
@@ -1196,8 +1213,10 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uShadowMap", 5);
     m_deferredDebugShader->setInt("uSsaoTex", 6);
     m_deferredDebugShader->setInt("uSceneLightingTex", 7);
-    m_deferredDebugShader->setInt("uVolumetricTex", 8);
-    m_deferredDebugShader->setInt("uSkyCaptureTex", 9);
+    m_deferredDebugShader->setInt("uTransparentCompositeTex", 8);
+    m_deferredDebugShader->setInt("uTransparentCompositeDepthTex", 9);
+    m_deferredDebugShader->setInt("uVolumetricTex", 10);
+    m_deferredDebugShader->setInt("uSkyCaptureTex", 11);
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
 
     glActiveTexture(GL_TEXTURE0);
@@ -1217,12 +1236,16 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.transparentCompositeTexture());
     glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.transparentCompositeDepthTexture());
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     renderFullscreen(*m_deferredDebugShader);
 
-    for (int unit = 9; unit >= 0; --unit) {
+    for (int unit = 11; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -1572,7 +1595,15 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                             static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
                             static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
                         const glm::vec3 toCamera = sectionCenter - m_cameraPos;
-                        m_deferredTransparentBatch.push_back({mesh.transparentRange, glm::dot(toCamera, toCamera)});
+                        m_deferredTransparentBatch.push_back({mesh.transparentRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Generic});
+                    }
+                    if (mesh.waterRange.vertexCount > 0) {
+                        const glm::vec3 sectionCenter(
+                            static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                            static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
+                            static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                        const glm::vec3 toCamera = sectionCenter - m_cameraPos;
+                        m_deferredTransparentBatch.push_back({mesh.waterRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Water});
                     }
                 }
             } else {
@@ -1782,7 +1813,7 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
         }
 
         const SubChunkMesh& mesh = sc->getMesh();
-        if (mesh.transparentVertexCount == 0) {
+        if (mesh.transparentVertexCount == 0 && mesh.waterVertexCount == 0) {
             continue;
         }
 
@@ -1887,7 +1918,11 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
                   });
 
         for (const DrawBatchEntry& entry : m_deferredTransparentBatch) {
-            m_worldRenderBuffer.addTransparent(entry.range);
+            if (entry.kind == TransparentBatchKind::Water) {
+                m_worldRenderBuffer.addWater(entry.range);
+            } else {
+                m_worldRenderBuffer.addTransparent(entry.range);
+            }
         }
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Transparent);
@@ -2204,7 +2239,8 @@ void Renderer::drainMeshingResults(const World& world) {
             static_cast<int>(result.meshData.opaqueVertices.size()) +
             static_cast<int>(result.meshData.cutoutVertices.size()) +
             static_cast<int>(result.meshData.cutoutDistanceVertices.size()) +
-            static_cast<int>(result.meshData.transparentVertices.size());
+            static_cast<int>(result.meshData.transparentVertices.size()) +
+            static_cast<int>(result.meshData.waterVertices.size());
 
         // Hard vertex budget: if this result would push us over, allow at most
         // one over-budget upload then stop for this frame.
@@ -2272,21 +2308,24 @@ void Renderer::drainMeshingResults(const World& world) {
             std::vector<BlockVertex> cutoutVerts = std::move(result.meshData.cutoutVertices);
             std::vector<BlockVertex> cutoutDistanceVerts = std::move(result.meshData.cutoutDistanceVertices);
             std::vector<BlockVertex> transparentVerts = std::move(result.meshData.transparentVertices);
+            std::vector<BlockVertex> waterVerts = std::move(result.meshData.waterVertices);
             bakeWorldOffset(opaqueVerts);
             bakeWorldOffset(cutoutVerts);
             bakeWorldOffset(cutoutDistanceVerts);
             bakeWorldOffset(transparentVerts);
+            bakeWorldOffset(waterVerts);
 
             const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
             WorldGpuMesh gpu = m_worldRenderBuffer.uploadSubChunk(
-                opaqueVerts, cutoutVerts, cutoutDistanceVerts, transparentVerts,
+                opaqueVerts, cutoutVerts, cutoutDistanceVerts, transparentVerts, waterVerts,
                 result.meshData.hasBounds,
                 result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
                 result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
             if ((!opaqueVerts.empty() && gpu.opaque.vertexCount == 0) ||
                 (!cutoutVerts.empty() && gpu.cutout.vertexCount == 0) ||
                 (!cutoutDistanceVerts.empty() && gpu.cutoutDistance.vertexCount == 0) ||
-                (!transparentVerts.empty() && gpu.transparent.vertexCount == 0)) {
+                (!transparentVerts.empty() && gpu.transparent.vertexCount == 0) ||
+                (!waterVerts.empty() && gpu.water.vertexCount == 0)) {
                 continue;
             }
 
@@ -2294,10 +2333,12 @@ void Renderer::drainMeshingResults(const World& world) {
             mesh.cutoutRange = gpu.cutout;
             mesh.cutoutDistanceRange = gpu.cutoutDistance;
             mesh.transparentRange = gpu.transparent;
+            mesh.waterRange = gpu.water;
             mesh.vertexCount = gpu.opaque.vertexCount;
             mesh.cutoutVertexCount = gpu.cutout.vertexCount;
             mesh.cutoutDistanceVertexCount = gpu.cutoutDistance.vertexCount;
             mesh.transparentVertexCount = gpu.transparent.vertexCount;
+            mesh.waterVertexCount = gpu.water.vertexCount;
             mesh.hasBounds = result.meshData.hasBounds;
             mesh.boundsMin = gpu.boundsMin;
             mesh.boundsMax = gpu.boundsMax;
@@ -2317,6 +2358,7 @@ void Renderer::drainMeshingResults(const World& world) {
             mesh.uploadCutoutDistance(result.meshData.cutoutDistanceVertices);
 
             std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
+            transparentVerts.insert(transparentVerts.end(), result.meshData.waterVertices.begin(), result.meshData.waterVertices.end());
             bakeWorldOffset(transparentVerts);
             mesh.uploadTransparent(transparentVerts);
 

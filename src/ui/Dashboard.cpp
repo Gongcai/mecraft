@@ -364,6 +364,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Shadow Depth",
             "SSAO",
             "Scene Lighting",
+            "Transparent Composite",
+            "Transparent Depth",
             "Volumetric RGB",
             "Volumetric Transmittance",
             "Sky Capture"

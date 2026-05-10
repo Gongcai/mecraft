@@ -90,6 +90,19 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    glCreateFramebuffers(1, &m_transparentCompositeFbo);
+    m_transparentCompositeTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    // Keep transparent depth separate from the sampled G-buffer depth to avoid feedback while drawing water/transparent materials.
+    m_transparentCompositeDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_transparentCompositeFbo, GL_COLOR_ATTACHMENT0, m_transparentCompositeTex, 0);
+    glNamedFramebufferTexture(m_transparentCompositeFbo, GL_DEPTH_ATTACHMENT, m_transparentCompositeDepth, 0);
+    const GLenum transparentCompositeDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_transparentCompositeFbo, 1, &transparentCompositeDrawBuffer);
+    if (!checkFramebufferComplete(m_transparentCompositeFbo, "TransparentComposite")) {
+        shutdown();
+        return false;
+    }
+
     glCreateFramebuffers(1, &m_halfResFbo);
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
@@ -145,6 +158,13 @@ void DeferredRenderTargets::bindSceneLighting() {
     glDrawBuffers(1, &drawBuffer);
 }
 
+void DeferredRenderTargets::bindTransparentComposite() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
 void DeferredRenderTargets::bindHalfRes() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_halfResFbo);
     glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
@@ -169,11 +189,59 @@ void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const GLint fram
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
 }
 
+void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const GLint framebuffer, const int width, const int height) const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
+    glBlitFramebuffer(0, 0, std::max(1, width), std::max(1, height),
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+}
+
+void DeferredRenderTargets::copySceneLightingToTransparentComposite() const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+}
+
+void DeferredRenderTargets::copyDepthToTransparentComposite() const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gBufferFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+}
+
 void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, std::max(1, width), std::max(1, height),
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+}
+
+void DeferredRenderTargets::blitTransparentCompositeTo(const GLint framebuffer, const int width, const int height) const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_transparentCompositeFbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
     glBlitFramebuffer(0, 0, m_width, m_height,
                       0, 0, std::max(1, width), std::max(1, height),
@@ -235,6 +303,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_shadowDepth,
         m_ssaoTex,
         m_sceneLightingTex,
+        m_transparentCompositeTex,
+        m_transparentCompositeDepth,
         m_halfResTex,
         m_skyCaptureTex
     };
@@ -252,10 +322,12 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_shadowDepth = 0;
     m_ssaoTex = 0;
     m_sceneLightingTex = 0;
+    m_transparentCompositeTex = 0;
+    m_transparentCompositeDepth = 0;
     m_halfResTex = 0;
     m_skyCaptureTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_halfResFbo, m_skyCaptureFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_skyCaptureFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -266,6 +338,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_shadowFbo = 0;
     m_ssaoFbo = 0;
     m_sceneLightingFbo = 0;
+    m_transparentCompositeFbo = 0;
     m_halfResFbo = 0;
     m_skyCaptureFbo = 0;
     m_ready = false;
