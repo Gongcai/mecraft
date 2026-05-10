@@ -4,7 +4,72 @@
 
 #include "Shader.h"
 
+#include <filesystem>
+
 using namespace std;
+
+namespace {
+string trimShaderIncludeToken(string token) {
+	const size_t first = token.find_first_not_of(" \t");
+	if (first == string::npos) {
+		return {};
+	}
+	const size_t last = token.find_last_not_of(" \t\r\n");
+	token = token.substr(first, last - first + 1);
+	if (token.size() >= 2 &&
+		((token.front() == '"' && token.back() == '"') ||
+		 (token.front() == '<' && token.back() == '>'))) {
+		return token.substr(1, token.size() - 2);
+	}
+	return {};
+}
+} // namespace
+
+string Shader::loadShaderSource(const string& path) {
+	ifstream shaderFile;
+	shaderFile.exceptions(ifstream::failbit | ifstream::badbit);
+	shaderFile.open(path);
+	stringstream shaderStream;
+	shaderStream << shaderFile.rdbuf();
+	return shaderStream.str();
+}
+
+string Shader::resolveIncludes(const string& source,
+                               const string& sourcePath,
+                               unordered_set<string>& includeStack) {
+	const filesystem::path currentPath = filesystem::absolute(sourcePath).lexically_normal();
+	const filesystem::path currentDir = currentPath.parent_path();
+	stringstream input(source);
+	string output;
+	string line;
+	while (getline(input, line)) {
+		const size_t directiveStart = line.find_first_not_of(" \t");
+		if (directiveStart != string::npos && line.compare(directiveStart, 8, "#include") == 0) {
+			const string includeName = trimShaderIncludeToken(line.substr(directiveStart + 8));
+			if (!includeName.empty()) {
+				const filesystem::path includePath = filesystem::absolute(currentDir / includeName).lexically_normal();
+				const string includeKey = includePath.string();
+				output += "#line 1 0\n";
+				if (includeStack.insert(includeKey).second) {
+					try {
+						output += resolveIncludes(loadShaderSource(includeKey), includeKey, includeStack);
+					} catch (ifstream::failure&) {
+						cout << "ERROR::SHADER::INCLUDE_NOT_SUCCESSFULLY_READ" << endl;
+						cout << "ERROR::SHADER::FILENAME:" << includeKey << endl;
+					}
+					includeStack.erase(includeKey);
+				} else {
+					cout << "ERROR::SHADER::CYCLIC_INCLUDE:" << includeKey << endl;
+				}
+				output += "\n#line 1 0\n";
+				continue;
+			}
+		}
+		output += line;
+		output += '\n';
+	}
+	return output;
+}
 
 Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath )
 {
@@ -32,9 +97,10 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 		vShaderFile.close();
 		fShaderFile.close();
 		gShaderFile.close();
-		vertexCode = vShaderStream.str();
-		framentCode = fShaderStream.str();
-		geometryCode = gShaderStream.str();
+		unordered_set<string> includeStack;
+		vertexCode = resolveIncludes(vShaderStream.str(), vertexPath, includeStack);
+		framentCode = resolveIncludes(fShaderStream.str(), fragmentPath, includeStack);
+		geometryCode = resolveIncludes(gShaderStream.str(), geometryPath, includeStack);
 	}
 	catch (ifstream::failure e)
 	{
@@ -128,8 +194,9 @@ Shader::Shader(const char* vertexPath,const char* fragmentPath){
 		vShaderFile.close();
 		fShaderFile.close();
 
-		vertexCode = vShaderStream.str();
-		framentCode = fShaderStream.str();
+		unordered_set<string> includeStack;
+		vertexCode = resolveIncludes(vShaderStream.str(), vertexPath, includeStack);
+		framentCode = resolveIncludes(fShaderStream.str(), fragmentPath, includeStack);
 
 	}
 	catch (ifstream::failure e)

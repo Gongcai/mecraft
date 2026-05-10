@@ -11,6 +11,7 @@
 #include<fstream>
 #include<sstream>
 #include<iostream>
+#include <unordered_set>
 #include<glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -42,6 +43,10 @@ public:
     [[nodiscard]] int getUniformLocation(const string& name) const;
 
 private:
+    static std::string loadShaderSource(const std::string& path);
+    static std::string resolveIncludes(const std::string& source,
+                                       const std::string& sourcePath,
+                                       std::unordered_set<std::string>& includeStack);
     mutable std::unordered_map<std::string,int> uniformLocationCache;
 };
 
