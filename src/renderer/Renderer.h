@@ -299,6 +299,29 @@ private:
         float texelWorldSize = 1.0f;
     };
 
+    struct RenderFrameData {
+        glm::mat4 view = glm::mat4(1.0f);
+        glm::mat4 projection = glm::mat4(1.0f);
+        glm::mat4 viewProj = glm::mat4(1.0f);
+        glm::mat4 invViewProj = glm::mat4(1.0f);
+        glm::vec3 cameraPos = glm::vec3(0.0f);
+        GameplaySkyRenderer::SkyColors skyColors{};
+        float skyIntensity = 1.0f;
+        float animationTime = 0.0f;
+        float shaderTime = 0.0f;
+        bool fogEnabled = true;
+        FogMode fogMode = FogMode::Linear;
+        glm::vec3 fogColor = glm::vec3(0.67f, 0.84f, 1.0f);
+        float fogStart = 0.0f;
+        float fogEnd = 1.0f;
+        float fogDensity = 0.01f;
+        float weatherMist = 0.0f;
+        float weatherWetness = 0.0f;
+        float weatherStorm = 0.0f;
+        float aerialReduction = 0.55f;
+        bool moonShadowActive = false;
+    };
+
     struct ChunkRenderColumnCache {
         Chunk* chunk = nullptr;
         int64_t chunkKey = 0;
@@ -348,23 +371,30 @@ private:
     void drainMeshingResults(const World& world);
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
-    void bindChunkRenderState(const World& world, const TextureArray& texArray) const;
-    void bindChunkRenderStateForShader(const World& world, const TextureArray& texArray, Shader& shader) const;
+    [[nodiscard]] RenderFrameData buildRenderFrameData(const World& world) const;
+    void bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, bool bindAerialReduction) const;
+    void bindFogUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindChunkRenderState(const RenderFrameData& frame, const TextureArray& texArray) const;
+    void bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const;
     void bindWaterEffectUniforms(Shader& shader, bool enabled) const;
     void bindTransparentCompositeInputs(Shader& shader, bool deferredInputsEnabled, bool compositeInputsEnabled) const;
-    void renderWorldForward(const World& world);
-    bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window);
+    void renderWorldForward(const World& world, const RenderFrameData& frame);
+    bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window, const RenderFrameData& frame);
     void renderTransparentCompositePass(const World& world, const Window& window);
-    void renderGBufferTerrain(const World& world);
-    void renderShadowMap(const World& world, const Camera& camera);
+    void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
+    void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
     void renderSsaoPass(const Camera& camera, const Window& window);
-    void renderDeferredLightingPass(const World& world);
-    void renderVolumetricFogPass(const World& world);
+    void renderDeferredLightingPass(const RenderFrameData& frame);
+    void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass(GLint framebuffer, int width, int height);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
+    glm::vec3 shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
+                                                bool* moonShadowActive = nullptr) const;
     ShadowProjectionData buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
@@ -442,6 +472,8 @@ private:
     GameplaySkyRenderer m_gameplaySkyRenderer;
     DeferredRenderTargets m_deferredTargets;
     RenderPipelineSettings m_pipelineSettings{};
+    RenderFrameData m_currentFrameData{};
+    bool m_currentFrameDataValid = false;
     GLint m_capturedFramebuffer = 0;
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     glm::mat4 m_shadowModelView = glm::mat4(1.0f);

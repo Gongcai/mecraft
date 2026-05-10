@@ -192,12 +192,15 @@ void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, c
     beginFrame(camera, window);
     m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem());
     m_fogSettings.color = m_gameplaySkyRenderer.getLastFogColor();
-    if (m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred && renderWorldDeferred(world, camera, window)) {
+    m_currentFrameData = buildRenderFrameData(world);
+    m_currentFrameDataValid = true;
+    if (m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred &&
+        renderWorldDeferred(world, camera, window, m_currentFrameData)) {
         return;
     }
     m_chunkShader = m_chunkForwardShader;
     m_deferredFrameActive = false;
-    renderWorldForward(world);
+    renderWorldForward(world, m_currentFrameData);
 }
 
 void Renderer::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window) {
@@ -231,7 +234,8 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         }
 
         const TextureArray& texArray = m_resourceMgr->getTextureArray();
-        bindChunkRenderState(world, texArray);
+        const RenderFrameData frame = m_currentFrameDataValid ? m_currentFrameData : buildRenderFrameData(world);
+        bindChunkRenderState(frame, texArray);
         bindTransparentCompositeInputs(*m_chunkShader, deferredInputsEnabled, compositeInputsEnabled);
         glEnable(GL_DEPTH_TEST);
         bindWaterEffectUniforms(*m_chunkShader, m_pipelineSettings.waterEffectsEnabled);
@@ -547,6 +551,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_projection = camera.getProjectionMatrix(window.getAspectRatio());
     m_view = camera.getViewMatrix();
     m_cameraPos = camera.getPosition();
+    m_currentFrameDataValid = false;
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
 
@@ -576,10 +581,11 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
 }
 
 void Renderer::renderWorld(const World& world) {
-    renderWorldForward(world);
+    const RenderFrameData frame = buildRenderFrameData(world);
+    renderWorldForward(world, frame);
 }
 
-void Renderer::renderWorldForward(const World& world) {
+void Renderer::renderWorldForward(const World& world, const RenderFrameData& frame) {
     if (m_chunkShader == nullptr || m_resourceMgr == nullptr) {
         m_deferredTransparentEntries.clear();
         return;
@@ -592,7 +598,7 @@ void Renderer::renderWorldForward(const World& world) {
     m_deferredTransparentBatch.clear();
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    bindChunkRenderState(world, texArray);
+    bindChunkRenderState(frame, texArray);
     submitMeshingJobs(world);
 
     std::vector<ChunkRenderEntry> cutoutEntries;
@@ -622,31 +628,100 @@ void Renderer::renderWorldForward(const World& world) {
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
-void Renderer::bindChunkRenderState(const World& world, const TextureArray& texArray) const {
+void Renderer::bindChunkRenderState(const RenderFrameData& frame, const TextureArray& texArray) const {
     if (m_chunkShader == nullptr) {
         return;
     }
-    bindChunkRenderStateForShader(world, texArray, *m_chunkShader);
+    bindChunkRenderStateForShader(frame, texArray, *m_chunkShader);
 }
 
-void Renderer::bindChunkRenderStateForShader(const World& world, const TextureArray& texArray, Shader& shader) const {
+Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) const {
+    RenderFrameData frame;
+    frame.view = m_view;
+    frame.projection = m_projection;
+    frame.viewProj = m_projection * m_view;
+    frame.invViewProj = glm::inverse(frame.viewProj);
+    frame.cameraPos = m_cameraPos;
+    frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
+    const double gameTime = Time::getGameTime();
+    frame.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
+    frame.shaderTime = static_cast<float>(std::fmod(gameTime, 8192.0));
 
-    float fogStart = m_fogSettings.startDistance;
-    float fogEnd = m_fogSettings.endDistance;
+    frame.fogEnabled = m_fogSettings.enabled;
+    frame.fogMode = m_fogSettings.mode;
+    frame.fogColor = m_fogSettings.color;
+    frame.fogStart = m_fogSettings.startDistance;
+    frame.fogEnd = m_fogSettings.endDistance;
+    frame.fogDensity = m_fogSettings.density;
     if (m_fogSettings.autoDistanceByRenderDistance) {
         const float chunkSize = static_cast<float>(Chunk::SIZE_X);
         const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
         // Circular loading: boundary at renderDistance chunks (Euclidean) from player.
         // fogEnd = where fog becomes fully opaque, should be before the chunk boundary
         // so that edge geometry is fully hidden.
-        fogEnd = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoEndOffsetChunks) * chunkSize);
-        fogStart = std::max(0.0f, fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
+        frame.fogEnd = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoEndOffsetChunks) * chunkSize);
+        frame.fogStart = std::max(0.0f, frame.fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
     }
-    fogEnd = std::max(fogEnd, fogStart + 0.1f);
+    frame.fogEnd = std::max(frame.fogEnd, frame.fogStart + 0.1f);
 
+    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
+    frame.weatherMist = weather.mist;
+    frame.weatherWetness = weather.wetness;
+    frame.weatherStorm = weather.storm;
+    frame.aerialReduction = weather.aerialReduction;
+    shadowLightDirectionFromSkyColors(frame.skyColors, &frame.moonShadowActive);
+    return frame;
+}
+
+void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const {
+    shader.setVec3("uCameraPos", frame.cameraPos);
+    shader.setVec3("uSunDirection", frame.skyColors.sunDirection);
+    shader.setVec3("uMoonDirection", frame.skyColors.moonDirection);
+    shader.setVec3("uSunLightColor", frame.skyColors.sunLightColor);
+    shader.setVec3("uMoonLightColor", frame.skyColors.moonLightColor);
+    shader.setVec3("uSkyAmbientColor", frame.skyColors.skyAmbientColor);
+    shader.setVec3("uShadowTintColor", frame.skyColors.shadowTintColor);
+    shader.setVec3("uHorizonScatterColor", frame.skyColors.horizonScatterColor);
+    shader.setFloat("uSkyIntensity", frame.skyIntensity);
+    shader.setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
+}
+
+void Renderer::bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, const bool bindAerialReduction) const {
+    shader.setFloat("uWeatherMist", frame.weatherMist);
+    shader.setFloat("uWeatherWetness", frame.weatherWetness);
+    shader.setFloat("uWeatherStorm", frame.weatherStorm);
+    if (bindAerialReduction) {
+        shader.setFloat("uAerialReduction", frame.aerialReduction);
+    }
+}
+
+void Renderer::bindFogUniforms(Shader& shader, const RenderFrameData& frame) const {
+    shader.setInt("uFogEnabled", frame.fogEnabled ? 1 : 0);
+    shader.setInt("uFogMode", static_cast<int>(frame.fogMode));
+    shader.setVec3("uFogColor", frame.fogColor);
+    shader.setFloat("uFogStart", frame.fogStart);
+    shader.setFloat("uFogEnd", frame.fogEnd);
+    shader.setFloat("uFogDensity", frame.fogDensity);
+}
+
+void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const {
+    shader.setMat4("uShadowViewProj", m_shadowViewProj);
+    shader.setMat4("uShadowModelView", m_shadowModelView);
+    shader.setMat4("uShadowProjection", m_shadowProjection);
+    shader.setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
+    shader.setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    shader.setFloat("uShadowExtent", m_shadowExtent);
+    shader.setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
+    shader.setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
+    shader.setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
+    shader.setInt("uShadowLightMode", frame.moonShadowActive ? 1 : 0);
+}
+
+void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const {
     shader.use();
-    shader.setMat4("view", m_view);
-    shader.setMat4("viewProj", m_projection * m_view);
+    shader.setMat4("view", frame.view);
+    shader.setMat4("viewProj", frame.viewProj);
     shader.setInt("uUseModel", 0);
     shader.setInt("texArray", 0);
     shader.setInt("uLightmapDay", 1);
@@ -662,25 +737,11 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setInt("uWaterCompositeEnabled", 0);
     shader.setInt("uForceBaseLod", 0);
     shader.setInt("uDepthSofteningEnabled", 0);
-    shader.setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
-    shader.setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
-    shader.setVec3("uFogColor", m_fogSettings.color);
-    shader.setFloat("uFogStart", fogStart);
-    shader.setFloat("uFogEnd", fogEnd);
-    shader.setFloat("uFogDensity", m_fogSettings.density);
-    shader.setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
+    bindFogUniforms(shader, frame);
+    shader.setFloat("uAnimationTime", frame.animationTime);
     shader.setInt("uDebugLightMode", m_debugLightMode);
-    shader.setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
-    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    shader.setVec3("uSunDirection", skyColors.sunDirection);
-    shader.setVec3("uMoonDirection", skyColors.moonDirection);
-    shader.setVec3("uSunLightColor", skyColors.sunLightColor);
-    shader.setVec3("uMoonLightColor", skyColors.moonLightColor);
-    shader.setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
-    shader.setVec3("uShadowTintColor", skyColors.shadowTintColor);
-    shader.setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
+    bindSkyLightingUniforms(shader, frame);
     shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
-    shader.setFloat("uMoonVisibility", skyColors.moonVisibility);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
     shader.setFloat("uMinimumAmbient", m_pipelineSettings.minimumAmbient);
@@ -692,12 +753,7 @@ void Renderer::bindChunkRenderStateForShader(const World& world, const TextureAr
     shader.setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     shader.setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     shader.setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
-    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
-    shader.setFloat("uWeatherMist", weather.mist);
-    shader.setFloat("uWeatherWetness", weather.wetness);
-    shader.setFloat("uWeatherStorm", weather.storm);
-    shader.setFloat("uAerialReduction", weather.aerialReduction);
-    shader.setVec3("uCameraPos", m_cameraPos);
+    bindWeatherUniforms(shader, frame, true);
     shader.setVec3("uWaterAbsorption", glm::vec3(1.0f));
     bindWaterEffectUniforms(shader, false);
 
@@ -755,7 +811,10 @@ void Renderer::bindTransparentCompositeInputs(Shader& shader,
     }
 }
 
-bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, const Window& window) {
+bool Renderer::renderWorldDeferred(const World& world,
+                                   const Camera& camera,
+                                   const Window& window,
+                                   const RenderFrameData& frame) {
     if (m_resourceMgr == nullptr ||
         m_chunkGBufferShader == nullptr ||
         m_deferredLightingShader == nullptr ||
@@ -775,7 +834,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
 #ifdef MECRAFT_DEBUG
     beginGpuTimer(GpuTimerPass::GBuffer);
 #endif
-    renderGBufferTerrain(world);
+    renderGBufferTerrain(world, frame);
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
 #endif
@@ -783,7 +842,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Shadow);
 #endif
-        renderShadowMap(world, camera);
+        renderShadowMap(world, camera, frame);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Shadow);
 #endif
@@ -803,7 +862,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
 #ifdef MECRAFT_DEBUG
     beginGpuTimer(GpuTimerPass::Lighting);
 #endif
-    renderDeferredLightingPass(world);
+    renderDeferredLightingPass(frame);
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
@@ -814,7 +873,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
         m_pipelineSettings.volumetricFogStrength > 0.001f &&
         m_volumetricFogShader != nullptr &&
         m_volumetricCompositeShader != nullptr) {
-        renderVolumetricFogPass(world);
+        renderVolumetricFogPass(frame);
         compositeVolumetricFogPass(m_capturedFramebuffer, capturedWidth, capturedHeight);
         compositedToCapturedFramebuffer = true;
     }
@@ -828,7 +887,7 @@ bool Renderer::renderWorldDeferred(const World& world, const Camera& camera, con
     return true;
 }
 
-void Renderer::renderGBufferTerrain(const World& world) {
+void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& frame) {
     m_deferredTargets.bindGBuffer();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -850,7 +909,7 @@ void Renderer::renderGBufferTerrain(const World& world) {
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     m_chunkShader = m_chunkGBufferShader;
-    bindChunkRenderStateForShader(world, texArray, *m_chunkGBufferShader);
+    bindChunkRenderStateForShader(frame, texArray, *m_chunkGBufferShader);
     submitMeshingJobs(world);
 
     std::vector<ChunkRenderEntry> cutoutEntries;
@@ -880,13 +939,13 @@ void Renderer::renderGBufferTerrain(const World& world) {
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
-void Renderer::renderShadowMap(const World& world, const Camera& camera) {
+void Renderer::renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame) {
     if (m_shadowDepthShader == nullptr) {
         return;
     }
     std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
     const ShadowProjectionData shadowProjectionData =
-        buildShadowProjectionData(camera, currentShadowLightDirection(world));
+        buildShadowProjectionData(camera, shadowLightDirectionFromSkyColors(frame.skyColors));
     m_shadowModelView = shadowProjectionData.modelView;
     m_shadowProjection = shadowProjectionData.projection;
     m_shadowProjectionInverse = shadowProjectionData.projectionInverse;
@@ -917,7 +976,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera) {
     // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
     const int effectiveShadowWarpMode = 2;
     m_shadowDepthShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
-    m_shadowDepthShader->setFloat("uAnimationTime", static_cast<float>(std::fmod(Time::getGameTime(), 16.0)));
+    m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false);
@@ -955,7 +1014,7 @@ void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Renderer::renderDeferredLightingPass(const World& world) {
+void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     if (m_deferredLightingShader == nullptr) {
         return;
     }
@@ -977,26 +1036,10 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setInt("uSsaoTex", 8);
     m_deferredLightingShader->setInt("uSkyCaptureTex", 9);
     m_deferredLightingShader->setInt("uNoiseTex", 10);
-    m_deferredLightingShader->setMat4("uViewProj", m_projection * m_view);
-    m_deferredLightingShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
-    m_deferredLightingShader->setMat4("uShadowViewProj", m_shadowViewProj);
-    m_deferredLightingShader->setMat4("uShadowModelView", m_shadowModelView);
-    m_deferredLightingShader->setMat4("uShadowProjection", m_shadowProjection);
-    m_deferredLightingShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
-    m_deferredLightingShader->setVec3("uCameraPos", m_cameraPos);
-    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    m_deferredLightingShader->setVec3("uSunDirection", skyColors.sunDirection);
-    m_deferredLightingShader->setVec3("uMoonDirection", skyColors.moonDirection);
-    m_deferredLightingShader->setVec3("uSunLightColor", skyColors.sunLightColor);
-    m_deferredLightingShader->setVec3("uMoonLightColor", skyColors.moonLightColor);
-    m_deferredLightingShader->setVec3("uSkyAmbientColor", skyColors.skyAmbientColor);
-    m_deferredLightingShader->setVec3("uShadowTintColor", skyColors.shadowTintColor);
-    m_deferredLightingShader->setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
-    m_deferredLightingShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
-    m_deferredLightingShader->setFloat("uMoonVisibility", skyColors.moonVisibility);
-    bool moonShadowActive = false;
-    currentShadowLightDirection(world, &moonShadowActive);
-    m_deferredLightingShader->setInt("uShadowLightMode", moonShadowActive ? 1 : 0);
+    m_deferredLightingShader->setMat4("uViewProj", frame.viewProj);
+    m_deferredLightingShader->setMat4("uInvViewProj", frame.invViewProj);
+    bindShadowFrameUniforms(*m_deferredLightingShader, frame);
+    bindSkyLightingUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
     m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
     m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
@@ -1012,11 +1055,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     m_deferredLightingShader->setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     m_deferredLightingShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     m_deferredLightingShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
-    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
-    m_deferredLightingShader->setFloat("uWeatherMist", weather.mist);
-    m_deferredLightingShader->setFloat("uWeatherWetness", weather.wetness);
-    m_deferredLightingShader->setFloat("uWeatherStorm", weather.storm);
-    m_deferredLightingShader->setFloat("uAerialReduction", weather.aerialReduction);
+    bindWeatherUniforms(*m_deferredLightingShader, frame, true);
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
@@ -1025,36 +1064,17 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     // Keep runtime on no-warp until the fuller shadowProjection system in the roadmap exists.
     const int effectiveShadowWarpMode = 2;
     m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
-    m_deferredLightingShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
-    m_deferredLightingShader->setFloat("uShadowExtent", m_shadowExtent);
-    m_deferredLightingShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
-    m_deferredLightingShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
-    m_deferredLightingShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     const float shadowDistanceScale = std::clamp(m_pipelineSettings.shadowDistance / 96.0f, 0.35f, 1.0f);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset * shadowDistanceScale);
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
     m_deferredLightingShader->setFloat("uCloudShadowStrength", m_pipelineSettings.cloudShadowStrength);
     m_deferredLightingShader->setFloat("uCloudShadowScale", m_pipelineSettings.cloudShadowScale);
     m_deferredLightingShader->setFloat("uCloudShadowSpeed", m_pipelineSettings.cloudShadowSpeed);
-    m_deferredLightingShader->setFloat("uTime", static_cast<float>(std::fmod(Time::getGameTime(), 8192.0)));
+    m_deferredLightingShader->setFloat("uTime", frame.shaderTime);
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uFogEnabled", m_fogSettings.enabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uFogMode", static_cast<int>(m_fogSettings.mode));
-    m_deferredLightingShader->setVec3("uFogColor", m_fogSettings.color);
-    float fogStart = m_fogSettings.startDistance;
-    float fogEnd = m_fogSettings.endDistance;
-    if (m_fogSettings.autoDistanceByRenderDistance) {
-        const float chunkSize = static_cast<float>(Chunk::SIZE_X);
-        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
-        fogEnd = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoEndOffsetChunks) * chunkSize);
-        fogStart = std::max(0.0f, fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
-    }
-    fogEnd = std::max(fogEnd, fogStart + 0.1f);
-    m_deferredLightingShader->setFloat("uFogStart", fogStart);
-    m_deferredLightingShader->setFloat("uFogEnd", fogEnd);
-    m_deferredLightingShader->setFloat("uFogDensity", m_fogSettings.density);
+    bindFogUniforms(*m_deferredLightingShader, frame);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());
@@ -1106,7 +1126,7 @@ void Renderer::renderDeferredLightingPass(const World& world) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::renderVolumetricFogPass(const World& world) {
+void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_deferredTargets.bindHalfRes();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -1114,43 +1134,21 @@ void Renderer::renderVolumetricFogPass(const World& world) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     m_volumetricFogShader->use();
     m_volumetricFogShader->setInt("uDepthTex", 0);
     m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
     m_volumetricFogShader->setInt("uNoiseTex", 2);
     m_volumetricFogShader->setInt("uShadowMap", 3);
-    m_volumetricFogShader->setMat4("uInvViewProj", glm::inverse(m_projection * m_view));
-    m_volumetricFogShader->setMat4("uShadowViewProj", m_shadowViewProj);
-    m_volumetricFogShader->setMat4("uShadowModelView", m_shadowModelView);
-    m_volumetricFogShader->setMat4("uShadowProjection", m_shadowProjection);
-    m_volumetricFogShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
-    m_volumetricFogShader->setVec3("uCameraPos", m_cameraPos);
-    m_volumetricFogShader->setVec3("uSunDirection", skyColors.sunDirection);
-    m_volumetricFogShader->setVec3("uMoonDirection", skyColors.moonDirection);
-    m_volumetricFogShader->setVec3("uSunLightColor", skyColors.sunLightColor);
-    m_volumetricFogShader->setVec3("uMoonLightColor", skyColors.moonLightColor);
-    m_volumetricFogShader->setVec3("uHorizonScatterColor", skyColors.horizonScatterColor);
-    m_volumetricFogShader->setFloat("uSkyIntensity", world.getDayNightSystem().getSkyIntensity());
-    m_volumetricFogShader->setFloat("uMoonVisibility", skyColors.moonVisibility);
+    m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
+    bindShadowFrameUniforms(*m_volumetricFogShader, frame);
+    bindSkyLightingUniforms(*m_volumetricFogShader, frame);
     m_volumetricFogShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
     m_volumetricFogShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
     m_volumetricFogShader->setFloat("uVolumetricFogStrength", m_pipelineSettings.volumetricFogStrength);
-    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
-    m_volumetricFogShader->setFloat("uWeatherMist", weather.mist);
-    m_volumetricFogShader->setFloat("uWeatherWetness", weather.wetness);
-    m_volumetricFogShader->setFloat("uWeatherStorm", weather.storm);
-    m_volumetricFogShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
-    m_volumetricFogShader->setFloat("uShadowExtent", m_shadowExtent);
-    m_volumetricFogShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
-    m_volumetricFogShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
-    m_volumetricFogShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
+    bindWeatherUniforms(*m_volumetricFogShader, frame, false);
     m_volumetricFogShader->setFloat("uVolumetricLightStrength", m_pipelineSettings.sunRayStrength);
-    bool moonShadowActive = false;
-    currentShadowLightDirection(world, &moonShadowActive);
-    m_volumetricFogShader->setInt("uShadowLightMode", moonShadowActive ? 1 : 0);
     m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
-    m_volumetricFogShader->setFloat("uTime", static_cast<float>(std::fmod(Time::getGameTime(), 8192.0)));
+    m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
 
@@ -1284,6 +1282,11 @@ void Renderer::renderFullscreen(Shader& shader) const {
 
 glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonShadowActive) const {
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    return shadowLightDirectionFromSkyColors(skyColors, moonShadowActive);
+}
+
+glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
+                                                      bool* moonShadowActive) const {
     const bool useMoonShadow = skyColors.moonVisibility > skyColors.sunVisibility;
     glm::vec3 direction = useMoonShadow ? skyColors.moonDirection : skyColors.sunDirection;
     if (direction.y < 0.08f) {
@@ -2016,6 +2019,7 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
 void Renderer::endFrame(const Window &window) {
     (void)window;
     recordMeshingHistory();
+    m_currentFrameDataValid = false;
     m_deferredFrameActive = false;
 }
 
