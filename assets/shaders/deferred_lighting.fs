@@ -98,6 +98,14 @@ vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
+vec3 decodeOctNormal(vec2 encoded) {
+    vec2 f = encoded * 2.0 - 1.0;
+    vec3 n = vec3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    float t = clamp(-n.z, 0.0, 1.0);
+    n.xy += vec2(n.x >= 0.0 ? -t : t, n.y >= 0.0 ? -t : t);
+    return normalize(n);
+}
+
 vec3 desaturateLinear(vec3 color, float amount) {
     float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
     return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
@@ -352,6 +360,28 @@ float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
     float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
     return texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
+}
+
+vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shadowVisibility) {
+    if (uShadowsEnabled == 0 || uShadowTintStrength <= 0.001) {
+        return vec3(1.0);
+    }
+
+    float viewDistanceForBias = length(worldPos - uCameraPos);
+    float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistanceForBias);
+    float warpDensity = 1.0;
+    vec3 proj = worldToShadowProj(worldPos + normal * normalOffset, warpDensity);
+    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
+        return vec3(1.0);
+    }
+
+    vec3 shadowColor = texture(uShadowColorTex, proj.xy).rgb;
+    vec3 shadowNormal = decodeOctNormal(texture(uShadowNormalTex, proj.xy).rg);
+    float tintStrength = clamp(uShadowTintStrength, 0.0, 1.0) * (1.0 - shadowVisibility);
+    float normalMatch = clamp(dot(shadowNormal, normal) * 0.5 + 0.5, 0.0, 1.0);
+    vec3 desaturatedShadow = mix(shadowColor, vec3(dot(shadowColor, vec3(0.2126, 0.7152, 0.0722))), 0.35);
+    return mix(vec3(1.0), desaturatedShadow, tintStrength * normalMatch * 0.42);
 }
 
 vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) {
@@ -609,6 +639,7 @@ void main() {
 
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
+    vec3 shadowTint = sampleShadowColorTint(worldPos, normal, shadowLightDir, shadow);
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
     vec3 capturedZenith = sampleSkyCapture(vec3(0.0, 1.0, 0.0));
     vec3 capturedNormalSky = sampleSkyIrradiance(normal);
@@ -618,13 +649,13 @@ void main() {
     float terminatorFill = roughTerminatorFill(rawNdotL, roughness) * sunShadow;
     float sssSunTransmittance = sss * smoothstep(-0.35, 0.18, -rawNdotL);
     float sssSunShadowFill = sssSunTransmittance * mix(0.18, 0.46, 1.0 - sunShadow) * cloudShadow;
-    vec3 directSun = warmSunColor *
+    vec3 directSun = warmSunColor * shadowTint *
                      ((diffuse * sunShadow + terminatorFill) * cloudShadow + sssSunShadowFill) *
                      skyLightMask * uDirectSunStrength * directEnergy;
     float moonMask = nightSkyMask;
     vec3 moonFill = uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
     float sssMoonTransmittance = sss * smoothstep(-0.30, 0.16, -rawNdotM);
-    vec3 directMoon = uMoonLightColor *
+    vec3 directMoon = uMoonLightColor * shadowTint *
                       (pow(ndotm * 0.5 + 0.5, 1.15) * moonShadow * cloudShadow + sssMoonTransmittance * 0.16) *
                       moonMask * (0.38 + 0.18 * uSkyAmbientStrength);
     vec3 f0 = vec3(f0Scalar);
@@ -635,7 +666,7 @@ void main() {
     directSpecular *= ndotl * sunShadow * cloudShadow * skyLightMask * uDirectSunStrength;
     directSpecular *= mix(1.18, 0.18, roughness);
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 skyAmbient = coolSkyColor * (0.026 + 0.54 * outdoorSkyMask) *
+    vec3 skyAmbient = coolSkyColor * shadowTint * (0.026 + 0.54 * outdoorSkyMask) *
                       uSkyAmbientStrength *
                       mix(0.48, 1.0, upward) +
                       moonFill;

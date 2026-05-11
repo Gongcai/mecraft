@@ -18,10 +18,31 @@ layout(location = 0) out vec4 ShadowColor;
 layout(location = 1) out vec4 ShadowNormal;
 
 vec2 encodeNormal(vec3 n) {
-    // Octahedral encoding (simplified for 2-component output)
     n = normalize(n);
-    float p = sqrt(n.z * 8.0 + 8.0);
-    return n.xy / p * 0.5 + 0.5;
+    n /= (abs(n.x) + abs(n.y) + abs(n.z) + 1e-6);
+    vec2 enc = n.xy;
+    if (n.z < 0.0) {
+        enc = (vec2(1.0) - abs(enc.yx)) * vec2(enc.x >= 0.0 ? 1.0 : -1.0,
+                                               enc.y >= 0.0 ? 1.0 : -1.0);
+    }
+    return enc * 0.5 + 0.5;
+}
+
+vec3 decodeFaceNormal(float face) {
+    if (face > -2.5 && face < -0.5) {
+        return vec3(0.0, 1.0, 0.0);
+    }
+    int idx = int(round(face));
+    if (idx == 0) return vec3(0.0, 1.0, 0.0);
+    if (idx == 1) return vec3(0.0, -1.0, 0.0);
+    if (idx == 2) return vec3(0.0, 0.0, 1.0);
+    if (idx == 3) return vec3(0.0, 0.0, -1.0);
+    if (idx == 4) return vec3(-1.0, 0.0, 0.0);
+    return vec3(1.0, 0.0, 0.0);
+}
+
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
 void main() {
@@ -39,12 +60,13 @@ void main() {
         discard;
     }
 
-    // Output albedo color for colored shadows
-    ShadowColor = vec4(texColor.rgb, 1.0);
+    vec3 shadowColor = srgbToLinear(texColor.rgb);
+    shadowColor = mix(vec3(1.0), shadowColor, pow(clamp(texColor.a, 0.0, 1.0), 0.45));
+    ShadowColor = vec4(shadowColor, 1.0);
 
-    // Output encoded normal (fallback: up vector for surfaces without normal mapping)
-    // vNormal is passed as a flat float encoding; for now output up vector as placeholder.
-    // Future: decode actual normal from vertex data when shadow pass has proper TBN.
-    vec3 worldNormal = vec3(0.0, 1.0, 0.0);
+    vec3 worldNormal = decodeFaceNormal(vNormal);
+    if (isCrossVegetation) {
+        worldNormal = vec3(0.0, 1.0, 0.0);
+    }
     ShadowNormal = vec4(encodeNormal(worldNormal), 0.0, 1.0);
 }
