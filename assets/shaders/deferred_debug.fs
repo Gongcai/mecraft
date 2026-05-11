@@ -13,6 +13,8 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uShadowMap;
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSceneLightingTex;
+uniform sampler2D uSceneCompositeTex;
+uniform sampler2D uSceneResolvedTex;
 uniform sampler2D uTransparentCompositeTex;
 uniform sampler2D uTransparentCompositeDepthTex;
 uniform sampler2D uVolumetricTex;
@@ -150,39 +152,43 @@ void main() {
         return;
     }
     if (uDebugViewMode == 11) {
-        FragColor = vec4(tonemapPreview(texture(uTransparentCompositeTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSceneCompositeTex, vTexCoord).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 12) {
+        FragColor = vec4(tonemapPreview(texture(uTransparentCompositeTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 13) {
         float depth = texture(uTransparentCompositeDepthTex, vTexCoord).r;
         FragColor = vec4(heatmap(1.0 - linearizeDepthPreview(depth)), 1.0);
         return;
     }
-    if (uDebugViewMode == 13) {
+    if (uDebugViewMode == 14) {
         vec4 volumetric = texture(uVolumetricTex, vTexCoord);
         FragColor = vec4(tonemapPreview(volumetric.rgb * 4.0), 1.0);
         return;
     }
-    if (uDebugViewMode == 14) {
+    if (uDebugViewMode == 15) {
         float transmittance = texture(uVolumetricTex, vTexCoord).a;
         FragColor = vec4(vec3(transmittance), 1.0);
         return;
     }
-    if (uDebugViewMode == 15) {
+    if (uDebugViewMode == 16) {
         FragColor = vec4(tonemapPreview(texture(uSkyCaptureTex, vTexCoord).rgb), 1.0);
         return;
     }
-    if (uDebugViewMode == 16) {
+    if (uDebugViewMode == 17) {
         vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
         float speed = length(velocity);
         FragColor = vec4(heatmap(speed * 50.0), 1.0);
         return;
     }
-    if (uDebugViewMode == 17) {
+    if (uDebugViewMode == 18) {
         FragColor = vec4(tonemapPreview(texture(uHistorySceneTex, vTexCoord).rgb), 1.0);
         return;
     }
-    if (uDebugViewMode == 18) {
+    if (uDebugViewMode == 19) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
@@ -208,7 +214,7 @@ void main() {
         FragColor = vec4(mix(coverageColor, outOfBounds, 0.75), 1.0);
         return;
     }
-    if (uDebugViewMode == 19) {
+    if (uDebugViewMode == 20) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
@@ -237,7 +243,7 @@ void main() {
         FragColor = vec4(mix(litColor, vec3(1.0, 0.58, 0.04), nearAcne * 0.65), 1.0);
         return;
     }
-    if (uDebugViewMode == 20) {
+    if (uDebugViewMode == 21) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
@@ -256,37 +262,41 @@ void main() {
         FragColor = vec4(heatmap(biasTexels / 4.0).r, heatmap(offsetTexels / 4.0).g, clamp(1.0 - ndotl, 0.0, 1.0), 1.0);
         return;
     }
-    if (uDebugViewMode == 21) {
+    if (uDebugViewMode == 22) {
         FragColor = vec4(tonemapPreview(texture(uReflectionTex, vTexCoord).rgb), 1.0);
         return;
     }
-    if (uDebugViewMode == 22) {
+    if (uDebugViewMode == 23) {
         vec4 cloud = texture(uCloudTex, vTexCoord);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
-    if (uDebugViewMode == 23) {
+    if (uDebugViewMode == 24) {
         SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
         FragColor = vec4(heatmap(aux.materialKind / 12.0), 1.0);
         return;
     }
-    if (uDebugViewMode == 24) {
+    if (uDebugViewMode == 25) {
         SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
         FragColor = vec4(aux.wetnessMask, aux.porosity, aux.metalness, 1.0);
         return;
     }
-    if (uDebugViewMode == 25) {
+    if (uDebugViewMode == 26) {
         FragColor = vec4(tonemapPreview(texture(uHistoryReflectionTex, vTexCoord).rgb), 1.0);
         return;
     }
-    if (uDebugViewMode == 26) {
+    if (uDebugViewMode == 27) {
         vec4 cloud = texture(uHistoryCloudTex, vTexCoord);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
-    if (uDebugViewMode == 27) {
+    if (uDebugViewMode == 28) {
         float reflectionMask = texture(uReflectionTex, vTexCoord).a;
         FragColor = vec4(heatmap(reflectionMask), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 29) {
+        FragColor = vec4(tonemapPreview(texture(uSceneResolvedTex, vTexCoord).rgb), 1.0);
         return;
     }
 

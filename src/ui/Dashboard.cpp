@@ -375,6 +375,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Shadow Depth",
             "SSAO",
             "Scene Lighting",
+            "Scene Composite",
             "Transparent Composite",
             "Transparent Depth",
             "Volumetric RGB",
@@ -391,7 +392,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Material Aux",
             "Reflection History",
             "Cloud History",
-            "SSR Hit Mask"
+            "SSR Hit Mask",
+            "Scene Resolved"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;

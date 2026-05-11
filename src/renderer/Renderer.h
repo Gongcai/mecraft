@@ -462,13 +462,14 @@ private:
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const RenderFrameData& frame);
+    void renderSceneCompositePass(const RenderFrameData& frame);
     void clearDeferredAuxiliaryTargets();
     void renderVelocityPass(const RenderFrameData& frame);
     void updateDeferredHistoryTargets();
     void renderReflectionPass(const RenderFrameData& frame);
     void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
-    void compositeVolumetricFogPass(GLint framebuffer, int width, int height);
+    void compositeVolumetricFogPass();
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
@@ -534,6 +535,7 @@ private:
     Shader* m_chunkGBufferShader = nullptr;
     Shader* m_shadowDepthShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;
+    Shader* m_sceneCompositeShader = nullptr;
     Shader* m_deferredDebugShader = nullptr;
     Shader* m_ssaoShader = nullptr;
     Shader* m_velocityShader = nullptr;

@@ -16,6 +16,8 @@ public:
     void bindShadowMap();
     void bindSsao();
     void bindSceneLighting();
+    void bindSceneComposite();
+    void bindSceneResolved();
     void bindTransparentComposite();
     void bindHalfRes();
     void bindReflection();
@@ -25,12 +27,17 @@ public:
     void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
     void copyFramebufferColorToTransparentComposite(GLint framebuffer, int width, int height) const;
     void copySceneLightingToTransparentComposite() const;
+    void copySceneLightingToSceneComposite() const;
+    void copySceneCompositeToSceneResolved() const;
+    void copySceneCompositeToTransparentComposite() const;
     void copyDepthToTransparentComposite() const;
     void copySceneLightingToHistory() const;
     void copyDepthToHistory() const;
     void copyReflectionToHistory() const;
     void copyCloudToHistory() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
+    void blitSceneCompositeTo(GLint framebuffer, int width, int height) const;
+    void blitSceneResolvedTo(GLint framebuffer, int width, int height) const;
     void blitTransparentCompositeTo(GLint framebuffer, int width, int height) const;
     void blitDepthTo(GLint framebuffer, int width, int height) const;
 
@@ -43,6 +50,8 @@ public:
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
+    [[nodiscard]] GLuint sceneCompositeTexture() const { return m_sceneCompositeTex; }
+    [[nodiscard]] GLuint sceneResolvedTexture() const { return m_sceneResolvedTex; }
     [[nodiscard]] GLuint transparentCompositeTexture() const { return m_transparentCompositeTex; }
     [[nodiscard]] GLuint transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
     [[nodiscard]] GLuint halfResTexture() const { return m_halfResTex; }
@@ -114,6 +123,12 @@ private:
 
     GLuint m_sceneLightingFbo = 0;
     GLuint m_sceneLightingTex = 0;
+
+    GLuint m_sceneCompositeFbo = 0;
+    GLuint m_sceneCompositeTex = 0;
+
+    GLuint m_sceneResolvedFbo = 0;
+    GLuint m_sceneResolvedTex = 0;
 
     GLuint m_transparentCompositeFbo = 0;
     GLuint m_transparentCompositeTex = 0;

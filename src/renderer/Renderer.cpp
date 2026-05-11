@@ -97,6 +97,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
+    m_sceneCompositeShader = resourceMgr.getShader("scene_composite");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_ssaoShader = resourceMgr.getShader("ssao");
     m_velocityShader = resourceMgr.getShader("velocity_resolve");
@@ -180,6 +181,7 @@ void Renderer::shutdown() {
     m_chunkGBufferShader = nullptr;
     m_shadowDepthShader = nullptr;
     m_deferredLightingShader = nullptr;
+    m_sceneCompositeShader = nullptr;
     m_deferredDebugShader = nullptr;
     m_ssaoShader = nullptr;
     m_velocityShader = nullptr;
@@ -283,7 +285,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneResolvedTexture());
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
 
@@ -1108,7 +1110,7 @@ void Renderer::bindTransparentCompositeInputs(Shader& shader,
     }
     if (compositeInputsEnabled && m_resourceMgr != nullptr) {
         glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneResolvedTexture());
         glActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
     }
@@ -1189,9 +1191,10 @@ bool Renderer::renderWorldDeferred(const World& world,
         endGpuTimer(GpuTimerPass::Cloud);
 #endif
     }
+    renderSceneCompositePass(frame);
     updateDeferredHistoryTargets();
-    m_deferredTargets.copySceneLightingToTransparentComposite();
-    bool compositedToCapturedFramebuffer = false;
+    m_deferredTargets.copySceneCompositeToTransparentComposite();
+    m_deferredTargets.copySceneCompositeToSceneResolved();
     if (m_pipelineSettings.volumetricFogEnabled &&
         m_pipelineSettings.aerialPerspectiveEnabled &&
         m_pipelineSettings.volumetricFogStrength > 0.001f &&
@@ -1201,16 +1204,15 @@ bool Renderer::renderWorldDeferred(const World& world,
         beginGpuTimer(GpuTimerPass::Volumetric);
 #endif
         renderVolumetricFogPass(frame);
-        compositeVolumetricFogPass(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        compositeVolumetricFogPass();
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Volumetric);
 #endif
-        compositedToCapturedFramebuffer = true;
     }
     if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
         renderDeferredDebugView(m_capturedFramebuffer, capturedWidth, capturedHeight);
-    } else if (!compositedToCapturedFramebuffer) {
-        m_deferredTargets.blitSceneLightingTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    } else {
+        m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     }
     m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     restoreCapturedFramebufferViewport(window);
@@ -1458,6 +1460,53 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::renderSceneCompositePass(const RenderFrameData& frame) {
+    if (m_sceneCompositeShader == nullptr) {
+        m_deferredTargets.copySceneLightingToSceneComposite();
+        return;
+    }
+
+    m_deferredTargets.bindSceneComposite();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_sceneCompositeShader->use();
+    m_sceneCompositeShader->setInt("uSceneLightingTex", 0);
+    m_sceneCompositeShader->setInt("uReflectionTex", 1);
+    m_sceneCompositeShader->setInt("uCloudTex", 2);
+    m_sceneCompositeShader->setInt("uDepthTex", 3);
+    m_sceneCompositeShader->setInt("uMaterialAuxTex", 4);
+    m_sceneCompositeShader->setInt("uSkyCaptureTex", 5);
+    m_sceneCompositeShader->setFloat("uWeatherWetness", frame.weatherWetness);
+    m_sceneCompositeShader->setFloat("uCloudCompositeStrength", 0.0f);
+    m_sceneCompositeShader->setFloat("uReflectionCompositeStrength", 0.0f);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.cloudTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    renderFullscreen(*m_sceneCompositeShader);
+
+    for (int unit = 5; unit >= 0; --unit) {
+        glActiveTexture(GL_TEXTURE0 + unit);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
 void Renderer::clearDeferredAuxiliaryTargets() {
     m_deferredTargets.bindReflection();
     glDisable(GL_DEPTH_TEST);
@@ -1467,6 +1516,14 @@ void Renderer::clearDeferredAuxiliaryTargets() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     m_deferredTargets.bindCloud();
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_deferredTargets.bindSceneComposite();
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_deferredTargets.bindSceneResolved();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -1650,8 +1707,8 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::compositeVolumetricFogPass(const GLint framebuffer, const int width, const int height) {
-    m_deferredTargets.bindDefaultLike(framebuffer, width, height);
+void Renderer::compositeVolumetricFogPass() {
+    m_deferredTargets.bindSceneResolved();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -1662,10 +1719,10 @@ void Renderer::compositeVolumetricFogPass(const GLint framebuffer, const int wid
     m_volumetricCompositeShader->setInt("uDepthTex", 2);
     m_volumetricCompositeShader->setVec2(
         "uInvFullResolution",
-        glm::vec2(1.0f / static_cast<float>(std::max(1, width)),
-                  1.0f / static_cast<float>(std::max(1, height))));
+        glm::vec2(1.0f / static_cast<float>(std::max(1, m_deferredTargets.width())),
+                  1.0f / static_cast<float>(std::max(1, m_deferredTargets.height()))));
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
     glActiveTexture(GL_TEXTURE2);
@@ -1709,6 +1766,8 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uHistorySceneTex", 13);
     m_deferredDebugShader->setInt("uReflectionTex", 14);
     m_deferredDebugShader->setInt("uCloudTex", 15);
+    m_deferredDebugShader->setInt("uSceneCompositeTex", 15);
+    m_deferredDebugShader->setInt("uSceneResolvedTex", 15);
     m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
     m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
@@ -1756,20 +1815,24 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
     glActiveTexture(GL_TEXTURE13);
     const bool materialAuxDebug =
-        m_pipelineSettings.debugViewMode == 23 || m_pipelineSettings.debugViewMode == 24;
+        m_pipelineSettings.debugViewMode == 24 || m_pipelineSettings.debugViewMode == 25;
     glBindTexture(GL_TEXTURE_2D,
                   materialAuxDebug ? m_deferredTargets.materialAuxTexture()
                                    : m_deferredTargets.historySceneTexturePrev());
     glActiveTexture(GL_TEXTURE14);
-    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 25;
+    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 26;
     glBindTexture(GL_TEXTURE_2D,
                   reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
                                          : m_deferredTargets.reflectionTexture());
     glActiveTexture(GL_TEXTURE15);
-    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 26;
+    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 27;
+    const bool sceneCompositeDebug = m_pipelineSettings.debugViewMode == 11;
+    const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 29;
     glBindTexture(GL_TEXTURE_2D,
-                  cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
-                                    : m_deferredTargets.cloudTexture());
+                  sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
+                                     : (sceneCompositeDebug ? m_deferredTargets.sceneCompositeTexture()
+                                                            : (cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
+                                                                                 : m_deferredTargets.cloudTexture())));
     renderFullscreen(*m_deferredDebugShader);
 
     for (int unit = 15; unit >= 0; --unit) {
