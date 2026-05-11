@@ -255,6 +255,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             ImGui::Text("GPU Lighting: %.3f ms", gpuStats.lightingMs);
             ImGui::Text("GPU Transparent: %.3f ms", gpuStats.transparentMs);
             ImGui::Text("GPU Volumetric: %.3f ms", gpuStats.volumetricMs);
+            ImGui::Text("GPU Reflection: %.3f ms", gpuStats.reflectionMs);
+            ImGui::Text("GPU Cloud: %.3f ms", gpuStats.cloudMs);
             ImGui::Text("GPU Water: %.3f ms", gpuStats.waterMs);
             ImGui::Text("GPU Post: %.3f ms", gpuStats.postMs);
         }

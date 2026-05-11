@@ -101,6 +101,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_ssaoShader = resourceMgr.getShader("ssao");
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
+    m_reflectionShader = resourceMgr.getShader("reflection_probe");
+    m_cloudShader = resourceMgr.getShader("cloud_target");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     //m_uiShader = resourceMgr.getShader("ui");
@@ -181,6 +183,8 @@ void Renderer::shutdown() {
     m_ssaoShader = nullptr;
     m_volumetricFogShader = nullptr;
     m_volumetricCompositeShader = nullptr;
+    m_reflectionShader = nullptr;
+    m_cloudShader = nullptr;
     m_bloomExtractShader = nullptr;
     m_bloomBlurShader = nullptr;
     m_deferredFrameActive = false;
@@ -610,7 +614,9 @@ bool Renderer::isHybridDeferredReady() const {
            m_shadowDepthShader != nullptr &&
            m_deferredLightingShader != nullptr &&
            m_deferredDebugShader != nullptr &&
-           m_ssaoShader != nullptr;
+           m_ssaoShader != nullptr &&
+           m_reflectionShader != nullptr &&
+           m_cloudShader != nullptr;
 }
 
 float Renderer::getAtlasAnisotropy() const {
@@ -1152,6 +1158,24 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
+    if (m_reflectionShader != nullptr) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Reflection);
+#endif
+        renderReflectionPass(frame);
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Reflection);
+#endif
+    }
+    if (m_cloudShader != nullptr) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Cloud);
+#endif
+        renderCloudPass(frame);
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Cloud);
+#endif
+    }
     m_deferredTargets.copySceneLightingToTransparentComposite();
     bool compositedToCapturedFramebuffer = false;
     if (m_pipelineSettings.volumetricFogEnabled &&
@@ -1425,6 +1449,92 @@ void Renderer::clearDeferredAuxiliaryTargets() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderReflectionPass(const RenderFrameData& frame) {
+    if (m_reflectionShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindReflection();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_reflectionShader->use();
+    m_reflectionShader->setInt("uSceneLightingTex", 0);
+    m_reflectionShader->setInt("uDepthTex", 1);
+    m_reflectionShader->setInt("uNormalAoTex", 2);
+    m_reflectionShader->setInt("uMaterialTex", 3);
+    m_reflectionShader->setInt("uSkyCaptureTex", 4);
+    m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
+    m_reflectionShader->setFloat("uWeatherWetness", frame.weatherWetness);
+    m_reflectionShader->setFloat("uTime", frame.shaderTime);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    renderFullscreen(*m_reflectionShader);
+
+    for (int unit = 4; unit >= 0; --unit) {
+        glActiveTexture(GL_TEXTURE0 + unit);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderCloudPass(const RenderFrameData& frame) {
+    if (m_cloudShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindCloud();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_cloudShader->use();
+    m_cloudShader->setInt("uDepthTex", 0);
+    m_cloudShader->setInt("uSkyCaptureTex", 1);
+    m_cloudShader->setInt("uNoiseTex", 2);
+    m_cloudShader->setMat4("uInvViewProj", frame.invViewProj);
+    bindSkyLightingUniforms(*m_cloudShader, frame);
+    bindAtmosphereUniforms(*m_cloudShader, frame);
+    bindCloudUniforms(*m_cloudShader, frame);
+    m_cloudShader->setFloat("uTime", frame.shaderTime);
+    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
+    m_cloudShader->setBool("uNoiseEnabled", noiseTexture != 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    renderFullscreen(*m_cloudShader);
+
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
@@ -2900,6 +3010,8 @@ void Renderer::beginGpuTimerFrame() {
             m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);
             m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
             m_gpuFrameStats.volumetricMs = readMs(GpuTimerPass::Volumetric);
+            m_gpuFrameStats.reflectionMs = readMs(GpuTimerPass::Reflection);
+            m_gpuFrameStats.cloudMs = readMs(GpuTimerPass::Cloud);
             m_gpuFrameStats.waterMs = readMs(GpuTimerPass::Water);
             m_gpuFrameStats.postMs = readMs(GpuTimerPass::Post);
             m_gpuTimerIssued[readIndex].fill(false);

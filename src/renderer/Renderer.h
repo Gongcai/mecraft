@@ -213,6 +213,8 @@ public:
         double lightingMs = 0.0;
         double transparentMs = 0.0;
         double volumetricMs = 0.0;
+        double reflectionMs = 0.0;
+        double cloudMs = 0.0;
         double waterMs = 0.0;
         double postMs = 0.0;
     };
@@ -460,6 +462,8 @@ private:
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const RenderFrameData& frame);
     void clearDeferredAuxiliaryTargets();
+    void renderReflectionPass(const RenderFrameData& frame);
+    void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass(GLint framebuffer, int width, int height);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
@@ -497,9 +501,11 @@ private:
         Lighting = 3,
         Transparent = 4,
         Volumetric = 5,
-        Water = 6,
-        Post = 7,
-        Count = 8
+        Reflection = 6,
+        Cloud = 7,
+        Water = 8,
+        Post = 9,
+        Count = 10
     };
     void initGpuTimers();
     void shutdownGpuTimers();
@@ -529,6 +535,8 @@ private:
     Shader* m_ssaoShader = nullptr;
     Shader* m_volumetricFogShader = nullptr;
     Shader* m_volumetricCompositeShader = nullptr;
+    Shader* m_reflectionShader = nullptr;
+    Shader* m_cloudShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
    // Shader* m_uiShader = nullptr;
