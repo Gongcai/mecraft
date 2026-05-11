@@ -177,6 +177,10 @@ public:
         float density = 1.0f;
         float height = 176.0f;
         float thickness = 48.0f;
+        // Planar clouds (cirrus)
+        float planarCoverage = 0.5f;
+        float planarDensity = 1.0f;
+        float planarAltitude = 400.0f;
     };
 
     enum class FrustumPlane : size_t {

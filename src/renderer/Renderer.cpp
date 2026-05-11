@@ -1088,6 +1088,9 @@ void Renderer::bindCloudUniforms(Shader& shader, const RenderFrameData& frame) c
     shader.setFloat("uCloudDensity", frame.cloud.density);
     shader.setFloat("uCloudHeight", frame.cloud.height);
     shader.setFloat("uCloudThickness", frame.cloud.thickness);
+    shader.setFloat("uPlanarCloudCoverage", frame.cloud.planarCoverage);
+    shader.setFloat("uPlanarCloudDensity", frame.cloud.planarDensity);
+    shader.setFloat("uPlanarCloudAltitude", frame.cloud.planarAltitude);
 }
 
 void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const {
