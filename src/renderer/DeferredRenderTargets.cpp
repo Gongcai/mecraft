@@ -44,18 +44,21 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_gNormalAo = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gVoxelLight = createTexture2D(GL_RG8, m_width, m_height, GL_RG, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gMaterial = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    m_gMaterialAux = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
 
     glNamedFramebufferTexture(m_gBufferFbo, kGAlbedoAttachment, m_gAlbedo, 0);
     glNamedFramebufferTexture(m_gBufferFbo, kGNormalAoAttachment, m_gNormalAo, 0);
     glNamedFramebufferTexture(m_gBufferFbo, kGVoxelLightAttachment, m_gVoxelLight, 0);
     glNamedFramebufferTexture(m_gBufferFbo, kGMaterialAttachment, m_gMaterial, 0);
+    glNamedFramebufferTexture(m_gBufferFbo, kGMaterialAuxAttachment, m_gMaterialAux, 0);
     glNamedFramebufferTexture(m_gBufferFbo, GL_DEPTH_ATTACHMENT, m_gDepth, 0);
     const GLenum gBufferDrawBuffers[] = {
         kGAlbedoAttachment,
         kGNormalAoAttachment,
         kGVoxelLightAttachment,
-        kGMaterialAttachment
+        kGMaterialAttachment,
+        kGMaterialAuxAttachment
     };
     glNamedFramebufferDrawBuffers(m_gBufferFbo, kGBufferAttachmentCount, gBufferDrawBuffers);
     if (!checkFramebufferComplete(m_gBufferFbo, "GBuffer")) {
@@ -193,7 +196,8 @@ void DeferredRenderTargets::bindGBuffer() {
         kGAlbedoAttachment,
         kGNormalAoAttachment,
         kGVoxelLightAttachment,
-        kGMaterialAttachment
+        kGMaterialAttachment,
+        kGMaterialAuxAttachment
     };
     glDrawBuffers(kGBufferAttachmentCount, drawBuffers);
 }
@@ -374,6 +378,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_gNormalAo,
         m_gVoxelLight,
         m_gMaterial,
+        m_gMaterialAux,
         m_gDepth,
         m_shadowDepth,
         m_ssaoTex,
@@ -398,6 +403,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gNormalAo = 0;
     m_gVoxelLight = 0;
     m_gMaterial = 0;
+    m_gMaterialAux = 0;
     m_gDepth = 0;
     m_shadowDepth = 0;
     m_ssaoTex = 0;

@@ -564,7 +564,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 22);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 24);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -1212,10 +1212,12 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     constexpr GLfloat clearNormal[] = {0.5f, 0.5f, 1.0f, 1.0f};
     constexpr GLfloat clearLight[] = {0.0f, 0.0f, 0.0f, 1.0f};
     constexpr GLfloat clearMaterial[] = {0.86f, 0.035f, 0.0f, 0.0f};
+    constexpr GLfloat clearMaterialAux[] = {0.0f, 0.0f, 0.65f, 0.0f};
     glClearBufferfv(GL_COLOR, 0, clearAlbedo);
     glClearBufferfv(GL_COLOR, 1, clearNormal);
     glClearBufferfv(GL_COLOR, 2, clearLight);
     glClearBufferfv(GL_COLOR, 3, clearMaterial);
+    glClearBufferfv(GL_COLOR, 4, clearMaterialAux);
     glClear(GL_DEPTH_BUFFER_BIT);
 
     releaseStaleMdiAllocations(world);
@@ -1348,13 +1350,14 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uNormalAoTex", 1);
     m_deferredLightingShader->setInt("uVoxelLightTex", 2);
     m_deferredLightingShader->setInt("uMaterialTex", 3);
-    m_deferredLightingShader->setInt("uDepthTex", 4);
-    m_deferredLightingShader->setInt("uLightmapDay", 5);
-    m_deferredLightingShader->setInt("uLightmapNight", 6);
-    m_deferredLightingShader->setInt("uShadowMap", 7);
-    m_deferredLightingShader->setInt("uSsaoTex", 8);
-    m_deferredLightingShader->setInt("uSkyCaptureTex", 9);
-    m_deferredLightingShader->setInt("uNoiseTex", 10);
+    m_deferredLightingShader->setInt("uMaterialAuxTex", 4);
+    m_deferredLightingShader->setInt("uDepthTex", 5);
+    m_deferredLightingShader->setInt("uLightmapDay", 6);
+    m_deferredLightingShader->setInt("uLightmapNight", 7);
+    m_deferredLightingShader->setInt("uShadowMap", 8);
+    m_deferredLightingShader->setInt("uSsaoTex", 9);
+    m_deferredLightingShader->setInt("uSkyCaptureTex", 10);
+    m_deferredLightingShader->setInt("uNoiseTex", 11);
     m_deferredLightingShader->setMat4("uViewProj", frame.viewProj);
     m_deferredLightingShader->setMat4("uInvViewProj", frame.invViewProj);
     bindShadowFrameUniforms(*m_deferredLightingShader, frame);
@@ -1396,21 +1399,25 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
     glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
     renderFullscreen(*m_deferredLightingShader);
 
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE9);
@@ -1470,7 +1477,8 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uDepthTex", 1);
     m_reflectionShader->setInt("uNormalAoTex", 2);
     m_reflectionShader->setInt("uMaterialTex", 3);
-    m_reflectionShader->setInt("uSkyCaptureTex", 4);
+    m_reflectionShader->setInt("uMaterialAuxTex", 4);
+    m_reflectionShader->setInt("uSkyCaptureTex", 5);
     m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
     m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
     m_reflectionShader->setFloat("uWeatherWetness", frame.weatherWetness);
@@ -1485,10 +1493,12 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
     glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
+    glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     renderFullscreen(*m_reflectionShader);
 
-    for (int unit = 4; unit >= 0; --unit) {
+    for (int unit = 5; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -1644,6 +1654,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uHistorySceneTex", 13);
     m_deferredDebugShader->setInt("uReflectionTex", 14);
     m_deferredDebugShader->setInt("uCloudTex", 15);
+    m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
     m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
@@ -1687,7 +1698,11 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
     glActiveTexture(GL_TEXTURE13);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
+    const bool materialAuxDebug =
+        m_pipelineSettings.debugViewMode == 23 || m_pipelineSettings.debugViewMode == 24;
+    glBindTexture(GL_TEXTURE_2D,
+                  materialAuxDebug ? m_deferredTargets.materialAuxTexture()
+                                   : m_deferredTargets.historySceneTexture());
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
     glActiveTexture(GL_TEXTURE15);

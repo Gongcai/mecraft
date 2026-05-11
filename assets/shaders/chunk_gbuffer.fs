@@ -5,6 +5,7 @@ layout (location = 0) out vec4 GAlbedoMaterial;
 layout (location = 1) out vec4 GNormalAo;
 layout (location = 2) out vec4 GVoxelLight;
 layout (location = 3) out vec4 GMaterial;
+layout (location = 4) out vec4 GMaterialAux;
 
 in vec2 vUV;
 in float vSunlight;
@@ -78,4 +79,5 @@ void main() {
     GNormalAo = vec4(normal * 0.5 + 0.5, ao);
     GVoxelLight = vec4(clamp(vSunlight, 0.0, 1.0), clamp(vBlockLight, 0.0, 1.0), 0.0, 1.0);
     GMaterial = packGBufferMaterial(surfaceMaterialForKind(vMaterialKind, emissiveHint));
+    GMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(vMaterialKind));
 }

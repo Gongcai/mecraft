@@ -8,6 +8,7 @@ uniform sampler2D uAlbedoTex;
 uniform sampler2D uNormalAoTex;
 uniform sampler2D uVoxelLightTex;
 uniform sampler2D uMaterialTex;
+uniform sampler2D uMaterialAuxTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uShadowMap;
 uniform sampler2D uSsaoTex;
@@ -260,6 +261,16 @@ void main() {
     if (uDebugViewMode == 22) {
         vec4 cloud = texture(uCloudTex, vTexCoord);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
+        return;
+    }
+    if (uDebugViewMode == 23) {
+        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+        FragColor = vec4(heatmap(aux.materialKind / 12.0), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 24) {
+        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+        FragColor = vec4(aux.wetnessMask, aux.porosity, aux.metalness, 1.0);
         return;
     }
 

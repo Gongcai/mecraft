@@ -8,6 +8,7 @@ uniform sampler2D uAlbedoTex;
 uniform sampler2D uNormalAoTex;
 uniform sampler2D uVoxelLightTex;
 uniform sampler2D uMaterialTex;
+uniform sampler2D uMaterialAuxTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
@@ -546,7 +547,8 @@ void main() {
     GBufferSurface surface = unpackGBufferSurface(texture(uAlbedoTex, vTexCoord),
                                                   texture(uNormalAoTex, vTexCoord),
                                                   texture(uVoxelLightTex, vTexCoord),
-                                                  texture(uMaterialTex, vTexCoord));
+                                                  texture(uMaterialTex, vTexCoord),
+                                                  texture(uMaterialAuxTex, vTexCoord));
     vec3 albedo = surface.albedo;
     albedo = desaturateLinear(albedo, uAlbedoDesaturation);
     float emissiveHint = surface.emissiveHint;
@@ -557,6 +559,15 @@ void main() {
     float f0Scalar = surface.material.f0;
     float materialEmission = surface.material.emission;
     float sss = surface.material.sss;
+    int materialKind = materialKindId(surface.aux.materialKind);
+    float wetness = clamp(uWeatherWetness * surface.aux.wetnessMask * voxelLight.r, 0.0, 1.0);
+    float wetPorosity = wetness * clamp(surface.aux.porosity, 0.0, 1.0);
+    bool waterLike = materialKind == MATERIAL_WATER || materialKind == MATERIAL_GLASS;
+    if (!waterLike) {
+        albedo *= 1.0 - wetPorosity * 0.22;
+        roughness = mix(roughness, max(0.08, roughness * 0.36), wetness * (0.72 + surface.aux.metalness * 0.18));
+        f0Scalar = mix(f0Scalar, max(f0Scalar, 0.055), wetness * (0.35 + surface.aux.metalness * 0.20));
+    }
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);

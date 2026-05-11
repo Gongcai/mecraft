@@ -33,6 +33,7 @@ public:
     [[nodiscard]] GLuint normalAoTexture() const { return m_gNormalAo; }
     [[nodiscard]] GLuint voxelLightTexture() const { return m_gVoxelLight; }
     [[nodiscard]] GLuint materialTexture() const { return m_gMaterial; }
+    [[nodiscard]] GLuint materialAuxTexture() const { return m_gMaterialAux; }
     [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
@@ -67,7 +68,8 @@ private:
     static constexpr GLenum kGNormalAoAttachment = GL_COLOR_ATTACHMENT1;
     static constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;
     static constexpr GLenum kGMaterialAttachment = GL_COLOR_ATTACHMENT3;
-    static constexpr GLsizei kGBufferAttachmentCount = 4;
+    static constexpr GLenum kGMaterialAuxAttachment = GL_COLOR_ATTACHMENT4;
+    static constexpr GLsizei kGBufferAttachmentCount = 5;
 
     static GLuint createTexture2D(GLenum internalFormat,
                                   int width,
@@ -86,11 +88,13 @@ private:
     // 1 RGBA16F  = encoded world normal.rgb, vertex AO.a
     // 2 RG8      = sky light.r, block light.g
     // 3 RGBA8    = roughness.r, f0.g, emission.b, subsurface.a
+    // 4 RGBA8    = material kind.r, wetness mask.g, porosity.b, metalness.a
     GLuint m_gBufferFbo = 0;
     GLuint m_gAlbedo = 0;
     GLuint m_gNormalAo = 0;
     GLuint m_gVoxelLight = 0;
     GLuint m_gMaterial = 0;
+    GLuint m_gMaterialAux = 0;
     GLuint m_gDepth = 0;
 
     GLuint m_shadowFbo = 0;

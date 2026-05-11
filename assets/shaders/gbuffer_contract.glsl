@@ -25,6 +25,13 @@ struct SurfaceMaterial {
     float sss;
 };
 
+struct SurfaceMaterialAux {
+    float materialKind;
+    float wetnessMask;
+    float porosity;
+    float metalness;
+};
+
 struct GBufferSurface {
     vec3 albedo;
     float emissiveHint;
@@ -32,6 +39,7 @@ struct GBufferSurface {
     float vertexAo;
     vec2 voxelLight;
     SurfaceMaterial material;
+    SurfaceMaterialAux aux;
 };
 
 int materialKindId(float materialKind) {
@@ -49,6 +57,15 @@ SurfaceMaterial defaultSurfaceMaterial() {
     material.emission = 0.0;
     material.sss = 0.0;
     return material;
+}
+
+SurfaceMaterialAux defaultSurfaceMaterialAux() {
+    SurfaceMaterialAux aux;
+    aux.materialKind = float(MATERIAL_DEFAULT);
+    aux.wetnessMask = 0.0;
+    aux.porosity = 0.65;
+    aux.metalness = 0.0;
+    return aux;
 }
 
 SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
@@ -100,8 +117,62 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
     return material;
 }
 
+SurfaceMaterialAux surfaceMaterialAuxForKind(float materialKind) {
+    SurfaceMaterialAux aux = defaultSurfaceMaterialAux();
+    int kind = materialKindId(materialKind);
+    aux.materialKind = clamp(float(kind), 0.0, 15.0);
+
+    if (kind == MATERIAL_STONE) {
+        aux.wetnessMask = 0.62;
+        aux.porosity = 0.44;
+    } else if (kind == MATERIAL_DIRT) {
+        aux.wetnessMask = 0.88;
+        aux.porosity = 0.82;
+    } else if (kind == MATERIAL_GRASS) {
+        aux.wetnessMask = 0.78;
+        aux.porosity = 0.70;
+    } else if (kind == MATERIAL_WOOD) {
+        aux.wetnessMask = 0.48;
+        aux.porosity = 0.58;
+    } else if (kind == MATERIAL_LEAVES) {
+        aux.wetnessMask = 0.68;
+        aux.porosity = 0.34;
+    } else if (kind == MATERIAL_PLANT) {
+        aux.wetnessMask = 0.72;
+        aux.porosity = 0.52;
+    } else if (kind == MATERIAL_SAND) {
+        aux.wetnessMask = 0.55;
+        aux.porosity = 0.90;
+    } else if (kind == MATERIAL_GLASS) {
+        aux.wetnessMask = 0.18;
+        aux.porosity = 0.02;
+    } else if (kind == MATERIAL_WATER) {
+        aux.wetnessMask = 1.0;
+        aux.porosity = 0.0;
+    } else if (kind == MATERIAL_ORE) {
+        aux.wetnessMask = 0.38;
+        aux.porosity = 0.18;
+    } else if (kind == MATERIAL_EMISSIVE) {
+        aux.wetnessMask = 0.15;
+        aux.porosity = 0.10;
+    } else if (kind == MATERIAL_METAL) {
+        aux.wetnessMask = 0.20;
+        aux.porosity = 0.04;
+        aux.metalness = 1.0;
+    }
+
+    return aux;
+}
+
 vec4 packGBufferMaterial(SurfaceMaterial material) {
     return vec4(material.roughness, material.f0, material.emission, material.sss);
+}
+
+vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
+    return vec4(clamp(aux.materialKind / 15.0, 0.0, 1.0),
+                clamp(aux.wetnessMask, 0.0, 1.0),
+                clamp(aux.porosity, 0.0, 1.0),
+                clamp(aux.metalness, 0.0, 1.0));
 }
 
 SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
@@ -113,6 +184,15 @@ SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
     return material;
 }
 
+SurfaceMaterialAux unpackGBufferMaterialAux(vec4 packedAux) {
+    SurfaceMaterialAux aux;
+    aux.materialKind = round(clamp(packedAux.r, 0.0, 1.0) * 15.0);
+    aux.wetnessMask = clamp(packedAux.g, 0.0, 1.0);
+    aux.porosity = clamp(packedAux.b, 0.0, 1.0);
+    aux.metalness = clamp(packedAux.a, 0.0, 1.0);
+    return aux;
+}
+
 GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 voxelLight, vec4 packedMaterial) {
     GBufferSurface surface;
     surface.albedo = albedoMaterial.rgb;
@@ -121,6 +201,13 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     surface.vertexAo = mix(0.72, 1.0, normalAo.a);
     surface.voxelLight = voxelLight.rg;
     surface.material = unpackGBufferMaterial(packedMaterial);
+    surface.aux = defaultSurfaceMaterialAux();
+    return surface;
+}
+
+GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 voxelLight, vec4 packedMaterial, vec4 packedMaterialAux) {
+    GBufferSurface surface = unpackGBufferSurface(albedoMaterial, normalAo, voxelLight, packedMaterial);
+    surface.aux = unpackGBufferMaterialAux(packedMaterialAux);
     return surface;
 }
 
