@@ -40,6 +40,7 @@ uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uShadowNormalOffset;
 uniform int uShadowLightMode;
+uniform int uShadowWarpMode;
 uniform int uDebugViewMode;
 
 vec3 tonemapPreview(vec3 color) {
@@ -71,17 +72,40 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.0001);
 }
 
+float calculateShadowWarp(vec2 coord) {
+    if (uShadowWarpMode == 2) {
+        return 1.0;
+    }
+    if (uShadowWarpMode == 1) {
+        vec2 scaled = coord * 1.165;
+        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
+        return quarticLength * 0.9 + 0.1;
+    }
+    return length(coord * 1.169) * 0.9 + 0.1;
+}
+
 vec3 shadowUvFromWorld(vec3 worldPos) {
     vec4 shadowClip = uShadowViewProj * vec4(worldPos, 1.0);
-    return shadowClip.xyz / max(shadowClip.w, 0.0001) * 0.5 + 0.5;
+    vec3 clip = shadowClip.xyz / max(shadowClip.w, 0.0001);
+    if (uShadowWarpMode != 2) {
+        float warp = calculateShadowWarp(clip.xy);
+        clip.xy /= warp;
+        clip.z *= 0.2;
+    }
+    return clip * 0.5 + 0.5;
 }
 
 float shadowDepthWorldScale() {
-    return max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    float scale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    return (uShadowWarpMode != 2) ? scale / 0.2 : scale;
 }
 
 float shadowDepthBiasFromWorld(float worldUnits) {
     return worldUnits / shadowDepthWorldScale();
+}
+
+float derivativeMinimumShadowBias() {
+    return (uShadowWarpMode != 2) ? 1.2e-4 : 6.0e-5;
 }
 
 float shadowWorldBias(float ndotl, float viewDistance) {
@@ -97,7 +121,12 @@ float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
     float grazing = 1.0 - clamp(ndotl, 0.0, 1.0);
     float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
-    return texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
+    float texelOffset = texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
+    float derivativeScale = max(uShadowNormalOffset, 0.0) / 0.035;
+    float derivativeOffset = (viewDistance * viewDistance * 8e-5 + 3e-2) *
+                             (2.0 - clamp(ndotl, 0.0, 1.0)) *
+                             derivativeScale;
+    return max(texelOffset, derivativeOffset);
 }
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
@@ -241,7 +270,8 @@ void main() {
         }
 
         float shadowDepth = texture(uShadowMap, shadowUv.xy).r;
-        float bias = shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistance));
+        float bias = max(shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistance)),
+                         derivativeMinimumShadowBias());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
         float margin = (shadowDepth - (shadowUv.z - bias)) * shadowDepthWorldScale();
         float nearAcne = 1.0 - smoothstep(0.0, max(uShadowTexelWorldSize * 1.25, 0.0001), abs(margin));
@@ -261,7 +291,8 @@ void main() {
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);
-        float biasWorld = shadowWorldBias(ndotl, viewDistance);
+        float biasWorld = max(shadowWorldBias(ndotl, viewDistance),
+                              derivativeMinimumShadowBias() * shadowDepthWorldScale());
         float offsetWorld = shadowNormalOffsetWorld(ndotl, viewDistance);
         float biasTexels = biasWorld / max(uShadowTexelWorldSize, 0.0001);
         float offsetTexels = offsetWorld / max(uShadowTexelWorldSize, 0.0001);

@@ -45,6 +45,7 @@ uniform float uCloudThickness;
 uniform int uShadowsEnabled;
 uniform int uVolumetricFogEnabled;
 uniform int uShadowLightMode;
+uniform int uShadowWarpMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 
@@ -118,15 +119,33 @@ float shadowProjectionFade(vec3 proj) {
     return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
 }
 
+float calculateShadowWarp(vec2 coord) {
+    if (uShadowWarpMode == 2) {
+        return 1.0;
+    }
+    if (uShadowWarpMode == 1) {
+        vec2 scaled = coord * 1.165;
+        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
+        return quarticLength * 0.9 + 0.1;
+    }
+    return length(coord * 1.169) * 0.9 + 0.1;
+}
+
 vec3 worldToShadowProj(vec3 worldPos) {
     vec4 lightView = uShadowModelView * vec4(worldPos, 1.0);
     vec4 lightClip = uShadowProjection * lightView;
     vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
+    if (uShadowWarpMode != 2) {
+        float warp = calculateShadowWarp(proj.xy);
+        proj.xy /= warp;
+        proj.z *= 0.2;
+    }
     return proj * 0.5 + 0.5;
 }
 
 float shadowDepthWorldScale() {
-    return max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    float scale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    return (uShadowWarpMode != 2) ? scale / 0.2 : scale;
 }
 
 float shadowDepthBiasFromWorld(float worldUnits) {

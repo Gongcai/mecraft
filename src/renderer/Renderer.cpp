@@ -5,6 +5,7 @@
 #include "Renderer.h"
 
 #include "ChunkMesher.h"
+#include "../Paths.h"
 #include "../core/Time.h"
 #include "../world/BlockSelection.h"
 #include "../world/World.h"
@@ -13,6 +14,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <string>
 #include <utility>
 #include <array>
 #include <vector>
@@ -79,6 +82,24 @@ RenderWeatherFactors weatherFactorsForPreset(const int preset) {
         return {0.0f, 0.0f, 0.0f, 0.55f};
     }
 }
+
+std::string resolveAtmosphereFinalLutPath() {
+    const std::array<const char*, 4> candidates = {
+        TEXTURES_DIR "/atmosphere/Final.lut",
+        SHADERPACK_FINAL_LUT_PATH,
+        "assets/textures/atmosphere/Final.lut",
+        "assets/textures/shaderpacks/Atmosphere/Final.lut",
+    };
+
+    std::error_code ec;
+    for (const char* candidate : candidates) {
+        if (std::filesystem::exists(candidate, ec) && !ec) {
+            return candidate;
+        }
+        ec.clear();
+    }
+    return candidates.front();
+}
 }
 
 Renderer::~Renderer() {
@@ -118,7 +139,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     initBreakOverlayMesh();
     m_worldRenderBuffer.init();
     m_deferredTargets.init();
-    m_deferredTargets.loadAtmosphereLut("assets/textures/atmosphere/Final.lut");
+    const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
+    m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
     m_gameplaySkyRenderer.init(resourceMgr);
 #ifdef MECRAFT_DEBUG
     initGpuTimers();
@@ -329,6 +351,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
 
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
@@ -446,6 +469,7 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         bindChunkRenderState(frame, texArray);
         bindTransparentCompositeInputs(*m_chunkShader, deferredInputsEnabled, compositeInputsEnabled);
         glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
         // Render generic transparent only -- water was handled in renderWaterCompositePass
         if (m_useMultiDrawIndirect) {
             if (!m_deferredTransparentBatch.empty()) {
@@ -587,7 +611,7 @@ int Renderer::getDebugLightMode() const {
 void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings) {
     m_pipelineSettings = settings;
     m_pipelineSettings.shadowResolution = std::clamp(m_pipelineSettings.shadowResolution, 256, 8192);
-    m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 16.0f, 512.0f);
+    m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 64.0f, 512.0f);
     m_pipelineSettings.shadowSoftness = std::clamp(m_pipelineSettings.shadowSoftness, 0.1f, 8.0f);
     m_pipelineSettings.shadowPcssStrength = std::clamp(m_pipelineSettings.shadowPcssStrength, 0.0f, 1.5f);
     m_pipelineSettings.shadowConstantBias = std::clamp(m_pipelineSettings.shadowConstantBias, 0.0f, 0.01f);
@@ -1071,7 +1095,7 @@ void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& fr
     shader.setMat4("uShadowModelView", m_shadowModelView);
     shader.setMat4("uShadowProjection", m_shadowProjection);
     shader.setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
-    shader.setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    shader.setFloat("uShadowDistance", std::max(64.0f, m_pipelineSettings.shadowDistance));
     shader.setFloat("uShadowExtent", m_shadowExtent);
     shader.setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     shader.setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
@@ -1425,6 +1449,10 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+    const GLfloat shadowColorClear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    const GLfloat shadowNormalClear[4] = {0.5f, 0.5f, 0.0f, 1.0f};
+    glClearBufferfv(GL_COLOR, 0, shadowColorClear);
+    glClearBufferfv(GL_COLOR, 1, shadowNormalClear);
     glClear(GL_DEPTH_BUFFER_BIT);
 
     m_worldRenderBuffer.beginFrame();
@@ -1442,9 +1470,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
-    // Projection V2 keeps runtime sampling on the stable no-warp path; radial/quartic remain debug-only.
-    const int effectiveShadowWarpMode = 2;
-    m_shadowDepthShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
+    m_shadowDepthShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
@@ -1528,9 +1554,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
     bindCloudUniforms(*m_deferredLightingShader, frame);
-    // Projection V2 keeps runtime sampling on the stable no-warp path; radial/quartic remain debug-only.
-    const int effectiveShadowWarpMode = 2;
-    m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
+    m_deferredLightingShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
@@ -1800,6 +1824,7 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     bindVolumetricUniforms(*m_volumetricFogShader, frame);
     bindCloudUniforms(*m_volumetricFogShader, frame);
     m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
+    m_volumetricFogShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
@@ -2068,11 +2093,12 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
     m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
-    m_deferredDebugShader->setFloat("uShadowDistance", std::max(16.0f, m_pipelineSettings.shadowDistance));
+    m_deferredDebugShader->setFloat("uShadowDistance", std::max(64.0f, m_pipelineSettings.shadowDistance));
     m_deferredDebugShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
+    m_deferredDebugShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     const RenderFrameData* debugFrame = m_currentFrameDataValid
         ? &m_currentFrameData
         : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
@@ -2178,7 +2204,7 @@ glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer:
 }
 
 Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const {
-    const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
+    const float distance = std::max(64.0f, m_pipelineSettings.shadowDistance);
     const float extent = distance + std::max(10.0f, distance * 0.18f);
     const glm::vec3 lightForward = glm::normalize(-lightDirection);
     const glm::vec3 fallbackUp =

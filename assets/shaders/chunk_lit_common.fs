@@ -355,6 +355,17 @@ uniform vec3 uCameraPos;
         }
 
         bool waterLayer = (uWaterEffectsEnabled != 0) && isWaterLayer(sampledLayer);
+        if (MECRAFT_TRANSPARENT_COMPOSITE != 0 && !waterLayer) {
+            int materialKind = materialKindId(vMaterialKind);
+            bool cutoutVegetation =
+                isCrossVegetation ||
+                materialKind == MATERIAL_PLANT ||
+                materialKind == MATERIAL_LEAVES ||
+                materialKind == MATERIAL_GRASS;
+            if (cutoutVegetation) {
+                discard;
+            }
+        }
         vec2 uv = vUV;
         if (waterLayer) {
             vec2 p = vWorldPos.xz;

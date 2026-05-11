@@ -25,7 +25,7 @@ void main() {
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
     vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
     vec2 previousUv = previousClip.xy / max(previousClip.w, 0.00001) * 0.5 + 0.5;
-    vec2 currentUv = vTexCoord - uJitter;
-    previousUv -= uPreviousJitter;
-    FragVelocity = currentUv - previousUv;
+    // The main gbuffer projection is currently not jittered. Including the Halton
+    // offsets here creates artificial full-screen motion and makes TAA drag history.
+    FragVelocity = vTexCoord - previousUv;
 }

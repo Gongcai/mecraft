@@ -309,9 +309,9 @@ float calculateShadowWarp(vec2 coord) {
     if (uShadowWarpMode == 1) {
         vec2 scaled = coord * 1.165;
         float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
-        return quarticLength * 0.85 + 0.15;
+        return quarticLength * 0.9 + 0.1;
     }
-    return length(coord * 1.169) * 0.85 + 0.15;
+    return length(coord * 1.169) * 0.9 + 0.1;
 }
 
 vec3 worldToShadowProj(vec3 worldPos, out float warpDensity) {
@@ -319,7 +319,10 @@ vec3 worldToShadowProj(vec3 worldPos, out float warpDensity) {
     vec4 lightClip = uShadowProjection * lightView;
     vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
     warpDensity = calculateShadowWarp(proj.xy);
-    proj.xy /= warpDensity;
+    if (uShadowWarpMode != 2) {
+        proj.xy /= warpDensity;
+        proj.z *= 0.2;
+    }
     return proj * 0.5 + 0.5;
 }
 
@@ -339,11 +342,19 @@ float shadowProjectionFade(vec3 proj) {
 }
 
 float shadowDepthWorldScale() {
-    return max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    float scale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
+    return (uShadowWarpMode != 2) ? scale / 0.2 : scale;
 }
 
 float shadowDepthBiasFromWorld(float worldUnits) {
     return worldUnits / shadowDepthWorldScale();
+}
+
+float derivativeMinimumShadowBias() {
+    // DerivativeMain applies a small constant depth bias in distorted shadow space.
+    // Keep this independent of shadow resolution; texel-scaled bias becomes too
+    // small at high resolutions and produces receiver acne/striped false shadows.
+    return (uShadowWarpMode != 2) ? 1.2e-4 : 6.0e-5;
 }
 
 float shadowWorldBias(float ndotl, float viewDistance) {
@@ -359,7 +370,16 @@ float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
     float grazing = 1.0 - clamp(ndotl, 0.0, 1.0);
     float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
-    return texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
+    float texelOffset = texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
+
+    // DerivativeMain offsets receivers by a small world-space amount before shadow projection:
+    // normal * (dist^2 * 8e-5 + 3e-2) * (2 - NdotL). Keep the same floor so higher
+    // shadow resolutions do not shrink the receiver offset back into shadow acne.
+    float derivativeScale = max(uShadowNormalOffset, 0.0) / 0.035;
+    float derivativeOffset = (viewDistance * viewDistance * 8e-5 + 3e-2) *
+                             (2.0 - clamp(ndotl, 0.0, 1.0)) *
+                             derivativeScale;
+    return max(texelOffset, derivativeOffset);
 }
 
 vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shadowVisibility) {
@@ -387,8 +407,8 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
 vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) {
     float blockerDepthSum = 0.0;
     float blockerCount = 0.0;
-    for (int i = 0; i < 12; ++i) {
-        vec2 offset = spiralDiskSample(i, 12, jitter) * searchRadius;
+    for (int i = 0; i < 8; ++i) {
+        vec2 offset = spiralDiskSample(i, 8, jitter) * searchRadius;
         float blockerDepth = sampleShadowDepthAt(proj, offset);
         float isBlocker = step(blockerDepth, proj.z - bias) * (1.0 - step(0.9999, blockerDepth));
         blockerDepthSum += blockerDepth * isBlocker;
@@ -396,7 +416,8 @@ vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) 
     }
 
     float averageBlockerDepth = blockerDepthSum / max(blockerCount, 0.0001);
-    return vec2(averageBlockerDepth, blockerCount);
+    float penumbraUv = min(2.0 * max(proj.z - bias - averageBlockerDepth, 0.0) / max(averageBlockerDepth, 0.0001), 1.0);
+    return vec2(penumbraUv, blockerCount);
 }
 
 float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensity, float jitter) {
@@ -404,26 +425,20 @@ float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensit
         return baseRadius;
     }
 
-    float texelRadiusFromSoftness = max(uShadowSoftness, 0.1);
-    float searchRadius = clamp(baseRadius * (0.62 + texelRadiusFromSoftness * 0.16) / max(warpDensity, 0.25),
-                               1.0,
-                               8.0);
+    float shadowMapSize = max(float(textureSize(uShadowMap, 0).x), 1.0);
+    float searchRadius = clamp(2.0 * abs(uShadowProjection[0][0]) * shadowMapSize, 1.0, 48.0);
     vec2 blockerSearch = pcssBlockerSearch(proj, bias, searchRadius, jitter);
-    float averageBlockerDepth = blockerSearch.x;
+    float penumbraUv = blockerSearch.x;
     float blockerCount = blockerSearch.y;
 
     if (blockerCount < 0.5) {
-        return min(baseRadius, 1.15);
+        return max(baseRadius, 2.0);
     }
 
-    float receiverToBlocker = max(proj.z - averageBlockerDepth, 0.0);
-    float receiverToBlockerWorld = receiverToBlocker * shadowDepthWorldScale();
-    float penumbraTexels = receiverToBlockerWorld / max(uShadowTexelWorldSize, 0.0001);
-    penumbraTexels *= 0.10 * uShadowPcssStrength / max(warpDensity, 0.25);
-
-    float blockerConfidence = smoothstep(1.5, 5.5, blockerCount);
-    float adaptiveRadius = clamp(0.85 + penumbraTexels, 0.85, max(baseRadius, 1.0));
-    return mix(min(baseRadius, 1.15), adaptiveRadius, blockerConfidence);
+    float derivativeRadius = penumbraUv * abs(uShadowProjection[0][0]) * shadowMapSize / max(warpDensity, 0.25);
+    derivativeRadius = clamp(derivativeRadius, 2.0, 28.0);
+    float blockerConfidence = smoothstep(1.0, 4.0, blockerCount);
+    return mix(baseRadius, derivativeRadius, blockerConfidence * clamp(uShadowPcssStrength, 0.0, 1.0));
 }
 
 float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
@@ -443,7 +458,8 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
-    float bias = shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistanceForBias));
+    float bias = max(shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistanceForBias)),
+                     derivativeMinimumShadowBias());
 
     float projectionFade = shadowProjectionFade(proj);
     if (projectionFade <= 0.001) {
@@ -455,20 +471,14 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return mix(1.0, hardShadow, projectionFade * distanceFade);
     }
 
-    float viewDistance = viewDistanceForBias;
-    float distanceSoftness = smoothstep(18.0, 96.0, viewDistance);
-    float grazingSoftness = 1.0 - ndotl;
-    vec2 centeredShadow = proj.xy * 2.0 - 1.0;
-    float filterWarpDensity = calculateShadowWarp(centeredShadow);
-    float radius = clamp(max(uShadowSoftness, 0.1) * (1.05 + 0.34 * distanceSoftness + 0.20 * grazingSoftness) * filterWarpDensity,
-                         1.25, 7.5);
+    float radius = max(uShadowSoftness, 0.1) * 2.0;
     float jitter = stableShadowJitter();
     radius = pcssFilterRadius(proj, radius, bias, warpDensity, jitter);
     float lit = 0.0;
-    for (int i = 0; i < 24; ++i) {
-        lit += compareShadowBilinear(proj, spiralDiskSample(i, 24, jitter) * radius, bias);
+    for (int i = 0; i < 16; ++i) {
+        lit += compareShadowBilinear(proj, spiralDiskSample(i, 16, jitter) * radius, bias);
     }
-    return mix(1.0, shapeShadowVisibility(lit / 24.0), projectionFade * distanceFade);
+    return mix(1.0, shapeShadowVisibility(lit / 16.0), projectionFade * distanceFade);
 }
 
 float contactShadow(vec3 worldPos,

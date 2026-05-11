@@ -44,7 +44,26 @@ vec3 clipAABB(vec3 aabbMin, vec3 aabbMax, vec3 color) {
     return center + offset * t;
 }
 
+vec3 reconstructWorldPosition(vec2 uv, float depth) {
+    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 world = uInvViewProj * clip;
+    return world.xyz / max(world.w, 0.00001);
+}
+
+float reprojectedPreviousDepth(vec2 uv, float depth) {
+    vec3 worldPos = reconstructWorldPosition(uv, depth);
+    vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
+    vec3 previousNdc = previousClip.xyz / max(previousClip.w, 0.00001);
+    return previousNdc.z * 0.5 + 0.5;
+}
+
+vec3 sampleCurrentClamped(vec2 uv) {
+    vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
+    return texture(uCurrentTex, clamp(uv, texelSize * 0.5, 1.0 - texelSize * 0.5)).rgb;
+}
+
 void main() {
+    vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
     vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
     vec2 historyUv = vTexCoord - velocity;
 
@@ -67,36 +86,21 @@ void main() {
         return;
     }
 
-    // Catmull-Rom resampling of history
-    vec2 historySize = uScreenSize;
-    vec2 texelSize = 1.0 / historySize;
-    vec2 texelHistoryUv = historyUv * historySize - 0.5;
-    vec2 p0 = floor(texelHistoryUv);
-    vec2 f = texelHistoryUv - p0;
+    float historyDepth = texture(uHistoryDepthTex, historyUv).r;
+    float expectedHistoryDepth = reprojectedPreviousDepth(vTexCoord, depth);
+    bool depthMatches = historyDepth < 0.9999 &&
+                        abs(historyDepth - expectedHistoryDepth) < max(0.0015, depth * 0.0025);
 
-    // Catmull-Rom weights
-    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
-    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
-    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
-    vec2 w3 = f * f * (-0.5 + 0.5 * f);
-    vec2 w12 = w1 + w2;
-    vec2 w0w3 = w0 + w3;
+    float velocityPixels = length(velocity * uScreenSize);
+    bool saneVelocity = all(lessThan(abs(velocity), vec2(0.35))) && velocityPixels < 160.0;
 
-    vec2 uv0 = (p0 - 1.0 + 0.5 * w12 / w0w3) * texelSize;
-    vec2 uv3 = (p0 + 2.0 + 0.5 * w12 / w0w3) * texelSize;
-    vec2 uv12 = (p0 + 0.5 + w3 / w12) * texelSize;
+    if (!depthMatches || !saneVelocity) {
+        FragColor = vec4(currentColor, 1.0);
+        return;
+    }
 
-    float weights[4];
-    weights[0] = w0w3.x * w0.y;
-    weights[1] = w0w3.x * w3.y;
-    weights[2] = w12.x  * w0.y;
-    weights[3] = w12.x  * w3.y;
-
-    vec3 historyColor = vec3(0.0);
-    historyColor += texture(uHistoryTex, vec2(uv0.x,  uv0.y)).rgb  * weights[0];
-    historyColor += texture(uHistoryTex, vec2(uv0.x,  uv3.y)).rgb  * weights[1];
-    historyColor += texture(uHistoryTex, vec2(uv12.x, uv0.y)).rgb  * weights[2];
-    historyColor += texture(uHistoryTex, vec2(uv12.x, uv3.y)).rgb  * weights[3];
+    vec2 safeHistoryUv = clamp(historyUv, texelSize * 0.5, 1.0 - texelSize * 0.5);
+    vec3 historyColor = texture(uHistoryTex, safeHistoryUv).rgb;
 
     // 3x3 neighborhood variance clipping in YCoCgR
     vec3 neighborMin = currentColor;
@@ -108,7 +112,7 @@ void main() {
         for (int x = -1; x <= 1; ++x) {
             if (x == 0 && y == 0) continue;
             vec2 offset = vec2(float(x), float(y)) * texelSize;
-            vec3 neighbor = texture(uCurrentTex, vTexCoord + offset).rgb;
+            vec3 neighbor = sampleCurrentClamped(vTexCoord + offset);
             neighborMin = min(neighborMin, neighbor);
             neighborMax = max(neighborMax, neighbor);
             neighborSum += neighbor;
@@ -131,14 +135,21 @@ void main() {
     historyYCoCgR = clipAABB(minYCoCgR, maxYCoCgR, historyYCoCgR);
     historyColor = yCoCgRToRgb(historyYCoCgR);
 
-    // Blend factor: blend history with current
+    // Blend factor: blend history with current. Moving/reprojected pixels need
+    // more current-frame weight; otherwise old shadow silhouettes smear during turns.
     float velocityLength = length(velocity) * max(uScreenSize.x, uScreenSize.y);
-    float blendFactor = mix(uBlendMax, uBlendMin,
-                            smoothstep(0.0, 16.0, velocityLength));
+    float motionBlendMax = max(uBlendMax, 0.72);
+    float blendFactor = mix(uBlendMin, motionBlendMax,
+                            smoothstep(0.35, 28.0, velocityLength));
 
     // Reinhard domain blending for HDR stability
     vec3 currentReinhard = currentColor / (1.0 + currentColor);
     vec3 historyReinhard = historyColor / (1.0 + historyColor);
+    float disocclusion = smoothstep(0.0015, 0.012, abs(historyDepth - expectedHistoryDepth));
+    blendFactor = max(blendFactor, disocclusion);
+    float colorDelta = length(currentReinhard - historyReinhard);
+    float reactiveBlend = smoothstep(0.018, 0.16, colorDelta);
+    blendFactor = max(blendFactor, reactiveBlend * 0.82);
     vec3 resultReinhard = mix(historyReinhard, currentReinhard, blendFactor);
     vec3 result = resultReinhard / max(1.0 - resultReinhard, 1e-6);
 

@@ -362,7 +362,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int weatherPreset = pipeline.weatherPreset;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic", "AgX"};
-        static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative Debug", "No Warp"};
+        static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative", "No Warp"};
         static constexpr const char* kDebugViewModes[] = {
             "Off",
             "GBuffer Albedo",
@@ -432,7 +432,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipeline.shadowWarpMode = shadowWarpMode;
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 2;
+            pipeline.shadowWarpMode = 1;
             pipeline.contactShadowsEnabled = false;
             pipeline.cloudShadowsEnabled = false;
             pipeline.directSunStrength = 1.0f;
@@ -477,8 +477,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 3;
-            pipeline.shadowWarpMode = 2;
-            pipeline.softShadowsEnabled = false;
+            pipeline.shadowWarpMode = 1;
+            pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = false;
             pipeline.contactShadowsEnabled = false;
             pipeline.cloudShadowsEnabled = true;
@@ -528,8 +528,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 3;
-            pipeline.shadowWarpMode = 2;
-            pipeline.softShadowsEnabled = false;
+            pipeline.shadowWarpMode = 1;
+            pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = false;
             pipeline.contactShadowsEnabled = false;
             pipeline.cloudShadowsEnabled = true;
@@ -577,7 +577,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipelineChanged = true;
         }
         pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &pipeline.shadowResolution, 512, 4096);
-        pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 24.0f, 192.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 64.0f, 192.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Softness", &pipeline.shadowSoftness, 0.1f, 4.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("PCSS Strength", &pipeline.shadowPcssStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Const Bias", &pipeline.shadowConstantBias, 0.0f, 0.004f, "%.4f");

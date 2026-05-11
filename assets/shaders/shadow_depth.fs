@@ -60,8 +60,13 @@ void main() {
         discard;
     }
 
-    vec3 shadowColor = srgbToLinear(texColor.rgb);
-    shadowColor = mix(vec3(1.0), shadowColor, pow(clamp(texColor.a, 0.0, 1.0), 0.45));
+    vec3 shadowColor = texColor.rgb;
+    if (texColor.a >= 254.0 / 255.0) {
+        shadowColor = texColor.rgb;
+    } else {
+        shadowColor = mix(vec3(1.0), texColor.rgb, pow(clamp(texColor.a, 0.0, 1.0), 0.4));
+    }
+    shadowColor = srgbToLinear(shadowColor);
     ShadowColor = vec4(shadowColor, 1.0);
 
     vec3 worldNormal = decodeFaceNormal(vNormal);

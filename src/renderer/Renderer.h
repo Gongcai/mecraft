@@ -52,7 +52,7 @@ public:
     struct RenderPipelineSettings {
         RenderPipelineMode mode = RenderPipelineMode::HybridDeferred;
         bool shadowsEnabled = true;
-        bool softShadowsEnabled = false;
+        bool softShadowsEnabled = true;
         bool pcssShadowsEnabled = false;
         bool contactShadowsEnabled = false;
         bool cloudShadowsEnabled = true;
@@ -75,8 +75,8 @@ public:
         bool reflectionFilterEnabled = true;
         bool ssaoFilterEnabled = true;
         bool motionBlurEnabled = false;
-        float taaBlendMin = 0.04f;
-        float taaBlendMax = 0.20f;
+        float taaBlendMin = 0.08f;
+        float taaBlendMax = 0.26f;
         float reflectionFilterStrength = 1.0f;
         float motionBlurStrength = 1.0f;
         int motionBlurSamples = 8;
@@ -85,11 +85,11 @@ public:
         int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
-        int shadowWarpMode = 2; // 0=Radial debug, 1=Derivative quartic debug, 2=No warp
+        int shadowWarpMode = 1; // 0=Radial debug, 1=Derivative quartic, 2=No warp
         int shadowResolution = 2048;
-        float shadowDistance = 96.0f;
-        float shadowSoftness = 1.6f;
-        float shadowPcssStrength = 0.72f;
+        float shadowDistance = 192.0f;
+        float shadowSoftness = 1.0f;
+        float shadowPcssStrength = 0.0f;
         float shadowConstantBias = 0.0007f;
         float shadowSlopeBias = 0.0022f;
         float shadowNormalOffset = 0.035f;
