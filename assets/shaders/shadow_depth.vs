@@ -25,6 +25,8 @@ out float vAnimationFrameCount;
 out float vAnimationFps;
 out float vAnimated;
 out float vNormal;
+out vec3 vWorldPos;
+flat out int vMaterialKind;
 
 float calculateShadowWarp(vec2 coord) {
     if (uShadowWarpMode == 2) {
@@ -53,4 +55,9 @@ void main() {
     vAnimationFps = aAnimationFps;
     vAnimated = aAnimated;
     vNormal = aNormal;
+    vWorldPos = worldPos.xyz;
+
+    // Extract material kind from packed tint data
+    uint materialKind = (aTintPacked >> 10u) & 15u;
+    vMaterialKind = int(materialKind);
 }

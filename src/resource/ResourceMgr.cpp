@@ -262,6 +262,7 @@ void ResourceMgr::init() {
     loadShader("reflection_filter", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/reflection_filter.fs");
     loadShader("ssao_filter", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/ssao_filter.fs");
     loadShader("motion_blur", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/motion_blur.fs");
+    loadShader("dof", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/dof.fs");
     loadShader("bloom_extract", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_extract.fs");
     loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_blur.fs");
     loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/exposure_downsample.fs");

@@ -132,6 +132,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
     m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
     m_motionBlurShader = resourceMgr.getShader("motion_blur");
+    m_dofShader = resourceMgr.getShader("dof");
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
@@ -302,23 +303,30 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uOpaqueDepthTex", 5);
     m_waterCompositeShader->setInt("uSkyCaptureTex", 6);
     m_waterCompositeShader->setInt("uSceneColorTex", 7);
-    m_waterCompositeShader->setInt("uWaterNoiseTex", 8);
-    m_waterCompositeShader->setInt("uNormalAoTex", 9);
-    m_waterCompositeShader->setInt("uMaterialTex", 10);
-    m_waterCompositeShader->setInt("uMaterialAuxTex", 11);
-    m_waterCompositeShader->setInt("uReflectionTex", 12);
-    m_waterCompositeShader->setInt("uShadowMap", 13);
+    m_waterCompositeShader->setInt("uNoiseTex", 8);
+    m_waterCompositeShader->setInt("uReflectionTex", 9);
+    m_waterCompositeShader->setInt("uAtmosphereLut", 10);
     m_waterCompositeShader->setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uDepthSofteningEnabled", deferredInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
-    m_waterCompositeShader->setFloat("uWindTime", frame.shaderTime * 0.003f);
+    m_waterCompositeShader->setFloat("uTime", frame.shaderTime);
     m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
-    m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(1.0f));
+    // DerivativeMain: pure water absorption coefficients
+    m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(0.45f, 0.02f, 0.01f));
     m_waterCompositeShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
+    m_waterCompositeShader->setVec3("uMoonDirection", frame.skyColors.moonDirection);
     m_waterCompositeShader->setVec3("uSunLightColor", frame.skyColors.sunLightColor);
+    m_waterCompositeShader->setVec3("uMoonLightColor", frame.skyColors.moonLightColor);
+    m_waterCompositeShader->setVec3("uSkyAmbientColor", frame.skyColors.skyAmbientColor);
+    m_waterCompositeShader->setFloat("uSkyIntensity", frame.skyIntensity);
+    m_waterCompositeShader->setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
     m_waterCompositeShader->setFloat("uWeatherWetness", frame.weatherWetness);
+    m_waterCompositeShader->setFloat("uWaterWaveHeight", 1.0f);
+    m_waterCompositeShader->setFloat("uWaterWaveSpeed", 1.0f);
+    m_waterCompositeShader->setFloat("uWaterIOR", 1.33f);
+    m_waterCompositeShader->setInt("uIsEyeInWater", 0); // TODO: detect from camera position
 
     if (m_resourceMgr) {
         const TextureAnimationInfo still = m_resourceMgr->getTextureAnimation("water_still");
@@ -340,15 +348,9 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-    glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
-    glActiveTexture(GL_TEXTURE13);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -417,6 +419,13 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindVertexArray(0);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+    for (int i = 10; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_3D, 0);
+    glActiveTexture(GL_TEXTURE0);
 
     if (compositeInputsEnabled) {
         m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
@@ -1371,6 +1380,10 @@ bool Renderer::renderWorldDeferred(const World& world,
         m_hasPreviousFrameData) {
         renderMotionBlurPass(frame);
     }
+    // Depth of Field (after motion blur, before transparent compositing)
+    if (m_pipelineSettings.dofEnabled && m_dofShader != nullptr) {
+        renderDofPass(frame);
+    }
     m_deferredTargets.copySceneResolvedToTransparentComposite();
     updateDeferredHistoryTargets();
     m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
@@ -1475,8 +1488,13 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setInt("texArray", 0);
     m_shadowDepthShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
+    m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
+    m_shadowDepthShader->setInt("uNoiseTex", 1);
+    const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, noiseTex);
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false);
     if (m_useMultiDrawIndirect) {
         m_worldRenderBuffer.flushOpaque();
@@ -1484,6 +1502,9 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     renderCutoutChunks(cutoutEntries);
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
     m_deferredTransparentBatch = std::move(preservedTransparentBatch);
     m_transparentPassPlan = preservedTransparentPlan;
 }
@@ -2048,6 +2069,50 @@ void Renderer::renderMotionBlurPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     renderFullscreen(*m_motionBlurShader);
+
+    for (int i = 2; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderDofPass(const RenderFrameData& frame) {
+    if (m_dofShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.copySceneResolvedToHistory();
+    m_deferredTargets.bindSceneResolved();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_dofShader->use();
+    m_dofShader->setInt("uSceneTex", 0);
+    m_dofShader->setInt("uDepthTex", 1);
+    m_dofShader->setInt("uNoiseTex", 2);
+    m_dofShader->setMat4("uProjection", frame.projection);
+    m_dofShader->setMat4("uInvProjection", glm::inverse(frame.projection));
+    m_dofShader->setFloat("uFocusDistance", m_pipelineSettings.dofFocusDistance);
+    m_dofShader->setFloat("uAperture", m_pipelineSettings.dofAperture);
+    m_dofShader->setFloat("uDofIntensity", m_pipelineSettings.dofIntensity);
+    m_dofShader->setFloat("uDofAnamorphic", 1.0f);
+    m_dofShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+
+    const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, noiseTex);
+    renderFullscreen(*m_dofShader);
 
     for (int i = 2; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);

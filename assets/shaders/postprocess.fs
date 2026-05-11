@@ -421,6 +421,14 @@ void main() {
     }
 
     vec3 graded = applyGrade(color);
+
+    // Purkinje shift (DerivativeMain Post/Grade.glsl)
+    // Scotopic vision: in low light, human eye sensitivity shifts toward blue-green
+    float luma = dot(graded, vec3(0.2126, 0.7152, 0.0722));
+    float scotopic = smoothstep(0.1, 0.0, luma); // stronger at lower luminance
+    vec3 purkinjeShift = graded * vec3(0.6, 0.9, 1.3); // shift toward blue
+    graded = mix(graded, purkinjeShift, scotopic * 0.35);
+
     if (uShaderpackGradingEnabled) {
         graded = applyVignette(graded, rolledUv);
     }

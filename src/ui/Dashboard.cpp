@@ -411,6 +411,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.1f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Bloom Strength", &pipeline.bloomStrength, 0.0f, 1.2f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("Depth of Field", &pipeline.dofEnabled);
+        pipelineChanged |= ImGui::SliderFloat("DoF Focus", &pipeline.dofFocusDistance, 0.5f, 50.0f, "%.1f blocks");
+        pipelineChanged |= ImGui::SliderFloat("DoF Aperture", &pipeline.dofAperture, 0.8f, 22.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("DoF Intensity", &pipeline.dofIntensity, 0.0f, 1.0f, "%.3f");
         pipelineChanged |= ImGui::Checkbox("Auto Exposure", &pipeline.autoExposureEnabled);
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Min", &pipeline.autoExposureMin, 0.1f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Max", &pipeline.autoExposureMax, 0.2f, 4.0f, "%.2f");

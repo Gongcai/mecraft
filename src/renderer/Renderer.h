@@ -80,6 +80,10 @@ public:
         float reflectionFilterStrength = 1.0f;
         float motionBlurStrength = 1.0f;
         int motionBlurSamples = 8;
+        bool dofEnabled = true;
+        float dofIntensity = 0.15f;
+        float dofAperture = 2.8f;
+        float dofFocusDistance = 5.0f;
         float sceneCloudCompositeStrength = 0.42f;
         float sceneReflectionCompositeStrength = 0.36f;
         int debugViewMode = 0;
@@ -492,6 +496,7 @@ private:
     void renderTemporalResolvePass(const RenderFrameData& frame);
     void renderSsaoFilterPass();
     void renderMotionBlurPass(const RenderFrameData& frame);
+    void renderDofPass(const RenderFrameData& frame);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
@@ -571,6 +576,7 @@ private:
     Shader* m_reflectionFilterShader = nullptr;
     Shader* m_ssaoFilterShader = nullptr;
     Shader* m_motionBlurShader = nullptr;
+    Shader* m_dofShader = nullptr;
    // Shader* m_uiShader = nullptr;
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;
