@@ -18,6 +18,12 @@ uniform sampler2D uHistoryReflectionTex;
 uniform sampler2D uHistoryCloudTex;
 uniform sampler2D uSkyCaptureTex;
 
+// Albedo texture for refraction sampling (DerivativeMain composite1 equivalent)
+uniform sampler2D uAlbedoTex;
+
+// Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
+uniform sampler3D uAtmosphereLut;
+
 // Scene composite resource contract:
 // - SceneLighting is opaque HDR lighting before screen-space scene effects.
 // - Reflection/Cloud are half-res effect targets sampled in full-res scene UV space.

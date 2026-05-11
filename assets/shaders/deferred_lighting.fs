@@ -84,6 +84,13 @@ uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
 
+// Shadow color/normal textures (DerivativeMain shadowcolor0/1 equivalent)
+uniform sampler2D uShadowColorTex;
+uniform sampler2D uShadowNormalTex;
+
+// Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
+uniform sampler3D uAtmosphereLut;
+
 const float kTwoPi = 6.28318530718;
 const float kPi = 3.14159265359;
 

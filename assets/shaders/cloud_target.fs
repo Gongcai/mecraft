@@ -6,6 +6,7 @@ out vec4 FragColor;
 uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
+uniform sampler3D uAtmosphereLut;
 uniform mat4 uInvViewProj;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;

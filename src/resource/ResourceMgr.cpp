@@ -258,6 +258,10 @@ void ResourceMgr::init() {
     loadShader("volumetric_composite", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/volumetric_composite.fs");
     loadShader("reflection_probe", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/reflection_probe.fs");
     loadShader("cloud_target", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/cloud_target.fs");
+    loadShader("temporal_resolve", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/temporal_resolve.fs");
+    loadShader("reflection_filter", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/reflection_filter.fs");
+    loadShader("ssao_filter", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/ssao_filter.fs");
+    loadShader("motion_blur", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/motion_blur.fs");
     loadShader("bloom_extract", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_extract.fs");
     loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/bloom_blur.fs");
     loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/exposure_downsample.fs");

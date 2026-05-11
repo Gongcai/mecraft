@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <iostream>
+#include <fstream>
+#include <vector>
 
 DeferredRenderTargets::~DeferredRenderTargets() {
     shutdown();
@@ -71,9 +73,19 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
     glTextureParameterfv(m_shadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    // Shadow color: albedo for colored shadows / caustics (RGBA8)
+    m_shadowColor = createTexture2D(GL_RGBA8, m_shadowResolution, m_shadowResolution,
+                                    GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_shadowColor, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    // Shadow normal: encoded normal + skylight (RG16F)
+    m_shadowNormal = createTexture2D(GL_RG16F, m_shadowResolution, m_shadowResolution,
+                                     GL_RG, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_shadowNormal, GL_TEXTURE_BORDER_COLOR, kBorderColor);
     glNamedFramebufferTexture(m_shadowFbo, GL_DEPTH_ATTACHMENT, m_shadowDepth, 0);
-    glNamedFramebufferDrawBuffer(m_shadowFbo, GL_NONE);
-    glNamedFramebufferReadBuffer(m_shadowFbo, GL_NONE);
+    glNamedFramebufferTexture(m_shadowFbo, GL_COLOR_ATTACHMENT0, m_shadowColor, 0);
+    glNamedFramebufferTexture(m_shadowFbo, GL_COLOR_ATTACHMENT1, m_shadowNormal, 0);
+    const GLenum shadowDrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glNamedFramebufferDrawBuffers(m_shadowFbo, 2, shadowDrawBuffers);
     if (!checkFramebufferComplete(m_shadowFbo, "ShadowMap")) {
         shutdown();
         return false;
@@ -85,6 +97,17 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     const GLenum ssaoDrawBuffer = GL_COLOR_ATTACHMENT0;
     glNamedFramebufferDrawBuffers(m_ssaoFbo, 1, &ssaoDrawBuffer);
     if (!checkFramebufferComplete(m_ssaoFbo, "SSAO")) {
+        shutdown();
+        return false;
+    }
+
+    // SSAO filtered output (bilateral filter resolves into this)
+    glCreateFramebuffers(1, &m_ssaoFilteredFbo);
+    m_ssaoFilteredTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_ssaoFilteredFbo, GL_COLOR_ATTACHMENT0, m_ssaoFilteredTex, 0);
+    const GLenum ssaoFilteredDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_ssaoFilteredFbo, 1, &ssaoFilteredDrawBuffer);
+    if (!checkFramebufferComplete(m_ssaoFilteredFbo, "SSAOFiltered")) {
         shutdown();
         return false;
     }
@@ -245,12 +268,24 @@ void DeferredRenderTargets::bindGBuffer() {
 void DeferredRenderTargets::bindShadowMap() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_shadowFbo);
     glViewport(0, 0, m_shadowResolution, m_shadowResolution);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
+    const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, drawBuffers);
+}
+
+void DeferredRenderTargets::bindShadowColor() {
+    // Read-only binding for sampling shadow color/normal in lighting pass
+    // No-op: textures are accessed via shadowColorTexture()/shadowNormalTexture()
 }
 
 void DeferredRenderTargets::bindSsao() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindSsaoFiltered() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoFilteredFbo);
     glViewport(0, 0, m_width, m_height);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
@@ -578,7 +613,10 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_gMaterialAux,
         m_gDepth,
         m_shadowDepth,
+        m_shadowColor,
+        m_shadowNormal,
         m_ssaoTex,
+        m_ssaoFilteredTex,
         m_sceneLightingTex,
         m_sceneCompositeTex,
         m_sceneResolvedTex,
@@ -607,7 +645,10 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gMaterialAux = 0;
     m_gDepth = 0;
     m_shadowDepth = 0;
+    m_shadowColor = 0;
+    m_shadowNormal = 0;
     m_ssaoTex = 0;
+    m_ssaoFilteredTex = 0;
     m_sceneLightingTex = 0;
     m_sceneCompositeTex = 0;
     m_sceneResolvedTex = 0;
@@ -623,7 +664,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
     m_velocityTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -633,6 +674,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gBufferFbo = 0;
     m_shadowFbo = 0;
     m_ssaoFbo = 0;
+    m_ssaoFilteredFbo = 0;
     m_sceneLightingFbo = 0;
     m_sceneCompositeFbo = 0;
     m_sceneResolvedFbo = 0;
@@ -654,4 +696,54 @@ void DeferredRenderTargets::destroyFullscreenTriangle() {
         glDeleteVertexArrays(1, &m_fullscreenVao);
         m_fullscreenVao = 0;
     }
+}
+
+bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
+    if (m_atmosphereLut3d != 0) {
+        glDeleteTextures(1, &m_atmosphereLut3d);
+        m_atmosphereLut3d = 0;
+    }
+
+    // Final.lut layout: 256 x 128 x 33, RGBA32F
+    constexpr int kLutWidth = 256;
+    constexpr int kLutHeight = 128;
+    constexpr int kLutDepth = 33;
+    constexpr size_t kExpectedSize = size_t(kLutWidth) * kLutHeight * kLutDepth * 4 * sizeof(float);
+
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::cerr << "AtmosphereLUT: failed to open " << path << "\n";
+        return false;
+    }
+
+    const auto fileSize = static_cast<size_t>(file.tellg());
+    if (fileSize != kExpectedSize) {
+        std::cerr << "AtmosphereLUT: unexpected file size " << fileSize
+                  << " (expected " << kExpectedSize << ")\n";
+        return false;
+    }
+
+    file.seekg(0, std::ios::beg);
+    std::vector<float> data(kLutWidth * kLutHeight * kLutDepth * 4);
+    if (!file.read(reinterpret_cast<char*>(data.data()), kExpectedSize)) {
+        std::cerr << "AtmosphereLUT: failed to read data\n";
+        return false;
+    }
+
+    glCreateTextures(GL_TEXTURE_3D, 1, &m_atmosphereLut3d);
+    glTextureStorage3D(m_atmosphereLut3d, 1, GL_RGBA32F, kLutWidth, kLutHeight, kLutDepth);
+    glTextureSubImage3D(m_atmosphereLut3d, 0, 0, 0, 0,
+                        kLutWidth, kLutHeight, kLutDepth,
+                        GL_RGBA, GL_FLOAT, data.data());
+    glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    // z=32 layer is the sky output (rendered at runtime); make sure it's writable
+    // by NOT marking the texture as immutable after upload. Storage is already allocated.
+
+    std::cout << "AtmosphereLUT: loaded " << path << " (256x128x33 RGBA32F)\n";
+    return true;
 }

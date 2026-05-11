@@ -109,6 +109,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     m_temporalResolveShader = resourceMgr.getShader("temporal_resolve");
     m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
+    m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
+    m_motionBlurShader = resourceMgr.getShader("motion_blur");
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
@@ -116,6 +118,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     initBreakOverlayMesh();
     m_worldRenderBuffer.init();
     m_deferredTargets.init();
+    m_deferredTargets.loadAtmosphereLut("assets/textures/atmosphere/Final.lut");
     m_gameplaySkyRenderer.init(resourceMgr);
 #ifdef MECRAFT_DEBUG
     initGpuTimers();
@@ -195,6 +198,8 @@ void Renderer::shutdown() {
     m_bloomBlurShader = nullptr;
     m_temporalResolveShader = nullptr;
     m_reflectionFilterShader = nullptr;
+    m_ssaoFilterShader = nullptr;
+    m_motionBlurShader = nullptr;
     m_deferredFrameActive = false;
 }
 
@@ -1071,6 +1076,8 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     shader.setInt("uHistoryReflectionTex", 10);
     shader.setInt("uHistoryCloudTex", 11);
     shader.setInt("uSkyCaptureTex", 12);
+    shader.setInt("uAlbedoTex", 13);
+    shader.setInt("uAtmosphereLut", 14);
     shader.setMat4("uViewProj", frame.viewProj);
     shader.setMat4("uInvViewProj", frame.invViewProj);
     shader.setMat4("uPreviousViewProj", frame.previousViewProj);
@@ -1109,6 +1116,10 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyCloudTexturePrev());
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE13);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());
+    glActiveTexture(GL_TEXTURE14);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
 }
 
 void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const {
@@ -1243,6 +1254,9 @@ bool Renderer::renderWorldDeferred(const World& world,
         beginGpuTimer(GpuTimerPass::Ssao);
 #endif
         renderSsaoPass(camera, window);
+        if (m_pipelineSettings.ssaoFilterEnabled && m_ssaoFilterShader != nullptr) {
+            renderSsaoFilterPass();
+        }
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Ssao);
 #endif
@@ -1301,6 +1315,12 @@ bool Renderer::renderWorldDeferred(const World& world,
         m_temporalResolveShader != nullptr &&
         m_hasPreviousFrameData) {
         renderTemporalResolvePass(frame);
+    }
+    // Motion blur (applied after TAA, before transparent compositing)
+    if (m_pipelineSettings.motionBlurEnabled &&
+        m_motionBlurShader != nullptr &&
+        m_hasPreviousFrameData) {
+        renderMotionBlurPass(frame);
     }
     m_deferredTargets.copySceneResolvedToTransparentComposite();
     updateDeferredHistoryTargets();
@@ -1499,6 +1519,9 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
     m_deferredLightingShader->setFloat("uTime", frame.shaderTime);
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uShadowColorTex", 12);
+    m_deferredLightingShader->setInt("uShadowNormalTex", 13);
+    m_deferredLightingShader->setInt("uAtmosphereLut", 14);
     bindFogUniforms(*m_deferredLightingShader, frame);
 
     glActiveTexture(GL_TEXTURE0);
@@ -1520,37 +1543,26 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    glBindTexture(GL_TEXTURE_2D, m_pipelineSettings.ssaoFilterEnabled && m_ssaoFilterShader != nullptr
+        ? m_deferredTargets.ssaoFilteredTexture() : m_deferredTargets.ssaoTexture());
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowColorTexture());
+    glActiveTexture(GL_TEXTURE13);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowNormalTexture());
+    glActiveTexture(GL_TEXTURE14);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     renderFullscreen(*m_deferredLightingShader);
 
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    for (int i = 14; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE14);
+    glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
@@ -1664,6 +1676,7 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uMaterialTex", 3);
     m_reflectionShader->setInt("uMaterialAuxTex", 4);
     m_reflectionShader->setInt("uSkyCaptureTex", 5);
+    m_reflectionShader->setInt("uAtmosphereLut", 6);
     m_reflectionShader->setMat4("uViewProj", frame.viewProj);
     m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
     m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
@@ -1682,13 +1695,16 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     renderFullscreen(*m_reflectionShader);
 
-    for (int unit = 5; unit >= 0; --unit) {
+    for (int unit = 6; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
-    glActiveTexture(GL_TEXTURE0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
@@ -1709,6 +1725,7 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     m_cloudShader->setInt("uDepthTex", 0);
     m_cloudShader->setInt("uSkyCaptureTex", 1);
     m_cloudShader->setInt("uNoiseTex", 2);
+    m_cloudShader->setInt("uAtmosphereLut", 3);
     m_cloudShader->setMat4("uInvViewProj", frame.invViewProj);
     bindSkyLightingUniforms(*m_cloudShader, frame);
     bindAtmosphereUniforms(*m_cloudShader, frame);
@@ -1723,14 +1740,16 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     renderFullscreen(*m_cloudShader);
 
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    for (int i = 3; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
@@ -1748,6 +1767,8 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
     m_volumetricFogShader->setInt("uNoiseTex", 2);
     m_volumetricFogShader->setInt("uShadowMap", 3);
+    m_volumetricFogShader->setInt("uShadowColorTex", 4);
+    m_volumetricFogShader->setInt("uAtmosphereLut", 5);
     m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
     bindShadowFrameUniforms(*m_volumetricFogShader, frame);
     bindSkyLightingUniforms(*m_volumetricFogShader, frame);
@@ -1767,15 +1788,17 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, noiseTexture);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowColorTexture());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     renderFullscreen(*m_volumetricFogShader);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    for (int i = 5; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_3D, 0);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -1900,6 +1923,81 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
     renderFullscreen(*m_temporalResolveShader);
 
     for (int i = 4; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderSsaoFilterPass() {
+    if (m_ssaoFilterShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindSsaoFiltered();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_ssaoFilterShader->use();
+    m_ssaoFilterShader->setInt("uSsaoTex", 0);
+    m_ssaoFilterShader->setInt("uDepthTex", 1);
+    m_ssaoFilterShader->setInt("uNormalAoTex", 2);
+    m_ssaoFilterShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    renderFullscreen(*m_ssaoFilterShader);
+
+    for (int i = 2; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderMotionBlurPass(const RenderFrameData& frame) {
+    if (m_motionBlurShader == nullptr) {
+        return;
+    }
+
+    // Save current SceneResolved to history[current] so we can read it while writing SceneResolved
+    m_deferredTargets.copySceneResolvedToHistory();
+
+    m_deferredTargets.bindSceneResolved();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_motionBlurShader->use();
+    m_motionBlurShader->setInt("uSceneTex", 0);
+    m_motionBlurShader->setInt("uVelocityTex", 1);
+    m_motionBlurShader->setInt("uDepthTex", 2);
+    m_motionBlurShader->setFloat("uStrength", m_pipelineSettings.motionBlurStrength);
+    m_motionBlurShader->setInt("uSamples", m_pipelineSettings.motionBlurSamples);
+    m_motionBlurShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    renderFullscreen(*m_motionBlurShader);
+
+    for (int i = 2; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }

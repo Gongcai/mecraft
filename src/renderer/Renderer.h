@@ -73,9 +73,13 @@ public:
         bool volumetricFogEnabled = true;
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
+        bool ssaoFilterEnabled = true;
+        bool motionBlurEnabled = false;
         float taaBlendMin = 0.04f;
         float taaBlendMax = 0.20f;
         float reflectionFilterStrength = 1.0f;
+        float motionBlurStrength = 1.0f;
+        int motionBlurSamples = 8;
         float sceneCloudCompositeStrength = 0.0f;
         float sceneReflectionCompositeStrength = 0.0f;
         int debugViewMode = 0;
@@ -480,6 +484,8 @@ private:
     void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass();
     void renderTemporalResolvePass(const RenderFrameData& frame);
+    void renderSsaoFilterPass();
+    void renderMotionBlurPass(const RenderFrameData& frame);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
@@ -557,6 +563,8 @@ private:
     Shader* m_bloomBlurShader = nullptr;
     Shader* m_temporalResolveShader = nullptr;
     Shader* m_reflectionFilterShader = nullptr;
+    Shader* m_ssaoFilterShader = nullptr;
+    Shader* m_motionBlurShader = nullptr;
    // Shader* m_uiShader = nullptr;
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;

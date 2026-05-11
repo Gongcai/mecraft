@@ -10,6 +10,7 @@ uniform sampler2D uNormalAoTex;
 uniform sampler2D uMaterialTex;
 uniform sampler2D uMaterialAuxTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler3D uAtmosphereLut;
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
 uniform vec3 uCameraPos;

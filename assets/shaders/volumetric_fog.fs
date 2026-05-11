@@ -7,6 +7,8 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uShadowMap;
+uniform sampler2D uShadowColorTex;
+uniform sampler3D uAtmosphereLut;
 uniform mat4 uInvViewProj;
 uniform mat4 uShadowViewProj;
 uniform mat4 uShadowModelView;

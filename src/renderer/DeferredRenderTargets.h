@@ -14,7 +14,9 @@ public:
 
     void bindGBuffer();
     void bindShadowMap();
+    void bindShadowColor();
     void bindSsao();
+    void bindSsaoFiltered();
     void bindSceneLighting();
     void bindSceneComposite();
     void bindSceneResolved();
@@ -50,7 +52,10 @@ public:
     [[nodiscard]] GLuint materialAuxTexture() const { return m_gMaterialAux; }
     [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
+    [[nodiscard]] GLuint shadowColorTexture() const { return m_shadowColor; }
+    [[nodiscard]] GLuint shadowNormalTexture() const { return m_shadowNormal; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
+    [[nodiscard]] GLuint ssaoFilteredTexture() const { return m_ssaoFilteredTex; }
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] GLuint sceneCompositeTexture() const { return m_sceneCompositeTex; }
     [[nodiscard]] GLuint sceneResolvedTexture() const { return m_sceneResolvedTex; }
@@ -73,6 +78,8 @@ public:
     [[nodiscard]] GLuint historyCloudTexture() const { return m_historyCloudTex[m_currentHistoryIndex]; }
     [[nodiscard]] GLuint historyCloudTexturePrev() const { return m_historyCloudTex[1 - m_currentHistoryIndex]; }
     [[nodiscard]] GLuint velocityTexture() const { return m_velocityTex; }
+    [[nodiscard]] GLuint atmosphereLutTexture() const { return m_atmosphereLut3d; }
+    bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
     void swapHistory() { m_currentHistoryIndex = 1 - m_currentHistoryIndex; }
     [[nodiscard]] GLuint fullscreenVao() const { return m_fullscreenVao; }
@@ -119,9 +126,13 @@ private:
 
     GLuint m_shadowFbo = 0;
     GLuint m_shadowDepth = 0;
+    GLuint m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
+    GLuint m_shadowNormal = 0;  // RG16F: encoded normal for shadow normal offset / SSS
 
     GLuint m_ssaoFbo = 0;
     GLuint m_ssaoTex = 0;
+    GLuint m_ssaoFilteredFbo = 0;
+    GLuint m_ssaoFilteredTex = 0;
 
     GLuint m_sceneLightingFbo = 0;
     GLuint m_sceneLightingTex = 0;
@@ -164,6 +175,9 @@ private:
     // Velocity buffer (RG16F encodes screen-space velocity xy)
     GLuint m_velocityFbo = 0;
     GLuint m_velocityTex = 0;
+
+    // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
+    GLuint m_atmosphereLut3d = 0;
 
     GLuint m_fullscreenVao = 0;
 
