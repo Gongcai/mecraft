@@ -23,6 +23,11 @@ uniform sampler2D uOpaqueDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uSceneColorTex;
 uniform sampler2D uWaterNoiseTex;
+uniform sampler2D uNormalAoTex;
+uniform sampler2D uMaterialTex;
+uniform sampler2D uMaterialAuxTex;
+uniform sampler2D uReflectionTex;
+uniform sampler2D uShadowMap;
 uniform int uSkyCaptureEnabled;
 uniform int uCompositeInputsEnabled;
 uniform int uWaterCompositeEnabled;
@@ -35,6 +40,9 @@ uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
 uniform vec3 uWaterAbsorption;
 uniform vec3 uCameraPos;
+uniform vec3 uSunDirection;
+uniform vec3 uSunLightColor;
+uniform float uWeatherWetness;
 
 out vec4 FragColor;
 

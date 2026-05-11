@@ -107,6 +107,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_cloudShader = resourceMgr.getShader("cloud_target");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
+    m_temporalResolveShader = resourceMgr.getShader("temporal_resolve");
+    m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
@@ -191,6 +193,8 @@ void Renderer::shutdown() {
     m_cloudShader = nullptr;
     m_bloomExtractShader = nullptr;
     m_bloomBlurShader = nullptr;
+    m_temporalResolveShader = nullptr;
+    m_reflectionFilterShader = nullptr;
     m_deferredFrameActive = false;
 }
 
@@ -269,6 +273,11 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uSkyCaptureTex", 6);
     m_waterCompositeShader->setInt("uSceneColorTex", 7);
     m_waterCompositeShader->setInt("uWaterNoiseTex", 8);
+    m_waterCompositeShader->setInt("uNormalAoTex", 9);
+    m_waterCompositeShader->setInt("uMaterialTex", 10);
+    m_waterCompositeShader->setInt("uMaterialAuxTex", 11);
+    m_waterCompositeShader->setInt("uReflectionTex", 12);
+    m_waterCompositeShader->setInt("uShadowMap", 13);
     m_waterCompositeShader->setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
@@ -277,6 +286,9 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setFloat("uWindTime", frame.shaderTime * 0.003f);
     m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
     m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(1.0f));
+    m_waterCompositeShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
+    m_waterCompositeShader->setVec3("uSunLightColor", frame.skyColors.sunLightColor);
+    m_waterCompositeShader->setFloat("uWeatherWetness", frame.weatherWetness);
 
     if (m_resourceMgr) {
         const TextureAnimationInfo still = m_resourceMgr->getTextureAnimation("water_still");
@@ -297,6 +309,16 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneResolvedTexture());
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    glActiveTexture(GL_TEXTURE13);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -1244,6 +1266,10 @@ bool Renderer::renderWorldDeferred(const World& world,
         endGpuTimer(GpuTimerPass::Reflection);
 #endif
     }
+    if (m_pipelineSettings.reflectionFilterEnabled &&
+        m_reflectionFilterShader != nullptr) {
+        renderReflectionFilterPass(frame);
+    }
     if (m_cloudShader != nullptr) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Cloud);
@@ -1270,10 +1296,14 @@ bool Renderer::renderWorldDeferred(const World& world,
         endGpuTimer(GpuTimerPass::Volumetric);
 #endif
     }
-    m_deferredTargets.copySceneResolvedToTransparentComposite();
-    if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
-        updateDeferredHistoryTargets();
+    // TAA resolve: blend current SceneResolved with reprojected history
+    if (m_pipelineSettings.taaEnabled &&
+        m_temporalResolveShader != nullptr &&
+        m_hasPreviousFrameData) {
+        renderTemporalResolvePass(frame);
     }
+    m_deferredTargets.copySceneResolvedToTransparentComposite();
+    updateDeferredHistoryTargets();
     if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
         renderDeferredDebugView(m_capturedFramebuffer, capturedWidth, capturedHeight);
     } else {
@@ -1778,6 +1808,101 @@ void Renderer::compositeVolumetricFogPass() {
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderReflectionFilterPass(const RenderFrameData& frame) {
+    if (m_reflectionFilterShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindReflection();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_reflectionFilterShader->use();
+    m_reflectionFilterShader->setInt("uReflectionTex", 0);
+    m_reflectionFilterShader->setInt("uDepthTex", 1);
+    m_reflectionFilterShader->setInt("uNormalAoTex", 2);
+    m_reflectionFilterShader->setInt("uMaterialTex", 3);
+    m_reflectionFilterShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_reflectionFilterShader->setFloat("uFilterStrength", m_pipelineSettings.reflectionFilterStrength);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+    renderFullscreen(*m_reflectionFilterShader);
+
+    for (int i = 3; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
+    if (m_temporalResolveShader == nullptr) {
+        return;
+    }
+
+    // Copy current SceneResolved to history[current] so we can read it while writing SceneResolved.
+    // history[current] = this frame's unresolved color, history[prev] = last frame's resolved color.
+    m_deferredTargets.copySceneResolvedToHistory();
+
+    m_deferredTargets.bindSceneResolved();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_temporalResolveShader->use();
+    m_temporalResolveShader->setInt("uCurrentTex", 0);
+    m_temporalResolveShader->setInt("uHistoryTex", 1);
+    m_temporalResolveShader->setInt("uVelocityTex", 2);
+    m_temporalResolveShader->setInt("uDepthTex", 3);
+    m_temporalResolveShader->setInt("uHistoryDepthTex", 4);
+
+    m_temporalResolveShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_temporalResolveShader->setMat4("uPreviousViewProj", frame.previousViewProj);
+    m_temporalResolveShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_temporalResolveShader->setVec2("uJitter", frame.jitter);
+    m_temporalResolveShader->setVec2("uPreviousJitter", frame.previousJitter);
+    m_temporalResolveShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex));
+    m_temporalResolveShader->setFloat("uBlendMin", m_pipelineSettings.taaBlendMin);
+    m_temporalResolveShader->setFloat("uBlendMax", m_pipelineSettings.taaBlendMax);
+
+    // uCurrentTex = this frame's unresolved color (now stored in history[current])
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
+    // uHistoryTex = previous frame's resolved color
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexturePrev());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyDepthTexturePrev());
+
+    renderFullscreen(*m_temporalResolveShader);
+
+    for (int i = 4; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);

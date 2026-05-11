@@ -71,6 +71,11 @@ public:
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
+        bool taaEnabled = true;
+        bool reflectionFilterEnabled = true;
+        float taaBlendMin = 0.04f;
+        float taaBlendMax = 0.20f;
+        float reflectionFilterStrength = 1.0f;
         float sceneCloudCompositeStrength = 0.0f;
         float sceneReflectionCompositeStrength = 0.0f;
         int debugViewMode = 0;
@@ -470,9 +475,11 @@ private:
     void renderVelocityPass(const RenderFrameData& frame);
     void updateDeferredHistoryTargets();
     void renderReflectionPass(const RenderFrameData& frame);
+    void renderReflectionFilterPass(const RenderFrameData& frame);
     void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass();
+    void renderTemporalResolvePass(const RenderFrameData& frame);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
@@ -548,6 +555,8 @@ private:
     Shader* m_cloudShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
+    Shader* m_temporalResolveShader = nullptr;
+    Shader* m_reflectionFilterShader = nullptr;
    // Shader* m_uiShader = nullptr;
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;
