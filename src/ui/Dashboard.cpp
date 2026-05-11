@@ -382,7 +382,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "History Scene",
             "Shadow Projection",
             "Shadow Visibility",
-            "Shadow Bias"
+            "Shadow Bias",
+            "Reflection Target",
+            "Cloud Target"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -464,13 +466,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 3;
             pipeline.shadowWarpMode = 2;
-            pipeline.contactShadowsEnabled = true;
-            pipeline.cloudShadowsEnabled = true;
+            pipeline.softShadowsEnabled = false;
+            pipeline.pcssShadowsEnabled = false;
+            pipeline.contactShadowsEnabled = false;
+            pipeline.cloudShadowsEnabled = false;
             pipeline.directSunStrength = 1.36f;
             pipeline.skyAmbientStrength = 0.36f;
             pipeline.minimumAmbient = 0.055f;
-            pipeline.contactShadowStrength = 0.24f;
-            pipeline.cloudShadowStrength = 0.16f;
+            pipeline.contactShadowStrength = 0.12f;
+            pipeline.cloudShadowStrength = 0.0f;
             pipeline.cloudShadowScale = 0.0045f;
             pipeline.cloudShadowSpeed = 0.018f;
             pipeline.shadowMinLight = 0.08f;
@@ -513,13 +517,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 3;
             pipeline.shadowWarpMode = 2;
-            pipeline.contactShadowsEnabled = true;
-            pipeline.cloudShadowsEnabled = true;
+            pipeline.softShadowsEnabled = false;
+            pipeline.pcssShadowsEnabled = false;
+            pipeline.contactShadowsEnabled = false;
+            pipeline.cloudShadowsEnabled = false;
             pipeline.directSunStrength = 1.58f;
             pipeline.skyAmbientStrength = 0.28f;
             pipeline.minimumAmbient = 0.04f;
-            pipeline.contactShadowStrength = 0.30f;
-            pipeline.cloudShadowStrength = 0.24f;
+            pipeline.contactShadowStrength = 0.16f;
+            pipeline.cloudShadowStrength = 0.0f;
             pipeline.cloudShadowScale = 0.0055f;
             pipeline.cloudShadowSpeed = 0.020f;
             pipeline.shadowMinLight = 0.055f;

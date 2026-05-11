@@ -560,7 +560,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 20);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 22);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -910,6 +910,23 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.weatherWetness = weather.wetness;
     frame.weatherStorm = weather.storm;
     frame.aerialReduction = weather.aerialReduction;
+    frame.atmosphere.aerialStrength = m_pipelineSettings.aerialStrength;
+    frame.atmosphere.horizonScatterStrength = m_pipelineSettings.horizonScatterStrength;
+    frame.atmosphere.sunWarmth = m_pipelineSettings.sunWarmth;
+    frame.atmosphere.skyCoolness = m_pipelineSettings.skyCoolness;
+    frame.atmosphere.weatherMist = frame.weatherMist;
+    frame.atmosphere.weatherWetness = frame.weatherWetness;
+    frame.atmosphere.weatherStorm = frame.weatherStorm;
+    frame.atmosphere.aerialReduction = frame.aerialReduction;
+    frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
+    frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
+    frame.volumetric.lightStrength = m_pipelineSettings.sunRayStrength;
+    frame.cloud.shadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
+    frame.cloud.shadowStrength = m_pipelineSettings.cloudShadowStrength;
+    frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
+    frame.cloud.shadowSpeed = m_pipelineSettings.cloudShadowSpeed;
+    frame.cloud.coverage = std::clamp(0.24f + frame.weatherMist * 0.28f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
+    frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
     shadowLightDirectionFromSkyColors(frame.skyColors, &frame.moonShadowActive);
     return frame;
 }
@@ -943,6 +960,38 @@ void Renderer::bindFogUniforms(Shader& shader, const RenderFrameData& frame) con
     shader.setFloat("uFogStart", frame.fogStart);
     shader.setFloat("uFogEnd", frame.fogEnd);
     shader.setFloat("uFogDensity", frame.fogDensity);
+}
+
+void Renderer::bindAtmosphereUniforms(Shader& shader, const RenderFrameData& frame) const {
+    shader.setFloat("uAerialStrength", frame.atmosphere.aerialStrength);
+    shader.setFloat("uHorizonScatterStrength", frame.atmosphere.horizonScatterStrength);
+    shader.setFloat("uSunWarmth", frame.atmosphere.sunWarmth);
+    shader.setFloat("uSkyCoolness", frame.atmosphere.skyCoolness);
+    shader.setFloat("uWeatherMist", frame.atmosphere.weatherMist);
+    shader.setFloat("uWeatherWetness", frame.atmosphere.weatherWetness);
+    shader.setFloat("uWeatherStorm", frame.atmosphere.weatherStorm);
+    shader.setFloat("uAerialReduction", frame.atmosphere.aerialReduction);
+}
+
+void Renderer::bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const {
+    shader.setInt("uVolumetricFogEnabled", frame.volumetric.fogEnabled ? 1 : 0);
+    shader.setFloat("uVolumetricFogStrength", frame.volumetric.fogStrength);
+    shader.setFloat("uVolumetricLightStrength", frame.volumetric.lightStrength);
+    shader.setFloat("uVolumetricPhaseG", frame.volumetric.phaseG);
+    shader.setFloat("uVolumetricBaseDensity", frame.volumetric.baseDensity);
+    shader.setFloat("uVolumetricHeightFalloff", frame.volumetric.heightFalloff);
+    shader.setFloat("uVolumetricMaxDistance", frame.volumetric.maxDistance);
+}
+
+void Renderer::bindCloudUniforms(Shader& shader, const RenderFrameData& frame) const {
+    shader.setInt("uCloudShadowsEnabled", frame.cloud.shadowsEnabled ? 1 : 0);
+    shader.setFloat("uCloudShadowStrength", frame.cloud.shadowStrength);
+    shader.setFloat("uCloudShadowScale", frame.cloud.shadowScale);
+    shader.setFloat("uCloudShadowSpeed", frame.cloud.shadowSpeed);
+    shader.setFloat("uCloudCoverage", frame.cloud.coverage);
+    shader.setFloat("uCloudDensity", frame.cloud.density);
+    shader.setFloat("uCloudHeight", frame.cloud.height);
+    shader.setFloat("uCloudThickness", frame.cloud.thickness);
 }
 
 void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const {
@@ -988,12 +1037,8 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     shader.setFloat("uBlockLightStrength", m_pipelineSettings.blockLightStrength);
     shader.setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
     shader.setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
-    shader.setFloat("uSunWarmth", m_pipelineSettings.sunWarmth);
-    shader.setFloat("uSkyCoolness", m_pipelineSettings.skyCoolness);
     shader.setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
-    shader.setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
-    shader.setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
-    bindWeatherUniforms(shader, frame, true);
+    bindAtmosphereUniforms(shader, frame);
     shader.setVec3("uWaterAbsorption", glm::vec3(1.0f));
     bindWaterEffectUniforms(shader, false);
 
@@ -1068,6 +1113,7 @@ bool Renderer::renderWorldDeferred(const World& world,
         restoreCapturedFramebufferViewport(window);
         return false;
     }
+    clearDeferredAuxiliaryTargets();
     renderSkyCapturePass(world);
 
     m_deferredFrameActive = true;
@@ -1299,17 +1345,13 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setFloat("uBlockLightStrength", m_pipelineSettings.blockLightStrength);
     m_deferredLightingShader->setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
     m_deferredLightingShader->setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
-    m_deferredLightingShader->setFloat("uSunWarmth", m_pipelineSettings.sunWarmth);
-    m_deferredLightingShader->setFloat("uSkyCoolness", m_pipelineSettings.skyCoolness);
     m_deferredLightingShader->setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
-    m_deferredLightingShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
-    m_deferredLightingShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
-    bindWeatherUniforms(*m_deferredLightingShader, frame, true);
+    bindAtmosphereUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uCloudShadowsEnabled", m_pipelineSettings.cloudShadowsEnabled ? 1 : 0);
+    bindCloudUniforms(*m_deferredLightingShader, frame);
     // Projection V2 keeps runtime sampling on the stable no-warp path; radial/quartic remain debug-only.
     const int effectiveShadowWarpMode = 2;
     m_deferredLightingShader->setInt("uShadowWarpMode", effectiveShadowWarpMode);
@@ -1317,9 +1359,6 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
-    m_deferredLightingShader->setFloat("uCloudShadowStrength", m_pipelineSettings.cloudShadowStrength);
-    m_deferredLightingShader->setFloat("uCloudShadowScale", m_pipelineSettings.cloudShadowScale);
-    m_deferredLightingShader->setFloat("uCloudShadowSpeed", m_pipelineSettings.cloudShadowSpeed);
     m_deferredLightingShader->setFloat("uTime", frame.shaderTime);
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
     bindFogUniforms(*m_deferredLightingShader, frame);
@@ -1374,6 +1413,22 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::clearDeferredAuxiliaryTargets() {
+    m_deferredTargets.bindReflection();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_deferredTargets.bindCloud();
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
 void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_deferredTargets.bindHalfRes();
     glDisable(GL_DEPTH_TEST);
@@ -1390,11 +1445,9 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
     bindShadowFrameUniforms(*m_volumetricFogShader, frame);
     bindSkyLightingUniforms(*m_volumetricFogShader, frame);
-    m_volumetricFogShader->setFloat("uAerialStrength", m_pipelineSettings.aerialStrength);
-    m_volumetricFogShader->setFloat("uHorizonScatterStrength", m_pipelineSettings.horizonScatterStrength);
-    m_volumetricFogShader->setFloat("uVolumetricFogStrength", m_pipelineSettings.volumetricFogStrength);
-    bindWeatherUniforms(*m_volumetricFogShader, frame, false);
-    m_volumetricFogShader->setFloat("uVolumetricLightStrength", m_pipelineSettings.sunRayStrength);
+    bindAtmosphereUniforms(*m_volumetricFogShader, frame);
+    bindVolumetricUniforms(*m_volumetricFogShader, frame);
+    bindCloudUniforms(*m_volumetricFogShader, frame);
     m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
@@ -1479,6 +1532,8 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uSkyCaptureTex", 11);
     m_deferredDebugShader->setInt("uVelocityTex", 12);
     m_deferredDebugShader->setInt("uHistorySceneTex", 13);
+    m_deferredDebugShader->setInt("uReflectionTex", 14);
+    m_deferredDebugShader->setInt("uCloudTex", 15);
     m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
@@ -1523,9 +1578,13 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
     glActiveTexture(GL_TEXTURE13);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
+    glActiveTexture(GL_TEXTURE14);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    glActiveTexture(GL_TEXTURE15);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.cloudTexture());
     renderFullscreen(*m_deferredDebugShader);
 
-    for (int unit = 13; unit >= 0; --unit) {
+    for (int unit = 15; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -1557,8 +1616,12 @@ glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer:
                                                       bool* moonShadowActive) const {
     const bool useMoonShadow = skyColors.moonVisibility > skyColors.sunVisibility;
     glm::vec3 direction = useMoonShadow ? skyColors.moonDirection : skyColors.sunDirection;
-    if (direction.y < 0.08f) {
-        direction.y = 0.08f;
+    direction = glm::normalize(direction);
+    if (direction.y < 0.12f) {
+        const glm::vec3 horizontal = glm::normalize(glm::vec3(direction.x, 0.0f, direction.z));
+        constexpr float kMinShadowElevation = 0.12f;
+        const float horizontalScale = std::sqrt(std::max(0.0f, 1.0f - kMinShadowElevation * kMinShadowElevation));
+        direction = horizontal * horizontalScale + glm::vec3(0.0f, kMinShadowElevation, 0.0f);
     }
     if (moonShadowActive != nullptr) {
         *moonShadowActive = useMoonShadow;
@@ -1568,51 +1631,17 @@ glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer:
 
 Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const {
     const float distance = std::max(16.0f, m_pipelineSettings.shadowDistance);
-    const float aspect = (std::abs(m_projection[0][0]) > 0.0001f)
-        ? std::clamp(std::abs(m_projection[1][1] / m_projection[0][0]), 0.25f, 4.0f)
-        : 1.0f;
-    const float nearPlane = std::max(0.01f, camera.getNear());
-    const float farPlane = std::clamp(distance, nearPlane + 1.0f, std::max(nearPlane + 1.0f, camera.getFar()));
-    const glm::mat4 cameraSliceProjection =
-        glm::perspective(glm::radians(camera.getFOV()), aspect, nearPlane, farPlane);
-    const glm::mat4 invCameraSliceViewProj = glm::inverse(cameraSliceProjection * camera.getViewMatrix());
-
-    std::array<glm::vec3, 8> frustumCorners{};
-    size_t cornerIndex = 0;
-    for (int z = 0; z < 2; ++z) {
-        for (int y = 0; y < 2; ++y) {
-            for (int x = 0; x < 2; ++x) {
-                const glm::vec4 clip(
-                    x == 0 ? -1.0f : 1.0f,
-                    y == 0 ? -1.0f : 1.0f,
-                    z == 0 ? -1.0f : 1.0f,
-                    1.0f);
-                glm::vec4 world = invCameraSliceViewProj * clip;
-                world /= std::max(std::abs(world.w), 0.00001f);
-                frustumCorners[cornerIndex++] = glm::vec3(world);
-            }
-        }
-    }
-
-    glm::vec3 center(0.0f);
-    for (const glm::vec3& corner : frustumCorners) {
-        center += corner;
-    }
-    center /= static_cast<float>(frustumCorners.size());
-
-    float radius = 0.0f;
-    for (const glm::vec3& corner : frustumCorners) {
-        radius = std::max(radius, glm::length(corner - center));
-    }
-    const float extent = std::max(16.0f, radius + std::max(6.0f, distance * 0.06f));
+    const float extent = distance + std::max(10.0f, distance * 0.18f);
     const glm::vec3 lightForward = glm::normalize(-lightDirection);
     const glm::vec3 fallbackUp =
         (std::abs(glm::dot(lightForward, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.96f)
             ? glm::vec3(0.0f, 0.0f, 1.0f)
             : glm::vec3(0.0f, 1.0f, 0.0f);
 
-    const float casterDepth = extent + distance * 0.78f;
-    const float receiverDepth = extent + distance * 0.58f;
+    glm::vec3 center = camera.getPosition();
+    center.y += std::clamp(distance * 0.08f, 4.0f, 18.0f);
+    const float casterDepth = extent + distance * 0.90f;
+    const float receiverDepth = extent + distance * 0.70f;
     const glm::vec3 lightPos = center - lightForward * casterDepth;
     glm::mat4 view = glm::lookAt(lightPos, center, fallbackUp);
 

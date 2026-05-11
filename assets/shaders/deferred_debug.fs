@@ -18,6 +18,8 @@ uniform sampler2D uVolumetricTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uVelocityTex;
 uniform sampler2D uHistorySceneTex;
+uniform sampler2D uReflectionTex;
+uniform sampler2D uCloudTex;
 uniform mat4 uShadowViewProj;
 uniform mat4 uShadowProjectionInverse;
 uniform mat4 uInvViewProj;
@@ -249,6 +251,15 @@ void main() {
         float biasTexels = biasWorld / max(uShadowTexelWorldSize, 0.0001);
         float offsetTexels = offsetWorld / max(uShadowTexelWorldSize, 0.0001);
         FragColor = vec4(heatmap(biasTexels / 4.0).r, heatmap(offsetTexels / 4.0).g, clamp(1.0 - ndotl, 0.0, 1.0), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 21) {
+        FragColor = vec4(tonemapPreview(texture(uReflectionTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 22) {
+        vec4 cloud = texture(uCloudTex, vTexCoord);
+        FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
 

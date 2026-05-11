@@ -23,6 +23,10 @@ uniform float uMoonVisibility;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uVolumetricFogStrength;
+uniform float uVolumetricPhaseG;
+uniform float uVolumetricBaseDensity;
+uniform float uVolumetricHeightFalloff;
+uniform float uVolumetricMaxDistance;
 uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
@@ -32,7 +36,12 @@ uniform float uShadowTexelWorldSize;
 uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uVolumetricLightStrength;
+uniform float uCloudCoverage;
+uniform float uCloudDensity;
+uniform float uCloudHeight;
+uniform float uCloudThickness;
 uniform int uShadowsEnabled;
+uniform int uVolumetricFogEnabled;
 uniform int uShadowLightMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
@@ -203,7 +212,8 @@ void main() {
     float sunForward = pow(sunDot, 18.0);
     float sunWide = pow(sunDot, 4.0);
     float moonForward = pow(moonDot, 10.0) * clamp(uMoonVisibility, 0.0, 1.0);
-    float sunPhase = rayleighPhase(dot(viewDir, sunDir)) * 0.35 + henyeyGreenstein(dot(viewDir, sunDir), 0.58) * 0.65;
+    float phaseG = clamp(uVolumetricPhaseG, -0.2, 0.85);
+    float sunPhase = rayleighPhase(dot(viewDir, sunDir)) * 0.35 + henyeyGreenstein(dot(viewDir, sunDir), phaseG) * 0.65;
     float moonPhase = rayleighPhase(dot(viewDir, moonDir)) * 0.55 + henyeyGreenstein(dot(viewDir, moonDir), 0.36) * 0.45;
     vec3 sunScatterColor = uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                            sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
@@ -216,10 +226,13 @@ void main() {
     vec3 directFogColor = sunScatterColor + moonScatterColor;
 
     float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
+    strength *= (uVolumetricFogEnabled != 0) ? 1.0 : 0.0;
     float baseDensity = (0.00010 + 0.00024 * horizon) *
                         strength *
+                        max(uVolumetricBaseDensity, 0.0) *
                         (0.58 + weatherHaze * 1.45);
     float jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
+    marchDistance = min(marchDistance, max(uVolumetricMaxDistance, 1.0));
     float stepLength = marchDistance / float(kFogSteps);
     vec3 scattering = vec3(0.0);
     float transmittance = 1.0;
@@ -227,13 +240,13 @@ void main() {
     for (int i = 0; i < kFogSteps; ++i) {
         float t = (float(i) + jitter) / float(kFogSteps);
         vec3 samplePos = uCameraPos + viewDir * (t * marchDistance);
-        float heightDensity = exp2(min((92.0 - samplePos.y) * 0.022, 0.35));
+        float heightDensity = exp2(min((92.0 - samplePos.y) * max(uVolumetricHeightFalloff, 0.0001), 0.35));
         heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
         heightDensity = clamp(heightDensity, 0.035, 1.45);
 
-        float coverage = 0.08 + uWeatherMist * 0.72 + uWeatherWetness * 0.32 + uWeatherStorm * 0.82;
+        float coverage = max(uCloudCoverage, 0.08 + uWeatherMist * 0.72 + uWeatherWetness * 0.32 + uWeatherStorm * 0.82);
         float structure = structuredFogDensity(samplePos, heightDensity, coverage);
-        float clearAir = 0.06 + weatherHaze * 0.18;
+        float clearAir = (0.06 + weatherHaze * 0.18) * max(uCloudDensity, 0.0);
         structure += clearAir;
         float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
         float sampleDensity = baseDensity * heightDensity * structure * nearFade;

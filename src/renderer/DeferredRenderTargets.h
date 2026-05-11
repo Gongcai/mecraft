@@ -18,6 +18,8 @@ public:
     void bindSceneLighting();
     void bindTransparentComposite();
     void bindHalfRes();
+    void bindReflection();
+    void bindCloud();
     void bindDefaultLike(GLint framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
     void copyFramebufferColorToTransparentComposite(GLint framebuffer, int width, int height) const;
@@ -38,6 +40,8 @@ public:
     [[nodiscard]] GLuint transparentCompositeTexture() const { return m_transparentCompositeTex; }
     [[nodiscard]] GLuint transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
     [[nodiscard]] GLuint halfResTexture() const { return m_halfResTex; }
+    [[nodiscard]] GLuint reflectionTexture() const { return m_reflectionTex; }
+    [[nodiscard]] GLuint cloudTexture() const { return m_cloudTex; }
     [[nodiscard]] GLuint skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
     [[nodiscard]] GLuint skyCaptureTexture() const { return m_skyCaptureTex; }
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
@@ -104,6 +108,12 @@ private:
 
     GLuint m_halfResFbo = 0;
     GLuint m_halfResTex = 0;
+
+    GLuint m_reflectionFbo = 0;
+    GLuint m_reflectionTex = 0;
+
+    GLuint m_cloudFbo = 0;
+    GLuint m_cloudTex = 0;
 
     GLuint m_skyCaptureFbo = 0;
     GLuint m_skyCaptureTex = 0;

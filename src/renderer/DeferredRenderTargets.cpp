@@ -121,6 +121,26 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    glCreateFramebuffers(1, &m_reflectionFbo);
+    m_reflectionTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_reflectionFbo, GL_COLOR_ATTACHMENT0, m_reflectionTex, 0);
+    const GLenum reflectionDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_reflectionFbo, 1, &reflectionDrawBuffer);
+    if (!checkFramebufferComplete(m_reflectionFbo, "Reflection")) {
+        shutdown();
+        return false;
+    }
+
+    glCreateFramebuffers(1, &m_cloudFbo);
+    m_cloudTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_cloudFbo, GL_COLOR_ATTACHMENT0, m_cloudTex, 0);
+    const GLenum cloudDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_cloudFbo, 1, &cloudDrawBuffer);
+    if (!checkFramebufferComplete(m_cloudFbo, "Cloud")) {
+        shutdown();
+        return false;
+    }
+
     glCreateFramebuffers(1, &m_skyCaptureFbo);
     m_skyCaptureTex = createTexture2D(GL_RGBA16F, kSkyCaptureWidth, kSkyCaptureHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_skyCaptureFbo, GL_COLOR_ATTACHMENT0, m_skyCaptureTex, 0);
@@ -208,6 +228,20 @@ void DeferredRenderTargets::bindTransparentComposite() {
 
 void DeferredRenderTargets::bindHalfRes() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_halfResFbo);
+    glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindReflection() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionFbo);
+    glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindCloud() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_cloudFbo);
     glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
@@ -347,6 +381,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_transparentCompositeTex,
         m_transparentCompositeDepth,
         m_halfResTex,
+        m_reflectionTex,
+        m_cloudTex,
         m_skyCaptureTex,
         m_historySceneTex[0], m_historySceneTex[1],
         m_historyDepthTex[0], m_historyDepthTex[1],
@@ -369,12 +405,14 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_transparentCompositeTex = 0;
     m_transparentCompositeDepth = 0;
     m_halfResTex = 0;
+    m_reflectionTex = 0;
+    m_cloudTex = 0;
     m_skyCaptureTex = 0;
     m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;
     m_historyDepthTex[0] = 0; m_historyDepthTex[1] = 0;
     m_velocityTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_velocityFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_velocityFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -387,6 +425,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_sceneLightingFbo = 0;
     m_transparentCompositeFbo = 0;
     m_halfResFbo = 0;
+    m_reflectionFbo = 0;
+    m_cloudFbo = 0;
     m_skyCaptureFbo = 0;
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
     m_velocityFbo = 0;

@@ -70,6 +70,10 @@ uniform float uContactShadowStrength;
 uniform float uCloudShadowStrength;
 uniform float uCloudShadowScale;
 uniform float uCloudShadowSpeed;
+uniform float uCloudCoverage;
+uniform float uCloudDensity;
+uniform float uCloudHeight;
+uniform float uCloudThickness;
 uniform float uTime;
 uniform int uSsaoEnabled;
 uniform int uFogEnabled;
@@ -243,10 +247,11 @@ float compareShadowBilinear(vec3 proj, vec2 offsetTexels, float bias) {
     return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
 }
 
-float stableShadowJitter(vec3 proj) {
-    ivec2 size = textureSize(uShadowMap, 0);
-    vec2 shadowTexel = floor(proj.xy * vec2(size));
-    return fract(52.9829189 * fract(dot(shadowTexel, vec2(0.06711056, 0.00583715))));
+float stableShadowJitter() {
+    // Keep the soft-shadow kernel fixed for now. A per-shadow-texel hash rotates the PCF/PCSS
+    // pattern whenever the sun or snapped projection crosses texel boundaries, which shows up as
+    // moving striped ghosting even with a stationary camera.
+    return 0.5;
 }
 
 float noise2D(vec2 uv) {
@@ -259,7 +264,7 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     }
 
     lightDir = normalize(lightDir);
-    float layerHeight = 176.0;
+    float layerHeight = max(uCloudHeight, 1.0);
     float denom = max(abs(lightDir.y), 0.18);
     float t = (layerHeight - worldPos.y) / denom;
     vec2 cloudPos = (worldPos.xz + lightDir.xz * t) * max(uCloudShadowScale, 0.0001);
@@ -267,9 +272,10 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
 
     float large = noise2D(cloudPos + wind);
     float medium = noise2D(cloudPos * 2.37 - wind * 1.7);
-    float coverage = smoothstep(0.48, 0.78, large * 0.72 + medium * 0.28);
+    float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
+    float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
     float weatherBoost = clamp(uWeatherMist * 0.25 + uWeatherWetness * 0.32 + uWeatherStorm * 0.58, 0.0, 0.65);
-    float strength = uCloudShadowStrength * outdoorMask * (1.0 + weatherBoost);
+    float strength = uCloudShadowStrength * outdoorMask * max(uCloudDensity, 0.0) * (1.0 + weatherBoost);
     return 1.0 - coverage * clamp(strength, 0.0, 0.85);
 }
 
@@ -343,8 +349,8 @@ float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
 vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) {
     float blockerDepthSum = 0.0;
     float blockerCount = 0.0;
-    for (int i = 0; i < 8; ++i) {
-        vec2 offset = spiralDiskSample(i, 8, jitter) * searchRadius;
+    for (int i = 0; i < 12; ++i) {
+        vec2 offset = spiralDiskSample(i, 12, jitter) * searchRadius;
         float blockerDepth = sampleShadowDepthAt(proj, offset);
         float isBlocker = step(blockerDepth, proj.z - bias) * (1.0 - step(0.9999, blockerDepth));
         blockerDepthSum += blockerDepth * isBlocker;
@@ -377,7 +383,7 @@ float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensit
     float penumbraTexels = receiverToBlockerWorld / max(uShadowTexelWorldSize, 0.0001);
     penumbraTexels *= 0.10 * uShadowPcssStrength / max(warpDensity, 0.25);
 
-    float blockerConfidence = smoothstep(0.5, 3.5, blockerCount);
+    float blockerConfidence = smoothstep(1.5, 5.5, blockerCount);
     float adaptiveRadius = clamp(0.85 + penumbraTexels, 0.85, max(baseRadius, 1.0));
     return mix(min(baseRadius, 1.15), adaptiveRadius, blockerConfidence);
 }
@@ -418,7 +424,7 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float filterWarpDensity = calculateShadowWarp(centeredShadow);
     float radius = clamp(max(uShadowSoftness, 0.1) * (1.05 + 0.34 * distanceSoftness + 0.20 * grazingSoftness) * filterWarpDensity,
                          1.25, 7.5);
-    float jitter = stableShadowJitter(proj);
+    float jitter = stableShadowJitter();
     radius = pcssFilterRadius(proj, radius, bias, warpDensity, jitter);
     float lit = 0.0;
     for (int i = 0; i < 24; ++i) {

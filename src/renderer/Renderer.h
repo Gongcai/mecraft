@@ -52,10 +52,10 @@ public:
     struct RenderPipelineSettings {
         RenderPipelineMode mode = RenderPipelineMode::HybridDeferred;
         bool shadowsEnabled = true;
-        bool softShadowsEnabled = true;
-        bool pcssShadowsEnabled = true;
-        bool contactShadowsEnabled = true;
-        bool cloudShadowsEnabled = true;
+        bool softShadowsEnabled = false;
+        bool pcssShadowsEnabled = false;
+        bool contactShadowsEnabled = false;
+        bool cloudShadowsEnabled = false;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
         float bloomThreshold = 0.82f;
@@ -82,8 +82,8 @@ public:
         float shadowConstantBias = 0.0007f;
         float shadowSlopeBias = 0.0022f;
         float shadowNormalOffset = 0.035f;
-        float contactShadowStrength = 0.24f;
-        float cloudShadowStrength = 0.16f;
+        float contactShadowStrength = 0.12f;
+        float cloudShadowStrength = 0.0f;
         float cloudShadowScale = 0.0045f;
         float cloudShadowSpeed = 0.018f;
         float sunRayStrength = 0.14f;
@@ -134,6 +134,38 @@ public:
         bool autoDistanceByRenderDistance = true;
         float autoEndOffsetChunks = -0.5f;
         float autoFadeWidthChunks = 2.0f;
+    };
+
+    struct AtmosphereSettings {
+        float aerialStrength = 0.65f;
+        float horizonScatterStrength = 0.78f;
+        float sunWarmth = 0.34f;
+        float skyCoolness = 0.18f;
+        float weatherMist = 0.0f;
+        float weatherWetness = 0.0f;
+        float weatherStorm = 0.0f;
+        float aerialReduction = 0.55f;
+    };
+
+    struct VolumetricSettings {
+        bool fogEnabled = true;
+        float fogStrength = 0.35f;
+        float lightStrength = 0.14f;
+        float phaseG = 0.58f;
+        float baseDensity = 1.0f;
+        float heightFalloff = 0.022f;
+        float maxDistance = 260.0f;
+    };
+
+    struct CloudSettings {
+        bool shadowsEnabled = true;
+        float shadowStrength = 0.0f;
+        float shadowScale = 0.0045f;
+        float shadowSpeed = 0.018f;
+        float coverage = 0.35f;
+        float density = 1.0f;
+        float height = 176.0f;
+        float thickness = 48.0f;
     };
 
     enum class FrustumPlane : size_t {
@@ -326,6 +358,9 @@ private:
         float weatherWetness = 0.0f;
         float weatherStorm = 0.0f;
         float aerialReduction = 0.55f;
+        AtmosphereSettings atmosphere{};
+        VolumetricSettings volumetric{};
+        CloudSettings cloud{};
         bool moonShadowActive = false;
         // Temporal foundation
         uint64_t frameIndex = 0;
@@ -408,6 +443,9 @@ private:
     void bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, bool bindAerialReduction) const;
     void bindFogUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindAtmosphereUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindCloudUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindChunkRenderState(const RenderFrameData& frame, const TextureArray& texArray) const;
     void bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const;
@@ -421,6 +459,7 @@ private:
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const RenderFrameData& frame);
+    void clearDeferredAuxiliaryTargets();
     void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass(GLint framebuffer, int width, int height);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
@@ -600,4 +639,3 @@ private:
 
 
 #endif //MECRAFT_RENDERER_H
-
