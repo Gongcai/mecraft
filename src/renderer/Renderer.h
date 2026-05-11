@@ -367,6 +367,7 @@ private:
         // Temporal foundation
         uint64_t frameIndex = 0;
         glm::vec2 jitter = glm::vec2(0.0f);
+        glm::vec2 previousJitter = glm::vec2(0.0f);
         glm::mat4 previousView = glm::mat4(1.0f);
         glm::mat4 previousProjection = glm::mat4(1.0f);
         glm::mat4 previousViewProj = glm::mat4(1.0f);
@@ -462,6 +463,8 @@ private:
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const RenderFrameData& frame);
     void clearDeferredAuxiliaryTargets();
+    void renderVelocityPass(const RenderFrameData& frame);
+    void updateDeferredHistoryTargets();
     void renderReflectionPass(const RenderFrameData& frame);
     void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
@@ -533,6 +536,7 @@ private:
     Shader* m_deferredLightingShader = nullptr;
     Shader* m_deferredDebugShader = nullptr;
     Shader* m_ssaoShader = nullptr;
+    Shader* m_velocityShader = nullptr;
     Shader* m_volumetricFogShader = nullptr;
     Shader* m_volumetricCompositeShader = nullptr;
     Shader* m_reflectionShader = nullptr;
@@ -562,6 +566,7 @@ private:
     bool m_currentFrameDataValid = false;
     uint64_t m_frameCounter = 0;
     RenderFrameData m_previousFrameData{};
+    bool m_hasPreviousFrameData = false;
     GLint m_capturedFramebuffer = 0;
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     glm::mat4 m_shadowModelView = glm::mat4(1.0f);

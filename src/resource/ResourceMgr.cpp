@@ -252,6 +252,7 @@ void ResourceMgr::init() {
     loadShader("deferred_lighting", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/deferred_lighting.fs");
     loadShader("deferred_debug", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/deferred_debug.fs");
     loadShader("ssao", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/ssao.fs");
+    loadShader("velocity_resolve", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/velocity_resolve.fs");
     loadShader("volumetric_fog", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/volumetric_fog.fs");
     loadShader("volumetric_composite", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/volumetric_composite.fs");
     loadShader("reflection_probe", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/reflection_probe.fs");

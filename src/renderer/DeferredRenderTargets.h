@@ -20,11 +20,14 @@ public:
     void bindHalfRes();
     void bindReflection();
     void bindCloud();
+    void bindVelocity();
     void bindDefaultLike(GLint framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
     void copyFramebufferColorToTransparentComposite(GLint framebuffer, int width, int height) const;
     void copySceneLightingToTransparentComposite() const;
     void copyDepthToTransparentComposite() const;
+    void copySceneLightingToHistory() const;
+    void copyDepthToHistory() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
     void blitTransparentCompositeTo(GLint framebuffer, int width, int height) const;
     void blitDepthTo(GLint framebuffer, int width, int height) const;

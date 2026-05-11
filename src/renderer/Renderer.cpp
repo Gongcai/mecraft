@@ -99,6 +99,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_ssaoShader = resourceMgr.getShader("ssao");
+    m_velocityShader = resourceMgr.getShader("velocity_resolve");
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_reflectionShader = resourceMgr.getShader("reflection_probe");
@@ -181,6 +182,7 @@ void Renderer::shutdown() {
     m_deferredLightingShader = nullptr;
     m_deferredDebugShader = nullptr;
     m_ssaoShader = nullptr;
+    m_velocityShader = nullptr;
     m_volumetricFogShader = nullptr;
     m_volumetricCompositeShader = nullptr;
     m_reflectionShader = nullptr;
@@ -615,6 +617,7 @@ bool Renderer::isHybridDeferredReady() const {
            m_deferredLightingShader != nullptr &&
            m_deferredDebugShader != nullptr &&
            m_ssaoShader != nullptr &&
+           m_velocityShader != nullptr &&
            m_reflectionShader != nullptr &&
            m_cloudShader != nullptr;
 }
@@ -884,10 +887,19 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.jitter.y = (haltonY * 2.0f - 1.0f) * invH;
     }
 
-    frame.previousView = m_previousFrameData.view;
-    frame.previousProjection = m_previousFrameData.projection;
-    frame.previousViewProj = m_previousFrameData.viewProj;
-    frame.previousInvViewProj = m_previousFrameData.invViewProj;
+    if (m_hasPreviousFrameData) {
+        frame.previousJitter = m_previousFrameData.jitter;
+        frame.previousView = m_previousFrameData.view;
+        frame.previousProjection = m_previousFrameData.projection;
+        frame.previousViewProj = m_previousFrameData.viewProj;
+        frame.previousInvViewProj = m_previousFrameData.invViewProj;
+    } else {
+        frame.previousJitter = frame.jitter;
+        frame.previousView = frame.view;
+        frame.previousProjection = frame.projection;
+        frame.previousViewProj = frame.viewProj;
+        frame.previousInvViewProj = frame.invViewProj;
+    }
     frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
     const double gameTime = Time::getGameTime();
@@ -1130,6 +1142,7 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
 #endif
+    renderVelocityPass(frame);
     if (m_pipelineSettings.shadowsEnabled && m_shadowDepthShader != nullptr) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Shadow);
@@ -1176,6 +1189,7 @@ bool Renderer::renderWorldDeferred(const World& world,
         endGpuTimer(GpuTimerPass::Cloud);
 #endif
     }
+    updateDeferredHistoryTargets();
     m_deferredTargets.copySceneLightingToTransparentComposite();
     bool compositedToCapturedFramebuffer = false;
     if (m_pipelineSettings.volumetricFogEnabled &&
@@ -1460,6 +1474,44 @@ void Renderer::clearDeferredAuxiliaryTargets() {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::renderVelocityPass(const RenderFrameData& frame) {
+    if (m_velocityShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindVelocity();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_velocityShader->use();
+    m_velocityShader->setInt("uDepthTex", 0);
+    m_velocityShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_velocityShader->setMat4("uPreviousViewProj", frame.previousViewProj);
+    m_velocityShader->setVec2("uJitter", frame.jitter);
+    m_velocityShader->setVec2("uPreviousJitter", frame.previousJitter);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    renderFullscreen(*m_velocityShader);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::updateDeferredHistoryTargets() {
+    if (!m_deferredTargets.isReady()) {
+        return;
+    }
+
+    m_deferredTargets.copySceneLightingToHistory();
+    m_deferredTargets.copyDepthToHistory();
+    m_deferredTargets.swapHistory();
+}
+
 void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     if (m_reflectionShader == nullptr) {
         return;
@@ -1702,7 +1754,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
         m_pipelineSettings.debugViewMode == 23 || m_pipelineSettings.debugViewMode == 24;
     glBindTexture(GL_TEXTURE_2D,
                   materialAuxDebug ? m_deferredTargets.materialAuxTexture()
-                                   : m_deferredTargets.historySceneTexture());
+                                   : m_deferredTargets.historySceneTexturePrev());
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
     glActiveTexture(GL_TEXTURE15);
@@ -2494,6 +2546,7 @@ void Renderer::endFrame(const Window &window) {
     (void)window;
     if (m_currentFrameDataValid) {
         m_previousFrameData = m_currentFrameData;
+        m_hasPreviousFrameData = true;
     }
     recordMeshingHistory();
     m_currentFrameDataValid = false;

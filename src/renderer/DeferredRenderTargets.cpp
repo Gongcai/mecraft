@@ -251,6 +251,13 @@ void DeferredRenderTargets::bindCloud() {
     glDrawBuffers(1, &drawBuffer);
 }
 
+void DeferredRenderTargets::bindVelocity() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_velocityFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
 void DeferredRenderTargets::bindDefaultLike(const GLint framebuffer, const int width, const int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
     glViewport(0, 0, std::max(1, width), std::max(1, height));
@@ -302,6 +309,30 @@ void DeferredRenderTargets::copyDepthToTransparentComposite() const {
                       0, 0, m_width, m_height,
                       GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+}
+
+void DeferredRenderTargets::copySceneLightingToHistory() const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
+}
+
+void DeferredRenderTargets::copyDepthToHistory() const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gBufferFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
