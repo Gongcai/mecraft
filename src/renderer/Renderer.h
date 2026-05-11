@@ -71,6 +71,8 @@ public:
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
+        float sceneCloudCompositeStrength = 0.0f;
+        float sceneReflectionCompositeStrength = 0.0f;
         int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
@@ -450,6 +452,7 @@ private:
     void bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindCloudUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const;
+    void bindSceneCompositeInputs(Shader& shader, const RenderFrameData& frame) const;
     void bindChunkRenderState(const RenderFrameData& frame, const TextureArray& texArray) const;
     void bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const;
     void bindWaterEffectUniforms(Shader& shader, bool enabled) const;

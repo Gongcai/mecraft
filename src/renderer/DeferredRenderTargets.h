@@ -25,13 +25,15 @@ public:
     void bindVelocity();
     void bindDefaultLike(GLint framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
+    void copyFramebufferColorToSceneResolved(GLint framebuffer, int width, int height) const;
     void copyFramebufferColorToTransparentComposite(GLint framebuffer, int width, int height) const;
     void copySceneLightingToTransparentComposite() const;
     void copySceneLightingToSceneComposite() const;
     void copySceneCompositeToSceneResolved() const;
     void copySceneCompositeToTransparentComposite() const;
+    void copySceneResolvedToTransparentComposite() const;
     void copyDepthToTransparentComposite() const;
-    void copySceneLightingToHistory() const;
+    void copySceneResolvedToHistory() const;
     void copyDepthToHistory() const;
     void copyReflectionToHistory() const;
     void copyCloudToHistory() const;
@@ -124,12 +126,15 @@ private:
     GLuint m_sceneLightingFbo = 0;
     GLuint m_sceneLightingTex = 0;
 
+    // SceneComposite is the opaque HDR scene after screen-space base effects such as clouds/reflections.
     GLuint m_sceneCompositeFbo = 0;
     GLuint m_sceneCompositeTex = 0;
 
+    // SceneResolved is the current full-world HDR color. It becomes the post input and temporal scene history source.
     GLuint m_sceneResolvedFbo = 0;
     GLuint m_sceneResolvedTex = 0;
 
+    // TransparentComposite is a scratch scene copy used while forward water/generic transparent geometry is blended.
     GLuint m_transparentCompositeFbo = 0;
     GLuint m_transparentCompositeTex = 0;
     GLuint m_transparentCompositeDepth = 0;

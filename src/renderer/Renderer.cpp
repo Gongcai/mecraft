@@ -217,6 +217,16 @@ void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, c
 void Renderer::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window) {
     renderTransparentCompositePass(world, window);
 
+    if (m_deferredFrameActive &&
+        m_deferredTargets.isReady() &&
+        (m_pipelineSettings.debugViewMode == 0 || m_deferredDebugShader == nullptr)) {
+        const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
+        const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
+        m_deferredTargets.copyFramebufferColorToSceneResolved(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        updateDeferredHistoryTargets();
+        restoreCapturedFramebufferViewport(window);
+    }
+
     renderBlockBreakOverlay(world, blockBreak);
     renderBlockOutline(world, target);
 #ifdef MECRAFT_DEBUG
@@ -239,8 +249,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
 
     if (compositeInputsEnabled) {
-        m_deferredTargets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
-        m_deferredTargets.copyFramebufferColorToTransparentComposite(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        m_deferredTargets.copySceneResolvedToTransparentComposite();
         m_deferredTargets.copyDepthToTransparentComposite();
         m_deferredTargets.bindTransparentComposite();
     } else if (m_deferredFrameActive) {
@@ -379,10 +388,7 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
     }
 
     if (!m_transparentPassPlan.hasGeneric()) {
-        if (m_deferredFrameActive && m_pipelineSettings.transparentCompositeEnabled && m_deferredTargets.isReady()) {
-            const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
-            const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
-            m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        if (m_deferredFrameActive) {
             restoreCapturedFramebufferViewport(window);
         }
         return;
@@ -395,10 +401,10 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
         const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
         if (deferredInputsEnabled) {
-            m_deferredTargets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
+            m_deferredTargets.copyFramebufferColorToSceneResolved(m_capturedFramebuffer, capturedWidth, capturedHeight);
         }
         if (compositeInputsEnabled) {
-            m_deferredTargets.copyFramebufferColorToTransparentComposite(m_capturedFramebuffer, capturedWidth, capturedHeight);
+            m_deferredTargets.copySceneResolvedToTransparentComposite();
             m_deferredTargets.copyDepthToTransparentComposite();
             m_deferredTargets.bindTransparentComposite();
         } else if (m_deferredFrameActive) {
@@ -568,7 +574,9 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 27);
+    m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
+    m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 30);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -1027,6 +1035,60 @@ void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& fr
     shader.setInt("uShadowLightMode", frame.moonShadowActive ? 1 : 0);
 }
 
+void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& frame) const {
+    shader.setInt("uSceneLightingTex", 0);
+    shader.setInt("uReflectionTex", 1);
+    shader.setInt("uCloudTex", 2);
+    shader.setInt("uDepthTex", 3);
+    shader.setInt("uNormalAoTex", 4);
+    shader.setInt("uMaterialTex", 5);
+    shader.setInt("uMaterialAuxTex", 6);
+    shader.setInt("uVelocityTex", 7);
+    shader.setInt("uHistorySceneTex", 8);
+    shader.setInt("uHistoryDepthTex", 9);
+    shader.setInt("uHistoryReflectionTex", 10);
+    shader.setInt("uHistoryCloudTex", 11);
+    shader.setInt("uSkyCaptureTex", 12);
+    shader.setMat4("uViewProj", frame.viewProj);
+    shader.setMat4("uInvViewProj", frame.invViewProj);
+    shader.setMat4("uPreviousViewProj", frame.previousViewProj);
+    shader.setMat4("uPreviousInvViewProj", frame.previousInvViewProj);
+    shader.setVec2("uJitter", frame.jitter);
+    shader.setVec2("uPreviousJitter", frame.previousJitter);
+    shader.setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
+    shader.setFloat("uTime", frame.shaderTime);
+    shader.setFloat("uWeatherWetness", frame.weatherWetness);
+    shader.setFloat("uCloudCompositeStrength", m_pipelineSettings.sceneCloudCompositeStrength);
+    shader.setFloat("uReflectionCompositeStrength", m_pipelineSettings.sceneReflectionCompositeStrength);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.cloudTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexturePrev());
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyDepthTexturePrev());
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyReflectionTexturePrev());
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyCloudTexturePrev());
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+}
+
 void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const {
     shader.use();
     shader.setMat4("view", frame.view);
@@ -1192,7 +1254,6 @@ bool Renderer::renderWorldDeferred(const World& world,
 #endif
     }
     renderSceneCompositePass(frame);
-    updateDeferredHistoryTargets();
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
     if (m_pipelineSettings.volumetricFogEnabled &&
@@ -1208,6 +1269,10 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Volumetric);
 #endif
+    }
+    m_deferredTargets.copySceneResolvedToTransparentComposite();
+    if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
+        updateDeferredHistoryTargets();
     }
     if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
         renderDeferredDebugView(m_capturedFramebuffer, capturedWidth, capturedHeight);
@@ -1474,31 +1539,10 @@ void Renderer::renderSceneCompositePass(const RenderFrameData& frame) {
     glClear(GL_COLOR_BUFFER_BIT);
 
     m_sceneCompositeShader->use();
-    m_sceneCompositeShader->setInt("uSceneLightingTex", 0);
-    m_sceneCompositeShader->setInt("uReflectionTex", 1);
-    m_sceneCompositeShader->setInt("uCloudTex", 2);
-    m_sceneCompositeShader->setInt("uDepthTex", 3);
-    m_sceneCompositeShader->setInt("uMaterialAuxTex", 4);
-    m_sceneCompositeShader->setInt("uSkyCaptureTex", 5);
-    m_sceneCompositeShader->setFloat("uWeatherWetness", frame.weatherWetness);
-    m_sceneCompositeShader->setFloat("uCloudCompositeStrength", 0.0f);
-    m_sceneCompositeShader->setFloat("uReflectionCompositeStrength", 0.0f);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.cloudTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
+    bindSceneCompositeInputs(*m_sceneCompositeShader, frame);
     renderFullscreen(*m_sceneCompositeShader);
 
-    for (int unit = 5; unit >= 0; --unit) {
+    for (int unit = 12; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -1564,7 +1608,7 @@ void Renderer::updateDeferredHistoryTargets() {
         return;
     }
 
-    m_deferredTargets.copySceneLightingToHistory();
+    m_deferredTargets.copySceneResolvedToHistory();
     m_deferredTargets.copyDepthToHistory();
     m_deferredTargets.copyReflectionToHistory();
     m_deferredTargets.copyCloudToHistory();
@@ -1764,6 +1808,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uSkyCaptureTex", 11);
     m_deferredDebugShader->setInt("uVelocityTex", 12);
     m_deferredDebugShader->setInt("uHistorySceneTex", 13);
+    m_deferredDebugShader->setInt("uHistoryDepthTex", 13);
     m_deferredDebugShader->setInt("uReflectionTex", 14);
     m_deferredDebugShader->setInt("uCloudTex", 15);
     m_deferredDebugShader->setInt("uSceneCompositeTex", 15);
@@ -1815,19 +1860,21 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
     glActiveTexture(GL_TEXTURE13);
     const bool materialAuxDebug =
-        m_pipelineSettings.debugViewMode == 24 || m_pipelineSettings.debugViewMode == 25;
+        m_pipelineSettings.debugViewMode == 25 || m_pipelineSettings.debugViewMode == 26;
+    const bool historyDepthDebug = m_pipelineSettings.debugViewMode == 19;
     glBindTexture(GL_TEXTURE_2D,
                   materialAuxDebug ? m_deferredTargets.materialAuxTexture()
-                                   : m_deferredTargets.historySceneTexturePrev());
+                                   : (historyDepthDebug ? m_deferredTargets.historyDepthTexturePrev()
+                                                        : m_deferredTargets.historySceneTexturePrev()));
     glActiveTexture(GL_TEXTURE14);
-    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 26;
+    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 27;
     glBindTexture(GL_TEXTURE_2D,
                   reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
                                          : m_deferredTargets.reflectionTexture());
     glActiveTexture(GL_TEXTURE15);
-    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 27;
+    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 28;
     const bool sceneCompositeDebug = m_pipelineSettings.debugViewMode == 11;
-    const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 29;
+    const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 30;
     glBindTexture(GL_TEXTURE_2D,
                   sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
                                      : (sceneCompositeDebug ? m_deferredTargets.sceneCompositeTexture()

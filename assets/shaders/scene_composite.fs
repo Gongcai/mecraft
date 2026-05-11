@@ -8,8 +8,29 @@ uniform sampler2D uSceneLightingTex;
 uniform sampler2D uReflectionTex;
 uniform sampler2D uCloudTex;
 uniform sampler2D uDepthTex;
+uniform sampler2D uNormalAoTex;
+uniform sampler2D uMaterialTex;
 uniform sampler2D uMaterialAuxTex;
+uniform sampler2D uVelocityTex;
+uniform sampler2D uHistorySceneTex;
+uniform sampler2D uHistoryDepthTex;
+uniform sampler2D uHistoryReflectionTex;
+uniform sampler2D uHistoryCloudTex;
 uniform sampler2D uSkyCaptureTex;
+
+// Scene composite resource contract:
+// - SceneLighting is opaque HDR lighting before screen-space scene effects.
+// - Reflection/Cloud are half-res effect targets sampled in full-res scene UV space.
+// - Velocity and history inputs are intentionally bound now so future temporal resolve,
+//   SSR rejection, and cloud reprojection can evolve inside this shader without C++ churn.
+uniform mat4 uViewProj;
+uniform mat4 uInvViewProj;
+uniform mat4 uPreviousViewProj;
+uniform mat4 uPreviousInvViewProj;
+uniform vec2 uJitter;
+uniform vec2 uPreviousJitter;
+uniform int uFrameIndex;
+uniform float uTime;
 uniform float uWeatherWetness;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;

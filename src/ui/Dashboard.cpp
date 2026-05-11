@@ -383,6 +383,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Sky Capture",
             "Velocity",
             "History Scene",
+            "History Depth",
             "Shadow Projection",
             "Shadow Visibility",
             "Shadow Bias",
@@ -418,6 +419,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);
         pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
         pipelineChanged |= ImGui::Checkbox("Transparent Composite", &pipeline.transparentCompositeEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Scene Cloud Composite", &pipeline.sceneCloudCompositeStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Scene Reflection Composite", &pipeline.sceneReflectionCompositeStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);

@@ -329,6 +329,18 @@ void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const GLint fram
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
 }
 
+void DeferredRenderTargets::copyFramebufferColorToSceneResolved(const GLint framebuffer, const int width, const int height) const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneResolvedFbo);
+    glBlitFramebuffer(0, 0, std::max(1, width), std::max(1, height),
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
+}
+
 void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const GLint framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
@@ -389,6 +401,18 @@ void DeferredRenderTargets::copySceneCompositeToTransparentComposite() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
+void DeferredRenderTargets::copySceneResolvedToTransparentComposite() const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneResolvedFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+}
+
 void DeferredRenderTargets::copyDepthToTransparentComposite() const {
     if (!m_ready) {
         return;
@@ -401,11 +425,11 @@ void DeferredRenderTargets::copyDepthToTransparentComposite() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
-void DeferredRenderTargets::copySceneLightingToHistory() const {
+void DeferredRenderTargets::copySceneResolvedToHistory() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneResolvedFbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
     glBlitFramebuffer(0, 0, m_width, m_height,
                       0, 0, m_width, m_height,
