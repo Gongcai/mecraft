@@ -647,6 +647,20 @@ Renderer::RenderPipelineSettings Renderer::getRenderPipelineSettings() const {
     return m_pipelineSettings;
 }
 
+bool Renderer::isDeferredDebugViewActive() const {
+    return m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred &&
+           m_pipelineSettings.debugViewMode > 0 &&
+           m_deferredTargets.isReady() &&
+           m_deferredDebugShader != nullptr;
+}
+
+void Renderer::renderDeferredDebugOverlay(const Window& window) {
+    if (!isDeferredDebugViewActive()) {
+        return;
+    }
+    renderDeferredDebugView(0, window.getWidth(), window.getHeight());
+}
+
 bool Renderer::isHybridDeferredReady() const {
     return m_deferredTargets.isReady() &&
            m_chunkGBufferShader != nullptr &&
@@ -1324,11 +1338,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     }
     m_deferredTargets.copySceneResolvedToTransparentComposite();
     updateDeferredHistoryTargets();
-    if (m_pipelineSettings.debugViewMode > 0 && m_deferredDebugShader != nullptr) {
-        renderDeferredDebugView(m_capturedFramebuffer, capturedWidth, capturedHeight);
-    } else {
-        m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
-    }
+    m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     restoreCapturedFramebufferViewport(window);
     return true;
@@ -2041,10 +2051,6 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
     m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
-    m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
-    m_deferredDebugShader->setVec3("uCameraPos", m_currentFrameDataValid ? m_currentFrameData.cameraPos : m_cameraPos);
-    m_deferredDebugShader->setVec3("uSunDirection", m_currentFrameDataValid ? m_currentFrameData.skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
-    m_deferredDebugShader->setVec3("uMoonDirection", m_currentFrameDataValid ? m_currentFrameData.skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
     m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
     m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
     m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
@@ -2052,8 +2058,15 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
-    m_deferredDebugShader->setInt("uShadowLightMode", (m_currentFrameDataValid && m_currentFrameData.moonShadowActive) ? 1 : 0);
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
+    const RenderFrameData* debugFrame = m_currentFrameDataValid
+        ? &m_currentFrameData
+        : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
+    m_deferredDebugShader->setMat4("uInvViewProj", debugFrame != nullptr ? debugFrame->invViewProj : glm::mat4(1.0f));
+    m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
+    m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
+    m_deferredDebugShader->setVec3("uMoonDirection", debugFrame != nullptr ? debugFrame->skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
+    m_deferredDebugShader->setInt("uShadowLightMode", (debugFrame != nullptr && debugFrame->moonShadowActive) ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());

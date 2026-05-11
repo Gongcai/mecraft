@@ -388,6 +388,7 @@ void Game::renderFrame(const float frameTime) {
     }
 
     m_postProcessRenderer.endSceneAndComposite(m_window, frameTime);
+    m_renderer.renderDeferredDebugOverlay(m_window);
 
     PlayerStatsData playerStats;
     playerStats.health = playerQuery.getHealth();

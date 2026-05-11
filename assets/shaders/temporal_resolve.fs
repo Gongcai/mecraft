@@ -38,7 +38,7 @@ vec3 clipAABB(vec3 aabbMin, vec3 aabbMax, vec3 color) {
     vec3 center = 0.5 * (aabbMax + aabbMin);
     vec3 extents = 0.5 * (aabbMax - aabbMin);
     vec3 offset = color - center;
-    vec3 ts = abs(extents) > 1e-6 ? extents / max(abs(offset), 1e-6) : vec3(1e6);
+    vec3 ts = mix(vec3(1e6), extents / max(abs(offset), 1e-6), step(vec3(1e-6), abs(extents)));
     float t = min(min(ts.x, ts.y), ts.z);
     t = clamp(t, 0.0, 1.0);
     return center + offset * t;

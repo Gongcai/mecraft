@@ -294,6 +294,8 @@ public:
     [[nodiscard]] int getDebugLightMode() const;
     void setRenderPipelineSettings(const RenderPipelineSettings& settings);
     [[nodiscard]] RenderPipelineSettings getRenderPipelineSettings() const;
+    [[nodiscard]] bool isDeferredDebugViewActive() const;
+    void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 #ifdef MECRAFT_DEBUG

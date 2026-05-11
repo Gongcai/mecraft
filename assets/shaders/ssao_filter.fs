@@ -8,8 +8,8 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uNormalAoTex;
 uniform vec2 uScreenSize;
 
-vec3 decodeNormal(vec4 packed) {
-    return normalize(packed.rgb * 2.0 - 1.0);
+vec3 decodeNormal(vec4 p) {
+    return normalize(p.rgb * 2.0 - 1.0);
 }
 
 void main() {

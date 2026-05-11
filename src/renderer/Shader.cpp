@@ -127,7 +127,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 	if (!success)
 	{
 		glGetShaderInfoLog(vertex,512,NULL,infolog);
-		cout << "ERROR:SHADER::VERTEX::COMPILATION_FAILED\n" << infolog << endl;
+		cout << "ERROR:SHADER::VERTEX::COMPILATION_FAILED [" << vertexPath << "]\n" << infolog << endl;
 
 	}
 	//片段着色器
@@ -138,7 +138,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 	if (!success)
 	{
 		glGetShaderInfoLog(fragment, 512, NULL, infolog);
-		cout << "ERROR:SHADER::FRAGMENT::COMPILATION_FAILED\n" << infolog << endl;
+		cout << "ERROR:SHADER::FRAGMENT::COMPILATION_FAILED [" << fragmentPath << "]\n" << infolog << endl;
 
 	}
 	//几何着色器
@@ -149,7 +149,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 	if (!success)
 	{
 		glGetShaderInfoLog(geometry,512,NULL,infolog);
-		cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED\n" << infolog << endl;
+		cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED [" << geometryPath << "]\n" << infolog << endl;
 	}
 
 
@@ -163,7 +163,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 	if (!success)
 	{
 		glGetProgramInfoLog(ID, 512, NULL, infolog);
-		cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infolog << endl;
+		cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED [" << vertexPath << " + " << fragmentPath << " + " << geometryPath << "]\n" << infolog << endl;
 	}
 
 	glDeleteShader(vertex);
@@ -223,7 +223,7 @@ Shader::Shader(const char* vertexPath,const char* fragmentPath){
 	if (!success)
 	{
 		glGetShaderInfoLog(vertex,512,NULL,infolog);
-		cout << "ERROR:SHADER::VERTEX::COMPILATION_FAILED\n" << infolog << endl;
+		cout << "ERROR:SHADER::VERTEX::COMPILATION_FAILED [" << vertexPath << "]\n" << infolog << endl;
 
 	}
 	//片段着色器
@@ -234,7 +234,7 @@ Shader::Shader(const char* vertexPath,const char* fragmentPath){
 	if (!success)
 	{
 		glGetShaderInfoLog(fragment, 512, NULL, infolog);
-		cout << "ERROR:SHADER::FRAGMENT::COMPILATION_FAILED\n" << infolog << endl;
+		cout << "ERROR:SHADER::FRAGMENT::COMPILATION_FAILED [" << fragmentPath << "]\n" << infolog << endl;
 
 	}
 
@@ -249,7 +249,7 @@ Shader::Shader(const char* vertexPath,const char* fragmentPath){
 	if (!success)
 	{
 		glGetProgramInfoLog(ID, 512, NULL, infolog);
-		cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infolog << endl;
+		cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED [" << vertexPath << " + " << fragmentPath << "]\n" << infolog << endl;
 	}
 
 	glDeleteShader(vertex);
