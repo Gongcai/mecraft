@@ -248,7 +248,10 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
 }
 
 void Renderer::renderWaterCompositePass(const World& world, const Window& window) {
-    if (!m_transparentPassPlan.hasWater() || m_waterCompositeShader == nullptr || m_resourceMgr == nullptr) {
+    if (!m_pipelineSettings.waterEffectsEnabled ||
+        !m_transparentPassPlan.hasWater() ||
+        m_waterCompositeShader == nullptr ||
+        m_resourceMgr == nullptr) {
         return;
     }
 

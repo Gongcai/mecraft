@@ -55,14 +55,14 @@ public:
         bool softShadowsEnabled = false;
         bool pcssShadowsEnabled = false;
         bool contactShadowsEnabled = false;
-        bool cloudShadowsEnabled = false;
+        bool cloudShadowsEnabled = true;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
         float bloomThreshold = 0.82f;
-        float bloomStrength = 0.18f;
+        float bloomStrength = 0.24f;
         bool autoExposureEnabled = true;
         float autoExposureMin = 0.55f;
-        float autoExposureMax = 1.60f;
+        float autoExposureMax = 1.85f;
         float autoExposureSpeed = 1.4f;
         float autoExposureBias = 0.0f;
         bool sunRaysEnabled = true;
@@ -80,8 +80,8 @@ public:
         float reflectionFilterStrength = 1.0f;
         float motionBlurStrength = 1.0f;
         int motionBlurSamples = 8;
-        float sceneCloudCompositeStrength = 0.0f;
-        float sceneReflectionCompositeStrength = 0.0f;
+        float sceneCloudCompositeStrength = 0.42f;
+        float sceneReflectionCompositeStrength = 0.36f;
         int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
@@ -94,10 +94,10 @@ public:
         float shadowSlopeBias = 0.0022f;
         float shadowNormalOffset = 0.035f;
         float contactShadowStrength = 0.12f;
-        float cloudShadowStrength = 0.0f;
+        float cloudShadowStrength = 0.28f;
         float cloudShadowScale = 0.0045f;
         float cloudShadowSpeed = 0.018f;
-        float sunRayStrength = 0.14f;
+        float sunRayStrength = 0.18f;
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
         float kappaGradingStrength = 0.65f;
@@ -113,7 +113,7 @@ public:
         float shadowDesaturation = 0.22f;
         float splitToneStrength = 0.28f;
         float vignetteStrength = 0.08f;
-        float shadowTintStrength = 0.28f;
+        float shadowTintStrength = 0.40f;
         float directSunStrength = 1.36f;
         float skyAmbientStrength = 0.36f;
         float minimumAmbient = 0.055f;
