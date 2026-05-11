@@ -169,6 +169,26 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
             shutdown();
             return false;
         }
+
+        glCreateFramebuffers(1, &m_historyReflectionFbo[i]);
+        m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
+                                                    GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+        glNamedFramebufferTexture(m_historyReflectionFbo[i], GL_COLOR_ATTACHMENT0, m_historyReflectionTex[i], 0);
+        glNamedFramebufferDrawBuffers(m_historyReflectionFbo[i], 1, &historyDrawBuffer);
+        if (!checkFramebufferComplete(m_historyReflectionFbo[i], "HistoryReflection")) {
+            shutdown();
+            return false;
+        }
+
+        glCreateFramebuffers(1, &m_historyCloudFbo[i]);
+        m_historyCloudTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
+                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+        glNamedFramebufferTexture(m_historyCloudFbo[i], GL_COLOR_ATTACHMENT0, m_historyCloudTex[i], 0);
+        glNamedFramebufferDrawBuffers(m_historyCloudFbo[i], 1, &historyDrawBuffer);
+        if (!checkFramebufferComplete(m_historyCloudFbo[i], "HistoryCloud")) {
+            shutdown();
+            return false;
+        }
     }
     m_currentHistoryIndex = 0;
 
@@ -335,6 +355,34 @@ void DeferredRenderTargets::copyDepthToHistory() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
 }
 
+void DeferredRenderTargets::copyReflectionToHistory() const {
+    if (!m_ready) {
+        return;
+    }
+    const int halfWidth = std::max(1, m_width / 2);
+    const int halfHeight = std::max(1, m_height / 2);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_reflectionFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
+    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
+                      0, 0, halfWidth, halfHeight,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
+}
+
+void DeferredRenderTargets::copyCloudToHistory() const {
+    if (!m_ready) {
+        return;
+    }
+    const int halfWidth = std::max(1, m_width / 2);
+    const int halfHeight = std::max(1, m_height / 2);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_cloudFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
+    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
+                      0, 0, halfWidth, halfHeight,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
+}
+
 void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
@@ -422,6 +470,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_skyCaptureTex,
         m_historySceneTex[0], m_historySceneTex[1],
         m_historyDepthTex[0], m_historyDepthTex[1],
+        m_historyReflectionTex[0], m_historyReflectionTex[1],
+        m_historyCloudTex[0], m_historyCloudTex[1],
         m_velocityTex
     };
     for (const GLuint texture : textures) {
@@ -447,9 +497,11 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_skyCaptureTex = 0;
     m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;
     m_historyDepthTex[0] = 0; m_historyDepthTex[1] = 0;
+    m_historyReflectionTex[0] = 0; m_historyReflectionTex[1] = 0;
+    m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
     m_velocityTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_velocityFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_sceneLightingFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -466,6 +518,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_cloudFbo = 0;
     m_skyCaptureFbo = 0;
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
+    m_historyReflectionFbo[0] = 0; m_historyReflectionFbo[1] = 0;
+    m_historyCloudFbo[0] = 0; m_historyCloudFbo[1] = 0;
     m_velocityFbo = 0;
     m_currentHistoryIndex = 0;
     m_ready = false;

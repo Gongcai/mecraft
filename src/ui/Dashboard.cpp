@@ -388,7 +388,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Reflection Target",
             "Cloud Target",
             "Material Kind",
-            "Material Aux"
+            "Material Aux",
+            "Reflection History",
+            "Cloud History"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;

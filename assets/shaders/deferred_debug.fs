@@ -21,6 +21,8 @@ uniform sampler2D uVelocityTex;
 uniform sampler2D uHistorySceneTex;
 uniform sampler2D uReflectionTex;
 uniform sampler2D uCloudTex;
+uniform sampler2D uHistoryReflectionTex;
+uniform sampler2D uHistoryCloudTex;
 uniform mat4 uShadowViewProj;
 uniform mat4 uShadowProjectionInverse;
 uniform mat4 uInvViewProj;
@@ -271,6 +273,15 @@ void main() {
     if (uDebugViewMode == 24) {
         SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
         FragColor = vec4(aux.wetnessMask, aux.porosity, aux.metalness, 1.0);
+        return;
+    }
+    if (uDebugViewMode == 25) {
+        FragColor = vec4(tonemapPreview(texture(uHistoryReflectionTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 26) {
+        vec4 cloud = texture(uHistoryCloudTex, vTexCoord);
+        FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
 

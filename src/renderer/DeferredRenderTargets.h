@@ -28,6 +28,8 @@ public:
     void copyDepthToTransparentComposite() const;
     void copySceneLightingToHistory() const;
     void copyDepthToHistory() const;
+    void copyReflectionToHistory() const;
+    void copyCloudToHistory() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
     void blitTransparentCompositeTo(GLint framebuffer, int width, int height) const;
     void blitDepthTo(GLint framebuffer, int width, int height) const;
@@ -55,6 +57,10 @@ public:
     [[nodiscard]] GLuint historySceneTexturePrev() const { return m_historySceneTex[1 - m_currentHistoryIndex]; }
     [[nodiscard]] GLuint historyDepthTexture() const { return m_historyDepthTex[m_currentHistoryIndex]; }
     [[nodiscard]] GLuint historyDepthTexturePrev() const { return m_historyDepthTex[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historyReflectionTexture() const { return m_historyReflectionTex[m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historyReflectionTexturePrev() const { return m_historyReflectionTex[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historyCloudTexture() const { return m_historyCloudTex[m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint historyCloudTexturePrev() const { return m_historyCloudTex[1 - m_currentHistoryIndex]; }
     [[nodiscard]] GLuint velocityTexture() const { return m_velocityTex; }
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
     void swapHistory() { m_currentHistoryIndex = 1 - m_currentHistoryIndex; }
@@ -129,6 +135,10 @@ private:
     GLuint m_historySceneFbo[2] = {0, 0};
     GLuint m_historySceneTex[2] = {0, 0};
     GLuint m_historyDepthTex[2] = {0, 0};
+    GLuint m_historyReflectionFbo[2] = {0, 0};
+    GLuint m_historyReflectionTex[2] = {0, 0};
+    GLuint m_historyCloudFbo[2] = {0, 0};
+    GLuint m_historyCloudTex[2] = {0, 0};
     int m_currentHistoryIndex = 0;
 
     // Velocity buffer (RG16F encodes screen-space velocity xy)

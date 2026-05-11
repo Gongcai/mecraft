@@ -566,7 +566,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 24);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 26);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -1509,6 +1509,8 @@ void Renderer::updateDeferredHistoryTargets() {
 
     m_deferredTargets.copySceneLightingToHistory();
     m_deferredTargets.copyDepthToHistory();
+    m_deferredTargets.copyReflectionToHistory();
+    m_deferredTargets.copyCloudToHistory();
     m_deferredTargets.swapHistory();
 }
 
@@ -1707,6 +1709,8 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uReflectionTex", 14);
     m_deferredDebugShader->setInt("uCloudTex", 15);
     m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
+    m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
+    m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
     m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
     m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_deferredDebugShader->setMat4("uInvViewProj", m_currentFrameDataValid ? m_currentFrameData.invViewProj : glm::mat4(1.0f));
@@ -1756,9 +1760,15 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
                   materialAuxDebug ? m_deferredTargets.materialAuxTexture()
                                    : m_deferredTargets.historySceneTexturePrev());
     glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 25;
+    glBindTexture(GL_TEXTURE_2D,
+                  reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
+                                         : m_deferredTargets.reflectionTexture());
     glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.cloudTexture());
+    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 26;
+    glBindTexture(GL_TEXTURE_2D,
+                  cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
+                                    : m_deferredTargets.cloudTexture());
     renderFullscreen(*m_deferredDebugShader);
 
     for (int unit = 15; unit >= 0; --unit) {
