@@ -566,7 +566,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 26);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 27);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -1533,6 +1533,7 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uMaterialTex", 3);
     m_reflectionShader->setInt("uMaterialAuxTex", 4);
     m_reflectionShader->setInt("uSkyCaptureTex", 5);
+    m_reflectionShader->setMat4("uViewProj", frame.viewProj);
     m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
     m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
     m_reflectionShader->setFloat("uWeatherWetness", frame.weatherWetness);

@@ -284,6 +284,11 @@ void main() {
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
+    if (uDebugViewMode == 27) {
+        float reflectionMask = texture(uReflectionTex, vTexCoord).a;
+        FragColor = vec4(heatmap(reflectionMask), 1.0);
+        return;
+    }
 
     FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, vTexCoord).rgb), 1.0);
 }
