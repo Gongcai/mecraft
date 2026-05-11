@@ -48,23 +48,16 @@ uniform int uShadowLightMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 
-const float kTwoPi = 6.28318530718;
+#include "atmosphere_lut.glsl"
+
 const int kFogSteps = 8;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
-vec2 directionToSkyCaptureUv(vec3 dir) {
-    dir = normalize(dir);
-    float phi = atan(dir.x, -dir.z);
-    float u = phi / kTwoPi + 0.5;
-    float v = dir.y * 0.5 + 0.5;
-    return vec2(fract(u), clamp(v, 0.0, 1.0));
-}
-
 vec3 sampleSkyCapture(vec3 dir) {
-    return texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb;
+    return texture(uSkyCaptureTex, atmDirectionToSkyCaptureUv(dir)).rgb;
 }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
@@ -114,16 +107,6 @@ float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCove
     float cloudy = clamp((base - detail) * 4.0 * heightDensity - threshold, 0.0, 1.0);
     float fineShape = smoothstep(0.05, 0.85, base * 0.22 + detail * 0.35);
     return cloudy * mix(0.85, 1.45, fineShape);
-}
-
-float rayleighPhase(float cosTheta) {
-    return 0.0596831 * (1.0 + cosTheta * cosTheta);
-}
-
-float henyeyGreenstein(float cosTheta, float g) {
-    float g2 = g * g;
-    float denom = max(1.0 + g2 - 2.0 * g * cosTheta, 0.001);
-    return 0.0795775 * (1.0 - g2) / (denom * sqrt(denom));
 }
 
 float shadowProjectionFade(vec3 proj) {
@@ -202,10 +185,6 @@ void main() {
     float nightFactor = 1.0 - dayFactor;
     float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.45);
 
-    vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.30, viewDir.z));
-    vec3 skyColor = sampleSkyCapture(captureDir);
-    vec3 fogColor = mix(skyColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
-
     vec3 sunDir = normalize(uSunDirection);
     vec3 moonDir = normalize(uMoonDirection);
     float sunVisibility = smoothstep(-0.08, 0.18, sunDir.y) * dayFactor;
@@ -215,8 +194,16 @@ void main() {
     float sunWide = pow(sunDot, 4.0);
     float moonForward = pow(moonDot, 10.0) * clamp(uMoonVisibility, 0.0, 1.0);
     float phaseG = clamp(uVolumetricPhaseG, -0.2, 0.85);
-    float sunPhase = rayleighPhase(dot(viewDir, sunDir)) * 0.35 + henyeyGreenstein(dot(viewDir, sunDir), phaseG) * 0.65;
-    float moonPhase = rayleighPhase(dot(viewDir, moonDir)) * 0.55 + henyeyGreenstein(dot(viewDir, moonDir), 0.36) * 0.45;
+    float sunPhase = atmRayleighPhase(dot(viewDir, sunDir)) * 0.35 + atmHenyeyGreensteinPhase(dot(viewDir, sunDir), phaseG) * 0.65;
+    float moonPhase = atmRayleighPhase(dot(viewDir, moonDir)) * 0.55 + atmHenyeyGreensteinPhase(dot(viewDir, moonDir), 0.36) * 0.45;
+    vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.30, viewDir.z));
+    vec3 skyColor = sampleSkyCapture(captureDir);
+    vec3 lutTransmittance;
+    vec3 lutSky = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, captureDir, sunDir, lutTransmittance);
+    vec3 lutMoon = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, captureDir, moonDir, lutTransmittance) *
+                   clamp(uMoonVisibility, 0.0, 1.0) * nightFactor * 0.25;
+    vec3 fogColor = mix(skyColor, lutSky + lutMoon, 0.46);
+    fogColor = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.28);
     vec3 sunScatterColor = uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                            sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
     vec3 moonScatterColor = uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
@@ -229,10 +216,10 @@ void main() {
 
     float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
     strength *= (uVolumetricFogEnabled != 0) ? 1.0 : 0.0;
-    float baseDensity = (0.00010 + 0.00024 * horizon) *
+    float baseDensity = (0.00012 + 0.00030 * horizon) *
                         strength *
                         max(uVolumetricBaseDensity, 0.0) *
-                        (0.58 + weatherHaze * 1.45);
+                        (0.64 + weatherHaze * 1.55);
     float jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
     marchDistance = min(marchDistance, max(uVolumetricMaxDistance, 1.0));
     float stepLength = marchDistance / float(kFogSteps);
@@ -255,11 +242,16 @@ void main() {
         float opticalStep = sampleDensity * stepLength;
         float stepTransmittance = exp(-opticalStep);
         float stepOpacity = clamp(1.0 - stepTransmittance, 0.0, 0.18);
-        float powder = 1.0 - exp(-structure * heightDensity * 0.65);
+        float powder = 1.0 - exp(-structure * heightDensity * 0.85);
+        powder = powder * (1.0 - clamp(dot(viewDir, shadowLightDir) * 0.5 + 0.5, 0.0, 1.0) * 0.35) +
+                 clamp(dot(viewDir, shadowLightDir) * 0.5 + 0.5, 0.0, 1.0) * 0.25;
         float shadowVisibility = sampleVolumetricShadow(samplePos, shadowLightDir);
         vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
-        vec3 stepColor = fogColor * (0.72 + powder * 0.18);
-        stepColor += shadowedDirect * (0.45 + powder * 0.65) *
+        vec3 altitudeTransmittance = atmGetTransmittanceToTopAtmosphereBoundary(
+            atmPlanetRadius + clamp(samplePos.y + 100.0, 0.0, 90000.0),
+            clamp(dot(vec3(0.0, 1.0, 0.0), shadowLightDir), -1.0, 1.0));
+        vec3 stepColor = fogColor * (0.76 + powder * 0.22);
+        stepColor += shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75) *
                      clamp(uVolumetricLightStrength, 0.0, 2.0) *
                      directLightWeight;
         scattering += transmittance * stepColor * stepOpacity;

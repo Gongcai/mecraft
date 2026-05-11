@@ -1104,6 +1104,11 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     shader.setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
     shader.setFloat("uTime", frame.shaderTime);
     shader.setFloat("uWeatherWetness", frame.weatherWetness);
+    shader.setVec3("uCameraPos", frame.cameraPos);
+    shader.setVec3("uSunDirection", frame.skyColors.sunDirection);
+    shader.setVec3("uMoonDirection", frame.skyColors.moonDirection);
+    shader.setFloat("uSkyIntensity", frame.skyIntensity);
+    shader.setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
     shader.setFloat("uCloudCompositeStrength", m_pipelineSettings.sceneCloudCompositeStrength);
     shader.setFloat("uReflectionCompositeStrength", m_pipelineSettings.sceneReflectionCompositeStrength);
 
@@ -1597,10 +1602,12 @@ void Renderer::renderSceneCompositePass(const RenderFrameData& frame) {
     bindSceneCompositeInputs(*m_sceneCompositeShader, frame);
     renderFullscreen(*m_sceneCompositeShader);
 
-    for (int unit = 12; unit >= 0; --unit) {
+    for (int unit = 13; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
+    glActiveTexture(GL_TEXTURE14);
+    glBindTexture(GL_TEXTURE_3D, 0);
     glActiveTexture(GL_TEXTURE0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -1693,6 +1700,10 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setMat4("uViewProj", frame.viewProj);
     m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
     m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
+    m_reflectionShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
+    m_reflectionShader->setVec3("uMoonDirection", frame.skyColors.moonDirection);
+    m_reflectionShader->setFloat("uSkyIntensity", frame.skyIntensity);
+    m_reflectionShader->setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
     m_reflectionShader->setFloat("uWeatherWetness", frame.weatherWetness);
     m_reflectionShader->setFloat("uTime", frame.shaderTime);
 

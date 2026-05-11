@@ -178,6 +178,18 @@ vec3 kappaFilmEmulation(vec3 color) {
     return mix(color, film, saturate(uFilmEmulationStrength));
 }
 
+vec3 derivativeAcademyCurve(vec3 color) {
+    color = max(color, vec3(0.0));
+    vec3 shoulder = color / (color + vec3(0.86));
+    vec3 toe = 1.0 - exp(-color * vec3(1.18, 1.10, 1.02));
+    float luma = luma709(color);
+    float shoulderWeight = smoothstep(0.32, 3.8, luma);
+    vec3 mapped = mix(toe, shoulder, shoulderWeight);
+    mapped = pow(max(mapped, vec3(0.0)), vec3(0.92, 0.96, 1.02));
+    vec3 printDensity = vec3(1.045, 1.01, 0.965);
+    return saturate(mapped * printDensity);
+}
+
 vec3 kappaAcesApprox(vec3 color) {
     color = acesCompressionLmt(max(color, vec3(0.0)));
     color = rrtSweeteners(color);
@@ -269,7 +281,9 @@ vec3 applyKappaTonemap(vec3 color) {
     if (uTonemapMode == 3) {
         vec3 agxMapped = tonemapPreserveLuma(color);
         vec3 kappaMapped = kappaAcesApprox(color);
-        return mix(agxMapped, kappaMapped, saturate(uKappaGradingStrength) * 0.28);
+        vec3 academyMapped = derivativeAcademyCurve(color * 0.92);
+        vec3 base = mix(agxMapped, kappaMapped, saturate(uKappaGradingStrength) * 0.22);
+        return mix(base, academyMapped, saturate(uKappaGradingStrength) * 0.38);
     }
     vec3 mapped = kappaAcesApprox(color);
     vec3 fallback = tonemapPreserveLuma(color);
@@ -280,7 +294,7 @@ vec3 applySplitTone(vec3 color) {
     float lum = luma709(color);
     vec3 shadowTint = vec3(0.88, 0.94, 1.08);
     vec3 highlightTint = vec3(1.10, 1.035, 0.90);
-    float shadowWeight = smoothstep(0.55, 0.02, lum);
+    float shadowWeight = 1.0 - smoothstep(0.02, 0.55, lum);
     float highlightWeight = smoothstep(0.38, 1.0, lum);
     vec3 toned = color;
     toned *= mix(vec3(1.0), shadowTint, shadowWeight * 0.42);
@@ -290,12 +304,12 @@ vec3 applySplitTone(vec3 color) {
 
 vec3 applyAgxLook(vec3 color) {
     float lum = luma709(color);
-    float chromaBoost = mix(1.09, 1.03, smoothstep(0.18, 0.85, lum));
+    float chromaBoost = mix(1.12, 1.02, smoothstep(0.18, 0.85, lum));
     color = mix(vec3(lum), color, chromaBoost);
-    vec3 coolShadows = vec3(0.92, 0.98, 1.08);
-    vec3 warmHighlights = vec3(1.06, 1.025, 0.94);
-    color *= mix(vec3(1.0), coolShadows, smoothstep(0.34, 0.02, lum) * 0.16);
-    color *= mix(vec3(1.0), warmHighlights, smoothstep(0.42, 1.0, lum) * 0.10);
+    vec3 coolShadows = vec3(0.88, 0.97, 1.12);
+    vec3 warmHighlights = vec3(1.08, 1.025, 0.91);
+    color *= mix(vec3(1.0), coolShadows, (1.0 - smoothstep(0.025, 0.36, lum)) * 0.20);
+    color *= mix(vec3(1.0), warmHighlights, smoothstep(0.42, 1.0, lum) * 0.14);
     return saturate(color);
 }
 
@@ -330,7 +344,10 @@ vec3 applyGrade(vec3 color) {
 vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
     vec3 color = texture(uSceneTex, sampleUv).rgb;
     if (uBloomEnabled) {
-        color += texture(uBloomTex, sampleUv).rgb * uBloomStrength;
+        vec3 bloom = texture(uBloomTex, sampleUv).rgb;
+        float bloomLuma = luma709(bloom);
+        vec3 fogBloom = mix(bloom, vec3(bloomLuma) * vec3(0.82, 0.93, 1.08), smoothstep(0.02, 0.34, bloomLuma) * 0.28);
+        color += fogBloom * uBloomStrength;
     }
 
     if (uUnderwaterEnabled) {
