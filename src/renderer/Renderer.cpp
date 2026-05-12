@@ -1058,6 +1058,7 @@ void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& fr
     shader.setVec3("uSunIlluminance", frame.skyIlluminance.sunIlluminance);
     shader.setVec3("uMoonIlluminance", frame.skyIlluminance.moonIlluminance);
     shader.setInt("uHeldBlockLightValue", m_heldBlockLightValue);
+    shader.setInt("uHeldBlockLightValue2", 0); // Off-hand slot (unused until dual-wield)
 }
 
 void Renderer::bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, const bool bindAerialReduction) const {
