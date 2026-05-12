@@ -17,6 +17,8 @@ const int MATERIAL_WATER = 9;
 const int MATERIAL_ORE = 10;
 const int MATERIAL_EMISSIVE = 11;
 const int MATERIAL_METAL = 12;
+const int MATERIAL_ICE = 13;
+const int MATERIAL_STAINED_GLASS = 14;
 
 struct SurfaceMaterial {
     float roughness;
@@ -209,6 +211,32 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     GBufferSurface surface = unpackGBufferSurface(albedoMaterial, normalAo, voxelLight, packedMaterial);
     surface.aux = unpackGBufferMaterialAux(packedMaterialAux);
     return surface;
+}
+
+//----------------------------------------------------------------------------//
+// Translucent mask — classifies translucent material types for composite passes.
+// Matches DerivativeMain lib/Head/Mask.inc TranslucentMask semantics.
+//----------------------------------------------------------------------------//
+
+struct TranslucentMask {
+    bool isWater;
+    bool isIce;
+    bool isGlass;
+    bool isStainedGlass;
+    bool isTranslucent;
+    vec3 stainedGlassTint;
+};
+
+TranslucentMask decodeTranslucentMask(float materialKind) {
+    TranslucentMask mask;
+    int kind = int(round(materialKind));
+    mask.isWater = (kind == MATERIAL_WATER);
+    mask.isIce = (kind == MATERIAL_ICE);
+    mask.isGlass = (kind == MATERIAL_GLASS);
+    mask.isStainedGlass = (kind == MATERIAL_STAINED_GLASS);
+    mask.isTranslucent = mask.isWater || mask.isIce || mask.isGlass || mask.isStainedGlass;
+    mask.stainedGlassTint = vec3(1.0);
+    return mask;
 }
 
 #endif

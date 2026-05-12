@@ -1,5 +1,6 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#include "render_contract.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;

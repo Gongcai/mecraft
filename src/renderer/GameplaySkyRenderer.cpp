@@ -339,6 +339,63 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     }
 }
 
+void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illuminance,
+                                                 GLuint framebuffer,
+                                                 int skyCaptureWidth) {
+    if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0) {
+        return;
+    }
+
+    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
+    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+    GLint viewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    GLint previousFramebuffer = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    // Write to column skyCaptureWidth-1, rows 0..3 (4 pixels)
+    glViewport(skyCaptureWidth - 1, 0, 1, 4);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+
+    m_shader->use();
+    m_shader->setInt("uMode", 5);
+    m_shader->setMat4("uView", glm::mat4(1.0f));
+    m_shader->setMat4("uProjection", glm::mat4(1.0f));
+    m_shader->setMat4("uModel", glm::mat4(1.0f));
+    m_shader->setVec3("uDirectIlluminance", illuminance.directIlluminance);
+    m_shader->setVec3("uSkyIlluminance", illuminance.skyIlluminance);
+    m_shader->setVec3("uSunIlluminance", illuminance.sunIlluminance);
+    m_shader->setVec3("uMoonIlluminance", illuminance.moonIlluminance);
+
+    glBindVertexArray(m_skyVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    if (blendWasEnabled) {
+        glEnable(GL_BLEND);
+    } else {
+        glDisable(GL_BLEND);
+    }
+    if (cullFaceWasEnabled) {
+        glEnable(GL_CULL_FACE);
+    } else {
+        glDisable(GL_CULL_FACE);
+    }
+    if (depthTestWasEnabled) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+}
+
 GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNightSystem& dayNight) const {
     const float skyIntensity = dayNight.getSkyIntensity();
     const float progress = dayNight.getDayProgress01();
@@ -405,6 +462,42 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     colors.cloudColor = lerp(cloudNightColor, cloudDayColor, skyIntensity);
     colors.cloudColor = lerp(colors.cloudColor, cloudWarmColor, warm * 0.42f);
     return colors;
+}
+
+GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminance(const SkyColors& colors) const {
+    // Physically-scaled illuminance approximations derived from the analytic sky palette.
+    // These are bridge values for Phase 1; Phase 3 will replace them with atmosphere LUT integrals.
+    //
+    // Reference values (clear sky noon):
+    //   Solar illuminance on horizontal plane ≈ 100,000-120,000 lux
+    //   Sky hemisphere irradiance ≈ 20,000-30,000 lux
+    //   Solar disk luminance ≈ 1.6e9 cd/m^2
+    //   Lunar disk luminance ≈ 2,500 cd/m^2 (full moon)
+
+    SkyIlluminanceData data;
+
+    // Direct sun illuminance on horizontal ground plane.
+    // Scales with sun altitude (cosine law) and sun visibility (day/night gate).
+    constexpr float kSolarConstant = 120000.0f; // lux, clear sky noon
+    const float sunAltitude = std::max(colors.sunDirection.y, 0.0f);
+    const float sunFactor = sunAltitude * colors.sunVisibility;
+    data.directIlluminance = colors.sunLightColor * sunFactor * kSolarConstant;
+
+    // Sky hemisphere irradiance.
+    // Proportional to sky ambient color, scaled to physical units.
+    constexpr float kSkyIrradianceScale = 28000.0f; // lux, clear sky
+    data.skyIlluminance = colors.skyAmbientColor * kSkyIrradianceScale;
+
+    // Solar disk luminous intensity (radiance).
+    // The sun disk is very bright but small (≈6.8e-5 sr solid angle).
+    constexpr float kSunDiskLuminance = 1.6e9f; // cd/m^2
+    data.sunIlluminance = colors.sunLightColor * colors.sunVisibility * kSunDiskLuminance;
+
+    // Lunar disk luminous intensity.
+    constexpr float kMoonDiskLuminance = 2500.0f; // cd/m^2, full moon
+    data.moonIlluminance = colors.moonLightColor * colors.moonVisibility * kMoonDiskLuminance;
+
+    return data;
 }
 
 glm::vec3 GameplaySkyRenderer::getLastFogColor() const {

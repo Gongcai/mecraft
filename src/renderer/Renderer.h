@@ -368,6 +368,7 @@ private:
         glm::mat4 invViewProj = glm::mat4(1.0f);
         glm::vec3 cameraPos = glm::vec3(0.0f);
         GameplaySkyRenderer::SkyColors skyColors{};
+        GameplaySkyRenderer::SkyIlluminanceData skyIlluminance{};
         float skyIntensity = 1.0f;
         float animationTime = 0.0f;
         float shaderTime = 0.0f;

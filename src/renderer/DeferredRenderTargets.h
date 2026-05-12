@@ -89,8 +89,12 @@ public:
     [[nodiscard]] bool isReady() const { return m_ready; }
 
 private:
+    // Sky capture: 256x256 equirectangular map.
+    // Columns 0..254 store sky radiance, column 255 stores metadata texels
+    // (directIlluminance, skyIlluminance, sunIlluminance, moonIlluminance).
+    // Height 256 matches DerivativeMain's skyCaptureRes.y.
     static constexpr int kSkyCaptureWidth = 256;
-    static constexpr int kSkyCaptureHeight = 128;
+    static constexpr int kSkyCaptureHeight = 256;
     static constexpr GLenum kGAlbedoAttachment = GL_COLOR_ATTACHMENT0;
     static constexpr GLenum kGNormalAoAttachment = GL_COLOR_ATTACHMENT1;
     static constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;

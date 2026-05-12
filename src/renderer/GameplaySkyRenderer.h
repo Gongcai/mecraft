@@ -13,6 +13,16 @@ class Shader;
 
 class GameplaySkyRenderer {
 public:
+    // Physically-scaled illuminance values for the sky cache metadata texels.
+    // These are derived analytically from the sky palette (Phase 1 bridge);
+    // will be replaced by atmosphere LUT integrals in Phase 3.
+    struct SkyIlluminanceData {
+        glm::vec3 directIlluminance = glm::vec3(0.0f);  // sun irradiance on horizontal ground (lux)
+        glm::vec3 skyIlluminance    = glm::vec3(0.0f);  // hemisphere sky irradiance (lux)
+        glm::vec3 sunIlluminance    = glm::vec3(0.0f);  // solar disk radiance (cd/m^2)
+        glm::vec3 moonIlluminance   = glm::vec3(0.0f);  // lunar disk radiance (cd/m^2)
+    };
+
     struct SkyColors {
         glm::vec3 top = glm::vec3(0.55f, 0.75f, 1.0f);
         glm::vec3 horizon = glm::vec3(0.70f, 0.86f, 1.0f);
@@ -44,8 +54,10 @@ public:
     void shutdown();
     void render(const Camera& camera, float aspect, const DayNightSystem& dayNight);
     void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height);
+    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, GLuint framebuffer, int skyCaptureWidth);
 
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
+    [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors) const;
     [[nodiscard]] glm::vec3 getLastFogColor() const;
     [[nodiscard]] static std::pair<glm::vec2, glm::vec2> getMoonPhaseUv(int phaseIndex);
 

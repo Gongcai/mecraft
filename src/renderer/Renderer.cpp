@@ -989,6 +989,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.previousInvViewProj = frame.invViewProj;
     }
     frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
+    frame.skyIlluminance = m_gameplaySkyRenderer.computeSkyIlluminance(frame.skyColors);
     frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
     const double gameTime = Time::getGameTime();
     frame.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
@@ -1048,6 +1049,10 @@ void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& fr
     shader.setVec3("uHorizonScatterColor", frame.skyColors.horizonScatterColor);
     shader.setFloat("uSkyIntensity", frame.skyIntensity);
     shader.setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
+    shader.setVec3("uDirectIlluminance", frame.skyIlluminance.directIlluminance);
+    shader.setVec3("uSkyIlluminance", frame.skyIlluminance.skyIlluminance);
+    shader.setVec3("uSunIlluminance", frame.skyIlluminance.sunIlluminance);
+    shader.setVec3("uMoonIlluminance", frame.skyIlluminance.moonIlluminance);
 }
 
 void Renderer::bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, const bool bindAerialReduction) const {
@@ -2241,6 +2246,12 @@ void Renderer::renderSkyCapturePass(const World& world) {
                                            m_deferredTargets.skyCaptureFramebuffer(),
                                            m_deferredTargets.skyCaptureWidth(),
                                            m_deferredTargets.skyCaptureHeight());
+
+    // Write sky cache metadata texels (illuminance) to column skyCaptureWidth-1
+    const auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()));
+    m_gameplaySkyRenderer.writeSkyCacheMetadata(illum,
+                                                 m_deferredTargets.skyCaptureFramebuffer(),
+                                                 m_deferredTargets.skyCaptureWidth());
 }
 
 void Renderer::renderFullscreen(Shader& shader) const {

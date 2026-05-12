@@ -1,6 +1,8 @@
 #ifndef MECRAFT_ATMOSPHERE_LUT_GLSL
 #define MECRAFT_ATMOSPHERE_LUT_GLSL
 
+#include "render_contract.glsl"
+
 const float atmPi = 3.14159265359;
 const float atmTwoPi = 6.28318530718;
 const float atmPlanetRadius = 6371000.0;

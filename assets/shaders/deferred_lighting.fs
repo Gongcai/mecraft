@@ -1,5 +1,6 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#include "render_contract.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -647,6 +648,17 @@ void main() {
     float sunShadow = (uShadowLightMode == 0) ? shadow : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadow, 0.82) : 1.0;
 
+    // Read physically-scaled illuminance from sky cache metadata texels.
+    // These provide HDR energy values that scale the artistic lighting colors.
+    vec3 cacheDirectLux = getDirectIlluminance(uSkyCaptureTex);
+    vec3 cacheSkyLux = getSkyIlluminance(uSkyCaptureTex);
+    // Luminance of the cached illuminance — used as a scalar energy multiplier.
+    float directLuxLuma = dot(cacheDirectLux, vec3(0.2126, 0.7152, 0.0722));
+    float skyLuxLuma = dot(cacheSkyLux, vec3(0.2126, 0.7152, 0.0722));
+    // Normalize to preserve the artistic color balance while applying physical energy.
+    float directEnergyScale = clamp(directLuxLuma / max(dot(uSunLightColor, vec3(0.2126, 0.7152, 0.0722)) * 120000.0, 1.0), 0.0, 10.0);
+    float skyEnergyScale = clamp(skyLuxLuma / max(dot(uSkyAmbientColor, vec3(0.2126, 0.7152, 0.0722)) * 28000.0, 1.0), 0.0, 10.0);
+
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
     vec3 shadowTint = sampleShadowColorTint(worldPos, normal, shadowLightDir, shadow);
@@ -661,7 +673,7 @@ void main() {
     float sssSunShadowFill = sssSunTransmittance * mix(0.18, 0.46, 1.0 - sunShadow) * cloudShadow;
     vec3 directSun = warmSunColor * shadowTint *
                      ((diffuse * sunShadow + terminatorFill) * cloudShadow + sssSunShadowFill) *
-                     skyLightMask * uDirectSunStrength * directEnergy;
+                     skyLightMask * uDirectSunStrength * directEnergy * directEnergyScale;
     float moonMask = nightSkyMask;
     vec3 moonFill = uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
     float sssMoonTransmittance = sss * smoothstep(-0.30, 0.16, -rawNdotM);
@@ -677,7 +689,7 @@ void main() {
     directSpecular *= mix(1.18, 0.18, roughness);
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 skyAmbient = coolSkyColor * shadowTint * (0.026 + 0.54 * outdoorSkyMask) *
-                      uSkyAmbientStrength *
+                      uSkyAmbientStrength * skyEnergyScale *
                       mix(0.48, 1.0, upward) +
                       moonFill;
     skyAmbient *= mix(vec3(1.0), uShadowTintColor, (1.0 - shadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);

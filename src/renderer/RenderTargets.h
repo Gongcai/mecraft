@@ -1,0 +1,155 @@
+#ifndef MECRAFT_RENDER_TARGETS_H
+#define MECRAFT_RENDER_TARGETS_H
+
+// Formal render target registry for the built-in deferred pipeline.
+// Each slot maps to a physical GPU texture owned by DeferredRenderTargets.
+// The DerivativeMain colortex equivalent is noted for cross-reference.
+//
+// This file is documentation-as-code: the enum and PassIO table make the
+// buffer contract explicit and auditable with zero runtime cost.
+
+namespace render {
+
+// Logical render target slots.
+enum class Target : int {
+    // --- GBuffer MRT (written by gbuffers, read by lighting/composite) ---
+    GAlbedo       = 0,   // RGBA8   — linear albedo.rgb, emissive hint.a         ≈ colortex6
+    GNormalAo     = 1,   // RGBA16F — octahedral normal.rgb, vertex AO.a        ≈ colortex3 (RG)
+    GVoxelLight   = 2,   // RG8     — sky light.r, block light.g                 ≈ colortex7 (RG)
+    GMaterial     = 3,   // RGBA8   — roughness.r, f0.g, emission.b, sss.a      ≈ colortex3 (BA)
+    GMaterialAux  = 4,   // RGBA8   — materialKind.r, wetness.g, porosity.b, metal.a
+    GDepth        = 5,   // DEPTH32F — opaque + transparent depth                ≈ depthtex0
+
+    // --- Deferred outputs ---
+    SceneLighting = 10,  // RGBA16F — HDR scene after deferred lighting          ≈ colortex4
+    ReflectionData= 11,  // RGBA16F — reflected radiance.rgb, specular weight.a  ≈ colortex2
+    CloudData     = 12,  // RGBA16F — scattered light.rgb, transmittance.a       ≈ colortex1
+    SkyCapture    = 13,  // RGBA16F — equirectangular sky map + metadata texels   ≈ colortex5
+    Velocity      = 14,  // RG16F   — screen-space motion vector xy
+
+    // --- Shadow ---
+    ShadowDepth   = 15,  // DEPTH32F — shadow map depth
+    ShadowColor   = 16,  // RGBA8   — albedo for colored shadows / caustics
+    ShadowNormal  = 17,  // RG16F   — octahedral normal for normal offset / SSS
+
+    // --- Post / temporal ---
+    SceneComposite= 20,  // RGBA16F — opaque HDR after screen-space effects (clouds, reflections)
+    SceneResolved = 21,  // RGBA16F — post-TAA HDR scene (input to post-process)
+    HistoryScene  = 22,  // RGBA16F — TAA color history (ping-pong)
+    HistoryDepth  = 23,  // DEPTH32F — TAA depth history
+    HistoryReflect= 24,  // RGBA16F — reflection temporal history
+    HistoryCloud  = 25,  // RGBA16F — cloud temporal history
+
+    // --- Utility ---
+    SSAO          = 30,  // R8     — raw ambient occlusion
+    SSAOFiltered  = 31,  // R8     — bilateral-filtered AO
+    VolumetricFog = 32,  // RGBA16F — fog scattered light.rgb + transmittance.a
+    HalfRes       = 33,  // RGBA16F — generic half-resolution scratch buffer
+
+    Count
+};
+
+// Per-pass I/O contract: which targets each pass reads and writes.
+// This is the authoritative reference for the buffer dependency graph.
+struct PassIO {
+    const char* name;
+    Target reads[10];
+    Target writes[5];
+};
+
+// clang-format off
+inline constexpr PassIO kPassTable[] = {
+    { "SkyCapture",
+      { Target::Count },
+      { Target::SkyCapture } },
+
+    { "GBuffer",
+      { Target::Count },
+      { Target::GAlbedo, Target::GNormalAo, Target::GVoxelLight,
+        Target::GMaterial, Target::GMaterialAux, Target::GDepth } },
+
+    { "Velocity",
+      { Target::GDepth },
+      { Target::Velocity } },
+
+    { "Shadow",
+      { Target::Count },
+      { Target::ShadowDepth, Target::ShadowColor, Target::ShadowNormal } },
+
+    { "SSAO",
+      { Target::GDepth, Target::GNormalAo },
+      { Target::SSAO } },
+
+    { "SSAOFilter",
+      { Target::SSAO, Target::GDepth, Target::GNormalAo },
+      { Target::SSAOFiltered } },
+
+    { "DeferredLighting",
+      { Target::GAlbedo, Target::GNormalAo, Target::GVoxelLight,
+        Target::GMaterial, Target::GMaterialAux, Target::GDepth,
+        Target::ShadowDepth, Target::ShadowColor, Target::SSAOFiltered,
+        Target::SkyCapture },
+      { Target::SceneLighting } },
+
+    { "Reflection",
+      { Target::SceneLighting, Target::GDepth, Target::GNormalAo,
+        Target::GMaterial, Target::GMaterialAux, Target::SkyCapture },
+      { Target::ReflectionData } },
+
+    { "ReflectionFilter",
+      { Target::ReflectionData, Target::GDepth, Target::GNormalAo,
+        Target::GMaterial },
+      { Target::ReflectionData } },
+
+    { "Cloud",
+      { Target::GDepth, Target::SkyCapture },
+      { Target::CloudData } },
+
+    { "SceneComposite",
+      { Target::SceneLighting, Target::CloudData, Target::ReflectionData,
+        Target::GDepth, Target::GMaterial, Target::GMaterialAux,
+        Target::SkyCapture, Target::GAlbedo },
+      { Target::SceneComposite } },
+
+    { "VolumetricFog",
+      { Target::GDepth, Target::SkyCapture, Target::ShadowDepth,
+        Target::ShadowColor },
+      { Target::VolumetricFog } },
+
+    { "VolumetricComposite",
+      { Target::SceneComposite, Target::VolumetricFog, Target::GDepth },
+      { Target::SceneComposite } },
+
+    { "TemporalResolve",
+      { Target::SceneComposite, Target::HistoryScene, Target::Velocity,
+        Target::GDepth, Target::HistoryDepth },
+      { Target::SceneResolved } },
+
+    { "MotionBlur",
+      { Target::SceneResolved, Target::Velocity, Target::GDepth },
+      { Target::SceneResolved } },
+
+    { "DoF",
+      { Target::SceneResolved, Target::GDepth },
+      { Target::SceneResolved } },
+
+    { "WaterComposite",
+      { Target::GDepth, Target::SceneResolved, Target::ReflectionData,
+        Target::SkyCapture },
+      { Target::Count } },  // writes to default framebuffer
+
+    { "TransparentComposite",
+      { Target::GDepth, Target::SceneResolved, Target::SkyCapture },
+      { Target::Count } },  // writes to default framebuffer
+
+    { "PostProcess",
+      { Target::SceneResolved },
+      { Target::Count } },  // writes to default framebuffer
+};
+// clang-format on
+
+inline constexpr int kPassCount = sizeof(kPassTable) / sizeof(kPassTable[0]);
+
+} // namespace render
+
+#endif // MECRAFT_RENDER_TARGETS_H

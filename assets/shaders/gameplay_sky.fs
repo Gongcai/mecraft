@@ -22,6 +22,12 @@ uniform float uNightFactor;
 uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
 
+// Sky cache metadata (mode 5)
+uniform vec3 uDirectIlluminance;
+uniform vec3 uSkyIlluminance;
+uniform vec3 uSunIlluminance;
+uniform vec3 uMoonIlluminance;
+
 const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
 
@@ -110,6 +116,22 @@ void main() {
         float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
         vec3 dir = normalize(vec3(sin(phi) * sinTheta, cosTheta, -cos(phi) * sinTheta));
         FragColor = vec4(srgbToLinear(evaluateSkyRadiance(dir)), 1.0);
+        return;
+    }
+
+    if (uMode == 5) {
+        // Sky cache metadata texel pass.
+        // Rendered as a 1x4 viewport at column x=255 of the sky capture FBO.
+        // Row 0: directIlluminance, Row 1: skyIlluminance,
+        // Row 2: sunIlluminance, Row 3: moonIlluminance.
+        int row = int(gl_FragCoord.y);
+        vec3 value = vec3(0.0);
+        if (row == 0) value = uDirectIlluminance;
+        else if (row == 1) value = uSkyIlluminance;
+        else if (row == 2) value = uSunIlluminance;
+        else if (row == 3) value = uMoonIlluminance;
+        else discard;
+        FragColor = vec4(value, 1.0);
         return;
     }
 
