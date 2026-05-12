@@ -9,6 +9,7 @@ uniform sampler2D uNoiseTex;
 
 uniform bool uBloomEnabled;
 uniform float uBloomStrength;
+uniform float uExposure;
 uniform bool uSunRaysEnabled;
 uniform vec2 uSunScreenPos;
 uniform float uSunVisibility;
@@ -30,7 +31,6 @@ uniform bool uUnderwaterEnabled;
 uniform vec3 uUnderwaterTint;
 uniform float uUnderwaterStrength;
 uniform float uScreenRollRadians;
-uniform float uExposure;
 uniform float uGamma;
 uniform float uSaturation;
 uniform float uContrast;
@@ -347,7 +347,9 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         vec3 bloom = texture(uBloomTex, sampleUv).rgb;
         float bloomLuma = luma709(bloom);
         vec3 fogBloom = mix(bloom, vec3(bloomLuma) * vec3(0.82, 0.93, 1.08), smoothstep(0.02, 0.34, bloomLuma) * 0.28);
-        color += fogBloom * uBloomStrength;
+        // DerivativeMain Grade.glsl line 144: exposure compensation
+        float bloomAmount = uBloomStrength / (max(uExposure, 1.0) * 0.7 + 0.3);
+        color += fogBloom * bloomAmount;
     }
 
     if (uUnderwaterEnabled) {
@@ -439,4 +441,3 @@ void main() {
     }
     FragColor = vec4(clamp(graded, 0.0, 1.0), 1.0);
 }
-

@@ -83,14 +83,18 @@ void main() {
         color = mix(color, mix(color, cloud.rgb, clamp(cloud.a, 0.0, 1.0)), farCloudBlend);
     }
 
+    // Premultiplied reflection data (DerivativeMain composite1 convention):
+    // reflection.rgb = reflection * specular weight, reflection.a = 1 - specular
+    // DerivativeMain: sceneData = sceneData * reflectionData.a + reflectionData.rgb
     vec4 reflection = texture(uReflectionTex, vTexCoord);
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
-    float wetSurface = clamp(uWeatherWetness * aux.wetnessMask * (0.35 + aux.porosity * 0.65), 0.0, 1.0);
-    float glossySurface = (1.0 - smoothstep(0.18, 0.92, material.roughness)) * smoothstep(0.025, 0.16, material.f0);
-    float reflectionWeight = reflection.a * max(wetSurface, glossySurface * 0.32) * clamp(uReflectionCompositeStrength, 0.0, 1.0);
-    color = mix(color, reflection.rgb, reflectionWeight);
+    float compositeStrength = clamp(uReflectionCompositeStrength, 0.0, 1.0);
+    // Blend between full scene pass-through (1.0) and premultiplied reflection
+    float sceneWeight = mix(1.0, reflection.a, compositeStrength);
+    vec3 reflContrib = reflection.rgb * compositeStrength;
+    color = color * sceneWeight + reflContrib;
 
     // Translucent tinting (DerivativeMain composite1 equivalent).
     // For stained glass: absorb light through colored medium.

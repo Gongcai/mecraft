@@ -168,7 +168,7 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     glCreateFramebuffers(1, &m_reflectionFbo);
-    m_reflectionTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    m_reflectionTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_reflectionFbo, GL_COLOR_ATTACHMENT0, m_reflectionTex, 0);
     const GLenum reflectionDrawBuffer = GL_COLOR_ATTACHMENT0;
     glNamedFramebufferDrawBuffers(m_reflectionFbo, 1, &reflectionDrawBuffer);
@@ -214,7 +214,7 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         }
 
         glCreateFramebuffers(1, &m_historyReflectionFbo[i]);
-        m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
+        m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                     GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
         glNamedFramebufferTexture(m_historyReflectionFbo[i], GL_COLOR_ATTACHMENT0, m_historyReflectionTex[i], 0);
         glNamedFramebufferDrawBuffers(m_historyReflectionFbo[i], 1, &historyDrawBuffer);
@@ -328,7 +328,7 @@ void DeferredRenderTargets::bindHalfRes() {
 
 void DeferredRenderTargets::bindReflection() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionFbo);
-    glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
+    glViewport(0, 0, m_width, m_height);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
 }
@@ -488,12 +488,10 @@ void DeferredRenderTargets::copyReflectionToHistory() const {
     if (!m_ready) {
         return;
     }
-    const int halfWidth = std::max(1, m_width / 2);
-    const int halfHeight = std::max(1, m_height / 2);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_reflectionFbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
-                      0, 0, halfWidth, halfHeight,
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
 }

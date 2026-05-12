@@ -42,8 +42,8 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.underwaterStrength = std::clamp(m_effects.underwaterStrength, 0.0f, 1.0f);
     m_effects.bloomThreshold = std::clamp(m_effects.bloomThreshold, 0.0f, 4.0f);
     m_effects.bloomStrength = std::clamp(m_effects.bloomStrength, 0.0f, 2.0f);
-    m_effects.autoExposureMin = std::clamp(m_effects.autoExposureMin, 0.05f, 8.0f);
-    m_effects.autoExposureMax = std::clamp(m_effects.autoExposureMax, m_effects.autoExposureMin, 8.0f);
+    m_effects.autoExposureMin = std::clamp(m_effects.autoExposureMin, 0.001f, 64.0f);
+    m_effects.autoExposureMax = std::clamp(m_effects.autoExposureMax, m_effects.autoExposureMin, 64.0f);
     m_effects.autoExposureSpeed = std::clamp(m_effects.autoExposureSpeed, 0.05f, 12.0f);
     m_effects.autoExposureBias = std::clamp(m_effects.autoExposureBias, -3.0f, 3.0f);
     m_effects.autoExposureDayFactor = std::clamp(m_effects.autoExposureDayFactor, 0.0f, 1.0f);
@@ -65,7 +65,7 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.vignetteStrength = std::clamp(m_effects.vignetteStrength, 0.0f, 0.5f);
     m_effects.noiseDitherStrength = std::clamp(m_effects.noiseDitherStrength, 0.0f, 0.08f);
     m_effects.sharpenStrength = std::clamp(m_effects.sharpenStrength, 0.0f, 1.0f);
-    m_effects.exposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
+    m_effects.exposure = std::clamp(m_effects.exposure, 0.1f, 50.0f);
     m_effects.gamma = std::clamp(m_effects.gamma, 1.0f, 3.5f);
     m_effects.saturation = std::clamp(m_effects.saturation, 0.0f, 3.0f);
     m_effects.contrast = std::clamp(m_effects.contrast, 0.25f, 3.0f);
@@ -262,7 +262,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
 }
 
 float PostProcessRenderer::updateAutoExposure(const float frameTime) {
-    const float manualExposure = std::clamp(m_effects.exposure, 0.05f, 8.0f);
+    const float manualExposure = 0.8f / std::max(m_effects.exposure, 0.0001f);
     if (!m_effects.autoExposureEnabled || m_exposureDownsampleShader == nullptr ||
         m_exposureMipCount <= 0 || m_sceneColorTex == 0 || m_fullscreenVao == 0) {
         m_autoExposureInitialized = false;
@@ -312,25 +312,28 @@ float PostProcessRenderer::updateAutoExposure(const float frameTime) {
     const float weightedLogLum = exposureData[0];
     const float weightSum = std::max(exposureData[1], 1e-4f);
     const float averageLogLum = weightedLogLum / weightSum;
-    const float averageLum = std::max(std::exp(averageLogLum), 1e-5f);
+    const float averageLum = std::max(std::exp(averageLogLum * 0.75f), 1e-5f);
 
-    const float dayFactor = m_effects.autoExposureDayFactor;
-    const float targetKey = (0.30f + 0.12f * dayFactor) * std::exp2(m_effects.autoExposureBias);
-    const float nightAwareMax = std::max(m_effects.autoExposureMin,
-                                         std::min(m_effects.autoExposureMax, 1.05f + 0.80f * dayFactor));
-    float targetExposure = targetKey / std::pow(averageLum, 0.85f);
-    targetExposure = std::clamp(targetExposure, m_effects.autoExposureMin, nightAwareMax);
+    // DerivativeMain sigmoid response curve (Temporal.vert lines 42-57)
+    const float bias = m_effects.autoExposureBias;
+    const float K = 19.0f;
+    const float calibration = std::exp2(bias) * K * 1e-2f;  // 0.19 when bias=0
+    const float a = K * 1e-2f * 18.0f;   // 3.42
+    const float b = a - K * 1e-2f * 0.04f; // 3.4124
+    float targetExposure = calibration / (a - b * std::exp(-averageLum / b));
+    targetExposure = std::clamp(targetExposure, m_effects.autoExposureMin, m_effects.autoExposureMax);
 
     if (!m_autoExposureInitialized) {
         m_adaptedExposure = targetExposure;
         m_autoExposureInitialized = true;
     } else {
-        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 1.55f : 1.0f);
+        // DerivativeMain: darken faster than brighten (1.5x vs 1.0x)
+        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 1.5f : 1.0f);
         const float alpha = 1.0f - std::exp(-std::max(frameTime, 0.0f) * speed);
         m_adaptedExposure += (targetExposure - m_adaptedExposure) * std::clamp(alpha, 0.0f, 1.0f);
     }
 
-    return std::clamp(manualExposure * m_adaptedExposure, 0.05f, 8.0f);
+    return m_adaptedExposure;
 }
 
 bool PostProcessRenderer::ensureRenderTargets(const int width, const int height) {
@@ -475,5 +478,4 @@ void PostProcessRenderer::destroyFullscreenTriangle() {
         m_fullscreenVao = 0;
     }
 }
-
 

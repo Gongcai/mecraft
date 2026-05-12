@@ -15,12 +15,12 @@ struct PostProcessEffects {
     float underwaterStrength = 0.68f;
     float screenRollRadians = 0.0f;
     bool bloomEnabled = true;
-    float bloomThreshold = 0.82f;
+    float bloomThreshold = 0.0f;    // DerivativeMain: no threshold, raw HDR feeds bloom
     float bloomStrength = 0.24f;
     bool autoExposureEnabled = true;
-    float autoExposureMin = 0.55f;
-    float autoExposureMax = 2.05f;
-    float autoExposureSpeed = 1.4f;
+    float autoExposureMin = 0.001f; // Allow very bright scenes
+    float autoExposureMax = 64.0f;  // Allow very dark scenes
+    float autoExposureSpeed = 1.0f; // DerivativeMain EXPOSURE_SPEED
     float autoExposureBias = 0.0f;
     float autoExposureDayFactor = 1.0f;
     bool sunRaysEnabled = true;
@@ -40,7 +40,7 @@ struct PostProcessEffects {
     float vignetteStrength = 0.08f;
     float noiseDitherStrength = 0.015f;
     float sharpenStrength = 0.08f;
-    float exposure = 1.0f;
+    float exposure = 12.0f;   // DerivativeMain MANUAL_EXPOSURE_VALUE
     float gamma = 2.2f;
     float saturation = 1.0f;
     float contrast = 1.0f;

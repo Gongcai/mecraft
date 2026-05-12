@@ -58,12 +58,12 @@ public:
         bool cloudShadowsEnabled = true;
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
-        float bloomThreshold = 0.82f;
+        float bloomThreshold = 0.0f;
         float bloomStrength = 0.24f;
         bool autoExposureEnabled = true;
-        float autoExposureMin = 0.55f;
-        float autoExposureMax = 1.85f;
-        float autoExposureSpeed = 1.4f;
+        float autoExposureMin = 0.001f;
+        float autoExposureMax = 64.0f;
+        float autoExposureSpeed = 1.0f;
         float autoExposureBias = 0.0f;
         bool sunRaysEnabled = true;
         bool waterEffectsEnabled = true;
@@ -132,7 +132,7 @@ public:
         float sharpenStrength = 0.08f;
         float ssaoRadius = 2.25f;
         float ssaoStrength = 0.75f;
-        float exposure = 1.0f;
+        float exposure = 12.0f;
         float gamma = 2.2f;
         float saturation = 1.0f;
         float contrast = 1.0f;

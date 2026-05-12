@@ -130,5 +130,8 @@ void main() {
     vec3 fallback = mix(sceneFallback * 0.06, roughSky, 0.74 + smoothness * 0.20);
     vec3 color = mix(fallback, ssrColor, ssrHit);
 
-    FragColor = vec4(max(color, vec3(0.0)), reflectance * mix(0.48, 1.0, ssrHit));
+    // Premultiplied output (DerivativeMain convention):
+    // rgb = reflection * specular, a = 1 - specular (scene pass-through)
+    float specular = reflectance * mix(0.48, 1.0, ssrHit);
+    FragColor = vec4(max(color, vec3(0.0)) * specular, 1.0 - specular);
 }
