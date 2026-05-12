@@ -57,6 +57,7 @@ uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
 uniform float uMinimumAmbient;
 uniform float uBlockLightStrength;
+uniform int uHeldBlockLightValue;
 uniform float uFakeBounceStrength;
 uniform float uAlbedoDesaturation;
 uniform float uSunWarmth;
@@ -87,6 +88,25 @@ uniform vec3 uCameraPos;
     vec3 desaturateLinear(vec3 color, float amount) {
         float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
         return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
+    }
+
+    // Planckian locus blackbody — matches DerivativeMain's Common.inc Blackbody().
+    vec3 blackbodyApprox(float t) {
+        t = clamp(t, 1000.0, 15000.0);
+        float it = 1.0 / t;
+        float it2 = it * it;
+        vec4 vx = vec4(-0.2661239e9, -0.2343580e6, 0.8776956e3, 0.179910);
+        vec4 vy = vec4(-1.1063814, -1.34811020, 2.18555832, -0.20219683);
+        float x = dot(vx, vec4(it * it2, it2, it, 1.0));
+        float x2 = x * x;
+        float y = dot(vy, vec4(x * x2, x2, x, 1.0));
+        mat3 xyzToSrgb = mat3(
+             3.2404542, -1.5371385, -0.4985314,
+            -0.9692660,  1.8760108,  0.0415560,
+             0.0556434, -0.2040259,  1.0572252);
+        vec3 srgb = vec3(x / y, 1.0, (1.0 - x - y) / y) * xyzToSrgb;
+        srgb = max(srgb, vec3(0.0));
+        return srgb / max(min(srgb.r, min(srgb.g, srgb.b)), 0.001);
     }
 
     vec3 sampleSkyCapture(vec3 dir) {
@@ -443,9 +463,19 @@ uniform vec3 uCameraPos;
         vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.28, 0.92, outdoorSkyMask) * 0.62;
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
         vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing);
-        vec3 blockLightColor = mix(vec3(1.0, 0.84, 0.58), vanillaLight, 0.18);
+        vec3 blockLightColor = mix(blackbodyApprox(3000.0), vanillaLight, 0.18);
         vec3 blockLight = blockLightColor * pow(blockLightMask, 2.2) * uBlockLightStrength;
-        vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight;
+
+        // Held block light: dynamic illumination from the player's held item.
+        vec3 heldLight = vec3(0.0);
+        if (uHeldBlockLightValue > 0) {
+            float dist = length(vWorldPos - uCameraPos);
+            float heldFalloff = max(1.0 - dist * 0.065, 0.0);
+            heldFalloff *= heldFalloff;
+            heldLight = blockLightColor * heldFalloff * float(uHeldBlockLightValue) / 15.0 * uBlockLightStrength;
+        }
+
+        vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight + heldLight;
         lightColor = mix(lightColor, vanillaLight, 0.035);
 
         // Combine texture, lightmap color, and AO
@@ -456,7 +486,23 @@ uniform vec3 uCameraPos;
             float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
             float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);
             float emissionMask = smoothstep(0.34, 0.72, max(emissionLuma, emissionPeak * 0.72));
-            vec3 emissionColor = mix(albedo, vec3(1.0, 0.88, 0.64) * max(emissionLuma, 0.45), 0.42);
+
+            // Per-type emission color (DerivativeMain BlockLighting.glsl style)
+            vec3 warmBlock = blackbodyApprox(3000.0);
+            bool isTorchLike = albedo.r > 0.8 || albedo.r > albedo.g * 1.4;
+            bool isSeaLantern = albedo.b > albedo.r * 1.1 && albedo.b > 0.4;
+            bool isRedstone = albedo.r > 0.65 && albedo.r > albedo.g * 1.8;
+
+            vec3 emissionColor;
+            if (isTorchLike) {
+                emissionColor = warmBlock * 4.0;
+            } else if (isSeaLantern) {
+                emissionColor = vec3(1.0, 0.95, 0.92) * 2.0;
+            } else if (isRedstone) {
+                emissionColor = vec3(2.1, 0.9, 0.9);
+            } else {
+                emissionColor = mix(albedo, vec3(1.0, 0.88, 0.64) * max(emissionLuma, 0.45), 0.42);
+            }
             finalColor += emissionColor * emissionMask * (0.42 + 0.64 * uBlockLightStrength);
         }
         finalColor = desaturateLinear(finalColor, (1.0 - max(diffuse, moonDiffuse * 0.65)) * outdoorSkyMask * uShadowDesaturation * 0.45);

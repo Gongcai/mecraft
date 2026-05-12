@@ -296,6 +296,7 @@ public:
     void setFogAutoEndOffsetChunks(float offsetChunks);
     void setFogAutoFadeWidthChunks(float fadeWidthChunks);
     [[nodiscard]] FogSettings getFogSettings() const;
+    void setHeldBlockLightValue(int value);
 
     // Debug light visualization: 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
     void setDebugLightMode(int mode);
@@ -597,6 +598,7 @@ private:
     GameplaySkyRenderer m_gameplaySkyRenderer;
     DeferredRenderTargets m_deferredTargets;
     RenderPipelineSettings m_pipelineSettings{};
+    int m_heldBlockLightValue = 0;
     RenderFrameData m_currentFrameData{};
     bool m_currentFrameDataValid = false;
     uint64_t m_frameCounter = 0;

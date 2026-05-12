@@ -280,6 +280,14 @@ void Game::renderFrame(const float frameTime) {
 
     Camera finalCamera = m_cameraController.computeRenderCamera(renderCamera, eyePosition);
 
+    // Set held block light for dynamic hand illumination
+    {
+        ecs::PlayerQuery pq(reg);
+        const BlockID heldBlock = pq.getInventory().getSelectedBlock();
+        const int lightLevel = BlockRegistry::getLightLevelFast(heldBlock);
+        m_renderer.setHeldBlockLightValue(lightLevel);
+    }
+
     m_renderer.renderOpaqueAndCutout(m_world, finalCamera, m_window);
     m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
 

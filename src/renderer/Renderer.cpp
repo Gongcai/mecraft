@@ -610,6 +610,10 @@ Renderer::FogSettings Renderer::getFogSettings() const {
     return m_fogSettings;
 }
 
+void Renderer::setHeldBlockLightValue(const int value) {
+    m_heldBlockLightValue = std::clamp(value, 0, 15);
+}
+
 void Renderer::setDebugLightMode(const int mode) {
     m_debugLightMode = std::clamp(mode, 0, 3);
 }
@@ -1053,6 +1057,7 @@ void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& fr
     shader.setVec3("uSkyIlluminance", frame.skyIlluminance.skyIlluminance);
     shader.setVec3("uSunIlluminance", frame.skyIlluminance.sunIlluminance);
     shader.setVec3("uMoonIlluminance", frame.skyIlluminance.moonIlluminance);
+    shader.setInt("uHeldBlockLightValue", m_heldBlockLightValue);
 }
 
 void Renderer::bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, const bool bindAerialReduction) const {
@@ -1527,17 +1532,26 @@ void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
     m_ssaoShader->use();
     m_ssaoShader->setInt("uDepthTex", 0);
     m_ssaoShader->setInt("uNormalAoTex", 1);
-    m_ssaoShader->setMat4("uProjection", camera.getProjectionMatrix(window.getAspectRatio()));
+    m_ssaoShader->setInt("uNoiseTex", 2);
+    const glm::mat4 proj = camera.getProjectionMatrix(window.getAspectRatio());
+    m_ssaoShader->setMat4("uProjection", proj);
+    m_ssaoShader->setMat4("uInvProjection", glm::inverse(proj));
     m_ssaoShader->setFloat("uRadius", m_pipelineSettings.ssaoRadius);
     m_ssaoShader->setFloat("uStrength", m_pipelineSettings.ssaoStrength);
     m_ssaoShader->setVec2("uInvResolution", glm::vec2(1.0f / std::max(1, window.getWidth()), 1.0f / std::max(1, window.getHeight())));
+    m_ssaoShader->setInt("uFrameIndex", static_cast<int>(m_frameCounter % 64));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, noiseTexture);
     renderFullscreen(*m_ssaoShader);
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {

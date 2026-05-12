@@ -78,6 +78,7 @@ uniform float uCloudHeight;
 uniform float uCloudThickness;
 uniform float uTime;
 uniform int uSsaoEnabled;
+uniform int uHeldBlockLightValue;
 uniform int uFogEnabled;
 uniform int uFogMode;
 uniform vec3 uFogColor;
@@ -94,6 +95,9 @@ uniform sampler3D uAtmosphereLut;
 
 const float kTwoPi = 6.28318530718;
 const float kPi = 3.14159265359;
+
+float cube(float x) { return x * x * x; }
+float sqr(float x) { return x * x; }
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -143,18 +147,24 @@ vec3 fresnelSchlick(float vdoth, vec3 f0) {
     return f0 + (1.0 - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
 }
 
-vec3 blackbodyApprox(float temperatureKelvin) {
-    float t = clamp(temperatureKelvin, 1000.0, 12000.0) / 1000.0;
-    vec3 color;
-    if (t <= 6.6) {
-        color.r = 1.0;
-        color.g = clamp(0.39008158 * log(t) - 0.63184144, 0.0, 1.0);
-    } else {
-        color.r = clamp(1.29293619 * pow(t - 6.0, -0.13320476), 0.0, 1.0);
-        color.g = clamp(1.12989086 * pow(t - 6.0, -0.07551485), 0.0, 1.0);
-    }
-    color.b = t >= 6.6 ? 1.0 : (t <= 1.9 ? 0.0 : clamp(0.54320679 * log(t - 1.0) - 1.19625409, 0.0, 1.0));
-    return color;
+// Planckian locus blackbody — matches DerivativeMain's Common.inc Blackbody().
+// Computes CIE xy chromaticity from temperature, converts to sRGB, normalizes.
+vec3 blackbodyApprox(float t) {
+    t = clamp(t, 1000.0, 15000.0);
+    float it = 1.0 / t;
+    float it2 = it * it;
+    vec4 vx = vec4(-0.2661239e9, -0.2343580e6, 0.8776956e3, 0.179910);
+    vec4 vy = vec4(-1.1063814, -1.34811020, 2.18555832, -0.20219683);
+    float x = dot(vx, vec4(it * it2, it2, it, 1.0));
+    float x2 = x * x;
+    float y = dot(vy, vec4(x * x2, x2, x, 1.0));
+    mat3 xyzToSrgb = mat3(
+         3.2404542, -1.5371385, -0.4985314,
+        -0.9692660,  1.8760108,  0.0415560,
+         0.0556434, -0.2040259,  1.0572252);
+    vec3 srgb = vec3(x / y, 1.0, (1.0 - x - y) / y) * xyzToSrgb;
+    srgb = max(srgb, vec3(0.0));
+    return srgb / max(min(srgb.r, min(srgb.g, srgb.b)), 0.001);
 }
 
 vec3 artisticSunIlluminance(vec3 sunColor, vec3 sunDir) {
@@ -693,11 +703,20 @@ void main() {
     vec3 fakeBounce = derivativeDirectColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing) * (0.35 + 0.65 * (1.0 - sunShadow));
 
     float blockLightCurve = pow(blockLightMask, 2.05);
-    vec3 warmBlockLight = vec3(1.0, 0.84, 0.58);
+    vec3 warmBlockLight = blackbodyApprox(3000.0);
     vec3 blockLightColor = mix(warmBlockLight, vanillaLight, 0.18);
     vec3 blockLight = blockLightColor * blockLightCurve * uBlockLightStrength;
 
-    vec3 totalLight = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight;
+    // Held block light: dynamic illumination from the player's held item.
+    vec3 heldLight = vec3(0.0);
+    if (uHeldBlockLightValue > 0) {
+        float dist = length(worldPos - uCameraPos);
+        float heldFalloff = max(1.0 - dist * 0.065, 0.0);
+        heldFalloff *= heldFalloff;  // quadratic falloff
+        heldLight = blockLightColor * heldFalloff * float(uHeldBlockLightValue) / 15.0 * uBlockLightStrength;
+    }
+
+    vec3 totalLight = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight + heldLight;
     totalLight = mix(totalLight, vanillaLight, 0.025);
 
     vec3 color = albedo * totalLight * vertexAo * mix(1.0, ssao, 0.65);
@@ -709,11 +728,54 @@ void main() {
     color += (directSpecular + skySpecular) * vertexAo * mix(1.0, ssao, 0.35) * (0.72 + 0.58 * specularSurfaceMask);
     float shadowMask = (1.0 - shadow) * outdoorSkyMask;
     color = desaturateLinear(color, shadowMask * uShadowDesaturation);
+    // Per-type emission (ported from DerivativeMain BlockLighting.glsl).
+    // Uses albedo color analysis to distinguish emission types since mecraft
+    // uses a single MATERIAL_EMISSIVE kind rather than per-block material IDs.
     float emissionStrength = max(emissiveHint * emissiveHint, materialEmission);
     float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-    vec3 emissionTint = vec3(1.0, 0.88, 0.64);
-    vec3 emissionColor = mix(albedo, emissionTint * max(emissionLuma, 0.45), 0.42);
-    color += emissionColor * emissionStrength * (0.55 + 0.82 * uBlockLightStrength);
+    float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);
+
+    vec3 emissionColor = vec3(0.0);
+    if (emissionStrength > 0.01) {
+        // Torch-like: warm red-dominant emission
+        bool isTorchLike = albedo.r > 0.8 || albedo.r > albedo.g * 1.4;
+        // Fire: high luminance warm emission
+        bool isFireLike = emissionLuma > 0.6 && albedo.r > albedo.g;
+        // Glowstone-like: moderate luminance warm
+        bool isGlowstoneLike = emissionLuma > 0.3 && emissionLuma < 0.7 && albedo.r > albedo.b;
+        // Sea lantern: blue-dominant cool white
+        bool isSeaLantern = albedo.b > albedo.r * 1.1 && albedo.b > 0.4;
+        // Soul fire: blue detection
+        bool isSoulFire = albedo.b > 0.53 && albedo.b > albedo.r;
+        // Redstone: red-dominant
+        bool isRedstone = albedo.r > 0.65 && albedo.r > albedo.g * 1.8;
+        // Sculk: blue-dominant dark
+        bool isSculk = albedo.b * 2.0 > albedo.r + albedo.g && albedo.b > 0.55;
+        // Amethyst: purple (red + blue, low green)
+        bool isAmethyst = albedo.r > 0.3 && albedo.b > 0.4 && albedo.g < 0.3;
+
+        if (isTorchLike) {
+            emissionColor = blockLightColor * 4.0 * emissionStrength;
+        } else if (isFireLike) {
+            emissionColor = blockLightColor * 6.0 * cube(emissionLuma);
+        } else if (isSeaLantern) {
+            emissionColor = vec3(1.0, 0.95, 0.92) * 2.0 * cube(emissionLuma);
+        } else if (isSoulFire) {
+            emissionColor = vec3(0.7, 0.85, 1.0) * (emissionLuma + 0.6) * emissionStrength;
+        } else if (isRedstone) {
+            emissionColor = vec3(2.1, 0.9, 0.9) * emissionStrength;
+        } else if (isSculk) {
+            emissionColor = vec3(0.4, 0.5, 0.9) * 0.04 * emissionLuma * emissionLuma;
+        } else if (isAmethyst) {
+            emissionColor = vec3(0.7, 0.4, 0.9) * 1.5 * emissionStrength;
+        } else if (isGlowstoneLike) {
+            emissionColor = blockLightColor * 2.5 * cube(emissionLuma);
+        } else {
+            // Generic emissive fallback
+            emissionColor = mix(albedo, vec3(1.0, 0.88, 0.64) * max(emissionLuma, 0.45), 0.42);
+        }
+        color += emissionColor * (0.55 + 0.82 * uBlockLightStrength);
+    }
 
     if (uFogEnabled != 0) {
         float fogDistance = length(worldPos - uCameraPos);
