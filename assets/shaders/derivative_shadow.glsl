@@ -62,6 +62,7 @@ vec3  pow4(vec3 x) { return cube(x) * x; }
 
 // DerivativeMain Common.inc:62
 float pow5(float x) { return pow4(x) * x; }
+vec3  pow5(vec3 x) { return pow4(x) * x; }
 
 // DerivativeMain Common.inc:67
 // sqrt2(x) = sqrt(sqrt(x)) = x^0.25  — the FOURTH root, NOT the square root.
@@ -89,6 +90,32 @@ float remap(float e0, float e1, float x) { return saturate((x - e0) / (e1 - e0))
 
 // DerivativeMain Common.inc:131-133
 float GetLuminance(in vec3 color) { return dot(color, vec3(0.2722, 0.6741, 0.0537)); }
+
+// DerivativeMain Common.inc — maxOf / minOf helpers
+float maxOf(vec3 v) { return max(max(v.x, v.y), v.z); }
+float minOf(vec3 v) { return min(min(v.x, v.y), v.z); }
+float maxOf(vec2 v) { return max(v.x, v.y); }
+float minOf(vec2 v) { return min(v.x, v.y); }
+
+//----------------------------------------------------------------------------//
+// Block light falloff — DerivativeMain/lib/Head/Functions.inc:4-7
+//----------------------------------------------------------------------------//
+
+// DerivativeMain Functions.inc:4-7
+// Nonlinear remap of block light channel: inverse-square falloff + mild linear.
+// Without this, torch-lit areas have incorrect brightness curves.
+void GetBlocklightFalloff(inout float blocklight) {
+    blocklight = rcp(sqr(16.0 - 15.0 * blocklight)) + sqr(blocklight) * 0.05;
+    blocklight = remap(rcp(sqr(16.0)), 1.0, blocklight);
+}
+
+//----------------------------------------------------------------------------//
+// Color space conversions — DerivativeMain/lib/Head/Common.inc
+//----------------------------------------------------------------------------//
+
+// DerivativeMain Common.inc — LinearToSRGB / SRGBtoLinear
+vec3 LinearToSRGB(in vec3 color) { return pow(max(color, vec3(0.0)), vec3(1.0 / 2.2)); }
+vec3 SRGBtoLinear(in vec3 color) { return pow(max(color, vec3(0.0)), vec3(2.2)); }
 
 //----------------------------------------------------------------------------//
 // Shadow distortion — DerivativeMain/lib/Lighting/ShadowDistortion.glsl

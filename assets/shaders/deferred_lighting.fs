@@ -650,10 +650,10 @@ void main() {
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
     vec3 shadowLightDir = (uShadowLightMode == 1) ? moonDir : sunDir;
     float shadowSssDepth = 0.0;
-    float shadow = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
+    float shadowRaw = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
-    float sunShadow = (uShadowLightMode == 0) ? shadow : 1.0;
-    float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadow, 0.82) : 1.0;
+    float sunShadow = (uShadowLightMode == 0) ? shadowRaw : 1.0;
+    float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadowRaw, 0.82) : 1.0;
 
     // --- Illuminance from sky capture (DerivativeMain directIlluminance/skyIlluminance) ---
     vec3 cacheDirectLux = getDirectIlluminance(uSkyCaptureTex);
@@ -663,26 +663,25 @@ void main() {
 
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
-    vec3 shadowTint = sampleShadowColorTint(worldPos, normal, shadowLightDir, shadow);
+    vec3 shadowTint = sampleShadowColorTint(worldPos, normal, shadowLightDir, shadowRaw);
 
-    // --- BRDF (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
+    // --- BRDF preparation (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
     float alpha = max(roughness * roughness, 0.002);
     float alpha2 = alpha * alpha;
     float f0ScalarClamped = max(f0Scalar, 0.005);
-    // Diffuse Hammon — DerivativeMain BRDF.glsl:54-67
-    vec3 diffuse = DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
-    // Specular BRDF — DerivativeMain BRDF.glsl:69-78
-    float specRaw = SpecularBRDF(LdotH, NdotV, NdotL, NdotH, alpha2, f0ScalarClamped);
-    vec3 specular = vec3(specRaw) * mix(vec3(1.0), albedo, surface.aux.metalness);
 
     // === DerivativeMain lighting order ===
-    // Reference: deferred5.fsh main() — sceneData starts at 0 + basic brightness
+    // Reference: deferred5.fsh main() — sceneData starts at 0
 
-    // Initialize sceneData BEFORE SSS/shadow contributions (DerivativeMain deferred5.fsh:194)
-    vec3 sceneData = vec3(0.018); // BASIC_BRIGHTNESS (nightVision=0 for now)
+    // Initialize sceneData (DerivativeMain deferred5.fsh:194)
+    vec3 sceneData = vec3(0.0);
 
     // 1. Sunlight setup: 64 * waterTint * SUNLIGHT_INTENSITY * directIlluminance * cloudShadow
-    vec3 sunlightMult = directIlluminance * 64.0 * uDirectSunStrength * cloudShadow * shadowTint;
+    // DerivativeMain: sunlightMult does NOT include shadowTint — tint is applied in skylight separately.
+    vec3 sunlightMult = directIlluminance * 64.0 * uDirectSunStrength * cloudShadow;
+    // DerivativeMain: diffuse = vec3(1.0) — only multiplied by DiffuseHammon when shadow > 0
+    vec3 diffuse = vec3(1.0);
+
     // 2. SSS (DerivativeMain SunLighting.glsl:176-188 — now via derivative_sunlight.glsl include)
     //    DerivativeMain deferred5.fsh:267-272: SSS is added to sceneData BEFORE shadow/diffuse
     float sssSunShadowFill = 0.0;
@@ -690,18 +689,47 @@ void main() {
         float sssDepth = max(shadowSssDepth, (1.0 - sunShadow) * 0.35);
         // DerivativeMain: CalculateSubsurfaceScattering(albedo, sssAmount, sssDepth, LdotV)
         vec3 sssContrib = CalculateSubsurfaceScattering(albedo, sss, sssDepth, LdotV);
+        // DerivativeMain deferred5.fsh:270 — sssContrib *= eyeSkylightFix
+        sssContrib *= outdoorSkyMask;
         sceneData += sssContrib * sunlightMult;
         // DerivativeMain: sunlightMult *= 1.0 - sssAmount * 0.5;
         sunlightMult *= oneMinus(sss * 0.5);
         sssSunShadowFill = sss * smoothstep(-0.35, 0.18, -rawNdotL) * mix(0.18, 0.46, oneMinus(sunShadow)) * cloudShadow;
     }
 
-    // 3. sceneData accumulation (DerivativeMain deferred5.fsh:290-357)
+    // 3. Shadow / specular computation (DerivativeMain deferred5.fsh:276-300)
+    vec3 shadow = vec3(0.0);
+    vec3 specular = vec3(0.0);
+    if (NdotL > 1e-3) {
+        // DerivativeMain: shadow = PercentageCloserFilter(...)
+        shadow = vec3(sunShadow);
+        shadow = mix(shadow, vec3(1.0), saturate(pow16(rcp(uShadowDistance * uShadowDistance) * dotSelf(worldPos))));
 
-    // Apply shadow to diffuse, add SSS
-    sceneData += sunShadow * diffuse * sunlightMult + sssSunShadowFill * sunlightMult;
+        if (maxOf(shadow) > 1e-6) {
+            // DerivativeMain: shadow *= ScreenSpaceShadow (contact shadows)
+            shadow *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, shadowDither(), sss);
 
-    // Skylight (DerivativeMain deferred5.fsh:305-323)
+            // DerivativeMain deferred5.fsh:289 — diffuse *= DiffuseHammon ONLY when shadow > 0
+            diffuse *= DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
+
+            // Specular (DerivativeMain deferred5.fsh:291-292)
+            specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
+                       mix(vec3(1.0), albedo, surface.aux.metalness);
+            // DerivativeMain deferred5.fsh:293 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
+            specular *= 1.0 + uWeatherWetness;
+
+            // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
+            // Indoor surfaces with sky light = 0 get no direct sunlight
+            shadow *= saturate(voxelLight.r * 1e6);
+            // DerivativeMain deferred5.fsh:300 — shadow *= sunlightMult
+            shadow *= sunlightMult;
+        }
+    }
+
+    // 4. SSS fill added to sceneData (DerivativeMain deferred5.fsh:267-272 equivalent)
+    sceneData += sssSunShadowFill * sunlightMult;
+
+    // 5. Skylight (DerivativeMain deferred5.fsh:305-323)
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
     vec3 capturedZenith = sampleSkyCapture(vec3(0.0, 1.0, 0.0));
     vec3 capturedNormalSky = sampleSkyIrradiance(normal);
@@ -713,8 +741,12 @@ void main() {
                     uSkyAmbientStrength * mix(0.48, 1.0, upward) * shadowTint;
     float moonMask = nightSkyMask;
     skylight += uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
-    skylight *= mix(vec3(1.0), uShadowTintColor, oneMinus(shadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
+    skylight *= mix(vec3(1.0), uShadowTintColor, oneMinus(sunShadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
     sceneData += skylight * voxelLight.r * 1.5; // SKYLIGHT_INTENSITY
+
+    // Basic brightness (DerivativeMain deferred5.fsh:325)
+    // sceneData += BASIC_BRIGHTNESS + nightVision * 0.1
+    sceneData += 0.018; // BASIC_BRIGHTNESS (nightVision=0 for now)
 
     // Minimum ambient + fake bounce
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
@@ -727,125 +759,188 @@ void main() {
     // AO multiplies accumulated diffuse+skylight (before blocklight)
     sceneData *= ssao * vertexAo;
 
-    // === Block lighting (DerivativeMain BlockLighting.glsl inline) ===
+    // === Block lighting (DerivativeMain BlockLighting.glsl) ===
     vec3 blocklightColor = blackbodyApprox(3000.0);
     float albedoLuminance = length(albedo);
-    vec3 albedoRawApprox = pow(max(albedo, vec3(0.0)), vec3(1.0 / 2.2));
+    // DerivativeMain: albedoRaw = texelFetch(colortex6, texel, 0).rgb — raw sRGB from GBuffer.
+    // Mecraft's albedo is already linear; reconstruct sRGB equivalent.
+    vec3 albedoRaw = LinearToSRGB(albedo);
     float lightSourceMask = 1.0;
 
-    // Per-materialID emission (BlockLighting.glsl:15-89)
-    vec3 emissionColor = vec3(0.0);
-    if (materialKind == MATERIAL_TOTAL_GLOWING || materialKind == MATERIAL_TEXTURED_EMISSIVE) {
-        emissionColor = vec3(albedoLuminance);
-        lightSourceMask = 0.1;
-    } else if (materialKind == MATERIAL_TORCH_LIKE) {
-        emissionColor = 4.0 * blocklightColor * float(albedoRawApprox.r > 0.8 || albedoRawApprox.r > albedoRawApprox.g * 1.4);
-        lightSourceMask = 0.15;
-    } else if (materialKind == MATERIAL_FIRE || materialKind == MATERIAL_LAVA) {
-        emissionColor = 6.0 * blocklightColor * cube(albedoLuminance);
-        lightSourceMask = 0.1;
-    } else if (materialKind == MATERIAL_GLOWSTONE_LIKE) {
-        emissionColor = 2.5 * blocklightColor * cube(albedoLuminance);
-        lightSourceMask = 0.15;
-    } else if (materialKind == MATERIAL_SEA_LANTERN_LIKE) {
-        emissionColor = vec3(2.0 * cube(albedoLuminance));
-        lightSourceMask = 0.0;
-    } else if (materialKind == MATERIAL_REDSTONE) {
-        emissionColor = vec3(2.1, 0.9, 0.9) * step(0.65, albedoRawApprox.r);
-    } else if (materialKind == MATERIAL_SOUL_FIRE) {
-        emissionColor = vec3(albedoLuminance + 0.6) * step(0.53, albedoRawApprox.b);
-        lightSourceMask = 0.5;
-    } else if (materialKind == MATERIAL_AMETHYST) {
-        emissionColor = vec3(min(blockLightMask * 200.0 + 0.05, 2.0) *
-                             pow(albedoLuminance, min(blockLightMask * 100.0, 2.5)));
-    } else if (materialKind == MATERIAL_GLOWBERRY) {
-        emissionColor = clamp(dot(clamp(albedo - 0.1, 0.0, 1.0), vec3(1.0, -0.6, -0.99)), 0.0, 1.0) *
-                        vec3(28.0, 25.0, 21.0);
-        lightSourceMask = 0.4;
-    } else if (materialKind == MATERIAL_RAILS) {
-        emissionColor = vec3(2.1, 0.9, 0.9) * albedoLuminance *
-                        step(albedoRawApprox.g * 2.0 + albedoRawApprox.b, albedoRawApprox.r);
-    } else if (materialKind == MATERIAL_BEACON_CORE) {
-        vec3 midBlockPos = abs(fract(worldPos) - 0.5);
-        emissionColor = vec3(step(max(max(midBlockPos.x, midBlockPos.y), midBlockPos.z), 0.4) *
-                             step(0.5, albedo.b) * 6.0 * albedoLuminance);
-        lightSourceMask = 0.2;
-    } else if (materialKind == MATERIAL_SCULK) {
-        emissionColor = vec3(0.04 * sqr(albedoLuminance) *
-                             float((albedoRawApprox.b * 2.0 > albedoRawApprox.r + albedoRawApprox.g) &&
-                                   albedoRawApprox.b > 0.55));
-    } else if (materialKind == MATERIAL_GLOW_LICHEN) {
-        emissionColor = vec3(albedoRawApprox.r > albedoRawApprox.b * 1.2 ? 3.0 : albedoLuminance * 0.1);
-    } else if (materialKind == MATERIAL_PARTIAL_GLOWING) {
-        vec3 partialGlow = clamp(albedo - 0.5, 0.0, 1.0);
-        emissionColor = 30.0 * albedoLuminance * partialGlow * partialGlow * partialGlow;
-        lightSourceMask = 0.5;
-    } else if (materialKind == MATERIAL_MIDDLE_GLOWING) {
-        vec2 midBlockPosXZ = abs(fract(worldPos.xz) - 0.5);
-        emissionColor = vec3(step(max(midBlockPosXZ.x, midBlockPosXZ.y), 0.063) * albedoLuminance);
+    // DerivativeMain BlockLighting.glsl:9 — GetBlocklightFalloff(mcLightmap.r)
+    // Applies nonlinear remap to block light channel before use.
+    float mcLightmapR = blockLightMask;
+    GetBlocklightFalloff(mcLightmapR);
+
+    // Per-materialID emission (BlockLighting.glsl:15-89) — EMISSION_MODE 0
+    vec3 EmissionColor = vec3(0.0);
+    switch (materialKind) {
+    // Total glowing — DerivativeMain case 20/36
+        case MATERIAL_TOTAL_GLOWING: case MATERIAL_TEXTURED_EMISSIVE:
+            EmissionColor += albedoLuminance;
+            lightSourceMask = 0.1;
+            break;
+    // Torch like — DerivativeMain case 21
+        case MATERIAL_TORCH_LIKE:
+            EmissionColor += 4.0 * blocklightColor * float(albedoRaw.r > 0.8 || albedoRaw.r > albedoRaw.g * 1.4);
+            lightSourceMask = 0.15;
+            break;
+    // Fire — DerivativeMain case 22/15
+        case MATERIAL_FIRE: case MATERIAL_LAVA:
+            EmissionColor += 6.0 * blocklightColor * cube(albedoLuminance);
+            lightSourceMask = 0.1;
+            break;
+    // Glowstone like — DerivativeMain case 23
+        case MATERIAL_GLOWSTONE_LIKE:
+            EmissionColor += 2.5 * blocklightColor * cube(albedoLuminance);
+            lightSourceMask = 0.15;
+            break;
+    // Sea lantern like — DerivativeMain case 24
+        case MATERIAL_SEA_LANTERN_LIKE:
+            EmissionColor += 2.0 * cube(albedoLuminance);
+            lightSourceMask = 0.0;
+            break;
+    // Redstone — DerivativeMain case 25 (top/bottom distinction)
+        case MATERIAL_REDSTONE:
+            if (fract(worldPos.y) > 0.18) EmissionColor += step(0.65, albedoRaw.r);
+            else EmissionColor += step(1.25, albedo.r / (albedo.g + albedo.b)) * step(0.5, albedoRaw.r);
+            EmissionColor *= vec3(2.1, 0.9, 0.9);
+            break;
+    // Soul fire — DerivativeMain case 26
+        case MATERIAL_SOUL_FIRE:
+            EmissionColor += (albedoLuminance + 0.6) * step(0.53, albedoRaw.b);
+            lightSourceMask = 0.5;
+            break;
+    // Amethyst — DerivativeMain case 27
+        case MATERIAL_AMETHYST:
+            EmissionColor += min(mcLightmapR * 2e2 + 0.05, 2.0) * pow(albedoLuminance, min(mcLightmapR * 1e2, 2.5));
+            break;
+    // Glowberry — DerivativeMain case 28
+        case MATERIAL_GLOWBERRY:
+            EmissionColor += saturate(dot(saturate(albedo - 0.1), vec3(1.0, -0.6, -0.99))) * vec3(28.0, 25.0, 21.0);
+            lightSourceMask = 0.4;
+            break;
+    // Rails — DerivativeMain case 29
+        case MATERIAL_RAILS:
+            EmissionColor += vec3(2.1, 0.9, 0.9) * albedoLuminance * step(albedoRaw.g * 2.0 + albedoRaw.b, albedoRaw.r);
+            break;
+    // Beacon core — DerivativeMain case 30
+        case MATERIAL_BEACON_CORE: {
+            // DerivativeMain: fract(worldPos + cameraPosition) — their worldPos excludes camera.
+            // Mecraft's worldPos already includes camera, so just use fract(worldPos).
+            vec3 midBlockPos = abs(fract(worldPos) - 0.5);
+            float maxComp = max(max(midBlockPos.x, midBlockPos.y), midBlockPos.z);
+            if (maxComp < 0.4 && albedo.b > 0.5) EmissionColor += 6.0 * albedoLuminance;
+            lightSourceMask = 0.2;
+            break;
+        }
+    // Sculk — DerivativeMain case 31
+        case MATERIAL_SCULK:
+            EmissionColor += 0.04 * sqr(albedoLuminance) * float((albedoRaw.b * 2.0 > albedoRaw.r + albedoRaw.g) && albedoRaw.b > 0.55);
+            break;
+    // Glow lichen — DerivativeMain case 32
+        case MATERIAL_GLOW_LICHEN:
+            if (albedoRaw.r > albedoRaw.b * 1.2) EmissionColor += 3.0;
+            else EmissionColor += albedoLuminance * 0.1;
+            break;
+    // Partial glowing — DerivativeMain case 33
+        case MATERIAL_PARTIAL_GLOWING:
+            EmissionColor += 30.0 * albedoLuminance * cube(saturate(albedo - 0.5));
+            lightSourceMask = 0.5;
+            break;
+    // Middle glowing — DerivativeMain case 34
+        case MATERIAL_MIDDLE_GLOWING: {
+            // DerivativeMain: fract(worldPos.xz + cameraPosition.xz) — same cameraPosition note.
+            vec2 midBlockPosXZ = abs(fract(worldPos.xz) - 0.5);
+            float maxCompXZ = max(midBlockPosXZ.x, midBlockPosXZ.y);
+            EmissionColor += step(maxCompXZ, 0.063) * albedoLuminance;
+            break;
+        }
     }
-    // Emissive ores (BlockLighting.glsl:100-109)
+
+    // DerivativeMain BlockLighting.glsl:91 — sceneData += EmissionColor * TORCHLIGHT_BRIGHTNESS
+    sceneData += EmissionColor * uBlockLightStrength;
+
+    // EMISSION_MODE 1: material.emissiveness with brightness and curve.
+    // DerivativeMain: sceneData += material.emissiveness * 1.5 * EMISSION_BRIGHTNESS
+    // We approximate EMISSION_CURVE as 1.0 (no pow) since Mecraft stores emissiveness
+    // as a pre-baked value, and EMISSION_BRIGHTNESS defaults to 1.0 in DerivativeMain.
+    if (materialEmission > 0.01) {
+        sceneData += materialEmission * 1.5 * uBlockLightStrength;
+    }
+
+    // Emissive ores (BlockLighting.glsl:98-109, EMISSIVE_ORES)
     if (materialKind == MATERIAL_ORE) {
-        float isOre = clamp((max(max(dot(albedoRawApprox, vec3(2.0, -1.0, -1.0)),
-                                     dot(albedoRawApprox, vec3(-1.0, 2.0, -1.0))),
-                                 dot(albedoRawApprox, vec3(-1.0, -1.0, 2.0))) - 0.1) / 0.3, 0.0, 1.0);
-        emissionColor += pow(max(albedoRawApprox - vec3(0.1), vec3(0.0)), vec3(5.0)) * isOre * 2.0;
+        float isOre = saturate((max(max(dot(albedoRaw, vec3(2.0, -1.0, -1.0)),
+                                       dot(albedoRaw, vec3(-1.0, 2.0, -1.0))),
+                                   dot(albedoRaw, vec3(-1.0, -1.0, 2.0))) - 0.1) * rcp(0.3));
+        // DerivativeMain: LinearToSRGB(isOre * pow5(max0(albedoRaw - 0.1))) * 2.0
+        sceneData += LinearToSRGB(isOre * pow5(max0(albedoRaw - vec3(0.1)))) * 2.0;
     }
     if (materialKind == MATERIAL_NETHER_ORE) {
-        float isNetherOre = clamp(dot(albedoRawApprox, vec3(-20.0, 30.0, 10.0)), 0.0, 1.0);
-        vec3 netherOreGlow = max(albedoRawApprox - vec3(0.1), vec3(0.0));
-        emissionColor += netherOreGlow * netherOreGlow * netherOreGlow * isNetherOre * 2.0;
-    }
-    // Emission from material system
-    if (materialEmission > 0.01) {
-        emissionColor += albedo * materialEmission * 1.5;
-    }
-    // Add emission to sceneData
-    if (max(max(emissionColor.r, emissionColor.g), emissionColor.b) > 0.0) {
-        sceneData += emissionColor * uBlockLightStrength;
+        float isNetherOre = saturate(dot(albedoRaw, vec3(-20.0, 30.0, 10.0)));
+        // DerivativeMain: LinearToSRGB(isNetherOre * cube(max0(albedoRaw - 0.1))) * 2.0
+        sceneData += LinearToSRGB(isNetherOre * cube(max0(albedoRaw - vec3(0.1)))) * 2.0;
     }
 
     // Blocklight falloff (BlockLighting.glsl:111-115, Overworld)
-    sceneData += blockLightMask * (ssao * oneMinus(blockLightMask) + blockLightMask) *
-                 2.0 * blocklightColor * uBlockLightStrength * lightSourceMask;
+    // DerivativeMain: mcLightmap.r * (ao * oneMinus(mcLightmap.r) + mcLightmap.r) * 2.0 * blocklightColor * TORCHLIGHT_BRIGHTNESS * lightSourceMask
+    // Note: mcLightmapR has already been through GetBlocklightFalloff.
+    if (mcLightmapR > 1e-5) {
+        sceneData += mcLightmapR * (ssao * oneMinus(mcLightmapR) + mcLightmapR) *
+                     2.0 * blocklightColor * uBlockLightStrength * lightSourceMask;
+    }
 
     // Held torchlight (BlockLighting.glsl:117-128, Overworld)
+    // DerivativeMain: uses heldBlockLightValue/heldBlockLightValue2 OptiFine builtins.
     int heldLightMax = max(uHeldBlockLightValue, uHeldBlockLightValue2);
     if (heldLightMax > 0) {
+        // DerivativeMain: falloff = rcp(dotSelf(worldPos) + 1.0)
+        // DerivativeMain's worldPos is relative to camera; Mecraft's is absolute.
         vec3 heldPos = worldPos - uCameraPos;
-        float heldFalloff = 1.0 / (dot(heldPos, heldPos) + 1.0);
-        heldFalloff *= NdotV * 0.8 + 0.2;
-        sceneData += heldFalloff * 0.2 * float(heldLightMax) * blocklightColor * uBlockLightStrength;
+        float falloff = rcp(dotSelf(heldPos) + 1.0);
+        // DerivativeMain: falloff *= fma(NdotV, 0.8, 0.2)
+        falloff *= fma(NdotV, 0.8, 0.2);
+        // DerivativeMain Overworld: falloff * (ao * oneMinus(falloff) + falloff) * 0.2 * max(held...) * HELDLIGHT_BRIGHTNESS * blocklightColor
+        sceneData += falloff * (ssao * oneMinus(falloff) + falloff) * 0.2 * float(heldLightMax) * uBlockLightStrength * blocklightColor;
     }
 
     // Hardcoded material-specific additions (BlockLighting.glsl:130)
     sceneData += float(materialKind == 12) * 12.0 +
                  float(materialKind == 36) * 2.0 +
-                 float(materialKind == 19) * albedoLuminance * 200.0;
+                 float(materialKind == 19) * albedoLuminance * 2e2;
 
     // === DerivativeMain compositing (deferred5.fsh:352-357) ===
+    // DerivativeMain order: sceneData += shadow * diffuse → sceneData *= albedo → sceneData *= oneMinus(isMetal) → sceneData += shadow * specular
+
+    // Add shadow * diffuse BEFORE albedo multiply
+    // (DerivativeMain deferred5.fsh:352: sceneData += shadow * diffuse)
+    sceneData += shadow * diffuse;
+
     // Multiply by albedo AFTER all diffuse/ambient/emission accumulation
-    vec3 color = sceneData * albedo;
-    // Metal mask: DerivativeMain deferred5.fsh:355 — reduce diffuse for metals in skylight
-    float isMetal = surface.aux.metalness * (0.2 * smoothstep(0.3, 0.8, voxelLight.r) + 0.8);
-    color *= oneMinus(isMetal);
+    // (DerivativeMain deferred5.fsh:353: sceneData *= albedo)
+    sceneData *= albedo;
+
+    // Metal mask: DerivativeMain deferred5.fsh:355
+    // if (isEyeInWater == 0) material.isMetal *= 0.2 * smoothstep(0.3, 0.8, mcLightmap.g) + 0.8;
+    float metalMask = surface.aux.metalness * (0.2 * smoothstep(0.3, 0.8, voxelLight.r) + 0.8);
+    sceneData *= oneMinus(metalMask);
+
     // Additive specular on top (not multiplied by albedo)
-    vec3 specularTint = specular * mix(vec3(1.0), albedo, surface.aux.metalness);
-    color += shadow * specularTint * sunlightMult * (0.5 + 0.5 * derivativeSpecularMask);
+    // (DerivativeMain deferred5.fsh:356: sceneData += shadow * specular)
+    // Note: shadow already contains sunlightMult, and specular already contains SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
+    sceneData += shadow * specular;
+
+    vec3 color = sceneData;
 
     // Sky specular (environment reflection) — uses DerivativeMain FresnelSchlick
     color += coolSkyColor * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
              pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
 
-    // Shadow desaturation
-    float shadowMask = oneMinus(shadow) * outdoorSkyMask;
-    color = desaturateLinear(color, shadowMask * uShadowDesaturation);
-
-    // Back-scatter SSS for sun and moon (kept from current implementation)
-    float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * mix(0.35, 1.0, sunShadow);
-    color += albedo * directIlluminance * 64.0 * backScatter * sss * cloudShadow * (0.46 + 0.20 * uDirectSunStrength);
-    float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * nightSkyMask;
-    color += albedo * uMoonLightColor * moonBackScatter * sss * 0.12;
+    // Shadow desaturation (Mecraft extension, not in DerivativeMain)
+    // Uses the raw 0-1 shadow value (sunShadow) for the mask.
+    float shadowDesatMask = oneMinus(sunShadow) * outdoorSkyMask;
+    color = desaturateLinear(color, shadowDesatMask * uShadowDesaturation);
 
     if (uFogEnabled != 0) {
         float fogDistance = length(worldPos - uCameraPos);
