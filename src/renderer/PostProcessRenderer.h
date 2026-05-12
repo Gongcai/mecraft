@@ -19,7 +19,9 @@ struct PostProcessEffects {
     float bloomStrength = 0.20f; // Calibrated for DerivativeMain exposure range (0.05-0.2)
     bool autoExposureEnabled = true;
     float autoExposureMin = 0.001f; // Allow very bright scenes
-    float autoExposureMax = 64.0f;  // Allow very dark scenes
+    float autoExposureMax = 4.0f;   // DerivativeMain: no clamp, but its HDR range prevents extreme values.
+                                    // Mecraft's HDR range is narrower, so clamp to prevent dark-area overexposure.
+                                    // 4x is enough for dark scenes without blowing out lit areas.
     float autoExposureSpeed = 1.0f; // DerivativeMain EXPOSURE_SPEED
     float autoExposureBias = 0.0f;
     float autoExposureDayFactor = 1.0f;

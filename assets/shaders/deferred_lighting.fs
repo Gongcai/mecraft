@@ -1,7 +1,7 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 #include "render_contract.glsl"
-#include "derivative_shadow.glsl"
+#include "derivative_sunlight.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -96,9 +96,6 @@ uniform sampler2D uShadowNormalTex;
 // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
 uniform sampler3D uAtmosphereLut;
 
-const float kTwoPi = 6.28318530718;
-const float kPi = 3.14159265359;
-
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
@@ -116,58 +113,7 @@ vec3 desaturateLinear(vec3 color, float amount) {
     return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
 }
 
-// --- DerivativeMain BRDF.glsl faithful port ---
-
-float fresnelSchlick(float cosTheta, float f0) {
-    float f = pow(1.0 - cosTheta, 5.0);
-    return clamp(f + (1.0 - f) * f0, 0.0, 1.0);
-}
-
-float fresnelDielectric(float cosTheta, float f0) {
-    f0 = min(sqrt(f0), 0.99999);
-    f0 = (1.0 + f0) / (1.0 - f0);
-    float cosTheta2 = cosTheta * cosTheta;
-    float sinTheta2 = 1.0 - cosTheta2;
-    float t1 = sqrt(max(f0 * f0 - sinTheta2, 0.0));
-    float t2 = f0 * f0 * cosTheta2;
-    float rs = (f0 * cosTheta - t1) / max(f0 * cosTheta + t1, 1e-8);
-    float rp = (t2 - f0 * t1) / max(t2 + f0 * t1, 1e-8);
-    return clamp((rs * rs + rp * rp) * 0.5, 0.0, 1.0);
-}
-
-float v1SmithGGXInverse(float cosTheta, float alpha2) {
-    return cosTheta + sqrt(max((cosTheta - alpha2 * cosTheta) * cosTheta + alpha2, 0.0));
-}
-
-float v2SmithGGX(float NdotV, float NdotL, float alpha2) {
-    float ggxl = NdotL * sqrt(max((NdotV - alpha2 * NdotV) * NdotV + alpha2, 0.0));
-    float ggxv = NdotV * sqrt(max((NdotL - alpha2 * NdotL) * NdotL + alpha2, 0.0));
-    return 0.5 / max(ggxl + ggxv, 1e-7);
-}
-
-float distributionGGX(float NdotH, float alpha2) {
-    return alpha2 / max(kPi * sqr(1.0 + (NdotH * alpha2 - NdotH) * NdotH), 1e-7);
-}
-
-vec3 diffuseHammon(float LdotV, float NdotV, float NdotL, float NdotH, float roughness, vec3 albedo) {
-    if (NdotL < 1e-6) return vec3(0.0);
-    float facing = max(LdotV, 0.0) * 0.5 + 0.5;
-    float singleSmooth = 1.05 * (1.0 - pow(1.0 - NdotL, 5.0)) * (1.0 - pow(1.0 - NdotV, 5.0));
-    float singleRough = facing * (0.45 - 0.2 * facing) * (1.0 / max(NdotH, 1e-4) + 2.0);
-    float single = mix(singleSmooth, singleRough, roughness) / kPi;
-    float multi = 0.1159 * roughness;
-    return (multi * albedo + single) * NdotL;
-}
-
-float specularBRDF(float LdotH, float NdotV, float NdotL, float NdotH, float alpha2, float f0) {
-    if (NdotL < 1e-5) return 0.0;
-    float F = fresnelSchlick(LdotH, f0);
-    float D = distributionGGX(NdotH, alpha2);
-    float V = v2SmithGGX(max(NdotV, 1e-2), max(NdotL, 1e-2), alpha2);
-    return min(NdotL * D * V * F, 4.0);
-}
-
-// Planckian locus blackbody — matches DerivativeMain's Common.inc Blackbody().
+// Planckian locus blackbody — DerivativeMain/lib/Head/Common.inc Blackbody().
 // Computes CIE xy chromaticity from temperature, converts to sRGB, normalizes.
 vec3 blackbodyApprox(float t) {
     t = clamp(t, 1000.0, 15000.0);
@@ -296,12 +242,6 @@ float shadowDither() {
     return noise2D(gl_FragCoord.xy / 256.0);
 }
 
-// DerivativeMain rotating Poisson disk: 45-degree increments via 2x2 rotation matrix.
-// cossin(angle) returns vec2(cos, sin).
-vec2 cossin(float angle) {
-    return vec2(cos(angle), sin(angle));
-}
-
 float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
         return 1.0;
@@ -326,7 +266,7 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
 vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
     float fi = float(index) + jitter;
     float radius = sqrt((float(index) + 0.5) / max(float(sampleCount), 1.0));
-    float angle = fi * 2.39996323 + jitter * kTwoPi;
+    float angle = fi * 2.39996323 + jitter * TAU;
     return vec2(cos(angle), sin(angle)) * radius;
 }
 
@@ -397,49 +337,52 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
 // DerivativeMain BlockerSearch (SunLighting.glsl:28-54)
 // Uses texelFetch (integer coordinates, no filtering) — matches DerivativeMain exactly.
 // Returns: .x = penumbra scale (shadow map space), .y = SSS depth (world space)
+// Mecraft adaptation: adds boundary clamping and far-plane masking for safety
+// since we use sampler2D instead of DerivativeMain's sampler2DShadow.
 vec2 blockerSearch(vec3 shadowProjPos, float dither) {
     float searchDepth = 0.0;
     float sumWeight = 0.0;
     float sssDepth = 0.0;
 
     float searchRadius = 2.0 * uShadowProjection[0][0];
-    ivec2 shadowSize = textureSize(uShadowMap, 0);
-    vec2 shadowRes = vec2(shadowSize);
+    float shadowMapRes = float(textureSize(uShadowMap, 0).x);
 
-    vec2 rot = cossin(dither * kTwoPi) * searchRadius;
-    vec2 angleStep = cossin(kTwoPi * 0.125);
-    mat2 rotStep = mat2(angleStep.x, angleStep.y, -angleStep.y, angleStep.x);
+    vec2 rot = cossin(dither * TAU) * searchRadius;
+    const vec2 angleStep = cossin(TAU * 0.125);
+    const mat2 rotStep = mat2(angleStep, -angleStep.y, angleStep.x);
 
-    for (int i = 0; i < 8; ++i, rot *= rotStep) {
+    for (uint i = 0u; i < 8u; ++i, rot *= rotStep) {
         float fi = float(i) + dither;
         vec2 sampleCoord = shadowProjPos.xy + rot * sqrt(fi * 0.125);
-        if (sampleCoord.x <= 0.0 || sampleCoord.y <= 0.0 || sampleCoord.x >= 1.0 || sampleCoord.y >= 1.0) {
-            continue;
-        }
 
-        // texelFetch: integer texel coordinates, no filtering (matches DerivativeMain)
-        ivec2 texelCoord = clamp(ivec2(sampleCoord * shadowRes), ivec2(0), shadowSize - ivec2(1));
-        float depthSample = texelFetch(uShadowMap, texelCoord, 0).r;
-        float weight = step(depthSample, shadowProjPos.z) * (1.0 - step(0.999999, depthSample));
+        // DerivativeMain: texelFetch(shadowtex0, ivec2(sampleCoord * realShadowMapRes), 0)
+        ivec2 texelCoord = ivec2(sampleCoord * shadowMapRes);
+        texelCoord = clamp(texelCoord, ivec2(0), ivec2(textureSize(uShadowMap, 0)) - ivec2(1));
+        float depthSample = texelFetch(uShadowMap, texelCoord, 0).x;
 
-        sssDepth += max(shadowProjPos.z - depthSample, 0.0);
+        // DerivativeMain: float weight = step(depthSample, shadowProjPos.z);
+        float weight = step(depthSample, shadowProjPos.z);
+
+        // DerivativeMain: sssDepth += max0(shadowProjPos.z - depthSample);
+        sssDepth += max0(shadowProjPos.z - depthSample);
         searchDepth += depthSample * weight;
         sumWeight += weight;
     }
 
-    if (sumWeight <= 0.0) {
-        return vec2(0.0);
-    }
+    // DerivativeMain: searchDepth *= 1.0 / sumWeight; (no zero-division guard)
+    searchDepth *= rcp(sumWeight);
+    searchDepth = min(2.0 * (shadowProjPos.z - searchDepth) / searchDepth, 1.0);
 
-    searchDepth /= sumWeight;
-    searchDepth = min(2.0 * (shadowProjPos.z - searchDepth) / max(searchDepth, 0.0001), 1.0);
-
+    // DerivativeMain: return vec2(searchDepth * shadowProjection[0].x, sssDepth * shadowProjectionInverse[2].z);
     float sssWorldDepth = sssDepth * localShadowDepthWorldScale();
     return vec2(searchDepth * uShadowProjection[0][0], sssWorldDepth);
 }
 
 // DerivativeMain PercentageCloserFilter (SunLighting.glsl:56-84)
-// Rotating Poisson disk PCF with 16 samples.
+// Rotating Poisson disk PCF with configurable sample count.
+// Mecraft adaptation: uses manual bilinear depth comparison instead of
+// DerivativeMain's textureLod(shadowtex1, vec3(uv, refZ), 0) hardware PCF,
+// since Mecraft uses sampler2D instead of sampler2DShadow.
 float pcfFilter(vec3 shadowProjPos, float penumbraScale, float dither, int sampleCount) {
     // DerivativeMain bias: constant 1e-4 minus dithered offset
     shadowProjPos.z -= 1e-4 - dither * 5e-5;
@@ -448,19 +391,20 @@ float pcfFilter(vec3 shadowProjPos, float penumbraScale, float dither, int sampl
     float shadowRes = float(textureSize(uShadowMap, 0).x);
     float result = 0.0;
 
-    // CRITICAL: initial rot radius = penumbraScale (DerivativeMain line 64)
-    // penumbraScale is in UV space; rot samples are in UV space.
-    vec2 rot = cossin(dither * kTwoPi) * penumbraScale;
-    vec2 angleStep = cossin(kTwoPi * 0.125);
-    mat2 rotStep = mat2(angleStep.x, angleStep.y, -angleStep.y, angleStep.x);
+    // DerivativeMain: vec2 rot = cossin(dither * TAU) * penumbraScale;
+    vec2 rot = cossin(dither * TAU) * penumbraScale;
+    const vec2 angleStep = cossin(TAU * 0.125);
+    const mat2 rotStep = mat2(angleStep, -angleStep.y, angleStep.x);
 
-    for (int i = 0; i < sampleCount; ++i, rot *= rotStep) {
+    for (uint i = 0u; i < uint(sampleCount); ++i, rot *= rotStep) {
         float fi = float(i) + dither;
         vec2 offsetUV = rot * sqrt(fi * rSteps);
         vec2 sampleUv = shadowProjPos.xy + offsetUV;
         if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
             result += 1.0;
         } else {
+            // DerivativeMain uses hardware PCF via textureLod(shadowtex1, ...).
+            // Mecraft uses manual bilinear comparison as approximation.
             result += compareShadowBilinear(shadowProjPos, offsetUV * shadowRes, 0.0);
         }
     }
@@ -469,14 +413,9 @@ float pcfFilter(vec3 shadowProjPos, float penumbraScale, float dither, int sampl
 }
 
 // DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
-// 12-step screen-space ray march along light direction with SSS absorption.
-// DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
-// 12-step screen-space ray march along projected light direction.
-// worldPos: fragment world position
-// screenUv: fragment screen UV (0-1)
-// sceneDepth: fragment screen depth (0-1, from depth buffer)
-// dither: per-pixel noise for temporal stability
-// sssAmount: subsurface scattering amount (0 = opaque, 1 = full SSS)
+// 12-step screen-space ray march for contact shadows.
+// Mecraft adaptation: uses world-position reconstruction for depth linearization
+// instead of DerivativeMain's GetDepthLinear() which uses OptiFine builtins.
 float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float dither, float sssAmount) {
     if (uContactShadowsEnabled == 0) return 1.0;
 
@@ -492,11 +431,12 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
     vec3 rayStep = screenDir * stepSize;
 
     vec3 rayPos = vec3(screenUv, sceneDepth) + rayStep * (1.0 - sssAmount + dither);
-    float shadow = 1.0;
+
+    // DerivativeMain: float absorption = pow(sssAmount, sqrt(length(viewPos)) * 0.5);
+    float absorption = pow(clamp(sssAmount, 0.001, 1.0), sqrt(length(worldPos - uCameraPos)) * 0.5);
+
     const float zTolerance = 0.025;
-    float absorption = (sssAmount > 1e-4)
-        ? pow(clamp(sssAmount, 0.001, 1.0), sqrt(length(worldPos - uCameraPos)) * 0.5)
-        : 0.0;
+    float shadow = 1.0;
 
     for (int i = 0; i < 12; ++i) {
         rayPos += rayStep;
@@ -508,11 +448,14 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
         float linearSample = length(sampleWorld - uCameraPos);
         float linearCurrent = length(currentWorld - uCameraPos);
 
-        if (abs(linearSample - linearCurrent) / max(linearCurrent, 1e-6) < zTolerance &&
-            sampleDepth < rayPos.z) {
-            shadow *= absorption;
-            if (shadow < 1e-2) break;
+        if (sampleDepth < rayPos.z) {
+            // DerivativeMain: if (abs(linearSample - currentDepth) / currentDepth < zTolerance)
+            if (abs(linearSample - linearCurrent) / max(linearCurrent, 1e-6) < zTolerance) {
+                shadow *= absorption;
+            }
         }
+
+        if (shadow < 1e-2) break;
     }
     return mix(1.0, shadow, clamp(uContactShadowStrength, 0.0, 1.0));
 }
@@ -526,15 +469,15 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, o
     lightDir = normalize(lightDir);
     float viewDistanceForBias = length(worldPos - uCameraPos);
 
-    float distance01 = clamp(viewDistanceForBias / max(uShadowDistance, 1.0), 0.0, 1.0);
-    float distanceFade = pow(distance01, 16.0);
+    // DerivativeMain: distanceFade = saturate(pow16(rcp(shadowDistance^2) * dotSelf(worldPos)))
+    float distanceFade = saturate(pow16(rcp(uShadowDistance * uShadowDistance) * dotSelf(worldPos)));
     if (distanceFade >= 0.999) return 1.0;
 
-    float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float ndotl = saturate(dot(normal, lightDir));
     if (ndotl <= 1e-4) return 1.0;
 
     // Normal offset (DerivativeMain: normal * (dist² * 8e-5 + 3e-2) * (2 - NdotL))
-    float normalOffset = (viewDistanceForBias * viewDistanceForBias * 8e-5 + 3e-2) *
+    float normalOffset = (dotSelf(worldPos) * 8e-5 + 3e-2) *
                          (2.0 - ndotl) * max(uShadowNormalOffset, 0.0) / 0.035;
     float warpDensity = 1.0;
     vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
@@ -552,7 +495,7 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, o
     if (uSoftShadowsEnabled == 0) {
         float lit = (proj.z <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
         float shaped = shapeShadowVisibility(lit);
-        return mix(1.0, shaped, projectionFade * (1.0 - distanceFade));
+        return mix(1.0, shaped, projectionFade * oneMinus(distanceFade));
     }
 
     float dither = shadowDither();
@@ -563,6 +506,7 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, o
     float minRadius = 2.0 / max(float(textureSize(uShadowMap, 0).x), 1.0);
     float pcfRadius = minRadius * max(uShadowSoftness, 0.1);
     if (uPcssShadowsEnabled != 0) {
+        // DerivativeMain: penumbraScale = max(blockerSearch.x / distortFactor, 2.0 / realShadowMapRes)
         pcfRadius = max(blocker.x / max(warpDensity, 0.1), minRadius) *
                     max(1.0, uShadowSoftness) *
                     max(uShadowPcssStrength, 0.35);
@@ -571,7 +515,7 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, o
     float lit = pcfFilter(proj, pcfRadius, dither, samples);
     lit *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, dither, sssAmount);
     float shaped = shapeShadowVisibility(lit);
-    return mix(1.0, shaped, projectionFade * (1.0 - distanceFade));
+    return mix(1.0, shaped, projectionFade * oneMinus(distanceFade));
 }
 
 // Overload without SSS depth output for callers that don't need it
@@ -721,39 +665,38 @@ void main() {
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
     vec3 shadowTint = sampleShadowColorTint(worldPos, normal, shadowLightDir, shadow);
 
-    // --- BRDF (DerivativeMain BRDF.glsl) ---
+    // --- BRDF (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
     float alpha = max(roughness * roughness, 0.002);
     float alpha2 = alpha * alpha;
     float f0ScalarClamped = max(f0Scalar, 0.005);
-    // Diffuse Hammon (derivativeMain's full implementation)
-    vec3 diffuse = diffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
-    // Specular BRDF: GGX NDF + height-correlated Smith G2 + Schlick Fresnel, clamped to 4.0
-    float specRaw = specularBRDF(LdotH, NdotV, NdotL, NdotH, alpha2, f0ScalarClamped);
+    // Diffuse Hammon — DerivativeMain BRDF.glsl:54-67
+    vec3 diffuse = DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
+    // Specular BRDF — DerivativeMain BRDF.glsl:69-78
+    float specRaw = SpecularBRDF(LdotH, NdotV, NdotL, NdotH, alpha2, f0ScalarClamped);
     vec3 specular = vec3(specRaw) * mix(vec3(1.0), albedo, surface.aux.metalness);
 
     // === DerivativeMain lighting order ===
+    // Reference: deferred5.fsh main() — sceneData starts at 0 + basic brightness
+
+    // Initialize sceneData BEFORE SSS/shadow contributions (DerivativeMain deferred5.fsh:194)
+    vec3 sceneData = vec3(0.018); // BASIC_BRIGHTNESS (nightVision=0 for now)
+
     // 1. Sunlight setup: 64 * waterTint * SUNLIGHT_INTENSITY * directIlluminance * cloudShadow
     vec3 sunlightMult = directIlluminance * 64.0 * uDirectSunStrength * cloudShadow * shadowTint;
-    // 2. SSS (DerivativeMain SunLighting.glsl:176-188)
+    // 2. SSS (DerivativeMain SunLighting.glsl:176-188 — now via derivative_sunlight.glsl include)
+    //    DerivativeMain deferred5.fsh:267-272: SSS is added to sceneData BEFORE shadow/diffuse
     float sssSunShadowFill = 0.0;
     if (sss > 1e-4) {
         float sssDepth = max(shadowSssDepth, (1.0 - sunShadow) * 0.35);
-        float coeff = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-        coeff = inversesqrt(coeff + 1e-6);
-        vec3 sssCoeff = albedo * coeff * (1.0 - 0.75 * clamp(albedo * coeff, 0.0, 1.0));
-        float hg1 = (1.0 - 0.5 * 0.6 * 0.6) / (4.0 * kPi * pow(1.0 + 0.6 * 0.6 - 2.0 * 0.6 * (-LdotV), 1.5));
-        float hg2 = (1.0 - 0.5 * 0.35 * 0.35) / (4.0 * kPi * pow(1.0 + 0.35 * 0.35 - 2.0 * 0.35 * (-LdotV), 1.5));
-        vec3 sssContrib = albedo * inversesqrt(max(dot(albedo, vec3(0.2126, 0.7152, 0.0722)), 1e-6));
-        sssContrib = sssContrib * (1.0 - 0.75 * clamp(sssContrib, 0.0, 1.0)) * (28.0 / max(sss, 1e-4));
-        sssContrib = exp(-sssContrib * sssDepth * 0.375) * hg1
-                   + exp(-sssContrib * sssDepth * 0.125) * (0.33 * hg2 + 0.17 / kPi);
-        sssContrib *= sss * kPi;
-        sssSunShadowFill = sss * smoothstep(-0.35, 0.18, -rawNdotL) * mix(0.18, 0.46, 1.0 - sunShadow) * cloudShadow;
+        // DerivativeMain: CalculateSubsurfaceScattering(albedo, sssAmount, sssDepth, LdotV)
+        vec3 sssContrib = CalculateSubsurfaceScattering(albedo, sss, sssDepth, LdotV);
+        sceneData += sssContrib * sunlightMult;
+        // DerivativeMain: sunlightMult *= 1.0 - sssAmount * 0.5;
+        sunlightMult *= oneMinus(sss * 0.5);
+        sssSunShadowFill = sss * smoothstep(-0.35, 0.18, -rawNdotL) * mix(0.18, 0.46, oneMinus(sunShadow)) * cloudShadow;
     }
 
     // 3. sceneData accumulation (DerivativeMain deferred5.fsh:290-357)
-    // Start with basic + night vision
-    vec3 sceneData = vec3(0.018) + vec3(0.1) * 0.0; // BASIC_BRIGHTNESS (nightVision=0 for now)
 
     // Apply shadow to diffuse, add SSS
     sceneData += sunShadow * diffuse * sunlightMult + sssSunShadowFill * sunlightMult;
@@ -770,15 +713,15 @@ void main() {
                     uSkyAmbientStrength * mix(0.48, 1.0, upward) * shadowTint;
     float moonMask = nightSkyMask;
     skylight += uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
-    skylight *= mix(vec3(1.0), uShadowTintColor, (1.0 - shadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
+    skylight *= mix(vec3(1.0), uShadowTintColor, oneMinus(shadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
     sceneData += skylight * voxelLight.r * 1.5; // SKYLIGHT_INTENSITY
 
     // Minimum ambient + fake bounce
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
     sceneData += uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
-    float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
-    sceneData += directIlluminance * 64.0 * uFakeBounceStrength * pow(skyLightMask, 4.0) *
-                 (0.28 + 0.58 * groundFacing) * (0.35 + 0.65 * (1.0 - sunShadow));
+    // DerivativeMain: CalculateFakeBouncedLight (SunLighting.glsl:168-174)
+    float bounce = CalculateFakeBouncedLight(normal, sunDir);
+    sceneData += bounce * sqr(skyLightMask) * sunlightMult * uFakeBounceStrength;
 
     // GI / AO (DerivativeMain deferred5.fsh:329-347)
     // AO multiplies accumulated diffuse+skylight (before blocklight)
@@ -863,7 +806,7 @@ void main() {
     }
 
     // Blocklight falloff (BlockLighting.glsl:111-115, Overworld)
-    sceneData += blockLightMask * (ssao * (1.0 - blockLightMask) + blockLightMask) *
+    sceneData += blockLightMask * (ssao * oneMinus(blockLightMask) + blockLightMask) *
                  2.0 * blocklightColor * uBlockLightStrength * lightSourceMask;
 
     // Held torchlight (BlockLighting.glsl:117-128, Overworld)
@@ -883,25 +826,25 @@ void main() {
     // === DerivativeMain compositing (deferred5.fsh:352-357) ===
     // Multiply by albedo AFTER all diffuse/ambient/emission accumulation
     vec3 color = sceneData * albedo;
-    // Metal mask: reduce diffuse for metals in skylight
+    // Metal mask: DerivativeMain deferred5.fsh:355 — reduce diffuse for metals in skylight
     float isMetal = surface.aux.metalness * (0.2 * smoothstep(0.3, 0.8, voxelLight.r) + 0.8);
-    color *= 1.0 - isMetal;
+    color *= oneMinus(isMetal);
     // Additive specular on top (not multiplied by albedo)
     vec3 specularTint = specular * mix(vec3(1.0), albedo, surface.aux.metalness);
     color += shadow * specularTint * sunlightMult * (0.5 + 0.5 * derivativeSpecularMask);
 
-    // Sky specular (environment reflection)
-    color += coolSkyColor * fresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
-             pow(1.0 - roughness, 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
+    // Sky specular (environment reflection) — uses DerivativeMain FresnelSchlick
+    color += coolSkyColor * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
+             pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
 
     // Shadow desaturation
-    float shadowMask = (1.0 - shadow) * outdoorSkyMask;
+    float shadowMask = oneMinus(shadow) * outdoorSkyMask;
     color = desaturateLinear(color, shadowMask * uShadowDesaturation);
 
     // Back-scatter SSS for sun and moon (kept from current implementation)
     float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * mix(0.35, 1.0, sunShadow);
     color += albedo * directIlluminance * 64.0 * backScatter * sss * cloudShadow * (0.46 + 0.20 * uDirectSunStrength);
-    float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * moonMask;
+    float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * nightSkyMask;
     color += albedo * uMoonLightColor * moonBackScatter * sss * 0.12;
 
     if (uFogEnabled != 0) {

@@ -12,4 +12,8 @@
 
 4. **每个移植函数都必须标注来源。** 在 shader 注释中写明：`DerivativeMain/lib/...` 或 `DerivativeMain/program/...` 的函数名/行意图。
 
-5. **阴影失真等核心函数必须使用公共 include。** 所有 shadow distortion / bias 函数统一在 `derivative_shadow.glsl` 中定义，shadow/deferred/volumetric/debug 全部引用同一 include，禁止重复内联。
+5. **核心函数必须使用公共 include。** shadow distortion/bias、BRDF、SSS/HG phase 等 DerivativeMain 核心函数统一在 `derivative_shadow.glsl`、`derivative_brdf.glsl`、`derivative_sunlight.glsl` 中定义，禁止在消费文件中重复内联。消费文件通过 local wrapper 模式绑定 uniform。
+
+6. **DerivativeMain 函数命名使用 PascalCase。** `FresnelSchlick`、`DiffuseHammon`、`SpecularBRDF`、`CalculateSubsurfaceScattering`、`HenyeyGreensteinPhase` 等必须使用 DerivativeMain 原名，不得改为 camelCase（如 `fresnelSchlick`、`diffuseHammon`）。同名是防止歧义和搜索困难。
+
+7. **DerivativeMain Common.inc 辅助宏必须使用共享定义。** `oneMinus`、`saturate`、`max0`、`fastExp`、`rcp`、`pow5`、`pow4`、`pow16`、`dotSelf`、`cossin`、`GetLuminance` 等由 `derivative_shadow.glsl` 统一提供，消费文件不得自行定义（`#ifndef` 保护允许安全共存）。

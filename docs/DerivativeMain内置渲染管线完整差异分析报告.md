@@ -258,12 +258,67 @@
 - RSM GI 使用 shadow color/normal 的间接光仍缺失。
 - DH shadow 为非目标。
 
+#### 5.4.1 TODO：升级为 sampler2DShadow 硬件 PCF（P1 后续升级）
+
+DerivativeMain 使用两个 shadow sampler：
+
+- `sampler2D shadowtex0` — raw depth，用于 `BlockerSearch` 的 `texelFetch` 读取原始深度值
+- `sampler2DShadow shadowtex1` — comparison mode，用于 `PercentageCloserFilter` 的 `textureLod(shadowtex1, vec3(uv, refZ), 0)` 硬件自动比较+双线性插值
+
+当前 Mecraft 只有一个 `sampler2D uShadowMap`，PCF 使用 `compareShadowBilinear` 手动模拟（~15 条指令/样本 vs 硬件 1 条）。
+
+**升级方案：`glTextureView` 零拷贝双视图**
+
+```
+m_shadowDepth (原始纹理, GL_DEPTH_COMPONENT32F)
+       │
+       ├── sampler2D       view → uShadowMapRaw   (texelFetch 读原始深度，用于 blockerSearch)
+       │
+       └── sampler2DShadow view → uShadowMap      (texture() 硬件比较，用于 PCF)
+```
+
+C++ 改动（~15 行）：
+
+```cpp
+// 在 DeferredRenderTargets.cpp ensureSize() 中，创建 m_shadowDepth 之后：
+GLuint m_shadowDepthComparison = 0;
+glGenTextures(1, &m_shadowDepthComparison);
+glTextureView(m_shadowDepthComparison, GL_DEPTH_COMPONENT32F,
+              m_shadowDepth, GL_DEPTH_COMPONENT32F, 0, 1, 0, 1);
+glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_COMPARE_MODE,  GL_COMPARE_REF_TO_TEXTURE);
+glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_COMPARE_FUNC,  GL_LEQUAL);
+glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_MIN_FILTER,    GL_NEAREST);
+glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_MAG_FILTER,    GL_NEAREST);
+glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_WRAP_S,        GL_CLAMP_TO_BORDER);
+glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_WRAP_T,        GL_CLAMP_TO_BORDER);
+constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+glTextureParameterfv(m_shadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+```
+
+Shader 改动：
+
+```glsl
+uniform sampler2D       uShadowMapRaw;   // blockerSearch: texelFetch 读原始深度
+uniform sampler2DShadow uShadowMap;       // PCF: texture() 硬件比较
+
+// PCF 从 compareShadowBilinear(...) 变为一行：
+float lit = texture(uShadowMap, vec3(sampleCoord, shadowProjPos.z));
+
+// blockerSearch 仍用 texelFetch：
+float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
+```
+
+**收益**：PCF 每样本 ~15 条指令 → 1 条；硬件精确双线性；`compareShadowBilinear` 等 ~40 行可全部删除；轻松支持 colored shadows。
+
+**前置条件**：当前手动双线性在视觉上等价，不阻塞 P1。升级时机为 P1 完成、shadow map 稳定后。
+
 ### 5.5 下一步阴影任务
 
-1. 将 `ShadowDistortion.glsl` 抽成项目公共 include，shadow/deferred/volumetric/debug 全部引用同一函数，避免再次分叉。
-2. 将 `SunLighting.glsl` 的 `BlockerSearch/PercentageCloserFilter/ScreenSpaceShadow/CalculateSubsurfaceScattering` 完整端口为一个 include。
-3. 将 `Shadow.frag` 的 `shadowcolor0/1` 写入逐分支复刻，包括水、透明、normal、lightmap、height aux。
-4. 再接 colored shadows 与 RSM GI。
+1. ~~将 `ShadowDistortion.glsl` 抽成项目公共 include，shadow/deferred/volumetric/debug 全部引用同一函数，避免再次分叉。~~ ✅ 已完成（`derivative_shadow.glsl`）
+2. ~~将 `SunLighting.glsl` 的纯数学函数端口为 include。~~ ✅ 已完成（`derivative_sunlight.glsl` — HG phase / fake bounce / SSS 计算）
+3. 升级 shadow map sampler 架构：`sampler2D` → `sampler2DShadow` + `glTextureView` 双视图（见 5.4.1）。
+4. 将 `Shadow.frag` 的 `shadowcolor0/1` 写入逐分支复刻，包括水、透明、normal、lightmap、height aux。
+5. 再接 colored shadows 与 RSM GI。
 
 ## 6. 主光照、BRDF、Block Light、SSS
 

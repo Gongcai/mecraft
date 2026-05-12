@@ -16,8 +16,35 @@
 // Base math helpers — DerivativeMain/lib/Head/Common.inc
 //----------------------------------------------------------------------------//
 
+// DerivativeMain Common.inc:22-26
+#ifndef MECRAFT_DERIV_PI
+#define MECRAFT_DERIV_PI
+const float PI  = radians(180.0);   // DerivativeMain Common.inc:22
+const float rPI = 1.0 / PI;          // DerivativeMain Common.inc:23
+const float TAU = radians(360.0);    // DerivativeMain Common.inc:24
+const float rTAU = 1.0 / TAU;       // DerivativeMain Common.inc:25
+const float rLOG2 = 1.0 / log(2.0);  // DerivativeMain Common.inc:26
+#endif
+
 // DerivativeMain Common.inc:28
 #define rcp(x) (1.0 / (x))
+
+// DerivativeMain Common.inc:29-33
+#ifndef oneMinus
+#define oneMinus(x) (1.0 - (x))      // DerivativeMain Common.inc:29
+#endif
+#ifndef saturate
+#define saturate(x) clamp(x, 0.0, 1.0)  // DerivativeMain Common.inc:32
+#endif
+#ifndef max0
+#define max0(x) max(x, 0.0)          // DerivativeMain Common.inc:31
+#endif
+#ifndef fastExp
+#define fastExp(x) exp2((x) * rLOG2) // DerivativeMain Common.inc:30
+#endif
+#ifndef clamp16F
+#define clamp16F(x) clamp(x, 0.0, 65535.0)  // DerivativeMain Common.inc:33
+#endif
 
 // DerivativeMain Common.inc:50
 float sqr(float x) { return x * x; }
@@ -42,6 +69,26 @@ float pow5(float x) { return pow4(x) * x; }
 // Derivative shadow warp read/write mismatch bug (drifting shadow blob).
 float sqrt2(float c) { return sqrt(sqrt(c)); }
 vec3  sqrt2(vec3 c) { return sqrt(sqrt(c)); }
+
+// DerivativeMain Common.inc:65
+float pow16(float x) { return sqr(pow4(x)); }
+
+// DerivativeMain Common.inc:70-72
+float curve(float x) { return sqr(x) * (3.0 - 2.0 * x); }
+
+// DerivativeMain Common.inc:74-75
+float dotSelf(vec2 x) { return dot(x, x); }
+float dotSelf(vec3 x) { return dot(x, x); }
+
+// DerivativeMain Common.inc:77-78
+vec2 sincos(float x) { return vec2(sin(x), cos(x)); }
+vec2 cossin(float x) { return vec2(cos(x), sin(x)); }
+
+// DerivativeMain Common.inc:80
+float remap(float e0, float e1, float x) { return saturate((x - e0) / (e1 - e0)); }
+
+// DerivativeMain Common.inc:131-133
+float GetLuminance(in vec3 color) { return dot(color, vec3(0.2722, 0.6741, 0.0537)); }
 
 //----------------------------------------------------------------------------//
 // Shadow distortion — DerivativeMain/lib/Lighting/ShadowDistortion.glsl
