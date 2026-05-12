@@ -437,6 +437,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 1;
+            pipeline.softShadowsEnabled = true;
+            pipeline.pcssShadowsEnabled = false;
             pipeline.contactShadowsEnabled = false;
             pipeline.cloudShadowsEnabled = false;
             pipeline.directSunStrength = 1.0f;
@@ -485,8 +487,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 1;
             pipeline.softShadowsEnabled = true;
-            pipeline.pcssShadowsEnabled = false;
+            pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;
+            pipeline.shadowPcssStrength = 0.72f;
             pipeline.cloudShadowsEnabled = true;
             pipeline.directSunStrength = 1.36f;
             pipeline.skyAmbientStrength = 0.36f;
@@ -538,8 +541,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 1;
             pipeline.softShadowsEnabled = true;
-            pipeline.pcssShadowsEnabled = false;
+            pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;
+            pipeline.shadowPcssStrength = 0.82f;
             pipeline.cloudShadowsEnabled = true;
             pipeline.directSunStrength = 1.58f;
             pipeline.skyAmbientStrength = 0.28f;

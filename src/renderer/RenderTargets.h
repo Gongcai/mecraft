@@ -30,7 +30,7 @@ enum class Target : int {
     // --- Shadow ---
     ShadowDepth   = 15,  // DEPTH32F — shadow map depth
     ShadowColor   = 16,  // RGBA8   — albedo for colored shadows / caustics
-    ShadowNormal  = 17,  // RG16F   — octahedral normal for normal offset / SSS
+    ShadowNormal  = 17,  // RGBA16F — encoded normal.rg, skylight.b, aux/height.a
 
     // --- Post / temporal ---
     SceneComposite= 20,  // RGBA16F — opaque HDR after screen-space effects (clouds, reflections)
@@ -87,8 +87,8 @@ inline constexpr PassIO kPassTable[] = {
     { "DeferredLighting",
       { Target::GAlbedo, Target::GNormalAo, Target::GVoxelLight,
         Target::GMaterial, Target::GMaterialAux, Target::GDepth,
-        Target::ShadowDepth, Target::ShadowColor, Target::SSAOFiltered,
-        Target::SkyCapture },
+        Target::ShadowDepth, Target::ShadowColor, Target::ShadowNormal,
+        Target::SSAOFiltered, Target::SkyCapture },
       { Target::SceneLighting } },
 
     { "Reflection",

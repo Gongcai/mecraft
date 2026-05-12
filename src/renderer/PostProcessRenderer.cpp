@@ -119,8 +119,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
         glClear(GL_COLOR_BUFFER_BIT);
         m_bloomExtractShader->use();
         m_bloomExtractShader->setInt("uSceneTex", 0);
-        m_bloomExtractShader->setFloat("uThreshold", m_effects.bloomThreshold);
-        m_bloomExtractShader->setFloat("uIntensity", 1.0f);
+        m_bloomExtractShader->setFloat("uExposure", resolvedExposure);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
         glBindVertexArray(m_fullscreenVao);
@@ -177,11 +176,15 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
         glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE);
         m_bloomBlurShader->setVec2("uDirection", glm::vec2(0.0f));
+        // DerivativeMain Grade.glsl: bloomData weights = 1 / (1.2^(lod-1)), normalized by 0.23118661
+        // Current mip chain uses additive weights: 0.3349 + 0.0670 * (6 - mip).
+        // Total raw weight sum = 3.0144. Normalize so total = 1.0 (matches DerivativeMain energy).
+        constexpr float kBloomNormalization = 1.0f / 3.0144f; // ~0.3317
         for (int mip = kBloomMipCount - 1; mip > 0; --mip) {
             if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip - 1][0] == 0) {
                 continue;
             }
-            const float weight = 0.33489798f + 0.06697960f * static_cast<float>(kBloomMipCount - 1 - mip);
+            const float weight = (0.33489798f + 0.06697960f * static_cast<float>(kBloomMipCount - 1 - mip)) * kBloomNormalization;
             glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip - 1][0]);
             glViewport(0, 0, m_bloomMipSize[mip - 1].x, m_bloomMipSize[mip - 1].y);
             m_bloomBlurShader->setFloat("uWeight", weight);

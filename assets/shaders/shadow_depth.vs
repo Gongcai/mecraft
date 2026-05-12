@@ -28,7 +28,7 @@ out float vNormal;
 out vec3 vWorldPos;
 flat out int vMaterialKind;
 
-float calculateShadowWarp(vec2 coord) {
+float calculateShadowDistortion(vec2 coord) {
     if (uShadowWarpMode == 2) {
         return 1.0;
     }
@@ -45,7 +45,7 @@ void main() {
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
     vec4 clipPos = uShadowProjection * (uShadowModelView * worldPos);
     if (uShadowWarpMode != 2) {
-        clipPos.xy /= calculateShadowWarp(clipPos.xy);
+        clipPos.xy /= calculateShadowDistortion(clipPos.xy);
         clipPos.z *= 0.2;
     }
     gl_Position = clipPos;

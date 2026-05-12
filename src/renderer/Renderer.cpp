@@ -1465,6 +1465,8 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     }
     std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
     const TransparentPassPlan preservedTransparentPlan = m_transparentPassPlan;
+    m_deferredTransparentBatch.clear();
+    m_transparentPassPlan.clear();
     const ShadowProjectionData shadowProjectionData =
         buildShadowProjectionData(camera, shadowLightDirectionFromSkyColors(frame.skyColors));
     m_shadowModelView = shadowProjectionData.modelView;
@@ -1478,7 +1480,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     const GLfloat shadowColorClear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    const GLfloat shadowNormalClear[4] = {0.5f, 0.5f, 0.0f, 1.0f};
+    const GLfloat shadowNormalClear[4] = {0.5f, 0.5f, 1.0f, 1.0f};
     glClearBufferfv(GL_COLOR, 0, shadowColorClear);
     glClearBufferfv(GL_COLOR, 1, shadowNormalClear);
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -1512,6 +1514,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         m_worldRenderBuffer.flushOpaque();
     }
     renderCutoutChunks(cutoutEntries);
+    m_worldRenderBuffer.beginFrame();
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE1);
@@ -1580,6 +1583,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uNoiseTex", 11);
     m_deferredLightingShader->setMat4("uViewProj", frame.viewProj);
     m_deferredLightingShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_deferredLightingShader->setMat4("uProjection", frame.projection);
     bindShadowFrameUniforms(*m_deferredLightingShader, frame);
     bindSkyLightingUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);

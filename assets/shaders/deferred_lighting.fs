@@ -20,6 +20,7 @@ uniform sampler2D uNoiseTex;
 
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
+uniform mat4 uProjection;
 uniform mat4 uShadowViewProj;
 uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
@@ -288,15 +289,30 @@ float compareShadowBilinear(vec3 proj, vec2 offsetTexels, float bias) {
     return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
 }
 
-float stableShadowJitter() {
-    // Keep the soft-shadow kernel fixed for now. A per-shadow-texel hash rotates the PCF/PCSS
-    // pattern whenever the sun or snapped projection crosses texel boundaries, which shows up as
-    // moving striped ghosting even with a stationary camera.
-    return 0.5;
-}
-
 float noise2D(vec2 uv) {
     return texture(uNoiseTex, uv).r;
+}
+
+// DerivativeMain-style dither: per-pixel blue noise rotation for shadow sampling.
+float shadowDither() {
+    return noise2D(gl_FragCoord.xy / 256.0);
+}
+
+// DerivativeMain rotating Poisson disk: 45-degree increments via 2x2 rotation matrix.
+// cossin(angle) returns vec2(cos, sin).
+vec2 cossin(float angle) {
+    return vec2(cos(angle), sin(angle));
+}
+
+// DerivativeMain quartic shadow distortion (ShadowDistortion.glsl)
+float quarticLength(vec2 v) {
+    vec2 v2 = v * v;
+    return pow(dot(v2, v2), 0.25);
+}
+
+float shadowDistortionFactor(vec2 shadowClipPos) {
+    const float SHADOW_MAP_BIAS = 0.9;
+    return quarticLength(shadowClipPos * 1.165) * SHADOW_MAP_BIAS + 1.0 - SHADOW_MAP_BIAS;
 }
 
 float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
@@ -332,9 +348,7 @@ float calculateShadowWarp(vec2 coord) {
         return 1.0;
     }
     if (uShadowWarpMode == 1) {
-        vec2 scaled = coord * 1.165;
-        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
-        return quarticLength * 0.9 + 0.1;
+        return shadowDistortionFactor(coord);
     }
     return length(coord * 1.169) * 0.9 + 0.1;
 }
@@ -343,10 +357,12 @@ vec3 worldToShadowProj(vec3 worldPos, out float warpDensity) {
     vec4 lightView = uShadowModelView * vec4(worldPos, 1.0);
     vec4 lightClip = uShadowProjection * lightView;
     vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
-    warpDensity = calculateShadowWarp(proj.xy);
     if (uShadowWarpMode != 2) {
+        warpDensity = calculateShadowWarp(proj.xy);
         proj.xy /= warpDensity;
         proj.z *= 0.2;
+    } else {
+        warpDensity = 1.0;
     }
     return proj * 0.5 + 0.5;
 }
@@ -376,18 +392,14 @@ float shadowDepthBiasFromWorld(float worldUnits) {
 }
 
 float derivativeMinimumShadowBias() {
-    // DerivativeMain applies a small constant depth bias in distorted shadow space.
-    // Keep this independent of shadow resolution; texel-scaled bias becomes too
-    // small at high resolutions and produces receiver acne/striped false shadows.
-    return (uShadowWarpMode != 2) ? 1.2e-4 : 6.0e-5;
+    return (uShadowWarpMode != 2) ? 1.0e-4 : 6.0e-5;
 }
 
 float shadowWorldBias(float ndotl, float viewDistance) {
     float texelWorld = max(uShadowTexelWorldSize, 0.0001);
     float slope = 1.0 - clamp(ndotl, 0.0, 1.0);
-    float receiverScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
-    return texelWorld * receiverScale *
-           (uShadowConstantBias * 48.0 + uShadowSlopeBias * 64.0 * slope);
+    float receiverScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
+    return texelWorld * receiverScale * (0.35 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 18.0 * slope);
 }
 
 float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
@@ -429,129 +441,190 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
     return mix(vec3(1.0), desaturatedShadow, tintStrength * normalMatch * 0.42);
 }
 
-vec2 pcssBlockerSearch(vec3 proj, float bias, float searchRadius, float jitter) {
-    float blockerDepthSum = 0.0;
-    float blockerCount = 0.0;
-    for (int i = 0; i < 8; ++i) {
-        vec2 offset = spiralDiskSample(i, 8, jitter) * searchRadius;
-        float blockerDepth = sampleShadowDepthAt(proj, offset);
-        float isBlocker = step(blockerDepth, proj.z - bias) * (1.0 - step(0.9999, blockerDepth));
-        blockerDepthSum += blockerDepth * isBlocker;
-        blockerCount += isBlocker;
+// DerivativeMain BlockerSearch (SunLighting.glsl:28-54)
+// Uses texelFetch (integer coordinates, no filtering) — matches DerivativeMain exactly.
+// Returns: .x = penumbra scale (shadow map space), .y = SSS depth (world space)
+vec2 blockerSearch(vec3 shadowProjPos, float dither) {
+    float searchDepth = 0.0;
+    float sumWeight = 0.0;
+    float sssDepth = 0.0;
+
+    float searchRadius = 2.0 * uShadowProjection[0][0];
+    ivec2 shadowSize = textureSize(uShadowMap, 0);
+    vec2 shadowRes = vec2(shadowSize);
+
+    vec2 rot = cossin(dither * kTwoPi) * searchRadius;
+    vec2 angleStep = cossin(kTwoPi * 0.125);
+    mat2 rotStep = mat2(angleStep.x, angleStep.y, -angleStep.y, angleStep.x);
+
+    for (int i = 0; i < 8; ++i, rot *= rotStep) {
+        float fi = float(i) + dither;
+        vec2 sampleCoord = shadowProjPos.xy + rot * sqrt(fi * 0.125);
+        if (sampleCoord.x <= 0.0 || sampleCoord.y <= 0.0 || sampleCoord.x >= 1.0 || sampleCoord.y >= 1.0) {
+            continue;
+        }
+
+        // texelFetch: integer texel coordinates, no filtering (matches DerivativeMain)
+        ivec2 texelCoord = clamp(ivec2(sampleCoord * shadowRes), ivec2(0), shadowSize - ivec2(1));
+        float depthSample = texelFetch(uShadowMap, texelCoord, 0).r;
+        float weight = step(depthSample, shadowProjPos.z) * (1.0 - step(0.999999, depthSample));
+
+        sssDepth += max(shadowProjPos.z - depthSample, 0.0);
+        searchDepth += depthSample * weight;
+        sumWeight += weight;
     }
 
-    float averageBlockerDepth = blockerDepthSum / max(blockerCount, 0.0001);
-    float penumbraUv = min(2.0 * max(proj.z - bias - averageBlockerDepth, 0.0) / max(averageBlockerDepth, 0.0001), 1.0);
-    return vec2(penumbraUv, blockerCount);
+    if (sumWeight <= 0.0) {
+        return vec2(0.0);
+    }
+
+    searchDepth /= sumWeight;
+    searchDepth = min(2.0 * (shadowProjPos.z - searchDepth) / max(searchDepth, 0.0001), 1.0);
+
+    float sssWorldDepth = sssDepth * shadowDepthWorldScale();
+    return vec2(searchDepth * uShadowProjection[0][0], sssWorldDepth);
 }
 
-float pcssFilterRadius(vec3 proj, float baseRadius, float bias, float warpDensity, float jitter) {
-    if (uPcssShadowsEnabled == 0 || uShadowPcssStrength <= 0.001) {
-        return baseRadius;
+// DerivativeMain PercentageCloserFilter (SunLighting.glsl:56-84)
+// Rotating Poisson disk PCF with 16 samples.
+float pcfFilter(vec3 shadowProjPos, float penumbraScale, float dither, int sampleCount) {
+    // DerivativeMain bias: constant 1e-4 minus dithered offset
+    shadowProjPos.z -= 1e-4 - dither * 5e-5;
+
+    float rSteps = 1.0 / float(sampleCount);
+    float shadowRes = float(textureSize(uShadowMap, 0).x);
+    float result = 0.0;
+
+    // CRITICAL: initial rot radius = penumbraScale (DerivativeMain line 64)
+    // penumbraScale is in UV space; rot samples are in UV space.
+    vec2 rot = cossin(dither * kTwoPi) * penumbraScale;
+    vec2 angleStep = cossin(kTwoPi * 0.125);
+    mat2 rotStep = mat2(angleStep.x, angleStep.y, -angleStep.y, angleStep.x);
+
+    for (int i = 0; i < sampleCount; ++i, rot *= rotStep) {
+        float fi = float(i) + dither;
+        vec2 offsetUV = rot * sqrt(fi * rSteps);
+        vec2 sampleUv = shadowProjPos.xy + offsetUV;
+        if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
+            result += 1.0;
+        } else {
+            result += compareShadowBilinear(shadowProjPos, offsetUV * shadowRes, 0.0);
+        }
     }
 
-    float shadowMapSize = max(float(textureSize(uShadowMap, 0).x), 1.0);
-    float searchRadius = clamp(2.0 * abs(uShadowProjection[0][0]) * shadowMapSize, 1.0, 48.0);
-    vec2 blockerSearch = pcssBlockerSearch(proj, bias, searchRadius, jitter);
-    float penumbraUv = blockerSearch.x;
-    float blockerCount = blockerSearch.y;
-
-    if (blockerCount < 0.5) {
-        return max(baseRadius, 2.0);
-    }
-
-    float derivativeRadius = penumbraUv * abs(uShadowProjection[0][0]) * shadowMapSize / max(warpDensity, 0.25);
-    derivativeRadius = clamp(derivativeRadius, 2.0, 28.0);
-    float blockerConfidence = smoothstep(1.0, 4.0, blockerCount);
-    return mix(baseRadius, derivativeRadius, blockerConfidence * clamp(uShadowPcssStrength, 0.0, 1.0));
+    return result * rSteps;
 }
 
-float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
-    if (uShadowsEnabled == 0) {
-        return 1.0;
+// DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
+// 12-step screen-space ray march along light direction with SSS absorption.
+// DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
+// 12-step screen-space ray march along projected light direction.
+// worldPos: fragment world position
+// screenUv: fragment screen UV (0-1)
+// sceneDepth: fragment screen depth (0-1, from depth buffer)
+// dither: per-pixel noise for temporal stability
+// sssAmount: subsurface scattering amount (0 = opaque, 1 = full SSS)
+float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float dither, float sssAmount) {
+    if (uContactShadowsEnabled == 0) return 1.0;
+
+    vec4 clipPos = uViewProj * vec4(worldPos, 1.0);
+    vec3 ndcPos = clipPos.xyz / max(abs(clipPos.w), 0.0001);
+    vec3 shadowLightDir = (uShadowLightMode == 1) ? normalize(uMoonDirection) : normalize(uSunDirection);
+    vec3 lightWorldOffset = worldPos + shadowLightDir * abs(clipPos.w) * 0.1;
+    vec4 clipOffset = uViewProj * vec4(lightWorldOffset, 1.0);
+    vec3 ndcOffset = clipOffset.xyz / max(abs(clipOffset.w), 0.0001);
+    vec3 screenDir = normalize(vec3((ndcOffset.xy - ndcPos.xy) * 0.5, ndcOffset.z - ndcPos.z));
+
+    float stepSize = max(0.01, 0.05 - sssAmount * 0.05) * uProjection[1][1] / 12.0;
+    vec3 rayStep = screenDir * stepSize;
+
+    vec3 rayPos = vec3(screenUv, sceneDepth) + rayStep * (1.0 - sssAmount + dither);
+    float shadow = 1.0;
+    const float zTolerance = 0.025;
+    float absorption = (sssAmount > 1e-4)
+        ? pow(clamp(sssAmount, 0.001, 1.0), sqrt(length(worldPos - uCameraPos)) * 0.5)
+        : 0.0;
+
+    for (int i = 0; i < 12; ++i) {
+        rayPos += rayStep;
+        if (rayPos.x < 0.0 || rayPos.y < 0.0 || rayPos.x > 1.0 || rayPos.y > 1.0 || rayPos.z >= 1.0) break;
+
+        float sampleDepth = texture(uDepthTex, rayPos.xy).r;
+        vec3 sampleWorld = reconstructWorldPosition(rayPos.xy, sampleDepth);
+        vec3 currentWorld = reconstructWorldPosition(rayPos.xy, rayPos.z);
+        float linearSample = length(sampleWorld - uCameraPos);
+        float linearCurrent = length(currentWorld - uCameraPos);
+
+        if (abs(linearSample - linearCurrent) / max(linearCurrent, 1e-6) < zTolerance &&
+            sampleDepth < rayPos.z) {
+            shadow *= absorption;
+            if (shadow < 1e-2) break;
+        }
     }
+    return mix(1.0, shadow, clamp(uContactShadowStrength, 0.0, 1.0));
+}
+
+// DerivativeMain shadow pipeline (deferred5.fsh:240-288)
+// Returns shadow value, outputs SSS depth for subsurface scattering.
+float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, out float outSssDepth) {
+    outSssDepth = 0.0;
+    if (uShadowsEnabled == 0) return 1.0;
+
     lightDir = normalize(lightDir);
     float viewDistanceForBias = length(worldPos - uCameraPos);
-    float distanceFade = 1.0 - smoothstep(uShadowDistance * 0.58, uShadowDistance * 0.82, viewDistanceForBias);
-    if (distanceFade <= 0.001) {
-        return 1.0;
-    }
+
+    float distance01 = clamp(viewDistanceForBias / max(uShadowDistance, 1.0), 0.0, 1.0);
+    float distanceFade = pow(distance01, 16.0);
+    if (distanceFade >= 0.999) return 1.0;
+
     float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistanceForBias);
+    if (ndotl <= 1e-4) return 1.0;
+
+    // Normal offset (DerivativeMain: normal * (dist² * 8e-5 + 3e-2) * (2 - NdotL))
+    float normalOffset = (viewDistanceForBias * viewDistanceForBias * 8e-5 + 3e-2) *
+                         (2.0 - ndotl) * max(uShadowNormalOffset, 0.0) / 0.035;
     float warpDensity = 1.0;
     vec3 proj = worldToShadowProj(worldPos + normal * normalOffset, warpDensity);
-    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
-        return 1.0;
-    }
-    float bias = max(shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistanceForBias)),
-                     derivativeMinimumShadowBias());
+    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) return 1.0;
 
     float projectionFade = shadowProjectionFade(proj);
-    if (projectionFade <= 0.001) {
-        return 1.0;
-    }
+    if (projectionFade <= 0.001) return 1.0;
+
+    float bias = max(
+        shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistanceForBias)),
+        derivativeMinimumShadowBias()
+    );
+    proj.z -= bias;
 
     if (uSoftShadowsEnabled == 0) {
-        float hardShadow = shapeShadowVisibility(compareShadowTexel(proj, ivec2(0), bias));
-        return mix(1.0, hardShadow, projectionFade * distanceFade);
+        float lit = (proj.z <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
+        float shaped = shapeShadowVisibility(lit);
+        return mix(1.0, shaped, projectionFade * (1.0 - distanceFade));
     }
 
-    float radius = max(uShadowSoftness, 0.1) * 2.0;
-    float jitter = stableShadowJitter();
-    radius = pcssFilterRadius(proj, radius, bias, warpDensity, jitter);
-    float lit = 0.0;
-    for (int i = 0; i < 16; ++i) {
-        lit += compareShadowBilinear(proj, spiralDiskSample(i, 16, jitter) * radius, bias);
+    float dither = shadowDither();
+    vec2 blocker = blockerSearch(proj, dither);
+    outSssDepth = blocker.y;
+
+    int samples = uPcssShadowsEnabled != 0 ? 16 : 8;
+    float minRadius = 2.0 / max(float(textureSize(uShadowMap, 0).x), 1.0);
+    float pcfRadius = minRadius * max(uShadowSoftness, 0.1);
+    if (uPcssShadowsEnabled != 0) {
+        pcfRadius = max(blocker.x / max(warpDensity, 0.1), minRadius) *
+                    max(1.0, uShadowSoftness) *
+                    max(uShadowPcssStrength, 0.35);
     }
-    return mix(1.0, shapeShadowVisibility(lit / 16.0), projectionFade * distanceFade);
+
+    float lit = pcfFilter(proj, pcfRadius, dither, samples);
+    lit *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, dither, sssAmount);
+    float shaped = shapeShadowVisibility(lit);
+    return mix(1.0, shaped, projectionFade * (1.0 - distanceFade));
 }
 
-float contactShadow(vec3 worldPos,
-                    vec3 normal,
-                    vec3 lightDir,
-                    float lightMask,
-                    float shadowVisibility) {
-    if (uShadowsEnabled == 0 || uContactShadowsEnabled == 0 || uContactShadowStrength <= 0.001) {
-        return 1.0;
-    }
-    lightDir = normalize(lightDir);
-    float lightTerm = max(dot(normal, lightDir), 0.0);
-    lightMask = clamp(lightMask, 0.0, 1.0);
-    float litGate = smoothstep(0.55, 0.92, shadowVisibility);
-    if (lightTerm * lightMask * litGate <= 0.02) {
-        return 1.0;
-    }
-
-    float occlusion = 0.0;
-    float weightSum = 0.0;
-    vec3 rayOrigin = worldPos + normal * 0.035 + lightDir * 0.045;
-    const float maxDistance = 1.65;
-    for (int i = 0; i < 8; ++i) {
-        float step01 = (float(i) + 0.72) / 8.0;
-        float rayDistance = step01 * step01 * maxDistance + 0.045;
-        vec3 sampleWorld = rayOrigin + lightDir * rayDistance;
-        float sampleProjectedDepth = 1.0;
-        vec2 sampleUv = projectWorldToUv(sampleWorld, sampleProjectedDepth);
-        if (sampleUv.x <= 0.001 || sampleUv.y <= 0.001 || sampleUv.x >= 0.999 || sampleUv.y >= 0.999) {
-            continue;
-        }
-
-        float sceneDepth = texture(uDepthTex, sampleUv).r;
-        if (sceneDepth >= 1.0 || sceneDepth >= sampleProjectedDepth - 0.00008) {
-            continue;
-        }
-
-        vec3 sceneWorld = reconstructWorldPosition(sampleUv, sceneDepth);
-        float worldSeparation = length(sceneWorld - sampleWorld);
-        float thickness = mix(0.12, 0.72, step01);
-        float hit = 1.0 - smoothstep(thickness * 0.45, thickness, worldSeparation);
-        float forwardWeight = 1.0 - step01 * 0.55;
-        occlusion += hit * forwardWeight;
-        weightSum += forwardWeight;
-    }
-    occlusion = clamp(occlusion / max(weightSum, 0.0001), 0.0, 1.0);
-    float grazingBoost = 0.55 + 0.45 * pow(1.0 - lightTerm, 0.65);
-    return 1.0 - occlusion * uContactShadowStrength * lightTerm * lightMask * litGate * grazingBoost;
+// Overload without SSS depth output for callers that don't need it
+float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
+    float unused;
+    return shadowFactor(worldPos, normal, lightDir, 0.0, unused);
 }
 
 vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSunColor) {
@@ -679,9 +752,8 @@ void main() {
 
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
     vec3 shadowLightDir = (uShadowLightMode == 1) ? moonDir : sunDir;
-    float shadow = shadowFactor(worldPos, normal, shadowLightDir);
-    float activeShadowLightMask = (uShadowLightMode == 1) ? nightSkyMask : skyLightMask;
-    shadow *= contactShadow(worldPos, normal, shadowLightDir, activeShadowLightMask, shadow);
+    float shadowSssDepth = 0.0;
+    float shadow = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? shadow : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadow, 0.82) : 1.0;
@@ -712,7 +784,7 @@ void main() {
     // 2. SSS (DerivativeMain SunLighting.glsl:176-188)
     float sssSunShadowFill = 0.0;
     if (sss > 1e-4) {
-        float sssDepth = shadow * 28.0 / max(sss, 1e-4);
+        float sssDepth = max(shadowSssDepth, (1.0 - sunShadow) * 0.35);
         float coeff = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
         coeff = inversesqrt(coeff + 1e-6);
         vec3 sssCoeff = albedo * coeff * (1.0 - 0.75 * clamp(albedo * coeff, 0.0, 1.0));

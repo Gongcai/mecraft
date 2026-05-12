@@ -152,6 +152,10 @@ float shadowDepthBiasFromWorld(float worldUnits) {
     return worldUnits / shadowDepthWorldScale();
 }
 
+float derivativeMinimumShadowBias() {
+    return (uShadowWarpMode != 2) ? 1.0e-4 : 6.0e-5;
+}
+
 float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     if (uShadowsEnabled == 0) {
         return 1.0;
@@ -164,8 +168,7 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     }
 
     float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    vec3 offsetPos = worldPos + normalize(lightDir) * texelWorld * 0.65;
-    vec3 proj = worldToShadowProj(offsetPos);
+    vec3 proj = worldToShadowProj(worldPos + normalize(lightDir) * texelWorld * 0.5);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
@@ -173,9 +176,8 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     ivec2 size = textureSize(uShadowMap, 0);
     vec2 texel = 1.0 / vec2(size);
     float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
-    float biasWorld = texelWorld * distanceScale *
-                      max(uShadowConstantBias * 72.0, uShadowSlopeBias * 32.0);
-    float bias = shadowDepthBiasFromWorld(biasWorld);
+    float biasWorld = texelWorld * distanceScale * (0.5 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 16.0);
+    float bias = max(shadowDepthBiasFromWorld(biasWorld), derivativeMinimumShadowBias());
     float lit = 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2( texel.x, 0.0)).r) ? 1.0 : 0.0;

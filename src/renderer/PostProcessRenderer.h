@@ -16,7 +16,7 @@ struct PostProcessEffects {
     float screenRollRadians = 0.0f;
     bool bloomEnabled = true;
     float bloomThreshold = 0.0f;    // DerivativeMain: no threshold, raw HDR feeds bloom
-    float bloomStrength = 1.0f;
+    float bloomStrength = 0.20f; // Calibrated for DerivativeMain exposure range (0.05-0.2)
     bool autoExposureEnabled = true;
     float autoExposureMin = 0.001f; // Allow very bright scenes
     float autoExposureMax = 64.0f;  // Allow very dark scenes

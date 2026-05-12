@@ -77,9 +77,9 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_shadowColor = createTexture2D(GL_RGBA8, m_shadowResolution, m_shadowResolution,
                                     GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_shadowColor, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    // Shadow normal: encoded normal + skylight (RG16F)
-    m_shadowNormal = createTexture2D(GL_RG16F, m_shadowResolution, m_shadowResolution,
-                                     GL_RG, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    // Shadow normal: encoded normal + skylight/aux, matching DerivativeMain shadowcolor1.
+    m_shadowNormal = createTexture2D(GL_RGBA16F, m_shadowResolution, m_shadowResolution,
+                                     GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_shadowNormal, GL_TEXTURE_BORDER_COLOR, kBorderColor);
     glNamedFramebufferTexture(m_shadowFbo, GL_DEPTH_ATTACHMENT, m_shadowDepth, 0);
     glNamedFramebufferTexture(m_shadowFbo, GL_COLOR_ATTACHMENT0, m_shadowColor, 0);

@@ -136,7 +136,7 @@ private:
     GLuint m_shadowFbo = 0;
     GLuint m_shadowDepth = 0;
     GLuint m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
-    GLuint m_shadowNormal = 0;  // RG16F: encoded normal for shadow normal offset / SSS
+    GLuint m_shadowNormal = 0;  // RGBA16F: encoded normal.rg, skylight.b, aux/height.a
 
     GLuint m_ssaoFbo = 0;
     GLuint m_ssaoTex = 0;

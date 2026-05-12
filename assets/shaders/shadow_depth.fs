@@ -17,7 +17,7 @@ uniform float uTime;
 
 // Shadow color outputs:
 // layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics)
-// layout 1 = shadowcolor1: RG = encoded normal (for shadow normal / SSS)
+// layout 1 = shadowcolor1: RG = encoded normal, B = skylight, A = height/aux
 layout(location = 0) out vec4 ShadowColor;
 layout(location = 1) out vec4 ShadowNormal;
 
@@ -103,7 +103,7 @@ void main() {
         caustics = clamp(caustics * caustics * 2.0, 0.0, 1.0);
 
         ShadowColor = vec4(vec3(caustics), 1.0);
-        ShadowNormal = vec4(encodeNormal(wavesNormal), 0.0, 1.0);
+        ShadowNormal = vec4(encodeNormal(wavesNormal), 1.0, vWorldPos.y * (1.0 / 512.0) + 0.25);
     } else {
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
@@ -133,6 +133,6 @@ void main() {
         if (isCrossVegetation) {
             worldNormal = vec3(0.0, 1.0, 0.0);
         }
-        ShadowNormal = vec4(encodeNormal(worldNormal), 0.0, 1.0);
+        ShadowNormal = vec4(encodeNormal(worldNormal), 1.0, 1.0);
     }
 }
