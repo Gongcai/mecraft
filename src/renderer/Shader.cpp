@@ -321,3 +321,69 @@ void Shader::setMat3(const string& name, const glm::mat3 &value) const
 {
     glUniformMatrix3fv(getUniformLocation(name), 1, GL_FALSE, &value[0][0]);
 }
+
+void Shader::setUint(const string& name, unsigned int value) const
+{
+    glUniform1ui(getUniformLocation(name), value);
+}
+
+Shader* Shader::createCompute(const char* computePath) {
+    string computeCode;
+    try {
+        ifstream file;
+        file.exceptions(ifstream::failbit | ifstream::badbit);
+        file.open(computePath);
+        stringstream stream;
+        stream << file.rdbuf();
+        file.close();
+        unordered_set<string> includeStack;
+        computeCode = resolveIncludes(stream.str(), computePath, includeStack);
+    } catch (ifstream::failure& e) {
+        cout << "ERROR::SHADER::COMPUTE::FILE_NOT_SUCCESSFULLY_READ" << endl;
+        cout << "ERROR::SHADER::FILENAME:" << computePath << endl;
+        return nullptr;
+    }
+
+    const char* code = computeCode.c_str();
+    GLuint compute = glCreateShader(GL_COMPUTE_SHADER);
+    glShaderSource(compute, 1, &code, nullptr);
+    glCompileShader(compute);
+
+    int success = 0;
+    char infolog[1024];
+    glGetShaderiv(compute, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(compute, sizeof(infolog), nullptr, infolog);
+        cout << "ERROR::SHADER::COMPUTE::COMPILATION_FAILED [" << computePath << "]\n" << infolog << endl;
+        glDeleteShader(compute);
+        return nullptr;
+    }
+
+    auto* shader = new Shader();
+    shader->ID = glCreateProgram();
+    glAttachShader(shader->ID, compute);
+    glLinkProgram(shader->ID);
+
+    glGetProgramiv(shader->ID, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(shader->ID, sizeof(infolog), nullptr, infolog);
+        cout << "ERROR::SHADER::COMPUTE::LINKING_FAILED [" << computePath << "]\n" << infolog << endl;
+        glDeleteProgram(shader->ID);
+        delete shader;
+        shader = nullptr;
+    }
+
+    glDeleteShader(compute);
+    return shader;
+}
+
+void Shader::dispatch(const GLuint numGroupsX, const GLuint numGroupsY, const GLuint numGroupsZ) const {
+    glDispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+}
+
+void Shader::bindImage(const GLuint unit, const GLuint texture, const GLint level,
+                       const GLboolean layered, const GLint layer,
+                       const GLenum access, const GLenum internalFormat) {
+    glBindImageTexture(unit, texture, level, layered, layer, access, internalFormat);
+}

@@ -111,7 +111,10 @@ private:
                                   GLenum type,
                                   GLenum minFilter,
                                   GLenum magFilter,
-                                  GLenum wrap);
+                                  GLenum wrap,
+                                  int levels = 1);
+
+    static void generateMipmaps(GLuint texture);
     static bool checkFramebufferComplete(GLuint framebuffer, const char* label);
     void destroyFramebuffers();
     void destroyFullscreenTriangle();

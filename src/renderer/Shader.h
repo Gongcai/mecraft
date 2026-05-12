@@ -25,12 +25,24 @@ public:
     Shader(const char* vertexPath,const char* fragmentPath, const char* geometryPath);
     Shader(const char* vertexPath,const char* fragmentPath);
 
+    // Compute shader factory: compiles a single compute shader program.
+    static Shader* createCompute(const char* computePath);
+
     //使用着色器
     void use();
+
+    // Dispatch a compute shader. numGroups can be 0 to skip that dimension.
+    void dispatch(GLuint numGroupsX, GLuint numGroupsY = 1, GLuint numGroupsZ = 1) const;
+
+    // Bind a texture as an image for imageLoad/imageStore in compute shaders.
+    static void bindImage(GLuint unit, GLuint texture, GLint level, GLboolean layered,
+                          GLint layer, GLenum access, GLenum internalFormat);
+
     //uniform值设置
     void setBool(const string& name, bool value) const;
     void setInt(const string& name,int value) const;
     void setFloat(const string& name,float value) const;
+    void setUint(const string& name, unsigned int value) const;
     void setMat4(const string& name,const glm::mat4 &value) const;
     void setMat4(int location, const glm::mat4 &value) const;
     void setMat3(const string& name, const glm::mat3 &value) const;
@@ -43,6 +55,7 @@ public:
     [[nodiscard]] int getUniformLocation(const string& name) const;
 
 private:
+    Shader() : ID(0) {} // private default for factory
     static std::string loadShaderSource(const std::string& path);
     static std::string resolveIncludes(const std::string& source,
                                        const std::string& sourcePath,

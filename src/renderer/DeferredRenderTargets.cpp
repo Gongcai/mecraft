@@ -577,19 +577,27 @@ GLuint DeferredRenderTargets::createTexture2D(const GLenum internalFormat,
                                               const GLenum type,
                                               const GLenum minFilter,
                                               const GLenum magFilter,
-                                              const GLenum wrap) {
+                                              const GLenum wrap,
+                                              const int levels) {
     GLuint texture = 0;
     (void)format;
     (void)type;
     glCreateTextures(GL_TEXTURE_2D, 1, &texture);
-    glTextureStorage2D(texture, 1, internalFormat, width, height);
+    const GLsizei mipLevels = std::max(1, levels);
+    glTextureStorage2D(texture, mipLevels, internalFormat, width, height);
     glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(minFilter));
     glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(magFilter));
     glTextureParameteri(texture, GL_TEXTURE_WRAP_S, static_cast<GLint>(wrap));
     glTextureParameteri(texture, GL_TEXTURE_WRAP_T, static_cast<GLint>(wrap));
     glTextureParameteri(texture, GL_TEXTURE_BASE_LEVEL, 0);
-    glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, 0);
+    glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
     return texture;
+}
+
+void DeferredRenderTargets::generateMipmaps(const GLuint texture) {
+    if (texture != 0) {
+        glGenerateTextureMipmap(texture);
+    }
 }
 
 bool DeferredRenderTargets::checkFramebufferComplete(const GLuint framebuffer, const char* label) {
