@@ -50,6 +50,7 @@ uniform float uTime;
 uniform bool uNoiseEnabled;
 
 #include "atmosphere_lut.glsl"
+#include "derivative_shadow.glsl"
 
 const int kFogSteps = 8;
 
@@ -110,50 +111,27 @@ float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCove
     return cloudy * mix(0.85, 1.45, fineShape);
 }
 
-float shadowProjectionFade(vec3 proj) {
-    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
-    float texelUv = 1.0 / max(float(textureSize(uShadowMap, 0).x), 1.0);
-    float edgeFade = smoothstep(texelUv * 8.0, texelUv * 36.0, min(edgeDistance.x, edgeDistance.y));
-    float nearFade = smoothstep(0.002, 0.016, proj.z);
-    float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
-    return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
+// Shadow warp, projection, and bias functions provided by derivative_shadow.glsl.
+// Local convenience wrappers adapt shared functions to this file's uniforms.
+
+float localShadowProjectionFade(vec3 proj) {
+    return shadowProjectionFade(proj, uShadowMap);
 }
 
-float calculateShadowWarp(vec2 coord) {
-    if (uShadowWarpMode == 2) {
-        return 1.0;
-    }
-    if (uShadowWarpMode == 1) {
-        vec2 scaled = coord * 1.165;
-        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
-        return quarticLength * 0.9 + 0.1;
-    }
-    return length(coord * 1.169) * 0.9 + 0.1;
+float localShadowDepthWorldScale() {
+    return shadowDepthWorldScale(uShadowProjectionInverse, uShadowWarpMode);
 }
 
-vec3 worldToShadowProj(vec3 worldPos) {
-    vec4 lightView = uShadowModelView * vec4(worldPos, 1.0);
-    vec4 lightClip = uShadowProjection * lightView;
-    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
-    if (uShadowWarpMode != 2) {
-        float warp = calculateShadowWarp(proj.xy);
-        proj.xy /= warp;
-        proj.z *= 0.2;
-    }
-    return proj * 0.5 + 0.5;
+float localShadowDepthBiasFromWorld(float worldUnits) {
+    return worldUnits / localShadowDepthWorldScale();
 }
 
-float shadowDepthWorldScale() {
-    float scale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
-    return (uShadowWarpMode != 2) ? scale / 0.2 : scale;
+float localDerivativeMinimumShadowBias() {
+    return derivativeMinimumShadowBias(uShadowWarpMode);
 }
 
-float shadowDepthBiasFromWorld(float worldUnits) {
-    return worldUnits / shadowDepthWorldScale();
-}
-
-float derivativeMinimumShadowBias() {
-    return (uShadowWarpMode != 2) ? 1.0e-4 : 6.0e-5;
+vec3 localWorldToShadowProj(vec3 worldPos) {
+    return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection, uShadowWarpMode, 0.9);
 }
 
 float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
@@ -168,7 +146,7 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     }
 
     float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    vec3 proj = worldToShadowProj(worldPos + normalize(lightDir) * texelWorld * 0.5);
+    vec3 proj = localWorldToShadowProj(worldPos + normalize(lightDir) * texelWorld * 0.5);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return 1.0;
     }
@@ -177,7 +155,7 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     vec2 texel = 1.0 / vec2(size);
     float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float biasWorld = texelWorld * distanceScale * (0.5 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 16.0);
-    float bias = max(shadowDepthBiasFromWorld(biasWorld), derivativeMinimumShadowBias());
+    float bias = max(localShadowDepthBiasFromWorld(biasWorld), localDerivativeMinimumShadowBias());
     float lit = 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2( texel.x, 0.0)).r) ? 1.0 : 0.0;
@@ -185,7 +163,7 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2(0.0,  texel.y)).r) ? 1.0 : 0.0;
     lit *= 0.25;
 
-    float visibility = mix(1.0, lit, shadowProjectionFade(proj) * distanceFade);
+    float visibility = mix(1.0, lit, localShadowProjectionFade(proj) * distanceFade);
     return clamp(visibility, 0.0, 1.0);
 }
 

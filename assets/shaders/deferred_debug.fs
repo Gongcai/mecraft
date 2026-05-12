@@ -1,5 +1,6 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#include "derivative_shadow.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -72,61 +73,44 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.0001);
 }
 
-float calculateShadowWarp(vec2 coord) {
-    if (uShadowWarpMode == 2) {
-        return 1.0;
-    }
-    if (uShadowWarpMode == 1) {
-        vec2 scaled = coord * 1.165;
-        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
-        return quarticLength * 0.9 + 0.1;
-    }
-    return length(coord * 1.169) * 0.9 + 0.1;
+// Shadow warp, projection, and bias functions provided by derivative_shadow.glsl.
+// Local convenience wrappers adapt shared functions to this file's uniforms.
+
+float localCalculateShadowWarp(vec2 coord) {
+    return calculateShadowWarp(coord, uShadowWarpMode);
 }
 
-vec3 shadowUvFromWorld(vec3 worldPos) {
+vec3 localShadowUvFromWorld(vec3 worldPos) {
     vec4 shadowClip = uShadowViewProj * vec4(worldPos, 1.0);
     vec3 clip = shadowClip.xyz / max(shadowClip.w, 0.0001);
     if (uShadowWarpMode != 2) {
-        float warp = calculateShadowWarp(clip.xy);
+        float warp = localCalculateShadowWarp(clip.xy);
         clip.xy /= warp;
         clip.z *= 0.2;
     }
     return clip * 0.5 + 0.5;
 }
 
-float shadowDepthWorldScale() {
-    float scale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
-    return (uShadowWarpMode != 2) ? scale / 0.2 : scale;
+float localShadowDepthWorldScale() {
+    return shadowDepthWorldScale(uShadowProjectionInverse, uShadowWarpMode);
 }
 
-float shadowDepthBiasFromWorld(float worldUnits) {
-    return worldUnits / shadowDepthWorldScale();
+float localShadowDepthBiasFromWorld(float worldUnits) {
+    return worldUnits / localShadowDepthWorldScale();
 }
 
-float derivativeMinimumShadowBias() {
-    return (uShadowWarpMode != 2) ? 1.2e-4 : 6.0e-5;
+float localDerivativeMinimumShadowBias() {
+    return derivativeMinimumShadowBias(uShadowWarpMode);
 }
 
-float shadowWorldBias(float ndotl, float viewDistance) {
-    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    float slope = 1.0 - clamp(ndotl, 0.0, 1.0);
-    float receiverScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
-    return texelWorld * receiverScale *
-           (uShadowConstantBias * 48.0 + uShadowSlopeBias * 64.0 * slope);
+float localShadowWorldBias(float ndotl, float viewDistance) {
+    return shadowWorldBias(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
+                           uShadowConstantBias, uShadowSlopeBias);
 }
 
-float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
-    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    float grazing = 1.0 - clamp(ndotl, 0.0, 1.0);
-    float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
-    float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
-    float texelOffset = texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
-    float derivativeScale = max(uShadowNormalOffset, 0.0) / 0.035;
-    float derivativeOffset = (viewDistance * viewDistance * 8e-5 + 3e-2) *
-                             (2.0 - clamp(ndotl, 0.0, 1.0)) *
-                             derivativeScale;
-    return max(texelOffset, derivativeOffset);
+float localShadowNormalOffsetWorld(float ndotl, float viewDistance) {
+    return shadowNormalOffsetWorld(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
+                                   uShadowNormalOffset);
 }
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
@@ -231,7 +215,7 @@ void main() {
         }
 
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        vec3 shadowUv = shadowUvFromWorld(worldPos);
+        vec3 shadowUv = localShadowUvFromWorld(worldPos);
 
         vec3 outOfBounds = vec3(0.0);
         if (shadowUvOutOfBounds(shadowUv))
@@ -261,8 +245,8 @@ void main() {
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);
-        float offsetWorld = shadowNormalOffsetWorld(ndotl, viewDistance);
-        vec3 shadowUv = shadowUvFromWorld(worldPos + normal * offsetWorld);
+        float offsetWorld = localShadowNormalOffsetWorld(ndotl, viewDistance);
+        vec3 shadowUv = localShadowUvFromWorld(worldPos + normal * offsetWorld);
 
         if (shadowUvOutOfBounds(shadowUv)) {
             FragColor = vec4(0.95, 0.08, 0.02, 1.0);
@@ -270,10 +254,10 @@ void main() {
         }
 
         float shadowDepth = texture(uShadowMap, shadowUv.xy).r;
-        float bias = max(shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistance)),
-                         derivativeMinimumShadowBias());
+        float bias = max(localShadowDepthBiasFromWorld(localShadowWorldBias(ndotl, viewDistance)),
+                         localDerivativeMinimumShadowBias());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
-        float margin = (shadowDepth - (shadowUv.z - bias)) * shadowDepthWorldScale();
+        float margin = (shadowDepth - (shadowUv.z - bias)) * localShadowDepthWorldScale();
         float nearAcne = 1.0 - smoothstep(0.0, max(uShadowTexelWorldSize * 1.25, 0.0001), abs(margin));
         vec3 litColor = mix(vec3(0.08, 0.12, 0.25), vec3(0.88, 0.92, 1.0), lit);
         FragColor = vec4(mix(litColor, vec3(1.0, 0.58, 0.04), nearAcne * 0.65), 1.0);
@@ -291,9 +275,9 @@ void main() {
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);
-        float biasWorld = max(shadowWorldBias(ndotl, viewDistance),
-                              derivativeMinimumShadowBias() * shadowDepthWorldScale());
-        float offsetWorld = shadowNormalOffsetWorld(ndotl, viewDistance);
+        float biasWorld = max(localShadowWorldBias(ndotl, viewDistance),
+                              localDerivativeMinimumShadowBias() * localShadowDepthWorldScale());
+        float offsetWorld = localShadowNormalOffsetWorld(ndotl, viewDistance);
         float biasTexels = biasWorld / max(uShadowTexelWorldSize, 0.0001);
         float offsetTexels = offsetWorld / max(uShadowTexelWorldSize, 0.0001);
         FragColor = vec4(heatmap(biasTexels / 4.0).r, heatmap(offsetTexels / 4.0).g, clamp(1.0 - ndotl, 0.0, 1.0), 1.0);

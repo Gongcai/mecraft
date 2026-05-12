@@ -1,6 +1,7 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 #include "render_contract.glsl"
+#include "derivative_shadow.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -97,9 +98,6 @@ uniform sampler3D uAtmosphereLut;
 
 const float kTwoPi = 6.28318530718;
 const float kPi = 3.14159265359;
-
-float cube(float x) { return x * x * x; }
-float sqr(float x) { return x * x; }
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -304,17 +302,6 @@ vec2 cossin(float angle) {
     return vec2(cos(angle), sin(angle));
 }
 
-// DerivativeMain quartic shadow distortion (ShadowDistortion.glsl)
-float quarticLength(vec2 v) {
-    vec2 v2 = v * v;
-    return pow(dot(v2, v2), 0.25);
-}
-
-float shadowDistortionFactor(vec2 shadowClipPos) {
-    const float SHADOW_MAP_BIAS = 0.9;
-    return quarticLength(shadowClipPos * 1.165) * SHADOW_MAP_BIAS + 1.0 - SHADOW_MAP_BIAS;
-}
-
 float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
         return 1.0;
@@ -343,80 +330,46 @@ vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
     return vec2(cos(angle), sin(angle)) * radius;
 }
 
-float calculateShadowWarp(vec2 coord) {
-    if (uShadowWarpMode == 2) {
-        return 1.0;
-    }
-    if (uShadowWarpMode == 1) {
-        return shadowDistortionFactor(coord);
-    }
-    return length(coord * 1.169) * 0.9 + 0.1;
+// Shadow warp and projection now provided by derivative_shadow.glsl:
+//   calculateShadowWarp(), worldToShadowProj(), shadowProjectionFade(),
+//   shadowDepthWorldScale(), shadowDepthBiasFromWorld(),
+//   derivativeMinimumShadowBias(), shadowWorldBias(), shadowNormalOffsetWorld()
+// Local convenience wrappers adapt the shared functions to this file's uniforms.
+
+float localShadowProjectionFade(vec3 proj) {
+    return shadowProjectionFade(proj, uShadowMap);
 }
 
-vec3 worldToShadowProj(vec3 worldPos, out float warpDensity) {
-    vec4 lightView = uShadowModelView * vec4(worldPos, 1.0);
-    vec4 lightClip = uShadowProjection * lightView;
-    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
-    if (uShadowWarpMode != 2) {
-        warpDensity = calculateShadowWarp(proj.xy);
-        proj.xy /= warpDensity;
-        proj.z *= 0.2;
-    } else {
-        warpDensity = 1.0;
-    }
-    return proj * 0.5 + 0.5;
+float localShadowDepthWorldScale() {
+    return shadowDepthWorldScale(uShadowProjectionInverse, uShadowWarpMode);
+}
+
+float localShadowDepthBiasFromWorld(float worldUnits) {
+    return worldUnits / localShadowDepthWorldScale();
+}
+
+float localDerivativeMinimumShadowBias() {
+    return derivativeMinimumShadowBias(uShadowWarpMode);
+}
+
+float localShadowWorldBias(float ndotl, float viewDistance) {
+    return shadowWorldBias(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
+                           uShadowConstantBias, uShadowSlopeBias);
+}
+
+float localShadowNormalOffsetWorld(float ndotl, float viewDistance) {
+    return shadowNormalOffsetWorld(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
+                                   uShadowNormalOffset);
+}
+
+vec3 localWorldToShadowProj(vec3 worldPos, out float warpDensity) {
+    return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection, uShadowWarpMode, 0.9, warpDensity);
 }
 
 float shapeShadowVisibility(float lit) {
     lit = clamp(lit, 0.0, 1.0);
     float contrasted = pow(lit, max(uShadowContrast, 0.001));
     return mix(clamp(uShadowMinLight, 0.0, 0.8), 1.0, contrasted);
-}
-
-float shadowProjectionFade(vec3 proj) {
-    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
-    float texelUv = 1.0 / max(float(textureSize(uShadowMap, 0).x), 1.0);
-    float edgeFade = smoothstep(texelUv * 8.0, texelUv * 36.0, min(edgeDistance.x, edgeDistance.y));
-    float nearFade = smoothstep(0.002, 0.016, proj.z);
-    float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
-    return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
-}
-
-float shadowDepthWorldScale() {
-    float scale = max(abs(uShadowProjectionInverse[2][2]) * 2.0, 1.0);
-    return (uShadowWarpMode != 2) ? scale / 0.2 : scale;
-}
-
-float shadowDepthBiasFromWorld(float worldUnits) {
-    return worldUnits / shadowDepthWorldScale();
-}
-
-float derivativeMinimumShadowBias() {
-    return (uShadowWarpMode != 2) ? 1.0e-4 : 6.0e-5;
-}
-
-float shadowWorldBias(float ndotl, float viewDistance) {
-    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    float slope = 1.0 - clamp(ndotl, 0.0, 1.0);
-    float receiverScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
-    return texelWorld * receiverScale * (0.35 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 18.0 * slope);
-}
-
-float shadowNormalOffsetWorld(float ndotl, float viewDistance) {
-    float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    float grazing = 1.0 - clamp(ndotl, 0.0, 1.0);
-    float distanceScale = 1.0 + 0.35 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
-    float requestedTexels = max(uShadowNormalOffset, 0.0) / 0.09375;
-    float texelOffset = texelWorld * requestedTexels * distanceScale * (1.0 + 0.85 * grazing);
-
-    // DerivativeMain offsets receivers by a small world-space amount before shadow projection:
-    // normal * (dist^2 * 8e-5 + 3e-2) * (2 - NdotL). Keep the same floor so higher
-    // shadow resolutions do not shrink the receiver offset back into shadow acne.
-    float derivativeScale = max(uShadowNormalOffset, 0.0) / 0.035;
-    float derivativeOffset = (viewDistance * viewDistance * 8e-5 + 3e-2) *
-                             (2.0 - clamp(ndotl, 0.0, 1.0)) *
-                             derivativeScale;
-    return max(texelOffset, derivativeOffset);
 }
 
 vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shadowVisibility) {
@@ -426,9 +379,9 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
 
     float viewDistanceForBias = length(worldPos - uCameraPos);
     float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistanceForBias);
+    float normalOffset = localShadowNormalOffsetWorld(ndotl, viewDistanceForBias);
     float warpDensity = 1.0;
-    vec3 proj = worldToShadowProj(worldPos + normal * normalOffset, warpDensity);
+    vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
         return vec3(1.0);
     }
@@ -481,7 +434,7 @@ vec2 blockerSearch(vec3 shadowProjPos, float dither) {
     searchDepth /= sumWeight;
     searchDepth = min(2.0 * (shadowProjPos.z - searchDepth) / max(searchDepth, 0.0001), 1.0);
 
-    float sssWorldDepth = sssDepth * shadowDepthWorldScale();
+    float sssWorldDepth = sssDepth * localShadowDepthWorldScale();
     return vec2(searchDepth * uShadowProjection[0][0], sssWorldDepth);
 }
 
@@ -584,15 +537,15 @@ float shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, o
     float normalOffset = (viewDistanceForBias * viewDistanceForBias * 8e-5 + 3e-2) *
                          (2.0 - ndotl) * max(uShadowNormalOffset, 0.0) / 0.035;
     float warpDensity = 1.0;
-    vec3 proj = worldToShadowProj(worldPos + normal * normalOffset, warpDensity);
+    vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
     if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) return 1.0;
 
-    float projectionFade = shadowProjectionFade(proj);
+    float projectionFade = localShadowProjectionFade(proj);
     if (projectionFade <= 0.001) return 1.0;
 
     float bias = max(
-        shadowDepthBiasFromWorld(shadowWorldBias(ndotl, viewDistanceForBias)),
-        derivativeMinimumShadowBias()
+        localShadowDepthBiasFromWorld(localShadowWorldBias(ndotl, viewDistanceForBias)),
+        localDerivativeMinimumShadowBias()
     );
     proj.z -= bias;
 

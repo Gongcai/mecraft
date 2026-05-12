@@ -1,4 +1,6 @@
 #version 450 core
+#include "derivative_shadow.glsl"
+
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aUV;
 layout (location = 2) in float aNormal;
@@ -28,24 +30,13 @@ out float vNormal;
 out vec3 vWorldPos;
 flat out int vMaterialKind;
 
-float calculateShadowDistortion(vec2 coord) {
-    if (uShadowWarpMode == 2) {
-        return 1.0;
-    }
-    if (uShadowWarpMode == 1) {
-        vec2 scaled = coord * 1.165;
-        float quarticLength = pow(dot(scaled * scaled, scaled * scaled), 0.25);
-        return quarticLength * 0.9 + 0.1;
-    }
-    return length(coord * 1.169) * 0.9 + 0.1;
-}
-
 void main() {
     vec4 localPos = vec4(aPos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
     vec4 clipPos = uShadowProjection * (uShadowModelView * worldPos);
     if (uShadowWarpMode != 2) {
-        clipPos.xy /= calculateShadowDistortion(clipPos.xy);
+        float warp = calculateShadowWarp(clipPos.xy, uShadowWarpMode);
+        clipPos.xy /= warp;
         clipPos.z *= 0.2;
     }
     gl_Position = clipPos;
