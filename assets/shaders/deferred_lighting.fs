@@ -601,10 +601,12 @@ void main() {
     float materialEmission = surface.material.emission;
     float sss = surface.material.sss;
     int materialKind = materialKindId(surface.aux.materialKind);
+    TranslucentMask transMask = decodeTranslucentMask(surface.aux.materialKind);
+
+    // Wetness/porosity only apply to opaque surfaces.
     float wetness = clamp(uWeatherWetness * surface.aux.wetnessMask * voxelLight.r, 0.0, 1.0);
     float wetPorosity = wetness * clamp(surface.aux.porosity, 0.0, 1.0);
-    bool waterLike = materialKind == MATERIAL_WATER || materialKind == MATERIAL_GLASS;
-    if (!waterLike) {
+    if (!transMask.isTranslucent) {
         albedo *= 1.0 - wetPorosity * 0.22;
         roughness = mix(roughness, max(0.08, roughness * 0.36), wetness * (0.72 + surface.aux.metalness * 0.18));
         f0Scalar = mix(f0Scalar, max(f0Scalar, 0.055), wetness * (0.35 + surface.aux.metalness * 0.20));
@@ -718,5 +720,8 @@ void main() {
         color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor);
     }
 
-    FragColor = vec4(max(color, vec3(0.0)), 1.0);
+    // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
+    // Downstream composite passes use this to apply refraction/tinting selectively.
+    float translucency = transMask.isTranslucent ? 1.0 : 0.0;
+    FragColor = vec4(max(color, vec3(0.0)), translucency);
 }

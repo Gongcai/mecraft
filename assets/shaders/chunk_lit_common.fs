@@ -349,12 +349,12 @@ uniform vec3 uCameraPos;
 
         bool waterLayer = (uWaterEffectsEnabled != 0) && isWaterLayer(sampledLayer);
         if (MECRAFT_TRANSPARENT_COMPOSITE != 0 && !waterLayer) {
-            int materialKind = materialKindId(vMaterialKind);
+            TranslucentMask transMask = decodeTranslucentMask(vMaterialKind);
+            // In the transparent composite pass, discard fragments that are actually
+            // alpha-tested cutout vegetation (not true translucent surfaces).
             bool cutoutVegetation =
                 isCrossVegetation ||
-                materialKind == MATERIAL_PLANT ||
-                materialKind == MATERIAL_LEAVES ||
-                materialKind == MATERIAL_GRASS;
+                (!transMask.isTranslucent && !isMaterialKind(vMaterialKind, MATERIAL_EMISSIVE));
             if (cutoutVegetation) {
                 discard;
             }

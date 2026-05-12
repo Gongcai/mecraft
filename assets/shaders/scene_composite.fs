@@ -86,10 +86,25 @@ void main() {
     vec4 reflection = texture(uReflectionTex, vTexCoord);
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+    TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
     float wetSurface = clamp(uWeatherWetness * aux.wetnessMask * (0.35 + aux.porosity * 0.65), 0.0, 1.0);
     float glossySurface = (1.0 - smoothstep(0.18, 0.92, material.roughness)) * smoothstep(0.025, 0.16, material.f0);
     float reflectionWeight = reflection.a * max(wetSurface, glossySurface * 0.32) * clamp(uReflectionCompositeStrength, 0.0, 1.0);
     color = mix(color, reflection.rgb, reflectionWeight);
+
+    // Translucent tinting (DerivativeMain composite1 equivalent).
+    // For stained glass: absorb light through colored medium.
+    // For ice: tint by squared albedo (approximates volumetric absorption).
+    if (scene.a > 0.5 && depth < 0.9999) {
+        vec3 transAlbedo = texture(uAlbedoTex, vTexCoord).rgb;
+        if (transMask.isStainedGlass) {
+            // Beer-Lambert absorption: darker albedo = more absorption.
+            vec3 absorbColor = mix(vec3(1.0), transAlbedo, 0.72);
+            color *= absorbColor;
+        } else if (transMask.isIce) {
+            color *= transAlbedo * transAlbedo;
+        }
+    }
 
     FragColor = vec4(tonemapDebugSafe(color), scene.a);
 }

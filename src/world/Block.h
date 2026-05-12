@@ -45,7 +45,9 @@ constexpr uint8_t WATER = 9;
 constexpr uint8_t ORE = 10;
 constexpr uint8_t EMISSIVE = 11;
 constexpr uint8_t METAL = 12;
-constexpr uint8_t MAX_BUILTIN = METAL;
+constexpr uint8_t ICE = 13;
+constexpr uint8_t STAINED_GLASS = 14;
+constexpr uint8_t MAX_BUILTIN = STAINED_GLASS;
 }
 
 namespace BlockMaterialFlags {
