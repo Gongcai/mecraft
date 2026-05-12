@@ -28,6 +28,12 @@ uniform vec3 uSkyIlluminance;
 uniform vec3 uSunIlluminance;
 uniform vec3 uMoonIlluminance;
 
+// Atmosphere LUT (modes 4, 5)
+uniform sampler3D uAtmosphereLut;
+uniform float uCameraAltitude;
+
+#include "atmosphere_lut.glsl"
+
 const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
 
@@ -110,26 +116,40 @@ void main() {
     }
 
     if (uMode == 4) {
+        // Equirectangular sky capture via atmosphere LUT (DerivativeMain-compatible).
         vec2 uv = clamp(vUV, vec2(0.0), vec2(1.0));
         float phi = uv.x * kTwoPi - kPi;
         float cosTheta = uv.y * 2.0 - 1.0;
         float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
         vec3 dir = normalize(vec3(sin(phi) * sinTheta, cosTheta, -cos(phi) * sinTheta));
-        FragColor = vec4(srgbToLinear(evaluateSkyRadiance(dir)), 1.0);
+
+        vec3 sunDir = normalize(uSunDirection);
+        vec3 moonDir = normalize(uMoonDirection);
+
+        vec3 transmittance;
+        vec3 sky = atmGetSkyRadiance(dir, sunDir, transmittance);
+        sky += atmRenderSun(dir, sunDir) * transmittance;
+        sky += atmRenderMoon(dir, moonDir) * transmittance;
+
+        FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;
     }
 
     if (uMode == 5) {
-        // Sky cache metadata texel pass.
+        // Sky cache metadata texel pass — illuminance computed from atmosphere LUT.
         // Rendered as a 1x4 viewport at column x=255 of the sky capture FBO.
-        // Row 0: directIlluminance, Row 1: skyIlluminance,
-        // Row 2: sunIlluminance, Row 3: moonIlluminance.
         int row = int(gl_FragCoord.y);
+        vec3 camera = vec3(0.0, atmPlanetRadius + max(uCameraAltitude, 0.0) + 100.0, 0.0);
+        vec3 sunDir = normalize(uSunDirection);
+
+        vec3 sunIrr, moonIrr;
+        vec3 skyIrr = atmGetSunAndSkyIrradiance(camera, sunDir, sunIrr, moonIrr);
+
         vec3 value = vec3(0.0);
-        if (row == 0) value = uDirectIlluminance;
-        else if (row == 1) value = uSkyIlluminance;
-        else if (row == 2) value = uSunIlluminance;
-        else if (row == 3) value = uMoonIlluminance;
+        if (row == 0) value = sunIrr + moonIrr;   // directIlluminance
+        else if (row == 1) value = skyIrr;         // skyIlluminance
+        else if (row == 2) value = sunIrr;         // sunIlluminance
+        else if (row == 3) value = moonIrr;        // moonIlluminance
         else discard;
         FragColor = vec4(value, 1.0);
         return;

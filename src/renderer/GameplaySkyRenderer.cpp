@@ -273,7 +273,10 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
                                            const GLuint framebuffer,
                                            const int width,
-                                           const int height) {
+                                           const int height,
+                                           const float cameraAltitude,
+                                           const GLuint atmosphereLutTexture,
+                                           const float moonPhaseFlux) {
     m_lastColors = computeSkyColors(dayNight);
     if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || width <= 0 || height <= 0) {
         return;
@@ -314,6 +317,14 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
+    m_shader->setFloat("uCameraAltitude", cameraAltitude);
+    m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
+    if (atmosphereLutTexture != 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
+        m_shader->setInt("uAtmosphereLut", 1);
+        glActiveTexture(GL_TEXTURE0);
+    }
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(m_skyVao);
@@ -341,7 +352,10 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
 
 void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illuminance,
                                                  GLuint framebuffer,
-                                                 int skyCaptureWidth) {
+                                                 int skyCaptureWidth,
+                                                 float cameraAltitude,
+                                                 GLuint atmosphereLutTexture,
+                                                 float moonPhaseFlux) {
     if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0) {
         return;
     }
@@ -372,6 +386,16 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     m_shader->setVec3("uSkyIlluminance", illuminance.skyIlluminance);
     m_shader->setVec3("uSunIlluminance", illuminance.sunIlluminance);
     m_shader->setVec3("uMoonIlluminance", illuminance.moonIlluminance);
+    m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
+    m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
+    m_shader->setFloat("uCameraAltitude", cameraAltitude);
+    m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
+    if (atmosphereLutTexture != 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
+        m_shader->setInt("uAtmosphereLut", 1);
+        glActiveTexture(GL_TEXTURE0);
+    }
 
     glBindVertexArray(m_skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);

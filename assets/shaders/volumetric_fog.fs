@@ -58,7 +58,7 @@ vec3 srgbToLinear(vec3 color) {
 }
 
 vec3 sampleSkyCapture(vec3 dir) {
-    return texture(uSkyCaptureTex, atmDirectionToSkyCaptureUv(dir)).rgb;
+    return sampleSkyRadiance(uSkyCaptureTex, dir);
 }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {

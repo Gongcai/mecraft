@@ -272,14 +272,6 @@ void UnderwaterFog(inout vec3 color, float waterDepth) {
     color += fogColor * clamp(skylight + 0.2, 0.0, 1.0) * (1.0 - transmittance);
 }
 
-vec2 directionToSkyCaptureUv(vec3 dir) {
-    dir = normalize(dir);
-    float phi = atan(dir.x, -dir.z);
-    float u = phi / kTwoPi + 0.5;
-    float v = dir.y * 0.5 + 0.5;
-    return vec2(fract(u), clamp(v, 0.0, 1.0));
-}
-
 // DerivativeMain water fallback reflection samples the sky capture (colortex5),
 // rather than re-querying the atmosphere LUT from a fragment/camera altitude.
 vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight) {
@@ -290,7 +282,7 @@ vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight) {
 
     float nDotUp = clamp((dot(normal, vec3(0.0, 1.0, 0.0)) + 0.7) * 2.0, 0.0, 1.0) * 0.75 + 0.25;
     vec3 skybox = (uSkyCaptureEnabled != 0)
-        ? texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb
+        ? sampleSkyRadiance(uSkyCaptureTex, dir)
         : uSkyAmbientColor;
     return max(skybox * skyWeight * nDotUp, vec3(0.0));
 }

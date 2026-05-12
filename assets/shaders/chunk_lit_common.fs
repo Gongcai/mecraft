@@ -1,5 +1,6 @@
 out vec4 FragColor;
 #include "gbuffer_contract.glsl"
+#include "render_contract.glsl"
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
 #define MECRAFT_TRANSPARENT_COMPOSITE 0
@@ -88,16 +89,8 @@ uniform vec3 uCameraPos;
         return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
     }
 
-    vec2 directionToSkyCaptureUv(vec3 dir) {
-        dir = normalize(dir);
-        float phi = atan(dir.x, -dir.z);
-        float u = phi / kTwoPi + 0.5;
-        float v = dir.y * 0.5 + 0.5;
-        return vec2(fract(u), clamp(v, 0.0, 1.0));
-    }
-
     vec3 sampleSkyCapture(vec3 dir) {
-        return texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb;
+        return sampleSkyRadiance(uSkyCaptureTex, dir);
     }
 
     vec3 sampleSkyIrradiance(vec3 normal) {
@@ -411,7 +404,9 @@ uniform vec3 uCameraPos;
         vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
         vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
         vec3 vanillaLight = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
-        float skyLightMask = clamp(vSunlight * uSkyIntensity, 0.0, 1.0);
+        // Match DerivativeMain: the skylight channel is sky visibility, while
+        // day/night intensity is supplied by the sky cache illuminance values.
+        float skyLightMask = clamp(vSunlight, 0.0, 1.0);
         float nightSkyMask = clamp(vSunlight * uMoonVisibility, 0.0, 1.0);
         float outdoorSkyMask = max(skyLightMask, nightSkyMask);
         float blockLightMask = clamp(vBlockLight, 0.0, 1.0);

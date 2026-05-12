@@ -103,7 +103,7 @@ void main() {
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
     vec3 reflectedDir = reflect(viewDir, normal);
-    vec3 skyReflection = texture(uSkyCaptureTex, atmDirectionToSkyCaptureUv(reflectedDir)).rgb;
+    vec3 skyReflection = texture(uSkyCaptureTex, projectSky(reflectedDir)).rgb;
     vec3 lutTransmittance;
     vec3 lutSky = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0,
                                             reflectedDir,

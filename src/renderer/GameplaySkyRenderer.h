@@ -53,8 +53,10 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void render(const Camera& camera, float aspect, const DayNightSystem& dayNight);
-    void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height);
-    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, GLuint framebuffer, int skyCaptureWidth);
+    void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height,
+                          float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux);
+    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, GLuint framebuffer, int skyCaptureWidth,
+                               float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux);
 
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
     [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors) const;

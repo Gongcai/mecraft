@@ -166,16 +166,9 @@ vec3 artisticSunIlluminance(vec3 sunColor, vec3 sunDir) {
     return max(sunColor * tint * energy, vec3(0.0));
 }
 
-vec2 directionToSkyCaptureUv(vec3 dir) {
-    dir = normalize(dir);
-    float phi = atan(dir.x, -dir.z);
-    float u = phi / kTwoPi + 0.5;
-    float v = dir.y * 0.5 + 0.5;
-    return vec2(fract(u), clamp(v, 0.0, 1.0));
-}
-
+// Sky sampling uses projectSky() from render_contract.glsl (included via atmosphere_lut.glsl)
 vec3 sampleSkyCapture(vec3 dir) {
-    return texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb;
+    return sampleSkyRadiance(uSkyCaptureTex, dir);
 }
 
 vec3 sampleSkyIrradiance(vec3 normal) {
@@ -622,7 +615,9 @@ void main() {
     vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
     vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
     vec3 vanillaLight = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
-    float skyLightMask = clamp(voxelLight.r * uSkyIntensity, 0.0, 1.0);
+    // DerivativeMain treats the sky lightmap channel as sky visibility. Day/night
+    // energy comes from directIlluminance/skyIlluminance in the sky cache.
+    float skyLightMask = clamp(voxelLight.r, 0.0, 1.0);
     float nightSkyMask = clamp(voxelLight.r * uMoonVisibility, 0.0, 1.0);
     float outdoorSkyMask = max(skyLightMask, nightSkyMask);
     float blockLightMask = clamp(voxelLight.g, 0.0, 1.0);
@@ -648,16 +643,10 @@ void main() {
     float sunShadow = (uShadowLightMode == 0) ? shadow : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, shadow, 0.82) : 1.0;
 
-    // Read physically-scaled illuminance from sky cache metadata texels.
-    // These provide HDR energy values that scale the artistic lighting colors.
     vec3 cacheDirectLux = getDirectIlluminance(uSkyCaptureTex);
     vec3 cacheSkyLux = getSkyIlluminance(uSkyCaptureTex);
-    // Luminance of the cached illuminance — used as a scalar energy multiplier.
-    float directLuxLuma = dot(cacheDirectLux, vec3(0.2126, 0.7152, 0.0722));
-    float skyLuxLuma = dot(cacheSkyLux, vec3(0.2126, 0.7152, 0.0722));
-    // Normalize to preserve the artistic color balance while applying physical energy.
-    float directEnergyScale = clamp(directLuxLuma / max(dot(uSunLightColor, vec3(0.2126, 0.7152, 0.0722)) * 120000.0, 1.0), 0.0, 10.0);
-    float skyEnergyScale = clamp(skyLuxLuma / max(dot(uSkyAmbientColor, vec3(0.2126, 0.7152, 0.0722)) * 28000.0, 1.0), 0.0, 10.0);
+    vec3 derivativeDirectColor = max(cacheDirectLux, vec3(0.0)) * 64.0;
+    vec3 derivativeSkyColor = max(cacheSkyLux, vec3(0.0));
 
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
@@ -671,9 +660,9 @@ void main() {
     float terminatorFill = roughTerminatorFill(rawNdotL, roughness) * sunShadow;
     float sssSunTransmittance = sss * smoothstep(-0.35, 0.18, -rawNdotL);
     float sssSunShadowFill = sssSunTransmittance * mix(0.18, 0.46, 1.0 - sunShadow) * cloudShadow;
-    vec3 directSun = warmSunColor * shadowTint *
+    vec3 directSun = derivativeDirectColor * shadowTint *
                      ((diffuse * sunShadow + terminatorFill) * cloudShadow + sssSunShadowFill) *
-                     skyLightMask * uDirectSunStrength * directEnergy * directEnergyScale;
+                     skyLightMask * uDirectSunStrength * directEnergy;
     float moonMask = nightSkyMask;
     vec3 moonFill = uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
     float sssMoonTransmittance = sss * smoothstep(-0.30, 0.16, -rawNdotM);
@@ -684,12 +673,12 @@ void main() {
     vec3 specF = fresnelSchlick(vdoth, f0);
     float specD = ggxDistribution(ndoth, roughness);
     float specG = smithG1(ndotl, roughness) * smithG1(ndotv, roughness);
-    vec3 directSpecular = warmSunColor * specF * (specD * specG / max(4.0 * ndotl * ndotv, 0.0001));
+    vec3 directSpecular = derivativeDirectColor * specF * (specD * specG / max(4.0 * ndotl * ndotv, 0.0001));
     directSpecular *= ndotl * sunShadow * cloudShadow * skyLightMask * uDirectSunStrength;
     directSpecular *= mix(1.18, 0.18, roughness);
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 skyAmbient = coolSkyColor * shadowTint * (0.026 + 0.54 * outdoorSkyMask) *
-                      uSkyAmbientStrength * skyEnergyScale *
+    vec3 skyAmbient = derivativeSkyColor * coolSkyColor * shadowTint * (0.026 + 0.54 * outdoorSkyMask) *
+                      uSkyAmbientStrength *
                       mix(0.48, 1.0, upward) +
                       moonFill;
     skyAmbient *= mix(vec3(1.0), uShadowTintColor, (1.0 - shadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
@@ -699,7 +688,7 @@ void main() {
     vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
 
     float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
-    vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing) * (0.35 + 0.65 * (1.0 - sunShadow));
+    vec3 fakeBounce = derivativeDirectColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing) * (0.35 + 0.65 * (1.0 - sunShadow));
 
     float blockLightCurve = pow(blockLightMask, 2.05);
     vec3 warmBlockLight = vec3(1.0, 0.84, 0.58);
@@ -711,7 +700,7 @@ void main() {
 
     vec3 color = albedo * totalLight * vertexAo * mix(1.0, ssao, 0.65);
     float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask * mix(0.35, 1.0, sunShadow);
-    color += albedo * warmSunColor * backScatter * sss * cloudShadow * (0.46 + 0.20 * uDirectSunStrength);
+    color += albedo * derivativeDirectColor * backScatter * sss * cloudShadow * (0.46 + 0.20 * uDirectSunStrength);
     float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * moonMask;
     color += albedo * uMoonLightColor * moonBackScatter * sss * 0.12;
     float specularSurfaceMask = smoothstep(0.025, 0.14, f0Scalar) * (1.0 - roughness * 0.45);

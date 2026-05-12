@@ -68,7 +68,7 @@ void main() {
     if (depth >= 0.9999) {
         vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
-        vec3 sky = texture(uSkyCaptureTex, atmDirectionToSkyCaptureUv(skyDir)).rgb;
+        vec3 sky = texture(uSkyCaptureTex, projectSky(skyDir)).rgb;
         vec3 transmittance;
         vec3 lutSky = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, skyDir, normalize(uSunDirection), transmittance);
         vec3 lutMoon = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, skyDir, normalize(uMoonDirection), transmittance) *

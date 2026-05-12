@@ -270,7 +270,7 @@ void main() {
     float eyeAltitude = max(uCameraPos.y, 0.0) + 100.0;
 
     vec3 atmos = sampleAtmosphere(ray, sunDir, moonDir, eyeAltitude, day, moonVis);
-    vec3 sky = texture(uSkyCaptureTex, atmDirectionToSkyCaptureUv(ray)).rgb;
+    vec3 sky = texture(uSkyCaptureTex, projectSky(ray)).rgb;
     vec3 horizon = mix(sky, uHorizonScatterColor, clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.22);
 
     // ---- Planar clouds (cirrus layer) ----

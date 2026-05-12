@@ -2242,16 +2242,24 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
 }
 
 void Renderer::renderSkyCapturePass(const World& world) {
+    const float cameraAltitude = m_cameraPos.y;
+    const GLuint atmosphereLut = m_deferredTargets.atmosphereLutTexture();
+    const int moonPhase = world.getDayNightSystem().getMoonPhaseIndex();
+    // DerivativeMain MoonFlux: vec3(abs(moonPhase - 4.0) * 0.25 + 0.2).
+    const float moonPhaseFlux = static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f;
+
     m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),
                                            m_deferredTargets.skyCaptureFramebuffer(),
                                            m_deferredTargets.skyCaptureWidth(),
-                                           m_deferredTargets.skyCaptureHeight());
+                                           m_deferredTargets.skyCaptureHeight(),
+                                           cameraAltitude, atmosphereLut, moonPhaseFlux);
 
-    // Write sky cache metadata texels (illuminance) to column skyCaptureWidth-1
+    // Write sky cache metadata texels (illuminance) via LUT
     const auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()));
     m_gameplaySkyRenderer.writeSkyCacheMetadata(illum,
                                                  m_deferredTargets.skyCaptureFramebuffer(),
-                                                 m_deferredTargets.skyCaptureWidth());
+                                                 m_deferredTargets.skyCaptureWidth(),
+                                                 cameraAltitude, atmosphereLut, moonPhaseFlux);
 }
 
 void Renderer::renderFullscreen(Shader& shader) const {
