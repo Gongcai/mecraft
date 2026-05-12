@@ -59,13 +59,13 @@ public:
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
         float bloomThreshold = 0.0f;
-        float bloomStrength = 0.24f;
+        float bloomStrength = 1.0f;
         bool autoExposureEnabled = true;
         float autoExposureMin = 0.001f;
         float autoExposureMax = 64.0f;
         float autoExposureSpeed = 1.0f;
         float autoExposureBias = 0.0f;
-        bool sunRaysEnabled = true;
+        bool sunRaysEnabled = false;
         bool waterEffectsEnabled = true;
         bool transparentCompositeEnabled = true;
         bool shaderpackGradingEnabled = true;
@@ -80,7 +80,7 @@ public:
         float reflectionFilterStrength = 1.0f;
         float motionBlurStrength = 1.0f;
         int motionBlurSamples = 8;
-        bool dofEnabled = true;
+        bool dofEnabled = false;
         float dofIntensity = 0.15f;
         float dofAperture = 2.8f;
         float dofFocusDistance = 5.0f;
@@ -88,7 +88,7 @@ public:
         float sceneReflectionCompositeStrength = 0.36f;
         int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
-        int tonemapMode = 3; // 0=Reinhard, 1=ACES, 2=Filmic, 3=AgX
+        int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
         int shadowWarpMode = 1; // 0=Radial debug, 1=Derivative quartic, 2=No warp
         int shadowResolution = 2048;
         float shadowDistance = 192.0f;
@@ -104,9 +104,9 @@ public:
         float sunRayStrength = 0.18f;
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
-        float kappaGradingStrength = 0.65f;
-        float highlightCompression = 0.72f;
-        float filmEmulationStrength = 0.55f;
+        float kappaGradingStrength = 0.0f;
+        float highlightCompression = 0.0f;
+        float filmEmulationStrength = 0.0f;
         float redModifierStrength = 0.35f;
         float colorLumaR = 1.02f;
         float colorLumaG = 1.00f;
@@ -115,8 +115,8 @@ public:
         float sunWarmth = 0.34f;
         float skyCoolness = 0.18f;
         float shadowDesaturation = 0.22f;
-        float splitToneStrength = 0.28f;
-        float vignetteStrength = 0.08f;
+        float splitToneStrength = 0.0f;
+        float vignetteStrength = 0.0f;
         float shadowTintStrength = 0.40f;
         float directSunStrength = 1.36f;
         float skyAmbientStrength = 0.36f;
@@ -129,11 +129,11 @@ public:
         float horizonScatterStrength = 0.78f;
         float volumetricFogStrength = 0.35f;
         float noiseDitherStrength = 0.015f;
-        float sharpenStrength = 0.08f;
+        float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
         float ssaoRadius = 2.25f;
         float ssaoStrength = 0.75f;
         float exposure = 12.0f;
-        float gamma = 2.2f;
+        float gamma = 1.0f;
         float saturation = 1.0f;
         float contrast = 1.0f;
     };

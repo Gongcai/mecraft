@@ -33,24 +33,25 @@ vec3 getSunIlluminance(sampler2D skyCapture)    { return sampleSkyMetadata(skyCa
 vec3 getMoonIlluminance(sampler2D skyCapture)   { return sampleSkyMetadata(skyCapture, 3); }
 
 //----------------------------------------------------------------------------//
-// Equirectangular sky projection
-// Simple mapping matching the sky capture shader's UV-to-direction conversion.
-// NOTE: DerivativeMain uses a 2-pixel border offset; we skip it here because
-// the sky capture and all consumers use the same direct mapping.
+// Equirectangular sky projection.
+// Matches DerivativeMain lib/Atmosphere/Atmosphere.glsl ProjectSky/UnprojectSky:
+// longitude in x with a 2px border, polar angle acos(y) in y.
 //----------------------------------------------------------------------------//
 
 vec2 projectSky(vec3 direction) {
-    float phi = atan(direction.x, -direction.z);
-    float u = phi * (1.0 / 6.28318530718) + 0.5;
-    float v = direction.y * 0.5 + 0.5;
-    return vec2(fract(u), clamp(v, 0.0, 1.0));
+    direction = normalize(direction);
+    float u = atan(-direction.x, -direction.z) * (1.0 / 6.28318530718) + 0.5;
+    float v = acos(clamp(direction.y, -1.0, 1.0)) * (1.0 / 3.14159265359);
+    u = u * (1.0 - 4.0 / float(skyCaptureRes.x)) + 2.0 / float(skyCaptureRes.x);
+    return clamp(vec2(u, v), vec2(0.0), vec2(1.0));
 }
 
 vec3 unprojectSky(vec2 uv) {
-    float phi = (uv.x - 0.5) * 6.28318530718;
-    float cosTheta = uv.y * 2.0 - 1.0;
-    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
-    return normalize(vec3(sin(phi) * sinTheta, cosTheta, -cos(phi) * sinTheta));
+    float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) / (1.0 - 4.0 / float(skyCaptureRes.x)));
+    float phi = u * 6.28318530718;
+    float theta = clamp(uv.y, 0.0, 1.0) * 3.14159265359;
+    float sinTheta = sin(theta);
+    return normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
 }
 
 // Convenience: sample sky radiance from a world direction.

@@ -217,11 +217,7 @@ void main() {
     float moonPhase = atmRayleighPhase(dot(viewDir, moonDir)) * 0.55 + atmHenyeyGreensteinPhase(dot(viewDir, moonDir), 0.36) * 0.45;
     vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.30, viewDir.z));
     vec3 skyColor = sampleSkyCapture(captureDir);
-    vec3 lutTransmittance;
-    vec3 lutSky = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, captureDir, sunDir, lutTransmittance);
-    vec3 lutMoon = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, captureDir, moonDir, lutTransmittance) *
-                   clamp(uMoonVisibility, 0.0, 1.0) * nightFactor * 0.25;
-    vec3 fogColor = mix(skyColor, lutSky + lutMoon, 0.46);
+    vec3 fogColor = skyColor;
     fogColor = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.28);
     vec3 sunScatterColor = uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                            sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);

@@ -94,7 +94,9 @@ void main() {
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
 
     if (depth >= 0.9999) {
-        vec3 sky = texture(uSkyCaptureTex, vTexCoord).rgb;
+        vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
+        vec3 skyDir = normalize(skyPos - uCameraPos);
+        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, skyDir);
         FragColor = vec4(sky, 0.0);
         return;
     }
@@ -103,18 +105,7 @@ void main() {
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
     vec3 reflectedDir = reflect(viewDir, normal);
-    vec3 skyReflection = texture(uSkyCaptureTex, projectSky(reflectedDir)).rgb;
-    vec3 lutTransmittance;
-    vec3 lutSky = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0,
-                                            reflectedDir,
-                                            normalize(uSunDirection),
-                                            lutTransmittance);
-    vec3 lutMoon = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0,
-                                             reflectedDir,
-                                             normalize(uMoonDirection),
-                                             lutTransmittance) *
-                   clamp(uMoonVisibility, 0.0, 1.0) * (1.0 - clamp(uSkyIntensity, 0.0, 1.0)) * 0.25;
-    skyReflection = mix(skyReflection, lutSky + lutMoon, 0.42);
+    vec3 skyReflection = sampleSkyRadiance(uSkyCaptureTex, reflectedDir);
 
     vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
     float smoothness = 1.0 - clamp(material.roughness, 0.0, 1.0);

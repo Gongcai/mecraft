@@ -101,6 +101,166 @@ float luma709(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
+float maxOf(vec3 v) {
+    return max(v.x, max(v.y, v.z));
+}
+
+float minOf(vec3 v) {
+    return min(v.x, min(v.y, v.z));
+}
+
+float sqr(float x) {
+    return x * x;
+}
+
+float cube(float x) {
+    return x * x * x;
+}
+
+float curve(float x) {
+    return sqr(x) * (3.0 - 2.0 * x);
+}
+
+float oneMinus(float x) {
+    return 1.0 - x;
+}
+
+vec3 clamp16F(vec3 color) {
+    return clamp(color, vec3(0.0), vec3(65535.0));
+}
+
+vec3 LinearToSRGB(vec3 color) {
+    color = max(color, vec3(0.0));
+    vec3 lo = color * 12.92;
+    vec3 hi = 1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), color));
+}
+
+float GetLuminance(vec3 color) {
+    return luma709(color);
+}
+
+float rgbToSaturation(vec3 rgb) {
+    return (max(maxOf(rgb), 1e-10) - max(minOf(rgb), 1e-10)) / max(maxOf(rgb), 1e-2);
+}
+
+float rgbToHue(vec3 rgb) {
+    if (rgb.r == rgb.g && rgb.g == rgb.b) {
+        return 0.0;
+    }
+
+    const float TAU = 6.283185307179586;
+    float hue = (360.0 / TAU) * atan(2.0 * rgb.r - rgb.g - rgb.b, sqrt(3.0) * (rgb.g - rgb.b));
+    if (hue < 0.0) {
+        hue += 360.0;
+    }
+    return hue;
+}
+
+float rgbToYc(vec3 rgb) {
+    const float yc_radius_weight = 1.75;
+    float chroma = sqrt(rgb.b * (rgb.b - rgb.g) + rgb.g * (rgb.g - rgb.r) + rgb.r * (rgb.r - rgb.b));
+    return (rgb.r + rgb.g + rgb.b + yc_radius_weight * chroma) / 3.0;
+}
+
+const mat3 acesAp0ToXyz = mat3(
+     0.9525523959,  0.0000000000,  0.0000936786,
+     0.3439664498,  0.7281660966, -0.0721325464,
+     0.0000000000,  0.0000000000,  1.0088251844
+);
+const mat3 acesXyzToAp0 = mat3(
+     1.0498110175,  0.0000000000, -0.0000974845,
+    -0.4959030231,  1.3733130458,  0.0982400361,
+     0.0000000000,  0.0000000000,  0.9912520182
+);
+
+const mat3 acesAp1ToXyz = mat3(
+     0.6624541811,  0.1340042065,  0.1561876870,
+     0.2722287168,  0.6740817658,  0.0536895174,
+    -0.0055746495,  0.0040607335,  1.0103391003
+);
+const mat3 acesXyzToAp1 = mat3(
+     1.6410233797, -0.3248032942, -0.2364246952,
+    -0.6636628587,  1.6153315917,  0.0167563477,
+     0.0117218943, -0.0082844420,  0.9883948585
+);
+
+const mat3 acesAp0ToAp1 = acesAp0ToXyz * acesXyzToAp1;
+const mat3 acesAp1ToAp0 = acesAp1ToXyz * acesXyzToAp0;
+
+const float rrtGlowGain = 0.05;
+const float rrtGlowMid = 0.08;
+const float rrtRedScale = 0.82;
+const float rrtRedPivot = 0.03;
+const float rrtRedHue = 0.0;
+const float rrtRedWidth = 135.0;
+const float rrtSatFactor = 0.96;
+const float odtSatFactor = 0.93;
+
+float GlowFwd(float ycIn, float glowGainIn, float glowMid) {
+    if (ycIn <= 2.0 / 3.0 * glowMid) {
+        return glowGainIn;
+    }
+    if (ycIn >= 2.0 * glowMid) {
+        return 0.0;
+    }
+    return glowGainIn * (glowMid / ycIn - 0.5);
+}
+
+float SigmoidShaper(float x) {
+    float t = max(1.0 - abs(0.5 * x), 0.0);
+    float y = 1.0 + sign(x) * oneMinus(t * t);
+    return 0.5 * y;
+}
+
+float CubicBasisShaperFit(float x, float width) {
+    float radius = 0.5 * width;
+    return abs(x) < radius ? sqr(curve(1.0 - abs(x) / radius)) : 0.0;
+}
+
+float CenterHue(float hue, float centerH) {
+    float hueCentered = hue - centerH;
+    if (hueCentered < -180.0) {
+        hueCentered += 360.0;
+    } else if (hueCentered > 180.0) {
+        hueCentered -= 360.0;
+    }
+    return hueCentered;
+}
+
+vec3 RRTSweeteners(vec3 aces) {
+    float saturation = rgbToSaturation(aces);
+    float ycIn = rgbToYc(aces);
+    float s = SigmoidShaper(saturation * 5.0 - 2.0);
+    float addedGlow = 1.0 + GlowFwd(ycIn, rrtGlowGain * s, rrtGlowMid);
+    aces *= addedGlow;
+
+    float hue = rgbToHue(aces);
+    float centeredHue = CenterHue(hue, rrtRedHue);
+    float hueWeight = CubicBasisShaperFit(centeredHue, rrtRedWidth);
+    aces.r += hueWeight * saturation * (rrtRedPivot - aces.r) * oneMinus(rrtRedScale);
+
+    aces = clamp16F(aces);
+    vec3 rgbPre = clamp16F(aces * acesAp0ToAp1);
+
+    float luminance = GetLuminance(rgbPre);
+    return mix(vec3(luminance), rgbPre, rrtSatFactor);
+}
+
+vec3 RRTAndODTFit(vec3 rgb) {
+    vec3 a = rgb * (rgb + 0.0245786) - 0.000090537;
+    vec3 b = rgb * (0.983729 * rgb + 0.4329510) + 0.238081;
+    return a / b;
+}
+
+vec3 AcademyFit(vec3 rgb) {
+    rgb *= 1.4;
+    rgb = RRTSweeteners(rgb * acesAp1ToAp0);
+    rgb = RRTAndODTFit(rgb);
+    rgb = mix(vec3(GetLuminance(rgb)), rgb, odtSatFactor);
+    return LinearToSRGB(rgb);
+}
+
 float compressLmt(float distToAch, float lim, float thr, float pwr) {
     if (distToAch >= thr) {
         float scl = (lim - thr) / pow(pow((1.0 - thr) / (lim - thr), -pwr) - 1.0, 1.0 / pwr);
@@ -324,20 +484,20 @@ vec3 applyVignette(vec3 color, vec2 uv) {
 vec3 applyGrade(vec3 color) {
     color *= max(uExposure, 0.001);
     if (uShaderpackGradingEnabled) {
-        color = applyColorTemperature(color);
-        color = applyKappaHdrGrade(color);
-        color = applyKappaTonemap(color);
-        if (uTonemapMode == 3) {
-            color = applyAgxLook(color);
+        if (uTonemapMode == 1) {
+            color = AcademyFit(color);
+        } else if (uTonemapMode == 3) {
+            color = tonemapAgx(color);
+        } else {
+            color = tonemapPreserveLuma(color);
         }
-        color = applySplitTone(color);
     } else {
         color = vec3(1.0) - exp(-color);
+        float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        color = mix(vec3(luminance), color, uSaturation);
+        color = (color - 0.5) * uContrast + 0.5;
+        color = pow(max(color, vec3(0.0)), vec3(1.0 / max(uGamma, 0.001)));
     }
-    float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    color = mix(vec3(luminance), color, uSaturation);
-    color = (color - 0.5) * uContrast + 0.5;
-    color = pow(max(color, vec3(0.0)), vec3(1.0 / max(uGamma, 0.001)));
     return color;
 }
 
@@ -345,11 +505,9 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
     vec3 color = texture(uSceneTex, sampleUv).rgb;
     if (uBloomEnabled) {
         vec3 bloom = texture(uBloomTex, sampleUv).rgb;
-        float bloomLuma = luma709(bloom);
-        vec3 fogBloom = mix(bloom, vec3(bloomLuma) * vec3(0.82, 0.93, 1.08), smoothstep(0.02, 0.34, bloomLuma) * 0.28);
         // DerivativeMain Grade.glsl line 144: exposure compensation
-        float bloomAmount = uBloomStrength / (max(uExposure, 1.0) * 0.7 + 0.3);
-        color += fogBloom * bloomAmount;
+        float bloomAmount = (uBloomStrength * 0.15) / (max(uExposure, 1.0) * 0.7 + 0.3);
+        color += bloom * bloomAmount;
     }
 
     if (uUnderwaterEnabled) {
@@ -379,25 +537,37 @@ vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
     }
 
     vec2 texel = 1.0 / vec2(textureSize(uSceneTex, 0));
-    vec3 left = resolveGradedColor(clamp(sampleUv - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)),
-                                   clamp(screenUv - vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)));
-    vec3 right = resolveGradedColor(clamp(sampleUv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)),
-                                    clamp(screenUv + vec2(texel.x, 0.0), vec2(0.0), vec2(1.0)));
-    vec3 down = resolveGradedColor(clamp(sampleUv - vec2(0.0, texel.y), vec2(0.0), vec2(1.0)),
-                                   clamp(screenUv - vec2(0.0, texel.y), vec2(0.0), vec2(1.0)));
-    vec3 up = resolveGradedColor(clamp(sampleUv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)),
-                                 clamp(screenUv + vec2(0.0, texel.y), vec2(0.0), vec2(1.0)));
-    vec3 blur = (left + right + down + up) * 0.25;
+    vec2 uv00 = clamp(sampleUv + texel * vec2(-1.0, -1.0), vec2(0.0), vec2(1.0));
+    vec2 uv10 = clamp(sampleUv + texel * vec2( 0.0, -1.0), vec2(0.0), vec2(1.0));
+    vec2 uv20 = clamp(sampleUv + texel * vec2( 1.0, -1.0), vec2(0.0), vec2(1.0));
+    vec2 uv01 = clamp(sampleUv + texel * vec2(-1.0,  0.0), vec2(0.0), vec2(1.0));
+    vec2 uv21 = clamp(sampleUv + texel * vec2( 1.0,  0.0), vec2(0.0), vec2(1.0));
+    vec2 uv02 = clamp(sampleUv + texel * vec2(-1.0,  1.0), vec2(0.0), vec2(1.0));
+    vec2 uv12 = clamp(sampleUv + texel * vec2( 0.0,  1.0), vec2(0.0), vec2(1.0));
+    vec2 uv22 = clamp(sampleUv + texel * vec2( 1.0,  1.0), vec2(0.0), vec2(1.0));
 
-    float contrastGate = smoothstep(0.015, 0.18, abs(luma709(center) - luma709(blur)));
-    vec3 sharpened = center + (center - blur) * (0.45 * strength * contrastGate);
-    return clamp(sharpened, 0.0, 1.0);
+    vec3 a = resolveGradedColor(uv00, uv00);
+    vec3 b = resolveGradedColor(uv10, uv10);
+    vec3 c = resolveGradedColor(uv20, uv20);
+    vec3 d = resolveGradedColor(uv01, uv01);
+    vec3 e = center;
+    vec3 f = resolveGradedColor(uv21, uv21);
+    vec3 g = resolveGradedColor(uv02, uv02);
+    vec3 h = resolveGradedColor(uv12, uv12);
+    vec3 i = resolveGradedColor(uv22, uv22);
+
+    vec3 minColor = min(a, min(b, min(c, min(d, min(e, min(f, min(g, min(h, i))))))));
+    vec3 maxColor = max(a, max(b, max(c, max(d, max(e, max(f, max(g, max(h, i))))))));
+    vec3 sharpeningAmount = sqrt(max(vec3(0.0), min(vec3(1.0) - maxColor, minColor) / max(maxColor, vec3(1e-5))));
+    vec3 w = sharpeningAmount * mix(-0.125, -0.2, strength);
+    return clamp(((b + d + f + h) * w + e) / (4.0 * w + vec3(1.0)), 0.0, 1.0);
 }
 
 void main() {
     vec2 centeredUv = vTexCoord - vec2(0.5, 0.5);
-    float c = cos(uScreenRollRadians);
-    float s = sin(uScreenRollRadians);
+    float roll = uShaderpackGradingEnabled ? 0.0 : uScreenRollRadians;
+    float c = cos(roll);
+    float s = sin(roll);
     mat2 rot = mat2(c, -s,
                     s,  c);
     vec2 rolledUv = rot * centeredUv + vec2(0.5, 0.5);
@@ -423,13 +593,6 @@ void main() {
     }
 
     vec3 graded = applyGrade(color);
-
-    // Purkinje shift (DerivativeMain Post/Grade.glsl)
-    // Scotopic vision: in low light, human eye sensitivity shifts toward blue-green
-    float luma = dot(graded, vec3(0.2126, 0.7152, 0.0722));
-    float scotopic = smoothstep(0.1, 0.0, luma); // stronger at lower luminance
-    vec3 purkinjeShift = graded * vec3(0.6, 0.9, 1.3); // shift toward blue
-    graded = mix(graded, purkinjeShift, scotopic * 0.35);
 
     if (uShaderpackGradingEnabled) {
         graded = applyVignette(graded, rolledUv);

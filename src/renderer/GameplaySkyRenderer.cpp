@@ -489,37 +489,25 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
 }
 
 GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminance(const SkyColors& colors) const {
-    // Physically-scaled illuminance approximations derived from the analytic sky palette.
-    // These are bridge values for Phase 1; Phase 3 will replace them with atmosphere LUT integrals.
-    //
-    // Reference values (clear sky noon):
-    //   Solar illuminance on horizontal plane ≈ 100,000-120,000 lux
-    //   Sky hemisphere irradiance ≈ 20,000-30,000 lux
-    //   Solar disk luminance ≈ 1.6e9 cd/m^2
-    //   Lunar disk luminance ≈ 2,500 cd/m^2 (full moon)
-
     SkyIlluminanceData data;
 
-    // Direct sun illuminance on horizontal ground plane.
-    // Scales with sun altitude (cosine law) and sun visibility (day/night gate).
-    constexpr float kSolarConstant = 120000.0f; // lux, clear sky noon
-    const float sunAltitude = std::max(colors.sunDirection.y, 0.0f);
-    const float sunFactor = sunAltitude * colors.sunVisibility;
-    data.directIlluminance = colors.sunLightColor * sunFactor * kSolarConstant;
+    // Match DerivativeMain's atmosphere-unit contract:
+    //   sunIlluminance/moonIlluminance are solar_irradiance * transmittance,
+    //   directIlluminance is their sum, and skyIlluminance is a low HDR
+    //   hemisphere term. Do not use real-world lux here; cloud/fog/water shaders
+    //   multiply these values by large shaderpack constants.
+    constexpr glm::vec3 kSolarIrradiance(1.474000f, 1.850400f, 1.911980f);
+    const float sunAltitude = std::clamp(colors.sunDirection.y, 0.0f, 1.0f);
+    const float moonAltitude = std::clamp(colors.moonDirection.y, 0.0f, 1.0f);
+    const float sunTransmittance = colors.sunVisibility * smoothstep(0.0f, 0.18f, sunAltitude);
+    const float moonTransmittance = colors.moonVisibility * smoothstep(0.0f, 0.18f, moonAltitude) * 0.35f;
 
-    // Sky hemisphere irradiance.
-    // Proportional to sky ambient color, scaled to physical units.
-    constexpr float kSkyIrradianceScale = 28000.0f; // lux, clear sky
-    data.skyIlluminance = colors.skyAmbientColor * kSkyIrradianceScale;
+    data.sunIlluminance = kSolarIrradiance * colors.sunLightColor * sunTransmittance;
+    data.moonIlluminance = kSolarIrradiance * colors.moonLightColor * moonTransmittance;
+    data.directIlluminance = data.sunIlluminance + data.moonIlluminance;
 
-    // Solar disk luminous intensity (radiance).
-    // The sun disk is very bright but small (≈6.8e-5 sr solid angle).
-    constexpr float kSunDiskLuminance = 1.6e9f; // cd/m^2
-    data.sunIlluminance = colors.sunLightColor * colors.sunVisibility * kSunDiskLuminance;
-
-    // Lunar disk luminous intensity.
-    constexpr float kMoonDiskLuminance = 2500.0f; // cd/m^2, full moon
-    data.moonIlluminance = colors.moonLightColor * colors.moonVisibility * kMoonDiskLuminance;
+    const float skyVisibility = std::clamp(colors.dayFactor + colors.moonVisibility * 0.18f, 0.0f, 1.0f);
+    data.skyIlluminance = colors.skyAmbientColor * (0.10f + 0.42f * skyVisibility);
 
     return data;
 }

@@ -172,11 +172,13 @@ float cirrusCloudDensity(vec2 worldPos, float coverage) {
 }
 
 vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis) {
-    if (ray.y < 0.02 && uCameraPos.y < uPlanarCloudAltitude) return vec4(0.0);
-    if (ray.y > -0.02 && uCameraPos.y > uPlanarCloudAltitude + 500.0) return vec4(0.0);
+    if ((ray.y < 0.0 && uCameraPos.y < uPlanarCloudAltitude) ||
+        (ray.y > 0.0 && uCameraPos.y > uPlanarCloudAltitude)) {
+        return vec4(0.0);
+    }
 
-    float tPlane = (uPlanarCloudAltitude - uCameraPos.y) / max(abs(ray.y), 0.02);
-    if (tPlane < 0.0 || tPlane > 300000.0) return vec4(0.0);
+    float tPlane = (uPlanarCloudAltitude - uCameraPos.y) / ray.y;
+    if (tPlane <= 0.0 || tPlane > 300000.0 - 60000.0 * clamp(uWeatherWetness, 0.0, 1.0)) return vec4(0.0);
 
     vec2 worldPos = uCameraPos.xz + ray.xz * tPlane;
     worldPos /= 1.0 + length(worldPos - uCameraPos.xz) * 5e-6;
@@ -234,11 +236,13 @@ float cirrocumulusDensity(vec2 worldPos) {
 
 vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter) {
     float altitude = uPlanarCloudAltitude * 0.7; // below cirrus
-    if (ray.y < 0.02 && uCameraPos.y < altitude) return vec4(0.0);
-    if (ray.y > -0.02 && uCameraPos.y > altitude + 500.0) return vec4(0.0);
+    if ((ray.y < 0.0 && uCameraPos.y < altitude) ||
+        (ray.y > 0.0 && uCameraPos.y > altitude)) {
+        return vec4(0.0);
+    }
 
-    float tPlane = (altitude - uCameraPos.y) / max(abs(ray.y), 0.02);
-    if (tPlane < 0.0 || tPlane > 200000.0) return vec4(0.0);
+    float tPlane = (altitude - uCameraPos.y) / ray.y;
+    if (tPlane <= 0.0 || tPlane > 300000.0 - 60000.0 * clamp(uWeatherWetness, 0.0, 1.0)) return vec4(0.0);
 
     vec2 worldPos = uCameraPos.xz + ray.xz * tPlane;
     float density = cirrocumulusDensity(worldPos);
@@ -374,9 +378,6 @@ void main() {
     float eyeAltitude = max(uCameraPos.y, 0.0) + 100.0;
 
     vec3 atmos = sampleAtmosphere(ray, sunDir, moonDir, eyeAltitude, day, moonVis);
-    vec3 sky = texture(uSkyCaptureTex, projectSky(ray)).rgb;
-    vec3 horizon = mix(sky, uHorizonScatterColor, clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.22);
-
     float LdotV = dot(ray, sunDir);
     float moonLdotV = dot(ray, moonDir);
     float jitter = sampleCloudNoise(vTexCoord * 23.0 + uTime * 0.01);
@@ -484,7 +485,7 @@ void main() {
 
         float opacity = clamp(1.0 - transmittance, 0.0, 1.0);
         float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uWeatherWetness, 0.0, 1.0)));
-        opacity *= distanceFade * smoothstep(-0.02, 0.12, ray.y);
+        opacity *= distanceFade;
 
         // Compose with sky cache illuminance
         vec3 sunIllum = uSunIlluminance * day + uMoonIlluminance * moonVis;
@@ -497,7 +498,6 @@ void main() {
 
         cloudColor = scattering;
         cloudColor += atmos * opacity * mix(0.5, 0.8, clamp(uHorizonScatterStrength, 0.0, 1.0));
-        cloudColor = mix(cloudColor, horizon * opacity, clamp(uWeatherStorm, 0.0, 1.0) * 0.18);
         transmittance = 1.0 - opacity;
     }
 

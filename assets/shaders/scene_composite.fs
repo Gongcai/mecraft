@@ -69,13 +69,7 @@ void main() {
         vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
         vec3 sky = texture(uSkyCaptureTex, projectSky(skyDir)).rgb;
-        vec3 transmittance;
-        vec3 lutSky = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, skyDir, normalize(uSunDirection), transmittance);
-        vec3 lutMoon = atmGetSkyRadianceForLight(max(uCameraPos.y, 0.0) + 100.0, skyDir, normalize(uMoonDirection), transmittance) *
-                       clamp(uMoonVisibility, 0.0, 1.0) * (1.0 - clamp(uSkyIntensity, 0.0, 1.0)) * 0.25;
-        sky = mix(sky, lutSky + lutMoon, 0.34);
-        vec3 cloudedSky = mix(sky, cloud.rgb, clamp(cloud.a, 0.0, 1.0));
-        color = mix(color, cloudedSky, clamp(uCloudCompositeStrength, 0.0, 1.0));
+        color = mix(sky, cloud.rgb, clamp(cloud.a, 0.0, 1.0) * clamp(uCloudCompositeStrength, 0.0, 1.0));
     } else if (cloud.a > 0.001) {
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);

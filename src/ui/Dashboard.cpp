@@ -361,7 +361,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int debugViewMode = pipeline.debugViewMode;
         int weatherPreset = pipeline.weatherPreset;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
-        static constexpr const char* kTonemapModes[] = {"Reinhard", "ACES", "Filmic", "AgX"};
+        static constexpr const char* kTonemapModes[] = {"Reinhard", "AcademyFit", "Filmic", "AgX"};
         static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative", "No Warp"};
         static constexpr const char* kDebugViewModes[] = {
             "Off",
@@ -410,7 +410,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Bloom Strength", &pipeline.bloomStrength, 0.0f, 1.2f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &pipeline.bloomStrength, 0.0f, 5.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Depth of Field", &pipeline.dofEnabled);
         pipelineChanged |= ImGui::SliderFloat("DoF Focus", &pipeline.dofFocusDistance, 0.5f, 50.0f, "%.1f blocks");
         pipelineChanged |= ImGui::SliderFloat("DoF Aperture", &pipeline.dofAperture, 0.8f, 22.0f, "%.1f");
@@ -453,6 +453,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.volumetricFogStrength = 0.0f;
             pipeline.bloomThreshold = 1.05f;
             pipeline.bloomStrength = 0.10f;
+            pipeline.sunRaysEnabled = false;
+            pipeline.dofEnabled = false;
             pipeline.autoExposureEnabled = false;
             pipeline.autoExposureMin = 0.70f;
             pipeline.autoExposureMax = 1.40f;
@@ -480,7 +482,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
-            pipeline.tonemapMode = 3;
+            pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 1;
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = false;
@@ -503,7 +505,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.horizonScatterStrength = 0.70f;
             pipeline.volumetricFogStrength = 0.52f;
             pipeline.bloomThreshold = 0.0f;
-            pipeline.bloomStrength = 0.24f;
+            pipeline.bloomStrength = 1.0f;
+            pipeline.sunRaysEnabled = false;
+            pipeline.dofEnabled = false;
             pipeline.autoExposureEnabled = true;
             pipeline.autoExposureMin = 0.001f;
             pipeline.autoExposureMax = 64.0f;
@@ -511,9 +515,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.autoExposureBias = 0.0f;
             pipeline.exposure = 12.0f;
             pipeline.vibrance = 0.0f;
-            pipeline.kappaGradingStrength = 0.65f;
-            pipeline.highlightCompression = 0.72f;
-            pipeline.filmEmulationStrength = 0.55f;
+            pipeline.kappaGradingStrength = 0.0f;
+            pipeline.highlightCompression = 0.0f;
+            pipeline.filmEmulationStrength = 0.0f;
             pipeline.redModifierStrength = 0.35f;
             pipeline.colorLumaR = 1.02f;
             pipeline.colorLumaG = 1.0f;
@@ -522,16 +526,16 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.sunWarmth = 0.34f;
             pipeline.skyCoolness = 0.18f;
             pipeline.shadowDesaturation = 0.22f;
-            pipeline.splitToneStrength = 0.28f;
-            pipeline.vignetteStrength = 0.08f;
-            pipeline.sharpenStrength = 0.08f;
+            pipeline.splitToneStrength = 0.0f;
+            pipeline.vignetteStrength = 0.0f;
+            pipeline.sharpenStrength = 0.3f;
             pipeline.saturation = 1.0f;
             pipeline.contrast = 1.0f;
             pipelineChanged = true;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
-            pipeline.tonemapMode = 3;
+            pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 1;
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = false;
@@ -554,7 +558,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.horizonScatterStrength = 0.82f;
             pipeline.volumetricFogStrength = 0.68f;
             pipeline.bloomThreshold = 0.0f;
-            pipeline.bloomStrength = 0.24f;
+            pipeline.bloomStrength = 1.0f;
+            pipeline.sunRaysEnabled = false;
+            pipeline.dofEnabled = false;
             pipeline.autoExposureEnabled = true;
             pipeline.autoExposureMin = 0.001f;
             pipeline.autoExposureMax = 64.0f;
@@ -562,9 +568,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.autoExposureBias = 0.0f;
             pipeline.exposure = 12.0f;
             pipeline.vibrance = 0.04f;
-            pipeline.kappaGradingStrength = 0.82f;
-            pipeline.highlightCompression = 0.88f;
-            pipeline.filmEmulationStrength = 0.72f;
+            pipeline.kappaGradingStrength = 0.0f;
+            pipeline.highlightCompression = 0.0f;
+            pipeline.filmEmulationStrength = 0.0f;
             pipeline.redModifierStrength = 0.45f;
             pipeline.colorLumaR = 1.04f;
             pipeline.colorLumaG = 1.0f;
@@ -573,9 +579,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.sunWarmth = 0.48f;
             pipeline.skyCoolness = 0.24f;
             pipeline.shadowDesaturation = 0.34f;
-            pipeline.splitToneStrength = 0.42f;
-            pipeline.vignetteStrength = 0.12f;
-            pipeline.sharpenStrength = 0.12f;
+            pipeline.splitToneStrength = 0.0f;
+            pipeline.vignetteStrength = 0.0f;
+            pipeline.sharpenStrength = 0.3f;
             pipeline.saturation = 1.0f;
             pipeline.contrast = 1.06f;
             pipelineChanged = true;

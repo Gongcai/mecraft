@@ -116,12 +116,13 @@ void main() {
     }
 
     if (uMode == 4) {
-        // Equirectangular sky capture via atmosphere LUT (DerivativeMain-compatible).
+        // DerivativeMain-compatible sky capture projection.
         vec2 uv = clamp(vUV, vec2(0.0), vec2(1.0));
-        float phi = uv.x * kTwoPi - kPi;
-        float cosTheta = uv.y * 2.0 - 1.0;
-        float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
-        vec3 dir = normalize(vec3(sin(phi) * sinTheta, cosTheta, -cos(phi) * sinTheta));
+        float u = fract((uv.x - 2.0 / 256.0) / (1.0 - 4.0 / 256.0));
+        float phi = u * kTwoPi;
+        float theta = uv.y * kPi;
+        float sinTheta = sin(theta);
+        vec3 dir = normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
 
         vec3 sunDir = normalize(uSunDirection);
         vec3 moonDir = normalize(uMoonDirection);

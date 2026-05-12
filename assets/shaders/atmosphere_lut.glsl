@@ -92,11 +92,7 @@ float atmGetTextureCoordFromUnitRange(float x, float textureSize) {
 }
 
 vec2 atmDirectionToSkyCaptureUv(vec3 dir) {
-    dir = normalize(dir);
-    float phi = atan(dir.x, -dir.z);
-    float u = phi / atmTwoPi + 0.5;
-    float v = dir.y * 0.5 + 0.5;
-    return vec2(fract(u), clamp(v, 0.0, 1.0));
+    return projectSky(dir);
 }
 
 vec2 atmGetTransmittanceTextureUvFromRMu(float r, float mu) {

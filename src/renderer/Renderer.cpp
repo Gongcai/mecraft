@@ -233,14 +233,14 @@ void Renderer::render(const World& world, const Camera &camera, const Window &wi
 
 void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
     beginFrame(camera, window);
-    m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem());
-    m_fogSettings.color = m_gameplaySkyRenderer.getLastFogColor();
     m_currentFrameData = buildRenderFrameData(world);
+    m_fogSettings.color = m_currentFrameData.skyColors.fog;
     m_currentFrameDataValid = true;
     if (m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred &&
         renderWorldDeferred(world, camera, window, m_currentFrameData)) {
         return;
     }
+    m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem());
     m_chunkShader = m_chunkForwardShader;
     m_deferredFrameActive = false;
     renderWorldForward(world, m_currentFrameData);

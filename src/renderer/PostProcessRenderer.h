@@ -16,32 +16,32 @@ struct PostProcessEffects {
     float screenRollRadians = 0.0f;
     bool bloomEnabled = true;
     float bloomThreshold = 0.0f;    // DerivativeMain: no threshold, raw HDR feeds bloom
-    float bloomStrength = 0.24f;
+    float bloomStrength = 1.0f;
     bool autoExposureEnabled = true;
     float autoExposureMin = 0.001f; // Allow very bright scenes
     float autoExposureMax = 64.0f;  // Allow very dark scenes
     float autoExposureSpeed = 1.0f; // DerivativeMain EXPOSURE_SPEED
     float autoExposureBias = 0.0f;
     float autoExposureDayFactor = 1.0f;
-    bool sunRaysEnabled = true;
+    bool sunRaysEnabled = false;
     glm::vec2 sunScreenPos = glm::vec2(0.5f);
     float sunVisibility = 0.0f;
     float sunRayStrength = 0.18f;
     bool shaderpackGradingEnabled = true;
-    int tonemapMode = 3;
+    int tonemapMode = 1;
     float colorTemperature = 1.0f;
     float vibrance = 0.0f;
-    float kappaGradingStrength = 0.65f;
-    float highlightCompression = 0.72f;
-    float filmEmulationStrength = 0.55f;
+    float kappaGradingStrength = 0.0f;
+    float highlightCompression = 0.0f;
+    float filmEmulationStrength = 0.0f;
     float redModifierStrength = 0.35f;
     glm::vec3 colorLuma = glm::vec3(1.02f, 1.0f, 0.96f);
-    float splitToneStrength = 0.28f;
-    float vignetteStrength = 0.08f;
+    float splitToneStrength = 0.0f;
+    float vignetteStrength = 0.0f;
     float noiseDitherStrength = 0.015f;
-    float sharpenStrength = 0.08f;
+    float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
     float exposure = 12.0f;   // DerivativeMain MANUAL_EXPOSURE_VALUE
-    float gamma = 2.2f;
+    float gamma = 1.0f;
     float saturation = 1.0f;
     float contrast = 1.0f;
 };
@@ -62,7 +62,7 @@ public:
     void setEffects(const PostProcessEffects& effects);
 
 private:
-    static constexpr int kBloomMipCount = 5;
+    static constexpr int kBloomMipCount = 7;
     static constexpr int kExposureMipCount = 13;
 
     bool ensureRenderTargets(int width, int height);
@@ -100,5 +100,3 @@ private:
 };
 
 #endif //MECRAFT_POSTPROCESSRENDERER_H
-
-

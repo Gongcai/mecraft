@@ -13,14 +13,13 @@ class Shader;
 
 class GameplaySkyRenderer {
 public:
-    // Physically-scaled illuminance values for the sky cache metadata texels.
-    // These are derived analytically from the sky palette (Phase 1 bridge);
-    // will be replaced by atmosphere LUT integrals in Phase 3.
+    // DerivativeMain-style atmosphere illuminance values.
+    // These are in the shaderpack's internal atmosphere units, not real-world lux.
     struct SkyIlluminanceData {
-        glm::vec3 directIlluminance = glm::vec3(0.0f);  // sun irradiance on horizontal ground (lux)
-        glm::vec3 skyIlluminance    = glm::vec3(0.0f);  // hemisphere sky irradiance (lux)
-        glm::vec3 sunIlluminance    = glm::vec3(0.0f);  // solar disk radiance (cd/m^2)
-        glm::vec3 moonIlluminance   = glm::vec3(0.0f);  // lunar disk radiance (cd/m^2)
+        glm::vec3 directIlluminance = glm::vec3(0.0f);
+        glm::vec3 skyIlluminance    = glm::vec3(0.0f);
+        glm::vec3 sunIlluminance    = glm::vec3(0.0f);
+        glm::vec3 moonIlluminance   = glm::vec3(0.0f);
     };
 
     struct SkyColors {

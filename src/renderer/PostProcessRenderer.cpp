@@ -181,7 +181,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
             if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip - 1][0] == 0) {
                 continue;
             }
-            const float weight = 0.24f + 0.10f * static_cast<float>(mip);
+            const float weight = 0.33489798f + 0.06697960f * static_cast<float>(kBloomMipCount - 1 - mip);
             glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip - 1][0]);
             glViewport(0, 0, m_bloomMipSize[mip - 1].x, m_bloomMipSize[mip - 1].y);
             m_bloomBlurShader->setFloat("uWeight", weight);
@@ -478,4 +478,3 @@ void PostProcessRenderer::destroyFullscreenTriangle() {
         m_fullscreenVao = 0;
     }
 }
-
