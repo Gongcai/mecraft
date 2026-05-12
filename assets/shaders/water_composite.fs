@@ -20,11 +20,13 @@ in vec2 vTintUV;
 
 uniform sampler2DArray texArray;
 uniform sampler2D uOpaqueDepthTex;
-uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uSceneColorTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uReflectionTex;
+uniform sampler2D uSkyCaptureTex;
 uniform sampler3D uAtmosphereLut;
+uniform mat4 viewProj;
+uniform mat4 uInvViewProj;
 uniform int uSkyCaptureEnabled;
 uniform int uCompositeInputsEnabled;
 uniform int uWaterCompositeEnabled;
@@ -55,9 +57,32 @@ out vec4 FragColor;
 #include "atmosphere_lut.glsl"
 
 const float rPI = 1.0 / 3.14159265359;
+const float kTwoPi = 6.28318530718;
+const int kWaterSsrSteps = 16;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+float cube(float x) {
+    return x * x * x;
+}
+
+vec3 reconstructWorldPosition(vec2 uv, float depth) {
+    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 world = uInvViewProj * clip;
+    return world.xyz / max(world.w, 0.00001);
+}
+
+vec2 projectWorldUv(vec3 worldPos, out float projectedDepth) {
+    vec4 clip = viewProj * vec4(worldPos, 1.0);
+    vec3 ndc = clip.xyz / max(clip.w, 0.00001);
+    projectedDepth = ndc.z * 0.5 + 0.5;
+    return ndc.xy * 0.5 + 0.5;
 }
 
 vec3 decodeFaceNormal(float face) {
@@ -150,20 +175,39 @@ vec2 GetWaterParallaxCoord(vec3 worldPos, vec3 tangentViewDir) {
     return samplePos.xy;
 }
 
-// ---- DerivativeMain SSR (lib/Surface/ScreenSpaceReflections.glsl) ----
-// Simplified screen-space ray trace
-bool ScreenSpaceRayTrace(vec3 viewPos, vec3 rayDir, float dither, int steps, inout vec3 hitPos) {
-    vec3 rayStep = rayDir * (20.0 / float(steps));
-    vec3 samplePos = viewPos + rayStep * dither;
+// DerivativeMain water reflection semantics: use screen-space color only on a real
+// depth hit, otherwise fall back to the captured skybox.
+bool traceWaterScreenSpaceReflection(vec3 worldPos,
+                                     vec3 reflectedDir,
+                                     vec3 normal,
+                                     out vec3 hitColor) {
+    hitColor = vec3(0.0);
 
-    for (int i = 0; i < steps; ++i) {
-        samplePos += rayStep;
-        // Project to screen
-        vec4 clipPos = vec4(samplePos, 1.0); // viewPos is already in a projection-compatible space
-        // For our setup, we need to project to screen UV
-        // Simplified: use depth comparison
-        if (samplePos.z > 0.0) return false; // Behind camera
+    const float maxDistance = 48.0;
+    const float stepLength = maxDistance / float(kWaterSsrSteps);
+    vec3 rayOrigin = worldPos + normal * 0.025 + reflectedDir * 0.15;
+
+    for (int i = 1; i <= kWaterSsrSteps; ++i) {
+        vec3 sampleWorld = rayOrigin + reflectedDir * (float(i) * stepLength);
+        float rayDepth;
+        vec2 uv = projectWorldUv(sampleWorld, rayDepth);
+        if (uv.x <= 0.001 || uv.x >= 0.999 || uv.y <= 0.001 || uv.y >= 0.999 ||
+            rayDepth <= 0.0 || rayDepth >= 1.0) {
+            return false;
+        }
+
+        float sceneDepth = texture(uOpaqueDepthTex, uv).r;
+        if (sceneDepth >= 0.9999) {
+            continue;
+        }
+
+        float thickness = mix(0.00025, 0.0045, clamp(float(i) / float(kWaterSsrSteps), 0.0, 1.0));
+        if (rayDepth >= sceneDepth && rayDepth - sceneDepth < thickness) {
+            hitColor = texture(uSceneColorTex, uv).rgb;
+            return true;
+        }
     }
+
     return false;
 }
 
@@ -190,24 +234,22 @@ float FresnelDielectricN(float cosTheta, float n) {
     return clamp(0.5 * (r1 * r1 + r2 * r2), 0.0, 1.0);
 }
 
-// DerivativeMain WaterFog (lib/Water/WaterFog.glsl line 2-17, exact port)
-// DerivativeMain waterAbsorption = vec3(0.45, 0.02, 0.01) — pure water coefficients
-// Our uWaterAbsorption = vec3(1.0, 0.45, 0.28) — different scale
-// We need to use the SAME formula: absorption * 8.0 + 0.03
+// DerivativeMain WaterFog (lib/Water/WaterFog.glsl)
 void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDepth) {
     // fogDensity = WATER_FOG_DENSITY * fma(0.1, wetness*skylight, 0.16) * waterDepth
     float fogDensity = 1.0 * (0.16 + 0.1 * uWeatherWetness * waterSkylight) * waterDepth;
 
-    // Fog color: skyIlluminance * 0.4 * rPI
-    vec3 fogColor = uSkyAmbientColor * 0.4 * rPI;
+    // DerivativeMain mixes wet weather toward a neutral luminance term before applying rPI.
+    vec3 fogColor = mix(uSkyAmbientColor * 0.4,
+                        vec3(luminance(uSkyAmbientColor) * 0.1),
+                        0.8 * uWeatherWetness * waterSkylight) * rPI;
 
     // Scatter: 28.0 * oneMinus(wetness*0.8) * directIlluminance * scatter
     float scatter = atmHenyeyGreensteinPhase(LdotV, 0.65) + 0.1 * rPI;
     fogColor *= 1.0 + 28.0 * (1.0 - uWeatherWetness * 0.8) * uSunLightColor * scatter;
 
     // Beer-Lambert: fastExp(-(waterAbsorption * 8.0 + 0.03) * fogDensity)
-    // Use corrected absorption: smaller values for transparent water
-    vec3 absorption = vec3(0.45, 0.02, 0.01) * 8.0 + 0.03; // = vec3(3.63, 0.19, 0.11)
+    vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
     vec3 transmittance = exp(-absorption * fogDensity);
 
     color *= transmittance;
@@ -216,24 +258,55 @@ void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDep
 
 // DerivativeMain UnderwaterFog (lib/Water/WaterFog.glsl line 19-32, exact port)
 void UnderwaterFog(inout vec3 color, float waterDepth) {
-    float skylight = clamp(vLight, 0.0, 1.0);
+    float skylight = cube(clamp(vSunlight, 0.0, 1.0));
     float fogDensity = 1.0 * (0.1 + 0.05 * uWeatherWetness * skylight) * waterDepth;
 
-    vec3 fogColor = uSkyAmbientColor * 0.4 * rPI;
+    vec3 fogColor = mix(uSkyAmbientColor * 0.4,
+                        vec3(luminance(uSkyAmbientColor) * 0.1),
+                        0.8 * uWeatherWetness * skylight) * rPI;
 
-    vec3 absorption = vec3(0.45, 0.02, 0.01) * 8.0 + 0.03;
+    vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
     vec3 transmittance = exp(-absorption * max(fogDensity, 2.0) + 0.4);
 
     color *= transmittance;
     color += fogColor * clamp(skylight + 0.2, 0.0, 1.0) * (1.0 - transmittance);
 }
 
-vec3 sampleSkyReflection(vec3 dir) {
+vec2 directionToSkyCaptureUv(vec3 dir) {
     dir = normalize(dir);
     float phi = atan(dir.x, -dir.z);
-    float u = phi / 6.28318530718 + 0.5;
+    float u = phi / kTwoPi + 0.5;
     float v = dir.y * 0.5 + 0.5;
-    return texture(uSkyCaptureTex, vec2(fract(u), clamp(v, 0.0, 1.0))).rgb;
+    return vec2(fract(u), clamp(v, 0.0, 1.0));
+}
+
+// DerivativeMain water fallback reflection samples the sky capture (colortex5),
+// rather than re-querying the atmosphere LUT from a fragment/camera altitude.
+vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight) {
+    float skyWeight = smoothstep(0.3, 0.8, skylight);
+    if (skyWeight <= 1e-3) {
+        return vec3(0.0);
+    }
+
+    float nDotUp = clamp((dot(normal, vec3(0.0, 1.0, 0.0)) + 0.7) * 2.0, 0.0, 1.0) * 0.75 + 0.25;
+    vec3 skybox = (uSkyCaptureEnabled != 0)
+        ? texture(uSkyCaptureTex, directionToSkyCaptureUv(dir)).rgb
+        : uSkyAmbientColor;
+    return max(skybox * skyWeight * nDotUp, vec3(0.0));
+}
+
+vec3 renderSunReflection(vec3 rayDir) {
+    vec3 sunDir = normalize(uSunDirection);
+    float cosTheta = clamp(dot(normalize(rayDir), sunDir), -1.0, 1.0);
+    const float sunReflectionRadius = 0.05;
+    if (cosTheta < cos(sunReflectionRadius)) {
+        return vec3(0.0);
+    }
+
+    float centerToEdge = clamp(acos(cosTheta) / sunReflectionRadius, 0.0, 1.0);
+    const vec3 alpha = vec3(0.429, 0.522, 0.614);
+    vec3 limbDark = pow(vec3(1.0 - centerToEdge * centerToEdge), alpha * 0.5);
+    return uSunLightColor * limbDark * clamp(uSkyIntensity, 0.0, 1.0) * 24.0;
 }
 
 bool layerInRange(float layer, float firstLayer, float layerCount) {
@@ -245,17 +318,19 @@ void main() {
                    layerInRange(vLayer, uWaterFlowFirstLayer, uWaterFlowLayerCount);
     if (!isWater) discard;
 
-    // ---- Depth gap ----
+    vec2 screenUv = gl_FragCoord.xy / vec2(textureSize(uSceneColorTex, 0));
+
+    // ---- DerivativeMain water depth ----
+    // DerivativeMain measures water fog through the water volume:
+    // distance(ScreenToViewSpace(water depth), ScreenToViewSpace(opaque depth)).
     float depthGap = 0.0;
     float sceneDepth = texelFetch(uOpaqueDepthTex, ivec2(gl_FragCoord.xy), 0).r;
-    if (uDepthSofteningEnabled != 0) {
-        float near = 0.05, far = 512.0;
-        float linearFrag = (2.0 * near) / (far + near - (gl_FragCoord.z * 2.0 - 1.0) * (far - near));
-        float linearScene = (2.0 * near) / (far + near - (sceneDepth * 2.0 - 1.0) * (far - near));
-        depthGap = max(0.0, linearScene - linearFrag);
+    if (uDepthSofteningEnabled != 0 && sceneDepth > gl_FragCoord.z) {
+        vec3 waterSurfacePos = reconstructWorldPosition(screenUv, gl_FragCoord.z);
+        vec3 opaquePos = reconstructWorldPosition(screenUv, sceneDepth);
+        depthGap = clamp(distance(waterSurfacePos, opaquePos), 0.0, 512.0);
     }
 
-    vec2 screenUv = gl_FragCoord.xy / vec2(textureSize(uSceneColorTex, 0));
     vec3 faceNormal = decodeFaceNormal(vNormal);
 
     // ---- DerivativeMain Water.frag line 224-249 ----
@@ -271,7 +346,7 @@ void main() {
 
     // Add rain ripple normals (DerivativeMain RainEffect.glsl)
     if (uWeatherWetness > 0.01) {
-        float skylightFactor = clamp(vLight * 10.0 - 9.0, 0.0, 1.0);
+        float skylightFactor = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
         vec2 rainNormal = GetRainNormal(vWorldPos, uWeatherWetness * skylightFactor);
         waveNormalTangent.xy += rainNormal;
         waveNormalTangent = normalize(waveNormalTangent);
@@ -303,49 +378,30 @@ void main() {
     vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb;
 
     // ---- Water fog (DerivativeMain WaterFog.glsl, applied BEFORE reflection) ----
+    float waterSkylight = cube(clamp(vSunlight, 0.0, 1.0));
     float LdotV = dot(normalize(uSunDirection), viewDir);
-    float fogDist = length(uCameraPos - vWorldPos);
+    float fogDist = depthGap;
     if (uIsEyeInWater == 1) {
         normal = -normal;
-        UnderwaterFog(sceneColor, fogDist);
+        UnderwaterFog(sceneColor, length(uCameraPos - vWorldPos));
     } else {
-        WaterFog(sceneColor, vLight, LdotV, fogDist);
+        WaterFog(sceneColor, waterSkylight, LdotV, fogDist);
     }
 
     // ---- Reflection (DerivativeMain CalculateSpecularReflections) ----
     vec3 reflDir = reflect(-viewDir, normal);
-    vec3 skyRefl = sampleSkyReflection(reflDir);
-    vec3 ssrRefl = texture(uReflectionTex, screenUv).rgb;
-    float ssrLuma = dot(ssrRefl, vec3(0.2126, 0.7152, 0.0722));
-    vec3 reflection = (ssrLuma > 0.01) ? ssrRefl : skyRefl;
+    vec3 skyRefl = sampleSkyReflection(reflDir, normal, waterSkylight);
+    vec3 ssrRefl = vec3(0.0);
+    bool ssrHit = traceWaterScreenSpaceReflection(vWorldPos, reflDir, normal, ssrRefl);
+    vec3 reflection = ssrHit ? ssrRefl : skyRefl;
 
     // Underwater reflection (DerivativeMain line 103)
     if (uIsEyeInWater == 1) {
         reflection = vec3(0.05, 0.7, 1.0) * 0.3 * clamp(uSkyIntensity, 0.0, 1.0);
     }
 
-    // Sun/moon specular (DerivativeMain uses separate specular highlight)
-    // Use tighter exponent for noon, looser for sunset
-    float sunAngle = clamp(uSunDirection.y, 0.0, 1.0); // 1.0 at noon, 0.0 at horizon
-    float sunExponent = mix(64.0, 1024.0, sunAngle); // tighter at noon
-    float sunSpec = pow(clamp(dot(normal, normalize(uSunDirection + viewDir)), 0.0, 1.0), sunExponent);
-    sunSpec *= clamp(uSkyIntensity, 0.0, 1.0);
-    float moonSpec = pow(clamp(dot(normal, normalize(uMoonDirection + viewDir)), 0.0, 1.0), 64.0);
-    moonSpec *= clamp(uMoonVisibility, 0.0, 1.0);
+    reflection += renderSunReflection(reflDir) * waterSkylight;
 
-    // Sun reflection (DerivativeMain Atmosphere.glsl RenderSunReflection, exact port)
-    vec3 sunDirNorm = normalize(uSunDirection);
-    float cosThetaSun = dot(reflDir, sunDirNorm);
-    float sunAngularSize = 0.05; // radians (~2.86 degrees)
-    if (cosThetaSun > cos(sunAngularSize)) {
-        float centerToEdge = clamp(acos(cosThetaSun) / sunAngularSize, 0.0, 1.0);
-        vec3 alpha = vec3(0.429, 0.522, 0.614); // AP1 primaries limb darkening
-        vec3 limbDark = pow(vec3(1.0 - centerToEdge * centerToEdge), alpha * 0.5);
-        vec3 sunLuminance = vec3(1.474, 1.850, 1.912) * 50.0 * limbDark;
-        reflection += sunLuminance * clamp(uSkyIntensity, 0.0, 1.0) * (1.0 - centerToEdge * centerToEdge);
-    }
-
-    // Moon reflection (DerivativeMain Atmosphere.glsl RenderMoonReflection)
     float cosThetaMoon = dot(reflDir, normalize(-uMoonDirection));
     float moonSize = 5e-3;
     float moonHardness = 2e2;
@@ -357,10 +413,6 @@ void main() {
     // sceneData = sceneData * reflectionData.a + reflectionData.rgb
     // = sceneColor * (1-fresnel) + reflection * fresnel
     vec3 color = sceneColor * (1.0 - fresnel) + reflection * fresnel;
-
-    // Foam: shoreline depth edges
-    float foamEdge = smoothstep(0.005, 0.085, depthGap);
-    color += vec3(0.85, 0.92, 0.97) * foamEdge * 0.15;
 
     FragColor = vec4(max(color, vec3(0.0)), 1.0);
 }

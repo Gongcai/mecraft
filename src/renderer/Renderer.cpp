@@ -297,6 +297,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->use();
     m_waterCompositeShader->setMat4("view", frame.view);
     m_waterCompositeShader->setMat4("viewProj", frame.viewProj);
+    m_waterCompositeShader->setMat4("uInvViewProj", frame.invViewProj);
     m_waterCompositeShader->setMat4("model", glm::mat4(1.0f));
     m_waterCompositeShader->setInt("uUseModel", 0);
     m_waterCompositeShader->setInt("texArray", 0);
@@ -313,8 +314,8 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
     m_waterCompositeShader->setFloat("uTime", frame.shaderTime);
     m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
-    // DerivativeMain: pure water absorption coefficients
-    m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(0.45f, 0.02f, 0.01f));
+    // DerivativeMain shaders.properties: uniform.vec3.waterAbsorption = vec3(0.4, 0.14, 0.08)
+    m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
     m_waterCompositeShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
     m_waterCompositeShader->setVec3("uMoonDirection", frame.skyColors.moonDirection);
     m_waterCompositeShader->setVec3("uSunLightColor", frame.skyColors.sunLightColor);
