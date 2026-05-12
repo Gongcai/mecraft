@@ -122,7 +122,7 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     if (def.biomeTint == BiomeTintKind::Foliage || containsToken(path, "leaves")) {
         return BlockMaterialKinds::LEAVES;
     }
-    if (def.biomeTint == BiomeTintKind::Grass || path == "grass_block" || path == "grass" || containsAnyToken(path, {"moss", "vine"})) {
+    if (path == "grass" || containsToken(path, "short_grass")) {
         return BlockMaterialKinds::GRASS;
     }
     if (containsAnyToken(path, {"ore", "diamond", "coal", "emerald", "lapis", "redstone", "amethyst", "quartz"})) {
@@ -146,6 +146,127 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     return BlockMaterialKinds::DEFAULT;
 }
 
+uint8_t inferDerivativeMaterialId(const BlockDef& def) {
+    const std::string_view path = def.namespacedId.path();
+
+    if (containsToken(path, "water")) {
+        return DerivativeMaterialIds::WATER;
+    }
+    if (containsToken(path, "stained_glass")) {
+        return DerivativeMaterialIds::STAINED_GLASS;
+    }
+    if (containsToken(path, "glass")) {
+        return DerivativeMaterialIds::STAINED_GLASS;
+    }
+    if (path == "ice") {
+        return DerivativeMaterialIds::ICE;
+    }
+    if (path == "snow" || path == "snow_block" || path == "powder_snow" ||
+        path == "frosted_ice" || path == "packed_ice" || path == "blue_ice") {
+        return DerivativeMaterialIds::SNOW_ICE_SSS;
+    }
+    if (containsToken(path, "lava")) {
+        return DerivativeMaterialIds::LAVA;
+    }
+    if (path == "fire" || containsToken(path, "lava_cauldron")) {
+        return DerivativeMaterialIds::FIRE;
+    }
+    if (path == "torch" || path == "wall_torch" || path == "campfire" ||
+        path == "lantern" || path == "furnace" || path == "blast_furnace" || path == "smoker") {
+        return DerivativeMaterialIds::TORCH_LIKE;
+    }
+    if (path == "glowstone" || path == "magma_block" || path == "shroomlight" ||
+        path == "redstone_lamp" || path == "jack_o_lantern" ||
+        path == "crimson_stem" || path == "crimson_hyphae") {
+        return DerivativeMaterialIds::GLOWSTONE_LIKE;
+    }
+    if (path == "sea_lantern" || path == "warped_stem" || path == "warped_hyphae" ||
+        path == "redstone_wire") {
+        return DerivativeMaterialIds::SEA_LANTERN_LIKE;
+    }
+    if (path == "redstone_torch" || path == "redstone_wall_torch" ||
+        path == "repeater" || path == "comparator") {
+        return DerivativeMaterialIds::REDSTONE;
+    }
+    if (path == "redstone_block" || containsToken(path, "powered_rail") ||
+        containsToken(path, "activator_rail") || containsToken(path, "detector_rail") ||
+        path == "observer") {
+        return DerivativeMaterialIds::RAILS;
+    }
+    if (path == "soul_campfire" || path == "soul_torch" || path == "soul_wall_torch" ||
+        path == "soul_lantern" || path == "soul_fire" || path == "sea_pickle" ||
+        path == "dragon_head" || path == "spawner" || path == "enchanting_table" ||
+        path == "respawn_anchor" || path == "crying_obsidian") {
+        return DerivativeMaterialIds::SOUL_FIRE;
+    }
+    if (containsToken(path, "amethyst") || path == "calibrated_sculk_sensor") {
+        return DerivativeMaterialIds::AMETHYST;
+    }
+    if (path == "cave_vines" || path == "cave_vines_plant") {
+        return DerivativeMaterialIds::GLOWBERRY;
+    }
+    if (containsToken(path, "sculk")) {
+        return DerivativeMaterialIds::SCULK;
+    }
+    if (path == "glow_lichen") {
+        return DerivativeMaterialIds::GLOW_LICHEN;
+    }
+    if (path == "beacon") {
+        return DerivativeMaterialIds::BEACON_CORE;
+    }
+    if (path == "end_portal" || path == "end_gateway") {
+        return DerivativeMaterialIds::END_PORTAL;
+    }
+    if (containsToken(path, "froglight") || path == "end_rod" ||
+        path == "lapis_block" || path == "emerald_block" || containsToken(path, "candle")) {
+        return DerivativeMaterialIds::TOTAL_GLOWING;
+    }
+    if (containsToken(path, "weeping_vines") || path == "chorus_plant" ||
+        path == "chorus_flower" || path == "crimson_fungus" || path == "warped_fungus") {
+        return DerivativeMaterialIds::PARTIAL_GLOWING;
+    }
+    if (path == "brewing_stand" || containsToken(path, "candle_cake")) {
+        return DerivativeMaterialIds::MIDDLE_GLOWING;
+    }
+    if (path == "nether_gold_ore" || path == "nether_quartz_ore") {
+        return DerivativeMaterialIds::NETHER_ORE;
+    }
+    if (path == "iron_ore" || path == "deepslate_iron_ore" ||
+        path == "copper_ore" || path == "deepslate_copper_ore" ||
+        path == "gold_ore" || path == "deepslate_gold_ore" ||
+        path == "redstone_ore" || path == "deepslate_redstone_ore" ||
+        path == "lapis_ore" || path == "deepslate_lapis_ore" ||
+        path == "emerald_ore" || path == "deepslate_emerald_ore" ||
+        path == "diamond_ore" || path == "deepslate_diamond_ore" ||
+        path == "gilded_blackstone") {
+        return DerivativeMaterialIds::ORE;
+    }
+    if (def.biomeTint == BiomeTintKind::Foliage || containsToken(path, "leaves") ||
+        path == "vine" || containsToken(path, "_vine")) {
+        return DerivativeMaterialIds::LEAVES;
+    }
+    if (path == "wheat" || path == "carrots" || path == "potatoes" ||
+        path == "beetroots" || path == "seagrass") {
+        return DerivativeMaterialIds::WHEAT;
+    }
+    if (containsAnyToken(path, {"dandelion", "poppy", "orchid", "allium", "bluet", "tulip", "daisy", "cornflower", "rose", "torchflower"})) {
+        return DerivativeMaterialIds::FLOWER;
+    }
+    if (path == "tall_grass" || path == "large_fern" || path == "sunflower" ||
+        path == "lilac" || path == "rose_bush" || path == "peony" ||
+        path == "tall_seagrass" || path == "pitcher_plant") {
+        return DerivativeMaterialIds::GRASS_LOWER;
+    }
+    if (path == "fern" || path == "grass" || path == "short_grass") {
+        return DerivativeMaterialIds::GRASS;
+    }
+    if (containsAnyToken(path, {"sapling", "dead_bush", "deadbush", "bamboo", "sugar_cane", "mangrove_roots", "cactus", "pumpkin_stem", "melon_stem", "kelp", "spore_blossom", "dripleaf", "pink_petals", "coral_block", "azalea"})) {
+        return DerivativeMaterialIds::GRASS_LIKE;
+    }
+
+    return DerivativeMaterialIds::DEFAULT;
+}
+
 bool parseMaterialKind(const nlohmann::json& blockJson, uint8_t& outKind) {
     const auto materialIt = blockJson.find("materialKind");
     if (materialIt == blockJson.end()) {
@@ -164,6 +285,19 @@ bool parseMaterialKind(const nlohmann::json& blockJson, uint8_t& outKind) {
     }
 
     return false;
+}
+
+bool parseDerivativeMaterialId(const nlohmann::json& blockJson, uint8_t& outId) {
+    const auto materialIt = blockJson.find("derivativeMaterialId");
+    if (materialIt == blockJson.end()) {
+        return false;
+    }
+    if (!materialIt->is_number_integer()) {
+        return false;
+    }
+    const int materialId = materialIt->get<int>();
+    outId = static_cast<uint8_t>(std::clamp(materialId, 0, static_cast<int>(DerivativeMaterialIds::MAX_BUILTIN)));
+    return true;
 }
 
 BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool isTransparent) {
@@ -222,6 +356,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].renderShapeName = "cube";
         s_blocks[i].renderShapeTag = 0;
         s_blocks[i].materialKind = BlockMaterialKinds::DEFAULT;
+        s_blocks[i].derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
         s_blocks[i].placementStrategy = "simple";
         s_blocks[i].supportRule.clear();
         s_blocks[i].biomeTint = BiomeTintKind::None;
@@ -315,6 +450,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.renderShapeName = "cube";
         def.renderShapeTag = 0;
         def.materialKind = BlockMaterialKinds::DEFAULT;
+        def.derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
         def.placementStrategy = "simple";
         def.supportRule.clear();
         def.namedTextureAnimations.clear();
@@ -380,6 +516,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             def.allowsFluidCoexistence = blockJson["allowsFluidCoexistence"].get<bool>();
         }
         const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
+        const bool hasExplicitDerivativeMaterialId = parseDerivativeMaterialId(blockJson, def.derivativeMaterialId);
 
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
             const auto& tex = blockJson["textures"];
@@ -529,6 +666,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
         if (!hasExplicitMaterialKind) {
             def.materialKind = inferBlockMaterialKind(def);
+        }
+        if (!hasExplicitDerivativeMaterialId) {
+            def.derivativeMaterialId = inferDerivativeMaterialId(def);
         }
 
         s_blocks[id] = def;

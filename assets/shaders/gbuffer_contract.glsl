@@ -1,28 +1,52 @@
-// Shared G-buffer and material contract for the built-in shader preset.
-// Keep these ids mirrored with BlockMaterialKinds in src/world/Block.h.
+// Shared DerivativeMain-compatible G-buffer and material contract.
+// Material ids mirror DerivativeMain/block.properties after subtracting 10000
+// from OptiFine/Iris mc_Entity ids.
 
 #ifndef MECRAFT_GBUFFER_CONTRACT_GLSL
 #define MECRAFT_GBUFFER_CONTRACT_GLSL
 
 const int MATERIAL_DEFAULT = 0;
-const int MATERIAL_STONE = 1;
-const int MATERIAL_DIRT = 2;
-const int MATERIAL_GRASS = 3;
-const int MATERIAL_WOOD = 4;
-const int MATERIAL_LEAVES = 5;
-const int MATERIAL_PLANT = 6;
-const int MATERIAL_SAND = 7;
-const int MATERIAL_GLASS = 8;
-const int MATERIAL_WATER = 9;
-const int MATERIAL_ORE = 10;
-const int MATERIAL_EMISSIVE = 11;
-const int MATERIAL_METAL = 12;
-const int MATERIAL_ICE = 13;
-const int MATERIAL_STAINED_GLASS = 14;
+const int MATERIAL_GRASS = 1;
+const int MATERIAL_WHEAT = 2;
+const int MATERIAL_FLOWER = 3;
+const int MATERIAL_GRASS_UPPER = 4;
+const int MATERIAL_GRASS_LOWER = 5;
+const int MATERIAL_GRASS_LIKE = 6;
+const int MATERIAL_LEAVES = 7;
+const int MATERIAL_BANNER_SSS = 9;
+const int MATERIAL_SNOW_ICE_SSS = 10;
+const int MATERIAL_LAVA = 15;
+const int MATERIAL_STAINED_GLASS = 16;
+const int MATERIAL_WATER = 17;
+const int MATERIAL_ICE = 18;
+const int MATERIAL_END_PORTAL = 19;
+const int MATERIAL_TOTAL_GLOWING = 20;
+const int MATERIAL_TORCH_LIKE = 21;
+const int MATERIAL_FIRE = 22;
+const int MATERIAL_GLOWSTONE_LIKE = 23;
+const int MATERIAL_SEA_LANTERN_LIKE = 24;
+const int MATERIAL_REDSTONE = 25;
+const int MATERIAL_SOUL_FIRE = 26;
+const int MATERIAL_AMETHYST = 27;
+const int MATERIAL_GLOWBERRY = 28;
+const int MATERIAL_RAILS = 29;
+const int MATERIAL_BEACON_CORE = 30;
+const int MATERIAL_SCULK = 31;
+const int MATERIAL_GLOW_LICHEN = 32;
+const int MATERIAL_PARTIAL_GLOWING = 33;
+const int MATERIAL_MIDDLE_GLOWING = 34;
+const int MATERIAL_TEXTURED = 35;
+const int MATERIAL_TEXTURED_EMISSIVE = 36;
+const int MATERIAL_ORE = 57;
+const int MATERIAL_NETHER_ORE = 58;
+const float MATERIAL_ID_MAX = 63.0;
 
 struct SurfaceMaterial {
+    // DerivativeMain GetMaterialData(vec2): roughness=specTex.r,
+    // f0=specTex.g when MC_SPECULAR_MAP is disabled.
     float roughness;
     float f0;
+    // Packed SSS/emission hints from DerivativeMain's specTex.ba fallback.
     float emission;
     float sss;
 };
@@ -48,14 +72,33 @@ int materialKindId(float materialKind) {
     return int(round(materialKind));
 }
 
+int derivativeFragmentMaterialId(int materialId) {
+    // DerivativeMain Terrain.vert keeps ids 1..5 only for plant animation, then
+    // writes them as material 6 for the G-buffer/lighting contract.
+    return (materialId > 0 && materialId < MATERIAL_GRASS_LIKE) ? MATERIAL_GRASS_LIKE : materialId;
+}
+
 bool isMaterialKind(float materialKind, int expectedKind) {
-    return materialKindId(materialKind) == expectedKind;
+    return derivativeFragmentMaterialId(materialKindId(materialKind)) == expectedKind;
+}
+
+bool isDerivativeEmissiveMaterialId(int materialId) {
+    return materialId == MATERIAL_LAVA ||
+           (materialId >= MATERIAL_END_PORTAL && materialId <= MATERIAL_MIDDLE_GLOWING) ||
+           materialId == MATERIAL_TEXTURED_EMISSIVE;
+}
+
+bool isDerivativeSssMaterialId(int materialId) {
+    return materialId == MATERIAL_GRASS_LIKE ||
+           materialId == MATERIAL_LEAVES ||
+           materialId == MATERIAL_BANNER_SSS ||
+           materialId == MATERIAL_SNOW_ICE_SSS;
 }
 
 SurfaceMaterial defaultSurfaceMaterial() {
     SurfaceMaterial material;
-    material.roughness = 0.84;
-    material.f0 = 0.040;
+    material.roughness = 1.0;
+    material.f0 = 0.0;
     material.emission = 0.0;
     material.sss = 0.0;
     return material;
@@ -65,113 +108,72 @@ SurfaceMaterialAux defaultSurfaceMaterialAux() {
     SurfaceMaterialAux aux;
     aux.materialKind = float(MATERIAL_DEFAULT);
     aux.wetnessMask = 0.0;
-    aux.porosity = 0.65;
+    aux.porosity = 0.0;
     aux.metalness = 0.0;
     return aux;
 }
 
+float derivativeHardcodedSss(int materialId) {
+    // Matches DerivativeMain Terrain/DH/Block hardcoded fallback when no
+    // resource-pack specular map is present: specularData.a carries SSS.
+    if (materialId == MATERIAL_GRASS_LIKE) {
+        return 0.45;
+    }
+    if (materialId == MATERIAL_LEAVES || materialId == MATERIAL_SNOW_ICE_SSS) {
+        return 0.70;
+    }
+    if (materialId == MATERIAL_BANNER_SSS) {
+        return 0.65;
+    }
+    return 0.0;
+}
+
+float derivativeEmissionHint(int materialId, float emissiveHint) {
+    if (isDerivativeEmissiveMaterialId(materialId) || materialId == MATERIAL_ORE || materialId == MATERIAL_NETHER_ORE) {
+        return max(emissiveHint, 1.0);
+    }
+    return 0.0;
+}
+
 SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
     SurfaceMaterial material = defaultSurfaceMaterial();
-    int kind = materialKindId(materialKind);
+    int materialId = derivativeFragmentMaterialId(materialKindId(materialKind));
 
-    if (kind == MATERIAL_STONE) {
-        material.roughness = 0.78;
-        material.f0 = 0.055;
-    } else if (kind == MATERIAL_DIRT) {
-        material.roughness = 0.96;
-        material.f0 = 0.030;
-    } else if (kind == MATERIAL_GRASS) {
-        material.roughness = 0.88;
-        material.f0 = 0.035;
-        material.sss = 0.26;
-    } else if (kind == MATERIAL_WOOD) {
-        material.roughness = 0.68;
-        material.f0 = 0.050;
-    } else if (kind == MATERIAL_LEAVES) {
-        material.roughness = 0.74;
-        material.f0 = 0.040;
-        material.sss = 0.72;
-    } else if (kind == MATERIAL_PLANT) {
-        material.roughness = 0.82;
-        material.f0 = 0.032;
-        material.sss = 0.78;
-    } else if (kind == MATERIAL_SAND) {
-        material.roughness = 0.92;
-        material.f0 = 0.026;
-    } else if (kind == MATERIAL_GLASS) {
-        material.roughness = 0.08;
-        material.f0 = 0.060;
-    } else if (kind == MATERIAL_WATER) {
-        material.roughness = 0.03;
-        material.f0 = 0.020;
-    } else if (kind == MATERIAL_ORE) {
-        material.roughness = 0.42;
-        material.f0 = 0.120;
-    } else if (kind == MATERIAL_EMISSIVE) {
-        material.roughness = 0.44;
-        material.f0 = 0.060;
-        material.emission = pow(emissiveHint, 1.35);
-    } else if (kind == MATERIAL_METAL) {
-        material.roughness = 0.30;
-        material.f0 = 0.260;
+    if (materialId == MATERIAL_STAINED_GLASS) {
+        material.roughness = 0.04;
+        material.f0 = 0.04;
+    } else if (materialId == MATERIAL_WATER) {
+        material.roughness = 0.0;
+        material.f0 = 0.02;
+    } else if (materialId == MATERIAL_ICE) {
+        material.roughness = 0.10;
+        material.f0 = 0.04;
     }
 
+    material.sss = derivativeHardcodedSss(materialId);
+    material.emission = derivativeEmissionHint(materialId, emissiveHint);
     return material;
 }
 
 SurfaceMaterialAux surfaceMaterialAuxForKind(float materialKind) {
     SurfaceMaterialAux aux = defaultSurfaceMaterialAux();
-    int kind = materialKindId(materialKind);
-    aux.materialKind = clamp(float(kind), 0.0, 15.0);
+    int materialId = derivativeFragmentMaterialId(materialKindId(materialKind));
+    aux.materialKind = clamp(float(materialId), 0.0, MATERIAL_ID_MAX);
 
-    if (kind == MATERIAL_STONE) {
-        aux.wetnessMask = 0.62;
-        aux.porosity = 0.44;
-    } else if (kind == MATERIAL_DIRT) {
-        aux.wetnessMask = 0.88;
-        aux.porosity = 0.82;
-    } else if (kind == MATERIAL_GRASS) {
-        aux.wetnessMask = 0.78;
-        aux.porosity = 0.70;
-    } else if (kind == MATERIAL_WOOD) {
-        aux.wetnessMask = 0.48;
-        aux.porosity = 0.58;
-    } else if (kind == MATERIAL_LEAVES) {
-        aux.wetnessMask = 0.68;
-        aux.porosity = 0.34;
-    } else if (kind == MATERIAL_PLANT) {
-        aux.wetnessMask = 0.72;
-        aux.porosity = 0.52;
-    } else if (kind == MATERIAL_SAND) {
-        aux.wetnessMask = 0.55;
-        aux.porosity = 0.90;
-    } else if (kind == MATERIAL_GLASS) {
-        aux.wetnessMask = 0.18;
-        aux.porosity = 0.02;
-    } else if (kind == MATERIAL_WATER) {
+    if (materialId == MATERIAL_STAINED_GLASS || materialId == MATERIAL_WATER || materialId == MATERIAL_ICE) {
         aux.wetnessMask = 1.0;
-        aux.porosity = 0.0;
-    } else if (kind == MATERIAL_ORE) {
-        aux.wetnessMask = 0.38;
-        aux.porosity = 0.18;
-    } else if (kind == MATERIAL_EMISSIVE) {
-        aux.wetnessMask = 0.15;
-        aux.porosity = 0.10;
-    } else if (kind == MATERIAL_METAL) {
-        aux.wetnessMask = 0.20;
-        aux.porosity = 0.04;
-        aux.metalness = 1.0;
     }
-
     return aux;
 }
 
 vec4 packGBufferMaterial(SurfaceMaterial material) {
+    // colortex3Out.zw in DerivativeMain pack specularData.rg/ba. Our target is
+    // expanded RGBA: roughness/f0/emission/sss.
     return vec4(material.roughness, material.f0, material.emission, material.sss);
 }
 
 vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
-    return vec4(clamp(aux.materialKind / 15.0, 0.0, 1.0),
+    return vec4(clamp(aux.materialKind / MATERIAL_ID_MAX, 0.0, 1.0),
                 clamp(aux.wetnessMask, 0.0, 1.0),
                 clamp(aux.porosity, 0.0, 1.0),
                 clamp(aux.metalness, 0.0, 1.0));
@@ -179,8 +181,8 @@ vec4 packGBufferMaterialAux(SurfaceMaterialAux aux) {
 
 SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
     SurfaceMaterial material;
-    material.roughness = clamp(packedMaterial.r, 0.03, 1.0);
-    material.f0 = clamp(packedMaterial.g, 0.02, 0.35);
+    material.roughness = clamp(packedMaterial.r, 0.0, 1.0);
+    material.f0 = clamp(packedMaterial.g, 0.0, 1.0);
     material.emission = clamp(packedMaterial.b, 0.0, 1.0);
     material.sss = clamp(packedMaterial.a, 0.0, 1.0);
     return material;
@@ -188,7 +190,7 @@ SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
 
 SurfaceMaterialAux unpackGBufferMaterialAux(vec4 packedAux) {
     SurfaceMaterialAux aux;
-    aux.materialKind = round(clamp(packedAux.r, 0.0, 1.0) * 15.0);
+    aux.materialKind = round(clamp(packedAux.r, 0.0, 1.0) * MATERIAL_ID_MAX);
     aux.wetnessMask = clamp(packedAux.g, 0.0, 1.0);
     aux.porosity = clamp(packedAux.b, 0.0, 1.0);
     aux.metalness = clamp(packedAux.a, 0.0, 1.0);
@@ -213,11 +215,6 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     return surface;
 }
 
-//----------------------------------------------------------------------------//
-// Translucent mask — classifies translucent material types for composite passes.
-// Matches DerivativeMain lib/Head/Mask.inc TranslucentMask semantics.
-//----------------------------------------------------------------------------//
-
 struct TranslucentMask {
     bool isWater;
     bool isIce;
@@ -229,12 +226,12 @@ struct TranslucentMask {
 
 TranslucentMask decodeTranslucentMask(float materialKind) {
     TranslucentMask mask;
-    int kind = int(round(materialKind));
-    mask.isWater = (kind == MATERIAL_WATER);
-    mask.isIce = (kind == MATERIAL_ICE);
-    mask.isGlass = (kind == MATERIAL_GLASS);
-    mask.isStainedGlass = (kind == MATERIAL_STAINED_GLASS);
-    mask.isTranslucent = mask.isWater || mask.isIce || mask.isGlass || mask.isStainedGlass;
+    int materialId = derivativeFragmentMaterialId(materialKindId(materialKind));
+    mask.isWater = (materialId == MATERIAL_WATER);
+    mask.isIce = (materialId == MATERIAL_ICE);
+    mask.isStainedGlass = (materialId == MATERIAL_STAINED_GLASS);
+    mask.isGlass = mask.isStainedGlass;
+    mask.isTranslucent = mask.isWater || mask.isIce || mask.isStainedGlass;
     mask.stainedGlassTint = vec3(1.0);
     return mask;
 }

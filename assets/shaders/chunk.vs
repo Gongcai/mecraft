@@ -40,9 +40,9 @@ void main() {
     vFogDist = max(0.0, -viewPos.z);
 
     uint tintKind = (aTintPacked >> 14u) & 3u;
-    uint tintU = (aTintPacked >> 5u) & 31u;
-    uint tintV = aTintPacked & 31u;
+    uint tintU = (aTintPacked >> 4u) & 15u;
+    uint tintV = aTintPacked & 15u;
     vTintKind = float(tintKind);
-    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 32.0;
+    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 16.0;
 }
 

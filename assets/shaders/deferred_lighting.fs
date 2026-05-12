@@ -621,6 +621,9 @@ void main() {
         roughness = mix(roughness, max(0.08, roughness * 0.36), wetness * (0.72 + surface.aux.metalness * 0.18));
         f0Scalar = mix(f0Scalar, max(f0Scalar, 0.055), wetness * (0.35 + surface.aux.metalness * 0.20));
     }
+    bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
+                                 transMask.isTranslucent;
+    float derivativeSpecularMask = hasDerivativeSpecular ? 1.0 : 0.0;
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
@@ -687,14 +690,15 @@ void main() {
     float specG = smithG1(ndotl, roughness) * smithG1(ndotv, roughness);
     vec3 directSpecular = derivativeDirectColor * specF * (specD * specG / max(4.0 * ndotl * ndotv, 0.0001));
     directSpecular *= ndotl * sunShadow * cloudShadow * skyLightMask * uDirectSunStrength;
-    directSpecular *= mix(1.18, 0.18, roughness);
+    directSpecular *= mix(1.18, 0.18, roughness) * derivativeSpecularMask;
     float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     vec3 skyAmbient = derivativeSkyColor * coolSkyColor * shadowTint * (0.026 + 0.54 * outdoorSkyMask) *
                       uSkyAmbientStrength *
                       mix(0.48, 1.0, upward) +
                       moonFill;
     skyAmbient *= mix(vec3(1.0), uShadowTintColor, (1.0 - shadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
-    vec3 skySpecular = coolSkyColor * specF * pow(1.0 - roughness, 1.65) * (0.018 + 0.105 * outdoorSkyMask);
+    vec3 skySpecular = coolSkyColor * specF * pow(1.0 - roughness, 1.65) * (0.018 + 0.105 * outdoorSkyMask) *
+                       derivativeSpecularMask;
 
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
     vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
@@ -724,57 +728,73 @@ void main() {
     color += albedo * derivativeDirectColor * backScatter * sss * cloudShadow * (0.46 + 0.20 * uDirectSunStrength);
     float moonBackScatter = pow(max(dot(-normal, moonDir), 0.0), 1.45) * moonMask;
     color += albedo * uMoonLightColor * moonBackScatter * sss * 0.12;
-    float specularSurfaceMask = smoothstep(0.025, 0.14, f0Scalar) * (1.0 - roughness * 0.45);
+    float specularSurfaceMask = smoothstep(0.025, 0.14, f0Scalar) * (1.0 - roughness * 0.45) *
+                                derivativeSpecularMask;
     color += (directSpecular + skySpecular) * vertexAo * mix(1.0, ssao, 0.35) * (0.72 + 0.58 * specularSurfaceMask);
     float shadowMask = (1.0 - shadow) * outdoorSkyMask;
     color = desaturateLinear(color, shadowMask * uShadowDesaturation);
-    // Per-type emission (ported from DerivativeMain BlockLighting.glsl).
-    // Uses albedo color analysis to distinguish emission types since mecraft
-    // uses a single MATERIAL_EMISSIVE kind rather than per-block material IDs.
-    float emissionStrength = max(emissiveHint * emissiveHint, materialEmission);
     float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-    float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);
+    float albedoLength = length(albedo);
+    vec3 albedoRawApprox = pow(max(albedo, vec3(0.0)), vec3(1.0 / 2.2));
 
     vec3 emissionColor = vec3(0.0);
-    if (emissionStrength > 0.01) {
-        // Torch-like: warm red-dominant emission
-        bool isTorchLike = albedo.r > 0.8 || albedo.r > albedo.g * 1.4;
-        // Fire: high luminance warm emission
-        bool isFireLike = emissionLuma > 0.6 && albedo.r > albedo.g;
-        // Glowstone-like: moderate luminance warm
-        bool isGlowstoneLike = emissionLuma > 0.3 && emissionLuma < 0.7 && albedo.r > albedo.b;
-        // Sea lantern: blue-dominant cool white
-        bool isSeaLantern = albedo.b > albedo.r * 1.1 && albedo.b > 0.4;
-        // Soul fire: blue detection
-        bool isSoulFire = albedo.b > 0.53 && albedo.b > albedo.r;
-        // Redstone: red-dominant
-        bool isRedstone = albedo.r > 0.65 && albedo.r > albedo.g * 1.8;
-        // Sculk: blue-dominant dark
-        bool isSculk = albedo.b * 2.0 > albedo.r + albedo.g && albedo.b > 0.55;
-        // Amethyst: purple (red + blue, low green)
-        bool isAmethyst = albedo.r > 0.3 && albedo.b > 0.4 && albedo.g < 0.3;
+    if (materialKind == MATERIAL_TOTAL_GLOWING || materialKind == MATERIAL_TEXTURED_EMISSIVE) {
+        emissionColor += vec3(albedoLength);
+    } else if (materialKind == MATERIAL_TORCH_LIKE) {
+        emissionColor += 4.0 * blockLightColor * float(albedoRawApprox.r > 0.8 || albedoRawApprox.r > albedoRawApprox.g * 1.4);
+    } else if (materialKind == MATERIAL_FIRE || materialKind == MATERIAL_LAVA) {
+        emissionColor += 6.0 * blockLightColor * cube(albedoLength);
+    } else if (materialKind == MATERIAL_GLOWSTONE_LIKE) {
+        emissionColor += 2.5 * blockLightColor * cube(albedoLength);
+    } else if (materialKind == MATERIAL_SEA_LANTERN_LIKE) {
+        emissionColor += vec3(2.0 * cube(albedoLength));
+    } else if (materialKind == MATERIAL_REDSTONE) {
+        emissionColor += vec3(2.1, 0.9, 0.9) * step(0.65, albedoRawApprox.r);
+    } else if (materialKind == MATERIAL_SOUL_FIRE) {
+        emissionColor += vec3(albedoLength + 0.6) * step(0.53, albedoRawApprox.b);
+    } else if (materialKind == MATERIAL_AMETHYST) {
+        emissionColor += min(blockLightMask * 200.0 + 0.05, 2.0) *
+                         pow(albedoLength, min(blockLightMask * 100.0, 2.5));
+    } else if (materialKind == MATERIAL_GLOWBERRY) {
+        emissionColor += clamp(dot(clamp(albedo - 0.1, 0.0, 1.0), vec3(1.0, -0.6, -0.99)), 0.0, 1.0) *
+                         vec3(28.0, 25.0, 21.0);
+    } else if (materialKind == MATERIAL_RAILS) {
+        emissionColor += vec3(2.1, 0.9, 0.9) * albedoLength *
+                         step(albedoRawApprox.g * 2.0 + albedoRawApprox.b, albedoRawApprox.r);
+    } else if (materialKind == MATERIAL_BEACON_CORE) {
+        vec3 midBlockPos = abs(fract(worldPos) - 0.5);
+        emissionColor += vec3(step(max(max(midBlockPos.x, midBlockPos.y), midBlockPos.z), 0.4) *
+                              step(0.5, albedo.b) * 6.0 * albedoLength);
+    } else if (materialKind == MATERIAL_SCULK) {
+        emissionColor += vec3(0.04 * sqr(albedoLength) *
+                              float((albedoRawApprox.b * 2.0 > albedoRawApprox.r + albedoRawApprox.g) &&
+                                    albedoRawApprox.b > 0.55));
+    } else if (materialKind == MATERIAL_GLOW_LICHEN) {
+        emissionColor += vec3(albedoRawApprox.r > albedoRawApprox.b * 1.2 ? 3.0 : albedoLength * 0.1);
+    } else if (materialKind == MATERIAL_PARTIAL_GLOWING) {
+        vec3 partialGlow = clamp(albedo - 0.5, 0.0, 1.0);
+        emissionColor += 30.0 * albedoLength * partialGlow * partialGlow * partialGlow;
+    } else if (materialKind == MATERIAL_MIDDLE_GLOWING) {
+        vec2 midBlockPosXZ = abs(fract(worldPos.xz) - 0.5);
+        emissionColor += vec3(step(max(midBlockPosXZ.x, midBlockPosXZ.y), 0.063) * albedoLength);
+    }
 
-        if (isTorchLike) {
-            emissionColor = blockLightColor * 4.0 * emissionStrength;
-        } else if (isFireLike) {
-            emissionColor = blockLightColor * 6.0 * cube(emissionLuma);
-        } else if (isSeaLantern) {
-            emissionColor = vec3(1.0, 0.95, 0.92) * 2.0 * cube(emissionLuma);
-        } else if (isSoulFire) {
-            emissionColor = vec3(0.7, 0.85, 1.0) * (emissionLuma + 0.6) * emissionStrength;
-        } else if (isRedstone) {
-            emissionColor = vec3(2.1, 0.9, 0.9) * emissionStrength;
-        } else if (isSculk) {
-            emissionColor = vec3(0.4, 0.5, 0.9) * 0.04 * emissionLuma * emissionLuma;
-        } else if (isAmethyst) {
-            emissionColor = vec3(0.7, 0.4, 0.9) * 1.5 * emissionStrength;
-        } else if (isGlowstoneLike) {
-            emissionColor = blockLightColor * 2.5 * cube(emissionLuma);
-        } else {
-            // Generic emissive fallback
-            emissionColor = mix(albedo, vec3(1.0, 0.88, 0.64) * max(emissionLuma, 0.45), 0.42);
-        }
-        color += emissionColor * (0.55 + 0.82 * uBlockLightStrength);
+    if (materialKind == MATERIAL_ORE) {
+        float isOre = clamp((max(max(dot(albedoRawApprox, vec3(2.0, -1.0, -1.0)),
+                                      dot(albedoRawApprox, vec3(-1.0, 2.0, -1.0))),
+                                  dot(albedoRawApprox, vec3(-1.0, -1.0, 2.0))) - 0.1) / 0.3, 0.0, 1.0);
+        emissionColor += pow(max(albedoRawApprox - vec3(0.1), vec3(0.0)), vec3(5.0)) * isOre * 2.0;
+    }
+    if (materialKind == MATERIAL_NETHER_ORE) {
+        float isNetherOre = clamp(dot(albedoRawApprox, vec3(-20.0, 30.0, 10.0)), 0.0, 1.0);
+        vec3 netherOreGlow = max(albedoRawApprox - vec3(0.1), vec3(0.0));
+        emissionColor += netherOreGlow * netherOreGlow * netherOreGlow * isNetherOre * 2.0;
+    }
+    if (materialEmission > 0.01) {
+        emissionColor += albedo * materialEmission * 1.5;
+    }
+    if (max(max(emissionColor.r, emissionColor.g), emissionColor.b) > 0.0) {
+        color += emissionColor * uBlockLightStrength;
     }
 
     if (uFogEnabled != 0) {

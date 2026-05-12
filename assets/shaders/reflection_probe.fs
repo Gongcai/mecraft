@@ -96,7 +96,7 @@ void main() {
     if (depth >= 0.9999) {
         vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
-        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, skyDir);
+        vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
         FragColor = vec4(sky, 0.0);
         return;
     }
@@ -105,11 +105,21 @@ void main() {
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
     vec3 reflectedDir = reflect(viewDir, normal);
-    vec3 skyReflection = sampleSkyRadiance(uSkyCaptureTex, reflectedDir);
+    vec3 skyReflection = sampleSkyRadianceCloudy(uSkyCaptureTex, reflectedDir);
+    TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 
     vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
     float smoothness = 1.0 - clamp(material.roughness, 0.0, 1.0);
     float wetBoost = clamp(uWeatherWetness, 0.0, 1.0) * aux.wetnessMask * clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
+    bool hasDerivativeReflection = transMask.isTranslucent ||
+                                   aux.metalness > 0.5 ||
+                                   smoothness > 0.375 ||
+                                   wetBoost > 0.70;
+    if (!hasDerivativeReflection) {
+        FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
     float fresnel = pow(1.0 - clamp(dot(-viewDir, normal), 0.0, 1.0), 5.0);
     float reflectance = clamp(material.f0 * 2.0 + smoothness * 0.18 + fresnel * 0.18 +
                               wetBoost * (0.18 + aux.porosity * 0.16), 0.0, 1.0);

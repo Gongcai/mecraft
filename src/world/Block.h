@@ -31,7 +31,8 @@ namespace BlockIds {
 }
 
 namespace BlockMaterialKinds {
-// Mirrored by assets/shaders/gbuffer_contract.glsl.
+// Legacy broad categories used by CPU-side gameplay helpers. The renderer
+// consumes derivativeMaterialId below for shaderpack-compatible material logic.
 constexpr uint8_t DEFAULT = 0;
 constexpr uint8_t STONE = 1;
 constexpr uint8_t DIRT = 2;
@@ -48,6 +49,45 @@ constexpr uint8_t METAL = 12;
 constexpr uint8_t ICE = 13;
 constexpr uint8_t STAINED_GLASS = 14;
 constexpr uint8_t MAX_BUILTIN = STAINED_GLASS;
+}
+
+namespace DerivativeMaterialIds {
+// Mirrored by assets/shaders/gbuffer_contract.glsl and DerivativeMain/block.properties.
+constexpr uint8_t DEFAULT = 0;
+constexpr uint8_t GRASS = 1;
+constexpr uint8_t WHEAT = 2;
+constexpr uint8_t FLOWER = 3;
+constexpr uint8_t GRASS_UPPER = 4;
+constexpr uint8_t GRASS_LOWER = 5;
+constexpr uint8_t GRASS_LIKE = 6;
+constexpr uint8_t LEAVES = 7;
+constexpr uint8_t BANNER_SSS = 9;
+constexpr uint8_t SNOW_ICE_SSS = 10;
+constexpr uint8_t LAVA = 15;
+constexpr uint8_t STAINED_GLASS = 16;
+constexpr uint8_t WATER = 17;
+constexpr uint8_t ICE = 18;
+constexpr uint8_t END_PORTAL = 19;
+constexpr uint8_t TOTAL_GLOWING = 20;
+constexpr uint8_t TORCH_LIKE = 21;
+constexpr uint8_t FIRE = 22;
+constexpr uint8_t GLOWSTONE_LIKE = 23;
+constexpr uint8_t SEA_LANTERN_LIKE = 24;
+constexpr uint8_t REDSTONE = 25;
+constexpr uint8_t SOUL_FIRE = 26;
+constexpr uint8_t AMETHYST = 27;
+constexpr uint8_t GLOWBERRY = 28;
+constexpr uint8_t RAILS = 29;
+constexpr uint8_t BEACON_CORE = 30;
+constexpr uint8_t SCULK = 31;
+constexpr uint8_t GLOW_LICHEN = 32;
+constexpr uint8_t PARTIAL_GLOWING = 33;
+constexpr uint8_t MIDDLE_GLOWING = 34;
+constexpr uint8_t TEXTURED = 35;
+constexpr uint8_t TEXTURED_EMISSIVE = 36;
+constexpr uint8_t ORE = 57;
+constexpr uint8_t NETHER_ORE = 58;
+constexpr uint8_t MAX_BUILTIN = NETHER_ORE;
 }
 
 namespace BlockMaterialFlags {
@@ -75,17 +115,17 @@ struct BlockMaterialInfo {
 
 namespace BlockMaterials {
 inline constexpr std::array<BlockMaterialInfo, BlockMaterialKinds::MAX_BUILTIN + 1> BUILTIN = {{
-    {BlockMaterialKinds::DEFAULT, "default", BlockMaterialFlags::Terrain, 0.84f, 0.040f, 0.0f, 0.0f},
-    {BlockMaterialKinds::STONE, "stone", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 0.78f, 0.055f, 0.0f, 0.0f},
-    {BlockMaterialKinds::DIRT, "dirt", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 0.96f, 0.030f, 0.0f, 0.0f},
-    {BlockMaterialKinds::GRASS, "grass", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain | BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 0.88f, 0.035f, 0.0f, 0.26f},
-    {BlockMaterialKinds::WOOD, "wood", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 0.68f, 0.050f, 0.0f, 0.0f},
-    {BlockMaterialKinds::LEAVES, "leaves", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 0.74f, 0.040f, 0.0f, 0.72f},
-    {BlockMaterialKinds::PLANT, "plant", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 0.82f, 0.032f, 0.0f, 0.78f},
-    {BlockMaterialKinds::SAND, "sand", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 0.92f, 0.026f, 0.0f, 0.0f},
+    {BlockMaterialKinds::DEFAULT, "default", BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::STONE, "stone", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::DIRT, "dirt", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::GRASS, "grass", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain | BlockMaterialFlags::Vegetation, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::WOOD, "wood", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
+    {BlockMaterialKinds::LEAVES, "leaves", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 1.0f, 0.0f, 0.0f, 0.70f},
+    {BlockMaterialKinds::PLANT, "plant", BlockMaterialFlags::Vegetation | BlockMaterialFlags::Subsurface, 1.0f, 0.0f, 0.0f, 0.45f},
+    {BlockMaterialKinds::SAND, "sand", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
     {BlockMaterialKinds::GLASS, "glass", BlockMaterialFlags::Translucent | BlockMaterialFlags::Reflective, 0.08f, 0.060f, 0.0f, 0.0f},
     {BlockMaterialKinds::WATER, "water", BlockMaterialFlags::Translucent | BlockMaterialFlags::Water | BlockMaterialFlags::Reflective, 0.03f, 0.020f, 0.0f, 0.0f},
-    {BlockMaterialKinds::ORE, "ore", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain | BlockMaterialFlags::Reflective, 0.42f, 0.120f, 0.0f, 0.0f},
+    {BlockMaterialKinds::ORE, "ore", BlockMaterialFlags::Solid | BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
     {BlockMaterialKinds::EMISSIVE, "emissive", BlockMaterialFlags::Solid | BlockMaterialFlags::Emissive, 0.44f, 0.060f, 1.0f, 0.0f},
     {BlockMaterialKinds::METAL, "metal", BlockMaterialFlags::Solid | BlockMaterialFlags::Reflective | BlockMaterialFlags::Metallic, 0.30f, 0.260f, 0.0f, 0.0f},
 }};
@@ -187,6 +227,7 @@ struct BlockDef {
     std::string renderShapeName = "cube";
     uint8_t renderShapeTag = 0;
     uint8_t materialKind = 0;
+    uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
     std::string placementStrategy = "simple";
     std::string supportRule;
     BiomeTintKind biomeTint = BiomeTintKind::None;

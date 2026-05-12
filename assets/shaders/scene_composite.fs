@@ -66,9 +66,11 @@ void main() {
 
     vec4 cloud = texture(uCloudTex, vTexCoord);
     if (depth >= 0.9999) {
+        // Sky pixels: sample the cloudy sky region (rows 258..513) which has clouds baked in.
+        // Matches DerivativeMain Deferred0.glsl cloudy sky map.
         vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
-        vec3 sky = texture(uSkyCaptureTex, projectSky(skyDir)).rgb;
+        vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
         color = mix(sky, cloud.rgb, clamp(cloud.a, 0.0, 1.0) * clamp(uCloudCompositeStrength, 0.0, 1.0));
     } else if (cloud.a > 0.001) {
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);

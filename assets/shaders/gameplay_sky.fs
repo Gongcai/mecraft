@@ -27,12 +27,14 @@ uniform vec3 uDirectIlluminance;
 uniform vec3 uSkyIlluminance;
 uniform vec3 uSunIlluminance;
 uniform vec3 uMoonIlluminance;
+uniform vec3 uCloudDynamicWeather;
 
 // Atmosphere LUT (modes 4, 5)
 uniform sampler3D uAtmosphereLut;
 uniform float uCameraAltitude;
 
 #include "atmosphere_lut.glsl"
+#include "render_contract.glsl"
 
 const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
@@ -117,8 +119,9 @@ void main() {
 
     if (uMode == 4) {
         // DerivativeMain-compatible sky capture projection.
+        // Matches UnprojectSky in DerivativeMain Atmosphere.glsl.
         vec2 uv = clamp(vUV, vec2(0.0), vec2(1.0));
-        float u = fract((uv.x - 2.0 / 256.0) / (1.0 - 4.0 / 256.0));
+        float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) / (1.0 - 4.0 / float(skyCaptureRes.x)));
         float phi = u * kTwoPi;
         float theta = uv.y * kPi;
         float sinTheta = sin(theta);
@@ -138,7 +141,7 @@ void main() {
 
     if (uMode == 5) {
         // Sky cache metadata texel pass — illuminance computed from atmosphere LUT.
-        // Rendered as a 1x4 viewport at column x=255 of the sky capture FBO.
+        // Rendered as a 1x6 viewport at column x=255 of the sky capture FBO.
         int row = int(gl_FragCoord.y);
         vec3 camera = vec3(0.0, atmPlanetRadius + max(uCameraAltitude, 0.0) + 100.0, 0.0);
         vec3 sunDir = normalize(uSunDirection);
@@ -151,6 +154,7 @@ void main() {
         else if (row == 1) value = skyIrr;         // skyIlluminance
         else if (row == 2) value = sunIrr;         // sunIlluminance
         else if (row == 3) value = moonIrr;        // moonIlluminance
+        else if (row == 5) value = uCloudDynamicWeather; // cloudDynamicWeather
         else discard;
         FragColor = vec4(value, 1.0);
         return;

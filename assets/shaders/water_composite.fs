@@ -282,7 +282,7 @@ vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight) {
 
     float nDotUp = clamp((dot(normal, vec3(0.0, 1.0, 0.0)) + 0.7) * 2.0, 0.0, 1.0) * 0.75 + 0.25;
     vec3 skybox = (uSkyCaptureEnabled != 0)
-        ? sampleSkyRadiance(uSkyCaptureTex, dir)
+        ? sampleSkyRadianceCloudy(uSkyCaptureTex, dir)
         : uSkyAmbientColor;
     return max(skybox * skyWeight * nDotUp, vec3(0.0));
 }

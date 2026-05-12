@@ -89,12 +89,14 @@ public:
     [[nodiscard]] bool isReady() const { return m_ready; }
 
 private:
-    // Sky capture: 256x256 equirectangular map.
-    // Columns 0..254 store sky radiance, column 255 stores metadata texels
-    // (directIlluminance, skyIlluminance, sunIlluminance, moonIlluminance).
-    // Height 256 matches DerivativeMain's skyCaptureRes.y.
+    // Sky capture: 256x514 equirectangular map (matches DerivativeMain colortex5).
+    // skyCaptureRes = ivec2(255, 256), texture = 256 wide x 514 tall.
+    // Rows 0..257:   raw atmospheric sky radiance (equirectangular).
+    // Rows 258..513: cloudy skybox (sky + clouds composited).
+    // Column 255, rows 0-5: metadata texels
+    //   (directIlluminance, skyIlluminance, sunIlluminance, moonIlluminance, unused, cloudDynamicWeather).
     static constexpr int kSkyCaptureWidth = 256;
-    static constexpr int kSkyCaptureHeight = 256;
+    static constexpr int kSkyCaptureHeight = 514;
     static constexpr GLenum kGAlbedoAttachment = GL_COLOR_ATTACHMENT0;
     static constexpr GLenum kGNormalAoAttachment = GL_COLOR_ATTACHMENT1;
     static constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;
@@ -119,7 +121,7 @@ private:
     // 1 RGBA16F  = encoded world normal.rgb, vertex AO.a
     // 2 RG8      = sky light.r, block light.g
     // 3 RGBA8    = roughness.r, f0.g, emission.b, subsurface.a
-    // 4 RGBA8    = material kind.r, wetness mask.g, porosity.b, metalness.a
+    // 4 RGBA8    = DerivativeMain material id.r, wetness mask.g, porosity.b, metalness.a
     GLuint m_gBufferFbo = 0;
     GLuint m_gAlbedo = 0;
     GLuint m_gNormalAo = 0;

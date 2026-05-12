@@ -97,7 +97,8 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
                         const float layer,
                         const float normal,
                         const std::array<glm::vec3, 4>& corners,
-                        const TorchModelUvRect& uvRect) {
+                        const TorchModelUvRect& uvRect,
+                        const uint8_t derivativeMaterialId) {
     const std::array<glm::vec2, 4> uv = {{
         {uvRect.u0, uvRect.v0},
         {uvRect.u1, uvRect.v0},
@@ -118,7 +119,14 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
             1.0f,
             0.0f,
             3.0f,
-            layer
+            layer,
+            1.0f,
+            0.0f,
+            0.0f,
+            BlockTintKinds::NONE,
+            0,
+            0,
+            derivativeMaterialId
         ));
     }
 }
@@ -371,7 +379,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     0.0f,
                     tintKind,
                     tintU,
-                    tintV
+                    tintV,
+                    def.derivativeMaterialId
                 ));
             }
         };
@@ -397,37 +406,37 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
             {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax},
             {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMin},
             {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMin}
-        }}, kTorchTopUv);
+        }}, kTorchTopUv, def.derivativeMaterialId);
         emitTorchModelFace(vertices, layer, 1.0f, {{
             {kTorchModelCoreMin, 0.0f, kTorchModelCoreMin},
             {kTorchModelCoreMax, 0.0f, kTorchModelCoreMin},
             {kTorchModelCoreMax, 0.0f, kTorchModelCoreMax},
             {kTorchModelCoreMin, 0.0f, kTorchModelCoreMax}
-        }}, kTorchBottomUv);
+        }}, kTorchBottomUv, def.derivativeMaterialId);
         emitTorchModelFace(vertices, layer, 4.0f, {{
             {kTorchModelCoreMin, 0.0f, 0.0f},
             {kTorchModelCoreMin, 0.0f, 1.0f},
             {kTorchModelCoreMin, 1.0f, 1.0f},
             {kTorchModelCoreMin, 1.0f, 0.0f}
-        }}, kTorchFullUv);
+        }}, kTorchFullUv, def.derivativeMaterialId);
         emitTorchModelFace(vertices, layer, 5.0f, {{
             {kTorchModelCoreMax, 0.0f, 1.0f},
             {kTorchModelCoreMax, 0.0f, 0.0f},
             {kTorchModelCoreMax, 1.0f, 0.0f},
             {kTorchModelCoreMax, 1.0f, 1.0f}
-        }}, kTorchFullUv);
+        }}, kTorchFullUv, def.derivativeMaterialId);
         emitTorchModelFace(vertices, layer, 2.0f, {{
             {0.0f, 0.0f, kTorchModelCoreMax},
             {1.0f, 0.0f, kTorchModelCoreMax},
             {1.0f, 1.0f, kTorchModelCoreMax},
             {0.0f, 1.0f, kTorchModelCoreMax}
-        }}, kTorchFullUv);
+        }}, kTorchFullUv, def.derivativeMaterialId);
         emitTorchModelFace(vertices, layer, 3.0f, {{
             {1.0f, 0.0f, kTorchModelCoreMin},
             {0.0f, 0.0f, kTorchModelCoreMin},
             {0.0f, 1.0f, kTorchModelCoreMin},
             {1.0f, 1.0f, kTorchModelCoreMin}
-        }}, kTorchFullUv);
+        }}, kTorchFullUv, def.derivativeMaterialId);
     } else {
         for (int face = 0; face < 6; ++face) {
             int tileIndex = getFaceTextureIndex(def, face);
@@ -461,7 +470,8 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
                     0.0f,
                     tintKind,
                     tintU,
-                    tintV
+                    tintV,
+                    def.derivativeMaterialId
                 ));
             }
         }

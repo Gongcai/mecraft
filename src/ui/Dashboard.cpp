@@ -522,7 +522,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.colorLumaR = 1.02f;
             pipeline.colorLumaG = 1.0f;
             pipeline.colorLumaB = 0.96f;
-            pipeline.albedoDesaturation = 0.18f;
+            pipeline.albedoDesaturation = 0.0f;
             pipeline.sunWarmth = 0.34f;
             pipeline.skyCoolness = 0.18f;
             pipeline.shadowDesaturation = 0.22f;
@@ -575,7 +575,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             pipeline.colorLumaR = 1.04f;
             pipeline.colorLumaG = 1.0f;
             pipeline.colorLumaB = 0.93f;
-            pipeline.albedoDesaturation = 0.26f;
+            pipeline.albedoDesaturation = 0.0f;
             pipeline.sunWarmth = 0.48f;
             pipeline.skyCoolness = 0.24f;
             pipeline.shadowDesaturation = 0.34f;

@@ -7,17 +7,19 @@
 #ifndef MECRAFT_RENDER_CONTRACT_GLSL
 #define MECRAFT_RENDER_CONTRACT_GLSL
 
-// Sky capture resolution — must match DeferredRenderTargets.h kSkyCaptureWidth/Height.
-// Columns 0..skyCaptureRes.x-2 store equirectangular sky radiance.
-// Column skyCaptureRes.x-1 stores metadata texels (illuminance, weather).
-const ivec2 skyCaptureRes = ivec2(256, 256);
+// Sky capture resolution — matches DerivativeMain Settings.glsl skyCaptureRes.
+// Texture is 256 wide x 514 tall (skyCaptureRes.x + 1 metadata column, skyCaptureRes.y * 2 + 2 rows).
+// Rows 0..skyCaptureRes.y+1:  raw atmospheric sky radiance (equirectangular).
+// Rows skyCaptureRes.y+2..:   cloudy skybox (sky + clouds composited).
+// Column skyCaptureRes.x, rows 0-5: metadata texels.
+const ivec2 skyCaptureRes = ivec2(255, 256);
 
 //----------------------------------------------------------------------------//
 // Sky cache metadata texel access
 //----------------------------------------------------------------------------//
 
 vec3 sampleSkyMetadata(sampler2D skyCapture, int row) {
-    return texelFetch(skyCapture, ivec2(skyCaptureRes.x - 1, row), 0).rgb;
+    return texelFetch(skyCapture, ivec2(skyCaptureRes.x, row), 0).rgb;
 }
 
 // Sun irradiance on horizontal ground plane (lux, physically scaled).
@@ -32,10 +34,14 @@ vec3 getSunIlluminance(sampler2D skyCapture)    { return sampleSkyMetadata(skyCa
 // Lunar disk luminous radiance (cd/m^2).
 vec3 getMoonIlluminance(sampler2D skyCapture)   { return sampleSkyMetadata(skyCapture, 3); }
 
+// Cloud dynamic weather (cirrocumulus, cirrus, storm factors).
+vec3 getCloudDynamicWeather(sampler2D skyCapture) { return sampleSkyMetadata(skyCapture, 5); }
+
 //----------------------------------------------------------------------------//
 // Equirectangular sky projection.
 // Matches DerivativeMain lib/Atmosphere/Atmosphere.glsl ProjectSky/UnprojectSky:
 // longitude in x with a 2px border, polar angle acos(y) in y.
+// Raw sky occupies v in [0,1], cloudy sky occupies v in [1,2] (offset by one skyCaptureRes.y unit).
 //----------------------------------------------------------------------------//
 
 vec2 projectSky(vec3 direction) {
@@ -46,6 +52,13 @@ vec2 projectSky(vec3 direction) {
     return clamp(vec2(u, v), vec2(0.0), vec2(1.0));
 }
 
+// Project sky direction into the cloudy sky region (rows skyCaptureRes.y+2..).
+// Adds 1.0 to v so the UV maps to the lower half of the texture.
+vec2 projectSkyCloudy(vec3 direction) {
+    vec2 uv = projectSky(direction);
+    return vec2(uv.x, uv.y + 1.0);
+}
+
 vec3 unprojectSky(vec2 uv) {
     float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) / (1.0 - 4.0 / float(skyCaptureRes.x)));
     float phi = u * 6.28318530718;
@@ -54,9 +67,14 @@ vec3 unprojectSky(vec2 uv) {
     return normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
 }
 
-// Convenience: sample sky radiance from a world direction.
+// Convenience: sample raw sky radiance from a world direction.
 vec3 sampleSkyRadiance(sampler2D skyCapture, vec3 worldDir) {
     return texture(skyCapture, projectSky(worldDir)).rgb;
+}
+
+// Convenience: sample cloudy sky radiance (sky + baked clouds) from a world direction.
+vec3 sampleSkyRadianceCloudy(sampler2D skyCapture, vec3 worldDir) {
+    return texture(skyCapture, projectSkyCloudy(worldDir)).rgb;
 }
 
 #endif

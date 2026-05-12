@@ -374,7 +374,7 @@ uniform vec3 uCameraPos;
             // alpha-tested cutout vegetation (not true translucent surfaces).
             bool cutoutVegetation =
                 isCrossVegetation ||
-                (!transMask.isTranslucent && !isMaterialKind(vMaterialKind, MATERIAL_EMISSIVE));
+                (!transMask.isTranslucent && !isDerivativeEmissiveMaterialId(materialKindId(vMaterialKind)));
             if (cutoutVegetation) {
                 discard;
             }
@@ -482,7 +482,7 @@ uniform vec3 uCameraPos;
         vec3 finalColor = albedo * lightColor * aoFactor;
         float backScatter = pow(max(dot(-normal, sunDir), 0.0), 1.35) * skyLightMask;
         finalColor += albedo * warmSunColor * backScatter * sss * (0.38 + 0.16 * uDirectSunStrength);
-        if (isMaterialKind(vMaterialKind, MATERIAL_EMISSIVE)) {
+        if (isDerivativeEmissiveMaterialId(materialKindId(vMaterialKind))) {
             float emissionLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
             float emissionPeak = max(max(albedo.r, albedo.g), albedo.b);
             float emissionMask = smoothstep(0.34, 0.72, max(emissionLuma, emissionPeak * 0.72));

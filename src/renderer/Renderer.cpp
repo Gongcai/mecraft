@@ -2262,14 +2262,27 @@ void Renderer::renderSkyCapturePass(const World& world) {
     // DerivativeMain MoonFlux: vec3(abs(moonPhase - 4.0) * 0.25 + 0.2).
     const float moonPhaseFlux = static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f;
 
+    // Raw sky radiance (rows 0..257)
     m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),
                                            m_deferredTargets.skyCaptureFramebuffer(),
                                            m_deferredTargets.skyCaptureWidth(),
                                            m_deferredTargets.skyCaptureHeight(),
                                            cameraAltitude, atmosphereLut, moonPhaseFlux);
 
-    // Write sky cache metadata texels (illuminance) via LUT
-    const auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()));
+    // Cloudy sky radiance (rows 258..513) — same atmosphere pass, composited with cloud data
+    m_gameplaySkyRenderer.renderCloudySkyCapture(world.getDayNightSystem(),
+                                                  m_deferredTargets.skyCaptureFramebuffer(),
+                                                  m_deferredTargets.skyCaptureWidth(),
+                                                  m_deferredTargets.skyCaptureHeight(),
+                                                  cameraAltitude, atmosphereLut, moonPhaseFlux);
+
+    // Compute illuminance metadata and cloud dynamic weather
+    auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()));
+    // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.
+    const int worldDay = world.getDayNightSystem().getElapsedDays();
+    const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
+    illum.cloudDynamicWeather = GameplaySkyRenderer::computeCloudDynamicWeather(worldDay, worldTime);
+
     m_gameplaySkyRenderer.writeSkyCacheMetadata(illum,
                                                  m_deferredTargets.skyCaptureFramebuffer(),
                                                  m_deferredTargets.skyCaptureWidth(),

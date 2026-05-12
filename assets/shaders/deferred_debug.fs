@@ -310,7 +310,7 @@ void main() {
     }
     if (uDebugViewMode == 25) {
         SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
-        FragColor = vec4(heatmap(aux.materialKind / 12.0), 1.0);
+        FragColor = vec4(heatmap(aux.materialKind / MATERIAL_ID_MAX), 1.0);
         return;
     }
     if (uDebugViewMode == 26) {

@@ -69,7 +69,10 @@ void main() {
 
     vec3 normal = decodeFaceNormal(vNormal);
     float ao = clamp(vAO / 3.0, 0.0, 1.0);
-    bool isEmissiveMaterial = isMaterialKind(vMaterialKind, MATERIAL_EMISSIVE);
+    int derivativeMaterialId = derivativeFragmentMaterialId(materialKindId(vMaterialKind));
+    bool isEmissiveMaterial = isDerivativeEmissiveMaterialId(derivativeMaterialId) ||
+                              derivativeMaterialId == MATERIAL_ORE ||
+                              derivativeMaterialId == MATERIAL_NETHER_ORE;
     float emissiveLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     float emissivePeak = max(max(albedo.r, albedo.g), albedo.b);
     float emissiveMask = smoothstep(0.34, 0.72, max(emissiveLuma, emissivePeak * 0.72));

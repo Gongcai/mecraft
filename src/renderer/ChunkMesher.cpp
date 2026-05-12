@@ -42,7 +42,7 @@ struct FaceRenderData {
     uint8_t tintKind = BlockTintKinds::NONE;
     uint8_t tintU = 0;
     uint8_t tintV = 0;
-    uint8_t materialKind = BlockMaterialKinds::DEFAULT;
+    uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
     uint8_t uvQuarterTurns = 0;
 };
 
@@ -53,7 +53,7 @@ struct FaceMergeKey {
     uint8_t tintKind = BlockTintKinds::NONE;
     uint8_t tintU = 0;
     uint8_t tintV = 0;
-    uint8_t materialKind = BlockMaterialKinds::DEFAULT;
+    uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
     uint8_t uvQuarterTurns = 0;
     std::array<uint8_t, 4> ao{};
     std::array<uint16_t, 4> sun{};
@@ -506,7 +506,7 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     renderData.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
     renderData.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
     renderData.tintKind = blockTintKindFromBiomeTint(def.biomeTint);
-    renderData.materialKind = def.materialKind;
+    renderData.derivativeMaterialId = def.derivativeMaterialId;
     if (renderData.tintKind != BlockTintKinds::NONE) {
         computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
     }
@@ -546,7 +546,7 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
     mix(static_cast<uint64_t>(key.tintKind));
     mix(static_cast<uint64_t>(key.tintU));
     mix(static_cast<uint64_t>(key.tintV));
-    mix(static_cast<uint64_t>(key.materialKind));
+    mix(static_cast<uint64_t>(key.derivativeMaterialId));
     mix(static_cast<uint64_t>(key.uvQuarterTurns));
     for (size_t i = 0; i < 4; ++i) {
         mix(static_cast<uint64_t>(key.ao[i]));
@@ -568,7 +568,7 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
     key.tintKind = renderData.tintKind;
     key.tintU = renderData.tintU;
     key.tintV = renderData.tintV;
-    key.materialKind = renderData.materialKind;
+    key.derivativeMaterialId = renderData.derivativeMaterialId;
     key.uvQuarterTurns = renderData.uvQuarterTurns;
     for (size_t i = 0; i < renderData.vertices.size(); ++i) {
         key.ao[i] = renderData.vertices[i].ao;
@@ -587,7 +587,7 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.tintKind == rhs.tintKind &&
            lhs.tintU == rhs.tintU &&
            lhs.tintV == rhs.tintV &&
-           lhs.materialKind == rhs.materialKind &&
+           lhs.derivativeMaterialId == rhs.derivativeMaterialId &&
            lhs.uvQuarterTurns == rhs.uvQuarterTurns &&
            lhs.ao == rhs.ao &&
            lhs.sun == rhs.sun &&
@@ -1055,7 +1055,7 @@ void appendFaceVertices(std::vector<BlockVertex>& vertices,
             renderData.tintKind,
             renderData.tintU,
             renderData.tintV,
-            renderData.materialKind
+            renderData.derivativeMaterialId
         ));
     }
 }
@@ -2006,7 +2006,7 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                 tintKind,
                 tintU,
                 tintV,
-                def.materialKind
+                def.derivativeMaterialId
             ));
         }
     };
@@ -2121,7 +2121,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                 BlockTintKinds::NONE,
                 0,
                 0,
-                def.materialKind
+                def.derivativeMaterialId
             ));
         }
     };
@@ -2257,7 +2257,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                 BlockTintKinds::NONE,
                 0,
                 0,
-                def.materialKind
+                def.derivativeMaterialId
             ));
         }
     };
@@ -2397,7 +2397,7 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
                         const int face,
                         const std::array<glm::vec3, 4>& localCorners,
                         const TorchModelUvRect& uvRect,
-                        const uint8_t materialKind,
+                        const uint8_t derivativeMaterialId,
                         const glm::mat4& transform = glm::mat4(1.0f)) {
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
     const std::array<glm::vec2, 4> uv = {{
@@ -2426,7 +2426,7 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
             BlockTintKinds::NONE,
             0,
             0,
-            materialKind
+            derivativeMaterialId
         ));
     }
 }
@@ -2451,14 +2451,14 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
                                const TorchModelUvRect& leftUv,
                                const bool emitRight,
                                const TorchModelUvRect& rightUv,
-                               const uint8_t materialKind) {
+                               const uint8_t derivativeMaterialId) {
     if (emitTop) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_TOP, {{
             {from.x, to.y, to.z},
             {to.x, to.y, to.z},
             {to.x, to.y, from.z},
             {from.x, to.y, from.z}
-        }}, topUv, materialKind, transform);
+        }}, topUv, derivativeMaterialId, transform);
     }
     if (emitBottom) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BOTTOM, {{
@@ -2466,7 +2466,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {to.x, from.y, from.z},
             {to.x, from.y, to.z},
             {from.x, from.y, to.z}
-        }}, bottomUv, materialKind, transform);
+        }}, bottomUv, derivativeMaterialId, transform);
     }
     if (emitFront) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_FRONT, {{
@@ -2474,7 +2474,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {to.x, from.y, to.z},
             {to.x, to.y, to.z},
             {from.x, to.y, to.z}
-        }}, frontUv, materialKind, transform);
+        }}, frontUv, derivativeMaterialId, transform);
     }
     if (emitBack) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_BACK, {{
@@ -2482,7 +2482,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {from.x, from.y, from.z},
             {from.x, to.y, from.z},
             {to.x, to.y, from.z}
-        }}, backUv, materialKind, transform);
+        }}, backUv, derivativeMaterialId, transform);
     }
     if (emitLeft) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_LEFT, {{
@@ -2490,7 +2490,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {from.x, from.y, to.z},
             {from.x, to.y, to.z},
             {from.x, to.y, from.z}
-        }}, leftUv, materialKind, transform);
+        }}, leftUv, derivativeMaterialId, transform);
     }
     if (emitRight) {
         emitTorchModelFace(vertices, pos, layer, sunNorm, blockNorm, FACE_RIGHT, {{
@@ -2498,7 +2498,7 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
             {to.x, from.y, from.z},
             {to.x, to.y, from.z},
             {to.x, to.y, to.z}
-        }}, rightUv, materialKind, transform);
+        }}, rightUv, derivativeMaterialId, transform);
     }
 }
 
@@ -2552,7 +2552,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                                   false, kTorchFullUv,
                                   false, kTorchFullUv,
                                   false, kTorchFullUv,
-                                  def.materialKind);
+                                  def.derivativeMaterialId);
         emitTorchModelCuboidFaces(vertices,
                                   pos,
                                   layer,
@@ -2567,7 +2567,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                                   false, kTorchFullUv,
                                   true, kTorchFullUv,
                                   true, kTorchFullUv,
-                                  def.materialKind);
+                                  def.derivativeMaterialId);
         emitTorchModelCuboidFaces(vertices,
                                   pos,
                                   layer,
@@ -2582,7 +2582,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                                   true, kTorchFullUv,
                                   false, kTorchFullUv,
                                   false, kTorchFullUv,
-                                  def.materialKind);
+                                  def.derivativeMaterialId);
         return;
     }
 
@@ -2601,7 +2601,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               false, kTorchFullUv,
                               false, kTorchFullUv,
                               false, kTorchFullUv,
-                              def.materialKind);
+                              def.derivativeMaterialId);
     emitTorchModelCuboidFaces(vertices,
                               pos,
                               layer,
@@ -2616,7 +2616,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               false, kTorchFullUv,
                               true, kTorchFullUv,
                               true, kTorchFullUv,
-                              def.materialKind);
+                              def.derivativeMaterialId);
     emitTorchModelCuboidFaces(vertices,
                               pos,
                               layer,
@@ -2631,7 +2631,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               true, kTorchFullUv,
                               false, kTorchFullUv,
                               false, kTorchFullUv,
-                              def.materialKind);
+                              def.derivativeMaterialId);
 }
 
 } // anonymous namespace

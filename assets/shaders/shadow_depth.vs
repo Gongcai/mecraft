@@ -57,7 +57,7 @@ void main() {
     vNormal = aNormal;
     vWorldPos = worldPos.xyz;
 
-    // Extract material kind from packed tint data
-    uint materialKind = (aTintPacked >> 10u) & 15u;
+    // Extract DerivativeMain material id from packed tint data.
+    uint materialKind = (aTintPacked >> 8u) & 63u;
     vMaterialKind = int(materialKind);
 }

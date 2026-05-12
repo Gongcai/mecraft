@@ -83,7 +83,8 @@ void emitTorchFace(std::vector<BlockVertex>& vertices,
                    const float layer,
                    const float normal,
                    const std::array<glm::vec3, 4>& corners,
-                   const FaceUvRect& uvRect) {
+                   const FaceUvRect& uvRect,
+                   const uint8_t derivativeMaterialId) {
     const std::array<glm::vec2, 4> uv = {{
         {uvRect.u0, uvRect.v0},
         {uvRect.u1, uvRect.v0},
@@ -103,7 +104,14 @@ void emitTorchFace(std::vector<BlockVertex>& vertices,
                                            1.0f,
                                            0.0f,
                                            3.0f,
-                                           layer));
+                                           layer,
+                                           1.0f,
+                                           0.0f,
+                                           0.0f,
+                                           BlockTintKinds::NONE,
+                                           0,
+                                           0,
+                                           derivativeMaterialId));
     }
 }
 
@@ -726,7 +734,8 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
                                                    0.0f,
                                                    tintKind,
                                                    tintU,
-                                                   tintV));
+                                                   tintV,
+                                                   def.derivativeMaterialId));
             }
         };
         emitQuad(kCrossQuadA);
@@ -740,12 +749,12 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
         const FaceUvRect topUv = makeTorchUvRect(7.0f, 6.0f, 9.0f, 8.0f);
         const FaceUvRect bottomUv = makeTorchUvRect(7.0f, 13.0f, 9.0f, 15.0f);
         const FaceUvRect fullUv = makeTorchUvRect(0.0f, 0.0f, 16.0f, 16.0f);
-        emitTorchFace(vertices, layer, 0.0f, {{{kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMax}, {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax}, {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMin}, {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMin}}}, topUv);
-        emitTorchFace(vertices, layer, 1.0f, {{{kTorchModelCoreMin, 0.0f, kTorchModelCoreMin}, {kTorchModelCoreMax, 0.0f, kTorchModelCoreMin}, {kTorchModelCoreMax, 0.0f, kTorchModelCoreMax}, {kTorchModelCoreMin, 0.0f, kTorchModelCoreMax}}}, bottomUv);
-        emitTorchFace(vertices, layer, 4.0f, {{{kTorchModelCoreMin, 0.0f, 0.0f}, {kTorchModelCoreMin, 0.0f, 1.0f}, {kTorchModelCoreMin, 1.0f, 1.0f}, {kTorchModelCoreMin, 1.0f, 0.0f}}}, fullUv);
-        emitTorchFace(vertices, layer, 5.0f, {{{kTorchModelCoreMax, 0.0f, 1.0f}, {kTorchModelCoreMax, 0.0f, 0.0f}, {kTorchModelCoreMax, 1.0f, 0.0f}, {kTorchModelCoreMax, 1.0f, 1.0f}}}, fullUv);
-        emitTorchFace(vertices, layer, 2.0f, {{{0.0f, 0.0f, kTorchModelCoreMax}, {1.0f, 0.0f, kTorchModelCoreMax}, {1.0f, 1.0f, kTorchModelCoreMax}, {0.0f, 1.0f, kTorchModelCoreMax}}}, fullUv);
-        emitTorchFace(vertices, layer, 3.0f, {{{1.0f, 0.0f, kTorchModelCoreMin}, {0.0f, 0.0f, kTorchModelCoreMin}, {0.0f, 1.0f, kTorchModelCoreMin}, {1.0f, 1.0f, kTorchModelCoreMin}}}, fullUv);
+        emitTorchFace(vertices, layer, 0.0f, {{{kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMax}, {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax}, {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMin}, {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMin}}}, topUv, def.derivativeMaterialId);
+        emitTorchFace(vertices, layer, 1.0f, {{{kTorchModelCoreMin, 0.0f, kTorchModelCoreMin}, {kTorchModelCoreMax, 0.0f, kTorchModelCoreMin}, {kTorchModelCoreMax, 0.0f, kTorchModelCoreMax}, {kTorchModelCoreMin, 0.0f, kTorchModelCoreMax}}}, bottomUv, def.derivativeMaterialId);
+        emitTorchFace(vertices, layer, 4.0f, {{{kTorchModelCoreMin, 0.0f, 0.0f}, {kTorchModelCoreMin, 0.0f, 1.0f}, {kTorchModelCoreMin, 1.0f, 1.0f}, {kTorchModelCoreMin, 1.0f, 0.0f}}}, fullUv, def.derivativeMaterialId);
+        emitTorchFace(vertices, layer, 5.0f, {{{kTorchModelCoreMax, 0.0f, 1.0f}, {kTorchModelCoreMax, 0.0f, 0.0f}, {kTorchModelCoreMax, 1.0f, 0.0f}, {kTorchModelCoreMax, 1.0f, 1.0f}}}, fullUv, def.derivativeMaterialId);
+        emitTorchFace(vertices, layer, 2.0f, {{{0.0f, 0.0f, kTorchModelCoreMax}, {1.0f, 0.0f, kTorchModelCoreMax}, {1.0f, 1.0f, kTorchModelCoreMax}, {0.0f, 1.0f, kTorchModelCoreMax}}}, fullUv, def.derivativeMaterialId);
+        emitTorchFace(vertices, layer, 3.0f, {{{1.0f, 0.0f, kTorchModelCoreMin}, {0.0f, 0.0f, kTorchModelCoreMin}, {0.0f, 1.0f, kTorchModelCoreMin}, {1.0f, 1.0f, kTorchModelCoreMin}}}, fullUv, def.derivativeMaterialId);
     } else {
         for (int face = 0; face < 6; ++face) {
             int tileIndex = getFaceTextureIndex(def, face);
@@ -776,7 +785,8 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
                                                    0.0f,
                                                    tintKind,
                                                    tintU,
-                                                   tintV));
+                                                   tintV,
+                                                   def.derivativeMaterialId));
             }
         }
     }

@@ -21,7 +21,7 @@ uniform float uTime;
 layout(location = 0) out vec4 ShadowColor;
 layout(location = 1) out vec4 ShadowNormal;
 
-const int MATERIAL_WATER = 9;
+const int MATERIAL_WATER = 17;
 
 vec2 encodeNormal(vec3 n) {
     n = normalize(n);

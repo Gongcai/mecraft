@@ -291,7 +291,89 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-    glViewport(0, 0, width, height);
+    // Raw sky: rows 0..skyCaptureRes.y+1 (258 rows). Matches DerivativeMain Deferred0.glsl.
+    glViewport(0, 0, width, std::min(height, 258));
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+
+    m_shader->use();
+    m_shader->setInt("uMode", 4);
+    m_shader->setMat4("uView", glm::mat4(1.0f));
+    m_shader->setMat4("uProjection", glm::mat4(1.0f));
+    m_shader->setMat4("uModel", glm::mat4(1.0f));
+    m_shader->setVec3("uSkyTopColor", m_lastColors.top);
+    m_shader->setVec3("uSkyHorizonColor", m_lastColors.horizon);
+    m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
+    m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
+    m_shader->setVec3("uSunScatterColor", m_lastColors.sunScatter);
+    m_shader->setVec3("uMoonLightColor", m_lastColors.moonLightColor);
+    m_shader->setFloat("uHorizonHaze", m_lastColors.horizonHaze);
+    m_shader->setFloat("uSunGlare", m_lastColors.sunGlare);
+    m_shader->setFloat("uSunVisibility", m_lastColors.sunVisibility);
+    m_shader->setFloat("uMoonVisibility", m_lastColors.moonVisibility);
+    m_shader->setFloat("uNightFactor", m_lastColors.nightFactor);
+    m_shader->setVec4("uTintColor", glm::vec4(1.0f));
+    m_shader->setVec2("uUvMin", glm::vec2(0.0f));
+    m_shader->setVec2("uUvMax", glm::vec2(1.0f));
+    m_shader->setFloat("uCameraAltitude", cameraAltitude);
+    m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
+    if (atmosphereLutTexture != 0) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
+        m_shader->setInt("uAtmosphereLut", 1);
+        glActiveTexture(GL_TEXTURE0);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindVertexArray(m_skyVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+    if (blendWasEnabled) {
+        glEnable(GL_BLEND);
+    } else {
+        glDisable(GL_BLEND);
+    }
+    if (cullFaceWasEnabled) {
+        glEnable(GL_CULL_FACE);
+    } else {
+        glDisable(GL_CULL_FACE);
+    }
+    if (depthTestWasEnabled) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+}
+
+void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
+                                                  const GLuint framebuffer,
+                                                  const int skyCaptureWidth,
+                                                  const int skyCaptureHeight,
+                                                  const float cameraAltitude,
+                                                  const GLuint atmosphereLutTexture,
+                                                  const float moonPhaseFlux) {
+    (void)dayNight; // Uses m_lastColors from preceding renderSkyCapture() call.
+    if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
+        return;
+    }
+
+    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
+    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
+    GLint viewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    GLint previousFramebuffer = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    // Cloudy sky: rows 258..513 (256 rows). Matches DerivativeMain Deferred0.glsl cloudy sky region.
+    glViewport(0, 258, skyCaptureWidth, 256);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
     glDisable(GL_DEPTH_TEST);
@@ -369,8 +451,9 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-    // Write to column skyCaptureWidth-1, rows 0..3 (4 pixels)
-    glViewport(skyCaptureWidth - 1, 0, 1, 4);
+    // Write to column skyCaptureWidth-1, rows 0..5 (6 pixels).
+    // Rows 0-3: illuminance, row 5: cloudDynamicWeather.
+    glViewport(skyCaptureWidth - 1, 0, 1, 6);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
     glDisable(GL_DEPTH_TEST);
@@ -386,6 +469,7 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     m_shader->setVec3("uSkyIlluminance", illuminance.skyIlluminance);
     m_shader->setVec3("uSunIlluminance", illuminance.sunIlluminance);
     m_shader->setVec3("uMoonIlluminance", illuminance.moonIlluminance);
+    m_shader->setVec3("uCloudDynamicWeather", illuminance.cloudDynamicWeather);
     m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
     m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
@@ -510,6 +594,63 @@ GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminan
     data.skyIlluminance = colors.skyAmbientColor * (0.10f + 0.42f * skyVisibility);
 
     return data;
+}
+
+glm::vec3 GameplaySkyRenderer::computeCloudDynamicWeather(const int worldDay, const int worldTime) {
+    // Replicates DerivativeMain deferred.vsh cloudDynamicWeather computation.
+    // Uses triple32 hash + per-day random weather maps interpolated over the day cycle.
+    auto triple32 = [](uint32_t x) -> uint32_t {
+        x ^= x >> 17; x *= 0xed5ad4bbu;
+        x ^= x >> 11; x *= 0xac4c1b51u;
+        x ^= x >> 15; x *= 0x31848babu;
+        x ^= x >> 14;
+        return x;
+    };
+    auto hash1 = [](float p) -> float {
+        p = std::fmod(p, 1.0f);
+        if (p < 0.0f) p += 1.0f;
+        p = p * p * (3.0f - 2.0f * p); // fract approximation not needed, just use p
+        // Exact GLSL: p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p);
+        float v = p * 0.1031f;
+        v = v - std::floor(v);
+        v *= v + 33.33f;
+        v *= v + v;
+        return v - std::floor(v);
+    };
+    auto randWeather = [&](int state) -> glm::vec2 {
+        float h = hash1(static_cast<float>(triple32(static_cast<uint32_t>(state))) / static_cast<float>(0xFFFFFFFFu));
+        return glm::vec2(h, hash1(h + 0.1f)); // second component from offset hash
+    };
+    auto curve = [](float x) -> float {
+        x = std::clamp(x, 0.0f, 1.0f);
+        return x * x * (3.0f - 2.0f * x);
+    };
+    auto remap = [](float lo, float hi, float x) -> float {
+        return std::clamp((x - lo) / (hi - lo), 0.0f, 1.0f);
+    };
+
+    // Interpolation factor: fract(worldTime / 24000.0 + vec2(0.65, 0.25))
+    const float dayFrac = static_cast<float>(worldTime) / 24000.0f;
+    const float tX = dayFrac + 0.65f;
+    const float tY = dayFrac + 0.25f;
+    const float curveTX = curve(tX - std::floor(tX));
+    const float curveTY = curve(tY - std::floor(tY));
+
+    const glm::vec2 w0 = randWeather(worldDay);
+    const glm::vec2 w1 = randWeather(worldDay + 1);
+
+    glm::vec2 weatherMap;
+    weatherMap.x = w0.x + (w1.x - w0.x) * curveTX;
+    weatherMap.y = w0.y + (w1.y - w0.y) * curveTY;
+
+    glm::vec3 result;
+    result.x = curve(remap(0.25f, 0.4f, weatherMap.x)) * 0.5f;           // cirrocumulus
+    result.y = (1.0f - remap(0.65f, 0.8f, weatherMap.y));
+    result.y = result.y * result.y * 0.5f;                                 // cirrus
+    result.z = remap(0.4f, 0.55f, weatherMap.x * 2.0f - weatherMap.y);    // storm
+    result.z *= 2.0f - result.z;
+
+    return result;
 }
 
 glm::vec3 GameplaySkyRenderer::getLastFogColor() const {
