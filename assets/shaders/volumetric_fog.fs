@@ -6,7 +6,8 @@ out vec4 FragColor;
 uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
-uniform sampler2D uShadowMap;
+uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch/textureSize
+uniform sampler2DShadow uShadowMap;  // Hardware comparison for PCF
 uniform sampler2D uShadowColorTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 uInvViewProj;
@@ -115,7 +116,7 @@ float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCove
 // Local convenience wrappers adapt shared functions to this file's uniforms.
 
 float localShadowProjectionFade(vec3 proj) {
-    return shadowProjectionFade(proj, uShadowMap);
+    return shadowProjectionFade(proj, uShadowMapRaw);
 }
 
 float localShadowDepthWorldScale() {
@@ -151,16 +152,18 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
         return 1.0;
     }
 
-    ivec2 size = textureSize(uShadowMap, 0);
+    ivec2 size = textureSize(uShadowMapRaw, 0);
     vec2 texel = 1.0 / vec2(size);
     float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float biasWorld = texelWorld * distanceScale * (0.5 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 16.0);
     float bias = max(localShadowDepthBiasFromWorld(biasWorld), localDerivativeMinimumShadowBias());
+    // Hardware PCF via sampler2DShadow: 4-tap cross pattern with automatic comparison
+    vec3 biasedProj = vec3(proj.xy, proj.z - bias);
     float lit = 0.0;
-    lit += (proj.z - bias <= texture(uShadowMap, proj.xy).r) ? 1.0 : 0.0;
-    lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2( texel.x, 0.0)).r) ? 1.0 : 0.0;
-    lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2(-texel.x, 0.0)).r) ? 1.0 : 0.0;
-    lit += (proj.z - bias <= texture(uShadowMap, proj.xy + vec2(0.0,  texel.y)).r) ? 1.0 : 0.0;
+    lit += texture(uShadowMap, vec3(proj.xy, proj.z - bias));
+    lit += texture(uShadowMap, vec3(proj.xy + vec2( texel.x, 0.0), proj.z - bias));
+    lit += texture(uShadowMap, vec3(proj.xy + vec2(-texel.x, 0.0), proj.z - bias));
+    lit += texture(uShadowMap, vec3(proj.xy + vec2(0.0,  texel.y), proj.z - bias));
     lit *= 0.25;
 
     float visibility = mix(1.0, lit, localShadowProjectionFade(proj) * distanceFade);

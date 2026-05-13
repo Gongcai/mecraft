@@ -1,4 +1,5 @@
 #version 450 core
+#include "derivative_shadow.glsl"
 
 in vec2 vUV;
 in float vLayer;
@@ -16,12 +17,14 @@ uniform float uAnimationTime;
 uniform float uTime;
 
 // Shadow color outputs:
-// layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics)
+// layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics),
+//                           A = 0.0 for transparent casters (water/glass), 1.0 for opaque
 // layout 1 = shadowcolor1: RG = encoded normal, B = skylight, A = height/aux
 layout(location = 0) out vec4 ShadowColor;
 layout(location = 1) out vec4 ShadowNormal;
 
 const int MATERIAL_WATER = 17;
+const int MATERIAL_STAINED_GLASS = 16;
 
 vec2 encodeNormal(vec3 n) {
     n = normalize(n);
@@ -102,7 +105,11 @@ void main() {
         float caustics = inversesqrt(oldArea / newArea) * 0.3;
         caustics = clamp(caustics * caustics * 2.0, 0.0, 1.0);
 
-        ShadowColor = vec4(vec3(caustics), 1.0);
+        // ShadowColor.a = 0.0 marks transparent casters (DerivativeMain COLORED_SHADOWS):
+        // Water should not cast hard shadows; instead it tints the light passing through.
+        // DerivativeMain Shadow.frag:64 — shadowcolor0Out = vec3(sqrt2(caustics))
+        // sqrt2 encoding (x^0.25) is undone by pow4 in the PCF colored shadow path.
+        ShadowColor = vec4(vec3(sqrt2(caustics)), 0.0);
         ShadowNormal = vec4(encodeNormal(wavesNormal), 1.0, vWorldPos.y * (1.0 / 512.0) + 0.25);
     } else {
         // Non-water blocks: existing behavior
@@ -121,13 +128,31 @@ void main() {
         }
 
         vec3 shadowColor = texColor.rgb;
+        // DerivativeMain Shadow.frag: alpha >= 254/255 → fully opaque; otherwise
+        // blend white with texture color (alpha^0.4).
         if (texColor.a >= 254.0 / 255.0) {
             shadowColor = texColor.rgb;
         } else {
             shadowColor = mix(vec3(1.0), texColor.rgb, pow(clamp(texColor.a, 0.0, 1.0), 0.4));
         }
         shadowColor = srgbToLinear(shadowColor);
-        ShadowColor = vec4(shadowColor, 1.0);
+
+        // Colored shadow alpha semantics (replaces DerivativeMain's dual-depth detection):
+        //   a = 0.0 → transparent caster: light passes through with color tint (water, stained glass)
+        //   a = 1.0 → opaque caster: blocks light completely (hard shadow)
+        //
+        // DerivativeMain uses shadowtex0 (all) vs shadowtex1 (opaque-only) to detect
+        // transparent casters. Leaves/grass are in BOTH textures → never trigger colored shadows.
+        // Previous code marked any texColor.a < 254/255 as transparent, which incorrectly
+        // treated cutout materials (leaves, grass, flowers) as colored shadow casters,
+        // causing pow4(leaf_color) * sampleLit ≈ 0.01 instead of 1.0 on lit surfaces.
+        float shadowAlpha = 1.0;
+        if (vMaterialKind == MATERIAL_STAINED_GLASS) {
+            // Stained glass: light passes through with tint
+            shadowAlpha = 0.0;
+        }
+        // All other non-water materials (including cutout like leaves/grass) cast hard shadows.
+        ShadowColor = vec4(shadowColor, shadowAlpha);
 
         vec3 worldNormal = decodeFaceNormal(vNormal);
         if (isCrossVegetation) {

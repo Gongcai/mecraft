@@ -11,7 +11,7 @@ uniform sampler2D uVoxelLightTex;
 uniform sampler2D uMaterialTex;
 uniform sampler2D uMaterialAuxTex;
 uniform sampler2D uDepthTex;
-uniform sampler2D uShadowMap;
+uniform sampler2D uShadowMapRaw;
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSceneLightingTex;
 uniform sampler2D uSceneCompositeTex;
@@ -154,7 +154,7 @@ void main() {
         return;
     }
     if (uDebugViewMode == 8) {
-        FragColor = vec4(vec3(texture(uShadowMap, vTexCoord).r), 1.0);
+        FragColor = vec4(vec3(texture(uShadowMapRaw, vTexCoord).r), 1.0);
         return;
     }
     if (uDebugViewMode == 9) {
@@ -253,7 +253,7 @@ void main() {
             return;
         }
 
-        float shadowDepth = texture(uShadowMap, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
         float bias = max(localShadowDepthBiasFromWorld(localShadowWorldBias(ndotl, viewDistance)),
                          localDerivativeMinimumShadowBias());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;

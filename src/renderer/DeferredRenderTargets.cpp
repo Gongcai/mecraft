@@ -73,6 +73,21 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
     glTextureParameterfv(m_shadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+
+    // DerivativeMain shadowtex1 equivalent: zero-copy view of m_shadowDepth with
+    // hardware depth comparison (sampler2DShadow). Used for PCF via texture() —
+    // replaces manual compareShadowBilinear (~15 instructions/sample → 1 instruction).
+    // BlockerSearch still uses the raw m_shadowDepth via texelFetch (uShadowMapRaw).
+    glGenTextures(1, &m_shadowDepthComparison);
+    glTextureView(m_shadowDepthComparison, GL_TEXTURE_2D,
+                  m_shadowDepth, GL_DEPTH_COMPONENT32F, 0, 1, 0, 1);
+    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_COMPARE_MODE,  GL_COMPARE_REF_TO_TEXTURE);
+    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_COMPARE_FUNC,  GL_LEQUAL);
+    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_MIN_FILTER,    GL_LINEAR);
+    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_MAG_FILTER,    GL_LINEAR);
+    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_WRAP_S,        GL_CLAMP_TO_BORDER);
+    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_WRAP_T,        GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_shadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
     // Shadow color: albedo for colored shadows / caustics (RGBA8)
     m_shadowColor = createTexture2D(GL_RGBA8, m_shadowResolution, m_shadowResolution,
                                     GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -619,6 +634,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_gMaterialAux,
         m_gDepth,
         m_shadowDepth,
+        m_shadowDepthComparison,
         m_shadowColor,
         m_shadowNormal,
         m_ssaoTex,
@@ -651,6 +667,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gMaterialAux = 0;
     m_gDepth = 0;
     m_shadowDepth = 0;
+    m_shadowDepthComparison = 0;
     m_shadowColor = 0;
     m_shadowNormal = 0;
     m_ssaoTex = 0;

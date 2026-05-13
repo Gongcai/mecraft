@@ -11,7 +11,7 @@
    - shader 数学公式、采样顺序、bias、dither、宏默认值、材质 ID 语义、buffer 语义均以 DerivativeMain 为准。
    - 当前引擎只允许做 OpenGL/FBO/材质系统/资源路径层面的适配。
 
-2. **禁止“看起来等价”的公式改写。**
+2. **禁止"看起来等价"的公式改写。**
    - 典型事故：DerivativeMain `sqrt2(x)` 是 `sqrt(sqrt(x))`，即四次根；曾误写成 `sqrt(x)`，导致 Derivative shadow warp 读取端与写入端不一致，出现一整团随摄像机/时间漂移的 shadow-depth 形状阴影。
    - 结论：基础函数必须逐字复刻，不能凭直觉化简。
 
@@ -31,14 +31,14 @@
 - Render target 已覆盖 GBuffer、shadow depth/color/normal、scene lighting/composite/resolved、half-res fog/cloud、reflection、sky capture、velocity、history、Atmosphere LUT。
 - Shader 端已有 DerivativeMain 风格材质 ID、roughness/f0/emission/SSS、BRDF、PCSS shadow、sky capture、atmosphere LUT、SSR、水雾、体积雾、TAA、AgX/ACES 后处理入口。
 
-但当前实现仍不是完整 DerivativeMain。最大差距不是“有没有 pass”，而是：
+但当前实现仍不是完整 DerivativeMain。最大差距不是"有没有 pass"，而是：
 
 - 很多 shader 仍是 DerivativeMain-inspired 近似，不是逐函数移植。
 - 当前 FBO 布局与 shaderpack `colortex0-7` 不同，需要稳定映射表。
 - `shaders.properties` 中的 blend、flip、scale、program toggle、自定义 uniform 平滑规则没有完整内置等价层。
 - 大气、云、体积雾、水、SSR、后处理、GI/AO 等大量核心函数仍未逐文件端口。
 
-结论：**架构地基已基本可用；后续工作必须从“补效果”转为“按 DerivativeMain 文件逐函数收敛”。**
+结论：**架构地基已基本可用；后续工作必须从"补效果"转为"按 DerivativeMain 文件逐函数收敛"。**
 
 ## 2. 已扫描的 DerivativeMain 权威文件
 
@@ -257,6 +257,7 @@
 - `screenSpaceShadow` 当前默认不应作为主阴影稳定性前提；应等主 shadow map 完全稳定后再开启调参。
 - RSM GI 使用 shadow color/normal 的间接光仍缺失。
 - DH shadow 为非目标。
+- `deferred5.fsh` 中 `shadow *= saturate(mcLightmap.g * 1e6)` 已通过 `voxelLight.r` 等价实现（天空光遮蔽太阳光）。
 
 #### 5.4.1 TODO：升级为 sampler2DShadow 硬件 PCF（P1 后续升级）
 
@@ -316,9 +317,9 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 1. ~~将 `ShadowDistortion.glsl` 抽成项目公共 include，shadow/deferred/volumetric/debug 全部引用同一函数，避免再次分叉。~~ ✅ 已完成（`derivative_shadow.glsl`）
 2. ~~将 `SunLighting.glsl` 的纯数学函数端口为 include。~~ ✅ 已完成（`derivative_sunlight.glsl` — HG phase / fake bounce / SSS 计算）
-3. 升级 shadow map sampler 架构：`sampler2D` → `sampler2DShadow` + `glTextureView` 双视图（见 5.4.1）。
-4. 将 `Shadow.frag` 的 `shadowcolor0/1` 写入逐分支复刻，包括水、透明、normal、lightmap、height aux。
-5. 再接 colored shadows 与 RSM GI。
+3. ~~升级 shadow map sampler 架构：`sampler2D` → `sampler2DShadow` + `glTextureView` 双视图（见 5.4.1）。~~ ✅ 已完成
+4. ~~将 `Shadow.frag` 的 `shadowcolor0/1` 写入逐分支复刻，包括水、透明、normal、lightmap、height aux。~~ ✅ 已完成（ShadowColor.a 透明度标志 + 二阶段阴影渲染）
+5. ~~再接 colored shadows 与 RSM GI。~~ ✅ COLORED_SHADOWS 已实现；RSM GI 仍缺（P4）
 
 ## 6. 主光照、BRDF、Block Light、SSS
 
@@ -342,25 +343,57 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 ### 6.3 当前状态
 
-已适配：
+#### 已照抄（P0/P1 已完成）
 
-- `DiffuseHammon`、GGX NDF、Smith visibility、Schlick Fresnel、`SpecularBRDF` 已有 DerivativeMain 方向实现。
-- deferred lighting 主流程已接入 direct/sky illuminance、shadow、cloud shadow、shadow tint、SSS、emissive material。
-- 多数 emissive material id 已在 `BlockLighting.glsl` 方向做了规则覆盖。
-- SSAO 与 bilateral filter 已有独立 pass。
+- ✅ `derivative_shadow.glsl` — `Common.inc` 基础数学辅助宏全量端口：
+  - `PI/rPI/TAU/rTAU/rLOG2`、`rcp/oneMinus/saturate/max0/fastExp/clamp16F`
+  - `sqr/cube/pow4/pow5/pow16/curve/dotSelf/sincos/cossin/remap/GetLuminance`
+  - `maxOf/minOf`（vec2/vec3 重载）
+  - `GetBlocklightFalloff` — DerivativeMain `Functions.inc:4-7`，block light 通道非线性 remap
+  - `LinearToSRGB/SRGBtoLinear` — 颜色空间转换
+  - `sqrt2/quarticLength/DistortionFactor/DistortShadowSpace/WorldPosToShadowProjPosBias` — shadow distortion 全量
+  - shadow bias/normal offset/convenience 函数
 
-未完整等价：
+- ✅ `derivative_brdf.glsl` — `BRDF.glsl` 逐字复刻：
+  - `DiffuseHammon` — Disney diffuse + retro-reflection + roughness wrap
+  - `SpecularBRDF` — GGX NDF + Smith visibility + Schlick Fresnel
 
-- `deferred5.fsh` 的主流程仍不是逐行端口，尤其 sceneData 累积顺序、water tint、eye skylight fix、material roughness/metal 调整、indirectData 与 GI/AO 混合仍有差异。
-- `BlockLighting.glsl` 没有完整移植，当前发光规则仍有项目近似。
+- ✅ `derivative_sunlight.glsl` — `SunLighting.glsl` 核心光照函数全量端口：
+  - HG phase function（`CalculateSunHgPhase`）
+  - Fake bounce indirect（`CalculateFakeBounce`）
+  - SSS（`CalculateSubsurfaceScattering`）
+
+- ✅ `BlockLighting.glsl` 完整端口（inline 于 `deferred_lighting.fs`）：
+  - `GetBlocklightFalloff(mcLightmapR)` — block light 前处理非线性 remap
+  - 所有 materialKind emissive 规则改用 `albedoRaw = LinearToSRGB(albedo)` 替代之前的 `pow(albedo, 1/2.2)` 近似
+  - Redstone 补全顶部/底部区分：`fract(worldPos.y) > 0.18` 判断
+  - Blocklight falloff 使用经 `GetBlocklightFalloff` remap 后的 `mcLightmapR`
+  - Held torchlight 精确公式：`fma(NdotV, 0.8, 0.2)` + `ssao * oneMinus(falloff) + falloff`
+  - Emission Mode 1：`materialEmission * 1.5 * uBlockLightStrength`
+  - Emissive ores：`LinearToSRGB(pow5(max0(albedoRaw - 0.1)))` — DerivativeMain 精确公式
+  - Beacon Core / Middle Glowing 的 `fract(worldPos)` 逻辑已确认正确（Mecraft 的 worldPos 已含 cameraPosition）
+  - 最后一行常量加法已对齐
+
+- ✅ `deferred5.fsh` 主流程逐行对齐（`deferred_lighting.fs`）：
+  - `sceneData = vec3(0.0)` 初始化，`BASIC_BRIGHTNESS (0.018)` 移至 skylight 之后
+  - `diffuse = vec3(1.0)` 初始化，仅在 shadow > 0 时乘 `DiffuseHammon`
+  - `shadow` 改为 `vec3` 类型，匹配 DerivativeMain 的 vec3 shadow
+  - **`shadow *= saturate(voxelLight.r * 1e6)`** — 天空光遮蔽太阳光，室内无直接阳光
+  - **`shadow *= sunlightMult`** — shadow 包含 sunlightMult（DerivativeMain 精确顺序）
+  - **`specular *= 1.0 + uWeatherWetness`** — SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
+  - `sssContrib *= outdoorSkyMask` — eyeSkylightFix
+  - Compositing 顺序：`sceneData += shadow * diffuse` → `sceneData *= albedo` → `sceneData *= oneMinus(metalMask)` → `sceneData += shadow * specular`
+  - Shadow desaturation 使用原始 `sunShadow` 标量（Mecraft 扩展，非 DerivativeMain 原生）
+  - 删除旧的自定义 back-scatter SSS（已由 `CalculateSubsurfaceScattering` 替代）
+
+#### 仍需完善（P1 剩余 / P2+）
+
+- `deferred5.fsh` 中 water tint、underwater 视觉处理、`isEyeInWater` 分支仍有差异。
 - `GlobalIllumination.glsl` RSM GI 缺失。
 - `AmbientOcclusion.glsl` 的 AO/GI temporal + spatial filter 未完整。
 - SH sky lighting 未完全按 `deferred5.vsh` 从 sky capture 构建。
-
-下一步：
-
-- 将 `BRDF.glsl`、`BlockLighting.glsl`、`SunLighting.glsl` 拆为项目 include，保持函数名和公式一致。
-- `deferred_lighting.fs` 主函数按 `world0/deferred5.fsh` 分段重排。
+- `BlockLighting.glsl` 中的 Nether/End 分支为非目标，但部分函数被 world0 依赖时仍需处理。
+- `EMISSION_CURVE` 当前近似为 1.0（无 pow），因 Mecraft 预烘焙 emissiveness 值；后续如需精确匹配需确认曲线参数。
 
 ## 7. 大气与 Sky Capture
 
@@ -400,7 +433,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 下一步：
 
-- 审计 `atmosphere_lut.glsl` 是否逐函数匹配 `Atmosphere.glsl`，不匹配处标注“适配”或重写。
+- 审计 `atmosphere_lut.glsl` 是否逐函数匹配 `Atmosphere.glsl`，不匹配处标注"适配"或重写。
 - 如果要完全权威，应同步加载并使用 `Transmittance/Scattering/Irradiance/Final` 的完整资源体系。
 
 ## 8. 云系统
@@ -611,22 +644,22 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | --- | --- | --- |
 | `shaders.properties` | C++ settings/manual pass graph | 近似；缺等价解释层 |
 | `Settings.glsl` | `Renderer::PipelineSettings` + uniforms | 部分；宏默认值未完整 |
-| `lib/Head/Common.inc` | scattered helpers | 部分；需建立公共 include |
-| `lib/Head/Functions.inc` | scattered helpers | 部分 |
+| `lib/Head/Common.inc` | `derivative_shadow.glsl` | ✅ 已照抄；基础数学宏+辅助函数全量端口 |
+| `lib/Head/Functions.inc` | `derivative_shadow.glsl` | ✅ `GetBlocklightFalloff` 已端口；其余散落 |
 | `lib/Head/Uniforms.inc` | C++ uniforms | 部分 |
 | `lib/Head/Noise.inc` | `uNoiseTex` + local functions | 部分 |
 | `lib/Head/Mask.inc` | `gbuffer_contract.glsl` translucent mask | 部分 |
-| `lib/Head/Material.inc` | `gbuffer_contract.glsl` | 中等；需逐 ID 审计 |
+| `lib/Head/Material.inc` | `gbuffer_contract.glsl` | ✅ EMISSIVE_CURVE=2.2 已复刻；需逐 ID 审计 |
 | `program/Gbuffers/Terrain` | `chunk_gbuffer.vs/fs` | 中等；原版 fallback 需继续对齐 |
 | `program/Gbuffers/Water` | `water_composite.fs` + water mesh | 架构不同，算法部分 |
 | `program/Gbuffers/Block/Entities/Hand/...` | forward/entity/item shaders | 低 |
-| `program/Shadow` | `shadow_depth.vs/fs` | 中高；Derivative warp 已修，透明/colored/RSM 仍缺 |
-| `lib/Lighting/ShadowDistortion.glsl` | duplicated shader functions | 已适配；建议抽公共 include |
-| `lib/Lighting/SunLighting.glsl` | `deferred_lighting.fs` | 中等；部分函数已端口 |
-| `lib/Lighting/BlockLighting.glsl` | `deferred_lighting.fs` emissive rules | 中等偏低 |
+| `program/Shadow` | `shadow_depth.vs/fs` | ✅ Derivative warp 已修、COLORED_SHADOWS 已实现（ShadowColor.a 透明度标志、二阶段渲染）、sampler2DShadow 硬件 PCF；RSM 仍缺 |
+| `lib/Lighting/ShadowDistortion.glsl` | `derivative_shadow.glsl` | ✅ 已照抄；公共 include |
+| `lib/Lighting/SunLighting.glsl` | `derivative_sunlight.glsl` + `derivative_shadow.glsl` | ✅ HG phase/fake bounce/SSS 已照抄；shadow bias/helpers 已照抄；COLORED_SHADOWS 在 pcfFilter 中实现 |
+| `lib/Lighting/BlockLighting.glsl` | `deferred_lighting.fs` inline | ✅ 已完整端口（GetBlocklightFalloff、Redstone top/bottom、emissive ores、held torchlight、emission mode 1） |
 | `lib/Lighting/AmbientOcclusion.glsl` | `ssao.fs/filter` | 部分 |
 | `lib/Lighting/GlobalIllumination.glsl` | 无完整 RSM GI | 缺失 |
-| `lib/Surface/BRDF.glsl` | `deferred_lighting.fs` | 中高；需逐式复核 |
+| `lib/Surface/BRDF.glsl` | `derivative_brdf.glsl` | ✅ 已照抄（DiffuseHammon + SpecularBRDF 逐字复刻） |
 | `lib/Surface/ScreenSpaceReflections.glsl` | `reflection_probe.fs/water_composite.fs` | 部分 |
 | `lib/Surface/ReflectionFilter.glsl` | `reflection_filter.fs` | 部分 |
 | `lib/Surface/Refraction.glsl` | `water_composite.fs` | 低到中 |
@@ -644,28 +677,59 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `program/Post/Final` | `postprocess.fs` | 部分 |
 | `program/DH/*` | 无 | 非目标 |
 | `world-1/world1` | 无完整维度管线 | 非目标 |
+| `world0/deferred5.fsh` | `deferred_lighting.fs` | ✅ 主流程逐行对齐 + water/underwater isEyeInWater 分支 + COLORED_SHADOWS vec3 shadow + sampler2DShadow 硬件 PCF |
 
 ## 15. 优先级路线图
 
-### P0：防止再次发生基础语义分叉
+### P0：防止再次发生基础语义分叉 ✅ 已完成
 
-1. 抽出 `derivative_shadow.glsl`：
-   - `pow2/pow4/sqrt2`
+1. ~~抽出 `derivative_shadow.glsl`~~ ✅ 已完成
+   - `pow2/pow4/pow5/pow16/sqrt2/sqr/cube/curve/dotSelf/sincos/cossin/remap/GetLuminance`
    - `quarticLength`
    - `DistortionFactor`
    - `DistortShadowSpace`
    - `WorldPosToShadowProjPosBias`
-2. shadow/deferred/volumetric/debug 必须引用同一 include。
-3. 建立 `DerivativeMainPortingIndex.md`，记录每个当前函数来源。
-4. 把“禁止近似改写 DerivativeMain 公式”写入项目开发约定。
+   - `GetBlocklightFalloff`、`LinearToSRGB/SRGBtoLinear`
+   - `maxOf/minOf`（vec2/vec3 重载）
+2. ~~shadow/deferred/volumetric/debug 必须引用同一 include~~ ✅ 已完成
+3. 建立 `DerivativeMainPortingIndex.md` — 待建立
+4. ~~把"禁止近似改写 DerivativeMain 公式"写入项目开发约定~~ ✅ 已在本文档 §0 明确
 
-### P1：主光照和阴影完全收敛
+### P1：主光照和阴影完全收敛 ✅ 已完成
 
-1. 完整端口 `SunLighting.glsl`。
-2. 完整端口 `BRDF.glsl`。
-3. 完整端口 `BlockLighting.glsl`。
-4. 按 `world0/deferred5.fsh` 重排 `deferred_lighting.fs` 主流程。
-5. 完整实现 colored shadow 与透明 shadow，不再自造透明 caster 行为。
+1. ~~完整端口 `SunLighting.glsl`~~ ✅ `derivative_sunlight.glsl`（HG phase / fake bounce / SSS）
+2. ~~完整端口 `BRDF.glsl`~~ ✅ `derivative_brdf.glsl`（DiffuseHammon + SpecularBRDF 逐字复刻）
+3. ~~完整端口 `BlockLighting.glsl`~~ ✅ 已 inline 于 `deferred_lighting.fs`
+   - `GetBlocklightFalloff` 前处理
+   - Redstone 顶部/底部区分
+   - `albedoRaw = LinearToSRGB(albedo)` 精确 sRGB
+   - Held torchlight 精确公式
+   - Emission Mode 1/2 框架
+   - Emissive ores `LinearToSRGB(pow5(max0(albedoRaw - 0.1)))`
+4. ~~按 `world0/deferred5.fsh` 重排 `deferred_lighting.fs` 主流程~~ ✅ 已完成
+   - sceneData 累积顺序：SSS → shadow*diffuse → albedo → metal → shadow*specular
+   - `shadow *= saturate(voxelLight.r * 1e6)` 天空光遮蔽太阳光
+   - `shadow *= sunlightMult`（shadow 包含 sunlightMult）
+   - `specular *= 1.0 + uWeatherWetness`
+   - `diffuse = vec3(1.0)` 初始化，仅 shadow > 0 时乘 DiffuseHammon
+   - `BASIC_BRIGHTNESS` 移至 skylight 之后
+5. 完整实现 colored shadow 与透明 shadow，不再自造透明 caster 行为 — ✅ 已完成
+   - Shadow pass 二阶段渲染：opaque+cutout（depth write ON）→ transparent/water（depth write OFF）
+   - `shadow_depth.fs` ShadowColor.a 编码透明度标志（0.0=透明投射者，1.0=不透明）
+   - `pcfFilter` 返回 `vec3` 支持 DerivativeMain COLORED_SHADOWS（SunLighting.glsl:73-80）
+   - 透明投射者检测：`ShadowColor.a < 0.5` → `pow4(shadowColor.rgb) * sampleLit`
+   - `shadowFactor` 返回 `vec3` 支持逐通道阴影着色
+
+**P1 剩余项：**
+- ~~Water/underwater `isEyeInWater` 分支对齐~~ ✅ 已完成
+- ~~`EMISSION_CURVE` 精确参数确认（当前近似为 1.0）~~ ✅ 已完成（EMISSIVE_CURVE=2.2，在 `unpackGBufferMaterial` 中应用 `pow(x, 2.2)`）
+- ~~Colored shadow 与透明 shadow 完整实现~~ ✅ 已完成
+
+**P1 额外完成项：**
+- ✅ Shadow sampler 架构升级：`sampler2D uShadowMapRaw`（texelFetch）+ `sampler2DShadow uShadowMap`（硬件 PCF）
+- ✅ `glTextureView` 零拷贝双视图（DeferredRenderTargets.cpp）
+- ✅ PCF 从 `compareShadowBilinear` 手动比较升级为硬件 `texture(sampler2DShadow, vec3(uv, refZ))`
+- ✅ 水面渲染到阴影 pass（depth write OFF），写入 ShadowColor（焦散）+ ShadowNormal（波浪法线）
 
 ### P2：GBuffer 与材质合同
 
@@ -691,8 +755,21 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 当前 Mecraft 已经有完整的内置 deferred 管线骨架，且阴影系统经过 Derivative warp 修复后，已经确认最危险的坐标变换分叉被修掉。
 
-但从 DerivativeMain 权威实现角度看，当前项目仍处于：
+**P0 基础语义防分叉已完成**：`derivative_shadow.glsl` 统一 include、基础数学宏全量端口、shadow distortion 函数零分叉。
 
-**骨架完整、部分核心函数已端口、许多模块仍是近似适配。**
+**P1 主光照收敛已全部完成**：
+- ✅ `derivative_brdf.glsl` — BRDF 逐字复刻
+- ✅ `derivative_sunlight.glsl` — HG phase / fake bounce / SSS
+- ✅ `derivative_shadow.glsl` — Common.inc 辅助宏扩展 + shadow distortion/bias
+- ✅ `BlockLighting.glsl` — 完整端口（GetBlocklightFalloff、Redstone top/bottom、emissive ores、held torchlight）
+- ✅ `deferred5.fsh` 主流程 — 逐行对齐（sceneData 累积顺序、shadow/sunlightMult、diffuse 初始化、compositing 顺序）
+- ✅ `EMISSION_CURVE` = 2.2（Material.inc 精确复刻，在 `unpackGBufferMaterial` 中应用）
+- ✅ Shadow sampler 升级：`sampler2DShadow` 硬件 PCF + `glTextureView` 零拷贝双视图
+- ✅ COLORED_SHADOWS：二阶段阴影渲染 + ShadowColor.a 透明度标志 + `pcfFilter` 返回 `vec3`
+- ✅ Water/underwater `isEyeInWater` 分支：水下阳光衰减、天空光修改、金属遮罩
 
-后续所有实现必须按 DerivativeMain 源码逐文件收敛。尤其 shadow、BRDF、SunLighting、BlockLighting、Atmosphere、Water、Post 这些基础库，不能再“按效果重写”，只能“照抄后适配”。
+**当前定位已从"P1 大部分完成"升级为**：
+
+**P1 全部完成、可进入 P2（GBuffer 材质合同）和 P3（Atmosphere/Cloud/Fog/Water）收敛。**
+
+后续所有实现必须继续按 DerivativeMain 源码逐文件收敛。尤其 GBuffer Material.inc、Atmosphere、Cloud、Water、Post 这些基础库，不能再"按效果重写"，只能"照抄后适配"。

@@ -289,17 +289,22 @@ vec3 worldToShadowProj(in vec3 worldPos,
                         in int shadowWarpMode,
                         in float shadowMapBias,
                         out float warpDensity) {
-    vec4 lightView = shadowModelView * vec4(worldPos, 1.0);
-    vec4 lightClip = shadowProjection * lightView;
-    vec3 proj = lightClip.xyz / max(lightClip.w, 0.00001);
+    // DerivativeMain SunLighting.glsl:18-24 — WorldPosToShadowProjPosBias
+    // Uses transMAD + projMAD decomposition instead of full 4x4 multiply + perspective divide.
+    // This matches the shadow_depth.vs write path which also uses transMAD + projMAD.
+    // transMAD(shadowModelView, worldOffsetPos) = mat3(m) * v + m[3].xyz
+    vec3 shadowClipPos = mat3(shadowModelView) * worldPos + shadowModelView[3].xyz;
+    // projMAD(shadowProjection, shadowClipPos) = diagonal3(m) * v + m[3].xyz
+    shadowClipPos = vec3(shadowProjection[0].x, shadowProjection[1].y, shadowProjection[2].z) * shadowClipPos + shadowProjection[3].xyz;
+
     if (shadowWarpMode != 2) {
-        warpDensity = calculateShadowWarp(proj.xy, shadowWarpMode, shadowMapBias);
-        proj.xy /= warpDensity;
-        proj.z *= 0.2;
+        warpDensity = calculateShadowWarp(shadowClipPos.xy, shadowWarpMode, shadowMapBias);
+        shadowClipPos.xy /= warpDensity;
+        shadowClipPos.z *= 0.2;
     } else {
         warpDensity = 1.0;
     }
-    return proj * 0.5 + 0.5;
+    return shadowClipPos * 0.5 + 0.5;
 }
 
 vec3 worldToShadowProj(in vec3 worldPos,

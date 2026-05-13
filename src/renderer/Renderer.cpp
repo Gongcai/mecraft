@@ -1514,6 +1514,32 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         m_worldRenderBuffer.flushOpaque();
     }
     renderCutoutChunks(cutoutEntries);
+
+    // Phase 2: Render transparent (water) with depth write OFF.
+    // DerivativeMain Shadow.frag: water writes shadowcolor0 (caustics) and shadowcolor1
+    // (wave normal) but does NOT block light in the shadow map. This enables
+    // COLORED_SHADOWS where light passes through water with color tinting.
+    glDepthMask(GL_FALSE);
+    m_shadowDepthShader->setInt("uForceBaseLod", 0);
+    for (const ChunkRenderEntry& entry : transparentEntries) {
+        if (entry.chunk == nullptr) continue;
+
+        const SubChunkMesh* mesh = nullptr;
+        if (entry.aggregated) {
+            mesh = &entry.chunk->getColumnMesh();
+        } else {
+            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+            if (!sc) continue;
+            mesh = &sc->getMesh();
+        }
+        if (mesh->transparentVertexCount > 0) {
+            glBindVertexArray(mesh->transparentVao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->transparentVertexCount));
+            ++drawCallCount;
+        }
+    }
+    glDepthMask(GL_TRUE);
+
     m_worldRenderBuffer.beginFrame();
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -1577,7 +1603,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uDepthTex", 5);
     m_deferredLightingShader->setInt("uLightmapDay", 6);
     m_deferredLightingShader->setInt("uLightmapNight", 7);
-    m_deferredLightingShader->setInt("uShadowMap", 8);
+    m_deferredLightingShader->setInt("uShadowMapRaw", 8);
     m_deferredLightingShader->setInt("uSsaoTex", 9);
     m_deferredLightingShader->setInt("uSkyCaptureTex", 10);
     m_deferredLightingShader->setInt("uNoiseTex", 11);
@@ -1610,9 +1636,11 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
     m_deferredLightingShader->setFloat("uTime", frame.shaderTime);
     m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
     m_deferredLightingShader->setInt("uShadowColorTex", 12);
     m_deferredLightingShader->setInt("uShadowNormalTex", 13);
     m_deferredLightingShader->setInt("uAtmosphereLut", 14);
+    m_deferredLightingShader->setInt("uShadowMap", 15);
     bindFogUniforms(*m_deferredLightingShader, frame);
 
     glActiveTexture(GL_TEXTURE0);
@@ -1646,6 +1674,8 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowNormalTexture());
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
+    glActiveTexture(GL_TEXTURE15);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthComparisonTexture());
     renderFullscreen(*m_deferredLightingShader);
 
     for (int i = 14; i >= 0; --i) {
@@ -1863,9 +1893,10 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setInt("uDepthTex", 0);
     m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
     m_volumetricFogShader->setInt("uNoiseTex", 2);
-    m_volumetricFogShader->setInt("uShadowMap", 3);
+    m_volumetricFogShader->setInt("uShadowMapRaw", 3);
     m_volumetricFogShader->setInt("uShadowColorTex", 4);
     m_volumetricFogShader->setInt("uAtmosphereLut", 5);
+    m_volumetricFogShader->setInt("uShadowMap", 6);
     m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
     bindShadowFrameUniforms(*m_volumetricFogShader, frame);
     bindSkyLightingUniforms(*m_volumetricFogShader, frame);
@@ -1890,8 +1921,10 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowColorTexture());
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthComparisonTexture());
     renderFullscreen(*m_volumetricFogShader);
-    for (int i = 5; i >= 0; --i) {
+    for (int i = 6; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -2164,7 +2197,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uVoxelLightTex", 2);
     m_deferredDebugShader->setInt("uMaterialTex", 3);
     m_deferredDebugShader->setInt("uDepthTex", 4);
-    m_deferredDebugShader->setInt("uShadowMap", 5);
+    m_deferredDebugShader->setInt("uShadowMapRaw", 5);
     m_deferredDebugShader->setInt("uSsaoTex", 6);
     m_deferredDebugShader->setInt("uSceneLightingTex", 7);
     m_deferredDebugShader->setInt("uTransparentCompositeTex", 8);

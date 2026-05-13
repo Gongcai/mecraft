@@ -41,6 +41,10 @@ const int MATERIAL_ORE = 57;
 const int MATERIAL_NETHER_ORE = 58;
 const float MATERIAL_ID_MAX = 63.0;
 
+// DerivativeMain Material.inc:12 — EMISSION_CURVE shapes the PBR emissiveness channel.
+// pow(x, 2.2) makes partial emission values dimmer, creating a steeper falloff.
+const float EMISSIVE_CURVE = 2.2;
+
 struct SurfaceMaterial {
     // DerivativeMain GetMaterialData(vec2): roughness=specTex.r,
     // f0=specTex.g when MC_SPECULAR_MAP is disabled.
@@ -128,9 +132,15 @@ float derivativeHardcodedSss(int materialId) {
     return 0.0;
 }
 
+// DerivativeMain: when MC_SPECULAR_MAP is defined, emissiveness comes from specTex.a
+// (format 0) or specTex.b (PBR format), then pow(x, EMISSIVE_CURVE) is applied.
+// Without PBR textures, emissiveness is 0.0 — all emission comes from per-ID
+// BlockLighting.glsl logic instead. Mecraft uses albedo-brightness-based
+// emissiveHint as a PBR emission proxy; pass it through directly without
+// the old max(hint, 1.0) clamp that forced binary behavior.
 float derivativeEmissionHint(int materialId, float emissiveHint) {
     if (isDerivativeEmissiveMaterialId(materialId) || materialId == MATERIAL_ORE || materialId == MATERIAL_NETHER_ORE) {
-        return max(emissiveHint, 1.0);
+        return emissiveHint;
     }
     return 0.0;
 }
@@ -183,7 +193,8 @@ SurfaceMaterial unpackGBufferMaterial(vec4 packedMaterial) {
     SurfaceMaterial material;
     material.roughness = clamp(packedMaterial.r, 0.0, 1.0);
     material.f0 = clamp(packedMaterial.g, 0.0, 1.0);
-    material.emission = clamp(packedMaterial.b, 0.0, 1.0);
+    // DerivativeMain Material.inc:35 — material.emissiveness = pow(emissiveness, EMISSIVE_CURVE)
+    material.emission = pow(clamp(packedMaterial.b, 0.0, 1.0), EMISSIVE_CURVE);
     material.sss = clamp(packedMaterial.a, 0.0, 1.0);
     return material;
 }

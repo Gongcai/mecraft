@@ -52,6 +52,7 @@ public:
     [[nodiscard]] GLuint materialAuxTexture() const { return m_gMaterialAux; }
     [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
+    [[nodiscard]] GLuint shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
     [[nodiscard]] GLuint shadowColorTexture() const { return m_shadowColor; }
     [[nodiscard]] GLuint shadowNormalTexture() const { return m_shadowNormal; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
@@ -135,6 +136,7 @@ private:
 
     GLuint m_shadowFbo = 0;
     GLuint m_shadowDepth = 0;
+    GLuint m_shadowDepthComparison = 0; // Zero-copy view with GL_COMPARE_REF_TO_TEXTURE for sampler2DShadow
     GLuint m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
     GLuint m_shadowNormal = 0;  // RGBA16F: encoded normal.rg, skylight.b, aux/height.a
 

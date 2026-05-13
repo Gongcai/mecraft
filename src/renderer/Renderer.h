@@ -302,6 +302,7 @@ public:
     void setDebugLightMode(int mode);
     [[nodiscard]] int getDebugLightMode() const;
     void setRenderPipelineSettings(const RenderPipelineSettings& settings);
+    void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
     [[nodiscard]] RenderPipelineSettings getRenderPipelineSettings() const;
     [[nodiscard]] bool isDeferredDebugViewActive() const;
     void renderDeferredDebugOverlay(const Window& window);
@@ -387,6 +388,7 @@ private:
         VolumetricSettings volumetric{};
         CloudSettings cloud{};
         bool moonShadowActive = false;
+        bool eyeInWater = false;
         // Temporal foundation
         uint64_t frameIndex = 0;
         glm::vec2 jitter = glm::vec2(0.0f);
@@ -598,6 +600,7 @@ private:
     GameplaySkyRenderer m_gameplaySkyRenderer;
     DeferredRenderTargets m_deferredTargets;
     RenderPipelineSettings m_pipelineSettings{};
+    bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;
     RenderFrameData m_currentFrameData{};
     bool m_currentFrameDataValid = false;
