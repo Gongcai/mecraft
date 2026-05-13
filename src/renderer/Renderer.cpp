@@ -626,7 +626,6 @@ int Renderer::getDebugLightMode() const {
 
 void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings) {
     m_pipelineSettings = settings;
-    ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
     m_pipelineSettings.shadowResolution = std::clamp(m_pipelineSettings.shadowResolution, 256, 8192);
     m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 64.0f, 512.0f);
     m_pipelineSettings.shadowSoftness = std::clamp(m_pipelineSettings.shadowSoftness, 0.1f, 8.0f);
@@ -650,7 +649,11 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 34);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
-    m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
+    m_pipelineSettings.shadowWarpMode = 2;
+    m_pipelineSettings.debugDisableGreedyMeshing = false;
+    m_pipelineSettings.derivativeExactShadow = false;
+    m_pipelineSettings.shadowWarpCutoff = false;
+    ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
     m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
     m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
     m_pipelineSettings.kappaGradingStrength = std::clamp(m_pipelineSettings.kappaGradingStrength, 0.0f, 1.0f);
@@ -1129,6 +1132,14 @@ void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& fr
     shader.setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     shader.setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     shader.setInt("uShadowLightMode", frame.moonShadowActive ? 1 : 0);
+    shader.setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
+    for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+        const std::string prefix = "uCsmCascades[" + std::to_string(i) + "]";
+        shader.setMat4(prefix + ".viewProj", m_shadowCascades[i].viewProj);
+        shader.setFloat(prefix + ".splitNear", m_shadowCascades[i].splitNear);
+        shader.setFloat(prefix + ".splitFar", m_shadowCascades[i].splitFar);
+        shader.setFloat(prefix + ".texelWorldSize", m_shadowCascades[i].texelWorldSize);
+    }
 }
 
 void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& frame) const {
@@ -1472,50 +1483,27 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_deferredTransparentBatch.clear();
     m_transparentPassPlan.clear();
     m_shadowLightDirection = shadowLightDirectionFromSkyColors(frame.skyColors);
-    float shadowAngle = world.getDayNightSystem().getDayProgress01();
-    if (frame.moonShadowActive) {
-        shadowAngle += 0.5f;
-    }
-    shadowAngle -= std::floor(shadowAngle);
-    const ShadowProjectionData shadowProjectionData =
-        buildShadowProjectionData(camera, shadowAngle);
-    m_shadowModelView = shadowProjectionData.modelView;
-    m_shadowProjection = shadowProjectionData.projection;
-    m_shadowProjectionInverse = shadowProjectionData.projectionInverse;
-    m_shadowViewProj = shadowProjectionData.viewProj;
-    m_shadowExtent = shadowProjectionData.extent;
-    m_shadowTexelWorldSize = shadowProjectionData.texelWorldSize;
-    const glm::vec3 matrixLightDirection = glm::vec3(glm::inverse(m_shadowModelView)[2]);
-    if (glm::dot(matrixLightDirection, matrixLightDirection) > 0.0001f) {
-        m_shadowLightDirection = glm::normalize(matrixLightDirection);
-    }
-    m_deferredTargets.bindShadowMap();
+    m_shadowCascades = buildShadowCascades(camera, frame);
+    m_shadowModelView = m_shadowCascades[0].view;
+    m_shadowProjection = m_shadowCascades[0].projection;
+    m_shadowProjectionInverse = glm::inverse(m_shadowProjection);
+    m_shadowViewProj = m_shadowCascades[0].viewProj;
+    m_shadowExtent = std::max(1.0f, m_shadowCascades[0].splitFar);
+    m_shadowTexelWorldSize = m_shadowCascades[0].texelWorldSize;
+
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    const GLfloat shadowColorClear[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    const GLfloat shadowNormalClear[4] = {0.5f, 0.5f, 1.0f, 1.0f};
-    glClearBufferfv(GL_COLOR, 0, shadowColorClear);
-    glClearBufferfv(GL_COLOR, 1, shadowNormalClear);
-    glClear(GL_DEPTH_BUFFER_BIT);
-
-    m_worldRenderBuffer.beginFrame();
-    std::vector<ChunkRenderEntry> cutoutEntries;
-    cutoutEntries.reserve(world.getActiveChunks().size() * 2);
-    std::vector<ChunkRenderEntry> transparentEntries;
-    transparentEntries.reserve(world.getActiveChunks().size() * 2);
 
     m_chunkShader = m_shadowDepthShader;
     m_shadowDepthShader->use();
-    m_shadowDepthShader->setMat4("viewProj", m_shadowViewProj);
-    m_shadowDepthShader->setMat4("uShadowModelView", m_shadowModelView);
-    m_shadowDepthShader->setMat4("uShadowProjection", m_shadowProjection);
-    m_shadowDepthShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
-    m_shadowDepthShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
-    m_shadowDepthShader->setInt("uShadowWarpCutoff", m_pipelineSettings.shadowWarpCutoff ? 1 : 0);
+    // Formal Mecraft shadows are linear CSM. Derivative/Radial warp remains a
+    // debug-only historical path and is intentionally bypassed here.
+    m_shadowDepthShader->setInt("uShadowWarpMode", 2);
+    m_shadowDepthShader->setInt("uShadowWarpCutoff", 0);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
     m_shadowDepthShader->setInt("uNoiseTex", 1);
@@ -1531,79 +1519,66 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
 
-    // Setup shadow caster culler (Iris BoxCuller AABB cube semantics).
-    // DerivativeMain shadow.culling=false disables advanced frustum culling,
-    // but Iris still bounds caster submission through shadow render distance.
     const float shadowDist = std::max(64.0f, m_pipelineSettings.shadowDistance);
-    shadow::ShadowCasterCuller shadowCuller;
-    shadowCuller.setup(shadowDist, 1.0f, camera.getPosition());
-    shadowCuller.resetCounters();
+    int visibleTotal = 0;
+    int culledTotal = 0;
+    float maxCasterDistance = 0.0f;
+    const char* cullingMode = "CSMBoxCulling";
 
-    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
-                                       shadowDist, &shadowCuller);
+    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        const ShadowCascadeData& cascadeData = m_shadowCascades[cascade];
+        m_deferredTargets.bindCsmShadowLayer(cascade);
+        glClear(GL_DEPTH_BUFFER_BIT);
 
-    // Debug output: shadow caster domain info
-    {
-        const int visible = shadowCuller.getVisibleCount();
-        const int culled = shadowCuller.getCulledCount();
-        const float maxDist = shadowCuller.getMaxCasterDistance();
-        const float renderMul = 1.0f;
-        const char* mode = shadowCuller.getCullingMode();
-        static int frameCounter = 0;
-        if (++frameCounter % 120 == 0) {
-            printf("[shadow] caster: %d submitted, %d culled, maxDist=%.1f, mode=%s, renderMul=%.1f, halfPlane=%.1f\n",
-                   visible, culled, maxDist, mode, renderMul, shadowDist);
+        m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+        m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+        m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+        m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+
+        m_worldRenderBuffer.beginFrame();
+        std::vector<ChunkRenderEntry> cutoutEntries;
+        cutoutEntries.reserve(world.getActiveChunks().size() * 2);
+        std::vector<ChunkRenderEntry> transparentEntries;
+        transparentEntries.reserve(world.getActiveChunks().size() * 2);
+        m_deferredTransparentBatch.clear();
+        m_transparentPassPlan.clear();
+
+        shadow::ShadowCasterCuller shadowCuller;
+        shadowCuller.setup(shadowDist, 1.0f, camera.getPosition());
+        shadowCuller.resetCounters();
+        renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
+                                           shadowDist, &shadowCuller);
+        visibleTotal += shadowCuller.getVisibleCount();
+        culledTotal += shadowCuller.getCulledCount();
+        maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
+        cullingMode = shadowCuller.getCullingMode();
+
+        if (m_useMultiDrawIndirect) {
+            m_worldRenderBuffer.flushOpaque();
         }
+        renderCutoutChunks(cutoutEntries);
     }
 
-    if (m_useMultiDrawIndirect) {
-        m_worldRenderBuffer.flushOpaque();
+    static int frameCounter = 0;
+    if (++frameCounter % 120 == 0) {
+        printf("[shadow:csm] cascades=%d submitted=%d culled=%d maxDist=%.1f mode=%s halfPlane=%.1f\n",
+               SHADOW_CASCADE_COUNT, visibleTotal, culledTotal, maxCasterDistance, cullingMode, shadowDist);
     }
-    renderCutoutChunks(cutoutEntries);
 
-    // Phase 2: Render transparent (water) with depth write OFF.
-    // DerivativeMain Shadow.frag: water writes shadowcolor0 (caustics) and shadowcolor1
-    // (wave normal) but does NOT block light in the shadow map. This enables
-    // COLORED_SHADOWS where light passes through water with color tinting.
-    glDepthMask(GL_FALSE);
-    m_shadowDepthShader->setInt("uForceBaseLod", 0);
-    if (m_useMultiDrawIndirect) {
-        // MDI path: water/transparent data is in m_deferredTransparentBatch, not transparentEntries.
-        // Use the same pattern as the water composite pass: iterate water entries from the batch
-        // and draw via the global transparent VAO.
-        for (const auto& entry : m_deferredTransparentBatch) {
-            if (entry.kind == TransparentBatchKind::Water ||
-                entry.kind == TransparentBatchKind::Generic) {
-                glBindVertexArray(m_worldRenderBuffer.transparentVao());
-                glDrawArrays(GL_TRIANGLES,
-                             static_cast<GLint>(entry.range.firstVertex),
-                             static_cast<GLsizei>(entry.range.vertexCount));
-                ++drawCallCount;
-            }
-        }
-    } else {
-        for (const ChunkRenderEntry& entry : transparentEntries) {
-            if (entry.chunk == nullptr) continue;
-
-            const SubChunkMesh* mesh = nullptr;
-            if (entry.aggregated) {
-                mesh = &entry.chunk->getColumnMesh();
-            } else {
-                const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-                if (!sc) continue;
-                mesh = &sc->getMesh();
-            }
-            if (mesh->transparentVertexCount > 0) {
-                glBindVertexArray(mesh->transparentVao);
-                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->transparentVertexCount));
-                ++drawCallCount;
-            }
-        }
-    }
-    glDepthMask(GL_TRUE);
+    // Transitional compatibility for debug/volumetric passes that still sample
+    // the legacy single shadow map: expose cascade 0 there until they consume
+    // the CSM contract directly.
+    glCopyImageSubData(m_deferredTargets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
+                       0, 0, 0, 0,
+                       m_deferredTargets.shadowDepthTexture(), GL_TEXTURE_2D,
+                       0, 0, 0, 0,
+                       m_deferredTargets.shadowResolution(),
+                       m_deferredTargets.shadowResolution(),
+                       1);
 
     m_worldRenderBuffer.beginFrame();
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1708,6 +1683,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uShadowNormalTex", 13);
     m_deferredLightingShader->setInt("uAtmosphereLut", 14);
     m_deferredLightingShader->setInt("uShadowMap", 15);
+    m_deferredLightingShader->setInt("uCsmShadowMap", 16);
     bindFogUniforms(*m_deferredLightingShader, frame);
 
     glActiveTexture(GL_TEXTURE0);
@@ -1743,9 +1719,13 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthComparisonTexture());
+    glActiveTexture(GL_TEXTURE16);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     renderFullscreen(*m_deferredLightingShader);
 
-    for (int i = 14; i >= 0; --i) {
+    glActiveTexture(GL_TEXTURE16);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    for (int i = 15; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -2463,6 +2443,86 @@ Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera&
     data.extent = extent;
     data.texelWorldSize = worldUnitsPerTexel;
     return data;
+}
+
+std::array<Renderer::ShadowCascadeData, Renderer::SHADOW_CASCADE_COUNT>
+Renderer::buildShadowCascades(const Camera& camera, const RenderFrameData& frame) const {
+    std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> cascades{};
+
+    const float shadowDistance = std::max(64.0f, m_pipelineSettings.shadowDistance);
+    const float nearPlane = std::max(0.05f, camera.getNear());
+    const float aspect = static_cast<float>(std::max(1, m_deferredTargets.width())) /
+                         static_cast<float>(std::max(1, m_deferredTargets.height()));
+    const float tanHalfFovY = std::tan(glm::radians(camera.getFOV()) * 0.5f);
+    const float tanHalfFovX = tanHalfFovY * aspect;
+    const std::array<float, SHADOW_CASCADE_COUNT> splitFractions = {0.10f, 0.24f, 0.52f, 1.0f};
+
+    glm::vec3 lightDir = m_shadowLightDirection;
+    if (glm::dot(lightDir, lightDir) < 0.0001f) {
+        lightDir = frame.skyColors.sunDirection;
+    }
+    lightDir = glm::normalize(lightDir);
+
+    const glm::vec3 cameraPos = camera.getPosition();
+    const glm::vec3 cameraForward = glm::normalize(camera.getFront());
+    const glm::vec3 cameraRight = glm::normalize(camera.getRight());
+    const glm::vec3 cameraUp = glm::normalize(camera.getUp());
+    const glm::vec3 upRef = std::abs(glm::dot(lightDir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.92f
+        ? glm::vec3(0.0f, 0.0f, 1.0f)
+        : glm::vec3(0.0f, 1.0f, 0.0f);
+
+    float splitNear = nearPlane;
+    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        const float splitFar = std::max(splitNear + 1.0f, shadowDistance * splitFractions[cascade]);
+
+        std::array<glm::vec3, 8> corners{};
+        int cornerIndex = 0;
+        for (const float dist : {splitNear, splitFar}) {
+            const glm::vec3 center = cameraPos + cameraForward * dist;
+            const float halfX = dist * tanHalfFovX;
+            const float halfY = dist * tanHalfFovY;
+            corners[cornerIndex++] = center - cameraRight * halfX - cameraUp * halfY;
+            corners[cornerIndex++] = center + cameraRight * halfX - cameraUp * halfY;
+            corners[cornerIndex++] = center - cameraRight * halfX + cameraUp * halfY;
+            corners[cornerIndex++] = center + cameraRight * halfX + cameraUp * halfY;
+        }
+
+        glm::vec3 center(0.0f);
+        for (const glm::vec3& corner : corners) {
+            center += corner;
+        }
+        center /= static_cast<float>(corners.size());
+
+        float radius = 1.0f;
+        for (const glm::vec3& corner : corners) {
+            radius = std::max(radius, glm::length(corner - center));
+        }
+        radius = std::ceil(radius * 16.0f) / 16.0f;
+
+        const float lightDistance = shadowDistance + radius * 2.0f;
+        const glm::mat4 lightView = glm::lookAt(center + lightDir * lightDistance,
+                                                center,
+                                                upRef);
+        const float texelWorldSize = (radius * 2.0f) /
+                                     static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
+        const glm::vec3 centerLight = glm::vec3(lightView * glm::vec4(center, 1.0f));
+        const float snappedX = std::floor(centerLight.x / texelWorldSize) * texelWorldSize;
+        const float snappedY = std::floor(centerLight.y / texelWorldSize) * texelWorldSize;
+        const float depthExtent = shadowDistance + radius * 3.0f;
+        const glm::mat4 projection = glm::ortho(snappedX - radius, snappedX + radius,
+                                                snappedY - radius, snappedY + radius,
+                                                -depthExtent, depthExtent);
+
+        cascades[cascade].view = lightView;
+        cascades[cascade].projection = projection;
+        cascades[cascade].viewProj = projection * lightView;
+        cascades[cascade].splitNear = splitNear;
+        cascades[cascade].splitFar = splitFar;
+        cascades[cascade].texelWorldSize = texelWorldSize;
+        splitNear = splitFar;
+    }
+
+    return cascades;
 }
 
 void Renderer::captureCurrentFramebuffer() {

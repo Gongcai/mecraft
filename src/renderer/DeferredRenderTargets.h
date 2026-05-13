@@ -14,6 +14,7 @@ public:
 
     void bindGBuffer();
     void bindShadowMap();
+    void bindCsmShadowLayer(int cascadeIndex);
     void bindShadowColor();
     void bindSsao();
     void bindSsaoFiltered();
@@ -53,6 +54,8 @@ public:
     [[nodiscard]] GLuint depthTexture() const { return m_gDepth; }
     [[nodiscard]] GLuint shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] GLuint shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
+    [[nodiscard]] GLuint csmShadowDepthTexture() const { return m_csmShadowDepth; }
+    [[nodiscard]] GLuint csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
     [[nodiscard]] GLuint shadowColorTexture() const { return m_shadowColor; }
     [[nodiscard]] GLuint shadowNormalTexture() const { return m_shadowNormal; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
@@ -87,9 +90,11 @@ public:
     [[nodiscard]] int width() const { return m_width; }
     [[nodiscard]] int height() const { return m_height; }
     [[nodiscard]] int shadowResolution() const { return m_shadowResolution; }
+    [[nodiscard]] int shadowCascadeCount() const { return kShadowCascadeCount; }
     [[nodiscard]] bool isReady() const { return m_ready; }
 
 private:
+    static constexpr int kShadowCascadeCount = 4;
     // Sky capture: 256x514 equirectangular map (matches DerivativeMain colortex5).
     // skyCaptureRes = ivec2(255, 256), texture = 256 wide x 514 tall.
     // Rows 0..257:   raw atmospheric sky radiance (equirectangular).
@@ -114,6 +119,13 @@ private:
                                   GLenum magFilter,
                                   GLenum wrap,
                                   int levels = 1);
+    static GLuint createTexture2DArray(GLenum internalFormat,
+                                       int width,
+                                       int height,
+                                       int layers,
+                                       GLenum minFilter,
+                                       GLenum magFilter,
+                                       GLenum wrap);
 
     static void generateMipmaps(GLuint texture);
     static bool checkFramebufferComplete(GLuint framebuffer, const char* label);
@@ -139,6 +151,9 @@ private:
     GLuint m_shadowDepthComparison = 0; // Zero-copy view with GL_COMPARE_REF_TO_TEXTURE for sampler2DShadow
     GLuint m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
     GLuint m_shadowNormal = 0;  // RGBA16F: encoded normal.rg, skylight.b, aux/height.a
+    GLuint m_csmShadowFbo = 0;
+    GLuint m_csmShadowDepth = 0; // GL_TEXTURE_2D_ARRAY raw depth, one layer per cascade
+    GLuint m_csmShadowDepthComparison = 0; // GL_TEXTURE_2D_ARRAY comparison view for sampler2DArrayShadow
 
     GLuint m_ssaoFbo = 0;
     GLuint m_ssaoTex = 0;

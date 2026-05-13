@@ -106,6 +106,35 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    glCreateFramebuffers(1, &m_csmShadowFbo);
+    m_csmShadowDepth = createTexture2DArray(GL_DEPTH_COMPONENT32F,
+                                            m_shadowResolution,
+                                            m_shadowResolution,
+                                            kShadowCascadeCount,
+                                            GL_NEAREST,
+                                            GL_NEAREST,
+                                            GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_csmShadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    glGenTextures(1, &m_csmShadowDepthComparison);
+    glTextureView(m_csmShadowDepthComparison, GL_TEXTURE_2D_ARRAY,
+                  m_csmShadowDepth, GL_DEPTH_COMPONENT32F,
+                  0, 1, 0, kShadowCascadeCount);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameterfv(m_csmShadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    glNamedFramebufferTextureLayer(m_csmShadowFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepth, 0, 0);
+    glNamedFramebufferDrawBuffer(m_csmShadowFbo, GL_NONE);
+    glNamedFramebufferReadBuffer(m_csmShadowFbo, GL_NONE);
+    if (!checkFramebufferComplete(m_csmShadowFbo, "CsmShadowMap")) {
+        shutdown();
+        return false;
+    }
+
     glCreateFramebuffers(1, &m_ssaoFbo);
     m_ssaoTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_ssaoFbo, GL_COLOR_ATTACHMENT0, m_ssaoTex, 0);
@@ -285,6 +314,15 @@ void DeferredRenderTargets::bindShadowMap() {
     glViewport(0, 0, m_shadowResolution, m_shadowResolution);
     const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
     glDrawBuffers(2, drawBuffers);
+}
+
+void DeferredRenderTargets::bindCsmShadowLayer(const int cascadeIndex) {
+    const int layer = std::clamp(cascadeIndex, 0, kShadowCascadeCount - 1);
+    glNamedFramebufferTextureLayer(m_csmShadowFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepth, 0, layer);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowFbo);
+    glViewport(0, 0, m_shadowResolution, m_shadowResolution);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
 }
 
 void DeferredRenderTargets::bindShadowColor() {
@@ -609,6 +647,26 @@ GLuint DeferredRenderTargets::createTexture2D(const GLenum internalFormat,
     return texture;
 }
 
+GLuint DeferredRenderTargets::createTexture2DArray(const GLenum internalFormat,
+                                                   const int width,
+                                                   const int height,
+                                                   const int layers,
+                                                   const GLenum minFilter,
+                                                   const GLenum magFilter,
+                                                   const GLenum wrap) {
+    GLuint texture = 0;
+    glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &texture);
+    glTextureStorage3D(texture, 1, internalFormat, width, height, layers);
+    glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(minFilter));
+    glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(magFilter));
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_S, static_cast<GLint>(wrap));
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_T, static_cast<GLint>(wrap));
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texture, GL_TEXTURE_BASE_LEVEL, 0);
+    glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, 0);
+    return texture;
+}
+
 void DeferredRenderTargets::generateMipmaps(const GLuint texture) {
     if (texture != 0) {
         glGenerateTextureMipmap(texture);
@@ -637,6 +695,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_shadowDepthComparison,
         m_shadowColor,
         m_shadowNormal,
+        m_csmShadowDepth,
+        m_csmShadowDepthComparison,
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_sceneLightingTex,
@@ -670,6 +730,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_shadowDepthComparison = 0;
     m_shadowColor = 0;
     m_shadowNormal = 0;
+    m_csmShadowDepth = 0;
+    m_csmShadowDepthComparison = 0;
     m_ssaoTex = 0;
     m_ssaoFilteredTex = 0;
     m_sceneLightingTex = 0;
@@ -687,7 +749,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
     m_velocityTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -696,6 +758,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     }
     m_gBufferFbo = 0;
     m_shadowFbo = 0;
+    m_csmShadowFbo = 0;
     m_ssaoFbo = 0;
     m_ssaoFilteredFbo = 0;
     m_sceneLightingFbo = 0;

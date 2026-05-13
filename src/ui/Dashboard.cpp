@@ -357,12 +357,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         Renderer::RenderPipelineSettings pipeline = render.getRenderPipelineSettings();
         int pipelineMode = static_cast<int>(pipeline.mode);
         int tonemapMode = pipeline.tonemapMode;
-        int shadowWarpMode = pipeline.shadowWarpMode;
         int debugViewMode = pipeline.debugViewMode;
         int weatherPreset = pipeline.weatherPreset;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {"Reinhard", "AcademyFit", "Filmic", "AgX"};
-        static constexpr const char* kShadowWarpModes[] = {"Radial Debug", "Derivative", "No Warp"};
         static constexpr const char* kDebugViewModes[] = {
             "Off",
             "GBuffer Albedo",
@@ -395,8 +393,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Cloud History",
             "SSR Hit Mask",
             "Scene Resolved",
-            "Shadow UV + Warp",
-            "Warp Density",
+            "Shadow UV",
+            "Shadow Density",
             "Shadow Depth Compare",
             "Shadow Hit Caster"
         };
@@ -436,26 +434,23 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipeline.weatherPreset = weatherPreset;
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
-        pipelineChanged |= ImGui::Combo("Shadow Warp", &shadowWarpMode, kShadowWarpModes, IM_ARRAYSIZE(kShadowWarpModes));
-        pipeline.shadowWarpMode = shadowWarpMode;
-        pipelineChanged |= ImGui::Checkbox("Shadow Warp Cutoff", &pipeline.shadowWarpCutoff);
-        pipelineChanged |= ImGui::Checkbox("Derivative Exact Shadow", &pipeline.derivativeExactShadow);
-        const bool previousDebugDisableGreedyMeshing = pipeline.debugDisableGreedyMeshing;
-        pipelineChanged |= ImGui::Checkbox("Debug Disable Greedy Meshing", &pipeline.debugDisableGreedyMeshing);
-        if (pipeline.debugDisableGreedyMeshing != previousDebugDisableGreedyMeshing) {
+        ImGui::TextUnformatted("Shadow Projection: CSM Linear");
+        pipeline.shadowWarpMode = 2;
+        pipeline.shadowWarpCutoff = false;
+        pipeline.derivativeExactShadow = false;
+        if (pipeline.debugDisableGreedyMeshing) {
+            pipeline.debugDisableGreedyMeshing = false;
             for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
                 (void)chunkKey;
                 if (chunk) {
                     chunk->markExistingSubChunksDirty();
                 }
             }
-        }
-        if (pipeline.debugDisableGreedyMeshing) {
-            ImGui::TextWrapped("Testing mesh: terrain cube faces are rebuilt as 1x1 quads to isolate nonlinear shadow warp interpolation.");
+            pipelineChanged = true;
         }
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 1;
+            pipeline.shadowWarpMode = 2;
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = false;
             pipeline.contactShadowsEnabled = false;
@@ -504,7 +499,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 1;
+            pipeline.shadowWarpMode = 2;
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;
@@ -558,7 +553,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 1;
+            pipeline.shadowWarpMode = 2;
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;

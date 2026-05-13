@@ -16,6 +16,7 @@ uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
 uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch (blockerSearch, debug)
 uniform sampler2DShadow uShadowMap;  // Hardware comparison for PCF (DerivativeMain shadowtex1)
+uniform sampler2DArrayShadow uCsmShadowMap; // Mecraft formal CSM depth array
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
@@ -99,6 +100,16 @@ uniform sampler2D uShadowNormalTex;
 
 // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
 uniform sampler3D uAtmosphereLut;
+
+struct CsmCascade {
+    mat4 viewProj;
+    float splitNear;
+    float splitFar;
+    float texelWorldSize;
+};
+
+uniform int uCsmCascadeCount;
+uniform CsmCascade uCsmCascades[4];
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -311,35 +322,9 @@ float shapeShadowVisibility(float lit) {
 }
 
 vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shadowVisibility) {
-    if (uShadowsEnabled == 0 || uShadowTintStrength <= 0.001) {
-        return vec3(1.0);
-    }
-
-    vec3 cameraRelPos = worldPos - uCameraPos;
-    float viewDistanceForBias = length(cameraRelPos);
-    float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float normalOffset = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistanceForBias);
-    float warpDensity = 1.0;
-    vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
-    if (shadowProjOutOfBounds(proj)) {
-        return vec3(1.0);
-    }
-
-    vec4 shadowColorSample = texture(uShadowColorTex, proj.xy);
-    // DerivativeMain Shadow.frag encodes transparent caster colors with sqrt2 (x^0.25),
-    // decoded by pow4 in the PCF path. For tinting, decode the same way.
-    vec3 shadowColor = (shadowColorSample.a < 0.5) ? pow4(shadowColorSample.rgb) : shadowColorSample.rgb;
-    // ShadowColor.a = 0.0 for transparent casters (already handled in pcfFilter).
-    // For opaque casters, apply shadow tint based on the caster's albedo color.
-    float tintStrength = clamp(uShadowTintStrength, 0.0, 1.0) * (1.0 - shadowVisibility);
-    float normalMatch = 1.0;
-    if (shadowColorSample.a > 0.5) {
-        // Opaque caster: apply subtle tint based on normal match
-        vec3 shadowNormal = decodeOctNormal(texture(uShadowNormalTex, proj.xy).rg);
-        normalMatch = clamp(dot(shadowNormal, normal) * 0.5 + 0.5, 0.0, 1.0);
-    }
-    vec3 desaturatedShadow = mix(shadowColor, vec3(dot(shadowColor, vec3(0.2126, 0.7152, 0.0722))), 0.35);
-    return mix(vec3(1.0), desaturatedShadow, tintStrength * normalMatch * 0.42);
+    // Mecraft CSM first pass is depth-only. Colored shadows / shadowcolor0 tint
+    // will return after transparent shadow semantics are defined for the CSM array.
+    return vec3(1.0);
 }
 
 // DerivativeMain BlockerSearch (SunLighting.glsl:28-54)
@@ -524,66 +509,58 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
     float ndotl = saturate(dot(normal, lightDir));
     if (ndotl <= 1e-3) return vec3(1.0);  // DerivativeMain deferred5.fsh:276 uses 1e-3
 
-    // Normal offset (DerivativeMain: normal * (dist² * 8e-5 + 3e-2) * (2 - NdotL)).
-    // Exact mode removes Mecraft's UI scale so the receiver path matches DerivativeMain.
-    float normalOffset = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistanceForBias);
-    float warpDensity = 1.0;
-    vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
+    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
+    for (int i = 0; i < 4; ++i) {
+        if (i >= uCsmCascadeCount) break;
+        if (viewDistanceForBias <= uCsmCascades[i].splitFar) {
+            cascadeIndex = i;
+            break;
+        }
+    }
+
+    float cascadeTexelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
+    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistanceForBias,
+                                                 cascadeTexelWorld, uShadowDistance,
+                                                 uShadowNormalOffset);
+    vec4 shadowClip = uCsmCascades[cascadeIndex].viewProj * vec4(worldPos + normal * normalOffset, 1.0);
+    vec3 proj = shadowClip.xyz / max(abs(shadowClip.w), 1e-6) * 0.5 + 0.5;
     if (shadowProjOutOfBounds(proj)) return vec3(1.0);
 
-    float projectionFade = localShadowProjectionFade(proj);
+    ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
+    vec2 texelUv = 1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1));
+    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
+    float projectionFade = smoothstep(texelUv.x * 2.0, texelUv.x * 12.0,
+                                      min(edgeDistance.x, edgeDistance.y));
+    if (cascadeIndex == uCsmCascadeCount - 1) {
+        projectionFade *= oneMinus(distanceFade);
+    }
     if (projectionFade <= 0.001) return vec3(1.0);
 
-    // DerivativeMain does NOT apply an additional depth bias here.
-    // Shadow bias comes from two sources only:
-    //   1. Normal offset (world-space receiver shift) — applied above
-    //   2. Constant 1e-4 bias inside pcfFilter/hardware comparison — applied there
-    // The previous extra world-space bias (shadowWorldBias) caused peter-panning
-    // (double bias: normal offset + depth offset).
-
-    if (uSoftShadowsEnabled == 0) {
-        // Hardware single-tap comparison (sampler2DShadow)
-        // DerivativeMain PCF applies: shadowProjPos.z -= 1e-4 - dither * 5e-5
-        // For the hard shadow path, apply the same minimum constant bias.
-        float dither = shadowDither();
-        proj.z -= 1e-4 - dither * 5e-5;
-        float lit = texture(uShadowMap, vec3(proj.xy, proj.z));
-
-        // Colored shadow detection for single-tap path. Mecraft marks true
-        // transparent casters in shadowcolor0 alpha; cutout leaves/grass write
-        // alpha 1.0 and therefore use the opaque shadow path.
-        ivec2 texel;
-        vec4 shadowCol;
-        bool transparentCaster = isTransparentShadowCasterAt(proj.xy, texel, shadowCol);
-        vec3 coloredLit = transparentCaster ? pow4(shadowCol.rgb) * lit : vec3(lit);
-
-        float shapedLit = shapeShadowVisibility(lit);
-        vec3 shaped = transparentCaster ? coloredLit * shapeShadowVisibility(dot(coloredLit, vec3(0.333))) : vec3(shapedLit);
-        return mix(vec3(1.0), shaped, projectionFade * oneMinus(distanceFade));
-    }
-
+    float radiusWorld = cascadeTexelWorld * float(max(shadowSize.x, 1)) * 0.5;
+    float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
+    float biasWorld = shadowWorldBias(ndotl, viewDistanceForBias, cascadeTexelWorld,
+                                      uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
+    float bias = max(biasWorld / (2.0 * depthExtent), 4.0e-5);
     float dither = shadowDither();
-    vec2 blocker = blockerSearch(proj, dither);
-    outSssDepth = blocker.y;
+    float refZ = proj.z - bias + dither * 1.5e-5;
 
-    int samples = (uDerivativeExactShadow != 0) ? 16 : (uPcssShadowsEnabled != 0 ? 16 : 8);
-    float minRadius = 2.0 / max(float(textureSize(uShadowMapRaw, 0).x), 1.0);
-    float pcfRadius = minRadius * max(uShadowSoftness, 0.1);
-    if (uDerivativeExactShadow != 0) {
-        // DerivativeMain/world0/deferred5.fsh:277
-        // penumbraScale = max(blockerSearch.x / distortFactor, 2.0 / realShadowMapRes)
-        pcfRadius = max(blocker.x / max(warpDensity, 0.1), minRadius);
-    } else if (uPcssShadowsEnabled != 0) {
-        pcfRadius = max(blocker.x / max(warpDensity, 0.1), minRadius) *
-                    max(1.0, uShadowSoftness) *
-                    max(uShadowPcssStrength, 0.35);
+    float lit = 0.0;
+    if (uSoftShadowsEnabled == 0) {
+        lit = texture(uCsmShadowMap, vec4(proj.xy, float(cascadeIndex), refZ));
+    } else {
+        float radius = max(1.0, uShadowSoftness) * 1.15;
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                vec2 uv = proj.xy + vec2(x, y) * texelUv * radius;
+                lit += texture(uCsmShadowMap, vec4(uv, float(cascadeIndex), refZ));
+            }
+        }
+        lit *= 1.0 / 9.0;
     }
 
-    vec3 lit = pcfFilter(proj, pcfRadius, dither, samples);
     lit *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, dither, sssAmount);
-    float litLuma = dot(lit, vec3(0.333));
-    float shaped = shapeShadowVisibility(litLuma);
-    return mix(vec3(1.0), lit * (shaped / max(litLuma, 1e-6)), projectionFade * oneMinus(distanceFade));
+    float shaped = shapeShadowVisibility(lit);
+    return vec3(mix(1.0, shaped, projectionFade));
 }
 
 // Overload without SSS depth output for callers that don't need it
@@ -765,7 +742,7 @@ void main() {
 
     // 2. SSS (DerivativeMain SunLighting.glsl:176-188 — now via derivative_sunlight.glsl include)
     //    DerivativeMain deferred5.fsh:267-272: SSS is added to sceneData BEFORE shadow/diffuse
-    if (sss > 1e-4) {
+    if (sss > 1e-4 && shadowSssDepth < -1e-5) {
         // DerivativeMain deferred5.fsh:268-271 — exactly 3 operations, no fill light
         vec3 sssContrib = CalculateSubsurfaceScattering(albedo, sss, shadowSssDepth, LdotV);
         // DerivativeMain deferred5.fsh:270 — sssContrib *= eyeSkylightFix

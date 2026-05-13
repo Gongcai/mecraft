@@ -91,10 +91,10 @@ public:
         int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
-        int shadowWarpMode = 1; // 0=Radial debug, 1=Derivative quartic, 2=No warp
-        bool shadowWarpCutoff = true; // Debug: discard vertices outside pre-warp shadow clip range
-        bool derivativeExactShadow = false; // Debug: use DerivativeMain receiver offset + PCF radius exactly
-        bool debugDisableGreedyMeshing = false; // Debug: rebuild terrain as unit faces to test nonlinear shadow warp interpolation
+        int shadowWarpMode = 2; // Forced CSM path; legacy warp modes are disabled.
+        bool shadowWarpCutoff = false;
+        bool derivativeExactShadow = false;
+        bool debugDisableGreedyMeshing = false;
         int shadowResolution = 2048;
         float shadowDistance = 192.0f;
         float shadowSoftness = 1.0f;
@@ -368,6 +368,17 @@ private:
         float texelWorldSize = 1.0f;
     };
 
+    static constexpr int SHADOW_CASCADE_COUNT = 4;
+
+    struct ShadowCascadeData {
+        glm::mat4 view = glm::mat4(1.0f);
+        glm::mat4 projection = glm::mat4(1.0f);
+        glm::mat4 viewProj = glm::mat4(1.0f);
+        float splitNear = 0.0f;
+        float splitFar = 1.0f;
+        float texelWorldSize = 1.0f;
+    };
+
     struct RenderFrameData {
         glm::mat4 view = glm::mat4(1.0f);
         glm::mat4 projection = glm::mat4(1.0f);
@@ -513,6 +524,8 @@ private:
     glm::vec3 shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
                                                 bool* moonShadowActive = nullptr) const;
     ShadowProjectionData buildShadowProjectionData(const Camera& camera, float shadowAngle) const;
+    std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> buildShadowCascades(const Camera& camera,
+                                                                            const RenderFrameData& frame) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);
@@ -623,6 +636,7 @@ private:
     glm::vec3 m_shadowLightDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     float m_shadowExtent = 1.0f;
     float m_shadowTexelWorldSize = 1.0f;
+    std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> m_shadowCascades{};
     bool m_deferredFrameActive = false;
     std::unordered_set<int64_t> m_meshingInFlight;
     std::vector<SubChunkMeshingResult> m_deferredMeshResults;
