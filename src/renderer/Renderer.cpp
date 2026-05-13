@@ -135,6 +135,14 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
     m_motionBlurShader = resourceMgr.getShader("motion_blur");
     m_dofShader = resourceMgr.getShader("dof");
+    if (m_deferredLightingShader != nullptr) {
+        m_deferredLightingShader->use();
+        m_deferredLightingShader->setInt("uCsmShadowMap", 15);
+    }
+    if (m_volumetricFogShader != nullptr) {
+        m_volumetricFogShader->use();
+        m_volumetricFogShader->setInt("uCsmShadowMap", 6);
+    }
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
@@ -1682,8 +1690,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uShadowColorTex", 12);
     m_deferredLightingShader->setInt("uShadowNormalTex", 13);
     m_deferredLightingShader->setInt("uAtmosphereLut", 14);
-    m_deferredLightingShader->setInt("uShadowMap", 15);
-    m_deferredLightingShader->setInt("uCsmShadowMap", 16);
+    m_deferredLightingShader->setInt("uCsmShadowMap", 15);
     bindFogUniforms(*m_deferredLightingShader, frame);
 
     glActiveTexture(GL_TEXTURE0);
@@ -1718,14 +1725,13 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthComparisonTexture());
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    m_deferredLightingShader->setInt("uCsmShadowMap", 15);
     renderFullscreen(*m_deferredLightingShader);
 
-    glActiveTexture(GL_TEXTURE16);
+    glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    for (int i = 15; i >= 0; --i) {
+    for (int i = 14; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -1943,7 +1949,7 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setInt("uShadowMapRaw", 3);
     m_volumetricFogShader->setInt("uShadowColorTex", 4);
     m_volumetricFogShader->setInt("uAtmosphereLut", 5);
-    m_volumetricFogShader->setInt("uShadowMap", 6);
+    m_volumetricFogShader->setInt("uCsmShadowMap", 6);
     m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
     bindShadowFrameUniforms(*m_volumetricFogShader, frame);
     bindSkyLightingUniforms(*m_volumetricFogShader, frame);
@@ -1969,9 +1975,12 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthComparisonTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    m_volumetricFogShader->setInt("uCsmShadowMap", 6);
     renderFullscreen(*m_volumetricFogShader);
-    for (int i = 6; i >= 0; --i) {
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    for (int i = 5; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -2264,6 +2273,9 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uShadowNormalTex", 15);
     m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
+    const RenderFrameData* debugFrame = m_currentFrameDataValid
+        ? &m_currentFrameData
+        : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
     m_deferredDebugShader->setMat4("uShadowModelView", m_shadowModelView);
     m_deferredDebugShader->setMat4("uShadowProjection", m_shadowProjection);
     m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
@@ -2274,12 +2286,21 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
+    if (debugFrame != nullptr) {
+        bindShadowFrameUniforms(*m_deferredDebugShader, *debugFrame);
+    } else {
+        m_deferredDebugShader->setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
+        for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
+            const std::string prefix = "uCsmCascades[" + std::to_string(i) + "]";
+            m_deferredDebugShader->setMat4(prefix + ".viewProj", m_shadowCascades[i].viewProj);
+            m_deferredDebugShader->setFloat(prefix + ".splitNear", m_shadowCascades[i].splitNear);
+            m_deferredDebugShader->setFloat(prefix + ".splitFar", m_shadowCascades[i].splitFar);
+            m_deferredDebugShader->setFloat(prefix + ".texelWorldSize", m_shadowCascades[i].texelWorldSize);
+        }
+    }
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
     m_deferredDebugShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_deferredDebugShader->setInt("uDerivativeExactShadow", m_pipelineSettings.derivativeExactShadow ? 1 : 0);
-    const RenderFrameData* debugFrame = m_currentFrameDataValid
-        ? &m_currentFrameData
-        : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
     m_deferredDebugShader->setMat4("uInvViewProj", debugFrame != nullptr ? debugFrame->invViewProj : glm::mat4(1.0f));
     m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
     m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
@@ -2315,28 +2336,28 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
     glActiveTexture(GL_TEXTURE13);
     const bool materialAuxDebug =
-        m_pipelineSettings.debugViewMode == 25 || m_pipelineSettings.debugViewMode == 26;
+        m_pipelineSettings.debugViewMode == 26 || m_pipelineSettings.debugViewMode == 27;
     const bool historyDepthDebug = m_pipelineSettings.debugViewMode == 19;
     const bool shadowCompareDebug =
         m_pipelineSettings.debugViewMode == 21 ||
         m_pipelineSettings.debugViewMode == 22 ||
-        m_pipelineSettings.debugViewMode == 33;
+        m_pipelineSettings.debugViewMode == 34;
     glBindTexture(GL_TEXTURE_2D,
                   shadowCompareDebug ? m_resourceMgr->getTexture2D("shader_noise2d")
                                      : (materialAuxDebug ? m_deferredTargets.materialAuxTexture()
                                                          : (historyDepthDebug ? m_deferredTargets.historyDepthTexturePrev()
                                                                               : m_deferredTargets.historySceneTexturePrev())));
     glActiveTexture(GL_TEXTURE14);
-    const bool shadowCasterDebug = m_pipelineSettings.debugViewMode == 34;
-    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 27;
+    const bool shadowCasterDebug = m_pipelineSettings.debugViewMode == 35;
+    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 28;
     glBindTexture(GL_TEXTURE_2D,
                   shadowCasterDebug ? m_deferredTargets.shadowColorTexture()
                                     : (reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
                                                               : m_deferredTargets.reflectionTexture()));
     glActiveTexture(GL_TEXTURE15);
-    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 28;
+    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 29;
     const bool sceneCompositeDebug = m_pipelineSettings.debugViewMode == 11;
-    const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 30;
+    const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 31;
     glBindTexture(GL_TEXTURE_2D,
                   shadowCasterDebug ? m_deferredTargets.shadowNormalTexture()
                                     : (sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
@@ -2417,112 +2438,26 @@ glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer:
     return glm::normalize(direction);
 }
 
-Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const float shadowAngle) const {
-    const float distance = std::max(64.0f, m_pipelineSettings.shadowDistance);
-    const float extent = distance;
-    const float resolution = static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
-    const float worldUnitsPerTexel = (extent * 2.0f) / resolution;
-    constexpr float kShadowIntervalSize = 2.0f;
-    constexpr float kSunPathRotationDegrees = -35.0f;
-    const glm::vec3 cameraPos = camera.getPosition();
-
-    // Delegate to ShadowMatrices (mirrors Iris ShadowMatrices.java).
-    const glm::mat4 view = shadow::ShadowMatrices::createModelViewMatrix(
-        shadowAngle, kShadowIntervalSize, kSunPathRotationDegrees,
-        cameraPos.x, cameraPos.y, cameraPos.z);
-
-    const glm::mat4 proj = shadow::ShadowMatrices::createOrthoMatrix(
-        extent, shadow::ShadowMatrices::NEAR, shadow::ShadowMatrices::FAR);
-
-    ShadowProjectionData data;
-    data.modelView = view;
-    data.projection = proj;
-    data.projectionInverse = glm::inverse(proj);
-    data.viewProj = proj * view;
-    data.center = cameraPos;
-    data.extent = extent;
-    data.texelWorldSize = worldUnitsPerTexel;
-    return data;
-}
-
 std::array<Renderer::ShadowCascadeData, Renderer::SHADOW_CASCADE_COUNT>
 Renderer::buildShadowCascades(const Camera& camera, const RenderFrameData& frame) const {
-    std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> cascades{};
-
-    const float shadowDistance = std::max(64.0f, m_pipelineSettings.shadowDistance);
-    const float nearPlane = std::max(0.05f, camera.getNear());
-    const float aspect = static_cast<float>(std::max(1, m_deferredTargets.width())) /
-                         static_cast<float>(std::max(1, m_deferredTargets.height()));
-    const float tanHalfFovY = std::tan(glm::radians(camera.getFOV()) * 0.5f);
-    const float tanHalfFovX = tanHalfFovY * aspect;
-    const std::array<float, SHADOW_CASCADE_COUNT> splitFractions = {0.10f, 0.24f, 0.52f, 1.0f};
-
     glm::vec3 lightDir = m_shadowLightDirection;
     if (glm::dot(lightDir, lightDir) < 0.0001f) {
         lightDir = frame.skyColors.sunDirection;
     }
-    lightDir = glm::normalize(lightDir);
+    shadow::ShadowMatrices::CameraBasis basis;
+    basis.position = camera.getPosition();
+    basis.forward = camera.getFront();
+    basis.right = camera.getRight();
+    basis.up = camera.getUp();
+    basis.nearPlane = camera.getNear();
+    basis.verticalFovDegrees = camera.getFOV();
+    basis.aspectRatio = static_cast<float>(std::max(1, m_deferredTargets.width())) /
+                        static_cast<float>(std::max(1, m_deferredTargets.height()));
 
-    const glm::vec3 cameraPos = camera.getPosition();
-    const glm::vec3 cameraForward = glm::normalize(camera.getFront());
-    const glm::vec3 cameraRight = glm::normalize(camera.getRight());
-    const glm::vec3 cameraUp = glm::normalize(camera.getUp());
-    const glm::vec3 upRef = std::abs(glm::dot(lightDir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.92f
-        ? glm::vec3(0.0f, 0.0f, 1.0f)
-        : glm::vec3(0.0f, 1.0f, 0.0f);
-
-    float splitNear = nearPlane;
-    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
-        const float splitFar = std::max(splitNear + 1.0f, shadowDistance * splitFractions[cascade]);
-
-        std::array<glm::vec3, 8> corners{};
-        int cornerIndex = 0;
-        for (const float dist : {splitNear, splitFar}) {
-            const glm::vec3 center = cameraPos + cameraForward * dist;
-            const float halfX = dist * tanHalfFovX;
-            const float halfY = dist * tanHalfFovY;
-            corners[cornerIndex++] = center - cameraRight * halfX - cameraUp * halfY;
-            corners[cornerIndex++] = center + cameraRight * halfX - cameraUp * halfY;
-            corners[cornerIndex++] = center - cameraRight * halfX + cameraUp * halfY;
-            corners[cornerIndex++] = center + cameraRight * halfX + cameraUp * halfY;
-        }
-
-        glm::vec3 center(0.0f);
-        for (const glm::vec3& corner : corners) {
-            center += corner;
-        }
-        center /= static_cast<float>(corners.size());
-
-        float radius = 1.0f;
-        for (const glm::vec3& corner : corners) {
-            radius = std::max(radius, glm::length(corner - center));
-        }
-        radius = std::ceil(radius * 16.0f) / 16.0f;
-
-        const float lightDistance = shadowDistance + radius * 2.0f;
-        const glm::mat4 lightView = glm::lookAt(center + lightDir * lightDistance,
-                                                center,
-                                                upRef);
-        const float texelWorldSize = (radius * 2.0f) /
-                                     static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
-        const glm::vec3 centerLight = glm::vec3(lightView * glm::vec4(center, 1.0f));
-        const float snappedX = std::floor(centerLight.x / texelWorldSize) * texelWorldSize;
-        const float snappedY = std::floor(centerLight.y / texelWorldSize) * texelWorldSize;
-        const float depthExtent = shadowDistance + radius * 3.0f;
-        const glm::mat4 projection = glm::ortho(snappedX - radius, snappedX + radius,
-                                                snappedY - radius, snappedY + radius,
-                                                -depthExtent, depthExtent);
-
-        cascades[cascade].view = lightView;
-        cascades[cascade].projection = projection;
-        cascades[cascade].viewProj = projection * lightView;
-        cascades[cascade].splitNear = splitNear;
-        cascades[cascade].splitFar = splitFar;
-        cascades[cascade].texelWorldSize = texelWorldSize;
-        splitNear = splitFar;
-    }
-
-    return cascades;
+    shadow::ShadowMatrices::Settings settings;
+    settings.shadowDistance = m_pipelineSettings.shadowDistance;
+    settings.shadowResolution = m_pipelineSettings.shadowResolution;
+    return shadow::ShadowMatrices::buildCascades(basis, lightDir, settings);
 }
 
 void Renderer::captureCurrentFramebuffer() {

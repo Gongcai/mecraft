@@ -7,7 +7,7 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch/textureSize
-uniform sampler2DShadow uShadowMap;  // Hardware comparison for PCF
+layout(binding = 6) uniform sampler2DArray uCsmShadowMap;
 uniform sampler2D uShadowColorTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 uInvViewProj;
@@ -55,6 +55,16 @@ uniform bool uNoiseEnabled;
 #include "derivative_shadow.glsl"
 
 const int kFogSteps = 8;
+
+struct CsmCascade {
+    mat4 viewProj;
+    float splitNear;
+    float splitFar;
+    float texelWorldSize;
+};
+
+uniform int uCsmCascadeCount;
+uniform CsmCascade uCsmCascades[4];
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -113,29 +123,6 @@ float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCove
     return cloudy * mix(0.85, 1.45, fineShape);
 }
 
-// Shadow warp, projection, and bias functions provided by derivative_shadow.glsl.
-// Local convenience wrappers adapt shared functions to this file's uniforms.
-
-float localShadowProjectionFade(vec3 proj) {
-    return shadowProjectionFadeWarpAware(proj, uShadowMapRaw, uShadowWarpMode);
-}
-
-float localShadowDepthWorldScale() {
-    return shadowDepthWorldScale(uShadowProjectionInverse, uShadowWarpMode);
-}
-
-float localShadowDepthBiasFromWorld(float worldUnits) {
-    return worldUnits / localShadowDepthWorldScale();
-}
-
-float localDerivativeMinimumShadowBias() {
-    return derivativeMinimumShadowBias(uShadowWarpMode);
-}
-
-vec3 localWorldToShadowProj(vec3 worldPos) {
-    return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection, uShadowWarpMode, 0.9);
-}
-
 float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     if (uShadowsEnabled == 0) {
         return 1.0;
@@ -148,26 +135,46 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     }
 
     float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    vec3 proj = localWorldToShadowProj(worldPos + normalize(lightDir) * texelWorld * 0.5);
+    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
+    for (int i = 0; i < 4; ++i) {
+        if (i >= uCsmCascadeCount) break;
+        if (viewDistance <= uCsmCascades[i].splitFar) {
+            cascadeIndex = i;
+            break;
+        }
+    }
+
+    texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
+    vec4 shadowClip = uCsmCascades[cascadeIndex].viewProj *
+                      vec4(worldPos + normalize(lightDir) * texelWorld * 0.5, 1.0);
+    vec3 proj = shadowClip.xyz / max(abs(shadowClip.w), 1e-6) * 0.5 + 0.5;
     if (shadowProjOutOfBounds(proj)) {
         return 1.0;
     }
 
-    ivec2 size = textureSize(uShadowMapRaw, 0);
-    vec2 texel = 1.0 / vec2(size);
+    ivec3 size = textureSize(uCsmShadowMap, 0);
+    vec2 texel = 1.0 / vec2(max(size.x, 1), max(size.y, 1));
     float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float biasWorld = texelWorld * distanceScale * (0.5 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 16.0);
-    float bias = max(localShadowDepthBiasFromWorld(biasWorld), localDerivativeMinimumShadowBias());
-    // Hardware PCF via sampler2DShadow: 4-tap cross pattern with automatic comparison
-    vec3 biasedProj = vec3(proj.xy, proj.z - bias);
+    float radiusWorld = texelWorld * float(max(size.x, 1)) * 0.5;
+    float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
+    float bias = max(biasWorld / (2.0 * depthExtent), 4.0e-5);
+    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
+    float projectionFade = smoothstep(texel.x * 2.0, texel.x * 12.0,
+                                      min(edgeDistance.x, edgeDistance.y));
+    if (projectionFade <= 0.001) {
+        return 1.0;
+    }
+
     float lit = 0.0;
-    lit += texture(uShadowMap, vec3(proj.xy, proj.z - bias));
-    lit += texture(uShadowMap, vec3(proj.xy + vec2( texel.x, 0.0), proj.z - bias));
-    lit += texture(uShadowMap, vec3(proj.xy + vec2(-texel.x, 0.0), proj.z - bias));
-    lit += texture(uShadowMap, vec3(proj.xy + vec2(0.0,  texel.y), proj.z - bias));
+    float refZ = proj.z - bias;
+    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy, float(cascadeIndex))).r ? 1.0 : 0.0;
+    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy + vec2( texel.x, 0.0), float(cascadeIndex))).r ? 1.0 : 0.0;
+    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy + vec2(-texel.x, 0.0), float(cascadeIndex))).r ? 1.0 : 0.0;
+    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy + vec2(0.0,  texel.y), float(cascadeIndex))).r ? 1.0 : 0.0;
     lit *= 0.25;
 
-    float visibility = mix(1.0, lit, localShadowProjectionFade(proj) * distanceFade);
+    float visibility = mix(1.0, lit, projectionFade * distanceFade);
     return clamp(visibility, 0.0, 1.0);
 }
 

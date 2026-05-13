@@ -15,8 +15,7 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
 uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch (blockerSearch, debug)
-uniform sampler2DShadow uShadowMap;  // Hardware comparison for PCF (DerivativeMain shadowtex1)
-uniform sampler2DArrayShadow uCsmShadowMap; // Mecraft formal CSM depth array
+layout(binding = 15) uniform sampler2DArray uCsmShadowMap; // Mecraft formal CSM depth array
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
@@ -266,11 +265,8 @@ vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
     return vec2(cos(angle), sin(angle)) * radius;
 }
 
-// Shadow warp and projection now provided by derivative_shadow.glsl:
-//   calculateShadowWarp(), worldToShadowProj(), shadowProjectionFade(),
-//   shadowDepthWorldScale(), shadowDepthBiasFromWorld(),
-//   derivativeMinimumShadowBias(), shadowWorldBias(), shadowNormalOffsetWorld()
-// Local convenience wrappers adapt the shared functions to this file's uniforms.
+// Legacy Derivative shadow helpers remain for historical debug views and for
+// shared bias math. Formal scene shadows below use Mecraft's linear CSM array.
 
 float localShadowProjectionFade(vec3 proj) {
     return shadowProjectionFadeWarpAware(proj, uShadowMapRaw, uShadowWarpMode);
@@ -327,115 +323,9 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
     return vec3(1.0);
 }
 
-// DerivativeMain BlockerSearch (SunLighting.glsl:28-54)
-// Uses texelFetch on uShadowMapRaw (raw depth, no filtering) — matches DerivativeMain exactly.
-// Returns: .x = penumbra scale (shadow map space), .y = SSS depth (world space)
-vec2 blockerSearch(vec3 shadowProjPos, float dither) {
-    float searchDepth = 0.0;
-    float sumWeight = 0.0;
-    float sssDepth = 0.0;
-
-    float searchRadius = 2.0 * uShadowProjection[0][0];
-    float shadowMapRes = float(textureSize(uShadowMapRaw, 0).x);
-
-    vec2 rot = cossin(dither * TAU) * searchRadius;
-    const vec2 angleStep = cossin(TAU * 0.125);
-    const mat2 rotStep = mat2(angleStep, -angleStep.y, angleStep.x);
-
-    for (uint i = 0u; i < 8u; ++i, rot *= rotStep) {
-        float fi = float(i) + dither;
-        vec2 sampleCoord = shadowProjPos.xy + rot * sqrt(fi * 0.125);
-
-        // DerivativeMain: texelFetch(shadowtex0, ivec2(sampleCoord * realShadowMapRes), 0)
-        ivec2 texelCoord = ivec2(sampleCoord * shadowMapRes);
-        texelCoord = clamp(texelCoord, ivec2(0), ivec2(textureSize(uShadowMapRaw, 0)) - ivec2(1));
-        float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
-
-        // DerivativeMain: float weight = step(depthSample, shadowProjPos.z);
-        float weight = step(depthSample, shadowProjPos.z);
-
-        // DerivativeMain: sssDepth += max0(shadowProjPos.z - depthSample);
-        sssDepth += max0(shadowProjPos.z - depthSample);
-        searchDepth += depthSample * weight;
-        sumWeight += weight;
-    }
-
-    // DerivativeMain: searchDepth *= 1.0 / sumWeight; (no zero-division guard)
-    // Mecraft: add guard to avoid NaN when no blockers are found (sumWeight=0)
-    if (sumWeight > 0.0) {
-        searchDepth *= rcp(sumWeight);
-        searchDepth = min(2.0 * (shadowProjPos.z - searchDepth) / max(searchDepth, 1e-7), 1.0);
-    } else {
-        searchDepth = 0.0;
-    }
-
-    // DerivativeMain SunLighting.glsl:53:
-    //   return vec2(searchDepth * shadowProjection[0].x,
-    //               sssDepth * shadowProjectionInverse[2].z);
-    // Keep the projection inverse sign. For OpenGL ortho this is negative, and
-    // CalculateSubsurfaceScattering expects that negative optical depth so the
-    // exponential attenuates instead of exploding on SSS materials like leaves.
-    float sssWorldDepth = sssDepth * uShadowProjectionInverse[2].z;
-    return vec2(searchDepth * uShadowProjection[0][0], sssWorldDepth);
-}
-
-bool isTransparentShadowCasterAt(vec2 sampleUv, out ivec2 sampleTexel, out vec4 shadowColorSample) {
-    float shadowMapRes = float(textureSize(uShadowMapRaw, 0).x);
-    sampleTexel = ivec2(sampleUv * shadowMapRes);
-    sampleTexel = clamp(sampleTexel, ivec2(0), ivec2(textureSize(uShadowMapRaw, 0)) - ivec2(1));
-
-    shadowColorSample = texelFetch(uShadowColorTex, sampleTexel, 0);
-    // Mecraft currently has one shadow depth texture plus an RGBA shadowcolor0
-    // flag, rather than DerivativeMain's shadowtex0/shadowtex1 pair. The flag
-    // is only written for true transparent casters; cutout leaves/grass write
-    // alpha 1.0 and therefore follow the ordinary opaque shadow path.
-    return shadowColorSample.a < 0.5;
-}
-
-// DerivativeMain PercentageCloserFilter (SunLighting.glsl:56-84)
-// Now uses hardware sampler2DShadow comparison via texture(uShadowMap, vec3(uv, refZ))
-// instead of the manual compareShadowBilinear approximation.
-// Each texture() call returns hardware bilinear PCF (4 comparisons) in a single instruction.
-// Returns vec3 for DerivativeMain COLORED_SHADOWS (SunLighting.glsl:73-80):
-// when a transparent caster is detected at a sample position, the shadow is tinted
-// with pow4(shadowColor.rgb) instead of full darkness.
-vec3 pcfFilter(vec3 shadowProjPos, float penumbraScale, float dither, int sampleCount) {
-    // DerivativeMain bias: constant 1e-4 minus dithered offset
-    shadowProjPos.z -= 1e-4 - dither * 5e-5;
-
-    float rSteps = 1.0 / float(sampleCount);
-
-    // DerivativeMain: vec2 rot = cossin(dither * TAU) * penumbraScale;
-    vec2 rot = cossin(dither * TAU) * penumbraScale;
-    const vec2 angleStep = cossin(TAU * 0.125);
-    const mat2 rotStep = mat2(angleStep, -angleStep.y, angleStep.x);
-
-    vec3 result = vec3(0.0);
-    for (uint i = 0u; i < uint(sampleCount); ++i, rot *= rotStep) {
-        float fi = float(i) + dither;
-        vec2 sampleUv = shadowProjPos.xy + rot * sqrt(fi * rSteps);
-        if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
-            result += vec3(1.0);
-        } else {
-            // DerivativeMain: textureLod(shadowtex1, vec3(sampleCoord, shadowProjPos.z), 0)
-            // sampler2DShadow returns hardware bilinear comparison: 1.0 = lit, 0.0 = shadowed.
-            float sampleLit = texture(uShadowMap, vec3(sampleUv, shadowProjPos.z));
-
-            ivec2 sampleTexel;
-            vec4 shadowColorSample;
-            bool transparentCaster = isTransparentShadowCasterAt(sampleUv, sampleTexel, shadowColorSample);
-
-            if (transparentCaster) {
-                // DerivativeMain: only when shadowtex0/shadowtex1 disagree:
-                // result += pow4(texelFetch(shadowcolor0, sampleTexel, 0).rgb) * sampleDepth1
-                result += pow4(shadowColorSample.rgb) * sampleLit;
-            } else {
-                result += vec3(sampleLit);
-            }
-        }
-    }
-
-    return result * rSteps;
+float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
+    float depth = texture(uCsmShadowMap, vec3(uv, float(cascadeIndex))).r;
+    return refZ <= depth ? 1.0 : 0.0;
 }
 
 // DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
@@ -486,8 +376,9 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
     return mix(1.0, shadow, clamp(uContactShadowStrength, 0.0, 1.0));
 }
 
-// DerivativeMain shadow pipeline (deferred5.fsh:240-288)
-// Returns per-channel shadow value (vec3 for COLORED_SHADOWS), outputs SSS depth.
+// Mecraft formal CSM shadow path.
+// Returns per-channel shadow value, with colored shadows deferred until the
+// transparent CSM caster contract is defined.
 vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, out float outSssDepth) {
     outSssDepth = 0.0;
     if (uShadowsEnabled == 0) return vec3(1.0);
@@ -546,13 +437,13 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
 
     float lit = 0.0;
     if (uSoftShadowsEnabled == 0) {
-        lit = texture(uCsmShadowMap, vec4(proj.xy, float(cascadeIndex), refZ));
+        lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
     } else {
         float radius = max(1.0, uShadowSoftness) * 1.15;
         for (int y = -1; y <= 1; ++y) {
             for (int x = -1; x <= 1; ++x) {
                 vec2 uv = proj.xy + vec2(x, y) * texelUv * radius;
-                lit += texture(uCsmShadowMap, vec4(uv, float(cascadeIndex), refZ));
+                lit += sampleCsmDepthCompare(uv, cascadeIndex, refZ);
             }
         }
         lit *= 1.0 / 9.0;

@@ -3,52 +3,50 @@
 
 #include <glm/glm.hpp>
 
-// Shadow matrix creation — mirrors Iris ShadowMatrices.java.
+#include <array>
+
+// Mecraft CSM matrix creation.
 //
-// Iris reference: Iris-26.1/.../shadows/ShadowMatrices.java
-// Mecraft source: Renderer::buildShadowProjectionData (Renderer.cpp:2399-2438)
+// The formal shadow path is a linear cascaded shadow map designed around
+// Mecraft's greedy terrain meshes. Iris/Derivative radial warp is intentionally
+// left out of this module; that path is historical debug compatibility only.
 
 namespace shadow {
 
 namespace ShadowMatrices {
 
-    // Iris ShadowMatrices.NEAR / FAR
-    constexpr float NEAR = -100.05f;
-    constexpr float FAR  =  156.0f;
+    constexpr int CASCADE_COUNT = 4;
 
-    // Create orthographic projection for shadow map.
-    // Iris: new Matrix4f().setOrthoSymmetric(hpl*2, hpl*2, near, far)
-    // Mecraft uses glm::ortho which is equivalent for symmetric bounds.
-    glm::mat4 createOrthoMatrix(float halfPlaneLength, float nearPlane, float farPlane);
+    struct CameraBasis {
+        glm::vec3 position = glm::vec3(0.0f);
+        glm::vec3 forward = glm::vec3(0.0f, 0.0f, -1.0f);
+        glm::vec3 right = glm::vec3(1.0f, 0.0f, 0.0f);
+        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+        float nearPlane = 0.05f;
+        float verticalFovDegrees = 70.0f;
+        float aspectRatio = 1.0f;
+    };
 
-    // Create shadow model-view matrix.
-    // Iris: createBaselineModelViewMatrix + snapModelViewToGrid
-    //
-    // Rotation order (Iris PoseStack mulPose is post-multiply):
-    //   1. XP(90°)           — align Y-up world to light space
-    //   2. ZP(skyAngle*-360°) — rotate by sun/moon angle
-    //   3. XP(sunPathRotation) — apply sun path tilt
-    //   4. translate(snapOffset) — grid snap to reduce shimmer
-    //
-    // shadowAngle: day progress [0,1), 0.5 added for moon shadow.
-    //   Normalized to [0,1) before sky angle conversion.
-    glm::mat4 createModelViewMatrix(float shadowAngle, float intervalSize,
-                                     float sunPathRotation,
-                                     double cameraX, double cameraY, double cameraZ);
+    struct Cascade {
+        glm::mat4 view = glm::mat4(1.0f);
+        glm::mat4 projection = glm::mat4(1.0f);
+        glm::mat4 viewProj = glm::mat4(1.0f);
+        float splitNear = 0.0f;
+        float splitFar = 1.0f;
+        float texelWorldSize = 1.0f;
+        float radius = 1.0f;
+        float depthExtent = 1.0f;
+    };
 
-    // Compute sky angle from shadow angle.
-    // Iris: if (shadowAngle < 0.25f) skyAngle = shadowAngle + 0.75f
-    //       else skyAngle = shadowAngle - 0.25f
-    float computeSkyAngle(float shadowAngle);
+    struct Settings {
+        float shadowDistance = 192.0f;
+        int shadowResolution = 2048;
+        std::array<float, CASCADE_COUNT> splitFractions = {0.10f, 0.24f, 0.52f, 1.0f};
+    };
 
-    // Snap model-view matrix to shadow interval grid.
-    // Iris: offsetX = (float)cameraX % intervalSize - halfIntervalSize
-    // Applied as translate(offsetX, offsetY, offsetZ) after camera-to-origin.
-    //
-    // Note: Java % and C++ std::fmod both preserve the sign of the dividend,
-    // so negative camera coordinates produce the same snap offset.
-    void snapModelViewToGrid(glm::mat4& modelView, float intervalSize,
-                              double cameraX, double cameraY, double cameraZ);
+    std::array<Cascade, CASCADE_COUNT> buildCascades(const CameraBasis& camera,
+                                                     const glm::vec3& lightDirection,
+                                                     const Settings& settings);
 
 } // namespace ShadowMatrices
 } // namespace shadow

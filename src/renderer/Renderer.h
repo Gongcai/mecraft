@@ -12,6 +12,7 @@
 #include "DeferredRenderTargets.h"
 #include "GameplaySkyRenderer.h"
 #include "Shader.h"
+#include "shadow/ShadowMatrices.h"
 #include "WorldRenderBuffer.h"
 #include "WorldDrawBatch.h"
 #include <glm/glm.hpp>
@@ -358,26 +359,8 @@ private:
         glm::vec3 boundsMax = glm::vec3(0.0f);
     };
 
-    struct ShadowProjectionData {
-        glm::mat4 modelView = glm::mat4(1.0f);
-        glm::mat4 projection = glm::mat4(1.0f);
-        glm::mat4 projectionInverse = glm::mat4(1.0f);
-        glm::mat4 viewProj = glm::mat4(1.0f);
-        glm::vec3 center = glm::vec3(0.0f);
-        float extent = 1.0f;
-        float texelWorldSize = 1.0f;
-    };
-
-    static constexpr int SHADOW_CASCADE_COUNT = 4;
-
-    struct ShadowCascadeData {
-        glm::mat4 view = glm::mat4(1.0f);
-        glm::mat4 projection = glm::mat4(1.0f);
-        glm::mat4 viewProj = glm::mat4(1.0f);
-        float splitNear = 0.0f;
-        float splitFar = 1.0f;
-        float texelWorldSize = 1.0f;
-    };
+    static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowMatrices::CASCADE_COUNT;
+    using ShadowCascadeData = shadow::ShadowMatrices::Cascade;
 
     struct RenderFrameData {
         glm::mat4 view = glm::mat4(1.0f);
@@ -523,7 +506,6 @@ private:
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
     glm::vec3 shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
                                                 bool* moonShadowActive = nullptr) const;
-    ShadowProjectionData buildShadowProjectionData(const Camera& camera, float shadowAngle) const;
     std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> buildShadowCascades(const Camera& camera,
                                                                             const RenderFrameData& frame) const;
     void captureCurrentFramebuffer();

@@ -1,75 +1,92 @@
 #include "ShadowMatrices.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 #include <cmath>
 
 namespace shadow {
 namespace ShadowMatrices {
 
-glm::mat4 createOrthoMatrix(float halfPlaneLength, float nearPlane, float farPlane) {
-    // Iris: new Matrix4f().setOrthoSymmetric(hpl*2, hpl*2, near, far)
-    // glm::ortho(left, right, bottom, top, near, far) with symmetric bounds is equivalent.
-    return glm::ortho(-halfPlaneLength, halfPlaneLength,
-                       -halfPlaneLength, halfPlaneLength,
-                       nearPlane, farPlane);
+namespace {
+glm::vec3 normalizeOr(const glm::vec3& value, const glm::vec3& fallback) {
+    return glm::dot(value, value) > 1.0e-8f ? glm::normalize(value) : fallback;
+}
 }
 
-float computeSkyAngle(float shadowAngle) {
-    // Iris ShadowMatrices.createBaselineModelViewMatrix:
-    //   if (shadowAngle < 0.25f) skyAngle = shadowAngle + 0.75f;
-    //   else skyAngle = shadowAngle - 0.25f;
-    float normalized = shadowAngle - std::floor(shadowAngle);
-    if (normalized < 0.0f) normalized += 1.0f;
-    return normalized < 0.25f ? normalized + 0.75f : normalized - 0.25f;
-}
+std::array<Cascade, CASCADE_COUNT> buildCascades(const CameraBasis& camera,
+                                                 const glm::vec3& lightDirection,
+                                                 const Settings& settings) {
+    std::array<Cascade, CASCADE_COUNT> cascades{};
 
-void snapModelViewToGrid(glm::mat4& modelView, float intervalSize,
-                          double cameraX, double cameraY, double cameraZ) {
-    // Iris ShadowMatrices.snapModelViewToGrid:
-    //   if (abs(intervalSize) == 0) return;
-    //   offsetX = (float)cameraX % intervalSize;
-    //   offsetX -= halfIntervalSize;
-    //   modelView.translate(offsetX, offsetY, offsetZ);
-    //
-    // Java % and C++ std::fmod both preserve the sign of the dividend.
-    if (std::abs(intervalSize) < 1e-6f) return;
+    const float shadowDistance = std::max(64.0f, settings.shadowDistance);
+    const float nearPlane = std::max(0.05f, camera.nearPlane);
+    const float aspect = std::max(0.01f, camera.aspectRatio);
+    const float tanHalfFovY = std::tan(glm::radians(camera.verticalFovDegrees) * 0.5f);
+    const float tanHalfFovX = tanHalfFovY * aspect;
+    const float resolution = static_cast<float>(std::max(1, settings.shadowResolution));
 
-    const float halfInterval = intervalSize * 0.5f;
-    const float offsetX = std::fmod(static_cast<float>(cameraX), intervalSize) - halfInterval;
-    const float offsetY = std::fmod(static_cast<float>(cameraY), intervalSize) - halfInterval;
-    const float offsetZ = std::fmod(static_cast<float>(cameraZ), intervalSize) - halfInterval;
+    const glm::vec3 lightDir = normalizeOr(lightDirection, glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::vec3 cameraForward = normalizeOr(camera.forward, glm::vec3(0.0f, 0.0f, -1.0f));
+    const glm::vec3 cameraRight = normalizeOr(camera.right, glm::vec3(1.0f, 0.0f, 0.0f));
+    const glm::vec3 cameraUp = normalizeOr(camera.up, glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::vec3 upRef = std::abs(glm::dot(lightDir, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.92f
+        ? glm::vec3(0.0f, 0.0f, 1.0f)
+        : glm::vec3(0.0f, 1.0f, 0.0f);
 
-    modelView = glm::translate(modelView, glm::vec3(offsetX, offsetY, offsetZ));
-}
+    float splitNear = nearPlane;
+    for (int cascade = 0; cascade < CASCADE_COUNT; ++cascade) {
+        const float fraction = std::clamp(settings.splitFractions[cascade], 0.0f, 1.0f);
+        const float splitFar = std::max(splitNear + 1.0f, shadowDistance * fraction);
 
-glm::mat4 createModelViewMatrix(float shadowAngle, float intervalSize,
-                                 float sunPathRotation,
-                                 double cameraX, double cameraY, double cameraZ) {
-    // Iris ShadowMatrices.createModelViewMatrix:
-    //   createBaselineModelViewMatrix(target, shadowAngle, sunPathRotation, near, far);
-    //   snapModelViewToGrid(target, intervalSize, cameraX, cameraY, cameraZ);
+        std::array<glm::vec3, 8> corners{};
+        int cornerIndex = 0;
+        for (const float dist : {splitNear, splitFar}) {
+            const glm::vec3 center = camera.position + cameraForward * dist;
+            const float halfX = dist * tanHalfFovX;
+            const float halfY = dist * tanHalfFovY;
+            corners[cornerIndex++] = center - cameraRight * halfX - cameraUp * halfY;
+            corners[cornerIndex++] = center + cameraRight * halfX - cameraUp * halfY;
+            corners[cornerIndex++] = center - cameraRight * halfX + cameraUp * halfY;
+            corners[cornerIndex++] = center + cameraRight * halfX + cameraUp * halfY;
+        }
 
-    const float skyAngle = computeSkyAngle(shadowAngle);
+        glm::vec3 center(0.0f);
+        for (const glm::vec3& corner : corners) {
+            center += corner;
+        }
+        center /= static_cast<float>(corners.size());
 
-    glm::mat4 view(1.0f);
-    view = glm::rotate(view, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    view = glm::rotate(view, glm::radians(skyAngle * -360.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    view = glm::rotate(view, glm::radians(sunPathRotation), glm::vec3(1.0f, 0.0f, 0.0f));
+        float radius = 1.0f;
+        for (const glm::vec3& corner : corners) {
+            radius = std::max(radius, glm::length(corner - center));
+        }
+        radius = std::ceil(radius * 16.0f) / 16.0f;
 
-    // Compute snap offset (matches old Renderer::buildShadowProjectionData exactly).
-    // intervalOffset = fmod(cameraPos, intervalSize) - halfIntervalSize
-    // Final translate = intervalOffset - cameraPos (single operation).
-    glm::vec3 intervalOffset(0.0f);
-    if (std::abs(intervalSize) > 1e-6f) {
-        const float halfInterval = intervalSize * 0.5f;
-        intervalOffset.x = std::fmod(static_cast<float>(cameraX), intervalSize) - halfInterval;
-        intervalOffset.y = std::fmod(static_cast<float>(cameraY), intervalSize) - halfInterval;
-        intervalOffset.z = std::fmod(static_cast<float>(cameraZ), intervalSize) - halfInterval;
+        const float lightDistance = shadowDistance + radius * 2.0f;
+        const glm::mat4 lightView = glm::lookAt(center + lightDir * lightDistance,
+                                                center,
+                                                upRef);
+        const float texelWorldSize = (radius * 2.0f) / resolution;
+        const glm::vec3 centerLight = glm::vec3(lightView * glm::vec4(center, 1.0f));
+        const float snappedX = std::floor(centerLight.x / texelWorldSize) * texelWorldSize;
+        const float snappedY = std::floor(centerLight.y / texelWorldSize) * texelWorldSize;
+        const float depthExtent = shadowDistance + radius * 3.0f;
+        const glm::mat4 projection = glm::ortho(snappedX - radius, snappedX + radius,
+                                                snappedY - radius, snappedY + radius,
+                                                -depthExtent, depthExtent);
+
+        cascades[cascade].view = lightView;
+        cascades[cascade].projection = projection;
+        cascades[cascade].viewProj = projection * lightView;
+        cascades[cascade].splitNear = splitNear;
+        cascades[cascade].splitFar = splitFar;
+        cascades[cascade].texelWorldSize = texelWorldSize;
+        cascades[cascade].radius = radius;
+        cascades[cascade].depthExtent = depthExtent;
+        splitNear = splitFar;
     }
-    view = glm::translate(view, intervalOffset - glm::vec3(
-        static_cast<float>(cameraX), static_cast<float>(cameraY), static_cast<float>(cameraZ)));
 
-    return view;
+    return cascades;
 }
 
 } // namespace ShadowMatrices

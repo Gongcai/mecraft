@@ -50,6 +50,16 @@ uniform int uShadowWarpMode;
 uniform int uDerivativeExactShadow;
 uniform int uDebugViewMode;
 
+struct CsmCascade {
+    mat4 viewProj;
+    float splitNear;
+    float splitFar;
+    float texelWorldSize;
+};
+
+uniform int uCsmCascadeCount;
+uniform CsmCascade uCsmCascades[4];
+
 vec3 tonemapPreview(vec3 color) {
     color = max(color, vec3(0.0));
     return color / (color + vec3(1.0));
@@ -87,8 +97,8 @@ float shadowDither() {
     return noise2D(gl_FragCoord.xy / 256.0);
 }
 
-// Shadow warp, projection, and bias functions provided by derivative_shadow.glsl.
-// Local convenience wrappers adapt shared functions to this file's uniforms.
+// Legacy Derivative shadow helpers are retained here only for historical debug
+// views that inspect the old single-map projection.
 
 vec3 localShadowUvFromWorld(vec3 worldPos) {
     // Must match shadow_depth.vs write path: transMAD + projMAD decomposition,
@@ -153,6 +163,25 @@ float selectedShadowBiasWorld(float ndotl, float viewDistance, float dither) {
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
     return shadowProjOutOfBounds(shadowUv);
+}
+
+int selectCsmCascade(float viewDistance) {
+    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
+    for (int i = 0; i < 4; ++i) {
+        if (i >= uCsmCascadeCount) break;
+        if (viewDistance <= uCsmCascades[i].splitFar) {
+            cascadeIndex = i;
+            break;
+        }
+    }
+    return cascadeIndex;
+}
+
+vec3 csmCascadeColor(int cascadeIndex) {
+    if (cascadeIndex == 0) return vec3(0.18, 0.58, 1.0);
+    if (cascadeIndex == 1) return vec3(0.20, 0.86, 0.36);
+    if (cascadeIndex == 2) return vec3(1.0, 0.74, 0.22);
+    return vec3(1.0, 0.22, 0.42);
 }
 
 void main() {
@@ -320,47 +349,70 @@ void main() {
         return;
     }
     if (uDebugViewMode == 23) {
-        FragColor = vec4(tonemapPreview(texture(uReflectionTex, vTexCoord).rgb), 1.0);
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        float viewDistance = length(worldPos - uCameraPos);
+        int cascadeIndex = selectCsmCascade(viewDistance);
+        vec4 shadowClip = uCsmCascades[cascadeIndex].viewProj * vec4(worldPos, 1.0);
+        vec3 proj = shadowClip.xyz / max(abs(shadowClip.w), 1e-6) * 0.5 + 0.5;
+        vec3 color = csmCascadeColor(cascadeIndex);
+        float edge = min(min(proj.x, 1.0 - proj.x), min(proj.y, 1.0 - proj.y));
+        float edgeWarning = 1.0 - smoothstep(0.015, 0.075, edge);
+        if (shadowProjOutOfBounds(proj)) {
+            color = vec3(0.95, 0.08, 0.02);
+        } else {
+            color = mix(color, vec3(1.0), edgeWarning * 0.45);
+        }
+        FragColor = vec4(color, 1.0);
         return;
     }
     if (uDebugViewMode == 24) {
+        FragColor = vec4(tonemapPreview(texture(uReflectionTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+    if (uDebugViewMode == 25) {
         vec4 cloud = texture(uCloudTex, vTexCoord);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
-    if (uDebugViewMode == 25) {
+    if (uDebugViewMode == 26) {
         SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
         FragColor = vec4(heatmap(aux.materialKind / MATERIAL_ID_MAX), 1.0);
         return;
     }
-    if (uDebugViewMode == 26) {
+    if (uDebugViewMode == 27) {
         SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
         FragColor = vec4(aux.wetnessMask, aux.porosity, aux.metalness, 1.0);
         return;
     }
-    if (uDebugViewMode == 27) {
+    if (uDebugViewMode == 28) {
         FragColor = vec4(tonemapPreview(texture(uHistoryReflectionTex, vTexCoord).rgb), 1.0);
         return;
     }
-    if (uDebugViewMode == 28) {
+    if (uDebugViewMode == 29) {
         vec4 cloud = texture(uHistoryCloudTex, vTexCoord);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
-    if (uDebugViewMode == 29) {
+    if (uDebugViewMode == 30) {
         float reflectionMask = texture(uReflectionTex, vTexCoord).a;
         FragColor = vec4(heatmap(reflectionMask), 1.0);
         return;
     }
-    if (uDebugViewMode == 30) {
+    if (uDebugViewMode == 31) {
         FragColor = vec4(tonemapPreview(texture(uSceneResolvedTex, vTexCoord).rgb), 1.0);
         return;
     }
 
-    // Debug 31: Shadow UV coordinates + warp density
+    // Debug 32: Shadow UV coordinates + warp density
     // R = shadowUv.x, G = shadowUv.y, B = warp density heatmap
     // Helps identify if ghosting correlates with specific shadow map regions or warp compression.
-    if (uDebugViewMode == 31) {
+    if (uDebugViewMode == 32) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
@@ -384,9 +436,9 @@ void main() {
         return;
     }
 
-    // Debug 32: Shadow warp density heatmap only
+    // Debug 33: Shadow warp density heatmap only
     // Blue = center (density ~1.0), Red = edge (density >1.5)
-    if (uDebugViewMode == 32) {
+    if (uDebugViewMode == 33) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
@@ -407,11 +459,11 @@ void main() {
         return;
     }
 
-    // Debug 33: Shadow depth comparison
+    // Debug 34: Shadow depth comparison
     // Shows receiver depth vs shadow map depth at each pixel.
     // Green = lit (receiver depth <= shadow depth), Red = shadowed
     // Brightness = depth margin (how much lit/shadowed)
-    if (uDebugViewMode == 33) {
+    if (uDebugViewMode == 34) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
@@ -447,10 +499,10 @@ void main() {
         return;
     }
 
-    // Debug 34: Shadow hit caster info.
+    // Debug 35: Shadow hit caster info.
     // For shadowed pixels, show the shadowcolor0 texel that caused the compare.
     // Blue tint = transparent caster marker, cyan = cleared/default texel.
-    if (uDebugViewMode == 34) {
+    if (uDebugViewMode == 35) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);

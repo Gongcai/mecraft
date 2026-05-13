@@ -385,6 +385,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Shadow Projection",
             "Shadow Visibility",
             "Shadow Bias",
+            "CSM Cascade",
             "Reflection Target",
             "Cloud Target",
             "Material Kind",
