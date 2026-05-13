@@ -1119,6 +1119,7 @@ void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& fr
     shader.setMat4("uShadowModelView", m_shadowModelView);
     shader.setMat4("uShadowProjection", m_shadowProjection);
     shader.setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
+    shader.setVec3("uShadowLightDirection", m_shadowLightDirection);
     shader.setFloat("uShadowDistance", std::max(64.0f, m_pipelineSettings.shadowDistance));
     shader.setFloat("uShadowExtent", m_shadowExtent);
     shader.setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
@@ -1467,14 +1468,24 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     const TransparentPassPlan preservedTransparentPlan = m_transparentPassPlan;
     m_deferredTransparentBatch.clear();
     m_transparentPassPlan.clear();
+    m_shadowLightDirection = shadowLightDirectionFromSkyColors(frame.skyColors);
+    float shadowAngle = world.getDayNightSystem().getDayProgress01();
+    if (frame.moonShadowActive) {
+        shadowAngle += 0.5f;
+    }
+    shadowAngle -= std::floor(shadowAngle);
     const ShadowProjectionData shadowProjectionData =
-        buildShadowProjectionData(camera, shadowLightDirectionFromSkyColors(frame.skyColors));
+        buildShadowProjectionData(camera, shadowAngle);
     m_shadowModelView = shadowProjectionData.modelView;
     m_shadowProjection = shadowProjectionData.projection;
     m_shadowProjectionInverse = shadowProjectionData.projectionInverse;
     m_shadowViewProj = shadowProjectionData.viewProj;
     m_shadowExtent = shadowProjectionData.extent;
     m_shadowTexelWorldSize = shadowProjectionData.texelWorldSize;
+    const glm::vec3 matrixLightDirection = glm::vec3(glm::inverse(m_shadowModelView)[2]);
+    if (glm::dot(matrixLightDirection, matrixLightDirection) > 0.0001f) {
+        m_shadowLightDirection = glm::normalize(matrixLightDirection);
+    }
     m_deferredTargets.bindShadowMap();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -1515,7 +1526,8 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
-    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false);
+    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
+                                       std::max(64.0f, m_pipelineSettings.shadowDistance));
     if (m_useMultiDrawIndirect) {
         m_worldRenderBuffer.flushOpaque();
     }
@@ -1527,21 +1539,37 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     // COLORED_SHADOWS where light passes through water with color tinting.
     glDepthMask(GL_FALSE);
     m_shadowDepthShader->setInt("uForceBaseLod", 0);
-    for (const ChunkRenderEntry& entry : transparentEntries) {
-        if (entry.chunk == nullptr) continue;
-
-        const SubChunkMesh* mesh = nullptr;
-        if (entry.aggregated) {
-            mesh = &entry.chunk->getColumnMesh();
-        } else {
-            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-            if (!sc) continue;
-            mesh = &sc->getMesh();
+    if (m_useMultiDrawIndirect) {
+        // MDI path: water/transparent data is in m_deferredTransparentBatch, not transparentEntries.
+        // Use the same pattern as the water composite pass: iterate water entries from the batch
+        // and draw via the global transparent VAO.
+        for (const auto& entry : m_deferredTransparentBatch) {
+            if (entry.kind == TransparentBatchKind::Water ||
+                entry.kind == TransparentBatchKind::Generic) {
+                glBindVertexArray(m_worldRenderBuffer.transparentVao());
+                glDrawArrays(GL_TRIANGLES,
+                             static_cast<GLint>(entry.range.firstVertex),
+                             static_cast<GLsizei>(entry.range.vertexCount));
+                ++drawCallCount;
+            }
         }
-        if (mesh->transparentVertexCount > 0) {
-            glBindVertexArray(mesh->transparentVao);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->transparentVertexCount));
-            ++drawCallCount;
+    } else {
+        for (const ChunkRenderEntry& entry : transparentEntries) {
+            if (entry.chunk == nullptr) continue;
+
+            const SubChunkMesh* mesh = nullptr;
+            if (entry.aggregated) {
+                mesh = &entry.chunk->getColumnMesh();
+            } else {
+                const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+                if (!sc) continue;
+                mesh = &sc->getMesh();
+            }
+            if (mesh->transparentVertexCount > 0) {
+                glBindVertexArray(mesh->transparentVao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->transparentVertexCount));
+                ++drawCallCount;
+            }
         }
     }
     glDepthMask(GL_TRUE);
@@ -1549,6 +1577,10 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_worldRenderBuffer.beginFrame();
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
@@ -2239,6 +2271,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
     m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
     m_deferredDebugShader->setVec3("uMoonDirection", debugFrame != nullptr ? debugFrame->skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
+    m_deferredDebugShader->setVec3("uShadowLightDirection", m_shadowLightDirection);
     m_deferredDebugShader->setInt("uShadowLightMode", (debugFrame != nullptr && debugFrame->moonShadowActive) ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -2363,37 +2396,42 @@ glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer:
     return glm::normalize(direction);
 }
 
-Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const {
+Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera& camera, const float shadowAngle) const {
     const float distance = std::max(64.0f, m_pipelineSettings.shadowDistance);
-    const float extent = distance + std::max(10.0f, distance * 0.18f);
-    const glm::vec3 lightForward = glm::normalize(-lightDirection);
-    const glm::vec3 fallbackUp =
-        (std::abs(glm::dot(lightForward, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.96f)
-            ? glm::vec3(0.0f, 0.0f, 1.0f)
-            : glm::vec3(0.0f, 1.0f, 0.0f);
-
-    glm::vec3 center = camera.getPosition();
-    center.y += std::clamp(distance * 0.08f, 4.0f, 18.0f);
-    const float casterDepth = extent + distance * 0.90f;
-    const float receiverDepth = extent + distance * 0.70f;
-    const glm::vec3 lightPos = center - lightForward * casterDepth;
-    glm::mat4 view = glm::lookAt(lightPos, center, fallbackUp);
-
+    const float extent = distance;
     const float resolution = static_cast<float>(std::max(1, m_pipelineSettings.shadowResolution));
     const float worldUnitsPerTexel = (extent * 2.0f) / resolution;
-    glm::vec4 centerLight = view * glm::vec4(center, 1.0f);
-    centerLight.x = std::round(centerLight.x / worldUnitsPerTexel) * worldUnitsPerTexel;
-    centerLight.y = std::round(centerLight.y / worldUnitsPerTexel) * worldUnitsPerTexel;
-    const glm::vec3 snappedCenter = glm::vec3(glm::inverse(view) * centerLight);
-    view = glm::lookAt(snappedCenter - lightForward * casterDepth, snappedCenter, fallbackUp);
+    constexpr float kShadowIntervalSize = 2.0f;
+    constexpr float kSunPathRotationDegrees = -35.0f;
+    const glm::vec3 cameraPos = camera.getPosition();
 
-    const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, 1.0f, casterDepth + receiverDepth);
+    glm::mat4 view(1.0f);
+    view = glm::rotate(view, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+    float normalizedShadowAngle = shadowAngle - std::floor(shadowAngle);
+    if (normalizedShadowAngle < 0.0f) {
+        normalizedShadowAngle += 1.0f;
+    }
+    const float skyAngle = normalizedShadowAngle < 0.25f ? normalizedShadowAngle + 0.75f : normalizedShadowAngle - 0.25f;
+    view = glm::rotate(view, glm::radians(skyAngle * -360.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    view = glm::rotate(view, glm::radians(kSunPathRotationDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
+
+    glm::vec3 intervalOffset(0.0f);
+    if (kShadowIntervalSize != 0.0f) {
+        const float halfIntervalSize = kShadowIntervalSize * 0.5f;
+        intervalOffset.x = std::fmod(cameraPos.x, kShadowIntervalSize) - halfIntervalSize;
+        intervalOffset.y = std::fmod(cameraPos.y, kShadowIntervalSize) - halfIntervalSize;
+        intervalOffset.z = std::fmod(cameraPos.z, kShadowIntervalSize) - halfIntervalSize;
+    }
+    view = glm::translate(view, intervalOffset - cameraPos);
+
+    const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, -100.05f, 156.0f);
     ShadowProjectionData data;
     data.modelView = view;
     data.projection = proj;
     data.projectionInverse = glm::inverse(proj);
     data.viewProj = proj * view;
-    data.center = snappedCenter;
+    data.center = cameraPos;
     data.extent = extent;
     data.texelWorldSize = worldUnitsPerTexel;
     return data;
@@ -2515,13 +2553,27 @@ void Renderer::submitMeshingJobs(const World& world) {
 void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                   std::vector<ChunkRenderEntry>& cutoutEntries,
                                                   std::vector<ChunkRenderEntry>& transparentEntries,
-                                                  const bool frustumCull) {
+                                                  const bool frustumCull,
+                                                  const float maxCameraDistance) {
     syncChunkRenderColumns(world);
     if (m_chunkRenderColumns.empty()) {
         return;
     }
 
     GLuint lastOpaqueVao = 0;
+    const bool distanceCull = maxCameraDistance > 0.0f;
+    const float maxCameraDistanceSq = maxCameraDistance * maxCameraDistance;
+
+    auto boundsWithinCameraDistance = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
+        if (!distanceCull) {
+            return true;
+        }
+        const float clampedX = std::clamp(m_cameraPos.x, boundsMin.x, boundsMax.x);
+        const float clampedZ = std::clamp(m_cameraPos.z, boundsMin.z, boundsMax.z);
+        const float dx = clampedX - m_cameraPos.x;
+        const float dz = clampedZ - m_cameraPos.z;
+        return dx * dx + dz * dz <= maxCameraDistanceSq;
+    };
 
     size_t regionBegin = 0;
     while (regionBegin < m_chunkRenderColumns.size()) {
@@ -2554,6 +2606,11 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             continue;
         }
 
+        if (!boundsWithinCameraDistance(regionMin, regionMax)) {
+            regionBegin = regionEnd;
+            continue;
+        }
+
 #ifdef MECRAFT_DEBUG
         ++m_regionTestsThisFrame;
         FrustumPlane culledPlane = FrustumPlane::Count;
@@ -2579,6 +2636,10 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
             }
 
             const int columnCandidateCount = (column.aggregatedPresent ? 1 : 0) + column.transparentCount;
+
+            if (!boundsWithinCameraDistance(column.columnBoundsMin, column.columnBoundsMax)) {
+                continue;
+            }
 
 #ifdef MECRAFT_DEBUG
             ++m_columnTestsThisFrame;
@@ -2629,6 +2690,9 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                         static_cast<float>(offset.z + Chunk::SIZE_Z));
                     const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : fallbackMin;
                     const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
+                    if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
+                        continue;
+                    }
 #ifdef MECRAFT_DEBUG
                     FrustumPlane subChunkCulledPlane = FrustumPlane::Count;
                     if (frustumCull && !isChunkInFrustum(boundsMin, boundsMax,

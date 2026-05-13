@@ -34,6 +34,7 @@ uniform mat4 uInvViewProj;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
+uniform vec3 uShadowLightDirection;
 uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
 uniform float uShadowMapSize;
@@ -109,9 +110,7 @@ float localShadowNormalOffsetWorld(float ndotl, float viewDistance) {
 }
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
-    return shadowUv.x < 0.0 || shadowUv.x > 1.0 ||
-           shadowUv.y < 0.0 || shadowUv.y > 1.0 ||
-           shadowUv.z < 0.0 || shadowUv.z > 1.0;
+    return shadowProjOutOfBounds(shadowUv);
 }
 
 void main() {
@@ -236,7 +235,7 @@ void main() {
         }
 
         vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
-        vec3 lightDir = normalize(uShadowLightMode == 1 ? uMoonDirection : uSunDirection);
+        vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);
@@ -266,7 +265,7 @@ void main() {
         }
 
         vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
-        vec3 lightDir = normalize(uShadowLightMode == 1 ? uMoonDirection : uSunDirection);
+        vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);

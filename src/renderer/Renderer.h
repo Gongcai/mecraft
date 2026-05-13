@@ -507,14 +507,15 @@ private:
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
     glm::vec3 shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
                                                 bool* moonShadowActive = nullptr) const;
-    ShadowProjectionData buildShadowProjectionData(const Camera& camera, const glm::vec3& lightDirection) const;
+    ShadowProjectionData buildShadowProjectionData(const Camera& camera, float shadowAngle) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);
     void renderOpaqueChunksAndCollectPasses(const World& world,
                                             std::vector<ChunkRenderEntry>& cutoutEntries,
                                             std::vector<ChunkRenderEntry>& transparentEntries,
-                                            bool frustumCull = true);
+                                            bool frustumCull = true,
+                                            float maxCameraDistance = 0.0f);
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);
@@ -613,6 +614,7 @@ private:
     glm::mat4 m_shadowProjection = glm::mat4(1.0f);
     glm::mat4 m_shadowProjectionInverse = glm::mat4(1.0f);
     glm::mat4 m_shadowViewProj = glm::mat4(1.0f);
+    glm::vec3 m_shadowLightDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     float m_shadowExtent = 1.0f;
     float m_shadowTexelWorldSize = 1.0f;
     bool m_deferredFrameActive = false;

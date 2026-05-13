@@ -18,6 +18,7 @@ uniform mat4 uShadowProjectionInverse;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
+uniform vec3 uShadowLightDirection;
 uniform vec3 uSunLightColor;
 uniform vec3 uMoonLightColor;
 uniform vec3 uHorizonScatterColor;
@@ -148,7 +149,7 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
 
     float texelWorld = max(uShadowTexelWorldSize, 0.0001);
     vec3 proj = localWorldToShadowProj(worldPos + normalize(lightDir) * texelWorld * 0.5);
-    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
+    if (shadowProjOutOfBounds(proj)) {
         return 1.0;
     }
 
@@ -208,7 +209,7 @@ void main() {
     fogColor += sunScatterColor + moonScatterColor;
     float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
     fogColor = mix(fogColor, fogColor * vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
-    vec3 shadowLightDir = uShadowLightMode == 1 ? moonDir : sunDir;
+    vec3 shadowLightDir = normalize(uShadowLightDirection);
     float directLightWeight = clamp(sunVisibility + clamp(uMoonVisibility, 0.0, 1.0) * nightFactor, 0.0, 1.0);
     vec3 directFogColor = sunScatterColor + moonScatterColor;
 

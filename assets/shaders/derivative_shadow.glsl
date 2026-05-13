@@ -310,6 +310,12 @@ vec3 worldToShadowProj(in vec3 worldPos,
     return shadowClipPos * 0.5 + 0.5;
 }
 
+bool shadowProjOutOfBounds(in vec3 shadowProj) {
+    return shadowProj.x < 0.0 || shadowProj.x > 1.0 ||
+           shadowProj.y < 0.0 || shadowProj.y > 1.0 ||
+           shadowProj.z < 0.0 || shadowProj.z > 1.0;
+}
+
 vec3 worldToShadowProj(in vec3 worldPos,
                         in mat4 shadowModelView,
                         in mat4 shadowProjection,

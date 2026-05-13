@@ -30,6 +30,7 @@ uniform mat4 uShadowProjectionInverse;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
+uniform vec3 uShadowLightDirection;
 uniform vec3 uSunLightColor;
 uniform vec3 uMoonLightColor;
 uniform vec3 uSkyAmbientColor;
@@ -305,7 +306,7 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
     float normalOffset = localShadowNormalOffsetWorld(ndotl, viewDistanceForBias);
     float warpDensity = 1.0;
     vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
-    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) {
+    if (shadowProjOutOfBounds(proj)) {
         return vec3(1.0);
     }
 
@@ -446,7 +447,7 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
 
     vec4 clipPos = uViewProj * vec4(worldPos, 1.0);
     vec3 ndcPos = clipPos.xyz / max(abs(clipPos.w), 0.0001);
-    vec3 shadowLightDir = (uShadowLightMode == 1) ? normalize(uMoonDirection) : normalize(uSunDirection);
+    vec3 shadowLightDir = normalize(uShadowLightDirection);
     vec3 lightWorldOffset = worldPos + shadowLightDir * abs(clipPos.w) * 0.1;
     vec4 clipOffset = uViewProj * vec4(lightWorldOffset, 1.0);
     vec3 ndcOffset = clipOffset.xyz / max(abs(clipOffset.w), 0.0001);
@@ -514,7 +515,7 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
                          (2.0 - ndotl) * max(uShadowNormalOffset, 0.0) / 0.035;
     float warpDensity = 1.0;
     vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
-    if (proj.x < 0.0 || proj.y < 0.0 || proj.x > 1.0 || proj.y > 1.0 || proj.z > 1.0) return vec3(1.0);
+    if (shadowProjOutOfBounds(proj)) return vec3(1.0);
 
     float projectionFade = localShadowProjectionFade(proj);
     if (projectionFade <= 0.001) return vec3(1.0);
@@ -703,7 +704,7 @@ void main() {
     float LdotH = max((LdotV + 1.0) * halfwayNorm, 0.0);
 
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
-    vec3 shadowLightDir = (uShadowLightMode == 1) ? moonDir : sunDir;
+    vec3 shadowLightDir = normalize(uShadowLightDirection);
     float shadowSssDepth = 0.0;
     vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
