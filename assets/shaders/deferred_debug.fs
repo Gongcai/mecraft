@@ -1,6 +1,7 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
-#include "derivative_shadow.glsl"
+#define MECRAFT_SHADOW_NO_SAMPLER
+#include "mecraft_shadow.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -30,6 +31,7 @@ uniform sampler2D uHistoryCloudTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uShadowColorTex;
 uniform sampler2D uShadowNormalTex;
+uniform sampler2DArray uCsmShadowDepthTex;
 uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
 uniform mat4 uShadowProjectionInverse;
@@ -49,16 +51,6 @@ uniform int uShadowLightMode;
 uniform int uShadowWarpMode;
 uniform int uDerivativeExactShadow;
 uniform int uDebugViewMode;
-
-struct CsmCascade {
-    mat4 viewProj;
-    float splitNear;
-    float splitFar;
-    float texelWorldSize;
-};
-
-uniform int uCsmCascadeCount;
-uniform CsmCascade uCsmCascades[4];
 
 vec3 tonemapPreview(vec3 color) {
     color = max(color, vec3(0.0));
@@ -163,25 +155,6 @@ float selectedShadowBiasWorld(float ndotl, float viewDistance, float dither) {
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
     return shadowProjOutOfBounds(shadowUv);
-}
-
-int selectCsmCascade(float viewDistance) {
-    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
-    for (int i = 0; i < 4; ++i) {
-        if (i >= uCsmCascadeCount) break;
-        if (viewDistance <= uCsmCascades[i].splitFar) {
-            cascadeIndex = i;
-            break;
-        }
-    }
-    return cascadeIndex;
-}
-
-vec3 csmCascadeColor(int cascadeIndex) {
-    if (cascadeIndex == 0) return vec3(0.18, 0.58, 1.0);
-    if (cascadeIndex == 1) return vec3(0.20, 0.86, 0.36);
-    if (cascadeIndex == 2) return vec3(1.0, 0.74, 0.22);
-    return vec3(1.0, 0.22, 0.42);
 }
 
 void main() {
@@ -358,8 +331,7 @@ void main() {
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         float viewDistance = length(worldPos - uCameraPos);
         int cascadeIndex = selectCsmCascade(viewDistance);
-        vec4 shadowClip = uCsmCascades[cascadeIndex].viewProj * vec4(worldPos, 1.0);
-        vec3 proj = shadowClip.xyz / max(abs(shadowClip.w), 1e-6) * 0.5 + 0.5;
+        vec3 proj = csmProjectWorld(worldPos, cascadeIndex);
         vec3 color = csmCascadeColor(cascadeIndex);
         float edge = min(min(proj.x, 1.0 - proj.x), min(proj.y, 1.0 - proj.y));
         float edgeWarning = 1.0 - smoothstep(0.015, 0.075, edge);
@@ -535,6 +507,18 @@ void main() {
         colorPreview = mix(colorPreview, vec3(0.0, 0.9, 0.9), cleared * 0.85);
         colorPreview = mix(colorPreview, normalPreview, 0.18);
         FragColor = vec4(mix(vec3(0.03), colorPreview, shadowed), 1.0);
+        return;
+    }
+
+    // Debug 36-39: raw CSM depth array layers.
+    if (uDebugViewMode >= 36 && uDebugViewMode <= 39) {
+        int layer = clamp(uDebugViewMode - 36, 0, 3);
+        float shadowDepth = texture(uCsmShadowDepthTex, vec3(vTexCoord, float(layer))).r;
+        if (shadowDepth >= 0.9999) {
+            FragColor = vec4(0.015, 0.025, 0.040, 1.0);
+            return;
+        }
+        FragColor = vec4(heatmap(1.0 - shadowDepth), 1.0);
         return;
     }
 

@@ -7,7 +7,6 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch/textureSize
-layout(binding = 6) uniform sampler2DArray uCsmShadowMap;
 uniform sampler2D uShadowColorTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 uInvViewProj;
@@ -52,19 +51,9 @@ uniform float uTime;
 uniform bool uNoiseEnabled;
 
 #include "atmosphere_lut.glsl"
-#include "derivative_shadow.glsl"
+#include "mecraft_shadow.glsl"
 
 const int kFogSteps = 8;
-
-struct CsmCascade {
-    mat4 viewProj;
-    float splitNear;
-    float splitFar;
-    float texelWorldSize;
-};
-
-uniform int uCsmCascadeCount;
-uniform CsmCascade uCsmCascades[4];
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -135,19 +124,11 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     }
 
     float texelWorld = max(uShadowTexelWorldSize, 0.0001);
-    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
-    for (int i = 0; i < 4; ++i) {
-        if (i >= uCsmCascadeCount) break;
-        if (viewDistance <= uCsmCascades[i].splitFar) {
-            cascadeIndex = i;
-            break;
-        }
-    }
+    int cascadeIndex = selectCsmCascade(viewDistance);
 
     texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
-    vec4 shadowClip = uCsmCascades[cascadeIndex].viewProj *
-                      vec4(worldPos + normalize(lightDir) * texelWorld * 0.5, 1.0);
-    vec3 proj = shadowClip.xyz / max(abs(shadowClip.w), 1e-6) * 0.5 + 0.5;
+    vec3 proj = csmProjectWorld(worldPos + normalize(lightDir) * texelWorld * 0.5,
+                                cascadeIndex);
     if (shadowProjOutOfBounds(proj)) {
         return 1.0;
     }
@@ -159,19 +140,17 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     float radiusWorld = texelWorld * float(max(size.x, 1)) * 0.5;
     float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
     float bias = max(biasWorld / (2.0 * depthExtent), 4.0e-5);
-    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
-    float projectionFade = smoothstep(texel.x * 2.0, texel.x * 12.0,
-                                      min(edgeDistance.x, edgeDistance.y));
+    float projectionFade = csmProjectionFade(proj, texel);
     if (projectionFade <= 0.001) {
         return 1.0;
     }
 
     float lit = 0.0;
     float refZ = proj.z - bias;
-    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy, float(cascadeIndex))).r ? 1.0 : 0.0;
-    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy + vec2( texel.x, 0.0), float(cascadeIndex))).r ? 1.0 : 0.0;
-    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy + vec2(-texel.x, 0.0), float(cascadeIndex))).r ? 1.0 : 0.0;
-    lit += refZ <= texture(uCsmShadowMap, vec3(proj.xy + vec2(0.0,  texel.y), float(cascadeIndex))).r ? 1.0 : 0.0;
+    lit += sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
+    lit += sampleCsmDepthCompare(proj.xy + vec2( texel.x, 0.0), cascadeIndex, refZ);
+    lit += sampleCsmDepthCompare(proj.xy + vec2(-texel.x, 0.0), cascadeIndex, refZ);
+    lit += sampleCsmDepthCompare(proj.xy + vec2(0.0,  texel.y), cascadeIndex, refZ);
     lit *= 0.25;
 
     float visibility = mix(1.0, lit, projectionFade * distanceFade);

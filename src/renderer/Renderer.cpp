@@ -136,12 +136,16 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_motionBlurShader = resourceMgr.getShader("motion_blur");
     m_dofShader = resourceMgr.getShader("dof");
     if (m_deferredLightingShader != nullptr) {
-        m_deferredLightingShader->use();
-        m_deferredLightingShader->setInt("uCsmShadowMap", 15);
+        const GLint csmLocation = m_deferredLightingShader->getUniformLocation("uCsmShadowMap");
+        if (csmLocation >= 0) {
+            glProgramUniform1i(m_deferredLightingShader->ID, csmLocation, 15);
+        }
     }
     if (m_volumetricFogShader != nullptr) {
-        m_volumetricFogShader->use();
-        m_volumetricFogShader->setInt("uCsmShadowMap", 6);
+        const GLint csmLocation = m_volumetricFogShader->getUniformLocation("uCsmShadowMap");
+        if (csmLocation >= 0) {
+            glProgramUniform1i(m_volumetricFogShader->ID, csmLocation, 6);
+        }
     }
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
@@ -1573,9 +1577,8 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
                SHADOW_CASCADE_COUNT, visibleTotal, culledTotal, maxCasterDistance, cullingMode, shadowDist);
     }
 
-    // Transitional compatibility for debug/volumetric passes that still sample
-    // the legacy single shadow map: expose cascade 0 there until they consume
-    // the CSM contract directly.
+    // Transitional compatibility for historical debug modes that still inspect
+    // the legacy single-map projection: expose cascade 0 there.
     glCopyImageSubData(m_deferredTargets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
                        0, 0, 0, 0,
                        m_deferredTargets.shadowDepthTexture(), GL_TEXTURE_2D,
@@ -1643,6 +1646,8 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
 
+    glActiveTexture(GL_TEXTURE15);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     m_deferredLightingShader->use();
     m_deferredLightingShader->setInt("uAlbedoTex", 0);
     m_deferredLightingShader->setInt("uNormalAoTex", 1);
@@ -1725,10 +1730,11 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     m_deferredLightingShader->setInt("uCsmShadowMap", 15);
     renderFullscreen(*m_deferredLightingShader);
 
+    glUseProgram(0);
     glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     for (int i = 14; i >= 0; --i) {
@@ -1942,6 +1948,8 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     m_volumetricFogShader->use();
     m_volumetricFogShader->setInt("uDepthTex", 0);
     m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
@@ -1975,9 +1983,10 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     m_volumetricFogShader->setInt("uCsmShadowMap", 6);
     renderFullscreen(*m_volumetricFogShader);
+    glUseProgram(0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     for (int i = 5; i >= 0; --i) {
@@ -2273,6 +2282,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uShadowNormalTex", 15);
     m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
+    m_deferredDebugShader->setInt("uCsmShadowDepthTex", 16);
     const RenderFrameData* debugFrame = m_currentFrameDataValid
         ? &m_currentFrameData
         : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
@@ -2364,8 +2374,12 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
                                                           : (sceneCompositeDebug ? m_deferredTargets.sceneCompositeTexture()
                                                                                  : (cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
                                                                                                       : m_deferredTargets.cloudTexture()))));
+    glActiveTexture(GL_TEXTURE16);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
     renderFullscreen(*m_deferredDebugShader);
 
+    glActiveTexture(GL_TEXTURE16);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     for (int unit = 15; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);

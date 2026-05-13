@@ -15,7 +15,6 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
 uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch (blockerSearch, debug)
-layout(binding = 15) uniform sampler2DArray uCsmShadowMap; // Mecraft formal CSM depth array
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
@@ -99,16 +98,6 @@ uniform sampler2D uShadowNormalTex;
 
 // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
 uniform sampler3D uAtmosphereLut;
-
-struct CsmCascade {
-    mat4 viewProj;
-    float splitNear;
-    float splitFar;
-    float texelWorldSize;
-};
-
-uniform int uCsmCascadeCount;
-uniform CsmCascade uCsmCascades[4];
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -237,6 +226,9 @@ float shadowDither() {
     return noise2D(gl_FragCoord.xy / 256.0);
 }
 
+#define MECRAFT_SHADOW_ENABLE_STANDARD_SAMPLE
+#include "mecraft_shadow.glsl"
+
 float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
         return 1.0;
@@ -323,11 +315,6 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
     return vec3(1.0);
 }
 
-float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
-    float depth = texture(uCsmShadowMap, vec3(uv, float(cascadeIndex))).r;
-    return refZ <= depth ? 1.0 : 0.0;
-}
-
 // DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
 // 12-step screen-space ray march for contact shadows.
 // Mecraft adaptation: uses world-position reconstruction for depth linearization
@@ -385,73 +372,12 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
 
     lightDir = normalize(lightDir);
 
-    // DerivativeMain: worldPos is camera-relative in deferred5.fsh (line 161):
-    //   vec3 worldPos = mat3(gbufferModelViewInverse) * viewPos;
-    // The gbufferModelViewInverse[3].xyz offset is only added later (line 229).
-    // dotSelf(worldPos) and viewDistance must use camera-relative position.
-    vec3 cameraRelPos = worldPos - uCameraPos;
-    float viewDistanceForBias = length(cameraRelPos);
-
-    // DerivativeMain: distanceFade = saturate(pow16(rcp(shadowDistance^2) * dotSelf(worldPos)))
-    // worldPos in DerivativeMain is camera-relative, so we use cameraRelPos
-    float distanceFade = saturate(pow16(rcp(uShadowDistance * uShadowDistance) * dotSelf(cameraRelPos)));
-    if (distanceFade >= 0.999) return vec3(1.0);
-
-    float ndotl = saturate(dot(normal, lightDir));
-    if (ndotl <= 1e-3) return vec3(1.0);  // DerivativeMain deferred5.fsh:276 uses 1e-3
-
-    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
-    for (int i = 0; i < 4; ++i) {
-        if (i >= uCsmCascadeCount) break;
-        if (viewDistanceForBias <= uCsmCascades[i].splitFar) {
-            cascadeIndex = i;
-            break;
-        }
-    }
-
-    float cascadeTexelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
-    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistanceForBias,
-                                                 cascadeTexelWorld, uShadowDistance,
-                                                 uShadowNormalOffset);
-    vec4 shadowClip = uCsmCascades[cascadeIndex].viewProj * vec4(worldPos + normal * normalOffset, 1.0);
-    vec3 proj = shadowClip.xyz / max(abs(shadowClip.w), 1e-6) * 0.5 + 0.5;
-    if (shadowProjOutOfBounds(proj)) return vec3(1.0);
-
-    ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
-    vec2 texelUv = 1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1));
-    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
-    float projectionFade = smoothstep(texelUv.x * 2.0, texelUv.x * 12.0,
-                                      min(edgeDistance.x, edgeDistance.y));
-    if (cascadeIndex == uCsmCascadeCount - 1) {
-        projectionFade *= oneMinus(distanceFade);
-    }
-    if (projectionFade <= 0.001) return vec3(1.0);
-
-    float radiusWorld = cascadeTexelWorld * float(max(shadowSize.x, 1)) * 0.5;
-    float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
-    float biasWorld = shadowWorldBias(ndotl, viewDistanceForBias, cascadeTexelWorld,
-                                      uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
-    float bias = max(biasWorld / (2.0 * depthExtent), 4.0e-5);
     float dither = shadowDither();
-    float refZ = proj.z - bias + dither * 1.5e-5;
-
-    float lit = 0.0;
-    if (uSoftShadowsEnabled == 0) {
-        lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
-    } else {
-        float radius = max(1.0, uShadowSoftness) * 1.15;
-        for (int y = -1; y <= 1; ++y) {
-            for (int x = -1; x <= 1; ++x) {
-                vec2 uv = proj.xy + vec2(x, y) * texelUv * radius;
-                lit += sampleCsmDepthCompare(uv, cascadeIndex, refZ);
-            }
-        }
-        lit *= 1.0 / 9.0;
-    }
-
+    ShadowSample csm = sampleCsmShadow(worldPos, normal, lightDir);
+    float lit = csm.visibility;
     lit *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, dither, sssAmount);
     float shaped = shapeShadowVisibility(lit);
-    return vec3(mix(1.0, shaped, projectionFade));
+    return vec3(mix(1.0, shaped, csm.fade));
 }
 
 // Overload without SSS depth output for callers that don't need it

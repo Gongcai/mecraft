@@ -397,7 +397,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Shadow UV",
             "Shadow Density",
             "Shadow Depth Compare",
-            "Shadow Hit Caster"
+            "Shadow Hit Caster",
+            "CSM Depth 0",
+            "CSM Depth 1",
+            "CSM Depth 2",
+            "CSM Depth 3"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
