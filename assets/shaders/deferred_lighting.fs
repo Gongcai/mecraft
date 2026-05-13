@@ -747,20 +747,14 @@ void main() {
 
     // 2. SSS (DerivativeMain SunLighting.glsl:176-188 — now via derivative_sunlight.glsl include)
     //    DerivativeMain deferred5.fsh:267-272: SSS is added to sceneData BEFORE shadow/diffuse
-    float sssSunShadowFill = 0.0;
     if (sss > 1e-4) {
-        // DerivativeMain deferred5.fsh:268:
-        // CalculateSubsurfaceScattering(albedo, sssAmount, blockerSearch.y, LdotV)
-        // Do not substitute a positive shadow fallback here: blockerSearch.y is
-        // intentionally signed by shadowProjectionInverse[2].z, so fastExp()
-        // attenuates instead of turning cutout SSS materials white.
+        // DerivativeMain deferred5.fsh:268-271 — exactly 3 operations, no fill light
         vec3 sssContrib = CalculateSubsurfaceScattering(albedo, sss, shadowSssDepth, LdotV);
         // DerivativeMain deferred5.fsh:270 — sssContrib *= eyeSkylightFix
         sssContrib *= outdoorSkyMask;
-        sceneData += sssContrib * sunlightMult;
-        // DerivativeMain: sunlightMult *= 1.0 - sssAmount * 0.5;
+        // DerivativeMain deferred5.fsh:270 — sunlightMult MUST be reduced BEFORE SSS accumulation
         sunlightMult *= oneMinus(sss * 0.5);
-        sssSunShadowFill = sss * smoothstep(-0.35, 0.18, -rawNdotL) * mix(0.18, 0.46, oneMinus(sunShadow)) * cloudShadow;
+        sceneData += sssContrib * sunlightMult;
     }
 
     // 3. Shadow / specular computation (DerivativeMain deferred5.fsh:276-300)
@@ -782,7 +776,7 @@ void main() {
             specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
                        mix(vec3(1.0), albedo, surface.aux.metalness);
             // DerivativeMain deferred5.fsh:293 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
-            specular *= 1.0 + uWeatherWetness;
+            specular *= 0.6 + uWeatherWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
             // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
             // Indoor surfaces with sky light = 0 get no direct sunlight
@@ -792,8 +786,7 @@ void main() {
         }
     }
 
-    // 4. SSS fill added to sceneData (DerivativeMain deferred5.fsh:267-272 equivalent)
-    sceneData += sssSunShadowFill * sunlightMult;
+    // 4. (DerivativeMain has no SSS fill light — removed self-invented extension)
 
     // 5. Skylight (DerivativeMain deferred5.fsh:305-323)
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
@@ -812,7 +805,7 @@ void main() {
 
     // Basic brightness (DerivativeMain deferred5.fsh:325)
     // sceneData += BASIC_BRIGHTNESS + nightVision * 0.1
-    sceneData += 0.018; // BASIC_BRIGHTNESS (nightVision=0 for now)
+    sceneData += 0.0005; // BASIC_BRIGHTNESS (DerivativeMain Settings.glsl:99)
 
     // Minimum ambient + fake bounce
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);

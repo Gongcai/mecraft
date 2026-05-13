@@ -30,6 +30,8 @@ out float vNormal;
 out vec3 vWorldPos;
 flat out int vMaterialKind;
 out float vSkylight;
+flat out float vTintKind;
+out vec2 vTintUV;
 
 void main() {
     vec4 localPos = vec4(aPos, 1.0);
@@ -66,4 +68,12 @@ void main() {
 
     // Skylight from vertex attribute (DerivativeMain Shadow.frag:83 — shadowcolor1Out.z = lightmap.y)
     vSkylight = aSunlight;
+
+    // DerivativeMain Shadow.frag:76,78 — shadowcolor0Out = albedo.rgb * tint
+    // Mecraft uses tint colormap lookup (grass/foliage) instead of vertex color.
+    uint tintKind = (aTintPacked >> 14u) & 3u;
+    uint tintU = (aTintPacked >> 4u) & 15u;
+    uint tintV = aTintPacked & 15u;
+    vTintKind = float(tintKind);
+    vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 16.0;
 }

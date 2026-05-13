@@ -1504,11 +1504,17 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
     m_shadowDepthShader->setInt("uNoiseTex", 1);
+    m_shadowDepthShader->setInt("uGrassColormap", 2);
+    m_shadowDepthShader->setInt("uFoliageColormap", 3);
     const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, noiseTex);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false);
     if (m_useMultiDrawIndirect) {
         m_worldRenderBuffer.flushOpaque();

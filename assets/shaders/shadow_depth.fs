@@ -10,9 +10,13 @@ in float vNormal;
 in vec3 vWorldPos;
 flat in int vMaterialKind;
 in float vSkylight;
+flat in float vTintKind;
+in vec2 vTintUV;
 
 uniform sampler2DArray texArray;
 uniform sampler2D uNoiseTex;
+uniform sampler2D uGrassColormap;
+uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform float uAnimationTime;
 uniform float uTime;
@@ -49,10 +53,6 @@ vec3 decodeFaceNormal(float face) {
     if (idx == 3) return vec3(0.0, 0.0, -1.0);
     if (idx == 4) return vec3(-1.0, 0.0, 0.0);
     return vec3(1.0, 0.0, 0.0);
-}
-
-vec3 srgbToLinear(vec3 color) {
-    return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
 // ---- Water caustics (ported from DerivativeMain Shadow.frag) ----
@@ -104,7 +104,7 @@ void main() {
         float newArea = dot(dFdx(newPos), dFdx(newPos)) * dot(dFdy(newPos), dFdy(newPos));
 
         float caustics = inversesqrt(oldArea / newArea) * 0.3;
-        caustics = clamp(caustics * caustics * 2.0, 0.0, 1.0);
+        // DerivativeMain Shadow.frag:64 — no extra squaring/clamping, just sqrt2 encoding
 
         // ShadowColor.a = 0.0 marks transparent casters (DerivativeMain COLORED_SHADOWS):
         // Water should not cast hard shadows; instead it tints the light passing through.
@@ -129,14 +129,24 @@ void main() {
         }
 
         vec3 shadowColor = texColor.rgb;
-        // DerivativeMain Shadow.frag: alpha >= 254/255 → fully opaque; otherwise
-        // blend white with texture color (alpha^0.4).
-        if (texColor.a >= 254.0 / 255.0) {
+        // DerivativeMain Shadow.frag:75 — alpha > 254/255 (strict greater-than)
+        if (texColor.a > 254.0 / 255.0) {
             shadowColor = texColor.rgb;
         } else {
             shadowColor = mix(vec3(1.0), texColor.rgb, pow(clamp(texColor.a, 0.0, 1.0), 0.4));
         }
-        shadowColor = srgbToLinear(shadowColor);
+
+        // DerivativeMain Shadow.frag:76,78 — shadowcolor0Out = albedo.rgb * tint
+        // Mecraft applies biome tint via colormap lookup (grass/foliage).
+        // The tint color is in sRGB space; shadowColor is also sRGB (no linear conversion).
+        if (vTintKind > 0.5 && vTintKind < 1.5) {
+            shadowColor *= texture(uGrassColormap, vTintUV).rgb;
+        } else if (vTintKind > 1.5 && vTintKind < 2.5) {
+            shadowColor *= texture(uFoliageColormap, vTintUV).rgb;
+        }
+
+        // DerivativeMain writes sRGB values directly; PCF reader applies pow4() decode
+        // which assumes sRGB-space input. Do NOT convert to linear here.
 
         // Colored shadow alpha semantics (replaces DerivativeMain's dual-depth detection):
         //   a = 0.0 → transparent caster: light passes through with color tint (water, stained glass)

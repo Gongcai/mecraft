@@ -113,9 +113,9 @@ void GetBlocklightFalloff(inout float blocklight) {
 // Color space conversions — DerivativeMain/lib/Head/Common.inc
 //----------------------------------------------------------------------------//
 
-// DerivativeMain Common.inc — LinearToSRGB / SRGBtoLinear
-vec3 LinearToSRGB(in vec3 color) { return pow(max(color, vec3(0.0)), vec3(1.0 / 2.2)); }
-vec3 SRGBtoLinear(in vec3 color) { return pow(max(color, vec3(0.0)), vec3(2.2)); }
+// DerivativeMain Common.inc:123-129 — exact sRGB piecewise transfer functions
+vec3 LinearToSRGB(in vec3 color) { return mix(color * 12.92, 1.055 * pow(color, vec3(1.0 / 2.4)) - 0.055, lessThan(vec3(0.0031308), color)); }
+vec3 SRGBtoLinear(in vec3 color) { return mix(color / 12.92, pow((color + 0.055) / 1.055, vec3(2.4)), lessThan(vec3(0.04045), color)); }
 
 //----------------------------------------------------------------------------//
 // Shadow distortion — DerivativeMain/lib/Lighting/ShadowDistortion.glsl
