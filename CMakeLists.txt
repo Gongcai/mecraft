@@ -104,6 +104,7 @@ set(SRC_RENDERER
         src/renderer/WorldRenderBuffer.cpp
         src/renderer/shadow/ShadowMatrices.cpp
         src/renderer/shadow/ShadowCasterCuller.cpp
+        src/renderer/shadow/ShadowRenderer.cpp
 )
 
 set(SRC_UI

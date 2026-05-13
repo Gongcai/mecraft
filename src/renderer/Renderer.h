@@ -12,7 +12,7 @@
 #include "DeferredRenderTargets.h"
 #include "GameplaySkyRenderer.h"
 #include "Shader.h"
-#include "shadow/ShadowMatrices.h"
+#include "shadow/ShadowRenderer.h"
 #include "WorldRenderBuffer.h"
 #include "WorldDrawBatch.h"
 #include <glm/glm.hpp>
@@ -359,8 +359,8 @@ private:
         glm::vec3 boundsMax = glm::vec3(0.0f);
     };
 
-    static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowMatrices::CASCADE_COUNT;
-    using ShadowCascadeData = shadow::ShadowMatrices::Cascade;
+    static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUNT;
+    using ShadowCascadeData = shadow::ShadowRenderer::Cascade;
 
     struct RenderFrameData {
         glm::mat4 view = glm::mat4(1.0f);
@@ -504,10 +504,6 @@ private:
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
-    glm::vec3 shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
-                                                bool* moonShadowActive = nullptr) const;
-    std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> buildShadowCascades(const Camera& camera,
-                                                                            const RenderFrameData& frame) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);
@@ -611,14 +607,7 @@ private:
     bool m_hasPreviousFrameData = false;
     GLint m_capturedFramebuffer = 0;
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
-    glm::mat4 m_shadowModelView = glm::mat4(1.0f);
-    glm::mat4 m_shadowProjection = glm::mat4(1.0f);
-    glm::mat4 m_shadowProjectionInverse = glm::mat4(1.0f);
-    glm::mat4 m_shadowViewProj = glm::mat4(1.0f);
-    glm::vec3 m_shadowLightDirection = glm::vec3(0.0f, 1.0f, 0.0f);
-    float m_shadowExtent = 1.0f;
-    float m_shadowTexelWorldSize = 1.0f;
-    std::array<ShadowCascadeData, SHADOW_CASCADE_COUNT> m_shadowCascades{};
+    shadow::ShadowRenderer m_shadowRenderer;
     bool m_deferredFrameActive = false;
     std::unordered_set<int64_t> m_meshingInFlight;
     std::vector<SubChunkMeshingResult> m_deferredMeshResults;

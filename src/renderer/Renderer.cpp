@@ -1056,7 +1056,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.cloud.shadowSpeed = m_pipelineSettings.cloudShadowSpeed;
     frame.cloud.coverage = std::clamp(0.24f + frame.weatherMist * 0.28f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
     frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
-    shadowLightDirectionFromSkyColors(frame.skyColors, &frame.moonShadowActive);
+    frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
     return frame;
 }
 
@@ -1133,25 +1133,7 @@ void Renderer::bindCloudUniforms(Shader& shader, const RenderFrameData& frame) c
 }
 
 void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const {
-    shader.setMat4("uShadowViewProj", m_shadowViewProj);
-    shader.setMat4("uShadowModelView", m_shadowModelView);
-    shader.setMat4("uShadowProjection", m_shadowProjection);
-    shader.setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
-    shader.setVec3("uShadowLightDirection", m_shadowLightDirection);
-    shader.setFloat("uShadowDistance", std::max(64.0f, m_pipelineSettings.shadowDistance));
-    shader.setFloat("uShadowExtent", m_shadowExtent);
-    shader.setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
-    shader.setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
-    shader.setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
-    shader.setInt("uShadowLightMode", frame.moonShadowActive ? 1 : 0);
-    shader.setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
-    for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
-        const std::string prefix = "uCsmCascades[" + std::to_string(i) + "]";
-        shader.setMat4(prefix + ".viewProj", m_shadowCascades[i].viewProj);
-        shader.setFloat(prefix + ".splitNear", m_shadowCascades[i].splitNear);
-        shader.setFloat(prefix + ".splitFar", m_shadowCascades[i].splitFar);
-        shader.setFloat(prefix + ".texelWorldSize", m_shadowCascades[i].texelWorldSize);
-    }
+    m_shadowRenderer.bindShadowUniforms(shader, frame.moonShadowActive);
 }
 
 void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& frame) const {
@@ -1494,14 +1476,13 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     const TransparentPassPlan preservedTransparentPlan = m_transparentPassPlan;
     m_deferredTransparentBatch.clear();
     m_transparentPassPlan.clear();
-    m_shadowLightDirection = shadowLightDirectionFromSkyColors(frame.skyColors);
-    m_shadowCascades = buildShadowCascades(camera, frame);
-    m_shadowModelView = m_shadowCascades[0].view;
-    m_shadowProjection = m_shadowCascades[0].projection;
-    m_shadowProjectionInverse = glm::inverse(m_shadowProjection);
-    m_shadowViewProj = m_shadowCascades[0].viewProj;
-    m_shadowExtent = std::max(1.0f, m_shadowCascades[0].splitFar);
-    m_shadowTexelWorldSize = m_shadowCascades[0].texelWorldSize;
+
+    // Update shadow cascades via ShadowRenderer.
+    m_shadowRenderer.computeLightDirection(frame.skyColors);
+    shadow::ShadowMatrices::Settings settings;
+    settings.shadowDistance = m_pipelineSettings.shadowDistance;
+    settings.shadowResolution = m_pipelineSettings.shadowResolution;
+    m_shadowRenderer.update(camera, settings, m_deferredTargets.width(), m_deferredTargets.height());
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -1538,7 +1519,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     const char* cullingMode = "CSMBoxCulling";
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
-        const ShadowCascadeData& cascadeData = m_shadowCascades[cascade];
+        const ShadowCascadeData& cascadeData = m_shadowRenderer.cascade(cascade);
         m_deferredTargets.bindCsmShadowLayer(cascade);
         glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -2286,26 +2267,26 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     const RenderFrameData* debugFrame = m_currentFrameDataValid
         ? &m_currentFrameData
         : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
-    m_deferredDebugShader->setMat4("uShadowModelView", m_shadowModelView);
-    m_deferredDebugShader->setMat4("uShadowProjection", m_shadowProjection);
-    m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
-    m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
-    m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);
+    m_deferredDebugShader->setMat4("uShadowModelView", m_shadowRenderer.modelView());
+    m_deferredDebugShader->setMat4("uShadowProjection", m_shadowRenderer.projection());
+    m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowRenderer.projectionInverse());
+    m_deferredDebugShader->setFloat("uShadowExtent", m_shadowRenderer.shadowExtent());
+    m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowRenderer.texelWorldSize());
     m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
     m_deferredDebugShader->setFloat("uShadowDistance", std::max(64.0f, m_pipelineSettings.shadowDistance));
     m_deferredDebugShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
     m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
     if (debugFrame != nullptr) {
-        bindShadowFrameUniforms(*m_deferredDebugShader, *debugFrame);
+        m_shadowRenderer.bindShadowUniforms(*m_deferredDebugShader, debugFrame->moonShadowActive);
     } else {
         m_deferredDebugShader->setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
         for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
             const std::string prefix = "uCsmCascades[" + std::to_string(i) + "]";
-            m_deferredDebugShader->setMat4(prefix + ".viewProj", m_shadowCascades[i].viewProj);
-            m_deferredDebugShader->setFloat(prefix + ".splitNear", m_shadowCascades[i].splitNear);
-            m_deferredDebugShader->setFloat(prefix + ".splitFar", m_shadowCascades[i].splitFar);
-            m_deferredDebugShader->setFloat(prefix + ".texelWorldSize", m_shadowCascades[i].texelWorldSize);
+            m_deferredDebugShader->setMat4(prefix + ".viewProj", m_shadowRenderer.cascade(i).viewProj);
+            m_deferredDebugShader->setFloat(prefix + ".splitNear", m_shadowRenderer.cascade(i).splitNear);
+            m_deferredDebugShader->setFloat(prefix + ".splitFar", m_shadowRenderer.cascade(i).splitFar);
+            m_deferredDebugShader->setFloat(prefix + ".texelWorldSize", m_shadowRenderer.cascade(i).texelWorldSize);
         }
     }
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
@@ -2315,7 +2296,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
     m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
     m_deferredDebugShader->setVec3("uMoonDirection", debugFrame != nullptr ? debugFrame->skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
-    m_deferredDebugShader->setVec3("uShadowLightDirection", m_shadowLightDirection);
+    m_deferredDebugShader->setVec3("uShadowLightDirection", m_shadowRenderer.lightDirection());
     m_deferredDebugShader->setInt("uShadowLightMode", (debugFrame != nullptr && debugFrame->moonShadowActive) ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
@@ -2432,46 +2413,9 @@ void Renderer::renderFullscreen(Shader& shader) const {
 
 glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonShadowActive) const {
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    return shadowLightDirectionFromSkyColors(skyColors, moonShadowActive);
-}
-
-glm::vec3 Renderer::shadowLightDirectionFromSkyColors(const GameplaySkyRenderer::SkyColors& skyColors,
-                                                      bool* moonShadowActive) const {
-    const bool useMoonShadow = skyColors.moonVisibility > skyColors.sunVisibility;
-    glm::vec3 direction = useMoonShadow ? skyColors.moonDirection : skyColors.sunDirection;
-    direction = glm::normalize(direction);
-    if (direction.y < 0.12f) {
-        const glm::vec3 horizontal = glm::normalize(glm::vec3(direction.x, 0.0f, direction.z));
-        constexpr float kMinShadowElevation = 0.12f;
-        const float horizontalScale = std::sqrt(std::max(0.0f, 1.0f - kMinShadowElevation * kMinShadowElevation));
-        direction = horizontal * horizontalScale + glm::vec3(0.0f, kMinShadowElevation, 0.0f);
-    }
-    if (moonShadowActive != nullptr) {
-        *moonShadowActive = useMoonShadow;
-    }
-    return glm::normalize(direction);
-}
-
-std::array<Renderer::ShadowCascadeData, Renderer::SHADOW_CASCADE_COUNT>
-Renderer::buildShadowCascades(const Camera& camera, const RenderFrameData& frame) const {
-    glm::vec3 lightDir = m_shadowLightDirection;
-    if (glm::dot(lightDir, lightDir) < 0.0001f) {
-        lightDir = frame.skyColors.sunDirection;
-    }
-    shadow::ShadowMatrices::CameraBasis basis;
-    basis.position = camera.getPosition();
-    basis.forward = camera.getFront();
-    basis.right = camera.getRight();
-    basis.up = camera.getUp();
-    basis.nearPlane = camera.getNear();
-    basis.verticalFovDegrees = camera.getFOV();
-    basis.aspectRatio = static_cast<float>(std::max(1, m_deferredTargets.width())) /
-                        static_cast<float>(std::max(1, m_deferredTargets.height()));
-
-    shadow::ShadowMatrices::Settings settings;
-    settings.shadowDistance = m_pipelineSettings.shadowDistance;
-    settings.shadowResolution = m_pipelineSettings.shadowResolution;
-    return shadow::ShadowMatrices::buildCascades(basis, lightDir, settings);
+    // Use a temporary ShadowRenderer to compute light direction without modifying state.
+    shadow::ShadowRenderer temp;
+    return temp.computeLightDirection(skyColors, moonShadowActive);
 }
 
 void Renderer::captureCurrentFramebuffer() {
