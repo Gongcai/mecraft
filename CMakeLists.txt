@@ -102,6 +102,8 @@ set(SRC_RENDERER
         src/renderer/HumanoidRenderer.cpp
         src/renderer/SkyboxRenderer.cpp
         src/renderer/WorldRenderBuffer.cpp
+        src/renderer/shadow/ShadowMatrices.cpp
+        src/renderer/shadow/ShadowCasterCuller.cpp
 )
 
 set(SRC_UI

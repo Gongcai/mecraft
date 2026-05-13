@@ -117,7 +117,7 @@ float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCove
 // Local convenience wrappers adapt shared functions to this file's uniforms.
 
 float localShadowProjectionFade(vec3 proj) {
-    return shadowProjectionFade(proj, uShadowMapRaw);
+    return shadowProjectionFadeWarpAware(proj, uShadowMapRaw, uShadowWarpMode);
 }
 
 float localShadowDepthWorldScale() {

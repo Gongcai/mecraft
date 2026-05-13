@@ -5,6 +5,8 @@
 #include "Renderer.h"
 
 #include "ChunkMesher.h"
+#include "shadow/ShadowMatrices.h"
+#include "shadow/ShadowCasterCuller.h"
 #include "../Paths.h"
 #include "../core/Time.h"
 #include "../world/BlockSelection.h"
@@ -624,6 +626,7 @@ int Renderer::getDebugLightMode() const {
 
 void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings) {
     m_pipelineSettings = settings;
+    ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
     m_pipelineSettings.shadowResolution = std::clamp(m_pipelineSettings.shadowResolution, 256, 8192);
     m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 64.0f, 512.0f);
     m_pipelineSettings.shadowSoftness = std::clamp(m_pipelineSettings.shadowSoftness, 0.1f, 8.0f);
@@ -644,7 +647,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 30);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 34);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = std::clamp(m_pipelineSettings.shadowWarpMode, 0, 2);
@@ -1512,6 +1515,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
     m_shadowDepthShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
+    m_shadowDepthShader->setInt("uShadowWarpCutoff", m_pipelineSettings.shadowWarpCutoff ? 1 : 0);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
     m_shadowDepthShader->setInt("uNoiseTex", 1);
@@ -1526,8 +1530,32 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+
+    // Setup shadow caster culler (Iris BoxCuller AABB cube semantics).
+    // DerivativeMain shadow.culling=false disables advanced frustum culling,
+    // but Iris still bounds caster submission through shadow render distance.
+    const float shadowDist = std::max(64.0f, m_pipelineSettings.shadowDistance);
+    shadow::ShadowCasterCuller shadowCuller;
+    shadowCuller.setup(shadowDist, 1.0f, camera.getPosition());
+    shadowCuller.resetCounters();
+
     renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
-                                       std::max(64.0f, m_pipelineSettings.shadowDistance));
+                                       shadowDist, &shadowCuller);
+
+    // Debug output: shadow caster domain info
+    {
+        const int visible = shadowCuller.getVisibleCount();
+        const int culled = shadowCuller.getCulledCount();
+        const float maxDist = shadowCuller.getMaxCasterDistance();
+        const float renderMul = 1.0f;
+        const char* mode = shadowCuller.getCullingMode();
+        static int frameCounter = 0;
+        if (++frameCounter % 120 == 0) {
+            printf("[shadow] caster: %d submitted, %d culled, maxDist=%.1f, mode=%s, renderMul=%.1f, halfPlane=%.1f\n",
+                   visible, culled, maxDist, mode, renderMul, shadowDist);
+        }
+    }
+
     if (m_useMultiDrawIndirect) {
         m_worldRenderBuffer.flushOpaque();
     }
@@ -1668,6 +1696,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
     bindCloudUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
+    m_deferredLightingShader->setInt("uDerivativeExactShadow", m_pipelineSettings.derivativeExactShadow ? 1 : 0);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
@@ -2245,11 +2274,14 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uVelocityTex", 12);
     m_deferredDebugShader->setInt("uHistorySceneTex", 13);
     m_deferredDebugShader->setInt("uHistoryDepthTex", 13);
+    m_deferredDebugShader->setInt("uNoiseTex", 13);
     m_deferredDebugShader->setInt("uReflectionTex", 14);
     m_deferredDebugShader->setInt("uCloudTex", 15);
     m_deferredDebugShader->setInt("uSceneCompositeTex", 15);
     m_deferredDebugShader->setInt("uSceneResolvedTex", 15);
     m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
+    m_deferredDebugShader->setInt("uShadowColorTex", 14);
+    m_deferredDebugShader->setInt("uShadowNormalTex", 15);
     m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
     m_deferredDebugShader->setMat4("uShadowModelView", m_shadowModelView);
@@ -2264,6 +2296,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
     m_deferredDebugShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
+    m_deferredDebugShader->setInt("uDerivativeExactShadow", m_pipelineSettings.derivativeExactShadow ? 1 : 0);
     const RenderFrameData* debugFrame = m_currentFrameDataValid
         ? &m_currentFrameData
         : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
@@ -2304,24 +2337,32 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     const bool materialAuxDebug =
         m_pipelineSettings.debugViewMode == 25 || m_pipelineSettings.debugViewMode == 26;
     const bool historyDepthDebug = m_pipelineSettings.debugViewMode == 19;
+    const bool shadowCompareDebug =
+        m_pipelineSettings.debugViewMode == 21 ||
+        m_pipelineSettings.debugViewMode == 22 ||
+        m_pipelineSettings.debugViewMode == 33;
     glBindTexture(GL_TEXTURE_2D,
-                  materialAuxDebug ? m_deferredTargets.materialAuxTexture()
-                                   : (historyDepthDebug ? m_deferredTargets.historyDepthTexturePrev()
-                                                        : m_deferredTargets.historySceneTexturePrev()));
+                  shadowCompareDebug ? m_resourceMgr->getTexture2D("shader_noise2d")
+                                     : (materialAuxDebug ? m_deferredTargets.materialAuxTexture()
+                                                         : (historyDepthDebug ? m_deferredTargets.historyDepthTexturePrev()
+                                                                              : m_deferredTargets.historySceneTexturePrev())));
     glActiveTexture(GL_TEXTURE14);
+    const bool shadowCasterDebug = m_pipelineSettings.debugViewMode == 34;
     const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 27;
     glBindTexture(GL_TEXTURE_2D,
-                  reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
-                                         : m_deferredTargets.reflectionTexture());
+                  shadowCasterDebug ? m_deferredTargets.shadowColorTexture()
+                                    : (reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
+                                                              : m_deferredTargets.reflectionTexture()));
     glActiveTexture(GL_TEXTURE15);
     const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 28;
     const bool sceneCompositeDebug = m_pipelineSettings.debugViewMode == 11;
     const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 30;
     glBindTexture(GL_TEXTURE_2D,
-                  sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
-                                     : (sceneCompositeDebug ? m_deferredTargets.sceneCompositeTexture()
-                                                            : (cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
-                                                                                 : m_deferredTargets.cloudTexture())));
+                  shadowCasterDebug ? m_deferredTargets.shadowNormalTexture()
+                                    : (sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
+                                                          : (sceneCompositeDebug ? m_deferredTargets.sceneCompositeTexture()
+                                                                                 : (cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
+                                                                                                      : m_deferredTargets.cloudTexture()))));
     renderFullscreen(*m_deferredDebugShader);
 
     for (int unit = 15; unit >= 0; --unit) {
@@ -2405,27 +2446,14 @@ Renderer::ShadowProjectionData Renderer::buildShadowProjectionData(const Camera&
     constexpr float kSunPathRotationDegrees = -35.0f;
     const glm::vec3 cameraPos = camera.getPosition();
 
-    glm::mat4 view(1.0f);
-    view = glm::rotate(view, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    // Delegate to ShadowMatrices (mirrors Iris ShadowMatrices.java).
+    const glm::mat4 view = shadow::ShadowMatrices::createModelViewMatrix(
+        shadowAngle, kShadowIntervalSize, kSunPathRotationDegrees,
+        cameraPos.x, cameraPos.y, cameraPos.z);
 
-    float normalizedShadowAngle = shadowAngle - std::floor(shadowAngle);
-    if (normalizedShadowAngle < 0.0f) {
-        normalizedShadowAngle += 1.0f;
-    }
-    const float skyAngle = normalizedShadowAngle < 0.25f ? normalizedShadowAngle + 0.75f : normalizedShadowAngle - 0.25f;
-    view = glm::rotate(view, glm::radians(skyAngle * -360.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    view = glm::rotate(view, glm::radians(kSunPathRotationDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
+    const glm::mat4 proj = shadow::ShadowMatrices::createOrthoMatrix(
+        extent, shadow::ShadowMatrices::NEAR, shadow::ShadowMatrices::FAR);
 
-    glm::vec3 intervalOffset(0.0f);
-    if (kShadowIntervalSize != 0.0f) {
-        const float halfIntervalSize = kShadowIntervalSize * 0.5f;
-        intervalOffset.x = std::fmod(cameraPos.x, kShadowIntervalSize) - halfIntervalSize;
-        intervalOffset.y = std::fmod(cameraPos.y, kShadowIntervalSize) - halfIntervalSize;
-        intervalOffset.z = std::fmod(cameraPos.z, kShadowIntervalSize) - halfIntervalSize;
-    }
-    view = glm::translate(view, intervalOffset - cameraPos);
-
-    const glm::mat4 proj = glm::ortho(-extent, extent, -extent, extent, -100.05f, 156.0f);
     ShadowProjectionData data;
     data.modelView = view;
     data.projection = proj;
@@ -2554,19 +2582,34 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                   std::vector<ChunkRenderEntry>& cutoutEntries,
                                                   std::vector<ChunkRenderEntry>& transparentEntries,
                                                   const bool frustumCull,
-                                                  const float maxCameraDistance) {
+                                                  const float maxCameraDistance,
+                                                  shadow::ShadowCasterCuller* shadowCuller) {
     syncChunkRenderColumns(world);
     if (m_chunkRenderColumns.empty()) {
         return;
     }
 
     GLuint lastOpaqueVao = 0;
-    const bool distanceCull = maxCameraDistance > 0.0f;
+    const bool distanceCull = maxCameraDistance > 0.0f || shadowCuller != nullptr;
     const float maxCameraDistanceSq = maxCameraDistance * maxCameraDistance;
 
+    // When a shadow culler is provided, use Iris BoxCuller AABB cube semantics.
+    // Otherwise, fall back to the original XZ clamped distance check.
     auto boundsWithinCameraDistance = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
         if (!distanceCull) {
             return true;
+        }
+        if (shadowCuller) {
+            const bool visible = shadowCuller->isAabbVisible(boundsMin, boundsMax);
+            if (visible) {
+                // Compute distance from camera to AABB center for debug
+                const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
+                const float dist = glm::length(center - m_cameraPos);
+                shadowCuller->recordVisible(dist);
+            } else {
+                shadowCuller->recordCulled();
+            }
+            return visible;
         }
         const float clampedX = std::clamp(m_cameraPos.x, boundsMin.x, boundsMax.x);
         const float clampedZ = std::clamp(m_cameraPos.z, boundsMin.z, boundsMax.z);

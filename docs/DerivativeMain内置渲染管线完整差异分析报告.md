@@ -1,23 +1,27 @@
 # DerivativeMain 内置渲染管线完整差异分析报告
 
-> 范围：本报告以根目录 `DerivativeMain/` 解包源码为唯一权威，对照当前 Mecraft C++/OpenGL Hybrid Deferred 管线、`src/renderer/` 与 `assets/shaders/`。  
-> 当前目标：**主世界 `world0` + 原版 Minecraft 材质包 + 内置 DerivativeMain 光影复刻**。Nether/End、Distant Horizons、Physics Oceans、外部 PBR 材质包、LabPBR/POM 等作为 DerivativeMain 源码中存在的非目标分支记录，不列入当前必须完成项。
+> 范围：本报告以根目录 `DerivativeMain/` 解包源码作为视觉与算法参考，对照当前 Mecraft C++/OpenGL Hybrid Deferred 管线、`src/renderer/` 与 `assets/shaders/`。  
+> 当前目标：**主世界 `world0` + 原版 Minecraft 材质包 + 内置 DerivativeMain-like 光影效果**。Mecraft 引擎端拥有自己的 Renderer Contract；DerivativeMain 的大气、光照、色调、HDR、水、体积雾、材质风格作为移植目标，但不再强制复现 Iris/OptiFine shaderpack 宿主 ABI。Nether/End、Distant Horizons、Physics Oceans、外部 PBR 材质包、LabPBR/POM、任意 shaderpack 替换能力均不列入当前必须完成项。
+
+> 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
 
 ## 0. 移植原则
 
-本项目的 DerivativeMain 复刻必须遵循以下原则：
+本项目的 DerivativeMain-like 内置光影必须遵循以下原则：
 
-1. **DerivativeMain 源码是权威实现。**
-   - shader 数学公式、采样顺序、bias、dither、宏默认值、材质 ID 语义、buffer 语义均以 DerivativeMain 为准。
-   - 当前引擎只允许做 OpenGL/FBO/材质系统/资源路径层面的适配。
+1. **Mecraft Renderer Contract 是宿主权威，DerivativeMain 是视觉/算法参考。**
+   - 大气、BRDF、色调、HDR、水、体积雾、材质风格优先参考 DerivativeMain。
+   - 当 DerivativeMain/Iris 运行假设与 Mecraft 引擎基础设施冲突时，以 Mecraft contract 为准。例如：DerivativeMain 的非线性 shadow warp 默认假设 Minecraft/Iris 小 quad terrain；Mecraft 当前主渲染依赖 greedy meshing + MDI，因此不能为了逐字复刻 shadow warp 而全局关闭 greedy meshing。
+   - shaderpack sampler 名、`colortex*`、`shadowtex*`、OptiFine/Iris uniform 只作为映射参考，不再要求完整 ABI 等价。
 
 2. **禁止"看起来等价"的公式改写。**
    - 典型事故：DerivativeMain `sqrt2(x)` 是 `sqrt(sqrt(x))`，即四次根；曾误写成 `sqrt(x)`，导致 Derivative shadow warp 读取端与写入端不一致，出现一整团随摄像机/时间漂移的 shadow-depth 形状阴影。
    - 结论：基础函数必须逐字复刻，不能凭直觉化简。
 
-3. **先还原 DerivativeMain 数据流，再优化性能。**
+3. **先定义 Mecraft 数据流，再吸收 DerivativeMain 效果。**
    - 如果当前 C++ pass graph 与 shaderpack `colortex` 不同，必须先建立明确映射。
-   - 不允许为了当前资源布局方便而改变 DerivativeMain 的采样语义。
+   - 不再为了对齐 shaderpack ABI 而反向扭曲引擎架构；应把 DerivativeMain 的算法改写为消费 Mecraft 的 GBuffer、shadow、history、material contract。
+   - 性能路径必须服务当前项目已有优势：greedy meshing、MDI、多类 draw list、固定内置 shader，而不是为任意 shaderpack loader 预留过高复杂度。
 
 4. **每个移植函数都必须标注来源。**
    - 推荐在 shader 注释中写明：`DerivativeMain/lib/...` 或 `DerivativeMain/program/...` 的函数名/行意图。
@@ -38,7 +42,7 @@
 - `shaders.properties` 中的 blend、flip、scale、program toggle、自定义 uniform 平滑规则没有完整内置等价层。
 - 大气、云、体积雾、水、SSR、后处理、GI/AO 等大量核心函数仍未逐文件端口。
 
-结论：**架构地基已基本可用；后续工作必须从"补效果"转为"按 DerivativeMain 文件逐函数收敛"。**
+结论：**架构地基已基本可用；后续工作必须从"复刻 Iris 宿主"转为"稳定 Mecraft Renderer Contract，并按 DerivativeMain 视觉目标收敛"。**
 
 ## 2. 已扫描的 DerivativeMain 权威文件
 
@@ -252,27 +256,33 @@
   - 直接原因：`BlockerSearch.y` 从 DerivativeMain 的 `sssDepth * shadowProjectionInverse[2].z` 被改成正的 world scale；随后 SSS 调用又使用 `(1.0 - sunShadow) * 0.35` 正值 fallback 覆盖 signed blocker depth。
   - DerivativeMain 依赖 OpenGL ortho `shadowProjectionInverse[2].z` 的负号，让 `CalculateSubsurfaceScattering()` 中 `fastExp(coeff * sssDepth)` 衰减；改成正数会在 leaves/grass 等 SSS 材质上指数爆亮。
   - 结论：`BlockerSearch`、SSS depth、bias、dither、PCF 半径等 shadow 数据流必须逐行对齐，不能用“更直观”的 world-unit 改写。
+- 2026-05-13 进一步确认 terrain ghosting 根因：
+  - 现象：`No Warp` 无鬼影，`Derivative` 与 `Radial Debug` 有鬼影；`Shadow Warp Cutoff` 无影响；`Derivative Exact Shadow` 下红区与鬼影重合；Debug view 中 ghost 区域显示真实 caster 贴图颜色。
+  - 关键验证：开启 `Debug Disable Greedy Meshing` 后，当前测试场景 ghosting 消失。
+  - 结论：根因不是 PCF、bias、cloud shadow、sampler clear，也不是单纯 caster distance/frustum；而是 **非线性 shadow warp 在贪婪合并大 quad 顶点上执行，GPU 对 warp 后顶点进行线性插值，导致 shadow map 写入端的深度/颜色布局被扭曲**。
+  - Iris/Sodium 不触发该问题，是因为 terrain 输入仍是 Minecraft block model 的小 quad 粒度，性能依靠压缩顶点格式与 region batching，而不是超大 greedy quad。
+  - Mecraft 正式路线：主渲染保留 greedy + MDI；不以完整复刻 DerivativeMain shadow warp 为硬目标。阴影系统改为 Mecraft 自有稳定方案（No Warp/linear shadow、CSM、PCF/PCSS/contact shadow），必要时仅对 shadow pass 建立 bounded fine caster mesh 作为质量选项。
 
-### 5.4 当前仍未完整等价
+### 5.4 当前仍需按 MecraftShadow contract 验收
 
-- DerivativeMain 使用 shadow sampler/OptiFine shadowtex 语义；当前是普通 depth texture 手写比较，需要继续审计所有边界、过滤、bias 行为。
-- `shadowcolor0` colored shadow 有资源，但彩色玻璃/透明体的写入与读取还未完整等价。
-- 水/透明 shadow caster 当前不应贸然写入 depth，否则会把大片水面当完全遮挡者；后续必须按 `Shadow.frag` 的水/透明逻辑完整端口。
+- DerivativeMain 使用 shadow sampler/OptiFine shadowtex 语义；Mecraft 当前已接入 raw depth + comparison view / `sampler2DShadow` 的双视图，但这应被文档化为 Mecraft shadow contract，而不是宣称完整复刻 OptiFine `shadowtex0/1` ABI。
+- `shadowcolor0` colored shadow 有资源，但彩色玻璃/透明体的写入与读取还需按 Mecraft 透明/水/玻璃材质模型重新验收。
+- 水/透明 shadow caster 当前不应贸然写入 depth，否则会把大片水面当完全遮挡者；后续应参考 `Shadow.frag` 的水/透明意图，落到 Mecraft 自有透明阴影语义。
 - `screenSpaceShadow` 当前默认不应作为主阴影稳定性前提；应等主 shadow map 完全稳定后再开启调参。
 - RSM GI 使用 shadow color/normal 的间接光仍缺失。
 - DH shadow 为非目标。
 - `deferred5.fsh` 中 `shadow *= saturate(mcLightmap.g * 1e6)` 已通过 `voxelLight.r` 等价实现（天空光遮蔽太阳光）。
 
-#### 5.4.1 TODO：升级为 sampler2DShadow 硬件 PCF（P1 后续升级）
+#### 5.4.1 已完成：sampler2DShadow 硬件 PCF 基础架构
 
 DerivativeMain 使用两个 shadow sampler：
 
 - `sampler2D shadowtex0` — raw depth，用于 `BlockerSearch` 的 `texelFetch` 读取原始深度值
 - `sampler2DShadow shadowtex1` — comparison mode，用于 `PercentageCloserFilter` 的 `textureLod(shadowtex1, vec3(uv, refZ), 0)` 硬件自动比较+双线性插值
 
-当前 Mecraft 只有一个 `sampler2D uShadowMap`，PCF 使用 `compareShadowBilinear` 手动模拟（~15 条指令/样本 vs 硬件 1 条）。
+Mecraft 已完成 raw depth + comparison view 的双视图基础架构：
 
-**升级方案：`glTextureView` 零拷贝双视图**
+**当前方案：`glTextureView` 零拷贝双视图**
 
 ```
 m_shadowDepth (原始纹理, GL_DEPTH_COMPONENT32F)
@@ -282,7 +292,7 @@ m_shadowDepth (原始纹理, GL_DEPTH_COMPONENT32F)
        └── sampler2DShadow view → uShadowMap      (texture() 硬件比较，用于 PCF)
 ```
 
-C++ 改动（~15 行）：
+C++ 关键配置：
 
 ```cpp
 // 在 DeferredRenderTargets.cpp ensureSize() 中，创建 m_shadowDepth 之后：
@@ -300,7 +310,7 @@ constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
 glTextureParameterfv(m_shadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 ```
 
-Shader 改动：
+Shader 关键接口：
 
 ```glsl
 uniform sampler2D       uShadowMapRaw;   // blockerSearch: texelFetch 读原始深度
@@ -313,20 +323,27 @@ float lit = texture(uShadowMap, vec3(sampleCoord, shadowProjPos.z));
 float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 ```
 
-**收益**：PCF 每样本 ~15 条指令 → 1 条；硬件精确双线性；`compareShadowBilinear` 等 ~40 行可全部删除；轻松支持 colored shadows。
+**收益**：PCF 每样本从手写比较转为硬件比较；raw depth 仍可用于 blocker search/debug；colored shadow 可继续通过 Mecraft 的 ShadowColor 语义扩展。
 
-**前置条件**：当前手动双线性在视觉上等价，不阻塞 P1。升级时机为 P1 完成、shadow map 稳定后。
+**注意**：该架构只解决 sampler/compare 的基础设施问题，不解决非线性 warp 与 greedy mesh 的 ghosting。正式默认阴影仍应走 MecraftShadow Linear/CSM 路线。
 
 ### 5.5 下一步阴影任务
 
 1. ~~将 `ShadowDistortion.glsl` 抽成项目公共 include，shadow/deferred/volumetric/debug 全部引用同一函数，避免再次分叉。~~ ✅ 已完成（`derivative_shadow.glsl`）
 2. ~~将 `SunLighting.glsl` 的纯数学函数端口为 include。~~ ✅ 已完成（`derivative_sunlight.glsl` — HG phase / fake bounce / SSS 计算）
 3. ~~升级 shadow map sampler 架构：`sampler2D` → `sampler2DShadow` + `glTextureView` 双视图（见 5.4.1）。~~ ✅ 已完成
-4. `Shadow.frag` 的 `shadowcolor0/1` 写入仍需重新验收。当前已有 ShadowColor.a 透明度标志与二阶段阴影渲染，但这只是 Mecraft 适配语义，不等同于 DerivativeMain `shadowtex0/shadowtex1 + shadowcolor0/1` 的完整合同。
-5. `SunLighting.glsl` 阴影读取链路仍需逐行复核。2026-05-13 发现 cutout 叶/草在 soft shadow 下爆白，根因是 `BlockerSearch.y` 被改成正的 world scale，并且 SSS 调用用正值 fallback 覆盖了 DerivativeMain 的 signed blocker depth。
-6. `COLORED_SHADOWS` 只能标记为部分实现：当前依赖 `ShadowColor.a < 0.5` 判断透明投射者；DerivativeMain 原逻辑依赖 `shadowtex0` 与 `shadowtex1` 比较结果不一致。需要补齐或明确建模双 shadowtex 语义，避免继续用单一 alpha flag 冒充完整实现。
-7. 建立阴影验收矩阵：opaque 方块、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；分别测试 Sun Shadows、Soft Shadows、PCSS、Contact Shadows、Cloud Shadows。只有矩阵通过后，P1 阴影才能重新标记完成。
-8. RSM GI 使用 shadow color/normal 的间接光仍缺失（P4）。
+4. 将正式阴影路线改为 `MecraftShadow`：
+   - 默认使用 No Warp/linear shadow，确保 greedy mesh 与 shadow map 写入端稳定。
+   - 后续优先评估 CSM/分段 shadow distance，而不是继续强行使用 DerivativeMain quartic warp。
+   - 保留 `Derivative/Radial Warp` 作为 debug/研究模式，用于对比和回归验证，不作为默认画面路径。
+5. 评估 shadow-only bounded fine caster mesh：
+   - 主 GBuffer/forward mesh 继续 greedy + MDI。
+   - shadow pass 可选建立 `maxShadowQuadSize = 1/2/4/8` 的独立 caster mesh，用于高质量阴影或研究非线性 warp。
+   - 默认不全局关闭 greedy；`Debug Disable Greedy Meshing` 仅保留为诊断开关。
+6. `Shadow.frag` 的 `shadowcolor0/1` 写入按 Mecraft contract 重新验收。当前 ShadowColor.a 透明度标志是 Mecraft 适配语义，不再要求冒充 DerivativeMain 双 `shadowtex0/shadowtex1` ABI。
+7. `COLORED_SHADOWS` 以 Mecraft 的透明/水/玻璃材质模型重新定义；可参考 DerivativeMain，但不强制复刻其双 shadowtex 检测。
+8. 建立阴影验收矩阵：opaque 方块、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；分别测试 Sun Shadows、Soft Shadows、PCSS、Contact Shadows、Cloud Shadows。只有矩阵通过后，阴影 V1 才能重新标记完成。
+9. RSM GI 使用 shadow color/normal 的间接光仍缺失（P4）。
 
 ## 6. 主光照、BRDF、Block Light、SSS
 
@@ -381,7 +398,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
   - Beacon Core / Middle Glowing 的 `fract(worldPos)` 逻辑已确认正确（Mecraft 的 worldPos 已含 cameraPosition）
   - 最后一行常量加法已对齐
 
-- ✅ `deferred5.fsh` 主流程逐行对齐（`deferred_lighting.fs`）：
+- ✅ `deferred5.fsh` 主流程已按 DerivativeMain 参考重排（`deferred_lighting.fs`）：
   - `sceneData = vec3(0.0)` 初始化，`BASIC_BRIGHTNESS (0.018)` 移至 skylight 之后
   - `diffuse = vec3(1.0)` 初始化，仅在 shadow > 0 时乘 `DiffuseHammon`
   - `shadow` 改为 `vec3` 类型，匹配 DerivativeMain 的 vec3 shadow
@@ -395,7 +412,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 #### 仍需完善（P1 剩余 / P2+）
 
-- `deferred5.fsh` 中 water tint、underwater 视觉处理、`isEyeInWater` 分支仍有差异。
+- `deferred5.fsh` 中 shadow/SSS/colored shadow 必须按 MecraftShadow contract 重新验收；water tint、underwater 视觉处理也仍需继续收敛。
 - `GlobalIllumination.glsl` RSM GI 缺失。
 - `AmbientOcclusion.glsl` 的 AO/GI temporal + spatial filter 未完整。
 - SH sky lighting 未完全按 `deferred5.vsh` 从 sky capture 构建。
@@ -432,7 +449,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - SkyCapture 为 `256x514`，包含 raw sky rows、cloudy sky rows、metadata rows。
 - metadata row 已包含 direct/sky/sun/moon illuminance 与 cloud dynamic weather。
 
-未完整等价：
+未完整适配：
 
 - DerivativeMain 的 Bruneton 查询体系依赖多个 LUT 语义；当前主要从 `Final.lut` 采样并自行映射。
 - `Atmosphere.glsl` 中 planet parameters、ProjectSky/UnprojectSky、sun/moon disk、night eye、aurora/stars、land atmospheric scattering 仍需逐函数端口。
@@ -441,7 +458,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 下一步：
 
 - 审计 `atmosphere_lut.glsl` 是否逐函数匹配 `Atmosphere.glsl`，不匹配处标注"适配"或重写。
-- 如果要完全权威，应同步加载并使用 `Transmittance/Scattering/Irradiance/Final` 的完整资源体系。
+- 如果后续要提升一致性，可同步加载并使用 `Transmittance/Scattering/Irradiance/Final` 的完整资源体系；这属于 DerivativeMain-like 视觉收敛，不是 shaderpack ABI 复刻要求。
 
 ## 8. 云系统
 
@@ -471,7 +488,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - 有 half-res cloud target 与 cloudy sky capture。
 - cloud composite 已进入 scene composite。
 
-未完整等价：
+未完整适配：
 
 - `VolumetricClouds.glsl` 的 marching、multi-scattering、powder、sun optical depth、temporal upscaling 未完整。
 - `PlanarClouds.glsl` 双层 cirrus/cirrocumulus 仍是近似。
@@ -480,7 +497,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 备注：
 
-- 用户验证 cloud shadow 开关对本次 Derivative warp 阴影 bug 无影响，说明该 bug 根因不是云影，而是 shadow distortion 不一致。
+- 用户验证 cloud shadow 开关对本次 Derivative/Radial warp 阴影 bug 无影响，说明该 bug 根因不是云影，而是非线性 shadow warp 与 greedy mesh 的插值不兼容。
 
 ## 9. 体积雾与体积光
 
@@ -507,7 +524,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - 有 height density、weather haze、phase、shadow visibility、depth-aware composite。
 - Derivative warp 在 volumetric 端使用 `(x^4+y^4)^(1/4)` 公式，与 shadow pass 一致。
 
-未完整等价：
+未完整适配：
 
 - `CalculateVolumetricFog` 未逐行端口。
 - Low/Medium/High/Ultra density mode、volFogWind、volFogDensity、BiomeSandstorm/GreenShift 未完整。
@@ -544,7 +561,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - WaterFog/UnderwaterFog 已有 DerivativeMain 注释来源。
 - 水面 SSR、sky reflection、sun reflection、wave/parallax、absorption 有入口。
 
-未完整等价：
+未完整适配：
 
 - DerivativeMain 水先写 GBuffer，再在 composite/composite1 中合成；当前是 deferred 后 forward/composite。
 - `WaterWave.glsl` 未完整逐函数端口。
@@ -555,7 +572,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 注意：
 
-- 当前不应把水/透明几何直接作为完全遮挡的 shadow depth caster，必须先按 DerivativeMain `Shadow.frag` 的 colored shadow/water 分支完整端口。
+- 当前不应把水/透明几何直接作为完全遮挡的 shadow depth caster；应参考 DerivativeMain `Shadow.frag` 的 colored shadow/water 分支，在 Mecraft 透明阴影 contract 中定义自己的写入/读取语义。
 
 ## 11. SSR、反射、湿润表面
 
@@ -584,7 +601,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - Reflection bilateral filter 有基础实现。
 - roughness/metal/translucent mask 已参与。
 
-未完整等价：
+未完整适配：
 
 - `ScreenSpaceReflections.glsl` 的 ray steps、hit validation、real sky reflection、VNDF rough reflection 未完整。
 - `ReflectionFilter.glsl` 与 compute path 未完整。
@@ -625,7 +642,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - Motion blur、DoF、Bloom、AgX/ACES/Filmic、sharpen/dither 均有入口。
 - PostProcessRenderer 已有 DerivativeMain sigmoid exposure response 注释来源。
 
-未完整等价：
+未完整适配：
 
 - DerivativeMain exposure 与 TAA 在 `Temporal.vert/.frag` 里高度耦合；当前拆分后顺序不同。
 - Bloom 不是 DerivativeMain tile/mip downsample + H/V blur + Grade 合成链。
@@ -702,7 +719,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 3. 建立 `DerivativeMainPortingIndex.md` — 待建立
 4. ~~把"禁止近似改写 DerivativeMain 公式"写入项目开发约定~~ ✅ 已在本文档 §0 明确
 
-### P1：主光照和阴影收敛（重新打开，未完成）
+### P1：主光照和 MecraftShadow 阴影收敛（重新打开，未完成）
 
 1. ~~完整端口 `SunLighting.glsl`~~ ✅ `derivative_sunlight.glsl`（HG phase / fake bounce / SSS）
 2. ~~完整端口 `BRDF.glsl`~~ ✅ `derivative_brdf.glsl`（DiffuseHammon + SpecularBRDF 逐字复刻）
@@ -720,19 +737,22 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
    - `specular *= 1.0 + uWeatherWetness`
    - `diffuse = vec3(1.0)` 初始化，仅 shadow > 0 时乘 DiffuseHammon
    - `BASIC_BRIGHTNESS` 移至 skylight 之后
-5. 完整实现 colored shadow 与透明 shadow，不再自造透明 caster 行为 — 部分完成，需重新验收
+5. Mecraft 透明/彩色阴影 contract — 部分完成，需重新验收
    - Shadow pass 二阶段渲染：opaque+cutout（depth write ON）→ transparent/water（depth write OFF）
    - `shadow_depth.fs` ShadowColor.a 编码透明度标志（0.0=透明投射者，1.0=不透明）
    - `pcfFilter` 返回 `vec3` 支持 DerivativeMain COLORED_SHADOWS（SunLighting.glsl:73-80）
    - 当前透明投射者检测：`ShadowColor.a < 0.5` → `pow4(shadowColor.rgb) * sampleLit`
    - `shadowFactor` 返回 `vec3` 支持逐通道阴影着色
-   - 风险：DerivativeMain 真实检测是 `shadowtex0` 与 `shadowtex1` 比较结果不一致；当前 alpha flag 只能算适配层，不能标记为完整等价。
+   - 说明：DerivativeMain 真实检测是 `shadowtex0` 与 `shadowtex1` 比较结果不一致；当前 alpha flag 是 Mecraft 适配层。后续应把它文档化为 Mecraft contract，而不是冒充完整 shaderpack ABI。
 
 **P1 剩余项（2026-05-13 重新打开）：**
 - ~~Water/underwater `isEyeInWater` 分支对齐~~ ✅ 已完成
 - ~~`EMISSION_CURVE` 精确参数确认（当前近似为 1.0）~~ ✅ 已完成（EMISSIVE_CURVE=2.2，在 `unpackGBufferMaterial` 中应用 `pow(x, 2.2)`）
-- `SunLighting.glsl` 的 `BlockerSearch`、`PercentageCloserFilter`、`ScreenSpaceShadow` 与 SSS 调用链逐行复核，禁止再用“看起来等价”的正向 depth scale 或 fallback。
-- `shadowtex0/shadowtex1` 语义建模：确认当前 raw depth + comparison view + ShadowColor.a 是否足够；如果不足，补真实双语义资源/检测路径。
+- 建立 `MecraftShadow` 默认路径：No Warp/linear shadow，greedy mesh 稳定，保留 texel snapping、BoxCuller、sampler2DShadow、PCF/PCSS/contact shadow。
+- 评估 CSM/分段 shadow distance，以线性投影替代 DerivativeMain quartic warp 的中心分辨率优势。
+- 保留 `Derivative/Radial Warp` 作为 debug/研究模式；不得作为默认完成标准。
+- `SunLighting.glsl` 中可复用的 BRDF/SSS/PCF 思路继续参考 DerivativeMain，但 shadow projection/warp 必须适配 Mecraft mesh contract。
+- `shadowtex0/shadowtex1` 语义建模：确认当前 raw depth + comparison view + ShadowColor.a 是否足够作为 Mecraft contract；如果不足，补 Mecraft 自有双语义资源/检测路径。
 - `Shadow.frag` 写入验收：cutout leaves/grass 必须 alpha test 后作为 opaque caster 写 depth；水/玻璃/透明必须不把 depth 写成完全遮挡。
 - 建立并通过阴影验收矩阵：opaque、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；Sun/Soft/PCSS/Contact/Cloud 分开测试。
 - Colored shadow 与透明 shadow 只能在上述验收通过后重新标记完成。
@@ -765,23 +785,23 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 ## 16. 当前结论
 
-当前 Mecraft 已经有完整的内置 deferred 管线骨架，且阴影系统经过 Derivative warp 修复后，已经确认最危险的坐标变换分叉被修掉。
+当前 Mecraft 已经有完整的内置 deferred 管线骨架。2026-05-13 的最新验证表明，阴影 ghosting 的关键根因不是单个 shader 公式错误，而是 DerivativeMain/Radial 非线性 shadow warp 与 Mecraft greedy 大面片 mesh contract 不兼容。开启 `Debug Disable Greedy Meshing` 后 ghosting 消失，说明正式路线必须转向 Mecraft 自有稳定阴影 contract，而不是继续把默认阴影逼近 Iris/OptiFine ABI。
 
 **P0 基础语义防分叉已完成**：`derivative_shadow.glsl` 统一 include、基础数学宏全量端口、shadow distortion 函数零分叉。
 
-**P1 主光照/阴影收敛未完成，已重新打开**：
+**P1 主光照/MecraftShadow 收敛未完成，已重新打开**：
 - ✅ `derivative_brdf.glsl` — BRDF 逐字复刻
 - ✅ `derivative_sunlight.glsl` — HG phase / fake bounce / SSS
 - ✅ `derivative_shadow.glsl` — Common.inc 辅助宏扩展 + shadow distortion/bias
 - ✅ `BlockLighting.glsl` — 完整端口（GetBlocklightFalloff、Redstone top/bottom、emissive ores、held torchlight）
-- 部分完成：`deferred5.fsh` 主流程已大体重排，但 shadow/SSS/colored shadow 数据流需重新逐行审计
+- 部分完成：`deferred5.fsh` 主流程已大体重排，但 shadow/SSS/colored shadow 需要按 MecraftShadow contract 重新验收
 - ✅ `EMISSION_CURVE` = 2.2（Material.inc 精确复刻，在 `unpackGBufferMaterial` 中应用）
 - ✅ Shadow sampler 升级：`sampler2DShadow` 硬件 PCF + `glTextureView` 零拷贝双视图
-- 部分完成：COLORED_SHADOWS 已有二阶段阴影渲染 + ShadowColor.a 透明度标志 + `pcfFilter` 返回 `vec3`，但仍不是 DerivativeMain 双 shadowtex 检测语义
+- 部分完成：COLORED_SHADOWS 已有二阶段阴影渲染 + ShadowColor.a 透明度标志 + `pcfFilter` 返回 `vec3`，但应文档化为 Mecraft 透明阴影语义，而不是 DerivativeMain 双 shadowtex ABI
 - ✅ Water/underwater `isEyeInWater` 分支：水下阳光衰减、天空光修改、金属遮罩
 
 **当前定位修正为**：
 
-**P1 不能标记完成；下一步必须先完成阴影验收矩阵与 `SunLighting.glsl` shadow/SSS 数据流逐行复核，再进入 P2/P3 的大规模收敛。**
+**P1 不能标记完成；下一步必须先把默认阴影切到稳定的 MecraftShadow 路线（No Warp/linear，后续 CSM），完成阴影验收矩阵，再进入 P2/P3 的大规模视觉收敛。**
 
-后续所有实现必须继续按 DerivativeMain 源码逐文件收敛。尤其 GBuffer Material.inc、Atmosphere、Cloud、Water、Post 这些基础库，不能再"按效果重写"，只能"照抄后适配"。
+后续实现继续参考 DerivativeMain 源码，但不再要求宿主 ABI 逐字复刻。GBuffer Material、Atmosphere、Cloud、Water、Post 这些基础库应优先复用 DerivativeMain 的视觉算法与数值风格；当算法依赖 Iris/OptiFine 特定宿主假设时，应改写为消费 Mecraft Renderer Contract。

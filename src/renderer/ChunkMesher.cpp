@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -17,6 +18,8 @@
 #include "../world/World.h"
 
 namespace {
+std::atomic_bool g_debugDisableGreedyMeshing{false};
+
 struct IVec3 {
     int x;
     int y;
@@ -1715,8 +1718,25 @@ void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                         }
                     }
 
-                    emitGreedyFace(targetVertices, meshData, plane[startIndex], face, runWidth, runHeight);
-                    ++faceCountAfterGreedy;
+                    if (g_debugDisableGreedyMeshing.load(std::memory_order_relaxed)) {
+                        for (int dy = 0; dy < runHeight; ++dy) {
+                            for (int dx = 0; dx < runWidth; ++dx) {
+                                const size_t cellIndex = static_cast<size_t>(u + dx) +
+                                                         static_cast<size_t>(v + dy) * static_cast<size_t>(width);
+                                const FaceCell& unitCell = plane[cellIndex];
+                                const glm::vec3 unitPos(unitCell.x, unitCell.y, unitCell.z);
+                                emitUnitFace(targetVertices,
+                                             unitPos,
+                                             face,
+                                             unitCell.renderData);
+                                expandBounds(meshData, unitPos, unitPos + glm::vec3(1.0f));
+                                ++faceCountAfterGreedy;
+                            }
+                        }
+                    } else {
+                        emitGreedyFace(targetVertices, meshData, plane[startIndex], face, runWidth, runHeight);
+                        ++faceCountAfterGreedy;
+                    }
                 }
             }
         }
@@ -2635,6 +2655,14 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
 }
 
 } // anonymous namespace
+
+void ChunkMesher::setDebugDisableGreedyMeshing(const bool disabled) {
+    g_debugDisableGreedyMeshing.store(disabled, std::memory_order_relaxed);
+}
+
+bool ChunkMesher::debugDisableGreedyMeshing() {
+    return g_debugDisableGreedyMeshing.load(std::memory_order_relaxed);
+}
 
 void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
                                    const SubChunkMeshingSnapshot& snapshot,

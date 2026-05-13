@@ -83,6 +83,9 @@ struct ChunkMeshData {
 
 class ChunkMesher {
 public:
+    static void setDebugDisableGreedyMeshing(bool disabled);
+    [[nodiscard]] static bool debugDisableGreedyMeshing();
+
     // --- Per-sub-chunk snapshot capture ---
     static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(
         const Chunk& chunk,

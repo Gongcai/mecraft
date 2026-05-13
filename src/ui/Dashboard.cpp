@@ -394,7 +394,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "Reflection History",
             "Cloud History",
             "SSR Hit Mask",
-            "Scene Resolved"
+            "Scene Resolved",
+            "Shadow UV + Warp",
+            "Warp Density",
+            "Shadow Depth Compare",
+            "Shadow Hit Caster"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -434,6 +438,21 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipeline.tonemapMode = tonemapMode;
         pipelineChanged |= ImGui::Combo("Shadow Warp", &shadowWarpMode, kShadowWarpModes, IM_ARRAYSIZE(kShadowWarpModes));
         pipeline.shadowWarpMode = shadowWarpMode;
+        pipelineChanged |= ImGui::Checkbox("Shadow Warp Cutoff", &pipeline.shadowWarpCutoff);
+        pipelineChanged |= ImGui::Checkbox("Derivative Exact Shadow", &pipeline.derivativeExactShadow);
+        const bool previousDebugDisableGreedyMeshing = pipeline.debugDisableGreedyMeshing;
+        pipelineChanged |= ImGui::Checkbox("Debug Disable Greedy Meshing", &pipeline.debugDisableGreedyMeshing);
+        if (pipeline.debugDisableGreedyMeshing != previousDebugDisableGreedyMeshing) {
+            for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
+                (void)chunkKey;
+                if (chunk) {
+                    chunk->markExistingSubChunksDirty();
+                }
+            }
+        }
+        if (pipeline.debugDisableGreedyMeshing) {
+            ImGui::TextWrapped("Testing mesh: terrain cube faces are rebuilt as 1x1 quads to isolate nonlinear shadow warp interpolation.");
+        }
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
             pipeline.shadowWarpMode = 1;

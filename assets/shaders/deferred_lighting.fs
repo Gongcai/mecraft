@@ -64,6 +64,7 @@ uniform int uContactShadowsEnabled;
 uniform int uCloudShadowsEnabled;
 uniform int uShadowWarpMode;
 uniform int uShadowLightMode;
+uniform int uDerivativeExactShadow;
 uniform float uShadowDistance;
 uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
@@ -261,7 +262,7 @@ vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
 // Local convenience wrappers adapt the shared functions to this file's uniforms.
 
 float localShadowProjectionFade(vec3 proj) {
-    return shadowProjectionFade(proj, uShadowMapRaw);
+    return shadowProjectionFadeWarpAware(proj, uShadowMapRaw, uShadowWarpMode);
 }
 
 float localShadowDepthWorldScale() {
@@ -290,6 +291,19 @@ vec3 localWorldToShadowProj(vec3 worldPos, out float warpDensity) {
     return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection, uShadowWarpMode, 0.9, warpDensity);
 }
 
+float derivativeExactNormalOffset(vec3 cameraRelPos, float ndotl) {
+    // DerivativeMain/world0/deferred5.fsh:251
+    // normalOffset = worldNormal * (dotSelf(worldPos) * 8e-5 + 3e-2) * (2.0 - saturate(NdotL))
+    return (dotSelf(cameraRelPos) * 8e-5 + 3e-2) * (2.0 - saturate(ndotl));
+}
+
+float selectedShadowNormalOffsetWorld(vec3 cameraRelPos, float ndotl, float viewDistance) {
+    if (uDerivativeExactShadow != 0) {
+        return derivativeExactNormalOffset(cameraRelPos, ndotl);
+    }
+    return localShadowNormalOffsetWorld(ndotl, viewDistance);
+}
+
 float shapeShadowVisibility(float lit) {
     lit = clamp(lit, 0.0, 1.0);
     float contrasted = pow(lit, max(uShadowContrast, 0.001));
@@ -301,9 +315,10 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
         return vec3(1.0);
     }
 
-    float viewDistanceForBias = length(worldPos - uCameraPos);
+    vec3 cameraRelPos = worldPos - uCameraPos;
+    float viewDistanceForBias = length(cameraRelPos);
     float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float normalOffset = localShadowNormalOffsetWorld(ndotl, viewDistanceForBias);
+    float normalOffset = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistanceForBias);
     float warpDensity = 1.0;
     vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
     if (shadowProjOutOfBounds(proj)) {
@@ -509,10 +524,9 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
     float ndotl = saturate(dot(normal, lightDir));
     if (ndotl <= 1e-3) return vec3(1.0);  // DerivativeMain deferred5.fsh:276 uses 1e-3
 
-    // Normal offset (DerivativeMain: normal * (dist² * 8e-5 + 3e-2) * (2 - NdotL))
-    // dotSelf must use camera-relative position (DerivativeMain worldPos is camera-relative)
-    float normalOffset = (dotSelf(cameraRelPos) * 8e-5 + 3e-2) *
-                         (2.0 - ndotl) * max(uShadowNormalOffset, 0.0) / 0.035;
+    // Normal offset (DerivativeMain: normal * (dist² * 8e-5 + 3e-2) * (2 - NdotL)).
+    // Exact mode removes Mecraft's UI scale so the receiver path matches DerivativeMain.
+    float normalOffset = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistanceForBias);
     float warpDensity = 1.0;
     vec3 proj = localWorldToShadowProj(worldPos + normal * normalOffset, warpDensity);
     if (shadowProjOutOfBounds(proj)) return vec3(1.0);
@@ -552,11 +566,14 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
     vec2 blocker = blockerSearch(proj, dither);
     outSssDepth = blocker.y;
 
-    int samples = uPcssShadowsEnabled != 0 ? 16 : 8;
+    int samples = (uDerivativeExactShadow != 0) ? 16 : (uPcssShadowsEnabled != 0 ? 16 : 8);
     float minRadius = 2.0 / max(float(textureSize(uShadowMapRaw, 0).x), 1.0);
     float pcfRadius = minRadius * max(uShadowSoftness, 0.1);
-    if (uPcssShadowsEnabled != 0) {
-        // DerivativeMain: penumbraScale = max(blockerSearch.x / distortFactor, 2.0 / realShadowMapRes)
+    if (uDerivativeExactShadow != 0) {
+        // DerivativeMain/world0/deferred5.fsh:277
+        // penumbraScale = max(blockerSearch.x / distortFactor, 2.0 / realShadowMapRes)
+        pcfRadius = max(blocker.x / max(warpDensity, 0.1), minRadius);
+    } else if (uPcssShadowsEnabled != 0) {
         pcfRadius = max(blocker.x / max(warpDensity, 0.1), minRadius) *
                     max(1.0, uShadowSoftness) *
                     max(uShadowPcssStrength, 0.35);

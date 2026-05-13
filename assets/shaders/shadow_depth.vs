@@ -20,6 +20,7 @@ uniform mat4 uShadowProjectionInverse;
 uniform mat4 model;
 uniform int uUseModel;
 uniform int uShadowWarpMode;
+uniform int uShadowWarpCutoff;  // Debug: 1 = discard vertices outside pre-warp clip XY range
 
 out vec2 vUV;
 out float vLayer;
@@ -49,9 +50,18 @@ void main() {
     vec3 clipPos = vec3(uShadowProjection[0].x, uShadowProjection[1].y, uShadowProjection[2].z) * viewPos + uShadowProjection[3].xyz;
 
     if (uShadowWarpMode != 2) {
+        vec2 preWarpClipXY = clipPos.xy;
         float warp = calculateShadowWarp(clipPos.xy, uShadowWarpMode);
         clipPos.xy /= warp;
         clipPos.z *= 0.2;
+
+        // Debug cutoff: test pre-warp clip space, not warped clip space.
+        // Distortion can compress pre-warp out-of-range casters back into the
+        // shadow map, which is the artifact pattern this switch is meant to isolate.
+        if (uShadowWarpCutoff != 0 && (abs(preWarpClipXY.x) > 1.0 || abs(preWarpClipXY.y) > 1.0)) {
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+            return;
+        }
     }
     gl_Position = vec4(clipPos, 1.0);
     vUV = aUV;

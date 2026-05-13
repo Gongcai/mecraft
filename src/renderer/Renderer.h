@@ -23,6 +23,8 @@
 class World;
 class Chunk;
 
+namespace shadow { class ShadowCasterCuller; }
+
 /// Decoupled data transfer structs for block interaction rendering.
 /// These allow Renderer to draw block outlines/overlays without depending on Player or ECS.
 struct BlockTargetRenderData {
@@ -90,6 +92,9 @@ public:
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
         int shadowWarpMode = 1; // 0=Radial debug, 1=Derivative quartic, 2=No warp
+        bool shadowWarpCutoff = true; // Debug: discard vertices outside pre-warp shadow clip range
+        bool derivativeExactShadow = false; // Debug: use DerivativeMain receiver offset + PCF radius exactly
+        bool debugDisableGreedyMeshing = false; // Debug: rebuild terrain as unit faces to test nonlinear shadow warp interpolation
         int shadowResolution = 2048;
         float shadowDistance = 192.0f;
         float shadowSoftness = 1.0f;
@@ -515,7 +520,8 @@ private:
                                             std::vector<ChunkRenderEntry>& cutoutEntries,
                                             std::vector<ChunkRenderEntry>& transparentEntries,
                                             bool frustumCull = true,
-                                            float maxCameraDistance = 0.0f);
+                                            float maxCameraDistance = 0.0f,
+                                            shadow::ShadowCasterCuller* shadowCuller = nullptr);
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);

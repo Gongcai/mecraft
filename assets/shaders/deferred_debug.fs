@@ -27,6 +27,9 @@ uniform sampler2D uReflectionTex;
 uniform sampler2D uCloudTex;
 uniform sampler2D uHistoryReflectionTex;
 uniform sampler2D uHistoryCloudTex;
+uniform sampler2D uNoiseTex;
+uniform sampler2D uShadowColorTex;
+uniform sampler2D uShadowNormalTex;
 uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
 uniform mat4 uShadowProjectionInverse;
@@ -44,6 +47,7 @@ uniform float uShadowSlopeBias;
 uniform float uShadowNormalOffset;
 uniform int uShadowLightMode;
 uniform int uShadowWarpMode;
+uniform int uDerivativeExactShadow;
 uniform int uDebugViewMode;
 
 vec3 tonemapPreview(vec3 color) {
@@ -73,6 +77,14 @@ float linearizeDepthPreview(float depth) {
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
     vec4 world = uInvViewProj * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     return world.xyz / max(world.w, 0.0001);
+}
+
+float noise2D(vec2 uv) {
+    return texture(uNoiseTex, uv).r;
+}
+
+float shadowDither() {
+    return noise2D(gl_FragCoord.xy / 256.0);
 }
 
 // Shadow warp, projection, and bias functions provided by derivative_shadow.glsl.
@@ -107,6 +119,36 @@ float localShadowWorldBias(float ndotl, float viewDistance) {
 float localShadowNormalOffsetWorld(float ndotl, float viewDistance) {
     return shadowNormalOffsetWorld(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
                                    uShadowNormalOffset);
+}
+
+float derivativeExactNormalOffset(vec3 cameraRelPos, float ndotl) {
+    // DerivativeMain/world0/deferred5.fsh:251
+    return (dotSelf(cameraRelPos) * 8e-5 + 3e-2) * (2.0 - saturate(ndotl));
+}
+
+float selectedShadowNormalOffsetWorld(vec3 cameraRelPos, float ndotl, float viewDistance) {
+    if (uDerivativeExactShadow != 0) {
+        return derivativeExactNormalOffset(cameraRelPos, ndotl);
+    }
+    return localShadowNormalOffsetWorld(ndotl, viewDistance);
+}
+
+float selectedShadowCompareBias(float ndotl, float viewDistance, float dither) {
+    if (uDerivativeExactShadow != 0) {
+        // Match DerivativeMain PercentageCloserFilter's receiver depth bias.
+        // Lighting uses the same constant term in pcfFilter()/hard-shadow compare.
+        return 1e-4 - dither * 5e-5;
+    }
+    return max(localShadowDepthBiasFromWorld(localShadowWorldBias(ndotl, viewDistance)),
+               localDerivativeMinimumShadowBias());
+}
+
+float selectedShadowBiasWorld(float ndotl, float viewDistance, float dither) {
+    if (uDerivativeExactShadow != 0) {
+        return (1e-4 - dither * 5e-5) * localShadowDepthWorldScale();
+    }
+    return max(localShadowWorldBias(ndotl, viewDistance),
+               localDerivativeMinimumShadowBias() * localShadowDepthWorldScale());
 }
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
@@ -238,8 +280,9 @@ void main() {
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        float viewDistance = length(worldPos - uCameraPos);
-        float offsetWorld = localShadowNormalOffsetWorld(ndotl, viewDistance);
+        vec3 cameraRelPos = worldPos - uCameraPos;
+        float viewDistance = length(cameraRelPos);
+        float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
         vec3 shadowUv = localShadowUvFromWorld(worldPos + normal * offsetWorld);
 
         if (shadowUvOutOfBounds(shadowUv)) {
@@ -248,8 +291,7 @@ void main() {
         }
 
         float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
-        float bias = max(localShadowDepthBiasFromWorld(localShadowWorldBias(ndotl, viewDistance)),
-                         localDerivativeMinimumShadowBias());
+        float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
         float margin = (shadowDepth - (shadowUv.z - bias)) * localShadowDepthWorldScale();
         float nearAcne = 1.0 - smoothstep(0.0, max(uShadowTexelWorldSize * 1.25, 0.0001), abs(margin));
@@ -268,10 +310,10 @@ void main() {
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        float viewDistance = length(worldPos - uCameraPos);
-        float biasWorld = max(localShadowWorldBias(ndotl, viewDistance),
-                              localDerivativeMinimumShadowBias() * localShadowDepthWorldScale());
-        float offsetWorld = localShadowNormalOffsetWorld(ndotl, viewDistance);
+        vec3 cameraRelPos = worldPos - uCameraPos;
+        float viewDistance = length(cameraRelPos);
+        float biasWorld = selectedShadowBiasWorld(ndotl, viewDistance, shadowDither());
+        float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
         float biasTexels = biasWorld / max(uShadowTexelWorldSize, 0.0001);
         float offsetTexels = offsetWorld / max(uShadowTexelWorldSize, 0.0001);
         FragColor = vec4(heatmap(biasTexels / 4.0).r, heatmap(offsetTexels / 4.0).g, clamp(1.0 - ndotl, 0.0, 1.0), 1.0);
@@ -312,6 +354,135 @@ void main() {
     }
     if (uDebugViewMode == 30) {
         FragColor = vec4(tonemapPreview(texture(uSceneResolvedTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+
+    // Debug 31: Shadow UV coordinates + warp density
+    // R = shadowUv.x, G = shadowUv.y, B = warp density heatmap
+    // Helps identify if ghosting correlates with specific shadow map regions or warp compression.
+    if (uDebugViewMode == 31) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        float warpDensity;
+        vec3 shadowUv = worldToShadowProj(worldPos, uShadowModelView, uShadowProjection,
+                                           uShadowWarpMode, 0.9, warpDensity);
+
+        if (shadowUvOutOfBounds(shadowUv)) {
+            FragColor = vec4(0.95, 0.08, 0.02, 1.0); // red = out of bounds
+            return;
+        }
+
+        // Warp density: 1.0 = center (high res), >1.0 = edge (compressed)
+        // Show as heatmap: blue=center, green=mid, red=compressed edge
+        float densityNorm = clamp((warpDensity - 1.0) / 0.5, 0.0, 1.0);
+        FragColor = vec4(shadowUv.x, shadowUv.y, densityNorm, 1.0);
+        return;
+    }
+
+    // Debug 32: Shadow warp density heatmap only
+    // Blue = center (density ~1.0), Red = edge (density >1.5)
+    if (uDebugViewMode == 32) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        float warpDensity;
+        vec3 shadowUv = worldToShadowProj(worldPos, uShadowModelView, uShadowProjection,
+                                           uShadowWarpMode, 0.9, warpDensity);
+
+        if (shadowUvOutOfBounds(shadowUv)) {
+            FragColor = vec4(0.95, 0.08, 0.02, 1.0);
+            return;
+        }
+
+        FragColor = vec4(heatmap(warpDensity / 2.0), 1.0);
+        return;
+    }
+
+    // Debug 33: Shadow depth comparison
+    // Shows receiver depth vs shadow map depth at each pixel.
+    // Green = lit (receiver depth <= shadow depth), Red = shadowed
+    // Brightness = depth margin (how much lit/shadowed)
+    if (uDebugViewMode == 33) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 lightDir = normalize(uShadowLightDirection);
+        float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 cameraRelPos = worldPos - uCameraPos;
+        float viewDistance = length(cameraRelPos);
+        float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
+        vec3 shadowUv = localShadowUvFromWorld(worldPos + normal * offsetWorld);
+
+        if (shadowUvOutOfBounds(shadowUv)) {
+            FragColor = vec4(0.95, 0.08, 0.02, 1.0); // red = out of bounds
+            return;
+        }
+
+        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
+        float margin = shadowUv.z - bias - shadowDepth;
+        // Green = lit (margin <= 0), Red = shadowed (margin > 0)
+        float lit = margin <= 0.0 ? 1.0 : 0.0;
+        float marginAbs = abs(margin) * localShadowDepthWorldScale();
+        FragColor = vec4(
+            mix(0.08, 0.95, 1.0 - lit),  // R: shadowed
+            mix(0.08, 0.95, lit),          // G: lit
+            heatmap(clamp(marginAbs / 2.0, 0.0, 1.0)).b,  // B: margin depth
+            1.0
+        );
+        return;
+    }
+
+    // Debug 34: Shadow hit caster info.
+    // For shadowed pixels, show the shadowcolor0 texel that caused the compare.
+    // Blue tint = transparent caster marker, cyan = cleared/default texel.
+    if (uDebugViewMode == 34) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+
+        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 lightDir = normalize(uShadowLightDirection);
+        float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 cameraRelPos = worldPos - uCameraPos;
+        float viewDistance = length(cameraRelPos);
+        float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
+        vec3 shadowUv = localShadowUvFromWorld(worldPos + normal * offsetWorld);
+
+        if (shadowUvOutOfBounds(shadowUv)) {
+            FragColor = vec4(0.95, 0.08, 0.02, 1.0);
+            return;
+        }
+
+        float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
+        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowed = (shadowUv.z - bias > shadowDepth) ? 1.0 : 0.0;
+        vec4 casterColor = texture(uShadowColorTex, shadowUv.xy);
+        vec4 casterNormal = texture(uShadowNormalTex, shadowUv.xy);
+        float cleared = step(0.995, casterColor.r) * step(0.995, casterColor.g) *
+                        step(0.995, casterColor.b) * step(0.995, casterColor.a);
+        vec3 normalPreview = vec3(casterNormal.rg, casterNormal.b);
+        vec3 colorPreview = mix(casterColor.rgb, vec3(0.1, 0.45, 1.0), (1.0 - casterColor.a) * 0.7);
+        colorPreview = mix(colorPreview, vec3(0.0, 0.9, 0.9), cleared * 0.85);
+        colorPreview = mix(colorPreview, normalPreview, 0.18);
+        FragColor = vec4(mix(vec3(0.03), colorPreview, shadowed), 1.0);
         return;
     }
 

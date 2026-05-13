@@ -203,6 +203,25 @@ float shadowProjectionFade(in vec3 proj, in sampler2D shadowMap) {
     return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
 }
 
+// Warp-aware version: adjusts near/far fade for z *= 0.2 compression.
+// With warp: valid depth UV range is [0.4, 0.6].
+// Without warp: valid depth UV range is [0.0, 1.0].
+float shadowProjectionFadeWarpAware(in vec3 proj, in sampler2D shadowMap, in int shadowWarpMode) {
+    vec2 edgeDistance = min(proj.xy, vec2(1.0) - proj.xy);
+    float texelUv = 1.0 / max(float(textureSize(shadowMap, 0).x), 1.0);
+    float edgeFade = smoothstep(texelUv * 8.0, texelUv * 36.0, min(edgeDistance.x, edgeDistance.y));
+    if (shadowWarpMode != 2) {
+        // Warp active: depth compressed to [0.4, 0.6] in UV space
+        float nearFade = smoothstep(0.398, 0.416, proj.z);
+        float farFade = 1.0 - smoothstep(0.584, 0.602, proj.z);
+        return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
+    }
+    // No warp: original thresholds
+    float nearFade = smoothstep(0.002, 0.016, proj.z);
+    float farFade = 1.0 - smoothstep(0.965, 0.998, proj.z);
+    return clamp(edgeFade * nearFade * farFade, 0.0, 1.0);
+}
+
 // Scale factor converting shadow depth differences to world-space units.
 // The z *= 0.2 in DistortShadowSpace compresses depth; we undo it here.
 // NOTE: This is ONLY for bias/offset calculations, NOT for SSS depth.

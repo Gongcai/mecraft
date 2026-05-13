@@ -1,29 +1,32 @@
 # Mecraft 与 Iris/OptiFine 渲染管线架构差异报告
 
-> 目标：把当前 Mecraft C++/OpenGL 渲染宿主环境改造成更符合 Iris/OptiFine shaderpack 行为的架构，减少 DerivativeMain 内置光影在开发时因为引擎端契约不一致而产生的异常 bug。  
+> 目标：记录当前 Mecraft C++/OpenGL 渲染宿主环境与 Iris/OptiFine 的差异，避免调试内置光影时误把 Iris shaderpack ABI 当作 Mecraft 必须复刻的目标。  
 > 范围：当前 Mecraft `src/renderer/`、`assets/shaders/`、内置 `DerivativeMain/` 光影包、根目录 `Iris-26.1/` 源码。  
-> 重点：本报告不是 DerivativeMain shader 文件逐项移植清单，而是 **Mecraft 引擎端宿主行为与 Iris 宿主行为的差异报告**。
+> 重点：本报告不是 DerivativeMain shader 文件逐项移植清单，也不再是“把 Mecraft 改造成 Iris”的实施计划；它是 **Mecraft 引擎端宿主行为与 Iris 宿主行为的差异/风险报告**。
+
+> 2026-05-13 路线修订：项目目标已从“复现 Iris/OptiFine contract”调整为“建立 Mecraft Renderer Contract，并让内置 DerivativeMain-like 光影适配该 contract”。Iris 继续作为重要参照，用于理解 shaderpack 默认假设和定位 bug，但不作为最终架构硬目标。
 
 ## 目标边界
 
-当前目标是：**复现 Iris/OptiFine 中 DerivativeMain 依赖的宿主契约，将 DerivativeMain 做成 Mecraft 内置光影，并以原版 Minecraft 材质包作为目标材质输入。**
+当前目标是：**主世界 `world0` + 原版 Minecraft 材质包 + 内置 DerivativeMain-like 视觉效果**。Mecraft 引擎端定义自己的 renderer contract；DerivativeMain 的大气、光照、色调、HDR、水、体积雾、材质风格作为实现参考，而不是要求 C++ 宿主完整复刻 Iris/OptiFine shaderpack ABI。
 
-本报告中的 `ShaderpackDirectives`、`ShaderpackTextureContract`、`RenderPhase` 等建议，是为了让内置 DerivativeMain 获得类似 Iris/OptiFine 的稳定运行环境，而不是要求 Mecraft 立即支持任意外部 shaderpack 替换。
+本报告中的 `ShaderpackDirectives`、`ShaderpackTextureContract`、`RenderPhase` 等旧建议，保留为历史参考。后续命名和实现应逐步改为 `MecraftRenderContract`、`MecraftTextureContract`、`MecraftRenderPhase` 一类项目自有概念，避免继续被 Iris/OptiFine 对号入座误导。
 
 明确非目标：
 
 - 不做通用 shaderpack loader。
 - 不承诺加载任意 OptiFine/Iris shaderpack。
+- 不以完整复刻 Iris/OptiFine uniform/sampler/pass ABI 为目标。
 - 不以 PBR/LabPBR/POM/高级材质包为当前效果目标。
 - 不优先实现 Distant Horizons、Physics Oceans、外部材质扩展等 DerivativeMain 可选分支。
 
-架构上保留 Iris-like 的边界，是为了防止 C++ pass、buffer、uniform、sampler 继续散落硬编码；这能降低 DerivativeMain 移植和调试成本。它不等价于“顺手支持不同 shaderpacks”。
+架构上仍需保留清晰 contract 层，但该 contract 应由 Mecraft 定义。DerivativeMain-like shader 适配 Mecraft，而不是 Mecraft 为任意 shaderpack 适配自己。
 
 ## 0. 当前结论
 
-当前 Mecraft 已经有一套可运行的 Hybrid Deferred 管线，但它还不是 Iris/OptiFine shaderpack 宿主。很多 pass、uniform、render target、sampler、阴影 culling、透明/实体提交规则是 Mecraft 手写约定，而不是从 shaderpack directives 和 Minecraft/Iris 渲染阶段中派生出来。
+当前 Mecraft 已经有一套可运行的 Hybrid Deferred 管线。它不是 Iris/OptiFine shaderpack 宿主，也不需要成为完整 shaderpack 宿主。很多 pass、uniform、render target、sampler、阴影 culling、透明/实体提交规则是 Mecraft 手写约定；后续需要把这些约定整理成稳定的 Mecraft Renderer Contract，而不是继续散落在 Renderer 和各个 shader 中。
 
-这会导致一种非常容易误判的问题：**shader 代码局部看起来已经和 DerivativeMain 对上了，但 shader 所依赖的宿主环境并没有和 Iris 对上。**
+这会导致一种非常容易误判的问题：**shader 代码局部看起来已经和 DerivativeMain 对上了，但 shader 所依赖的是 Iris/OptiFine 默认宿主假设，而 Mecraft 的 mesh、pass、buffer、sampler contract 与之不同。**
 
 近期阴影问题就是典型症状：
 
@@ -34,7 +37,9 @@
 - cloud shadow 对该问题无影响。
 - 继续做接收端 OOB 保护、局部距离限制后，鬼影仍存在且行为一致。
 
-这组现象不再支持“单点 shader 采样错误”作为首要判断。更高概率是 **C++ shadow pass 的宿主契约仍与 Iris/OptiFine 不一致**，尤其是阴影 caster 提交、阴影 frustum/culling、shadow projection/distortion 作用域、render distance multiplier、以及 depth/color target 语义之间的组合问题。
+这组现象后续已被进一步验证：开启 `Debug Disable Greedy Meshing` 后 ghosting 消失。根因不是 C++ caster 域单独不一致，而是 **DerivativeMain/Radial 非线性 shadow warp 与 Mecraft 贪婪合并大面片不兼容**。Iris/Sodium terrain 不会触发该问题，是因为它保留 Minecraft block model 的小 quad 粒度，并通过压缩顶点格式、region batching、索引/MDI 等方式获得性能，而不是把大量相邻方块面合并成超大 quad。
+
+因此本报告的工程结论已调整：不建议为了复刻 Iris contract 而全局关闭 Mecraft greedy meshing；正式路线应保留 greedy + MDI，并将阴影改为适配 Mecraft mesh contract 的稳定方案（No Warp/linear shadow、CSM、PCF/PCSS/contact shadow，必要时提供 shadow-only bounded fine caster mesh）。
 
 ## 1. Mecraft 当前渲染管线概览
 
@@ -148,22 +153,22 @@ Mecraft 当前 shadow pass 仍更像：
 4. 调用 `renderOpaqueChunksAndCollectPasses(...)` 复用 chunk 绘制链路。
 5. 当前已尝试关闭主 frustum cull，并增加基于 camera XZ 距离的 max distance。
 
-这比最初更接近正确方向，但仍不是 Iris 的 `createShadowFrustum + invokeCullTerrain`。简单 XZ 圆形距离无法表达 Iris 的 shadow culling 规则，也无法保证 DerivativeMain 的非线性 shadow warp 之后不会把不该写入的 caster 折入有效 shadow map 区域。
+这比最初更接近正确方向，但仍只是 Mecraft shadow culling 的早期近似。Iris 的 `createShadowFrustum + invokeCullTerrain` 可作为参考，但当前已确认 ghosting 主因不是 caster 域本身，而是非线性 shadow warp 与 greedy 大面片插值不兼容。因此后续不应把“变得更像 Iris”作为完成标准，而应把 culling/debug 纳入 MecraftShadow contract。
 
 ### 4.3 为什么“缩短阴影距离反而加重鬼影”很重要
 
 如果问题只是接收端采样越界，缩短 shadow distance 通常会让投影范围变小、错误范围变明显，但不一定导致方向相关 ghost caster 一致存在。
 
-现在的表现更像：
+当时的表现曾被判断为：
 
 - shadow projection 半径缩小后，shadow warp 的有效域变得更紧。
-- 某些 caster 提交仍没有按 Iris 预期剔除。
+- 某些 caster 提交可能没有按预期剔除。
 - 这些 caster 经过 DerivativeMain/Radial warp 后被压入 shadow map 可采样区域。
-- 因为 caster 集合与相机朝向、chunk collect、LOD/visible set 有关，所以不同视角 ghost 不同。
+- 因为 caster 集合、chunk collect、LOD/visible set 或 warp 插值误差都可能随视角变化，所以不同视角 ghost 不同。
 - `No Warp` 消失，说明普通线性 shadow projection 下这些 caster 没有被折入或折入不明显。
 - debug view 和 final 一致，说明错误已经存在于 shadow visibility/深度关系中，不是后续 lighting、cloud shadow 或 tone mapping 引入。
 
-因此下一步不应继续优先改 lighting shader，而应优先让 shadow pass 的 caster 域、frustum、distance multiplier、render list 与 Iris 对齐。
+该判断已被后续实验修正：BoxCuller 与 caster 计数调试只能证明提交域可观测，不能解释 ghosting 根因。`Debug Disable Greedy Meshing` 开启后 ghosting 消失，说明首要问题是 Mecraft greedy 大面片与非线性 shadow warp 不兼容。下一步不应继续把 shadow pass 逼近 Iris，而应把正式阴影路线改为 Mecraft 自有稳定 contract：默认线性/CSM 阴影，Derivative/Radial warp 仅保留为 debug 或研究模式。
 
 ### 4.4 DerivativeMain 的 `shadow.culling = false` 不等于 Mecraft 应提交所有 chunk
 
@@ -184,7 +189,7 @@ Iris 仍然有：
 - chunk/section 可见性与 render region 管理；
 - voxelization 与 culling fallback 逻辑。
 
-所以 Mecraft 不能把 `shadow.culling=false` 简化成“shadow pass 不做任何剔除”。正确目标是：**复刻 Iris 在该 directive 组合下最终提交给 shadow pass 的 terrain/entity 集合**。
+所以 Mecraft 不能把 `shadow.culling=false` 简化成“shadow pass 不做任何剔除”。正确做法是：**在 MecraftShadow contract 中显式定义 terrain/entity caster 的提交边界**；Iris 在该 directive 组合下的最终提交集合可作为参照和风险检查，但不再作为必须逐项复刻的目标。
 
 ## 5. Render Target 与 sampler 差异
 
@@ -217,7 +222,7 @@ Mecraft 当前 `DeferredRenderTargets` 已经有清晰的现代化资源拆分�
 - history/flip buffer 是否符合 `flip.*` 语义。
 - blend/depth/cull 状态是否符合 `shaders.properties`。
 
-建议建立一个固定表：`ShaderpackTextureContract`，将 DerivativeMain 的每个 sampler 映射到 Mecraft target、格式、filter、wrap、mipmap、写入 pass、读取 pass。没有这张表，后续每移植一个 shader 都可能出现“采样到了看似合理但语义错误的 buffer”。
+建议建立一个固定表：`MecraftTextureContract`，将 DerivativeMain/Iris 参考 sampler 映射到 Mecraft target、格式、filter、wrap、mipmap、写入 pass、读取 pass。没有这张表，后续每移植一个效果都可能出现“采样到了看似合理但语义错误的 buffer”。
 
 ## 6. Pass/phase 架构差异
 
@@ -229,24 +234,24 @@ Iris 的 shaderpack pass 有明确语义：
 - `composite*`：云、体积、bloom、TAA、后处理链。
 - `final`：最终输出。
 
-Mecraft 当前 pass graph 不直接使用这些名字，而是按自身功能拆分。这可以保留，但必须补一个 `ShaderpackPhase` 或 `RenderPassContract` 层，使每个 Mecraft pass 明确声明：
+Mecraft 当前 pass graph 不直接使用这些名字，而是按自身功能拆分。这可以保留，但必须补一个 `MecraftRenderPhase` / `MecraftRenderContract` 层，使每个 Mecraft pass 明确声明：
 
-- 对应哪个 shaderpack phase。
+- 该 pass 的 Mecraft 语义，以及可选的 DerivativeMain/Iris 参考 phase。
 - 当前绑定哪些 color/depth attachments。
 - 当前允许读取哪些 texture。
 - 当前写入哪些 texture。
 - viewport/scale 是全分辨率、半分辨率还是自定义。
 - GL blend/depth/cull/color mask 状态。
-- 必须上传哪些 OptiFine/Iris uniform。
+- 必须上传哪些 Mecraft frame/material/shadow uniform。
 - 是否需要 previous/current matrix、camera、time。
 
-没有这个 contract 层，Renderer 会越来越像“能跑但难以证明等价”的状态机。阴影 bug 只是第一个放大器；后续 TAA、SSR、体积云、透明、水、手持物也会遇到同类问题。
+没有这个 contract 层，Renderer 会越来越像“能跑但难以证明行为边界”的状态机。阴影 bug 只是第一个放大器；后续 TAA、SSR、体积云、透明、水、手持物也会遇到同类问题。
 
 ## 7. Uniform 与时间/坐标契约差异
 
 DerivativeMain 依赖大量 OptiFine/Iris uniform 语义。Mecraft 当前只上传项目 shader 已经用到的 uniform，例如 shadow matrices、camera、time、noise、sky 等。
 
-需要补齐一个统一的 `IrisUniformState`：
+需要补齐一个统一的 `MecraftFrameUniformState`：
 
 - 当前帧与上一帧 camera position。
 - camera-relative 与 absolute/unshifted camera position。
@@ -280,7 +285,7 @@ Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip
 - water/transparent composite；
 - shadow pass 临时收集 cutout/transparent。
 
-需要确认每个路径在 shadow pass 中与 DerivativeMain 一致：
+需要确认每个路径在 shadow pass 中由 Mecraft contract 明确定义，并参考 DerivativeMain 的材质意图：
 
 - cutout alpha discard 阈值。
 - mip alpha 处理。
@@ -292,38 +297,37 @@ Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip
 
 白/黑块问题常见根因包括：alpha-tested caster 写入了错误 shadowcolor、depth/color target clear 或 blend 状态不一致、shadow sampler filter 与 color target 不一致、cutout 在 GBuffer 与 shadow pass 中使用了不同 UV/mip/tint/atlas 逻辑。
 
-## 9. 与 Iris 对齐的目标架构
+## 9. 修订后的目标架构：Mecraft Renderer Contract
 
-建议不要继续把所有逻辑塞进 `Renderer`。目标架构应拆成以下层：
+建议不要继续把所有逻辑塞进 `Renderer`。但拆分目标不再是“与 Iris 完整对齐”，而是建立 Mecraft 自有渲染契约，让内置 DerivativeMain-like shader 可靠消费这套契约。
 
-### 9.1 `ShaderpackDirectives`
+### 9.1 `MecraftRenderContract`
 
-即使当前只支持内置 DerivativeMain，也要建立 directives 层：
+建立项目自有 contract 层：
 
-- `ShadowDirectives`
+- `MecraftShadowContract`
   - `shadowDistance`
-  - `shadowDistanceRenderMul`
-  - `shadowIntervalSize`
-  - `sunPathRotation`
   - `shadowMapResolution`
-  - near/far/fov
-  - terrain/translucent/entities/blockEntities/player toggles
-  - shadow culling state
+  - shadow projection mode：`Linear` / `CSM` / `DebugDerivativeWarp`
+  - cascade/split 参数（CSM 后续）
+  - PCF/PCSS/contact shadow 参数
+  - terrain/cutout/translucent/entity caster toggles
+  - shadow-only bounded fine mesh 参数：`maxShadowQuadSize = 1/2/4/8`
   - shadow sampler/filter/mipmap
-- `BufferDirectives`
+- `MecraftBufferContract`
   - colortex/shadowcolor/depthtex 格式
   - flip/history
   - scale
   - clear color/depth
   - mipmap/filter/wrap
-- `ProgramDirectives`
+- `MecraftProgramContract`
   - blend
   - depth test/write
   - cull
   - program toggle
   - render scale
 
-注意：这里不是为了做通用 shaderpack loader，而是为了让内置 DerivativeMain 也通过一套 Iris-like contract 驱动 C++，避免硬编码散落。
+注意：这里不是为了做通用 shaderpack loader，而是为了避免 C++ pass、buffer、uniform、sampler 继续散落硬编码。DerivativeMain-like shader 应适配这套 Mecraft contract。
 
 ### 9.2 `ShadowRenderer`
 
@@ -333,7 +337,7 @@ Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip
   - `World`
   - `Camera`
   - `RenderFrameData`
-  - `ShadowDirectives`
+  - `MecraftShadowContract`
   - chunk/entity render registries
 - 输出：
   - shadow matrices
@@ -342,39 +346,41 @@ Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip
   - debug info：caster count、chunk count、distance/culling mode、matrix、snap offset
 - 内部：
   - `ShadowRenderContext`
-  - `ShadowMatrices` equivalent
-  - `ShadowFrustum`
+  - `ShadowMatrices` / `CascadeMatrices`
+  - `ShadowCasterCuller`
+  - optional shadow-only bounded fine caster mesh
   - terrain caster list
   - cutout/translucent/entity caster list
 
 这样可以防止 shadow pass 继续隐式复用主 pass 的 frustum、shader、chunk 收集副作用。
 
-### 9.3 `ShadowFrustum` / `ShadowCasterCuller`
+### 9.3 `ShadowCasterCuller` / `MecraftShadow`
 
 先实现三层：
 
-1. **P0：Iris distance render mul 语义**
-   - caster distance = `shadowDistance * shadowDistanceRenderMul`。
-   - DerivativeMain 当前 `shadowDistanceRenderMul = 1.0`。
-   - 不使用主相机朝向相关 visible set 作为 shadow caster 的唯一来源。
-   - 输出 debug：实际 caster 半径、chunk 数、被剔除 chunk 数。
+1. **P0：稳定线性阴影**
+   - 默认关闭 Derivative/Radial 非线性 shadow warp。
+   - 保留 texel snapping、稳定 near/far、BoxCuller 距离域、caster count debug。
+   - 使用当前 greedy mesh + MDI，避免 shadow pass 顶点数爆炸。
 
-2. **P1：Iris-like safe shadow frustum**
-   - 从 camera/player 视域中“会被阴影影响的区域”反推 caster 区域。
-   - 不直接用 warped shadow clip space 判断 chunk，因为 DerivativeMain 是非线性 warp。
-   - 保留安全边界，避免太阳角度/snap 时 popping。
+2. **P1：CSM 或分段 shadow distance**
+   - 用多级线性 shadow map 替代 DerivativeMain quartic warp 的中心分辨率优势。
+   - 继续兼容 greedy mesh，因为每个 cascade 内投影仍是线性。
+   - 用 contact shadow/SSAO 补近景细节。
 
-3. **P2：高级 culling**
-   - 参考 Iris `AdvancedShadowCullingFrustum`、`SafeZoneCullingFrustum`、`BoxCuller`。
-   - entity/block entity 使用独立 distance multiplier。
+3. **P2：shadow-only bounded fine caster mesh**
+   - 只在确有质量需求时启用。
+   - 主 GBuffer/forward mesh 保留 greedy。
+   - shadow mesh 允许 `maxShadowQuadSize = 1/2/4/8`，用于研究或高质量 preset。
+   - `Debug Disable Greedy Meshing` 只保留为诊断开关，不作为正式默认路径。
 
-当前简单 XZ 距离限制只能算 P0 的临时近似，不是最终架构。
+Iris 的 `BoxCuller`、shadow frustum、terrain setup 仍可作为 culling 参考，但不要求完整复现 Iris `invokeCullTerrain`。
 
-### 9.4 `ShaderpackTextureContract`
+### 9.4 `MecraftTextureContract`
 
 建立一张硬编码但集中管理的表：
 
-| Shaderpack 名 | Mecraft target | 格式 | filter | mipmap | clear | 写入 pass | 读取 pass |
+| DerivativeMain 参考名 | Mecraft target | 格式 | filter | mipmap | clear | 写入 pass | 读取 pass |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `shadowtex0` | `ShadowDepth` | DEPTH32F | 待确认 | 待确认 | depth=1 | shadow | deferred/fog/debug |
 | `shadowcolor0` | `ShadowColor` | RGBA8/待确认 | 待确认 | 待确认 | black/transparent | shadow | deferred/fog |
@@ -382,25 +388,26 @@ Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip
 | `depthtex0` | `GDepth` | DEPTH32F | nearest | no | depth=1 | gbuffers | deferred/composite |
 | `colortex*` | Mecraft GBuffer/Scene/History | varies | varies | varies | varies | varies | varies |
 
-所有 shader include 只通过这个 contract 获取 sampler 语义，不允许每个 shader 自己猜。
+所有 shader include 只通过这个 contract 获取 sampler 语义，不允许每个 shader 自己猜。表中的 DerivativeMain/Iris 名称只是迁移参考，Mecraft target 才是宿主真相。
 
-### 9.5 `RenderPhase` / `ProgramState`
+### 9.5 `MecraftRenderPhase` / `ProgramState`
 
 建立类似：
 
 ```cpp
-enum class ShaderpackPhase {
+enum class MecraftRenderPhase {
     GbuffersTerrain,
     GbuffersWater,
     GbuffersEntities,
-    Shadow,
+    ShadowLinear,
+    ShadowDebugWarp,
     Deferred,
     Composite,
     Final
 };
 
 struct ProgramState {
-    ShaderpackPhase phase;
+    MecraftRenderPhase phase;
     FramebufferContract framebuffer;
     TextureBindings textures;
     UniformSet uniforms;
@@ -408,23 +415,23 @@ struct ProgramState {
 };
 ```
 
-这不是形式主义。它能让每次移植 DerivativeMain 文件时都先检查“这个 shader 在 Iris 中属于哪个 phase，它能读写什么，GL 状态是什么”，避免只看 GLSL 函数本身。
+这不是形式主义。它能让每次移植 DerivativeMain-like 效果时都先检查“这个 Mecraft phase 能读写什么，GL 状态是什么”，避免只看 GLSL 函数本身。
 
 ## 10. 立即改造优先级
 
-### P0：阴影 ghosting 相关
+### P0：阴影 ghosting 收口
 
 1. 建立 `ShadowRenderContext`，把 shadow matrices、distance、renderDistanceMul、intervalSize、near/far、light direction、debug info 集中起来。
-2. shadow pass 不再直接复用主 pass chunk visible/cutout list，改为独立生成 shadow caster list。
-3. caster list 必须输出 debug：提交 chunk 数、剔除 chunk 数、最大距离、是否来自主 frustum、是否使用 shadow frustum。
-4. 实现 DerivativeMain `shadowDistanceRenderMul = 1.0` 的明确语义，而不是散落在 `std::max(64.0f, shadowDistance)`。
-5. 增加 shadow map caster debug view：显示写入 shadow map 的 chunk bounds 或 caster coverage，直接判断 ghost 是否来自远处/错误 chunk。
+2. 默认阴影路径切到 `ShadowLinear` / No Warp，确保 greedy mesh 稳定。
+3. 保留 `Derivative/Radial Warp` 作为 debug 模式，不作为默认视觉目标。
+4. caster list 必须输出 debug：提交 chunk 数、剔除 chunk 数、最大距离、是否来自主 frustum、是否使用 shadow culler。
+5. 增加 shadow-only bounded fine mesh 实验参数：`maxShadowQuadSize = 1/2/4/8`，用于评估质量/性能，而不是全局关闭 greedy。
 
 ### P0：防止继续被局部 shader 对号误导
 
-1. 建立 `ShaderpackTextureContract`。
-2. 建立 `ShaderpackDirectives`，先只覆盖 DerivativeMain 当前用到的字段。
-3. 每个 shader include 顶部标注依赖的 contract，而不是只标注 DerivativeMain 来源函数。
+1. 建立 `MecraftTextureContract`。
+2. 建立 `MecraftRenderContract`，先覆盖 shadow、GBuffer、history、material id。
+3. 每个 shader include 顶部标注依赖的 Mecraft contract，同时可标注 DerivativeMain 参考来源。
 
 ### P1：cutout/alpha/材质语义
 
@@ -436,19 +443,19 @@ struct ProgramState {
 ### P1：sampler/filter/mipmap
 
 1. shadow depth/color target 的 filter、wrap、compare mode 集中配置。
-2. 按 DerivativeMain/Iris 需要生成 mipmap，而不是按 Mecraft 方便与否。
+2. 按 `MecraftTextureContract` 明确哪些 target 需要 mipmap/filter/wrap，而不是在 shader 中临时假设。
 3. debug 输出当前 shadow target 参数。
 
-### P2：完整 Iris-like pipeline
+### P2：完整 Mecraft pipeline 拆分
 
 1. 把 `Renderer` 中 pass 逐步拆为子 renderer。
-2. 实现 `ProgramState`/`RenderPhase`。
+2. 实现 `ProgramState`/`MecraftRenderPhase`。
 3. 补齐 entities、block entities、hand、weather、particles 的 GBuffer/shadow contract。
-4. 补齐 previous matrices、history flip、frame/tick time uniform contract。
+4. 补齐 previous matrices、history、frame/tick time uniform contract。
 
-## 11. 针对当前鬼影的下一步排查建议
+## 11. 当前鬼影的已验证结论与保留排查方法
 
-不要先继续改 lighting shader。建议下一步按以下顺序做引擎端验证：
+2026-05-13 已验证：开启 `Debug Disable Greedy Meshing` 后 ghosting 消失。当前结论是 **非线性 shadow warp 与 greedy 大面片插值不兼容**。以下排查顺序保留为未来 shadow bug 的通用方法，但不再作为当前 ghosting 的下一步路线：
 
 1. 在 shadow pass 中给每个提交 chunk/caster 输出 debug 计数和最大 camera distance。
 2. 增加一个 shadow caster bounds debug overlay，显示哪些 chunk 被送进 shadow pass。
@@ -466,12 +473,12 @@ struct ProgramState {
 - **debug visibility 与 final 不一致**：lighting/composite 为主因。
 - **debug visibility 与 final 一致**：shadow map 或 visibility 计算之前已经错。
 
-目前用户反馈属于最后一种，并且 `No Warp` 与 warp 模式差异明显，所以最高优先级是 `shadow pass caster domain + warp domain` 的一致性。
+当前 ghosting 已不再归因于 caster domain 单独错误。最高优先级改为：默认阴影路径采用适合 Mecraft greedy mesh 的线性/CSM 投影；warp 模式仅作为 debug/研究路径保留。
 
 ## 12. 不要再误判的几个点
 
-1. **矩阵数值接近 Iris，不代表 shadow pass 等价 Iris。**  
-   矩阵只是 contract 的一部分，caster list、frustum、distance render mul、sampler、target、uniform time 都必须一起对齐。
+1. **矩阵数值接近 Iris，不代表 shadow pass 行为完整。**  
+   矩阵只是 contract 的一部分，caster list、frustum、distance render mul、sampler、target、uniform time 都必须在 Mecraft contract 中一起定义清楚。
 
 2. **DerivativeMain `shadow.culling=false` 不代表无边界提交。**  
    Iris 仍有 render distance、terrain setup/culling、entity distance、voxelization fallback。
@@ -482,23 +489,23 @@ struct ProgramState {
 4. **PCSS 开关无影响，不代表 shadow 系统没问题。**  
    如果基础 shadow map 或 caster domain 已错，PCSS 只是放大/模糊错误。
 
-5. **缩短 shadowDistance 加重 ghost，是强烈的 domain mismatch 信号。**  
-   它说明 projection/warp 有效域变小后，不该参与的 caster 更容易被折入可见区域。
+5. **缩短 shadowDistance 加重 ghost，不再单独视为 caster domain 证据。**  
+   在本次问题中，它更符合“非线性 warp 有效域变化后，大面片插值误差区域随投影缩放改变”的表现。
 
 6. **C++ 与 shader 必须作为一个协议调试。**  
-   DerivativeMain 的 GLSL 是权威数学，但 Iris 是它默认运行的宿主协议。Mecraft 要做内置光影，就必须复刻协议，而不是只复刻函数。
+   DerivativeMain 的 GLSL 默认运行在 Iris/OptiFine 宿主协议中；Mecraft 做内置光影时不能只复刻函数，也不能盲目复刻 Iris 协议。正确做法是先定义 Mecraft Renderer Contract，再把 DerivativeMain-like shader 改写为消费该 contract。
 
 ## 13. 建议新增文档/代码入口
 
-建议后续新增：
+建议后续新增或重命名为 Mecraft 自有 contract：
 
-- `src/renderer/shaderpack/ShaderpackDirectives.h/.cpp`
-- `src/renderer/shaderpack/ShaderpackTextureContract.h/.cpp`
+- `src/renderer/contract/MecraftRenderContract.h/.cpp`
+- `src/renderer/contract/MecraftTextureContract.h/.cpp`
 - `src/renderer/shadow/ShadowRenderer.h/.cpp`
 - `src/renderer/shadow/ShadowRenderContext.h`
 - `src/renderer/shadow/ShadowMatrices.h/.cpp`
 - `src/renderer/shadow/ShadowCasterCuller.h/.cpp`
-- `docs/Iris宿主契约映射表.md`
+- `docs/Mecraft渲染契约映射表.md`
 
 并逐步把 `Renderer.cpp` 中 shadow 相关状态迁移出去：
 
