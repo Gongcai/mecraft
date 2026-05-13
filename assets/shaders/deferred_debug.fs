@@ -27,7 +27,8 @@ uniform sampler2D uReflectionTex;
 uniform sampler2D uCloudTex;
 uniform sampler2D uHistoryReflectionTex;
 uniform sampler2D uHistoryCloudTex;
-uniform mat4 uShadowViewProj;
+uniform mat4 uShadowModelView;
+uniform mat4 uShadowProjection;
 uniform mat4 uShadowProjectionInverse;
 uniform mat4 uInvViewProj;
 uniform vec3 uCameraPos;
@@ -76,19 +77,13 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
 // Shadow warp, projection, and bias functions provided by derivative_shadow.glsl.
 // Local convenience wrappers adapt shared functions to this file's uniforms.
 
-float localCalculateShadowWarp(vec2 coord) {
-    return calculateShadowWarp(coord, uShadowWarpMode);
-}
-
 vec3 localShadowUvFromWorld(vec3 worldPos) {
-    vec4 shadowClip = uShadowViewProj * vec4(worldPos, 1.0);
-    vec3 clip = shadowClip.xyz / max(shadowClip.w, 0.0001);
-    if (uShadowWarpMode != 2) {
-        float warp = localCalculateShadowWarp(clip.xy);
-        clip.xy /= warp;
-        clip.z *= 0.2;
-    }
-    return clip * 0.5 + 0.5;
+    // Must match shadow_depth.vs write path: transMAD + projMAD decomposition,
+    // NOT uShadowViewProj full multiply. For ortho + w=1 these are equivalent,
+    // but keeping the same decomposition prevents subtle drift if matrices change.
+    float warpDensity;
+    return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection,
+                             uShadowWarpMode, 0.9, warpDensity);
 }
 
 float localShadowDepthWorldScale() {

@@ -29,6 +29,7 @@ out float vAnimated;
 out float vNormal;
 out vec3 vWorldPos;
 flat out int vMaterialKind;
+out float vSkylight;
 
 void main() {
     vec4 localPos = vec4(aPos, 1.0);
@@ -62,4 +63,7 @@ void main() {
     // Extract DerivativeMain material id from packed tint data.
     uint materialKind = (aTintPacked >> 8u) & 63u;
     vMaterialKind = int(materialKind);
+
+    // Skylight from vertex attribute (DerivativeMain Shadow.frag:83 — shadowcolor1Out.z = lightmap.y)
+    vSkylight = aSunlight;
 }

@@ -9,6 +9,7 @@ in float vAnimated;
 in float vNormal;
 in vec3 vWorldPos;
 flat in int vMaterialKind;
+in float vSkylight;
 
 uniform sampler2DArray texArray;
 uniform sampler2D uNoiseTex;
@@ -110,7 +111,7 @@ void main() {
         // DerivativeMain Shadow.frag:64 — shadowcolor0Out = vec3(sqrt2(caustics))
         // sqrt2 encoding (x^0.25) is undone by pow4 in the PCF colored shadow path.
         ShadowColor = vec4(vec3(sqrt2(caustics)), 0.0);
-        ShadowNormal = vec4(encodeNormal(wavesNormal), 1.0, vWorldPos.y * (1.0 / 512.0) + 0.25);
+        ShadowNormal = vec4(encodeNormal(wavesNormal), vSkylight, vWorldPos.y * (1.0 / 512.0) + 0.25);
     } else {
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
@@ -158,6 +159,6 @@ void main() {
         if (isCrossVegetation) {
             worldNormal = vec3(0.0, 1.0, 0.0);
         }
-        ShadowNormal = vec4(encodeNormal(worldNormal), 1.0, 1.0);
+        ShadowNormal = vec4(encodeNormal(worldNormal), vSkylight, 1.0);
     }
 }

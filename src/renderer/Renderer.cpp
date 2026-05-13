@@ -2214,7 +2214,8 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
     m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
-    m_deferredDebugShader->setMat4("uShadowViewProj", m_shadowViewProj);
+    m_deferredDebugShader->setMat4("uShadowModelView", m_shadowModelView);
+    m_deferredDebugShader->setMat4("uShadowProjection", m_shadowProjection);
     m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowProjectionInverse);
     m_deferredDebugShader->setFloat("uShadowExtent", m_shadowExtent);
     m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowTexelWorldSize);

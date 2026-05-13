@@ -205,6 +205,9 @@ float shadowProjectionFade(in vec3 proj, in sampler2D shadowMap) {
 
 // Scale factor converting shadow depth differences to world-space units.
 // The z *= 0.2 in DistortShadowSpace compresses depth; we undo it here.
+// NOTE: This is ONLY for bias/offset calculations, NOT for SSS depth.
+// For SSS, use shadowProjectionInverse[2][2] directly (with sign!) so that
+// fastExp() in CalculateSubsurfaceScattering attenuates instead of exploding.
 float shadowDepthWorldScale(in mat4 shadowProjectionInverse, in int shadowWarpMode) {
     float scale = max(abs(shadowProjectionInverse[2][2]) * 2.0, 1.0);
     return (shadowWarpMode != 2) ? scale / 0.2 : scale;

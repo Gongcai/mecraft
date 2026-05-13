@@ -248,6 +248,10 @@
 - 该错误只影响 Derivative warp；radial/no warp 正常。
 - 现象为：出现一整团形似 shadow depth 的阴影，跟随摄像机移动，并随时间/太阳方向漂移。
 - 结论：此类基础函数必须字面核对 DerivativeMain，不允许自行化简。
+- 2026-05-13 发现 cutout 叶/草在开启 Sun Shadows + Soft Shadows 后大片白化/少量黑斑。
+  - 直接原因：`BlockerSearch.y` 从 DerivativeMain 的 `sssDepth * shadowProjectionInverse[2].z` 被改成正的 world scale；随后 SSS 调用又使用 `(1.0 - sunShadow) * 0.35` 正值 fallback 覆盖 signed blocker depth。
+  - DerivativeMain 依赖 OpenGL ortho `shadowProjectionInverse[2].z` 的负号，让 `CalculateSubsurfaceScattering()` 中 `fastExp(coeff * sssDepth)` 衰减；改成正数会在 leaves/grass 等 SSS 材质上指数爆亮。
+  - 结论：`BlockerSearch`、SSS depth、bias、dither、PCF 半径等 shadow 数据流必须逐行对齐，不能用“更直观”的 world-unit 改写。
 
 ### 5.4 当前仍未完整等价
 
@@ -318,8 +322,11 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 1. ~~将 `ShadowDistortion.glsl` 抽成项目公共 include，shadow/deferred/volumetric/debug 全部引用同一函数，避免再次分叉。~~ ✅ 已完成（`derivative_shadow.glsl`）
 2. ~~将 `SunLighting.glsl` 的纯数学函数端口为 include。~~ ✅ 已完成（`derivative_sunlight.glsl` — HG phase / fake bounce / SSS 计算）
 3. ~~升级 shadow map sampler 架构：`sampler2D` → `sampler2DShadow` + `glTextureView` 双视图（见 5.4.1）。~~ ✅ 已完成
-4. ~~将 `Shadow.frag` 的 `shadowcolor0/1` 写入逐分支复刻，包括水、透明、normal、lightmap、height aux。~~ ✅ 已完成（ShadowColor.a 透明度标志 + 二阶段阴影渲染）
-5. ~~再接 colored shadows 与 RSM GI。~~ ✅ COLORED_SHADOWS 已实现；RSM GI 仍缺（P4）
+4. `Shadow.frag` 的 `shadowcolor0/1` 写入仍需重新验收。当前已有 ShadowColor.a 透明度标志与二阶段阴影渲染，但这只是 Mecraft 适配语义，不等同于 DerivativeMain `shadowtex0/shadowtex1 + shadowcolor0/1` 的完整合同。
+5. `SunLighting.glsl` 阴影读取链路仍需逐行复核。2026-05-13 发现 cutout 叶/草在 soft shadow 下爆白，根因是 `BlockerSearch.y` 被改成正的 world scale，并且 SSS 调用用正值 fallback 覆盖了 DerivativeMain 的 signed blocker depth。
+6. `COLORED_SHADOWS` 只能标记为部分实现：当前依赖 `ShadowColor.a < 0.5` 判断透明投射者；DerivativeMain 原逻辑依赖 `shadowtex0` 与 `shadowtex1` 比较结果不一致。需要补齐或明确建模双 shadowtex 语义，避免继续用单一 alpha flag 冒充完整实现。
+7. 建立阴影验收矩阵：opaque 方块、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；分别测试 Sun Shadows、Soft Shadows、PCSS、Contact Shadows、Cloud Shadows。只有矩阵通过后，P1 阴影才能重新标记完成。
+8. RSM GI 使用 shadow color/normal 的间接光仍缺失（P4）。
 
 ## 6. 主光照、BRDF、Block Light、SSS
 
@@ -653,9 +660,9 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `program/Gbuffers/Terrain` | `chunk_gbuffer.vs/fs` | 中等；原版 fallback 需继续对齐 |
 | `program/Gbuffers/Water` | `water_composite.fs` + water mesh | 架构不同，算法部分 |
 | `program/Gbuffers/Block/Entities/Hand/...` | forward/entity/item shaders | 低 |
-| `program/Shadow` | `shadow_depth.vs/fs` | ✅ Derivative warp 已修、COLORED_SHADOWS 已实现（ShadowColor.a 透明度标志、二阶段渲染）、sampler2DShadow 硬件 PCF；RSM 仍缺 |
+| `program/Shadow` | `shadow_depth.vs/fs` | 部分完成；Derivative warp 与 sampler2DShadow 双视图已实现，但 ShadowColor.a 透明标志不是 DerivativeMain 双 shadowtex 语义，colored shadow/透明投射者需重新验收；RSM 仍缺 |
 | `lib/Lighting/ShadowDistortion.glsl` | `derivative_shadow.glsl` | ✅ 已照抄；公共 include |
-| `lib/Lighting/SunLighting.glsl` | `derivative_sunlight.glsl` + `derivative_shadow.glsl` | ✅ HG phase/fake bounce/SSS 已照抄；shadow bias/helpers 已照抄；COLORED_SHADOWS 在 pcfFilter 中实现 |
+| `lib/Lighting/SunLighting.glsl` | `derivative_sunlight.glsl` + `derivative_shadow.glsl` + `deferred_lighting.fs` | 部分完成；HG phase/fake bounce/SSS 纯函数已端口，但 BlockerSearch/PCF/SSS depth/colored shadow 读取链路需逐行复核并通过 cutout/transparent 验收 |
 | `lib/Lighting/BlockLighting.glsl` | `deferred_lighting.fs` inline | ✅ 已完整端口（GetBlocklightFalloff、Redstone top/bottom、emissive ores、held torchlight、emission mode 1） |
 | `lib/Lighting/AmbientOcclusion.glsl` | `ssao.fs/filter` | 部分 |
 | `lib/Lighting/GlobalIllumination.glsl` | 无完整 RSM GI | 缺失 |
@@ -677,7 +684,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `program/Post/Final` | `postprocess.fs` | 部分 |
 | `program/DH/*` | 无 | 非目标 |
 | `world-1/world1` | 无完整维度管线 | 非目标 |
-| `world0/deferred5.fsh` | `deferred_lighting.fs` | ✅ 主流程逐行对齐 + water/underwater isEyeInWater 分支 + COLORED_SHADOWS vec3 shadow + sampler2DShadow 硬件 PCF |
+| `world0/deferred5.fsh` | `deferred_lighting.fs` | 部分完成；主流程大体重排、water/underwater、vec3 shadow 与 sampler2DShadow 已接入，但 2026-05-13 cutout/SSS bug 证明不能标记逐行对齐，需重新审计 shadow/SSS 相关数据流 |
 
 ## 15. 优先级路线图
 
@@ -695,7 +702,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 3. 建立 `DerivativeMainPortingIndex.md` — 待建立
 4. ~~把"禁止近似改写 DerivativeMain 公式"写入项目开发约定~~ ✅ 已在本文档 §0 明确
 
-### P1：主光照和阴影完全收敛 ✅ 已完成
+### P1：主光照和阴影收敛（重新打开，未完成）
 
 1. ~~完整端口 `SunLighting.glsl`~~ ✅ `derivative_sunlight.glsl`（HG phase / fake bounce / SSS）
 2. ~~完整端口 `BRDF.glsl`~~ ✅ `derivative_brdf.glsl`（DiffuseHammon + SpecularBRDF 逐字复刻）
@@ -713,23 +720,28 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
    - `specular *= 1.0 + uWeatherWetness`
    - `diffuse = vec3(1.0)` 初始化，仅 shadow > 0 时乘 DiffuseHammon
    - `BASIC_BRIGHTNESS` 移至 skylight 之后
-5. 完整实现 colored shadow 与透明 shadow，不再自造透明 caster 行为 — ✅ 已完成
+5. 完整实现 colored shadow 与透明 shadow，不再自造透明 caster 行为 — 部分完成，需重新验收
    - Shadow pass 二阶段渲染：opaque+cutout（depth write ON）→ transparent/water（depth write OFF）
    - `shadow_depth.fs` ShadowColor.a 编码透明度标志（0.0=透明投射者，1.0=不透明）
    - `pcfFilter` 返回 `vec3` 支持 DerivativeMain COLORED_SHADOWS（SunLighting.glsl:73-80）
-   - 透明投射者检测：`ShadowColor.a < 0.5` → `pow4(shadowColor.rgb) * sampleLit`
+   - 当前透明投射者检测：`ShadowColor.a < 0.5` → `pow4(shadowColor.rgb) * sampleLit`
    - `shadowFactor` 返回 `vec3` 支持逐通道阴影着色
+   - 风险：DerivativeMain 真实检测是 `shadowtex0` 与 `shadowtex1` 比较结果不一致；当前 alpha flag 只能算适配层，不能标记为完整等价。
 
-**P1 剩余项：**
+**P1 剩余项（2026-05-13 重新打开）：**
 - ~~Water/underwater `isEyeInWater` 分支对齐~~ ✅ 已完成
 - ~~`EMISSION_CURVE` 精确参数确认（当前近似为 1.0）~~ ✅ 已完成（EMISSIVE_CURVE=2.2，在 `unpackGBufferMaterial` 中应用 `pow(x, 2.2)`）
-- ~~Colored shadow 与透明 shadow 完整实现~~ ✅ 已完成
+- `SunLighting.glsl` 的 `BlockerSearch`、`PercentageCloserFilter`、`ScreenSpaceShadow` 与 SSS 调用链逐行复核，禁止再用“看起来等价”的正向 depth scale 或 fallback。
+- `shadowtex0/shadowtex1` 语义建模：确认当前 raw depth + comparison view + ShadowColor.a 是否足够；如果不足，补真实双语义资源/检测路径。
+- `Shadow.frag` 写入验收：cutout leaves/grass 必须 alpha test 后作为 opaque caster 写 depth；水/玻璃/透明必须不把 depth 写成完全遮挡。
+- 建立并通过阴影验收矩阵：opaque、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；Sun/Soft/PCSS/Contact/Cloud 分开测试。
+- Colored shadow 与透明 shadow 只能在上述验收通过后重新标记完成。
 
 **P1 额外完成项：**
 - ✅ Shadow sampler 架构升级：`sampler2D uShadowMapRaw`（texelFetch）+ `sampler2DShadow uShadowMap`（硬件 PCF）
 - ✅ `glTextureView` 零拷贝双视图（DeferredRenderTargets.cpp）
 - ✅ PCF 从 `compareShadowBilinear` 手动比较升级为硬件 `texture(sampler2DShadow, vec3(uv, refZ))`
-- ✅ 水面渲染到阴影 pass（depth write OFF），写入 ShadowColor（焦散）+ ShadowNormal（波浪法线）
+- 部分完成：水面渲染到阴影 pass（depth write OFF），写入 ShadowColor（焦散）+ ShadowNormal（波浪法线）；仍需和 DerivativeMain `Shadow.frag` 水分支逐行核对。
 
 ### P2：GBuffer 与材质合同
 
@@ -757,19 +769,19 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 **P0 基础语义防分叉已完成**：`derivative_shadow.glsl` 统一 include、基础数学宏全量端口、shadow distortion 函数零分叉。
 
-**P1 主光照收敛已全部完成**：
+**P1 主光照/阴影收敛未完成，已重新打开**：
 - ✅ `derivative_brdf.glsl` — BRDF 逐字复刻
 - ✅ `derivative_sunlight.glsl` — HG phase / fake bounce / SSS
 - ✅ `derivative_shadow.glsl` — Common.inc 辅助宏扩展 + shadow distortion/bias
 - ✅ `BlockLighting.glsl` — 完整端口（GetBlocklightFalloff、Redstone top/bottom、emissive ores、held torchlight）
-- ✅ `deferred5.fsh` 主流程 — 逐行对齐（sceneData 累积顺序、shadow/sunlightMult、diffuse 初始化、compositing 顺序）
+- 部分完成：`deferred5.fsh` 主流程已大体重排，但 shadow/SSS/colored shadow 数据流需重新逐行审计
 - ✅ `EMISSION_CURVE` = 2.2（Material.inc 精确复刻，在 `unpackGBufferMaterial` 中应用）
 - ✅ Shadow sampler 升级：`sampler2DShadow` 硬件 PCF + `glTextureView` 零拷贝双视图
-- ✅ COLORED_SHADOWS：二阶段阴影渲染 + ShadowColor.a 透明度标志 + `pcfFilter` 返回 `vec3`
+- 部分完成：COLORED_SHADOWS 已有二阶段阴影渲染 + ShadowColor.a 透明度标志 + `pcfFilter` 返回 `vec3`，但仍不是 DerivativeMain 双 shadowtex 检测语义
 - ✅ Water/underwater `isEyeInWater` 分支：水下阳光衰减、天空光修改、金属遮罩
 
-**当前定位已从"P1 大部分完成"升级为**：
+**当前定位修正为**：
 
-**P1 全部完成、可进入 P2（GBuffer 材质合同）和 P3（Atmosphere/Cloud/Fog/Water）收敛。**
+**P1 不能标记完成；下一步必须先完成阴影验收矩阵与 `SunLighting.glsl` shadow/SSS 数据流逐行复核，再进入 P2/P3 的大规模收敛。**
 
 后续所有实现必须继续按 DerivativeMain 源码逐文件收敛。尤其 GBuffer Material.inc、Atmosphere、Cloud、Water、Post 这些基础库，不能再"按效果重写"，只能"照抄后适配"。
