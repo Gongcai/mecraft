@@ -25,6 +25,7 @@ uniform CsmCascade uCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
 
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
 uniform sampler2DArrayShadow uCsmShadowMap;
+uniform sampler2DArray uCsmShadowDepthRaw;
 #endif
 
 struct ShadowSample {
@@ -43,6 +44,39 @@ int selectCsmCascade(float viewDistance) {
         }
     }
     return cascadeIndex;
+}
+
+// Cascade selection with transition blend factor.
+// Returns: primary cascade index.
+// Sets blendNext = 1.0 when sampling from the next cascade should be blended in.
+// Sets nextCascade = the next cascade index (or -1 if none).
+void selectCsmCascadeBlended(float viewDistance, out int cascadeIndex,
+                             out int nextCascade, out float blendNext) {
+    cascadeIndex = max(uCsmCascadeCount - 1, 0);
+    for (int i = 0; i < MECRAFT_CSM_CASCADE_COUNT; ++i) {
+        if (i >= uCsmCascadeCount) break;
+        if (viewDistance <= uCsmCascades[i].splitFar) {
+            cascadeIndex = i;
+            break;
+        }
+    }
+
+    nextCascade = -1;
+    blendNext = 0.0;
+
+    if (cascadeIndex < uCsmCascadeCount - 1) {
+        float splitFar = uCsmCascades[cascadeIndex].splitFar;
+        float splitNear = uCsmCascades[cascadeIndex].splitNear;
+        float cascadeRange = max(splitFar - splitNear, 1.0);
+        // Transition zone: last 12% of each cascade's range
+        float transitionZone = cascadeRange * 0.12;
+        float distFromEnd = splitFar - viewDistance;
+        if (distFromEnd < transitionZone) {
+            nextCascade = cascadeIndex + 1;
+            blendNext = 1.0 - distFromEnd / transitionZone;
+            blendNext = smoothstep(0.0, 1.0, blendNext);
+        }
+    }
 }
 
 vec3 csmProjectWorld(vec3 worldPos, int cascadeIndex) {
@@ -89,6 +123,129 @@ float sampleCsmPcf3x3(vec2 uv, int cascadeIndex, float refZ, vec2 texelUv, float
 }
 
 #ifdef MECRAFT_SHADOW_ENABLE_STANDARD_SAMPLE
+// Cascade-specific PCF radius: near cascades get softer shadows, far cascades get sharper.
+float cascadePcfRadius(int cascadeIndex, float baseSoftness) {
+    // Cascade 0: 2.0x, Cascade 1: 1.5x, Cascade 2: 1.2x, Cascade 3: 1.0x
+    float scale = max(1.0, 2.0 - float(cascadeIndex) * 0.35);
+    return max(1.0, baseSoftness) * scale;
+}
+
+// ---- PCSS (Percentage Closer Soft Shadows) ----
+
+float sampleCsmRawDepth(vec2 uv, int cascadeIndex) {
+    return texture(uCsmShadowDepthRaw, vec3(uv, float(cascadeIndex))).r;
+}
+
+// Blocker search: find average depth of blockers in a neighborhood.
+float pcssBlockerSearch(vec2 uv, int cascadeIndex, float blockerCompareZ,
+                        vec2 texelUv, float searchRadius) {
+    float avgBlockerDepth = 0.0;
+    int blockerCount = 0;
+    // 4x4 Poisson-like search for performance
+    const vec2 offsets[8] = vec2[8](
+        vec2(-0.7, -0.7), vec2( 0.7, -0.7), vec2(-0.7,  0.7), vec2( 0.7,  0.7),
+        vec2(-1.0,  0.0), vec2( 1.0,  0.0), vec2( 0.0, -1.0), vec2( 0.0,  1.0)
+    );
+    for (int i = 0; i < 8; ++i) {
+        vec2 sampleUv = uv + offsets[i] * texelUv * searchRadius;
+        float depth = sampleCsmRawDepth(sampleUv, cascadeIndex);
+        if (depth < blockerCompareZ) {
+            avgBlockerDepth += depth;
+            ++blockerCount;
+        }
+    }
+    if (blockerCount == 0) return -1.0; // no blockers
+    return avgBlockerDepth / float(blockerCount);
+}
+
+// Estimate penumbra width from blocker separation.
+// CSM depth is linear orthographic depth in [0, 1], so convert the depth delta
+// back into approximate world units before turning it into a texel radius.
+float pcssPenumbraTexels(float receiverZ, float avgBlockerZ,
+                         float depthExtent, float texelWorld,
+                         float lightAngularScale) {
+    float blockerGapWorld = max(receiverZ - avgBlockerZ, 0.0) * (2.0 * depthExtent);
+    float penumbraWorld = blockerGapWorld * lightAngularScale;
+    return clamp(1.0 + penumbraWorld / max(texelWorld, 0.0001), 1.0, 8.0);
+}
+
+float sampleCsmPcss(vec2 uv, int cascadeIndex,
+                    float receiverZ, float refZ,
+                    vec2 texelUv, float texelWorld, float depthExtent,
+                    float lightAngularScale, float searchRadius) {
+    // Step 1: Blocker search
+    float blockerCompareZ = receiverZ - max(receiverZ - refZ, 2.0e-5) * 0.35;
+    float avgBlocker = pcssBlockerSearch(uv, cascadeIndex, blockerCompareZ, texelUv, searchRadius);
+    if (avgBlocker < 0.0) {
+        // No blockers — fully lit
+        return 1.0;
+    }
+
+    // Step 2: Penumbra estimation
+    float pcfRadius = pcssPenumbraTexels(receiverZ, avgBlocker, depthExtent,
+                                         texelWorld, lightAngularScale);
+
+    // Step 3: Variable PCF
+    float lit = 0.0;
+    // 4x4 rotated PCF kernel
+    const vec2 offsets[16] = vec2[16](
+        vec2(-1.5, -1.5), vec2(-0.5, -1.5), vec2( 0.5, -1.5), vec2( 1.5, -1.5),
+        vec2(-1.5, -0.5), vec2(-0.5, -0.5), vec2( 0.5, -0.5), vec2( 1.5, -0.5),
+        vec2(-1.5,  0.5), vec2(-0.5,  0.5), vec2( 0.5,  0.5), vec2( 1.5,  0.5),
+        vec2(-1.5,  1.5), vec2(-0.5,  1.5), vec2( 0.5,  1.5), vec2( 1.5,  1.5)
+    );
+    for (int i = 0; i < 16; ++i) {
+        lit += sampleCsmDepthCompare(uv + offsets[i] * texelUv * pcfRadius,
+                                     cascadeIndex, refZ);
+    }
+    return lit * (1.0 / 16.0);
+}
+
+float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
+                           float viewDistance, int cascadeIndex,
+                           out float outProjectionFade) {
+    outProjectionFade = 0.0;
+    float texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
+    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistance, texelWorld,
+                                                 uShadowDistance, uShadowNormalOffset);
+    vec3 proj = csmProjectWorld(worldPos + normal * normalOffset, cascadeIndex);
+    if (shadowProjOutOfBounds(proj)) {
+        return -1.0;
+    }
+
+    ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
+    vec2 texelUv = 1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1));
+    float projectionFade = csmProjectionFade(proj, texelUv);
+    if (projectionFade <= 0.001) {
+        return -1.0;
+    }
+    outProjectionFade = projectionFade;
+
+    float bias = csmDepthBias(ndotl, viewDistance, cascadeIndex, shadowSize,
+                              uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
+    float dither = shadowDither();
+    float receiverZ = proj.z;
+    float refZ = receiverZ - bias + dither * 1.5e-5;
+    float lit;
+    if (uSoftShadowsEnabled == 0) {
+        lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
+    } else if (uPcssShadowsEnabled != 0 && cascadeIndex == 0) {
+        // PCSS for near cascade. Keep the sun angular scale conservative so
+        // contact shadows remain crisp and only separated casters get soft.
+        float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
+        float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
+        float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
+        float lightAngularScale = 0.012 + strength * 0.052;
+        float searchRadius = 2.0 + strength * 3.5;
+        lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
+                            texelWorld, depthExtent, lightAngularScale, searchRadius);
+    } else {
+        lit = sampleCsmPcf3x3(proj.xy, cascadeIndex, refZ, texelUv,
+                              cascadePcfRadius(cascadeIndex, uShadowSoftness));
+    }
+    return clamp(lit, 0.0, 1.0);
+}
+
 ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
     ShadowSample result;
     result.visibility = 1.0;
@@ -110,39 +267,38 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return result;
     }
 
-    int cascadeIndex = selectCsmCascade(viewDistance);
+    // Select cascade with transition blend at split boundaries.
+    int cascadeIndex, nextCascade;
+    float blendNext;
+    selectCsmCascadeBlended(viewDistance, cascadeIndex, nextCascade, blendNext);
     result.cascadeIndex = cascadeIndex;
 
-    float texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
-    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistance, texelWorld,
-                                                 uShadowDistance, uShadowNormalOffset);
-    vec3 proj = csmProjectWorld(worldPos + normal * normalOffset, cascadeIndex);
-    if (shadowProjOutOfBounds(proj)) {
+    // Sample primary cascade.
+    float primaryFade;
+    float litPrimary = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, cascadeIndex, primaryFade);
+    if (litPrimary < 0.0) {
         return result;
     }
 
-    ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
-    vec2 texelUv = 1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1));
-    float projectionFade = csmProjectionFade(proj, texelUv);
+    float lit = litPrimary;
+    float projectionFade = primaryFade;
+
+    // Blend with next cascade at split boundary.
+    if (nextCascade >= 0 && blendNext > 0.001) {
+        float nextFade;
+        float litNext = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, nextCascade, nextFade);
+        if (litNext >= 0.0) {
+            lit = mix(litPrimary, litNext, blendNext);
+            projectionFade = mix(primaryFade, nextFade, blendNext);
+        }
+    }
+
+    // Distance fade for the last cascade.
     if (cascadeIndex == uCsmCascadeCount - 1) {
         projectionFade *= oneMinus(distanceFade);
     }
-    if (projectionFade <= 0.001) {
-        return result;
-    }
 
-    float bias = csmDepthBias(ndotl, viewDistance, cascadeIndex, shadowSize,
-                              uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
-    float refZ = proj.z - bias + shadowDither() * 1.5e-5;
-    float lit = 0.0;
-    if (uSoftShadowsEnabled == 0) {
-        lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
-    } else {
-        lit = sampleCsmPcf3x3(proj.xy, cascadeIndex, refZ, texelUv,
-                              max(1.0, uShadowSoftness) * 1.15);
-    }
-
-    result.visibility = clamp(lit, 0.0, 1.0);
+    result.visibility = clamp(lit * projectionFade, 0.0, 1.0);
     result.fade = projectionFade;
     return result;
 }

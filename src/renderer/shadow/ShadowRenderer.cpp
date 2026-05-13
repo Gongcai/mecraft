@@ -57,7 +57,8 @@ void ShadowRenderer::update(const Camera& camera,
     m_shadowDistance = settings.shadowDistance;
 }
 
-void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive) const {
+void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive,
+                                        const BiasSettings& bias) const {
     shader.setMat4("uShadowViewProj", m_viewProj);
     shader.setMat4("uShadowModelView", m_modelView);
     shader.setMat4("uShadowProjection", m_projection);
@@ -66,8 +67,9 @@ void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive) c
     shader.setFloat("uShadowDistance", std::max(64.0f, m_shadowDistance));
     shader.setFloat("uShadowExtent", m_shadowExtent);
     shader.setFloat("uShadowTexelWorldSize", m_texelWorldSize);
-    shader.setFloat("uShadowConstantBias", 0.0007f);
-    shader.setFloat("uShadowSlopeBias", 0.0022f);
+    shader.setFloat("uShadowConstantBias", bias.constantBias);
+    shader.setFloat("uShadowSlopeBias", bias.slopeBias);
+    shader.setFloat("uShadowNormalOffset", bias.normalOffset);
     shader.setInt("uShadowLightMode", moonShadowActive ? 1 : 0);
     shader.setInt("uCsmCascadeCount", CASCADE_COUNT);
     for (int i = 0; i < CASCADE_COUNT; ++i) {

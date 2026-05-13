@@ -658,7 +658,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 34);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 40);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.shadowWarpMode = 2;
@@ -1133,7 +1133,12 @@ void Renderer::bindCloudUniforms(Shader& shader, const RenderFrameData& frame) c
 }
 
 void Renderer::bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const {
-    m_shadowRenderer.bindShadowUniforms(shader, frame.moonShadowActive);
+    const shadow::ShadowRenderer::BiasSettings bias{
+        m_pipelineSettings.shadowConstantBias,
+        m_pipelineSettings.shadowSlopeBias,
+        m_pipelineSettings.shadowNormalOffset
+    };
+    m_shadowRenderer.bindShadowUniforms(shader, frame.moonShadowActive, bias);
 }
 
 void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& frame) const {
@@ -1713,9 +1718,14 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     m_deferredLightingShader->setInt("uCsmShadowMap", 15);
+    glActiveTexture(GL_TEXTURE16);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    m_deferredLightingShader->setInt("uCsmShadowDepthRaw", 16);
     renderFullscreen(*m_deferredLightingShader);
 
     glUseProgram(0);
+    glActiveTexture(GL_TEXTURE16);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     for (int i = 14; i >= 0; --i) {
@@ -2278,7 +2288,12 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
     m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
     if (debugFrame != nullptr) {
-        m_shadowRenderer.bindShadowUniforms(*m_deferredDebugShader, debugFrame->moonShadowActive);
+        const shadow::ShadowRenderer::BiasSettings bias{
+            m_pipelineSettings.shadowConstantBias,
+            m_pipelineSettings.shadowSlopeBias,
+            m_pipelineSettings.shadowNormalOffset
+        };
+        m_shadowRenderer.bindShadowUniforms(*m_deferredDebugShader, debugFrame->moonShadowActive, bias);
     } else {
         m_deferredDebugShader->setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
         for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
@@ -2332,7 +2347,8 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     const bool shadowCompareDebug =
         m_pipelineSettings.debugViewMode == 21 ||
         m_pipelineSettings.debugViewMode == 22 ||
-        m_pipelineSettings.debugViewMode == 34;
+        m_pipelineSettings.debugViewMode == 34 ||
+        m_pipelineSettings.debugViewMode == 35;
     glBindTexture(GL_TEXTURE_2D,
                   shadowCompareDebug ? m_resourceMgr->getTexture2D("shader_noise2d")
                                      : (materialAuxDebug ? m_deferredTargets.materialAuxTexture()

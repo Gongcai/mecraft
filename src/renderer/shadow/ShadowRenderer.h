@@ -30,6 +30,12 @@ public:
     static constexpr int CASCADE_COUNT = ShadowMatrices::CASCADE_COUNT;
     using Cascade = ShadowMatrices::Cascade;
 
+    struct BiasSettings {
+        float constantBias;
+        float slopeBias;
+        float normalOffset;
+    };
+
     // Compute light direction from sky colors and store it.
     // Clamps minimum elevation to 0.12 above horizon.
     // Returns the computed direction.
@@ -47,7 +53,8 @@ public:
 
     // Bind all CSM shadow uniforms to a shader.
     // Called by deferred lighting, volumetric fog, and debug passes.
-    void bindShadowUniforms(Shader& shader, bool moonShadowActive) const;
+    void bindShadowUniforms(Shader& shader, bool moonShadowActive,
+                            const BiasSettings& bias = {0.0007f, 0.0022f, 0.035f}) const;
 
     // Accessors
     const Cascade& cascade(int index) const { return m_cascades[index]; }

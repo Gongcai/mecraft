@@ -92,26 +92,11 @@ vec3 fastRefract(vec3 dir, vec3 normal, float eta) {
 
 void main() {
     if (vMaterialKind == MATERIAL_WATER) {
-        // Water caustics (DerivativeMain approach)
-        vec3 wavesNormal = getWaterWaveNormal(vWorldPos.xz);
-
-        // Refract downward light through water surface
-        vec3 oldPos = vWorldPos;
-        vec3 newPos = oldPos + fastRefract(vec3(0.0, -1.0, 0.0), wavesNormal, 1.0 / 1.333) * 6.0;
-
-        // Area ratio: old area / new area = caustics intensity
-        float oldArea = dot(dFdx(oldPos), dFdx(oldPos)) * dot(dFdy(oldPos), dFdy(oldPos));
-        float newArea = dot(dFdx(newPos), dFdx(newPos)) * dot(dFdy(newPos), dFdy(newPos));
-
-        float caustics = inversesqrt(oldArea / newArea) * 0.3;
-        // DerivativeMain Shadow.frag:64 — no extra squaring/clamping, just sqrt2 encoding
-
-        // ShadowColor.a = 0.0 marks transparent casters (DerivativeMain COLORED_SHADOWS):
-        // Water should not cast hard shadows; instead it tints the light passing through.
-        // DerivativeMain Shadow.frag:64 — shadowcolor0Out = vec3(sqrt2(caustics))
-        // sqrt2 encoding (x^0.25) is undone by pow4 in the PCF colored shadow path.
-        ShadowColor = vec4(vec3(sqrt2(caustics)), 0.0);
-        ShadowNormal = vec4(encodeNormal(wavesNormal), vSkylight, vWorldPos.y * (1.0 / 512.0) + 0.25);
+        // Water does not cast hard shadows. The CSM FBO is depth-only (no color
+        // attachment), so caustics data would be lost. Discard entirely to prevent
+        // water from blocking direct light. Caustics can be reintroduced when a
+        // colored shadow pass with color attachments is implemented.
+        discard;
     } else {
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
@@ -159,8 +144,9 @@ void main() {
         // causing pow4(leaf_color) * sampleLit ≈ 0.01 instead of 1.0 on lit surfaces.
         float shadowAlpha = 1.0;
         if (vMaterialKind == MATERIAL_STAINED_GLASS) {
-            // Stained glass: light passes through with tint
-            shadowAlpha = 0.0;
+            // Stained glass: discard in depth-only CSM pass to avoid hard shadows.
+            // Colored shadow tinting requires a color attachment, not yet available.
+            discard;
         }
         // All other non-water materials (including cutout like leaves/grass) cast hard shadows.
         ShadowColor = vec4(shadowColor, shadowAlpha);

@@ -522,5 +522,33 @@ void main() {
         return;
     }
 
+    // Debug 40: cascade info — shows cascade index (color) and texel world size (brightness).
+    if (uDebugViewMode == 40) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.02, 0.03, 0.05, 1.0);
+            return;
+        }
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        float viewDistance = length(worldPos - uCameraPos);
+        int cascadeIdx = selectCsmCascade(viewDistance);
+        vec3 cascadeColor = csmCascadeColor(cascadeIdx);
+
+        // Texel world size: brighter = larger texels = lower resolution
+        float texelWorld = uCsmCascades[cascadeIdx].texelWorldSize;
+        float texelBrightness = clamp(texelWorld / 4.0, 0.15, 1.0);
+
+        // Split position within cascade: shows how far into the cascade we are
+        float splitNear = uCsmCascades[cascadeIdx].splitNear;
+        float splitFar = uCsmCascades[cascadeIdx].splitFar;
+        float cascadeT = clamp((viewDistance - splitNear) / max(splitFar - splitNear, 1.0), 0.0, 1.0);
+
+        // Near split boundary = brighter (highlighting transition zones)
+        float edgeHighlight = 1.0 + 0.4 * (1.0 - cascadeT);
+
+        FragColor = vec4(cascadeColor * texelBrightness * edgeHighlight, 1.0);
+        return;
+    }
+
     FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, vTexCoord).rgb), 1.0);
 }

@@ -401,7 +401,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "CSM Depth 0",
             "CSM Depth 1",
             "CSM Depth 2",
-            "CSM Depth 3"
+            "CSM Depth 3",
+            "Cascade Info"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
