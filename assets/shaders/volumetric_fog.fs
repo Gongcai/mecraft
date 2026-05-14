@@ -49,6 +49,7 @@ uniform int uShadowLightMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 uniform int uVolumetricDebugMode;
+uniform int uVolumetricSkyRayEnabled;
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
@@ -164,16 +165,25 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
 
 void main() {
     float depth = texture(uDepthTex, vTexCoord).r;
-    if (depth >= 1.0) {
-        FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
-    }
 
-    vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-    vec3 ray = worldPos - uCameraPos;
-    float distance = length(ray);
-    vec3 viewDir = ray / max(distance, 0.0001);
-    float marchDistance = min(distance, 260.0);
+    vec3 viewDir;
+    float marchDistance;
+    if (depth >= 1.0) {
+        if (uVolumetricSkyRayEnabled == 0) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+        // Sky pixel: reconstruct view direction and march to max distance
+        vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+        viewDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
+        marchDistance = max(uVolumetricMaxDistance, 1.0);
+    } else {
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 ray = worldPos - uCameraPos;
+        float distance = length(ray);
+        viewDir = ray / max(distance, 0.0001);
+        marchDistance = min(distance, max(uVolumetricMaxDistance, 1.0));
+    }
 
     // --- Lighting environment: physical sky data from SkyCapture ---
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
@@ -224,7 +234,6 @@ void main() {
                         max(uVolumetricBaseDensity, 0.0) *
                         (0.64 + weatherHaze * 1.55);
     float jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
-    marchDistance = min(marchDistance, max(uVolumetricMaxDistance, 1.0));
     float stepLength = marchDistance / float(kFogSteps);
     vec3 scattering = vec3(0.0);
     vec3 skyScattering = vec3(0.0);
@@ -303,14 +312,51 @@ void main() {
     if (uVolumetricDebugMode == 5) {
         // Sun gate diagnostics: why is VFog Sun Only black?
         // R = sunVisibility (0-1)
-        // G = phaseTerm (forward scattering strength, 0-~0.5)
+        // G = phaseTerm * 10 (amplified to reveal small values)
         // B = avgShadowVisibility (0-1, averaged across march steps)
         float avgShadow = shadowSampleCount > 0 ? avgShadowVisibility / float(shadowSampleCount) : 1.0;
-        float sunIllumLum = dot(env.sunIlluminance, vec3(0.2126, 0.7152, 0.0722));
         FragColor = vec4(
             clamp(sunVisibility, 0.0, 1.0),
-            clamp(phaseTerm, 0.0, 1.0),
+            clamp(phaseTerm * 10.0, 0.0, 1.0),
             clamp(avgShadow, 0.0, 1.0),
+            1.0
+        );
+        return;
+    }
+    if (uVolumetricDebugMode == 6) {
+        // Integration diagnostic: what survives the full pipeline?
+        // R = phaseTerm * 10 (is phase contributing?)
+        // G = maxDensitySeen * 40 (is density high enough?)
+        // B = dot(sunScattering, luma) * 200 (final sun energy, heavily amplified)
+        float sunLum = dot(sunScattering, vec3(0.2126, 0.7152, 0.0722));
+        FragColor = vec4(
+            clamp(phaseTerm * 10.0, 0.0, 1.0),
+            clamp(maxDensitySeen * 40.0, 0.0, 1.0),
+            clamp(sunLum * 200.0, 0.0, 1.0),
+            1.0
+        );
+        return;
+    }
+    if (uVolumetricDebugMode == 7) {
+        // Sky ray coverage (pure): which pixels participate in fog march?
+        // Warm white = sky ray (marching to maxDistance)
+        // Gray = geometry ray (marching to surface distance)
+        // Black = not participating
+        float isSky = (depth >= 1.0) ? 1.0 : 0.0;
+        FragColor = vec4(mix(vec3(0.25), vec3(1.0, 0.92, 0.78), isSky), 1.0);
+        return;
+    }
+    if (uVolumetricDebugMode == 8) {
+        // March detail: coverage + distance + accumulation
+        // R = isSkyRay (1.0 for sky, 0.0 for geometry)
+        // G = marchDistance / maxDistance (how far we march, 0-1)
+        // B = opacity * 10 (actual fog accumulated, amplified)
+        float isSky = (depth >= 1.0) ? 1.0 : 0.0;
+        float distNorm = clamp(marchDistance / max(uVolumetricMaxDistance, 1.0), 0.0, 1.0);
+        FragColor = vec4(
+            isSky,
+            distNorm,
+            clamp(opacity * 10.0, 0.0, 1.0),
             1.0
         );
         return;

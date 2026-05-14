@@ -74,6 +74,7 @@ public:
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
+        bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
         bool ssaoFilterEnabled = true;
@@ -105,6 +106,7 @@ public:
         float cloudShadowScale = 0.0045f;
         float cloudShadowSpeed = 0.018f;
         float sunRayStrength = 0.18f;
+        float volumetricLightStrength = 0.14f; // Separate from post-process sun rays
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
         float kappaGradingStrength = 0.0f;

@@ -418,7 +418,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "VFog Transmittance",
             "VFog Sky Only",
             "VFog Sun Only",
-            "VFog Sun Gates"
+            "VFog Sun Gates",
+            "VFog Integration",
+            "VFog Sky Ray Coverage",
+            "VFog March Detail"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -452,6 +455,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
+        pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
         pipelineChanged |= ImGui::Combo("Weather Preset", &weatherPreset, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets));
         pipeline.weatherPreset = weatherPreset;
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
@@ -504,7 +508,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("env.skyIlluminance:  (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
             ImGui::Text("sunVisibility(CPU): %.3f  (sunDir.y=%.2f)", sunVis, sunY);
             ImGui::Text("VFog strength: %.2f", pipeline.volumetricFogStrength);
-            ImGui::Text("VFog lightStr: 0.14  baseDensity: 1.0  (VolumetricSettings defaults)");
+            ImGui::Text("VFog lightStr: %.2f  baseDensity: 1.0  (VolumetricSettings defaults)", pipeline.volumetricLightStrength);
             ImGui::Text("VFog maxDist: 260  heightFalloff: 0.022  phaseG: 0.58");
             ImGui::Separator();
         }
@@ -686,7 +690,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &pipeline.cloudShadowStrength, 0.0f, 0.8f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &pipeline.cloudShadowScale, 0.001f, 0.02f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Speed", &pipeline.cloudShadowSpeed, 0.0f, 0.08f, "%.3f");
-        pipelineChanged |= ImGui::SliderFloat("Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &pipeline.volumetricLightStrength, 0.0f, 0.6f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Kappa Grade", &pipeline.kappaGradingStrength, 0.0f, 1.0f, "%.2f");
