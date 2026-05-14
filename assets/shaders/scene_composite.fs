@@ -64,19 +64,15 @@ void main() {
     float depth = texture(uDepthTex, vTexCoord).r;
     vec3 color = scene.rgb;
 
+    // DerivativeMain deferred5.fsh:168-176: clouds composited ONLY on sky pixels.
+    // Geometry pixels never get cloud blending (clouds are always behind geometry).
     vec4 cloud = texture(uCloudTex, vTexCoord);
     if (depth >= 0.9999) {
-        // Sky pixels: sample the cloudy sky region (rows 258..513) which has clouds baked in.
-        // Matches DerivativeMain Deferred0.glsl cloudy sky map.
         vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
         vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
-        color = mix(sky, cloud.rgb, clamp(cloud.a, 0.0, 1.0) * clamp(uCloudCompositeStrength, 0.0, 1.0));
-    } else if (cloud.a > 0.001) {
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        float viewDistance = length(worldPos - uCameraPos);
-        float farCloudBlend = smoothstep(96.0, 320.0, viewDistance) * clamp(uCloudCompositeStrength, 0.0, 1.0) * 0.28;
-        color = mix(color, mix(color, cloud.rgb, clamp(cloud.a, 0.0, 1.0)), farCloudBlend);
+        // Premultiplied alpha: sceneData = sceneData * cloudData.a + cloudData.rgb
+        color = sky * cloud.a + cloud.rgb * clamp(uCloudCompositeStrength, 0.0, 1.0);
     }
 
     // Premultiplied reflection data (DerivativeMain composite1 convention):

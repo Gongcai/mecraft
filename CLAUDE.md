@@ -18,3 +18,13 @@
 6. **DerivativeMain 函数命名使用 PascalCase。** `FresnelSchlick`、`DiffuseHammon`、`SpecularBRDF`、`CalculateSubsurfaceScattering`、`HenyeyGreensteinPhase` 等必须使用 DerivativeMain 原名，不得改为 camelCase（如 `fresnelSchlick`、`diffuseHammon`）。同名是防止歧义和搜索困难。
 
 7. **DerivativeMain Common.inc 辅助宏必须使用共享定义。** `oneMinus`、`saturate`、`max0`、`fastExp`、`rcp`、`pow5`、`pow4`、`pow16`、`dotSelf`、`cossin`、`GetLuminance` 等由 `derivative_shadow.glsl` 统一提供，消费文件不得自行定义（`#ifndef` 保护允许安全共存）。
+
+# 参考文档
+## 文档位置及内容
+- 根目录下DerivativeMain文件夹，此为光影包解包文件，包含光影包内所有着色器文件和使用的素材，供移植参考。
+- docs/文件夹根目录下，*技术分析.md，此为对光影包的各项实现的分析报告，包含对核心算法的分析和伪代码实现，供移植参考。
+- docs/文件夹根目录下，*差异报告.md，此为对光影包和Mecraft渲染管线差异的分析报告，包含对每个差异点的分析和建议，供移植参考。
+- docs/文件夹根目录下，渲染管线实现状态分析与开发路线图.md，此为对光影包移植的计划和路线图，包含每个阶段的目标和任务，供移植参考。
+
+
+

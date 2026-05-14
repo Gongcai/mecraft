@@ -330,8 +330,9 @@ float PostProcessRenderer::updateAutoExposure(const float frameTime) {
         m_adaptedExposure = targetExposure;
         m_autoExposureInitialized = true;
     } else {
-        // DerivativeMain: darken faster than brighten (1.5x vs 1.0x)
-        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 1.5f : 1.0f);
+        // Asymmetric adaptation: darken fast (shadow→light transition recovers quickly),
+        // brighten slightly slower (light→shadow needs less urgency with proper skylight).
+        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 3.0f : 1.5f);
         const float alpha = 1.0f - std::exp(-std::max(frameTime, 0.0f) * speed);
         m_adaptedExposure += (targetExposure - m_adaptedExposure) * std::clamp(alpha, 0.0f, 1.0f);
     }

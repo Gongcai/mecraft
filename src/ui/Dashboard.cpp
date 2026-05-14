@@ -441,9 +441,6 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
-        pipeline.shadowWarpMode = 2;
-        pipeline.shadowWarpCutoff = false;
-        pipeline.derivativeExactShadow = false;
         if (pipeline.debugDisableGreedyMeshing) {
             pipeline.debugDisableGreedyMeshing = false;
             for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
@@ -456,7 +453,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         }
         if (ImGui::Button("Preset Neutral")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 2;
+
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = false;
             pipeline.contactShadowsEnabled = false;
@@ -505,7 +502,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 2;
+
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;
@@ -559,7 +556,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
             pipeline.tonemapMode = 1;
-            pipeline.shadowWarpMode = 2;
+
             pipeline.softShadowsEnabled = true;
             pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;

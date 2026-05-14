@@ -48,8 +48,6 @@ uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uShadowNormalOffset;
 uniform int uShadowLightMode;
-uniform int uShadowWarpMode;
-uniform int uDerivativeExactShadow;
 uniform int uDebugViewMode;
 
 vec3 tonemapPreview(vec3 color) {
@@ -89,28 +87,12 @@ float shadowDither() {
     return noise2D(gl_FragCoord.xy / 256.0);
 }
 
-// Legacy Derivative shadow helpers are retained here only for historical debug
-// views that inspect the old single-map projection.
+// Single-map shadow helpers for debug views (cascade 0 mirror).
 
 vec3 localShadowUvFromWorld(vec3 worldPos) {
-    // Must match shadow_depth.vs write path: transMAD + projMAD decomposition,
-    // NOT uShadowViewProj full multiply. For ortho + w=1 these are equivalent,
-    // but keeping the same decomposition prevents subtle drift if matrices change.
-    float warpDensity;
-    return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection,
-                             uShadowWarpMode, 0.9, warpDensity);
-}
-
-float localShadowDepthWorldScale() {
-    return shadowDepthWorldScale(uShadowProjectionInverse, uShadowWarpMode);
-}
-
-float localShadowDepthBiasFromWorld(float worldUnits) {
-    return worldUnits / localShadowDepthWorldScale();
-}
-
-float localDerivativeMinimumShadowBias() {
-    return derivativeMinimumShadowBias(uShadowWarpMode);
+    vec3 viewPos = mat3(uShadowModelView) * worldPos + uShadowModelView[3].xyz;
+    vec3 clipPos = vec3(uShadowProjection[0].x, uShadowProjection[1].y, uShadowProjection[2].z) * viewPos + uShadowProjection[3].xyz;
+    return clipPos * 0.5 + 0.5;
 }
 
 float localShadowWorldBias(float ndotl, float viewDistance) {
@@ -123,34 +105,17 @@ float localShadowNormalOffsetWorld(float ndotl, float viewDistance) {
                                    uShadowNormalOffset);
 }
 
-float derivativeExactNormalOffset(vec3 cameraRelPos, float ndotl) {
-    // DerivativeMain/world0/deferred5.fsh:251
-    return (dotSelf(cameraRelPos) * 8e-5 + 3e-2) * (2.0 - saturate(ndotl));
-}
-
 float selectedShadowNormalOffsetWorld(vec3 cameraRelPos, float ndotl, float viewDistance) {
-    if (uDerivativeExactShadow != 0) {
-        return derivativeExactNormalOffset(cameraRelPos, ndotl);
-    }
     return localShadowNormalOffsetWorld(ndotl, viewDistance);
 }
 
 float selectedShadowCompareBias(float ndotl, float viewDistance, float dither) {
-    if (uDerivativeExactShadow != 0) {
-        // Match DerivativeMain PercentageCloserFilter's receiver depth bias.
-        // Lighting uses the same constant term in pcfFilter()/hard-shadow compare.
-        return 1e-4 - dither * 5e-5;
-    }
-    return max(localShadowDepthBiasFromWorld(localShadowWorldBias(ndotl, viewDistance)),
-               localDerivativeMinimumShadowBias());
+    return max(localShadowWorldBias(ndotl, viewDistance) / max(uShadowDistance * 2.0, 1.0),
+               6.0e-5);
 }
 
 float selectedShadowBiasWorld(float ndotl, float viewDistance, float dither) {
-    if (uDerivativeExactShadow != 0) {
-        return (1e-4 - dither * 5e-5) * localShadowDepthWorldScale();
-    }
-    return max(localShadowWorldBias(ndotl, viewDistance),
-               localDerivativeMinimumShadowBias() * localShadowDepthWorldScale());
+    return localShadowWorldBias(ndotl, viewDistance);
 }
 
 bool shadowUvOutOfBounds(vec3 shadowUv) {
@@ -295,7 +260,7 @@ void main() {
         float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
-        float margin = (shadowDepth - (shadowUv.z - bias)) * localShadowDepthWorldScale();
+        float margin = (shadowDepth - (shadowUv.z - bias)) * uShadowDistance * 2.0;
         float nearAcne = 1.0 - smoothstep(0.0, max(uShadowTexelWorldSize * 1.25, 0.0001), abs(margin));
         vec3 litColor = mix(vec3(0.08, 0.12, 0.25), vec3(0.88, 0.92, 1.0), lit);
         FragColor = vec4(mix(litColor, vec3(1.0, 0.58, 0.04), nearAcne * 0.65), 1.0);
@@ -392,42 +357,31 @@ void main() {
         }
 
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        float warpDensity;
-        vec3 shadowUv = worldToShadowProj(worldPos, uShadowModelView, uShadowProjection,
-                                           uShadowWarpMode, 0.9, warpDensity);
+        vec3 shadowUv = localShadowUvFromWorld(worldPos);
 
         if (shadowUvOutOfBounds(shadowUv)) {
             FragColor = vec4(0.95, 0.08, 0.02, 1.0); // red = out of bounds
             return;
         }
 
-        // Warp density: 1.0 = center (high res), >1.0 = edge (compressed)
-        // Show as heatmap: blue=center, green=mid, red=compressed edge
-        float densityNorm = clamp((warpDensity - 1.0) / 0.5, 0.0, 1.0);
-        FragColor = vec4(shadowUv.x, shadowUv.y, densityNorm, 1.0);
+        // CSM mode: show shadow UV + cascade index color
+        float viewDist = length(worldPos - uCameraPos);
+        int cascadeIdx = selectCsmCascade(viewDist);
+        FragColor = vec4(shadowUv.x, shadowUv.y, float(cascadeIdx) / 3.0, 1.0);
         return;
     }
 
-    // Debug 33: Shadow warp density heatmap only
-    // Blue = center (density ~1.0), Red = edge (density >1.5)
+    // Debug 33: CSM cascade heatmap (blue=0, green=1, yellow=2, red=3)
     if (uDebugViewMode == 33) {
         float depth = texture(uDepthTex, vTexCoord).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
-
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        float warpDensity;
-        vec3 shadowUv = worldToShadowProj(worldPos, uShadowModelView, uShadowProjection,
-                                           uShadowWarpMode, 0.9, warpDensity);
-
-        if (shadowUvOutOfBounds(shadowUv)) {
-            FragColor = vec4(0.95, 0.08, 0.02, 1.0);
-            return;
-        }
-
-        FragColor = vec4(heatmap(warpDensity / 2.0), 1.0);
+        float viewDist = length(worldPos - uCameraPos);
+        int cascadeIdx = selectCsmCascade(viewDist);
+        FragColor = vec4(csmCascadeColor(cascadeIdx), 1.0);
         return;
     }
 
@@ -461,7 +415,7 @@ void main() {
         float margin = shadowUv.z - bias - shadowDepth;
         // Green = lit (margin <= 0), Red = shadowed (margin > 0)
         float lit = margin <= 0.0 ? 1.0 : 0.0;
-        float marginAbs = abs(margin) * localShadowDepthWorldScale();
+        float marginAbs = abs(margin) * uShadowDistance * 2.0;
         FragColor = vec4(
             mix(0.08, 0.95, 1.0 - lit),  // R: shadowed
             mix(0.08, 0.95, lit),          // G: lit

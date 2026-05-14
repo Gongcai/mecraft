@@ -661,10 +661,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 40);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
-    m_pipelineSettings.shadowWarpMode = 2;
     m_pipelineSettings.debugDisableGreedyMeshing = false;
-    m_pipelineSettings.derivativeExactShadow = false;
-    m_pipelineSettings.shadowWarpCutoff = false;
     ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
     m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
     m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
@@ -1498,10 +1495,6 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setInt("uUseModel", 0);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
-    // Formal Mecraft shadows are linear CSM. Derivative/Radial warp remains a
-    // debug-only historical path and is intentionally bypassed here.
-    m_shadowDepthShader->setInt("uShadowWarpMode", 2);
-    m_shadowDepthShader->setInt("uShadowWarpCutoff", 0);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
     m_shadowDepthShader->setInt("uNoiseTex", 1);
@@ -1669,8 +1662,6 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
     bindCloudUniforms(*m_deferredLightingShader, frame);
-    m_deferredLightingShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
-    m_deferredLightingShader->setInt("uDerivativeExactShadow", m_pipelineSettings.derivativeExactShadow ? 1 : 0);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
@@ -1956,7 +1947,6 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     bindVolumetricUniforms(*m_volumetricFogShader, frame);
     bindCloudUniforms(*m_volumetricFogShader, frame);
     m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
-    m_volumetricFogShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
     m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
@@ -2305,8 +2295,6 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
         }
     }
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
-    m_deferredDebugShader->setInt("uShadowWarpMode", m_pipelineSettings.shadowWarpMode);
-    m_deferredDebugShader->setInt("uDerivativeExactShadow", m_pipelineSettings.derivativeExactShadow ? 1 : 0);
     m_deferredDebugShader->setMat4("uInvViewProj", debugFrame != nullptr ? debugFrame->invViewProj : glm::mat4(1.0f));
     m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
     m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));

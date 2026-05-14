@@ -65,7 +65,7 @@ public:
         float bloomStrength = 1.0f;
         bool autoExposureEnabled = true;
         float autoExposureMin = 0.001f;
-        float autoExposureMax = 64.0f;
+        float autoExposureMax = 4.0f;
         float autoExposureSpeed = 1.0f;
         float autoExposureBias = 0.0f;
         bool sunRaysEnabled = false;
@@ -87,14 +87,11 @@ public:
         float dofIntensity = 0.15f;
         float dofAperture = 2.8f;
         float dofFocusDistance = 5.0f;
-        float sceneCloudCompositeStrength = 0.42f;
+        float sceneCloudCompositeStrength = 0.85f;
         float sceneReflectionCompositeStrength = 0.36f;
         int debugViewMode = 0;
         int weatherPreset = 0; // 0=Clear, 1=Mist, 2=Rain, 3=Storm
         int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
-        int shadowWarpMode = 2; // Forced CSM path; legacy warp modes are disabled.
-        bool shadowWarpCutoff = false;
-        bool derivativeExactShadow = false;
         bool debugDisableGreedyMeshing = false;
         int shadowResolution = 2048;
         float shadowDistance = 192.0f;
@@ -124,11 +121,11 @@ public:
         float splitToneStrength = 0.0f;
         float vignetteStrength = 0.0f;
         float shadowTintStrength = 0.40f;
-        float directSunStrength = 1.36f;
+        float directSunStrength = 1.0f;
         float skyAmbientStrength = 0.36f;
         float minimumAmbient = 0.055f;
-        float shadowMinLight = 0.08f;
-        float shadowContrast = 1.28f;
+        float shadowMinLight = 0.0f;
+        float shadowContrast = 1.0f;
         float blockLightStrength = 1.00f;
         float fakeBounceStrength = 0.06f;
         float aerialStrength = 0.65f;

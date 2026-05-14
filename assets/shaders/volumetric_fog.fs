@@ -46,7 +46,6 @@ uniform float uCloudThickness;
 uniform int uShadowsEnabled;
 uniform int uVolumetricFogEnabled;
 uniform int uShadowLightMode;
-uniform int uShadowWarpMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 

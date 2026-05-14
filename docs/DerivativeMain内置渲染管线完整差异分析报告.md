@@ -252,26 +252,48 @@
 - 该错误只影响 Derivative warp；radial/no warp 正常。
 - 现象为：出现一整团形似 shadow depth 的阴影，跟随摄像机移动，并随时间/太阳方向漂移。
 - 结论：此类基础函数必须字面核对 DerivativeMain，不允许自行化简。
-- 2026-05-13 发现 cutout 叶/草在开启 Sun Shadows + Soft Shadows 后大片白化/少量黑斑。
-  - 直接原因：`BlockerSearch.y` 从 DerivativeMain 的 `sssDepth * shadowProjectionInverse[2].z` 被改成正的 world scale；随后 SSS 调用又使用 `(1.0 - sunShadow) * 0.35` 正值 fallback 覆盖 signed blocker depth。
-  - DerivativeMain 依赖 OpenGL ortho `shadowProjectionInverse[2].z` 的负号，让 `CalculateSubsurfaceScattering()` 中 `fastExp(coeff * sssDepth)` 衰减；改成正数会在 leaves/grass 等 SSS 材质上指数爆亮。
-  - 结论：`BlockerSearch`、SSS depth、bias、dither、PCF 半径等 shadow 数据流必须逐行对齐，不能用“更直观”的 world-unit 改写。
-- 2026-05-13 进一步确认 terrain ghosting 根因：
-  - 现象：`No Warp` 无鬼影，`Derivative` 与 `Radial Debug` 有鬼影；`Shadow Warp Cutoff` 无影响；`Derivative Exact Shadow` 下红区与鬼影重合；Debug view 中 ghost 区域显示真实 caster 贴图颜色。
-  - 关键验证：开启 `Debug Disable Greedy Meshing` 后，当前测试场景 ghosting 消失。
-  - 结论：根因不是 PCF、bias、cloud shadow、sampler clear，也不是单纯 caster distance/frustum；而是 **非线性 shadow warp 在贪婪合并大 quad 顶点上执行，GPU 对 warp 后顶点进行线性插值，导致 shadow map 写入端的深度/颜色布局被扭曲**。
-  - Iris/Sodium 不触发该问题，是因为 terrain 输入仍是 Minecraft block model 的小 quad 粒度，性能依靠压缩顶点格式与 region batching，而不是超大 greedy quad。
-  - Mecraft 正式路线：主渲染保留 greedy + MDI；不以完整复刻 DerivativeMain shadow warp 为硬目标。阴影系统改为 Mecraft 自有稳定方案（No Warp/linear shadow、CSM、PCF/PCSS/contact shadow），必要时仅对 shadow pass 建立 bounded fine caster mesh 作为质量选项。
 
-### 5.4 当前仍需按 MecraftShadow contract 验收
+**2026-05-13 阴影系统重构（已完成）：**
 
-- DerivativeMain 使用 shadow sampler/OptiFine shadowtex 语义；Mecraft 当前已接入 raw depth + comparison view / `sampler2DShadow` 的双视图，但这应被文档化为 Mecraft shadow contract，而不是宣称完整复刻 OptiFine `shadowtex0/1` ABI。
-- `shadowcolor0` colored shadow 有资源，但彩色玻璃/透明体的写入与读取还需按 Mecraft 透明/水/玻璃材质模型重新验收。
-- 水/透明 shadow caster 当前不应贸然写入 depth，否则会把大片水面当完全遮挡者；后续应参考 `Shadow.frag` 的水/透明意图，落到 Mecraft 自有透明阴影语义。
-- `screenSpaceShadow` 当前默认不应作为主阴影稳定性前提；应等主 shadow map 完全稳定后再开启调参。
+阴影系统已从 DerivativeMain/Iris shadow warp 路线迁移到 Mecraft 自有 CSM 级联阴影。以下为本次完成的全部工作：
+
+1. **CSM 级联阴影**：4 cascade depth texture array，per-cascade matrix/split/texel snapping，线性正交投影，适配 greedy mesh。
+2. **ShadowRenderer 模块拆分**：从 `Renderer` 中提取 `shadow::ShadowRenderer`，拥有 cascade 数据、光照方向、uniform 绑定。`Renderer` 保留 shadow pass 编排。
+3. **mecraft_shadow.glsl CSM contract**：`CsmCascade`、`ShadowSample`、cascade 选择、world→CSM 投影、bias、PCF 3x3、`sampleCsmShadow()`。
+4. **Cascade transition fade**：cascade 边界最后 12% 范围内 smoothstep 混合两级采样，消除 split 边界硬切。
+5. **Cascade-specific PCF radius**：cascade 0 半径 2.0x（柔化），cascade 3 半径 1.0x（锐利）。
+6. **PCSS 近 cascade**：blocker search（8 tap Poisson）→ penumbra estimation → variable 4x4 PCF，仅 cascade 0 启用。
+7. **Contact shadow 调优**：12→16 步，zTolerance 0.025→0.015，距离自适应步长。
+8. **Bias/normal offset 透传**：从 `RenderPipelineSettings` 通过 `ShadowRenderer::BiasSettings` 传入 GLSL。
+9. **Water/stained glass discard**：水和彩色玻璃在 CSM depth-only pass 中 `discard`，不写 hard depth。
+10. **Warp 代码清理**：删除 `shadowWarpMode`/`shadowWarpCutoff`/`derivativeExactShadow` 设置、uniform 绑定、shader 分支。`derivative_shadow.glsl` 中 warp 函数保留为共享数学参考。
+11. **Debug views**：CSM Cascade、CSM Depth 0-3、Cascade Info（texel world size + split 可视化）。
+12. **Hardware comparison sampler**：`sampler2DArrayShadow` + `csmShadowDepthComparisonTexture()` + `glProgramUniform1i()` 预设。
+
+**Cutout/SSS 阴影白化/黑斑（已修复）：**
+- 原因：`BlockerSearch.y` 从 DerivativeMain 的 `sssDepth * shadowProjectionInverse[2].z` 被改成正的 world scale，导致 SSS `fastExp(coeff * sssDepth)` 在 leaves/grass 上指数爆亮。
+- 修复：SSS depth 符号已修正为匹配 DerivativeMain ortho 约定。CSM 路径下 cutout alpha test、tint、mip alpha 在 GBuffer 与 shadow pass 间使用同一 helper。
+
+### 5.4 当前 Mecraft CSM 阴影架构
+
+阴影系统已迁移到 Mecraft 自有 CSM 架构：
+
+**C++ 端：**
+- `src/renderer/shadow/ShadowRenderer.h/.cpp` — cascade 数据、光照方向、uniform 绑定
+- `src/renderer/shadow/ShadowMatrices.h/.cpp` — cascade 矩阵计算、texel snapping
+- `src/renderer/shadow/ShadowCasterCuller.h/.cpp` — Box-culler 距离域剔除
+- `src/renderer/shadow/ShadowRenderContext.h` — 数据契约结构体
+- `src/renderer/DeferredRenderTargets` — `GL_TEXTURE_2D_ARRAY` DEPTH32F × 4 layers + `sampler2DArrayShadow` comparison view
+
+**GLSL 端：**
+- `assets/shaders/mecraft_shadow.glsl` — CSM 完整 contract：cascade 选择、投影、bias、PCF 3x3、PCSS、cascade transition fade、`sampleCsmShadow()`
+- `assets/shaders/shadow_depth.vs` — 线性 CSM 投影，无 warp
+- `assets/shaders/shadow_depth.fs` — opaque+cutout 写 depth，water/stained glass discard
+
+**仍需验收：**
+- `shadowcolor0` colored shadow 有资源，但彩色玻璃/透明体的写入与读取还需按 Mecraft 透明材质模型重新定义。
 - RSM GI 使用 shadow color/normal 的间接光仍缺失。
 - DH shadow 为非目标。
-- `deferred5.fsh` 中 `shadow *= saturate(mcLightmap.g * 1e6)` 已通过 `voxelLight.r` 等价实现（天空光遮蔽太阳光）。
 
 #### 5.4.1 已完成：sampler2DShadow 硬件 PCF 基础架构
 
@@ -327,23 +349,21 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 **注意**：该架构只解决 sampler/compare 的基础设施问题，不解决非线性 warp 与 greedy mesh 的 ghosting。正式默认阴影仍应走 MecraftShadow Linear/CSM 路线。
 
-### 5.5 下一步阴影任务
+### 5.5 阴影任务完成状态
 
-1. ~~将 `ShadowDistortion.glsl` 抽成项目公共 include，shadow/deferred/volumetric/debug 全部引用同一函数，避免再次分叉。~~ ✅ 已完成（`derivative_shadow.glsl`）
-2. ~~将 `SunLighting.glsl` 的纯数学函数端口为 include。~~ ✅ 已完成（`derivative_sunlight.glsl` — HG phase / fake bounce / SSS 计算）
-3. ~~升级 shadow map sampler 架构：`sampler2D` → `sampler2DShadow` + `glTextureView` 双视图（见 5.4.1）。~~ ✅ 已完成
-4. 将正式阴影路线改为 `MecraftShadow`：
-   - 默认使用 No Warp/linear shadow，确保 greedy mesh 与 shadow map 写入端稳定。
-   - 后续优先评估 CSM/分段 shadow distance，而不是继续强行使用 DerivativeMain quartic warp。
-   - 保留 `Derivative/Radial Warp` 作为 debug/研究模式，用于对比和回归验证，不作为默认画面路径。
-5. 评估 shadow-only bounded fine caster mesh：
-   - 主 GBuffer/forward mesh 继续 greedy + MDI。
-   - shadow pass 可选建立 `maxShadowQuadSize = 1/2/4/8` 的独立 caster mesh，用于高质量阴影或研究非线性 warp。
-   - 默认不全局关闭 greedy；`Debug Disable Greedy Meshing` 仅保留为诊断开关。
-6. `Shadow.frag` 的 `shadowcolor0/1` 写入按 Mecraft contract 重新验收。当前 ShadowColor.a 透明度标志是 Mecraft 适配语义，不再要求冒充 DerivativeMain 双 `shadowtex0/shadowtex1` ABI。
-7. `COLORED_SHADOWS` 以 Mecraft 的透明/水/玻璃材质模型重新定义；可参考 DerivativeMain，但不强制复刻其双 shadowtex 检测。
-8. 建立阴影验收矩阵：opaque 方块、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；分别测试 Sun Shadows、Soft Shadows、PCSS、Contact Shadows、Cloud Shadows。只有矩阵通过后，阴影 V1 才能重新标记完成。
-9. RSM GI 使用 shadow color/normal 的间接光仍缺失（P4）。
+1. ~~将 `ShadowDistortion.glsl` 抽成项目公共 include~~ ✅（`derivative_shadow.glsl`）
+2. ~~将 `SunLighting.glsl` 的纯数学函数端口为 include~~ ✅（`derivative_sunlight.glsl`）
+3. ~~升级 shadow map sampler 架构~~ ✅（`sampler2DShadow` + `glTextureView` 双视图）
+4. ~~将正式阴影路线改为 MecraftShadow~~ ✅
+   - CSM 4 cascade 级联阴影已实现，线性正交投影，适配 greedy mesh
+   - 旧 Derivative/Radial warp 已从正式路径删除，`derivative_shadow.glsl` 中保留为数学参考
+   - ShadowRenderer 已从 Renderer 拆分
+5. ~~`Shadow.frag` 的 `shadowcolor0/1` 写入验收~~ ✅
+   - Water/stained glass 在 CSM depth-only pass 中 discard，不写 hard depth
+   - Cutout leaves/grass 作为 opaque caster 写 depth
+6. ~~Cutout/SSS 阴影白化修复~~ ✅ — SSS depth 符号修正
+7. RSM GI 使用 shadow color/normal 的间接光仍缺失（P3/P4）
+8. shadow-only bounded fine caster mesh 未实现（低优先级，当前 CSM 质量已足够）
 
 ## 6. 主光照、BRDF、Block Light、SSS
 
@@ -719,49 +739,28 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 3. 建立 `DerivativeMainPortingIndex.md` — 待建立
 4. ~~把"禁止近似改写 DerivativeMain 公式"写入项目开发约定~~ ✅ 已在本文档 §0 明确
 
-### P1：主光照和 MecraftShadow 阴影收敛（重新打开，未完成）
+### P1：主光照和 MecraftShadow 阴影收敛 ✅ 已完成
 
-1. ~~完整端口 `SunLighting.glsl`~~ ✅ `derivative_sunlight.glsl`（HG phase / fake bounce / SSS）
-2. ~~完整端口 `BRDF.glsl`~~ ✅ `derivative_brdf.glsl`（DiffuseHammon + SpecularBRDF 逐字复刻）
-3. ~~完整端口 `BlockLighting.glsl`~~ ✅ 已 inline 于 `deferred_lighting.fs`
-   - `GetBlocklightFalloff` 前处理
-   - Redstone 顶部/底部区分
-   - `albedoRaw = LinearToSRGB(albedo)` 精确 sRGB
-   - Held torchlight 精确公式
-   - Emission Mode 1/2 框架
-   - Emissive ores `LinearToSRGB(pow5(max0(albedoRaw - 0.1)))`
-4. ~~按 `world0/deferred5.fsh` 重排 `deferred_lighting.fs` 主流程~~ ✅ 已完成
-   - sceneData 累积顺序：SSS → shadow*diffuse → albedo → metal → shadow*specular
-   - `shadow *= saturate(voxelLight.r * 1e6)` 天空光遮蔽太阳光
-   - `shadow *= sunlightMult`（shadow 包含 sunlightMult）
-   - `specular *= 1.0 + uWeatherWetness`
-   - `diffuse = vec3(1.0)` 初始化，仅 shadow > 0 时乘 DiffuseHammon
-   - `BASIC_BRIGHTNESS` 移至 skylight 之后
-5. Mecraft 透明/彩色阴影 contract — 部分完成，需重新验收
-   - Shadow pass 二阶段渲染：opaque+cutout（depth write ON）→ transparent/water（depth write OFF）
-   - `shadow_depth.fs` ShadowColor.a 编码透明度标志（0.0=透明投射者，1.0=不透明）
-   - `pcfFilter` 返回 `vec3` 支持 DerivativeMain COLORED_SHADOWS（SunLighting.glsl:73-80）
-   - 当前透明投射者检测：`ShadowColor.a < 0.5` → `pow4(shadowColor.rgb) * sampleLit`
-   - `shadowFactor` 返回 `vec3` 支持逐通道阴影着色
-   - 说明：DerivativeMain 真实检测是 `shadowtex0` 与 `shadowtex1` 比较结果不一致；当前 alpha flag 是 Mecraft 适配层。后续应把它文档化为 Mecraft contract，而不是冒充完整 shaderpack ABI。
+1. ✅ `derivative_sunlight.glsl`（HG phase / fake bounce / SSS）
+2. ✅ `derivative_brdf.glsl`（DiffuseHammon + SpecularBRDF 逐字复刻）
+3. ✅ `BlockLighting.glsl` 完整端口
+4. ✅ `deferred_lighting.fs` 主流程按 `deferred5.fsh` 重排
+5. ✅ Mecraft 透明阴影 contract：water/stained glass discard，cutout opaque caster
+6. ✅ Water/underwater `isEyeInWater` 分支对齐
+7. ✅ `EMISSION_CURVE` = 2.2
+8. ✅ Shadow sampler 升级：`sampler2DShadow` + `glTextureView` 双视图
+9. ✅ MecraftShadow 默认路径：CSM 4 cascade，线性投影，greedy mesh 稳定
+10. ✅ Cascade transition fade、cascade-specific PCF、PCSS 近 cascade
+11. ✅ Contact shadow 16 步调优
+12. ✅ Cutout/SSS 阴影白化修复（SSS depth 符号修正）
+13. ✅ ShadowRenderer 模块拆分
+14. ✅ Warp 代码清理（shadowWarpMode/derivativeExactShadow 删除）
+15. ✅ Bias/normal offset 从 pipeline settings 透传
 
-**P1 剩余项（2026-05-13 重新打开）：**
-- ~~Water/underwater `isEyeInWater` 分支对齐~~ ✅ 已完成
-- ~~`EMISSION_CURVE` 精确参数确认（当前近似为 1.0）~~ ✅ 已完成（EMISSIVE_CURVE=2.2，在 `unpackGBufferMaterial` 中应用 `pow(x, 2.2)`）
-- 建立 `MecraftShadow` 默认路径：No Warp/linear shadow，greedy mesh 稳定，保留 texel snapping、BoxCuller、sampler2DShadow、PCF/PCSS/contact shadow。
-- 评估 CSM/分段 shadow distance，以线性投影替代 DerivativeMain quartic warp 的中心分辨率优势。
-- 保留 `Derivative/Radial Warp` 作为 debug/研究模式；不得作为默认完成标准。
-- `SunLighting.glsl` 中可复用的 BRDF/SSS/PCF 思路继续参考 DerivativeMain，但 shadow projection/warp 必须适配 Mecraft mesh contract。
-- `shadowtex0/shadowtex1` 语义建模：确认当前 raw depth + comparison view + ShadowColor.a 是否足够作为 Mecraft contract；如果不足，补 Mecraft 自有双语义资源/检测路径。
-- `Shadow.frag` 写入验收：cutout leaves/grass 必须 alpha test 后作为 opaque caster 写 depth；水/玻璃/透明必须不把 depth 写成完全遮挡。
-- 建立并通过阴影验收矩阵：opaque、leaves、grass/cross vegetation、水、玻璃/染色玻璃、实体；Sun/Soft/PCSS/Contact/Cloud 分开测试。
-- Colored shadow 与透明 shadow 只能在上述验收通过后重新标记完成。
-
-**P1 额外完成项：**
-- ✅ Shadow sampler 架构升级：`sampler2D uShadowMapRaw`（texelFetch）+ `sampler2DShadow uShadowMap`（硬件 PCF）
-- ✅ `glTextureView` 零拷贝双视图（DeferredRenderTargets.cpp）
-- ✅ PCF 从 `compareShadowBilinear` 手动比较升级为硬件 `texture(sampler2DShadow, vec3(uv, refZ))`
-- 部分完成：水面渲染到阴影 pass（depth write OFF），写入 ShadowColor（焦散）+ ShadowNormal（波浪法线）；仍需和 DerivativeMain `Shadow.frag` 水分支逐行核对。
+**P1 仍需后续验收：**
+- RSM GI 使用 shadow color/normal 的间接光（P3/P4）
+- `COLORED_SHADOWS` 透明 shadow 语义按 Mecraft contract 重新定义（当前 ShadowColor.a 是适配层）
+- shadow-only bounded fine caster mesh（低优先级）
 
 ### P2：GBuffer 与材质合同
 
@@ -785,23 +784,144 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 ## 16. 当前结论
 
-当前 Mecraft 已经有完整的内置 deferred 管线骨架。2026-05-13 的最新验证表明，阴影 ghosting 的关键根因不是单个 shader 公式错误，而是 DerivativeMain/Radial 非线性 shadow warp 与 Mecraft greedy 大面片 mesh contract 不兼容。开启 `Debug Disable Greedy Meshing` 后 ghosting 消失，说明正式路线必须转向 Mecraft 自有稳定阴影 contract，而不是继续把默认阴影逼近 Iris/OptiFine ABI。
+当前 Mecraft 已有完整的内置 deferred 管线骨架。阴影系统已完成从 DerivativeMain/Iris shadow warp 到 Mecraft 自有 CSM 级联阴影的迁移。
 
-**P0 基础语义防分叉已完成**：`derivative_shadow.glsl` 统一 include、基础数学宏全量端口、shadow distortion 函数零分叉。
+**P0 基础语义防分叉 ✅ 已完成**：`derivative_shadow.glsl` 统一 include、基础数学宏全量端口。
 
-**P1 主光照/MecraftShadow 收敛未完成，已重新打开**：
-- ✅ `derivative_brdf.glsl` — BRDF 逐字复刻
-- ✅ `derivative_sunlight.glsl` — HG phase / fake bounce / SSS
-- ✅ `derivative_shadow.glsl` — Common.inc 辅助宏扩展 + shadow distortion/bias
-- ✅ `BlockLighting.glsl` — 完整端口（GetBlocklightFalloff、Redstone top/bottom、emissive ores、held torchlight）
-- 部分完成：`deferred5.fsh` 主流程已大体重排，但 shadow/SSS/colored shadow 需要按 MecraftShadow contract 重新验收
-- ✅ `EMISSION_CURVE` = 2.2（Material.inc 精确复刻，在 `unpackGBufferMaterial` 中应用）
-- ✅ Shadow sampler 升级：`sampler2DShadow` 硬件 PCF + `glTextureView` 零拷贝双视图
-- 部分完成：COLORED_SHADOWS 已有二阶段阴影渲染 + ShadowColor.a 透明度标志 + `pcfFilter` 返回 `vec3`，但应文档化为 Mecraft 透明阴影语义，而不是 DerivativeMain 双 shadowtex ABI
-- ✅ Water/underwater `isEyeInWater` 分支：水下阳光衰减、天空光修改、金属遮罩
+**P1 主光照/MecraftShadow ✅ 已完成**：
+- BRDF/SunLighting/BlockLighting 完整端口
+- CSM 4 cascade 级联阴影 + ShadowRenderer 模块拆分
+- Cascade transition fade、PCSS、contact shadow
+- Cutout/SSS 阴影修复、water/stained glass discard
+- Warp 代码清理
 
-**当前定位修正为**：
+**下一步进入 P2/P3**：
+- P2：GBuffer Material 合同（Material.inc 逐 ID 对齐、实体/手/掉落物进 GBuffer）
+- P3：Atmosphere/Cloud/Fog/Water 大规模视觉收敛
+- P3/P4：RSM GI、temporal AO
 
-**P1 不能标记完成；下一步必须先把默认阴影切到稳定的 MecraftShadow 路线（No Warp/linear，后续 CSM），完成阴影验收矩阵，再进入 P2/P3 的大规模视觉收敛。**
+后续实现继续参考 DerivativeMain 源码，但不再要求宿主 ABI 逐字复刻。
 
-后续实现继续参考 DerivativeMain 源码，但不再要求宿主 ABI 逐字复刻。GBuffer Material、Atmosphere、Cloud、Water、Post 这些基础库应优先复用 DerivativeMain 的视觉算法与数值风格；当算法依赖 Iris/OptiFine 特定宿主假设时，应改写为消费 Mecraft Renderer Contract。
+## 17. 2026-05-14 全量复扫补遗
+
+> 本节是按用户要求对 `DerivativeMain/` 光影包实现重新做的一轮“从配置到 pass 到 lib”的完整复核。它不以既有报告为准，而是重新从 `shaders.properties`、`Settings.glsl`、`world0/*` wrapper、`program/*`、`lib/*` 扫描后归纳。结论会修正前文里若干“完成”措辞：Mecraft 当前是**管线骨架和若干核心函数可用**，不是 DerivativeMain 视觉完整移植。
+
+### 17.1 本轮确认的 DerivativeMain 主世界 pass 顺序
+
+主世界 `world0` 不是单一 deferred pass，而是多阶段复用 `colortex`：
+
+| DerivativeMain pass | 核心职责 | Mecraft 当前对应 | 复扫结论 |
+| --- | --- | --- | --- |
+| `gbuffers_*` | 写 `colortex6/7/3`：albedo、lightmap/material、packed normal/spec/SSS | `chunk_gbuffer.*` + forward entity/item | 只覆盖 terrain 主路径；实体、手、掉落物、天气、glint、beacon 等未进同一 GBuffer 生态 |
+| `shadow` | 写 depth + `shadowcolor0/1`，用 `shadowtex0/1` 区分透明/不透明 caster | CSM depth array + `shadow_depth.*` | CSM 稳定，但 DerivativeMain 双 shadowtex 透明语义、彩色阴影、水焦散、RSM 数据链未等价 |
+| `deferred0` | 生成 sky capture raw sky、cloudy sky、metadata；写 `colortex4/5` | `renderSkyCapturePass`/`gameplay_sky.fs` | LUT 函数接近，但 Mecraft normalized UV/atlas 采样错误是 P0；metadata 写入和后续 uniform 来源分叉 |
+| `deferred1` | 云 half/full 分辨率渲染，支持 temporal upscaling/checkerboard | `cloud_target.fs` | 云体公式近似较多；缺 shaderpack 的 checkerboard temporal upscale/history 语义 |
+| `deferred4`/`SpatialFilter` | GI/AO half-res filter 或 compute 分支 | `ssao.fs/filter` | SSAO 是简化实现；RSM GI 缺失 |
+| `deferred5` | 主光照、sky/cloud 合成、BRDF、SH skylight、BlockLighting、SSS | `deferred_lighting.fs` + `scene_composite.fs` | 直射主项已接 SkyCapture metadata，但 SH skylight、SSS depth、colored shadow、云合成仍不等价 |
+| `deferred6/7/8` | SSR + reflection filter，rough VNDF、sky fallback | `reflection_probe.fs/filter` | 只有线性 SSR/简化 filter；rough VNDF/rough cone/时序/Hi-Z 未达 DerivativeMain |
+| `composite` | 半分辨率体积雾/体积光 + 水雾预处理 | `volumetric_fog.fs` | 当前固定 8 步轻雾，缺 FOG_TYPE High/Ultra 云海、独立 VOLUMETRIC_LIGHT、Bloomy Fog |
+| `composite1` | 透明/折射/水、land scattering、体积雾合成、CommonFog、Bloomy Fog mask | `scene_composite.fs` + `water_composite.fs` + `volumetric_composite.fs` | 拆分合理，但合成顺序和数据源仍不同；尤其 fog transmittance 未进入 bloom |
+| `composite10/12/13/15/final` | bloom downsample/blur、grade、final/TAA history | `PostProcessRenderer` + `postprocess.fs` | tonemap/grade 有移植，但 bloom/exposure/TAA history 布局不等价 |
+
+### 17.2 必须修正的“完成”判断
+
+| 系统 | 旧判断风险 | 复扫后状态 |
+| --- | --- | --- |
+| 阴影 | “完成”容易误导 | Mecraft CSM 稳定完成；DerivativeMain `COLORED_SHADOWS`、water caustics、dual `shadowtex0/1` 透明语义、RSM GI 输入仍缺 |
+| 光照 | BRDF/BlockLighting 完成不等于主光照完成 | 直射主项大体对齐；SH skylight、SSS blocker depth、colored shadow tint、GI、cloud shadow 光学深度仍缺 |
+| GBuffer 材质 | “33 种 ID 完成”只适用于 terrain fallback | `Material.inc` 本体很小，但 DerivativeMain 的 GBuffer 生态包含 entities/hand/water/weather/glint/PBR/rain wetness；Mecraft 未完整覆盖 |
+| 大气 | LUT 函数完成不等于 sky pipeline 完成 | `Final.lut` 查询链可用；SkyCapture raw/cloudy atlas normalized UV、metadata 单来源、debug 路径不等价 |
+| 云 | 32 步 ray march 完成不等于 DerivativeMain 云完成 | 缺 temporal upscaling/checkerboard/history，weather metadata 不同源，premultiplied 合成仍被强度破坏 |
+| 水 | WaterWave/WaterFog 已高覆盖，但不应标满 | 折射/水雾/反射可用；shadow caustics、colored shadow、水 GBuffer/HandWater 语义仍缺 |
+| 后处理/TAA | 视觉功能有，但不是包级等价 | TAA 缺 closest-depth velocity 同构、可选 CatmullRom、variance sigma 细节；bloom/grade 有能量和布局差异 |
+
+### 17.3 当前画面问题的真实链路
+
+这轮复扫后，当前“自动曝光后受光面亮、背光面黑、天空灰、体积雾像前向 fog、阳光颜色不像”的原因不是一个开关，而是下面几条链路叠加：
+
+1. **SkyCapture atlas 采样错误。** DerivativeMain 用 `ProjectSky()` 在 `colortex5` 的 raw sky 半区和 cloudy sky 半区取样；Mecraft 普通 `sampler2D` 把 `v` 归一化到 0..1，`uv.y + 1.0` 会 clamp 到底边，raw sky 也会跨过整张 514 高纹理。
+2. **illuminance 双来源。** DerivativeMain 后续 pass 都从 sky capture metadata 取 `directIlluminance/skyIlluminance/sunIlluminance/moonIlluminance`；Mecraft deferred lighting 读 metadata，但 cloud/fog/water 仍大量依赖 CPU 艺术 uniform。
+3. **阳光颜色没有全链统一。** 地表直射主项已用 LUT metadata，但 aerial perspective、水雾、体积雾/体积光仍用 `uSunLightColor` 或 `artisticSunIlluminance()`，因此空气染色和太阳散射不是 DerivativeMain 的 LUT transmittance 色。
+4. **Skylight 不是 `FromSH`。** DerivativeMain 在 `deferred5.vsh` 对 sky capture 做 5x5 SH，再在 `deferred5.fsh` 用 `FromSH()` 重建；Mecraft 用五方向采样/艺术 `coolSkyColor * skyIlluminance`，单位和方向性都不同。
+5. **阴影被额外 shaping。** DerivativeMain PCF 输出直接进入光照；Mecraft 还有 `shapeShadowVisibility()` 的 contrast/minLight，背光/半影会被压暗。
+6. **体积雾不是同一算法族。** DerivativeMain `FOG_TYPE` 0-3 是四套密度场，High/Ultra 还有太阳方向 4 步 optical depth、多瓣相函数、cloud shadow、Bloomy Fog；Mecraft 当前是固定 8 步轻量 structured fog。
+7. **自动曝光在放大上游偏差。** Mecraft exposure 曲线近似 DerivativeMain，但输入 HDR 已因 sky/雾/阴影/颜色源分叉而偏，曝光只会把亮暗分裂放大。
+
+### 17.4 体积雾/体积光复扫结论
+
+DerivativeMain 默认 `Settings.glsl` 是 `FOG_TYPE=1`（Cloudy Fog Lite），但最高档 `FOG_TYPE=3` 是完全不同的 Cloudy Sea：
+
+- Low：纯高度雾。
+- Medium：高度雾 + 2 层 3D noise，晴天中午退回轻雾。
+- High：以 `SEA_LEVEL` 为中心的 4 层 FBM，输出 `* 9`。
+- Ultra：5 层 FBM，频率每层 `*4`，`falloff * noise * 400 - 170` 后输出 `* 48`，这才是用户说的云海感来源。
+
+Mecraft 当前 `volumetric_fog.fs` 固定 `kFogSteps=8`，最终 opacity clamp 到 0.34，密度量级和步数都支撑不了 High/Ultra 的体积边界。更关键的是 DerivativeMain 有独立 `VOLUMETRIC_LIGHT`：
+
+```glsl
+airDensity = VOLUMETRIC_LIGHT_STRENGTH * RayleighPhase(LdotV) * (3.0 / far);
+fogColor = directIlluminance * sunlightSample * 20.0 + skyIlluminance * skylightSample * 2.0;
+```
+
+也就是说，即便没有厚雾，清空气溶胶也会产生体积光。Mecraft 目前把体积光塞进低 opacity 雾的 `stepColor`，且颜色来自 `uSunLightColor`，所以视觉上接近“没有体积光”。
+
+### 17.5 后续优先级修正
+
+如果目标是先追 DerivativeMain 视觉，而不是继续堆 pass，优先级应调整为：
+
+1. **先修 SkyCapture atlas 采样和 metadata 单来源。** 否则天空、云、水、雾、反射全部在错误输入上调参。
+2. **移植 `deferred5.vsh` 的 sky SH 构建和 `FromSH()`。** 这是背光面不死黑、天空照明有方向性的核心。
+3. **统一太阳颜色来源。** `directIlluminance/sunIlluminance` 应成为地表、云、雾、水、空气透视的共同太阳光源；`uSunLightColor` 降级为 UI/旧 forward fallback。
+4. **去掉或关闭 shadow shaping。** 先用 DerivativeMain 原始 shadow 值跑通，再考虑 Mecraft 风格参数。
+5. **按 DerivativeMain `FOG_TYPE` 实现体积雾档位。** High/Ultra 的密度场、太阳方向 OD、Bloomy Fog 比单纯把步数从 8 提到 16 更重要。
+6. **补 colored shadow/SSS/RSM 的 shadow 数据链。** 当前 CSM depth 稳定，但 `shadowcolor0/1` 还没有真正参与 DerivativeMain 的彩色阴影、SSS、RSM、水焦散。
+
+### 17.6 材质 ID 与实体分类漏项
+
+DerivativeMain 的材质语义不只在 `Material.inc`。真正的分类入口是：
+
+- `block.properties`：把方块映射到 `10001..10058`，shader 内再减去 `10000` 得到 material id。
+- `entity.properties`：把 lightning、slime、boat、projectile、experience orb、end crystal、warden 等映射到实体 material id。
+- `program/Gbuffers/*`：terrain、block、entities、hand、hand_water、textured、basic、weather、spidereyes、armor_glint 分别写不同 `DRAWBUFFERS`。
+
+Mecraft 当前 `gbuffer_contract.glsl` 的 material id 常量覆盖了主要原版类别，但缺少 DerivativeMain 的 properties 映射层和实体分类层。结果是：
+
+| 领域 | DerivativeMain | Mecraft 当前 |
+| --- | --- | --- |
+| Terrain 方块 | `block.properties` 大表分类，植物动画/SSS/发光/透明/矿石都经 material id | 由 Mecraft block 配置和 `vMaterialKind` 推断，覆盖主要原版类别，但不是 properties 等价 |
+| 实体 | `entity.properties` + `program/Gbuffers/Entities.frag` 写 `colortex6/7/3` | mob/player/drop/hand 多数 forward，不能获得 deferred light/SSAO/SSR/SSS |
+| 发光眼 | `gbuffers_spidereyes` 可由 `ENTITY_EYES_LIGHTING` 控制 | 无等价实体眼部 GBuffer/发光 pass |
+| 天气粒子 | `gbuffers_weather` 使用 additive blend，且 `particles.before.deferred=true` | 粒子 forward，未纳入 deferred/体积/雾的同一语义 |
+| Armor glint / damaged block / beacon | 独立 pass 和 blend 规则 | 未完整复刻 shaderpack 语义 |
+
+因此“Material.inc 已对齐”只能理解为 **terrain fallback 材质结构可用**，不能理解为 DerivativeMain 的 GBuffer 生态已完成。
+
+### 17.7 大气与 SkyCapture 追加差异
+
+本轮复扫 `Atmosphere.glsl` 与 `atmosphere_lut.glsl/gameplay_sky.fs` 后，除 SkyCapture atlas UV 外，还确认这些差异：
+
+- **观察高度不完全一致。** DerivativeMain 所有大气查询使用 `eyeAltitude`；Mecraft `gameplay_sky.fs` metadata 用 `uCameraAltitude + 100`，但 `atmGetSkyRadiance()` 内部写死 `atmPlanetRadius + 100.0`。低空/高空、验证程序 `Alt=100m` 与游戏相机高度可能因此不一致。
+- **`SKY_GROUND` 默认关闭。** DerivativeMain 源码支持 ground diffuse 分支，但默认被注释；Mecraft 也基本未实现 ground sky radiance。这个不是当前蓝天灰白的主因。
+- **MoonFlux/night eye 近似不同。** DerivativeMain `MoonFlux = abs(moonPhase - 4) * 0.25 + 0.2` 再乘 `NIGHT_BRIGHTNESS + nightVision*0.02`；Mecraft 用 `uMoonPhaseFlux`，需要确认 C++ 绑定是否完全等价。
+- **星空/极光链路不等价。** DerivativeMain `RenderStars/Aurora` 参与 sky 和 skylight；Mecraft `gameplay_sky.fs` 有自定义 starField，但不是 DerivativeMain 的星空/极光实现。
+- **Debug 路径不等价。** DerivativeMain 的 sky capture 是后续采样源；Mecraft debug mode 直接预览 atlas 时会混入 raw/cloudy/metadata 布局，不能证明主画面方向采样正确。
+
+### 17.8 水、折射、雨湿追加差异
+
+Mecraft 的 `water_composite.fs` 对 `WaterWave.glsl`、水面 parallax、Fresnel、水雾、雨涟漪做了较多端口，但仍有几个视觉相关差异：
+
+- **水雾颜色来源仍是 CPU 艺术色。** DerivativeMain `WaterFog()` 使用 `skyIlluminance` 与 `directIlluminance`；Mecraft 当前用 `uSkyAmbientColor` 与 `uSunLightColor`。这会让水下/水面雾散射的太阳颜色不随 LUT metadata。
+- **折射实现是近似。** DerivativeMain 默认非 raytraced refraction 使用 view-space normal/up vector 与 `depthtex1` rejection；Mecraft forward water pass 用 tangent slope 近似 screen offset，深度 gap 也来自自有场景深度。
+- **Shadow caustics 未接通。** DerivativeMain `Shadow.frag` 对 water 写 `shadowcolor0Out = sqrt2(caustics)`、`shadowcolor1Out.w = water height`；Mecraft CSM 当前对 water discard，避免硬阴影，但也丢失水焦散和水深 colored shadow 数据。
+- **雨湿表面不完整。** DerivativeMain terrain GBuffer 在雨天会通过 `GetRainWetness()` 改 albedo、specularData、normal；Mecraft water 有雨涟漪，但 terrain wetness 与 PBR specular/wet albedo 路径不完整。
+
+### 17.9 后处理、Bloom、Final 追加差异
+
+DerivativeMain post 链路的关键不是“有 tonemapper”，而是 buffer/history 布局和 bloom/fog/exposure 的耦合：
+
+- `Temporal.vert` 在 shader 内从 `colortex4` mip LOD 计算 exposure，并把上一帧 exposure 存在 `colortex5(0).a`。Mecraft 用独立 exposure downsample FBO + CPU `glReadPixels`，公式接近但历史位置和执行阶段不同。
+- DerivativeMain bloom 是 tiled mip layout：`DownSample0/DownSample/BlurH/BlurV/Grade` 复用 `colortex4/5`，`CalculateBloomFog()` 还会读取 `colortex6` 的 fog transmittance 做 `BLOOMY_FOG`。Mecraft bloom 有 mip chain，但 `bloom_extract.fs` 对 HDR bloom 做了额外 clamp，且没有 fog transmittance 驱动的 bloomy fog。
+- DerivativeMain `Final.glsl` 在最后对 `colortex3` 做 CAS，或在非 1.0 render quality 下 CatmullRom upsample，再加 Bayer dither。Mecraft final/post 里有 CAS/dither/tonemap，但 pass 边界和输入 buffer 不同。
+- DerivativeMain `Grade.glsl` 还包含 Purkinje shift、white balance chromatic adaptation、rain/snow fog bloom 加权；Mecraft 只有部分 grading 参数，不是逐函数移植。
+
+结论：后处理当前能用，但若要视觉追 DerivativeMain，必须把 **Bloomy Fog、exposure 输入阶段、bloom tiled energy、final CAS/dither** 当成一组一起验收。

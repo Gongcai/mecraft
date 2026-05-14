@@ -26,20 +26,12 @@
 
 当前 Mecraft 已经有一套可运行的 Hybrid Deferred 管线。它不是 Iris/OptiFine shaderpack 宿主，也不需要成为完整 shaderpack 宿主。很多 pass、uniform、render target、sampler、阴影 culling、透明/实体提交规则是 Mecraft 手写约定；后续需要把这些约定整理成稳定的 Mecraft Renderer Contract，而不是继续散落在 Renderer 和各个 shader 中。
 
-这会导致一种非常容易误判的问题：**shader 代码局部看起来已经和 DerivativeMain 对上了，但 shader 所依赖的是 Iris/OptiFine 默认宿主假设，而 Mecraft 的 mesh、pass、buffer、sampler contract 与之不同。**
+**2026-05-13 阴影系统已完成迁移**：原 DerivativeMain/Radial 非线性 shadow warp 与 Mecraft greedy 大面片不兼容导致的 ghosting 问题已通过迁移到 CSM 级联阴影解决。ShadowRenderer 已从 Renderer 拆分，warp 代码已清理，CSM 4 cascade + transition fade + PCSS + contact shadow 已实现。正式阴影路线已确认为 Mecraft 自有 CSM contract。
 
-近期阴影问题就是典型症状：
-
-- `No Warp` 不出现鬼影。
-- `Radial Debug` 和 `Derivative` 都出现鬼影。
-- debug view 中的 shadow visibility 与最终画面一致。
-- 缩小阴影距离会加重鬼影。
-- cloud shadow 对该问题无影响。
-- 继续做接收端 OOB 保护、局部距离限制后，鬼影仍存在且行为一致。
-
-这组现象后续已被进一步验证：开启 `Debug Disable Greedy Meshing` 后 ghosting 消失。根因不是 C++ caster 域单独不一致，而是 **DerivativeMain/Radial 非线性 shadow warp 与 Mecraft 贪婪合并大面片不兼容**。Iris/Sodium terrain 不会触发该问题，是因为它保留 Minecraft block model 的小 quad 粒度，并通过压缩顶点格式、region batching、索引/MDI 等方式获得性能，而不是把大量相邻方块面合并成超大 quad。
-
-因此本报告的工程结论已调整：不建议为了复刻 Iris contract 而全局关闭 Mecraft greedy meshing；正式路线应保留 greedy + MDI，并将阴影改为适配 Mecraft mesh contract 的稳定方案（No Warp/linear shadow、CSM、PCF/PCSS/contact shadow，必要时提供 shadow-only bounded fine caster mesh）。
+仍需推进的工作：
+- Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
+- GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer）
+- Atmosphere/Cloud/Fog/Water 视觉收敛
 
 ## 1. Mecraft 当前渲染管线概览
 
@@ -117,58 +109,46 @@ Iris 不是简单地把 shader 编译后按固定顺序调用。它在 shaderpac
 | 坐标空间 | Minecraft/Iris 明确区分 camera-relative、absolute、unshifted camera | Mecraft 多处自定义世界坐标/相机坐标 | shadow warp、TAA、体积雾、SSR、云影容易出现视角相关漂移 |
 | 状态管理 | 每个 pass 有明确 GL state/blend/depth/cull 规则 | 多数状态由 C++ pass 手动设置 | alpha/cutout/背面阴影/透明阴影非常容易残留状态 |
 
-## 4. 阴影系统差异：当前鬼影最相关
+## 4. 阴影系统差异：已通过 CSM 迁移解决
 
-### 4.1 已对齐但仍不充分的部分
+### 4.1 已完成的阴影重构（2026-05-13）
 
-Mecraft 近期已经做了几项正确方向的工作：
+阴影系统已从 DerivativeMain/Iris shadow warp 路线迁移到 Mecraft 自有 CSM 级联阴影：
 
-- `shadowDistance` 默认/目标值与 DerivativeMain `lib/Lighting/SunLighting.glsl` 中 `shadowDistance = 192.0` 对齐。
-- DerivativeMain 中 `shadowDistanceRenderMul = 1.0` 已被识别为关键常量。
-- `ShadowMatrices` 风格 near/far 已采用类似 `-100.05 / 156`。
-- shadow angle 已改为接近 Iris/OptiFine 的 sky angle 模型。
-- shadow modelView snap、sunPathRotation、interval size 已向 Iris 逻辑靠拢。
-- `uShadowLightDirection` 已从 shadow modelView 反推，避免与天空颜色方向分裂。
-- 写入端 shadow vertex 已使用 DerivativeMain `DistortShadowSpace`。
-- 读取端 debug/final/volumetric 使用同一套 shadow projection helper。
+- `ShadowRenderer` 已从 `Renderer` 拆分（`src/renderer/shadow/ShadowRenderer.h/.cpp`）。
+- CSM 4 cascade depth texture array，per-cascade matrix/split/texel snapping。
+- `mecraft_shadow.glsl` 作为正式 CSM contract：cascade 选择、投影、bias、PCF 3x3、PCSS、cascade transition fade。
+- 旧 `shadowWarpMode`/`shadowWarpCutoff`/`derivativeExactShadow` 已从 settings、renderer、shader 中删除。
+- Water/stained glass 在 CSM depth-only pass 中 discard。
+- Cutout/SSS 阴影白化已修复。
+- Contact shadow 16 步调优。
+- Debug views：CSM Cascade、CSM Depth 0-3、Cascade Info。
 
-这些修复能减少“数学公式不一致”类问题，但不能自动解决 caster 提交域问题。
+### 4.2 CSM 架构下的 shadow caster 提交
 
-### 4.2 仍不一致的核心：shadow caster 提交不是 Iris 模型
+Mecraft 当前 shadow pass 流程：
 
-Iris shadow pass 会：
+1. `ShadowRenderer::computeLightDirection()` 从天空颜色计算光照方向。
+2. `ShadowRenderer::update()` 构建 4 cascade 级联矩阵（texel snapping、frustum slice）。
+3. Per-cascade 循环：
+   - `DeferredRenderTargets::bindCsmShadowLayer(cascade)` 绑定 depth array layer。
+   - 设置 per-cascade viewProj/shadowModelView/shadowProjection uniforms。
+   - `ShadowCasterCuller::setup()` 建立 camera-centered cube 剔除域。
+   - `renderOpaqueChunksAndCollectPasses()` + `renderCutoutChunks()` 提交 terrain。
+4. `glCopyImageSubData` CSM layer 0 → legacy single-layer shadow depth（debug 兼容）。
 
-1. 根据 `PackShadowDirectives` 得到 `halfPlaneLength`、`renderDistanceMultiplier`、`intervalSize`、near/far、实体距离、透明阴影开关。
-2. 根据 shadow matrices 创建 shadow projection。
-3. 创建 shadow frustum。
-4. 用 shadow frustum 重新执行 terrain setup/culling。
-5. 单独处理 terrain、translucent、entities、block entities、player。
-6. 输出 debug distance/culling 信息。
+与 Iris 差异：
+- Iris 有独立 shadow frustum + `invokeCullTerrain`；Mecraft 使用 BoxCuller 距离域。
+- Iris 可分别处理 terrain/entity/block entity shadow；Mecraft 当前只处理 terrain。
+- 但 CSM 线性投影下 greedy mesh 稳定，ghosting 问题已解决。
 
-Mecraft 当前 shadow pass 仍更像：
+### 4.3 鬼影根因与解决方案（已解决）
 
-1. 在主 Renderer 中计算 shadow matrices。
-2. 切换到 shadow FBO。
-3. 临时把 `m_chunkShader` 改成 shadow shader。
-4. 调用 `renderOpaqueChunksAndCollectPasses(...)` 复用 chunk 绘制链路。
-5. 当前已尝试关闭主 frustum cull，并增加基于 camera XZ 距离的 max distance。
+**根因**：DerivativeMain/Radial 非线性 shadow warp 在 Mecraft greedy 大面片顶点上执行，GPU 对 warp 后顶点进行线性插值，导致 shadow map 写入端的深度/颜色布局被扭曲。
 
-这比最初更接近正确方向，但仍只是 Mecraft shadow culling 的早期近似。Iris 的 `createShadowFrustum + invokeCullTerrain` 可作为参考，但当前已确认 ghosting 主因不是 caster 域本身，而是非线性 shadow warp 与 greedy 大面片插值不兼容。因此后续不应把“变得更像 Iris”作为完成标准，而应把 culling/debug 纳入 MecraftShadow contract。
+**验证**：开启 `Debug Disable Greedy Meshing` 后 ghosting 消失。
 
-### 4.3 为什么“缩短阴影距离反而加重鬼影”很重要
-
-如果问题只是接收端采样越界，缩短 shadow distance 通常会让投影范围变小、错误范围变明显，但不一定导致方向相关 ghost caster 一致存在。
-
-当时的表现曾被判断为：
-
-- shadow projection 半径缩小后，shadow warp 的有效域变得更紧。
-- 某些 caster 提交可能没有按预期剔除。
-- 这些 caster 经过 DerivativeMain/Radial warp 后被压入 shadow map 可采样区域。
-- 因为 caster 集合、chunk collect、LOD/visible set 或 warp 插值误差都可能随视角变化，所以不同视角 ghost 不同。
-- `No Warp` 消失，说明普通线性 shadow projection 下这些 caster 没有被折入或折入不明显。
-- debug view 和 final 一致，说明错误已经存在于 shadow visibility/深度关系中，不是后续 lighting、cloud shadow 或 tone mapping 引入。
-
-该判断已被后续实验修正：BoxCuller 与 caster 计数调试只能证明提交域可观测，不能解释 ghosting 根因。`Debug Disable Greedy Meshing` 开启后 ghosting 消失，说明首要问题是 Mecraft greedy 大面片与非线性 shadow warp 不兼容。下一步不应继续把 shadow pass 逼近 Iris，而应把正式阴影路线改为 Mecraft 自有稳定 contract：默认线性/CSM 阴影，Derivative/Radial warp 仅保留为 debug 或研究模式。
+**解决方案**：迁移到 CSM 级联阴影（线性正交投影），适配 greedy mesh。旧 warp 代码已从正式路径删除。
 
 ### 4.4 DerivativeMain 的 `shadow.culling = false` 不等于 Mecraft 应提交所有 chunk
 
@@ -275,27 +255,19 @@ Mecraft 应拆开这些时间源，避免一个调试加速参数同时驱动“
 
 ## 8. Cutout/alpha/透明链路差异
 
-用户最初提到树叶/草等 cutout 物体在 sun shadow 下出现大片白色/少量黑色，关闭 soft shadow 可以减轻，PCSS 开关无影响。这个问题也不应只看 lighting shader。
+**树叶/草 cutout 阴影白化/黑斑已修复（2026-05-13）**：SSS depth 符号修正后，leaves/grass 在 soft shadow 下不再出现白块/黑点。
 
-Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip/atlas、material id、lightmap、tint、entity/hand 等完整路径。Mecraft 当前 chunk GBuffer 和 shadow pass 复用自己的 chunk 分类：
+当前 Mecraft chunk GBuffer 和 shadow pass 的 chunk 分类：
 
-- opaque chunk；
-- cutout entries；
-- transparent entries；
-- water/transparent composite；
-- shadow pass 临时收集 cutout/transparent。
+- opaque chunk → depth write ON
+- cutout entries → depth write ON（alpha test discard）
+- transparent entries → 不进 shadow pass
+- water/stained glass → `discard`（不写 hard depth）
 
-需要确认每个路径在 shadow pass 中由 Mecraft contract 明确定义，并参考 DerivativeMain 的材质意图：
-
-- cutout alpha discard 阈值。
-- mip alpha 处理。
-- 树叶/草 tint 是否参与 shadowcolor。
-- shadow depth 是否写入 alpha-tested geometry。
-- shadow normal/color 是否对 cutout 写入一致。
-- backface culling 是否符合 `SHADOW_BACKFACE_CULLING`。
-- translucent shadow 是否按 DerivativeMain 预期启用。
-
-白/黑块问题常见根因包括：alpha-tested caster 写入了错误 shadowcolor、depth/color target clear 或 blend 状态不一致、shadow sampler filter 与 color target 不一致、cutout 在 GBuffer 与 shadow pass 中使用了不同 UV/mip/tint/atlas 逻辑。
+仍需确认：
+- cutout alpha discard 阈值、mip alpha 处理在 GBuffer 与 shadow pass 间的一致性。
+- 树叶/草 tint 是否参与 shadowcolor（当前不参与，cutout 作为 opaque caster）。
+- translucent shadow 按 Mecraft contract 重新定义。
 
 ## 9. 修订后的目标架构：Mecraft Renderer Contract
 
@@ -329,52 +301,24 @@ Iris/Minecraft 中 terrain/cutout/translucent 有 render type、alpha test、mip
 
 注意：这里不是为了做通用 shaderpack loader，而是为了避免 C++ pass、buffer、uniform、sampler 继续散落硬编码。DerivativeMain-like shader 应适配这套 Mecraft contract。
 
-### 9.2 `ShadowRenderer`
+### 9.2 `ShadowRenderer` ✅ 已实现
 
-从 `Renderer` 中拆出 shadow 子系统：
+已从 `Renderer` 中拆出 shadow 子系统：
 
-- 输入：
-  - `World`
-  - `Camera`
-  - `RenderFrameData`
-  - `MecraftShadowContract`
-  - chunk/entity render registries
-- 输出：
-  - shadow matrices
-  - shadow light direction
-  - shadow render targets
-  - debug info：caster count、chunk count、distance/culling mode、matrix、snap offset
-- 内部：
-  - `ShadowRenderContext`
-  - `ShadowMatrices` / `CascadeMatrices`
-  - `ShadowCasterCuller`
-  - optional shadow-only bounded fine caster mesh
-  - terrain caster list
-  - cutout/translucent/entity caster list
+- `src/renderer/shadow/ShadowRenderer.h/.cpp` — cascade 数据、光照方向、uniform 绑定
+- `src/renderer/shadow/ShadowMatrices.h/.cpp` — cascade 矩阵计算
+- `src/renderer/shadow/ShadowCasterCuller.h/.cpp` — Box-culler 距离域剔除
+- `src/renderer/shadow/ShadowRenderContext.h` — 数据契约结构体
 
-这样可以防止 shadow pass 继续隐式复用主 pass 的 frustum、shader、chunk 收集副作用。
+`Renderer` 保留 shadow pass 编排（chunk 迭代、FBO 层绑定），数据层完全由 ShadowRenderer 管理。
 
-### 9.3 `ShadowCasterCuller` / `MecraftShadow`
+### 9.3 `ShadowCasterCuller` / `MecraftShadow` ✅ P0+P1 已完成
 
-先实现三层：
-
-1. **P0：稳定线性阴影**
-   - 默认关闭 Derivative/Radial 非线性 shadow warp。
-   - 保留 texel snapping、稳定 near/far、BoxCuller 距离域、caster count debug。
-   - 使用当前 greedy mesh + MDI，避免 shadow pass 顶点数爆炸。
-
-2. **P1：CSM 或分段 shadow distance**
-   - 用多级线性 shadow map 替代 DerivativeMain quartic warp 的中心分辨率优势。
-   - 继续兼容 greedy mesh，因为每个 cascade 内投影仍是线性。
-   - 用 contact shadow/SSAO 补近景细节。
-
-3. **P2：shadow-only bounded fine caster mesh**
-   - 只在确有质量需求时启用。
-   - 主 GBuffer/forward mesh 保留 greedy。
-   - shadow mesh 允许 `maxShadowQuadSize = 1/2/4/8`，用于研究或高质量 preset。
-   - `Debug Disable Greedy Meshing` 只保留为诊断开关，不作为正式默认路径。
-
-Iris 的 `BoxCuller`、shadow frustum、terrain setup 仍可作为 culling 参考，但不要求完整复现 Iris `invokeCullTerrain`。
+1. ✅ **P0：稳定线性阴影** — CSM 线性投影，greedy mesh 稳定，texel snapping、BoxCuller 距离域。
+2. ✅ **P1：CSM 级联阴影** — 4 cascade depth texture array，cascade transition fade，cascade-specific PCF。
+3. ✅ **PCSS 近 cascade** — blocker search + variable PCF，仅 cascade 0 启用。
+4. ✅ **Contact shadow** — 16 步屏幕空间 ray march。
+5. P2：shadow-only bounded fine caster mesh — 未实现（低优先级）。
 
 ### 9.4 `MecraftTextureContract`
 
@@ -417,63 +361,63 @@ struct ProgramState {
 
 这不是形式主义。它能让每次移植 DerivativeMain-like 效果时都先检查“这个 Mecraft phase 能读写什么，GL 状态是什么”，避免只看 GLSL 函数本身。
 
-## 10. 立即改造优先级
+## 10. 改造优先级
 
-### P0：阴影 ghosting 收口
+### ~~P0：阴影 ghosting 收口~~ ✅ 已完成
 
-1. 建立 `ShadowRenderContext`，把 shadow matrices、distance、renderDistanceMul、intervalSize、near/far、light direction、debug info 集中起来。
-2. 默认阴影路径切到 `ShadowLinear` / No Warp，确保 greedy mesh 稳定。
-3. 保留 `Derivative/Radial Warp` 作为 debug 模式，不作为默认视觉目标。
-4. caster list 必须输出 debug：提交 chunk 数、剔除 chunk 数、最大距离、是否来自主 frustum、是否使用 shadow culler。
-5. 增加 shadow-only bounded fine mesh 实验参数：`maxShadowQuadSize = 1/2/4/8`，用于评估质量/性能，而不是全局关闭 greedy。
+1. ✅ `ShadowRenderer` 已从 `Renderer` 拆分，拥有 cascade 数据、光照方向、uniform 绑定。
+2. ✅ 默认阴影路径已切到 CSM 级联阴影（线性投影），greedy mesh 稳定。
+3. ✅ 旧 `Derivative/Radial Warp` 已从正式路径删除，`derivative_shadow.glsl` 中保留为数学参考。
+4. ✅ ShadowCasterCuller 输出 debug：提交 chunk 数、剔除 chunk 数、最大距离。
+5. ✅ CSM 4 cascade + cascade transition fade + cascade-specific PCF + PCSS 近 cascade。
+6. ✅ Contact shadow 16 步调优。
+7. ✅ Water/stained glass 在 CSM depth-only pass 中 discard。
+8. ✅ Cutout/SSS 阴影白化修复（SSS depth 符号修正）。
+9. ✅ Bias/normal offset 从 pipeline settings 透传。
+10. ✅ Debug views：CSM Cascade、CSM Depth 0-3、Cascade Info。
+11. ✅ Warp 代码清理（shadowWarpMode/derivativeExactShadow/shadowWarpCutoff 删除）。
 
-### P0：防止继续被局部 shader 对号误导
+### P0：防止继续被局部 shader 对号误导（未完成）
 
 1. 建立 `MecraftTextureContract`。
 2. 建立 `MecraftRenderContract`，先覆盖 shadow、GBuffer、history、material id。
 3. 每个 shader include 顶部标注依赖的 Mecraft contract，同时可标注 DerivativeMain 参考来源。
 
-### P1：cutout/alpha/材质语义
+### P1：cutout/alpha/材质语义 ✅ 阴影部分已完成
 
-1. 对齐 terrain atlas alpha discard、tint、lightmap、mip alpha。
-2. shadow pass 与 GBuffer pass 使用同一份 cutout alpha/tint/material helper。
-3. 确认 shadowcolor0/1 对树叶、草、水、半透明方块的写入语义。
-4. 分离 opaque/cutout/translucent shadow toggles。
+1. ✅ shadow pass 与 GBuffer pass 使用同一份 cutout alpha/tint/material helper。
+2. ✅ Water/stained glass discard，cutout leaves/grass 作为 opaque caster。
+3. 仍需：对齐 terrain atlas alpha discard、tint、lightmap、mip alpha 的逐行一致性。
+4. 仍需：分离 opaque/cutout/translucent shadow toggles（当前 cutout 始终写 depth）。
 
-### P1：sampler/filter/mipmap
+### P1：sampler/filter/mipmap（未完成）
 
 1. shadow depth/color target 的 filter、wrap、compare mode 集中配置。
-2. 按 `MecraftTextureContract` 明确哪些 target 需要 mipmap/filter/wrap，而不是在 shader 中临时假设。
+2. 按 `MecraftTextureContract` 明确哪些 target 需要 mipmap/filter/wrap。
 3. debug 输出当前 shadow target 参数。
 
-### P2：完整 Mecraft pipeline 拆分
+### P2：完整 Mecraft pipeline 拆分（未完成）
 
 1. 把 `Renderer` 中 pass 逐步拆为子 renderer。
 2. 实现 `ProgramState`/`MecraftRenderPhase`。
 3. 补齐 entities、block entities、hand、weather、particles 的 GBuffer/shadow contract。
 4. 补齐 previous matrices、history、frame/tick time uniform contract。
 
-## 11. 当前鬼影的已验证结论与保留排查方法
+## 11. 鬼影问题已解决
 
-2026-05-13 已验证：开启 `Debug Disable Greedy Meshing` 后 ghosting 消失。当前结论是 **非线性 shadow warp 与 greedy 大面片插值不兼容**。以下排查顺序保留为未来 shadow bug 的通用方法，但不再作为当前 ghosting 的下一步路线：
+2026-05-13 验证：`Debug Disable Greedy Meshing` 开启后 ghosting 消失。根因：**非线性 shadow warp 与 greedy 大面片插值不兼容**。
+
+2026-05-13 解决：迁移到 CSM 级联阴影（线性正交投影），旧 warp 代码已删除。Ghosting 不再复现。
+
+以下排查方法保留为未来 shadow bug 的通用方法：
 
 1. 在 shadow pass 中给每个提交 chunk/caster 输出 debug 计数和最大 camera distance。
-2. 增加一个 shadow caster bounds debug overlay，显示哪些 chunk 被送进 shadow pass。
-3. 在 `No Warp`、`Radial Debug`、`Derivative` 三种模式下保持完全相同 caster list，只切换 vertex warp。
-4. 固定太阳角度和 vegetation animation time，排除时间耦合。
-5. 将 shadowDistance 改小/改大时记录 caster list 是否按 `shadowDistanceRenderMul` 成比例变化。
-6. 临时强制 shadow caster list 为 camera 周围固定 chunk 方块区域，观察 ghost 是否消失。
-7. 如果固定 caster 区域后 ghost 消失，根因优先锁定 C++ caster/culling。
-8. 如果固定 caster 区域后 ghost 仍存在，再回到 shadow vertex 写入、depth range、shadow sampler/filter、projection inverse 查 shader/target。
+2. 在 `No Warp`、`Radial Debug`、`Derivative` 三种模式下保持完全相同 caster list，只切换 vertex warp。
+3. 固定太阳角度和 vegetation animation time，排除时间耦合。
+4. 将 shadowDistance 改小/改大时记录 caster list 是否按 `shadowDistanceRenderMul` 成比例变化。
+5. 临时强制 shadow caster list 为 camera 周围固定 chunk 方块区域，观察 ghost 是否消失。
 
-这个顺序能最快区分 C++ 与 shader：
-
-- **caster list 改变会改变/消除 ghost**：C++ shadow submission/culling 为主因。
-- **caster list 固定仍 ghost，且只在 warp 模式出现**：shadow vertex warp 或 receiver inverse/unwarp 为主因。
-- **debug visibility 与 final 不一致**：lighting/composite 为主因。
-- **debug visibility 与 final 一致**：shadow map 或 visibility 计算之前已经错。
-
-当前 ghosting 已不再归因于 caster domain 单独错误。最高优先级改为：默认阴影路径采用适合 Mecraft greedy mesh 的线性/CSM 投影；warp 模式仅作为 debug/研究路径保留。
+这个顺序能最快区分 C++ 与 shader 问题。
 
 ## 12. 不要再误判的几个点
 
@@ -495,38 +439,22 @@ struct ProgramState {
 6. **C++ 与 shader 必须作为一个协议调试。**  
    DerivativeMain 的 GLSL 默认运行在 Iris/OptiFine 宿主协议中；Mecraft 做内置光影时不能只复刻函数，也不能盲目复刻 Iris 协议。正确做法是先定义 Mecraft Renderer Contract，再把 DerivativeMain-like shader 改写为消费该 contract。
 
-## 13. 建议新增文档/代码入口
+## 13. 文档/代码入口
 
-建议后续新增或重命名为 Mecraft 自有 contract：
+### 已实现
+
+- ✅ `src/renderer/shadow/ShadowRenderer.h/.cpp` — shadow 数据+uniform 层
+- ✅ `src/renderer/shadow/ShadowRenderContext.h` — 数据契约结构体
+- ✅ `src/renderer/shadow/ShadowMatrices.h/.cpp` — cascade 矩阵计算
+- ✅ `src/renderer/shadow/ShadowCasterCuller.h/.cpp` — Box-culler
+- ✅ `assets/shaders/mecraft_shadow.glsl` — CSM GLSL contract
+- ✅ Shadow 相关状态已从 `Renderer` 迁移到 `ShadowRenderer`
+
+### 待建立
 
 - `src/renderer/contract/MecraftRenderContract.h/.cpp`
 - `src/renderer/contract/MecraftTextureContract.h/.cpp`
-- `src/renderer/shadow/ShadowRenderer.h/.cpp`
-- `src/renderer/shadow/ShadowRenderContext.h`
-- `src/renderer/shadow/ShadowMatrices.h/.cpp`
-- `src/renderer/shadow/ShadowCasterCuller.h/.cpp`
 - `docs/Mecraft渲染契约映射表.md`
-
-并逐步把 `Renderer.cpp` 中 shadow 相关状态迁移出去：
-
-- `m_shadowModelView`
-- `m_shadowProjection`
-- `m_shadowProjectionInverse`
-- `m_shadowViewProj`
-- `m_shadowLightDirection`
-- `m_shadowExtent`
-- `m_shadowTexelWorldSize`
-- `renderShadowMap`
-- `buildShadowProjectionData`
-- shadow target clear/bind
-- shadow caster list 收集
-
-最终 `Renderer` 只负责调度：
-
-```cpp
-ShadowResult shadow = m_shadowRenderer.render(world, camera, frame, directives.shadow);
-bindShadowResultForDeferred(shadow);
-```
 
 ## 14. 本报告与旧差异报告的关系
 

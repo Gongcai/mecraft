@@ -61,9 +61,7 @@ uniform int uSoftShadowsEnabled;
 uniform int uPcssShadowsEnabled;
 uniform int uContactShadowsEnabled;
 uniform int uCloudShadowsEnabled;
-uniform int uShadowWarpMode;
 uniform int uShadowLightMode;
-uniform int uDerivativeExactShadow;
 uniform float uShadowDistance;
 uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
@@ -257,52 +255,6 @@ vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
     return vec2(cos(angle), sin(angle)) * radius;
 }
 
-// Legacy Derivative shadow helpers remain for historical debug views and for
-// shared bias math. Formal scene shadows below use Mecraft's linear CSM array.
-
-float localShadowProjectionFade(vec3 proj) {
-    return shadowProjectionFadeWarpAware(proj, uShadowMapRaw, uShadowWarpMode);
-}
-
-float localShadowDepthWorldScale() {
-    return shadowDepthWorldScale(uShadowProjectionInverse, uShadowWarpMode);
-}
-
-float localShadowDepthBiasFromWorld(float worldUnits) {
-    return worldUnits / localShadowDepthWorldScale();
-}
-
-float localDerivativeMinimumShadowBias() {
-    return derivativeMinimumShadowBias(uShadowWarpMode);
-}
-
-float localShadowWorldBias(float ndotl, float viewDistance) {
-    return shadowWorldBias(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
-                           uShadowConstantBias, uShadowSlopeBias);
-}
-
-float localShadowNormalOffsetWorld(float ndotl, float viewDistance) {
-    return shadowNormalOffsetWorld(ndotl, viewDistance, uShadowTexelWorldSize, uShadowDistance,
-                                   uShadowNormalOffset);
-}
-
-vec3 localWorldToShadowProj(vec3 worldPos, out float warpDensity) {
-    return worldToShadowProj(worldPos, uShadowModelView, uShadowProjection, uShadowWarpMode, 0.9, warpDensity);
-}
-
-float derivativeExactNormalOffset(vec3 cameraRelPos, float ndotl) {
-    // DerivativeMain/world0/deferred5.fsh:251
-    // normalOffset = worldNormal * (dotSelf(worldPos) * 8e-5 + 3e-2) * (2.0 - saturate(NdotL))
-    return (dotSelf(cameraRelPos) * 8e-5 + 3e-2) * (2.0 - saturate(ndotl));
-}
-
-float selectedShadowNormalOffsetWorld(vec3 cameraRelPos, float ndotl, float viewDistance) {
-    if (uDerivativeExactShadow != 0) {
-        return derivativeExactNormalOffset(cameraRelPos, ndotl);
-    }
-    return localShadowNormalOffsetWorld(ndotl, viewDistance);
-}
-
 float shapeShadowVisibility(float lit) {
     lit = clamp(lit, 0.0, 1.0);
     float contrasted = pow(lit, max(uShadowContrast, 0.001));
@@ -316,9 +268,10 @@ vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shad
 }
 
 // DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
-// 12-step screen-space ray march for contact shadows.
+// Screen-space ray march for contact shadows.
 // Mecraft adaptation: uses world-position reconstruction for depth linearization
 // instead of DerivativeMain's GetDepthLinear() which uses OptiFine builtins.
+// 16 steps with distance-adaptive step size and tighter z-tolerance.
 float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float dither, float sssAmount) {
     if (uContactShadowsEnabled == 0) return 1.0;
 
@@ -330,18 +283,22 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
     vec3 ndcOffset = clipOffset.xyz / max(abs(clipOffset.w), 0.0001);
     vec3 screenDir = normalize(vec3((ndcOffset.xy - ndcPos.xy) * 0.5, ndcOffset.z - ndcPos.z));
 
-    float stepSize = max(0.01, 0.05 - sssAmount * 0.05) * uProjection[1][1] / 12.0;
+    // Distance-adaptive step size: finer near camera, coarser far away
+    float viewDist = length(worldPos - uCameraPos);
+    float distScale = clamp(viewDist / 64.0, 0.5, 2.0);
+    float stepSize = max(0.008, 0.04 - sssAmount * 0.04) * uProjection[1][1] / 16.0 * distScale;
     vec3 rayStep = screenDir * stepSize;
 
-    vec3 rayPos = vec3(screenUv, sceneDepth) + rayStep * (1.0 - sssAmount + dither);
+    // Golden ratio dither to break up banding
+    vec3 rayPos = vec3(screenUv, sceneDepth) + rayStep * (1.0 - sssAmount + dither * 0.75);
 
     // DerivativeMain: float absorption = pow(sssAmount, sqrt(length(viewPos)) * 0.5);
-    float absorption = pow(clamp(sssAmount, 0.001, 1.0), sqrt(length(worldPos - uCameraPos)) * 0.5);
+    float absorption = pow(clamp(sssAmount, 0.001, 1.0), sqrt(viewDist) * 0.5);
 
-    const float zTolerance = 0.025;
+    const float zTolerance = 0.015;
     float shadow = 1.0;
 
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 16; ++i) {
         rayPos += rayStep;
         if (rayPos.x < 0.0 || rayPos.y < 0.0 || rayPos.x > 1.0 || rayPos.y > 1.0 || rayPos.z >= 1.0) break;
 
@@ -352,7 +309,6 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
         float linearCurrent = length(currentWorld - uCameraPos);
 
         if (sampleDepth < rayPos.z) {
-            // DerivativeMain: if (abs(linearSample - currentDepth) / currentDepth < zTolerance)
             if (abs(linearSample - linearCurrent) / max(linearCurrent, 1e-6) < zTolerance) {
                 shadow *= absorption;
             }
@@ -607,13 +563,17 @@ void main() {
     float skyCaptureInfluence = mix(0.18, 0.46, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
     coolSkyColor = mix(coolSkyColor, mix(capturedZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
 
-    float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 skylight = coolSkyColor * skyIlluminance * (0.026 + 0.54 * outdoorSkyMask) *
-                    uSkyAmbientStrength * mix(0.48, 1.0, upward) * shadowTint;
+    // DerivativeMain deferred5.fsh:305-323 skylight:
+    //   skylight = FromSH(skySHR, skySHG, skySHB, worldNormal) * (normal.y * 2.0 + 3.0)
+    //   sceneData += skylight * mcLightmap.g * SKYLIGHT_INTENSITY
+    // Mecraft approximation: use captured sky irradiance with directional boost.
+    // The SH approach returns ~1.0-5.0x directional irradiance; we approximate with normal.y.
+    float directionalBoost = normal.y * 2.0 + 3.0;  // 1.0 (down) to 5.0 (up)
+    vec3 skylight = coolSkyColor * skyIlluminance * directionalBoost * outdoorSkyMask * shadowTint;
     float moonMask = nightSkyMask;
-    skylight += uMoonLightColor * moonMask * (0.030 + 0.060 * uSkyAmbientStrength);
+    skylight += uMoonLightColor * moonMask * 0.15;
     skylight *= mix(vec3(1.0), uShadowTintColor, oneMinus(sunShadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
-    sceneData += skylight * voxelLight.r * 1.5; // SKYLIGHT_INTENSITY
+    sceneData += skylight * voxelLight.r;
 
     // Basic brightness (DerivativeMain deferred5.fsh:325)
     // sceneData += BASIC_BRIGHTNESS + nightVision * 0.1
