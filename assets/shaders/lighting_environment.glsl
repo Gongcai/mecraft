@@ -14,18 +14,40 @@
 #include "render_contract.glsl"
 
 struct LightingEnvironment {
-    // SkyCapture metadata (GPU texel values, physically scaled)
-    vec3 directIlluminance;  // sun+moon irradiance on horizontal ground (lux)
-    vec3 skyIlluminance;     // hemisphere-integrated sky irradiance (lux)
-    vec3 sunIlluminance;     // solar disk luminous radiance
-    vec3 moonIlluminance;    // lunar disk luminous radiance
+    // --- SkyCapture metadata (GPU texel values) ---
+    // These are NOT 0..1 colors. They are physically-scaled irradiance/radiance
+    // values that must be multiplied by large scale factors before use.
+    // See GameplaySkyRenderer::computeSkyIlluminance() for the CPU-side source.
 
-    // Sky radiance samples (raw atmospheric, no clouds)
-    vec3 skyZenith;          // sampleSkyRadiance(vec3(0,1,0))
-    vec3 skyHorizonAvg;      // average of 4 horizontal sky samples
+    vec3 directIlluminance;  // sun+moon irradiance on horizontal ground (DerivativeMain units).
+                             // Typical day: ~(1.0-2.0, 1.3-2.5, 1.3-2.6). Night: near zero.
+                             // Usage: multiply by 64 * strength for direct light energy.
 
-    // Cloudy sky radiance samples (sky + baked clouds)
-    vec3 cloudySkyZenith;    // sampleSkyRadianceCloudy(vec3(0,1,0))
+    vec3 skyIlluminance;     // hemisphere-integrated sky irradiance (DerivativeMain units).
+                             // Typical day: ~(0.1-0.5). Night: ~(0.01-0.05).
+                             // Usage: multiply by directionalBoost * strength for skylight.
+
+    vec3 sunIlluminance;     // solar disk luminous radiance (DerivativeMain units).
+                             // NOT a 0..1 color. Typical: ~(1.0-2.0). Night: zero.
+                             // Usage: multiply by phase * scale for cloud/fog sun scatter.
+                             // WARNING: do NOT use as a direct color replacement for
+                             // uSunLightColor without matching the energy scale.
+
+    vec3 moonIlluminance;    // lunar disk luminous radiance. Similar scale to sunIlluminance
+                             // but ~0.35x weaker.
+
+    // --- Sky radiance samples (raw atmospheric, no clouds) ---
+    // These are sky radiance in scene-linear space, suitable for fog/aerial color.
+
+    vec3 skyZenith;          // raw sky radiance looking straight up.
+                             // Usage: fog base color, skylight zenith reference.
+
+    vec3 skyHorizonAvg;      // average of 4 horizontal raw sky samples (N/S/E/W).
+                             // Usage: ambient estimation, fog fallback when no SH available.
+
+    // --- Cloudy sky radiance (sky + baked clouds) ---
+    vec3 cloudySkyZenith;    // cloudy sky radiance looking straight up.
+                             // Usage: sky background, water reflection fallback.
 };
 
 // Build a LightingEnvironment from the SkyCapture texture.

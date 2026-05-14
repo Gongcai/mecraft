@@ -658,7 +658,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 45);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 49);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -1950,6 +1950,13 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
+
+    // Volumetric fog debug mode: active when debug view 46-49 is selected
+    int vfDebugMode = 0;
+    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 49) {
+        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, 47->2, 48->3, 49->4
+    }
+    m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());

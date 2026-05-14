@@ -698,5 +698,26 @@ void main() {
         return;
     }
 
+    // Debug 46-49: Volumetric fog component breakdown.
+    // The volumetric fog pass outputs debug colors when uVolumetricDebugMode is active.
+    // These modes just display the volumetric fog texture with tonemap.
+    if (uDebugViewMode >= 46 && uDebugViewMode <= 49) {
+        vec4 vfog = texture(uVolumetricTex, vTexCoord);
+        if (uDebugViewMode == 46) {
+            // Density: the fog pass outputs a heatmap when debugMode=1
+            FragColor = vec4(vfog.rgb, 1.0);
+        } else if (uDebugViewMode == 47) {
+            // Transmittance: fog pass outputs grayscale when debugMode=2
+            FragColor = vec4(vfog.rgb, 1.0);
+        } else if (uDebugViewMode == 48) {
+            // Sky in-scattering only (debugMode=3)
+            FragColor = vec4(tonemapPreview(max(vfog.rgb, vec3(0.0))), 1.0);
+        } else {
+            // Sun/volume light only (debugMode=4)
+            FragColor = vec4(tonemapPreview(max(vfog.rgb, vec3(0.0))), 1.0);
+        }
+        return;
+    }
+
     FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, vTexCoord).rgb), 1.0);
 }

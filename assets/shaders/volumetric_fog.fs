@@ -48,6 +48,7 @@ uniform int uVolumetricFogEnabled;
 uniform int uShadowLightMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
+uniform int uVolumetricDebugMode;
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
@@ -57,6 +58,14 @@ const int kFogSteps = 8;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
+vec3 heatmap(float v) {
+    v = clamp(v, 0.0, 1.0);
+    vec3 a = mix(vec3(0.02, 0.04, 0.18), vec3(0.05, 0.35, 0.95), smoothstep(0.0, 0.35, v));
+    vec3 b = mix(vec3(0.05, 0.35, 0.95), vec3(0.95, 0.86, 0.18), smoothstep(0.35, 0.72, v));
+    vec3 c = mix(vec3(0.95, 0.86, 0.18), vec3(1.0, 0.08, 0.02), smoothstep(0.72, 1.0, v));
+    return v < 0.35 ? a : (v < 0.72 ? b : c);
 }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
@@ -188,20 +197,24 @@ void main() {
     // Sky radiance for fog base color (from SkyCapture, not CPU constant)
     vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.30, viewDir.z));
     vec3 skyColor = sampleEnvironmentSky(uSkyCaptureTex, captureDir);
-    vec3 fogColor = skyColor;
-    fogColor = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.28);
+    vec3 skyFogColor = skyColor;
+    skyFogColor = mix(skyFogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.28);
 
-    // Art-directed sun/moon scatter (CPU uSunLightColor, NOT from SkyCapture metadata)
-    // TODO: consider replacing with env.sunIlluminance * sunTint for unified path
-    vec3 sunScatterColor = uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
+    // Sun/moon scatter from LightingEnvironment (SkyCapture metadata).
+    // Scale 0.55 matches the old energy level when sunIlluminance ~ 1..2.
+    vec3 sunScatterColor = env.sunIlluminance * 0.55 *
+                           (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                            sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
-    vec3 moonScatterColor = uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
-    fogColor += sunScatterColor + moonScatterColor;
+    vec3 moonScatterColor = env.moonIlluminance * 0.55 *
+                            (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
+    vec3 directFogColor = sunScatterColor + moonScatterColor;
+
+    // Combined fog color for weather haze modulation
+    vec3 fogColor = skyFogColor + directFogColor;
     float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
     fogColor = mix(fogColor, fogColor * vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
     vec3 shadowLightDir = normalize(uShadowLightDirection);
     float directLightWeight = clamp(sunVisibility + clamp(uMoonVisibility, 0.0, 1.0) * nightFactor, 0.0, 1.0);
-    vec3 directFogColor = sunScatterColor + moonScatterColor;
 
     float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
     strength *= (uVolumetricFogEnabled != 0) ? 1.0 : 0.0;
@@ -213,7 +226,10 @@ void main() {
     marchDistance = min(marchDistance, max(uVolumetricMaxDistance, 1.0));
     float stepLength = marchDistance / float(kFogSteps);
     vec3 scattering = vec3(0.0);
+    vec3 skyScattering = vec3(0.0);
+    vec3 sunScattering = vec3(0.0);
     float transmittance = 1.0;
+    float maxDensitySeen = 0.0;
 
     for (int i = 0; i < kFogSteps; ++i) {
         float t = (float(i) + jitter) / float(kFogSteps);
@@ -228,6 +244,7 @@ void main() {
         structure += clearAir;
         float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
         float sampleDensity = baseDensity * heightDensity * structure * nearFade;
+        maxDensitySeen = max(maxDensitySeen, sampleDensity);
         float opticalStep = sampleDensity * stepLength;
         float stepTransmittance = exp(-opticalStep);
         float stepOpacity = clamp(1.0 - stepTransmittance, 0.0, 0.18);
@@ -239,16 +256,45 @@ void main() {
         vec3 altitudeTransmittance = atmGetTransmittanceToTopAtmosphereBoundary(
             atmPlanetRadius + clamp(samplePos.y + 100.0, 0.0, 90000.0),
             clamp(dot(vec3(0.0, 1.0, 0.0), shadowLightDir), -1.0, 1.0));
-        vec3 stepColor = fogColor * (0.76 + powder * 0.22);
-        stepColor += shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75) *
-                     clamp(uVolumetricLightStrength, 0.0, 2.0) *
-                     directLightWeight;
+        vec3 skyStep = skyFogColor * (0.76 + powder * 0.22);
+        vec3 sunStep = directFogColor * (0.76 + powder * 0.22) +
+                       shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75) *
+                       clamp(uVolumetricLightStrength, 0.0, 2.0) *
+                       directLightWeight;
+        vec3 stepColor = skyStep + sunStep;
         scattering += transmittance * stepColor * stepOpacity;
+        skyScattering += transmittance * skyStep * stepOpacity;
+        sunScattering += transmittance * sunStep * stepOpacity;
         transmittance *= stepTransmittance;
     }
 
     float opacity = clamp(1.0 - transmittance, 0.0, 0.34);
     float rawOpacity = max(1.0 - transmittance, 0.0001);
     scattering *= opacity / rawOpacity;
+    skyScattering *= opacity / rawOpacity;
+    sunScattering *= opacity / rawOpacity;
+
+    // Debug output modes
+    if (uVolumetricDebugMode == 1) {
+        // Density heatmap
+        FragColor = vec4(heatmap(clamp(maxDensitySeen * 40.0, 0.0, 1.0)), 1.0);
+        return;
+    }
+    if (uVolumetricDebugMode == 2) {
+        // Transmittance (white = clear, dark = dense fog)
+        FragColor = vec4(vec3(transmittance), 1.0);
+        return;
+    }
+    if (uVolumetricDebugMode == 3) {
+        // Sky in-scattering only
+        FragColor = vec4(max(skyScattering, vec3(0.0)), 1.0 - opacity);
+        return;
+    }
+    if (uVolumetricDebugMode == 4) {
+        // Sun/volume light contribution only
+        FragColor = vec4(max(sunScattering, vec3(0.0)), 1.0 - opacity);
+        return;
+    }
+
     FragColor = vec4(max(scattering, vec3(0.0)), 1.0 - opacity);
 }

@@ -413,7 +413,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "Sky Dir Cloudy",
             "Sky Dir Raw x20",
             "SkyCapture Atlas + Metadata",
-            "Lighting Balance"
+            "Lighting Balance",
+            "VFog Density",
+            "VFog Transmittance",
+            "VFog Sky Only",
+            "VFog Sun Only"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -483,6 +487,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("HorizonScatter(CPU): (%.2f, %.2f, %.2f)", skyColors.horizonScatterColor.r, skyColors.horizonScatterColor.g, skyColors.horizonScatterColor.b);
             ImGui::Text("DirectSunStrength: %.2f  SkyAmbientStrength: %.2f", pipeline.directSunStrength, pipeline.skyAmbientStrength);
             ImGui::Text("SunWarmth: %.2f  SkyCoolness: %.2f", pipeline.sunWarmth, pipeline.skyCoolness);
+            // Effective after-tint values (what passes actually use)
+            ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "Effective After Tint");
+            // coolSkyColor = mix(skyAmbient, skyAmbient * coolness tint, skyCoolness)
+            float coolR = skyColors.skyAmbientColor.r * (1.0f - pipeline.skyCoolness * 0.22f);
+            float coolG = skyColors.skyAmbientColor.g * (1.0f + pipeline.skyCoolness * 0.08f);
+            float coolB = skyColors.skyAmbientColor.b * (1.0f + pipeline.skyCoolness * 0.18f);
+            ImGui::Text("coolSkyColor: (%.2f, %.2f, %.2f)", coolR, coolG, coolB);
+            ImGui::Text("VFog sunScale: env.sunIlluminance * 0.55");
+            ImGui::Text("Cloud cirrus: env.sunIlluminance * 40.0");
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
