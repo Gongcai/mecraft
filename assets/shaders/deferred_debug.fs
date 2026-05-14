@@ -556,5 +556,60 @@ void main() {
         return;
     }
 
+    // Debug 44: SkyCapture atlas overview + GPU metadata.
+    // Left half: raw sky equirectangular. Right half: cloudy sky equirectangular.
+    // Bottom-right panel: metadata texels from GPU sky capture.
+    //   Row 0: directIlluminance (sun+moon)
+    //   Row 1: skyIlluminance
+    //   Row 2: sunIlluminance
+    //   Row 3: moonIlluminance
+    //   Row 5: cloudDynamicWeather
+    if (uDebugViewMode == 44) {
+        vec2 uv = vTexCoord;
+        // Metadata region: visible 6-row panel in the bottom-right corner.
+        vec2 metaPanelSize = vec2(0.26, 0.24);
+        if (uv.x > 1.0 - metaPanelSize.x && uv.y < metaPanelSize.y) {
+            vec2 metaUv = vec2(
+                (uv.x - (1.0 - metaPanelSize.x)) / metaPanelSize.x,
+                uv.y / metaPanelSize.y
+            );
+            int row = int(metaUv.y * 6.0);
+            row = clamp(row, 0, 5);
+            vec3 val = texelFetch(uSkyCaptureTex, ivec2(skyCaptureRes.x, row), 0).rgb;
+
+            // Label: different colors per metadata row
+            vec3 labelColor = vec3(0.0);
+            if (row == 0) labelColor = vec3(1.0, 0.9, 0.3);   // directIlluminance = yellow
+            else if (row == 1) labelColor = vec3(0.3, 0.7, 1.0); // skyIlluminance = sky blue
+            else if (row == 2) labelColor = vec3(1.0, 0.5, 0.1); // sunIlluminance = orange
+            else if (row == 3) labelColor = vec3(0.6, 0.6, 0.9); // moonIlluminance = pale blue
+            else if (row == 5) labelColor = vec3(0.3, 1.0, 0.5); // cloudDynamicWeather = green
+
+            // Show value with label stripe on left edge and row separators.
+            float labelStripe = step(metaUv.x, 0.15);
+            float rowSeparator = step(fract(metaUv.y * 6.0), 0.04);
+            vec3 display = mix(tonemapPreview(max(val, vec3(0.0))), labelColor, labelStripe * 0.7);
+            display = mix(display, vec3(0.0), rowSeparator * 0.55);
+            FragColor = vec4(display, 1.0);
+            return;
+        }
+
+        // Split horizontally: left = raw sky, right = cloudy sky.
+        // Use the same texel-center atlas contract as projectSky/projectSkyCloudy,
+        // so the debug view itself does not introduce row-boundary bleeding.
+        if (uv.x < 0.5) {
+            // Left: raw sky (rows 0..257)
+            vec2 rawUv = vec2(uv.x * 2.0, mix(rawSkyVMin, rawSkyVMax, uv.y));
+            vec3 sky = texture(uSkyCaptureTex, clamp(rawUv, 0.0, 1.0)).rgb;
+            FragColor = vec4(tonemapPreview(sky), 1.0);
+        } else {
+            // Right: cloudy sky (rows 258..513)
+            vec2 cloudyUv = vec2((uv.x - 0.5) * 2.0, mix(cloudySkyVMin, cloudySkyVMax, uv.y));
+            vec3 sky = texture(uSkyCaptureTex, clamp(cloudyUv, 0.0, 1.0)).rgb;
+            FragColor = vec4(tonemapPreview(sky), 1.0);
+        }
+        return;
+    }
+
     FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, vTexCoord).rgb), 1.0);
 }

@@ -411,7 +411,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "Cascade Info",
             "Sky Dir Raw",
             "Sky Dir Cloudy",
-            "Sky Dir Raw x20"
+            "Sky Dir Raw x20",
+            "SkyCapture Atlas + Metadata"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
