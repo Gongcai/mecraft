@@ -1,6 +1,6 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
-#include "render_contract.glsl"
+#include "lighting_environment.glsl"
 #include "derivative_sunlight.glsl"
 
 in vec2 vTexCoord;
@@ -143,9 +143,10 @@ vec3 artisticSunIlluminance(vec3 sunColor, vec3 sunDir) {
     return max(sunColor * tint * energy, vec3(0.0));
 }
 
-// Sky sampling uses projectSky() from render_contract.glsl (included via atmosphere_lut.glsl)
+// Sky sampling — uses sampleEnvironmentSky from lighting_environment.glsl.
+// Keep local sampleSkyIrradiance for normal-weighted 5-direction sampling.
 vec3 sampleSkyCapture(vec3 dir) {
-    return sampleSkyRadiance(uSkyCaptureTex, dir);
+    return sampleEnvironmentSky(uSkyCaptureTex, dir);
 }
 
 vec3 sampleSkyIrradiance(vec3 normal) {
@@ -478,11 +479,10 @@ void main() {
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, dot(shadowColored, vec3(0.333)), 0.82) : 1.0;
 
-    // --- Illuminance from sky capture (DerivativeMain directIlluminance/skyIlluminance) ---
-    vec3 cacheDirectLux = getDirectIlluminance(uSkyCaptureTex);
-    vec3 cacheSkyLux = getSkyIlluminance(uSkyCaptureTex);
-    vec3 directIlluminance = max(cacheDirectLux, vec3(0.0));
-    vec3 skyIlluminance = max(cacheSkyLux, vec3(0.0));
+    // --- Lighting environment from SkyCapture (unified data source) ---
+    LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
+    vec3 directIlluminance = env.directIlluminance;
+    vec3 skyIlluminance = env.skyIlluminance;
 
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
@@ -558,10 +558,10 @@ void main() {
 
     // 5. Skylight (DerivativeMain deferred5.fsh:305-323)
     vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
-    vec3 capturedZenith = sampleSkyCapture(vec3(0.0, 1.0, 0.0));
-    vec3 capturedNormalSky = sampleSkyIrradiance(normal);
+    // Sky samples from LightingEnvironment (unified SkyCapture data)
+    vec3 capturedNormalSky = sampleEnvironmentSky(uSkyCaptureTex, normal);
     float skyCaptureInfluence = mix(0.18, 0.46, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
-    coolSkyColor = mix(coolSkyColor, mix(capturedZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
+    coolSkyColor = mix(coolSkyColor, mix(env.skyZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
 
     // DerivativeMain deferred5.fsh:305-323 skylight:
     //   skylight = FromSH(skySHR, skySHG, skySHB, worldNormal) * (normal.y * 2.0 + 3.0)

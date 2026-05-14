@@ -48,6 +48,7 @@ uniform vec3 uSkyIlluminance;
 uniform vec3 uSunIlluminance;
 uniform vec3 uMoonIlluminance;
 
+#include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 
 const float PHI = 1.61803398875;
@@ -171,7 +172,8 @@ float cirrusCloudDensity(vec2 worldPos, float coverage) {
     return max(noise * coverage - 0.2, 0.0);
 }
 
-vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis) {
+vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
+                           LightingEnvironment env) {
     if ((ray.y < 0.0 && uCameraPos.y < uPlanarCloudAltitude) ||
         (ray.y > 0.0 && uCameraPos.y > uPlanarCloudAltitude)) {
         return vec4(0.0);
@@ -191,9 +193,12 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis)
     vec4 phases = multiLobePhase(LdotV);
     float phase = dot(phases, vec4(1.0));
 
-    vec3 lightColor = phase * uSunLightColor * dayFactor * 40.0;
+    // Sun/moon from LightingEnvironment (SkyCapture metadata) instead of CPU constants
+    vec3 lightColor = phase * env.sunIlluminance * dayFactor * 40.0;
     lightColor += phase * uMoonLightColor * moonVis * 12.0;
-    lightColor += uSkyAmbientColor * 0.25;
+    // Sky ambient from LightingEnvironment instead of CPU uSkyAmbientColor
+    vec3 skyAmb = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
+    lightColor += skyAmb * 0.25;
     lightColor *= 1.0 - uWeatherWetness * 0.8;
 
     float opacity = 1.0 - exp(-density * 4.0 * uPlanarCloudDensity);
@@ -371,6 +376,9 @@ void main() {
     vec3 targetPos = reconstructWorldPosition(vTexCoord, depth >= 0.9999 ? 1.0 : depth);
     vec3 ray = normalize(targetPos - uCameraPos);
 
+    // --- Lighting environment from SkyCapture ---
+    LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
+
     vec3 sunDir = normalize(uSunDirection);
     vec3 moonDir = normalize(uMoonDirection);
     float day = clamp(uSkyIntensity, 0.0, 1.0);
@@ -383,7 +391,7 @@ void main() {
     float jitter = sampleCloudNoise(vTexCoord * 23.0 + uTime * 0.01);
 
     // ---- Planar clouds (cirrus layer) ----
-    vec4 planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis);
+    vec4 planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis, env);
     float planarTransmittance = 1.0 - planarResult.a;
 
     // ---- Cirrocumulus planar layer ----

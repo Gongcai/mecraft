@@ -1,6 +1,6 @@
 out vec4 FragColor;
 #include "gbuffer_contract.glsl"
-#include "render_contract.glsl"
+#include "lighting_environment.glsl"
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
 #define MECRAFT_TRANSPARENT_COMPOSITE 0
@@ -110,7 +110,7 @@ uniform vec3 uCameraPos;
     }
 
     vec3 sampleSkyCapture(vec3 dir) {
-        return sampleSkyRadiance(uSkyCaptureTex, dir);
+        return sampleEnvironmentSky(uSkyCaptureTex, dir);
     }
 
     vec3 sampleSkyIrradiance(vec3 normal) {

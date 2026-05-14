@@ -54,6 +54,7 @@ uniform float uWaterFlowLayerCount;
 
 out vec4 FragColor;
 
+#include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 
 const float rPI = 1.0 / 3.14159265359;
@@ -235,16 +236,20 @@ float FresnelDielectricN(float cosTheta, float n) {
 }
 
 // DerivativeMain WaterFog (lib/Water/WaterFog.glsl)
-void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDepth) {
+// env: LightingEnvironment from SkyCapture — provides sky color + illuminance.
+void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDepth,
+              LightingEnvironment env) {
     // fogDensity = WATER_FOG_DENSITY * fma(0.1, wetness*skylight, 0.16) * waterDepth
     float fogDensity = 1.0 * (0.16 + 0.1 * uWeatherWetness * waterSkylight) * waterDepth;
 
-    // DerivativeMain mixes wet weather toward a neutral luminance term before applying rPI.
-    vec3 fogColor = mix(uSkyAmbientColor * 0.4,
-                        vec3(luminance(uSkyAmbientColor) * 0.1),
+    // Sky-derived fog color from LightingEnvironment (replaces CPU uSkyAmbientColor)
+    vec3 skyFogBase = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
+    vec3 fogColor = mix(skyFogBase * 0.4,
+                        vec3(luminance(skyFogBase) * 0.1),
                         0.8 * uWeatherWetness * waterSkylight) * rPI;
 
     // Scatter: 28.0 * oneMinus(wetness*0.8) * directIlluminance * scatter
+    // Art-directed: uSunLightColor (CPU constant) retained for now
     float scatter = atmHenyeyGreensteinPhase(LdotV, 0.65) + 0.1 * rPI;
     fogColor *= 1.0 + 28.0 * (1.0 - uWeatherWetness * 0.8) * uSunLightColor * scatter;
 
@@ -257,12 +262,13 @@ void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDep
 }
 
 // DerivativeMain UnderwaterFog (lib/Water/WaterFog.glsl line 19-32, exact port)
-void UnderwaterFog(inout vec3 color, float waterDepth) {
+void UnderwaterFog(inout vec3 color, float waterDepth, LightingEnvironment env) {
     float skylight = cube(clamp(vSunlight, 0.0, 1.0));
     float fogDensity = 1.0 * (0.1 + 0.05 * uWeatherWetness * skylight) * waterDepth;
 
-    vec3 fogColor = mix(uSkyAmbientColor * 0.4,
-                        vec3(luminance(uSkyAmbientColor) * 0.1),
+    vec3 skyFogBase = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
+    vec3 fogColor = mix(skyFogBase * 0.4,
+                        vec3(luminance(skyFogBase) * 0.1),
                         0.8 * uWeatherWetness * skylight) * rPI;
 
     vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
@@ -274,7 +280,7 @@ void UnderwaterFog(inout vec3 color, float waterDepth) {
 
 // DerivativeMain water fallback reflection samples the sky capture (colortex5),
 // rather than re-querying the atmosphere LUT from a fragment/camera altitude.
-vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight) {
+vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight, LightingEnvironment env) {
     float skyWeight = smoothstep(0.3, 0.8, skylight);
     if (skyWeight <= 1e-3) {
         return vec3(0.0);
@@ -282,8 +288,8 @@ vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight) {
 
     float nDotUp = clamp((dot(normal, vec3(0.0, 1.0, 0.0)) + 0.7) * 2.0, 0.0, 1.0) * 0.75 + 0.25;
     vec3 skybox = (uSkyCaptureEnabled != 0)
-        ? sampleSkyRadianceCloudy(uSkyCaptureTex, dir)
-        : uSkyAmbientColor;
+        ? sampleEnvironmentCloudySky(uSkyCaptureTex, dir)
+        : mix(env.skyHorizonAvg, env.skyZenith, 0.3);
     return max(skybox * skyWeight * nDotUp, vec3(0.0));
 }
 
@@ -309,6 +315,9 @@ void main() {
     bool isWater = layerInRange(vLayer, uWaterStillFirstLayer, uWaterStillLayerCount) ||
                    layerInRange(vLayer, uWaterFlowFirstLayer, uWaterFlowLayerCount);
     if (!isWater) discard;
+
+    // --- Lighting environment from SkyCapture ---
+    LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
     vec2 screenUv = gl_FragCoord.xy / vec2(textureSize(uSceneColorTex, 0));
 
@@ -375,14 +384,14 @@ void main() {
     float fogDist = depthGap;
     if (uIsEyeInWater == 1) {
         normal = -normal;
-        UnderwaterFog(sceneColor, length(uCameraPos - vWorldPos));
+        UnderwaterFog(sceneColor, length(uCameraPos - vWorldPos), env);
     } else {
-        WaterFog(sceneColor, waterSkylight, LdotV, fogDist);
+        WaterFog(sceneColor, waterSkylight, LdotV, fogDist, env);
     }
 
     // ---- Reflection (DerivativeMain CalculateSpecularReflections) ----
     vec3 reflDir = reflect(-viewDir, normal);
-    vec3 skyRefl = sampleSkyReflection(reflDir, normal, waterSkylight);
+    vec3 skyRefl = sampleSkyReflection(reflDir, normal, waterSkylight, env);
     vec3 ssrRefl = vec3(0.0);
     bool ssrHit = traceWaterScreenSpaceReflection(vWorldPos, reflDir, normal, ssrRefl);
     vec3 reflection = ssrHit ? ssrRefl : skyRefl;
