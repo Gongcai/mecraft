@@ -63,6 +63,11 @@ public:
 
     void setEffects(const PostProcessEffects& effects);
 
+    // Debug accessors for exposure diagnostics
+    [[nodiscard]] float getAdaptedExposure() const { return m_adaptedExposure; }
+    [[nodiscard]] float getAverageLuminance() const { return m_lastAverageLum; }
+    [[nodiscard]] float getTargetExposure() const { return m_lastTargetExposure; }
+
 private:
     static constexpr int kBloomMipCount = 7;
     static constexpr int kExposureMipCount = 13;
@@ -97,6 +102,8 @@ private:
     bool m_sceneCaptured = false;
     bool m_autoExposureInitialized = false;
     float m_adaptedExposure = 1.0f;
+    float m_lastAverageLum = 0.0f;
+    float m_lastTargetExposure = 1.0f;
 
     PostProcessEffects m_effects{};
 };

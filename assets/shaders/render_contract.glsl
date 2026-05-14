@@ -9,8 +9,8 @@
 
 // Sky capture resolution — matches DerivativeMain Settings.glsl skyCaptureRes.
 // Texture is 256 wide x 514 tall (skyCaptureRes.x + 1 metadata column, skyCaptureRes.y * 2 + 2 rows).
-// Rows 0..skyCaptureRes.y+1:  raw atmospheric sky radiance (equirectangular).
-// Rows skyCaptureRes.y+2..:   cloudy skybox (sky + clouds composited).
+// Rows 0..skyCaptureRes.y+1 (0..257):  raw atmospheric sky radiance (equirectangular).
+// Rows skyCaptureRes.y+2.. (258..513): cloudy skybox (sky + clouds composited).
 // Column skyCaptureRes.x, rows 0-5: metadata texels.
 const ivec2 skyCaptureRes = ivec2(255, 256);
 
@@ -41,28 +41,39 @@ vec3 getCloudDynamicWeather(sampler2D skyCapture) { return sampleSkyMetadata(sky
 // Equirectangular sky projection.
 // Matches DerivativeMain lib/Atmosphere/Atmosphere.glsl ProjectSky/UnprojectSky:
 // longitude in x with a 2px border, polar angle acos(y) in y.
-// Raw sky occupies v in [0,1], cloudy sky occupies v in [1,2] (offset by one skyCaptureRes.y unit).
+// Texture is 256 x 514 (GL_CLAMP_TO_EDGE):
+//   Rows 0..257  (258 rows): raw atmospheric sky radiance.
+//   Rows 258..513 (256 rows): cloudy skybox.
+// projectSky()       -> v in [0, rawSkyVMax]   maps to raw sky rows.
+// projectSkyCloudy() -> v in [rawSkyVMax, 1.0] maps to cloudy sky rows.
 //----------------------------------------------------------------------------//
+
+const float rawSkyVMax = float(skyCaptureRes.y + 1) / float(skyCaptureRes.y * 2 + 2); // 258/514
 
 vec2 projectSky(vec3 direction) {
     direction = normalize(direction);
     float u = atan(-direction.x, -direction.z) * (1.0 / 6.28318530718) + 0.5;
     float v = acos(clamp(direction.y, -1.0, 1.0)) * (1.0 / 3.14159265359);
     u = u * (1.0 - 4.0 / float(skyCaptureRes.x)) + 2.0 / float(skyCaptureRes.x);
+    v = v * rawSkyVMax;
     return clamp(vec2(u, v), vec2(0.0), vec2(1.0));
 }
 
-// Project sky direction into the cloudy sky region (rows skyCaptureRes.y+2..).
-// Adds 1.0 to v so the UV maps to the lower half of the texture.
+// Project sky direction into the cloudy sky region (rows 258..513).
+// Maps equirectangular v [0,1] into [rawSkyVMax, 1.0].
 vec2 projectSkyCloudy(vec3 direction) {
-    vec2 uv = projectSky(direction);
-    return vec2(uv.x, uv.y + 1.0);
+    direction = normalize(direction);
+    float u = atan(-direction.x, -direction.z) * (1.0 / 6.28318530718) + 0.5;
+    float v = acos(clamp(direction.y, -1.0, 1.0)) * (1.0 / 3.14159265359);
+    u = u * (1.0 - 4.0 / float(skyCaptureRes.x)) + 2.0 / float(skyCaptureRes.x);
+    v = rawSkyVMax + v * (1.0 - rawSkyVMax);
+    return clamp(vec2(u, v), vec2(0.0), vec2(1.0));
 }
 
 vec3 unprojectSky(vec2 uv) {
     float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) / (1.0 - 4.0 / float(skyCaptureRes.x)));
     float phi = u * 6.28318530718;
-    float theta = clamp(uv.y, 0.0, 1.0) * 3.14159265359;
+    float theta = clamp(uv.y / rawSkyVMax, 0.0, 1.0) * 3.14159265359;
     float sinTheta = sin(theta);
     return normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
 }

@@ -307,6 +307,7 @@ public:
     void setRenderPipelineSettings(const RenderPipelineSettings& settings);
     void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
     [[nodiscard]] RenderPipelineSettings getRenderPipelineSettings() const;
+    [[nodiscard]] GameplaySkyRenderer::SkyIlluminanceData getSkyIlluminanceData() const { return m_currentFrameData.skyIlluminance; }
     [[nodiscard]] bool isDeferredDebugViewActive() const;
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;

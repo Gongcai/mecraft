@@ -2,6 +2,7 @@
 #include "gbuffer_contract.glsl"
 #define MECRAFT_SHADOW_NO_SAMPLER
 #include "mecraft_shadow.glsl"
+#include "render_contract.glsl"
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -473,6 +474,57 @@ void main() {
             return;
         }
         FragColor = vec4(heatmap(1.0 - shadowDepth), 1.0);
+        return;
+    }
+
+    // Debug 41: Sky direction — raw sky radiance sampled by world direction.
+    // For sky pixels (depth >= 0.9999), uses view ray direction. For solid geometry,
+    // reconstructs world position and shows the sky radiance in that direction.
+    if (uDebugViewMode == 41) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        vec3 worldDir;
+        if (depth >= 0.9999) {
+            // Sky pixel: reconstruct direction from screen UV
+            vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+            worldDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
+        } else {
+            vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+            worldDir = normalize(worldPos - uCameraPos);
+        }
+        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, worldDir);
+        FragColor = vec4(tonemapPreview(sky), 1.0);
+        return;
+    }
+
+    // Debug 42: Sky direction — cloudy sky radiance sampled by world direction.
+    if (uDebugViewMode == 42) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        vec3 worldDir;
+        if (depth >= 0.9999) {
+            vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+            worldDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
+        } else {
+            vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+            worldDir = normalize(worldPos - uCameraPos);
+        }
+        vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, worldDir);
+        FragColor = vec4(tonemapPreview(sky), 1.0);
+        return;
+    }
+
+    // Debug 43: Sky direction — raw sky with 20x exposure to reveal dim regions.
+    if (uDebugViewMode == 43) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        vec3 worldDir;
+        if (depth >= 0.9999) {
+            vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+            worldDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
+        } else {
+            vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+            worldDir = normalize(worldPos - uCameraPos);
+        }
+        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, worldDir) * 20.0;
+        FragColor = vec4(tonemapPreview(sky), 1.0);
         return;
     }
 

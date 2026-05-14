@@ -21,6 +21,7 @@
 #include "../ecs/util/PlayerQuery.h"
 #include "../world/World.h"
 #include "../renderer/Renderer.h"
+#include "../renderer/PostProcessRenderer.h"
 class FirstPersonHeldItemRenderer;
 class UIRenderer;
 class Dashboard {
@@ -55,13 +56,14 @@ public:
                 World &world,
                 Camera &camera,
                 Renderer &render,
+                PostProcessRenderer& postProcess,
                 UIRenderer& uiRenderer,
                 const FrameProfilerStats& profilerStats);
 private:
     void showPlayerStats(ecs::GameplayRegistry& registry);
     void showWorldStats(World& world, ecs::GameplayRegistry& registry);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats);
+    void showPerformanceStats(World& world, Renderer &render, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);

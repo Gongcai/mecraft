@@ -48,6 +48,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
                        World &world,
                        Camera &camera,
                        Renderer &render,
+                       PostProcessRenderer& postProcess,
                        UIRenderer& uiRenderer,
                        const FrameProfilerStats& profilerStats) {
     // (Your code calls glfwPollEvents())
@@ -61,7 +62,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
         showPlayerStats(registry);
         showCameraStats(camera);
         showWorldStats(world, registry);
-        showPerformanceStats(world, render, profilerStats);
+        showPerformanceStats(world, render, postProcess, profilerStats);
         showCrosshairSettings(uiRenderer);
         showHotbarSettings(uiRenderer);
         showInventoryPanelSettings(uiRenderer);
@@ -186,7 +187,7 @@ void Dashboard::showCameraStats( Camera &camera) {
     }
 }
 
-void Dashboard::showPerformanceStats(World& world, Renderer &render, const FrameProfilerStats& profilerStats) {
+void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
@@ -360,7 +361,12 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         int debugViewMode = pipeline.debugViewMode;
         int weatherPreset = pipeline.weatherPreset;
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
-        static constexpr const char* kTonemapModes[] = {"Reinhard", "AcademyFit", "Filmic", "AgX"};
+        static constexpr const char* kTonemapModes[] = {
+            "Reinhard [Mecraft extra]",
+            "AcademyFit [DerivativeMain]",
+            "Filmic [Mecraft extra]",
+            "AgX [Mecraft extra]"
+        };
         static constexpr const char* kDebugViewModes[] = {
             "Off",
             "GBuffer Albedo",
@@ -402,7 +408,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
             "CSM Depth 1",
             "CSM Depth 2",
             "CSM Depth 3",
-            "Cascade Info"
+            "Cascade Info",
+            "Sky Dir Raw",
+            "Sky Dir Cloudy",
+            "Sky Dir Raw x20"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -440,6 +449,30 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, const Frame
         pipeline.weatherPreset = weatherPreset;
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
+        // Exposure diagnostics
+        {
+            float adapted = postProcess.getAdaptedExposure();
+            float target = postProcess.getTargetExposure();
+            float avgLum = postProcess.getAverageLuminance();
+            float resolvedExposure = pipeline.autoExposureEnabled ? adapted : (0.8f / std::max(pipeline.exposure, 0.0001f));
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "Exposure Diagnostics");
+            ImGui::Text("Resolved Exposure: %.4f", resolvedExposure);
+            if (pipeline.autoExposureEnabled) {
+                ImGui::Text("Adapted: %.4f  Target: %.4f", adapted, target);
+                ImGui::Text("Avg Luminance: %.3f", avgLum);
+            } else {
+                ImGui::Text("Manual Exposure: %.2f (1/exposure=%.4f)", pipeline.exposure, resolvedExposure);
+            }
+            // SkyCapture metadata
+            auto skyLux = render.getSkyIlluminanceData();
+            ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "SkyCapture Metadata");
+            ImGui::Text("Direct: (%.2f, %.2f, %.2f)", skyLux.directIlluminance.r, skyLux.directIlluminance.g, skyLux.directIlluminance.b);
+            ImGui::Text("Sky:   (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
+            ImGui::Text("Sun:   (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
+            ImGui::Text("Moon:  (%.2f, %.2f, %.2f)", skyLux.moonIlluminance.r, skyLux.moonIlluminance.g, skyLux.moonIlluminance.b);
+            ImGui::Separator();
+        }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
         if (pipeline.debugDisableGreedyMeshing) {
             pipeline.debugDisableGreedyMeshing = false;

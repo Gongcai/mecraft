@@ -658,7 +658,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 40);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 43);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.debugDisableGreedyMeshing = false;

@@ -316,6 +316,7 @@ float PostProcessRenderer::updateAutoExposure(const float frameTime) {
     const float weightSum = std::max(exposureData[1], 1e-4f);
     const float averageLogLum = weightedLogLum / weightSum;
     const float averageLum = std::max(std::exp(averageLogLum * 0.75f), 0.02f);
+    m_lastAverageLum = averageLum;
 
     // DerivativeMain sigmoid response curve (Temporal.vert lines 42-57)
     const float bias = m_effects.autoExposureBias;
@@ -325,6 +326,7 @@ float PostProcessRenderer::updateAutoExposure(const float frameTime) {
     const float b = a - K * 1e-2f * 0.04f; // 3.4124
     float targetExposure = calibration / (a - b * std::exp(-averageLum / b));
     targetExposure = std::clamp(targetExposure, m_effects.autoExposureMin, m_effects.autoExposureMax);
+    m_lastTargetExposure = targetExposure;
 
     if (!m_autoExposureInitialized) {
         m_adaptedExposure = targetExposure;
