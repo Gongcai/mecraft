@@ -49,6 +49,7 @@ uniform int uShadowLightMode;
 uniform float uTime;
 uniform bool uNoiseEnabled;
 
+#include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 #include "mecraft_shadow.glsl"
 
@@ -56,10 +57,6 @@ const int kFogSteps = 8;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
-}
-
-vec3 sampleSkyCapture(vec3 dir) {
-    return sampleSkyRadiance(uSkyCaptureTex, dir);
 }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
@@ -169,6 +166,9 @@ void main() {
     vec3 viewDir = ray / max(distance, 0.0001);
     float marchDistance = min(distance, 260.0);
 
+    // --- Lighting environment: physical sky data from SkyCapture ---
+    LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
+
     float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
     float nightFactor = 1.0 - dayFactor;
     float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.45);
@@ -184,10 +184,15 @@ void main() {
     float phaseG = clamp(uVolumetricPhaseG, -0.2, 0.85);
     float sunPhase = atmRayleighPhase(dot(viewDir, sunDir)) * 0.35 + atmHenyeyGreensteinPhase(dot(viewDir, sunDir), phaseG) * 0.65;
     float moonPhase = atmRayleighPhase(dot(viewDir, moonDir)) * 0.55 + atmHenyeyGreensteinPhase(dot(viewDir, moonDir), 0.36) * 0.45;
+
+    // Sky radiance for fog base color (from SkyCapture, not CPU constant)
     vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.30, viewDir.z));
-    vec3 skyColor = sampleSkyCapture(captureDir);
+    vec3 skyColor = sampleEnvironmentSky(uSkyCaptureTex, captureDir);
     vec3 fogColor = skyColor;
     fogColor = mix(fogColor, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0) * 0.28);
+
+    // Art-directed sun/moon scatter (CPU uSunLightColor, NOT from SkyCapture metadata)
+    // TODO: consider replacing with env.sunIlluminance * sunTint for unified path
     vec3 sunScatterColor = uSunLightColor * (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
                            sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
     vec3 moonScatterColor = uMoonLightColor * (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
