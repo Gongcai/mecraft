@@ -456,6 +456,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
+        static constexpr const char* kVFogQualityTiers[] = {"Low", "Medium", "High", "Ultra"};
+        int qualityTier = pipeline.volumetricQualityTier;
+        pipelineChanged |= ImGui::Combo("VFog Quality Tier", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
+        pipeline.volumetricQualityTier = qualityTier;
         pipelineChanged |= ImGui::Combo("Weather Preset", &weatherPreset, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets));
         pipeline.weatherPreset = weatherPreset;
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
@@ -509,7 +513,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("sunVisibility(CPU): %.3f  (sunDir.y=%.2f)", sunVis, sunY);
             ImGui::Text("VFog strength: %.2f", pipeline.volumetricFogStrength);
             ImGui::Text("VFog lightStr: %.2f  baseDensity: 1.0  (VolumetricSettings defaults)", pipeline.volumetricLightStrength);
-            ImGui::Text("VFog maxDist: 260  heightFalloff: 0.022  phaseG: 0.58");
+            const char* tierNames[] = {"Low(0.5x)", "Medium(1.4x)", "High(9.0x)", "Ultra(48.0x)"};
+            ImGui::Text("VFog tier: %s  maxDist: 260  heightFalloff: 0.022", tierNames[qualityTier]);
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");

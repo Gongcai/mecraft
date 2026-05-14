@@ -75,6 +75,7 @@ public:
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
         bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
+        int volumetricQualityTier = 1; // 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
         bool ssaoFilterEnabled = true;

@@ -657,6 +657,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.volumetricLightStrength = std::clamp(m_pipelineSettings.volumetricLightStrength, 0.0f, 2.0f);
+    m_pipelineSettings.volumetricQualityTier = std::clamp(m_pipelineSettings.volumetricQualityTier, 0, 3);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 53);
@@ -1954,6 +1955,9 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
 
     // Sky ray A/B toggle: when enabled, sky pixels (depth >= 1.0) also march volumetric fog
     m_volumetricFogShader->setInt("uVolumetricSkyRayEnabled", m_pipelineSettings.volumetricSkyRayEnabled ? 1 : 0);
+
+    // Quality tier: 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
+    m_volumetricFogShader->setInt("uVolumetricQualityTier", m_pipelineSettings.volumetricQualityTier);
 
     // Volumetric fog debug mode: active when debug view 46-53 is selected
     int vfDebugMode = 0;
