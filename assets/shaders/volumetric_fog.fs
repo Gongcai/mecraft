@@ -56,12 +56,19 @@ uniform int uVolumetricQualityTier; // 0=Low, 1=Medium, 2=High, 3=Ultra
 #include "atmosphere_lut.glsl"
 #include "mecraft_shadow.glsl"
 
-const int kFogSteps = 8;
+// Dynamic step count per quality tier (DerivativeMain VOLUMETRIC_FOG_SAMPLES)
+int getFogSteps() {
+    if (uVolumetricQualityTier <= 1) return 8;   // Low/Medium
+    if (uVolumetricQualityTier <= 2) return 16;  // High
+    return 20;                                      // Ultra
+}
 
 // DerivativeMain-aligned volumetric fog constants
-// VFOG_SUN_INTENSITY: final sun scatter multiplier. DerivativeMain uses SUNLIGHT_INTENSITY * 20.0
-// but its sunlightSample already accumulates shadow*phase*OD per step. Start conservative.
+// VFOG_SUN_INTENSITY: per-sample sun illuminance scale. DerivativeMain uses SUNLIGHT_INTENSITY.
 const float VFOG_SUN_INTENSITY = 1.0;
+// VFOG_FINAL_SUN_MULTIPLIER: final sun scattering multiplier (DerivativeMain fogSunColor * 20.0)
+// Only applied to High/Ultra shadowed sun path.
+const float VFOG_FINAL_SUN_MULTIPLIER = 20.0;
 // VFOG_AIR_DENSITY: Rayleigh-phase air scatter strength (DerivativeMain VOLUMETRIC_LIGHT_STRENGTH = 0.2)
 const float VFOG_AIR_DENSITY = 0.2;
 
@@ -85,6 +92,11 @@ float multiLobePhase(float LdotV) {
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
+vec3 tonemapPreview(vec3 color) {
+    color = max(color, vec3(0.0));
+    return color / (color + vec3(1.0));
 }
 
 vec3 heatmap(float v) {
@@ -269,17 +281,20 @@ void main() {
                         (0.64 + weatherHaze * 1.55) *
                         densityMultiplier;
     float jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
-    float stepLength = marchDistance / float(kFogSteps);
+    int fogSteps = getFogSteps();
+    float stepLength = marchDistance / float(fogSteps);
     vec3 scattering = vec3(0.0);
     vec3 skyScattering = vec3(0.0);
     vec3 sunScattering = vec3(0.0);
+    vec3 unshadowedSunAccum = vec3(0.0);
+    vec3 shadowedSunAccum = vec3(0.0);
     float transmittance = 1.0;
     float maxDensitySeen = 0.0;
     float avgShadowVisibility = 0.0;
     int shadowSampleCount = 0;
 
-    for (int i = 0; i < kFogSteps; ++i) {
-        float t = (float(i) + jitter) / float(kFogSteps);
+    for (int i = 0; i < fogSteps; ++i) {
+        float t = (float(i) + jitter) / float(fogSteps);
         vec3 samplePos = uCameraPos + viewDir * (t * marchDistance);
         float heightDensity = exp2(min((92.0 - samplePos.y) * max(uVolumetricHeightFalloff, 0.0001), 0.35));
         heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
@@ -301,39 +316,68 @@ void main() {
         float shadowVisibility = sampleVolumetricShadow(samplePos, shadowLightDir);
         avgShadowVisibility += shadowVisibility;
         shadowSampleCount++;
-        vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
         vec3 altitudeTransmittance = atmGetTransmittanceToTopAtmosphereBoundary(
             atmPlanetRadius + clamp(samplePos.y + 100.0, 0.0, 90000.0),
             clamp(dot(vec3(0.0, 1.0, 0.0), shadowLightDir), -1.0, 1.0));
 
-        // High/Ultra: 4-step sun optical depth + multi-lobe phase (DerivativeMain FOG_TYPE > 1)
+        // Sun contribution: High/Ultra uses optical depth + multi-lobe phase
+        vec3 sunStep;
         if (uVolumetricQualityTier >= 2 && sampleDensity > 1e-5) {
+            // 4-step sun optical depth (DerivativeMain FOG_TYPE > 1)
+            // Recalculate height/density at each checkPos
             float odStepSize = 5.0;
             float sunlightOD = 0.0;
             vec3 checkPos = samplePos;
+            float LdotV01 = LdotV * 0.5 + 0.5;
+            // Accumulate 4 separate phase*OD terms (DerivativeMain exact)
+            float phaseOD1 = 0.0, phaseOD2 = 0.0, phaseOD3 = 0.0, phaseOD4 = 0.0;
             for (int j = 0; j < 4; ++j) {
-                float d = baseDensity * structuredFogDensity(checkPos, heightDensity, coverage);
-                if (d > 1e-5) sunlightOD += d * odStepSize;
+                // Recalculate density at checkPos (not reusing current step's heightDensity)
+                float checkHeight = exp2(min((92.0 - checkPos.y) * max(uVolumetricHeightFalloff, 0.0001), 0.35));
+                checkHeight *= 1.0 - smoothstep(180.0, 260.0, checkPos.y);
+                checkHeight = clamp(checkHeight, 0.035, 1.45);
+                float d = baseDensity * checkHeight * structuredFogDensity(checkPos, checkHeight, coverage);
+                if (d > 1e-5) {
+                    float stepOD = d * odStepSize;
+                    sunlightOD += stepOD;
+                    phaseOD1 += stepOD;
+                    phaseOD2 += stepOD;
+                    phaseOD3 += stepOD;
+                    phaseOD4 += stepOD;
+                }
                 checkPos += shadowLightDir * odStepSize;
                 odStepSize *= 1.5;
             }
-            float LdotV01 = LdotV * 0.5 + 0.5;
-            float mPhase = multiLobePhase(LdotV);
-            float scatteringSun = (1.0 - exp(-sunlightOD * 2.0)) * (1.0 - LdotV01) + LdotV01;
-            scatteringSun *= exp(-sunlightOD * 2.4) * mPhase;
+            // Powder effect
+            float powderSun = (1.0 - exp(-sunlightOD * 2.0)) * (1.0 - LdotV01) + LdotV01;
+            // 4-lobe scattering with separate OD attenuation per lobe
+            float scatteringSun =
+                exp(-sunlightOD * 2.4) * (atmHenyeyGreensteinPhase(LdotV, 0.6) + atmHenyeyGreensteinPhase(LdotV, -0.3)) * 0.5 +
+                exp(-sunlightOD * 1.2) * (atmHenyeyGreensteinPhase(LdotV * 0.5, 0.6) + atmHenyeyGreensteinPhase(LdotV * 0.5, -0.3)) * 0.25 +
+                exp(-sunlightOD * 0.6) * (atmHenyeyGreensteinPhase(LdotV * 0.25, 0.6) + atmHenyeyGreensteinPhase(LdotV * 0.25, -0.3)) * 0.125 +
+                exp(-sunlightOD * 0.3) * (atmHenyeyGreensteinPhase(LdotV * 0.125, 0.6) + atmHenyeyGreensteinPhase(LdotV * 0.125, -0.3)) * 0.0625;
+            scatteringSun *= powderSun;
             float tierScale = float(uVolumetricQualityTier) * float(uVolumetricQualityTier);
-            shadowedDirect *= (scatteringSun + airDensity) * tierScale;
+            vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
+            sunStep = shadowedDirect * altitudeTransmittance * (scatteringSun + airDensity) * tierScale *
+                      clamp(uVolumetricLightStrength, 0.0, 2.0) * directLightWeight *
+                      VFOG_FINAL_SUN_MULTIPLIER;
+        } else {
+            // Low/Medium: simpler path with unshadowed base + shadowed direct
+            vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
+            sunStep = directFogColor * (0.76 + powder * 0.22) * 0.3 +
+                      shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75) *
+                      clamp(uVolumetricLightStrength, 0.0, 2.0) * directLightWeight;
         }
 
         vec3 skyStep = skyFogColor * (0.76 + powder * 0.22);
-        vec3 sunStep = directFogColor * (0.76 + powder * 0.22) +
-                       shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75) *
-                       clamp(uVolumetricLightStrength, 0.0, 2.0) *
-                       directLightWeight;
         vec3 stepColor = skyStep + sunStep;
         scattering += transmittance * stepColor * stepOpacity;
         skyScattering += transmittance * skyStep * stepOpacity;
         sunScattering += transmittance * sunStep * stepOpacity;
+        // Track unshadowed vs shadowed for debug
+        unshadowedSunAccum += transmittance * directFogColor * stepOpacity;
+        shadowedSunAccum += transmittance * sunStep * stepOpacity;
         transmittance *= stepTransmittance;
     }
 
@@ -414,6 +458,32 @@ void main() {
             clamp(opacity * 10.0, 0.0, 1.0),
             1.0
         );
+        return;
+    }
+    if (uVolumetricDebugMode == 9) {
+        // Sun contrast: unshadowed vs shadowed/OD contribution
+        // R = unshadowed direct (before shadow/OD)
+        // G = shadowed/OD direct (after shadow/OD)
+        // B = final sunStep luminance
+        float unshLum = dot(unshadowedSunAccum, vec3(0.2126, 0.7152, 0.0722));
+        float shLum = dot(shadowedSunAccum, vec3(0.2126, 0.7152, 0.0722));
+        float sunLum = dot(sunScattering, vec3(0.2126, 0.7152, 0.0722));
+        FragColor = vec4(
+            clamp(unshLum * 50.0, 0.0, 1.0),
+            clamp(shLum * 50.0, 0.0, 1.0),
+            clamp(sunLum * 100.0, 0.0, 1.0),
+            1.0
+        );
+        return;
+    }
+    if (uVolumetricDebugMode == 10) {
+        // Sun Only x20: amplified sun scattering for structure diagnosis
+        FragColor = vec4(tonemapPreview(max(sunScattering * 20.0, vec3(0.0))), 1.0);
+        return;
+    }
+    if (uVolumetricDebugMode == 11) {
+        // Sun Only x100: heavily amplified sun scattering
+        FragColor = vec4(tonemapPreview(max(sunScattering * 100.0, vec3(0.0))), 1.0);
         return;
     }
 

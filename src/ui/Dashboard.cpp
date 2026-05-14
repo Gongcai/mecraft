@@ -421,7 +421,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "VFog Sun Gates",
             "VFog Integration",
             "VFog Sky Ray Coverage",
-            "VFog March Detail"
+            "VFog March Detail",
+            "VFog Sun Contrast",
+            "VFog Sun Only x20",
+            "VFog Sun Only x100"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
