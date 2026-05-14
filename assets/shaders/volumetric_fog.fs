@@ -202,17 +202,18 @@ void main() {
 
     // Sun/moon scatter from LightingEnvironment (SkyCapture metadata).
     // Scale 0.55 matches the old energy level when sunIlluminance ~ 1..2.
-    vec3 sunScatterColor = env.sunIlluminance * 0.55 *
-                           (sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11) *
+    float phaseTerm = sunWide * 0.10 + sunForward * 0.36 + sunPhase * 0.11;
+    vec3 sunScatterColor = env.sunIlluminance * 0.55 * phaseTerm *
                            sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
     vec3 moonScatterColor = env.moonIlluminance * 0.55 *
                             (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
     vec3 directFogColor = sunScatterColor + moonScatterColor;
 
-    // Combined fog color for weather haze modulation
-    vec3 fogColor = skyFogColor + directFogColor;
+    // Weather haze modulation applied to both components separately
     float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
-    fogColor = mix(fogColor, fogColor * vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
+    vec3 weatherTint = mix(vec3(1.0), vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
+    skyFogColor *= weatherTint;
+    directFogColor *= weatherTint;
     vec3 shadowLightDir = normalize(uShadowLightDirection);
     float directLightWeight = clamp(sunVisibility + clamp(uMoonVisibility, 0.0, 1.0) * nightFactor, 0.0, 1.0);
 
@@ -230,6 +231,8 @@ void main() {
     vec3 sunScattering = vec3(0.0);
     float transmittance = 1.0;
     float maxDensitySeen = 0.0;
+    float avgShadowVisibility = 0.0;
+    int shadowSampleCount = 0;
 
     for (int i = 0; i < kFogSteps; ++i) {
         float t = (float(i) + jitter) / float(kFogSteps);
@@ -252,6 +255,8 @@ void main() {
         powder = powder * (1.0 - clamp(dot(viewDir, shadowLightDir) * 0.5 + 0.5, 0.0, 1.0) * 0.35) +
                  clamp(dot(viewDir, shadowLightDir) * 0.5 + 0.5, 0.0, 1.0) * 0.25;
         float shadowVisibility = sampleVolumetricShadow(samplePos, shadowLightDir);
+        avgShadowVisibility += shadowVisibility;
+        shadowSampleCount++;
         vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
         vec3 altitudeTransmittance = atmGetTransmittanceToTopAtmosphereBoundary(
             atmPlanetRadius + clamp(samplePos.y + 100.0, 0.0, 90000.0),
@@ -293,6 +298,21 @@ void main() {
     if (uVolumetricDebugMode == 4) {
         // Sun/volume light contribution only
         FragColor = vec4(max(sunScattering, vec3(0.0)), 1.0 - opacity);
+        return;
+    }
+    if (uVolumetricDebugMode == 5) {
+        // Sun gate diagnostics: why is VFog Sun Only black?
+        // R = sunVisibility (0-1)
+        // G = phaseTerm (forward scattering strength, 0-~0.5)
+        // B = avgShadowVisibility (0-1, averaged across march steps)
+        float avgShadow = shadowSampleCount > 0 ? avgShadowVisibility / float(shadowSampleCount) : 1.0;
+        float sunIllumLum = dot(env.sunIlluminance, vec3(0.2126, 0.7152, 0.0722));
+        FragColor = vec4(
+            clamp(sunVisibility, 0.0, 1.0),
+            clamp(phaseTerm, 0.0, 1.0),
+            clamp(avgShadow, 0.0, 1.0),
+            1.0
+        );
         return;
     }
 

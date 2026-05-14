@@ -417,7 +417,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "VFog Density",
             "VFog Transmittance",
             "VFog Sky Only",
-            "VFog Sun Only"
+            "VFog Sun Only",
+            "VFog Sun Gates"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -494,8 +495,17 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             float coolG = skyColors.skyAmbientColor.g * (1.0f + pipeline.skyCoolness * 0.08f);
             float coolB = skyColors.skyAmbientColor.b * (1.0f + pipeline.skyCoolness * 0.18f);
             ImGui::Text("coolSkyColor: (%.2f, %.2f, %.2f)", coolR, coolG, coolB);
-            ImGui::Text("VFog sunScale: env.sunIlluminance * 0.55");
             ImGui::Text("Cloud cirrus: env.sunIlluminance * 40.0");
+            // VFog component diagnostics (CPU approximate — actual values are GPU-side)
+            ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Volumetric Fog Diagnostics (approx)");
+            float sunY = skyColors.sunDirection.y;
+            float sunVis = (sunY > -0.08f) ? std::min((sunY + 0.08f) / 0.26f, 1.0f) : 0.0f;
+            ImGui::Text("env.sunIlluminance: (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
+            ImGui::Text("env.skyIlluminance:  (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
+            ImGui::Text("sunVisibility(CPU): %.3f  (sunDir.y=%.2f)", sunVis, sunY);
+            ImGui::Text("VFog strength: %.2f", pipeline.volumetricFogStrength);
+            ImGui::Text("VFog lightStr: 0.14  baseDensity: 1.0  (VolumetricSettings defaults)");
+            ImGui::Text("VFog maxDist: 260  heightFalloff: 0.022  phaseG: 0.58");
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
