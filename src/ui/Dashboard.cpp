@@ -412,7 +412,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "Sky Dir Raw",
             "Sky Dir Cloudy",
             "Sky Dir Raw x20",
-            "SkyCapture Atlas + Metadata"
+            "SkyCapture Atlas + Metadata",
+            "Lighting Balance"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -472,6 +473,16 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("Sky:   (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
             ImGui::Text("Sun:   (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
             ImGui::Text("Moon:  (%.2f, %.2f, %.2f)", skyLux.moonIlluminance.r, skyLux.moonIlluminance.g, skyLux.moonIlluminance.b);
+            // Lighting input diagnostic — compare CPU art colors vs SkyCapture metadata
+            auto skyColors = render.getSkyColors();
+            auto fogColor = render.getFogColor();
+            ImGui::TextColored(ImVec4(0.9f, 0.75f, 0.4f, 1.0f), "Lighting Input Diagnostic");
+            ImGui::Text("SunLightColor(CPU): (%.2f, %.2f, %.2f)", skyColors.sunLightColor.r, skyColors.sunLightColor.g, skyColors.sunLightColor.b);
+            ImGui::Text("SkyAmbientColor(CPU): (%.2f, %.2f, %.2f)", skyColors.skyAmbientColor.r, skyColors.skyAmbientColor.g, skyColors.skyAmbientColor.b);
+            ImGui::Text("FogColor(CPU):      (%.2f, %.2f, %.2f)", fogColor.r, fogColor.g, fogColor.b);
+            ImGui::Text("HorizonScatter(CPU): (%.2f, %.2f, %.2f)", skyColors.horizonScatterColor.r, skyColors.horizonScatterColor.g, skyColors.horizonScatterColor.b);
+            ImGui::Text("DirectSunStrength: %.2f  SkyAmbientStrength: %.2f", pipeline.directSunStrength, pipeline.skyAmbientStrength);
+            ImGui::Text("SunWarmth: %.2f  SkyCoolness: %.2f", pipeline.sunWarmth, pipeline.skyCoolness);
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");

@@ -51,6 +51,12 @@ uniform float uShadowNormalOffset;
 uniform int uShadowLightMode;
 uniform int uDebugViewMode;
 
+// Lighting diagnostic uniforms (for debug view 45)
+uniform vec3 uSunLightColor;
+uniform vec3 uSkyAmbientColor;
+uniform vec3 uHorizonScatterColor;
+uniform vec3 uFogColor;
+
 vec3 tonemapPreview(vec3 color) {
     color = max(color, vec3(0.0));
     return color / (color + vec3(1.0));
@@ -608,6 +614,87 @@ void main() {
             vec3 sky = texture(uSkyCaptureTex, clamp(cloudyUv, 0.0, 1.0)).rgb;
             FragColor = vec4(tonemapPreview(sky), 1.0);
         }
+        return;
+    }
+
+    // Debug 45: Lighting balance diagnostic.
+    // Shows CPU-side lighting colors as patches + SkyCapture metadata intensity bars.
+    // Top-right: CPU sunLightColor, skyAmbientColor, horizonScatterColor, fogColor.
+    // Bottom-right: SkyCapture illuminance bars (direct, sky, sun, moon).
+    if (uDebugViewMode == 45) {
+        vec2 uv = vTexCoord;
+
+        // CPU lighting color patches (top-right, each 0.04 high, 0.12 wide)
+        float patchX = 0.88;
+        float patchW = 0.12;
+        float patchH = 0.04;
+        if (uv.x > patchX) {
+            vec3 cpuColor = vec3(0.0);
+            float labelStripe = 0.0;
+            vec3 labelColor = vec3(0.0);
+            if (uv.y > 0.96) {
+                cpuColor = max(uSunLightColor, vec3(0.0));
+                labelColor = vec3(1.0, 0.9, 0.3);
+                labelStripe = step(uv.x, patchX + 0.015);
+            } else if (uv.y > 0.92) {
+                cpuColor = max(uSkyAmbientColor, vec3(0.0));
+                labelColor = vec3(0.3, 0.7, 1.0);
+                labelStripe = step(uv.x, patchX + 0.015);
+            } else if (uv.y > 0.88) {
+                cpuColor = max(uHorizonScatterColor, vec3(0.0));
+                labelColor = vec3(0.8, 0.6, 0.9);
+                labelStripe = step(uv.x, patchX + 0.015);
+            } else if (uv.y > 0.84) {
+                cpuColor = max(uFogColor, vec3(0.0));
+                labelColor = vec3(0.6, 0.6, 0.6);
+                labelStripe = step(uv.x, patchX + 0.015);
+            } else {
+                discard;
+            }
+            vec3 display = tonemapPreview(cpuColor);
+            display = mix(display, labelColor, labelStripe * 0.7);
+            FragColor = vec4(display, 1.0);
+            return;
+        }
+
+        // SkyCapture illuminance intensity bars (bottom-right)
+        float barX = 0.78;
+        float barW = 0.22;
+        float barH = 0.025;
+        if (uv.x > barX && uv.y < barH * 4.0) {
+            int barIndex = int(uv.y / barH);
+            float barLocalY = mod(uv.y, barH) / barH;
+
+            vec3 luxValue = vec3(0.0);
+            vec3 barColor = vec3(0.0);
+            if (barIndex == 0) {
+                luxValue = max(getDirectIlluminance(uSkyCaptureTex), vec3(0.0));
+                barColor = vec3(1.0, 0.85, 0.3);
+            } else if (barIndex == 1) {
+                luxValue = max(getSkyIlluminance(uSkyCaptureTex), vec3(0.0));
+                barColor = vec3(0.3, 0.6, 1.0);
+            } else if (barIndex == 2) {
+                luxValue = max(getSunIlluminance(uSkyCaptureTex), vec3(0.0));
+                barColor = vec3(1.0, 0.5, 0.1);
+            } else {
+                luxValue = max(getMoonIlluminance(uSkyCaptureTex), vec3(0.0));
+                barColor = vec3(0.5, 0.5, 0.8);
+            }
+
+            float intensity = dot(luxValue, vec3(0.2126, 0.7152, 0.0722));
+            float barFill = clamp(intensity / max(intensity + 1.0, 0.001), 0.0, 1.0);
+            float fillEdge = step(uv.x - barX, barW * barFill);
+            float border = step(barLocalY, 0.1) + step(0.9, barLocalY);
+            float borderColor = border * 0.3;
+
+            vec3 fillColor = barColor * fillEdge * 0.7;
+            vec3 bg = vec3(0.05);
+            FragColor = vec4(mix(bg, fillColor + borderColor, max(fillEdge, border)), 1.0);
+            return;
+        }
+
+        // Default: scene lighting preview
+        FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, uv).rgb), 1.0);
         return;
     }
 

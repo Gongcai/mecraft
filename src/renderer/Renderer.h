@@ -308,6 +308,8 @@ public:
     void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
     [[nodiscard]] RenderPipelineSettings getRenderPipelineSettings() const;
     [[nodiscard]] GameplaySkyRenderer::SkyIlluminanceData getSkyIlluminanceData() const { return m_currentFrameData.skyIlluminance; }
+    [[nodiscard]] GameplaySkyRenderer::SkyColors getSkyColors() const { return m_currentFrameData.skyColors; }
+    [[nodiscard]] glm::vec3 getFogColor() const { return m_currentFrameData.fogColor; }
     [[nodiscard]] bool isDeferredDebugViewActive() const;
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;

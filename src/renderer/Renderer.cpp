@@ -658,7 +658,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 44);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 45);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -2301,6 +2301,14 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setVec3("uMoonDirection", debugFrame != nullptr ? debugFrame->skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
     m_deferredDebugShader->setVec3("uShadowLightDirection", m_shadowRenderer.lightDirection());
     m_deferredDebugShader->setInt("uShadowLightMode", (debugFrame != nullptr && debugFrame->moonShadowActive) ? 1 : 0);
+
+    // Lighting diagnostic uniforms (for debug view 45)
+    if (debugFrame != nullptr) {
+        m_deferredDebugShader->setVec3("uSunLightColor", debugFrame->skyColors.sunLightColor);
+        m_deferredDebugShader->setVec3("uSkyAmbientColor", debugFrame->skyColors.skyAmbientColor);
+        m_deferredDebugShader->setVec3("uHorizonScatterColor", debugFrame->skyColors.horizonScatterColor);
+        m_deferredDebugShader->setVec3("uFogColor", debugFrame->fogColor);
+    }
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());
