@@ -481,6 +481,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Scene Reflection Composite", &pipeline.sceneReflectionCompositeStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
         pipelineChanged |= ImGui::Checkbox("Purkinje Shift", &pipeline.purkinjeShiftEnabled);
+        pipelineChanged |= ImGui::Checkbox("Bloomy Fog", &pipeline.bloomyFogEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);

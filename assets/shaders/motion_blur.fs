@@ -30,15 +30,15 @@ void main() {
     vec2 direction = normalize(velocity);
     float blurSize = min(speed * uStrength * 0.01, 0.05);
 
-    vec3 color = vec3(0.0);
+    vec4 color = vec4(0.0);
     float totalWeight = 0.0;
 
     for (int i = 0; i < uSamples; ++i) {
         float t = (float(i) + noise) / float(uSamples) - 0.5;
         vec2 sampleUv = vTexCoord + direction * t * blurSize;
-        color += texture(uSceneTex, sampleUv).rgb;
+        color += texture(uSceneTex, sampleUv);
         totalWeight += 1.0;
     }
 
-    FragColor = vec4(color / totalWeight, 1.0);
+    FragColor = color / totalWeight;
 }

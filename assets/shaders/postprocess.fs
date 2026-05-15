@@ -5,6 +5,13 @@ out vec4 FragColor;
 
 uniform sampler2D uSceneTex;
 uniform sampler2D uBloomTex;
+uniform sampler2D uBloomMip0;
+uniform sampler2D uBloomMip1;
+uniform sampler2D uBloomMip2;
+uniform sampler2D uBloomMip3;
+uniform sampler2D uBloomMip4;
+uniform sampler2D uBloomMip5;
+uniform sampler2D uBloomMip6;
 uniform sampler2D uNoiseTex;
 
 uniform bool uBloomEnabled;
@@ -35,6 +42,7 @@ uniform float uGamma;
 uniform float uSaturation;
 uniform float uContrast;
 uniform bool uPurkinjeShiftEnabled;
+uniform bool uBloomyFogEnabled;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -889,13 +897,69 @@ vec3 applyTonemap(vec3 color) {
     return color;
 }
 
+vec3 sampleBloomMip(int mip, vec2 uv) {
+    if (mip == 0) return texture(uBloomMip0, uv).rgb;
+    if (mip == 1) return texture(uBloomMip1, uv).rgb;
+    if (mip == 2) return texture(uBloomMip2, uv).rgb;
+    if (mip == 3) return texture(uBloomMip3, uv).rgb;
+    if (mip == 4) return texture(uBloomMip4, uv).rgb;
+    if (mip == 5) return texture(uBloomMip5, uv).rgb;
+    return texture(uBloomMip6, uv).rgb;
+}
+
+void CalculateBloomFog(vec2 uv, out vec3 bloomData, out vec3 fogBloom) {
+    // DerivativeMain/program/Post/Grade.glsl: CalculateBloomFog().
+    // Mecraft adaptation: mips are bound as separate textures instead of atlas tiles.
+    vec3 sampleTile = sampleBloomMip(0, uv);
+    bloomData = sampleTile;
+    fogBloom = sampleTile;
+
+    sampleTile = sampleBloomMip(1, uv);
+    bloomData += sampleTile * 0.83333333;
+    fogBloom += sampleTile * 1.5;
+
+    sampleTile = sampleBloomMip(2, uv);
+    bloomData += sampleTile * 0.69444444;
+    fogBloom += sampleTile * 2.25;
+
+    sampleTile = sampleBloomMip(3, uv);
+    bloomData += sampleTile * 0.57870370;
+    fogBloom += sampleTile * 3.375;
+
+    sampleTile = sampleBloomMip(4, uv);
+    bloomData += sampleTile * 0.48225309;
+    fogBloom += sampleTile * 5.0625;
+
+    sampleTile = sampleBloomMip(5, uv);
+    bloomData += sampleTile * 0.40187757;
+    fogBloom += sampleTile * 7.59375;
+
+    sampleTile = sampleBloomMip(6, uv);
+    bloomData += sampleTile * 0.33489798;
+    fogBloom += sampleTile * 11.328125;
+
+    bloomData *= 0.23118661;
+    fogBloom *= 0.03108305;
+    fogBloom += bloomData;
+}
+
 vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
-    vec3 color = texture(uSceneTex, sampleUv).rgb;
+    vec4 sceneSample = texture(uSceneTex, sampleUv);
+    vec3 color = sceneSample.rgb;
+    float fogTransmittance = clamp(sceneSample.a, 0.0, 1.0); // from volumetric_composite.fs
+
     if (uBloomEnabled) {
-        vec3 bloom = texture(uBloomTex, sampleUv).rgb;
+        vec3 bloomData;
+        vec3 fogBloom;
+        CalculateBloomFog(sampleUv, bloomData, fogBloom);
         // DerivativeMain Grade.glsl line 144: exposure compensation
         float bloomAmount = (uBloomStrength * 0.15) / (max(uExposure, 1.0) * 0.7 + 0.3);
-        color += bloom * bloomAmount;
+
+        // DerivativeMain Grade.glsl line 136-139: Bloomy Fog
+        if (uBloomyFogEnabled && fogTransmittance < 0.999) {
+            color = mix(fogBloom * 0.5, color, fogTransmittance);
+        }
+        color += bloomData * bloomAmount;
     }
 
     if (uUnderwaterEnabled) {

@@ -82,7 +82,7 @@ void main() {
                         historyUv.y >= 0.0 && historyUv.y <= 1.0;
 
     if (!validHistory) {
-        FragColor = vec4(currentColor, 1.0);
+        FragColor = vec4(currentColor, texture(uCurrentTex, vTexCoord).a);
         return;
     }
 
@@ -95,7 +95,7 @@ void main() {
     bool saneVelocity = all(lessThan(abs(velocity), vec2(0.35))) && velocityPixels < 160.0;
 
     if (!depthMatches || !saneVelocity) {
-        FragColor = vec4(currentColor, 1.0);
+        FragColor = vec4(currentColor, texture(uCurrentTex, vTexCoord).a);
         return;
     }
 
@@ -153,5 +153,10 @@ void main() {
     vec3 resultReinhard = mix(historyReinhard, currentReinhard, blendFactor);
     vec3 result = resultReinhard / max(1.0 - resultReinhard, 1e-6);
 
-    FragColor = vec4(max(result, vec3(0.0)), 1.0);
+    // Preserve fog transmittance in alpha with same temporal blend.
+    float currentAlpha = texture(uCurrentTex, vTexCoord).a;
+    float historyAlpha = texture(uHistoryTex, safeHistoryUv).a;
+    float resultAlpha = mix(historyAlpha, currentAlpha, blendFactor);
+
+    FragColor = vec4(max(result, vec3(0.0)), resultAlpha);
 }

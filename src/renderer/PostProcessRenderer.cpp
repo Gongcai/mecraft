@@ -114,16 +114,24 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     bool hasBloom = false;
     if (m_effects.bloomEnabled && m_bloomExtractShader != nullptr && m_bloomBlurShader != nullptr &&
         m_bloomFbos[0][0] != 0 && m_bloomFbos[0][1] != 0 && m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[0][0]);
-        glViewport(0, 0, m_bloomMipSize[0].x, m_bloomMipSize[0].y);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
         m_bloomExtractShader->use();
         m_bloomExtractShader->setInt("uSceneTex", 0);
         m_bloomExtractShader->setFloat("uExposure", resolvedExposure);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
         glBindVertexArray(m_fullscreenVao);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        for (int mip = 0; mip < kBloomMipCount; ++mip) {
+            if (m_bloomFbos[mip][0] == 0) {
+                break;
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
+            glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
+            glClear(GL_COLOR_BUFFER_BIT);
+            m_bloomExtractShader->setInt("uSourceLod", mip);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
 
         m_bloomBlurShader->use();
         m_bloomBlurShader->setInt("uImage", 0);
@@ -131,17 +139,6 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
         for (int mip = 0; mip < kBloomMipCount; ++mip) {
             if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip][1] == 0) {
                 break;
-            }
-            if (mip > 0) {
-                glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
-                glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
-                glClear(GL_COLOR_BUFFER_BIT);
-                m_bloomBlurShader->setVec2("uDirection", glm::vec2(0.0f));
-                m_bloomBlurShader->setFloat("uWeight", 0.68f);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip - 1][0]);
-                glDrawArrays(GL_TRIANGLES, 0, 3);
-                m_bloomBlurShader->setFloat("uWeight", 1.0f);
             }
 
             glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][1]);
@@ -163,41 +160,6 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
             glDrawArrays(GL_TRIANGLES, 0, 3);
         }
 
-        const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-        GLint previousBlendSrcRgb = GL_ONE;
-        GLint previousBlendDstRgb = GL_ZERO;
-        GLint previousBlendSrcAlpha = GL_ONE;
-        GLint previousBlendDstAlpha = GL_ZERO;
-        glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlendSrcRgb);
-        glGetIntegerv(GL_BLEND_DST_RGB, &previousBlendDstRgb);
-        glGetIntegerv(GL_BLEND_SRC_ALPHA, &previousBlendSrcAlpha);
-        glGetIntegerv(GL_BLEND_DST_ALPHA, &previousBlendDstAlpha);
-
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_ONE, GL_ONE);
-        m_bloomBlurShader->setVec2("uDirection", glm::vec2(0.0f));
-        // DerivativeMain Grade.glsl: bloomData weights = 1 / (1.2^(lod-1)), normalized by 0.23118661
-        // Current mip chain uses additive weights: 0.3349 + 0.0670 * (6 - mip).
-        // Total raw weight sum = 3.0144. Normalize so total = 1.0 (matches DerivativeMain energy).
-        constexpr float kBloomNormalization = 1.0f / 3.0144f; // ~0.3317
-        for (int mip = kBloomMipCount - 1; mip > 0; --mip) {
-            if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip - 1][0] == 0) {
-                continue;
-            }
-            const float weight = (0.33489798f + 0.06697960f * static_cast<float>(kBloomMipCount - 1 - mip)) * kBloomNormalization;
-            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip - 1][0]);
-            glViewport(0, 0, m_bloomMipSize[mip - 1].x, m_bloomMipSize[mip - 1].y);
-            m_bloomBlurShader->setFloat("uWeight", weight);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][0]);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-        }
-        glBlendFuncSeparate(previousBlendSrcRgb, previousBlendDstRgb, previousBlendSrcAlpha, previousBlendDstAlpha);
-        if (blendWasEnabled) {
-            glEnable(GL_BLEND);
-        } else {
-            glDisable(GL_BLEND);
-        }
         m_bloomBlurShader->setFloat("uWeight", 1.0f);
 
         glBindVertexArray(0);
@@ -211,7 +173,14 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->use();
     m_postProcessShader->setInt("uSceneTex", 0);
     m_postProcessShader->setInt("uBloomTex", 1);
-    m_postProcessShader->setInt("uNoiseTex", 2);
+    m_postProcessShader->setInt("uBloomMip0", 1);
+    m_postProcessShader->setInt("uBloomMip1", 2);
+    m_postProcessShader->setInt("uBloomMip2", 3);
+    m_postProcessShader->setInt("uBloomMip3", 4);
+    m_postProcessShader->setInt("uBloomMip4", 5);
+    m_postProcessShader->setInt("uBloomMip5", 6);
+    m_postProcessShader->setInt("uBloomMip6", 7);
+    m_postProcessShader->setInt("uNoiseTex", 8);
     m_postProcessShader->setBool("uBloomEnabled", hasBloom);
     m_postProcessShader->setFloat("uBloomStrength", m_effects.bloomStrength);
     m_postProcessShader->setBool("uSunRaysEnabled", m_effects.sunRaysEnabled && hasBloom);
@@ -243,21 +212,26 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uSaturation", m_effects.saturation);
     m_postProcessShader->setFloat("uContrast", m_effects.contrast);
     m_postProcessShader->setBool("uPurkinjeShiftEnabled", m_effects.purkinjeShiftEnabled);
+    m_postProcessShader->setBool("uBloomyFogEnabled", m_effects.bloomyFogEnabled);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[0][0] : 0);
-    glActiveTexture(GL_TEXTURE2);
+    for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        glActiveTexture(GL_TEXTURE1 + mip);
+        glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[mip][0] : 0);
+    }
+    glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
 
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE2);
+    glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    for (int mip = kBloomMipCount - 1; mip >= 0; --mip) {
+        glActiveTexture(GL_TEXTURE1 + mip);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -360,9 +334,15 @@ bool PostProcessRenderer::ensureRenderTargets(const int width, const int height)
     glCreateFramebuffers(1, &m_sceneFbo);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &m_sceneColorTex);
-    glTextureStorage2D(m_sceneColorTex, 1, GL_RGBA16F, width, height);
+    const int sceneMipLevels = std::max(
+        1,
+        static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1);
+    glTextureStorage2D(m_sceneColorTex, sceneMipLevels, GL_RGBA16F, width, height);
+    // Keep normal scene sampling on base level. Bloom uses explicit textureLod()
+    // after glGenerateMipmap(), matching DerivativeMain's LOD-driven downsample.
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MAX_LEVEL, sceneMipLevels - 1);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_sceneFbo, GL_COLOR_ATTACHMENT0, m_sceneColorTex, 0);

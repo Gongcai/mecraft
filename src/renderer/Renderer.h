@@ -146,6 +146,7 @@ public:
         float saturation = 1.0f;
         float contrast = 1.0f;
         bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
+        bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
     };
 
 

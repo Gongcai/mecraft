@@ -74,7 +74,7 @@ void main() {
     float noise = texture(uNoiseTex, screenCoord * 3.0).r;
     vec2 rot = vec2(cos(noise * TAU), sin(noise * TAU)) * CoC2;
 
-    vec3 color = vec3(0.0);
+    vec4 color = vec4(0.0);
     float rSteps = 1.0 / float(SAMPLES);
 
     for (int i = 0; i < SAMPLES; ++i) {
@@ -82,11 +82,11 @@ void main() {
         vec2 sampleOffset = rot * sqrt((noise + float(i)) * rSteps);
         ivec2 sampleCoord = texel + ivec2(sampleOffset);
         sampleCoord = clamp(sampleCoord, ivec2(0), ivec2(uScreenSize) - 1);
-        color += texelFetch(uSceneTex, sampleCoord, 0).rgb;
+        color += texelFetch(uSceneTex, sampleCoord, 0);
         rot *= goldenRotate;
     }
 
     color *= rSteps;
 
-    FragColor = vec4(color, 1.0);
+    FragColor = color;
 }
