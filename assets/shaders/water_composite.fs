@@ -214,13 +214,17 @@ bool traceWaterScreenSpaceReflection(vec3 worldPos,
 
 // ---- Rain ripple normal (DerivativeMain lib/Surface/RainEffect.glsl) ----
 vec2 GetRainNormal(vec3 worldPos, float wetness) {
+    // Mecraft does not have a real rain ripple texture/system yet. The generic
+    // noise texture is too high-frequency for DerivativeMain's RainEffect.glsl
+    // semantics, so keep this as a very subtle placeholder until WeatherSystem
+    // owns precipitation particles and a proper ripple normal atlas.
     vec2 p = worldPos.xz * 0.6;
     float frame = fract(uTime * 0.05) * 64.0;
     p.x = (p.x + floor(frame)) / 64.0;
     vec2 normal = texture(uNoiseTex, p).rg * 2.0 - 1.0;
     float lod = length(fwidth(worldPos.xz));
     normal /= 1.0 + lod;
-    return normal * 0.75 * wetness;
+    return normal * 0.08 * wetness;
 }
 
 // DerivativeMain FresnelDielectricN

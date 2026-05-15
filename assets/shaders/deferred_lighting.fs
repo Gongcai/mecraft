@@ -42,6 +42,7 @@ uniform vec3 uHorizonScatterColor;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
 uniform int uAerialPerspectiveEnabled;
+uniform int uVolumetricFogActive;
 uniform float uShadowTintStrength;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
@@ -248,9 +249,10 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     float medium = noise2D(cloudPos * 2.37 - wind * 1.7);
     float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
     float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
-    float weatherBoost = clamp(uWeatherMist * 0.25 + uWeatherWetness * 0.32 + uWeatherStorm * 0.58, 0.0, 0.65);
-    float strength = uCloudShadowStrength * outdoorMask * max(uCloudDensity, 0.0) * (1.0 + weatherBoost);
-    return 1.0 - coverage * clamp(strength, 0.0, 0.85);
+    // Until WeatherSystem owns real cloud cover/precipitation, do not let debug
+    // weather presets amplify procedural cloud-shadow noise into roaming black blobs.
+    float strength = uCloudShadowStrength * outdoorMask * max(uCloudDensity, 0.0);
+    return 1.0 - coverage * clamp(strength, 0.0, 0.45);
 }
 
 vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
@@ -782,7 +784,11 @@ void main() {
     float shadowDesatMask = oneMinus(sunShadow) * outdoorSkyMask;
     color = desaturateLinear(color, shadowDesatMask * uShadowDesaturation);
 
-    if (uFogEnabled != 0) {
+    // Aerial perspective: skip when volumetric fog is active, because the volumetric
+    // march already integrates atmospheric transmittance at each step. Running both
+    // causes double-fogging (double dimming + double scattering).
+    // When volumetric fog is off, this provides the fallback land atmospheric scattering.
+    if (uFogEnabled != 0 && uVolumetricFogActive == 0) {
         float fogDistance = length(worldPos - uCameraPos);
         color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor);
     }

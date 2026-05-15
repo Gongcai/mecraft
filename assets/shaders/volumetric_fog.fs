@@ -255,9 +255,10 @@ float vfogCloudShadow(vec3 worldPos, vec3 lightDir) {
     float medium = pseudo3DNoise(vec3(cloudPos * 2.37 - wind * 1.7, 0.0), 0.05, vec2(0.0));
     float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
     float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
-    float weatherBoost = clamp(uWeatherMist * 0.25 + uWeatherWetness * 0.32 + uWeatherStorm * 0.58, 0.0, 0.65);
-    float strength = uCloudShadowStrength * max(uCloudDensity, 0.0) * (1.0 + weatherBoost);
-    return 1.0 - coverage * clamp(strength, 0.0, 0.85);
+    // Debug weather presets are not a real cloud-shadow/precipitation system yet.
+    // Keep procedural cloud shadows conservative to avoid roaming black fog blobs.
+    float strength = uCloudShadowStrength * max(uCloudDensity, 0.0);
+    return 1.0 - coverage * clamp(strength, 0.0, 0.45);
 }
 
 void main() {

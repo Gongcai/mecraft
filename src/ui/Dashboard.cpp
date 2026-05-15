@@ -359,7 +359,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int pipelineMode = static_cast<int>(pipeline.mode);
         int tonemapMode = pipeline.tonemapMode;
         int debugViewMode = pipeline.debugViewMode;
-        int weatherPreset = pipeline.weatherPreset;
+        int weatherPreset = static_cast<int>(world.getWeatherSystem().getRenderState().type);
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {
             "Reinhard [Mecraft extra]",
@@ -470,8 +470,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int qualityTier = pipeline.volumetricQualityTier;
         pipelineChanged |= ImGui::Combo("VFog Quality Tier", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
         pipeline.volumetricQualityTier = qualityTier;
-        pipelineChanged |= ImGui::Combo("Weather Preset", &weatherPreset, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets));
-        pipeline.weatherPreset = weatherPreset;
+        if (ImGui::Combo("Weather State (Debug)", &weatherPreset, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
+            world.getWeatherSystem().setDebugWeatherPreset(static_cast<WeatherType>(weatherPreset));
+        }
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
         // Exposure diagnostics
@@ -553,7 +554,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.shadowTintStrength = 0.18f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.04f;
-            pipeline.weatherPreset = 0;
+            world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
             pipeline.aerialStrength = 0.25f;
             pipeline.horizonScatterStrength = 0.35f;
             pipeline.volumetricFogStrength = 0.0f;
@@ -607,7 +608,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.shadowTintStrength = 0.28f;
             pipeline.blockLightStrength = 1.0f;
             pipeline.fakeBounceStrength = 0.06f;
-            pipeline.weatherPreset = 0;
+            world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
             pipeline.aerialStrength = 0.48f;
             pipeline.horizonScatterStrength = 0.70f;
             pipeline.volumetricFogStrength = 0.52f;
@@ -661,7 +662,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.shadowTintStrength = 0.34f;
             pipeline.blockLightStrength = 1.05f;
             pipeline.fakeBounceStrength = 0.08f;
-            pipeline.weatherPreset = 1;
+            world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Mist);
             pipeline.aerialStrength = 0.58f;
             pipeline.horizonScatterStrength = 0.82f;
             pipeline.volumetricFogStrength = 0.68f;

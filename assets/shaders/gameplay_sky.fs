@@ -134,8 +134,8 @@ void main() {
         vec3 transmittance;
         vec3 sky = atmGetSkyRadiance(dir, sunDir, transmittance);
         if (uIncludeCelestialDisks != 0) {
-            sky += atmRenderSun(dir, sunDir) * transmittance;
-            sky += atmRenderMoon(dir, moonDir) * transmittance;
+            sky += atmRenderSun(dir, sunDir) * transmittance * clamp(uSunVisibility, 0.0, 1.0);
+            sky += atmRenderMoon(dir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
         }
 
         FragColor = vec4(max(sky, vec3(0.0)), 1.0);

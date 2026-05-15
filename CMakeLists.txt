@@ -83,6 +83,7 @@ set(SRC_WORLD
         src/world/World.cpp
         src/world/DropSystem.cpp
         src/world/DayNightSystem.cpp
+        src/world/WeatherSystem.cpp
 )
 
 # [渲染与UI]

@@ -121,6 +121,7 @@ void World::init(uint32_t seed) {
 
 void World::update(const glm::vec3& playerPos) {
     m_dayNightSystem.update(static_cast<float>(Time::deltaTime));
+    m_weatherSystem.update(static_cast<float>(Time::deltaTime));
 
     const int playerChunkX = worldToChunkCoord(static_cast<int>(std::floor(playerPos.x)), Chunk::SIZE_X);
     const int playerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(playerPos.z)), Chunk::SIZE_Z);

@@ -65,25 +65,6 @@ constexpr Renderer::FrustumPlane kPlaneFromIndex(const size_t index) {
     return static_cast<Renderer::FrustumPlane>(index);
 }
 
-struct RenderWeatherFactors {
-    float mist = 0.0f;
-    float wetness = 0.0f;
-    float storm = 0.0f;
-    float aerialReduction = 0.55f;
-};
-
-RenderWeatherFactors weatherFactorsForPreset(const int preset) {
-    switch (std::clamp(preset, 0, 3)) {
-    case 1:
-        return {0.55f, 0.15f, 0.0f, 0.42f};
-    case 2:
-        return {0.38f, 0.72f, 0.18f, 0.34f};
-    case 3:
-        return {0.72f, 1.0f, 0.85f, 0.28f};
-    default:
-        return {0.0f, 0.0f, 0.0f, 0.55f};
-    }
-}
 
 std::string resolveAtmosphereFinalLutPath() {
     const std::array<const char*, 4> candidates = {
@@ -662,7 +643,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 63);
-    m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
+
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
     ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
@@ -1034,7 +1015,9 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     }
     frame.fogEnd = std::max(frame.fogEnd, frame.fogStart + 0.1f);
 
-    const RenderWeatherFactors weather = weatherFactorsForPreset(m_pipelineSettings.weatherPreset);
+    // Weather state now comes from World::WeatherSystem (single source of truth).
+    // Dashboard writes to WeatherSystem; Renderer reads from it.
+    const WeatherState& weather = world.getWeatherSystem().getRenderState();
     frame.weatherMist = weather.mist;
     frame.weatherWetness = weather.wetness;
     frame.weatherStorm = weather.storm;
@@ -1649,6 +1632,14 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     bindShadowFrameUniforms(*m_deferredLightingShader, frame);
     bindSkyLightingUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
+    // Tell deferred lighting to skip aerial perspective when volumetric fog will handle it.
+    // This prevents double-fogging (deferred aerial + volumetric both applying atmospheric scatter).
+    const bool volFogActive = m_pipelineSettings.volumetricFogEnabled &&
+                              m_pipelineSettings.aerialPerspectiveEnabled &&
+                              m_pipelineSettings.volumetricFogStrength > 0.001f &&
+                              m_volumetricFogShader != nullptr &&
+                              m_volumetricCompositeShader != nullptr;
+    m_deferredLightingShader->setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
     m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
     m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     m_deferredLightingShader->setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
@@ -2406,8 +2397,12 @@ void Renderer::renderSkyCapturePass(const World& world) {
     const float cameraAltitude = m_cameraPos.y;
     const GLuint atmosphereLut = m_deferredTargets.atmosphereLutTexture();
     const int moonPhase = world.getDayNightSystem().getMoonPhaseIndex();
-    // DerivativeMain MoonFlux: vec3(abs(moonPhase - 4.0) * 0.25 + 0.2).
-    const float moonPhaseFlux = static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f;
+    // DerivativeMain MoonFlux: vec3(abs(moonPhase - 4.0) * 0.25 + 0.2) * NIGHT_BRIGHTNESS.
+    // Phase factor ranges 0.2 (full moon) to 1.2 (new moon).
+    // NIGHT_BRIGHTNESS = 0.0005 (DerivativeMain Settings.glsl:91).
+    // Without this scaling, moon contribution is ~2000x too bright.
+    constexpr float kNightBrightness = 0.0005f;
+    const float moonPhaseFlux = (static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f) * kNightBrightness;
 
     // Raw sky radiance (rows 0..257)
     m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),

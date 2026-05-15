@@ -245,10 +245,12 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 
     const float sunAngle = dayNight.getCelestialAngleRadians();
     const float moonAngle = std::fmod(sunAngle + kPi, kTwoPi);
-    renderCelestialBody(camera, aspect, sunAngle, kSunSize, m_sunTexture, glm::vec2(0.0f), glm::vec2(1.0f), 1.0f);
+    renderCelestialBody(camera, aspect, sunAngle, kSunSize, m_sunTexture, glm::vec2(0.0f), glm::vec2(1.0f), m_lastColors.sunVisibility);
 
     const MoonPhaseUv moonUv = getMoonPhaseUvInternal(dayNight.getMoonPhaseIndex());
-    renderCelestialBody(camera, aspect, moonAngle, kMoonSize, m_moonTexture, moonUv.uvMin, moonUv.uvMax, 0.95f);
+    const float moonPhaseFactor = static_cast<float>(std::abs(dayNight.getMoonPhaseIndex() - 4)) * 0.25f + 0.2f;
+    const float moonDiscAlpha = 0.18f * moonPhaseFactor * m_lastColors.moonVisibility;
+    renderCelestialBody(camera, aspect, moonAngle, kMoonSize, m_moonTexture, moonUv.uvMin, moonUv.uvMax, moonDiscAlpha);
     renderClouds(camera, aspect, dayNight, m_lastColors);
 
     if (blendWasEnabled) {
@@ -586,7 +588,12 @@ GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminan
     const float sunAltitude = std::clamp(colors.sunDirection.y, 0.0f, 1.0f);
     const float moonAltitude = std::clamp(colors.moonDirection.y, 0.0f, 1.0f);
     const float sunTransmittance = colors.sunVisibility * smoothstep(0.0f, 0.18f, sunAltitude);
-    const float moonTransmittance = colors.moonVisibility * smoothstep(0.0f, 0.18f, moonAltitude) * 0.35f;
+    // DerivativeMain MoonFlux includes NIGHT_BRIGHTNESS (0.0005) which scales moon
+    // contribution to physically correct levels. Without this, moon is ~2000x too bright.
+    // The GPU metadata path (mode 5) uses atmGetSunAndSkyIrradiance with uMoonPhaseFlux
+    // which already includes NIGHT_BRIGHTNESS. This CPU fallback should match.
+    constexpr float kNightBrightness = 0.0005f;
+    const float moonTransmittance = colors.moonVisibility * smoothstep(0.0f, 0.18f, moonAltitude) * kNightBrightness;
 
     data.sunIlluminance = kSolarIrradiance * colors.sunLightColor * sunTransmittance;
     data.moonIlluminance = kSolarIrradiance * colors.moonLightColor * moonTransmittance;

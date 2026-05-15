@@ -15,6 +15,7 @@
 #include "DayNightSystem.h"
 #include "FluidState.h"
 #include "FluidSystem.h"
+#include "WeatherSystem.h"
 #include "LightService.h"
 #include "TerrainGenerator.h"
 #include "../physics/PhysicsInfo.h"
@@ -61,6 +62,8 @@ public:
     const DayNightSystem& getDayNightSystem() const { return m_dayNightSystem; }
     FluidSystem& fluidSystem() { return m_fluidSystem; }
     const FluidSystem& fluidSystem() const { return m_fluidSystem; }
+    WeatherSystem& getWeatherSystem() { return m_weatherSystem; }
+    const WeatherSystem& getWeatherSystem() const { return m_weatherSystem; }
 
     BlockNeighborUpdateQueue& neighborUpdateQueue() { return m_neighborUpdateQueue; }
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
@@ -72,6 +75,7 @@ private:
     std::unique_ptr<LightService> m_lightService;
     DayNightSystem m_dayNightSystem;
     FluidSystem m_fluidSystem{*this};
+    WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
 
