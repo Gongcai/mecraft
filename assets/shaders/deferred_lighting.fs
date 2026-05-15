@@ -94,7 +94,8 @@ uniform vec3 uFogColor;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
-uniform int uDeferredDebugMode; // 0=off, 1=direct-only, 2=skylight-only, 3=blocklight-only, 4=minimum-ambient, 5=fake-bounce, 6=before-post
+uniform int uDeferredDebugMode; // 0=off, 1=direct-only, 2=skylight-only, 3=blocklight-only, 4=minimum-ambient, 5=fake-bounce, 6=before-post, 7=skylight-energy
+uniform int uDerivativeStrictMode; // 1=disable Mecraft extras (minimumAmbient, sky specular, fake bounce) to match DerivativeMain baseline
 
 // Shadow color/normal textures (DerivativeMain shadowcolor0/1 equivalent)
 uniform sampler2D uShadowColorTex;
@@ -409,7 +410,11 @@ vec3 applyAerialPerspective(vec3 sceneColor,
 
 void main() {
     float depth = texture(uDepthTex, vTexCoord).r;
-    if (depth >= 1.0) {
+    if (depth >= 0.9999) {
+        if (uDeferredDebugMode > 0) {
+            FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+            return;
+        }
         discard;
     }
 
@@ -487,7 +492,7 @@ void main() {
     vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
-    float moonShadow = (uShadowLightMode == 1) ? mix(1.0, dot(shadowColored, vec3(0.333)), 0.82) : 1.0;
+    float moonShadow = (uShadowLightMode == 1) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float activeShadow = (uShadowLightMode == 1) ? moonShadow : sunShadow;
 
     // --- Lighting environment from SkyCapture (unified data source) ---
@@ -515,6 +520,7 @@ void main() {
     vec3 dbgBlocklight = vec3(0.0);
     vec3 dbgMinAmbient = vec3(0.0);
     vec3 dbgFakeBounce = vec3(0.0);
+    float dbgSkylightDirectRatio = 0.0;
 
     // 1. Sunlight setup: 64 * waterTint * SUNLIGHT_INTENSITY * directIlluminance * cloudShadow
     // DerivativeMain deferred5.fsh:240 — underwater waterTint attenuates sunlight
@@ -545,6 +551,7 @@ void main() {
     // 3. Shadow / specular computation (DerivativeMain deferred5.fsh:276-300)
     vec3 shadow = vec3(0.0);
     vec3 specular = vec3(0.0);
+    vec3 directVisibilityDebug = vec3(0.0);
     if (NdotL > 1e-3) {
         // DerivativeMain: shadow = PercentageCloserFilter(...)
         shadow = shadowColored;
@@ -566,12 +573,28 @@ void main() {
             // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
             // Indoor surfaces with sky light = 0 get no direct sunlight
             shadow *= saturate(voxelLight.r * 1e6);
+            // Diagnostic view: show the 0..1 direct-light visibility before HDR
+            // sunlightMult is applied. The physical direct light is intentionally
+            // much brighter than LDR, so using it directly makes debug mode pure white.
+            directVisibilityDebug = clamp(shadow * diffuse * NdotL, vec3(0.0), vec3(1.0));
             // DerivativeMain deferred5.fsh:300 — shadow *= sunlightMult
             shadow *= sunlightMult;
         }
     }
 
     // 4. (DerivativeMain has no SSS fill light — removed self-invented extension)
+
+    // DerivativeMain time weights (shaders.properties:125-131)
+    // Computed from worldSunVectorY (= uSunDirection.y). meWeight peaks at horizon
+    // (y=0.18) and the four weights sum to 1.0 at all times.
+    float sunY = uSunDirection.y;
+    float sunX = uSunDirection.x;
+    float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
+    float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
+    float timeNoon = (sunY > 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
+    float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
+    float timeSunrise = (sunX > 0.0 ? 1.0 : 0.0) * meWeight;
+    float timeSunset = (sunX < 0.0 ? 1.0 : 0.0) * meWeight;
 
     // 5. Skylight (DerivativeMain deferred5.fsh:305-323)
     // SkySH is computed once in the vertex shader (3 invocations) and passed via
@@ -586,6 +609,8 @@ void main() {
     // Wetness blend: under rain, lerp toward flat skySunLight (DerivativeMain deferred5.fsh:319)
     vec3 skySunLight = (normal.y * 0.24 + 0.4) * directIlluminance;
     skylight = mix(skylight, skySunLight, uWeatherWetness * 0.7);
+    // DerivativeMain/world0/deferred5.fsh:316
+    skylight *= 0.8 - uWeatherWetness * 0.2;
 
     // DerivativeMain keeps skylight independent from the shadow map; only direct
     // light is shadowed. Shadow-tinting skylight makes sun/moon shadows collapse
@@ -594,19 +619,29 @@ void main() {
     sceneData += skylightContrib;
     dbgSkylight = skylightContrib;
 
+    // Skylight/direct ratio: this is the useful contrast diagnostic for shadows.
+    // DerivativeMain uses sky radiance SH directly for skylight, while skyIlluminance
+    // metadata is a separate atmosphere irradiance value, so comparing those 1:1 is
+    // not unit-equivalent. What matters visually is how much sky fill competes with
+    // the fully-lit direct term.
+    float skylightLum = dot(skylightContrib, vec3(0.2126, 0.7152, 0.0722));
+    float directPotentialLum = dot(sunlightMult * diffuse, vec3(0.2126, 0.7152, 0.0722));
+    dbgSkylightDirectRatio = (directPotentialLum > 1e-6) ? skylightLum / directPotentialLum : 0.0;
+
     // Basic brightness (DerivativeMain deferred5.fsh:325)
     // sceneData += BASIC_BRIGHTNESS + nightVision * 0.1
     sceneData += 0.0005; // BASIC_BRIGHTNESS (DerivativeMain Settings.glsl:99)
 
     // Minimum ambient + fake bounce
+    // DerivativeMain strict: these are Mecraft extensions, not in DerivativeMain deferred5.fsh
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
     vec3 minAmbientContrib = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
-    sceneData += minAmbientContrib;
+    if (uDerivativeStrictMode == 0) { sceneData += minAmbientContrib; }
     dbgMinAmbient = minAmbientContrib;
     // DerivativeMain: CalculateFakeBouncedLight (SunLighting.glsl:168-174)
     float bounce = CalculateFakeBouncedLight(normal, shadowLightDir);
     vec3 bounceContrib = bounce * sqr(skyLightMask) * sunlightMult * uFakeBounceStrength;
-    sceneData += bounceContrib;
+    if (uDerivativeStrictMode == 0) { sceneData += bounceContrib; }
     dbgFakeBounce = bounceContrib;
 
     // GI / AO (DerivativeMain deferred5.fsh:329-347)
@@ -772,8 +807,8 @@ void main() {
 
     // Add shadow * diffuse BEFORE albedo multiply
     // (DerivativeMain deferred5.fsh:352: sceneData += shadow * diffuse)
-    dbgDirect = shadow * diffuse;
-    sceneData += dbgDirect;
+    dbgDirect = directVisibilityDebug;
+    sceneData += shadow * diffuse;
 
     // Multiply by albedo AFTER all diffuse/ambient/emission accumulation
     // (DerivativeMain deferred5.fsh:353: sceneData *= albedo)
@@ -794,20 +829,25 @@ void main() {
 
     vec3 color = sceneData;
 
-    // Sky specular (environment reflection) — uses DerivativeMain FresnelSchlick
-    color += evaluateSkySH(skySH, normal) * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
-             pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
+    // Sky specular (environment reflection) — Mecraft extension, not in DerivativeMain deferred5.fsh
+    // DerivativeMain handles sky reflections in a separate SSR pass (deferred6.fsh)
+    if (uDerivativeStrictMode == 0) {
+        color += evaluateSkySH(skySH, normal) * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
+                 pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
+    }
 
     // Shadow desaturation (Mecraft extension, not in DerivativeMain)
     // Uses the raw 0-1 shadow value for the active sun/moon shadow light.
     float shadowDesatMask = oneMinus(activeShadow) * outdoorSkyMask;
-    color = desaturateLinear(color, shadowDesatMask * uShadowDesaturation);
+    if (uDerivativeStrictMode == 0) {
+        color = desaturateLinear(color, shadowDesatMask * uShadowDesaturation);
+    }
 
     // Aerial perspective: skip when volumetric fog is active, because the volumetric
     // march already integrates atmospheric transmittance at each step. Running both
     // causes double-fogging (double dimming + double scattering).
     // When volumetric fog is off, this provides the fallback land atmospheric scattering.
-    if (uFogEnabled != 0 && uVolumetricFogActive == 0) {
+    if (uDerivativeStrictMode == 0 && uFogEnabled != 0 && uVolumetricFogActive == 0) {
         float fogDistance = length(worldPos - uCameraPos);
         color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor, env);
     }
@@ -821,6 +861,16 @@ void main() {
     else if (uDeferredDebugMode == 4) { color = dbgMinAmbient; }
     else if (uDeferredDebugMode == 5) { color = dbgFakeBounce; }
     else if (uDeferredDebugMode == 6) { color = sceneData; } // before aerial/fog
+    else if (uDeferredDebugMode == 7) {
+        // Skylight/direct ratio heatmap: green≈0.25 balanced, red means sky fill
+        // is too strong relative to direct light and shadows will look washed out.
+        float r = clamp(dbgSkylightDirectRatio / 0.25, 0.0, 2.0);
+        color = vec3(
+            smoothstep(1.0, 2.0, r),           // red channel: overbright
+            1.0 - abs(r - 1.0),                // green channel: peak at 1.0
+            smoothstep(1.0, 0.0, r)            // blue channel: underbright
+        );
+    }
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.

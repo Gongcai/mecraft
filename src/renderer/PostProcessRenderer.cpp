@@ -315,7 +315,11 @@ float PostProcessRenderer::updateAutoExposure(const float frameTime) {
     const float weightedLogLum = exposureData[0];
     const float weightSum = std::max(exposureData[1], 1e-4f);
     const float averageLogLum = weightedLogLum / weightSum;
-    const float averageLum = std::max(std::exp(averageLogLum * 0.75f), 0.02f);
+    // DerivativeMain/program/Post/Temporal.vert::CalculateAverageExposure:
+    // exposure = fastExp(weightedLogLuminance * 0.75). Do not apply a Mecraft
+    // luminance floor here; the shaderpack relies on very low night luminance to
+    // drive the sigmoid exposure response smoothly.
+    const float averageLum = std::exp(averageLogLum * 0.75f);
     m_lastAverageLum = averageLum;
 
     // DerivativeMain sigmoid response curve (Temporal.vert lines 42-57)
@@ -325,16 +329,15 @@ float PostProcessRenderer::updateAutoExposure(const float frameTime) {
     const float a = K * 1e-2f * 18.0f;   // 3.42
     const float b = a - K * 1e-2f * 0.04f; // 3.4124
     float targetExposure = calibration / (a - b * std::exp(-averageLum / b));
-    targetExposure = std::clamp(targetExposure, m_effects.autoExposureMin, m_effects.autoExposureMax);
     m_lastTargetExposure = targetExposure;
 
     if (!m_autoExposureInitialized) {
         m_adaptedExposure = targetExposure;
         m_autoExposureInitialized = true;
     } else {
-        // Asymmetric adaptation: darken fast (shadow→light transition recovers quickly),
-        // brighten slightly slower (light→shadow needs less urgency with proper skylight).
-        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 3.0f : 1.5f);
+        // DerivativeMain/program/Post/Temporal.vert:
+        // speed = targetExposure < prevExposure ? 1.5 : 1.0
+        const float speed = m_effects.autoExposureSpeed * (targetExposure < m_adaptedExposure ? 1.5f : 1.0f);
         const float alpha = 1.0f - std::exp(-std::max(frameTime, 0.0f) * speed);
         m_adaptedExposure += (targetExposure - m_adaptedExposure) * std::clamp(alpha, 0.0f, 1.0f);
     }

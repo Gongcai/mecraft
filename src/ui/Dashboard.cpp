@@ -446,7 +446,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "3: Blocklight Only",
             "4: Minimum Ambient",
             "5: Fake Bounce",
-            "6: Before Post"
+            "6: Before Post",
+            "7: Sky/Direct Ratio"
         };
         int lightDebugMode = pipeline.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
@@ -456,6 +457,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &pipeline.contactShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Cloud Shadows", &pipeline.cloudShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Derivative Strict", &pipeline.derivativeStrictMode);
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.0f, 3.0f, "%.2f");
@@ -467,6 +469,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Auto Exposure", &pipeline.autoExposureEnabled);
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Min", &pipeline.autoExposureMin, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Max", &pipeline.autoExposureMax, 1.0f, 64.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::TextDisabled("DerivativeMain exposure target is unclamped; min/max are legacy UI fields.");
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Speed", &pipeline.autoExposureSpeed, 0.1f, 6.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Auto Exp Bias", &pipeline.autoExposureBias, -2.0f, 2.0f, "%.2f EV");
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);

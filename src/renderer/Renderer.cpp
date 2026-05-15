@@ -437,6 +437,11 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
 }
 
 void Renderer::renderTransparentCompositePass(const World& world, const Window& window) {
+    if (m_deferredFrameActive && m_pipelineSettings.deferredLightDebugMode > 0) {
+        restoreCapturedFramebufferViewport(window);
+        return;
+    }
+
     // Step 1: Render water with dedicated shader
     renderWaterCompositePass(world, window);
 
@@ -1338,6 +1343,16 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
+    if (m_pipelineSettings.deferredLightDebugMode > 0) {
+        m_deferredTargets.copySceneLightingToSceneComposite();
+        m_deferredTargets.copySceneCompositeToTransparentComposite();
+        m_deferredTargets.copySceneCompositeToSceneResolved();
+        updateDeferredHistoryTargets();
+        m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        restoreCapturedFramebufferViewport(window);
+        return true;
+    }
     if (m_reflectionShader != nullptr) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Reflection);
@@ -1610,6 +1625,10 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
+    if (m_pipelineSettings.deferredLightDebugMode > 0) {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
 
     glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
@@ -1651,6 +1670,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
     m_deferredLightingShader->setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
     m_deferredLightingShader->setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
+    m_deferredLightingShader->setInt("uDerivativeStrictMode", m_pipelineSettings.derivativeStrictMode ? 1 : 0);
     bindAtmosphereUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);

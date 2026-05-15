@@ -5,6 +5,7 @@
 > 2026-05-14 范围修订：`SKY_GROUND` 行星地面渲染、`AURORA/AURORA_STRENGTH`、染色玻璃彩色阴影不纳入当前目标；DerivativeMain 的非线性 `shadow warp` 已确认与 Mecraft greedy meshing 不适配，正式阴影路线维持 Mecraft 自有 CSM contract。
 > 2026-05-14 源码同步：当前工作区已修复 SkyCapture raw/cloudy atlas normalized UV，并新增 `lighting_environment.glsl` 统一读取入口、SkyCapture directional debug、体积雾 High/Ultra 雏形。后续优先级从”先修 SkyCapture UV”调整为”移植 FromSH、收口云/水光照单来源、修 SSS、参数化体积雾云海”。
 > 2026-05-15 源码同步：`FromSH` skylight 已实现（`sky_sh.glsl`，L1 SH 25 方向采样）并接入 deferred lighting；SkyCapture raw sky 已剥离天体盘；云/水光照已统一到 `LightingEnvironment` 单来源并按 DerivativeMain 做了能量倍率审计（volumetric sun=22.0/sky=0.15，planar sun=120.0，water fog sun=28.0*directIlluminance，sun reflection clamp 2000）；云合成已修正为 premultiplied strength 混合。Phase 0 亮度链路收口基本完成，后续转向 SSS、体积雾参数化、Tonemap 对齐。
+> 2026-05-15 后处理曝光同步：`PostProcessRenderer::updateAutoExposure()` 已恢复 DerivativeMain `Temporal.vert` 的自动曝光公式：无 `averageLum >= 0.02` 地板、无 target exposure min/max clamp、适应速度为 `target < prev ? 1.5 : 1.0`。`autoExposureMin/Max` 仅作为 legacy UI/settings 字段保留，不再作为 DerivativeMain-like 标准路径的调参依据。
 
 > 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
 
@@ -849,7 +850,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 4. **Skylight 不是 `FromSH`。** DerivativeMain 在 `deferred5.vsh` 对 sky capture 做 5x5 SH，再在 `deferred5.fsh` 用 `FromSH()` 重建；Mecraft 仍用五方向采样/艺术 `coolSkyColor * skyIlluminance`，单位和方向性都不同。
 5. **阴影 shaping 默认已中性但仍在正式路径。** `shadowContrast=1.0`、`shadowMinLight=0.0` 已避免额外压暗；但 `shapeShadowVisibility()` 仍存在，建议降级为 debug/extra，标准路径直接消费 CSM shadow。
 6. **体积雾已有 High/Ultra 雏形但非完整云海。** 现有 tier 0-3、太阳方向 OD、多瓣相函数、cloud shadow 和 air density 已落地；仍缺 `SEA_LEVEL/FALLOFF` 可调高度、DerivativeMain 动态 samples、Bloomy Fog 和更准确的 High/Ultra 密度场。
-7. **自动曝光会放大上游偏差。** Mecraft exposure 曲线近似 DerivativeMain，但输入 HDR 仍受 `FromSH` 缺失、云/水光照尾项、后处理差异影响。
+7. **自动曝光公式已回到 DerivativeMain。** 当前 `PostProcessRenderer` 已移除 Mecraft 自加的夜间亮度地板、曝光上限和改速逻辑；如果后续仍出现夜间阴影关系不对，应继续查 Grade/Tonemap 集合、Bloomy Fog、Purkinje Shift 和 deferred lighting extension，而不是继续用 exposure clamp 补偿。
 
 ### 17.4 体积雾/体积光复扫结论
 

@@ -65,7 +65,7 @@ public:
         float bloomStrength = 1.0f;
         bool autoExposureEnabled = true;
         float autoExposureMin = 0.001f;
-        float autoExposureMax = 4.0f;
+        float autoExposureMax = 64.0f; // Legacy UI field; DerivativeMain target exposure is not clamped.
         float autoExposureSpeed = 1.0f;
         float autoExposureBias = 0.0f;
         bool sunRaysEnabled = false;
@@ -94,6 +94,7 @@ public:
         float sceneReflectionCompositeStrength = 0.36f;
         int debugViewMode = 0;
         int deferredLightDebugMode = 0; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=beforePost
+        bool derivativeStrictMode = false;
         int weatherPreset = 0; // DEPRECATED: weather state now lives in World::WeatherSystem
         int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
         bool debugDisableGreedyMeshing = false;
