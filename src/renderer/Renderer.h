@@ -96,7 +96,7 @@ public:
         int deferredLightDebugMode = 0; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=beforePost
         bool derivativeStrictMode = false;
         int weatherPreset = 0; // DEPRECATED: weather state now lives in World::WeatherSystem
-        int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
+        int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX_Minimal, 4=AcademyFull, 5=AgX_Full
         bool debugDisableGreedyMeshing = false;
         int shadowResolution = 2048;
         float shadowDistance = 192.0f;
@@ -145,6 +145,7 @@ public:
         float gamma = 1.0f;
         float saturation = 1.0f;
         float contrast = 1.0f;
+        bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
     };
 
 

@@ -8,7 +8,6 @@ in vec2 vTexCoord;
 out vec4 FragColor;
 
 uniform sampler2D uSceneTex;
-uniform float uExposure; // Current auto-exposure value
 
 void main() {
     vec2 texel = 1.0 / vec2(textureSize(uSceneTex, 0));
@@ -19,15 +18,8 @@ void main() {
     bloom += texture(uSceneTex, vTexCoord + vec2(-1.0, -1.0) * texel).rgb;
     bloom *= 0.2;
 
-    // Clamp to prevent extreme HDR values from dominating bloom.
-    // DerivativeMain's scene values are typically 0-2 after exposure;
-    // our scene can reach 50+ due to directIlluminance*64 scaling.
-    // The exposure compensation in the final composite handles the rest.
-    float maxComponent = max(bloom.r, max(bloom.g, bloom.b));
-    float clampThreshold = max(uExposure * 8.0, 0.5);
-    if (maxComponent > clampThreshold) {
-        bloom *= clampThreshold / maxComponent;
-    }
-
+    // DerivativeMain DownSample0: raw HDR downsample, no brightness clamp.
+    // Exposure compensation in Grade (bloomAmount /= fma(max(exposure,1.0),0.7,0.3))
+    // prevents bloom from blowing out in bright scenes.
     FragColor = vec4(bloom, 1.0);
 }

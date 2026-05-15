@@ -495,11 +495,9 @@ void main() {
         transmittance *= stepTransmittance;
     }
 
-    float opacity = clamp(1.0 - transmittance, 0.0, 0.34);
-    float rawOpacity = max(1.0 - transmittance, 0.0001);
-    scattering *= opacity / rawOpacity;
-    skyScattering *= opacity / rawOpacity;
-    sunScattering *= opacity / rawOpacity;
+    // DerivativeMain VolumetricFog.glsl: return real vec4(fogColor, transmittance).
+    // No fixed opacity cap — fog density is controlled by the march parameters alone.
+    float opacity = max(1.0 - transmittance, 0.0);
 
     // Debug output modes
     if (uVolumetricDebugMode == 1) {

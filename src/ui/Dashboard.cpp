@@ -365,7 +365,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "Reinhard [Mecraft extra]",
             "AcademyFit [DerivativeMain]",
             "Filmic [Mecraft extra]",
-            "AgX [Mecraft extra]"
+            "AgX_Minimal [DerivativeMain]",
+            "AcademyFull [DerivativeMain]",
+            "AgX_Full [DerivativeMain]"
         };
         static constexpr const char* kDebugViewModes[] = {
             "0: Off",
@@ -478,6 +480,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Scene Cloud Composite", &pipeline.sceneCloudCompositeStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Scene Reflection Composite", &pipeline.sceneReflectionCompositeStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
+        pipelineChanged |= ImGui::Checkbox("Purkinje Shift", &pipeline.purkinjeShiftEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
@@ -551,8 +554,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 skyColors.moonVisibility,
                 world.getDayNightSystem().getSkyIntensity());
             // Weather state
-            const char* tonemapNames[] = {"Reinhard [Mecraft]", "AcademyFit [DerivMain]", "Filmic [Mecraft]", "AgX [Mecraft]"};
-            ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 3)]);
+            const char* tonemapNames[] = {
+                "Reinhard [Mecraft]",
+                "AcademyFit [DerivMain]",
+                "Filmic [Mecraft]",
+                "AgX_Minimal [DerivMain]",
+                "AcademyFull [DerivMain]",
+                "AgX_Full [DerivMain]"
+            };
+            ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 5)]);
             const auto& weather = world.getWeatherSystem().getRenderState();
             const char* weatherNames[] = {"Clear", "Mist", "Rain", "Storm"};
             ImGui::Text("Weather: %s  mist=%.2f wet=%.2f storm=%.2f aerialRed=%.2f",

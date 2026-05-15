@@ -51,7 +51,7 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.sunScreenPos.y = std::clamp(m_effects.sunScreenPos.y, -1.0f, 2.0f);
     m_effects.sunVisibility = std::clamp(m_effects.sunVisibility, 0.0f, 1.0f);
     m_effects.sunRayStrength = std::clamp(m_effects.sunRayStrength, 0.0f, 1.0f);
-    m_effects.tonemapMode = std::clamp(m_effects.tonemapMode, 0, 3);
+    m_effects.tonemapMode = std::clamp(m_effects.tonemapMode, 0, 5);
     m_effects.colorTemperature = std::clamp(m_effects.colorTemperature, 0.0f, 2.0f);
     m_effects.vibrance = std::clamp(m_effects.vibrance, -1.0f, 1.0f);
     m_effects.kappaGradingStrength = std::clamp(m_effects.kappaGradingStrength, 0.0f, 1.0f);
@@ -242,6 +242,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uGamma", m_effects.gamma);
     m_postProcessShader->setFloat("uSaturation", m_effects.saturation);
     m_postProcessShader->setFloat("uContrast", m_effects.contrast);
+    m_postProcessShader->setBool("uPurkinjeShiftEnabled", m_effects.purkinjeShiftEnabled);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);

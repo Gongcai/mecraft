@@ -34,6 +34,7 @@ uniform float uScreenRollRadians;
 uniform float uGamma;
 uniform float uSaturation;
 uniform float uContrast;
+uniform bool uPurkinjeShiftEnabled;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -79,7 +80,9 @@ vec3 agxContrastApprox(vec3 x) {
     return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
 }
 
-vec3 tonemapAgx(vec3 color) {
+// Legacy Mecraft AgX (Blender-style parameters, 6th-order polynomial).
+// Kept for tonemapPreserveLuma fallback on Mecraft-extra modes (0/2).
+vec3 tonemapAgxLegacy(vec3 color) {
     color = agxInset(max(color, vec3(0.0)));
     color = clamp(log2(max(color, vec3(1e-6))), -12.47393, 4.026069);
     color = (color + 12.47393) / 16.5;
@@ -89,45 +92,52 @@ vec3 tonemapAgx(vec3 color) {
     return clamp(color, 0.0, 1.0);
 }
 
-float saturate(float value) {
-    return clamp(value, 0.0, 1.0);
+// DerivativeMain/lib/Post/AgX.glsl:101 — AgX_Minimal
+// From https://www.shadertoy.com/view/mdcSDH
+// 7th-order polynomial sigmoid, sRGB gamut, -8 to +6 EV range.
+vec3 AgX_Minimal(in vec3 val) {
+    const mat3 agx_mat = mat3(
+        0.842479062253094, 0.0423282422610123, 0.0423756549057051,
+        0.0784335999999992, 0.878468636469772, 0.0784336,
+        0.0792237451477643, 0.0791661274605434, 0.879142973793104);
+    const mat3 agx_mat_inv = mat3(
+        1.19687900512017, -0.0528968517574562, -0.0529716355144438,
+        -0.0980208811401368, 1.15190312990417, -0.0980434501171241,
+        -0.0990297440797205, -0.0989611768448433, 1.15107367264116);
+    const float min_ev = -8.0;
+    const float max_ev = 6.0;
+    // Input transform
+    val = agx_mat * max(val, vec3(0.0)) * 8.0;
+    // Log2 space encoding
+    val = clamp(log2(max(val, vec3(1e-10))), min_ev, max_ev);
+    val = (val - min_ev) / (max_ev - min_ev);
+    // Apply 7th-order sigmoid approximation
+    vec3 x2 = val * val;
+    vec3 x4 = x2 * x2;
+    val = -17.86 * x4 * x2 * val
+          + 78.01 * x4 * x2
+          - 126.7 * x4 * val
+          + 92.06 * x4
+          - 28.72 * x2 * val
+          + 4.361 * x2
+          - 0.1718 * val
+          + 0.002857;
+    // Undo input transform
+    return agx_mat_inv * val;
 }
 
-vec3 saturate(vec3 value) {
-    return clamp(value, 0.0, 1.0);
-}
-
-float luma709(vec3 color) {
-    return dot(color, vec3(0.2126, 0.7152, 0.0722));
-}
-
-float maxOf(vec3 v) {
-    return max(v.x, max(v.y, v.z));
-}
-
-float minOf(vec3 v) {
-    return min(v.x, min(v.y, v.z));
-}
-
-float sqr(float x) {
-    return x * x;
-}
-
-float cube(float x) {
-    return x * x * x;
-}
-
-float curve(float x) {
-    return sqr(x) * (3.0 - 2.0 * x);
-}
-
-float oneMinus(float x) {
-    return 1.0 - x;
-}
-
-vec3 clamp16F(vec3 color) {
-    return clamp(color, vec3(0.0), vec3(65535.0));
-}
+// Helper functions needed by AcademyFull (must precede its definition)
+float luma709(vec3 color) { return dot(color, vec3(0.2126, 0.7152, 0.0722)); }
+float maxOf(vec3 v) { return max(v.x, max(v.y, v.z)); }
+float minOf(vec3 v) { return min(v.x, min(v.y, v.z)); }
+float sqr(float x) { return x * x; }
+float cube(float x) { return x * x * x; }
+float curve(float x) { return sqr(x) * (3.0 - 2.0 * x); }
+float oneMinus(float x) { return 1.0 - x; }
+float GetLuminance(vec3 color) { return luma709(color); }
+float saturate(float v) { return clamp(v, 0.0, 1.0); }
+vec3 saturate(vec3 v) { return clamp(v, 0.0, 1.0); }
+vec3 clamp16F(vec3 color) { return clamp(color, vec3(0.0), vec3(65535.0)); }
 
 vec3 LinearToSRGB(vec3 color) {
     color = max(color, vec3(0.0));
@@ -136,32 +146,451 @@ vec3 LinearToSRGB(vec3 color) {
     return mix(lo, hi, step(vec3(0.0031308), color));
 }
 
-float GetLuminance(vec3 color) {
-    return luma709(color);
-}
-
 float rgbToSaturation(vec3 rgb) {
     return (max(maxOf(rgb), 1e-10) - max(minOf(rgb), 1e-10)) / max(maxOf(rgb), 1e-2);
 }
-
 float rgbToHue(vec3 rgb) {
-    if (rgb.r == rgb.g && rgb.g == rgb.b) {
-        return 0.0;
-    }
-
-    const float TAU = 6.283185307179586;
-    float hue = (360.0 / TAU) * atan(2.0 * rgb.r - rgb.g - rgb.b, sqrt(3.0) * (rgb.g - rgb.b));
-    if (hue < 0.0) {
-        hue += 360.0;
-    }
+    if (rgb.r == rgb.g && rgb.g == rgb.b) return 0.0;
+    const float TAU_val = 6.283185307179586;
+    float hue = (360.0 / TAU_val) * atan(2.0 * rgb.r - rgb.g - rgb.b, sqrt(3.0) * (rgb.g - rgb.b));
+    if (hue < 0.0) hue += 360.0;
     return hue;
 }
-
 float rgbToYc(vec3 rgb) {
     const float yc_radius_weight = 1.75;
     float chroma = sqrt(rgb.b * (rgb.b - rgb.g) + rgb.g * (rgb.g - rgb.r) + rgb.r * (rgb.r - rgb.b));
     return (rgb.r + rgb.g + rgb.b + yc_radius_weight * chroma) / 3.0;
 }
+float GlowFwd(float ycIn, float glowGainIn, float glowMid) {
+    if (ycIn <= 2.0 / 3.0 * glowMid) return glowGainIn;
+    if (ycIn >= 2.0 * glowMid) return 0.0;
+    return glowGainIn * (glowMid / ycIn - 0.5);
+}
+float SigmoidShaper(float x) {
+    float t = max(1.0 - abs(0.5 * x), 0.0);
+    float y = 1.0 + sign(x) * oneMinus(t * t);
+    return 0.5 * y;
+}
+float CubicBasisShaperFit(float x, float width) {
+    float radius = 0.5 * width;
+    return abs(x) < radius ? sqr(curve(1.0 - abs(x) / radius)) : 0.0;
+}
+float CenterHue(float hue, float centerH) {
+    float hueCentered = hue - centerH;
+    if (hueCentered < -180.0) hueCentered += 360.0;
+    else if (hueCentered > 180.0) hueCentered -= 360.0;
+    return hueCentered;
+}
+float max0(float x) { return max(x, 0.0); }
+vec3 max0(vec3 v) { return max(v, vec3(0.0)); }
+float fastExp(float x) {
+    x = 1.0 + x / 256.0;
+    x *= x; x *= x; x *= x; x *= x;
+    x *= x; x *= x; x *= x; x *= x;
+    return x;
+}
+const mat3 rgbToXyz = mat3(
+    0.4124564, 0.3575761, 0.1804375,
+    0.2126729, 0.7151522, 0.0721750,
+    0.0193339, 0.1191920, 0.9503041
+);
+const mat3 xyzToRgb = mat3(
+     3.2404542, -1.5371385, -0.4985314,
+    -0.9692660,  1.8760108,  0.0415560,
+     0.0556434, -0.2040259,  1.0572252
+);
+
+// DerivativeMain/lib/Post/ACES.glsl — AcademyFull: full ACES RRT+ODT pipeline.
+// Includes segmented spline c5 (RRT), segmented spline c9 (ODT), surround
+// adaptation, and D60-to-D65 chromatic adaptation.
+const mat3 sRGBtoACES = mat3(
+    0.43963298, 0.38298870, 0.17737832,
+    0.08977644, 0.81343943, 0.09678413,
+    0.01754117, 0.11154655, 0.87091228
+);
+const mat3 s_ap0ToAp1 = mat3(
+     1.4514393161, -0.2365107465, -0.2149285696,
+    -0.0765537734,  1.1762296998, -0.0996759264,
+     0.0083161484, -0.0060324498,  0.9977163014
+);
+const mat3 s_ap1ToAp0 = mat3(
+     0.6954522414, 0.1406786965, 0.1638690622,
+     0.0447945634, 0.8596711185, 0.0955343182,
+    -0.0055258826, 0.0040252103, 1.0015006723
+);
+const mat3 s_ap1ToXyz = mat3(
+     0.6624541811, 0.1340042065, 0.1561876870,
+     0.2722287168, 0.6740817658, 0.0536895174,
+    -0.0055746495, 0.0040607335, 1.0103391003
+);
+const mat3 s_xyzToAp1 = mat3(
+     1.6410233797, -0.3248032942, -0.2364246952,
+    -0.6636628587,  1.6153315917,  0.0167563477,
+     0.0117218943, -0.0082844420,  0.9883948585
+);
+const mat3 D60ToD65_CAT = mat3(
+     0.98722400, -0.00611327, 0.01595330,
+    -0.00759836,  1.00186000, 0.00533002,
+     0.00307257, -0.00509595, 1.08168000
+);
+
+#define log10_aces(x) (log(x) * (1.0 / log(10.0)))
+
+// B-spline basis matrix for segmented spline evaluation
+const mat3 splineM = mat3(
+     0.5, -1.0,  0.5,
+    -1.0,  1.0,  0.5,
+     0.5,  0.0,  0.0
+);
+
+// Segmented spline c5 (RRT tone curve)
+struct SegmentedSplineParams_c5 {
+    float coeffsLow[6];
+    float coeffsHigh[6];
+    vec2 minPoint;
+    vec2 midPoint;
+    vec2 maxPoint;
+    float slopeLow;
+    float slopeHigh;
+};
+
+const SegmentedSplineParams_c5 RRT_PARAMS = SegmentedSplineParams_c5(
+    float[6](-4.0000000000, -4.0000000000, -3.1573765773, -0.4852499958, 1.8477324706, 1.8477324706),
+    float[6](-0.7185482425, 2.0810307172, 3.6681241237, 4.0000000000, 4.0000000000, 4.0000000000),
+    vec2(0.18 * exp2(-15.0), 0.0001),
+    vec2(0.18, 4.8),
+    vec2(0.18 * exp2(18.0), 10000.0),
+    0.0, 0.0
+);
+
+float segmented_spline_c5_fwd(float x, SegmentedSplineParams_c5 params) {
+    const int N_KNOTS_LOW = 4;
+    const int N_KNOTS_HIGH = 4;
+    float logMinPoint = log10_aces(params.minPoint.x);
+    float logMidPoint = log10_aces(params.midPoint.x);
+    float logMaxPoint = log10_aces(params.maxPoint.x);
+    float logx = log10_aces(max(x, 1e-6));
+    float logy;
+    if (logx <= logMinPoint) {
+        logy = logx * params.slopeLow + (log10_aces(params.minPoint.y) - params.slopeLow * logMinPoint);
+    } else if (logx < logMidPoint) {
+        float knot_coord = float(N_KNOTS_LOW - 1) * (logx - logMinPoint) / (logMidPoint - logMinPoint);
+        int j = int(knot_coord);
+        float t = knot_coord - float(j);
+        vec3 cf = vec3(params.coeffsLow[j], params.coeffsLow[j + 1], params.coeffsLow[j + 2]);
+        logy = dot(vec3(t * t, t, 1.0), splineM * cf);
+    } else if (logx < logMaxPoint) {
+        float knot_coord = float(N_KNOTS_HIGH - 1) * (logx - logMidPoint) / (logMaxPoint - logMidPoint);
+        int j = int(knot_coord);
+        float t = knot_coord - float(j);
+        vec3 cf = vec3(params.coeffsHigh[j], params.coeffsHigh[j + 1], params.coeffsHigh[j + 2]);
+        logy = dot(vec3(t * t, t, 1.0), splineM * cf);
+    } else {
+        logy = logx * params.slopeHigh + (log10_aces(params.maxPoint.y) - params.slopeHigh * logMaxPoint);
+    }
+    return pow(10.0, logy);
+}
+
+// Segmented spline c9 (ODT tone curve)
+struct SegmentedSplineParams_c9 {
+    float coeffsLow[10];
+    float coeffsHigh[10];
+    vec2 minPoint;
+    vec2 midPoint;
+    vec2 maxPoint;
+    float slopeLow;
+    float slopeHigh;
+};
+
+const SegmentedSplineParams_c9 ODT_48nits = SegmentedSplineParams_c9(
+    float[10](-1.6989700043, -1.6989700043, -1.4779000000, -1.2291000000, -0.8648000000, -0.4480000000, 0.0051800000, 0.4511080334, 0.9113744414, 0.9113744414),
+    float[10](0.5154386965, 0.8470437783, 1.1358000000, 1.3802000000, 1.5197000000, 1.5985000000, 1.6467000000, 1.6746091357, 1.6878733390, 1.6878733390),
+    vec2(0.18 * exp2(-6.5), 0.02),
+    vec2(0.18, 4.8),
+    vec2(0.18 * exp2(6.5), 48.0),
+    0.0, 0.04
+);
+
+float segmented_spline_c9_fwd(float x, SegmentedSplineParams_c9 params) {
+    const int N_KNOTS_LOW = 8;
+    const int N_KNOTS_HIGH = 8;
+    float logMinPoint = log10_aces(params.minPoint.x);
+    float logMidPoint = log10_aces(params.midPoint.x);
+    float logMaxPoint = log10_aces(params.maxPoint.x);
+    float logx = log10_aces(max(x, 1e-6));
+    float logy;
+    if (logx <= logMinPoint) {
+        logy = logx * params.slopeLow + (log10_aces(params.minPoint.y) - params.slopeLow * logMinPoint);
+    } else if (logx < logMidPoint) {
+        float knot_coord = float(N_KNOTS_LOW - 1) * (logx - logMinPoint) / (logMidPoint - logMinPoint);
+        int j = int(knot_coord);
+        float t = knot_coord - float(j);
+        vec3 cf = vec3(params.coeffsLow[j], params.coeffsLow[j + 1], params.coeffsLow[j + 2]);
+        logy = dot(vec3(t * t, t, 1.0), splineM * cf);
+    } else if (logx < logMaxPoint) {
+        float knot_coord = float(N_KNOTS_HIGH - 1) * (logx - logMidPoint) / (logMaxPoint - logMidPoint);
+        int j = int(knot_coord);
+        float t = knot_coord - float(j);
+        vec3 cf = vec3(params.coeffsHigh[j], params.coeffsHigh[j + 1], params.coeffsHigh[j + 2]);
+        logy = dot(vec3(t * t, t, 1.0), splineM * cf);
+    } else {
+        logy = logx * params.slopeHigh + (log10_aces(params.maxPoint.y) - params.slopeHigh * logMaxPoint);
+    }
+    return pow(10.0, logy);
+}
+
+float moncurve_r(float y, float gamma, float offs) {
+    float yb = pow(offs * gamma / ((gamma - 1.0) * (1.0 + offs)), gamma);
+    float rs = pow((gamma - 1.0) / offs, gamma - 1.0) * pow((1.0 + offs) / gamma, gamma);
+    return y >= yb ? (1.0 + offs) * pow(y, 1.0 / gamma) - offs : y * rs;
+}
+
+vec3 dark_surround_to_dim_surround(vec3 linearCV) {
+    const float dimSurroundGamma = 0.9811;
+    vec3 XYZ = linearCV * s_ap1ToXyz;
+    float mul = 1.0 / max(XYZ.x + XYZ.y + XYZ.z, 1e-10);
+    vec3 xyY = vec3(XYZ.x * mul, XYZ.y * mul, XYZ.y);
+    xyY.z = max(xyY.z, 0.0);
+    xyY.z = pow(xyY.z, dimSurroundGamma);
+    float mul2 = xyY.z / max(xyY.y, 1e-10);
+    XYZ = vec3(xyY.x * mul2, xyY.z, (1.0 - xyY.x - xyY.y) * mul2);
+    return XYZ * s_xyzToAp1;
+}
+
+vec3 RRT_Full(vec3 aces) {
+    float saturation = rgbToSaturation(aces);
+    float ycIn = rgbToYc(aces);
+    float s = SigmoidShaper(saturation * 5.0 - 2.0);
+    float addedGlow = 1.0 + GlowFwd(ycIn, 0.05 * s, 0.08);
+    aces *= addedGlow;
+    float hue = rgbToHue(aces);
+    float centeredHue = CenterHue(hue, 0.0);
+    float hueWeight = CubicBasisShaperFit(centeredHue, 135.0);
+    aces.r += hueWeight * saturation * (0.03 - aces.r) * (1.0 - 0.82);
+    aces = clamp(aces, vec3(0.0), vec3(65535.0));
+    vec3 rgbPre = clamp(aces * s_ap0ToAp1, vec3(0.0), vec3(65535.0));
+    float luminance = dot(rgbPre, vec3(0.2126, 0.7152, 0.0722));
+    rgbPre = mix(vec3(luminance), rgbPre, 0.96);
+    vec3 rgbPost;
+    rgbPost.r = segmented_spline_c5_fwd(rgbPre.r, RRT_PARAMS);
+    rgbPost.g = segmented_spline_c5_fwd(rgbPre.g, RRT_PARAMS);
+    rgbPost.b = segmented_spline_c5_fwd(rgbPre.b, RRT_PARAMS);
+    return rgbPost;
+}
+
+vec3 ODT_sRGB_100nits(vec3 rgbPre) {
+    SegmentedSplineParams_c9 params = ODT_48nits;
+    params.minPoint.x = segmented_spline_c5_fwd(params.minPoint.x, RRT_PARAMS);
+    params.midPoint.x = segmented_spline_c5_fwd(params.midPoint.x, RRT_PARAMS);
+    params.maxPoint.x = segmented_spline_c5_fwd(params.maxPoint.x, RRT_PARAMS);
+    vec3 rgbPost;
+    rgbPost.r = segmented_spline_c9_fwd(rgbPre.r, params);
+    rgbPost.g = segmented_spline_c9_fwd(rgbPre.g, params);
+    rgbPost.b = segmented_spline_c9_fwd(rgbPre.b, params);
+    vec3 linearCV = (rgbPost - vec3(0.02)) / (48.0 - 0.02);
+    linearCV = dark_surround_to_dim_surround(linearCV);
+    float luminance = GetLuminance(linearCV);
+    linearCV = mix(vec3(luminance), linearCV, 0.93);
+    vec3 XYZ = linearCV * s_ap1ToXyz;
+    XYZ *= D60ToD65_CAT;
+    linearCV = XYZ * xyzToRgb;
+    linearCV = saturate(linearCV);
+    vec3 outputCV;
+    outputCV.r = moncurve_r(linearCV.r, 2.4, 0.055);
+    outputCV.g = moncurve_r(linearCV.g, 2.4, 0.055);
+    outputCV.b = moncurve_r(linearCV.b, 2.4, 0.055);
+    return outputCV;
+}
+
+vec3 AcademyFull(vec3 color) {
+    color *= 1.4;
+    color *= sRGBtoACES;
+    color = RRT_Full(color);
+    color = ODT_sRGB_100nits(color);
+    return color;
+}
+
+// DerivativeMain/lib/Post/AgX.glsl — AgX_Full.
+// Rec.2020 conversion, configurable gamut compression, and parametric curve.
+const mat3 LINEAR_SRGB_TO_LINEAR_REC2020 = mat3(
+    vec3(0.627404, 0.069097, 0.016391),
+    vec3(0.329283, 0.919540, 0.088013),
+    vec3(0.043313, 0.011362, 0.895595));
+const mat3 LINEAR_REC2020_TO_LINEAR_SRGB = mat3(
+    vec3(1.660491, -0.124550, -0.018151),
+    vec3(-0.587641, 1.132900, -0.100579),
+    vec3(-0.072850, -0.008349, 1.118730));
+
+const float agx_slope = 2.4;
+const float agx_toe_power = 3.0;
+const float agx_shoulder_power = 3.25;
+const vec3 agx_compression = vec3(0.1, 0.1, 0.15);
+const vec3 agx_rotation = vec3(2.0, -1.0, -3.0);
+const float PI = radians(180.0);
+
+vec3 SRGBtoLinear(vec3 color) {
+    return mix(color / 12.92, pow((color + 0.055) / 1.055, vec3(2.4)), lessThan(vec3(0.04045), color));
+}
+
+vec3 unproject(vec2 xy) {
+    if (xy.y == 0.0) return vec3(0.0);
+
+    float Y = 1.0;
+    float X = xy.x / xy.y;
+    float Z = (1.0 - xy.x - xy.y) / xy.y;
+
+    return vec3(X, Y, Z);
+}
+
+mat3 primaries_to_matrix(vec2 xy_red, vec2 xy_green, vec2 xy_blue, vec2 xy_white) {
+    vec3 XYZ_red = unproject(xy_red);
+    vec3 XYZ_green = unproject(xy_green);
+    vec3 XYZ_blue = unproject(xy_blue);
+    vec3 XYZ_white = unproject(xy_white);
+
+    mat3 temp = mat3(
+        XYZ_red.x, XYZ_green.x, XYZ_blue.x,
+        1.0,       1.0,         1.0,
+        XYZ_red.z, XYZ_green.z, XYZ_blue.z);
+
+    mat3 inverseMatrix = inverse(temp);
+    vec3 scale = XYZ_white * inverseMatrix;
+
+    return mat3(
+        scale.x * XYZ_red.x, scale.y * XYZ_green.x, scale.z * XYZ_blue.x,
+        scale.x * XYZ_red.y, scale.y * XYZ_green.y, scale.z * XYZ_blue.y,
+        scale.x * XYZ_red.z, scale.y * XYZ_green.z, scale.z * XYZ_blue.z);
+}
+
+float RotationToSlide(vec2 primary, vec2 neighborA, vec2 neighborB, float angle) {
+    vec2 neighbor = angle >= 0.0 ? neighborA : neighborB;
+
+    float distance_to_neighbor = distance(primary, neighbor);
+    float distance_to_center = length(primary);
+    float side = sin(angle / 180.0 * PI) * distance_to_center;
+
+    return side / distance_to_neighbor;
+}
+
+vec2 SlidePrimary(vec2 primary, vec2 neighborA, vec2 neighborB, float amount) {
+    return mix(primary, amount >= 0.0 ? neighborA : neighborB, saturate(abs(amount)));
+}
+
+mat3 ComputeCompressionMatrix(vec2 xyR, vec2 xyG, vec2 xyB, vec2 xyW) {
+    vec2 offsetR = xyR - xyW;
+    vec2 offsetG = xyG - xyW;
+    vec2 offsetB = xyB - xyW;
+
+    vec3 slide = vec3(0.0);
+    slide.r = RotationToSlide(offsetR, offsetB, offsetG, agx_rotation.r);
+    slide.g = RotationToSlide(offsetG, offsetR, offsetB, agx_rotation.g);
+    slide.b = RotationToSlide(offsetB, offsetG, offsetR, agx_rotation.b);
+
+    vec3 scale_factor = 1.0 / (1.0 - agx_compression);
+
+    vec2 R = (SlidePrimary(offsetR, offsetB, offsetG, slide.r) * scale_factor.r) + xyW;
+    vec2 G = (SlidePrimary(offsetG, offsetR, offsetB, slide.g) * scale_factor.g) + xyW;
+    vec2 B = (SlidePrimary(offsetB, offsetG, offsetR, slide.b) * scale_factor.b) + xyW;
+    vec2 W = xyW;
+
+    return primaries_to_matrix(R, G, B, W);
+}
+
+vec3 open_domain_to_normalized_log2(vec3 in_od, float minimum_ev, float maximum_ev) {
+    const float middle_grey = 0.18;
+    float total_exposure = maximum_ev - minimum_ev;
+    vec3 output_log = clamp(log2(in_od / middle_grey), minimum_ev, maximum_ev);
+    return (output_log - minimum_ev) / total_exposure;
+}
+
+float equation_hyperbolic(float x, float power) {
+    return x / pow(1.0 + pow(x, power), 1.0 / power);
+}
+
+float equation_scale(float x_pivot, float y_pivot, float slope_pivot, float power) {
+    return pow(pow(slope_pivot * x_pivot, -power) * (pow(slope_pivot * (x_pivot / y_pivot), power) - 1.0), -1.0 / power);
+}
+
+float equation_term(float x, float x_pivot, float slope_pivot, float scale) {
+    return (slope_pivot * (x - x_pivot)) / scale;
+}
+
+float equation_curve(float x, float x_pivot, float y_pivot, float slope_pivot, float toe_power, float shoulder_power, float scale) {
+    if (scale < 0.0) {
+        return scale * equation_hyperbolic(equation_term(x, x_pivot, slope_pivot, scale), toe_power) + y_pivot;
+    } else {
+        return scale * equation_hyperbolic(equation_term(x, x_pivot, slope_pivot, scale), shoulder_power) + y_pivot;
+    }
+}
+
+float equation_full_curve(float x, float x_pivot, float y_pivot, float slope_pivot, float toe_power, float shoulder_power) {
+    bool bpivot = x >= x_pivot;
+    float scale_x_pivot = mix(x_pivot, 1.0 - x_pivot, bpivot);
+    float scale_y_pivot = mix(y_pivot, 1.0 - y_pivot, bpivot);
+
+    float toe_scale = equation_scale(scale_x_pivot, scale_y_pivot, slope_pivot, toe_power);
+    float shoulder_scale = equation_scale(scale_x_pivot, scale_y_pivot, slope_pivot, shoulder_power);
+    float scale = mix(-toe_scale, shoulder_scale, bpivot);
+
+    return equation_curve(x, x_pivot, y_pivot, slope_pivot, toe_power, shoulder_power, scale);
+}
+
+vec3 AgXConfigurable(vec3 rgb) {
+    mat3 sRGB_to_XYZ = primaries_to_matrix(
+        vec2(0.708, 0.292),
+        vec2(0.170, 0.797),
+        vec2(0.131, 0.046),
+        vec2(0.3127, 0.3290));
+
+    mat3 adjusted_to_XYZ = ComputeCompressionMatrix(
+        vec2(0.708, 0.292),
+        vec2(0.170, 0.797),
+        vec2(0.131, 0.046),
+        vec2(0.3127, 0.3290));
+
+    mat3 XYZ_to_adjusted = inverse(adjusted_to_XYZ);
+
+    vec3 xyz = rgb * sRGB_to_XYZ;
+    vec3 adjustedRGB = xyz * XYZ_to_adjusted;
+
+    const float min_ev = -8.48;
+    const float max_ev = 5.52;
+
+    float x_pivot = abs(min_ev) / (max_ev - min_ev);
+    float y_pivot = 0.5;
+
+    vec3 logRGB = open_domain_to_normalized_log2(adjustedRGB, min_ev, max_ev);
+
+    float outputR = equation_full_curve(logRGB.r, x_pivot, y_pivot, agx_slope, agx_toe_power, agx_shoulder_power);
+    float outputG = equation_full_curve(logRGB.g, x_pivot, y_pivot, agx_slope, agx_toe_power, agx_shoulder_power);
+    float outputB = equation_full_curve(logRGB.b, x_pivot, y_pivot, agx_slope, agx_toe_power, agx_shoulder_power);
+
+    return saturate(vec3(outputR, outputG, outputB));
+}
+
+vec3 AgX_Full(vec3 rgb) {
+    rgb = LINEAR_SRGB_TO_LINEAR_REC2020 * max(rgb, vec3(0.0));
+    rgb = AgXConfigurable(rgb);
+    rgb = SRGBtoLinear(rgb);
+    rgb = LINEAR_REC2020_TO_LINEAR_SRGB * rgb;
+    rgb = LinearToSRGB(rgb);
+    return rgb;
+}
+
+// DerivativeMain/lib/Post/PurkinjeShift.glsl
+// Simulates the Purkinje effect: at very low luminance, human vision shifts
+// from cone-mediated (photopic) to rod-mediated (scotopic) perception,
+// biasing sensitivity toward blue-green wavelengths.
+
+vec3 PurkinjeShift(vec3 color) {
+    const vec3 rodResponse = vec3(7.15e-5, 4.81e-1, 3.28e-1);
+    vec3 xyz = color * rgbToXyz;
+    vec3 scotopicLuminance = max0(xyz * (1.33 * (1.0 + (xyz.y + xyz.z) / max(xyz.x, 1e-10)) - 1.68));
+    float purkinje = dot(rodResponse, scotopicLuminance * xyzToRgb);
+    return mix(color, purkinje * vec3(0.5, 0.7, 1.0), fastExp(-purkinje * 90.0));
+}
+
+// DerivativeMain/lib/Common.inc helpers
 
 const mat3 acesAp0ToXyz = mat3(
      0.9525523959,  0.0000000000,  0.0000936786,
@@ -196,37 +625,6 @@ const float rrtRedHue = 0.0;
 const float rrtRedWidth = 135.0;
 const float rrtSatFactor = 0.96;
 const float odtSatFactor = 0.93;
-
-float GlowFwd(float ycIn, float glowGainIn, float glowMid) {
-    if (ycIn <= 2.0 / 3.0 * glowMid) {
-        return glowGainIn;
-    }
-    if (ycIn >= 2.0 * glowMid) {
-        return 0.0;
-    }
-    return glowGainIn * (glowMid / ycIn - 0.5);
-}
-
-float SigmoidShaper(float x) {
-    float t = max(1.0 - abs(0.5 * x), 0.0);
-    float y = 1.0 + sign(x) * oneMinus(t * t);
-    return 0.5 * y;
-}
-
-float CubicBasisShaperFit(float x, float width) {
-    float radius = 0.5 * width;
-    return abs(x) < radius ? sqr(curve(1.0 - abs(x) / radius)) : 0.0;
-}
-
-float CenterHue(float hue, float centerH) {
-    float hueCentered = hue - centerH;
-    if (hueCentered < -180.0) {
-        hueCentered += 360.0;
-    } else if (hueCentered > 180.0) {
-        hueCentered -= 360.0;
-    }
-    return hueCentered;
-}
 
 vec3 RRTSweeteners(vec3 aces) {
     float saturation = rgbToSaturation(aces);
@@ -380,35 +778,22 @@ float tonemapFilmicScalar(float value) {
     return clamp((value * (6.2 * value + 0.5)) / (value * (6.2 * value + 1.7) + 0.06), 0.0, 1.0);
 }
 
-float tonemapAgxScalar(float value) {
-    return luma709(tonemapAgx(vec3(value)));
-}
-
+// Luma-preserving tonemap for Mecraft-extra modes (0=Reinhard, 2=Filmic).
+// DerivativeMain modes (1=AcademyFit, 3=AgX_Minimal, 4=AcademyFull, 5=AgX_Full)
+// are handled directly in applyTonemap() and never reach this path.
 vec3 tonemapPreserveLuma(vec3 color) {
     color = max(color, vec3(0.0));
     float lumaIn = max(dot(color, vec3(0.2126, 0.7152, 0.0722)), 0.00001);
     float lumaOut;
-    if (uTonemapMode == 3) {
-        lumaOut = tonemapAgxScalar(lumaIn);
-    } else if (uTonemapMode == 1) {
-        lumaOut = tonemapAcesScalar(lumaIn);
-    } else if (uTonemapMode == 2) {
-        lumaOut = tonemapFilmicScalar(lumaIn);
-    } else {
-        lumaOut = tonemapReinhardScalar(lumaIn);
-    }
-
-    vec3 lumaMapped = color * (lumaOut / lumaIn);
     vec3 channelMapped;
-    if (uTonemapMode == 3) {
-        channelMapped = tonemapAgx(color);
-    } else if (uTonemapMode == 1) {
-        channelMapped = tonemapAces(color);
-    } else if (uTonemapMode == 2) {
+    if (uTonemapMode == 2) {
+        lumaOut = tonemapFilmicScalar(lumaIn);
         channelMapped = tonemapFilmic(color);
     } else {
+        lumaOut = tonemapReinhardScalar(lumaIn);
         channelMapped = tonemapReinhard(color);
     }
+    vec3 lumaMapped = color * (lumaOut / lumaIn);
     float highlight = smoothstep(0.35, 2.5, lumaIn);
     return clamp(mix(channelMapped, lumaMapped, 0.72 + 0.18 * highlight), 0.0, 1.0);
 }
@@ -437,14 +822,8 @@ vec3 applyKappaHdrGrade(vec3 color) {
     return mix(color, graded, saturate(uKappaGradingStrength));
 }
 
+// Dead code — not called from main() or applyGrade(). Kept for reference.
 vec3 applyKappaTonemap(vec3 color) {
-    if (uTonemapMode == 3) {
-        vec3 agxMapped = tonemapPreserveLuma(color);
-        vec3 kappaMapped = kappaAcesApprox(color);
-        vec3 academyMapped = derivativeAcademyCurve(color * 0.92);
-        vec3 base = mix(agxMapped, kappaMapped, saturate(uKappaGradingStrength) * 0.22);
-        return mix(base, academyMapped, saturate(uKappaGradingStrength) * 0.38);
-    }
     vec3 mapped = kappaAcesApprox(color);
     vec3 fallback = tonemapPreserveLuma(color);
     return mix(fallback, mapped, saturate(uKappaGradingStrength));
@@ -481,13 +860,22 @@ vec3 applyVignette(vec3 color, vec2 uv) {
     return color * clamp(fade, 0.5, 1.0);
 }
 
-vec3 applyGrade(vec3 color) {
-    color *= max(uExposure, 0.001);
+vec3 applyExposure(vec3 color) {
+    return color * max(uExposure, 0.001);
+}
+
+// DerivativeMain Grade.glsl: tonemap is a pure LDR mapping.
+// Exposure and vignette are applied in main() before this call.
+vec3 applyTonemap(vec3 color) {
     if (uShaderpackGradingEnabled) {
         if (uTonemapMode == 1) {
             color = AcademyFit(color);
+        } else if (uTonemapMode == 4) {
+            color = AcademyFull(color);
         } else if (uTonemapMode == 3) {
-            color = tonemapAgx(color);
+            color = AgX_Minimal(color);
+        } else if (uTonemapMode == 5) {
+            color = AgX_Full(color);
         } else {
             color = tonemapPreserveLuma(color);
         }
@@ -522,12 +910,14 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
     return color;
 }
 
+// DerivativeMain Grade.glsl order: Exposure -> Vignette -> Tonemap
 vec3 resolveGradedColor(vec2 sampleUv, vec2 screenUv) {
-    vec3 graded = applyGrade(resolveHdrColor(sampleUv, screenUv));
+    vec3 color = resolveHdrColor(sampleUv, screenUv);
+    color = applyExposure(color);
     if (uShaderpackGradingEnabled) {
-        graded = applyVignette(graded, sampleUv);
+        color = applyVignette(color, sampleUv);
     }
-    return graded;
+    return applyTonemap(color);
 }
 
 vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
@@ -592,11 +982,18 @@ void main() {
         }
     }
 
-    vec3 graded = applyGrade(color);
-
-    if (uShaderpackGradingEnabled) {
-        graded = applyVignette(graded, rolledUv);
+    // DerivativeMain Grade.glsl line 237: PurkinjeShift before exposure/tonemap.
+    // Only active in shaderpack grading mode (DerivativeMain-like pipeline).
+    if (uPurkinjeShiftEnabled && uShaderpackGradingEnabled) {
+        color = PurkinjeShift(color);
     }
+
+    // DerivativeMain Grade.glsl order: Exposure -> Vignette -> Tonemap
+    color = applyExposure(color);
+    if (uShaderpackGradingEnabled) {
+        color = applyVignette(color, rolledUv);
+    }
+    vec3 graded = applyTonemap(color);
     graded = applyCasLikeSharpen(graded, rolledUv, vTexCoord);
     if (uNoiseDitherStrength > 0.0) {
         float noise = texture(uNoiseTex, gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0))).r - 0.5;
