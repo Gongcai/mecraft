@@ -94,6 +94,7 @@ uniform vec3 uFogColor;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
+uniform int uDeferredDebugMode; // 0=off, 1=direct-only, 2=skylight-only, 3=blocklight-only, 4=minimum-ambient, 5=fake-bounce, 6=before-post
 
 // Shadow color/normal textures (DerivativeMain shadowcolor0/1 equivalent)
 uniform sampler2D uShadowColorTex;
@@ -508,6 +509,13 @@ void main() {
     // Initialize sceneData (DerivativeMain deferred5.fsh:194)
     vec3 sceneData = vec3(0.0);
 
+    // Component tracking for debug views (uDeferredDebugMode)
+    vec3 dbgDirect = vec3(0.0);
+    vec3 dbgSkylight = vec3(0.0);
+    vec3 dbgBlocklight = vec3(0.0);
+    vec3 dbgMinAmbient = vec3(0.0);
+    vec3 dbgFakeBounce = vec3(0.0);
+
     // 1. Sunlight setup: 64 * waterTint * SUNLIGHT_INTENSITY * directIlluminance * cloudShadow
     // DerivativeMain deferred5.fsh:240 — underwater waterTint attenuates sunlight
     vec3 waterTint = vec3(1.0);
@@ -582,7 +590,9 @@ void main() {
     // DerivativeMain keeps skylight independent from the shadow map; only direct
     // light is shadowed. Shadow-tinting skylight makes sun/moon shadows collapse
     // into black ambient patches and breaks daytime contrast.
-    sceneData += skylight * skyLightMask;
+    vec3 skylightContrib = skylight * skyLightMask;
+    sceneData += skylightContrib;
+    dbgSkylight = skylightContrib;
 
     // Basic brightness (DerivativeMain deferred5.fsh:325)
     // sceneData += BASIC_BRIGHTNESS + nightVision * 0.1
@@ -590,10 +600,14 @@ void main() {
 
     // Minimum ambient + fake bounce
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
-    sceneData += uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
+    vec3 minAmbientContrib = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
+    sceneData += minAmbientContrib;
+    dbgMinAmbient = minAmbientContrib;
     // DerivativeMain: CalculateFakeBouncedLight (SunLighting.glsl:168-174)
     float bounce = CalculateFakeBouncedLight(normal, shadowLightDir);
-    sceneData += bounce * sqr(skyLightMask) * sunlightMult * uFakeBounceStrength;
+    vec3 bounceContrib = bounce * sqr(skyLightMask) * sunlightMult * uFakeBounceStrength;
+    sceneData += bounceContrib;
+    dbgFakeBounce = bounceContrib;
 
     // GI / AO (DerivativeMain deferred5.fsh:329-347)
     // AO multiplies accumulated diffuse+skylight (before blocklight)
@@ -699,6 +713,7 @@ void main() {
     }
 
     // DerivativeMain BlockLighting.glsl:91 — sceneData += EmissionColor * TORCHLIGHT_BRIGHTNESS
+    vec3 sceneDataBeforeBlocklight = sceneData; // snapshot for debug
     sceneData += EmissionColor * uBlockLightStrength;
 
     // EMISSION_MODE 1: material.emissiveness with brightness and curve.
@@ -750,12 +765,15 @@ void main() {
                  float(materialKind == 36) * 2.0 +
                  float(materialKind == 19) * albedoLuminance * 2e2;
 
+    dbgBlocklight = sceneData - sceneDataBeforeBlocklight;
+
     // === DerivativeMain compositing (deferred5.fsh:352-357) ===
     // DerivativeMain order: sceneData += shadow * diffuse → sceneData *= albedo → sceneData *= oneMinus(isMetal) → sceneData += shadow * specular
 
     // Add shadow * diffuse BEFORE albedo multiply
     // (DerivativeMain deferred5.fsh:352: sceneData += shadow * diffuse)
-    sceneData += shadow * diffuse;
+    dbgDirect = shadow * diffuse;
+    sceneData += dbgDirect;
 
     // Multiply by albedo AFTER all diffuse/ambient/emission accumulation
     // (DerivativeMain deferred5.fsh:353: sceneData *= albedo)
@@ -793,6 +811,16 @@ void main() {
         float fogDistance = length(worldPos - uCameraPos);
         color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor, env);
     }
+
+    // Lighting component debug views (uDeferredDebugMode)
+    // These show individual contributions BEFORE albedo/specular/fog, useful for diagnosing
+    // which component drives nighttime brightness.
+    if (uDeferredDebugMode == 1) { color = dbgDirect; }
+    else if (uDeferredDebugMode == 2) { color = dbgSkylight + 0.0005; }
+    else if (uDeferredDebugMode == 3) { color = dbgBlocklight; }
+    else if (uDeferredDebugMode == 4) { color = dbgMinAmbient; }
+    else if (uDeferredDebugMode == 5) { color = dbgFakeBounce; }
+    else if (uDeferredDebugMode == 6) { color = sceneData; } // before aerial/fog
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.

@@ -1640,6 +1640,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
                               m_volumetricFogShader != nullptr &&
                               m_volumetricCompositeShader != nullptr;
     m_deferredLightingShader->setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
+    m_deferredLightingShader->setInt("uDeferredDebugMode", m_pipelineSettings.deferredLightDebugMode);
     m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
     m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     m_deferredLightingShader->setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);

@@ -93,6 +93,7 @@ public:
         float sceneCloudCompositeStrength = 0.85f;
         float sceneReflectionCompositeStrength = 0.36f;
         int debugViewMode = 0;
+        int deferredLightDebugMode = 0; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=beforePost
         int weatherPreset = 0; // DEPRECATED: weather state now lives in World::WeatherSystem
         int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX
         bool debugDisableGreedyMeshing = false;

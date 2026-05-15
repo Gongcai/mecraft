@@ -439,6 +439,18 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
         pipelineChanged |= ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));
         pipeline.debugViewMode = debugViewMode;
+        static constexpr const char* kLightDebugModes[] = {
+            "0: Off",
+            "1: Direct Only",
+            "2: Skylight Only",
+            "3: Blocklight Only",
+            "4: Minimum Ambient",
+            "5: Fake Bounce",
+            "6: Before Post"
+        };
+        int lightDebugMode = pipeline.deferredLightDebugMode;
+        pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
+        pipeline.deferredLightDebugMode = lightDebugMode;
         pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
@@ -492,11 +504,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             }
             // SkyCapture metadata
             auto skyLux = render.getSkyIlluminanceData();
-            ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "SkyCapture Metadata");
-            ImGui::Text("Direct: (%.2f, %.2f, %.2f)", skyLux.directIlluminance.r, skyLux.directIlluminance.g, skyLux.directIlluminance.b);
-            ImGui::Text("Sky:   (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
-            ImGui::Text("Sun:   (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
-            ImGui::Text("Moon:  (%.2f, %.2f, %.2f)", skyLux.moonIlluminance.r, skyLux.moonIlluminance.g, skyLux.moonIlluminance.b);
+            ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "SkyCapture Metadata (LUT units)");
+            ImGui::Text("Direct: (%.6f, %.6f, %.6f)", skyLux.directIlluminance.r, skyLux.directIlluminance.g, skyLux.directIlluminance.b);
+            ImGui::Text("Sky:   (%.6f, %.6f, %.6f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
+            ImGui::Text("Sun:   (%.6f, %.6f, %.6f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
+            ImGui::Text("Moon:  (%.6f, %.6f, %.6f)", skyLux.moonIlluminance.r, skyLux.moonIlluminance.g, skyLux.moonIlluminance.b);
             // Lighting input diagnostic — compare CPU art colors vs SkyCapture metadata
             auto skyColors = render.getSkyColors();
             auto fogColor = render.getFogColor();
@@ -531,9 +543,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("SunDir: (%.2f, %.2f, %.2f)  MoonDir: (%.2f, %.2f, %.2f)",
                 skyColors.sunDirection.x, skyColors.sunDirection.y, skyColors.sunDirection.z,
                 skyColors.moonDirection.x, skyColors.moonDirection.y, skyColors.moonDirection.z);
-            ImGui::Text("SunVis: %.3f  MoonVis: %.3f  DayFactor: %.3f",
-                (skyColors.sunDirection.y > -0.08f) ? std::min((skyColors.sunDirection.y + 0.08f) / 0.26f, 1.0f) : 0.0f,
-                skyColors.moonLightColor.x > 0.001f ? 1.0f : 0.0f, // approximate
+            ImGui::Text("SunVis: %.3f  MoonVis: %.6f  DayFactor: %.3f",
+                skyColors.sunVisibility,
+                skyColors.moonVisibility,
                 world.getDayNightSystem().getSkyIntensity());
             // Weather state
             const char* tonemapNames[] = {"Reinhard [Mecraft]", "AcademyFit [DerivMain]", "Filmic [Mecraft]", "AgX [Mecraft]"};

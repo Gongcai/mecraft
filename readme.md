@@ -7,7 +7,7 @@
 ![CMake](https://img.shields.io/badge/CMake-3.20+-orange.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-**一个基于 C++17 和 OpenGL 3.3 构建的 Minecraft 风格体素沙盒游戏引擎**
+**一个基于 C++17 和 OpenGL 4.5 构建的 Minecraft 风格体素沙盒游戏引擎**
 
 </div>
 
@@ -17,7 +17,7 @@
 
 Mecraft 是一个从零构建的桌面端体素沙盒游戏项目，旨在还原 Minecraft 的核心体验并提供一个高性能的体素引擎架构。项目采用现代 C++17 标准，结合 Entity Component System (ECS) 架构，实现了程序化地形生成、动态区块加载、物理碰撞、光照传播以及 3D 空间音频等核心特性。
 
-当前项目目标为 **主世界 (world0) + 原版 Minecraft 材质包 + 内置 DerivativeMain-like 光影效果**——将 DerivativeMain shader pack 的大气、光照、色调、HDR、水体、体积雾、材质风格等视觉算法移植为引擎内置渲染管线，而非外部 shader pack 替换。
+当前项目目标为 **主世界 (world0) + 原版 Minecraft 材质包 + 内置 DerivativeMain-like 光影效果**——将 DerivativeMain shader pack 的大气、光照、色调、HDR、水体、体积雾、材质风格等视觉算法移植为引擎内置渲染管线，而非外部 shader pack 替换。Mecraft 引擎拥有自己的 Renderer Contract，DerivativeMain 作为视觉与算法参考，当其运行假设与引擎基础设施冲突时以 Mecraft contract 为准（例如保留 greedy meshing + MDI，不使用非线性 shadow warp）。
 
 ## 核心特性
 
@@ -27,46 +27,52 @@ Mecraft 是一个从零构建的桌面端体素沙盒游戏项目，旨在还原
 - **动态区块加载** — 异步多线程网格构建（`ChunkMeshingService`），支持自定义渲染距离。
 - **高性能渲染** — 智能面剔除 + 环境光遮蔽 (AO)，视锥体三级分层剔除（Region -> Column -> Chunk），Multi-Draw Indirect (MDI) 批量渲染。
 - **物理与交互** — AABB 碰撞检测与分轴解析，支持移动/冲刺/跳跃/蹲伏/流体阻尼，3D DDA 射线检测。
-- **动态光照** — 阳光垂直投射 + BFS 体积光传播，动态光源实时更新。
+- **动态光照** — 阳光垂直投射 + BFS 体积光传播，动态光源实时更新，球谐天光 (FromSH) 重建环境辐射。
 - **ECS 架构** — 深度集成 EnTT 管理玩家实体、掉落物与粒子效果。
 - **沉浸式音频** — 基于 OpenAL 的 3D 空间音效与动态触发。
 
 ### 渲染管线 (DerivativeMain-like)
 
-Mecraft 实现了完整的 **混合延迟渲染管线 (Hybrid Deferred)**，参考 DerivativeMain shader pack 的算法与数据流：
+Mecraft 实现了完整的 **混合延迟渲染管线 (Hybrid Deferred)**，参考 DerivativeMain shader pack 的算法与数据流。光照链路已统一为 SkyCapture metadata / LightingEnvironment 单来源：
 
 ```
-SkyCapture -> GBuffer -> Velocity -> Shadow (CSM) -> SSAO -> Deferred Lighting
--> SSR -> Cloud -> Scene Composite -> Volumetric Fog -> TAA -> Motion Blur
--> DoF -> Water Composite -> Transparent -> Post (Bloom / Tonemap / Grade)
+SkyCapture (LUT + GPU Metadata) -> GBuffer -> Velocity -> Shadow (CSM/PCSS)
+-> SSAO -> Deferred Lighting (FromSH + BlockLighting) -> SSR -> Cloud
+-> Scene Composite -> Volumetric Fog -> TAA -> Motion Blur -> DoF
+-> Water Composite -> Transparent -> Post (Bloom / Tonemap / Grade)
 ```
 
 | 特性 | 状态 | 说明 |
 | --- | --- | --- |
-| **延迟渲染管线** | 已完成 | GBuffer MRT (5 color + depth)，Forward/Deferred 双路径自动回退 |
-| **级联阴影 (CSM)** | 已完成 | 4-cascade，PCSS 软阴影，cascade 过渡混合，接触阴影 |
-| **PBR BRDF** | 已完成 | Cook-Torrance 高光 + Hammon 漫反射，逐字移植自 DerivativeMain |
-| **大气散射 LUT** | 已完成 | Bruneton 预计算大气 LUT (透射/散射/辐照)，太阳临边昏暗，月亮渲染 |
-| **天空捕获系统** | 已完成 | 等距矩形投影天空图 + 元数据 (光照度、云动态天气) |
-| **体积云** | 已完成 | 32 步体积光线步进，4 阶 3D 噪声，Beer-Powder 散射，多层云 |
-| **屏幕空间反射** | 已完成 | 28 步线性光线步进，粗糙度自适应，天空捕获回退 |
-| **SSAO** | 已完成 | 金角旋转采样 + 双边滤波，NdotL 加权 |
-| **时域抗锯齿 (TAA)** | 已完成 | YCoCgR 色彩空间，AABB 裁剪，速度自适应混合 |
-| **水体渲染** | 已完成 | 4 阶波浪法线，60 步视差，菲涅耳折射，水雾 + 水下效果，SSR |
-| **体积雾** | 进行中 | 基础 8 步光线步进已完成，DerivativeMain 云海级效果待完善 |
-| **HDR 后处理** | 已完成 | 自动曝光，7 级 Bloom，4 种色调映射 (Reinhard/Academy/Filmic/AgX)，色彩分级，CAS 锐化，运动模糊，景深 |
-| **全局光照 (RSM)** | 未开始 | DerivativeMain RSM 尚未移植 |
-| **实体 GBuffer** | 未开始 | 实体当前仅使用前向渲染 |
+| **延迟渲染管线** | ✅ 已完成 | GBuffer MRT (5 color + depth)，Forward/Deferred 双路径自动回退 |
+| **级联阴影 (CSM)** | ✅ 已完成 | 4-cascade，PCSS 软阴影，cascade 过渡混合，接触阴影；DerivativeMain 非线性 warp 已清理（与 greedy meshing 不兼容） |
+| **PBR BRDF** | ✅ 已完成 | Cook-Torrance 高光 + Hammon 漫反射，逐字移植自 DerivativeMain |
+| **球谐天光 (FromSH)** | ✅ 已完成 | L1 SH 25 方向采样，per-vertex 构建，已接入 deferred lighting |
+| **大气散射 LUT** | ✅ 已完成 | Bruneton 预计算大气 LUT (透射/散射/辐照)，太阳临边昏暗，月亮渲染，SkyCapture 天体盘剥离 |
+| **天空捕获系统** | ✅ 已完成 | 256×514 等距矩形投影 + GPU LUT 元数据 pass，LightingEnvironment 单来源光照 |
+| **体积云** | ✅ 已完成 | 32 步体积光线步进，4 阶 3D 噪声，Beer-Powder 散射，3 层云（积云/卷云/卷积云），premultiplied 合成，LightingEnvironment 光照 |
+| **屏幕空间反射** | ⚠️ 部分 | 28 步线性光线步进，粗糙度自适应，天空捕获回退；缺 VNDF、Hi-Z、时序积累 |
+| **SSAO** | ⚠️ 部分 | 金角旋转采样 + 双边滤波，NdotL 加权；仅 6 采样，缺时序积累与空间滤波 |
+| **次表面散射 (SSS)** | ❌ 失效 | 算法已移植但 shadowSssDepth 恒为 0，条件永远不满足 |
+| **时域抗锯齿 (TAA)** | ⚠️ 部分 | YCoCgR AABB 裁剪，Reinhard-domain 混合；缺 CatmullRom history、variance sigma |
+| **水体渲染** | ⚠️ 较高覆盖 | 4 阶波浪法线，60 步视差，菲涅耳折射，水雾 + 水下效果，SSR；光照已单来源对齐；缺水下体积光、水焦散 |
+| **体积雾** | ⚠️ 进行中 | High/Ultra 雏形（4 档位、太阳方向 OD、多瓣相函数、云影），缺 SEA_LEVEL/FALLOFF 参数化、云海密度公式、Bloomy Fog |
+| **天气系统** | ✅ 已完成 | World::WeatherSystem 架构，天气预设迁移，帧数据从 World 读取 |
+| **HDR 后处理** | ⚠️ 可用 | 自动曝光，7 级 Bloom，色彩分级，CAS 锐化，运动模糊，景深；Tonemap UI 集合未对齐 DerivativeMain 正式选项 (缺 AcademyFull/AgX_Minimal/AgX_Full) |
+| **全局光照 (RSM)** | ❌ 缺失 | 仅有 CalculateFakeBouncedLight 作为 fallback |
+| **实体 GBuffer** | ❌ 缺失 | 所有实体纯 forward 渲染，不接收 deferred lighting/SSAO/SSR |
 
 ### 渲染技术参考来源
 
 渲染管线的算法与公式参考自 DerivativeMain shader pack，核心移植模块包括：
 
 - `derivative_brdf.glsl` — PBR BRDF 完整移植 (FresnelSchlick, GGX, Smith G2, Hammon)
-- `derivative_sunlight.glsl` — Henyey-Greenstein 相函数，次表面散射
-- `derivative_shadow.glsl` — Common.inc 辅助函数，阴影畸变
-- `mecraft_shadow.glsl` — Mecraft 自有 CSM contract (PCSS, PCF)
+- `derivative_sunlight.glsl` — Henyey-Greenstein 相函数，次表面散射，伪弹射光
+- `derivative_shadow.glsl` — Common.inc 辅助函数 (30+)，阴影畸变
+- `mecraft_shadow.glsl` — Mecraft 自有 CSM contract (PCSS, PCF, contact shadow)
 - `atmosphere_lut.glsl` — Bruneton 预计算大气散射 LUT 查询
+- `sky_sh.glsl` — 球谐天光 (ToSH/FromSH/buildSkySH)，L1 SH 25 方向采样
+- `lighting_environment.glsl` — LightingEnvironment 统一光照入口，从 SkyCapture metadata 读取
 - `gbuffer_contract.glsl` — GBuffer 材质 contract (33 种材质 ID)
 - `render_contract.glsl` — 天空捕获布局与元数据 contract
 
@@ -76,7 +82,7 @@ SkyCapture -> GBuffer -> Velocity -> Shadow (CSM) -> SSAO -> Deferred Lighting
 | --- | --- |
 | **编程语言** | C++17 |
 | **构建系统** | CMake (3.20+) |
-| **图形 API** | OpenGL 3.3 Core Profile (GLAD) |
+| **图形 API** | OpenGL 4.5 Core Profile (GLAD) |
 | **窗口与输入** | GLFW 3 |
 | **数学库** | GLM |
 | **ECS 框架** | EnTT |
