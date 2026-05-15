@@ -43,6 +43,7 @@ uniform float uSaturation;
 uniform float uContrast;
 uniform bool uPurkinjeShiftEnabled;
 uniform bool uBloomyFogEnabled;
+uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -943,6 +944,12 @@ void CalculateBloomFog(vec2 uv, out vec3 bloomData, out vec3 fogBloom) {
     fogBloom += bloomData;
 }
 
+// Debug outputs captured during resolveHdrColor for use in debug views.
+vec3 g_debugBloomData = vec3(0.0);
+vec3 g_debugFogBloom = vec3(0.0);
+vec3 g_debugColorBeforeBloomyFog = vec3(0.0);
+vec3 g_debugColorAfterBloomyFog = vec3(0.0);
+
 vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
     vec4 sceneSample = texture(uSceneTex, sampleUv);
     vec3 color = sceneSample.rgb;
@@ -952,13 +959,17 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         vec3 bloomData;
         vec3 fogBloom;
         CalculateBloomFog(sampleUv, bloomData, fogBloom);
+        g_debugBloomData = bloomData;
+        g_debugFogBloom = fogBloom;
         // DerivativeMain Grade.glsl line 144: exposure compensation
         float bloomAmount = (uBloomStrength * 0.15) / (max(uExposure, 1.0) * 0.7 + 0.3);
 
         // DerivativeMain Grade.glsl line 136-139: Bloomy Fog
+        g_debugColorBeforeBloomyFog = color;
         if (uBloomyFogEnabled && fogTransmittance < 0.999) {
             color = mix(fogBloom * 0.5, color, fogTransmittance);
         }
+        g_debugColorAfterBloomyFog = color;
         color += bloomData * bloomAmount;
     }
 
@@ -1058,6 +1069,27 @@ void main() {
         color = applyVignette(color, rolledUv);
     }
     vec3 graded = applyTonemap(color);
+
+    // Bloom/Fog debug views — must be before CAS sharpen, which re-enters
+    // resolveHdrColor for neighbor pixels and would overwrite debug globals.
+    if (uPostprocessDebugMode == 1) {
+        // BloomData: CalculateBloomFog() output (DerivativeMain weighted mip sum), tonemapped
+        FragColor = vec4(g_debugBloomData / (g_debugBloomData + vec3(1.0)), 1.0);
+        return;
+    }
+    if (uPostprocessDebugMode == 2) {
+        // FogTransmittance: alpha channel heatmap (white=clear, dark=dense fog)
+        float ft = texture(uSceneTex, vTexCoord).a;
+        FragColor = vec4(vec3(ft), 1.0);
+        return;
+    }
+    if (uPostprocessDebugMode == 3) {
+        // Bloomy Fog contribution: color difference from fogBloom mix
+        vec3 contribution = abs(g_debugColorAfterBloomyFog - g_debugColorBeforeBloomyFog);
+        FragColor = vec4(contribution / (contribution + vec3(1.0)), 1.0);
+        return;
+    }
+
     graded = applyCasLikeSharpen(graded, rolledUv, vTexCoord);
     if (uNoiseDitherStrength > 0.0) {
         float noise = texture(uNoiseTex, gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0))).r - 0.5;

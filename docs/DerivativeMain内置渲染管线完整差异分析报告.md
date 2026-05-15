@@ -930,8 +930,8 @@ Mecraft 的 `water_composite.fs` 对 `WaterWave.glsl`、水面 parallax、Fresne
 DerivativeMain post 链路的关键不是“有 tonemapper”，而是 buffer/history 布局和 bloom/fog/exposure 的耦合：
 
 - `Temporal.vert` 在 shader 内从 `colortex4` mip LOD 计算 exposure，并把上一帧 exposure 存在 `colortex5(0).a`。Mecraft 用独立 exposure downsample FBO + CPU `glReadPixels`，公式接近但历史位置和执行阶段不同。
-- DerivativeMain bloom 是 tiled mip layout：`DownSample0/DownSample/BlurH/BlurV/Grade` 复用 `colortex4/5`，`CalculateBloomFog()` 还会读取 `colortex6` 的 fog transmittance 做 `BLOOMY_FOG`。Mecraft bloom 有 mip chain，但 `bloom_extract.fs` 对 HDR bloom 做了额外 clamp，且没有 fog transmittance 驱动的 bloomy fog。
+- DerivativeMain bloom 是 tiled mip layout：`DownSample0/DownSample/BlurH/BlurV/Grade` 复用 `colortex4/5`，`CalculateBloomFog()` 还会读取 `colortex6` 的 fog transmittance 做 `BLOOMY_FOG`。Mecraft bloom 有 mip chain（separate textures），`CalculateBloomFog()` 已按 DerivativeMain 双套权重实现，fogTransmittance 通过 alpha 链路贯通 TAA/motion_blur/dof 到 postprocess，Bloomy Fog 已生效。bloom_extract.fs HDR clamp 已移除。
 - DerivativeMain `Final.glsl` 在最后对 `colortex3` 做 CAS，或在非 1.0 render quality 下 CatmullRom upsample，再加 Bayer dither。Mecraft final/post 里有 CAS/dither/tonemap，但 pass 边界和输入 buffer 不同。
-- DerivativeMain `Grade.glsl` 还包含 Purkinje shift、white balance chromatic adaptation、rain/snow fog bloom 加权；Mecraft 只有部分 grading 参数，不是逐函数移植。
+- DerivativeMain `Grade.glsl` 还包含 Purkinje shift（已实现，默认关闭）、white balance chromatic adaptation、rain/snow fog bloom 加权；Mecraft grading 参数已对齐，tonemap 集合已完整移植。
 
 结论：后处理当前能用，但若要视觉追 DerivativeMain，必须把 **Bloomy Fog、exposure 输入阶段、bloom tiled energy、final CAS/dither** 当成一组一起验收。

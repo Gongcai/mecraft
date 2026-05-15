@@ -38,7 +38,7 @@
 - Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
 - 亮度链路收口：`FromSH` skylight、云/水 sunlight 单来源尾项、标准路径旁路 `shapeShadowVisibility`
 - CSM-native SSS depth：从 PCSS/blocker search 暴露树叶/草 SSS 所需深度，不恢复完整 DerivativeMain shadowcolor ABI
-- Atmosphere/Cloud/Fog/Water 视觉收敛：体积雾 `SEA_LEVEL/FALLOFF/samples`、Bloomy Fog、水下体积光
+- Atmosphere/Cloud/Fog/Water 视觉收敛：体积雾 `SEA_LEVEL/FALLOFF/samples`、水下体积光（Bloomy Fog 已完成）
 - GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer）
 
 ## 1. Mecraft 当前渲染管线概览

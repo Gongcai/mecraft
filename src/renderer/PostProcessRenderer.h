@@ -46,6 +46,7 @@ struct PostProcessEffects {
     float contrast = 1.0f;
     bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift (default off, matches #define guard)
     bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG (default on)
+    int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
 };
 
 class PostProcessRenderer {

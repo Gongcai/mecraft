@@ -454,6 +454,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int lightDebugMode = pipeline.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
         pipeline.deferredLightDebugMode = lightDebugMode;
+        static constexpr const char* kPostprocessDebugModes[] = {
+            "0: Off",
+            "1: BloomData",
+            "2: FogTransmittance",
+            "3: BloomyFog"
+        };
+        int ppDebugMode = pipeline.postprocessDebugMode;
+        pipelineChanged |= ImGui::Combo("Postprocess Debug", &ppDebugMode, kPostprocessDebugModes, IM_ARRAYSIZE(kPostprocessDebugModes));
+        pipeline.postprocessDebugMode = ppDebugMode;
         pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);

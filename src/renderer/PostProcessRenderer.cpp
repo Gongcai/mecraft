@@ -213,6 +213,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uContrast", m_effects.contrast);
     m_postProcessShader->setBool("uPurkinjeShiftEnabled", m_effects.purkinjeShiftEnabled);
     m_postProcessShader->setBool("uBloomyFogEnabled", m_effects.bloomyFogEnabled);
+    m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);

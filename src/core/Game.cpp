@@ -352,6 +352,7 @@ void Game::renderFrame(const float frameTime) {
     effects.contrast = pipelineSettings.contrast;
     effects.purkinjeShiftEnabled = pipelineSettings.purkinjeShiftEnabled;
     effects.bloomyFogEnabled = pipelineSettings.bloomyFogEnabled;
+    effects.postprocessDebugMode = pipelineSettings.postprocessDebugMode;
     {
         const float sunAngle = m_world.getDayNightSystem().getCelestialAngleRadians();
         glm::vec3 sunDirection(0.25f, std::sin(sunAngle), -std::cos(sunAngle));

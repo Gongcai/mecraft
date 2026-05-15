@@ -147,6 +147,7 @@ public:
         float contrast = 1.0f;
         bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
         bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
+        int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
     };
 
 
