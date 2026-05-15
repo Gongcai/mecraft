@@ -35,6 +35,9 @@ uniform vec3 uCloudDynamicWeather;
 uniform sampler3D uAtmosphereLut;
 uniform float uCameraAltitude;
 
+// Sky capture texture for mode 0 visible sky (atmosphere LUT radiance)
+uniform sampler2D uSkyCaptureTex;
+
 #include "atmosphere_lut.glsl"
 #include "render_contract.glsl"
 
@@ -114,8 +117,15 @@ vec3 evaluateSkyRadiance(vec3 dir) {
 
 void main() {
     if (uMode == 0) {
+        // Visible sky: sample from SkyCapture (atmosphere LUT radiance) instead of
+        // independent gradient model. This ensures visible sky matches the sky that
+        // deferred lighting/SH/fog use for energy calculations.
         vec3 dir = normalize(vWorldDir);
-        FragColor = vec4(srgbToLinear(evaluateSkyRadiance(dir)), 1.0);
+        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, dir);
+        // Add stars on top (SkyCapture doesn't include them)
+        float stars = starField(dir) * clamp(uNightFactor, 0.0, 1.0) * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
+        sky += vec3(0.72, 0.82, 1.0) * stars * 1.15;
+        FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;
     }
 

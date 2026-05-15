@@ -235,7 +235,7 @@ void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, c
         renderWorldDeferred(world, camera, window, m_currentFrameData)) {
         return;
     }
-    m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem());
+    m_gameplaySkyRenderer.render(camera, window.getAspectRatio(), world.getDayNightSystem(), m_deferredTargets.skyCaptureTexture());
     m_chunkShader = m_chunkForwardShader;
     m_deferredFrameActive = false;
     renderWorldForward(world, m_currentFrameData);

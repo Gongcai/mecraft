@@ -318,10 +318,10 @@ void main() {
                             (moonForward * 0.16 + moonPhase * 0.05) * nightFactor;
     vec3 directFogColor = sunScatterColor + moonScatterColor;
 
-    // Independent air density: Rayleigh-phase scatter (DerivativeMain VOLUMETRIC_LIGHT)
-    // Uses maxDistance (not per-pixel marchDistance) to match DerivativeMain's 3.0/far
-    float airDensity = VFOG_AIR_DENSITY;
-    airDensity *= atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0));
+    // Independent air density: Rayleigh scatter (DerivativeMain VOLUMETRIC_LIGHT)
+    // Base density for extinction; phase-modulated version for in-scattering.
+    float airDensityBase = VFOG_AIR_DENSITY * (3.0 / max(uVolumetricMaxDistance, 1.0));
+    float airDensity = airDensityBase * atmRayleighPhase(LdotV);
 
     // Weather haze modulation applied to both components separately
     float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
@@ -386,7 +386,8 @@ void main() {
         float clearAir = (0.06 + weatherHaze * 0.18) * max(uCloudDensity, 0.0);
         structure += clearAir;
         float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
-        float sampleDensity = baseDensity * heightDensity * structure * nearFade + airDensity;
+        // Extinction uses base airDensity (no phase) — phase only affects scattering direction.
+        float sampleDensity = baseDensity * heightDensity * structure * nearFade + airDensityBase;
         maxDensitySeen = max(maxDensitySeen, sampleDensity);
         float opticalStep = sampleDensity * stepLength;
         float stepTransmittance = exp(-opticalStep);
@@ -473,6 +474,8 @@ void main() {
             scatteringSun *= powderSun;
             float tierScale = float(uVolumetricQualityTier) * float(uVolumetricQualityTier);
             vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
+            // airDensity already includes Rayleigh phase (line 324).
+            // Extinction uses airDensityBase (no phase), in-scattering uses airDensity (phase-modulated).
             sunStep = shadowedDirect * altitudeTransmittance * (scatteringSun + airDensity) * tierScale *
                       clamp(uVolumetricLightStrength, 0.0, 2.0) * directLightWeight *
                       VFOG_FINAL_SUN_MULTIPLIER;

@@ -215,7 +215,7 @@ void GameplaySkyRenderer::shutdown() {
     m_moonTexture = 0;
 }
 
-void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight) {
+void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, GLuint skyCaptureTexture) {
     m_lastColors = computeSkyColors(dayNight);
     if (m_shader == nullptr || m_skyVao == 0) {
         return;
@@ -240,7 +240,7 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
 
-    renderSkyGradient(camera, aspect, m_lastColors);
+    renderSkyGradient(camera, aspect, m_lastColors, skyCaptureTexture);
     renderHalo(camera, aspect, dayNight, m_lastColors);
 
     const float sunAngle = dayNight.getCelestialAngleRadians();
@@ -916,7 +916,7 @@ void GameplaySkyRenderer::initCloudMesh() {
     m_cloudMeshInfo.valid = true;
 }
 
-void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float aspect, const SkyColors& colors) {
+void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float aspect, const SkyColors& colors, GLuint skyCaptureTexture) {
     m_shader->use();
     m_shader->setInt("uMode", 0);
     m_shader->setMat4("uView", buildSkyView(camera));
@@ -937,7 +937,13 @@ void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float as
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
 
+    // Bind SkyCapture texture for mode 0 visible sky (atmosphere LUT radiance)
+    m_shader->setInt("uSkyCaptureTex", 1);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, skyCaptureTexture);
+
     glDisable(GL_BLEND);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(m_skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
