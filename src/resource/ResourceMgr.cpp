@@ -249,7 +249,7 @@ void ResourceMgr::init() {
     loadShader("block_item_lit", SHADERS_DIR "/chunk_lit.vs", SHADERS_DIR "/block_item_lit.fs");
     loadShader("chunk_gbuffer", SHADERS_DIR "/chunk_gbuffer.vs", SHADERS_DIR "/chunk_gbuffer.fs");
     loadShader("shadow_depth", SHADERS_DIR "/shadow_depth.vs", SHADERS_DIR "/shadow_depth.fs");
-    loadShader("deferred_lighting", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/deferred_lighting.fs");
+    loadShader("deferred_lighting", SHADERS_DIR "/deferred_lighting.vs", SHADERS_DIR "/deferred_lighting.fs");
     loadShader("scene_composite", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/scene_composite.fs");
     loadShader("deferred_debug", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/deferred_debug.fs");
     loadShader("ssao", SHADERS_DIR "/fullscreen_triangle.vs", SHADERS_DIR "/ssao.fs");

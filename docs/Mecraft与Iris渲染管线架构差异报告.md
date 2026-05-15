@@ -5,6 +5,7 @@
 > 重点：本报告不是 DerivativeMain shader 文件逐项移植清单，也不再是“把 Mecraft 改造成 Iris”的实施计划；它是 **Mecraft 引擎端宿主行为与 Iris 宿主行为的差异/风险报告**。
 
 > 2026-05-13 路线修订：项目目标已从“复现 Iris/OptiFine contract”调整为“建立 Mecraft Renderer Contract，并让内置 DerivativeMain-like 光影适配该 contract”。Iris 继续作为重要参照，用于理解 shaderpack 默认假设和定位 bug，但不作为最终架构硬目标。
+> 2026-05-14 源码同步：SkyCapture normalized UV、GPU metadata 读取入口、directional debug 和体积雾 High/Ultra 雏形已落地。当前架构风险重点转为：`FromSH` skylight、云/水 sunlight 单来源尾项、CSM SSS depth、体积雾 SEA_LEVEL/FALLOFF/samples/Bloomy Fog。
 
 ## 目标边界
 
@@ -19,6 +20,9 @@
 - 不以完整复刻 Iris/OptiFine uniform/sampler/pass ABI 为目标。
 - 不以 PBR/LabPBR/POM/高级材质包为当前效果目标。
 - 不优先实现 Distant Horizons、Physics Oceans、外部材质扩展等 DerivativeMain 可选分支。
+- 不实现 DerivativeMain `SKY_GROUND` 行星地面渲染与 `AURORA/AURORA_STRENGTH`。
+- 不实现染色玻璃彩色阴影；水体焦散和树叶/草 SSS 可用 Mecraft-native 数据链单独评估。
+- 不恢复 DerivativeMain/Radial 非线性 `shadow warp` 作为正式阴影路径；该算法与 greedy meshing 大面片插值不适配，只保留数学参考和历史排查价值。
 
 架构上仍需保留清晰 contract 层，但该 contract 应由 Mecraft 定义。DerivativeMain-like shader 适配 Mecraft，而不是 Mecraft 为任意 shaderpack 适配自己。
 
@@ -28,10 +32,14 @@
 
 **2026-05-13 阴影系统已完成迁移**：原 DerivativeMain/Radial 非线性 shadow warp 与 Mecraft greedy 大面片不兼容导致的 ghosting 问题已通过迁移到 CSM 级联阴影解决。ShadowRenderer 已从 Renderer 拆分，warp 代码已清理，CSM 4 cascade + transition fade + PCSS + contact shadow 已实现。正式阴影路线已确认为 Mecraft 自有 CSM contract。
 
+**2026-05-14 范围补充**：从 `DerivativeMain/lang/zh_cn.lang` 反查设置目录后，确认后续工作应聚焦在 `FOG_TYPE/SEA_LEVEL/VOLUMETRIC_LIGHT/UW_VOLUMETRIC_LIGHT`、云影、水体光学、曝光/tonemap/Bloomy Fog 等视觉主干；`SKY_GROUND`、Aurora、染色玻璃彩色阴影不进入当前路线。
+
 仍需推进的工作：
 - Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
+- 亮度链路收口：`FromSH` skylight、云/水 sunlight 单来源尾项、标准路径旁路 `shapeShadowVisibility`
+- CSM-native SSS depth：从 PCSS/blocker search 暴露树叶/草 SSS 所需深度，不恢复完整 DerivativeMain shadowcolor ABI
+- Atmosphere/Cloud/Fog/Water 视觉收敛：体积雾 `SEA_LEVEL/FALLOFF/samples`、Bloomy Fog、水下体积光
 - GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer）
-- Atmosphere/Cloud/Fog/Water 视觉收敛
 
 ## 1. Mecraft 当前渲染管线概览
 
@@ -119,7 +127,7 @@ Iris 不是简单地把 shader 编译后按固定顺序调用。它在 shaderpac
 - CSM 4 cascade depth texture array，per-cascade matrix/split/texel snapping。
 - `mecraft_shadow.glsl` 作为正式 CSM contract：cascade 选择、投影、bias、PCF 3x3、PCSS、cascade transition fade。
 - 旧 `shadowWarpMode`/`shadowWarpCutoff`/`derivativeExactShadow` 已从 settings、renderer、shader 中删除。
-- Water/stained glass 在 CSM depth-only pass 中 discard。
+- Water/stained glass 在 CSM depth-only pass 中 discard；染色玻璃彩色阴影不纳入当前目标，水体焦散另按水体光学需求评估。
 - Cutout/SSS 阴影白化已修复。
 - Contact shadow 16 步调优。
 - Debug views：CSM Cascade、CSM Depth 0-3、Cascade Info。

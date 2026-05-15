@@ -76,6 +76,7 @@ public:
         bool volumetricFogEnabled = true;
         bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
         int volumetricQualityTier = 1; // 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
+        float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
         bool ssaoFilterEnabled = true;

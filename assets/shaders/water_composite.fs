@@ -242,16 +242,15 @@ void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDep
     // fogDensity = WATER_FOG_DENSITY * fma(0.1, wetness*skylight, 0.16) * waterDepth
     float fogDensity = 1.0 * (0.16 + 0.1 * uWeatherWetness * waterSkylight) * waterDepth;
 
-    // Sky-derived fog color from LightingEnvironment (replaces CPU uSkyAmbientColor)
-    vec3 skyFogBase = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
-    vec3 fogColor = mix(skyFogBase * 0.4,
-                        vec3(luminance(skyFogBase) * 0.1),
+    // DerivativeMain WaterFog.glsl:6-8
+    // Base fog color from skyIlluminance (hemisphere-integrated sky irradiance).
+    vec3 fogColor = mix(env.skyIlluminance * 0.4,
+                        vec3(luminance(env.skyIlluminance) * 0.1),
                         0.8 * uWeatherWetness * waterSkylight) * rPI;
 
-    // Scatter: 28.0 * oneMinus(wetness*0.8) * directIlluminance * scatter
-    // Art-directed: uSunLightColor (CPU constant) retained for now
+    // Sun scatter: 28.0 * directIlluminance * phase (DerivativeMain WaterFog.glsl:8)
     float scatter = atmHenyeyGreensteinPhase(LdotV, 0.65) + 0.1 * rPI;
-    fogColor *= 1.0 + 28.0 * (1.0 - uWeatherWetness * 0.8) * uSunLightColor * scatter;
+    fogColor *= 1.0 + 28.0 * (1.0 - uWeatherWetness * 0.8) * env.directIlluminance * scatter;
 
     // Beer-Lambert: fastExp(-(waterAbsorption * 8.0 + 0.03) * fogDensity)
     vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
@@ -293,7 +292,7 @@ vec3 sampleSkyReflection(vec3 dir, vec3 normal, float skylight, LightingEnvironm
     return max(skybox * skyWeight * nDotUp, vec3(0.0));
 }
 
-vec3 renderSunReflection(vec3 rayDir) {
+vec3 renderSunReflection(vec3 rayDir, LightingEnvironment env) {
     vec3 sunDir = normalize(uSunDirection);
     float cosTheta = clamp(dot(normalize(rayDir), sunDir), -1.0, 1.0);
     const float sunReflectionRadius = 0.05;
@@ -304,7 +303,13 @@ vec3 renderSunReflection(vec3 rayDir) {
     float centerToEdge = clamp(acos(cosTheta) / sunReflectionRadius, 0.0, 1.0);
     const vec3 alpha = vec3(0.429, 0.522, 0.614);
     vec3 limbDark = pow(vec3(1.0 - centerToEdge * centerToEdge), alpha * 0.5);
-    return uSunLightColor * limbDark * clamp(uSkyIntensity, 0.0, 1.0) * 24.0;
+    // DerivativeMain Atmosphere.glsl:784 uses hardcoded solar disk luminance:
+    //   sunIlluminance = solar_irradiance * 126.6e3 / coneAngleToSolidAngle(0.05)
+    // which is ~vec3(186600,234200,242000), then clamped to 2000.
+    // We use env.sunIlluminance (LUT transmittance * solar constant) scaled to
+    // approximate the visible disk luminance. The clamp caps overexposure.
+    vec3 solarDiskLuminance = env.sunIlluminance * 80000.0;
+    return min(solarDiskLuminance * limbDark, vec3(2000.0)) * clamp(uSkyIntensity, 0.0, 1.0);
 }
 
 bool layerInRange(float layer, float firstLayer, float layerCount) {
@@ -401,7 +406,7 @@ void main() {
         reflection = vec3(0.05, 0.7, 1.0) * 0.3 * clamp(uSkyIntensity, 0.0, 1.0);
     }
 
-    reflection += renderSunReflection(reflDir) * waterSkylight;
+    reflection += renderSunReflection(reflDir, env) * waterSkylight;
 
     float cosThetaMoon = dot(reflDir, normalize(-uMoonDirection));
     float moonSize = 5e-3;

@@ -1,9 +1,13 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
+#include "sky_sh.glsl"
 #include "derivative_sunlight.glsl"
 
 in vec2 vTexCoord;
+flat in vec4 vSkySH_R;
+flat in vec4 vSkySH_G;
+flat in vec4 vSkySH_B;
 out vec4 FragColor;
 
 uniform sampler2D uAlbedoTex;
@@ -557,19 +561,21 @@ void main() {
     // 4. (DerivativeMain has no SSS fill light — removed self-invented extension)
 
     // 5. Skylight (DerivativeMain deferred5.fsh:305-323)
-    vec3 coolSkyColor = mix(uSkyAmbientColor, uSkyAmbientColor * vec3(0.78, 0.92, 1.18), clamp(uSkyCoolness, 0.0, 1.0));
-    // Sky samples from LightingEnvironment (unified SkyCapture data)
-    vec3 capturedNormalSky = sampleEnvironmentSky(uSkyCaptureTex, normal);
-    float skyCaptureInfluence = mix(0.18, 0.46, 1.0 - clamp(uSkyIntensity, 0.0, 1.0));
-    coolSkyColor = mix(coolSkyColor, mix(env.skyZenith, capturedNormalSky, 0.55), skyCaptureInfluence);
+    // SkySH is computed once in the vertex shader (3 invocations) and passed via
+    // flat interpolation, matching DerivativeMain's deferred5.vsh approach.
+    SkySH skySH;
+    skySH.R = vSkySH_R;
+    skySH.G = vSkySH_G;
+    skySH.B = vSkySH_B;
+    vec3 skylight = evaluateSkySH(skySH, normal);
+    skylight *= normal.y * 2.0 + 3.0;  // directional boost 1.0 (down) to 5.0 (up)
 
-    // DerivativeMain deferred5.fsh:305-323 skylight:
-    //   skylight = FromSH(skySHR, skySHG, skySHB, worldNormal) * (normal.y * 2.0 + 3.0)
-    //   sceneData += skylight * mcLightmap.g * SKYLIGHT_INTENSITY
-    // Mecraft approximation: use captured sky irradiance with directional boost.
-    // The SH approach returns ~1.0-5.0x directional irradiance; we approximate with normal.y.
-    float directionalBoost = normal.y * 2.0 + 3.0;  // 1.0 (down) to 5.0 (up)
-    vec3 skylight = coolSkyColor * skyIlluminance * directionalBoost * outdoorSkyMask * shadowTint;
+    // Wetness blend: under rain, lerp toward flat skySunLight (DerivativeMain deferred5.fsh:319)
+    vec3 skySunLight = (normal.y * 0.24 + 0.4) * directIlluminance;
+    skylight = mix(skylight, skySunLight, uWeatherWetness * 0.7);
+
+    // Mecraft extension: moon, shadow tint
+    skylight *= outdoorSkyMask * shadowTint;
     float moonMask = nightSkyMask;
     skylight += uMoonLightColor * moonMask * 0.15;
     skylight *= mix(vec3(1.0), uShadowTintColor, oneMinus(sunShadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
@@ -768,7 +774,7 @@ void main() {
     vec3 color = sceneData;
 
     // Sky specular (environment reflection) — uses DerivativeMain FresnelSchlick
-    color += coolSkyColor * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
+    color += evaluateSkySH(skySH, normal) * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
              pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
 
     // Shadow desaturation (Mecraft extension, not in DerivativeMain)

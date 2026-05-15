@@ -239,7 +239,7 @@ float cirrocumulusDensity(vec2 worldPos) {
     return cube(clamp(noise * 4.0, 0.0, 1.0));
 }
 
-vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter) {
+vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter, LightingEnvironment env) {
     float altitude = uPlanarCloudAltitude * 0.7; // below cirrus
     if ((ray.y < 0.0 && uCameraPos.y < altitude) ||
         (ray.y > 0.0 && uCameraPos.y > altitude)) {
@@ -285,9 +285,9 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
 
     float powder = (1.0 - exp(-density * 600.0)) * 0.75 / (1.0 - (1.0 - exp(-density * 600.0)) * 0.75 + 0.001);
 
-    vec3 sunIllum = uSunIlluminance * dayFactor + uMoonIlluminance * moonVis;
+    vec3 sunIllum = env.sunIlluminance * dayFactor + env.moonIlluminance * moonVis;
     vec3 scattering = sunlightEnergy * 120.0 * sunIllum;
-    scattering += skyEnergy * 0.3 * uSkyIlluminance;
+    scattering += skyEnergy * 0.3 * env.skyIlluminance;
     scattering *= 1.0 - uWeatherWetness * 0.7;
 
     float opacity = 1.0 - exp(-density * 0.02 * 1.0 * tPlane);
@@ -395,7 +395,7 @@ void main() {
     float planarTransmittance = 1.0 - planarResult.a;
 
     // ---- Cirrocumulus planar layer ----
-    vec4 cirroResult = evaluateCirrocumulusClouds(ray, LdotV, day, moonVis, jitter);
+    vec4 cirroResult = evaluateCirrocumulusClouds(ray, LdotV, day, moonVis, jitter, env);
     // Composite cirrocumulus behind cirrus
     planarResult.rgb += cirroResult.rgb * planarTransmittance;
     planarTransmittance *= 1.0 - cirroResult.a;
@@ -495,10 +495,11 @@ void main() {
         float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uWeatherWetness, 0.0, 1.0)));
         opacity *= distanceFade;
 
-        // Compose with sky cache illuminance
-        vec3 sunIllum = uSunIlluminance * day + uMoonIlluminance * moonVis;
-        vec3 scattering = scatteringSun * 64.0 * sunIllum * sunVisibility;
-        scattering += scatteringSky * 0.2 * uSkyIlluminance;
+        // Compose with SkyCapture illuminance (unified source)
+        // DerivativeMain Deferred1.glsl:240-241: sun*22.0, sky*0.15
+        vec3 sunIllum = env.sunIlluminance * day + env.moonIlluminance * moonVis;
+        vec3 scattering = scatteringSun * 22.0 * sunIllum * sunVisibility;
+        scattering += scatteringSky * 0.15 * env.skyIlluminance;
 
         // Weather darkening
         scattering = mix(scattering, scattering * vec3(0.68, 0.75, 0.86),

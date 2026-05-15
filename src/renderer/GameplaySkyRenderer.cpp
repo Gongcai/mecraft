@@ -315,6 +315,7 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uSunVisibility", m_lastColors.sunVisibility);
     m_shader->setFloat("uMoonVisibility", m_lastColors.moonVisibility);
     m_shader->setFloat("uNightFactor", m_lastColors.nightFactor);
+    m_shader->setInt("uIncludeCelestialDisks", 0);
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
@@ -396,6 +397,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uSunVisibility", m_lastColors.sunVisibility);
     m_shader->setFloat("uMoonVisibility", m_lastColors.moonVisibility);
     m_shader->setFloat("uNightFactor", m_lastColors.nightFactor);
+    m_shader->setInt("uIncludeCelestialDisks", 1);
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));

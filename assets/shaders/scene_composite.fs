@@ -72,7 +72,10 @@ void main() {
         vec3 skyDir = normalize(skyPos - uCameraPos);
         vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
         // Premultiplied alpha: sceneData = sceneData * cloudData.a + cloudData.rgb
-        color = sky * cloud.a + cloud.rgb * clamp(uCloudCompositeStrength, 0.0, 1.0);
+        // Strength blends between unmodified sky and full premultiplied result,
+        // so reducing strength doesn't break sky transmittance energy.
+        vec3 premul = sky * cloud.a + cloud.rgb;
+        color = mix(sky, premul, clamp(uCloudCompositeStrength, 0.0, 1.0));
     }
 
     // Premultiplied reflection data (DerivativeMain composite1 convention):

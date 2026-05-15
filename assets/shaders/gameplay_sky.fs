@@ -21,6 +21,7 @@ uniform float uMoonVisibility;
 uniform float uNightFactor;
 uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
+uniform int uIncludeCelestialDisks;
 
 // Sky cache metadata (mode 5)
 uniform vec3 uDirectIlluminance;
@@ -132,8 +133,10 @@ void main() {
 
         vec3 transmittance;
         vec3 sky = atmGetSkyRadiance(dir, sunDir, transmittance);
-        sky += atmRenderSun(dir, sunDir) * transmittance;
-        sky += atmRenderMoon(dir, moonDir) * transmittance;
+        if (uIncludeCelestialDisks != 0) {
+            sky += atmRenderSun(dir, sunDir) * transmittance;
+            sky += atmRenderMoon(dir, moonDir) * transmittance;
+        }
 
         FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;

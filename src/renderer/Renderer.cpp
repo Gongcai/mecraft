@@ -658,9 +658,10 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
     m_pipelineSettings.volumetricLightStrength = std::clamp(m_pipelineSettings.volumetricLightStrength, 0.0f, 2.0f);
     m_pipelineSettings.volumetricQualityTier = std::clamp(m_pipelineSettings.volumetricQualityTier, 0, 3);
+    m_pipelineSettings.volumetricShadowBiasScale = std::clamp(m_pipelineSettings.volumetricShadowBiasScale, 0.0f, 4.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 56);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 63);
     m_pipelineSettings.weatherPreset = std::clamp(m_pipelineSettings.weatherPreset, 0, 3);
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 3);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -1959,12 +1960,16 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     // Quality tier: 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
     m_volumetricFogShader->setInt("uVolumetricQualityTier", m_pipelineSettings.volumetricQualityTier);
 
-    // Volumetric fog debug mode: active when debug view 46-56 is selected
+    // Volumetric fog debug mode: active when debug view 46-63 is selected
     int vfDebugMode = 0;
-    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 56) {
-        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 56->11
+    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 63) {
+        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 63->18
     }
     m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
+    // Freeze jitter for stable debug visualization
+    m_volumetricFogShader->setInt("uVolumetricStaticJitter", vfDebugMode > 0 ? 1 : 0);
+    // Shadow bias scale for A/B testing (only affects volumetric fog)
+    m_volumetricFogShader->setFloat("uVolumetricShadowBiasScale", m_pipelineSettings.volumetricShadowBiasScale);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
