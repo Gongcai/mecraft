@@ -193,9 +193,11 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
     vec4 phases = multiLobePhase(LdotV);
     float phase = dot(phases, vec4(1.0));
 
-    // Sun/moon from LightingEnvironment (SkyCapture metadata) instead of CPU constants
-    vec3 lightColor = phase * env.sunIlluminance * dayFactor * 40.0;
-    lightColor += phase * uMoonLightColor * moonVis * 12.0;
+    // Sun/moon from LightingEnvironment (SkyCapture metadata).
+    // DerivativeMain PlanarClouds.glsl:245: sunlightEnergy * 1.2e2 * (moonlit ? moonIlluminance : sunIlluminance)
+    // Sun and moon share the same scattering multiplier — the phase function handles angular dependence.
+    vec3 lightIlluminance = env.sunIlluminance * dayFactor + env.moonIlluminance * moonVis;
+    vec3 lightColor = phase * lightIlluminance * 40.0;
     // Sky ambient from LightingEnvironment instead of CPU uSkyAmbientColor
     vec3 skyAmb = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
     lightColor += skyAmb * 0.25;

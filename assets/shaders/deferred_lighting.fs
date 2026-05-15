@@ -349,7 +349,7 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     return shadowFactor(worldPos, normal, lightDir, 0.0, unused);
 }
 
-vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSunColor) {
+vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSunColor, LightingEnvironment env) {
     vec3 sunDir = normalize(uSunDirection);
     vec3 moonDir = normalize(uMoonDirection);
     float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
@@ -367,8 +367,8 @@ vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSun
     float moonForward = pow(max(dot(viewDir, moonDir), 0.0), 8.0);
     fogColor += warmSunColor * (sunForwardWide * 0.14 + sunForwardCore * 0.22) *
                 sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
-    fogColor += uMoonLightColor * moonForward * moonVisibility * nightFactor *
-                (0.10 + 0.10 * clamp(uHorizonScatterStrength, 0.0, 2.0));
+    fogColor += env.moonIlluminance * moonForward * moonVisibility * nightFactor *
+                (150.0 + 150.0 * clamp(uHorizonScatterStrength, 0.0, 2.0));
     return max(fogColor, vec3(0.0));
 }
 
@@ -376,7 +376,8 @@ vec3 applyAerialPerspective(vec3 sceneColor,
                             vec3 worldPos,
                             float fogDistance,
                             float outdoorSkyMask,
-                            vec3 warmSunColor) {
+                            vec3 warmSunColor,
+                            LightingEnvironment env) {
     vec3 viewDir = normalize(worldPos - uCameraPos);
     float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.55);
     float distanceTransmittance = computeFogFactor(fogDistance);
@@ -401,7 +402,7 @@ vec3 applyAerialPerspective(vec3 sceneColor,
                              0.0,
                              0.88);
 
-    vec3 fogColor = aerialFogColor(baseFogColor, viewDir, horizon, warmSunColor);
+    vec3 fogColor = aerialFogColor(baseFogColor, viewDir, horizon, warmSunColor, env);
     return mix(sceneColor, fogColor, fogOpacity);
 }
 
@@ -463,27 +464,30 @@ void main() {
 
     vec3 sunDir = normalize(uSunDirection);
     vec3 moonDir = normalize(uMoonDirection);
+    vec3 shadowLightDir = normalize(uShadowLightDirection);
     vec3 viewDir = normalize(uCameraPos - worldPos);
 
-    // Dot products using fast halfway-vector trick (DerivativeMain deferred5.fsh:213-227)
-    float rawNdotL = dot(normal, sunDir);
+    // Dot products using fast halfway-vector trick (DerivativeMain deferred5.fsh:213-227).
+    // DerivativeMain's worldLightVector follows the active celestial shadow light; in Mecraft
+    // that is uShadowLightDirection, which switches to the moon at night.
+    float rawNdotL = dot(normal, shadowLightDir);
     float rawNdotM = dot(normal, moonDir);
-    float LdotV = dot(sunDir, viewDir);
+    float LdotV = dot(shadowLightDir, viewDir);
     float NdotV = max(dot(normal, viewDir), 0.0);
     float NdotL = max(rawNdotL, 0.0);
     float NdotM = max(rawNdotM, 0.0);
-    // Fast halfway vector: avoids normalize(sunDir + viewDir) per-pixel
+    // Fast halfway vector: avoids normalize(lightDir + viewDir) per-pixel
     float halfwayNorm = inversesqrt(2.0 * LdotV + 2.0);
     float NdotH = max((rawNdotL + dot(normal, viewDir)) * halfwayNorm, 0.0);
     float LdotH = max((LdotV + 1.0) * halfwayNorm, 0.0);
 
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
-    vec3 shadowLightDir = normalize(uShadowLightDirection);
     float shadowSssDepth = 0.0;
     vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? mix(1.0, dot(shadowColored, vec3(0.333)), 0.82) : 1.0;
+    float activeShadow = (uShadowLightMode == 1) ? moonShadow : sunShadow;
 
     // --- Lighting environment from SkyCapture (unified data source) ---
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
@@ -492,7 +496,6 @@ void main() {
 
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
-    vec3 shadowTint = sampleShadowColorTint(worldPos, normal, shadowLightDir, sunShadow);
 
     // --- BRDF preparation (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
     float alpha = max(roughness * roughness, 0.002);
@@ -576,12 +579,10 @@ void main() {
     vec3 skySunLight = (normal.y * 0.24 + 0.4) * directIlluminance;
     skylight = mix(skylight, skySunLight, uWeatherWetness * 0.7);
 
-    // Mecraft extension: moon, shadow tint
-    skylight *= outdoorSkyMask * shadowTint;
-    float moonMask = nightSkyMask;
-    skylight += uMoonLightColor * moonMask * 0.15;
-    skylight *= mix(vec3(1.0), uShadowTintColor, oneMinus(sunShadow) * clamp(uShadowTintStrength, 0.0, 1.0) * 0.72);
-    sceneData += skylight * voxelLight.r;
+    // DerivativeMain keeps skylight independent from the shadow map; only direct
+    // light is shadowed. Shadow-tinting skylight makes sun/moon shadows collapse
+    // into black ambient patches and breaks daytime contrast.
+    sceneData += skylight * skyLightMask;
 
     // Basic brightness (DerivativeMain deferred5.fsh:325)
     // sceneData += BASIC_BRIGHTNESS + nightVision * 0.1
@@ -591,7 +592,7 @@ void main() {
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
     sceneData += uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
     // DerivativeMain: CalculateFakeBouncedLight (SunLighting.glsl:168-174)
-    float bounce = CalculateFakeBouncedLight(normal, sunDir);
+    float bounce = CalculateFakeBouncedLight(normal, shadowLightDir);
     sceneData += bounce * sqr(skyLightMask) * sunlightMult * uFakeBounceStrength;
 
     // GI / AO (DerivativeMain deferred5.fsh:329-347)
@@ -780,8 +781,8 @@ void main() {
              pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
 
     // Shadow desaturation (Mecraft extension, not in DerivativeMain)
-    // Uses the raw 0-1 shadow value (sunShadow) for the mask.
-    float shadowDesatMask = oneMinus(sunShadow) * outdoorSkyMask;
+    // Uses the raw 0-1 shadow value for the active sun/moon shadow light.
+    float shadowDesatMask = oneMinus(activeShadow) * outdoorSkyMask;
     color = desaturateLinear(color, shadowDesatMask * uShadowDesaturation);
 
     // Aerial perspective: skip when volumetric fog is active, because the volumetric
@@ -790,7 +791,7 @@ void main() {
     // When volumetric fog is off, this provides the fallback land atmospheric scattering.
     if (uFogEnabled != 0 && uVolumetricFogActive == 0) {
         float fogDistance = length(worldPos - uCameraPos);
-        color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor);
+        color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor, env);
     }
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).

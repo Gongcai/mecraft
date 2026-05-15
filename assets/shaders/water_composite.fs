@@ -412,11 +412,15 @@ void main() {
 
     reflection += renderSunReflection(reflDir, env) * waterSkylight;
 
+    // Moon reflection: Mecraft intentional divergence from DerivativeMain.
+    // DerivativeMain RenderMoonReflection() returns vec3(disc * 4.0) — a hardcoded luminance
+    // independent of moonIlluminance/NIGHT_BRIGHTNESS. Mecraft scales by env.moonIlluminance
+    // so the reflection brightness tracks the actual moon phase and night brightness setting.
     float cosThetaMoon = dot(reflDir, normalize(-uMoonDirection));
     float moonSize = 5e-3;
     float moonHardness = 2e2;
     float moonDisc = pow(clamp((cosThetaMoon - 1.0 + moonSize) * moonHardness, 0.0, 1.0), 2.0);
-    reflection += vec3(moonDisc * 4.0) * clamp(uMoonVisibility, 0.0, 1.0);
+    reflection += vec3(moonDisc) * env.moonIlluminance;
 
     // ---- Combine (DerivativeMain composite1.fsh line 117, premultiplied alpha) ----
     // reflectionData = vec4(reflection * specular, 1.0 - specular)

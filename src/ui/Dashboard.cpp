@@ -526,6 +526,23 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("VFog lightStr: %.2f  baseDensity: 1.0  (VolumetricSettings defaults)", pipeline.volumetricLightStrength);
             const char* tierNames[] = {"Low(0.5x)", "Medium(1.4x)", "High(9.0x)", "Ultra(48.0x)"};
             ImGui::Text("VFog tier: %s  maxDist: 260  heightFalloff: 0.022", tierNames[qualityTier]);
+            // Active light direction (shadow system uses this)
+            ImGui::TextColored(ImVec4(0.9f, 0.85f, 0.5f, 1.0f), "Active Light");
+            ImGui::Text("SunDir: (%.2f, %.2f, %.2f)  MoonDir: (%.2f, %.2f, %.2f)",
+                skyColors.sunDirection.x, skyColors.sunDirection.y, skyColors.sunDirection.z,
+                skyColors.moonDirection.x, skyColors.moonDirection.y, skyColors.moonDirection.z);
+            ImGui::Text("SunVis: %.3f  MoonVis: %.3f  DayFactor: %.3f",
+                (skyColors.sunDirection.y > -0.08f) ? std::min((skyColors.sunDirection.y + 0.08f) / 0.26f, 1.0f) : 0.0f,
+                skyColors.moonLightColor.x > 0.001f ? 1.0f : 0.0f, // approximate
+                world.getDayNightSystem().getSkyIntensity());
+            // Weather state
+            const char* tonemapNames[] = {"Reinhard [Mecraft]", "AcademyFit [DerivMain]", "Filmic [Mecraft]", "AgX [Mecraft]"};
+            ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 3)]);
+            const auto& weather = world.getWeatherSystem().getRenderState();
+            const char* weatherNames[] = {"Clear", "Mist", "Rain", "Storm"};
+            ImGui::Text("Weather: %s  mist=%.2f wet=%.2f storm=%.2f aerialRed=%.2f",
+                weatherNames[static_cast<int>(weather.type)],
+                weather.mist, weather.wetness, weather.storm, weather.aerialReduction);
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
