@@ -42,7 +42,8 @@ uniform float uPlanarCloudCoverage;
 uniform float uPlanarCloudDensity;
 uniform float uPlanarCloudAltitude;
 
-// Sky cache illuminance (Phase 3)
+// CPU illuminance uniforms — legacy/fallback only. Cloud lighting reads from
+// GPU SkyCapture metadata via getLightingEnvironment(). Kept for forward path.
 uniform vec3 uDirectIlluminance;
 uniform vec3 uSkyIlluminance;
 uniform vec3 uSunIlluminance;

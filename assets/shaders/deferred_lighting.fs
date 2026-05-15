@@ -498,7 +498,8 @@ void main() {
     // --- Lighting environment from SkyCapture (unified data source) ---
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
     vec3 directIlluminance = env.directIlluminance;
-    vec3 skyIlluminance = env.skyIlluminance;
+    // skyIlluminance is metadata irradiance, not used by deferred SH skylight.
+    // SH radiance and metadata irradiance are different units — see comment at line 623.
 
     vec3 warmSunColor = artisticSunIlluminance(uSunLightColor, sunDir);
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);

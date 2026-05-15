@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cmath>
 #include <cstdint>
 
 Dashboard::Dashboard() {
@@ -57,8 +58,10 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+    ImGui::GetIO().FontGlobalScale = m_fontScale;
 
     if (ImGui::Begin("Debug Dashboard")) {
+        ImGui::SliderFloat("Font Scale", &m_fontScale, 0.8f, 3.0f, "%.1f");
         showPlayerStats(registry);
         showCameraStats(camera);
         showWorldStats(world, registry);
@@ -563,6 +566,31 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 skyColors.sunVisibility,
                 skyColors.moonVisibility,
                 world.getDayNightSystem().getSkyIntensity());
+            // Time of day slider (0-1200 seconds, 20 min cycle)
+            {
+                auto& dayNight = world.getDayNightSystem();
+                float tod = dayNight.getTimeOfDay();
+                if (ImGui::SliderFloat("Time of Day", &tod, 0.0f, 1200.0f, "%.0f s")) {
+                    dayNight.setTimeOfDay(tod);
+                }
+            }
+            // DerivativeMain time weights (shader-side, from sun direction)
+            {
+                float sunY = skyColors.sunDirection.y;
+                float sunX = skyColors.sunDirection.x;
+                float meFade = (sunY < 0.18f) ? 0.37f + 1.2f * std::max(0.0f, -sunY) : 1.7f;
+                float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
+                float timeNoon = (sunY > 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
+                float timeMidnight = (sunY < 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
+                float timeSunrise = (sunX > 0.0f ? 1.0f : 0.0f) * meWeight;
+                float timeSunset = (sunX < 0.0f ? 1.0f : 0.0f) * meWeight;
+                ImGui::TextColored(ImVec4(0.9f, 0.85f, 0.5f, 1.0f), "Derivative Time Weights");
+                ImGui::Text("Noon: %.3f  Midnight: %.3f  Sunrise: %.3f  Sunset: %.3f",
+                    timeNoon, timeMidnight, timeSunrise, timeSunset);
+                ImGui::Text("meWeight: %.3f  (sunY=%.3f, sunX=%.3f)", meWeight, sunY, sunX);
+                ImGui::Text("CPU DayFactor: %.3f  vs  GPU meWeight: %.3f",
+                    world.getDayNightSystem().getSkyIntensity(), meWeight);
+            }
             // Weather state
             const char* tonemapNames[] = {
                 "Reinhard [Mecraft]",

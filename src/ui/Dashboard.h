@@ -72,6 +72,7 @@ private:
     void showTextSettings(UIRenderer& uiRenderer);
 
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
+    float m_fontScale = 1.5f; // Global ImGui font scale
 };
 
 #endif // NDEBUG

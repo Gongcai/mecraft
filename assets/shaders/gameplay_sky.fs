@@ -23,7 +23,8 @@ uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
 uniform int uIncludeCelestialDisks;
 
-// Sky cache metadata (mode 5)
+// CPU illuminance uniforms — legacy/fallback only. Mode 5 computes illuminance
+// from atmosphere LUT via atmGetSunAndSkyIrradiance(), not from these uniforms.
 uniform vec3 uDirectIlluminance;
 uniform vec3 uSkyIlluminance;
 uniform vec3 uSunIlluminance;
