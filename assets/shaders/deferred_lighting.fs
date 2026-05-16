@@ -60,6 +60,12 @@ uniform float uHorizonScatterStrength;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uAerialReduction;
+uniform float uLightningFlash;
+uniform float uSurfaceWetness;
+uniform float uSkyWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
+uniform float uPrecipitation;
 uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
 uniform int uPcssShadowsEnabled;
@@ -239,7 +245,7 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     // cloudShadow = mix(1.0, 0.03, wetness), before CLOUDS_SHADOW optionally
     // replaces it with sampled cloud density. Keep this weather dimming active
     // even when procedural cloud shadows are disabled.
-    float weatherWetness = clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0);
+    float weatherWetness = clamp(uSkyWetness, 0.0, 1.0);
     float overcastShadow = mix(1.0, 0.03, weatherWetness);
 
     if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
@@ -400,7 +406,7 @@ vec3 applyAerialPerspective(vec3 sceneColor,
 
     float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
     float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-    float weatherHaze = 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+    float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
     float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
     float airDensity = (0.00048 + 0.00105 * horizon) *
                        clamp(uAerialStrength, 0.0, 2.0) *
@@ -444,13 +450,41 @@ void main() {
     int materialKind = materialKindId(surface.aux.materialKind);
     TranslucentMask transMask = decodeTranslucentMask(surface.aux.materialKind);
 
-    // Wetness/porosity only apply to opaque surfaces.
-    float wetness = clamp(uWeatherWetness * surface.aux.wetnessMask * voxelLight.r, 0.0, 1.0);
-    float wetPorosity = wetness * clamp(surface.aux.porosity, 0.0, 1.0);
-    if (!transMask.isTranslucent) {
-        albedo *= 1.0 - wetPorosity * 0.22;
-        roughness = mix(roughness, max(0.08, roughness * 0.36), wetness * (0.72 + surface.aux.metalness * 0.18));
-        f0Scalar = mix(f0Scalar, max(f0Scalar, 0.055), wetness * (0.35 + surface.aux.metalness * 0.20));
+    // DerivativeMain-style wet surface effects (RainEffect.glsl + Terrain.frag).
+    // Per-pixel wetness: surfaceWetness * outdoor exposure * upward-facing.
+    // Surfaces must be outdoors (skylight > 0) and facing up to get wet.
+    // Translucent surfaces (water/glass/ice) skip wet effects — they are inherently wet.
+    // Uses uSurfaceWetness (derived) for surface-only semantics, not raw uWeatherWetness.
+    float weatherWetness = clamp(uSurfaceWetness, 0.0, 1.0);
+    float skyLightRaw01 = clamp(voxelLight.r, 0.0, 1.0);
+    float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0); // only top 10% of skylight
+    float upwardFacing = remap(0.5, 0.9, clamp(normal.y, 0.0, 1.0));
+    float pixelWetness = weatherWetness * outdoorWetMask * upwardFacing;
+    // Also allow inherently wet materials (water/ice/glass) via wetnessMask.
+    pixelWetness = max(pixelWetness, surface.aux.wetnessMask * weatherWetness * skyLightRaw01);
+
+    if (!transMask.isTranslucent && pixelWetness > 1e-4) {
+        // DerivativeMain Terrain.frag:225-230 — wet albedo = ColorSaturation(albedo, 0.75) * 0.85
+        float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+        vec3 wetAlbedo = mix(vec3(luma), albedo, 0.75) * 0.85;
+        // Porosity correction (DerivativeMain Terrain.frag:227-228)
+        float porosity = clamp(surface.aux.porosity, 0.0, 1.0);
+        vec3 porosityFactor = (1.0 - porosity) / max(vec3(1.0) - porosity * wetAlbedo, vec3(0.01));
+        wetAlbedo *= porosityFactor;
+        albedo = mix(albedo, wetAlbedo, pixelWetness);
+
+        // Normal flattening: wet surfaces push toward flat (water film effect).
+        // DerivativeMain Terrain.frag:213 — normalData = mix(normalData, vec3(0,0,1), wetFact)
+        // In octahedral space, (0,0,1) = flat upward normal.
+        normal = mix(normal, vec3(0.0, 1.0, 0.0), pixelWetness * 0.65);
+
+        // Roughness reduction: wet surfaces are smoother/more reflective.
+        // DerivativeMain deferred5.fsh:210 — roughness = sqr(oneMinus(roughness) * oneMinus(wetness*0.3))
+        roughness = mix(roughness, max(0.08, roughness * 0.36), pixelWetness);
+
+        // Specular F0 boost: wet surfaces have stronger Fresnel (water IOR ~0.04).
+        // DerivativeMain Terrain.frag:220 — specularData.g = max(specularData.g, 0.04 * wetFact)
+        f0Scalar = max(f0Scalar, 0.04 * pixelWetness);
     }
     bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;
@@ -578,7 +612,7 @@ void main() {
             specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
                        mix(vec3(1.0), albedo, surface.aux.metalness);
             // DerivativeMain deferred5.fsh:293 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
-            specular *= 0.6 + uWeatherWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
+            specular *= 0.6 + uSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
             // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
             // Indoor surfaces with sky light = 0 get no direct sunlight
@@ -617,9 +651,9 @@ void main() {
 
     // Wetness blend: under rain, lerp toward flat skySunLight (DerivativeMain deferred5.fsh:319)
     vec3 skySunLight = (normal.y * 0.24 + 0.4) * directIlluminance;
-    skylight = mix(skylight, skySunLight, uWeatherWetness * 0.7);
+    skylight = mix(skylight, skySunLight, uSkyWetness * 0.7);
     // DerivativeMain/world0/deferred5.fsh:316
-    skylight *= 0.8 - uWeatherWetness * 0.2;
+    skylight *= 0.8 - uSkyWetness * 0.2;
 
     // DerivativeMain keeps skylight independent from the shadow map; only direct
     // light is shadowed. Shadow-tinting skylight makes sun/moon shadows collapse
@@ -810,6 +844,14 @@ void main() {
                  float(materialKind == 19) * albedoLuminance * 2e2;
 
     dbgBlocklight = sceneData - sceneDataBeforeBlocklight;
+
+    // [Phase 0] Lightning flash: brief intense illumination during storms.
+    // Temporary hack — does not flow through sky capture, cloud, or volumetric fog.
+    // TODO: Phase 1 should route lightningColor through skylight SH, cloud shadow,
+    // and volumetric fog for consistent scene-wide flash.
+    if (uLightningFlash > 0.001) {
+        sceneData += directIlluminance * uLightningFlash * 4.0 * outdoorSkyMask;
+    }
 
     // === DerivativeMain compositing (deferred5.fsh:352-357) ===
     // DerivativeMain order: sceneData += shadow * diffuse → sceneData *= albedo → sceneData *= oneMinus(isMetal) → sceneData += shadow * specular

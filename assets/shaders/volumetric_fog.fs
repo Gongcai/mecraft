@@ -29,6 +29,11 @@ uniform float uVolumetricHeightFalloff;
 uniform float uVolumetricMaxDistance;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
+uniform float uSkyWetness;
+uniform float uSurfaceWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
+uniform float uPrecipitation;
 uniform float uShadowDistance;
 uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
@@ -306,8 +311,8 @@ void main() {
     vec3 skyFogColor = env.skyIlluminance;         // sky hemisphere irradiance (DerivativeMain skyIlluminance)
 
     // Mecraft adaptation: weather tint on fog color
-    float weatherHaze = 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
-    vec3 weatherTint = mix(vec3(1.0), vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
+    float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
+    vec3 weatherTint = mix(vec3(1.0), vec3(0.82, 0.88, 0.94), clamp(uSkyWetness, 0.0, 1.0) * 0.28);
     skyFogColor *= weatherTint;
     directFogColor *= weatherTint;
 
@@ -337,7 +342,7 @@ void main() {
     float mistDensity = baseDensity;
     if (uVolumetricQualityTier < 2) {
         // DerivativeMain VolumetricFog.glsl:191
-        float csPhase = cornetteShanksPhase(LdotV, 0.7 - uWeatherWetness * 0.3) * 0.45 +
+        float csPhase = cornetteShanksPhase(LdotV, 0.7 - uSkyWetness * 0.3) * 0.45 +
                         atmHenyeyGreensteinPhase(LdotV, -0.3) * 0.15 + 0.1;
         mistDensity *= csPhase;
     }
@@ -350,7 +355,7 @@ void main() {
         float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
         float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
         float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
-        float wetness = uWeatherWetness + uWeatherStorm;
+        float wetness = clamp(uSkyWetness, 0.0, 1.0);
         airDensity *= max(clamp(meWeight + 0.25, 0.0, 1.0) + timeMidnight * 4.0, wetness);
         mistDensity *= max(meWeight * meWeight + timeMidnight * 2.0, wetness);
     }
@@ -395,7 +400,7 @@ void main() {
         heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
         heightDensity = clamp(heightDensity, 0.035, 1.45);
 
-        float coverage = max(uCloudCoverage, 0.08 + uWeatherWetness * 0.32 + uWeatherStorm * 0.82);
+        float coverage = max(uCloudCoverage, 0.08 + uCloudWetness * 0.82);
         float structure = structuredFogDensity(samplePos, heightDensity, coverage);
         float clearAir = (0.06 + weatherHaze * 0.18) * max(uCloudDensity, 0.0);
         structure += clearAir;

@@ -172,6 +172,12 @@ public:
         float weatherWetness = 0.0f;
         float weatherStorm = 0.0f;
         float aerialReduction = 0.55f;
+        float lightningFlash = 0.0f;
+        float surfaceWetness = 0.0f;
+        float skyWetness = 0.0f;
+        float fogWetness = 0.0f;
+        float cloudWetness = 0.0f;
+        float precipitation = 0.0f;
     };
 
     struct VolumetricSettings {
@@ -389,6 +395,15 @@ private:
         float weatherWetness = 0.0f;
         float weatherStorm = 0.0f;
         float aerialReduction = 0.55f;
+        float lightningFlash = 0.0f;
+        // Derived weather values — semantic separation for downstream consumers.
+        float surfaceWetness = 0.0f;   // terrain/surface effects only
+        float skyWetness = 0.0f;       // sky/post/direct rain occlusion
+        float fogWetness = 0.0f;       // aerial/volumetric haze weighting
+        float cloudWetness = 0.0f;     // cloud coverage/weather shaping
+        float precipitation = 0.0f;    // combined rain+snow intensity
+        float rainStrength = 0.0f;     // rain particles
+        float thunderStrength = 0.0f;  // lightning frequency
         AtmosphereSettings atmosphere{};
         VolumetricSettings volumetric{};
         CloudSettings cloud{};

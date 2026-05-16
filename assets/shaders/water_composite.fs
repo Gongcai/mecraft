@@ -45,6 +45,10 @@ uniform vec3 uSkyAmbientColor;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
 uniform float uWeatherWetness;
+uniform float uSkyWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
+uniform float uSurfaceWetness;
 uniform float uWaterWaveHeight;
 uniform float uWaterWaveSpeed;
 uniform float uWaterIOR;
@@ -276,17 +280,17 @@ float FresnelDielectricN(float cosTheta, float n) {
 void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDepth,
               LightingEnvironment env) {
     // fogDensity = WATER_FOG_DENSITY * fma(0.1, wetness*skylight, 0.16) * waterDepth
-    float fogDensity = 1.0 * (0.16 + 0.1 * uWeatherWetness * waterSkylight) * waterDepth;
+    float fogDensity = 1.0 * (0.16 + 0.1 * uSkyWetness * waterSkylight) * waterDepth;
 
     // DerivativeMain WaterFog.glsl:6-8
     // Base fog color from skyIlluminance (hemisphere-integrated sky irradiance).
     vec3 fogColor = mix(env.skyIlluminance * 0.4,
                         vec3(luminance(env.skyIlluminance) * 0.1),
-                        0.8 * uWeatherWetness * waterSkylight) * rPI;
+                        0.8 * uSkyWetness * waterSkylight) * rPI;
 
     // Sun scatter: 28.0 * directIlluminance * phase (DerivativeMain WaterFog.glsl:8)
     float scatter = atmHenyeyGreensteinPhase(LdotV, 0.65) + 0.1 * rPI;
-    fogColor *= 1.0 + 28.0 * (1.0 - uWeatherWetness * 0.8) * env.directIlluminance * scatter;
+    fogColor *= 1.0 + 28.0 * (1.0 - uSkyWetness * 0.8) * env.directIlluminance * scatter;
 
     // Beer-Lambert: fastExp(-(waterAbsorption * 8.0 + 0.03) * fogDensity)
     vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
@@ -299,12 +303,12 @@ void WaterFog(inout vec3 color, float waterSkylight, float LdotV, float waterDep
 // DerivativeMain UnderwaterFog (lib/Water/WaterFog.glsl line 19-32, exact port)
 void UnderwaterFog(inout vec3 color, float waterDepth, LightingEnvironment env) {
     float skylight = cube(clamp(vSunlight, 0.0, 1.0));
-    float fogDensity = 1.0 * (0.1 + 0.05 * uWeatherWetness * skylight) * waterDepth;
+    float fogDensity = 1.0 * (0.1 + 0.05 * uSkyWetness * skylight) * waterDepth;
 
     vec3 skyFogBase = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
     vec3 fogColor = mix(skyFogBase * 0.4,
                         vec3(luminance(skyFogBase) * 0.1),
-                        0.8 * uWeatherWetness * skylight) * rPI;
+                        0.8 * uSkyWetness * skylight) * rPI;
 
     vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
     vec3 transmittance = exp(-absorption * max(fogDensity, 2.0) + 0.4);
@@ -387,9 +391,9 @@ void main() {
     waveNormalTangent = GetWavesNormal(parallaxPos);
 
     // Add rain ripple normals (DerivativeMain RainEffect.glsl)
-    if (uWeatherWetness > 0.01) {
+    if (uSurfaceWetness > 0.01) {
         float skylightFactor = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
-        vec2 rainNormal = GetRainNormal(vWorldPos, uWeatherWetness * skylightFactor);
+        vec2 rainNormal = GetRainNormal(vWorldPos, uSurfaceWetness * skylightFactor);
         waveNormalTangent.xy += rainNormal;
         waveNormalTangent = normalize(waveNormalTangent);
     }

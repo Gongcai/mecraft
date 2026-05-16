@@ -71,6 +71,9 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects.contrast = std::clamp(m_effects.contrast, 0.25f, 3.0f);
     m_effects.weatherWetness = std::clamp(m_effects.weatherWetness, 0.0f, 1.0f);
     m_effects.weatherStorm = std::clamp(m_effects.weatherStorm, 0.0f, 1.0f);
+    m_effects.skyWetness = std::clamp(m_effects.skyWetness, 0.0f, 1.0f);
+    m_effects.fogWetness = std::clamp(m_effects.fogWetness, 0.0f, 1.0f);
+    m_effects.cloudWetness = std::clamp(m_effects.cloudWetness, 0.0f, 1.0f);
 }
 
 void PostProcessRenderer::beginScene(const Window& window) {
@@ -220,6 +223,9 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setBool("uBloomyFogEnabled", m_effects.bloomyFogEnabled);
     m_postProcessShader->setFloat("uWeatherWetness", m_effects.weatherWetness);
     m_postProcessShader->setFloat("uWeatherStorm", m_effects.weatherStorm);
+    m_postProcessShader->setFloat("uSkyWetness", m_effects.skyWetness);
+    m_postProcessShader->setFloat("uFogWetness", m_effects.fogWetness);
+    m_postProcessShader->setFloat("uCloudWetness", m_effects.cloudWetness);
     m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
 
     glActiveTexture(GL_TEXTURE0);

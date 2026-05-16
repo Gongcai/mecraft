@@ -48,6 +48,9 @@ struct PostProcessEffects {
     bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG (default on)
     float weatherWetness = 0.0f;
     float weatherStorm = 0.0f;
+    float skyWetness = 0.0f;
+    float fogWetness = 0.0f;
+    float cloudWetness = 0.0f;
     int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
 };
 

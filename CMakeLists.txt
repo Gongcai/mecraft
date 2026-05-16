@@ -188,7 +188,7 @@ set(SRC_PLAYER
         src/player/Inventory.cpp
 )
 set(SRC_PHYSICS src/physics/PhysicsSystem.cpp)
-set(SRC_PARTICLE src/particle/ParticleSystem.cpp)
+set(SRC_PARTICLE src/particle/ParticleSystem.cpp src/particle/RainRenderer.cpp)
 set(SRC_ITEM src/item/Item.cpp)
 set(SRC_CRAFTING src/crafting/CraftingSystem.cpp)
 set(SRC_AUDIO

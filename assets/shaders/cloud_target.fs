@@ -18,8 +18,11 @@ uniform vec3 uShadowTintColor;
 uniform vec3 uHorizonScatterColor;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
-uniform float uWeatherWetness;
-uniform float uWeatherStorm;
+uniform float uSkyWetness;
+uniform float uSurfaceWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
+uniform float uPrecipitation;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uSunWarmth;
@@ -180,12 +183,12 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
     }
 
     float tPlane = (uPlanarCloudAltitude - uCameraPos.y) / ray.y;
-    if (tPlane <= 0.0 || tPlane > 300000.0 - 60000.0 * clamp(uWeatherWetness, 0.0, 1.0)) return vec4(0.0);
+    if (tPlane <= 0.0 || tPlane > 300000.0 - 60000.0 * clamp(uSkyWetness, 0.0, 1.0)) return vec4(0.0);
 
     vec2 worldPos = uCameraPos.xz + ray.xz * tPlane;
     worldPos /= 1.0 + length(worldPos - uCameraPos.xz) * 5e-6;
 
-    float coverage = clamp(uPlanarCloudCoverage + uWeatherWetness * 0.2 + uWeatherStorm * 0.3, 0.05, 0.95);
+    float coverage = clamp(uPlanarCloudCoverage + uCloudWetness * 0.2, 0.05, 0.95);
     float density = cirrusCloudDensity(worldPos, coverage);
     if (density < 1e-5) return vec4(0.0);
 
@@ -201,10 +204,10 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
     // Sky ambient from LightingEnvironment instead of CPU uSkyAmbientColor
     vec3 skyAmb = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
     lightColor += skyAmb * 0.25;
-    lightColor *= 1.0 - uWeatherWetness * 0.8;
+    lightColor *= 1.0 - uSkyWetness * 0.8;
 
     float opacity = 1.0 - exp(-density * 4.0 * uPlanarCloudDensity);
-    float atmosFade = exp(-tPlane * (0.02 + uWeatherWetness * 0.12) / max(uPlanarCloudAltitude, 1.0));
+    float atmosFade = exp(-tPlane * (0.02 + uSkyWetness * 0.12) / max(uPlanarCloudAltitude, 1.0));
     opacity *= atmosFade;
 
     vec3 color = lightColor * powder * opacity;
@@ -249,7 +252,7 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
     }
 
     float tPlane = (altitude - uCameraPos.y) / ray.y;
-    if (tPlane <= 0.0 || tPlane > 300000.0 - 60000.0 * clamp(uWeatherWetness, 0.0, 1.0)) return vec4(0.0);
+    if (tPlane <= 0.0 || tPlane > 300000.0 - 60000.0 * clamp(uSkyWetness, 0.0, 1.0)) return vec4(0.0);
 
     vec2 worldPos = uCameraPos.xz + ray.xz * tPlane;
     float density = cirrocumulusDensity(worldPos);
@@ -290,10 +293,10 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
     vec3 sunIllum = env.sunIlluminance * dayFactor + env.moonIlluminance * moonVis;
     vec3 scattering = sunlightEnergy * 120.0 * sunIllum;
     scattering += skyEnergy * 0.3 * env.skyIlluminance;
-    scattering *= 1.0 - uWeatherWetness * 0.7;
+    scattering *= 1.0 - uSkyWetness * 0.7;
 
     float opacity = 1.0 - exp(-density * 0.02 * 1.0 * tPlane);
-    float atmosFade = exp(-tPlane * (0.02 + uWeatherWetness * 0.12) / max(altitude, 1.0));
+    float atmosFade = exp(-tPlane * (0.02 + uSkyWetness * 0.12) / max(altitude, 1.0));
     opacity *= atmosFade;
 
     vec3 color = scattering * powder * opacity;
@@ -306,12 +309,12 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
 
 float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverage, float noiseDetail) {
     vec3 wind = vec3(2e-3, 2e-4, 1e-3) * uTime;
-    float noiseScale = 4e-4 + 6e-5 * uWeatherWetness;
+    float noiseScale = 4e-4 + 6e-5 * uCloudWetness;
     vec3 position = worldPos * noiseScale - wind;
 
     // Local coverage
     float localCoverage = texture(uNoiseTex, worldPos.xz * 2e-7 - wind.xz * 2e-3 + 0.5).y;
-    localCoverage = clamp(localCoverage * 3.0 + uWeatherWetness - 0.4, 0.0, 1.0) * 0.5 + 0.5;
+    localCoverage = clamp(localCoverage * 3.0 + uCloudWetness - 0.4, 0.0, 1.0) * 0.5 + 0.5;
     if (localCoverage < 0.1) return 0.0;
 
     float density = noiseDetail * 0.03;
@@ -330,7 +333,7 @@ float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverag
     density *= localCoverage;
 
     float heightAttenuation = clamp(normalizedHeight * 6.6, 0.0, 1.0)
-                            * clamp((1.0 - normalizedHeight) * (2.0 + uWeatherWetness), 0.0, 1.0);
+                            * clamp((1.0 - normalizedHeight) * (2.0 + uCloudWetness), 0.0, 1.0);
 
     if (weatherCoverage != 1.0) {
         density = clamp((density - 1.0 + weatherCoverage) / weatherCoverage, 0.0, 1.0);
@@ -444,7 +447,7 @@ void main() {
         int steps = 32;
         steps = int(mix(float(steps), float(steps) / 1.6, abs(ray.y)));
 
-        float weatherCoverage = clamp(uCloudCoverage * 2.8 + 0.2 + uWeatherWetness * 0.3 + uWeatherStorm * 0.4, 0.8, 1.5);
+        float weatherCoverage = clamp(uCloudCoverage * 2.8 + 0.2 + uCloudWetness * 0.3, 0.8, 1.5);
         float rayDistance = clamp(endT - startT, 0.0, 20000.0);
         float stepLength = rayDistance / float(steps);
 
@@ -494,7 +497,7 @@ void main() {
         }
 
         float opacity = clamp(1.0 - transmittance, 0.0, 1.0);
-        float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uWeatherWetness, 0.0, 1.0)));
+        float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uSkyWetness, 0.0, 1.0)));
         opacity *= distanceFade;
 
         // Compose with SkyCapture illuminance (unified source)
@@ -505,7 +508,7 @@ void main() {
 
         // Weather darkening
         scattering = mix(scattering, scattering * vec3(0.68, 0.75, 0.86),
-                        clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.55);
+                        clamp(uSkyWetness, 0.0, 1.0) * 0.55);
 
         cloudColor = scattering;
         cloudColor += atmos * opacity * mix(0.5, 0.8, clamp(uHorizonScatterStrength, 0.0, 1.0));

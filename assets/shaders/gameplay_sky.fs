@@ -36,6 +36,11 @@ uniform vec3 uCloudDynamicWeather;
 // GetSunAndSkyIrradiance(), which is weather-independent.
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
+uniform float uSkyWetness;
+uniform float uSurfaceWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
+uniform float uPrecipitation;
 
 // Atmosphere LUT (modes 4, 5)
 uniform sampler3D uAtmosphereLut;
@@ -166,7 +171,7 @@ void main() {
         // return (rayleigh + mie) * oneMinus(wetness * 0.6);
         // Mecraft adaptation: atmosphere LUT returns combined sky radiance here,
         // so apply the same shaping to combined radiance.
-        float weatherOcclusion = clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0);
+        float weatherOcclusion = clamp(uSkyWetness, 0.0, 1.0);
         if (weatherOcclusion > 0.001) {
             float skyLum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
             vec3 wetnessGrey = skyLum * vec3(1.026186824, 0.9881671071, 1.015787125);

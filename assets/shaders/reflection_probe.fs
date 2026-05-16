@@ -19,6 +19,10 @@ uniform vec3 uMoonDirection;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
 uniform float uWeatherWetness;
+uniform float uSurfaceWetness;
+uniform float uSkyWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
 uniform float uTime;
 
 #include "atmosphere_lut.glsl"
@@ -110,7 +114,7 @@ void main() {
 
     vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
     float smoothness = 1.0 - clamp(material.roughness, 0.0, 1.0);
-    float wetBoost = clamp(uWeatherWetness, 0.0, 1.0) * aux.wetnessMask * clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
+    float wetBoost = clamp(uSurfaceWetness, 0.0, 1.0) * aux.wetnessMask * clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
     bool hasDerivativeReflection = transMask.isTranslucent ||
                                    aux.metalness > 0.5 ||
                                    smoothness > 0.375 ||

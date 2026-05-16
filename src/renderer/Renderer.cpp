@@ -326,6 +326,10 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setFloat("uSkyIntensity", frame.skyIntensity);
     m_waterCompositeShader->setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
     m_waterCompositeShader->setFloat("uWeatherWetness", frame.weatherWetness);
+    m_waterCompositeShader->setFloat("uSkyWetness", frame.skyWetness);
+    m_waterCompositeShader->setFloat("uFogWetness", frame.fogWetness);
+    m_waterCompositeShader->setFloat("uCloudWetness", frame.cloudWetness);
+    m_waterCompositeShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
     m_waterCompositeShader->setFloat("uWaterWaveHeight", 1.0f);
     m_waterCompositeShader->setFloat("uWaterWaveSpeed", 1.0f);
     m_waterCompositeShader->setFloat("uWaterIOR", 1.33f);
@@ -1006,9 +1010,18 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     // Weather state now comes from World::WeatherSystem (single source of truth).
     // Dashboard writes to WeatherSystem; Renderer reads from it.
     const WeatherState& weather = world.getWeatherSystem().getRenderState();
+    const WeatherDerived& weatherDerived = world.getWeatherSystem().getDerived();
     frame.weatherWetness = weather.wetness;
     frame.weatherStorm = weather.storm;
     frame.aerialReduction = weather.aerialReduction;
+    frame.lightningFlash = weatherDerived.lightningFlash;
+    frame.surfaceWetness = weatherDerived.surfaceWetness;
+    frame.skyWetness = weatherDerived.skyWetness;
+    frame.fogWetness = weatherDerived.fogWetness;
+    frame.cloudWetness = weatherDerived.cloudWetness;
+    frame.precipitation = weatherDerived.precipitation;
+    frame.rainStrength = weatherDerived.rainStrength;
+    frame.thunderStrength = weatherDerived.thunderStrength;
 
     frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     frame.skyIlluminance = m_gameplaySkyRenderer.computeSkyIlluminance(
@@ -1043,6 +1056,12 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.atmosphere.weatherWetness = frame.weatherWetness;
     frame.atmosphere.weatherStorm = frame.weatherStorm;
     frame.atmosphere.aerialReduction = frame.aerialReduction;
+    frame.atmosphere.lightningFlash = frame.lightningFlash;
+    frame.atmosphere.surfaceWetness = frame.surfaceWetness;
+    frame.atmosphere.skyWetness = frame.skyWetness;
+    frame.atmosphere.fogWetness = frame.fogWetness;
+    frame.atmosphere.cloudWetness = frame.cloudWetness;
+    frame.atmosphere.precipitation = frame.precipitation;
     frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
     frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
     frame.cloud.shadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
@@ -1077,6 +1096,12 @@ void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& fr
 void Renderer::bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, const bool bindAerialReduction) const {
     shader.setFloat("uWeatherWetness", frame.weatherWetness);
     shader.setFloat("uWeatherStorm", frame.weatherStorm);
+    shader.setFloat("uLightningFlash", frame.lightningFlash);
+    shader.setFloat("uSurfaceWetness", frame.surfaceWetness);
+    shader.setFloat("uSkyWetness", frame.skyWetness);
+    shader.setFloat("uFogWetness", frame.fogWetness);
+    shader.setFloat("uCloudWetness", frame.cloudWetness);
+    shader.setFloat("uPrecipitation", frame.precipitation);
     if (bindAerialReduction) {
         shader.setFloat("uAerialReduction", frame.aerialReduction);
     }
@@ -1099,6 +1124,12 @@ void Renderer::bindAtmosphereUniforms(Shader& shader, const RenderFrameData& fra
     shader.setFloat("uWeatherWetness", frame.atmosphere.weatherWetness);
     shader.setFloat("uWeatherStorm", frame.atmosphere.weatherStorm);
     shader.setFloat("uAerialReduction", frame.atmosphere.aerialReduction);
+    shader.setFloat("uLightningFlash", frame.atmosphere.lightningFlash);
+    shader.setFloat("uSurfaceWetness", frame.atmosphere.surfaceWetness);
+    shader.setFloat("uSkyWetness", frame.atmosphere.skyWetness);
+    shader.setFloat("uFogWetness", frame.atmosphere.fogWetness);
+    shader.setFloat("uCloudWetness", frame.atmosphere.cloudWetness);
+    shader.setFloat("uPrecipitation", frame.atmosphere.precipitation);
 }
 
 void Renderer::bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const {
@@ -1867,6 +1898,10 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setFloat("uSkyIntensity", frame.skyIntensity);
     m_reflectionShader->setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
     m_reflectionShader->setFloat("uWeatherWetness", frame.weatherWetness);
+    m_reflectionShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
+    m_reflectionShader->setFloat("uSkyWetness", frame.skyWetness);
+    m_reflectionShader->setFloat("uFogWetness", frame.fogWetness);
+    m_reflectionShader->setFloat("uCloudWetness", frame.cloudWetness);
     m_reflectionShader->setFloat("uTime", frame.shaderTime);
 
     glActiveTexture(GL_TEXTURE0);
@@ -2034,6 +2069,11 @@ void Renderer::compositeVolumetricFogPass() {
     m_volumetricCompositeShader->setMat4("uInvProjection", glm::inverse(m_currentFrameData.projection));
     m_volumetricCompositeShader->setFloat("uWeatherWetness", m_currentFrameData.weatherWetness);
     m_volumetricCompositeShader->setFloat("uWeatherStorm", m_currentFrameData.weatherStorm);
+    m_volumetricCompositeShader->setFloat("uSkyWetness", m_currentFrameData.skyWetness);
+    m_volumetricCompositeShader->setFloat("uSurfaceWetness", m_currentFrameData.surfaceWetness);
+    m_volumetricCompositeShader->setFloat("uFogWetness", m_currentFrameData.fogWetness);
+    m_volumetricCompositeShader->setFloat("uCloudWetness", m_currentFrameData.cloudWetness);
+    m_volumetricCompositeShader->setFloat("uPrecipitation", m_currentFrameData.precipitation);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
     glActiveTexture(GL_TEXTURE1);

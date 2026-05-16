@@ -273,6 +273,7 @@ void ResourceMgr::init() {
     loadShader("inventory", SHADERS_DIR "/inventory.vs", SHADERS_DIR "/inventory.fs");
     loadShader("text", SHADERS_DIR "/text.vs", SHADERS_DIR "/text.fs");
     loadShader("particle", SHADERS_DIR "/particle.vs", SHADERS_DIR "/particle.fs");
+    loadShader("rain", SHADERS_DIR "/rain.vs", SHADERS_DIR "/rain.fs");
     loadShader("postprocess", SHADERS_DIR "/postprocess.vs", SHADERS_DIR "/postprocess.fs");
     loadShader("item_model", SHADERS_DIR "/item_model.vs", SHADERS_DIR "/item_model.fs");
     loadShader("steve", SHADERS_DIR "/steve.vs", SHADERS_DIR "/steve.fs");

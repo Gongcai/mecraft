@@ -32,6 +32,7 @@
 #include "../audio/AudioEngine.h"
 #include "../audio/BgmSystem.h"
 #include "../particle/ParticleSystem.h"
+#include "../particle/RainRenderer.h"
 #include "../crafting/CraftingSystem.h"
 #include "../ecs/GameplayScene.h"
 #include "states/StateDependencies.h"
@@ -86,6 +87,7 @@ private:
     HumanoidRenderer  m_humanoidRenderer;
     PostProcessRenderer m_postProcessRenderer;
     ParticleSystem m_particleSystem;
+    RainRenderer m_rainRenderer;
     DropSystem m_dropSystem;
     CraftingSystem m_craftingSystem;
     ecs::GameplayScene m_gameplayScene;

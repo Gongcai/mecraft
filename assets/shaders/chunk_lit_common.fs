@@ -68,6 +68,12 @@ uniform float uHorizonScatterStrength;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uAerialReduction;
+uniform float uLightningFlash;
+uniform float uSurfaceWetness;
+uniform float uSkyWetness;
+uniform float uFogWetness;
+uniform float uCloudWetness;
+uniform float uPrecipitation;
 uniform float uWindTime;
 uniform float uAnimationTime;
 uniform int uWaterEffectsEnabled;
@@ -302,7 +308,7 @@ uniform vec3 uCameraPos;
 
         float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
         float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-        float weatherHaze = 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+        float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
         float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
         float airDensity = (0.00048 + 0.00105 * horizon) *
                            clamp(uAerialStrength, 0.0, 2.0) *
@@ -436,6 +442,21 @@ uniform vec3 uCameraPos;
         SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, 0.0);
         float roughness = material.roughness;
         float sss = material.sss;
+
+        // DerivativeMain-style wet surface effects (RainEffect.glsl + Terrain.frag).
+        // Per-pixel wetness from surfaceWetness * outdoor exposure * upward-facing.
+        float weatherW = clamp(uSurfaceWetness, 0.0, 1.0);
+        float outdoorWetMask = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
+        float upwardWet = clamp((normal.y - 0.5) / 0.4, 0.0, 1.0);
+        float fwdWetness = weatherW * outdoorWetMask * upwardWet;
+        if (fwdWetness > 1e-4) {
+            // Wet albedo: desaturate 25% and darken 15% (DerivativeMain Terrain.frag:225)
+            float wetLuma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+            vec3 wetAlbedo = mix(vec3(wetLuma), albedo, 0.75) * 0.85;
+            albedo = mix(albedo, wetAlbedo, fwdWetness);
+            // Roughness reduction: wet surfaces are smoother
+            roughness = mix(roughness, max(0.08, roughness * 0.36), fwdWetness);
+        }
         float rawNdotL = dot(normal, sunDir);
         float rawNdotM = dot(normal, moonDir);
         float ndotl = max(rawNdotL, 0.0);
@@ -475,6 +496,10 @@ uniform vec3 uCameraPos;
         }
 
         vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight + heldLight;
+        // [Phase 0] Lightning flash: temporary hack, not routed through sky/fog/cloud.
+        if (uLightningFlash > 0.001) {
+            lightColor += warmSunColor * uLightningFlash * 4.0 * outdoorSkyMask;
+        }
         lightColor = mix(lightColor, vanillaLight, 0.035);
 
         // Combine texture, lightmap color, and AO

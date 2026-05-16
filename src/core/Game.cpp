@@ -74,6 +74,7 @@ void Game::initRenderers() {
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
+    m_rainRenderer.init(m_resourceMgr);
 
     glEnable(GL_DEPTH_TEST);
 }
@@ -301,6 +302,30 @@ void Game::renderFrame(const float frameTime) {
     m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
                             finalCamera.getViewMatrix());
 
+    // Rain particles: render after opaque geometry, before transparent compositing.
+    {
+        const auto& weather = m_world.getWeatherSystem().getDerived();
+        // Indoor check: if any opaque block exists above camera, suppress rain.
+        // Use floor() for negative coordinates (static_cast<int> truncates toward 0).
+        glm::vec3 camPos = finalCamera.getPosition();
+        float skyLight = 1.0f;
+        const int camBlockX = static_cast<int>(std::floor(camPos.x));
+        const int camBlockZ = static_cast<int>(std::floor(camPos.z));
+        for (int yCheck = static_cast<int>(camPos.y) + 1; yCheck < 256; ++yCheck) {
+            BlockID above = m_world.getBlock(camBlockX, yCheck, camBlockZ);
+            if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
+                skyLight = 0.0f;
+                break;
+            }
+        }
+        m_rainRenderer.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
+                              finalCamera.getViewMatrix(),
+                              camPos,
+                              weather.rainStrength,
+                              skyLight,
+                              frameTime);
+    }
+
     // Read block interaction data from ECS and pass to Renderer
     BlockTargetRenderData targetData;
     BlockBreakRenderData breakData;
@@ -354,8 +379,12 @@ void Game::renderFrame(const float frameTime) {
     effects.bloomyFogEnabled = pipelineSettings.bloomyFogEnabled;
     {
         const WeatherState& weather = m_world.getWeatherSystem().getRenderState();
+        const WeatherDerived& derived = m_world.getWeatherSystem().getDerived();
         effects.weatherWetness = weather.wetness;
         effects.weatherStorm = weather.storm;
+        effects.skyWetness = derived.skyWetness;
+        effects.fogWetness = derived.fogWetness;
+        effects.cloudWetness = derived.cloudWetness;
     }
     effects.postprocessDebugMode = pipelineSettings.postprocessDebugMode;
     {
@@ -543,6 +572,7 @@ void Game::shutdown() {
     if (!m_initialized) {
         return;
     }
+    m_rainRenderer.shutdown();
     m_particleSystem.shutdown();
     m_postProcessRenderer.shutdown();
     m_humanoidRenderer.shutdown();

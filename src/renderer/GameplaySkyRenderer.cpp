@@ -327,6 +327,13 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
     m_shader->setFloat("uWeatherWetness", weatherWetness);
     m_shader->setFloat("uWeatherStorm", weatherStorm);
+    // Sky radiance occlusion uses the DerivativeMain wetness+storm gate.
+    const float skyWetnessLocal = std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f);
+    m_shader->setFloat("uSkyWetness", skyWetnessLocal);
+    m_shader->setFloat("uFogWetness", std::clamp(weatherWetness * 0.35f + weatherStorm * 0.65f, 0.0f, 1.0f));
+    m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
+    m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
+    m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -413,6 +420,13 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
     m_shader->setFloat("uWeatherWetness", weatherWetness);
     m_shader->setFloat("uWeatherStorm", weatherStorm);
+    // Sky radiance occlusion uses the DerivativeMain wetness+storm gate.
+    const float skyWetnessLocal = std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f);
+    m_shader->setFloat("uSkyWetness", skyWetnessLocal);
+    m_shader->setFloat("uFogWetness", std::clamp(weatherWetness * 0.35f + weatherStorm * 0.65f, 0.0f, 1.0f));
+    m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
+    m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
+    m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -486,6 +500,12 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     m_shader->setVec3("uCloudDynamicWeather", illuminance.cloudDynamicWeather);
     m_shader->setFloat("uWeatherWetness", weatherWetness);
     m_shader->setFloat("uWeatherStorm", weatherStorm);
+    const float skyWetnessLocal = std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f);
+    m_shader->setFloat("uSkyWetness", skyWetnessLocal);
+    m_shader->setFloat("uFogWetness", std::clamp(weatherWetness * 0.35f + weatherStorm * 0.65f, 0.0f, 1.0f));
+    m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
+    m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
+    m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
     m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
     m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
