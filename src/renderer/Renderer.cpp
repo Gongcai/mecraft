@@ -650,12 +650,11 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
     m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
     m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.volumetricLightStrength = std::clamp(m_pipelineSettings.volumetricLightStrength, 0.0f, 2.0f);
     m_pipelineSettings.volumetricQualityTier = std::clamp(m_pipelineSettings.volumetricQualityTier, 0, 3);
     m_pipelineSettings.volumetricShadowBiasScale = std::clamp(m_pipelineSettings.volumetricShadowBiasScale, 0.0f, 4.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 63);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 65);
 
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 5);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -1045,7 +1044,6 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.atmosphere.aerialReduction = frame.aerialReduction;
     frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
     frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
-    frame.volumetric.lightStrength = m_pipelineSettings.volumetricLightStrength;
     frame.cloud.shadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
     frame.cloud.shadowStrength = m_pipelineSettings.cloudShadowStrength;
     frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
@@ -1107,8 +1105,6 @@ void Renderer::bindAtmosphereUniforms(Shader& shader, const RenderFrameData& fra
 void Renderer::bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const {
     shader.setInt("uVolumetricFogEnabled", frame.volumetric.fogEnabled ? 1 : 0);
     shader.setFloat("uVolumetricFogStrength", frame.volumetric.fogStrength);
-    shader.setFloat("uVolumetricLightStrength", frame.volumetric.lightStrength);
-    shader.setFloat("uVolumetricPhaseG", frame.volumetric.phaseG);
     shader.setFloat("uVolumetricBaseDensity", frame.volumetric.baseDensity);
     shader.setFloat("uVolumetricHeightFalloff", frame.volumetric.heightFalloff);
     shader.setFloat("uVolumetricMaxDistance", frame.volumetric.maxDistance);
@@ -1976,14 +1972,15 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
 
     // Sky ray A/B toggle: when enabled, sky pixels (depth >= 1.0) also march volumetric fog
     m_volumetricFogShader->setInt("uVolumetricSkyRayEnabled", m_pipelineSettings.volumetricSkyRayEnabled ? 1 : 0);
+    m_volumetricFogShader->setInt("uVolumetricTimeFadeEnabled", m_pipelineSettings.volumetricTimeFadeEnabled ? 1 : 0);
 
     // Quality tier: 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
     m_volumetricFogShader->setInt("uVolumetricQualityTier", m_pipelineSettings.volumetricQualityTier);
 
-    // Volumetric fog debug mode: active when debug view 46-63 is selected
+    // Volumetric fog debug mode: active when debug view 46-65 is selected
     int vfDebugMode = 0;
-    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 63) {
-        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 63->18
+    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 65) {
+        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 65->20
     }
     m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
     // Freeze jitter for stable debug visualization

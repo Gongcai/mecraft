@@ -16,17 +16,14 @@ uniform mat4 uShadowProjection;
 uniform mat4 uShadowProjectionInverse;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
 uniform vec3 uShadowLightDirection;
 uniform vec3 uSunLightColor;
 uniform vec3 uMoonLightColor;
 uniform vec3 uHorizonScatterColor;
 uniform float uSkyIntensity;
-uniform float uMoonVisibility;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uVolumetricFogStrength;
-uniform float uVolumetricPhaseG;
 uniform float uVolumetricBaseDensity;
 uniform float uVolumetricHeightFalloff;
 uniform float uVolumetricMaxDistance;
@@ -38,7 +35,6 @@ uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
 uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
-uniform float uVolumetricLightStrength;
 uniform float uCloudCoverage;
 uniform float uCloudDensity;
 uniform float uCloudHeight;
@@ -50,6 +46,7 @@ uniform float uTime;
 uniform bool uNoiseEnabled;
 uniform int uVolumetricDebugMode;
 uniform int uVolumetricSkyRayEnabled;
+uniform int uVolumetricTimeFadeEnabled; // DerivativeMain TIME_FADE toggle
 uniform int uVolumetricQualityTier; // 0=Low, 1=Medium, 2=High, 3=Ultra
 uniform int uVolumetricStaticJitter; // 1 = freeze jitter for stable debug
 uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (default 1.0)
@@ -296,21 +293,12 @@ void main() {
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
     float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
-    float nightFactor = 1.0 - dayFactor;
     float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.45);
 
     vec3 sunDir = normalize(uSunDirection);
-    vec3 moonDir = normalize(uMoonDirection);
     float sunVisibility = smoothstep(-0.08, 0.18, sunDir.y) * dayFactor;
     float LdotV = dot(viewDir, sunDir);
-    float sunDot = max(LdotV, 0.0);
-    float moonDot = max(dot(viewDir, moonDir), 0.0);
-    float sunForward = pow(sunDot, 18.0);
-    float sunWide = pow(sunDot, 4.0);
-    float moonForward = pow(moonDot, 10.0) * clamp(uMoonVisibility, 0.0, 1.0);
-    float phaseG = clamp(uVolumetricPhaseG, -0.2, 0.85);
-    float sunPhase = atmRayleighPhase(dot(viewDir, sunDir)) * 0.35 + atmHenyeyGreensteinPhase(dot(viewDir, sunDir), phaseG) * 0.65;
-    float moonPhase = atmRayleighPhase(dot(viewDir, moonDir)) * 0.55 + atmHenyeyGreensteinPhase(dot(viewDir, moonDir), 0.36) * 0.45;
+    float LdotV01 = LdotV * 0.5 + 0.5;
 
     // DerivativeMain VolumetricFog.glsl: fogColor = fogSunColor * 20.0 + fogSkyColor * 2.0
     // directFogColor and skyFogColor are irradiance from SkyCapture metadata.
@@ -358,9 +346,8 @@ void main() {
     // DerivativeMain TIME_FADE: modulate airDensity and mistDensity by time of day.
     // Peaks at sunrise/sunset (meWeight) and midnight; stronger under wetness.
     // DerivativeMain VolumetricFog.glsl:210-213
-    {
+    if (uVolumetricTimeFadeEnabled != 0) {
         float sunY = uSunDirection.y;
-        float sunX = uSunDirection.x;
         float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
         float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
         float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
@@ -382,8 +369,7 @@ void main() {
     // DerivativeMain integration form: accumulate dimensionless samples, apply radiance after.
     vec3 sunlightSample = vec3(0.0);   // shadow * phase * fogSample (per step)
     float skylightSample = 0.0;        // fogSample (per step)
-    vec3 unshadowedSunAccum = vec3(0.0); // debug: unshadowed direct
-    vec3 shadowedSunAccum = vec3(0.0);   // debug: shadowed direct
+    vec3 unshadowedSunSample = vec3(0.0); // debug: same units as sunlightSample without shadowing
     float transmittance = 1.0;
     float maxDensitySeen = 0.0;
     float avgShadowVisibility = 0.0;
@@ -415,17 +401,17 @@ void main() {
         float clearAir = (0.06 + weatherHaze * 0.18) * max(uCloudDensity, 0.0);
         structure += clearAir;
         float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
-        // Low/Medium: mistDensity includes phase (DerivativeMain FOG_TYPE <= 1).
-        // High/Ultra: baseDensity (phase applied per-step in shadow calculation).
-        float effectiveDensity = (uVolumetricQualityTier < 2) ? mistDensity : baseDensity;
-        float sampleDensity = effectiveDensity * heightDensity * structure * nearFade + airDensity;
+        // DerivativeMain: fogDensity = CalculateFogDensity(rayPosition) * mistDensity + airDensity.
+        // For Low/Medium, mistDensity already includes phase. For High/Ultra, phase is applied per-step below.
+        float density = mistDensity * heightDensity * structure * nearFade;
+        float sampleDensity = density + airDensity;
         maxDensitySeen = max(maxDensitySeen, sampleDensity);
-        float opticalStep = sampleDensity * stepLength;
-        float stepTransmittance = exp(-opticalStep);
-        float stepOpacity = clamp(1.0 - stepTransmittance, 0.0, 0.18);
-        float powder = 1.0 - exp(-structure * heightDensity * 0.85);
-        powder = powder * (1.0 - clamp(dot(viewDir, shadowLightDir) * 0.5 + 0.5, 0.0, 1.0) * 0.35) +
-                 clamp(dot(viewDir, shadowLightDir) * 0.5 + 0.5, 0.0, 1.0) * 0.25;
+        float fogDensity = sampleDensity * stepLength;
+        float stepTransmittance = exp(-fogDensity);
+        float stepOpacity = 1.0 - stepTransmittance;
+        // DerivativeMain powder effect: oneMinus(exp(-fogDensity * 3.0)) blended by LdotV01.
+        float powder = 1.0 - exp(-fogDensity * 3.0);
+        powder = powder * (1.0 - LdotV01) + LdotV01;
         // Shadow: compute setup once, sample raw compare + filtered
         VFogShadowData shadowData = computeVolumetricShadowSetup(samplePos, shadowLightDir);
         float rawCompare = 1.0;
@@ -462,10 +448,6 @@ void main() {
         float cloudShadow = vfogCloudShadow(samplePos, shadowLightDir);
         shadowVisibility *= cloudShadow;
 
-        vec3 altitudeTransmittance = atmGetTransmittanceToTopAtmosphereBoundary(
-            atmPlanetRadius + clamp(samplePos.y + 100.0, 0.0, 90000.0),
-            clamp(dot(vec3(0.0, 1.0, 0.0), shadowLightDir), -1.0, 1.0));
-
         // DerivativeMain VolumetricFog.glsl: fogSample = powder * transmittance * oneMinus(stepTransmittance)
         // Dimensionless: represents how much light scatters toward camera from this step.
         float fogSample = powder * transmittance * stepOpacity;
@@ -474,18 +456,18 @@ void main() {
         // Phase is applied differently per tier (DerivativeMain FOG_TYPE).
         float shadow = shadowVisibility;  // DerivativeMain: shadow = shadow map sample
 
-        if (uVolumetricQualityTier >= 2 && sampleDensity > 1e-5) {
+        vec3 unshadowedStep = vec3(fogSample);
+        if (uVolumetricQualityTier >= 2 && density > 1e-5) {
             // High/Ultra (FOG_TYPE > 1): multi-lobe phase + optical depth + airDensity
             // DerivativeMain VolumetricFog.glsl:254-272
             float odStepSize = 5.0;
             float sunlightOD = 0.0;
             vec3 checkPos = samplePos;
-            float LdotV01 = LdotV * 0.5 + 0.5;
             for (int j = 0; j < 4; ++j) {
                 float checkHeight = exp2(min((92.0 - checkPos.y) * max(uVolumetricHeightFalloff, 0.0001), 0.35));
                 checkHeight *= 1.0 - smoothstep(180.0, 260.0, checkPos.y);
                 checkHeight = clamp(checkHeight, 0.035, 1.45);
-                float d = baseDensity * checkHeight * structuredFogDensity(checkPos, checkHeight, coverage);
+                float d = mistDensity * checkHeight * structuredFogDensity(checkPos, checkHeight, coverage);
                 if (d > 1e-5) {
                     sunlightOD += d * odStepSize;
                 }
@@ -503,23 +485,22 @@ void main() {
             scatteringSun *= powderSun;
             // DerivativeMain line 271: shadow *= (scatteringSun + airDensity) * FOG_TYPE^2
             float tierScale = float(uVolumetricQualityTier) * float(uVolumetricQualityTier);
-            shadow *= (scatteringSun + airDensity) * tierScale;
-            // Mecraft adaptation: altitudeTransmittance (per-step atmospheric absorption)
-            sunlightSample += shadow * altitudeTransmittance * fogSample;
+            float phaseScale = (scatteringSun + airDensity) * tierScale;
+            shadow *= phaseScale;
+            sunlightSample += shadow * fogSample;
+            unshadowedStep = vec3(phaseScale * fogSample);
         } else {
             // Low/Medium (FOG_TYPE <= 1): phase applied to mistDensity before fogDensity
             // DerivativeMain VolumetricFog.glsl:191
             sunlightSample += shadow * fogSample;
         }
+        unshadowedSunSample += unshadowedStep;
 
         // DerivativeMain line 291: skylightSample += fogSample (no phase, no powder)
         skylightSample += fogSample;
 
-        // Debug tracking
-        unshadowedSunAccum += transmittance * directFogColor * stepOpacity;
-        shadowedSunAccum += transmittance * directFogColor * shadow * stepOpacity;
-
         transmittance *= stepTransmittance;
+        if (transmittance < 1e-3) break;
     }
 
     // DerivativeMain VolumetricFog.glsl:298-301
@@ -608,16 +589,18 @@ void main() {
     }
     if (uVolumetricDebugMode == 9) {
         // Sun contrast: unshadowed vs shadowed/OD contribution
-        // R = unshadowed direct (before shadow/OD)
-        // G = shadowed/OD direct (after shadow/OD)
-        // B = final sunStep luminance
-        float unshLum = dot(unshadowedSunAccum, vec3(0.2126, 0.7152, 0.0722));
-        float shLum = dot(shadowedSunAccum, vec3(0.2126, 0.7152, 0.0722));
-        float sunLum = dot(sunScattering, vec3(0.2126, 0.7152, 0.0722));
+        // R = unshadowed direct fog luminance
+        // G = shadow retention ratio
+        // B = shadow modulation ratio
+        vec3 unshadowedSunColor = directFogColor * unshadowedSunSample * VFOG_SUN_INTENSITY * VFOG_FINAL_SUN_MULTIPLIER;
+        float unshLum = dot(unshadowedSunColor, vec3(0.2126, 0.7152, 0.0722));
+        float shLum = dot(sunScattering, vec3(0.2126, 0.7152, 0.0722));
+        float retained = unshLum > 1e-6 ? clamp(shLum / unshLum, 0.0, 1.0) : 0.0;
+        float modulation = unshLum > 1e-6 ? clamp(max(unshLum - shLum, 0.0) / unshLum, 0.0, 1.0) : 0.0;
         FragColor = vec4(
             clamp(unshLum * 50.0, 0.0, 1.0),
-            clamp(shLum * 50.0, 0.0, 1.0),
-            clamp(sunLum * 100.0, 0.0, 1.0),
+            retained,
+            modulation,
             1.0
         );
         return;
@@ -735,6 +718,41 @@ void main() {
             clamp(avgPZ, 0.0, 1.0),
             clamp(avgBI * 1000.0, 0.0, 1.0),
             clamp(avgRC, 0.0, 1.0),
+            1.0
+        );
+        return;
+    }
+    if (uVolumetricDebugMode == 19) {
+        // Sun/sky fog ratio
+        // R = sunScattering luminance (direct volumetric light)
+        // G = skyScattering luminance (ambient fog)
+        // B = sun / (sun + sky) ratio
+        float sunLum = dot(sunScattering, vec3(0.2126, 0.7152, 0.0722));
+        float skyLum = dot(skyScattering, vec3(0.2126, 0.7152, 0.0722));
+        float total = sunLum + skyLum;
+        float ratio = total > 1e-6 ? sunLum / total : 0.0;
+        FragColor = vec4(
+            clamp(sunLum * 50.0, 0.0, 1.0),
+            clamp(skyLum * 10.0, 0.0, 1.0),
+            clamp(ratio, 0.0, 1.0),
+            1.0
+        );
+        return;
+    }
+    if (uVolumetricDebugMode == 20) {
+        // Beam modulation: shadow-driven contrast inside the direct volumetric light.
+        // R = unshadowed direct fog luminance
+        // G = shadow retention ratio (shadowed / unshadowed)
+        // B = shadow modulation ratio ((unshadowed - shadowed) / unshadowed)
+        vec3 unshadowedSunColor = directFogColor * unshadowedSunSample * VFOG_SUN_INTENSITY * VFOG_FINAL_SUN_MULTIPLIER;
+        float unshLum = dot(unshadowedSunColor, vec3(0.2126, 0.7152, 0.0722));
+        float shLum = dot(sunScattering, vec3(0.2126, 0.7152, 0.0722));
+        float retained = unshLum > 1e-6 ? clamp(shLum / unshLum, 0.0, 1.0) : 0.0;
+        float modulation = unshLum > 1e-6 ? clamp(max(unshLum - shLum, 0.0) / unshLum, 0.0, 1.0) : 0.0;
+        FragColor = vec4(
+            clamp(unshLum * 50.0, 0.0, 1.0),
+            retained,
+            modulation,
             1.0
         );
         return;

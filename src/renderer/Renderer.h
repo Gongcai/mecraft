@@ -75,6 +75,7 @@ public:
         bool aerialPerspectiveEnabled = true;
         bool volumetricFogEnabled = true;
         bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
+        bool volumetricTimeFadeEnabled = true; // DerivativeMain TIME_FADE
         int volumetricQualityTier = 1; // 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
         float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
         bool taaEnabled = true;
@@ -110,7 +111,7 @@ public:
         float cloudShadowScale = 0.0045f;
         float cloudShadowSpeed = 0.018f;
         float sunRayStrength = 0.18f;
-        float volumetricLightStrength = 0.14f; // Separate from post-process sun rays
+        float volumetricLightStrength = 0.14f; // DEPRECATED: DerivativeMain volumetric path ignores this UI value.
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
         float kappaGradingStrength = 0.0f;
@@ -177,8 +178,6 @@ public:
     struct VolumetricSettings {
         bool fogEnabled = true;
         float fogStrength = 0.35f;
-        float lightStrength = 0.14f;
-        float phaseG = 0.58f;
         float baseDensity = 1.0f;
         float heightFalloff = 0.022f;
         float maxDistance = 260.0f;

@@ -436,7 +436,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "60: VFog Shadow Compare",
             "61: VFog Bias Compare",
             "62: VFog Cascade Index",
-            "63: VFog Receiver Depth"
+            "63: VFog Receiver Depth",
+            "64: VFog Sun/Sky Ratio",
+            "65: VFog Beam Modulation"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
         bool pipelineChanged = false;
@@ -497,6 +499,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
+        pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &pipeline.volumetricTimeFadeEnabled);
         static constexpr const char* kVFogQualityTiers[] = {"Low", "Medium", "High", "Ultra"};
         int qualityTier = pipeline.volumetricQualityTier;
         pipelineChanged |= ImGui::Combo("VFog Quality Tier", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
@@ -548,15 +551,36 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("Cloud cirrus: env.sunIlluminance * 40.0");
             // VFog component diagnostics (CPU approximate — actual values are GPU-side)
             ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Volumetric Fog Diagnostics (approx)");
+            const auto& weather = world.getWeatherSystem().getRenderState();
             float sunY = skyColors.sunDirection.y;
             float sunVis = (sunY > -0.08f) ? std::min((sunY + 0.08f) / 0.26f, 1.0f) : 0.0f;
             ImGui::Text("env.sunIlluminance: (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
             ImGui::Text("env.skyIlluminance:  (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
             ImGui::Text("sunVisibility(CPU): %.3f  (sunDir.y=%.2f)", sunVis, sunY);
             ImGui::Text("VFog strength: %.2f", pipeline.volumetricFogStrength);
-            ImGui::Text("VFog lightStr: %.2f  baseDensity: 1.0  (VolumetricSettings defaults)", pipeline.volumetricLightStrength);
+            ImGui::TextDisabled("VFog Light Strength is deprecated; DerivativeMain path ignores it.");
+            ImGui::Text("VFog baseDensity: 1.0  (VolumetricSettings defaults)");
             const char* tierNames[] = {"Low(0.5x)", "Medium(1.4x)", "High(9.0x)", "Ultra(48.0x)"};
             ImGui::Text("VFog tier: %s  maxDist: 260  heightFalloff: 0.022", tierNames[qualityTier]);
+            {
+                float meFade = (sunY < 0.18f) ? 0.37f + 1.2f * std::max(0.0f, -sunY) : 1.7f;
+                float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
+                float timeMidnight = (sunY < 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
+                float wetness = weather.wetness + weather.storm;
+                float airGate = pipeline.volumetricTimeFadeEnabled
+                    ? std::max(std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f, wetness)
+                    : 1.0f;
+                float mistGate = pipeline.volumetricTimeFadeEnabled
+                    ? std::max(meWeight * meWeight + timeMidnight * 2.0f, wetness)
+                    : 1.0f;
+                float tierMultiplier = qualityTier <= 0 ? 0.5f : (qualityTier <= 1 ? 1.4f : (qualityTier <= 2 ? 9.0f : 48.0f));
+                ImGui::Text("VFog TIME_FADE gates: %s  air=%.3f mist=%.3f wet=%.2f",
+                    pipeline.volumetricTimeFadeEnabled ? "ON" : "OFF", airGate, mistGate, wetness);
+                ImGui::Text("VFog effective tier density: %.2f x mistGate = %.3f", tierMultiplier, tierMultiplier * mistGate);
+                if (weather.type == WeatherType::Clear && mistGate < 0.02f) {
+                    ImGui::TextDisabled("Clear noon: DerivativeMain TIME_FADE suppresses mist density; quality tiers mostly affect samples.");
+                }
+            }
             // Active light direction (shadow system uses this)
             ImGui::TextColored(ImVec4(0.9f, 0.85f, 0.5f, 1.0f), "Active Light");
             ImGui::Text("SunDir: (%.2f, %.2f, %.2f)  MoonDir: (%.2f, %.2f, %.2f)",
@@ -601,7 +625,6 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 "AgX_Full [DerivMain]"
             };
             ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 5)]);
-            const auto& weather = world.getWeatherSystem().getRenderState();
             const char* weatherNames[] = {"Clear", "Mist", "Rain", "Storm"};
             ImGui::Text("Weather: %s  mist=%.2f wet=%.2f storm=%.2f aerialRed=%.2f",
                 weatherNames[static_cast<int>(weather.type)],
@@ -787,7 +810,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &pipeline.cloudShadowScale, 0.001f, 0.02f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Speed", &pipeline.cloudShadowSpeed, 0.0f, 0.08f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &pipeline.volumetricLightStrength, 0.0f, 0.6f, "%.2f");
+        ImGui::TextDisabled("VFog Light Strength: deprecated (DerivativeMain path ignores it)");
         pipelineChanged |= ImGui::SliderFloat("VFog Shadow Bias Scale", &pipeline.volumetricShadowBiasScale, 0.0f, 4.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
