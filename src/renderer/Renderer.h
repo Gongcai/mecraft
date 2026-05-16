@@ -169,7 +169,6 @@ public:
         float horizonScatterStrength = 0.78f;
         float sunWarmth = 0.34f;
         float skyCoolness = 0.18f;
-        float weatherMist = 0.0f;
         float weatherWetness = 0.0f;
         float weatherStorm = 0.0f;
         float aerialReduction = 0.55f;
@@ -387,7 +386,6 @@ private:
         float fogStart = 0.0f;
         float fogEnd = 1.0f;
         float fogDensity = 0.01f;
-        float weatherMist = 0.0f;
         float weatherWetness = 0.0f;
         float weatherStorm = 0.0f;
         float aerialReduction = 0.55f;

@@ -1003,8 +1003,18 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.previousViewProj = frame.viewProj;
         frame.previousInvViewProj = frame.invViewProj;
     }
+    // Weather state now comes from World::WeatherSystem (single source of truth).
+    // Dashboard writes to WeatherSystem; Renderer reads from it.
+    const WeatherState& weather = world.getWeatherSystem().getRenderState();
+    frame.weatherWetness = weather.wetness;
+    frame.weatherStorm = weather.storm;
+    frame.aerialReduction = weather.aerialReduction;
+
     frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    frame.skyIlluminance = m_gameplaySkyRenderer.computeSkyIlluminance(frame.skyColors);
+    frame.skyIlluminance = m_gameplaySkyRenderer.computeSkyIlluminance(
+        frame.skyColors,
+        frame.weatherWetness,
+        frame.weatherStorm);
     frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
     const double gameTime = Time::getGameTime();
     frame.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
@@ -1026,19 +1036,10 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.fogStart = std::max(0.0f, frame.fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
     }
     frame.fogEnd = std::max(frame.fogEnd, frame.fogStart + 0.1f);
-
-    // Weather state now comes from World::WeatherSystem (single source of truth).
-    // Dashboard writes to WeatherSystem; Renderer reads from it.
-    const WeatherState& weather = world.getWeatherSystem().getRenderState();
-    frame.weatherMist = weather.mist;
-    frame.weatherWetness = weather.wetness;
-    frame.weatherStorm = weather.storm;
-    frame.aerialReduction = weather.aerialReduction;
     frame.atmosphere.aerialStrength = m_pipelineSettings.aerialStrength;
     frame.atmosphere.horizonScatterStrength = m_pipelineSettings.horizonScatterStrength;
     frame.atmosphere.sunWarmth = m_pipelineSettings.sunWarmth;
     frame.atmosphere.skyCoolness = m_pipelineSettings.skyCoolness;
-    frame.atmosphere.weatherMist = frame.weatherMist;
     frame.atmosphere.weatherWetness = frame.weatherWetness;
     frame.atmosphere.weatherStorm = frame.weatherStorm;
     frame.atmosphere.aerialReduction = frame.aerialReduction;
@@ -1048,7 +1049,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.cloud.shadowStrength = m_pipelineSettings.cloudShadowStrength;
     frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
     frame.cloud.shadowSpeed = m_pipelineSettings.cloudShadowSpeed;
-    frame.cloud.coverage = std::clamp(0.24f + frame.weatherMist * 0.28f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
+    frame.cloud.coverage = std::clamp(0.24f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
     frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
     frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
     return frame;
@@ -1074,7 +1075,6 @@ void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& fr
 }
 
 void Renderer::bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, const bool bindAerialReduction) const {
-    shader.setFloat("uWeatherMist", frame.weatherMist);
     shader.setFloat("uWeatherWetness", frame.weatherWetness);
     shader.setFloat("uWeatherStorm", frame.weatherStorm);
     if (bindAerialReduction) {
@@ -1096,7 +1096,6 @@ void Renderer::bindAtmosphereUniforms(Shader& shader, const RenderFrameData& fra
     shader.setFloat("uHorizonScatterStrength", frame.atmosphere.horizonScatterStrength);
     shader.setFloat("uSunWarmth", frame.atmosphere.sunWarmth);
     shader.setFloat("uSkyCoolness", frame.atmosphere.skyCoolness);
-    shader.setFloat("uWeatherMist", frame.atmosphere.weatherMist);
     shader.setFloat("uWeatherWetness", frame.atmosphere.weatherWetness);
     shader.setFloat("uWeatherStorm", frame.atmosphere.weatherStorm);
     shader.setFloat("uAerialReduction", frame.atmosphere.aerialReduction);
@@ -2032,6 +2031,9 @@ void Renderer::compositeVolumetricFogPass() {
         "uInvFullResolution",
         glm::vec2(1.0f / static_cast<float>(std::max(1, m_deferredTargets.width())),
                   1.0f / static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_volumetricCompositeShader->setMat4("uInvProjection", glm::inverse(m_currentFrameData.projection));
+    m_volumetricCompositeShader->setFloat("uWeatherWetness", m_currentFrameData.weatherWetness);
+    m_volumetricCompositeShader->setFloat("uWeatherStorm", m_currentFrameData.weatherStorm);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
     glActiveTexture(GL_TEXTURE1);
@@ -2430,22 +2432,31 @@ void Renderer::renderSkyCapturePass(const World& world) {
     constexpr float kNightBrightness = 0.0005f;
     const float moonPhaseFlux = (static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f) * kNightBrightness;
 
-    // Raw sky radiance (rows 0..257)
+    // Weather state for SkyCapture modulation
+    const WeatherState& weather = world.getWeatherSystem().getRenderState();
+    const float weatherWetness = weather.wetness;
+    const float weatherStorm = weather.storm;
+
+    // Raw sky radiance (rows 0..257) — weather-tinted for SH skylight
     m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),
                                            m_deferredTargets.skyCaptureFramebuffer(),
                                            m_deferredTargets.skyCaptureWidth(),
                                            m_deferredTargets.skyCaptureHeight(),
-                                           cameraAltitude, atmosphereLut, moonPhaseFlux);
+                                           cameraAltitude, atmosphereLut, moonPhaseFlux,
+                                           weatherWetness, weatherStorm);
 
     // Cloudy sky radiance (rows 258..513) — same atmosphere pass, composited with cloud data
     m_gameplaySkyRenderer.renderCloudySkyCapture(world.getDayNightSystem(),
                                                   m_deferredTargets.skyCaptureFramebuffer(),
                                                   m_deferredTargets.skyCaptureWidth(),
                                                   m_deferredTargets.skyCaptureHeight(),
-                                                  cameraAltitude, atmosphereLut, moonPhaseFlux);
+                                                  cameraAltitude, atmosphereLut, moonPhaseFlux,
+                                                  weatherWetness, weatherStorm);
 
     // Compute illuminance metadata and cloud dynamic weather
-    auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()));
+    auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(
+        m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()),
+        weatherWetness, weatherStorm);
     // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.
     const int worldDay = world.getDayNightSystem().getElapsedDays();
     const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
@@ -2454,7 +2465,8 @@ void Renderer::renderSkyCapturePass(const World& world) {
     m_gameplaySkyRenderer.writeSkyCacheMetadata(illum,
                                                  m_deferredTargets.skyCaptureFramebuffer(),
                                                  m_deferredTargets.skyCaptureWidth(),
-                                                 cameraAltitude, atmosphereLut, moonPhaseFlux);
+                                                 cameraAltitude, atmosphereLut, moonPhaseFlux,
+                                                 weatherWetness, weatherStorm);
 }
 
 void Renderer::renderFullscreen(Shader& shader) const {

@@ -278,7 +278,9 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
                                            const int height,
                                            const float cameraAltitude,
                                            const GLuint atmosphereLutTexture,
-                                           const float moonPhaseFlux) {
+                                           const float moonPhaseFlux,
+                                           const float weatherWetness,
+                                           const float weatherStorm) {
     m_lastColors = computeSkyColors(dayNight);
     if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || width <= 0 || height <= 0) {
         return;
@@ -323,6 +325,8 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
     m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
+    m_shader->setFloat("uWeatherWetness", weatherWetness);
+    m_shader->setFloat("uWeatherStorm", weatherStorm);
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -360,7 +364,9 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
                                                   const int skyCaptureHeight,
                                                   const float cameraAltitude,
                                                   const GLuint atmosphereLutTexture,
-                                                  const float moonPhaseFlux) {
+                                                  const float moonPhaseFlux,
+                                                  const float weatherWetness,
+                                                  const float weatherStorm) {
     (void)dayNight; // Uses m_lastColors from preceding renderSkyCapture() call.
     if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
@@ -405,6 +411,8 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
     m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
+    m_shader->setFloat("uWeatherWetness", weatherWetness);
+    m_shader->setFloat("uWeatherStorm", weatherStorm);
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -441,7 +449,9 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
                                                  int skyCaptureWidth,
                                                  float cameraAltitude,
                                                  GLuint atmosphereLutTexture,
-                                                 float moonPhaseFlux) {
+                                                 float moonPhaseFlux,
+                                                 float weatherWetness,
+                                                 float weatherStorm) {
     if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0) {
         return;
     }
@@ -474,6 +484,8 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     m_shader->setVec3("uSunIlluminance", illuminance.sunIlluminance);
     m_shader->setVec3("uMoonIlluminance", illuminance.moonIlluminance);
     m_shader->setVec3("uCloudDynamicWeather", illuminance.cloudDynamicWeather);
+    m_shader->setFloat("uWeatherWetness", weatherWetness);
+    m_shader->setFloat("uWeatherStorm", weatherStorm);
     m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
     m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
@@ -576,7 +588,9 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     return colors;
 }
 
-GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminance(const SkyColors& colors) const {
+GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminance(const SkyColors& colors,
+                                                                                   const float weatherWetness,
+                                                                                   const float weatherStorm) const {
     SkyIlluminanceData data;
 
     // Match DerivativeMain's atmosphere-unit contract:
@@ -601,6 +615,12 @@ GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminan
 
     const float skyVisibility = std::clamp(colors.dayFactor + colors.moonVisibility * 0.18f, 0.0f, 1.0f);
     data.skyIlluminance = colors.skyAmbientColor * (0.10f + 0.42f * skyVisibility);
+
+    // Keep CPU fallback aligned with gameplay_sky.fs mode 5 and DerivativeMain:
+    // GetSunAndSkyIrradiance() itself is weather-independent. Wetness attenuates
+    // direct light later via deferred cloudShadow and tints sky radiance in capture.
+    (void)weatherWetness;
+    (void)weatherStorm;
 
     return data;
 }

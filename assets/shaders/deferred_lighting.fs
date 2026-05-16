@@ -57,7 +57,6 @@ uniform float uSkyCoolness;
 uniform float uShadowDesaturation;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
-uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uAerialReduction;
@@ -236,8 +235,15 @@ float shadowDither() {
 #include "mecraft_shadow.glsl"
 
 float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
+    // DerivativeMain/world0/deferred5.fsh:232 starts rainy direct light from
+    // cloudShadow = mix(1.0, 0.03, wetness), before CLOUDS_SHADOW optionally
+    // replaces it with sampled cloud density. Keep this weather dimming active
+    // even when procedural cloud shadows are disabled.
+    float weatherWetness = clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0);
+    float overcastShadow = mix(1.0, 0.03, weatherWetness);
+
     if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
-        return 1.0;
+        return overcastShadow;
     }
 
     lightDir = normalize(lightDir);
@@ -251,10 +257,12 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     float medium = noise2D(cloudPos * 2.37 - wind * 1.7);
     float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
     float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
-    // Until WeatherSystem owns real cloud cover/precipitation, do not let debug
-    // weather presets amplify procedural cloud-shadow noise into roaming black blobs.
     float strength = uCloudShadowStrength * outdoorMask * max(uCloudDensity, 0.0);
-    return 1.0 - coverage * clamp(strength, 0.0, 0.45);
+    float proceduralShadow = 1.0 - coverage * clamp(strength, 0.0, 0.45);
+
+    // Mecraft keeps the procedural cloud texture when it is darker, then applies
+    // the weather overcast floor so rain and storms actually remove direct light.
+    return min(proceduralShadow, overcastShadow);
 }
 
 vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
@@ -392,7 +400,7 @@ vec3 applyAerialPerspective(vec3 sceneColor,
 
     float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
     float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-    float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+    float weatherHaze = 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
     float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
     float airDensity = (0.00048 + 0.00105 * horizon) *
                        clamp(uAerialStrength, 0.0, 2.0) *
@@ -455,13 +463,14 @@ void main() {
     vec3 vanillaLight = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
     // DerivativeMain treats the sky lightmap channel as sky visibility. Day/night
     // energy comes from directIlluminance/skyIlluminance in the sky cache.
-    // DerivativeMain deferred5.fsh:203 — when underwater, sky light is reduced but not zero
+    // DerivativeMain/world0/deferred5.fsh:203:
     // mcLightmap.g = isEyeInWater == 1 ? 0.75 : cube(mcLightmap.g)
-    float skyLightMask = clamp(voxelLight.r, 0.0, 1.0);
+    float skyLightRaw = clamp(voxelLight.r, 0.0, 1.0);
+    float skyLightMask = skyLightRaw * skyLightRaw * skyLightRaw;
     if (uIsEyeInWater != 0) {
         skyLightMask = 0.75;
     }
-    float nightSkyMask = clamp(voxelLight.r * uMoonVisibility, 0.0, 1.0);
+    float nightSkyMask = clamp(skyLightMask * uMoonVisibility, 0.0, 1.0);
     float outdoorSkyMask = max(skyLightMask, nightSkyMask);
     float blockLightMask = clamp(voxelLight.g, 0.0, 1.0);
 
@@ -574,10 +583,9 @@ void main() {
             // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
             // Indoor surfaces with sky light = 0 get no direct sunlight
             shadow *= saturate(voxelLight.r * 1e6);
-            // Diagnostic view: show the 0..1 direct-light visibility before HDR
-            // sunlightMult is applied. The physical direct light is intentionally
-            // much brighter than LDR, so using it directly makes debug mode pure white.
-            directVisibilityDebug = clamp(shadow * diffuse * NdotL, vec3(0.0), vec3(1.0));
+            // Diagnostic view: show direct visibility including weather/cloud
+            // attenuation, but without HDR directIlluminance to avoid pure white.
+            directVisibilityDebug = clamp(shadow * diffuse * NdotL * cloudShadow, vec3(0.0), vec3(1.0));
             // DerivativeMain deferred5.fsh:300 — shadow *= sunlightMult
             shadow *= sunlightMult;
         }

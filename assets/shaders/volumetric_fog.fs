@@ -27,7 +27,6 @@ uniform float uVolumetricFogStrength;
 uniform float uVolumetricBaseDensity;
 uniform float uVolumetricHeightFalloff;
 uniform float uVolumetricMaxDistance;
-uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uShadowDistance;
@@ -307,7 +306,7 @@ void main() {
     vec3 skyFogColor = env.skyIlluminance;         // sky hemisphere irradiance (DerivativeMain skyIlluminance)
 
     // Mecraft adaptation: weather tint on fog color
-    float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+    float weatherHaze = 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
     vec3 weatherTint = mix(vec3(1.0), vec3(0.82, 0.88, 0.94), clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0) * 0.28);
     skyFogColor *= weatherTint;
     directFogColor *= weatherTint;
@@ -396,7 +395,7 @@ void main() {
         heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
         heightDensity = clamp(heightDensity, 0.035, 1.45);
 
-        float coverage = max(uCloudCoverage, 0.08 + uWeatherMist * 0.72 + uWeatherWetness * 0.32 + uWeatherStorm * 0.82);
+        float coverage = max(uCloudCoverage, 0.08 + uWeatherWetness * 0.32 + uWeatherStorm * 0.82);
         float structure = structuredFogDensity(samplePos, heightDensity, coverage);
         float clearAir = (0.06 + weatherHaze * 0.18) * max(uCloudDensity, 0.0);
         structure += clearAir;

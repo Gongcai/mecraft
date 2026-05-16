@@ -6,6 +6,7 @@ out vec4 FragColor;
 uniform sampler2D uInputTex;
 uniform bool uSourceIsScene;
 uniform vec2 uSourceSize;
+uniform int uSourceLod;
 
 float luminance709(vec3 color) {
     return dot(max(color, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
@@ -21,7 +22,7 @@ float centerWeight(vec2 uv) {
 vec2 readExposureSample(ivec2 texel) {
     ivec2 clampedTexel = clamp(texel, ivec2(0), ivec2(uSourceSize) - ivec2(1));
     if (uSourceIsScene) {
-        vec3 color = texelFetch(uInputTex, clampedTexel, 0).rgb;
+        vec3 color = texelFetch(uInputTex, clampedTexel, uSourceLod).rgb;
         float lum = max(luminance709(color), 1e-6);
         float weight = centerWeight((vec2(clampedTexel) + 0.5) / max(uSourceSize, vec2(1.0)));
         return vec2(max(log(lum), -18.0) * weight, weight);

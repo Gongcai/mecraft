@@ -43,6 +43,8 @@ uniform float uSaturation;
 uniform float uContrast;
 uniform bool uPurkinjeShiftEnabled;
 uniform bool uBloomyFogEnabled;
+uniform float uWeatherWetness;
+uniform float uWeatherStorm;
 uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
 
 vec3 srgbToLinear(vec3 color) {
@@ -971,6 +973,16 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         }
         g_debugColorAfterBloomyFog = color;
         color += bloomData * bloomAmount;
+
+        // DerivativeMain Grade.glsl rain pass: wet weather mixes the HDR scene
+        // toward fogBloom after bloom. Mecraft has no screen-space rain mask yet,
+        // so wetness provides the weather mask until rain/snow particles exist.
+        float wetness = clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0);
+        if (!uUnderwaterEnabled && wetness > 0.01) {
+            float rain = wetness * 0.35;
+            float rainFogAmount = clamp(uExposure, 0.6, 2.0) * 0.15 + 0.3;
+            color = mix(color, fogBloom * rainFogAmount, rain);
+        }
     }
 
     if (uUnderwaterEnabled) {

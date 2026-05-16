@@ -18,7 +18,6 @@ uniform vec3 uShadowTintColor;
 uniform vec3 uHorizonScatterColor;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
-uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uAerialStrength;

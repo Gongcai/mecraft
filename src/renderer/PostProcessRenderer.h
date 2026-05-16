@@ -46,6 +46,8 @@ struct PostProcessEffects {
     float contrast = 1.0f;
     bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift (default off, matches #define guard)
     bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG (default on)
+    float weatherWetness = 0.0f;
+    float weatherStorm = 0.0f;
     int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
 };
 
@@ -72,6 +74,7 @@ public:
 private:
     static constexpr int kBloomMipCount = 7;
     static constexpr int kExposureMipCount = 13;
+    static constexpr int kAutoExposureLod = 6; // DerivativeMain AUTO_EXPOSURE_LOD
 
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();

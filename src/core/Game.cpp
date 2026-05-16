@@ -352,6 +352,11 @@ void Game::renderFrame(const float frameTime) {
     effects.contrast = pipelineSettings.contrast;
     effects.purkinjeShiftEnabled = pipelineSettings.purkinjeShiftEnabled;
     effects.bloomyFogEnabled = pipelineSettings.bloomyFogEnabled;
+    {
+        const WeatherState& weather = m_world.getWeatherSystem().getRenderState();
+        effects.weatherWetness = weather.wetness;
+        effects.weatherStorm = weather.storm;
+    }
     effects.postprocessDebugMode = pipelineSettings.postprocessDebugMode;
     {
         const float sunAngle = m_world.getDayNightSystem().getCelestialAngleRadians();

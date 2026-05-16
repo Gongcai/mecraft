@@ -54,15 +54,19 @@ public:
     void shutdown();
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, GLuint skyCaptureTexture);
     void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height,
-                          float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux);
+                          float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux,
+                          float weatherWetness = 0.0f, float weatherStorm = 0.0f);
     void renderCloudySkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int skyCaptureWidth,
                                 int skyCaptureHeight, float cameraAltitude, GLuint atmosphereLutTexture,
-                                float moonPhaseFlux);
+                                float moonPhaseFlux, float weatherWetness = 0.0f, float weatherStorm = 0.0f);
     void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, GLuint framebuffer, int skyCaptureWidth,
-                               float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux);
+                               float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux,
+                               float weatherWetness = 0.0f, float weatherStorm = 0.0f);
 
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
-    [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors) const;
+    [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors,
+                                                            float weatherWetness = 0.0f,
+                                                            float weatherStorm = 0.0f) const;
     [[nodiscard]] static glm::vec3 computeCloudDynamicWeather(int worldDay, int worldTime);
     [[nodiscard]] glm::vec3 getLastFogColor() const;
     [[nodiscard]] static std::pair<glm::vec2, glm::vec2> getMoonPhaseUv(int phaseIndex);

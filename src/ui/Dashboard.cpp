@@ -440,7 +440,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "64: VFog Sun/Sky Ratio",
             "65: VFog Beam Modulation"
         };
-        static constexpr const char* kWeatherPresets[] = {"Clear", "Mist", "Rain", "Storm"};
+        static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
@@ -625,10 +625,17 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 "AgX_Full [DerivMain]"
             };
             ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 5)]);
-            const char* weatherNames[] = {"Clear", "Mist", "Rain", "Storm"};
-            ImGui::Text("Weather: %s  mist=%.2f wet=%.2f storm=%.2f aerialRed=%.2f",
+            const char* weatherNames[] = {"Clear", "Rain", "Storm"};
+            ImGui::Text("Weather: %s  wet=%.2f storm=%.2f aerialRed=%.2f",
                 weatherNames[static_cast<int>(weather.type)],
-                weather.mist, weather.wetness, weather.storm, weather.aerialReduction);
+                weather.wetness, weather.storm, weather.aerialReduction);
+            {
+                float weatherWetness = std::clamp(weather.wetness + weather.storm, 0.0f, 1.0f);
+                float overcastShadow = 1.0f + (0.03f - 1.0f) * weatherWetness;
+                ImGui::Text("Weather direct shadow: %.3f  (DerivativeMain mix(1.0, 0.03, wetness))",
+                    overcastShadow);
+                ImGui::TextDisabled("SkyCapture metadata stays weather-independent; direct rain dimming happens in deferred cloudShadow.");
+            }
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
@@ -765,7 +772,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.shadowTintStrength = 0.34f;
             pipeline.blockLightStrength = 1.05f;
             pipeline.fakeBounceStrength = 0.08f;
-            world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Mist);
+            world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
             pipeline.aerialStrength = 0.58f;
             pipeline.horizonScatterStrength = 0.82f;
             pipeline.volumetricFogStrength = 0.68f;

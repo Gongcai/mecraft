@@ -31,6 +31,12 @@ uniform vec3 uSunIlluminance;
 uniform vec3 uMoonIlluminance;
 uniform vec3 uCloudDynamicWeather;
 
+// Weather modulation for SkyCapture radiance (mode 4).
+// Metadata mode 5 intentionally stays aligned with DerivativeMain
+// GetSunAndSkyIrradiance(), which is weather-independent.
+uniform float uWeatherWetness;
+uniform float uWeatherStorm;
+
 // Atmosphere LUT (modes 4, 5)
 uniform sampler3D uAtmosphereLut;
 uniform float uCameraAltitude;
@@ -155,6 +161,19 @@ void main() {
             sky += atmRenderMoon(dir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
         }
 
+        // DerivativeMain/lib/Atmosphere/Atmosphere.glsl:
+        // rayleigh = mix(rayleigh, GetLuminance(rayleigh) * wetnessGrey, wetness * 0.7);
+        // return (rayleigh + mie) * oneMinus(wetness * 0.6);
+        // Mecraft adaptation: atmosphere LUT returns combined sky radiance here,
+        // so apply the same shaping to combined radiance.
+        float weatherOcclusion = clamp(uWeatherWetness + uWeatherStorm, 0.0, 1.0);
+        if (weatherOcclusion > 0.001) {
+            float skyLum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
+            vec3 wetnessGrey = skyLum * vec3(1.026186824, 0.9881671071, 1.015787125);
+            sky = mix(sky, wetnessGrey, weatherOcclusion * 0.7);
+            sky *= 1.0 - weatherOcclusion * 0.6;
+        }
+
         FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;
     }
@@ -170,6 +189,9 @@ void main() {
         vec3 skyIrr = atmGetSunAndSkyIrradiance(camera, sunDir, sunIrr, moonIrr);
 
         vec3 value = vec3(0.0);
+        // DerivativeMain GetSunAndSkyIrradiance() does not apply wetness here.
+        // Rain/overcast direct-light attenuation happens later through cloudShadow
+        // in deferred lighting, while sky radiance wetness is applied in mode 4.
         if (row == 0) value = sunIrr + moonIrr;   // directIlluminance
         else if (row == 1) value = skyIrr;         // skyIlluminance
         else if (row == 2) value = sunIrr;         // sunIlluminance

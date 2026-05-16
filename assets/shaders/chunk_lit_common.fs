@@ -65,7 +65,6 @@ uniform float uSkyCoolness;
 uniform float uShadowDesaturation;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
-uniform float uWeatherMist;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
 uniform float uAerialReduction;
@@ -303,7 +302,7 @@ uniform vec3 uCameraPos;
 
         float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
         float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-        float weatherHaze = 0.55 * uWeatherMist + 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
+        float weatherHaze = 0.35 * uWeatherWetness + 0.65 * uWeatherStorm;
         float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
         float airDensity = (0.00048 + 0.00105 * horizon) *
                            clamp(uAerialStrength, 0.0, 2.0) *
