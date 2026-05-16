@@ -117,11 +117,17 @@ vec3 evaluateSkyRadiance(vec3 dir) {
 
 void main() {
     if (uMode == 0) {
-        // Visible sky: sample from SkyCapture (atmosphere LUT radiance) instead of
-        // independent gradient model. This ensures visible sky matches the sky that
-        // deferred lighting/SH/fog use for energy calculations.
+        // Visible sky: prefer SkyCapture (atmosphere LUT) for consistency with deferred.
+        // Fallback to gradient model if SkyCapture texture is not bound (forward path).
         vec3 dir = normalize(vWorldDir);
-        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, dir);
+        vec3 sky;
+        if (textureSize(uSkyCaptureTex, 0).x > 0) {
+            sky = sampleSkyRadiance(uSkyCaptureTex, dir);
+        } else {
+            // Forward fallback: evaluateSkyRadiance() is already in display-referred space,
+            // no additional srgbToLinear needed (was applied in the old path).
+            sky = evaluateSkyRadiance(dir);
+        }
         // Add stars on top (SkyCapture doesn't include them)
         float stars = starField(dir) * clamp(uNightFactor, 0.0, 1.0) * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
         sky += vec3(0.72, 0.82, 1.0) * stars * 1.15;
