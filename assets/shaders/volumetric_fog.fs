@@ -481,9 +481,10 @@ void main() {
                       VFOG_FINAL_SUN_MULTIPLIER;
         } else {
             // Low/Medium: simpler path with unshadowed base + shadowed direct
+            // airDensity added to in-scattering to match extinction (prevents pure energy loss).
             vec3 shadowedDirect = directFogColor * mix(0.28, 1.0, shadowVisibility);
             sunStep = directFogColor * (0.76 + powder * 0.22) * 0.3 +
-                      shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75) *
+                      shadowedDirect * altitudeTransmittance * (0.55 + powder * 0.75 + airDensity) *
                       clamp(uVolumetricLightStrength, 0.0, 2.0) * directLightWeight;
         }
 
