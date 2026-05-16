@@ -302,10 +302,17 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uNoiseTex", 8);
     m_waterCompositeShader->setInt("uReflectionTex", 9);
     m_waterCompositeShader->setInt("uAtmosphereLut", 10);
+    m_waterCompositeShader->setInt("uVolumetricTex", 11);
     m_waterCompositeShader->setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uDepthSofteningEnabled", deferredInputsEnabled ? 1 : 0);
+    const bool volumetricFogActive = m_pipelineSettings.volumetricFogEnabled &&
+                                     m_pipelineSettings.aerialPerspectiveEnabled &&
+                                     m_pipelineSettings.volumetricFogStrength > 0.001f &&
+                                     m_volumetricFogShader != nullptr &&
+                                     m_volumetricCompositeShader != nullptr;
+    m_waterCompositeShader->setInt("uVolumetricFogActive", volumetricFogActive ? 1 : 0);
     m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
     m_waterCompositeShader->setFloat("uTime", frame.shaderTime);
     m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
@@ -347,11 +354,12 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_BLEND);
     glDepthMask(GL_FALSE);
 
 #ifdef MECRAFT_DEBUG
@@ -415,7 +423,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindVertexArray(0);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    for (int i = 10; i >= 0; --i) {
+    for (int i = 11; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }

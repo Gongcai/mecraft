@@ -24,6 +24,7 @@ uniform sampler2D uSceneColorTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uReflectionTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler2D uVolumetricTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 viewProj;
 uniform mat4 uInvViewProj;
@@ -31,6 +32,7 @@ uniform int uSkyCaptureEnabled;
 uniform int uCompositeInputsEnabled;
 uniform int uWaterCompositeEnabled;
 uniform int uDepthSofteningEnabled;
+uniform int uVolumetricFogActive;
 uniform float uAnimationTime;
 uniform float uTime;
 uniform vec3 uWaterAbsorption;
@@ -77,6 +79,36 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
+}
+
+vec4 sampleDepthAwareVolumetric(vec2 uv) {
+    float centerDepth = texture(uOpaqueDepthTex, uv).r;
+    vec2 invFullResolution = 1.0 / max(vec2(textureSize(uSceneColorTex, 0)), vec2(1.0));
+    vec2 halfResStep = invFullResolution * 2.0;
+    vec2 offsets[5] = vec2[](
+        vec2(0.0, 0.0),
+        vec2(1.0, 0.0),
+        vec2(-1.0, 0.0),
+        vec2(0.0, 1.0),
+        vec2(0.0, -1.0)
+    );
+    float spatialWeights[5] = float[](1.0, 0.55, 0.55, 0.55, 0.55);
+
+    vec4 sum = vec4(0.0);
+    float weightSum = 0.0;
+    for (int i = 0; i < 5; ++i) {
+        vec2 sampleUv = clamp(uv + offsets[i] * halfResStep, vec2(0.0), vec2(1.0));
+        float sampleDepth = texture(uOpaqueDepthTex, sampleUv).r;
+        float depthDelta = abs(sampleDepth - centerDepth);
+        float depthWeight = exp(-depthDelta * 320.0);
+        if (centerDepth >= 0.9999 && sampleDepth < 0.9999) {
+            depthWeight *= 0.08;
+        }
+        float weight = spatialWeights[i] * max(depthWeight, 0.025);
+        sum += texture(uVolumetricTex, sampleUv) * weight;
+        weightSum += weight;
+    }
+    return sum / max(weightSum, 0.0001);
 }
 
 vec2 projectWorldUv(vec3 worldPos, out float projectedDepth) {
@@ -428,5 +460,14 @@ void main() {
     // = sceneColor * (1-fresnel) + reflection * fresnel
     vec3 color = sceneColor * (1.0 - fresnel) + reflection * fresnel;
 
-    FragColor = vec4(max(color, vec3(0.0)), 1.0);
+    // Mecraft adaptation: water is rendered after volumetric fog, so it must consume
+    // the same volumetric result instead of overwriting fogged opaque scene pixels.
+    float fogTransmittance = 1.0;
+    if (uVolumetricFogActive != 0) {
+        vec4 volumetric = sampleDepthAwareVolumetric(screenUv);
+        fogTransmittance = clamp(volumetric.a, 0.0, 1.0);
+        color = color * fogTransmittance + volumetric.rgb;
+    }
+
+    FragColor = vec4(max(color, vec3(0.0)), fogTransmittance);
 }

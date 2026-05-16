@@ -81,6 +81,15 @@ const float VFOG_FINAL_SUN_MULTIPLIER = 20.0;
 const float VFOG_AIR_DENSITY = 0.2;
 
 // Quality tier density multiplier (DerivativeMain FOG_TYPE)
+// DerivativeMain CornetteShanksPhase (cloud_target.fs:109)
+// More accurate than HG for forward-peaked fog scattering.
+float cornetteShanksPhase(float cosTheta, float g) {
+    float gg = g * g;
+    float mu2 = cosTheta * cosTheta;
+    float denom = 1.0 + gg - 2.0 * g * cosTheta;
+    return (3.0 * (1.0 - gg) * (1.0 + mu2)) / (8.0 * 3.14159265 * (2.0 + gg) * denom * sqrt(denom));
+}
+
 float getQualityDensityMultiplier() {
     if (uVolumetricQualityTier <= 0) return 0.5;   // Low: no noise
     if (uVolumetricQualityTier <= 1) return 1.4;   // Medium: cloudy fog lite
@@ -340,11 +349,26 @@ void main() {
     // High/Ultra (FOG_TYPE > 1) applies multi-lobe phase per-step instead.
     float mistDensity = baseDensity;
     if (uVolumetricQualityTier < 2) {
-        // DerivativeMain uses CornetteShanksPhase; we approximate with HG (close enough for fog).
-        float csPhase = atmHenyeyGreensteinPhase(LdotV, 0.7 - uWeatherWetness * 0.3) * 0.45 +
+        // DerivativeMain VolumetricFog.glsl:191
+        float csPhase = cornetteShanksPhase(LdotV, 0.7 - uWeatherWetness * 0.3) * 0.45 +
                         atmHenyeyGreensteinPhase(LdotV, -0.3) * 0.15 + 0.1;
         mistDensity *= csPhase;
     }
+
+    // DerivativeMain TIME_FADE: modulate airDensity and mistDensity by time of day.
+    // Peaks at sunrise/sunset (meWeight) and midnight; stronger under wetness.
+    // DerivativeMain VolumetricFog.glsl:210-213
+    {
+        float sunY = uSunDirection.y;
+        float sunX = uSunDirection.x;
+        float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
+        float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
+        float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
+        float wetness = uWeatherWetness + uWeatherStorm;
+        airDensity *= max(clamp(meWeight + 0.25, 0.0, 1.0) + timeMidnight * 4.0, wetness);
+        mistDensity *= max(meWeight * meWeight + timeMidnight * 2.0, wetness);
+    }
+
     // Jitter: dynamic for normal rendering, screen-only hash for stable debug
     float jitter;
     if (uVolumetricStaticJitter != 0) {
