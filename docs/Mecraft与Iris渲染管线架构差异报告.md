@@ -6,6 +6,7 @@
 
 > 2026-05-13 路线修订：项目目标已从“复现 Iris/OptiFine contract”调整为“建立 Mecraft Renderer Contract，并让内置 DerivativeMain-like 光影适配该 contract”。Iris 继续作为重要参照，用于理解 shaderpack 默认假设和定位 bug，但不作为最终架构硬目标。
 > 2026-05-14 源码同步：SkyCapture normalized UV、GPU metadata 读取入口、directional debug 和体积雾 High/Ultra 雏形已落地。当前架构风险重点转为：`FromSH` skylight、云/水 sunlight 单来源尾项、CSM SSS depth、体积雾 SEA_LEVEL/FALLOFF/samples/Bloomy Fog。
+> 2026-05-16 源码同步：体积雾主积分基线已对齐 DerivativeMain `VolumetricFog.glsl`，`TIME_FADE` 开关、Bloomy Fog、Debug 64/65 和失效 UI 清理已落地。当前体积雾风险从“主积分/后处理未接”转为 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动与水下 `UW_VOLUMETRIC_LIGHT`。
 
 ## 目标边界
 
@@ -34,11 +35,13 @@
 
 **2026-05-14 范围补充**：从 `DerivativeMain/lang/zh_cn.lang` 反查设置目录后，确认后续工作应聚焦在 `FOG_TYPE/SEA_LEVEL/VOLUMETRIC_LIGHT/UW_VOLUMETRIC_LIGHT`、云影、水体光学、曝光/tonemap/Bloomy Fog 等视觉主干；`SKY_GROUND`、Aurora、染色玻璃彩色阴影不进入当前路线。
 
+**2026-05-16 体积雾基线封版**：`volumetric_fog.fs` 已从 Mecraft 旧式 per-step scattering 累积改为 DerivativeMain 形态的 `sunlightSample/skylightSample/transmittance` 积分；Low/Medium phase、High/Ultra sunlight OD、多瓣 phase、powder、`TIME_FADE`、Bloomy Fog 与 Debug 64/65 已接通。验证结论：Clear 正午压雾、晨昏出体积光是 DerivativeMain 默认 `TIME_FADE` 行为，非 shadow 失效。
+
 仍需推进的工作：
 - Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
 - 亮度链路收口：`FromSH` skylight、云/水 sunlight 单来源尾项、标准路径旁路 `shapeShadowVisibility`
 - CSM-native SSS depth：从 PCSS/blocker search 暴露树叶/草 SSS 所需深度，不恢复完整 DerivativeMain shadowcolor ABI
-- Atmosphere/Cloud/Fog/Water 视觉收敛：体积雾 `SEA_LEVEL/FALLOFF/samples`、水下体积光（Bloomy Fog 已完成）
+- Atmosphere/Cloud/Fog/Water 视觉收敛：体积雾 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动、水下体积光（Bloomy Fog 已完成）
 - GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer）
 
 ## 1. Mecraft 当前渲染管线概览

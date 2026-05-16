@@ -5,6 +5,7 @@
 > 2026-05-14 范围修订：`SKY_GROUND` 行星地面渲染、`AURORA/AURORA_STRENGTH`、染色玻璃彩色阴影不纳入当前目标；DerivativeMain 的非线性 `shadow warp` 已确认与 Mecraft greedy meshing 不适配，正式阴影路线维持 Mecraft 自有 CSM contract。
 > 2026-05-14 源码同步：当前工作区已修复 SkyCapture raw/cloudy atlas normalized UV，并新增 `lighting_environment.glsl` 统一读取入口、SkyCapture directional debug、体积雾 High/Ultra 雏形。后续优先级从”先修 SkyCapture UV”调整为”移植 FromSH、收口云/水光照单来源、修 SSS、参数化体积雾云海”。
 > 2026-05-15 源码同步：`FromSH` skylight 已实现（`sky_sh.glsl`，L1 SH 25 方向采样）并接入 deferred lighting；SkyCapture raw sky 已剥离天体盘；云/水光照已统一到 `LightingEnvironment` 单来源并按 DerivativeMain 做了能量倍率审计（volumetric sun=22.0/sky=0.15，planar sun=120.0，water fog sun=28.0*directIlluminance，sun reflection clamp 2000）；云合成已修正为 premultiplied strength 混合。Phase 0 亮度链路收口基本完成，后续转向 SSS、体积雾参数化、Tonemap 对齐。
+> 2026-05-16 体积雾同步：`volumetric_fog.fs` 已按 DerivativeMain `VolumetricFog.glsl` 主积分形态收口，使用 `sunlightSample/skylightSample/transmittance` 循环累积，循环后统一应用 `directIlluminance/skyIlluminance` 与 `fogSunColor*20 + fogSkyColor*2`。Low/Medium Cornette-Shanks phase、High/Ultra sunlight OD、多瓣 HG、powder、`TIME_FADE`、Bloomy Fog 与 debug 64/65 均已落地；旧 `uVolumetricLightStrength/uVolumetricPhaseG` 失效路径已清理。剩余重点是 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度公式、天气光照联动与水下体积光。
 > 2026-05-15 后处理曝光同步：`PostProcessRenderer::updateAutoExposure()` 已恢复 DerivativeMain `Temporal.vert` 的自动曝光公式：无 `averageLum >= 0.02` 地板、无 target exposure min/max clamp、适应速度为 `target < prev ? 1.5 : 1.0`。`autoExposureMin/Max` 仅作为 legacy UI/settings 字段保留，不再作为 DerivativeMain-like 标准路径的调参依据。
 
 > 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
@@ -544,18 +545,25 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 已适配：
 
-- Half-res volumetric target。
-- 绑定 depth、sky capture、noise、shadow depth/color、atmosphere LUT。
-- 有 height density、weather haze、phase、shadow visibility、depth-aware composite。
-- Derivative warp 在 volumetric 端使用 `(x^4+y^4)^(1/4)` 公式，与 shadow pass 一致。
+- Half-res volumetric target + depth-aware composite。
+- 绑定 depth、SkyCapture metadata、noise、CSM shadow depth/color、atmosphere LUT。
+- 主积分已改为 DerivativeMain 形态：循环内累积 `sunlightSample/skylightSample/transmittance`，循环后统一构造 `fogSunColor/fogSkyColor`。
+- 输出公式已对齐：`fogColor = fogSunColor * 20.0 + fogSkyColor * 2.0`。
+- Low/Medium：Cornette-Shanks phase 作用到 `mistDensity`。
+- High/Ultra：太阳方向 4 步 optical-depth、powderSun、多瓣 HG phase、`FOG_TYPE^2` scale 已落地。
+- `TIME_FADE` 已移植并提供 Dashboard 开关；默认开启，验证 Clear 正午压雾、晨昏出体积光。
+- `VOLUMETRIC_LIGHT` 清空气溶胶路径已接入 Rayleigh-phase `airDensity`，颜色来自 SkyCapture `directIlluminance`。
+- Bloomy Fog 已完成：volumetric alpha 输出 transmittance，TAA/motion_blur/dof 保留 alpha，postprocess `CalculateBloomFog()` 按 DerivativeMain 双套权重混合 `fogBloom`。
+- Debug 64/65 已加入：`VFog Sun/Sky Ratio` 与 `VFog Beam Modulation`。
+- 旧 `uVolumetricLightStrength/uVolumetricPhaseG` 与 UI 失效滑条已清理/标记 deprecated。
 
 未完整适配：
 
-- `CalculateVolumetricFog` 未逐行端口。
-- Low/Medium/High/Ultra density mode、volFogWind、volFogDensity、BiomeSandstorm/GreenShift 未完整。
+- `structuredFogDensity()` 仍不是 DerivativeMain 四套 `FOG_TYPE` 原始密度公式。
+- `SEA_LEVEL`、`VOLUMETRIC_FOG_FALLOFF/FALLOFF_START`、动态 `VOLUMETRIC_FOG_SAMPLES` 仍未参数化。
+- `volFogWind/volFogDensity`、BiomeSandstorm/GreenShift 未完整。
 - colored shadow 体积雾采样不完整。
 - underwater volumetric light 未完整。
-- Bloomy fog transmittance 未接 DerivativeMain `colortex6` 链路。
 
 ## 10. 水体、透明、折射
 
@@ -824,8 +832,8 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `deferred4`/`SpatialFilter` | GI/AO half-res filter 或 compute 分支 | `ssao.fs/filter` | SSAO 是简化实现；RSM GI 缺失 |
 | `deferred5` | 主光照、sky/cloud 合成、BRDF、SH skylight、BlockLighting、SSS | `deferred_lighting.fs` + `scene_composite.fs` | 直射主项已接 SkyCapture metadata；云只在天空像素合成已修；SH skylight、SSS depth、colored shadow、云合成能量仍需验收 |
 | `deferred6/7/8` | SSR + reflection filter，rough VNDF、sky fallback | `reflection_probe.fs/filter` | 只有线性 SSR/简化 filter；rough VNDF/rough cone/时序/Hi-Z 未达 DerivativeMain |
-| `composite` | 半分辨率体积雾/体积光 + 水雾预处理 | `volumetric_fog.fs` | 已有 tier 0-3、High/Ultra 太阳方向 OD、多瓣相函数和独立 air density 雏形；缺 SEA_LEVEL/FALLOFF、动态 samples、Bloomy Fog |
-| `composite1` | 透明/折射/水、land scattering、体积雾合成、CommonFog、Bloomy Fog mask | `scene_composite.fs` + `water_composite.fs` + `volumetric_composite.fs` | 拆分合理，但合成顺序和数据源仍不同；尤其 fog transmittance 未进入 bloom |
+| `composite` | 半分辨率体积雾/体积光 + 水雾预处理 | `volumetric_fog.fs` | 主积分基线已对齐：Low/Medium phase、High/Ultra OD、多瓣相函数、air density、TIME_FADE、debug 64/65；缺 SEA_LEVEL/FALLOFF、动态 samples、High/Ultra 原始密度公式 |
+| `composite1` | 透明/折射/水、land scattering、体积雾合成、CommonFog、Bloomy Fog mask | `scene_composite.fs` + `water_composite.fs` + `volumetric_composite.fs` | Bloomy Fog alpha 链路已完成；透明/水合成顺序按 Mecraft pass 拆分，CommonFog/特殊介质 fallback 仍未完整 |
 | `composite10/12/13/15/final` | bloom downsample/blur、grade、final/TAA history | `PostProcessRenderer` + `postprocess.fs` | tonemap/grade 有移植，但 bloom/exposure/TAA history 布局不等价 |
 
 ### 17.2 必须修正的“完成”判断
@@ -835,8 +843,8 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | 阴影 | “完成”容易误导 | Mecraft CSM 稳定完成；DerivativeMain `COLORED_SHADOWS`、water caustics、dual `shadowtex0/1` 透明语义、RSM GI 输入仍缺 |
 | 光照 | BRDF/BlockLighting 完成不等于主光照完成 | 直射主项大体对齐；SH skylight、SSS blocker depth、colored shadow tint、GI、cloud shadow 光学深度仍缺 |
 | GBuffer 材质 | “33 种 ID 完成”只适用于 terrain fallback | `Material.inc` 本体很小，但 DerivativeMain 的 GBuffer 生态包含 entities/hand/water/weather/glint/PBR/rain wetness；Mecraft 未完整覆盖 |
-| 大气 | LUT 函数完成不等于 sky pipeline 完成 | SkyCapture raw/cloudy atlas normalized UV 已修；`lighting_environment.glsl` 已建立；仍缺 `FromSH` skylight 与云/水 metadata 单来源尾项 |
-| 云 | 32 步 ray march 完成不等于 DerivativeMain 云完成 | 缺 temporal upscaling/checkerboard/history，weather metadata 不同源，premultiplied 合成仍被强度破坏 |
+| 大气 | LUT 函数完成不等于 sky pipeline 完成 | SkyCapture raw/cloudy atlas normalized UV 已修；`lighting_environment.glsl` 已建立；`FromSH` skylight 已接入；天气对 SkyCapture/光照的联动仍不足 |
+| 云 | 32 步 ray march 完成不等于 DerivativeMain 云完成 | 光照单来源与 premultiplied 合成已修；仍缺 temporal upscaling/checkerboard/history 与完整天气动态云 |
 | 水 | WaterWave/WaterFog 已高覆盖，但不应标满 | 折射/水雾/反射可用；shadow caustics、colored shadow、水 GBuffer/HandWater 语义仍缺 |
 | 后处理/TAA | 视觉功能有，但不是包级等价 | TAA 缺 closest-depth velocity 同构、可选 CatmullRom、variance sigma 细节；bloom/grade 有能量和布局差异 |
 
@@ -849,7 +857,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 3. **阳光颜色没有全链统一。** 地表直射主项与体积雾已用 LUT metadata，但水雾、太阳反射、部分空气透视/旧 forward fallback 仍可能由 `uSunLightColor` 或 `artisticSunIlluminance()` 染色。
 4. **Skylight 不是 `FromSH`。** DerivativeMain 在 `deferred5.vsh` 对 sky capture 做 5x5 SH，再在 `deferred5.fsh` 用 `FromSH()` 重建；Mecraft 仍用五方向采样/艺术 `coolSkyColor * skyIlluminance`，单位和方向性都不同。
 5. **阴影 shaping 默认已中性但仍在正式路径。** `shadowContrast=1.0`、`shadowMinLight=0.0` 已避免额外压暗；但 `shapeShadowVisibility()` 仍存在，建议降级为 debug/extra，标准路径直接消费 CSM shadow。
-6. **体积雾已有 High/Ultra 雏形但非完整云海。** 现有 tier 0-3、太阳方向 OD、多瓣相函数、cloud shadow 和 air density 已落地；仍缺 `SEA_LEVEL/FALLOFF` 可调高度、DerivativeMain 动态 samples、Bloomy Fog 和更准确的 High/Ultra 密度场。
+6. **体积雾主积分基线已收口但非完整云海。** 现有 tier 0-3、太阳方向 OD、多瓣相函数、cloud shadow、air density、TIME_FADE、Bloomy Fog 和 debug 64/65 已落地；仍缺 `SEA_LEVEL/FALLOFF` 可调高度、DerivativeMain 动态 samples 和更准确的 High/Ultra 密度场。
 7. **自动曝光公式已回到 DerivativeMain。** 当前 `PostProcessRenderer` 已移除 Mecraft 自加的夜间亮度地板、曝光上限和改速逻辑；如果后续仍出现夜间阴影关系不对，应继续查 Grade/Tonemap 集合、Bloomy Fog、Purkinje Shift 和 deferred lighting extension，而不是继续用 exposure clamp 补偿。
 
 ### 17.4 体积雾/体积光复扫结论
@@ -863,14 +871,14 @@ DerivativeMain 默认 `Settings.glsl` 是 `FOG_TYPE=1`（Cloudy Fog Lite），�
 
 `SEA_LEVEL` 是体积雾高度（海拔），`VOLUMETRIC_FOG_FALLOFF/FALLOFF_START` 控制高度衰减曲线。Mecraft 早期实现把高度中心写死在 shader 中，缺少可调海拔与衰减入口，因此调强度只能得到一层白雾，不能复现 DerivativeMain Ultra 的低空云海。
 
-Mecraft 当前 `volumetric_fog.fs` 已有 High/Ultra 雏形和独立 air-density 体积光，但密度场仍未完整等价；若不补 `SEA_LEVEL/FALLOFF`、动态 samples、High/Ultra 原始 FBM 公式和 Bloomy Fog，密度量级、团块尺度和高度分布仍支撑不了完整云海边界。DerivativeMain 的独立 `VOLUMETRIC_LIGHT` 参考公式为：
+Mecraft 当前 `volumetric_fog.fs` 已完成主积分基线、独立 air-density 体积光、`TIME_FADE` 与 Bloomy Fog，但密度场仍未完整等价；若不补 `SEA_LEVEL/FALLOFF`、动态 samples 与 High/Ultra 原始 FBM 公式，密度量级、团块尺度和高度分布仍支撑不了完整云海边界。DerivativeMain 的独立 `VOLUMETRIC_LIGHT` 参考公式为：
 
 ```glsl
 airDensity = VOLUMETRIC_LIGHT_STRENGTH * RayleighPhase(LdotV) * (3.0 / far);
 fogColor = directIlluminance * sunlightSample * 20.0 + skyIlluminance * skylightSample * 2.0;
 ```
 
-也就是说，即便没有厚雾，清空气溶胶也会产生体积光。Mecraft 目前已加入 Rayleigh-phase `airDensity` 雏形，颜色也改为 SkyCapture metadata 的 `directIlluminance`；下一步应验收能量、与厚雾 opacity 的耦合，以及 Bloomy Fog。
+也就是说，即便没有厚雾，清空气溶胶也会产生体积光。Mecraft 目前已加入 Rayleigh-phase `airDensity`，颜色也改为 SkyCapture metadata 的 `directIlluminance`；Debug 65 已验证阴影调制成立。Clear 正午体积光弱、晨昏明显是 DerivativeMain `TIME_FADE` 默认行为，不应再误判为 shadow 失效。
 
 此外，DerivativeMain 还有独立的 `UW_VOLUMETRIC_LIGHT` 水下体积光：`UnderwaterVolumetricLight()` 使用水吸收系数、折射后的太阳方向、shadow/translucent shadow 采样和双 forward HG 相函数积分。Mecraft 当前 `water_composite.fs` 只有 `WaterFog/UnderwaterFog` 的水雾吸收混合，且 `uIsEyeInWater` 仍有 TODO 检测缺口，没有水下体积光积分。
 
