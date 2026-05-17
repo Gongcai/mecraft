@@ -291,6 +291,19 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    // Weather mask (R8) — additive-blended weather particle alpha.
+    // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
+    glCreateFramebuffers(1, &m_weatherMaskFbo);
+    m_weatherMaskTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
+                                       GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_weatherMaskFbo, GL_COLOR_ATTACHMENT0, m_weatherMaskTex, 0);
+    const GLenum weatherMaskDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_weatherMaskFbo, 1, &weatherMaskDrawBuffer);
+    if (!checkFramebufferComplete(m_weatherMaskFbo, "WeatherMask")) {
+        shutdown();
+        return false;
+    }
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     m_ready = true;
     return true;
@@ -398,6 +411,19 @@ void DeferredRenderTargets::bindVelocity() {
     glViewport(0, 0, m_width, m_height);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindWeatherMask() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_weatherMaskFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::clearWeatherMask() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_weatherMaskFbo);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 void DeferredRenderTargets::bindDefaultLike(const GLint framebuffer, const int width, const int height) {
@@ -712,7 +738,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_historyDepthTex[0], m_historyDepthTex[1],
         m_historyReflectionTex[0], m_historyReflectionTex[1],
         m_historyCloudTex[0], m_historyCloudTex[1],
-        m_velocityTex
+        m_velocityTex,
+        m_weatherMaskTex
     };
     for (const GLuint texture : textures) {
         if (texture != 0) {
@@ -748,8 +775,9 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_historyReflectionTex[0] = 0; m_historyReflectionTex[1] = 0;
     m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
     m_velocityTex = 0;
+    m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo, m_weatherMaskFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -773,6 +801,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_historyReflectionFbo[0] = 0; m_historyReflectionFbo[1] = 0;
     m_historyCloudFbo[0] = 0; m_historyCloudFbo[1] = 0;
     m_velocityFbo = 0;
+    m_weatherMaskFbo = 0;
     m_currentHistoryIndex = 0;
     m_ready = false;
 }

@@ -1837,6 +1837,8 @@ void Renderer::clearDeferredAuxiliaryTargets() {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
+    m_deferredTargets.clearWeatherMask();
+
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
@@ -2543,6 +2545,10 @@ glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonSh
 void Renderer::captureCurrentFramebuffer() {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_capturedFramebuffer);
     glGetIntegerv(GL_VIEWPORT, m_capturedViewport);
+}
+
+void Renderer::restoreDefaultFbo() {
+    m_deferredTargets.bindDefaultLike(m_capturedFramebuffer, m_capturedViewport[2], m_capturedViewport[3]);
 }
 
 void Renderer::restoreCapturedFramebufferViewport(const Window& window) {

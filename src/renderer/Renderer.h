@@ -336,6 +336,9 @@ public:
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
     [[nodiscard]] GLuint gbufDepthTexture() const { return m_deferredTargets.depthTexture(); }
+    [[nodiscard]] GLuint weatherMaskTexture() const { return m_deferredTargets.weatherMaskTexture(); }
+    void bindWeatherMaskFbo() { m_deferredTargets.bindWeatherMask(); }
+    void restoreDefaultFbo();
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);

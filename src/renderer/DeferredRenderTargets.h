@@ -26,6 +26,8 @@ public:
     void bindReflection();
     void bindCloud();
     void bindVelocity();
+    void bindWeatherMask();
+    void clearWeatherMask();
     void bindDefaultLike(GLint framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const;
     void copyFramebufferColorToSceneResolved(GLint framebuffer, int width, int height) const;
@@ -82,6 +84,7 @@ public:
     [[nodiscard]] GLuint historyCloudTexture() const { return m_historyCloudTex[m_currentHistoryIndex]; }
     [[nodiscard]] GLuint historyCloudTexturePrev() const { return m_historyCloudTex[1 - m_currentHistoryIndex]; }
     [[nodiscard]] GLuint velocityTexture() const { return m_velocityTex; }
+    [[nodiscard]] GLuint weatherMaskTexture() const { return m_weatherMaskTex; }
     [[nodiscard]] GLuint atmosphereLutTexture() const { return m_atmosphereLut3d; }
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
@@ -201,6 +204,12 @@ private:
     // Velocity buffer (RG16F encodes screen-space velocity xy)
     GLuint m_velocityFbo = 0;
     GLuint m_velocityTex = 0;
+
+    // Weather mask: single-channel R8 storing accumulated weather particle alpha.
+    // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
+    // Written with additive blending by weather geometry, read by postprocess.
+    GLuint m_weatherMaskFbo = 0;
+    GLuint m_weatherMaskTex = 0;
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
     GLuint m_atmosphereLut3d = 0;

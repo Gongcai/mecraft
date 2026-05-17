@@ -71,7 +71,8 @@ public:
     // Composite captured scene to back buffer with active effects.
     // gbufDepthTex is the GBuffer depth texture for sky-pixel rain masking.
     void endSceneAndComposite(const Window& window, float frameTime,
-                              GLuint gbufDepthTex = 0);
+                              GLuint gbufDepthTex = 0,
+                              GLuint weatherMaskTex = 0);
 
     // Blit captured scene directly to back buffer without any postprocessing.
     // Used when deferredLightDebugMode > 0 to show raw lighting debug output.

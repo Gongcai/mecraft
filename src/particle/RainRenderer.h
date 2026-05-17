@@ -35,6 +35,18 @@ public:
                     float alphaScale,
                     float dt);
 
+    // Render weather mask to the currently bound FBO with additive blending.
+    // Equivalent to DerivativeMain gbuffers_weather: writes particle alpha to a single channel.
+    // Caller must bind the weather mask FBO before calling.
+    void renderWeatherMask(const glm::mat4& projection,
+                           const glm::mat4& view,
+                           const glm::vec3& cameraPos,
+                           float rainStrength,
+                           float snowStrength,
+                           float skyLightAtCamera,
+                           float alphaScale,
+                           float dt);
+
 private:
     struct PrecipDrop {
         glm::vec3 offset;   // relative to camera (xz = horizontal offset, y = height above camera)
@@ -64,6 +76,7 @@ private:
     GLuint m_snowTex = 0;
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
+    float m_time = 0.0f;  // accumulated time for wind animation
 
     std::vector<PrecipDrop> m_rainDrops;
     std::vector<PrecipDrop> m_snowDrops;

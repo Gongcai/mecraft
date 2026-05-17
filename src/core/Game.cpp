@@ -344,6 +344,16 @@ void Game::renderFrame(const float frameTime) {
             auto projMat = finalCamera.getProjectionMatrix(m_window.getAspectRatio());
             auto viewMat = finalCamera.getViewMatrix();
             float alphaScale = pipelineCfg.weatherRainAlphaScale;
+
+            // Step 1: Render weather mask to dedicated FBO (DerivativeMain gbuffers_weather equivalent).
+            // This provides the postprocess with a proper weather coverage mask.
+            m_renderer.bindWeatherMaskFbo();
+            m_rainRenderer.renderWeatherMask(projMat, viewMat, camPos,
+                                             weather.rainStrength, weather.snowStrength,
+                                             cameraRainVisibility, alphaScale, frameTime);
+            m_renderer.restoreDefaultFbo();
+
+            // Step 2: Render visible rain/snow particles to the main scene.
             if (weather.rainStrength > 0.01f) {
                 m_rainRenderer.render(projMat, viewMat, camPos,
                                       weather.rainStrength, cameraRainVisibility,
@@ -352,7 +362,7 @@ void Game::renderFrame(const float frameTime) {
             if (weather.snowStrength > 0.01f) {
                 m_rainRenderer.renderSnow(projMat, viewMat, camPos,
                                           weather.snowStrength, cameraRainVisibility,
-                                          alphaScale * 0.6f, frameTime);  // snow uses lower alpha
+                                          alphaScale * 0.6f, frameTime);
             }
         }
     }
@@ -473,7 +483,8 @@ void Game::renderFrame(const float frameTime) {
         }
 
         m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
-                                                   m_renderer.gbufDepthTexture());
+                                                   m_renderer.gbufDepthTexture(),
+                                                   m_renderer.weatherMaskTexture());
     }
     m_renderer.renderDeferredDebugOverlay(m_window);
 

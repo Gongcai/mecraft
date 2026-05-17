@@ -53,6 +53,7 @@ uniform float uCameraRainVisibility; // 0=indoors, 1=outdoors (from 5-ray check)
 uniform float uWeatherExposureBias;  // EV offset on auto exposure during precipitation
 uniform float uWeatherPostRainFog;   // [0,2] multiplier on post-process rain/snow fog
 uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
+uniform sampler2D uWeatherMaskTex;  // Weather particle alpha (R8, additive-blended)
 uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
 
 vec3 srgbToLinear(vec3 color) {
@@ -963,6 +964,16 @@ vec3 g_debugColorAfterBloomyFog = vec3(0.0);
 float g_debugRainMask = 0.0;
 
 float rainMaskAt(vec2 sampleUv) {
+    // DerivativeMain Grade.glsl:149 — rain = texelFetch(colortex0, texel, 0).b * 0.35
+    // Use weather mask texture (additive-blended particle alpha) if available.
+    ivec2 weatherSize = textureSize(uWeatherMaskTex, 0);
+    if (weatherSize.x > 0 && weatherSize.y > 0) {
+        ivec2 weatherTexel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(weatherSize));
+        float weatherAlpha = texelFetch(uWeatherMaskTex, weatherTexel, 0).r;
+        return weatherAlpha * 0.35;
+    }
+
+    // Fallback: depth-based sky mask (legacy, less accurate).
     ivec2 texSize = textureSize(uDepthTex, 0);
     if (texSize.x <= 0 || texSize.y <= 0) {
         return 0.0;
@@ -971,10 +982,6 @@ float rainMaskAt(vec2 sampleUv) {
     ivec2 texel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(texSize));
     float depth = texelFetch(uDepthTex, texel, 0).r;
     float skyMask = step(0.9999, depth);
-
-    // Phase C.0: use a depth-derived sky/air mask only. Geometry skylight is
-    // surface exposure, not a DerivativeMain weather sprite mask; using it here
-    // makes every outdoor block mix toward fogBloom and creates edge halos.
     return skyMask * clamp(uCameraRainVisibility, 0.0, 1.0);
 }
 
@@ -1000,25 +1007,25 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         g_debugColorAfterBloomyFog = color;
         color += bloomData * bloomAmount;
 
-        // DerivativeMain Grade.glsl rain pass: wet weather mixes the HDR scene
-        // toward fogBloom after bloom.
-        // Per-pixel precipitation mask: sky/air pixels only.
+        // DerivativeMain Grade.glsl:148-153 — rain fog pass.
+        // rain = colortex0.b * 0.35 (already factored into rainMaskAt).
+        // color = color * oneMinus(rain) + fogBloom * fma(exposure, 0.15, 0.3) * rain
         float wetness = clamp(uSkyWetness, 0.0, 1.0);
         if (!uUnderwaterEnabled && wetness > 0.01) {
-            float precipMask = rainMaskAt(sampleUv);
-            g_debugRainMask = precipMask;
+            float rain = rainMaskAt(sampleUv);  // already * 0.35
+            g_debugRainMask = rain;
             float fogScale = clamp(uWeatherPostRainFog, 0.0, 2.0);
             float snowAmt = clamp(uSnowStrength, 0.0, 1.0);
             float rainAmt = clamp(wetness - snowAmt, 0.0, 1.0);
-            // Rain fog: blue-tinted, moderate density
-            float rainFog = rainAmt * precipMask * 0.35 * fogScale;
+            // Rain fog: DerivativeMain formula
+            float rainBlend = rain * rainAmt * fogScale;
             float rainFogAmount = clamp(uExposure, 0.6, 2.0) * 0.15 + 0.3;
-            color = mix(color, fogBloom * rainFogAmount, rainFog);
-            // Snow fog: whiter, more diffuse, higher density
-            float snowFog = snowAmt * precipMask * 0.50 * fogScale;
+            color = color * (1.0 - rainBlend) + fogBloom * rainFogAmount * rainBlend;
+            // Snow fog: whiter, higher density
+            float snowBlend = rain * snowAmt * fogScale * 1.4;
             vec3 snowFogBloom = mix(fogBloom, vec3(dot(fogBloom, vec3(0.299, 0.587, 0.114)) * 1.1), 0.4);
             float snowFogAmount = clamp(uExposure, 0.6, 2.0) * 0.20 + 0.4;
-            color = mix(color, snowFogBloom * snowFogAmount, snowFog);
+            color = color * (1.0 - snowBlend) + snowFogBloom * snowFogAmount * snowBlend;
         }
     }
 

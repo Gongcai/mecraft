@@ -103,7 +103,8 @@ void PostProcessRenderer::beginScene(const Window& window) {
 }
 
 void PostProcessRenderer::endSceneAndComposite(const Window& window, const float frameTime,
-                                                GLuint gbufDepthTex) {
+                                                GLuint gbufDepthTex,
+                                                GLuint weatherMaskTex) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
@@ -234,10 +235,16 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uWeatherExposureBias", m_effects.weatherExposureBias);
     m_postProcessShader->setFloat("uWeatherPostRainFog", m_effects.weatherPostRainFog);
     m_postProcessShader->setInt("uDepthTex", 9);
+    m_postProcessShader->setInt("uWeatherMaskTex", 10);
     m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
+
+    // Bind weather mask texture (R8, additive-blended weather particle alpha).
+    // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, weatherMaskTex != 0 ? weatherMaskTex : 0);
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         glActiveTexture(GL_TEXTURE1 + mip);
         glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[mip][0] : 0);
