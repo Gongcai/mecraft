@@ -439,7 +439,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "62: VFog Cascade Index",
             "63: VFog Receiver Depth",
             "64: VFog Sun/Sky Ratio",
-            "65: VFog Beam Modulation"
+            "65: VFog Beam Modulation",
+            "66: VFog Density Field"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
@@ -526,13 +527,18 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &pipeline.volumetricTimeFadeEnabled);
-        static constexpr const char* kVFogQualityTiers[] = {"Low", "Medium", "High", "Ultra"};
+        static constexpr const char* kVFogQualityTiers[] = {
+            "Low: No Noise",
+            "Medium: Cloudy Fog Lite",
+            "High: Cloudy Fog",
+            "Ultra: Cloudy Sea"
+        };
         int qualityTier = pipeline.volumetricQualityTier;
-        pipelineChanged |= ImGui::Combo("VFog Quality Tier", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
+        pipelineChanged |= ImGui::Combo("VFog Fog Type", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
         pipeline.volumetricQualityTier = qualityTier;
         // DerivativeMain-style VFog independent profile controls
         pipelineChanged |= ImGui::SliderFloat("VFog Center Height", &pipeline.vfogCenterHeight, 0.0f, 255.0f, "%.0f");
-        pipelineChanged |= ImGui::SliderFloat("VFog Height Spread", &pipeline.vfogHeightSpread, 0.0f, 128.0f, "%.0f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Height Spread", &pipeline.vfogHeightSpread, 1.0f, 200.0f, "%.0f");
         pipelineChanged |= ImGui::SliderFloat("VFog Noise Scale", &pipeline.vfogNoiseScale, 0.001f, 0.200f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &pipeline.vfogLightStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("VFog Density Scale", &pipeline.vfogDensityScale, 0.0f, 10.0f, "%.2f");
@@ -600,7 +606,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 pipeline.vfogLightStrength, pipeline.vfogDensityScale);
             ImGui::Text("VFog baseDensity: 1.0  (VolumetricSettings defaults)");
             const char* tierNames[] = {"Low(0.5x)", "Medium(1.4x)", "High(9.0x)", "Ultra(48.0x)"};
-            ImGui::Text("VFog tier: %s  maxDist: 260  heightFalloff: 0.022", tierNames[qualityTier]);
+            ImGui::Text("VFog tier: %s  maxDist: 260  heightSpread: %.0f", tierNames[qualityTier], pipeline.vfogHeightSpread);
             {
                 float meFade = (sunY < 0.18f) ? 0.37f + 1.2f * std::max(0.0f, -sunY) : 1.7f;
                 float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
@@ -617,7 +623,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                     pipeline.volumetricTimeFadeEnabled ? "ON" : "OFF", airGate, mistGate, wetness);
                 ImGui::Text("VFog effective tier density: %.2f x mistGate = %.3f", tierMultiplier, tierMultiplier * mistGate);
                 if (weather.type == WeatherType::Clear && mistGate < 0.02f) {
-                    ImGui::TextDisabled("Clear noon: DerivativeMain TIME_FADE suppresses mist density; quality tiers mostly affect samples.");
+                    ImGui::TextDisabled("Clear noon: DerivativeMain TIME_FADE suppresses mist density; FOG_TYPE mostly affects density shape.");
                 }
             }
             // Active light direction (shadow system uses this)
@@ -781,7 +787,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
             pipeline.aerialStrength = 0.48f;
             pipeline.horizonScatterStrength = 0.70f;
-            pipeline.volumetricFogStrength = 0.52f;
+            pipeline.volumetricFogStrength = 1.0f;
             pipeline.bloomThreshold = 0.0f;
             pipeline.bloomStrength = 1.0f;
             pipeline.sunRaysEnabled = false;
@@ -835,7 +841,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
             pipeline.aerialStrength = 0.58f;
             pipeline.horizonScatterStrength = 0.82f;
-            pipeline.volumetricFogStrength = 0.68f;
+            pipeline.volumetricFogStrength = 1.0f;
             pipeline.bloomThreshold = 0.0f;
             pipeline.bloomStrength = 1.0f;
             pipeline.sunRaysEnabled = false;
@@ -877,7 +883,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &pipeline.cloudShadowScale, 0.001f, 0.02f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Speed", &pipeline.cloudShadowSpeed, 0.0f, 0.08f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
-        ImGui::TextDisabled("VFog Light Strength: deprecated (DerivativeMain path ignores it)");
+        ImGui::TextDisabled("VFog Strength 1.00 matches DerivativeMain VOLUMETRIC_FOG_DENSITY baseline");
         pipelineChanged |= ImGui::SliderFloat("VFog Shadow Bias Scale", &pipeline.volumetricShadowBiasScale, 0.0f, 4.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
@@ -904,7 +910,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Fake Bounce", &pipeline.fakeBounceStrength, 0.0f, 0.3f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &pipeline.aerialStrength, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &pipeline.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Volumetric Fog Strength", &pipeline.volumetricFogStrength, 0.0f, 1.2f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Volumetric Fog Strength", &pipeline.volumetricFogStrength, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Noise Dither", &pipeline.noiseDitherStrength, 0.0f, 0.05f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("CAS Sharpen", &pipeline.sharpenStrength, 0.0f, 0.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");

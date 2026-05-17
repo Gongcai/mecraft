@@ -33,6 +33,7 @@ uniform int uCompositeInputsEnabled;
 uniform int uWaterCompositeEnabled;
 uniform int uDepthSofteningEnabled;
 uniform int uVolumetricFogActive;
+uniform int uFrameIndex;
 uniform float uAnimationTime;
 uniform float uTime;
 uniform vec3 uWaterAbsorption;
@@ -85,33 +86,45 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
-vec4 sampleDepthAwareVolumetric(vec2 uv) {
-    float centerDepth = texture(uOpaqueDepthTex, uv).r;
-    vec2 invFullResolution = 1.0 / max(vec2(textureSize(uSceneColorTex, 0)), vec2(1.0));
-    vec2 halfResStep = invFullResolution * 2.0;
-    vec2 offsets[5] = vec2[](
-        vec2(0.0, 0.0),
-        vec2(1.0, 0.0),
-        vec2(-1.0, 0.0),
-        vec2(0.0, 1.0),
-        vec2(0.0, -1.0)
-    );
-    float spatialWeights[5] = float[](1.0, 0.55, 0.55, 0.55, 0.55);
+float viewDistanceFromDepth(float depth, vec2 uv) {
+    if (depth >= 0.9999) {
+        return 1e6;
+    }
+    return length(reconstructWorldPosition(uv, depth) - uCameraPos);
+}
 
+float viewDistanceFromDepthTexel(ivec2 texel) {
+    vec2 invFullResolution = 1.0 / max(vec2(textureSize(uSceneColorTex, 0)), vec2(1.0));
+    ivec2 size = textureSize(uOpaqueDepthTex, 0);
+    ivec2 clampedTexel = clamp(texel, ivec2(0), size - ivec2(1));
+    vec2 uv = (vec2(clampedTexel) + 0.5) * invFullResolution;
+    return viewDistanceFromDepth(texelFetch(uOpaqueDepthTex, clampedTexel, 0).r, uv);
+}
+
+vec4 sampleDepthAwareVolumetric(vec2 uv) {
+    float centerLinearDepth = viewDistanceFromDepth(texture(uOpaqueDepthTex, uv).r, uv);
+    ivec2 halfSize = textureSize(uVolumetricTex, 0);
+    ivec2 bias = (ivec2(floor(gl_FragCoord.xy)) + ivec2(uFrameIndex)) & ivec2(1);
+    ivec2 baseTexel = ivec2(floor(gl_FragCoord.xy * 0.5)) + bias * 2;
+    ivec2 offsets[4] = ivec2[](
+        ivec2(-2, -2),
+        ivec2(-2,  0),
+        ivec2( 0,  0),
+        ivec2( 0, -2)
+    );
+
+    float sigmaZ = 64.0 / max(centerLinearDepth, 1.0);
     vec4 sum = vec4(0.0);
     float weightSum = 0.0;
-    for (int i = 0; i < 5; ++i) {
-        vec2 sampleUv = clamp(uv + offsets[i] * halfResStep, vec2(0.0), vec2(1.0));
-        float sampleDepth = texture(uOpaqueDepthTex, sampleUv).r;
-        float depthDelta = abs(sampleDepth - centerDepth);
-        float depthWeight = exp(-depthDelta * 320.0);
-        if (centerDepth >= 0.9999 && sampleDepth < 0.9999) {
-            depthWeight *= 0.08;
-        }
-        float weight = spatialWeights[i] * max(depthWeight, 0.025);
-        sum += texture(uVolumetricTex, sampleUv) * weight;
+
+    for (int i = 0; i < 4; ++i) {
+        ivec2 sampleTexel = clamp(baseTexel + offsets[i], ivec2(0), halfSize - ivec2(1));
+        float sampleLinearDepth = viewDistanceFromDepthTexel(sampleTexel * 2);
+        float weight = max(exp2(-abs(sampleLinearDepth - centerLinearDepth) * sigmaZ), 1e-6);
+        sum += texelFetch(uVolumetricTex, sampleTexel, 0) * weight;
         weightSum += weight;
     }
+
     return sum / max(weightSum, 0.0001);
 }
 

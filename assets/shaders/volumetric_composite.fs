@@ -8,6 +8,7 @@ uniform sampler2D uVolumetricTex;
 uniform sampler2D uDepthTex;
 uniform vec2 uInvFullResolution;
 uniform mat4 uInvProjection;
+uniform int uFrameIndex;
 
 float viewDistanceFromDepth(float depth, vec2 uv) {
     if (depth >= 0.9999) {
@@ -19,38 +20,47 @@ float viewDistanceFromDepth(float depth, vec2 uv) {
     return length(view.xyz);
 }
 
-vec4 sampleDepthAwareVolumetric(vec2 uv) {
-    float centerDepth = texture(uDepthTex, uv).r;
-    vec2 halfResStep = uInvFullResolution * 2.0;
-    vec2 offsets[5] = vec2[](
-        vec2(0.0, 0.0),
-        vec2(1.0, 0.0),
-        vec2(-1.0, 0.0),
-        vec2(0.0, 1.0),
-        vec2(0.0, -1.0)
-    );
-    float spatialWeights[5] = float[](1.0, 0.55, 0.55, 0.55, 0.55);
+float viewDistanceFromDepthTexel(ivec2 texel) {
+    ivec2 size = textureSize(uDepthTex, 0);
+    ivec2 clampedTexel = clamp(texel, ivec2(0), size - ivec2(1));
+    vec2 uv = (vec2(clampedTexel) + 0.5) * uInvFullResolution;
+    return viewDistanceFromDepth(texelFetch(uDepthTex, clampedTexel, 0).r, uv);
+}
 
+vec4 spatialUpscaleVolumetric(vec2 uv) {
+    vec2 fullCoord = gl_FragCoord.xy;
+    float centerLinearDepth = viewDistanceFromDepth(texture(uDepthTex, uv).r, uv);
+    ivec2 halfSize = textureSize(uVolumetricTex, 0);
+
+    // DerivativeMain spatial upscale: reconstruct from the matching checkerboard
+    // half-res texels and weight by linear depth, avoiding screen-space fog sheets.
+    ivec2 bias = (ivec2(floor(fullCoord)) + ivec2(uFrameIndex)) & ivec2(1);
+    ivec2 baseTexel = ivec2(floor(fullCoord * 0.5)) + bias * 2;
+    ivec2 offsets[4] = ivec2[](
+        ivec2(-2, -2),
+        ivec2(-2,  0),
+        ivec2( 0,  0),
+        ivec2( 0, -2)
+    );
+
+    float sigmaZ = 64.0 / max(centerLinearDepth, 1.0);
     vec4 sum = vec4(0.0);
     float weightSum = 0.0;
-    for (int i = 0; i < 5; ++i) {
-        vec2 sampleUv = clamp(uv + offsets[i] * halfResStep, vec2(0.0), vec2(1.0));
-        float sampleDepth = texture(uDepthTex, sampleUv).r;
-        float depthDelta = abs(sampleDepth - centerDepth);
-        float depthWeight = exp(-depthDelta * 320.0);
-        if (centerDepth >= 0.9999 && sampleDepth < 0.9999) {
-            depthWeight *= 0.08;
-        }
-        float weight = spatialWeights[i] * max(depthWeight, 0.025);
-        sum += texture(uVolumetricTex, sampleUv) * weight;
+
+    for (int i = 0; i < 4; ++i) {
+        ivec2 sampleTexel = clamp(baseTexel + offsets[i], ivec2(0), halfSize - ivec2(1));
+        float sampleLinearDepth = viewDistanceFromDepthTexel(sampleTexel * 2);
+        float weight = max(exp2(-abs(sampleLinearDepth - centerLinearDepth) * sigmaZ), 1e-6);
+        sum += texelFetch(uVolumetricTex, sampleTexel, 0) * weight;
         weightSum += weight;
     }
+
     return sum / max(weightSum, 0.0001);
 }
 
 void main() {
     vec3 scene = texture(uSceneTex, vTexCoord).rgb;
-    vec4 volumetric = sampleDepthAwareVolumetric(vTexCoord);
+    vec4 volumetric = spatialUpscaleVolumetric(vTexCoord);
     // Output fog transmittance in alpha for Bloomy Fog in postprocess.
     // volumetric.a = 1 - opacity = transmittance (from volumetric_fog.fs).
     FragColor = vec4(scene * volumetric.a + volumetric.rgb, volumetric.a);

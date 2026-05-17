@@ -76,7 +76,7 @@ public:
         bool volumetricFogEnabled = true;
         bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
         bool volumetricTimeFadeEnabled = true; // DerivativeMain TIME_FADE
-        int volumetricQualityTier = 1; // 0=Low, 1=Medium, 2=High, 3=Ultra (DerivativeMain FOG_TYPE)
+        int volumetricQualityTier = 1; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
         float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
@@ -137,10 +137,10 @@ public:
         float fakeBounceStrength = 0.06f;
         float aerialStrength = 0.65f;
         float horizonScatterStrength = 0.78f;
-        float volumetricFogStrength = 0.35f;
+        float volumetricFogStrength = 1.0f;
         // DerivativeMain-style VFog independent profile (decoupled from weather)
         float vfogCenterHeight = 63.0f;   // SEA_LEVEL: y-level where fog is densest
-        float vfogHeightSpread = 32.0f;   // height falloff reference offset above center
+        float vfogHeightSpread = 100.0f;  // DerivativeMain falloff denominator: 100 -> exponent 0.01
         float vfogNoiseScale = 0.04f;     // noise sampling scale for structured fog
         float vfogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
         float vfogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
@@ -197,13 +197,13 @@ public:
 
     struct VolumetricSettings {
         bool fogEnabled = true;
-        float fogStrength = 0.35f;
+        float fogStrength = 1.0f;
         float baseDensity = 1.0f;
         float heightFalloff = 0.022f;
         float maxDistance = 260.0f;
         // DerivativeMain-style VFog independent profile (decoupled from weather)
         float fogCenterHeight = 63.0f;   // SEA_LEVEL: y-level where fog is densest
-        float fogHeightSpread = 32.0f;   // height falloff reference offset above center
+        float fogHeightSpread = 100.0f;  // DerivativeMain falloff denominator: 100 -> exponent 0.01
         float fogNoiseScale = 0.04f;     // noise sampling scale for structured fog
         float fogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
         float fogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)

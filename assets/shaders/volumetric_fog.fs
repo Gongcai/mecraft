@@ -25,7 +25,6 @@ uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uVolumetricFogStrength;
 uniform float uVolumetricBaseDensity;
-uniform float uVolumetricHeightFalloff;
 uniform float uVolumetricMaxDistance;
 uniform float uSkyWetness;
 uniform float uLightningFlash;
@@ -46,13 +45,14 @@ uniform bool uNoiseEnabled;
 uniform int uVolumetricDebugMode;
 uniform int uVolumetricSkyRayEnabled;
 uniform int uVolumetricTimeFadeEnabled; // DerivativeMain TIME_FADE toggle
-uniform int uVolumetricQualityTier; // 0=Low, 1=Medium, 2=High, 3=Ultra
+uniform int uVolumetricQualityTier; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
 uniform int uVolumetricStaticJitter; // 1 = freeze jitter for stable debug
+uniform int uFrameIndex;
 uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (default 1.0)
 
 // DerivativeMain-style VFog independent profile (decoupled from weather)
 uniform float uVFogCenterHeight;   // SEA_LEVEL: y-level where fog is densest (default 63.0)
-uniform float uVFogHeightSpread;   // height falloff reference offset (default 32.0)
+uniform float uVFogHeightSpread;   // High/Ultra falloff denominator: 100 -> exponent 0.01
 uniform float uVFogNoiseScale;     // noise sampling scale for structured fog (default 0.04)
 uniform float uVFogLightStrength;  // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH (default 0.2)
 uniform float uVFogDensityScale;   // user density multiplier / volFogDensity (default 1.0)
@@ -67,11 +67,14 @@ uniform float uCloudShadowSpeed;
 #include "atmosphere_lut.glsl"
 #include "mecraft_shadow.glsl"
 
-// Dynamic step count per quality tier (DerivativeMain VOLUMETRIC_FOG_SAMPLES)
-int getFogSteps() {
-    if (uVolumetricQualityTier <= 1) return 8;   // Low/Medium
-    if (uVolumetricQualityTier <= 2) return 16;  // High
-    return 20;                                      // Ultra
+const int noiseTextureResolution = 256;
+const float noiseTexturePixelSize = 1.0 / float(noiseTextureResolution);
+
+// Dynamic ray step count from DerivativeMain CalculateVolumetricFog().
+// FOG_TYPE controls density shape; VOLUMETRIC_FOG_SAMPLES controls march quality.
+int getFogSteps(float rayLength) {
+    const float maxSamples = 20.0; // DerivativeMain VOLUMETRIC_FOG_SAMPLES default.
+    return int(min(maxSamples, maxSamples * 0.4 + rayLength * 0.1));
 }
 
 // DerivativeMain-aligned volumetric fog constants
@@ -83,7 +86,7 @@ const float VFOG_FINAL_SUN_MULTIPLIER = 20.0;
 // VFOG_AIR_DENSITY: Rayleigh-phase air scatter strength (DerivativeMain VOLUMETRIC_LIGHT_STRENGTH = 0.2)
 const float VFOG_AIR_DENSITY = 0.2;
 
-// Quality tier density multiplier (DerivativeMain FOG_TYPE)
+// DerivativeMain FOG_TYPE density shapes.
 // DerivativeMain CornetteShanksPhase (cloud_target.fs:109)
 // More accurate than HG for forward-peaked fog scattering.
 float cornetteShanksPhase(float cosTheta, float g) {
@@ -93,12 +96,6 @@ float cornetteShanksPhase(float cosTheta, float g) {
     return (3.0 * (1.0 - gg) * (1.0 + mu2)) / (8.0 * 3.14159265 * (2.0 + gg) * denom * sqrt(denom));
 }
 
-float getQualityDensityMultiplier() {
-    if (uVolumetricQualityTier <= 0) return 0.5;   // Low: no noise
-    if (uVolumetricQualityTier <= 1) return 1.4;   // Medium: cloudy fog lite
-    if (uVolumetricQualityTier <= 2) return 9.0;   // High: cloudy fog
-    return 48.0;                                     // Ultra: cloudy sea
-}
 
 // Multi-lobe HG phase for High/Ultra (DerivativeMain FOG_TYPE > 1)
 // 4 angular scales with forward (g=0.6) + backward (g=-0.3) lobes
@@ -139,45 +136,89 @@ float hash13(vec3 p) {
     return fract((p.x + p.y) * p.z);
 }
 
-float sampleNoise2D(vec2 uv, float slice, int channel) {
-    vec4 n = texture(uNoiseTex, uv + vec2(slice * 0.071, slice * 0.113));
-    if (channel == 0) {
-        return n.r;
-    }
-    if (channel == 1) {
-        return n.g;
-    }
-    return n.b;
+float temporalR1(int n, float seed) {
+    const float alpha = 0.61803398875; // 1 / golden ratio
+    return fract(seed + float(n) * alpha);
 }
 
-float pseudo3DNoise(vec3 p, float scale, vec2 wind) {
+vec3 vfogCurve3(vec3 x) {
+    return x * x * (3.0 - 2.0 * x);
+}
+
+// DerivativeMain/lib/Head/Noise.inc Get3DNoiseSmooth().
+// Mecraft adaptation: use uNoiseTex and hash fallback when the shaderpack noise texture is unavailable.
+float get3DNoiseSmooth(vec3 position) {
     if (!uNoiseEnabled) {
-        return hash13(p * scale);
+        return hash13(position);
     }
 
-    vec3 q = p * scale;
-    float slice = q.y * 7.0 + q.z * 1.7;
-    float slice0 = floor(slice);
-    float blend = smoothstep(0.0, 1.0, fract(slice));
-    vec2 uv = q.xz + wind;
-    float n0 = sampleNoise2D(uv, slice0, 0);
-    float n1 = sampleNoise2D(uv, slice0 + 1.0, 1);
-    return mix(n0, n1, blend);
+    vec3 p = floor(position);
+    vec3 b = vfogCurve3(position - p);
+    vec2 uv = p.xy + b.xy + 97.0 * p.z;
+    vec2 rg = texture(uNoiseTex, (uv + 0.5) * noiseTexturePixelSize).xy;
+    return mix(rg.x, rg.y, b.z);
 }
 
-// DerivativeMain-style structured fog density (weather-independent).
-// Uses multi-octave 3D noise with fixed threshold for consistent fog shape
-// regardless of weather state. Threshold 4.5 is the DerivativeMain High mode default.
-float structuredFogDensity(vec3 worldPos, float heightDensity) {
+// DerivativeMain CalculateFogDensity — 4 quality tiers.
+// Returns full fog density including height falloff and noise structure.
+// Low/Medium: simple asymmetric falloff ± 1 octave.
+// High/Ultra: symmetric SEA_LEVEL falloff + multi-octave 3D noise → cloud blobs.
+// Source: DerivativeMain/lib/Atmosphere/VolumetricFog.glsl lines 94-151
+float CalculateVFogDensity(in vec3 rayPosition) {
     float ns = max(uVFogNoiseScale, 0.001);
-    vec2 wind = vec2(uTime * 0.004, uTime * 0.002);
-    vec3 p = worldPos * ns + vec3(wind.x, 0.0, wind.y);
-    float base = pseudo3DNoise(p, 1.0, vec2(0.0)) * 4.0;
-    float detail = pseudo3DNoise(p * 4.0 + vec3(wind.x, 0.0, wind.y), 1.0, vec2(0.0));
-    float threshold = 4.5;
-    float cloudy = clamp((base - detail) * 4.0 * heightDensity - threshold, 0.0, 1.0);
-    float fineShape = smoothstep(0.05, 0.85, base * 0.22 + detail * 0.35);
-    return cloudy * mix(0.85, 1.45, fineShape);
+    // uVFogHeightSpread controls falloff exponent: spread=100 → exponent=0.01 (DerivativeMain default)
+    float falloffExp = 1.0 / max(uVFogHeightSpread, 1.0);
+    // DerivativeMain shaders.properties: volFogWind = vec3(volFogTime, 0.0, volFogTime * 0.6).
+    float volFogTime = uTime * 0.01;
+    vec3 volFogWind = vec3(volFogTime, 0.0, volFogTime * 0.6);
+
+    if (uVolumetricQualityTier <= 0) {
+        // FOG_TYPE 0 — Low: simple asymmetric falloff, no noise.
+        // DerivativeMain: exp2(min((SEA_LEVEL + 32.0 - y) * rcp(12.0), 0.2)) * 0.5
+        float fogDensity = exp2(min((uVFogCenterHeight + 32.0 - rayPosition.y) / 12.0, 0.2));
+        return fogDensity * 0.5;
+    }
+
+    if (uVolumetricQualityTier <= 1) {
+        // FOG_TYPE 1 — Medium: asymmetric falloff + 2-octave noise.
+        // DerivativeMain: exp2(min((SEA_LEVEL + 28.0 - y) * 0.15, 0.2)) + noise erosion
+        float fogDensity = exp2(min((uVFogCenterHeight + 28.0 - rayPosition.y) * 0.15, 0.2));
+        vec3 p = rayPosition * ns * 1.75;
+        float noise = get3DNoiseSmooth(p + volFogWind) * 4.0;
+        noise -= get3DNoiseSmooth(p * 4.0 + volFogWind);
+        fogDensity = clamp(noise * 4.0 * fogDensity - 5.0, 0.0, 1.0) * 1.4;
+        return fogDensity;
+    }
+
+    if (uVolumetricQualityTier <= 2) {
+        // FOG_TYPE 2 — High: symmetric SEA_LEVEL falloff + 4-octave noise → cloud blobs.
+        // DerivativeMain: fastExp(-abs(y - SEA_LEVEL) * 0.01), 4 octaves at 0.04/3.2/9.6/28.8
+        float falloff = exp2(-abs(rayPosition.y - uVFogCenterHeight) * falloffExp);
+        vec3 p = rayPosition * ns;
+        p += volFogWind;
+        float noise = get3DNoiseSmooth(p) * 0.5;
+        p += volFogWind;
+        noise += get3DNoiseSmooth(p * 3.2) * 0.25;
+        p += volFogWind;
+        noise += get3DNoiseSmooth(p * 9.6) * 0.125;
+        p += volFogWind;
+        noise += get3DNoiseSmooth(p * 28.8) * 0.0625;
+        float fogDensity = clamp(noise * 12.0 * falloff - 4.5, 0.0, 1.0);
+        return fogDensity * 9.0;
+    }
+
+    // FOG_TYPE 3 — Ultra: symmetric SEA_LEVEL falloff + 5-octave loop → dense cloud sea.
+    // DerivativeMain: exp2(-abs(y - SEA_LEVEL) * 0.01), 5 octaves loop at 0.013 * 4^i
+    float falloff = exp2(-abs(rayPosition.y - uVFogCenterHeight) * falloffExp);
+    vec3 p = (rayPosition + volFogWind) * ns * 0.325;
+    float weight = 0.5;
+    float noise = 0.0;
+    for (uint i = 0u; i < 5u; i++, weight *= 0.5) {
+        noise += weight * get3DNoiseSmooth(p);
+        p = (p + volFogWind) * 4.0;
+    }
+    float fogDensity = clamp(falloff * noise * 400.0 - 170.0, 0.0, 1.0);
+    return fogDensity * 48.0;
 }
 
 // Shadow setup result for volumetric fog (avoids recomputation in debug modes)
@@ -267,8 +308,8 @@ float vfogCloudShadow(vec3 worldPos, vec3 lightDir) {
     vec2 cloudPos = (worldPos.xz + lightDir.xz * t) * max(uCloudShadowScale, 0.0001);
     vec2 wind = vec2(0.73, 0.31) * uTime * uCloudShadowSpeed;
 
-    float large = pseudo3DNoise(vec3(cloudPos + wind, 0.0), 0.05, vec2(0.0));
-    float medium = pseudo3DNoise(vec3(cloudPos * 2.37 - wind * 1.7, 0.0), 0.05, vec2(0.0));
+    float large = get3DNoiseSmooth(vec3((cloudPos + wind) * 0.05, 0.0));
+    float medium = get3DNoiseSmooth(vec3((cloudPos * 2.37 - wind * 1.7) * 0.05, 0.0));
     float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
     float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
     // Debug weather presets are not a real cloud-shadow/precipitation system yet.
@@ -303,8 +344,6 @@ void main() {
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
     float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
-    float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.45);
-
     vec3 sunDir = normalize(uSunDirection);
     float sunVisibility = smoothstep(-0.08, 0.18, sunDir.y) * dayFactor;
     float LdotV = dot(viewDir, sunDir);
@@ -338,18 +377,17 @@ void main() {
     float phaseTerm = pow(max(LdotV, 0.0), 4.0) * 0.10 + pow(max(LdotV, 0.0), 18.0) * 0.36 +
                       atmRayleighPhase(LdotV) * 0.35 * 0.11 + atmHenyeyGreensteinPhase(LdotV, 0.6) * 0.65 * 0.11;
 
-    float strength = clamp(uAerialStrength, 0.0, 2.0) * clamp(uVolumetricFogStrength, 0.0, 2.0);
+    float strength = clamp(uVolumetricFogStrength, 0.0, 2.0);
     strength *= (uVolumetricFogEnabled != 0) ? 1.0 : 0.0;
-    // Apply quality tier density multiplier (DerivativeMain FOG_TYPE)
-    float densityMultiplier = getQualityDensityMultiplier();
-    // DerivativeMain: volFogDensity uniform scales base density (1.0 clear, up to ~6.8 in storm).
-    // Here uVFogDensityScale is the user-controlled equivalent, independent of weather.
-    float baseDensity = (0.00012 + 0.00030 * horizon) *
+    // DerivativeMain: mistDensity = VOLUMETRIC_FOG_DENSITY * volFogDensity.
+    // uVFogDensityScale is the user-controlled volFogDensity equivalent,
+    // independent of weather for Mecraft's VFog profile.
+    // Tier density multiplier (0.5/1.4/9.0/48.0) is baked into CalculateVFogDensity().
+    const float VFogDensityBase = 0.002;
+    float baseDensity = VFogDensityBase *
                         strength *
                         max(uVolumetricBaseDensity, 0.0) *
-                        0.64 *
-                        max(uVFogDensityScale, 0.0) *
-                        densityMultiplier;
+                        max(uVFogDensityScale, 0.0);
 
     // DerivativeMain VolumetricFog.glsl:191: Low/Medium phase applied to mistDensity.
     // For FOG_TYPE <= 1, phase modifies density before the march loop.
@@ -376,15 +414,21 @@ void main() {
         mistDensity *= meWeight * meWeight + timeMidnight * 2.0;
     }
 
-    // Jitter: dynamic for normal rendering, screen-only hash for stable debug
+    // Jitter: DerivativeMain-style temporal blue-noise sequence.
+    // Do not derive this from uTime; high-frequency temporal jitter makes fog look
+    // like screen-space stains instead of a stable volume.
     float jitter;
     if (uVolumetricStaticJitter != 0) {
         // Fixed per-pixel jitter (no camera/time dependence) for stable debug
         jitter = fract(dot(vTexCoord, vec2(12.9898, 78.233)) + 0.5);
     } else {
-        jitter = pseudo3DNoise(vec3(uCameraPos.xz * 0.17, uTime * 7.0).xzy + vec3(vTexCoord, 0.0) * 17.0, 1.0, vec2(0.0));
+        ivec2 noiseTexel = ivec2(gl_FragCoord.xy * 2.0) & ivec2(255);
+        float seed = uNoiseEnabled
+            ? texelFetch(uNoiseTex, noiseTexel, 0).a
+            : hash13(vec3(gl_FragCoord.xy, 17.0));
+        jitter = temporalR1(uFrameIndex, seed);
     }
-    int fogSteps = getFogSteps();
+    int fogSteps = getFogSteps(marchDistance);
     float stepLength = marchDistance / float(fogSteps);
     // DerivativeMain integration form: accumulate dimensionless samples, apply radiance after.
     vec3 sunlightSample = vec3(0.0);   // shadow * phase * fogSample (per step)
@@ -392,6 +436,7 @@ void main() {
     vec3 unshadowedSunSample = vec3(0.0); // debug: same units as sunlightSample without shadowing
     float transmittance = 1.0;
     float maxDensitySeen = 0.0;
+    float blobTransmittanceDebug = 1.0;
     float avgShadowVisibility = 0.0;
     float minShadowVisibility = 1.0;
     int shadowSampleCount = 0;
@@ -412,18 +457,13 @@ void main() {
     for (int i = 0; i < fogSteps; ++i) {
         float t = (float(i) + jitter) / float(fogSteps);
         vec3 samplePos = uCameraPos + viewDir * (t * marchDistance);
-        // DerivativeMain-style height falloff: symmetric around uVFogCenterHeight (SEA_LEVEL).
-        // FOG_TYPE 2/3 uses fastExp(-abs(y - SEA_LEVEL) * 0.01) for symmetric falloff.
-        float heightDensity = exp2(-abs(samplePos.y - uVFogCenterHeight) * max(uVolumetricHeightFalloff, 0.0001));
-        heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
-        heightDensity = clamp(heightDensity, 0.035, 1.45);
-
-        float structure = structuredFogDensity(samplePos, heightDensity);
-        structure += 0.06 * max(uCloudDensity, 0.0);
-        float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
         // DerivativeMain: fogDensity = CalculateFogDensity(rayPosition) * mistDensity + airDensity.
-        // For Low/Medium, mistDensity already includes phase. For High/Ultra, phase is applied per-step below.
-        float density = mistDensity * heightDensity * structure * nearFade;
+        // CalculateVFogDensity includes height falloff + noise structure internally.
+        // airDensity provides smooth continuous haze; fogDensity provides cloud blobs.
+        float vfogDensity = CalculateVFogDensity(samplePos);
+        float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
+        float density = mistDensity * vfogDensity * nearFade;
+        blobTransmittanceDebug *= exp(-density * stepLength);
         float sampleDensity = density + airDensity;
         maxDensitySeen = max(maxDensitySeen, sampleDensity);
         float fogDensity = sampleDensity * stepLength;
@@ -484,10 +524,7 @@ void main() {
             float sunlightOD = 0.0;
             vec3 checkPos = samplePos;
             for (int j = 0; j < 4; ++j) {
-                float checkHeight = exp2(-abs(checkPos.y - uVFogCenterHeight) * max(uVolumetricHeightFalloff, 0.0001));
-                checkHeight *= 1.0 - smoothstep(180.0, 260.0, checkPos.y);
-                checkHeight = clamp(checkHeight, 0.035, 1.45);
-                float d = mistDensity * checkHeight * structuredFogDensity(checkPos, checkHeight);
+                float d = mistDensity * CalculateVFogDensity(checkPos);
                 if (d > 1e-5) {
                     sunlightOD += d * odStepSize;
                 }
@@ -775,6 +812,13 @@ void main() {
             modulation,
             1.0
         );
+        return;
+    }
+    if (uVolumetricDebugMode == 21) {
+        // Blob-only opacity diagnostic: integrated CalculateVFogDensity without airDensity,
+        // lighting, transmittance color, or weather color changes.
+        float blobOpacity = 1.0 - blobTransmittanceDebug;
+        FragColor = vec4(heatmap(clamp(blobOpacity * 12.0, 0.0, 1.0)), 1.0);
         return;
     }
 
