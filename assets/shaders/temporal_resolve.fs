@@ -69,7 +69,8 @@ void main() {
 
     float depth = texture(uDepthTex, vTexCoord).r;
 
-    // If sky pixel, just output current frame
+    // If sky pixel, just output current frame. VFog is stabilized at its own
+    // sampling pattern; reprojecting sky history creates large far-plane trails.
     if (depth >= 0.9999) {
         FragColor = texture(uCurrentTex, vTexCoord);
         return;

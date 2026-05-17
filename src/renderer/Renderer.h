@@ -655,6 +655,7 @@ private:
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     shadow::ShadowRenderer m_shadowRenderer;
     bool m_deferredFrameActive = false;
+    bool m_deferredHistoryUpdatedThisFrame = false;
     std::unordered_set<int64_t> m_meshingInFlight;
     std::vector<SubChunkMeshingResult> m_deferredMeshResults;
     int m_meshingSubmitBudget = 8;

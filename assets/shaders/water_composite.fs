@@ -104,7 +104,7 @@ float viewDistanceFromDepthTexel(ivec2 texel) {
 vec4 sampleDepthAwareVolumetric(vec2 uv) {
     float centerLinearDepth = viewDistanceFromDepth(texture(uOpaqueDepthTex, uv).r, uv);
     ivec2 halfSize = textureSize(uVolumetricTex, 0);
-    ivec2 bias = (ivec2(floor(gl_FragCoord.xy)) + ivec2(uFrameIndex)) & ivec2(1);
+    ivec2 bias = ivec2(floor(gl_FragCoord.xy)) & ivec2(1);
     ivec2 baseTexel = ivec2(floor(gl_FragCoord.xy * 0.5)) + bias * 2;
     ivec2 offsets[4] = ivec2[](
         ivec2(-2, -2),

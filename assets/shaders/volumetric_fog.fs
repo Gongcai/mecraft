@@ -136,11 +136,6 @@ float hash13(vec3 p) {
     return fract((p.x + p.y) * p.z);
 }
 
-float temporalR1(int n, float seed) {
-    const float alpha = 0.61803398875; // 1 / golden ratio
-    return fract(seed + float(n) * alpha);
-}
-
 vec3 vfogCurve3(vec3 x) {
     return x * x * (3.0 - 2.0 * x);
 }
@@ -414,19 +409,18 @@ void main() {
         mistDensity *= meWeight * meWeight + timeMidnight * 2.0;
     }
 
-    // Jitter: DerivativeMain-style temporal blue-noise sequence.
-    // Do not derive this from uTime; high-frequency temporal jitter makes fog look
-    // like screen-space stains instead of a stable volume.
+    // Stable spatial jitter. DerivativeMain rotates R1 jitter through frameCounter,
+    // but that requires a matching VFog history resolve. Mecraft keeps this stable
+    // until VFog has a correct motion/depth-aware history path.
     float jitter;
     if (uVolumetricStaticJitter != 0) {
         // Fixed per-pixel jitter (no camera/time dependence) for stable debug
         jitter = fract(dot(vTexCoord, vec2(12.9898, 78.233)) + 0.5);
     } else {
         ivec2 noiseTexel = ivec2(gl_FragCoord.xy * 2.0) & ivec2(255);
-        float seed = uNoiseEnabled
+        jitter = uNoiseEnabled
             ? texelFetch(uNoiseTex, noiseTexel, 0).a
             : hash13(vec3(gl_FragCoord.xy, 17.0));
-        jitter = temporalR1(uFrameIndex, seed);
     }
     int fogSteps = getFogSteps(marchDistance);
     float stepLength = marchDistance / float(fogSteps);

@@ -883,6 +883,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_view = camera.getViewMatrix();
     m_cameraPos = camera.getPosition();
     m_currentFrameDataValid = false;
+    m_deferredHistoryUpdatedThisFrame = false;
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
 
@@ -1432,20 +1433,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     renderSceneCompositePass(frame);
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
-    if (m_pipelineSettings.volumetricFogEnabled &&
-        m_pipelineSettings.aerialPerspectiveEnabled &&
-        m_pipelineSettings.volumetricFogStrength > 0.001f &&
-        m_volumetricFogShader != nullptr &&
-        m_volumetricCompositeShader != nullptr) {
-#ifdef MECRAFT_DEBUG
-        beginGpuTimer(GpuTimerPass::Volumetric);
-#endif
-        renderVolumetricFogPass(frame);
-        compositeVolumetricFogPass();
-#ifdef MECRAFT_DEBUG
-        endGpuTimer(GpuTimerPass::Volumetric);
-#endif
-    }
+
     // TAA resolve: blend current SceneResolved with reprojected history
     if (m_pipelineSettings.taaEnabled &&
         m_temporalResolveShader != nullptr &&
@@ -1462,8 +1450,25 @@ bool Renderer::renderWorldDeferred(const World& world,
     if (m_pipelineSettings.dofEnabled && m_dofShader != nullptr) {
         renderDofPass(frame);
     }
-    m_deferredTargets.copySceneResolvedToTransparentComposite();
+    // Keep volumetric fog out of scene TAA history. Without a dedicated
+    // depth/motion-aware VFog history, reprojecting far-plane fog creates
+    // rectangular trails and dark disocclusion edges during camera movement.
     updateDeferredHistoryTargets();
+    if (m_pipelineSettings.volumetricFogEnabled &&
+        m_pipelineSettings.aerialPerspectiveEnabled &&
+        m_pipelineSettings.volumetricFogStrength > 0.001f &&
+        m_volumetricFogShader != nullptr &&
+        m_volumetricCompositeShader != nullptr) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Volumetric);
+#endif
+        renderVolumetricFogPass(frame);
+        compositeVolumetricFogPass();
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Volumetric);
+#endif
+    }
+    m_deferredTargets.copySceneResolvedToTransparentComposite();
     m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     restoreCapturedFramebufferViewport(window);
@@ -1885,12 +1890,16 @@ void Renderer::updateDeferredHistoryTargets() {
     if (!m_deferredTargets.isReady()) {
         return;
     }
+    if (m_deferredHistoryUpdatedThisFrame) {
+        return;
+    }
 
     m_deferredTargets.copySceneResolvedToHistory();
     m_deferredTargets.copyDepthToHistory();
     m_deferredTargets.copyReflectionToHistory();
     m_deferredTargets.copyCloudToHistory();
     m_deferredTargets.swapHistory();
+    m_deferredHistoryUpdatedThisFrame = true;
 }
 
 void Renderer::renderReflectionPass(const RenderFrameData& frame) {
