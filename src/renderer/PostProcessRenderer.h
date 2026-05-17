@@ -70,6 +70,10 @@ public:
     void endSceneAndComposite(const Window& window, float frameTime,
                               GLuint gbufDepthTex = 0);
 
+    // Blit captured scene directly to back buffer without any postprocessing.
+    // Used when deferredLightDebugMode > 0 to show raw lighting debug output.
+    void blitSceneToBackbuffer(const Window& window);
+
     void setEffects(const PostProcessEffects& effects);
 
     // Debug accessors for exposure diagnostics
@@ -92,6 +96,7 @@ private:
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
     Shader* m_exposureDownsampleShader = nullptr;
+    Shader* m_blitShader = nullptr;
     GLuint m_noiseTexture = 0;
 
     GLuint m_sceneFbo = 0;

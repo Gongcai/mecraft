@@ -290,54 +290,64 @@ void Game::renderFrame(const float frameTime) {
     }
 
     m_renderer.renderOpaqueAndCutout(m_world, finalCamera, m_window);
-    m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
 
-    if (m_cameraController.shouldRenderPlayerModel()) {
-        m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                  HumanoidRenderer::kRenderAll);
-    } else {
-        m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                  HumanoidRenderer::kRenderMobsOnly);
-    }
-    m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
-                            finalCamera.getViewMatrix());
-
-    // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
-    // skyLightAtCamera = fraction reaching sky. Gives smooth transitions at
-    // tree edges, doorways, overhangs instead of binary 0/1.
-    // Used by both RainRenderer and PostProcessEffects.
-    const glm::vec3 camPos = finalCamera.getPosition();
+    // When lighting or reflection debug mode is active, skip overlays and postprocess
+    // to show raw debug output without contamination from bloom/tonemap/rain fog.
+    const auto& pipelineCfg = m_renderer.getRenderPipelineSettings();
+    const bool lightDebugActive = pipelineCfg.deferredLightDebugMode > 0 ||
+                                  pipelineCfg.reflectionDebugMode > 0;
     float cameraRainVisibility = 1.0f;
-    {
-        constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
-        constexpr int kRayCount = 5;
-        int skyHits = 0;
-        const int startY = static_cast<int>(std::floor(camPos.y)) + 1;
-        for (int r = 0; r < kRayCount; ++r) {
-            const int bx = static_cast<int>(std::floor(camPos.x + kOffsets[r][0]));
-            const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
-            bool blocked = false;
-            for (int y = startY; y < 256; ++y) {
-                BlockID above = m_world.getBlock(bx, y, bz);
-                if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
-                    blocked = true;
-                    break;
-                }
-            }
-            if (!blocked) ++skyHits;
-        }
-        cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
-    }
 
-    // Rain particles: render after opaque geometry, before transparent compositing.
-    {
-        const auto& weather = m_world.getWeatherSystem().getDerived();
-        m_rainRenderer.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
-                              finalCamera.getViewMatrix(),
-                              camPos,
-                              weather.rainStrength,
-                              cameraRainVisibility,
-                              frameTime);
+    if (!lightDebugActive) {
+        m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
+
+        if (m_cameraController.shouldRenderPlayerModel()) {
+            m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
+                                      HumanoidRenderer::kRenderAll);
+        } else {
+            m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
+                                      HumanoidRenderer::kRenderMobsOnly);
+        }
+        m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
+                                finalCamera.getViewMatrix());
+
+        // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
+        // skyLightAtCamera = fraction reaching sky. Gives smooth transitions at
+        // tree edges, doorways, overhangs instead of binary 0/1.
+        // Used by both RainRenderer and PostProcessEffects.
+        {
+            const glm::vec3 camPos = finalCamera.getPosition();
+            constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
+            constexpr int kRayCount = 5;
+            int skyHits = 0;
+            const int startY = static_cast<int>(std::floor(camPos.y)) + 1;
+            for (int r = 0; r < kRayCount; ++r) {
+                const int bx = static_cast<int>(std::floor(camPos.x + kOffsets[r][0]));
+                const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
+                bool blocked = false;
+                for (int y = startY; y < 256; ++y) {
+                    BlockID above = m_world.getBlock(bx, y, bz);
+                    if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (!blocked) ++skyHits;
+            }
+            cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
+        }
+
+        // Rain particles: render after opaque geometry, before transparent compositing.
+        {
+            const auto& weather = m_world.getWeatherSystem().getDerived();
+            const glm::vec3 camPos = finalCamera.getPosition();
+            m_rainRenderer.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
+                                  finalCamera.getViewMatrix(),
+                                  camPos,
+                                  weather.rainStrength,
+                                  cameraRainVisibility,
+                                  frameTime);
+        }
     }
 
     // Read block interaction data from ECS and pass to Renderer
@@ -434,22 +444,27 @@ void Game::renderFrame(const float frameTime) {
 
     const Inventory& inventory = playerQuery.getInventory();
 
-    if (m_cameraController.isFirstPerson()) {
-        if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
-            m_firstPersonHeldItemRenderer.triggerSwing();
-        }
-        m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
-        m_firstPersonHeldItemRenderer.render(m_window,
-                                             inventory,
-                                             heldItemMotion,
-                                             static_cast<float>(Time::getGameTime()));
+    if (lightDebugActive) {
+        // Skip overlays and postprocess — blit raw lighting debug output directly.
+        m_postProcessRenderer.blitSceneToBackbuffer(m_window);
     } else {
-        static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
-        m_firstPersonHeldItemRenderer.setContinuousSwing(false);
-    }
+        if (m_cameraController.isFirstPerson()) {
+            if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
+                m_firstPersonHeldItemRenderer.triggerSwing();
+            }
+            m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
+            m_firstPersonHeldItemRenderer.render(m_window,
+                                                 inventory,
+                                                 heldItemMotion,
+                                                 static_cast<float>(Time::getGameTime()));
+        } else {
+            static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
+            m_firstPersonHeldItemRenderer.setContinuousSwing(false);
+        }
 
-    m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
-                                               m_renderer.gbufDepthTexture());
+        m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
+                                                   m_renderer.gbufDepthTexture());
+    }
     m_renderer.renderDeferredDebugOverlay(m_window);
 
     PlayerStatsData playerStats;

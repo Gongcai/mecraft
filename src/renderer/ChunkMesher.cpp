@@ -339,6 +339,13 @@ uint8_t safeSunLevel(const SubChunkMeshingSnapshot& snapshot,
                      const int z,
                      const bool isSolid,
                      const uint8_t base) {
+    if (isSolid) {
+        // AO samples may point inside neighbouring opaque blocks. Those cells
+        // often carry zero skylight; using them for smooth lighting bakes an
+        // AO-shaped dark ring into the GBuffer light channel. Keep occlusion in
+        // the AO channel and reuse the visible face light for solid samples.
+        return base;
+    }
     if (!isSolid) {
         // Above the top of the world — full sky light
         if (y >= SubChunk::SIZE && snapshot.isTopSection) {
@@ -354,6 +361,9 @@ uint8_t safeBlockLevel(const SubChunkMeshingSnapshot& snapshot,
                        const int z,
                        const bool isSolid,
                        const uint8_t base) {
+    if (isSolid) {
+        return base;
+    }
     if (!isSolid) {
         if (y >= SubChunk::SIZE && snapshot.isTopSection) {
             return 0;

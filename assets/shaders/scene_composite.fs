@@ -46,6 +46,7 @@ uniform float uSkyIntensity;
 uniform float uMoonVisibility;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;
+uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta
 
 #include "atmosphere_lut.glsl"
 
@@ -82,6 +83,20 @@ void main() {
     // reflection.rgb = reflection * specular weight, reflection.a = 1 - specular
     // DerivativeMain: sceneData = sceneData * reflectionData.a + reflectionData.rgb
     vec4 reflection = texture(uReflectionTex, vTexCoord);
+
+    // Reflection debug: bypass composite, output raw reflection data.
+    if (uReflectionDebugMode > 0) {
+        if (uReflectionDebugMode == 6) {
+            // Composite delta: actual contribution of reflection to final scene.
+            float compositeStr = clamp(uReflectionCompositeStrength, 0.0, 1.0);
+            vec3 delta = compositeStr * (reflection.rgb - color * (1.0 - reflection.a));
+            FragColor = vec4(abs(delta), 1.0);
+        } else {
+            FragColor = vec4(reflection.rgb, 1.0);
+        }
+        return;
+    }
+
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);

@@ -65,6 +65,8 @@ uniform float uSurfaceWetness;
 uniform float uSkyWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
+uniform float uDirectWeatherOcclusion;       // manual value when override enabled
+uniform int uDirectWeatherOcclusionOverride; // 0=auto (skyWetness + procedural), 1=manual bypass
 uniform float uPrecipitation;
 uniform int uShadowsEnabled;
 uniform int uSoftShadowsEnabled;
@@ -99,7 +101,7 @@ uniform vec3 uFogColor;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
-uniform int uDeferredDebugMode; // 0=off, 1=direct-only, 2=skylight-only, 3=blocklight-only, 4=minimum-ambient, 5=fake-bounce, 6=before-post, 7=skylight-energy
+uniform int uDeferredDebugMode; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=scene, 7=skyDirRatio, 8=NdotL, 9=cloudShadow, 10=outdoorMask, 11=directFrac, 12=beforeAO, 13=afterAO, 14=rawSkyLight, 15=skyLightMask, 16=vertexAO, 17=SSAO, 18=normalY, 19=contactShadow
 uniform int uDerivativeStrictMode; // 1=disable Mecraft extras (minimumAmbient, sky specular, fake bounce) to match DerivativeMain baseline
 
 // Shadow color/normal textures (DerivativeMain shadowcolor0/1 equivalent)
@@ -245,8 +247,14 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
     // cloudShadow = mix(1.0, 0.03, wetness), before CLOUDS_SHADOW optionally
     // replaces it with sampled cloud density. Keep this weather dimming active
     // even when procedural cloud shadows are disabled.
-    float weatherWetness = clamp(uSkyWetness, 0.0, 1.0);
-    float overcastShadow = mix(1.0, 0.03, weatherWetness);
+    // Mecraft: when override enabled, bypass all cloud shadow computation
+    // (overcast + procedural) for energy diagnosis.
+    if (uDirectWeatherOcclusionOverride != 0) {
+        return clamp(uDirectWeatherOcclusion, 0.0, 1.0);
+    }
+
+    // Auto mode: DerivativeMain overcast from skyWetness.
+    float overcastShadow = mix(1.0, 0.03, clamp(uSkyWetness, 0.0, 1.0));
 
     if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
         return overcastShadow;
@@ -351,10 +359,8 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
 
     lightDir = normalize(lightDir);
 
-    float dither = shadowDither();
     ShadowSample csm = sampleCsmShadow(worldPos, normal, lightDir);
     float lit = csm.visibility;
-    lit *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, dither, sssAmount);
     float shaped = shapeShadowVisibility(lit);
     return vec3(mix(1.0, shaped, csm.fade));
 }
@@ -516,6 +522,11 @@ void main() {
     vec3 shadowLightDir = normalize(uShadowLightDirection);
     vec3 viewDir = normalize(uCameraPos - worldPos);
 
+    // Debug capture variables (declared early so they can be assigned inline).
+    float dbgNdotL = 0.0;
+    float dbgOutdoorMask = 0.0;
+    float dbgCloudShadow = 0.0;
+
     // Dot products using fast halfway-vector trick (DerivativeMain deferred5.fsh:213-227).
     // DerivativeMain's worldLightVector follows the active celestial shadow light; in Mecraft
     // that is uShadowLightDirection, which switches to the moon at night.
@@ -525,6 +536,7 @@ void main() {
     float NdotV = max(dot(normal, viewDir), 0.0);
     float NdotL = max(rawNdotL, 0.0);
     float NdotM = max(rawNdotM, 0.0);
+    dbgNdotL = NdotL;
     // Fast halfway vector: avoids normalize(lightDir + viewDir) per-pixel
     float halfwayNorm = inversesqrt(2.0 * LdotV + 2.0);
     float NdotH = max((rawNdotL + dot(normal, viewDir)) * halfwayNorm, 0.0);
@@ -537,6 +549,8 @@ void main() {
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float activeShadow = (uShadowLightMode == 1) ? moonShadow : sunShadow;
+    dbgOutdoorMask = outdoorSkyMask;
+    dbgCloudShadow = cloudShadow;
 
     // --- Lighting environment from SkyCapture (unified data source) ---
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
@@ -564,7 +578,9 @@ void main() {
     vec3 dbgBlocklight = vec3(0.0);
     vec3 dbgMinAmbient = vec3(0.0);
     vec3 dbgFakeBounce = vec3(0.0);
+    vec3 dbgBeforeAO = vec3(0.0);
     float dbgSkylightDirectRatio = 0.0;
+    float dbgContactShadow = 1.0;
 
     // 1. Sunlight setup: 64 * waterTint * SUNLIGHT_INTENSITY * directIlluminance * cloudShadow
     // DerivativeMain deferred5.fsh:240 — underwater waterTint attenuates sunlight
@@ -603,7 +619,8 @@ void main() {
 
         if (maxOf(shadow) > 1e-6) {
             // DerivativeMain: shadow *= ScreenSpaceShadow (contact shadows)
-            shadow *= screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, shadowDither(), sss);
+            dbgContactShadow = screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, shadowDither(), sss);
+            shadow *= dbgContactShadow;
 
             // DerivativeMain deferred5.fsh:289 — diffuse *= DiffuseHammon ONLY when shadow > 0
             diffuse *= DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);
@@ -689,6 +706,7 @@ void main() {
 
     // GI / AO (DerivativeMain deferred5.fsh:329-347)
     // AO multiplies accumulated diffuse+skylight (before blocklight)
+    dbgBeforeAO = sceneData;
     sceneData *= ssao * vertexAo;
 
     // === Block lighting (DerivativeMain BlockLighting.glsl) ===
@@ -922,6 +940,23 @@ void main() {
             smoothstep(1.0, 0.0, r)            // blue channel: underbright
         );
     }
+    else if (uDeferredDebugMode == 8) { color = vec3(dbgNdotL); }
+    else if (uDeferredDebugMode == 9) { color = vec3(dbgCloudShadow); }
+    else if (uDeferredDebugMode == 10) { color = vec3(dbgOutdoorMask); }
+    else if (uDeferredDebugMode == 11) {
+        // Direct energy fraction: how much direct contributes to total diffuse.
+        float dLum = dot(dbgDirect, vec3(0.2722, 0.6741, 0.0537));
+        float sLum = dot(dbgSkylight, vec3(0.2722, 0.6741, 0.0537));
+        color = vec3(dLum / max(dLum + sLum, 0.001));
+    }
+    else if (uDeferredDebugMode == 12) { color = dbgBeforeAO; }
+    else if (uDeferredDebugMode == 13) { color = sceneData; }
+    else if (uDeferredDebugMode == 14) { color = vec3(skyLightRaw); }
+    else if (uDeferredDebugMode == 15) { color = vec3(skyLightMask); }
+    else if (uDeferredDebugMode == 16) { color = vec3(vertexAo); }
+    else if (uDeferredDebugMode == 17) { color = vec3(ssao); }
+    else if (uDeferredDebugMode == 18) { color = vec3(normal.y * 0.5 + 0.5); }
+    else if (uDeferredDebugMode == 19) { color = vec3(dbgContactShadow); }
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.

@@ -149,6 +149,8 @@ public:
         bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
         bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
         int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
+        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta
+        float directWeatherOcclusion = -1.0f; // <0 = auto from skyWetness; >=0 = manual override
     };
 
 
@@ -178,6 +180,8 @@ public:
         float fogWetness = 0.0f;
         float cloudWetness = 0.0f;
         float precipitation = 0.0f;
+        float directWeatherOcclusion = 1.0f; // 1.0=clear, 0.03=DerivativeMain Storm default
+        int directWeatherOcclusionOverride = 0; // 0=auto, 1=manual bypass
     };
 
     struct VolumetricSettings {

@@ -17,6 +17,7 @@ void PostProcessRenderer::init(ResourceMgr& resourceMgr) {
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     m_exposureDownsampleShader = resourceMgr.getShader("exposure_downsample");
+    m_blitShader = resourceMgr.getShader("blit_texture");
     m_noiseTexture = resourceMgr.getTexture2D("shader_bayer256");
     if (m_noiseTexture == 0) {
         m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
@@ -31,6 +32,7 @@ void PostProcessRenderer::shutdown() {
     m_bloomExtractShader = nullptr;
     m_bloomBlurShader = nullptr;
     m_exposureDownsampleShader = nullptr;
+    m_blitShader = nullptr;
     m_noiseTexture = 0;
     m_sceneCaptured = false;
     m_targetWidth = 0;
@@ -253,6 +255,40 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
         glActiveTexture(GL_TEXTURE1 + mip);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void PostProcessRenderer::blitSceneToBackbuffer(const Window& window) {
+    const int width = std::max(1, window.getWidth());
+    const int height = std::max(1, window.getHeight());
+
+    if (!m_sceneCaptured || m_blitShader == nullptr || m_fullscreenVao == 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, width, height);
+        return;
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, width, height);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_blitShader->use();
+    m_blitShader->setInt("uInputTex", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
+
+    glBindVertexArray(m_fullscreenVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
 

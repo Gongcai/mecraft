@@ -24,8 +24,14 @@ uniform float uSkyWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uTime;
+uniform sampler2D uVoxelLightTex; // GBuffer attachment 2: sky light.r, block light.g
+uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight
 
 #include "atmosphere_lut.glsl"
+
+// DerivativeMain Common.inc helpers (mirrored from derivative_shadow.glsl)
+float saturate(float x) { return clamp(x, 0.0, 1.0); }
+float remap(float e0, float e1, float x) { return saturate((x - e0) / (e1 - e0)); }
 
 const int kSsrSteps = 28;
 
@@ -108,35 +114,87 @@ void main() {
     vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
-    vec3 reflectedDir = reflect(viewDir, normal);
-    vec3 skyReflection = sampleSkyRadianceCloudy(uSkyCaptureTex, reflectedDir);
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 
+    // DerivativeMain wet surface — same formula as deferred_lighting.fs lines 458-487.
+    // Modifies roughness/F0/normal before SSR trace so reflection sees wet state.
+    float roughness = material.roughness;
+    float f0Scalar = material.f0;
+    float pixelWetness = 0.0;
+    {
+        float weatherWetness = clamp(uSurfaceWetness, 0.0, 1.0);
+        float skyLightRaw01 = clamp(texture(uVoxelLightTex, vTexCoord).r, 0.0, 1.0);
+        float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0);
+        float upwardFacing = remap(0.5, 0.9, clamp(normal.y, 0.0, 1.0));
+        pixelWetness = weatherWetness * outdoorWetMask * upwardFacing;
+        pixelWetness = max(pixelWetness, aux.wetnessMask * weatherWetness * skyLightRaw01);
+
+        if (!transMask.isTranslucent && pixelWetness > 1e-4) {
+            normal = mix(normal, vec3(0.0, 1.0, 0.0), pixelWetness * 0.65);
+            roughness = mix(roughness, max(0.08, roughness * 0.36), pixelWetness);
+            f0Scalar = max(f0Scalar, 0.04 * pixelWetness);
+        }
+    }
+
+    // Recompute reflected direction with wet-flattened normal.
+    vec3 reflectedDir = reflect(viewDir, normal);
+    vec3 skyReflection = sampleSkyRadianceCloudy(uSkyCaptureTex, reflectedDir);
+
+    // Early debug: pixelWetness and roughness are available for ALL pixels.
+    if (uReflectionDebugMode == 1) {
+        FragColor = vec4(vec3(pixelWetness), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 4) {
+        FragColor = vec4(vec3(roughness), 0.0);
+        return;
+    }
+
     vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
-    float smoothness = 1.0 - clamp(material.roughness, 0.0, 1.0);
-    float wetBoost = clamp(uSurfaceWetness, 0.0, 1.0) * aux.wetnessMask * clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
+    float smoothness = 1.0 - clamp(roughness, 0.0, 1.0);
     bool hasDerivativeReflection = transMask.isTranslucent ||
                                    aux.metalness > 0.5 ||
-                                   smoothness > 0.375 ||
-                                   wetBoost > 0.70;
+                                   smoothness > 0.375;
     if (!hasDerivativeReflection) {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 
     float fresnel = pow(1.0 - clamp(dot(-viewDir, normal), 0.0, 1.0), 5.0);
-    float reflectance = clamp(material.f0 * 2.0 + smoothness * 0.18 + fresnel * 0.18 +
-                              wetBoost * (0.18 + aux.porosity * 0.16), 0.0, 1.0);
+    // Wet boost: DerivativeMain rain wet surfaces get stronger Fresnel and base reflectance.
+    float wetReflectBoost = pixelWetness * mix(0.04, 0.14, smoothness);
+    float reflectance = clamp(f0Scalar * 2.0 + smoothness * 0.18 + fresnel * 0.18 +
+                              aux.porosity * 0.16 + wetReflectBoost, 0.0, 1.0);
     vec3 ssrColor = vec3(0.0);
     float ssrHit = 0.0;
-    traceScreenSpaceReflection(worldPos + normal * 0.025, reflectedDir, material.roughness, ssrColor, ssrHit);
+    traceScreenSpaceReflection(worldPos + normal * 0.025, reflectedDir, roughness, ssrColor, ssrHit);
 
-    vec3 roughSky = mix(skyReflection, skyReflection * vec3(0.82, 0.91, 1.04), material.roughness * 0.45);
-    vec3 fallback = mix(sceneFallback * 0.06, roughSky, 0.74 + smoothness * 0.20);
+    // Late debug: reflectance and ssrHit only valid after SSR trace.
+    if (uReflectionDebugMode == 2) {
+        FragColor = vec4(vec3(reflectance), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 3) {
+        FragColor = vec4(vec3(ssrHit), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 5) {
+        float specularFloor = mix(0.48, 0.72, pixelWetness);
+        float specular = reflectance * mix(specularFloor, 1.0, ssrHit);
+        FragColor = vec4(vec3(specular), 0.0);
+        return;
+    }
+
+    // Wet terrain gets stronger sky fallback: more sky-dominant, less scene-dark.
+    float fallbackSkyWeight = mix(0.74, 0.95, pixelWetness);
+    vec3 roughSky = mix(skyReflection, skyReflection * vec3(0.82, 0.91, 1.04), roughness * 0.45);
+    vec3 fallback = mix(sceneFallback * 0.06, roughSky, fallbackSkyWeight + smoothness * 0.20);
     vec3 color = mix(fallback, ssrColor, ssrHit);
 
     // Premultiplied output (DerivativeMain convention):
     // rgb = reflection * specular, a = 1 - specular (scene pass-through)
-    float specular = reflectance * mix(0.48, 1.0, ssrHit);
+    // Wet surfaces get a higher specular floor so reflection contributes more to final scene.
+    float specularFloor = mix(0.48, 0.72, pixelWetness);
+    float specular = reflectance * mix(specularFloor, 1.0, ssrHit);
     FragColor = vec4(max(color, vec3(0.0)) * specular, 1.0 - specular);
 }

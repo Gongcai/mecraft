@@ -1062,6 +1062,11 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.atmosphere.fogWetness = frame.fogWetness;
     frame.atmosphere.cloudWetness = frame.cloudWetness;
     frame.atmosphere.precipitation = frame.precipitation;
+    // DerivativeMain default: mix(1.0, 0.03, skyWetness). Exposed for energy tuning.
+    // slider < 0: auto mode (shader computes from skyWetness + procedural cloud shadow)
+    // slider >= 0: manual override (shader bypasses all cloud shadow, returns slider value)
+    frame.atmosphere.directWeatherOcclusionOverride = (m_pipelineSettings.directWeatherOcclusion >= 0.0f) ? 1 : 0;
+    frame.atmosphere.directWeatherOcclusion = std::clamp(m_pipelineSettings.directWeatherOcclusion, 0.0f, 1.0f);
     frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
     frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
     frame.cloud.shadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
@@ -1130,6 +1135,8 @@ void Renderer::bindAtmosphereUniforms(Shader& shader, const RenderFrameData& fra
     shader.setFloat("uFogWetness", frame.atmosphere.fogWetness);
     shader.setFloat("uCloudWetness", frame.atmosphere.cloudWetness);
     shader.setFloat("uPrecipitation", frame.atmosphere.precipitation);
+    shader.setFloat("uDirectWeatherOcclusion", frame.atmosphere.directWeatherOcclusion);
+    shader.setInt("uDirectWeatherOcclusionOverride", frame.atmosphere.directWeatherOcclusionOverride);
 }
 
 void Renderer::bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const {
@@ -1195,6 +1202,7 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     shader.setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
     shader.setFloat("uCloudCompositeStrength", m_pipelineSettings.sceneCloudCompositeStrength);
     shader.setFloat("uReflectionCompositeStrength", m_pipelineSettings.sceneReflectionCompositeStrength);
+    shader.setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
@@ -1397,6 +1405,7 @@ bool Renderer::renderWorldDeferred(const World& world,
 #endif
     }
     if (m_pipelineSettings.reflectionFilterEnabled &&
+        m_pipelineSettings.reflectionDebugMode == 0 &&
         m_reflectionFilterShader != nullptr) {
         renderReflectionFilterPass(frame);
     }
@@ -1890,6 +1899,7 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uMaterialAuxTex", 4);
     m_reflectionShader->setInt("uSkyCaptureTex", 5);
     m_reflectionShader->setInt("uAtmosphereLut", 6);
+    m_reflectionShader->setInt("uVoxelLightTex", 7);
     m_reflectionShader->setMat4("uViewProj", frame.viewProj);
     m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
     m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
@@ -1903,6 +1913,7 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setFloat("uFogWetness", frame.fogWetness);
     m_reflectionShader->setFloat("uCloudWetness", frame.cloudWetness);
     m_reflectionShader->setFloat("uTime", frame.shaderTime);
+    m_reflectionShader->setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
@@ -1918,8 +1929,12 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
     renderFullscreen(*m_reflectionShader);
 
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, 0);
     for (int unit = 6; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);

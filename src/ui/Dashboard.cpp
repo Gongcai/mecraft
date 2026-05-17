@@ -454,8 +454,20 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "3: Blocklight Only",
             "4: Minimum Ambient",
             "5: Fake Bounce",
-            "6: Before Post",
-            "7: Sky/Direct Ratio"
+            "6: Scene Before Fog",
+            "7: Sky/Direct Ratio",
+            "8: NdotL",
+            "9: Cloud Shadow",
+            "10: Outdoor Mask",
+            "11: Direct Fraction",
+            "12: Before AO",
+            "13: After AO",
+            "14: Raw SkyLight",
+            "15: SkyLight Mask",
+            "16: Vertex AO",
+            "17: SSAO",
+            "18: Normal Y",
+            "19: Contact Shadow"
         };
         int lightDebugMode = pipeline.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
@@ -470,6 +482,18 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int ppDebugMode = pipeline.postprocessDebugMode;
         pipelineChanged |= ImGui::Combo("Postprocess Debug", &ppDebugMode, kPostprocessDebugModes, IM_ARRAYSIZE(kPostprocessDebugModes));
         pipeline.postprocessDebugMode = ppDebugMode;
+        static constexpr const char* kReflectionDebugModes[] = {
+            "0: Off",
+            "1: PixelWetness",
+            "2: Reflectance",
+            "3: SSR Hit",
+            "4: Roughness",
+            "5: SpecularWeight",
+            "6: CompositeDelta"
+        };
+        int reflDebugMode = pipeline.reflectionDebugMode;
+        pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));
+        pipeline.reflectionDebugMode = reflDebugMode;
         pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
@@ -649,6 +673,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                     derivedWeather.rainStrength);
                 ImGui::Text("Weather direct shadow: %.3f  (mix(1.0, 0.03, derived.skyWetness))",
                     overcastShadow);
+                pipelineChanged |= ImGui::SliderFloat("Direct Occlusion Override", &pipeline.directWeatherOcclusion, -1.0f, 1.0f, "%.2f (<0=auto, >=0=bypass all cloud shadow)");
                 ImGui::TextDisabled("SkyCapture metadata stays weather-independent; direct rain dimming happens in deferred cloudShadow.");
             }
             ImGui::Separator();
