@@ -3,11 +3,11 @@ out vec4 FragColor;
 
 in vec2 vUV;
 
-uniform sampler2D uRainTex;
-uniform float uRainStrength;
+uniform sampler2D uPrecipTex;
+uniform float uPrecipStrength;
+uniform vec3 uPrecipColor;
 
 void main() {
-    float texAlpha = texture(uRainTex, vUV).r;
-    vec3 rainColor = vec3(0.72, 0.78, 0.85);
-    FragColor = vec4(rainColor, texAlpha * uRainStrength);
+    float texAlpha = texture(uPrecipTex, vUV).r;
+    FragColor = vec4(uPrecipColor, texAlpha * uPrecipStrength);
 }

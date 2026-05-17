@@ -33,6 +33,8 @@ uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssr
 float saturate(float x) { return clamp(x, 0.0, 1.0); }
 float remap(float e0, float e1, float x) { return saturate((x - e0) / (e1 - e0)); }
 
+#include "weather_surface.glsl"
+
 const int kSsrSteps = 28;
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
@@ -116,24 +118,16 @@ void main() {
     vec3 viewDir = normalize(worldPos - uCameraPos);
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 
-    // DerivativeMain wet surface — same formula as deferred_lighting.fs lines 458-487.
-    // Modifies roughness/F0/normal before SSR trace so reflection sees wet state.
+    // DerivativeMain wet surface — shared implementation in weather_surface.glsl
     float roughness = material.roughness;
     float f0Scalar = material.f0;
-    float pixelWetness = 0.0;
-    {
-        float weatherWetness = clamp(uSurfaceWetness, 0.0, 1.0);
-        float skyLightRaw01 = clamp(texture(uVoxelLightTex, vTexCoord).r, 0.0, 1.0);
-        float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0);
-        float upwardFacing = remap(0.5, 0.9, clamp(normal.y, 0.0, 1.0));
-        pixelWetness = weatherWetness * outdoorWetMask * upwardFacing;
-        pixelWetness = max(pixelWetness, aux.wetnessMask * weatherWetness * skyLightRaw01);
+    float skyLightRaw01 = clamp(texture(uVoxelLightTex, vTexCoord).r, 0.0, 1.0);
+    float pixelWetness = ComputePixelWetness(uSurfaceWetness, skyLightRaw01, aux.wetnessMask, normal.y);
 
-        if (!transMask.isTranslucent && pixelWetness > 1e-4) {
-            normal = mix(normal, vec3(0.0, 1.0, 0.0), pixelWetness * 0.65);
-            roughness = mix(roughness, max(0.08, roughness * 0.36), pixelWetness);
-            f0Scalar = max(f0Scalar, 0.04 * pixelWetness);
-        }
+    if (!transMask.isTranslucent && pixelWetness > 1e-4) {
+        normal = ApplyWetNormal(normal, pixelWetness);
+        roughness = ApplyWetRoughness(roughness, pixelWetness);
+        f0Scalar = ApplyWetF0(f0Scalar, pixelWetness);
     }
 
     // Recompute reflected direction with wet-flattened normal.

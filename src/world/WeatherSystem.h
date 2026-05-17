@@ -8,7 +8,8 @@
 enum class WeatherType {
     Clear,
     Rain,
-    Storm
+    Storm,
+    Snow
 };
 
 struct WeatherState {
@@ -22,6 +23,7 @@ struct WeatherState {
 struct WeatherDerived {
     float precipitation = 0.0f;     // [0, 1] combined rain+snow intensity
     float rainStrength = 0.0f;      // [0, 1] rain-only intensity (no snow)
+    float snowStrength = 0.0f;      // [0, 1] snow-only intensity
     float thunderStrength = 0.0f;   // [0, 1] thunder/lightning intensity
     float surfaceWetness = 0.0f;    // [0, 1] wetness for terrain surface effects
     float skyWetness = 0.0f;        // [0, 1] sky/post rain occlusion, equivalent to wetness+storm

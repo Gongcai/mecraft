@@ -54,6 +54,7 @@ void GameManager::initResources() {
     m_resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH, false, true, true, false);
     m_resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH, false, false, true, false);
     m_resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH, false, false, true, false);
+    m_resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH, false, false, true, false);
     m_resourceMgr.probeAtmosphereLut("Transmittance", SHADERPACK_TRANSMITTANCE_LUT_PATH, 256U * 64U * 16U);
     m_resourceMgr.probeAtmosphereLut("Scattering", SHADERPACK_SCATTERING_LUT_PATH, 32U * 128U * 32U * 8U * 16U);
     m_resourceMgr.probeAtmosphereLut("Irradiance", SHADERPACK_IRRADIANCE_LUT_PATH, 64U * 16U * 16U);

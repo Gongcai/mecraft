@@ -226,6 +226,7 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setBool("uBloomyFogEnabled", m_effects.bloomyFogEnabled);
     m_postProcessShader->setFloat("uWeatherWetness", m_effects.weatherWetness);
     m_postProcessShader->setFloat("uWeatherStorm", m_effects.weatherStorm);
+    m_postProcessShader->setFloat("uSnowStrength", m_effects.snowStrength);
     m_postProcessShader->setFloat("uSkyWetness", m_effects.skyWetness);
     m_postProcessShader->setFloat("uFogWetness", m_effects.fogWetness);
     m_postProcessShader->setFloat("uCloudWetness", m_effects.cloudWetness);

@@ -441,7 +441,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "64: VFog Sun/Sky Ratio",
             "65: VFog Beam Modulation"
         };
-        static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm"};
+        static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);

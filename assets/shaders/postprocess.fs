@@ -45,6 +45,7 @@ uniform bool uPurkinjeShiftEnabled;
 uniform bool uBloomyFogEnabled;
 uniform float uWeatherWetness;
 uniform float uWeatherStorm;
+uniform float uSnowStrength;
 uniform float uSkyWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
@@ -998,15 +999,22 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
 
         // DerivativeMain Grade.glsl rain pass: wet weather mixes the HDR scene
         // toward fogBloom after bloom.
-        // Per-pixel rain mask: sky/air pixels only until the weather pass writes
-        // a real rain sprite coverage mask.
+        // Per-pixel precipitation mask: sky/air pixels only.
         float wetness = clamp(uSkyWetness, 0.0, 1.0);
         if (!uUnderwaterEnabled && wetness > 0.01) {
-            float rainMask = rainMaskAt(sampleUv);
-            g_debugRainMask = rainMask;
-            float rain = wetness * rainMask * 0.35;
+            float precipMask = rainMaskAt(sampleUv);
+            g_debugRainMask = precipMask;
+            float snowAmt = clamp(uSnowStrength, 0.0, 1.0);
+            float rainAmt = clamp(wetness - snowAmt, 0.0, 1.0);
+            // Rain fog: blue-tinted, moderate density
+            float rainFog = rainAmt * precipMask * 0.35;
             float rainFogAmount = clamp(uExposure, 0.6, 2.0) * 0.15 + 0.3;
-            color = mix(color, fogBloom * rainFogAmount, rain);
+            color = mix(color, fogBloom * rainFogAmount, rainFog);
+            // Snow fog: whiter, more diffuse, higher density
+            float snowFog = snowAmt * precipMask * 0.50;
+            vec3 snowFogBloom = mix(fogBloom, vec3(dot(fogBloom, vec3(0.299, 0.587, 0.114)) * 1.1), 0.4);
+            float snowFogAmount = clamp(uExposure, 0.6, 2.0) * 0.20 + 0.4;
+            color = mix(color, snowFogBloom * snowFogAmount, snowFog);
         }
     }
 

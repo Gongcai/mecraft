@@ -48,6 +48,7 @@ struct PostProcessEffects {
     bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG (default on)
     float weatherWetness = 0.0f;
     float weatherStorm = 0.0f;
+    float snowStrength = 0.0f;       // [0,1] snow-only intensity for snow fog branch
     float skyWetness = 0.0f;
     float fogWetness = 0.0f;
     float cloudWetness = 0.0f;

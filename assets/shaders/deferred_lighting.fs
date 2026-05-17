@@ -3,6 +3,7 @@
 #include "lighting_environment.glsl"
 #include "sky_sh.glsl"
 #include "derivative_sunlight.glsl"
+#include "weather_surface.glsl"
 
 in vec2 vTexCoord;
 flat in vec4 vSkySH_R;
@@ -456,41 +457,15 @@ void main() {
     int materialKind = materialKindId(surface.aux.materialKind);
     TranslucentMask transMask = decodeTranslucentMask(surface.aux.materialKind);
 
-    // DerivativeMain-style wet surface effects (RainEffect.glsl + Terrain.frag).
-    // Per-pixel wetness: surfaceWetness * outdoor exposure * upward-facing.
-    // Surfaces must be outdoors (skylight > 0) and facing up to get wet.
-    // Translucent surfaces (water/glass/ice) skip wet effects — they are inherently wet.
-    // Uses uSurfaceWetness (derived) for surface-only semantics, not raw uWeatherWetness.
-    float weatherWetness = clamp(uSurfaceWetness, 0.0, 1.0);
+    // DerivativeMain-style wet surface effects — shared implementation in weather_surface.glsl
     float skyLightRaw01 = clamp(voxelLight.r, 0.0, 1.0);
-    float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0); // only top 10% of skylight
-    float upwardFacing = remap(0.5, 0.9, clamp(normal.y, 0.0, 1.0));
-    float pixelWetness = weatherWetness * outdoorWetMask * upwardFacing;
-    // Also allow inherently wet materials (water/ice/glass) via wetnessMask.
-    pixelWetness = max(pixelWetness, surface.aux.wetnessMask * weatherWetness * skyLightRaw01);
+    float pixelWetness = ComputePixelWetness(uSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y);
 
     if (!transMask.isTranslucent && pixelWetness > 1e-4) {
-        // DerivativeMain Terrain.frag:225-230 — wet albedo = ColorSaturation(albedo, 0.75) * 0.85
-        float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-        vec3 wetAlbedo = mix(vec3(luma), albedo, 0.75) * 0.85;
-        // Porosity correction (DerivativeMain Terrain.frag:227-228)
-        float porosity = clamp(surface.aux.porosity, 0.0, 1.0);
-        vec3 porosityFactor = (1.0 - porosity) / max(vec3(1.0) - porosity * wetAlbedo, vec3(0.01));
-        wetAlbedo *= porosityFactor;
-        albedo = mix(albedo, wetAlbedo, pixelWetness);
-
-        // Normal flattening: wet surfaces push toward flat (water film effect).
-        // DerivativeMain Terrain.frag:213 — normalData = mix(normalData, vec3(0,0,1), wetFact)
-        // In octahedral space, (0,0,1) = flat upward normal.
-        normal = mix(normal, vec3(0.0, 1.0, 0.0), pixelWetness * 0.65);
-
-        // Roughness reduction: wet surfaces are smoother/more reflective.
-        // DerivativeMain deferred5.fsh:210 — roughness = sqr(oneMinus(roughness) * oneMinus(wetness*0.3))
-        roughness = mix(roughness, max(0.08, roughness * 0.36), pixelWetness);
-
-        // Specular F0 boost: wet surfaces have stronger Fresnel (water IOR ~0.04).
-        // DerivativeMain Terrain.frag:220 — specularData.g = max(specularData.g, 0.04 * wetFact)
-        f0Scalar = max(f0Scalar, 0.04 * pixelWetness);
+        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, pixelWetness);
+        normal = ApplyWetNormal(normal, pixelWetness);
+        roughness = ApplyWetRoughness(roughness, pixelWetness);
+        f0Scalar = ApplyWetF0(f0Scalar, pixelWetness);
     }
     bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;

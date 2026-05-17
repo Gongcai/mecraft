@@ -337,16 +337,20 @@ void Game::renderFrame(const float frameTime) {
             cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
         }
 
-        // Rain particles: render after opaque geometry, before transparent compositing.
+        // Precipitation particles: render after opaque geometry, before transparent compositing.
         {
             const auto& weather = m_world.getWeatherSystem().getDerived();
             const glm::vec3 camPos = finalCamera.getPosition();
-            m_rainRenderer.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
-                                  finalCamera.getViewMatrix(),
-                                  camPos,
-                                  weather.rainStrength,
-                                  cameraRainVisibility,
-                                  frameTime);
+            auto projMat = finalCamera.getProjectionMatrix(m_window.getAspectRatio());
+            auto viewMat = finalCamera.getViewMatrix();
+            if (weather.rainStrength > 0.01f) {
+                m_rainRenderer.render(projMat, viewMat, camPos,
+                                      weather.rainStrength, cameraRainVisibility, frameTime);
+            }
+            if (weather.snowStrength > 0.01f) {
+                m_rainRenderer.renderSnow(projMat, viewMat, camPos,
+                                          weather.snowStrength, cameraRainVisibility, frameTime);
+            }
         }
     }
 
@@ -406,6 +410,7 @@ void Game::renderFrame(const float frameTime) {
         const WeatherDerived& derived = m_world.getWeatherSystem().getDerived();
         effects.weatherWetness = weather.wetness;
         effects.weatherStorm = weather.storm;
+        effects.snowStrength = derived.snowStrength;
         effects.skyWetness = derived.skyWetness;
         effects.fogWetness = derived.fogWetness;
         effects.cloudWetness = derived.cloudWetness;

@@ -42,23 +42,33 @@ void WeatherSystem::update(float dt) {
 void WeatherSystem::computeDerived() {
     float w = m_state.wetness;
     float s = m_state.storm;
+    bool isSnow = (m_state.type == WeatherType::Snow);
 
     // precipitation: combined rain+snow intensity (0..1)
     m_derived.precipitation = std::clamp(w + s, 0.0f, 1.0f);
-    // rainStrength: rain-only (storm contributes additional intensity)
-    m_derived.rainStrength = std::clamp(w * 0.7f + s * 0.3f, 0.0f, 1.0f);
-    // thunderStrength: only significant during storms
-    m_derived.thunderStrength = std::clamp(s * 1.2f - 0.15f, 0.0f, 1.0f);
+    // rainStrength / snowStrength: mutually exclusive based on precipitation type
+    if (isSnow) {
+        m_derived.rainStrength = 0.0f;
+        m_derived.snowStrength = std::clamp(w * 0.7f + s * 0.3f, 0.0f, 1.0f);
+    } else {
+        m_derived.rainStrength = std::clamp(w * 0.7f + s * 0.3f, 0.0f, 1.0f);
+        m_derived.snowStrength = 0.0f;
+    }
+    // thunderStrength: only significant during storms (not snow)
+    m_derived.thunderStrength = isSnow ? 0.0f : std::clamp(s * 1.2f - 0.15f, 0.0f, 1.0f);
     // surfaceWetness: drives albedo darkening, roughness reduction, specular boost
-    m_derived.surfaceWetness = std::clamp(w + s * 0.3f, 0.0f, 1.0f);
+    // Snow still wets surfaces (melt), but less aggressively than rain.
+    m_derived.surfaceWetness = isSnow
+        ? std::clamp((w + s * 0.3f) * 0.5f, 0.0f, 1.0f)
+        : std::clamp(w + s * 0.3f, 0.0f, 1.0f);
     // skyWetness: DerivativeMain rain/overcast occlusion for sky, post, and direct cloud shadow.
     m_derived.skyWetness = std::clamp(w + s, 0.0f, 1.0f);
     // fogWetness: historical Mecraft haze weighting used by aerial and volumetric fog.
     m_derived.fogWetness = std::clamp(w * 0.35f + s * 0.65f, 0.0f, 1.0f);
     // cloudWetness: cloud coverage should retain the old storm boost curve.
     m_derived.cloudWetness = std::clamp(w + s * (4.0f / 3.0f), 0.0f, 1.0f);
-    // lightningFlash: from updateLightning()
-    m_derived.lightningFlash = m_lightningFlash;
+    // lightningFlash: no lightning during snow
+    m_derived.lightningFlash = isSnow ? 0.0f : m_lightningFlash;
 }
 
 // [Phase 0] Lightning: random flash generator with simple decay.
@@ -111,6 +121,11 @@ WeatherState WeatherSystem::stateForPreset(WeatherType type) {
             state.wetness = 0.95f;
             state.storm = 0.80f;
             state.aerialReduction = 0.15f;
+            break;
+        case WeatherType::Snow:
+            state.wetness = 0.75f;
+            state.storm = 0.0f;
+            state.aerialReduction = 0.25f;
             break;
     }
     return state;
