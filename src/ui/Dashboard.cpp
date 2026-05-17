@@ -656,7 +656,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 "AgX_Full [DerivMain]"
             };
             ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 5)]);
-            const char* weatherNames[] = {"Clear", "Rain", "Storm"};
+            const char* weatherNames[] = {"Clear", "Rain", "Storm", "Snow"};
             ImGui::Text("Weather current: %s  wet=%.2f storm=%.2f aerialRed=%.2f",
                 weatherNames[static_cast<int>(weather.type)],
                 weather.wetness, weather.storm, weather.aerialReduction);
@@ -675,6 +675,17 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                     overcastShadow);
                 pipelineChanged |= ImGui::SliderFloat("Direct Occlusion Override", &pipeline.directWeatherOcclusion, -1.0f, 1.0f, "%.2f (<0=auto, >=0=bypass all cloud shadow)");
                 ImGui::TextDisabled("SkyCapture metadata stays weather-independent; direct rain dimming happens in deferred cloudShadow.");
+            }
+            // Weather debug overrides — multiply against DerivativeMain formula.
+            // Default values (1.0 / 0.0) = no override, use DerivativeMain contract.
+            {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.85f, 0.75f, 0.5f, 1.0f), "Weather Debug Override");
+                ImGui::TextDisabled("Multiplies against DerivativeMain formula. 1.0/0.0 = no override.");
+                pipelineChanged |= ImGui::SliderFloat("Skylight Scale##weather", &pipeline.weatherSkylightScale, 0.0f, 1.0f, "%.2f (x DerivMain)");
+                pipelineChanged |= ImGui::SliderFloat("Exposure Bias##weather", &pipeline.weatherExposureBias, -2.0f, 2.0f, "%.2f EV");
+                pipelineChanged |= ImGui::SliderFloat("Post Rain Fog##weather", &pipeline.weatherPostRainFog, 0.0f, 2.0f, "%.2f (x DerivMain)");
+                pipelineChanged |= ImGui::SliderFloat("Rain Alpha Scale##weather", &pipeline.weatherRainAlphaScale, 0.0f, 5.0f, "%.2f");
             }
             ImGui::Separator();
         }

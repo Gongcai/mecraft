@@ -50,6 +50,8 @@ uniform float uSkyWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uCameraRainVisibility; // 0=indoors, 1=outdoors (from 5-ray check)
+uniform float uWeatherExposureBias;  // EV offset on auto exposure during precipitation
+uniform float uWeatherPostRainFog;   // [0,2] multiplier on post-process rain/snow fog
 uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
 uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
 
@@ -878,7 +880,8 @@ vec3 applyVignette(vec3 color, vec2 uv) {
 }
 
 vec3 applyExposure(vec3 color) {
-    return color * max(uExposure, 0.001);
+    float evBias = pow(2.0, uWeatherExposureBias);
+    return color * max(uExposure * evBias, 0.001);
 }
 
 // DerivativeMain Grade.glsl: tonemap is a pure LDR mapping.
@@ -1004,14 +1007,15 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         if (!uUnderwaterEnabled && wetness > 0.01) {
             float precipMask = rainMaskAt(sampleUv);
             g_debugRainMask = precipMask;
+            float fogScale = clamp(uWeatherPostRainFog, 0.0, 2.0);
             float snowAmt = clamp(uSnowStrength, 0.0, 1.0);
             float rainAmt = clamp(wetness - snowAmt, 0.0, 1.0);
             // Rain fog: blue-tinted, moderate density
-            float rainFog = rainAmt * precipMask * 0.35;
+            float rainFog = rainAmt * precipMask * 0.35 * fogScale;
             float rainFogAmount = clamp(uExposure, 0.6, 2.0) * 0.15 + 0.3;
             color = mix(color, fogBloom * rainFogAmount, rainFog);
             // Snow fog: whiter, more diffuse, higher density
-            float snowFog = snowAmt * precipMask * 0.50;
+            float snowFog = snowAmt * precipMask * 0.50 * fogScale;
             vec3 snowFogBloom = mix(fogBloom, vec3(dot(fogBloom, vec3(0.299, 0.587, 0.114)) * 1.1), 0.4);
             float snowFogAmount = clamp(uExposure, 0.6, 2.0) * 0.20 + 0.4;
             color = mix(color, snowFogBloom * snowFogAmount, snowFog);

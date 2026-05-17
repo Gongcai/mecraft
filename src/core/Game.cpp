@@ -343,13 +343,16 @@ void Game::renderFrame(const float frameTime) {
             const glm::vec3 camPos = finalCamera.getPosition();
             auto projMat = finalCamera.getProjectionMatrix(m_window.getAspectRatio());
             auto viewMat = finalCamera.getViewMatrix();
+            float alphaScale = pipelineCfg.weatherRainAlphaScale;
             if (weather.rainStrength > 0.01f) {
                 m_rainRenderer.render(projMat, viewMat, camPos,
-                                      weather.rainStrength, cameraRainVisibility, frameTime);
+                                      weather.rainStrength, cameraRainVisibility,
+                                      alphaScale, frameTime);
             }
             if (weather.snowStrength > 0.01f) {
                 m_rainRenderer.renderSnow(projMat, viewMat, camPos,
-                                          weather.snowStrength, cameraRainVisibility, frameTime);
+                                          weather.snowStrength, cameraRainVisibility,
+                                          alphaScale * 0.6f, frameTime);  // snow uses lower alpha
             }
         }
     }
@@ -415,6 +418,8 @@ void Game::renderFrame(const float frameTime) {
         effects.fogWetness = derived.fogWetness;
         effects.cloudWetness = derived.cloudWetness;
     }
+    effects.weatherExposureBias = pipelineSettings.weatherExposureBias;
+    effects.weatherPostRainFog = pipelineSettings.weatherPostRainFog;
     effects.cameraRainVisibility = cameraRainVisibility;
     effects.postprocessDebugMode = pipelineSettings.postprocessDebugMode;
     {

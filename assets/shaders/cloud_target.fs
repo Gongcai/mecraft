@@ -23,6 +23,7 @@ uniform float uSurfaceWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uPrecipitation;
+uniform float uLightningFlash;
 uniform float uAerialStrength;
 uniform float uHorizonScatterStrength;
 uniform float uSunWarmth;
@@ -384,6 +385,10 @@ void main() {
     // --- Lighting environment from SkyCapture ---
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
+    // Lightning flash: boost cloud illumination so flash lights up clouds.
+    env.sunIlluminance *= 1.0 + uLightningFlash * 4.0;
+    env.moonIlluminance *= 1.0 + uLightningFlash * 4.0;
+
     vec3 sunDir = normalize(uSunDirection);
     vec3 moonDir = normalize(uMoonDirection);
     float day = clamp(uSkyIntensity, 0.0, 1.0);
@@ -503,12 +508,15 @@ void main() {
         // Compose with SkyCapture illuminance (unified source)
         // DerivativeMain Deferred1.glsl:240-241: sun*22.0, sky*0.15
         vec3 sunIllum = env.sunIlluminance * day + env.moonIlluminance * moonVis;
-        vec3 scattering = scatteringSun * 22.0 * sunIllum * sunVisibility;
-        scattering += scatteringSky * 0.15 * env.skyIlluminance;
 
-        // Weather darkening
-        scattering = mix(scattering, scattering * vec3(0.68, 0.75, 0.86),
-                        clamp(uSkyWetness, 0.0, 1.0) * 0.55);
+        // DerivativeMain VolumetricClouds.glsl:60-68: rain cloud lighting = 0.3
+        // sunlighting and skylighting drop from 1.0 (clear) to 0.3 (full wetness).
+        float wetness = clamp(uSkyWetness, 0.0, 1.0);
+        float cloudSunlighting = mix(1.0, 0.3, wetness);
+        float cloudSkylighting = mix(1.0, 0.3, wetness);
+
+        vec3 scattering = scatteringSun * 22.0 * sunIllum * sunVisibility * cloudSunlighting;
+        scattering += scatteringSky * 0.15 * env.skyIlluminance * cloudSkylighting;
 
         cloudColor = scattering;
         cloudColor += atmos * opacity * mix(0.5, 0.8, clamp(uHorizonScatterStrength, 0.0, 1.0));

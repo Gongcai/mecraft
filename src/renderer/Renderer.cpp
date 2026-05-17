@@ -1262,6 +1262,7 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
+    shader.setFloat("uWeatherSkylightScale", m_pipelineSettings.weatherSkylightScale);
     shader.setFloat("uMinimumAmbient", m_pipelineSettings.minimumAmbient);
     shader.setFloat("uBlockLightStrength", m_pipelineSettings.blockLightStrength);
     shader.setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
@@ -1706,6 +1707,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
     m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     m_deferredLightingShader->setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
+    m_deferredLightingShader->setFloat("uWeatherSkylightScale", m_pipelineSettings.weatherSkylightScale);
     m_deferredLightingShader->setFloat("uMinimumAmbient", m_pipelineSettings.minimumAmbient);
     m_deferredLightingShader->setFloat("uShadowMinLight", m_pipelineSettings.shadowMinLight);
     m_deferredLightingShader->setFloat("uShadowContrast", m_pipelineSettings.shadowContrast);

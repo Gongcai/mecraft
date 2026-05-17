@@ -34,6 +34,7 @@ uniform float uSurfaceWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uPrecipitation;
+uniform float uLightningFlash;
 uniform float uShadowDistance;
 uniform float uShadowExtent;
 uniform float uShadowTexelWorldSize;
@@ -310,11 +311,16 @@ void main() {
     vec3 directFogColor = env.directIlluminance;  // sun+moon irradiance (DerivativeMain directIlluminance)
     vec3 skyFogColor = env.skyIlluminance;         // sky hemisphere irradiance (DerivativeMain skyIlluminance)
 
-    // Mecraft adaptation: weather tint on fog color
+    // DerivativeMain VolumetricFog.glsl:310 — fog color darkening with wetness.
+    // At full wetness, fog color is reduced to 20% (oneMinus(0.8 * wetness)).
+    float wetness = clamp(uSkyWetness, 0.0, 1.0);
     float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
-    vec3 weatherTint = mix(vec3(1.0), vec3(0.82, 0.88, 0.94), clamp(uSkyWetness, 0.0, 1.0) * 0.28);
-    skyFogColor *= weatherTint;
-    directFogColor *= weatherTint;
+    skyFogColor *= 1.0 - 0.8 * wetness;
+    directFogColor *= 1.0 - 0.8 * wetness;
+
+    // Lightning flash: boost fog scattering so flash lights up the atmosphere.
+    skyFogColor *= 1.0 + uLightningFlash * 4.0;
+    directFogColor *= 1.0 + uLightningFlash * 4.0;
 
     // DerivativeMain VOLUMETRIC_LIGHT: airDensity includes RayleighPhase(LdotV),
     // enters fogDensity directly (both extinction and in-scattering are phase-modulated).

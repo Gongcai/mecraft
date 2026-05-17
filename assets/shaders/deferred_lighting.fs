@@ -47,6 +47,7 @@ uniform int uVolumetricFogActive;
 uniform float uShadowTintStrength;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
+uniform float uWeatherSkylightScale;
 uniform float uMinimumAmbient;
 uniform float uShadowMinLight;
 uniform float uShadowContrast;
@@ -647,6 +648,13 @@ void main() {
     // DerivativeMain/world0/deferred5.fsh:316
     skylight *= 0.8 - uSkyWetness * 0.2;
 
+    // Lightning flash: boost sky SH uniformly so flash propagates through
+    // skylight → scene → reflections → volumetric fog consistently.
+    skylight *= 1.0 + uLightningFlash * 4.0;
+
+    // Weather profile: scale skylight during precipitation (rain/storm dimming).
+    skylight *= uWeatherSkylightScale;
+
     // DerivativeMain keeps skylight independent from the shadow map; only direct
     // light is shadowed. Shadow-tinting skylight makes sun/moon shadows collapse
     // into black ambient patches and breaks daytime contrast.
@@ -838,13 +846,8 @@ void main() {
 
     dbgBlocklight = sceneData - sceneDataBeforeBlocklight;
 
-    // [Phase 0] Lightning flash: brief intense illumination during storms.
-    // Temporary hack — does not flow through sky capture, cloud, or volumetric fog.
-    // TODO: Phase 1 should route lightningColor through skylight SH, cloud shadow,
-    // and volumetric fog for consistent scene-wide flash.
-    if (uLightningFlash > 0.001) {
-        sceneData += directIlluminance * uLightningFlash * 4.0 * outdoorSkyMask;
-    }
+    // Lightning flash is now routed through sky SH (line ~652), flowing
+    // consistently through skylight → scene → reflections → volumetric fog.
 
     // === DerivativeMain compositing (deferred5.fsh:352-357) ===
     // DerivativeMain order: sceneData += shadow * diffuse → sceneData *= albedo → sceneData *= oneMinus(isMetal) → sceneData += shadow * specular

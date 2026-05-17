@@ -55,6 +55,7 @@ uniform float uMoonVisibility;
 uniform int uAerialPerspectiveEnabled;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
+uniform float uWeatherSkylightScale;
 uniform float uMinimumAmbient;
 uniform float uBlockLightStrength;
 uniform int uHeldBlockLightValue;
@@ -480,6 +481,10 @@ uniform vec3 uCameraPos;
                           uSkyAmbientStrength *
                           mix(0.48, 1.0, upward) +
                           moonFill;
+        // Lightning flash: boost sky ambient so flash propagates consistently.
+        skyAmbient *= 1.0 + uLightningFlash * 4.0;
+        // Weather profile: scale skylight during precipitation.
+        skyAmbient *= uWeatherSkylightScale;
         vec3 minimumAmbient = uShadowTintColor * uMinimumAmbient * mix(0.28, 0.92, outdoorSkyMask) * 0.62;
         float groundFacing = clamp(dot(normal, vec3(0.0, -1.0, 0.0)) * 0.5 + 0.5, 0.0, 1.0);
         vec3 fakeBounce = warmSunColor * uFakeBounceStrength * pow(skyLightMask, 4.0) * (0.28 + 0.58 * groundFacing);
@@ -496,10 +501,6 @@ uniform vec3 uCameraPos;
         }
 
         vec3 lightColor = directSun + directMoon + skyAmbient + minimumAmbient + fakeBounce + blockLight + heldLight;
-        // [Phase 0] Lightning flash: temporary hack, not routed through sky/fog/cloud.
-        if (uLightningFlash > 0.001) {
-            lightColor += warmSunColor * uLightningFlash * 4.0 * outdoorSkyMask;
-        }
         lightColor = mix(lightColor, vanillaLight, 0.035);
 
         // Combine texture, lightmap color, and AO

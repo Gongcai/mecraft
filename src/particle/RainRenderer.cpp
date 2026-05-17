@@ -92,6 +92,8 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         float skyLightAtCamera,
                                         float baseSpeed,
                                         float dropLength,
+                                        float streakWidth,
+                                        float alphaScale,
                                         const glm::vec3& color,
                                         float dt) {
     if (!m_shader || texture == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
@@ -108,7 +110,6 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     glm::vec3 fallDir = glm::normalize(glm::vec3(0.0f, -1.0f, 0.0f));
 
     const int visibleCount = static_cast<int>(drops.size() * strength);
-    const float streakWidth = 0.02f;
 
     std::vector<float> vertices;
     vertices.reserve(visibleCount * 6 * 5);
@@ -145,6 +146,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     m_shader->use();
     m_shader->setMat4("viewProj", projection * view);
     m_shader->setFloat("uPrecipStrength", strength * skyLightAtCamera);
+    m_shader->setFloat("uPrecipAlphaScale", alphaScale);
     m_shader->setVec3("uPrecipColor", color);
 
     glActiveTexture(GL_TEXTURE0);
@@ -173,12 +175,15 @@ void RainRenderer::render(const glm::mat4& projection,
                            const glm::vec3& cameraPos,
                            float rainStrength,
                            float skyLightAtCamera,
+                           float alphaScale,
                            float dt) {
     ensureDrops(m_rainDrops, MAX_RAIN_DROPS);
     renderPrecipitation(projection, view, cameraPos,
                         m_rainTex, m_rainDrops,
                         rainStrength, skyLightAtCamera,
                         RAIN_FALL_SPEED, RAIN_DROP_LENGTH,
+                        0.035f,  // streakWidth: wider for visibility
+                        alphaScale,
                         glm::vec3(0.72f, 0.78f, 0.85f), // rain blue-gray
                         dt);
 }
@@ -188,12 +193,15 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                const glm::vec3& cameraPos,
                                float snowStrength,
                                float skyLightAtCamera,
+                               float alphaScale,
                                float dt) {
     ensureDrops(m_snowDrops, MAX_SNOW_DROPS);
     renderPrecipitation(projection, view, cameraPos,
                         m_snowTex, m_snowDrops,
                         snowStrength, skyLightAtCamera,
                         SNOW_FALL_SPEED, SNOW_DROP_LENGTH,
+                        0.025f,  // streakWidth: snow flakes are shorter
+                        alphaScale,
                         glm::vec3(0.92f, 0.95f, 1.0f), // snow white
                         dt);
 }

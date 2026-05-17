@@ -23,6 +23,7 @@ public:
                 const glm::vec3& cameraPos,
                 float rainStrength,
                 float skyLightAtCamera,
+                float alphaScale,
                 float dt);
 
     // Render snow around the given camera position.
@@ -31,6 +32,7 @@ public:
                     const glm::vec3& cameraPos,
                     float snowStrength,
                     float skyLightAtCamera,
+                    float alphaScale,
                     float dt);
 
 private:
@@ -52,6 +54,8 @@ private:
                              float skyLightAtCamera,
                              float baseSpeed,
                              float dropLength,
+                             float streakWidth,
+                             float alphaScale,
                              const glm::vec3& color,
                              float dt);
 

@@ -231,6 +231,8 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uFogWetness", m_effects.fogWetness);
     m_postProcessShader->setFloat("uCloudWetness", m_effects.cloudWetness);
     m_postProcessShader->setFloat("uCameraRainVisibility", m_effects.cameraRainVisibility);
+    m_postProcessShader->setFloat("uWeatherExposureBias", m_effects.weatherExposureBias);
+    m_postProcessShader->setFloat("uWeatherPostRainFog", m_effects.weatherPostRainFog);
     m_postProcessShader->setInt("uDepthTex", 9);
     m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
 

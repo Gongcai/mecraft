@@ -53,6 +53,8 @@ struct PostProcessEffects {
     float fogWetness = 0.0f;
     float cloudWetness = 0.0f;
     float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
+    float weatherExposureBias = 0.0f;  // EV offset on auto exposure during precipitation
+    float weatherPostRainFog = 1.0f;   // [0,2] multiplier on post-process rain/snow fog
     int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
 };
 
