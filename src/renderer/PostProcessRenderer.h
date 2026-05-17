@@ -51,7 +51,8 @@ struct PostProcessEffects {
     float skyWetness = 0.0f;
     float fogWetness = 0.0f;
     float cloudWetness = 0.0f;
-    int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
+    float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
+    int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
 };
 
 class PostProcessRenderer {
@@ -65,7 +66,9 @@ public:
     void beginScene(const Window& window);
 
     // Composite captured scene to back buffer with active effects.
-    void endSceneAndComposite(const Window& window, float frameTime);
+    // gbufDepthTex is the GBuffer depth texture for sky-pixel rain masking.
+    void endSceneAndComposite(const Window& window, float frameTime,
+                              GLuint gbufDepthTex = 0);
 
     void setEffects(const PostProcessEffects& effects);
 

@@ -48,7 +48,9 @@ uniform float uWeatherStorm;
 uniform float uSkyWetness;
 uniform float uFogWetness;
 uniform float uCloudWetness;
-uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
+uniform float uCameraRainVisibility; // 0=indoors, 1=outdoors (from 5-ray check)
+uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
+uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -954,6 +956,23 @@ vec3 g_debugBloomData = vec3(0.0);
 vec3 g_debugFogBloom = vec3(0.0);
 vec3 g_debugColorBeforeBloomyFog = vec3(0.0);
 vec3 g_debugColorAfterBloomyFog = vec3(0.0);
+float g_debugRainMask = 0.0;
+
+float rainMaskAt(vec2 sampleUv) {
+    ivec2 texSize = textureSize(uDepthTex, 0);
+    if (texSize.x <= 0 || texSize.y <= 0) {
+        return 0.0;
+    }
+
+    ivec2 texel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(texSize));
+    float depth = texelFetch(uDepthTex, texel, 0).r;
+    float skyMask = step(0.9999, depth);
+
+    // Phase C.0: use a depth-derived sky/air mask only. Geometry skylight is
+    // surface exposure, not a DerivativeMain weather sprite mask; using it here
+    // makes every outdoor block mix toward fogBloom and creates edge halos.
+    return skyMask * clamp(uCameraRainVisibility, 0.0, 1.0);
+}
 
 vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
     vec4 sceneSample = texture(uSceneTex, sampleUv);
@@ -978,10 +997,14 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         color += bloomData * bloomAmount;
 
         // DerivativeMain Grade.glsl rain pass: wet weather mixes the HDR scene
-        // toward fogBloom after bloom. Uses skyWetness (derived) for sky/atmosphere semantics.
+        // toward fogBloom after bloom.
+        // Per-pixel rain mask: sky/air pixels only until the weather pass writes
+        // a real rain sprite coverage mask.
         float wetness = clamp(uSkyWetness, 0.0, 1.0);
         if (!uUnderwaterEnabled && wetness > 0.01) {
-            float rain = wetness * 0.35;
+            float rainMask = rainMaskAt(sampleUv);
+            g_debugRainMask = rainMask;
+            float rain = wetness * rainMask * 0.35;
             float rainFogAmount = clamp(uExposure, 0.6, 2.0) * 0.15 + 0.3;
             color = mix(color, fogBloom * rainFogAmount, rain);
         }
@@ -1101,6 +1124,11 @@ void main() {
         // Bloomy Fog contribution: color difference from fogBloom mix
         vec3 contribution = abs(g_debugColorAfterBloomyFog - g_debugColorBeforeBloomyFog);
         FragColor = vec4(contribution / (contribution + vec3(1.0)), 1.0);
+        return;
+    }
+    if (uPostprocessDebugMode == 4) {
+        // Rain mask: white=outdoor/sky (rain visible), black=indoor (rain hidden)
+        FragColor = vec4(vec3(rainMaskAt(rolledUv)), 1.0);
         return;
     }
 

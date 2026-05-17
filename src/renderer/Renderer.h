@@ -326,6 +326,7 @@ public:
     [[nodiscard]] bool isDeferredDebugViewActive() const;
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
+    [[nodiscard]] GLuint gbufDepthTexture() const { return m_deferredTargets.depthTexture(); }
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);

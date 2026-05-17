@@ -8,9 +8,9 @@
 class Shader;
 class ResourceMgr;
 
-// Procedural rain streak renderer.
-// Spawns camera-relative rain lines in a cylinder, renders as alpha-blended
-// camera-facing quads. No texture needed — procedural white-to-transparent gradient.
+// Textured rain streak renderer using vanilla rain.png atlas.
+// Spawns camera-relative rain quads in a cylinder, samples streak columns
+// from the 64x256 rain texture (each drop picks a random column).
 class RainRenderer {
 public:
     void init(ResourceMgr& resourceMgr);
@@ -32,13 +32,14 @@ private:
         glm::vec3 offset;   // relative to camera (xz = horizontal offset, y = height above camera)
         float speed;        // fall speed (units/sec)
         float length;       // streak length
-        float alpha;        // base opacity
+        float texU;         // random column in rain atlas [0,1]
     };
 
     void ensureDrops();
-    void updateDrops(float dt, float rainStrength);
+    void updateDrops(float dt);
 
     Shader* m_shader = nullptr;
+    GLuint m_rainTex = 0;
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
 

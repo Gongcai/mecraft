@@ -100,7 +100,8 @@ void PostProcessRenderer::beginScene(const Window& window) {
     m_sceneCaptured = true;
 }
 
-void PostProcessRenderer::endSceneAndComposite(const Window& window, const float frameTime) {
+void PostProcessRenderer::endSceneAndComposite(const Window& window, const float frameTime,
+                                                GLuint gbufDepthTex) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
@@ -226,6 +227,8 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uSkyWetness", m_effects.skyWetness);
     m_postProcessShader->setFloat("uFogWetness", m_effects.fogWetness);
     m_postProcessShader->setFloat("uCloudWetness", m_effects.cloudWetness);
+    m_postProcessShader->setFloat("uCameraRainVisibility", m_effects.cameraRainVisibility);
+    m_postProcessShader->setInt("uDepthTex", 9);
     m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
@@ -236,10 +239,14 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     }
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, gbufDepthTex);
 
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, 0);
     for (int mip = kBloomMipCount - 1; mip >= 0; --mip) {

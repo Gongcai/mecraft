@@ -362,7 +362,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int pipelineMode = static_cast<int>(pipeline.mode);
         int tonemapMode = pipeline.tonemapMode;
         int debugViewMode = pipeline.debugViewMode;
-        int weatherPreset = static_cast<int>(world.getWeatherSystem().getRenderState().type);
+        int weatherPresetInstant = static_cast<int>(world.getWeatherSystem().getRenderState().type);
+        int weatherPresetSmooth = static_cast<int>(world.getWeatherSystem().getTargetState().type);
         static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
         static constexpr const char* kTonemapModes[] = {
             "Reinhard [Mecraft extra]",
@@ -463,7 +464,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "0: Off",
             "1: BloomData",
             "2: FogTransmittance",
-            "3: BloomyFog"
+            "3: BloomyFog",
+            "4: RainMask"
         };
         int ppDebugMode = pipeline.postprocessDebugMode;
         pipelineChanged |= ImGui::Combo("Postprocess Debug", &ppDebugMode, kPostprocessDebugModes, IM_ARRAYSIZE(kPostprocessDebugModes));
@@ -504,8 +506,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int qualityTier = pipeline.volumetricQualityTier;
         pipelineChanged |= ImGui::Combo("VFog Quality Tier", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
         pipeline.volumetricQualityTier = qualityTier;
-        if (ImGui::Combo("Weather State (Debug)", &weatherPreset, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
-            world.getWeatherSystem().setDebugWeatherPreset(static_cast<WeatherType>(weatherPreset));
+        if (ImGui::Combo("Weather Instant (Debug)", &weatherPresetInstant, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
+            world.getWeatherSystem().setDebugWeatherPresetInstant(static_cast<WeatherType>(weatherPresetInstant));
+        }
+        if (ImGui::Combo("Weather Smooth (Debug)", &weatherPresetSmooth, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
+            world.getWeatherSystem().setDebugWeatherPresetSmooth(static_cast<WeatherType>(weatherPresetSmooth));
         }
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
         pipeline.tonemapMode = tonemapMode;
@@ -552,6 +557,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             // VFog component diagnostics (CPU approximate — actual values are GPU-side)
             ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Volumetric Fog Diagnostics (approx)");
             const auto& weather = world.getWeatherSystem().getRenderState();
+            const auto targetWeather = world.getWeatherSystem().getTargetState();
+            const auto& derivedWeather = world.getWeatherSystem().getDerived();
             float sunY = skyColors.sunDirection.y;
             float sunVis = (sunY > -0.08f) ? std::min((sunY + 0.08f) / 0.26f, 1.0f) : 0.0f;
             ImGui::Text("env.sunIlluminance: (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
@@ -566,7 +573,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 float meFade = (sunY < 0.18f) ? 0.37f + 1.2f * std::max(0.0f, -sunY) : 1.7f;
                 float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
                 float timeMidnight = (sunY < 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
-                float wetness = weather.wetness + weather.storm;
+                float wetness = derivedWeather.skyWetness;
                 float airGate = pipeline.volumetricTimeFadeEnabled
                     ? std::max(std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f, wetness)
                     : 1.0f;
@@ -626,13 +633,21 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             };
             ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 5)]);
             const char* weatherNames[] = {"Clear", "Rain", "Storm"};
-            ImGui::Text("Weather: %s  wet=%.2f storm=%.2f aerialRed=%.2f",
+            ImGui::Text("Weather current: %s  wet=%.2f storm=%.2f aerialRed=%.2f",
                 weatherNames[static_cast<int>(weather.type)],
                 weather.wetness, weather.storm, weather.aerialReduction);
+            ImGui::Text("Weather target:  %s  wet=%.2f storm=%.2f aerialRed=%.2f",
+                weatherNames[static_cast<int>(targetWeather.type)],
+                targetWeather.wetness, targetWeather.storm, targetWeather.aerialReduction);
             {
-                float weatherWetness = std::clamp(weather.wetness + weather.storm, 0.0f, 1.0f);
-                float overcastShadow = 1.0f + (0.03f - 1.0f) * weatherWetness;
-                ImGui::Text("Weather direct shadow: %.3f  (DerivativeMain mix(1.0, 0.03, wetness))",
+                float overcastShadow = 1.0f + (0.03f - 1.0f) * derivedWeather.skyWetness;
+                ImGui::Text("Derived weather: sky=%.2f fog=%.2f cloud=%.2f surface=%.2f rain=%.2f",
+                    derivedWeather.skyWetness,
+                    derivedWeather.fogWetness,
+                    derivedWeather.cloudWetness,
+                    derivedWeather.surfaceWetness,
+                    derivedWeather.rainStrength);
+                ImGui::Text("Weather direct shadow: %.3f  (mix(1.0, 0.03, derived.skyWetness))",
                     overcastShadow);
                 ImGui::TextDisabled("SkyCapture metadata stays weather-independent; direct rain dimming happens in deferred cloudShadow.");
             }

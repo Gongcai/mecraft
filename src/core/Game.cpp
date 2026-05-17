@@ -302,27 +302,41 @@ void Game::renderFrame(const float frameTime) {
     m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
                             finalCamera.getViewMatrix());
 
+    // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
+    // skyLightAtCamera = fraction reaching sky. Gives smooth transitions at
+    // tree edges, doorways, overhangs instead of binary 0/1.
+    // Used by both RainRenderer and PostProcessEffects.
+    const glm::vec3 camPos = finalCamera.getPosition();
+    float cameraRainVisibility = 1.0f;
+    {
+        constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
+        constexpr int kRayCount = 5;
+        int skyHits = 0;
+        const int startY = static_cast<int>(std::floor(camPos.y)) + 1;
+        for (int r = 0; r < kRayCount; ++r) {
+            const int bx = static_cast<int>(std::floor(camPos.x + kOffsets[r][0]));
+            const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
+            bool blocked = false;
+            for (int y = startY; y < 256; ++y) {
+                BlockID above = m_world.getBlock(bx, y, bz);
+                if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (!blocked) ++skyHits;
+        }
+        cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
+    }
+
     // Rain particles: render after opaque geometry, before transparent compositing.
     {
         const auto& weather = m_world.getWeatherSystem().getDerived();
-        // Indoor check: if any opaque block exists above camera, suppress rain.
-        // Use floor() for negative coordinates (static_cast<int> truncates toward 0).
-        glm::vec3 camPos = finalCamera.getPosition();
-        float skyLight = 1.0f;
-        const int camBlockX = static_cast<int>(std::floor(camPos.x));
-        const int camBlockZ = static_cast<int>(std::floor(camPos.z));
-        for (int yCheck = static_cast<int>(camPos.y) + 1; yCheck < 256; ++yCheck) {
-            BlockID above = m_world.getBlock(camBlockX, yCheck, camBlockZ);
-            if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
-                skyLight = 0.0f;
-                break;
-            }
-        }
         m_rainRenderer.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
                               finalCamera.getViewMatrix(),
                               camPos,
                               weather.rainStrength,
-                              skyLight,
+                              cameraRainVisibility,
                               frameTime);
     }
 
@@ -386,6 +400,7 @@ void Game::renderFrame(const float frameTime) {
         effects.fogWetness = derived.fogWetness;
         effects.cloudWetness = derived.cloudWetness;
     }
+    effects.cameraRainVisibility = cameraRainVisibility;
     effects.postprocessDebugMode = pipelineSettings.postprocessDebugMode;
     {
         const float sunAngle = m_world.getDayNightSystem().getCelestialAngleRadians();
@@ -433,7 +448,8 @@ void Game::renderFrame(const float frameTime) {
         m_firstPersonHeldItemRenderer.setContinuousSwing(false);
     }
 
-    m_postProcessRenderer.endSceneAndComposite(m_window, frameTime);
+    m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
+                                               m_renderer.gbufDepthTexture());
     m_renderer.renderDeferredDebugOverlay(m_window);
 
     PlayerStatsData playerStats;

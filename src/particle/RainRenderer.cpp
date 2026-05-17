@@ -7,23 +7,27 @@
 #include "../renderer/Shader.h"
 
 static std::mt19937 s_rng{42};
+static constexpr int RAIN_ATLAS_COLUMNS = 64;
 
 void RainRenderer::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("rain");
-    if (!m_shader) return;
+    m_rainTex = resourceMgr.getTexture2D("rain");
+    if (!m_shader || m_rainTex == 0) return;
 
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // 6 vertices per drop (2 tris), 4 floats per vertex (xyz + alpha)
-    glBufferData(GL_ARRAY_BUFFER, MAX_DROPS * 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // 6 vertices per drop (2 tris), 5 floats per vertex (xyz + uv)
+    glBufferData(GL_ARRAY_BUFFER, MAX_DROPS * 6 * 5 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
+    // Position: location 0
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
+    // UV: location 1
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 
     glBindVertexArray(0);
 }
@@ -40,7 +44,7 @@ void RainRenderer::ensureDrops() {
         std::uniform_real_distribution<float> distAngle(0.0f, 6.2831853f);
         std::uniform_real_distribution<float> distHeight(0.0f, SPAWN_HEIGHT);
         std::uniform_real_distribution<float> distSpeed(0.8f, 1.2f);
-        std::uniform_real_distribution<float> distAlpha(0.15f, 0.45f);
+        std::uniform_int_distribution<int> distCol(0, RAIN_ATLAS_COLUMNS - 1);
 
         for (int i = 0; i < MAX_DROPS; ++i) {
             RainDrop d;
@@ -49,13 +53,13 @@ void RainRenderer::ensureDrops() {
             d.offset = glm::vec3(r * cosf(a), distHeight(s_rng), r * sinf(a));
             d.speed = BASE_FALL_SPEED * distSpeed(s_rng);
             d.length = DROP_LENGTH * distSpeed(s_rng);
-            d.alpha = distAlpha(s_rng);
+            d.texU = (distCol(s_rng) + 0.5f) / static_cast<float>(RAIN_ATLAS_COLUMNS);
             m_drops.push_back(d);
         }
     }
 }
 
-void RainRenderer::updateDrops(float dt, float rainStrength) {
+void RainRenderer::updateDrops(float dt) {
     ensureDrops();
 
     for (auto& d : m_drops) {
@@ -66,6 +70,7 @@ void RainRenderer::updateDrops(float dt, float rainStrength) {
             std::uniform_real_distribution<float> distRadius(0.0f, SPAWN_RADIUS);
             std::uniform_real_distribution<float> distAngle(0.0f, 6.2831853f);
             std::uniform_real_distribution<float> distSpeed(0.8f, 1.2f);
+            std::uniform_int_distribution<int> distCol(0, RAIN_ATLAS_COLUMNS - 1);
 
             float r = distRadius(s_rng);
             float a = distAngle(s_rng);
@@ -73,6 +78,7 @@ void RainRenderer::updateDrops(float dt, float rainStrength) {
             d.offset.z = r * sinf(a);
             d.offset.y = SPAWN_HEIGHT;
             d.speed = BASE_FALL_SPEED * distSpeed(s_rng);
+            d.texU = (distCol(s_rng) + 0.5f) / static_cast<float>(RAIN_ATLAS_COLUMNS);
         }
     }
 }
@@ -83,11 +89,11 @@ void RainRenderer::render(const glm::mat4& projection,
                            float rainStrength,
                            float skyLightAtCamera,
                            float dt) {
-    if (!m_shader || rainStrength < 0.01f || skyLightAtCamera < 0.05f) return;
+    if (!m_shader || m_rainTex == 0 || rainStrength < 0.01f || skyLightAtCamera < 0.05f) return;
 
     // Clamp dt to avoid physics explosion on frame hitches.
     dt = std::max(0.001f, std::min(dt, 0.1f));
-    updateDrops(dt, rainStrength);
+    updateDrops(dt);
 
     // Camera-facing billboards: extract right/up from view matrix.
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
@@ -100,7 +106,7 @@ void RainRenderer::render(const glm::mat4& projection,
     const float streakWidth = 0.02f;
 
     std::vector<float> vertices;
-    vertices.reserve(visibleCount * 6 * 4);
+    vertices.reserve(visibleCount * 6 * 5);
 
     for (int i = 0; i < visibleCount && i < MAX_DROPS; ++i) {
         const auto& d = m_drops[i];
@@ -118,24 +124,29 @@ void RainRenderer::render(const glm::mat4& projection,
         glm::vec3 v2 = bot + rOff;
         glm::vec3 v3 = bot - rOff;
 
-        float alphaTop = d.alpha * rainStrength * skyLightAtCamera;
-        float alphaBot = alphaTop * 0.2f; // fade toward bottom
+        // UV: u = random column, v = 0 at top, 1 at bottom
+        float u = d.texU;
 
         // Triangle 1: v0 v1 v2
-        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(alphaTop);
-        vertices.push_back(v1.x); vertices.push_back(v1.y); vertices.push_back(v1.z); vertices.push_back(alphaTop);
-        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(alphaBot);
+        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u); vertices.push_back(0.0f);
+        vertices.push_back(v1.x); vertices.push_back(v1.y); vertices.push_back(v1.z); vertices.push_back(u); vertices.push_back(0.0f);
+        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u); vertices.push_back(1.0f);
         // Triangle 2: v0 v2 v3
-        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(alphaTop);
-        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(alphaBot);
-        vertices.push_back(v3.x); vertices.push_back(v3.y); vertices.push_back(v3.z); vertices.push_back(alphaBot);
+        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u); vertices.push_back(0.0f);
+        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u); vertices.push_back(1.0f);
+        vertices.push_back(v3.x); vertices.push_back(v3.y); vertices.push_back(v3.z); vertices.push_back(u); vertices.push_back(1.0f);
     }
 
     if (vertices.empty()) return;
 
     m_shader->use();
     m_shader->setMat4("viewProj", projection * view);
-    m_shader->setFloat("uRainStrength", rainStrength);
+    // Fold skyLightAtCamera into rainStrength so the texture alpha fades indoors.
+    m_shader->setFloat("uRainStrength", rainStrength * skyLightAtCamera);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_rainTex);
+    m_shader->setInt("uRainTex", 0);
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -147,7 +158,7 @@ void RainRenderer::render(const glm::mat4& projection,
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 4));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 5));
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
