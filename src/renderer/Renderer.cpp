@@ -1069,6 +1069,11 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.atmosphere.directWeatherOcclusion = std::clamp(m_pipelineSettings.directWeatherOcclusion, 0.0f, 1.0f);
     frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
     frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
+    frame.volumetric.fogCenterHeight = m_pipelineSettings.vfogCenterHeight;
+    frame.volumetric.fogHeightSpread = m_pipelineSettings.vfogHeightSpread;
+    frame.volumetric.fogNoiseScale = m_pipelineSettings.vfogNoiseScale;
+    frame.volumetric.fogLightStrength = m_pipelineSettings.vfogLightStrength;
+    frame.volumetric.fogDensityScale = m_pipelineSettings.vfogDensityScale;
     frame.cloud.shadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
     frame.cloud.shadowStrength = m_pipelineSettings.cloudShadowStrength;
     frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
@@ -1145,6 +1150,11 @@ void Renderer::bindVolumetricUniforms(Shader& shader, const RenderFrameData& fra
     shader.setFloat("uVolumetricBaseDensity", frame.volumetric.baseDensity);
     shader.setFloat("uVolumetricHeightFalloff", frame.volumetric.heightFalloff);
     shader.setFloat("uVolumetricMaxDistance", frame.volumetric.maxDistance);
+    shader.setFloat("uVFogCenterHeight", frame.volumetric.fogCenterHeight);
+    shader.setFloat("uVFogHeightSpread", frame.volumetric.fogHeightSpread);
+    shader.setFloat("uVFogNoiseScale", frame.volumetric.fogNoiseScale);
+    shader.setFloat("uVFogLightStrength", frame.volumetric.fogLightStrength);
+    shader.setFloat("uVFogDensityScale", frame.volumetric.fogDensityScale);
 }
 
 void Renderer::bindCloudUniforms(Shader& shader, const RenderFrameData& frame) const {

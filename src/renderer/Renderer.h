@@ -138,6 +138,12 @@ public:
         float aerialStrength = 0.65f;
         float horizonScatterStrength = 0.78f;
         float volumetricFogStrength = 0.35f;
+        // DerivativeMain-style VFog independent profile (decoupled from weather)
+        float vfogCenterHeight = 63.0f;   // SEA_LEVEL: y-level where fog is densest
+        float vfogHeightSpread = 32.0f;   // height falloff reference offset above center
+        float vfogNoiseScale = 0.04f;     // noise sampling scale for structured fog
+        float vfogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
+        float vfogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
         float noiseDitherStrength = 0.015f;
         float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
         float ssaoRadius = 2.25f;
@@ -195,6 +201,12 @@ public:
         float baseDensity = 1.0f;
         float heightFalloff = 0.022f;
         float maxDistance = 260.0f;
+        // DerivativeMain-style VFog independent profile (decoupled from weather)
+        float fogCenterHeight = 63.0f;   // SEA_LEVEL: y-level where fog is densest
+        float fogHeightSpread = 32.0f;   // height falloff reference offset above center
+        float fogNoiseScale = 0.04f;     // noise sampling scale for structured fog
+        float fogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
+        float fogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
     };
 
     struct CloudSettings {

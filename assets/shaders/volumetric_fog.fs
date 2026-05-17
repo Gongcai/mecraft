@@ -27,13 +27,7 @@ uniform float uVolumetricFogStrength;
 uniform float uVolumetricBaseDensity;
 uniform float uVolumetricHeightFalloff;
 uniform float uVolumetricMaxDistance;
-uniform float uWeatherWetness;
-uniform float uWeatherStorm;
 uniform float uSkyWetness;
-uniform float uSurfaceWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uPrecipitation;
 uniform float uLightningFlash;
 uniform float uShadowDistance;
 uniform float uShadowExtent;
@@ -55,6 +49,13 @@ uniform int uVolumetricTimeFadeEnabled; // DerivativeMain TIME_FADE toggle
 uniform int uVolumetricQualityTier; // 0=Low, 1=Medium, 2=High, 3=Ultra
 uniform int uVolumetricStaticJitter; // 1 = freeze jitter for stable debug
 uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (default 1.0)
+
+// DerivativeMain-style VFog independent profile (decoupled from weather)
+uniform float uVFogCenterHeight;   // SEA_LEVEL: y-level where fog is densest (default 63.0)
+uniform float uVFogHeightSpread;   // height falloff reference offset (default 32.0)
+uniform float uVFogNoiseScale;     // noise sampling scale for structured fog (default 0.04)
+uniform float uVFogLightStrength;  // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH (default 0.2)
+uniform float uVFogDensityScale;   // user density multiplier / volFogDensity (default 1.0)
 
 // Cloud shadow uniforms (shared with deferred_lighting)
 uniform int uCloudShadowsEnabled;
@@ -164,12 +165,16 @@ float pseudo3DNoise(vec3 p, float scale, vec2 wind) {
     return mix(n0, n1, blend);
 }
 
-float structuredFogDensity(vec3 worldPos, float heightDensity, float weatherCoverage) {
+// DerivativeMain-style structured fog density (weather-independent).
+// Uses multi-octave 3D noise with fixed threshold for consistent fog shape
+// regardless of weather state. Threshold 4.5 is the DerivativeMain High mode default.
+float structuredFogDensity(vec3 worldPos, float heightDensity) {
+    float ns = max(uVFogNoiseScale, 0.001);
     vec2 wind = vec2(uTime * 0.004, uTime * 0.002);
-    vec3 p = worldPos * 0.070 + vec3(wind.x, 0.0, wind.y);
+    vec3 p = worldPos * ns + vec3(wind.x, 0.0, wind.y);
     float base = pseudo3DNoise(p, 1.0, vec2(0.0)) * 4.0;
     float detail = pseudo3DNoise(p * 4.0 + vec3(wind.x, 0.0, wind.y), 1.0, vec2(0.0));
-    float threshold = mix(5.25, 3.55, clamp(weatherCoverage, 0.0, 1.0));
+    float threshold = 4.5;
     float cloudy = clamp((base - detail) * 4.0 * heightDensity - threshold, 0.0, 1.0);
     float fineShape = smoothstep(0.05, 0.85, base * 0.22 + detail * 0.35);
     return cloudy * mix(0.85, 1.45, fineShape);
@@ -313,8 +318,8 @@ void main() {
 
     // DerivativeMain VolumetricFog.glsl:310 — fog color darkening with wetness.
     // At full wetness, fog color is reduced to 20% (oneMinus(0.8 * wetness)).
+    // This affects fog appearance only, not density — density is controlled by VFog profile.
     float wetness = clamp(uSkyWetness, 0.0, 1.0);
-    float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
     skyFogColor *= 1.0 - 0.8 * wetness;
     directFogColor *= 1.0 - 0.8 * wetness;
 
@@ -324,7 +329,8 @@ void main() {
 
     // DerivativeMain VOLUMETRIC_LIGHT: airDensity includes RayleighPhase(LdotV),
     // enters fogDensity directly (both extinction and in-scattering are phase-modulated).
-    float airDensity = VFOG_AIR_DENSITY * atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0));
+    // Uses uVFogLightStrength (DerivativeMain VOLUMETRIC_LIGHT_STRENGTH, default 0.2).
+    float airDensity = uVFogLightStrength * atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0));
 
     vec3 shadowLightDir = normalize(uShadowLightDirection);
 
@@ -336,10 +342,13 @@ void main() {
     strength *= (uVolumetricFogEnabled != 0) ? 1.0 : 0.0;
     // Apply quality tier density multiplier (DerivativeMain FOG_TYPE)
     float densityMultiplier = getQualityDensityMultiplier();
+    // DerivativeMain: volFogDensity uniform scales base density (1.0 clear, up to ~6.8 in storm).
+    // Here uVFogDensityScale is the user-controlled equivalent, independent of weather.
     float baseDensity = (0.00012 + 0.00030 * horizon) *
                         strength *
                         max(uVolumetricBaseDensity, 0.0) *
-                        (0.64 + weatherHaze * 1.55) *
+                        0.64 *
+                        max(uVFogDensityScale, 0.0) *
                         densityMultiplier;
 
     // DerivativeMain VolumetricFog.glsl:191: Low/Medium phase applied to mistDensity.
@@ -347,23 +356,24 @@ void main() {
     // High/Ultra (FOG_TYPE > 1) applies multi-lobe phase per-step instead.
     float mistDensity = baseDensity;
     if (uVolumetricQualityTier < 2) {
-        // DerivativeMain VolumetricFog.glsl:191
-        float csPhase = cornetteShanksPhase(LdotV, 0.7 - uSkyWetness * 0.3) * 0.45 +
+        // DerivativeMain VolumetricFog.glsl:191 — CornetteShanks phase for Low/Medium.
+        // Fixed g=0.7 (no wetness modulation — fog profile is weather-independent).
+        float csPhase = cornetteShanksPhase(LdotV, 0.7) * 0.45 +
                         atmHenyeyGreensteinPhase(LdotV, -0.3) * 0.15 + 0.1;
         mistDensity *= csPhase;
     }
 
     // DerivativeMain TIME_FADE: modulate airDensity and mistDensity by time of day.
-    // Peaks at sunrise/sunset (meWeight) and midnight; stronger under wetness.
+    // Peaks at sunrise/sunset (meWeight) and midnight. No weather wetness floor —
+    // fog presence is controlled by VFog profile, not weather state.
     // DerivativeMain VolumetricFog.glsl:210-213
     if (uVolumetricTimeFadeEnabled != 0) {
         float sunY = uSunDirection.y;
         float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
         float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
         float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
-        float wetness = clamp(uSkyWetness, 0.0, 1.0);
-        airDensity *= max(clamp(meWeight + 0.25, 0.0, 1.0) + timeMidnight * 4.0, wetness);
-        mistDensity *= max(meWeight * meWeight + timeMidnight * 2.0, wetness);
+        airDensity *= clamp(meWeight + 0.25, 0.0, 1.0) + timeMidnight * 4.0;
+        mistDensity *= meWeight * meWeight + timeMidnight * 2.0;
     }
 
     // Jitter: dynamic for normal rendering, screen-only hash for stable debug
@@ -402,14 +412,14 @@ void main() {
     for (int i = 0; i < fogSteps; ++i) {
         float t = (float(i) + jitter) / float(fogSteps);
         vec3 samplePos = uCameraPos + viewDir * (t * marchDistance);
-        float heightDensity = exp2(min((92.0 - samplePos.y) * max(uVolumetricHeightFalloff, 0.0001), 0.35));
+        // DerivativeMain-style height falloff: symmetric around uVFogCenterHeight (SEA_LEVEL).
+        // FOG_TYPE 2/3 uses fastExp(-abs(y - SEA_LEVEL) * 0.01) for symmetric falloff.
+        float heightDensity = exp2(-abs(samplePos.y - uVFogCenterHeight) * max(uVolumetricHeightFalloff, 0.0001));
         heightDensity *= 1.0 - smoothstep(180.0, 260.0, samplePos.y);
         heightDensity = clamp(heightDensity, 0.035, 1.45);
 
-        float coverage = max(uCloudCoverage, 0.08 + uCloudWetness * 0.82);
-        float structure = structuredFogDensity(samplePos, heightDensity, coverage);
-        float clearAir = (0.06 + weatherHaze * 0.18) * max(uCloudDensity, 0.0);
-        structure += clearAir;
+        float structure = structuredFogDensity(samplePos, heightDensity);
+        structure += 0.06 * max(uCloudDensity, 0.0);
         float nearFade = smoothstep(5.0, 32.0, t * marchDistance);
         // DerivativeMain: fogDensity = CalculateFogDensity(rayPosition) * mistDensity + airDensity.
         // For Low/Medium, mistDensity already includes phase. For High/Ultra, phase is applied per-step below.
@@ -474,10 +484,10 @@ void main() {
             float sunlightOD = 0.0;
             vec3 checkPos = samplePos;
             for (int j = 0; j < 4; ++j) {
-                float checkHeight = exp2(min((92.0 - checkPos.y) * max(uVolumetricHeightFalloff, 0.0001), 0.35));
+                float checkHeight = exp2(-abs(checkPos.y - uVFogCenterHeight) * max(uVolumetricHeightFalloff, 0.0001));
                 checkHeight *= 1.0 - smoothstep(180.0, 260.0, checkPos.y);
                 checkHeight = clamp(checkHeight, 0.035, 1.45);
-                float d = mistDensity * checkHeight * structuredFogDensity(checkPos, checkHeight, coverage);
+                float d = mistDensity * checkHeight * structuredFogDensity(checkPos, checkHeight);
                 if (d > 1e-5) {
                     sunlightOD += d * odStepSize;
                 }

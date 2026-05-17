@@ -530,6 +530,12 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int qualityTier = pipeline.volumetricQualityTier;
         pipelineChanged |= ImGui::Combo("VFog Quality Tier", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
         pipeline.volumetricQualityTier = qualityTier;
+        // DerivativeMain-style VFog independent profile controls
+        pipelineChanged |= ImGui::SliderFloat("VFog Center Height", &pipeline.vfogCenterHeight, 0.0f, 255.0f, "%.0f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Height Spread", &pipeline.vfogHeightSpread, 0.0f, 128.0f, "%.0f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Noise Scale", &pipeline.vfogNoiseScale, 0.001f, 0.200f, "%.3f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &pipeline.vfogLightStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Density Scale", &pipeline.vfogDensityScale, 0.0f, 10.0f, "%.2f");
         if (ImGui::Combo("Weather Instant (Debug)", &weatherPresetInstant, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
             world.getWeatherSystem().setDebugWeatherPresetInstant(static_cast<WeatherType>(weatherPresetInstant));
         }
@@ -589,7 +595,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("env.skyIlluminance:  (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
             ImGui::Text("sunVisibility(CPU): %.3f  (sunDir.y=%.2f)", sunVis, sunY);
             ImGui::Text("VFog strength: %.2f", pipeline.volumetricFogStrength);
-            ImGui::TextDisabled("VFog Light Strength is deprecated; DerivativeMain path ignores it.");
+            ImGui::Text("VFog profile: center=%.0f  spread=%.0f  noise=%.3f  light=%.2f  density=%.2f",
+                pipeline.vfogCenterHeight, pipeline.vfogHeightSpread, pipeline.vfogNoiseScale,
+                pipeline.vfogLightStrength, pipeline.vfogDensityScale);
             ImGui::Text("VFog baseDensity: 1.0  (VolumetricSettings defaults)");
             const char* tierNames[] = {"Low(0.5x)", "Medium(1.4x)", "High(9.0x)", "Ultra(48.0x)"};
             ImGui::Text("VFog tier: %s  maxDist: 260  heightFalloff: 0.022", tierNames[qualityTier]);
@@ -599,10 +607,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 float timeMidnight = (sunY < 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
                 float wetness = derivedWeather.skyWetness;
                 float airGate = pipeline.volumetricTimeFadeEnabled
-                    ? std::max(std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f, wetness)
+                    ? std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f
                     : 1.0f;
                 float mistGate = pipeline.volumetricTimeFadeEnabled
-                    ? std::max(meWeight * meWeight + timeMidnight * 2.0f, wetness)
+                    ? meWeight * meWeight + timeMidnight * 2.0f
                     : 1.0f;
                 float tierMultiplier = qualityTier <= 0 ? 0.5f : (qualityTier <= 1 ? 1.4f : (qualityTier <= 2 ? 9.0f : 48.0f));
                 ImGui::Text("VFog TIME_FADE gates: %s  air=%.3f mist=%.3f wet=%.2f",
@@ -719,6 +727,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.aerialStrength = 0.25f;
             pipeline.horizonScatterStrength = 0.35f;
             pipeline.volumetricFogStrength = 0.0f;
+            pipeline.vfogDensityScale = 0.0f;
             pipeline.bloomThreshold = 1.05f;
             pipeline.bloomStrength = 0.10f;
             pipeline.sunRaysEnabled = false;

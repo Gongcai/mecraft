@@ -8,13 +8,6 @@ uniform sampler2D uVolumetricTex;
 uniform sampler2D uDepthTex;
 uniform vec2 uInvFullResolution;
 uniform mat4 uInvProjection;
-uniform float uWeatherWetness;
-uniform float uWeatherStorm;
-uniform float uSkyWetness;
-uniform float uSurfaceWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uPrecipitation;
 
 float viewDistanceFromDepth(float depth, vec2 uv) {
     if (depth >= 0.9999) {
@@ -58,14 +51,6 @@ vec4 sampleDepthAwareVolumetric(vec2 uv) {
 void main() {
     vec3 scene = texture(uSceneTex, vTexCoord).rgb;
     vec4 volumetric = sampleDepthAwareVolumetric(vTexCoord);
-    float weatherWetness = clamp(uSkyWetness, 0.0, 1.0);
-    if (weatherWetness > 0.01) {
-        // DerivativeMain world0/composite1.fsh:214-219
-        // fogDensity = wetness * eyeSkylightFix * 2e-3; fogTransmittance = min(exp(-density * dist), fogTransmittance)
-        float dist = viewDistanceFromDepth(texture(uDepthTex, vTexCoord).r, vTexCoord);
-        float weatherTransmittance = exp(-weatherWetness * 2e-3 * dist);
-        volumetric.a = min(volumetric.a, weatherTransmittance);
-    }
     // Output fog transmittance in alpha for Bloomy Fog in postprocess.
     // volumetric.a = 1 - opacity = transmittance (from volumetric_fog.fs).
     FragColor = vec4(scene * volumetric.a + volumetric.rgb, volumetric.a);
