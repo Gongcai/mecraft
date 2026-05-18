@@ -10,6 +10,7 @@ uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch/textureSize
 uniform sampler2D uShadowColorTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 uInvViewProj;
+uniform vec2 uJitter;
 uniform mat4 uShadowViewProj;
 uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
@@ -125,7 +126,8 @@ vec3 heatmap(float v) {
 }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec2 ndcXY = uv * 2.0 - 1.0 - uJitter;
+    vec4 clip = vec4(ndcXY, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -324,7 +326,7 @@ void main() {
             return;
         }
         // Sky pixel: reconstruct view direction and march to max distance
-        vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+        vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0 - uJitter, 1.0, 1.0);
         viewDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
         marchDistance = max(uVolumetricMaxDistance, 1.0);
     } else {

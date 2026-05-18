@@ -78,6 +78,10 @@ public:
         bool volumetricTimeFadeEnabled = true; // DerivativeMain TIME_FADE
         int volumetricQualityTier = 1; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
         float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
+        bool freezeR1 = false;       // A/B test: freeze VFog R1 dither (no temporal variation)
+        bool freezeBias = false;     // A/B test: freeze VFog upscale bias (no temporal rotation)
+        bool forceZeroVelocity = false; // A/B test: force zero velocity (verify TAA pure accumulation)
+        bool freezeTaaJitter = false; // A/B test: disable projection jitter while keeping TAA resolve active
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
         bool ssaoFilterEnabled = true;
@@ -436,6 +440,8 @@ private:
         CloudSettings cloud{};
         bool moonShadowActive = false;
         bool eyeInWater = false;
+        float nearPlane = 0.1f;
+        float farPlane = 500.0f;
         // Temporal foundation
         uint64_t frameIndex = 0;
         glm::vec2 jitter = glm::vec2(0.0f);
@@ -531,7 +537,7 @@ private:
     void renderWorldForward(const World& world, const RenderFrameData& frame);
     bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window, const RenderFrameData& frame);
     void renderTransparentCompositePass(const World& world, const Window& window);
-    void renderWaterCompositePass(const World& world, const Window& window);
+    void renderWaterCompositePass(const World& world, const Window& window, bool preTemporalResolve = false);
     void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
     void renderSsaoPass(const Camera& camera, const Window& window);
@@ -658,6 +664,7 @@ private:
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     shadow::ShadowRenderer m_shadowRenderer;
     bool m_deferredFrameActive = false;
+    bool m_waterRenderedBeforeTemporal = false;
     bool m_deferredHistoryUpdatedThisFrame = false;
     std::unordered_set<int64_t> m_meshingInFlight;
     std::vector<SubChunkMeshingResult> m_deferredMeshResults;
@@ -717,6 +724,8 @@ private:
     glm::mat4 m_view = glm::mat4(1.0f);
     glm::mat4 m_viewProj = glm::mat4(1.0f);
     glm::vec3 m_cameraPos = glm::vec3(0.0f);
+    float m_nearPlane = 0.1f;
+    float m_farPlane = 500.0f;
     FogSettings m_fogSettings{};
     int m_debugLightMode = 0;
     bool m_cutoutDistanceLimitEnabled = true;

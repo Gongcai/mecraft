@@ -265,7 +265,7 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
 #endif
 }
 
-void Renderer::renderWaterCompositePass(const World& world, const Window& window) {
+void Renderer::renderWaterCompositePass(const World& world, const Window& window, const bool preTemporalResolve) {
     if (!m_pipelineSettings.waterEffectsEnabled ||
         !m_transparentPassPlan.hasWater() ||
         m_waterCompositeShader == nullptr ||
@@ -274,7 +274,8 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     }
 
     const bool deferredInputsEnabled = m_deferredFrameActive && m_deferredTargets.isReady();
-    const bool compositeInputsEnabled = deferredInputsEnabled && m_pipelineSettings.transparentCompositeEnabled;
+    const bool compositeInputsEnabled = deferredInputsEnabled &&
+                                        (preTemporalResolve || m_pipelineSettings.transparentCompositeEnabled);
     const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
     const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
 
@@ -291,10 +292,14 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
 
     m_waterCompositeShader->use();
     m_waterCompositeShader->setMat4("view", frame.view);
+    // DerivativeMain parity: water vertices also carry taaOffset when the
+    // water pass runs before temporal resolve. The post-TAA fallback stays raw
+    // because there is no later TAA pass to accumulate it.
+    const bool useJitteredWater = preTemporalResolve && m_pipelineSettings.taaEnabled;
     m_waterCompositeShader->setMat4("viewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
+        useJitteredWater ? frame.jitteredViewProj : frame.viewProj);
     m_waterCompositeShader->setMat4("uInvViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
+        useJitteredWater ? frame.jitteredInvViewProj : frame.invViewProj);
     m_waterCompositeShader->setMat4("model", glm::mat4(1.0f));
     m_waterCompositeShader->setInt("uUseModel", 0);
     m_waterCompositeShader->setInt("texArray", 0);
@@ -309,16 +314,20 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uDepthSofteningEnabled", deferredInputsEnabled ? 1 : 0);
-    const bool volumetricFogActive = m_pipelineSettings.volumetricFogEnabled &&
+    const bool volumetricFogActive = !preTemporalResolve &&
+                                     m_pipelineSettings.volumetricFogEnabled &&
                                      m_pipelineSettings.aerialPerspectiveEnabled &&
                                      m_pipelineSettings.volumetricFogStrength > 0.001f &&
                                      m_volumetricFogShader != nullptr &&
                                      m_volumetricCompositeShader != nullptr;
     m_waterCompositeShader->setInt("uVolumetricFogActive", volumetricFogActive ? 1 : 0);
     m_waterCompositeShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
+    m_waterCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
     m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
     m_waterCompositeShader->setFloat("uTime", frame.shaderTime);
     m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
+    m_waterCompositeShader->setFloat("uNearPlane", frame.nearPlane);
+    m_waterCompositeShader->setFloat("uFarPlane", frame.farPlane);
     // DerivativeMain shaders.properties: uniform.vec3.waterAbsorption = vec3(0.4, 0.14, 0.08)
     m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
     m_waterCompositeShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
@@ -438,7 +447,11 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindTexture(GL_TEXTURE_3D, 0);
     glActiveTexture(GL_TEXTURE0);
 
-    if (compositeInputsEnabled) {
+    if (preTemporalResolve && compositeInputsEnabled) {
+        m_deferredTargets.copyTransparentCompositeToSceneComposite();
+        m_deferredTargets.copyTransparentCompositeToSceneResolved();
+        m_waterRenderedBeforeTemporal = true;
+    } else if (compositeInputsEnabled) {
         m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
         restoreCapturedFramebufferViewport(window);
     }
@@ -457,8 +470,12 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         return;
     }
 
-    // Step 1: Render water with dedicated shader
-    renderWaterCompositePass(world, window);
+    // Step 1: Render water with dedicated shader. In the deferred/TAA path it
+    // has already been rendered into SceneResolved before temporal resolve so
+    // water/opaque contact edges share the same jittered depth and history.
+    if (!m_waterRenderedBeforeTemporal) {
+        renderWaterCompositePass(world, window);
+    }
 
     // Step 2: Render generic transparent
     if (m_deferredFrameActive) {
@@ -495,7 +512,8 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         bindTransparentCompositeInputs(*m_chunkShader, deferredInputsEnabled, compositeInputsEnabled);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
-        // Render generic transparent only -- water was handled in renderWaterCompositePass
+        // Render generic transparent only; water is handled by renderWaterCompositePass
+        // either before TAA (deferred temporal path) or at the start of this pass.
         if (m_useMultiDrawIndirect) {
             if (!m_deferredTransparentBatch.empty()) {
                 m_chunkShader->setInt("uForceBaseLod", 1);
@@ -661,7 +679,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.volumetricShadowBiasScale = std::clamp(m_pipelineSettings.volumetricShadowBiasScale, 0.0f, 4.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 66);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 71);
 
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 5);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -884,7 +902,10 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_projection = camera.getProjectionMatrix(window.getAspectRatio());
     m_view = camera.getViewMatrix();
     m_cameraPos = camera.getPosition();
+    m_nearPlane = camera.getNear();
+    m_farPlane = camera.getFar();
     m_currentFrameDataValid = false;
+    m_waterRenderedBeforeTemporal = false;
     m_deferredHistoryUpdatedThisFrame = false;
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
@@ -977,6 +998,8 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.viewProj = m_projection * m_view;
     frame.invViewProj = glm::inverse(frame.viewProj);
     frame.cameraPos = m_cameraPos;
+    frame.nearPlane = m_nearPlane;
+    frame.farPlane = m_farPlane;
 
     // Temporal foundation
     frame.frameIndex = m_frameCounter;
@@ -994,6 +1017,9 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
         frame.jitter.x = frameX * invW;
         frame.jitter.y = frameY * invH;
+        if (m_pipelineSettings.freezeTaaJitter) {
+            frame.jitter = glm::vec2(0.0f);
+        }
     }
 
     // DerivativeMain-style TAA jitter: bake sub-pixel offset into projection
@@ -1452,6 +1478,13 @@ bool Renderer::renderWorldDeferred(const World& world,
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
 
+    // DerivativeMain renders water with taaOffset in gbuffers/composite before
+    // the scene temporal pass. Do it before VFog so volumetric fog is applied
+    // once to the combined opaque+water scene, matching composite1.fsh.
+    if (m_pipelineSettings.taaEnabled) {
+        renderWaterCompositePass(world, window, true);
+    }
+
     // DerivativeMain-style pipeline: VFog composited BEFORE TAA so the fog
     // participates in temporal accumulation. R1 dither + checkerboard upscale
     // provides per-frame variation that TAA resolves over multiple frames.
@@ -1906,6 +1939,7 @@ void Renderer::renderVelocityPass(const RenderFrameData& frame) {
     m_velocityShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_velocityShader->setInt("uForceZeroVelocity", m_pipelineSettings.forceZeroVelocity ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
@@ -2064,9 +2098,10 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setInt("uShadowColorTex", 4);
     m_volumetricFogShader->setInt("uAtmosphereLut", 5);
     m_volumetricFogShader->setInt("uCsmShadowMap", 6);
-    // DerivativeMain: VFog uses raw ScreenToViewSpaceRaw (no taaOffset
-    // subtraction). The jittered screen ray is preserved and TAA accumulates.
+    // Bind raw inverse and let the shader subtract taaOffset in NDC, matching
+    // DerivativeMain ScreenToViewSpace() for jittered depth.
     m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_volumetricFogShader->setVec2("uJitter", frame.jitter);
     bindShadowFrameUniforms(*m_volumetricFogShader, frame);
     bindSkyLightingUniforms(*m_volumetricFogShader, frame);
     bindAtmosphereUniforms(*m_volumetricFogShader, frame);
@@ -2090,8 +2125,9 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
         vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 66->21
     }
     m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
-    // Freeze jitter for stable debug visualization
-    m_volumetricFogShader->setInt("uVolumetricStaticJitter", vfDebugMode > 0 ? 1 : 0);
+    // Freeze jitter for stable debug visualization or A/B test
+    m_volumetricFogShader->setInt("uVolumetricStaticJitter",
+        (vfDebugMode > 0 || m_pipelineSettings.freezeR1) ? 1 : 0);
     m_volumetricFogShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
     // Shadow bias scale for A/B testing (only affects volumetric fog)
     m_volumetricFogShader->setFloat("uVolumetricShadowBiasScale", m_pipelineSettings.volumetricShadowBiasScale);
@@ -2136,12 +2172,10 @@ void Renderer::compositeVolumetricFogPass() {
     m_volumetricCompositeShader->setInt("uSceneTex", 0);
     m_volumetricCompositeShader->setInt("uVolumetricTex", 1);
     m_volumetricCompositeShader->setInt("uDepthTex", 2);
-    m_volumetricCompositeShader->setVec2(
-        "uInvFullResolution",
-        glm::vec2(1.0f / static_cast<float>(std::max(1, m_deferredTargets.width())),
-                  1.0f / static_cast<float>(std::max(1, m_deferredTargets.height()))));
-    m_volumetricCompositeShader->setMat4("uInvProjection", glm::inverse(m_currentFrameData.projection));
+    m_volumetricCompositeShader->setFloat("uNearPlane", m_currentFrameData.nearPlane);
+    m_volumetricCompositeShader->setFloat("uFarPlane", m_currentFrameData.farPlane);
     m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(m_currentFrameData.frameIndex & 0x7fffffffULL));
+    m_volumetricCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
     glActiveTexture(GL_TEXTURE1);
@@ -2204,9 +2238,10 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
         return;
     }
 
-    // Copy current SceneResolved to history[current] so we can read it while writing SceneResolved.
-    // history[current] = this frame's unresolved color, history[prev] = last frame's resolved color.
-    m_deferredTargets.copySceneResolvedToHistory();
+    // DerivativeMain parity: copy current scene to a dedicated scratch buffer
+    // so TAA reads from TemporalCurrent + HistoryPrev, writes to SceneResolved.
+    // History is only updated at frame end (updateDeferredHistoryTargets).
+    m_deferredTargets.copySceneResolvedToTemporalCurrent();
 
     m_deferredTargets.bindSceneResolved();
     glDisable(GL_DEPTH_TEST);
@@ -2222,9 +2257,9 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
     m_temporalResolveShader->setVec2("uJitter", frame.jitter);
 
-    // uCurrentTex = this frame's unresolved color (now stored in history[current])
+    // uCurrentTex = this frame's unresolved color (TemporalCurrent scratch)
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.temporalCurrentTexture());
     // uHistoryTex = previous frame's resolved color
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexturePrev());
@@ -2392,6 +2427,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     m_deferredDebugShader->setInt("uCloudTex", 15);
     m_deferredDebugShader->setInt("uSceneCompositeTex", 15);
     m_deferredDebugShader->setInt("uSceneResolvedTex", 15);
+    m_deferredDebugShader->setInt("uTemporalCurrentTex", 17);
     m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
     m_deferredDebugShader->setInt("uShadowColorTex", 14);
     m_deferredDebugShader->setInt("uShadowNormalTex", 15);
@@ -2429,7 +2465,11 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
         }
     }
     m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
+    m_deferredDebugShader->setInt("uFrameIndex", static_cast<int>(m_frameCounter & 0x7fffffffULL));
+    m_deferredDebugShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
     m_deferredDebugShader->setMat4("uInvViewProj", debugFrame != nullptr ? debugFrame->invViewProj : glm::mat4(1.0f));
+    m_deferredDebugShader->setFloat("uNearPlane", debugFrame != nullptr ? debugFrame->nearPlane : m_nearPlane);
+    m_deferredDebugShader->setFloat("uFarPlane", debugFrame != nullptr ? debugFrame->farPlane : m_farPlane);
     m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
     m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
     m_deferredDebugShader->setVec3("uMoonDirection", debugFrame != nullptr ? debugFrame->skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
@@ -2503,8 +2543,12 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
                                                                                                       : m_deferredTargets.cloudTexture()))));
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    glActiveTexture(GL_TEXTURE17);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.temporalCurrentTexture());
     renderFullscreen(*m_deferredDebugShader);
 
+    glActiveTexture(GL_TEXTURE17);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     for (int unit = 15; unit >= 0; --unit) {
@@ -3332,6 +3376,7 @@ void Renderer::endFrame(const Window &window) {
     recordMeshingHistory();
     m_currentFrameDataValid = false;
     m_deferredFrameActive = false;
+    m_waterRenderedBeforeTemporal = false;
 }
 
 void Renderer::initOutlineMesh() {

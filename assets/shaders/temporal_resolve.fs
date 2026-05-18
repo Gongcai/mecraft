@@ -58,6 +58,42 @@ vec3 clipAABB(in vec3 boxMin, in vec3 boxMax, in vec3 previousSample) {
     return previousSample;
 }
 
+// DerivativeMain Temporal.frag: SMAA CatmullRom approximation (5-tap).
+// Sharper than bilinear for history sampling, reduces variance clip rejection.
+vec4 catmullRomFast(sampler2D tex, vec2 coord) {
+    vec2 pxSize = 1.0 / max(uScreenSize, vec2(1.0));
+    vec2 position = uScreenSize * coord;
+    vec2 centerPosition = floor(position - 0.5) + 0.5;
+    vec2 f = position - centerPosition;
+    vec2 f2 = f * f;
+    vec2 f3 = f * f2;
+
+    const float sharpness = 0.7; // DerivativeMain TAA_SHARPNESS
+    vec2 w0 = -sharpness        * f3 + 2.0 * sharpness         * f2 - sharpness * f;
+    vec2 w1 = (2.0 - sharpness) * f3 - (3.0 - sharpness)       * f2 + 1.0;
+    vec2 w2 = (sharpness - 2.0) * f3 + (3.0 - 2.0 * sharpness) * f2 + sharpness * f;
+    vec2 w3 = sharpness         * f3 - sharpness                * f2;
+
+    vec2 w12 = w1 + w2;
+    vec2 tc0 = pxSize * (centerPosition - 1.0);
+    vec2 tc3 = pxSize * (centerPosition + 2.0);
+    vec2 tc12 = pxSize * (centerPosition + w2 / w12);
+
+    float l0 = w12.x * w0.y;
+    float l1 = w0.x  * w12.y;
+    float l2 = w12.x * w12.y;
+    float l3 = w3.x  * w12.y;
+    float l4 = w12.x * w3.y;
+
+    vec4 color =  texture(tex, vec2(tc12.x, tc0.y )) * l0
+               + texture(tex, vec2(tc0.x,  tc12.y)) * l1
+               + texture(tex, vec2(tc12.x, tc12.y)) * l2
+               + texture(tex, vec2(tc3.x,  tc12.y)) * l3
+               + texture(tex, vec2(tc12.x, tc3.y )) * l4;
+
+    return color / (l0 + l1 + l2 + l3 + l4);
+}
+
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
@@ -103,9 +139,10 @@ void main() {
     vec3 clipMin = clipAvg - variance * 1.25;
     vec3 clipMax = clipAvg + variance * 1.25;
 
-    // Sample and clip history
+    // Sample and clip history — CatmullRom for sharper reconstruction.
+    // DerivativeMain Temporal.frag: textureCatmullRomFast with TAA_SHARPNESS=0.7.
     vec2 safeHistoryUv = clamp(previousCoord, texelSize * 0.5, 1.0 - texelSize * 0.5);
-    vec3 previousSample = RGBtoYCoCgR(texture(uHistoryTex, safeHistoryUv).rgb);
+    vec3 previousSample = RGBtoYCoCgR(catmullRomFast(uHistoryTex, safeHistoryUv).rgb);
     previousSample = clipAABB(clipMin, clipMax, previousSample);
     previousSample = YCoCgRtoRGB(previousSample);
 

@@ -39,6 +39,7 @@ enum class Target : int {
     HistoryDepth  = 23,  // DEPTH32F — TAA depth history
     HistoryReflect= 24,  // RGBA16F — reflection temporal history
     HistoryCloud  = 25,  // RGBA16F — cloud temporal history
+    TemporalCurrent= 26, // RGBA16F — TAA current-frame scratch (avoids reading history[current])
 
     // --- Utility ---
     SSAO          = 30,  // R8     — raw ambient occlusion
@@ -135,8 +136,8 @@ inline constexpr PassIO kPassTable[] = {
 
     { "WaterComposite",
       { Target::GDepth, Target::SceneResolved, Target::ReflectionData,
-        Target::SkyCapture },
-      { Target::Count } },  // writes to default framebuffer
+        Target::SkyCapture, Target::VolumetricFog },
+      { Target::SceneResolved } },
 
     { "TransparentComposite",
       { Target::GDepth, Target::SceneResolved, Target::SkyCapture },

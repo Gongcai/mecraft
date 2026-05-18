@@ -28,12 +28,15 @@ uniform sampler2D uVolumetricTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 viewProj;
 uniform mat4 uInvViewProj;
+uniform float uNearPlane;
+uniform float uFarPlane;
 uniform int uSkyCaptureEnabled;
 uniform int uCompositeInputsEnabled;
 uniform int uWaterCompositeEnabled;
 uniform int uDepthSofteningEnabled;
 uniform int uVolumetricFogActive;
 uniform int uFrameIndex;
+uniform int uFreezeBias;
 uniform float uAnimationTime;
 uniform float uTime;
 uniform vec3 uWaterAbsorption;
@@ -86,26 +89,26 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
-float viewDistanceFromDepth(float depth, vec2 uv) {
+float linearDepthFromDepth(float depth) {
     if (depth >= 0.9999) {
         return 1e6;
     }
-    return length(reconstructWorldPosition(uv, depth) - uCameraPos);
+    return (uNearPlane * uFarPlane) / (depth * (uNearPlane - uFarPlane) + uFarPlane);
 }
 
 float viewDistanceFromDepthTexel(ivec2 texel) {
-    vec2 invFullResolution = 1.0 / max(vec2(textureSize(uSceneColorTex, 0)), vec2(1.0));
     ivec2 size = textureSize(uOpaqueDepthTex, 0);
     ivec2 clampedTexel = clamp(texel, ivec2(0), size - ivec2(1));
-    vec2 uv = (vec2(clampedTexel) + 0.5) * invFullResolution;
-    return viewDistanceFromDepth(texelFetch(uOpaqueDepthTex, clampedTexel, 0).r, uv);
+    return linearDepthFromDepth(texelFetch(uOpaqueDepthTex, clampedTexel, 0).r);
 }
 
 vec4 sampleDepthAwareVolumetric(vec2 uv) {
-    float centerLinearDepth = viewDistanceFromDepth(texture(uOpaqueDepthTex, uv).r, uv);
+    float centerLinearDepth = linearDepthFromDepth(texture(uOpaqueDepthTex, uv).r);
     ivec2 halfSize = textureSize(uVolumetricTex, 0);
     // DerivativeMain: bias rotates with frameCounter for temporal variation.
-    ivec2 bias = ivec2(gl_FragCoord.xy + float(uFrameIndex)) & ivec2(1);
+    ivec2 bias = (uFreezeBias != 0)
+        ? ivec2(floor(gl_FragCoord.xy)) & ivec2(1)
+        : ivec2(gl_FragCoord.xy + float(uFrameIndex)) & ivec2(1);
     ivec2 baseTexel = ivec2(floor(gl_FragCoord.xy * 0.5)) + bias * 2;
     ivec2 offsets[4] = ivec2[](
         ivec2(-2, -2),
@@ -478,8 +481,9 @@ void main() {
     // = sceneColor * (1-fresnel) + reflection * fresnel
     vec3 color = sceneColor * (1.0 - fresnel) + reflection * fresnel;
 
-    // Mecraft adaptation: water is rendered after volumetric fog, so it must consume
-    // the same volumetric result instead of overwriting fogged opaque scene pixels.
+    // Mecraft adaptation: post-TAA fallback path consumes the already computed
+    // volumetric result. In the DerivativeMain-parity path, water runs before
+    // VFog and uVolumetricFogActive is disabled so fog is applied once later.
     float fogTransmittance = 1.0;
     if (uVolumetricFogActive != 0) {
         vec4 volumetric = sampleDepthAwareVolumetric(screenUv);

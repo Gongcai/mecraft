@@ -18,6 +18,7 @@ uniform sampler2D uSsaoTex;
 uniform sampler2D uSceneLightingTex;
 uniform sampler2D uSceneCompositeTex;
 uniform sampler2D uSceneResolvedTex;
+uniform sampler2D uTemporalCurrentTex;
 uniform sampler2D uTransparentCompositeTex;
 uniform sampler2D uTransparentCompositeDepthTex;
 uniform sampler2D uVolumetricTex;
@@ -37,6 +38,8 @@ uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
 uniform mat4 uShadowProjectionInverse;
 uniform mat4 uInvViewProj;
+uniform float uNearPlane;
+uniform float uFarPlane;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
@@ -50,6 +53,8 @@ uniform float uShadowSlopeBias;
 uniform float uShadowNormalOffset;
 uniform int uShadowLightMode;
 uniform int uDebugViewMode;
+uniform int uFrameIndex;
+uniform int uFreezeBias;
 
 // Lighting diagnostic uniforms (for debug view 45)
 uniform vec3 uSunLightColor;
@@ -79,6 +84,52 @@ float linearizeDepthPreview(float depth) {
     float farPlane = 512.0;
     float linearDepth = (2.0 * nearPlane * farPlane) / max(farPlane + nearPlane - ndc * (farPlane - nearPlane), 0.0001);
     return clamp(linearDepth / 192.0, 0.0, 1.0);
+}
+
+vec3 reconstructWorldPosition(vec2 uv, float depth);
+
+float vfogLinearDepthFromDepth(float depth) {
+    if (depth >= 0.9999) {
+        return 1e6;
+    }
+    return (uNearPlane * uFarPlane) / (depth * (uNearPlane - uFarPlane) + uFarPlane);
+}
+
+float vfogViewDistanceFromDepthTexel(ivec2 texel) {
+    ivec2 size = textureSize(uDepthTex, 0);
+    ivec2 clampedTexel = clamp(texel, ivec2(0), size - ivec2(1));
+    return vfogLinearDepthFromDepth(texelFetch(uDepthTex, clampedTexel, 0).r);
+}
+
+vec4 debugSpatialUpscaleVolumetric(vec2 uv) {
+    vec2 fullCoord = gl_FragCoord.xy;
+    float centerLinearDepth = vfogLinearDepthFromDepth(texture(uDepthTex, uv).r);
+    ivec2 halfSize = textureSize(uVolumetricTex, 0);
+
+    ivec2 bias = (uFreezeBias != 0)
+        ? ivec2(floor(fullCoord)) & ivec2(1)
+        : ivec2(fullCoord + float(uFrameIndex)) & ivec2(1);
+    ivec2 baseTexel = ivec2(floor(fullCoord * 0.5)) + bias * 2;
+    ivec2 offsets[4] = ivec2[](
+        ivec2(-2, -2),
+        ivec2(-2,  0),
+        ivec2( 0,  0),
+        ivec2( 0, -2)
+    );
+
+    float sigmaZ = 64.0 / max(centerLinearDepth, 1.0);
+    vec4 sum = vec4(0.0);
+    float weightSum = 0.0;
+
+    for (int i = 0; i < 4; ++i) {
+        ivec2 sampleTexel = clamp(baseTexel + offsets[i], ivec2(0), halfSize - ivec2(1));
+        float sampleLinearDepth = vfogViewDistanceFromDepthTexel(sampleTexel * 2);
+        float weight = max(exp2(-abs(sampleLinearDepth - centerLinearDepth) * sigmaZ), 1e-6);
+        sum += texelFetch(uVolumetricTex, sampleTexel, 0) * weight;
+        weightSum += weight;
+    }
+
+    return sum / max(weightSum, 0.0001);
 }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
@@ -695,6 +746,57 @@ void main() {
 
         // Default: scene lighting preview
         FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, uv).rgb), 1.0);
+        return;
+    }
+
+    // Debug 67: TAA current scratch (TemporalCurrent buffer).
+    // Shows the pre-TAA scene that the temporal resolve reads as "current".
+    if (uDebugViewMode == 67) {
+        FragColor = vec4(tonemapPreview(texture(uTemporalCurrentTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+
+    // Debug 68: TAA current-vs-history delta.
+    // Shows abs(current - history) amplified 4x. Bright = large divergence.
+    // Helps identify where variance clip is rejecting history or where TAA fails to converge.
+    if (uDebugViewMode == 68) {
+        vec3 current = texture(uTemporalCurrentTex, vTexCoord).rgb;
+        vec3 history = texture(uHistorySceneTex, vTexCoord).rgb;
+        vec3 delta = abs(current - history) * 4.0;
+        FragColor = vec4(clamp(delta, 0.0, 1.0), 1.0);
+        return;
+    }
+
+    // Debug 69: Velocity field with sky/far-plane highlight.
+    // Non-sky pixels: velocity direction as color, speed as brightness.
+    // Sky pixels (depth >= 0.9999): red highlight to identify sky velocity issues.
+    if (uDebugViewMode == 69) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
+        float speed = length(velocity);
+        if (depth >= 0.9999) {
+            // Sky: show velocity magnitude with red tint
+            FragColor = vec4(heatmap(speed * 100.0).r, heatmap(speed * 100.0).g * 0.3, 0.05, 1.0);
+        } else {
+            FragColor = vec4(heatmap(speed * 50.0), 1.0);
+        }
+        return;
+    }
+
+    // Debug 70: Raw half-res VFog texel preview.
+    // Nearest half-res fetch, magnified to full screen without the depth-aware upscale.
+    if (uDebugViewMode == 70) {
+        ivec2 halfSize = textureSize(uVolumetricTex, 0);
+        ivec2 halfTexel = clamp(ivec2(gl_FragCoord.xy * 0.5), ivec2(0), halfSize - ivec2(1));
+        vec4 vfog = texelFetch(uVolumetricTex, halfTexel, 0);
+        FragColor = vec4(tonemapPreview(max(vfog.rgb, vec3(0.0)) * 4.0), 1.0);
+        return;
+    }
+
+    // Debug 71: Depth-aware upscaled VFog, matching volumetric_composite.fs.
+    if (uDebugViewMode == 71) {
+        vec4 vfog = debugSpatialUpscaleVolumetric(vTexCoord);
+        FragColor = vec4(tonemapPreview(max(vfog.rgb, vec3(0.0)) * 4.0), 1.0);
         return;
     }
 

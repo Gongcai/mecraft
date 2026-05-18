@@ -6,37 +6,40 @@ out vec4 FragColor;
 uniform sampler2D uSceneTex;
 uniform sampler2D uVolumetricTex;
 uniform sampler2D uDepthTex;
-uniform vec2 uInvFullResolution;
-uniform mat4 uInvProjection;
+uniform float uNearPlane;
+uniform float uFarPlane;
 uniform int uFrameIndex;
+uniform int uFreezeBias; // A/B test: 1 = use static bias (no temporal rotation)
 
-float viewDistanceFromDepth(float depth, vec2 uv) {
+float viewDistanceFromDepth(float depth) {
     if (depth >= 0.9999) {
         return 1e6;
     }
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    vec4 view = uInvProjection * clip;
-    view.xyz /= max(view.w, 1e-6);
-    return length(view.xyz);
+    // DerivativeMain/lib/Head/Functions.inc GetDepthLinear(): depth-only
+    // view-space z distance. Do not use ray length here; SpatialUpscale's
+    // sigmaZ is tuned for linear depth and ray length jitters at screen edges.
+    return (uNearPlane * uFarPlane) / (depth * (uNearPlane - uFarPlane) + uFarPlane);
 }
 
 float viewDistanceFromDepthTexel(ivec2 texel) {
     ivec2 size = textureSize(uDepthTex, 0);
     ivec2 clampedTexel = clamp(texel, ivec2(0), size - ivec2(1));
-    vec2 uv = (vec2(clampedTexel) + 0.5) * uInvFullResolution;
-    return viewDistanceFromDepth(texelFetch(uDepthTex, clampedTexel, 0).r, uv);
+    return viewDistanceFromDepth(texelFetch(uDepthTex, clampedTexel, 0).r);
 }
 
 vec4 spatialUpscaleVolumetric(vec2 uv) {
     vec2 fullCoord = gl_FragCoord.xy;
-    float centerLinearDepth = viewDistanceFromDepth(texture(uDepthTex, uv).r, uv);
+    float centerLinearDepth = viewDistanceFromDepth(texture(uDepthTex, uv).r);
     ivec2 halfSize = textureSize(uVolumetricTex, 0);
 
     // DerivativeMain spatial upscale: reconstruct from the matching checkerboard
     // half-res texels and weight by linear depth, avoiding screen-space fog sheets.
     // DerivativeMain lib/Atmosphere/Fogs.glsl:46: bias rotates with frameCounter
     // so each frame samples a different 2x2 quarter, providing temporal variation.
-    ivec2 bias = ivec2(fullCoord + float(uFrameIndex)) & ivec2(1);
+    // A/B test: uFreezeBias=1 uses static bias (no temporal rotation).
+    ivec2 bias = (uFreezeBias != 0)
+        ? ivec2(floor(fullCoord)) & ivec2(1)
+        : ivec2(fullCoord + float(uFrameIndex)) & ivec2(1);
     ivec2 baseTexel = ivec2(floor(fullCoord * 0.5)) + bias * 2;
     ivec2 offsets[4] = ivec2[](
         ivec2(-2, -2),

@@ -37,8 +37,11 @@ public:
     void copySceneCompositeToSceneResolved() const;
     void copySceneCompositeToTransparentComposite() const;
     void copySceneResolvedToTransparentComposite() const;
+    void copyTransparentCompositeToSceneComposite() const;
+    void copyTransparentCompositeToSceneResolved() const;
     void copyDepthToTransparentComposite() const;
     void copySceneResolvedToHistory() const;
+    void copySceneResolvedToTemporalCurrent() const;
     void copyDepthToHistory() const;
     void copyReflectionToHistory() const;
     void copyCloudToHistory() const;
@@ -83,6 +86,7 @@ public:
     [[nodiscard]] GLuint historyReflectionTexturePrev() const { return m_historyReflectionTex[1 - m_currentHistoryIndex]; }
     [[nodiscard]] GLuint historyCloudTexture() const { return m_historyCloudTex[m_currentHistoryIndex]; }
     [[nodiscard]] GLuint historyCloudTexturePrev() const { return m_historyCloudTex[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] GLuint temporalCurrentTexture() const { return m_temporalCurrentTex; }
     [[nodiscard]] GLuint velocityTexture() const { return m_velocityTex; }
     [[nodiscard]] GLuint weatherMaskTexture() const { return m_weatherMaskTex; }
     [[nodiscard]] GLuint atmosphereLutTexture() const { return m_atmosphereLut3d; }
@@ -200,6 +204,10 @@ private:
     GLuint m_historyCloudFbo[2] = {0, 0};
     GLuint m_historyCloudTex[2] = {0, 0};
     int m_currentHistoryIndex = 0;
+
+    // TAA current-frame scratch: avoids reading history[current] as TAA input.
+    GLuint m_temporalCurrentFbo = 0;
+    GLuint m_temporalCurrentTex = 0;
 
     // Velocity buffer (RG16F encodes screen-space velocity xy)
     GLuint m_velocityFbo = 0;

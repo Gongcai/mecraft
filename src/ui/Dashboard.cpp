@@ -440,7 +440,12 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "63: VFog Receiver Depth",
             "64: VFog Sun/Sky Ratio",
             "65: VFog Beam Modulation",
-            "66: VFog Density Field"
+            "66: VFog Density Field",
+            "67: TAA Current Scratch",
+            "68: TAA Current-History Delta",
+            "69: Velocity Sky Highlight",
+            "70: Raw Half VFog",
+            "71: Upscaled VFog"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
@@ -885,6 +890,13 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
         ImGui::TextDisabled("VFog Strength 1.00 matches DerivativeMain VOLUMETRIC_FOG_DENSITY baseline");
         pipelineChanged |= ImGui::SliderFloat("VFog Shadow Bias Scale", &pipeline.volumetricShadowBiasScale, 0.0f, 4.0f, "%.2f");
+        // A/B test toggles for TAA/VFog temporal convergence diagnosis
+        ImGui::Separator();
+        ImGui::TextDisabled("TAA/VFog A/B Test");
+        pipelineChanged |= ImGui::Checkbox("Freeze R1 Dither", &pipeline.freezeR1);
+        pipelineChanged |= ImGui::Checkbox("Freeze Upscale Bias", &pipeline.freezeBias);
+        pipelineChanged |= ImGui::Checkbox("Force Zero Velocity", &pipeline.forceZeroVelocity);
+        pipelineChanged |= ImGui::Checkbox("Freeze TAA Jitter", &pipeline.freezeTaaJitter);
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Kappa Grade", &pipeline.kappaGradingStrength, 0.0f, 1.0f, "%.2f");

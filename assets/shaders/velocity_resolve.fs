@@ -7,6 +7,7 @@ uniform sampler2D uDepthTex;
 uniform mat4 uInvViewProj;
 uniform mat4 uPreviousViewProj;
 uniform vec2 uScreenSize;
+uniform int uForceZeroVelocity; // A/B test: 1 = output zero velocity everywhere
 
 // DerivativeMain: 3x3 neighborhood offsets (excluding center)
 const ivec2 offset3x3N[8] = ivec2[8](
@@ -22,6 +23,12 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
 }
 
 void main() {
+    // A/B test: force zero velocity to verify TAA pure accumulation
+    if (uForceZeroVelocity != 0) {
+        FragVelocity = vec2(0.0);
+        return;
+    }
+
     ivec2 texel = ivec2(gl_FragCoord.xy);
     float depth = texelFetch(uDepthTex, texel, 0).r;
 
