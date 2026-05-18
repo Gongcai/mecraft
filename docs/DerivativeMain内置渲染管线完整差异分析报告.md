@@ -7,6 +7,7 @@
 > 2026-05-15 源码同步：`FromSH` skylight 已实现（`sky_sh.glsl`，L1 SH 25 方向采样）并接入 deferred lighting；SkyCapture raw sky 已剥离天体盘；云/水光照已统一到 `LightingEnvironment` 单来源并按 DerivativeMain 做了能量倍率审计（volumetric sun=22.0/sky=0.15，planar sun=120.0，water fog sun=28.0*directIlluminance，sun reflection clamp 2000）；云合成已修正为 premultiplied strength 混合。Phase 0 亮度链路收口基本完成，后续转向 SSS、体积雾参数化、Tonemap 对齐。
 > 2026-05-16 体积雾同步：`volumetric_fog.fs` 已按 DerivativeMain `VolumetricFog.glsl` 主积分形态收口，使用 `sunlightSample/skylightSample/transmittance` 循环累积，循环后统一应用 `directIlluminance/skyIlluminance` 与 `fogSunColor*20 + fogSkyColor*2`。Low/Medium Cornette-Shanks phase、High/Ultra sunlight OD、多瓣 HG、powder、`TIME_FADE`、Bloomy Fog 与 debug 64/65 均已落地；旧 `uVolumetricLightStrength/uVolumetricPhaseG` 失效路径已清理。剩余重点是 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度公式、天气光照联动与水下体积光。
 > 2026-05-15 后处理曝光同步：`PostProcessRenderer::updateAutoExposure()` 已恢复 DerivativeMain `Temporal.vert` 的自动曝光公式：无 `averageLum >= 0.02` 地板、无 target exposure min/max clamp、适应速度为 `target < prev ? 1.5 : 1.0`。`autoExposureMin/Max` 仅作为 legacy UI/settings 字段保留，不再作为 DerivativeMain-like 标准路径的调参依据。
+> 2026-05-18 TAA/VFog 时间管线重写：完全重写 `temporal_resolve.fs` 对齐 DerivativeMain `Temporal.frag`——variance clip（mean ± 1.25σ）、固定 0.97 history weight + 子像素覆盖调制、Reinhard 亮度加权混合、CatmullRom history sampling（sharpness=0.7）、taaOffset × 0.5 采样偏移、无 sky 特判统一流程。重写 `velocity_resolve.fs`——3×3 closest fragment 搜索、远平面 reprojection velocity（无 sky early return）、raw projection path（无手动 jitter 减法）。GBuffer 投影注入 TAA jitter（`gl_Position.xy += taaOffset * gl_Position.w` 等价），所有读取 depth 的 pass 统一使用 jitteredInvViewProj。渲染顺序重排为 VFog → TAA（DerivativeMain 原序）。VFog 恢复 R1 时间抖动（golden ratio）与旋转 spatial upscale bias。新增 `TemporalCurrent` scratch RT 避免 TAA 读写 history 冲突。新增 debug 67/68/69（TAA current scratch、current-history delta、velocity sky highlight）与 Dashboard A/B 开关（Freeze R1、Freeze Bias、Force Zero Velocity、Freeze TAA Jitter）。
 
 > 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
 
@@ -556,6 +557,10 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - Bloomy Fog 已完成：volumetric alpha 输出 transmittance，TAA/motion_blur/dof 保留 alpha，postprocess `CalculateBloomFog()` 按 DerivativeMain 双套权重混合 `fogBloom`。
 - Debug 64/65 已加入：`VFog Sun/Sky Ratio` 与 `VFog Beam Modulation`。
 - 旧 `uVolumetricLightStrength/uVolumetricPhaseG` 与 UI 失效滑条已清理/标记 deprecated。
+- **R1 时间抖动已恢复（2026-05-18）：** `volumetric_fog.fs` 使用 DerivativeMain `R1(frameCounter, noiseTexel.a)` 准随机序列（golden ratio），每帧偏移 `1/PHI`，TAA 逐帧积累。Dashboard `Freeze R1 Dither` 可冻结为静态 per-pixel hash。
+- **旋转 spatial upscale bias 已恢复（2026-05-18）：** `volumetric_composite.fs` 使用 `ivec2(fullCoord + frameCounter) % 2`，每帧采样不同 2×2 quarter。Dashboard `Freeze Upscale Bias` 可冻结为静态 bias。
+- **渲染顺序已重排为 VFog → TAA（2026-05-18）：** 与 DerivativeMain `composite.fsh → Temporal.fsh` 一致，VFog 参与 TAA temporal accumulation。`updateDeferredHistoryTargets` 在 TAA 之后执行，history 存储 VFog+TAA 结果。
+- **深度重建使用 raw invViewProj（2026-05-18）：** 匹配 DerivativeMain `ScreenToViewSpaceRaw`（不做 taaOffset 减法），jittered screen ray 由 TAA 平均。
 
 未完整适配：
 
@@ -671,7 +676,20 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 已适配：
 
-- TAA 有 reprojection、history depth、CatmullRom/YCoCg/variance clamp/Reinhard blend。
+- **TAA temporal resolve 已对齐 DerivativeMain（2026-05-18 重写）：**
+  - Variance clip（mean ± 1.25σ）替代旧 AABB 12.5% expansion。
+  - 固定 0.97 history weight + 子像素覆盖调制（`sqrt(pixelVelocity.x * pixelVelocity.y) * 0.25 + 0.75`）。
+  - Reinhard 亮度加权混合：`invReinhard(mix(reinhard(current), reinhard(history), weight))`。
+  - CatmullRom history sampling（5-tap SMAA 近似，sharpness=0.7）。
+  - `taaOffset × 0.5` 应用到当前采样坐标。
+  - 无 sky 特判：所有像素（包括 sky、VFog）统一走 variance clip + 0.97 blend。
+  - `TemporalCurrent` scratch RT 避免 TAA 读写 history ping-pong 冲突。
+- **Velocity resolve 已对齐 DerivativeMain（2026-05-18 重写）：**
+  - 3×3 closest fragment 搜索（`GetClosestFragment` 等价）。
+  - 远平面 reprojection velocity（无 sky early return，depth=1 也做 reprojection）。
+  - Raw projection path（无手动 jitter 减法，矩阵本身编码 jitter）。
+- **GBuffer TAA jitter 已注入（2026-05-18）：** `jitteredViewProj` 等价于 `gl_Position.xy += taaOffset * gl_Position.w`，所有读取 depth 的 pass（deferred lighting、reflection、cloud、VFog、water composite）统一使用 jitteredInvViewProj。
+- **Debug 诊断已补齐（2026-05-18）：** Debug 67=TAA Current Scratch、68=TAA Current-History Delta、69=Velocity Sky Highlight。Dashboard A/B 开关：Freeze R1、Freeze Bias、Force Zero Velocity、Freeze TAA Jitter。
 - Motion blur、DoF、Bloom、AgX/ACES/Filmic、sharpen/dither 均有入口。
 - PostProcessRenderer 已有 DerivativeMain sigmoid exposure response 注释来源。
 

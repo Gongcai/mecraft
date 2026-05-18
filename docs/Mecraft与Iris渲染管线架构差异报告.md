@@ -6,7 +6,8 @@
 
 > 2026-05-13 路线修订：项目目标已从“复现 Iris/OptiFine contract”调整为“建立 Mecraft Renderer Contract，并让内置 DerivativeMain-like 光影适配该 contract”。Iris 继续作为重要参照，用于理解 shaderpack 默认假设和定位 bug，但不作为最终架构硬目标。
 > 2026-05-14 源码同步：SkyCapture normalized UV、GPU metadata 读取入口、directional debug 和体积雾 High/Ultra 雏形已落地。当前架构风险重点转为：`FromSH` skylight、云/水 sunlight 单来源尾项、CSM SSS depth、体积雾 SEA_LEVEL/FALLOFF/samples/Bloomy Fog。
-> 2026-05-16 源码同步：体积雾主积分基线已对齐 DerivativeMain `VolumetricFog.glsl`，`TIME_FADE` 开关、Bloomy Fog、Debug 64/65 和失效 UI 清理已落地。当前体积雾风险从“主积分/后处理未接”转为 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动与水下 `UW_VOLUMETRIC_LIGHT`。
+> 2026-05-16 源码同步：体积雾主积分基线已对齐 DerivativeMain `VolumetricFog.glsl`，`TIME_FADE` 开关、Bloomy Fog、Debug 64/65 和失效 UI 清理已落地。当前体积雾风险从”主积分/后处理未接”转为 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动与水下 `UW_VOLUMETRIC_LIGHT`。
+> 2026-05-18 TAA/VFog 时间管线同步：TAA temporal resolve 完全重写对齐 DerivativeMain（variance clip、0.97 fixed weight、CatmullRom、Reinhard luminance blend、taaOffset × 0.5）；velocity resolve 重写（3×3 closest fragment、远平面 reprojection、raw projection path）；GBuffer 投影注入 TAA jitter；渲染顺序重排为 VFog → TAA（DerivativeMain 原序）；VFog 恢复 R1 dither 与旋转 upscale bias；新增 TemporalCurrent scratch RT、debug 67-69、Dashboard A/B 开关。TAA 差异从”可用但非完整等价”升级为”DerivativeMain parity 基本达成”。
 
 ## 目标边界
 
@@ -57,22 +58,23 @@
 - `src/renderer/Renderer.cpp:2553`：`renderOpaqueChunksAndCollectPasses`
 - `src/renderer/Renderer.cpp:1117`：`bindShadowFrameUniforms`
 
-现有大致顺序：
+现有大致顺序（2026-05-18 更新，VFog → TAA 已对齐 DerivativeMain 原序）：
 
 1. begin frame / 更新 camera、天空、大气、时间、history。
-2. GBuffer terrain pass。
-3. velocity pass。
+2. GBuffer terrain pass（TAA jitter 已注入 `jitteredViewProj`）。
+3. velocity pass（3×3 closest fragment、远平面 reprojection、raw projection path）。
 4. shadow map pass。
 5. SSAO / AO filter。
-6. deferred lighting。
-7. reflection / reflection filter。
-8. cloud。
+6. deferred lighting（使用 `jitteredInvViewProj`）。
+7. reflection / reflection filter（使用 `jitteredInvViewProj`）。
+8. cloud（使用 `jitteredInvViewProj`）。
 9. scene composite。
-10. volumetric fog。
-11. temporal resolve。
+10. volumetric fog（R1 dither + rotating upscale bias，使用 raw `invViewProj`）。
+11. temporal resolve（读 TemporalCurrent scratch + HistoryPrev，variance clip + 0.97 + CatmullRom）。
 12. motion blur / DoF。
-13. water / transparent composite。
-14. post process / debug view。
+13. `updateDeferredHistoryTargets`（history 快照，存储 VFog+TAA 结果）。
+14. water / transparent composite。
+15. post process / debug view。
 
 这个架构适合项目自有光照管线，但与 Iris 最大差别是：Mecraft 当前以“自己定义的一组 pass 和资源”为中心；Iris 以“shaderpack 声明 + Minecraft 渲染阶段 + OptiFine 兼容 uniform/texture contract”为中心。
 
