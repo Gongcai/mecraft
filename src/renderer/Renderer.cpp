@@ -291,8 +291,10 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
 
     m_waterCompositeShader->use();
     m_waterCompositeShader->setMat4("view", frame.view);
-    m_waterCompositeShader->setMat4("viewProj", frame.viewProj);
-    m_waterCompositeShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_waterCompositeShader->setMat4("viewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
+    m_waterCompositeShader->setMat4("uInvViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
     m_waterCompositeShader->setMat4("model", glm::mat4(1.0f));
     m_waterCompositeShader->setInt("uUseModel", 0);
     m_waterCompositeShader->setInt("texArray", 0);
@@ -980,20 +982,31 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.frameIndex = m_frameCounter;
     frame.deltaTime = static_cast<float>(Time::deltaTime);
 
-    // Halton(2,3) sequence for 8-sample jitter base
+    // DerivativeMain shaders.properties:
+    // frameX = frac(frameCounter / 1.3247179572 + 0.5) * 2.0 - 1.0
+    // frameY = frac(frameCounter / 1.7548776662 + 0.5) * 2.0 - 1.0
+    // taaOffset = vec2(frameX / viewWidth, frameY / viewHeight)
     {
-        constexpr int kHaltonBase = 8;
-        const uint64_t idx = m_frameCounter % static_cast<uint64_t>(kHaltonBase);
-        float haltonX = 0.0f, haltonY = 0.0f;
-        float f2 = 1.0f, f3 = 1.0f;
-        uint64_t n = idx;
-        while (n > 0) { f2 /= 2.0f; haltonX += f2 * static_cast<float>(n % 2); n /= 2; }
-        n = idx;
-        while (n > 0) { f3 /= 3.0f; haltonY += f3 * static_cast<float>(n % 3); n /= 3; }
         const float invW = 1.0f / static_cast<float>(std::max(1, m_deferredTargets.width()));
         const float invH = 1.0f / static_cast<float>(std::max(1, m_deferredTargets.height()));
-        frame.jitter.x = (haltonX * 2.0f - 1.0f) * invW;
-        frame.jitter.y = (haltonY * 2.0f - 1.0f) * invH;
+        const float frameCounter = static_cast<float>(m_frameCounter);
+        const float frameX = glm::fract(frameCounter / 1.3247179572f + 0.5f) * 2.0f - 1.0f;
+        const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
+        frame.jitter.x = frameX * invW;
+        frame.jitter.y = frameY * invH;
+    }
+
+    // DerivativeMain-style TAA jitter: bake sub-pixel offset into projection
+    // so GBuffer vertices are shifted each frame. This is equivalent to
+    // gl_Position.xy += taaOffset * gl_Position.w in the vertex shader.
+    {
+        glm::mat4 jitteredProj = m_projection;
+        for (int column = 0; column < 4; ++column) {
+            jitteredProj[column][0] += frame.jitter.x * m_projection[column][3];
+            jitteredProj[column][1] += frame.jitter.y * m_projection[column][3];
+        }
+        frame.jitteredViewProj = jitteredProj * m_view;
+        frame.jitteredInvViewProj = glm::inverse(frame.jitteredViewProj);
     }
 
     if (m_hasPreviousFrameData) {
@@ -1001,12 +1014,14 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.previousView = m_previousFrameData.view;
         frame.previousProjection = m_previousFrameData.projection;
         frame.previousViewProj = m_previousFrameData.viewProj;
+        frame.previousJitteredViewProj = m_previousFrameData.jitteredViewProj;
         frame.previousInvViewProj = m_previousFrameData.invViewProj;
     } else {
         frame.previousJitter = frame.jitter;
         frame.previousView = frame.view;
         frame.previousProjection = frame.projection;
         frame.previousViewProj = frame.viewProj;
+        frame.previousJitteredViewProj = frame.jitteredViewProj;
         frame.previousInvViewProj = frame.invViewProj;
     }
     // Weather state now comes from World::WeatherSystem (single source of truth).
@@ -1197,9 +1212,12 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     shader.setInt("uSkyCaptureTex", 12);
     shader.setInt("uAlbedoTex", 13);
     shader.setInt("uAtmosphereLut", 14);
-    shader.setMat4("uViewProj", frame.viewProj);
-    shader.setMat4("uInvViewProj", frame.invViewProj);
-    shader.setMat4("uPreviousViewProj", frame.previousViewProj);
+    shader.setMat4("uViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
+    shader.setMat4("uInvViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
+    shader.setMat4("uPreviousViewProj",
+        m_pipelineSettings.taaEnabled ? frame.previousJitteredViewProj : frame.previousViewProj);
     shader.setMat4("uPreviousInvViewProj", frame.previousInvViewProj);
     shader.setVec2("uJitter", frame.jitter);
     shader.setVec2("uPreviousJitter", frame.previousJitter);
@@ -1434,7 +1452,25 @@ bool Renderer::renderWorldDeferred(const World& world,
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
 
-    // TAA resolve: blend current SceneResolved with reprojected history
+    // DerivativeMain-style pipeline: VFog composited BEFORE TAA so the fog
+    // participates in temporal accumulation. R1 dither + checkerboard upscale
+    // provides per-frame variation that TAA resolves over multiple frames.
+    if (m_pipelineSettings.volumetricFogEnabled &&
+        m_pipelineSettings.aerialPerspectiveEnabled &&
+        m_pipelineSettings.volumetricFogStrength > 0.001f &&
+        m_volumetricFogShader != nullptr &&
+        m_volumetricCompositeShader != nullptr) {
+#ifdef MECRAFT_DEBUG
+        beginGpuTimer(GpuTimerPass::Volumetric);
+#endif
+        renderVolumetricFogPass(frame);
+        compositeVolumetricFogPass();
+#ifdef MECRAFT_DEBUG
+        endGpuTimer(GpuTimerPass::Volumetric);
+#endif
+    }
+
+    // TAA resolve: blend current SceneResolved (with fog) with reprojected history
     if (m_pipelineSettings.taaEnabled &&
         m_temporalResolveShader != nullptr &&
         m_hasPreviousFrameData) {
@@ -1450,24 +1486,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     if (m_pipelineSettings.dofEnabled && m_dofShader != nullptr) {
         renderDofPass(frame);
     }
-    // Keep volumetric fog out of scene TAA history. Without a dedicated
-    // depth/motion-aware VFog history, reprojecting far-plane fog creates
-    // rectangular trails and dark disocclusion edges during camera movement.
     updateDeferredHistoryTargets();
-    if (m_pipelineSettings.volumetricFogEnabled &&
-        m_pipelineSettings.aerialPerspectiveEnabled &&
-        m_pipelineSettings.volumetricFogStrength > 0.001f &&
-        m_volumetricFogShader != nullptr &&
-        m_volumetricCompositeShader != nullptr) {
-#ifdef MECRAFT_DEBUG
-        beginGpuTimer(GpuTimerPass::Volumetric);
-#endif
-        renderVolumetricFogPass(frame);
-        compositeVolumetricFogPass();
-#ifdef MECRAFT_DEBUG
-        endGpuTimer(GpuTimerPass::Volumetric);
-#endif
-    }
     m_deferredTargets.copySceneResolvedToTransparentComposite();
     m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
@@ -1501,6 +1520,11 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     m_chunkShader = m_chunkGBufferShader;
     bindChunkRenderStateForShader(frame, texArray, *m_chunkGBufferShader);
+    // DerivativeMain-style TAA: jitter GBuffer projection so vertices shift
+    // sub-pixel each frame, enabling proper temporal accumulation.
+    if (m_pipelineSettings.taaEnabled) {
+        m_chunkGBufferShader->setMat4("viewProj", frame.jitteredViewProj);
+    }
     submitMeshingJobs(world);
 
     std::vector<ChunkRenderEntry> cutoutEntries;
@@ -1704,8 +1728,10 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uSsaoTex", 9);
     m_deferredLightingShader->setInt("uSkyCaptureTex", 10);
     m_deferredLightingShader->setInt("uNoiseTex", 11);
-    m_deferredLightingShader->setMat4("uViewProj", frame.viewProj);
-    m_deferredLightingShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_deferredLightingShader->setMat4("uViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
+    m_deferredLightingShader->setMat4("uInvViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
     m_deferredLightingShader->setMat4("uProjection", frame.projection);
     bindShadowFrameUniforms(*m_deferredLightingShader, frame);
     bindSkyLightingUniforms(*m_deferredLightingShader, frame);
@@ -1872,10 +1898,14 @@ void Renderer::renderVelocityPass(const RenderFrameData& frame) {
 
     m_velocityShader->use();
     m_velocityShader->setInt("uDepthTex", 0);
+    // DerivativeMain Reproject() uses ScreenToViewSpaceRaw with the raw
+    // projection matrices. The jittered screen coordinate is preserved as an
+    // input to TAA, but frame-to-frame jitter is not encoded as velocity.
     m_velocityShader->setMat4("uInvViewProj", frame.invViewProj);
     m_velocityShader->setMat4("uPreviousViewProj", frame.previousViewProj);
-    m_velocityShader->setVec2("uJitter", frame.jitter);
-    m_velocityShader->setVec2("uPreviousJitter", frame.previousJitter);
+    m_velocityShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
@@ -1923,8 +1953,10 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uSkyCaptureTex", 5);
     m_reflectionShader->setInt("uAtmosphereLut", 6);
     m_reflectionShader->setInt("uVoxelLightTex", 7);
-    m_reflectionShader->setMat4("uViewProj", frame.viewProj);
-    m_reflectionShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_reflectionShader->setMat4("uViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
+    m_reflectionShader->setMat4("uInvViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
     m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
     m_reflectionShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
     m_reflectionShader->setVec3("uMoonDirection", frame.skyColors.moonDirection);
@@ -1985,7 +2017,8 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     m_cloudShader->setInt("uSkyCaptureTex", 1);
     m_cloudShader->setInt("uNoiseTex", 2);
     m_cloudShader->setInt("uAtmosphereLut", 3);
-    m_cloudShader->setMat4("uInvViewProj", frame.invViewProj);
+    m_cloudShader->setMat4("uInvViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
     bindSkyLightingUniforms(*m_cloudShader, frame);
     bindAtmosphereUniforms(*m_cloudShader, frame);
     bindCloudUniforms(*m_cloudShader, frame);
@@ -2031,6 +2064,8 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setInt("uShadowColorTex", 4);
     m_volumetricFogShader->setInt("uAtmosphereLut", 5);
     m_volumetricFogShader->setInt("uCsmShadowMap", 6);
+    // DerivativeMain: VFog uses raw ScreenToViewSpaceRaw (no taaOffset
+    // subtraction). The jittered screen ray is preserved and TAA accumulates.
     m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
     bindShadowFrameUniforms(*m_volumetricFogShader, frame);
     bindSkyLightingUniforms(*m_volumetricFogShader, frame);
@@ -2182,19 +2217,10 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
     m_temporalResolveShader->setInt("uCurrentTex", 0);
     m_temporalResolveShader->setInt("uHistoryTex", 1);
     m_temporalResolveShader->setInt("uVelocityTex", 2);
-    m_temporalResolveShader->setInt("uDepthTex", 3);
-    m_temporalResolveShader->setInt("uHistoryDepthTex", 4);
-
-    m_temporalResolveShader->setMat4("uInvViewProj", frame.invViewProj);
-    m_temporalResolveShader->setMat4("uPreviousViewProj", frame.previousViewProj);
     m_temporalResolveShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
     m_temporalResolveShader->setVec2("uJitter", frame.jitter);
-    m_temporalResolveShader->setVec2("uPreviousJitter", frame.previousJitter);
-    m_temporalResolveShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex));
-    m_temporalResolveShader->setFloat("uBlendMin", m_pipelineSettings.taaBlendMin);
-    m_temporalResolveShader->setFloat("uBlendMax", m_pipelineSettings.taaBlendMax);
 
     // uCurrentTex = this frame's unresolved color (now stored in history[current])
     glActiveTexture(GL_TEXTURE0);
@@ -2204,14 +2230,10 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexturePrev());
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyDepthTexturePrev());
 
     renderFullscreen(*m_temporalResolveShader);
 
-    for (int i = 4; i >= 0; --i) {
+    for (int i = 2; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }

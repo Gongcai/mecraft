@@ -6,8 +6,14 @@ out vec2 FragVelocity;
 uniform sampler2D uDepthTex;
 uniform mat4 uInvViewProj;
 uniform mat4 uPreviousViewProj;
-uniform vec2 uJitter;
-uniform vec2 uPreviousJitter;
+uniform vec2 uScreenSize;
+
+// DerivativeMain: 3x3 neighborhood offsets (excluding center)
+const ivec2 offset3x3N[8] = ivec2[8](
+    ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1),
+    ivec2(-1,  0),                ivec2(1,  0),
+    ivec2(-1,  1), ivec2(0,  1), ivec2(1,  1)
+);
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -16,16 +22,32 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
 }
 
 void main() {
-    float depth = texture(uDepthTex, vTexCoord).r;
-    if (depth >= 0.9999) {
-        FragVelocity = vec2(0.0);
-        return;
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    float depth = texelFetch(uDepthTex, texel, 0).r;
+
+    // DerivativeMain-style closest fragment: search 3x3 neighborhood for the
+    // nearest depth texel. This stabilizes velocity at depth discontinuities.
+    vec3 closestFragment = vec3(texel, depth);
+    for (int i = 0; i < 8; ++i) {
+        ivec2 sampleTexel = offset3x3N[i] + texel;
+        float sampleDepth = texelFetch(uDepthTex, clamp(sampleTexel, ivec2(0), ivec2(uScreenSize) - 1), 0).r;
+        if (sampleDepth < closestFragment.z) {
+            closestFragment = vec3(sampleTexel, sampleDepth);
+        }
     }
 
-    vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+    // DerivativeMain: no sky early return. depth=1 (sky/far-plane) gets
+    // a valid far-plane reprojection velocity. This is critical for TAA
+    // to properly accumulate VFog dither; sky pixels must track camera
+    // rotation, not stay pinned to screen space.
+    // DerivativeMain/program/Post/Temporal.frag::GetClosestFragment returns
+    // closestFragment.xy *= screenPixelSize, without a half-texel offset.
+    vec2 closestUv = closestFragment.xy / uScreenSize;
+    vec3 worldPos = reconstructWorldPosition(closestUv, closestFragment.z);
     vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
     vec2 previousUv = previousClip.xy / max(previousClip.w, 0.00001) * 0.5 + 0.5;
-    // The main gbuffer projection is currently not jittered. Including the Halton
-    // offsets here creates artificial full-screen motion and makes TAA drag history.
-    FragVelocity = vTexCoord - previousUv;
+
+    // DerivativeMain raw reprojection: Reproject() uses raw projection
+    // matrices and does not manually subtract current/previous jitter.
+    FragVelocity = closestUv - previousUv;
 }

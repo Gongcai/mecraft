@@ -1,4 +1,9 @@
 #version 450 core
+// DerivativeMain-style temporal resolve. Parity with Temporal.frag:
+// - Variance clip (mean +/- 1.25 * stddev) instead of AABB expansion
+// - Fixed 0.97 blend weight with sub-pixel coverage modulation
+// - Reinhard luminance-weighted tonemapping
+// - taaOffset * 0.5 applied to current sample coordinate
 
 in vec2 vTexCoord;
 out vec4 FragColor;
@@ -6,158 +11,118 @@ out vec4 FragColor;
 uniform sampler2D uCurrentTex;
 uniform sampler2D uHistoryTex;
 uniform sampler2D uVelocityTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uHistoryDepthTex;
 
-uniform mat4 uInvViewProj;
-uniform mat4 uPreviousViewProj;
 uniform vec2 uScreenSize;
 uniform vec2 uJitter;
-uniform vec2 uPreviousJitter;
-uniform int uFrameIndex;
-uniform float uBlendMin;
-uniform float uBlendMax;
 
-const float kPi = 3.14159265359;
-
-vec3 rgbToYCoCgR(vec3 c) {
-    float y  =  0.25 * c.r + 0.5 * c.g + 0.25 * c.b;
-    float co =  0.5 * c.r - 0.5 * c.b;
-    float cg = -0.25 * c.r + 0.5 * c.g - 0.25 * c.b;
-    return vec3(y, co, cg);
+vec3 RGBtoYCoCgR(in vec3 rgbColor) {
+    vec3 ycocg;
+    ycocg.y = rgbColor.r - rgbColor.b;
+    float temp = rgbColor.b + ycocg.y * 0.5;
+    ycocg.z = rgbColor.g - temp;
+    ycocg.x = temp + ycocg.z * 0.5;
+    return ycocg;
 }
 
-vec3 yCoCgRToRgb(vec3 c) {
-    float r = c.x + c.y - c.z;
-    float g = c.x + c.z;
-    float b = c.x - c.y - c.z;
-    return vec3(r, g, b);
+vec3 YCoCgRtoRGB(in vec3 ycocg) {
+    vec3 rgb;
+    float temp = ycocg.x - ycocg.z * 0.5;
+    rgb.g = ycocg.z + temp;
+    rgb.b = temp - ycocg.y * 0.5;
+    rgb.r = rgb.b + ycocg.y;
+    return rgb;
 }
 
-vec3 clipAABB(vec3 aabbMin, vec3 aabbMax, vec3 color) {
-    vec3 center = 0.5 * (aabbMax + aabbMin);
-    vec3 extents = 0.5 * (aabbMax - aabbMin);
-    vec3 offset = color - center;
-    vec3 ts = mix(vec3(1e6), extents / max(abs(offset), 1e-6), step(vec3(1e-6), abs(extents)));
-    float t = min(min(ts.x, ts.y), ts.z);
-    t = clamp(t, 0.0, 1.0);
-    return center + offset * t;
+float GetLuminance(in vec3 color) {
+    return dot(color, vec3(0.2722, 0.6741, 0.0537));
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    vec4 world = uInvViewProj * clip;
-    return world.xyz / max(world.w, 0.00001);
+vec3 reinhard(in vec3 color) {
+    return color / (1.0 + GetLuminance(color));
 }
 
-float reprojectedPreviousDepth(vec2 uv, float depth) {
-    vec3 worldPos = reconstructWorldPosition(uv, depth);
-    vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
-    vec3 previousNdc = previousClip.xyz / max(previousClip.w, 0.00001);
-    return previousNdc.z * 0.5 + 0.5;
+vec3 invReinhard(in vec3 color) {
+    return color / (1.0 - GetLuminance(color));
 }
 
-vec3 sampleCurrentClamped(vec2 uv) {
-    vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
-    return texture(uCurrentTex, clamp(uv, texelSize * 0.5, 1.0 - texelSize * 0.5)).rgb;
+vec3 clipAABB(in vec3 boxMin, in vec3 boxMax, in vec3 previousSample) {
+    vec3 p_clip = 0.5 * (boxMax + boxMin);
+    vec3 e_clip = 0.5 * (boxMax - boxMin);
+    vec3 v_clip = previousSample - p_clip;
+    vec3 v_unit = v_clip / max(e_clip, vec3(1e-6));
+    vec3 a_unit = abs(v_unit);
+    float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
+    if (ma_unit > 1.0) {
+        return v_clip / ma_unit + p_clip;
+    }
+    return previousSample;
 }
 
 void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
-    vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
-    vec2 historyUv = vTexCoord - velocity;
+    vec2 screenCoord = gl_FragCoord.xy * texelSize;
 
-    float depth = texture(uDepthTex, vTexCoord).r;
+    vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
+    vec2 previousCoord = screenCoord - velocity;
 
-    // If sky pixel, just output current frame. VFog is stabilized at its own
-    // sampling pattern; reprojecting sky history creates large far-plane trails.
-    if (depth >= 0.9999) {
-        FragColor = texture(uCurrentTex, vTexCoord);
+    // Out-of-bounds history: use current frame
+    if (previousCoord.x < 0.0 || previousCoord.x > 1.0 ||
+        previousCoord.y < 0.0 || previousCoord.y > 1.0) {
+        FragColor = texelFetch(uCurrentTex, texel, 0);
         return;
     }
 
-    vec3 currentColor = texture(uCurrentTex, vTexCoord).rgb;
+    // DerivativeMain: apply taaOffset * 0.5 to current sample coordinate.
+    // Convert UV to pixel, apply jitter in pixel space, clamp.
+    vec2 samplePixel = screenCoord * uScreenSize + uJitter * uScreenSize * 0.5;
+    ivec2 sampleTexel = clamp(ivec2(samplePixel), ivec2(0), ivec2(uScreenSize) - 1);
 
-    // Reject history if out of bounds
-    bool validHistory = historyUv.x >= 0.0 && historyUv.x <= 1.0 &&
-                        historyUv.y >= 0.0 && historyUv.y <= 1.0;
+    vec3 currentSample = texelFetch(uCurrentTex, sampleTexel, 0).rgb;
 
-    if (!validHistory) {
-        FragColor = vec4(currentColor, texture(uCurrentTex, vTexCoord).a);
-        return;
-    }
+    // DerivativeMain: no sky special case. All pixels, including sky and
+    // VFog, go through the same variance clip + 0.97 history blend.
+    // Sky velocity comes from far-plane reprojection, not zero.
 
-    float historyDepth = texture(uHistoryDepthTex, historyUv).r;
-    float expectedHistoryDepth = reprojectedPreviousDepth(vTexCoord, depth);
-    bool depthMatches = historyDepth < 0.9999 &&
-                        abs(historyDepth - expectedHistoryDepth) < max(0.0015, depth * 0.0025);
+    // 3x3 neighborhood in YCoCgR for variance clip, all around sampleTexel.
+    ivec2 clampedSize = ivec2(uScreenSize) - 1;
+    vec3 col0 = RGBtoYCoCgR(currentSample);
+    vec3 col1 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2(-1,  1), ivec2(0), clampedSize), 0).rgb);
+    vec3 col2 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 0,  1), ivec2(0), clampedSize), 0).rgb);
+    vec3 col3 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 1,  1), ivec2(0), clampedSize), 0).rgb);
+    vec3 col4 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2(-1,  0), ivec2(0), clampedSize), 0).rgb);
+    vec3 col5 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 1,  0), ivec2(0), clampedSize), 0).rgb);
+    vec3 col6 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2(-1, -1), ivec2(0), clampedSize), 0).rgb);
+    vec3 col7 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 0, -1), ivec2(0), clampedSize), 0).rgb);
+    vec3 col8 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 1, -1), ivec2(0), clampedSize), 0).rgb);
 
-    float velocityPixels = length(velocity * uScreenSize);
-    bool saneVelocity = all(lessThan(abs(velocity), vec2(0.35))) && velocityPixels < 160.0;
+    // DerivativeMain variance clip: mean +/- 1.25 * stddev
+    vec3 clipAvg = (col0 + col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8) / 9.0;
+    vec3 sqrVar = (col0*col0 + col1*col1 + col2*col2 + col3*col3 + col4*col4 + col5*col5 + col6*col6 + col7*col7 + col8*col8) / 9.0;
+    vec3 variance = sqrt(abs(sqrVar - clipAvg * clipAvg));
+    vec3 clipMin = clipAvg - variance * 1.25;
+    vec3 clipMax = clipAvg + variance * 1.25;
 
-    if (!depthMatches || !saneVelocity) {
-        FragColor = vec4(currentColor, texture(uCurrentTex, vTexCoord).a);
-        return;
-    }
+    // Sample and clip history
+    vec2 safeHistoryUv = clamp(previousCoord, texelSize * 0.5, 1.0 - texelSize * 0.5);
+    vec3 previousSample = RGBtoYCoCgR(texture(uHistoryTex, safeHistoryUv).rgb);
+    previousSample = clipAABB(clipMin, clipMax, previousSample);
+    previousSample = YCoCgRtoRGB(previousSample);
 
-    vec2 safeHistoryUv = clamp(historyUv, texelSize * 0.5, 1.0 - texelSize * 0.5);
-    vec3 historyColor = texture(uHistoryTex, safeHistoryUv).rgb;
+    // DerivativeMain blend: fixed 0.97 with sub-pixel coverage modulation.
+    // When the reprojected coordinate lands near a texel center (coverage ~1),
+    // history gets full weight. Near texel edges, weight drops slightly.
+    float blendWeight = 0.97;
+    vec2 pixelVelocity = 1.0 - abs(fract(previousCoord * uScreenSize) * 2.0 - 1.0);
+    blendWeight *= sqrt(pixelVelocity.x * pixelVelocity.y) * 0.25 + 0.75;
 
-    // 3x3 neighborhood variance clipping in YCoCgR
-    vec3 neighborMin = currentColor;
-    vec3 neighborMax = currentColor;
-    vec3 neighborSum = currentColor;
-    float neighborCount = 1.0;
+    // DerivativeMain: Reinhard luminance-weighted blend
+    vec3 result = invReinhard(mix(reinhard(currentSample), reinhard(previousSample), blendWeight));
 
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            if (x == 0 && y == 0) continue;
-            vec2 offset = vec2(float(x), float(y)) * texelSize;
-            vec3 neighbor = sampleCurrentClamped(vTexCoord + offset);
-            neighborMin = min(neighborMin, neighbor);
-            neighborMax = max(neighborMax, neighbor);
-            neighborSum += neighbor;
-            neighborCount += 1.0;
-        }
-    }
-
-    // Convert to YCoCgR for clipping
-    vec3 avgYCoCgR = rgbToYCoCgR(neighborSum / neighborCount);
-    vec3 minYCoCgR = rgbToYCoCgR(neighborMin);
-    vec3 maxYCoCgR = rgbToYCoCgR(neighborMax);
-
-    // Expand AABB slightly
-    vec3 boxSize = maxYCoCgR - minYCoCgR;
-    minYCoCgR -= boxSize * 0.125;
-    maxYCoCgR += boxSize * 0.125;
-
-    // Clip history to AABB
-    vec3 historyYCoCgR = rgbToYCoCgR(historyColor);
-    historyYCoCgR = clipAABB(minYCoCgR, maxYCoCgR, historyYCoCgR);
-    historyColor = yCoCgRToRgb(historyYCoCgR);
-
-    // Blend factor: blend history with current. Moving/reprojected pixels need
-    // more current-frame weight; otherwise old shadow silhouettes smear during turns.
-    float velocityLength = length(velocity) * max(uScreenSize.x, uScreenSize.y);
-    float motionBlendMax = max(uBlendMax, 0.72);
-    float blendFactor = mix(uBlendMin, motionBlendMax,
-                            smoothstep(0.35, 28.0, velocityLength));
-
-    // Reinhard domain blending for HDR stability
-    vec3 currentReinhard = currentColor / (1.0 + currentColor);
-    vec3 historyReinhard = historyColor / (1.0 + historyColor);
-    float disocclusion = smoothstep(0.0015, 0.012, abs(historyDepth - expectedHistoryDepth));
-    blendFactor = max(blendFactor, disocclusion);
-    float colorDelta = length(currentReinhard - historyReinhard);
-    float reactiveBlend = smoothstep(0.018, 0.16, colorDelta);
-    blendFactor = max(blendFactor, reactiveBlend * 0.82);
-    vec3 resultReinhard = mix(historyReinhard, currentReinhard, blendFactor);
-    vec3 result = resultReinhard / max(1.0 - resultReinhard, 1e-6);
-
-    // Preserve fog transmittance in alpha with same temporal blend.
-    float currentAlpha = texture(uCurrentTex, vTexCoord).a;
+    // Preserve fog transmittance in alpha
+    float currentAlpha = texelFetch(uCurrentTex, sampleTexel, 0).a;
     float historyAlpha = texture(uHistoryTex, safeHistoryUv).a;
-    float resultAlpha = mix(historyAlpha, currentAlpha, blendFactor);
+    float resultAlpha = mix(historyAlpha, currentAlpha, 1.0 - blendWeight);
 
     FragColor = vec4(max(result, vec3(0.0)), resultAlpha);
 }

@@ -547,7 +547,7 @@ void DeferredRenderTargets::copySceneResolvedToHistory() const {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
     glBlitFramebuffer(0, 0, m_width, m_height,
                       0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
 }
 

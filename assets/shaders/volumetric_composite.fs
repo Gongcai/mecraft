@@ -34,7 +34,9 @@ vec4 spatialUpscaleVolumetric(vec2 uv) {
 
     // DerivativeMain spatial upscale: reconstruct from the matching checkerboard
     // half-res texels and weight by linear depth, avoiding screen-space fog sheets.
-    ivec2 bias = ivec2(floor(fullCoord)) & ivec2(1);
+    // DerivativeMain lib/Atmosphere/Fogs.glsl:46: bias rotates with frameCounter
+    // so each frame samples a different 2x2 quarter, providing temporal variation.
+    ivec2 bias = ivec2(fullCoord + float(uFrameIndex)) & ivec2(1);
     ivec2 baseTexel = ivec2(floor(fullCoord * 0.5)) + bias * 2;
     ivec2 offsets[4] = ivec2[](
         ivec2(-2, -2),

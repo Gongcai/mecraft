@@ -404,6 +404,8 @@ private:
         glm::mat4 view = glm::mat4(1.0f);
         glm::mat4 projection = glm::mat4(1.0f);
         glm::mat4 viewProj = glm::mat4(1.0f);
+        glm::mat4 jitteredViewProj = glm::mat4(1.0f);
+        glm::mat4 jitteredInvViewProj = glm::mat4(1.0f);
         glm::mat4 invViewProj = glm::mat4(1.0f);
         glm::vec3 cameraPos = glm::vec3(0.0f);
         GameplaySkyRenderer::SkyColors skyColors{};
@@ -441,6 +443,7 @@ private:
         glm::mat4 previousView = glm::mat4(1.0f);
         glm::mat4 previousProjection = glm::mat4(1.0f);
         glm::mat4 previousViewProj = glm::mat4(1.0f);
+        glm::mat4 previousJitteredViewProj = glm::mat4(1.0f);
         glm::mat4 previousInvViewProj = glm::mat4(1.0f);
         float deltaTime = 0.0f;
     };

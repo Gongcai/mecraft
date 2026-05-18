@@ -409,18 +409,23 @@ void main() {
         mistDensity *= meWeight * meWeight + timeMidnight * 2.0;
     }
 
-    // Stable spatial jitter. DerivativeMain rotates R1 jitter through frameCounter,
-    // but that requires a matching VFog history resolve. Mecraft keeps this stable
-    // until VFog has a correct motion/depth-aware history path.
+    // DerivativeMain R1 dither: quasi-random low-discrepancy sequence based on
+    // the golden ratio. Each frame shifts by 1/PHI, providing temporal variation
+    // that TAA accumulates into a higher-quality result.
+    // DerivativeMain lib/Head/Noise.inc:89 R1()
     float jitter;
     if (uVolumetricStaticJitter != 0) {
         // Fixed per-pixel jitter (no camera/time dependence) for stable debug
         jitter = fract(dot(vTexCoord, vec2(12.9898, 78.233)) + 0.5);
     } else {
-        ivec2 noiseTexel = ivec2(gl_FragCoord.xy * 2.0) & ivec2(255);
-        jitter = uNoiseEnabled
+        // DerivativeMain/world0/composite.fsh computes the half-resolution fog
+        // seed as: texel = ivec2(gl_FragCoord.xy); texel *= 2; texel & 255.
+        ivec2 noiseTexel = (ivec2(gl_FragCoord.xy) * 2) & ivec2(255);
+        float seed = uNoiseEnabled
             ? texelFetch(uNoiseTex, noiseTexel, 0).a
             : hash13(vec3(gl_FragCoord.xy, 17.0));
+        const float PHI1 = 1.61803398874;
+        jitter = fract(seed + float(uFrameIndex) / PHI1);
     }
     int fogSteps = getFogSteps(marchDistance);
     float stepLength = marchDistance / float(fogSteps);
