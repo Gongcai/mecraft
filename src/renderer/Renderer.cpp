@@ -679,7 +679,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.volumetricShadowBiasScale = std::clamp(m_pipelineSettings.volumetricShadowBiasScale, 0.0f, 4.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 71);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 77);
 
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 5);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -1638,6 +1638,12 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     float maxCasterDistance = 0.0f;
     const char* cullingMode = "CSMBoxCulling";
 
+    // Water shadow pass: writes DepthAll + Color0/Color1 for UW VL dual-depth detection.
+    // Only runs for cascade 0 when underwater or when shadow contract debug views are active.
+    // Stained glass / generic transparent shadows are not yet supported by this path.
+    const bool needWaterShadow = m_eyeInWater ||
+        (m_pipelineSettings.debugViewMode >= 75 && m_pipelineSettings.debugViewMode <= 77);
+
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         const ShadowCascadeData& cascadeData = m_shadowRenderer.cascade(cascade);
 
@@ -1660,7 +1666,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
         cullingMode = shadowCuller.getCullingMode();
 
-        // Pass 1: Opaque-only (shadowtex1 equivalent — no water)
+        // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
         m_deferredTargets.bindCsmShadowLayer(cascade);
         glClear(GL_DEPTH_BUFFER_BIT);
         m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
@@ -1673,24 +1679,34 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         }
         renderCutoutChunks(cutoutEntries);
 
-        // Pass 2: Transparent/all (shadowtex0 + shadowcolor0/1 — includes water)
-        m_deferredTargets.bindCsmShadowTransparentLayer(cascade);
-        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-        m_shadowDepthShader->setInt("uShadowPassMode", 1);
-        // Re-submit: opaque blocks write depth + color for DepthAll buffer
-        if (m_useMultiDrawIndirect) {
-            m_worldRenderBuffer.beginFrame();
-            std::vector<ChunkRenderEntry> cutoutEntries2;
-            std::vector<ChunkRenderEntry> transparentEntries2;
-            renderOpaqueChunksAndCollectPasses(world, cutoutEntries2, transparentEntries2, false,
-                                               shadowDist, nullptr);
-            m_worldRenderBuffer.flushOpaque();
-            renderCutoutChunks(cutoutEntries2);
+        // Pass 2: Transparent/all — only cascade 0, only when needed.
+        // Copy DepthOpaque → DepthAll, then draw water on top with depth writes.
+        if (needWaterShadow && cascade == 0) {
+            const int res = m_deferredTargets.shadowResolution();
+            // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
+            glCopyImageSubData(
+                m_deferredTargets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
+                0, 0, 0, cascade,
+                m_deferredTargets.csmShadowDepthAllTexture(), GL_TEXTURE_2D_ARRAY,
+                0, 0, 0, cascade,
+                res, res, 1);
+
+            m_deferredTargets.bindCsmShadowTransparentLayer(cascade);
+            // Depth already contains opaque from the copy; clear color explicitly
+            const float clearColor0[] = {0.0f, 0.0f, 0.0f, 1.0f}; // no transparent marker
+            const float clearColor1[] = {0.0f, 0.0f, 0.0f, 0.0f};
+            glClearBufferfv(GL_COLOR, 0, clearColor0);
+            glClearBufferfv(GL_COLOR, 1, clearColor1);
+            m_shadowDepthShader->setInt("uShadowPassMode", 1);
+            m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+            m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+            m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+            m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+            // Water: depth write ON, no blending, no sort — just draw water faces
+            glDepthMask(GL_TRUE);
+            glDisable(GL_BLEND);
+            renderWaterShadowChunks(transparentEntries);
         }
-        // Submit water geometry with depth writes disabled (water on top of opaque)
-        glDepthMask(GL_FALSE);
-        renderTransparentChunks(transparentEntries);
-        glDepthMask(GL_TRUE);
     }
 
     static int frameCounter = 0;
@@ -3412,6 +3428,35 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+    m_chunkShader->setInt("uForceBaseLod", 0);
+}
+
+// Water-only shadow pass: writes water depth to DepthAll + color to Color0/Color1.
+// Does NOT handle stained glass or generic transparent (those require separate contract).
+void Renderer::renderWaterShadowChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
+    m_chunkShader->setInt("uForceBaseLod", 1);
+
+    if (m_useMultiDrawIndirect) {
+        // Filter for water-only entries from the transparent batch
+        m_worldRenderBuffer.beginFrame();
+        for (const DrawBatchEntry& entry : m_deferredTransparentBatch) {
+            if (entry.kind == TransparentBatchKind::Water) {
+                m_worldRenderBuffer.addWater(entry.range);
+            }
+        }
+        m_worldRenderBuffer.flushTransparent();
+    } else {
+        for (const ChunkRenderEntry& entry : transparentEntries) {
+            if (entry.chunk == nullptr) continue;
+            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+            if (!sc) continue;
+            const SubChunkMesh& mesh = sc->getMesh();
+            if (mesh.waterVertexCount == 0) continue;
+            glBindVertexArray(mesh.transparentVao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.waterVertexCount));
+        }
+    }
+
     m_chunkShader->setInt("uForceBaseLod", 0);
 }
 

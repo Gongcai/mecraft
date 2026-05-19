@@ -334,6 +334,10 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
     vec3 transmittance = vec3(1.0);
     vec3 scattering = vec3(0.0);
 
+    // Transparent shadow contract is only maintained for cascade 0.
+    // Pre-compute cascade 0 projection for dual-depth detection.
+    vec3 cascade0Split = vec3(uCsmCascades[0].splitFar);
+
     for (int i = 1; i < steps; ++i) {
         float t = (float(i) + dither) * rSteps;
         vec3 samplePos = uCameraPos + worldDir * (t * rayLength);
@@ -350,27 +354,28 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
         int ci = shadowData.cascadeIndex;
         float z = shadowData.proj.z;
 
-        // DerivativeMain dual-depth detection: shadowtex0 (all) vs shadowtex1 (opaque)
-        float allLit = sampleCsmDepthAllCompare(uv, ci, z);
+        // Opaque shadow from the selected cascade (always valid)
         float opaqueLit = sampleCsmDepthCompare(uv, ci, z);
-
         vec3 sampleShadow = vec3(opaqueLit);
 
-        // Transparent/water occlusion: in DepthAll shadow but not in DepthOpaque
-        if (allLit < 0.5 && opaqueLit > 0.5) {
-            vec4 color0 = sampleCsmShadowColor0(uv, ci);
-            vec4 color1 = sampleCsmShadowColor1(uv, ci);
-            float waterDepth = abs(color1.w * 512.0 - 128.0 - samplePos.y);
+        // Transparent/water detection: only valid in cascade 0.
+        // Project into cascade 0 space; if outside, fall back to opaque-only.
+        if (ci == 0) {
+            float allLit = sampleCsmDepthAllCompare(uv, 0, z);
+            if (allLit < 0.5 && opaqueLit > 0.5) {
+                vec4 color0 = sampleCsmShadowColor0(uv, 0);
+                vec4 color1 = sampleCsmShadowColor1(uv, 0);
+                float waterDepth = abs(color1.w * 512.0 - 128.0 - samplePos.y);
 
-            if (color0.a < 0.5 && waterDepth > 0.1) {
-                // Water: apply colored absorption (DerivativeMain shadowcolor0 decode)
-                sampleShadow = color0.rgb * color0.rgb; // sqr() approximation
-                sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
-            } else {
-                // Stained glass or other transparent: use tint
-                sampleShadow = color0.rgb * color0.rgb;
+                if (color0.a < 0.5 && waterDepth > 0.1) {
+                    sampleShadow = color0.rgb * color0.rgb;
+                    sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
+                } else {
+                    sampleShadow = color0.rgb * color0.rgb;
+                }
             }
         }
+        // For ci > 0: transparent contract not available, opaque-only shadow.
 
         float shadow = mix(1.0, max(sampleShadow.r, max(sampleShadow.g, sampleShadow.b)),
                            shadowData.projectionFade * shadowData.distanceFade);
@@ -950,28 +955,28 @@ void main() {
         float sceneDepth = texture(uDepthTex, vTexCoord).r;
         if (sceneDepth < 1.0) {
             vec3 worldPos = reconstructWorldPosition(vTexCoord, sceneDepth);
-            float viewDist = length(worldPos - uCameraPos);
             VFogShadowData sd = computeVolumetricShadowSetup(worldPos, normalize(uShadowLightDirection));
             if (sd.valid) {
+                // Water shadow contract only maintained for cascade 0.
+                // Show marker color for out-of-contract cascades.
+                if (sd.cascadeIndex != 0) {
+                    FragColor = vec4(0.15, 0.0, 0.0, 1.0); // dark red = no contract data
+                    return;
+                }
                 vec2 uv = sd.proj.xy;
-                int ci = sd.cascadeIndex;
-                float z = sd.proj.z;
                 if (uVolumetricDebugMode == 30) {
-                    // DepthAll - DepthOpaque: shows transparent/water depth contribution
-                    float dAll = sampleCsmDepthAllRaw(uv, ci);
-                    float dOpa = texture(uCsmShadowDepthRaw, vec3(uv, float(ci))).r;
+                    float dAll = sampleCsmDepthAllRaw(uv, 0);
+                    float dOpa = texture(uCsmShadowDepthRaw, vec3(uv, 0.0)).r;
                     float gap = abs(dAll - dOpa) * 20.0;
                     FragColor = vec4(heatmap(clamp(gap, 0.0, 1.0)), 1.0);
                     return;
                 }
                 if (uVolumetricDebugMode == 31) {
-                    // shadowcolor0: water tint / transparent color
-                    FragColor = sampleCsmShadowColor0(uv, ci);
+                    FragColor = sampleCsmShadowColor0(uv, 0);
                     return;
                 }
                 if (uVolumetricDebugMode == 32) {
-                    // shadowcolor1: RG=normal, B=skylight, A=water height
-                    FragColor = sampleCsmShadowColor1(uv, ci);
+                    FragColor = sampleCsmShadowColor1(uv, 0);
                     return;
                 }
             }

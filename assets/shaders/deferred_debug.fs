@@ -800,9 +800,9 @@ void main() {
         return;
     }
 
-    // Debug 46-66: Volumetric fog component breakdown.
+    // Debug 46-77: Volumetric fog / UW VL / shadow contract debug.
     // The volumetric fog pass outputs debug colors when uVolumetricDebugMode is active.
-    if (uDebugViewMode >= 46 && uDebugViewMode <= 66) {
+    if (uDebugViewMode >= 46 && uDebugViewMode <= 77) {
         vec4 vfog = texture(uVolumetricTex, vTexCoord);
         if (uDebugViewMode == 48 || uDebugViewMode == 49) {
             // Sky/Sun scattering: use tonemap to reveal small HDR values

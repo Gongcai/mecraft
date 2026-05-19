@@ -445,7 +445,13 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "68: TAA Current-History Delta",
             "69: Velocity Sky Highlight",
             "70: Raw Half VFog",
-            "71: Upscaled VFog"
+            "71: Upscaled VFog",
+            "72: UW VL Scatter",
+            "73: UW VL Shadow",
+            "74: UW VL Phase",
+            "75: Shadow Depth Gap",
+            "76: Shadow Color0",
+            "77: Shadow Color1"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;

@@ -20,7 +20,7 @@ uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform float uAnimationTime;
 uniform float uTime;
-uniform int uShadowPassMode; // 0 = opaque-only (existing), 1 = transparent/all (water+opaque)
+uniform int uShadowPassMode; // 0 = opaque-only (existing), 1 = water shadow (DepthAll + Color)
 
 // Shadow color outputs:
 // layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics),
