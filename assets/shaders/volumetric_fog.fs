@@ -51,6 +51,10 @@ uniform int uVolumetricStaticJitter; // 1 = freeze jitter for stable debug
 uniform int uFrameIndex;
 uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (default 1.0)
 
+// Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
+uniform int uIsEyeInWater;
+uniform vec3 uWaterAbsorption; // RGB absorption coefficients (default 0.4, 0.14, 0.08)
+
 // DerivativeMain-style VFog independent profile (decoupled from weather)
 uniform float uVFogCenterHeight;   // SEA_LEVEL: y-level where fog is densest (default 63.0)
 uniform float uVFogHeightSpread;   // High/Ultra falloff denominator: 100 -> exponent 0.01
@@ -315,6 +319,56 @@ float vfogCloudShadow(vec3 worldPos, vec3 lightDir) {
     return 1.0 - coverage * clamp(strength, 0.0, 0.45);
 }
 
+// DerivativeMain VolumetricFog.glsl:317-380 UnderwaterVolumetricLight()
+// Mecraft adaptation: uses CSM cascade shadow instead of raw shadow map
+// (DerivativeMain uses translucent+opaque shadow + shadowcolor tint;
+//  Mecraft CSM is opaque-only — stained glass tint deferred to future work).
+// Returns vec4(scatter.rgb, transmittance) — alpha is luminance-average transmittance
+// so the composite pass can apply water absorption depth: scene *= alpha + scatter.
+vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
+    float rayLength = min(24.0, length(worldPos - uCameraPos));
+    int steps = min(22, int(12.0 + 0.5 * rayLength));
+    float rSteps = 1.0 / float(steps);
+    float stepLength = rayLength * rSteps;
+
+    vec3 shadowLightDir = normalize(uShadowLightDirection);
+    vec3 coeff = uWaterAbsorption + 0.02;
+    vec3 stepTransmittance = exp(-coeff * stepLength);
+    vec3 transmittance = vec3(1.0);
+    vec3 scattering = vec3(0.0);
+
+    for (int i = 1; i < steps; ++i) {
+        float t = (float(i) + dither) * rSteps;
+        vec3 samplePos = uCameraPos + worldDir * (t * rayLength);
+
+        // Mecraft CSM shadow sampling (reuses volumetric fog's cascade path)
+        float shadow = 1.0;
+        VFogShadowData shadowData = computeVolumetricShadowSetup(samplePos, shadowLightDir);
+        if (shadowData.valid) {
+            shadow = sampleVolumetricShadowFiltered(shadowData);
+        }
+        scattering += shadow * transmittance * oneMinus(stepTransmittance);
+        transmittance *= stepTransmittance;
+    }
+
+    // DerivativeMain: refracted sun direction through water surface for phase
+    // refract(I, N, eta): I=toward light source, N=downward surface normal, eta=1/IOR
+    // Matches DerivativeMain: refract(worldLightVector, vec3(0,-1,0), 1.0/IOR)
+    float eta = 1.0 / 1.33; // 1/WATER_REFRACT_IOR
+    vec3 lightVector = refract(normalize(uSunDirection), vec3(0.0, -1.0, 0.0), eta);
+    float LdotV = dot(lightVector, worldDir);
+    float phase = atmHenyeyGreensteinPhase(LdotV, 0.8) + atmHenyeyGreensteinPhase(LdotV, 0.6);
+
+    // DerivativeMain: 8.0/coeff * directIlluminance * scattering * phase * STRENGTH
+    vec3 env = getLightingEnvironment(uSkyCaptureTex).directIlluminance;
+    vec3 fogColor = 8.0 / coeff * env;
+    fogColor *= scattering * phase * 0.1; // UW_VOLUMETRIC_LIGHT_STRENGTH = 0.1
+
+    // Transmittance: luminance-average of RGB water absorption for depth compositing
+    float alpha = dot(transmittance, vec3(0.2126, 0.7152, 0.0722));
+    return vec4(fogColor, alpha);
+}
+
 void main() {
     float depth = texture(uDepthTex, vTexCoord).r;
 
@@ -335,6 +389,15 @@ void main() {
         float distance = length(ray);
         viewDir = ray / max(distance, 0.0001);
         marchDistance = min(distance, max(uVolumetricMaxDistance, 1.0));
+    }
+
+    // DerivativeMain composite.fsh:79-85 — UW_VOLUMETRIC_LIGHT replaces overworld VFog
+    if (uIsEyeInWater == 1) {
+        float dither = fract(float(uFrameIndex) * 0.618033988);
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
+        vec4 uwResult = UnderwaterVolumetricLight(worldPos, viewDir, dither);
+        FragColor = vec4(max(uwResult.rgb, vec3(0.0)), uwResult.a);
+        return;
     }
 
     // --- Lighting environment: physical sky data from SkyCapture ---

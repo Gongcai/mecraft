@@ -32,6 +32,7 @@ struct ShadowSample {
     float visibility;
     int cascadeIndex;
     float fade;
+    float blockerDepth; // signed receiver-blocker delta from PCSS (negative = blocker present); 0 when unavailable
 };
 
 int selectCsmCascade(float viewDistance) {
@@ -172,14 +173,19 @@ float pcssPenumbraTexels(float receiverZ, float avgBlockerZ,
 float sampleCsmPcss(vec2 uv, int cascadeIndex,
                     float receiverZ, float refZ,
                     vec2 texelUv, float texelWorld, float depthExtent,
-                    float lightAngularScale, float searchRadius) {
+                    float lightAngularScale, float searchRadius,
+                    out float outBlockerDepth) {
     // Step 1: Blocker search
     float blockerCompareZ = receiverZ - max(receiverZ - refZ, 2.0e-5) * 0.35;
     float avgBlocker = pcssBlockerSearch(uv, cascadeIndex, blockerCompareZ, texelUv, searchRadius);
     if (avgBlocker < 0.0) {
         // No blockers — fully lit
+        outBlockerDepth = 0.0;
         return 1.0;
     }
+    // Signed delta: negative when blocker is closer to light than receiver.
+    // Matches DerivativeMain BlockerSearch.y convention for SSS depth.
+    outBlockerDepth = avgBlocker - receiverZ;
 
     // Step 2: Penumbra estimation
     float pcfRadius = pcssPenumbraTexels(receiverZ, avgBlocker, depthExtent,
@@ -203,8 +209,9 @@ float sampleCsmPcss(vec2 uv, int cascadeIndex,
 
 float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
                            float viewDistance, int cascadeIndex,
-                           out float outProjectionFade) {
+                           out float outProjectionFade, out float outBlockerDepth) {
     outProjectionFade = 0.0;
+    outBlockerDepth = 0.0;
     float texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
     float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistance, texelWorld,
                                                  uShadowDistance, uShadowNormalOffset);
@@ -239,7 +246,8 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
         float lightAngularScale = 0.012 + strength * 0.035;
         float searchRadius = 2.0 + strength * 3.5;
         lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
-                            texelWorld, depthExtent, lightAngularScale, searchRadius);
+                            texelWorld, depthExtent, lightAngularScale, searchRadius,
+                            outBlockerDepth);
     } else {
         lit = sampleCsmPcf3x3(proj.xy, cascadeIndex, refZ, texelUv,
                               cascadePcfRadius(cascadeIndex, uShadowSoftness));
@@ -252,6 +260,7 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
     result.visibility = 1.0;
     result.cascadeIndex = max(uCsmCascadeCount - 1, 0);
     result.fade = 0.0;
+    result.blockerDepth = 0.0;
 
     lightDir = normalize(lightDir);
     normal = normalize(normal);
@@ -276,22 +285,24 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
     result.cascadeIndex = cascadeIndex;
 
     // Sample primary cascade.
-    float primaryFade;
-    float litPrimary = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, cascadeIndex, primaryFade);
+    float primaryFade, primaryBlocker;
+    float litPrimary = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, cascadeIndex, primaryFade, primaryBlocker);
     if (litPrimary < 0.0) {
         return result;
     }
+    result.blockerDepth = primaryBlocker;
 
     float lit = litPrimary;
     float projectionFade = primaryFade;
 
     // Blend with next cascade at split boundary.
     if (nextCascade >= 0 && blendNext > 0.001) {
-        float nextFade;
-        float litNext = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, nextCascade, nextFade);
+        float nextFade, nextBlocker;
+        float litNext = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, nextCascade, nextFade, nextBlocker);
         if (litNext >= 0.0) {
             lit = mix(litPrimary, litNext, blendNext);
             projectionFade = mix(primaryFade, nextFade, blendNext);
+            result.blockerDepth = mix(primaryBlocker, nextBlocker, blendNext);
         }
     }
 

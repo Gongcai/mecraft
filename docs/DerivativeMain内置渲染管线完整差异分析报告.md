@@ -42,7 +42,7 @@
 
 - C++ 端已有 GBuffer、Shadow、SSAO、DeferredLighting、Reflection、Cloud、SceneComposite、VolumetricFog、TAA、MotionBlur、DoF、Water/Transparent、Post 等 17 个 pass。
 - Render target 已覆盖 GBuffer 5 MRT、shadow depth CSM array + comparison view、scene lighting/composite/resolved、half-res fog/cloud、reflection、sky capture 256×514、velocity、history ping-pong、Atmosphere LUT 3D。
-- Shader 端已有 DerivativeMain 风格材质 ID 33+ 种、roughness/f0/emission/SSS、BRDF、PCSS shadow、sky capture、atmosphere LUT、SSR、水雾、体积雾 4 tier、TAA DerivativeMain parity、AgX/ACES 后处理入口。
+- Shader 端已有 DerivativeMain 风格材质 ID 33+ 种、roughness/f0/emission/SSS、BRDF、PCSS shadow、sky capture、atmosphere LUT、SSR、水雾、体积雾 4 tier（完整对齐 DerivativeMain）、TAA DerivativeMain parity、AgX/ACES 后处理入口。
 
 但当前实现仍不是完整 DerivativeMain。最大差距不是"有没有 pass"，而是：
 
@@ -933,7 +933,7 @@ fogColor = directIlluminance * sunlightSample * 20.0 + skyIlluminance * skylight
 
 也就是说，即便没有厚雾，清空气溶胶也会产生体积光。Mecraft 目前已加入 Rayleigh-phase `airDensity`，颜色也改为 SkyCapture metadata 的 `directIlluminance`；Debug 65 已验证阴影调制成立。Clear 正午体积光弱、晨昏明显是 DerivativeMain `TIME_FADE` 默认行为，不应再误判为 shadow 失效。
 
-此外，DerivativeMain 还有独立的 `UW_VOLUMETRIC_LIGHT` 水下体积光：`UnderwaterVolumetricLight()` 使用水吸收系数、折射后的太阳方向、shadow/translucent shadow 采样和双 forward HG 相函数积分。Mecraft 当前 `water_composite.fs` 只有 `WaterFog/UnderwaterFog` 的水雾吸收混合，且 `uIsEyeInWater` 仍有 TODO 检测缺口，没有水下体积光积分。
+此外，DerivativeMain 还有独立的 `UW_VOLUMETRIC_LIGHT` 水下体积光：`UnderwaterVolumetricLight()` 使用水吸收系数、折射后的太阳方向、shadow/translucent shadow 采样和双 forward HG 相函数积分。Mecraft 当前 `water_composite.fs` 只有 `WaterFog/UnderwaterFog` 的水雾吸收混合，没有水下体积光积分。水下检测链路已完整（PhysicsSystem → ECS → Renderer::m_eyeInWater），deferred lighting pass 已动态绑定（`Renderer.cpp:1805`），但 water composite pass 仍硬编码为 0（`Renderer.cpp:348`），需修复后才能激活水下渲染路径。
 
 ### 17.5 后续优先级修正
 

@@ -362,6 +362,7 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
     lightDir = normalize(lightDir);
 
     ShadowSample csm = sampleCsmShadow(worldPos, normal, lightDir);
+    outSssDepth = csm.blockerDepth;
     float lit = csm.visibility;
     float shaped = shapeShadowVisibility(lit);
     return vec3(mix(1.0, shaped, csm.fade));

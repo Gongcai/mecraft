@@ -419,6 +419,11 @@ void main() {
     // Transform to world space using TBN (DerivativeMain line 249)
     vec3 normal = normalize(tbnMatrix * waveNormalTangent);
 
+    // ---- Underwater normal flip (must precede Fresnel so wave ripples are visible) ----
+    if (uIsEyeInWater == 1) {
+        normal = -normal;
+    }
+
     // ---- Fresnel (DerivativeMain BRDF.glsl FresnelDielectricN) ----
     float NdotV = max(1e-6, dot(normal, viewDir));
     float fresnel = FresnelDielectricN(NdotV, uWaterIOR);
@@ -446,7 +451,6 @@ void main() {
     float LdotV = dot(normalize(uSunDirection), viewDir);
     float fogDist = depthGap;
     if (uIsEyeInWater == 1) {
-        normal = -normal;
         UnderwaterFog(sceneColor, length(uCameraPos - vWorldPos), env);
     } else {
         WaterFog(sceneColor, waterSkylight, LdotV, fogDist, env);
@@ -459,9 +463,11 @@ void main() {
     bool ssrHit = traceWaterScreenSpaceReflection(vWorldPos, reflDir, normal, ssrRefl);
     vec3 reflection = ssrHit ? ssrRefl : skyRefl;
 
-    // Underwater reflection (DerivativeMain line 103)
+    // Underwater reflection: use sky reflection driven by flipped wave normal
+    // (DerivativeMain line 103 — keeps wave variation visible instead of flat constant)
     if (uIsEyeInWater == 1) {
-        reflection = vec3(0.05, 0.7, 1.0) * 0.3 * clamp(uSkyIntensity, 0.0, 1.0);
+        float uwSkyWeight = clamp(uSkyIntensity, 0.0, 1.0) * 0.3;
+        reflection = max(skyRefl, vec3(0.02, 0.14, 0.2)) * uwSkyWeight;
     }
 
     // DerivativeMain/program/Gbuffers/Water.frag keeps REAL_SKY_REFLECTION

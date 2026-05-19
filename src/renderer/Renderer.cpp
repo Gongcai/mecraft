@@ -345,7 +345,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setFloat("uWaterWaveHeight", 1.0f);
     m_waterCompositeShader->setFloat("uWaterWaveSpeed", 1.0f);
     m_waterCompositeShader->setFloat("uWaterIOR", 1.33f);
-    m_waterCompositeShader->setInt("uIsEyeInWater", 0); // TODO: detect from camera position
+    m_waterCompositeShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
 
     if (m_resourceMgr) {
         const TextureAnimationInfo still = m_resourceMgr->getTextureAnimation("water_still");
@@ -1488,11 +1488,16 @@ bool Renderer::renderWorldDeferred(const World& world,
     // DerivativeMain-style pipeline: VFog composited BEFORE TAA so the fog
     // participates in temporal accumulation. R1 dither + checkerboard upscale
     // provides per-frame variation that TAA resolves over multiple frames.
-    if (m_pipelineSettings.volumetricFogEnabled &&
-        m_pipelineSettings.aerialPerspectiveEnabled &&
-        m_pipelineSettings.volumetricFogStrength > 0.001f &&
+    // UW_VOLUMETRIC_LIGHT: underwater volumetric light runs even when overworld VFog
+    // strength is zero — the underwater branch is independent of fog density settings.
+    bool uwVolumetricActive = m_eyeInWater &&
         m_volumetricFogShader != nullptr &&
-        m_volumetricCompositeShader != nullptr) {
+        m_volumetricCompositeShader != nullptr;
+    if ((m_pipelineSettings.volumetricFogEnabled &&
+         m_pipelineSettings.aerialPerspectiveEnabled &&
+         m_pipelineSettings.volumetricFogStrength > 0.001f &&
+         m_volumetricFogShader != nullptr &&
+         m_volumetricCompositeShader != nullptr) || uwVolumetricActive) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Volumetric);
 #endif
@@ -2131,6 +2136,9 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     m_volumetricFogShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
     // Shadow bias scale for A/B testing (only affects volumetric fog)
     m_volumetricFogShader->setFloat("uVolumetricShadowBiasScale", m_pipelineSettings.volumetricShadowBiasScale);
+    // Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
+    m_volumetricFogShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
+    m_volumetricFogShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
