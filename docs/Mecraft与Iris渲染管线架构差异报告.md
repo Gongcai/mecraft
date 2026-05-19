@@ -2,12 +2,15 @@
 
 > 目标：记录当前 Mecraft C++/OpenGL 渲染宿主环境与 Iris/OptiFine 的差异，避免调试内置光影时误把 Iris shaderpack ABI 当作 Mecraft 必须复刻的目标。  
 > 范围：当前 Mecraft `src/renderer/`、`assets/shaders/`、内置 `DerivativeMain/` 光影包、根目录 `Iris-26.1/` 源码。  
-> 重点：本报告不是 DerivativeMain shader 文件逐项移植清单，也不再是“把 Mecraft 改造成 Iris”的实施计划；它是 **Mecraft 引擎端宿主行为与 Iris 宿主行为的差异/风险报告**。
+> 重点：本报告不是 DerivativeMain shader 文件逐项移植清单，也不再是"把 Mecraft 改造成 Iris"的实施计划；它是 **Mecraft 引擎端宿主行为与 Iris 宿主行为的差异/风险报告**。
 
-> 2026-05-13 路线修订：项目目标已从“复现 Iris/OptiFine contract”调整为“建立 Mecraft Renderer Contract，并让内置 DerivativeMain-like 光影适配该 contract”。Iris 继续作为重要参照，用于理解 shaderpack 默认假设和定位 bug，但不作为最终架构硬目标。
+> 2026-05-13 路线修订：项目目标已从"复现 Iris/OptiFine contract"调整为"建立 Mecraft Renderer Contract，并让内置 DerivativeMain-like 光影适配该 contract"。Iris 继续作为重要参照，用于理解 shaderpack 默认假设和定位 bug，但不作为最终架构硬目标。
 > 2026-05-14 源码同步：SkyCapture normalized UV、GPU metadata 读取入口、directional debug 和体积雾 High/Ultra 雏形已落地。当前架构风险重点转为：`FromSH` skylight、云/水 sunlight 单来源尾项、CSM SSS depth、体积雾 SEA_LEVEL/FALLOFF/samples/Bloomy Fog。
-> 2026-05-16 源码同步：体积雾主积分基线已对齐 DerivativeMain `VolumetricFog.glsl`，`TIME_FADE` 开关、Bloomy Fog、Debug 64/65 和失效 UI 清理已落地。当前体积雾风险从”主积分/后处理未接”转为 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动与水下 `UW_VOLUMETRIC_LIGHT`。
-> 2026-05-18 TAA/VFog 时间管线同步：TAA temporal resolve 完全重写对齐 DerivativeMain（variance clip、0.97 fixed weight、CatmullRom、Reinhard luminance blend、taaOffset × 0.5）；velocity resolve 重写（3×3 closest fragment、远平面 reprojection、raw projection path）；GBuffer 投影注入 TAA jitter；渲染顺序重排为 VFog → TAA（DerivativeMain 原序）；VFog 恢复 R1 dither 与旋转 upscale bias；新增 TemporalCurrent scratch RT、debug 67-69、Dashboard A/B 开关。TAA 差异从”可用但非完整等价”升级为”DerivativeMain parity 基本达成”。
+> 2026-05-16 源码同步：体积雾主积分基线已对齐 DerivativeMain `VolumetricFog.glsl`，`TIME_FADE` 开关、Bloomy Fog、Debug 64/65 和失效 UI 清理已落地。当前体积雾风险从"主积分/后处理未接"转为 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动与水下 `UW_VOLUMETRIC_LIGHT`。
+> 2026-05-18 TAA/VFog 时间管线同步：TAA temporal resolve 完全重写对齐 DerivativeMain（variance clip、0.97 fixed weight、CatmullRom、Reinhard luminance blend、taaOffset × 0.5）；velocity resolve 重写（3×3 closest fragment、远平面 reprojection、raw projection path）；GBuffer 投影注入 TAA jitter；渲染顺序重排为 VFog → TAA（DerivativeMain 原序）；VFog 恢复 R1 dither 与旋转 upscale bias；新增 TemporalCurrent scratch RT、debug 67-69、Dashboard A/B 开关。TAA 差异从"可用但非完整等价"升级为"DerivativeMain parity 基本达成"。
+
+> 2026-05-18 源码全面审计同步：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线 pass 顺序为 SkyCapture → GBuffer(jitteredViewProj) → Velocity(raw invViewProj) → Shadow(CSM) → SSAO+Filter → DeferredLighting(jitteredInvViewProj) → Reflection+Filter → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite(raw invViewProj) → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新增发现：`uIsEyeInWater` 硬编码为 0；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR；实体/手/掉落物仍纯 forward；GBuffer 无 per-pixel 法线贴图；roughness/f0 完全靠材质 ID 硬编码。
+> 2026-05-19 源码同步：体积雾系统确认完成——`SEA_LEVEL` 通过 `uVFogCenterHeight` uniform 实现（默认 63.0），`FALLOFF` 通过 `uVFogHeightSpread` 实现（默认 100.0），动态步数 `getFogSteps()` 实现 `min(20, 20*0.4 + rayLength*0.1)`，High/Ultra 密度公式完整对齐 DerivativeMain FOG_TYPE 2/3（4/5 octave FBM）。21 个 debug mode、CSM shadow 集成、cloud shadow、Cornette-Shanks + multi-lobe HG phase、powder、High/Ultra optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路已从 PhysicsSystem → ECS → Renderer 完整接通，deferred lighting pass 已动态绑定 `m_eyeInWater`（`Renderer.cpp:1805`），但 water composite pass 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，`CalculateSubsurfaceScattering` 不可达。
 
 ## 目标边界
 
@@ -40,43 +43,57 @@
 
 仍需推进的工作：
 - Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
-- 亮度链路收口：`FromSH` skylight、云/水 sunlight 单来源尾项、标准路径旁路 `shapeShadowVisibility`
-- CSM-native SSS depth：从 PCSS/blocker search 暴露树叶/草 SSS 所需深度，不恢复完整 DerivativeMain shadowcolor ABI
-- Atmosphere/Cloud/Fog/Water 视觉收敛：体积雾 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动、水下体积光（Bloomy Fog 已完成）
-- GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer）
+- SSS depth：从 PCSS/blocker search 暴露树叶/草 SSS 所需深度（当前 `outSssDepth` 恒为 0，`CalculateSubsurfaceScattering` 不可达）
+- 水下渲染：water composite pass 的 `uIsEyeInWater` 仍硬编码为 0（`Renderer.cpp:348`），需改为 `m_eyeInWater ? 1 : 0`；`UW_VOLUMETRIC_LIGHT` 水下体积光未实现
+- GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer、per-pixel normal map、PBR specular map 输入）
+- 前向路径增强：`chunk_lit_common.fs` 缺 shadow/SSAO/SSR/SH skylight，需对齐 DerivativeMain 或将实体迁入 deferred 路径
 
 ## 1. Mecraft 当前渲染管线概览
 
-当前 Mecraft 主链路集中在 `Renderer` 巨型类中：
+当前 Mecraft 主链路仍集中在 `Renderer` 巨型类中，但已有部分子系统拆分：
 
-- `src/renderer/Renderer.cpp:1285`：`renderWorldDeferred`
-- `src/renderer/Renderer.cpp:1408`：`renderGBufferTerrain`
-- `src/renderer/Renderer.cpp:1463`：`renderShadowMap`
-- `src/renderer/Renderer.cpp:1625`：`renderDeferredLightingPass`
-- `src/renderer/Renderer.cpp:2222`：`renderDeferredDebugView`
-- `src/renderer/Renderer.cpp:2399`：`buildShadowProjectionData`
-- `src/renderer/Renderer.cpp:2553`：`renderOpaqueChunksAndCollectPasses`
-- `src/renderer/Renderer.cpp:1117`：`bindShadowFrameUniforms`
+- `src/renderer/Renderer.cpp:1384`：`renderWorldDeferred`
+- `src/renderer/Renderer.cpp:1530`：`renderGBufferTerrain`
+- `src/renderer/Renderer.cpp:1590`：`renderShadowMap`
+- `src/renderer/Renderer.cpp:1735`：`renderDeferredLightingPass`
+- `src/renderer/Renderer.cpp:1866`：`renderSceneCompositePass`
+- `src/renderer/Renderer.cpp:2083`：`renderVolumetricFogPass`
+- `src/renderer/Renderer.cpp:2236`：`renderTemporalResolvePass`
+- `src/renderer/Renderer.cpp:2563`：`renderSkyCapturePass`
+- `src/renderer/shadow/ShadowRenderer.cpp`：CSM 级联数据、光照方向、uniform 绑定
+- `src/renderer/GameplaySkyRenderer.cpp`：天空捕获、大气 LUT、云渲染
+- `src/renderer/PostProcessRenderer.cpp`：自动曝光、bloom、后处理
 
-现有大致顺序（2026-05-18 更新，VFog → TAA 已对齐 DerivativeMain 原序）：
+`Renderer.h` 包含约 100+ 字段的 `RenderPipelineSettings` 结构体（行 55-169），涵盖阴影/TAA/VFog/后处理/天气/色彩分级等全部配置。
+
+现有大致顺序（2026-05-18 更新，源码审计确认）：
 
 1. begin frame / 更新 camera、天空、大气、时间、history。
-2. GBuffer terrain pass（TAA jitter 已注入 `jitteredViewProj`）。
-3. velocity pass（3×3 closest fragment、远平面 reprojection、raw projection path）。
-4. shadow map pass。
-5. SSAO / AO filter。
-6. deferred lighting（使用 `jitteredInvViewProj`）。
-7. reflection / reflection filter（使用 `jitteredInvViewProj`）。
-8. cloud（使用 `jitteredInvViewProj`）。
-9. scene composite。
-10. volumetric fog（R1 dither + rotating upscale bias，使用 raw `invViewProj`）。
-11. temporal resolve（读 TemporalCurrent scratch + HistoryPrev，variance clip + 0.97 + CatmullRom）。
-12. motion blur / DoF。
-13. `updateDeferredHistoryTargets`（history 快照，存储 VFog+TAA 结果）。
-14. water / transparent composite。
-15. post process / debug view。
+2. SkyCapture pass（equirectangular raw sky + cloudy sky + metadata）。
+3. GBuffer terrain pass（TAA jitter 已注入 `jitteredViewProj`，5 MRT 输出）。
+4. velocity pass（3×3 closest fragment、远平面 reprojection、raw projection path）。
+5. shadow map pass（CSM 4 cascade，per-cascade draw call）。
+6. SSAO / AO filter（6 采样 golden-angle rotation + 5×5 bilateral）。
+7. deferred lighting（使用 `jitteredInvViewProj`，FromSH skylight，天气湿润表面）。
+8. reflection / reflection filter（SSR 28 步，sky capture fallback，roughness bilateral + luma-chroma sharpen）。
+9. cloud（3 层：cirrus planar、cirrocumulus planar、volumetric cumulus 32 步，光照读 LightingEnvironment）。
+10. scene composite（cloud premultiplied strength 混合，reflection composite，stained glass/ice）。
+11. water composite（pre-TAA 路径，WaterWave/WaterFog/SSR/折射/Fresnel，与 GBuffer 共享 jittered depth）。
+12. volumetric fog + composite（R1 dither + rotating upscale bias，使用 raw `invViewProj`，4 tier）。
+13. temporal resolve（读 TemporalCurrent scratch + HistoryPrev，variance clip + 0.97 + CatmullRom）。
+14. motion blur / DoF。
+15. `updateDeferredHistoryTargets`（history 快照，存储 VFog+TAA 结果）。
+16. transparent composite（forward entities/drops/particles）。
+17. post process / debug view。
 
-这个架构适合项目自有光照管线，但与 Iris 最大差别是：Mecraft 当前以“自己定义的一组 pass 和资源”为中心；Iris 以“shaderpack 声明 + Minecraft 渲染阶段 + OptiFine 兼容 uniform/texture contract”为中心。
+**2026-05-18 关键架构发现：**
+- **水 pre-TAA 渲染**（步骤 11）：`Renderer.cpp:1481-1486`，DerivativeMain 风格，水面与 GBuffer 共享 jittered depth，确保水/不透明接触边缘在 TAA 中正确累积。
+- **VFog pre-TAA 渲染**（步骤 12）：R1 dither + checkerboard upscale 提供逐帧变化，TAA 多帧解析。
+- **Velocity 不编码 jitter**（步骤 4）：`Renderer.cpp:1934-1937`，DerivativeMain Reproject() 使用 raw projection 矩阵，jitter 通过 TAA 的 `uJitter` offset 处理。
+- **前向路径**（步骤 16）：所有实体（mob/player/drop/hand）使用独立 forward 路径，`chunk_lit_common.fs` 无 shadow map 采样、无 SSAO、无 SSR、使用简化 BRDF（`hammonDiffuseApprox` 非 `DiffuseHammon`）。
+- **`uIsEyeInWater` 硬编码为 0**（`Renderer.cpp:348`）：水下渲染路径未激活。
+
+这个架构适合项目自有光照管线，但与 Iris 最大差别是：Mecraft 当前以"自己定义的一组 pass 和资源"为中心；Iris 以"shaderpack 声明 + Minecraft 渲染阶段 + OptiFine 兼容 uniform/texture contract"为中心。
 
 ## 2. Iris/OptiFine 宿主行为概览
 
@@ -102,24 +119,24 @@ Iris 不是简单地把 shader 编译后按固定顺序调用。它在 shaderpac
 - `Iris-26.1/common/src/main/java/net/irisshaders/iris/shadows/ShadowRenderTargets.java`
   - 管理 `shadowtex*`、`shadowcolor*` 及其采样、mipmap、feature flag。
 
-换句话说，Iris 阴影不是“把所有当前可见 chunk 用 shadow shader 画一遍”。它会建立一个 shaderpack 指令驱动的 shadow render context，并用专门的 frustum/culling/render target/uniform 状态运行一轮 Minecraft 渲染。
+换句话说，Iris 阴影不是"把所有当前可见 chunk 用 shadow shader 画一遍"。它会建立一个 shaderpack 指令驱动的 shadow render context，并用专门的 frustum/culling/render target/uniform 状态运行一轮 Minecraft 渲染。
 
 ## 3. 高风险差异总表
 
 | 领域 | Iris/OptiFine 行为 | Mecraft 当前行为 | 风险 |
 | --- | --- | --- | --- |
 | Shaderpack directives | 从 pack properties/const directives 生成管线参数 | C++ `PipelineSettings` 手写参数 + shader 常量散落 | shader 以为自己在 Iris 环境，实际参数来源不完整 |
-| Pass 架构 | `gbuffers_*`、`shadow`、`deferred*`、`composite*`、`final` 与 Minecraft phase 绑定 | 自定义 Hybrid Deferred pass graph | pass 名不同不是问题，资源/时序/语义不同才是问题 |
-| Shadow renderer | 独立 `ShadowRenderer`，有 shadow context、targets、frustum、directives | `Renderer::renderShadowMap` 内嵌在主 Renderer | shadow 状态易和主相机/主 frustum/主 chunk 列表耦合 |
-| Shadow culling | terrain/entity/block entity 分离，专门 shadow frustum | 近期加入简单 camera XZ 距离限制，仍不是 Iris frustum | warping 后 far caster 仍可能折入 shadow map，造成 ghosting |
+| Pass 架构 | `gbuffers_*`、`shadow`、`deferred*`、`composite*`、`final` 与 Minecraft phase 绑定 | 自定义 Hybrid Deferred pass graph（17 个 pass） | pass 名不同不是问题，资源/时序/语义不同才是问题 |
+| Shadow renderer | 独立 `ShadowRenderer`，有 shadow context、targets、frustum、directives | `ShadowRenderer` 已从 `Renderer` 拆分（`src/renderer/shadow/`） | CSM 4 cascade 稳定，但 colored shadow/透明 caster 语义未等价 |
+| Shadow culling | terrain/entity/block entity 分离，专门 shadow frustum | `ShadowCasterCuller` Box-culler 距离域（Phase 1a），NonCullingFrustum fallback 未实现 | CSM 线性投影下稳定；ghosting 已通过迁移到 CSM 解决 |
 | Shadow matrix | `ShadowMatrices` 统一生成，snap、near/far、intervalSize 受 directives 管理 | 已接近 Iris 数值，但散落在 `Renderer` | 数值对上不等于提交范围、坐标契约也对上 |
 | Shadow distance render mul | pack directive 决定阴影 caster 渲染距离 | 当前基本使用 `shadowDistance` 或最小 64 | 缩短 shadowDistance 时 ghosting 变重，说明 render 域与 warp 域仍未闭合 |
-| Render targets | Iris 管理 `shadowtex*`、`shadowcolor*`、`colortex*`、depthtex、flip/mipmap/filter | Mecraft 使用自定义 `DeferredRenderTargets` | shader 移植时 sampler 名和 buffer 语义容易“看起来对号”但不等价 |
-| Sampler/filter/mipmap | properties/directives 可控制 | C++ 固定 texture 参数为主 | PCF/soft shadow/历史 buffer/噪声采样出现偏差 |
-| Cutout/alpha | Minecraft terrain render type + shaderpack alpha test 语义 | chunk pass 自行分类 cutout/transparent | 树叶/草在 shadow、GBuffer、透明 pass 中语义可能分裂 |
-| Entity/block entity/player shadow | directives 可分别开关和距离限制 | 当前重点是 chunk terrain | 后续实体阴影、手持物、掉落物会继续偏离 |
-| Uniform contract | OptiFine/Iris 全量兼容 uniform，时间、相机、矩阵、上一帧状态严格定义 | 当前只上传项目 shader 用到的 uniform | DerivativeMain 文件逐步移植时会不断撞到缺失或近似 uniform |
-| 坐标空间 | Minecraft/Iris 明确区分 camera-relative、absolute、unshifted camera | Mecraft 多处自定义世界坐标/相机坐标 | shadow warp、TAA、体积雾、SSR、云影容易出现视角相关漂移 |
+| Render targets | Iris 管理 `shadowtex*`、`shadowcolor*`、`colortex*`、depthtex、flip/mipmap/filter | Mecraft 使用自定义 `DeferredRenderTargets`（30+ 逻辑 target） | shader 移植时 sampler 名和 buffer 语义容易"看起来对号"但不等价 |
+| Sampler/filter/mipmap | properties/directives 可控制 | C++ 固定 texture 参数为主；CSM depth 有 `sampler2DArrayShadow` comparison view（零拷贝 `glTextureView`） | PCF 从 ~15 指令/采样降至 1 指令；PCF/soft shadow/历史 buffer/噪声采样出现偏差 |
+| Cutout/alpha | Minecraft terrain render type + shaderpack alpha test 语义 | chunk pass 自行分类 cutout/transparent | 树叶/草在 shadow、GBuffer、透明 pass 中语义已统一（使用同一 cutout helper） |
+| Entity/block entity/player shadow | directives 可分别开关和距离限制 | 当前只处理 terrain；实体用纯 forward | 后续实体阴影、手持物、掉落物会继续偏离 |
+| Uniform contract | OptiFine/Iris 全量兼容 uniform，时间、相机、矩阵、上一帧状态严格定义 | 当前上传项目 shader 用到的 uniform；`LightingEnvironment` 统一光照数据 | DerivativeMain 文件逐步移植时会不断撞到缺失或近似 uniform |
+| 坐标空间 | Minecraft/Iris 明确区分 camera-relative、absolute、unshifted camera | Mecraft 使用 `jitteredViewProj`/`jitteredInvViewProj`/raw `invViewProj` 三套矩阵 | TAA jitter 通过 `jitteredViewProj` 注入 GBuffer，velocity 使用 raw `invViewProj`，VFog 使用 raw `invViewProj` |
 | 状态管理 | 每个 pass 有明确 GL state/blend/depth/cull 规则 | 多数状态由 C++ pass 手动设置 | alpha/cutout/背面阴影/透明阴影非常容易残留状态 |
 
 ## 4. 阴影系统差异：已通过 CSM 迁移解决
@@ -171,7 +188,7 @@ Mecraft 当前 shadow pass 流程：
 shadow.culling = false
 ```
 
-这个值容易误导。它表达的是 shaderpack/Iris 对特定 culling 策略的要求，不等价于“引擎可以把任意远处 chunk 都送进 shadow map”。
+这个值容易误导。它表达的是 shaderpack/Iris 对特定 culling 策略的要求，不等价于"引擎可以把任意远处 chunk 都送进 shadow map"。
 
 Iris 仍然有：
 
@@ -182,7 +199,7 @@ Iris 仍然有：
 - chunk/section 可见性与 render region 管理；
 - voxelization 与 culling fallback 逻辑。
 
-所以 Mecraft 不能把 `shadow.culling=false` 简化成“shadow pass 不做任何剔除”。正确做法是：**在 MecraftShadow contract 中显式定义 terrain/entity caster 的提交边界**；Iris 在该 directive 组合下的最终提交集合可作为参照和风险检查，但不再作为必须逐项复刻的目标。
+所以 Mecraft 不能把 `shadow.culling=false` 简化成"shadow pass 不做任何剔除"。正确做法是：**在 MecraftShadow contract 中显式定义 terrain/entity caster 的提交边界**；Iris 在该 directive 组合下的最终提交集合可作为参照和风险检查，但不再作为必须逐项复刻的目标。
 
 ## 5. Render Target 与 sampler 差异
 
@@ -203,7 +220,7 @@ Mecraft 当前 `DeferredRenderTargets` 已经有清晰的现代化资源拆分�
 - `noisetex`
 - custom texture / LUT
 
-当前 Mecraft 把这些语义映射到自己的 target 名上。问题不是“名字不同”，而是以下行为必须也一起映射：
+当前 Mecraft 把这些语义映射到自己的 target 名上。问题不是"名字不同"，而是以下行为必须也一起映射：
 
 - 颜色格式是否一致。
 - depth compare sampler 与普通 depth sampler 是否一致。
@@ -215,7 +232,7 @@ Mecraft 当前 `DeferredRenderTargets` 已经有清晰的现代化资源拆分�
 - history/flip buffer 是否符合 `flip.*` 语义。
 - blend/depth/cull 状态是否符合 `shaders.properties`。
 
-建议建立一个固定表：`MecraftTextureContract`，将 DerivativeMain/Iris 参考 sampler 映射到 Mecraft target、格式、filter、wrap、mipmap、写入 pass、读取 pass。没有这张表，后续每移植一个效果都可能出现“采样到了看似合理但语义错误的 buffer”。
+建议建立一个固定表：`MecraftTextureContract`，将 DerivativeMain/Iris 参考 sampler 映射到 Mecraft target、格式、filter、wrap、mipmap、写入 pass、读取 pass。没有这张表，后续每移植一个效果都可能出现"采样到了看似合理但语义错误的 buffer"。
 
 ## 6. Pass/phase 架构差异
 
@@ -238,7 +255,7 @@ Mecraft 当前 pass graph 不直接使用这些名字，而是按自身功能拆
 - 必须上传哪些 Mecraft frame/material/shadow uniform。
 - 是否需要 previous/current matrix、camera、time。
 
-没有这个 contract 层，Renderer 会越来越像“能跑但难以证明行为边界”的状态机。阴影 bug 只是第一个放大器；后续 TAA、SSR、体积云、透明、水、手持物也会遇到同类问题。
+没有这个 contract 层，Renderer 会越来越像"能跑但难以证明行为边界"的状态机。阴影 bug 只是第一个放大器；后续 TAA、SSR、体积云、透明、水、手持物也会遇到同类问题。
 
 ## 7. Uniform 与时间/坐标契约差异
 
@@ -257,14 +274,14 @@ DerivativeMain 依赖大量 OptiFine/Iris uniform 语义。Mecraft 当前只上�
 - near/far、rain/wetness、eye brightness、held item、dimension。
 - TAA jitter 与历史矩阵。
 
-特别注意：时间类 uniform 不能简单等同于 `animationTime`。之前“树影草影抖动随时间速度变快”的现象说明，shadow matrix、wind animation、frameTimeCounter、world time 之间存在耦合风险。Iris/OptiFine 中：
+特别注意：时间类 uniform 不能简单等同于 `animationTime`。之前"树影草影抖动随时间速度变快"的现象说明，shadow matrix、wind animation、frameTimeCounter、world time 之间存在耦合风险。Iris/OptiFine 中：
 
 - 天体角度影响 shadow matrix。
 - `frameTimeCounter` 影响动画/noise。
 - tickDelta 影响插值。
 - paused/frozen time 与世界时间有不同语义。
 
-Mecraft 应拆开这些时间源，避免一个调试加速参数同时驱动“太阳角度 + 植被动画 + temporal noise + cloud/fog wind”，否则稳定性排错会被时间耦合污染。
+Mecraft 应拆开这些时间源，避免一个调试加速参数同时驱动"太阳角度 + 植被动画 + temporal noise + cloud/fog wind"，否则稳定性排错会被时间耦合污染。
 
 ## 8. Cutout/alpha/透明链路差异
 
@@ -284,7 +301,7 @@ Mecraft 应拆开这些时间源，避免一个调试加速参数同时驱动“
 
 ## 9. 修订后的目标架构：Mecraft Renderer Contract
 
-建议不要继续把所有逻辑塞进 `Renderer`。但拆分目标不再是“与 Iris 完整对齐”，而是建立 Mecraft 自有渲染契约，让内置 DerivativeMain-like shader 可靠消费这套契约。
+建议不要继续把所有逻辑塞进 `Renderer`。但拆分目标不再是"与 Iris 完整对齐"，而是建立 Mecraft 自有渲染契约，让内置 DerivativeMain-like shader 可靠消费这套契约。
 
 ### 9.1 `MecraftRenderContract`
 
@@ -372,7 +389,7 @@ struct ProgramState {
 };
 ```
 
-这不是形式主义。它能让每次移植 DerivativeMain-like 效果时都先检查“这个 Mecraft phase 能读写什么，GL 状态是什么”，避免只看 GLSL 函数本身。
+这不是形式主义。它能让每次移植 DerivativeMain-like 效果时都先检查"这个 Mecraft phase 能读写什么，GL 状态是什么"，避免只看 GLSL 函数本身。
 
 ## 10. 改造优先级
 
@@ -447,7 +464,7 @@ struct ProgramState {
    如果基础 shadow map 或 caster domain 已错，PCSS 只是放大/模糊错误。
 
 5. **缩短 shadowDistance 加重 ghost，不再单独视为 caster domain 证据。**  
-   在本次问题中，它更符合“非线性 warp 有效域变化后，大面片插值误差区域随投影缩放改变”的表现。
+   在本次问题中，它更符合"非线性 warp 有效域变化后，大面片插值误差区域随投影缩放改变"的表现。
 
 6. **C++ 与 shader 必须作为一个协议调试。**  
    DerivativeMain 的 GLSL 默认运行在 Iris/OptiFine 宿主协议中；Mecraft 做内置光影时不能只复刻函数，也不能盲目复刻 Iris 协议。正确做法是先定义 Mecraft Renderer Contract，再把 DerivativeMain-like shader 改写为消费该 contract。

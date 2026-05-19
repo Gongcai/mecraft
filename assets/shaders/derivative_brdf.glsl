@@ -91,7 +91,12 @@ vec3 DiffuseHammon(in float LdotV, in float NdotV, in float NdotL, in float Ndot
     float facing = max0(LdotV) * 0.5 + 0.5;
 
     float singleSmooth = 1.05 * oneMinus(pow5(1.0 - max(NdotL, 1e-2))) * oneMinus(pow5(1.0 - max(NdotV, 1e-2)));
-    float singleRough = facing * (0.45 - 0.2 * facing) * (rcp(NdotH) + 2.0);
+    // Mecraft adaptation: alpha-tested foliage exposes Hammon's rough diffuse
+    // half-vector singularity as a sun-aligned halo. DerivativeMain runs this
+    // after its full material/shadow contract; clamp the reciprocal floor here
+    // so near-opposite light/view vectors cannot create HDR rings.
+    float safeNdotH = max(NdotH, 0.08);
+    float singleRough = facing * (0.45 - 0.2 * facing) * (rcp(safeNdotH) + 2.0);
 
     float single = mix(singleSmooth, singleRough, roughness) * rPI;
     float multi = 0.1159 * roughness;

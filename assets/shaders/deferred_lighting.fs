@@ -515,7 +515,7 @@ void main() {
     dbgNdotL = NdotL;
     // Fast halfway vector: avoids normalize(lightDir + viewDir) per-pixel
     float halfwayNorm = inversesqrt(2.0 * LdotV + 2.0);
-    float NdotH = max((rawNdotL + dot(normal, viewDir)) * halfwayNorm, 0.0);
+    float NdotH = max((NdotL + NdotV) * halfwayNorm, 0.0);
     float LdotH = max((LdotV + 1.0) * halfwayNorm, 0.0);
 
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;

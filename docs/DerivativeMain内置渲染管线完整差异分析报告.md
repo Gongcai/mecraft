@@ -3,11 +3,13 @@
 > 范围：本报告以根目录 `DerivativeMain/` 解包源码作为视觉与算法参考，对照当前 Mecraft C++/OpenGL Hybrid Deferred 管线、`src/renderer/` 与 `assets/shaders/`。  
 > 当前目标：**主世界 `world0` + 原版 Minecraft 材质包 + 内置 DerivativeMain-like 光影效果**。Mecraft 引擎端拥有自己的 Renderer Contract；DerivativeMain 的大气、光照、色调、HDR、水、体积雾、材质风格作为移植目标，但不再强制复现 Iris/OptiFine shaderpack 宿主 ABI。Nether/End、Distant Horizons、Physics Oceans、外部 PBR 材质包、LabPBR/POM、任意 shaderpack 替换能力均不列入当前必须完成项。
 > 2026-05-14 范围修订：`SKY_GROUND` 行星地面渲染、`AURORA/AURORA_STRENGTH`、染色玻璃彩色阴影不纳入当前目标；DerivativeMain 的非线性 `shadow warp` 已确认与 Mecraft greedy meshing 不适配，正式阴影路线维持 Mecraft 自有 CSM contract。
-> 2026-05-14 源码同步：当前工作区已修复 SkyCapture raw/cloudy atlas normalized UV，并新增 `lighting_environment.glsl` 统一读取入口、SkyCapture directional debug、体积雾 High/Ultra 雏形。后续优先级从”先修 SkyCapture UV”调整为”移植 FromSH、收口云/水光照单来源、修 SSS、参数化体积雾云海”。
+> 2026-05-14 源码同步：当前工作区已修复 SkyCapture raw/cloudy atlas normalized UV，并新增 `lighting_environment.glsl` 统一读取入口、SkyCapture directional debug、体积雾 High/Ultra 雏形。后续优先级从"先修 SkyCapture UV"调整为"移植 FromSH、收口云/水光照单来源、修 SSS、参数化体积雾云海"。
 > 2026-05-15 源码同步：`FromSH` skylight 已实现（`sky_sh.glsl`，L1 SH 25 方向采样）并接入 deferred lighting；SkyCapture raw sky 已剥离天体盘；云/水光照已统一到 `LightingEnvironment` 单来源并按 DerivativeMain 做了能量倍率审计（volumetric sun=22.0/sky=0.15，planar sun=120.0，water fog sun=28.0*directIlluminance，sun reflection clamp 2000）；云合成已修正为 premultiplied strength 混合。Phase 0 亮度链路收口基本完成，后续转向 SSS、体积雾参数化、Tonemap 对齐。
 > 2026-05-16 体积雾同步：`volumetric_fog.fs` 已按 DerivativeMain `VolumetricFog.glsl` 主积分形态收口，使用 `sunlightSample/skylightSample/transmittance` 循环累积，循环后统一应用 `directIlluminance/skyIlluminance` 与 `fogSunColor*20 + fogSkyColor*2`。Low/Medium Cornette-Shanks phase、High/Ultra sunlight OD、多瓣 HG、powder、`TIME_FADE`、Bloomy Fog 与 debug 64/65 均已落地；旧 `uVolumetricLightStrength/uVolumetricPhaseG` 失效路径已清理。剩余重点是 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度公式、天气光照联动与水下体积光。
 > 2026-05-15 后处理曝光同步：`PostProcessRenderer::updateAutoExposure()` 已恢复 DerivativeMain `Temporal.vert` 的自动曝光公式：无 `averageLum >= 0.02` 地板、无 target exposure min/max clamp、适应速度为 `target < prev ? 1.5 : 1.0`。`autoExposureMin/Max` 仅作为 legacy UI/settings 字段保留，不再作为 DerivativeMain-like 标准路径的调参依据。
 > 2026-05-18 TAA/VFog 时间管线重写：完全重写 `temporal_resolve.fs` 对齐 DerivativeMain `Temporal.frag`——variance clip（mean ± 1.25σ）、固定 0.97 history weight + 子像素覆盖调制、Reinhard 亮度加权混合、CatmullRom history sampling（sharpness=0.7）、taaOffset × 0.5 采样偏移、无 sky 特判统一流程。重写 `velocity_resolve.fs`——3×3 closest fragment 搜索、远平面 reprojection velocity（无 sky early return）、raw projection path（无手动 jitter 减法）。GBuffer 投影注入 TAA jitter（`gl_Position.xy += taaOffset * gl_Position.w` 等价），所有读取 depth 的 pass 统一使用 jitteredInvViewProj。渲染顺序重排为 VFog → TAA（DerivativeMain 原序）。VFog 恢复 R1 时间抖动（golden ratio）与旋转 spatial upscale bias。新增 `TemporalCurrent` scratch RT 避免 TAA 读写 history 冲突。新增 debug 67/68/69（TAA current scratch、current-history delta、velocity sky highlight）与 Dashboard A/B 开关（Freeze R1、Freeze Bias、Force Zero Velocity、Freeze TAA Jitter）。
+> 2026-05-18 源码全面审计：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线完整 pass 顺序为 SkyCapture → GBuffer → Velocity → Shadow → SSAO+Filter → DeferredLighting → Reflection+Filter → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新发现：`uIsEyeInWater` 硬编码为 0（`Renderer.cpp:348`）；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR、使用简化 BRDF（hammonDiffuseApprox）；`cloud_target.fs` 和 `water_composite.fs` 已统一读 `LightingEnvironment`；实体/手/掉落物仍纯 forward 渲染；GBuffer 无 per-pixel 法线贴图（仅面法线）；roughness/f0 完全靠材质 ID 硬编码。
+> 2026-05-19 源码同步：体积雾系统全面确认完成——`SEA_LEVEL`（`uVFogCenterHeight` 默认 63.0）、`FALLOFF`（`uVFogHeightSpread` 默认 100.0）、动态步数 `getFogSteps()`、High/Ultra 密度公式（4/5 octave FBM）全部对齐 DerivativeMain。21 个 debug mode、CSM shadow、cloud shadow、phase functions、powder、optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路完整（PhysicsSystem → ECS → Renderer::m_eyeInWater），deferred lighting 已动态绑定（`Renderer.cpp:1805`），但 water composite 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，PCSS blocker depth 未传递到 `ShadowSample` 结构体。
 
 > 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
 
@@ -38,9 +40,9 @@
 
 当前 Mecraft 已具备承载 DerivativeMain 的 Hybrid Deferred 骨架：
 
-- C++ 端已有 GBuffer、Shadow、SSAO、DeferredLighting、Reflection、Cloud、SceneComposite、VolumetricFog、TAA、MotionBlur、DoF、Water/Transparent、Post 等 pass。
-- Render target 已覆盖 GBuffer、shadow depth/color/normal、scene lighting/composite/resolved、half-res fog/cloud、reflection、sky capture、velocity、history、Atmosphere LUT。
-- Shader 端已有 DerivativeMain 风格材质 ID、roughness/f0/emission/SSS、BRDF、PCSS shadow、sky capture、atmosphere LUT、SSR、水雾、体积雾、TAA、AgX/ACES 后处理入口。
+- C++ 端已有 GBuffer、Shadow、SSAO、DeferredLighting、Reflection、Cloud、SceneComposite、VolumetricFog、TAA、MotionBlur、DoF、Water/Transparent、Post 等 17 个 pass。
+- Render target 已覆盖 GBuffer 5 MRT、shadow depth CSM array + comparison view、scene lighting/composite/resolved、half-res fog/cloud、reflection、sky capture 256×514、velocity、history ping-pong、Atmosphere LUT 3D。
+- Shader 端已有 DerivativeMain 风格材质 ID 33+ 种、roughness/f0/emission/SSS、BRDF、PCSS shadow、sky capture、atmosphere LUT、SSR、水雾、体积雾 4 tier、TAA DerivativeMain parity、AgX/ACES 后处理入口。
 
 但当前实现仍不是完整 DerivativeMain。最大差距不是"有没有 pass"，而是：
 
@@ -48,6 +50,10 @@
 - 当前 FBO 布局与 shaderpack `colortex0-7` 不同，需要稳定映射表。
 - `shaders.properties` 中的 blend、flip、scale、program toggle、自定义 uniform 平滑规则没有完整内置等价层。
 - 大气、云、体积雾、水、SSR、后处理、GI/AO 等大量核心函数仍未逐文件端口。
+- 前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR/SH skylight，使用简化 BRDF（`hammonDiffuseApprox` 非 `DiffuseHammon`）。
+- `uIsEyeInWater` 硬编码为 0（`Renderer.cpp:348`），水下渲染路径未激活。
+- GBuffer 无 per-pixel 法线贴图，roughness/f0 完全靠材质 ID 硬编码。
+- 实体/手/掉落物仍纯 forward 渲染（`steve.fs`/`block_item_lit.fs`）。
 
 结论：**架构地基已基本可用；后续工作必须从"复刻 Iris 宿主"转为"稳定 Mecraft Renderer Contract，并按 DerivativeMain 视觉目标收敛"。**
 
@@ -203,6 +209,8 @@
 - 原版方块材质 ID 已进入顶点 packed 数据，并写入 `GMaterialAux`。
 - `gbuffer_contract.glsl` 已包含 DerivativeMain 风格 material id、roughness/f0/emission/sss、translucent mask。
 - terrain chunk 的 albedo、voxel light、normal、AO、material、aux 已写入 GBuffer。
+- `chunk_gbuffer.vs` 解码 `tintPacked`（tintKind/materialKind/tintUV），`chunk_gbuffer.fs` 基于 `albedoRaw` 亮度 + blockLight 生成 `emissiveHint`。
+- 半透明 mask 解码 — water/ice/stained_glass。
 
 仍缺：
 
@@ -210,6 +218,9 @@
 - Terrain.frag 中原版 atlas alpha、tint、lightmap、mip/alpha 处理尚未逐行对齐。
 - Block/Entities/Hand/HandWater/Textured/Basic/Damagedblock/Beaconbeam/Spidereyes/ArmorGlint/Weather 没有完整 GBuffer 等价 pass。
 - PBR/LabPBR/POM 路径为非目标，但原版材质 fallback 必须对齐。
+- **无 per-pixel 法线贴图**：GBuffer 仅存面法线，`chunk_gbuffer.fs` 无 normal map 采样。DerivativeMain `Terrain.frag` 有完整 tangent-space normal map + anisotropic filtering。
+- **roughness/f0 完全靠材质 ID 硬编码**：无 PBR specular map 输入，`surfaceMaterialForKind` / `surfaceMaterialAuxForKind` 返回固定值。水面/冰面/玻璃的 porosity/metalness 未设置。
+- **实体/手/掉落物/天气粒子 GBuffer**：`HumanoidRenderer`（`steve.fs`）、`FirstPersonHeldItemRenderer`（`block_item_lit.fs`）、`DropRenderer` 均为纯 forward，无 GBuffer 输出。
 
 建议下一步：
 
@@ -562,13 +573,20 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - **渲染顺序已重排为 VFog → TAA（2026-05-18）：** 与 DerivativeMain `composite.fsh → Temporal.fsh` 一致，VFog 参与 TAA temporal accumulation。`updateDeferredHistoryTargets` 在 TAA 之后执行，history 存储 VFog+TAA 结果。
 - **深度重建使用 raw invViewProj（2026-05-18）：** 匹配 DerivativeMain `ScreenToViewSpaceRaw`（不做 taaOffset 减法），jittered screen ray 由 TAA 平均。
 
-未完整适配：
+已完整对齐（2026-05-19 确认）：
 
-- `structuredFogDensity()` 仍不是 DerivativeMain 四套 `FOG_TYPE` 原始密度公式。
-- `SEA_LEVEL`、`VOLUMETRIC_FOG_FALLOFF/FALLOFF_START`、动态 `VOLUMETRIC_FOG_SAMPLES` 仍未参数化。
+- `SEA_LEVEL` 通过 `uVFogCenterHeight`（默认 63.0）参数化，替代所有 DerivativeMain `SEA_LEVEL` 引用。
+- `FALLOFF` 通过 `uVFogHeightSpread`（默认 100.0）参数化，指数 `falloffExp = 1.0 / max(uVFogHeightSpread, 1.0)`。
+- 动态步数 `getFogSteps()` 返回 `min(20, 20*0.4 + rayLength*0.1)`，匹配 DerivativeMain `VOLUMETRIC_FOG_SAMPLES` contract。
+- High（tier 2）密度公式完整对齐：对称 `exp2(-abs(y - SEA_LEVEL) * falloffExp)` + 4-octave FBM，`clamp(noise * 12.0 * falloff - 4.5, 0.0, 1.0) * 9.0`。
+- Ultra（tier 3）密度公式完整对齐：对称 falloff + 5-octave loop（`weight *= 0.5`, `p = (p + wind) * 4.0`），`clamp(falloff * noise * 400.0 - 170.0, 0.0, 1.0) * 48.0`。
+- 21 个 debug mode 已实现（576-824 行）。
+
+仍缺：
+
 - `volFogWind/volFogDensity`、BiomeSandstorm/GreenShift 未完整。
 - colored shadow 体积雾采样不完整。
-- underwater volumetric light 未完整。
+- underwater volumetric light（`UW_VOLUMETRIC_LIGHT`）未实现。
 
 ## 10. 水体、透明、折射
 
@@ -596,17 +614,22 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 已适配：
 
 - 水从 generic transparent 中拆出，有独立 composite。
-- WaterFog/UnderwaterFog 已有 DerivativeMain 注释来源。
+- WaterFog/UnderwaterFog 已有 DerivativeMain 注释来源，光照已统一到 `LightingEnvironment`。
 - 水面 SSR、sky reflection、sun reflection、wave/parallax、absorption 有入口。
+- 水面在 TAA 之前渲染（`Renderer.cpp:1481-1486`），与 GBuffer 共享 jittered depth。
+- 太阳反射已改读 `env.sunIlluminance`，月亮反射用 `env.moonIlluminance`。
+- `water_composite.fs` 体积雾集成使用 depth-aware upsample + premultiplied alpha 混合。
 
 未完整适配：
 
 - DerivativeMain 水先写 GBuffer，再在 composite/composite1 中合成；当前是 deferred 后 forward/composite。
-- `WaterWave.glsl` 未完整逐函数端口。
+- `WaterWave.glsl` 已移植到 `water_composite.fs`（4 octave textureSmooth、distance attenuation），但雨滴涟漪仍为占位噪声（注释"no real rain ripple texture/system yet"），非 DerivativeMain `RippleNormal.png`。
 - `Refraction.glsl`、raytraced refraction、dispersion 未完整。
 - `RainEffect.glsl` 与 `RippleNormal.png` 未完整。
-- Foam/caustics/underwater light 不完整。
+- Foam/caustics/underwater light 不完整。水面 caustics 函数已在 `shadow_depth.fs:60-89` 定义，但水面在 CSM pass 中 discard，caustics 被阻止。
 - 玻璃/冰/彩色透明与水的统一半透明管线缺失。
+- **`uIsEyeInWater` 在 water composite pass 仍硬编码为 0**（`Renderer.cpp:348`），水下渲染路径未激活；deferred lighting pass 已动态绑定 `m_eyeInWater`（`Renderer.cpp:1805`）。水下检测链路完整（PhysicsSystem → ECS → Game.cpp → Renderer::m_eyeInWater），只需修复 water composite pass 的一行绑定。
+- 水下时反转法线但不做波浪计算（`water_composite.fs:448`）。
 
 注意：
 
@@ -638,13 +661,18 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - SSR ray march 与 sky fallback 有基础实现。
 - Reflection bilateral filter 有基础实现。
 - roughness/metal/translucent mask 已参与。
+- 湿润表面影响：`ComputePixelWetness` 修改 normal/roughness/f0，`wetReflectBoost` 增强 Fresnel。
+- Premultiplied 输出：DerivativeMain convention `rgb*specular, a=1-specular`。
+- 天空回退：cloudy sky + wet-boosted sky weight。
+- Filter：roughness-based bilateral filter + luma-chroma sharpening。
 
 未完整适配：
 
-- `ScreenSpaceReflections.glsl` 的 ray steps、hit validation、real sky reflection、VNDF rough reflection 未完整。
+- `ScreenSpaceReflections.glsl` 的 GGX VNDF importance sampling、rough cone widening、hit validation、real sky reflection 未完整。当前 28 步线性 ray march，无 VNDF。
 - `ReflectionFilter.glsl` 与 compute path 未完整。
-- wetness/rain splash/puddle 对 reflection 的影响未完整。
-- DerivativeMain 的 reflection temporal reject 未完整。
+- wetness/rain splash/puddle 对 reflection 的影响部分实现（`weather_surface.glsl` 已端口），但无 puddle rendering。
+- DerivativeMain 的 reflection temporal reprojection 未完成（`HistoryReflection` 纹理已绑定但未使用）。
+- 无 half-resolution SSR pass。
 
 ## 12. TAA、Motion Blur、DoF、Bloom、Grade、Final
 
@@ -725,9 +753,9 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `lib/Head/Noise.inc` | `uNoiseTex` + local functions | 部分 |
 | `lib/Head/Mask.inc` | `gbuffer_contract.glsl` translucent mask | 部分 |
 | `lib/Head/Material.inc` | `gbuffer_contract.glsl` | ✅ EMISSIVE_CURVE=2.2 已复刻；需逐 ID 审计 |
-| `program/Gbuffers/Terrain` | `chunk_gbuffer.vs/fs` | 中等；原版 fallback 需继续对齐 |
-| `program/Gbuffers/Water` | `water_composite.fs` + water mesh | 架构不同，算法部分 |
-| `program/Gbuffers/Block/Entities/Hand/...` | forward/entity/item shaders | 低 |
+| `program/Gbuffers/Terrain` | `chunk_gbuffer.vs/fs` | 中等；原版 fallback 需继续对齐；无 per-pixel normal map、无 PBR specular map |
+| `program/Gbuffers/Water` | `water_composite.fs` + water mesh | 架构不同，算法部分；水面 pre-TAA 已实现 |
+| `program/Gbuffers/Block/Entities/Hand/...` | forward/entity/item shaders | 低；`steve.fs`/`block_item_lit.fs`/`item_model.fs` 无 GBuffer 输出 |
 | `program/Shadow` | `shadow_depth.vs/fs` | 部分完成；Derivative warp 与 sampler2DShadow 双视图已实现，但 ShadowColor.a 透明标志不是 DerivativeMain 双 shadowtex 语义，colored shadow/透明投射者需重新验收；RSM 仍缺 |
 | `lib/Lighting/ShadowDistortion.glsl` | `derivative_shadow.glsl` | ✅ 已照抄；公共 include |
 | `lib/Lighting/SunLighting.glsl` | `derivative_sunlight.glsl` + `derivative_shadow.glsl` + `deferred_lighting.fs` | 部分完成；HG phase/fake bounce/SSS 纯函数已端口，但 BlockerSearch/PCF/SSS depth/colored shadow 读取链路需逐行复核并通过 cutout/transparent 验收 |
@@ -735,21 +763,21 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `lib/Lighting/AmbientOcclusion.glsl` | `ssao.fs/filter` | 部分 |
 | `lib/Lighting/GlobalIllumination.glsl` | 无完整 RSM GI | 缺失 |
 | `lib/Surface/BRDF.glsl` | `derivative_brdf.glsl` | ✅ 已照抄（DiffuseHammon + SpecularBRDF 逐字复刻） |
-| `lib/Surface/ScreenSpaceReflections.glsl` | `reflection_probe.fs/water_composite.fs` | 部分 |
-| `lib/Surface/ReflectionFilter.glsl` | `reflection_filter.fs` | 部分 |
+| `lib/Surface/ScreenSpaceReflections.glsl` | `reflection_probe.fs/water_composite.fs` | 部分；28步线性ray march，无VNDF/rough cone，history纹理已绑定未用 |
+| `lib/Surface/ReflectionFilter.glsl` | `reflection_filter.fs` | 部分；roughness-based bilateral + luma-chroma sharpen |
 | `lib/Surface/Refraction.glsl` | `water_composite.fs` | 低到中 |
 | `lib/Surface/RainEffect.glsl` | wetness params | 低 |
 | `lib/Atmosphere/Atmosphere.glsl` | `atmosphere_lut.glsl/gameplay_sky.fs` | 中等；LUT 体系不完整 |
-| `lib/Atmosphere/VolumetricClouds.glsl` | `cloud_target.fs` | 部分近似 |
+| `lib/Atmosphere/VolumetricClouds.glsl` | `cloud_target.fs` | 部分近似；光照已统一读LightingEnvironment |
 | `lib/Atmosphere/PlanarClouds.glsl` | `cloud_target.fs` | 部分近似 |
-| `lib/Atmosphere/VolumetricFog.glsl` | `volumetric_fog.fs` | 部分 |
-| `lib/Water/WaterWave.glsl` | `water_composite.fs/shadow_depth.fs` | 部分 |
-| `lib/Water/WaterFog.glsl` | `water_composite.fs` | 部分较高 |
-| `program/Post/Temporal` | `temporal_resolve.fs` | 中等 |
+| `lib/Atmosphere/VolumetricFog.glsl` | `volumetric_fog.fs` | ✅ 已完整对齐（4 tier/SEA_LEVEL/FALLOFF/动态步数/High(Ultra FBM/phase/OD/TIME_FADE/Bloomy Fog/21 debug modes） |
+| `lib/Water/WaterWave.glsl` | `water_composite.fs/shadow_depth.fs` | 部分；4 octave textureSmooth 已移植，雨涟漪为占位 |
+| `lib/Water/WaterFog.glsl` | `water_composite.fs` | 部分较高；光照已统一到LightingEnvironment |
+| `program/Post/Temporal` | `temporal_resolve.fs` | 高；variance clip/CatmullRom/0.97 weight/Reinhard luminance blend/3×3 velocity 已完整对齐 |
 | `program/Post/DoF` | `dof.fs` | 部分 |
 | `program/Post/MotionBlur` | `motion_blur.fs` | 部分 |
-| `program/Post/DownSample/Blur/Grade` | bloom/postprocess | 部分 |
-| `program/Post/Final` | `postprocess.fs` | 部分 |
+| `program/Post/DownSample/Blur/Grade` | bloom/postprocess | 部分；6 tonemap modes + Bloomy Fog + Kappa grading 已实现 |
+| `program/Post/Final` | `postprocess.fs` | 部分；CAS sharpening + dithering 已实现 |
 | `program/DH/*` | 无 | 非目标 |
 | `world-1/world1` | 无完整维度管线 | 非目标 |
 | `world0/deferred5.fsh` | `deferred_lighting.fs` | 部分完成；主流程大体重排、water/underwater、vec3 shadow 与 sampler2DShadow 已接入，但 2026-05-13 cutout/SSS bug 证明不能标记逐行对齐，需重新审计 shadow/SSS 相关数据流 |
@@ -803,7 +831,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 1. `Atmosphere.glsl` 完整审计。
 2. `VolumetricClouds.glsl` 与 `PlanarClouds.glsl` 移植。
-3. `VolumetricFog.glsl` 移植。
+3. ~~`VolumetricFog.glsl` 移植。~~ ✅ 已完成：SEA_LEVEL/FALLOFF/动态步数/High(Ultra 密度公式/phase/OD/TIME_FADE/Bloomy Fog/21 debug modes 全部对齐。
 4. `WaterWave/WaterFog/Refraction/RainEffect` 移植。
 
 ### P4：Post 与长期完整性
@@ -826,16 +854,21 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - Cutout/SSS 阴影修复、water/stained glass discard
 - Warp 代码清理
 
+**P3 体积雾 ✅ 已完成**：
+- SEA_LEVEL/FALLOFF/动态步数/High(Ultra 密度公式全部对齐 DerivativeMain
+- 21 个 debug mode、CSM shadow、cloud shadow、phase functions、powder、optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地
+
 **下一步进入 P2/P3**：
 - P2：GBuffer Material 合同（Material.inc 逐 ID 对齐、实体/手/掉落物进 GBuffer）
-- P3：Atmosphere/Cloud/Fog/Water 大规模视觉收敛
+- P3：Atmosphere/Cloud/Water 大规模视觉收敛；修复 water composite `uIsEyeInWater` 硬编码；实现 `UW_VOLUMETRIC_LIGHT`
+- P1：修复 SSS depth（`outSssDepth` 恒为 0）
 - P3/P4：RSM GI、temporal AO
 
 后续实现继续参考 DerivativeMain 源码，但不再要求宿主 ABI 逐字复刻。
 
 ## 17. 2026-05-14 全量复扫补遗
 
-> 本节是按用户要求对 `DerivativeMain/` 光影包实现重新做的一轮“从配置到 pass 到 lib”的完整复核。它不以既有报告为准，而是重新从 `shaders.properties`、`Settings.glsl`、`world0/*` wrapper、`program/*`、`lib/*` 扫描后归纳。结论会修正前文里若干“完成”措辞：Mecraft 当前是**管线骨架和若干核心函数可用**，不是 DerivativeMain 视觉完整移植。
+> 本节是按用户要求对 `DerivativeMain/` 光影包实现重新做的一轮"从配置到 pass 到 lib"的完整复核。它不以既有报告为准，而是重新从 `shaders.properties`、`Settings.glsl`、`world0/*` wrapper、`program/*`、`lib/*` 扫描后归纳。结论会修正前文里若干"完成"措辞：Mecraft 当前是**管线骨架和若干核心函数可用**，不是 DerivativeMain 视觉完整移植。
 
 ### 17.1 本轮确认的 DerivativeMain 主世界 pass 顺序
 
@@ -850,17 +883,17 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `deferred4`/`SpatialFilter` | GI/AO half-res filter 或 compute 分支 | `ssao.fs/filter` | SSAO 是简化实现；RSM GI 缺失 |
 | `deferred5` | 主光照、sky/cloud 合成、BRDF、SH skylight、BlockLighting、SSS | `deferred_lighting.fs` + `scene_composite.fs` | 直射主项已接 SkyCapture metadata；云只在天空像素合成已修；SH skylight、SSS depth、colored shadow、云合成能量仍需验收 |
 | `deferred6/7/8` | SSR + reflection filter，rough VNDF、sky fallback | `reflection_probe.fs/filter` | 只有线性 SSR/简化 filter；rough VNDF/rough cone/时序/Hi-Z 未达 DerivativeMain |
-| `composite` | 半分辨率体积雾/体积光 + 水雾预处理 | `volumetric_fog.fs` | 主积分基线已对齐：Low/Medium phase、High/Ultra OD、多瓣相函数、air density、TIME_FADE、debug 64/65；缺 SEA_LEVEL/FALLOFF、动态 samples、High/Ultra 原始密度公式 |
+| `composite` | 半分辨率体积雾/体积光 + 水雾预处理 | `volumetric_fog.fs` | ✅ 已完整对齐：SEA_LEVEL/FALLOFF/动态步数/High(Ultra FBM 密度公式/Low/Medium phase/High(Ultra OD/多瓣相函数/air density/TIME_FADE/Bloomy Fog/21 debug modes；缺 UW_VOLUMETRIC_LIGHT 水下体积光 |
 | `composite1` | 透明/折射/水、land scattering、体积雾合成、CommonFog、Bloomy Fog mask | `scene_composite.fs` + `water_composite.fs` + `volumetric_composite.fs` | Bloomy Fog alpha 链路已完成；透明/水合成顺序按 Mecraft pass 拆分，CommonFog/特殊介质 fallback 仍未完整 |
 | `composite10/12/13/15/final` | bloom downsample/blur、grade、final/TAA history | `PostProcessRenderer` + `postprocess.fs` | tonemap/grade 有移植，但 bloom/exposure/TAA history 布局不等价 |
 
-### 17.2 必须修正的“完成”判断
+### 17.2 必须修正的"完成"判断
 
 | 系统 | 旧判断风险 | 复扫后状态 |
 | --- | --- | --- |
-| 阴影 | “完成”容易误导 | Mecraft CSM 稳定完成；DerivativeMain `COLORED_SHADOWS`、water caustics、dual `shadowtex0/1` 透明语义、RSM GI 输入仍缺 |
+| 阴影 | "完成"容易误导 | Mecraft CSM 稳定完成；DerivativeMain `COLORED_SHADOWS`、water caustics、dual `shadowtex0/1` 透明语义、RSM GI 输入仍缺 |
 | 光照 | BRDF/BlockLighting 完成不等于主光照完成 | 直射主项大体对齐；SH skylight、SSS blocker depth、colored shadow tint、GI、cloud shadow 光学深度仍缺 |
-| GBuffer 材质 | “33 种 ID 完成”只适用于 terrain fallback | `Material.inc` 本体很小，但 DerivativeMain 的 GBuffer 生态包含 entities/hand/water/weather/glint/PBR/rain wetness；Mecraft 未完整覆盖 |
+| GBuffer 材质 | "33 种 ID 完成"只适用于 terrain fallback | `Material.inc` 本体很小，但 DerivativeMain 的 GBuffer 生态包含 entities/hand/water/weather/glint/PBR/rain wetness；Mecraft 未完整覆盖 |
 | 大气 | LUT 函数完成不等于 sky pipeline 完成 | SkyCapture raw/cloudy atlas normalized UV 已修；`lighting_environment.glsl` 已建立；`FromSH` skylight 已接入；天气对 SkyCapture/光照的联动仍不足 |
 | 云 | 32 步 ray march 完成不等于 DerivativeMain 云完成 | 光照单来源与 premultiplied 合成已修；仍缺 temporal upscaling/checkerboard/history 与完整天气动态云 |
 | 水 | WaterWave/WaterFog 已高覆盖，但不应标满 | 折射/水雾/反射可用；shadow caustics、colored shadow、水 GBuffer/HandWater 语义仍缺 |
@@ -868,15 +901,17 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 ### 17.3 当前画面问题的真实链路
 
-这轮复扫后，当前“自动曝光后受光面亮、背光面黑、天空灰、体积雾像前向 fog、阳光颜色不像”的原因不是一个开关，而是下面几条链路叠加：
+这轮复扫后，当前"自动曝光后受光面亮、背光面黑、天空灰、体积雾像前向 fog、阳光颜色不像"的原因不是一个开关，而是下面几条链路叠加：
 
 1. **SkyCapture atlas 采样错误已修。** `render_contract.glsl` 现在按 256x514 真实 normalized texture layout 映射 raw sky rows 0..257、cloudy sky rows 258..513，旧 `uv.y + 1.0` clamp 问题不再成立；仍需用 debug 41-44 做视觉验收。
-2. **illuminance 单来源仍有尾项。** `lighting_environment.glsl` 已统一从 SkyCapture metadata 读光照，deferred lighting、volumetric fog、水体部分路径已接入；但 `cloud_target.fs` 的体积云散射仍用 CPU 下发的 `uSunIlluminance/uSkyIlluminance`，`water_composite.fs` 的水雾太阳散射/太阳反射仍用 `uSunLightColor`。
-3. **阳光颜色没有全链统一。** 地表直射主项与体积雾已用 LUT metadata，但水雾、太阳反射、部分空气透视/旧 forward fallback 仍可能由 `uSunLightColor` 或 `artisticSunIlluminance()` 染色。
-4. **Skylight 不是 `FromSH`。** DerivativeMain 在 `deferred5.vsh` 对 sky capture 做 5x5 SH，再在 `deferred5.fsh` 用 `FromSH()` 重建；Mecraft 仍用五方向采样/艺术 `coolSkyColor * skyIlluminance`，单位和方向性都不同。
-5. **阴影 shaping 默认已中性但仍在正式路径。** `shadowContrast=1.0`、`shadowMinLight=0.0` 已避免额外压暗；但 `shapeShadowVisibility()` 仍存在，建议降级为 debug/extra，标准路径直接消费 CSM shadow。
-6. **体积雾主积分基线已收口但非完整云海。** 现有 tier 0-3、太阳方向 OD、多瓣相函数、cloud shadow、air density、TIME_FADE、Bloomy Fog 和 debug 64/65 已落地；仍缺 `SEA_LEVEL/FALLOFF` 可调高度、DerivativeMain 动态 samples 和更准确的 High/Ultra 密度场。
+2. **illuminance 单来源已基本完成。** `lighting_environment.glsl` 已统一从 SkyCapture metadata 读光照，deferred lighting、volumetric fog、水体、云散射已全部接入；`uSunLightColor` 已降级为 forward fallback/debug 用途。
+3. **阳光颜色全链已统一到 SkyCapture metadata。** 地表直射主项、体积雾、水雾、太阳反射均从 LUT metadata 获取颜色。旧 `uSunLightColor` 和 `artisticSunIlluminance()` 不再主导 deferred 路径。
+4. **Skylight 已实现 `FromSH`。** `sky_sh.glsl` 已实现 ToSH/FromSH/buildSkySH（L1 SH，25 方向采样），`deferred_lighting.fs` 已接入。SkyCapture raw sky 已剥离太阳/月亮盘（避免 SH 采到天体盘导致暴白）。
+5. **阴影 shaping 默认已中性。** `shadowContrast=1.0`、`shadowMinLight=0.0` 已避免额外压暗；`shapeShadowVisibility()` 仍在正式路径，建议降级为 debug/extra。
+6. **体积雾已全面完成。** `SEA_LEVEL`（`uVFogCenterHeight`）、`FALLOFF`（`uVFogHeightSpread`）、动态步数、High/Ultra 密度公式全部对齐 DerivativeMain。Bloomy Fog、TIME_FADE、R1 dither、21 个 debug mode 已落地。下一步转向 `UW_VOLUMETRIC_LIGHT` 水下体积光。
 7. **自动曝光公式已回到 DerivativeMain。** 当前 `PostProcessRenderer` 已移除 Mecraft 自加的夜间亮度地板、曝光上限和改速逻辑；如果后续仍出现夜间阴影关系不对，应继续查 Grade/Tonemap 集合、Bloomy Fog、Purkinje Shift 和 deferred lighting extension，而不是继续用 exposure clamp 补偿。
+8. **`uIsEyeInWater` 硬编码为 0。** 水下渲染路径未激活，影响水下体积光、水下 fog、eye-in-water 视觉。
+9. **前向路径实体无 deferred 效果。** `chunk_lit_common.fs` 无 shadow/SSAO/SSR/SH skylight，实体和掉落物在 forward 路径下缺少 deferred 管线提供的光影效果。
 
 ### 17.4 体积雾/体积光复扫结论
 
@@ -889,7 +924,7 @@ DerivativeMain 默认 `Settings.glsl` 是 `FOG_TYPE=1`（Cloudy Fog Lite），�
 
 `SEA_LEVEL` 是体积雾高度（海拔），`VOLUMETRIC_FOG_FALLOFF/FALLOFF_START` 控制高度衰减曲线。Mecraft 早期实现把高度中心写死在 shader 中，缺少可调海拔与衰减入口，因此调强度只能得到一层白雾，不能复现 DerivativeMain Ultra 的低空云海。
 
-Mecraft 当前 `volumetric_fog.fs` 已完成主积分基线、独立 air-density 体积光、`TIME_FADE` 与 Bloomy Fog，但密度场仍未完整等价；若不补 `SEA_LEVEL/FALLOFF`、动态 samples 与 High/Ultra 原始 FBM 公式，密度量级、团块尺度和高度分布仍支撑不了完整云海边界。DerivativeMain 的独立 `VOLUMETRIC_LIGHT` 参考公式为：
+Mecraft 当前 `volumetric_fog.fs` 已全面完成：主积分基线、独立 air-density 体积光、`TIME_FADE`、Bloomy Fog、`SEA_LEVEL`（`uVFogCenterHeight`）、`FALLOFF`（`uVFogHeightSpread`）、动态步数（`getFogSteps()`）、High/Ultra 原始 FBM 密度公式全部对齐 DerivativeMain。21 个 debug mode 已实现。DerivativeMain 的独立 `VOLUMETRIC_LIGHT` 参考公式为：
 
 ```glsl
 airDensity = VOLUMETRIC_LIGHT_STRENGTH * RayleighPhase(LdotV) * (3.0 / far);
@@ -908,8 +943,8 @@ fogColor = directIlluminance * sunlightSample * 20.0 + skyIlluminance * skylight
 2. **完成云/水 sunlight 单来源尾项。** `directIlluminance/sunIlluminance` 应成为云散射、水雾、太阳反射、空气透视的共同太阳光源；`uSunLightColor` 降级为 UI/旧 forward fallback/debug。
 3. **去掉或旁路标准路径中的 shadow shaping。** 默认参数已中性，但标准 DerivativeMain-like 路径应直接消费 CSM shadow；风格化 contrast/minLight 作为 debug/extra。
 4. **修复 SSS depth。** 当前 CSM depth 稳定，但 `shadowSssDepth` 仍为 0；需要从 CSM/PCSS blocker search 暴露 Mecraft-native SSS depth。
-5. **收紧体积雾云海参数化。** 现有 High/Ultra 是雏形；继续补 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 密度公式和 Bloomy Fog。
-6. **补水下体积光与水体光学链。** 先完成 eye-in-water 检测，再移植 `UW_VOLUMETRIC_LIGHT_STRENGTH/LENGTH` 对应的水下积分；水焦散可作为水体增强项，染色玻璃彩色阴影不列入当前目标。
+5. ~~**收紧体积雾云海参数化。**~~ ✅ 已完成：`SEA_LEVEL`/`FALLOFF`/动态步数/High(Ultra 密度公式/Bloomy Fog 全部对齐 DerivativeMain。
+6. **补水下体积光与水体光学链。** water composite pass 的 `uIsEyeInWater` 仍硬编码为 0（`Renderer.cpp:348`），需改为 `m_eyeInWater ? 1 : 0`；deferred lighting 已动态绑定。再移植 `UW_VOLUMETRIC_LIGHT_STRENGTH/LENGTH` 对应的水下积分；水焦散可作为水体增强项，染色玻璃彩色阴影不列入当前目标。
 7. **SSS/RSM 另行评估。** 当前 CSM depth 稳定，但 DerivativeMain 的 `shadowcolor0/1` 数据链不再作为完整 shaderpack ABI 目标；只保留对树叶/草 SSS、RSM 输入的 Mecraft-native 方案评估。
 
 ### 17.6 材质 ID 与实体分类漏项
@@ -930,7 +965,7 @@ Mecraft 当前 `gbuffer_contract.glsl` 的 material id 常量覆盖了主要原�
 | 天气粒子 | `gbuffers_weather` 使用 additive blend，且 `particles.before.deferred=true` | 粒子 forward，未纳入 deferred/体积/雾的同一语义 |
 | Armor glint / damaged block / beacon | 独立 pass 和 blend 规则 | 未完整复刻 shaderpack 语义 |
 
-因此“Material.inc 已对齐”只能理解为 **terrain fallback 材质结构可用**，不能理解为 DerivativeMain 的 GBuffer 生态已完成。
+因此"Material.inc 已对齐"只能理解为 **terrain fallback 材质结构可用**，不能理解为 DerivativeMain 的 GBuffer 生态已完成。
 
 ### 17.7 大气与 SkyCapture 追加差异
 
@@ -953,7 +988,7 @@ Mecraft 的 `water_composite.fs` 对 `WaterWave.glsl`、水面 parallax、Fresne
 
 ### 17.9 后处理、Bloom、Final 追加差异
 
-DerivativeMain post 链路的关键不是“有 tonemapper”，而是 buffer/history 布局和 bloom/fog/exposure 的耦合：
+DerivativeMain post 链路的关键不是"有 tonemapper"，而是 buffer/history 布局和 bloom/fog/exposure 的耦合：
 
 - `Temporal.vert` 在 shader 内从 `colortex4` mip LOD 计算 exposure，并把上一帧 exposure 存在 `colortex5(0).a`。Mecraft 用独立 exposure downsample FBO + CPU `glReadPixels`，公式接近但历史位置和执行阶段不同。
 - DerivativeMain bloom 是 tiled mip layout：`DownSample0/DownSample/BlurH/BlurV/Grade` 复用 `colortex4/5`，`CalculateBloomFog()` 还会读取 `colortex6` 的 fog transmittance 做 `BLOOMY_FOG`。Mecraft bloom 有 mip chain（separate textures），`CalculateBloomFog()` 已按 DerivativeMain 双套权重实现，fogTransmittance 通过 alpha 链路贯通 TAA/motion_blur/dof 到 postprocess，Bloomy Fog 已生效。bloom_extract.fs HDR clamp 已移除。

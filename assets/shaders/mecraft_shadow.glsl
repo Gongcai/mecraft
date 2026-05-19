@@ -68,8 +68,8 @@ void selectCsmCascadeBlended(float viewDistance, out int cascadeIndex,
         float splitFar = uCsmCascades[cascadeIndex].splitFar;
         float splitNear = uCsmCascades[cascadeIndex].splitNear;
         float cascadeRange = max(splitFar - splitNear, 1.0);
-        // Transition zone: last 12% of each cascade's range
-        float transitionZone = cascadeRange * 0.12;
+        // Transition zone: last 20% of each cascade's range (wider to hide texel size differences)
+        float transitionZone = cascadeRange * 0.20;
         float distFromEnd = splitFar - viewDistance;
         if (distFromEnd < transitionZone) {
             nextCascade = cascadeIndex + 1;
@@ -235,7 +235,8 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
         float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
         float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
         float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
-        float lightAngularScale = 0.012 + strength * 0.052;
+        // Reduced angular scale multiplier (0.035 vs 0.052) to keep near shadows crisper
+        float lightAngularScale = 0.012 + strength * 0.035;
         float searchRadius = 2.0 + strength * 3.5;
         lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
                             texelWorld, depthExtent, lightAngularScale, searchRadius);
@@ -257,7 +258,8 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
 
     vec3 cameraRelPos = worldPos - uCameraPos;
     float viewDistance = length(cameraRelPos);
-    float distanceFade = saturate(pow16(rcp(uShadowDistance * uShadowDistance) * dotSelf(cameraRelPos)));
+    // pow4 for softer distance fade (original pow16 = x^8 was too aggressive at far distances)
+    float distanceFade = saturate(pow(rcp(uShadowDistance * uShadowDistance) * dotSelf(cameraRelPos), 4.0));
     if (distanceFade >= 0.999) {
         return result;
     }

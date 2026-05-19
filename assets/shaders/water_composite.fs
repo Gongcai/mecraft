@@ -70,6 +70,7 @@ out vec4 FragColor;
 const float rPI = 1.0 / 3.14159265359;
 const float kTwoPi = 6.28318530718;
 const int kWaterSsrSteps = 16;
+const bool kWaterRealSkyReflection = false;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -463,7 +464,14 @@ void main() {
         reflection = vec3(0.05, 0.7, 1.0) * 0.3 * clamp(uSkyIntensity, 0.0, 1.0);
     }
 
-    reflection += renderSunReflection(reflDir, env) * waterSkylight;
+    // DerivativeMain/program/Gbuffers/Water.frag keeps REAL_SKY_REFLECTION
+    // disabled by default. In that path, water falls back to the captured sky
+    // and does not add a separate high-energy sun disk to reflectionData.
+    // Mecraft adaptation: keep the dormant path available for future opt-in
+    // parity testing, but avoid feeding a 2e3 sun disk into threshold-free bloom.
+    if (kWaterRealSkyReflection) {
+        reflection += renderSunReflection(reflDir, env) * waterSkylight;
+    }
 
     // Moon reflection: Mecraft intentional divergence from DerivativeMain.
     // DerivativeMain RenderMoonReflection() returns vec3(disc * 4.0) — a hardcoded luminance
