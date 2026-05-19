@@ -20,6 +20,7 @@ uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform float uAnimationTime;
 uniform float uTime;
+uniform int uShadowPassMode; // 0 = opaque-only (existing), 1 = transparent/all (water+opaque)
 
 // Shadow color outputs:
 // layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics),
@@ -92,11 +93,19 @@ vec3 fastRefract(vec3 dir, vec3 normal, float eta) {
 
 void main() {
     if (vMaterialKind == MATERIAL_WATER) {
-        // Water does not cast hard shadows. The CSM FBO is depth-only (no color
-        // attachment), so caustics data would be lost. Discard entirely to prevent
-        // water from blocking direct light. Caustics can be reintroduced when a
-        // colored shadow pass with color attachments is implemented.
-        discard;
+        if (uShadowPassMode == 0) {
+            // Opaque pass: water must not block direct light
+            discard;
+        }
+        // Transparent pass: write water depth + caustics data
+        // (DerivativeMain shadowtex0/shadowcolor0/shadowcolor1 for water)
+        vec3 waveNormal = getWaterWaveNormal(vWorldPos.xz);
+        float waveH = getWaterWaveHeight(vWorldPos.xz);
+        // shadowcolor0: RGB = water tint (blue-ish), A = 0.0 (transparent marker)
+        ShadowColor = vec4(0.2, 0.5, 0.8, 0.0);
+        // shadowcolor1: RG = encoded normal, B = skylight, A = water height
+        // DerivativeMain: shadowcolor1.w = surfaceY / 512 + 0.25
+        ShadowNormal = vec4(encodeNormal(waveNormal), vSkylight, vWorldPos.y / 512.0 + 0.25);
     } else {
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
@@ -144,9 +153,11 @@ void main() {
         // causing pow4(leaf_color) * sampleLit ≈ 0.01 instead of 1.0 on lit surfaces.
         float shadowAlpha = 1.0;
         if (vMaterialKind == MATERIAL_STAINED_GLASS) {
-            // Stained glass: discard in depth-only CSM pass to avoid hard shadows.
-            // Colored shadow tinting requires a color attachment, not yet available.
-            discard;
+            if (uShadowPassMode == 0) {
+                discard;
+            }
+            // Transparent pass: stained glass writes colored shadow
+            shadowAlpha = 0.0; // marks as transparent caster
         }
         // All other non-water materials (including cutout like leaves/grass) cast hard shadows.
         ShadowColor = vec4(shadowColor, shadowAlpha);

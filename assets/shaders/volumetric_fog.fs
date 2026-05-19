@@ -320,11 +320,8 @@ float vfogCloudShadow(vec3 worldPos, vec3 lightDir) {
 }
 
 // DerivativeMain VolumetricFog.glsl:317-380 UnderwaterVolumetricLight()
-// Mecraft adaptation: uses CSM cascade shadow instead of raw shadow map
-// (DerivativeMain uses translucent+opaque shadow + shadowcolor tint;
-//  Mecraft CSM is opaque-only — stained glass tint deferred to future work).
-// Returns vec4(scatter.rgb, transmittance) — alpha is luminance-average transmittance
-// so the composite pass can apply water absorption depth: scene *= alpha + scatter.
+// Mecraft adaptation: samples CSM transparent shadow contract (shadowtex0/1 + shadowcolor0/1)
+// to detect water/transparent occlusion and apply colored water absorption.
 vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
     float rayLength = min(24.0, length(worldPos - uCameraPos));
     int steps = min(22, int(12.0 + 0.5 * rayLength));
@@ -341,19 +338,47 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
         float t = (float(i) + dither) * rSteps;
         vec3 samplePos = uCameraPos + worldDir * (t * rayLength);
 
-        // Mecraft CSM shadow sampling (reuses volumetric fog's cascade path)
-        float shadow = 1.0;
+        // Cascade selection + projection (reuses volumetric fog infrastructure)
         VFogShadowData shadowData = computeVolumetricShadowSetup(samplePos, shadowLightDir);
-        if (shadowData.valid) {
-            shadow = sampleVolumetricShadowFiltered(shadowData);
+        if (!shadowData.valid) {
+            scattering += transmittance * oneMinus(stepTransmittance);
+            transmittance *= stepTransmittance;
+            continue;
         }
+
+        vec2 uv = shadowData.proj.xy;
+        int ci = shadowData.cascadeIndex;
+        float z = shadowData.proj.z;
+
+        // DerivativeMain dual-depth detection: shadowtex0 (all) vs shadowtex1 (opaque)
+        float allLit = sampleCsmDepthAllCompare(uv, ci, z);
+        float opaqueLit = sampleCsmDepthCompare(uv, ci, z);
+
+        vec3 sampleShadow = vec3(opaqueLit);
+
+        // Transparent/water occlusion: in DepthAll shadow but not in DepthOpaque
+        if (allLit < 0.5 && opaqueLit > 0.5) {
+            vec4 color0 = sampleCsmShadowColor0(uv, ci);
+            vec4 color1 = sampleCsmShadowColor1(uv, ci);
+            float waterDepth = abs(color1.w * 512.0 - 128.0 - samplePos.y);
+
+            if (color0.a < 0.5 && waterDepth > 0.1) {
+                // Water: apply colored absorption (DerivativeMain shadowcolor0 decode)
+                sampleShadow = color0.rgb * color0.rgb; // sqr() approximation
+                sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
+            } else {
+                // Stained glass or other transparent: use tint
+                sampleShadow = color0.rgb * color0.rgb;
+            }
+        }
+
+        float shadow = mix(1.0, max(sampleShadow.r, max(sampleShadow.g, sampleShadow.b)),
+                           shadowData.projectionFade * shadowData.distanceFade);
         scattering += shadow * transmittance * oneMinus(stepTransmittance);
         transmittance *= stepTransmittance;
     }
 
     // DerivativeMain: refracted sun direction through water surface for phase
-    // refract(I, N, eta): I=toward light source, N=downward surface normal, eta=1/IOR
-    // Matches DerivativeMain: refract(worldLightVector, vec3(0,-1,0), 1.0/IOR)
     float eta = 1.0 / 1.33; // 1/WATER_REFRACT_IOR
     vec3 lightVector = refract(normalize(uSunDirection), vec3(0.0, -1.0, 0.0), eta);
     float LdotV = dot(lightVector, worldDir);
@@ -364,9 +389,7 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
     vec3 fogColor = 8.0 / coeff * env;
     fogColor *= scattering * phase * 0.1; // UW_VOLUMETRIC_LIGHT_STRENGTH = 0.1
 
-    // Transmittance: luminance-average of RGB water absorption for depth compositing
-    float alpha = dot(transmittance, vec3(0.2126, 0.7152, 0.0722));
-    return vec4(fogColor, alpha);
+    return vec4(fogColor, 1.0);
 }
 
 void main() {
@@ -396,6 +419,42 @@ void main() {
         float dither = fract(float(uFrameIndex) * 0.618033988);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
         vec4 uwResult = UnderwaterVolumetricLight(worldPos, viewDir, dither);
+
+        // UW debug views (debug view 72-74, shader mode 27-29)
+        if (uVolumetricDebugMode == 27) {
+            float lum = dot(max(uwResult.rgb, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
+            FragColor = vec4(heatmap(clamp(lum * 20.0, 0.0, 1.0)), 1.0);
+            return;
+        }
+        if (uVolumetricDebugMode == 28) {
+            float rayLength = min(24.0, length(worldPos - uCameraPos));
+            int steps = min(22, int(12.0 + 0.5 * rayLength));
+            float rSteps = 1.0 / float(steps);
+            vec3 shadowLightDir = normalize(uShadowLightDirection);
+            float avgShadow = 0.0;
+            int shadowCount = 0;
+            for (int i = 1; i < steps; ++i) {
+                float t = (float(i) + dither) * rSteps;
+                vec3 samplePos = uCameraPos + viewDir * (t * rayLength);
+                VFogShadowData shadowData = computeVolumetricShadowSetup(samplePos, shadowLightDir);
+                if (shadowData.valid) {
+                    avgShadow += sampleVolumetricShadowFiltered(shadowData);
+                    ++shadowCount;
+                }
+            }
+            float s = shadowCount > 0 ? avgShadow / float(shadowCount) : 1.0;
+            FragColor = vec4(vec3(s), 1.0);
+            return;
+        }
+        if (uVolumetricDebugMode == 29) {
+            float eta = 1.0 / 1.33;
+            vec3 lightVec = refract(normalize(uSunDirection), vec3(0.0, -1.0, 0.0), eta);
+            float LdotV = dot(lightVec, viewDir);
+            float phase = atmHenyeyGreensteinPhase(LdotV, 0.8) + atmHenyeyGreensteinPhase(LdotV, 0.6);
+            FragColor = vec4(heatmap(clamp(phase * 2.0, 0.0, 1.0)), 1.0);
+            return;
+        }
+
         FragColor = vec4(max(uwResult.rgb, vec3(0.0)), uwResult.a);
         return;
     }
@@ -883,6 +942,41 @@ void main() {
         // lighting, transmittance color, or weather color changes.
         float blobOpacity = 1.0 - blobTransmittanceDebug;
         FragColor = vec4(heatmap(clamp(blobOpacity * 12.0, 0.0, 1.0)), 1.0);
+        return;
+    }
+
+    // Shadow contract debug views (debug view 75-77, shader mode 30-32)
+    if (uVolumetricDebugMode >= 30 && uVolumetricDebugMode <= 32) {
+        float sceneDepth = texture(uDepthTex, vTexCoord).r;
+        if (sceneDepth < 1.0) {
+            vec3 worldPos = reconstructWorldPosition(vTexCoord, sceneDepth);
+            float viewDist = length(worldPos - uCameraPos);
+            VFogShadowData sd = computeVolumetricShadowSetup(worldPos, normalize(uShadowLightDirection));
+            if (sd.valid) {
+                vec2 uv = sd.proj.xy;
+                int ci = sd.cascadeIndex;
+                float z = sd.proj.z;
+                if (uVolumetricDebugMode == 30) {
+                    // DepthAll - DepthOpaque: shows transparent/water depth contribution
+                    float dAll = sampleCsmDepthAllRaw(uv, ci);
+                    float dOpa = texture(uCsmShadowDepthRaw, vec3(uv, float(ci))).r;
+                    float gap = abs(dAll - dOpa) * 20.0;
+                    FragColor = vec4(heatmap(clamp(gap, 0.0, 1.0)), 1.0);
+                    return;
+                }
+                if (uVolumetricDebugMode == 31) {
+                    // shadowcolor0: water tint / transparent color
+                    FragColor = sampleCsmShadowColor0(uv, ci);
+                    return;
+                }
+                if (uVolumetricDebugMode == 32) {
+                    // shadowcolor1: RG=normal, B=skylight, A=water height
+                    FragColor = sampleCsmShadowColor1(uv, ci);
+                    return;
+                }
+            }
+        }
+        FragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
     }
 

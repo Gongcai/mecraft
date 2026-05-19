@@ -24,8 +24,12 @@ uniform int uCsmCascadeCount;
 uniform CsmCascade uCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
 
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
-uniform sampler2DArrayShadow uCsmShadowMap;
-uniform sampler2DArray uCsmShadowDepthRaw;
+uniform sampler2DArrayShadow uCsmShadowMap;       // shadowtex1: opaque-only depth (comparison)
+uniform sampler2DArray uCsmShadowDepthRaw;         // shadowtex1: opaque-only depth (raw)
+uniform sampler2DArrayShadow uCsmShadowDepthAll;   // shadowtex0: depth including water (comparison)
+uniform sampler2DArray uCsmShadowDepthAllRaw;      // shadowtex0: depth including water (raw)
+uniform sampler2DArray uCsmShadowColor0;           // shadowcolor0: RGB tint/caustics, A transparent flag
+uniform sampler2DArray uCsmShadowColor1;           // shadowcolor1: RG normal, B skylight, A water height
 #endif
 
 struct ShadowSample {
@@ -109,6 +113,23 @@ float csmDepthBias(float ndotl,
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
 float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
     return texture(uCsmShadowMap, vec4(uv, float(cascadeIndex), refZ));
+}
+
+// Transparent shadow sampling (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
+float sampleCsmDepthAllCompare(vec2 uv, int cascadeIndex, float refZ) {
+    return texture(uCsmShadowDepthAll, vec4(uv, float(cascadeIndex), refZ));
+}
+
+float sampleCsmDepthAllRaw(vec2 uv, int cascadeIndex) {
+    return texture(uCsmShadowDepthAllRaw, vec3(uv, float(cascadeIndex))).r;
+}
+
+vec4 sampleCsmShadowColor0(vec2 uv, int cascadeIndex) {
+    return texture(uCsmShadowColor0, vec3(uv, float(cascadeIndex)));
+}
+
+vec4 sampleCsmShadowColor1(vec2 uv, int cascadeIndex) {
+    return texture(uCsmShadowColor1, vec3(uv, float(cascadeIndex)));
 }
 
 float sampleCsmPcf3x3(vec2 uv, int cascadeIndex, float refZ, vec2 texelUv, float radius) {

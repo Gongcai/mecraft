@@ -135,6 +135,46 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    // CSM transparent shadow: depth-all + color for water/transparent occlusion
+    // (DerivativeMain shadowtex0/shadowcolor0/shadowcolor1 equivalent)
+    glCreateFramebuffers(1, &m_csmShadowTransparentFbo);
+    m_csmShadowDepthAll = createTexture2DArray(GL_DEPTH_COMPONENT32F,
+                                               m_shadowResolution, m_shadowResolution,
+                                               kShadowCascadeCount,
+                                               GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_csmShadowDepthAll, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    glGenTextures(1, &m_csmShadowDepthAllComparison);
+    glTextureView(m_csmShadowDepthAllComparison, GL_TEXTURE_2D_ARRAY,
+                  m_csmShadowDepthAll, GL_DEPTH_COMPONENT32F,
+                  0, 1, 0, kShadowCascadeCount);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameterfv(m_csmShadowDepthAllComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    m_csmShadowColor0 = createTexture2DArray(GL_RGBA8,
+                                             m_shadowResolution, m_shadowResolution,
+                                             kShadowCascadeCount,
+                                             GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_csmShadowColor0, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    m_csmShadowColor1 = createTexture2DArray(GL_RGBA16F,
+                                             m_shadowResolution, m_shadowResolution,
+                                             kShadowCascadeCount,
+                                             GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    glTextureParameterfv(m_csmShadowColor1, GL_TEXTURE_BORDER_COLOR, kBorderColor);
+    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepthAll, 0, 0);
+    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT0, m_csmShadowColor0, 0, 0);
+    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT1, m_csmShadowColor1, 0, 0);
+    const GLenum transparentDrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glNamedFramebufferDrawBuffers(m_csmShadowTransparentFbo, 2, transparentDrawBuffers);
+    if (!checkFramebufferComplete(m_csmShadowTransparentFbo, "CsmShadowTransparent")) {
+        shutdown();
+        return false;
+    }
+
     glCreateFramebuffers(1, &m_ssaoFbo);
     m_ssaoTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_ssaoFbo, GL_COLOR_ATTACHMENT0, m_ssaoTex, 0);
@@ -349,6 +389,17 @@ void DeferredRenderTargets::bindCsmShadowLayer(const int cascadeIndex) {
     glViewport(0, 0, m_shadowResolution, m_shadowResolution);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
+}
+
+void DeferredRenderTargets::bindCsmShadowTransparentLayer(const int cascadeIndex) {
+    const int layer = std::clamp(cascadeIndex, 0, kShadowCascadeCount - 1);
+    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepthAll, 0, layer);
+    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT0, m_csmShadowColor0, 0, layer);
+    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT1, m_csmShadowColor1, 0, layer);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowTransparentFbo);
+    glViewport(0, 0, m_shadowResolution, m_shadowResolution);
+    const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, drawBuffers);
 }
 
 void DeferredRenderTargets::bindShadowColor() {
@@ -772,6 +823,10 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_shadowNormal,
         m_csmShadowDepth,
         m_csmShadowDepthComparison,
+        m_csmShadowDepthAll,
+        m_csmShadowDepthAllComparison,
+        m_csmShadowColor0,
+        m_csmShadowColor1,
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_sceneLightingTex,
@@ -809,6 +864,10 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_shadowNormal = 0;
     m_csmShadowDepth = 0;
     m_csmShadowDepthComparison = 0;
+    m_csmShadowDepthAll = 0;
+    m_csmShadowDepthAllComparison = 0;
+    m_csmShadowColor0 = 0;
+    m_csmShadowColor1 = 0;
     m_ssaoTex = 0;
     m_ssaoFilteredTex = 0;
     m_sceneLightingTex = 0;
@@ -828,7 +887,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_velocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo, m_weatherMaskFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo, m_weatherMaskFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -838,6 +897,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_gBufferFbo = 0;
     m_shadowFbo = 0;
     m_csmShadowFbo = 0;
+    m_csmShadowTransparentFbo = 0;
     m_ssaoFbo = 0;
     m_ssaoFilteredFbo = 0;
     m_sceneLightingFbo = 0;

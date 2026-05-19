@@ -15,6 +15,7 @@ public:
     void bindGBuffer();
     void bindShadowMap();
     void bindCsmShadowLayer(int cascadeIndex);
+    void bindCsmShadowTransparentLayer(int cascadeIndex);
     void bindShadowColor();
     void bindSsao();
     void bindSsaoFiltered();
@@ -61,6 +62,11 @@ public:
     [[nodiscard]] GLuint shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
     [[nodiscard]] GLuint csmShadowDepthTexture() const { return m_csmShadowDepth; }
     [[nodiscard]] GLuint csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
+    // CSM transparent shadow contract (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
+    [[nodiscard]] GLuint csmShadowDepthAllTexture() const { return m_csmShadowDepthAll; }
+    [[nodiscard]] GLuint csmShadowDepthAllComparisonTexture() const { return m_csmShadowDepthAllComparison; }
+    [[nodiscard]] GLuint csmShadowColor0Texture() const { return m_csmShadowColor0; }
+    [[nodiscard]] GLuint csmShadowColor1Texture() const { return m_csmShadowColor1; }
     [[nodiscard]] GLuint shadowColorTexture() const { return m_shadowColor; }
     [[nodiscard]] GLuint shadowNormalTexture() const { return m_shadowNormal; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
@@ -161,6 +167,12 @@ private:
     GLuint m_csmShadowFbo = 0;
     GLuint m_csmShadowDepth = 0; // GL_TEXTURE_2D_ARRAY raw depth, one layer per cascade
     GLuint m_csmShadowDepthComparison = 0; // GL_TEXTURE_2D_ARRAY comparison view for sampler2DArrayShadow
+    // CSM transparent shadow: depth-all + color for water/transparent occlusion
+    GLuint m_csmShadowTransparentFbo = 0;
+    GLuint m_csmShadowDepthAll = 0; // depth including water/transparent surfaces
+    GLuint m_csmShadowDepthAllComparison = 0;
+    GLuint m_csmShadowColor0 = 0; // RGBA8: RGB caustics/tint, A transparent flag
+    GLuint m_csmShadowColor1 = 0; // RGBA16F: RG normal, B skylight, A water height
 
     GLuint m_ssaoFbo = 0;
     GLuint m_ssaoTex = 0;

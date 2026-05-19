@@ -1640,14 +1640,8 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         const ShadowCascadeData& cascadeData = m_shadowRenderer.cascade(cascade);
-        m_deferredTargets.bindCsmShadowLayer(cascade);
-        glClear(GL_DEPTH_BUFFER_BIT);
 
-        m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-        m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-        m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-        m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-
+        // Collect geometry once per cascade
         m_worldRenderBuffer.beginFrame();
         std::vector<ChunkRenderEntry> cutoutEntries;
         cutoutEntries.reserve(world.getActiveChunks().size() * 2);
@@ -1666,10 +1660,37 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
         cullingMode = shadowCuller.getCullingMode();
 
+        // Pass 1: Opaque-only (shadowtex1 equivalent — no water)
+        m_deferredTargets.bindCsmShadowLayer(cascade);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+        m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+        m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+        m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+        m_shadowDepthShader->setInt("uShadowPassMode", 0);
         if (m_useMultiDrawIndirect) {
             m_worldRenderBuffer.flushOpaque();
         }
         renderCutoutChunks(cutoutEntries);
+
+        // Pass 2: Transparent/all (shadowtex0 + shadowcolor0/1 — includes water)
+        m_deferredTargets.bindCsmShadowTransparentLayer(cascade);
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+        m_shadowDepthShader->setInt("uShadowPassMode", 1);
+        // Re-submit: opaque blocks write depth + color for DepthAll buffer
+        if (m_useMultiDrawIndirect) {
+            m_worldRenderBuffer.beginFrame();
+            std::vector<ChunkRenderEntry> cutoutEntries2;
+            std::vector<ChunkRenderEntry> transparentEntries2;
+            renderOpaqueChunksAndCollectPasses(world, cutoutEntries2, transparentEntries2, false,
+                                               shadowDist, nullptr);
+            m_worldRenderBuffer.flushOpaque();
+            renderCutoutChunks(cutoutEntries2);
+        }
+        // Submit water geometry with depth writes disabled (water on top of opaque)
+        glDepthMask(GL_FALSE);
+        renderTransparentChunks(transparentEntries);
+        glDepthMask(GL_TRUE);
     }
 
     static int frameCounter = 0;
@@ -2124,10 +2145,11 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
     m_volumetricFogShader->setInt("uVolumetricQualityTier", m_pipelineSettings.volumetricQualityTier);
 
-    // Volumetric fog debug mode: active when debug view 46-66 is selected
+    // Volumetric fog debug mode: active when debug view 46-77 is selected
+    // 46-66: overworld VFog modes (1-21), 72-74: UW volumetric (27-29), 75-77: shadow contract (30-32)
     int vfDebugMode = 0;
-    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 66) {
-        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 66->21
+    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 77) {
+        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 77->32
     }
     m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
     // Freeze jitter for stable debug visualization or A/B test
@@ -2155,8 +2177,27 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
     m_volumetricFogShader->setInt("uCsmShadowMap", 6);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
+    m_volumetricFogShader->setInt("uCsmShadowDepthRaw", 7);
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllComparisonTexture());
+    m_volumetricFogShader->setInt("uCsmShadowDepthAll", 8);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllTexture());
+    m_volumetricFogShader->setInt("uCsmShadowDepthAllRaw", 9);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor0Texture());
+    m_volumetricFogShader->setInt("uCsmShadowColor0", 10);
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor1Texture());
+    m_volumetricFogShader->setInt("uCsmShadowColor1", 11);
     renderFullscreen(*m_volumetricFogShader);
     glUseProgram(0);
+    for (int i = 11; i >= 7; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    }
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     for (int i = 5; i >= 0; --i) {
