@@ -1776,6 +1776,7 @@ void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
     m_ssaoShader->setFloat("uStrength", m_pipelineSettings.ssaoStrength);
     m_ssaoShader->setVec2("uInvResolution", glm::vec2(1.0f / std::max(1, window.getWidth()), 1.0f / std::max(1, window.getHeight())));
     m_ssaoShader->setInt("uFrameIndex", static_cast<int>(m_frameCounter % 64));
+    m_ssaoShader->setInt("uSamples", std::clamp(m_pipelineSettings.ssaoSamples, 1, 64));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
@@ -2378,6 +2379,7 @@ void Renderer::renderSsaoFilterPass() {
     m_ssaoFilterShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_ssaoFilterShader->setFloat("uNear", m_nearPlane);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());

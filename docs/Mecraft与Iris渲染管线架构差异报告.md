@@ -11,6 +11,7 @@
 
 > 2026-05-18 源码全面审计同步：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线 pass 顺序为 SkyCapture → GBuffer(jitteredViewProj) → Velocity(raw invViewProj) → Shadow(CSM) → SSAO+Filter → DeferredLighting(jitteredInvViewProj) → Reflection+Filter → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite(raw invViewProj) → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新增发现：`uIsEyeInWater` 硬编码为 0；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR；实体/手/掉落物仍纯 forward；GBuffer 无 per-pixel 法线贴图；roughness/f0 完全靠材质 ID 硬编码。
 > 2026-05-19 源码同步：体积雾系统确认完成——`SEA_LEVEL` 通过 `uVFogCenterHeight` uniform 实现（默认 63.0），`FALLOFF` 通过 `uVFogHeightSpread` 实现（默认 100.0），动态步数 `getFogSteps()` 实现 `min(20, 20*0.4 + rayLength*0.1)`，High/Ultra 密度公式完整对齐 DerivativeMain FOG_TYPE 2/3（4/5 octave FBM）。21 个 debug mode、CSM shadow 集成、cloud shadow、Cornette-Shanks + multi-lobe HG phase、powder、High/Ultra optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路已从 PhysicsSystem → ECS → Renderer 完整接通，deferred lighting pass 已动态绑定 `m_eyeInWater`（`Renderer.cpp:1805`），但 water composite pass 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，`CalculateSubsurfaceScattering` 不可达。
+> 2026-05-20 水下渲染链路收口：`uIsEyeInWater` 全部 5 个 pass 动态绑定；SSS depth 通过 PCSS blocker delta 打通（cascade 0）；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth、caustic、Beer-Lambert、折射 HG 相函数）；water shadow contract 建立（cascade 0 DepthAll + Color0/1，`glCopyImageSubData` + 水-only draw）；水下 Fresnel IOR 修正为 `1.0/uWaterIOR`；debug 72-77 已扩展。
 
 ## 目标边界
 
@@ -43,8 +44,8 @@
 
 仍需推进的工作：
 - Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
-- SSS depth：从 PCSS/blocker search 暴露树叶/草 SSS 所需深度（当前 `outSssDepth` 恒为 0，`CalculateSubsurfaceScattering` 不可达）
-- 水下渲染：water composite pass 的 `uIsEyeInWater` 仍硬编码为 0（`Renderer.cpp:348`），需改为 `m_eyeInWater ? 1 : 0`；`UW_VOLUMETRIC_LIGHT` 水下体积光未实现
+- SSS depth：已通过 PCSS blocker delta（`avgBlocker - receiverZ`）打通，cascade 0 可用；非 PCSS 级联仍为 0（已知限制）
+- 水下渲染：`uIsEyeInWater` 全部 5 个 pass 已动态绑定；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth cascade 0、caustic 吸收、Beer-Lambert 消光）；water shadow contract 已建立（cascade 0 DepthAll + Color0/1）
 - GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer、per-pixel normal map、PBR specular map 输入）
 - 前向路径增强：`chunk_lit_common.fs` 缺 shadow/SSAO/SSR/SH skylight，需对齐 DerivativeMain 或将实体迁入 deferred 路径
 
@@ -91,7 +92,7 @@
 - **VFog pre-TAA 渲染**（步骤 12）：R1 dither + checkerboard upscale 提供逐帧变化，TAA 多帧解析。
 - **Velocity 不编码 jitter**（步骤 4）：`Renderer.cpp:1934-1937`，DerivativeMain Reproject() 使用 raw projection 矩阵，jitter 通过 TAA 的 `uJitter` offset 处理。
 - **前向路径**（步骤 16）：所有实体（mob/player/drop/hand）使用独立 forward 路径，`chunk_lit_common.fs` 无 shadow map 采样、无 SSAO、无 SSR、使用简化 BRDF（`hammonDiffuseApprox` 非 `DiffuseHammon`）。
-- **`uIsEyeInWater` 硬编码为 0**（`Renderer.cpp:348`）：水下渲染路径未激活。
+- **~~`uIsEyeInWater` 硬编码为 0~~**：已修复，全部 5 个 pass 动态绑定 `m_eyeInWater`。
 
 这个架构适合项目自有光照管线，但与 Iris 最大差别是：Mecraft 当前以"自己定义的一组 pass 和资源"为中心；Iris 以"shaderpack 声明 + Minecraft 渲染阶段 + OptiFine 兼容 uniform/texture contract"为中心。
 

@@ -151,8 +151,9 @@ public:
         float underwaterVolumetricLightStrength = 0.1f; // DerivativeMain UW_VOLUMETRIC_LIGHT_STRENGTH
         float noiseDitherStrength = 0.015f;
         float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
-        float ssaoRadius = 2.25f;
+        float ssaoRadius = 0.6f;
         float ssaoStrength = 0.75f;
+        int ssaoSamples = 16;
         float exposure = 12.0f;
         float gamma = 1.0f;
         float saturation = 1.0f;

@@ -934,6 +934,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("CAS Sharpen", &pipeline.sharpenStrength, 0.0f, 0.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("SSAO Samples", &pipeline.ssaoSamples, 1, 64);
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &pipeline.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
         pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.0f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Saturation", &pipeline.saturation, 0.0f, 2.0f, "%.2f");

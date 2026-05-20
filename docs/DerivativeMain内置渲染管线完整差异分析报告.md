@@ -10,6 +10,7 @@
 > 2026-05-18 TAA/VFog 时间管线重写：完全重写 `temporal_resolve.fs` 对齐 DerivativeMain `Temporal.frag`——variance clip（mean ± 1.25σ）、固定 0.97 history weight + 子像素覆盖调制、Reinhard 亮度加权混合、CatmullRom history sampling（sharpness=0.7）、taaOffset × 0.5 采样偏移、无 sky 特判统一流程。重写 `velocity_resolve.fs`——3×3 closest fragment 搜索、远平面 reprojection velocity（无 sky early return）、raw projection path（无手动 jitter 减法）。GBuffer 投影注入 TAA jitter（`gl_Position.xy += taaOffset * gl_Position.w` 等价），所有读取 depth 的 pass 统一使用 jitteredInvViewProj。渲染顺序重排为 VFog → TAA（DerivativeMain 原序）。VFog 恢复 R1 时间抖动（golden ratio）与旋转 spatial upscale bias。新增 `TemporalCurrent` scratch RT 避免 TAA 读写 history 冲突。新增 debug 67/68/69（TAA current scratch、current-history delta、velocity sky highlight）与 Dashboard A/B 开关（Freeze R1、Freeze Bias、Force Zero Velocity、Freeze TAA Jitter）。
 > 2026-05-18 源码全面审计：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线完整 pass 顺序为 SkyCapture → GBuffer → Velocity → Shadow → SSAO+Filter → DeferredLighting → Reflection+Filter → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新发现：`uIsEyeInWater` 硬编码为 0（`Renderer.cpp:348`）；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR、使用简化 BRDF（hammonDiffuseApprox）；`cloud_target.fs` 和 `water_composite.fs` 已统一读 `LightingEnvironment`；实体/手/掉落物仍纯 forward 渲染；GBuffer 无 per-pixel 法线贴图（仅面法线）；roughness/f0 完全靠材质 ID 硬编码。
 > 2026-05-19 源码同步：体积雾系统全面确认完成——`SEA_LEVEL`（`uVFogCenterHeight` 默认 63.0）、`FALLOFF`（`uVFogHeightSpread` 默认 100.0）、动态步数 `getFogSteps()`、High/Ultra 密度公式（4/5 octave FBM）全部对齐 DerivativeMain。21 个 debug mode、CSM shadow、cloud shadow、phase functions、powder、optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路完整（PhysicsSystem → ECS → Renderer::m_eyeInWater），deferred lighting 已动态绑定（`Renderer.cpp:1805`），但 water composite 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，PCSS blocker depth 未传递到 `ShadowSample` 结构体。
+> 2026-05-20 水下渲染链路收口：`uIsEyeInWater` 全部 5 个 pass 动态绑定；SSS depth 通过 PCSS blocker delta（`avgBlocker - receiverZ`）打通（cascade 0）；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth cascade 0、caustic 吸收、Beer-Lambert 消光、折射 HG 相函数）；water shadow contract 建立（cascade 0 DepthAll + Color0/1，`glCopyImageSubData` + 水-only draw）；水下 Fresnel IOR 修正为 `1.0/uWaterIOR`；debug 72-77 已扩展。
 
 > 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
 
@@ -51,7 +52,7 @@
 - `shaders.properties` 中的 blend、flip、scale、program toggle、自定义 uniform 平滑规则没有完整内置等价层。
 - 大气、云、体积雾、水、SSR、后处理、GI/AO 等大量核心函数仍未逐文件端口。
 - 前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR/SH skylight，使用简化 BRDF（`hammonDiffuseApprox` 非 `DiffuseHammon`）。
-- `uIsEyeInWater` 硬编码为 0（`Renderer.cpp:348`），水下渲染路径未激活。
+- ~~`uIsEyeInWater` 硬编码为 0~~ 已修复：全部 5 个 pass 动态绑定 `m_eyeInWater`。
 - GBuffer 无 per-pixel 法线贴图，roughness/f0 完全靠材质 ID 硬编码。
 - 实体/手/掉落物仍纯 forward 渲染（`steve.fs`/`block_item_lit.fs`）。
 
@@ -586,7 +587,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 - `volFogWind/volFogDensity`、BiomeSandstorm/GreenShift 未完整。
 - colored shadow 体积雾采样不完整。
-- underwater volumetric light（`UW_VOLUMETRIC_LIGHT`）未实现。
+- ~~underwater volumetric light（`UW_VOLUMETRIC_LIGHT`）~~ 已实现：dual-depth cascade 0、caustic 吸收、Beer-Lambert 消光、折射 HG 相函数。
 
 ## 10. 水体、透明、折射
 
@@ -628,7 +629,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - `RainEffect.glsl` 与 `RippleNormal.png` 未完整。
 - Foam/caustics/underwater light 不完整。水面 caustics 函数已在 `shadow_depth.fs:60-89` 定义，但水面在 CSM pass 中 discard，caustics 被阻止。
 - 玻璃/冰/彩色透明与水的统一半透明管线缺失。
-- **`uIsEyeInWater` 在 water composite pass 仍硬编码为 0**（`Renderer.cpp:348`），水下渲染路径未激活；deferred lighting pass 已动态绑定 `m_eyeInWater`（`Renderer.cpp:1805`）。水下检测链路完整（PhysicsSystem → ECS → Game.cpp → Renderer::m_eyeInWater），只需修复 water composite pass 的一行绑定。
+- **~~`uIsEyeInWater` 在 water composite pass 仍硬编码为 0~~** 已修复：全部 5 个 pass 动态绑定 `m_eyeInWater`。
 - 水下时反转法线但不做波浪计算（`water_composite.fs:448`）。
 
 注意：
@@ -860,8 +861,10 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 **下一步进入 P2/P3**：
 - P2：GBuffer Material 合同（Material.inc 逐 ID 对齐、实体/手/掉落物进 GBuffer）
-- P3：Atmosphere/Cloud/Water 大规模视觉收敛；修复 water composite `uIsEyeInWater` 硬编码；实现 `UW_VOLUMETRIC_LIGHT`
-- P1：修复 SSS depth（`outSssDepth` 恒为 0）
+- P3：Atmosphere/Cloud/Water 大规模视觉收敛
+- ~~P1：修复 SSS depth~~ ✅ PCSS cascade 0 已打通
+- ~~P1：修复 water composite `uIsEyeInWater` 硬编码~~ ✅ 全部 5 个 pass 动态绑定
+- ~~P1：实现 `UW_VOLUMETRIC_LIGHT`~~ ✅ dual-depth + caustic + Beer-Lambert
 - P3/P4：RSM GI、temporal AO
 
 后续实现继续参考 DerivativeMain 源码，但不再要求宿主 ABI 逐字复刻。
@@ -910,7 +913,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 5. **阴影 shaping 默认已中性。** `shadowContrast=1.0`、`shadowMinLight=0.0` 已避免额外压暗；`shapeShadowVisibility()` 仍在正式路径，建议降级为 debug/extra。
 6. **体积雾已全面完成。** `SEA_LEVEL`（`uVFogCenterHeight`）、`FALLOFF`（`uVFogHeightSpread`）、动态步数、High/Ultra 密度公式全部对齐 DerivativeMain。Bloomy Fog、TIME_FADE、R1 dither、21 个 debug mode 已落地。下一步转向 `UW_VOLUMETRIC_LIGHT` 水下体积光。
 7. **自动曝光公式已回到 DerivativeMain。** 当前 `PostProcessRenderer` 已移除 Mecraft 自加的夜间亮度地板、曝光上限和改速逻辑；如果后续仍出现夜间阴影关系不对，应继续查 Grade/Tonemap 集合、Bloomy Fog、Purkinje Shift 和 deferred lighting extension，而不是继续用 exposure clamp 补偿。
-8. **`uIsEyeInWater` 硬编码为 0。** 水下渲染路径未激活，影响水下体积光、水下 fog、eye-in-water 视觉。
+8. **~~`uIsEyeInWater` 硬编码为 0~~** 已修复。全部 5 个 pass 动态绑定，水下渲染路径已激活。
 9. **前向路径实体无 deferred 效果。** `chunk_lit_common.fs` 无 shadow/SSAO/SSR/SH skylight，实体和掉落物在 forward 路径下缺少 deferred 管线提供的光影效果。
 
 ### 17.4 体积雾/体积光复扫结论
@@ -944,7 +947,7 @@ fogColor = directIlluminance * sunlightSample * 20.0 + skyIlluminance * skylight
 3. **去掉或旁路标准路径中的 shadow shaping。** 默认参数已中性，但标准 DerivativeMain-like 路径应直接消费 CSM shadow；风格化 contrast/minLight 作为 debug/extra。
 4. **修复 SSS depth。** 当前 CSM depth 稳定，但 `shadowSssDepth` 仍为 0；需要从 CSM/PCSS blocker search 暴露 Mecraft-native SSS depth。
 5. ~~**收紧体积雾云海参数化。**~~ ✅ 已完成：`SEA_LEVEL`/`FALLOFF`/动态步数/High(Ultra 密度公式/Bloomy Fog 全部对齐 DerivativeMain。
-6. **补水下体积光与水体光学链。** water composite pass 的 `uIsEyeInWater` 仍硬编码为 0（`Renderer.cpp:348`），需改为 `m_eyeInWater ? 1 : 0`；deferred lighting 已动态绑定。再移植 `UW_VOLUMETRIC_LIGHT_STRENGTH/LENGTH` 对应的水下积分；水焦散可作为水体增强项，染色玻璃彩色阴影不列入当前目标。
+6. **~~补水下体积光与水体光学链。~~** ✅ 已完成：`uIsEyeInWater` 全部 5 个 pass 动态绑定；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth cascade 0、caustic 吸收、Beer-Lambert 消光、折射 HG 相函数）；water shadow contract 已建立（cascade 0 DepthAll + Color0/1）。水焦散可作为水体增强项，染色玻璃彩色阴影不列入当前目标。
 7. **SSS/RSM 另行评估。** 当前 CSM depth 稳定，但 DerivativeMain 的 `shadowcolor0/1` 数据链不再作为完整 shaderpack ABI 目标；只保留对树叶/草 SSS、RSM 输入的 Mecraft-native 方案评估。
 
 ### 17.6 材质 ID 与实体分类漏项

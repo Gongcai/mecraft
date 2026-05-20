@@ -1,5 +1,7 @@
 #version 450 core
 
+#include "derivative_shadow.glsl"
+
 in vec2 vTexCoord;
 out vec4 FragColor;
 
@@ -12,11 +14,7 @@ uniform vec2 uInvResolution;
 uniform float uRadius;
 uniform float uStrength;
 uniform int uFrameIndex;
-
-const float kPi = 3.14159265359;
-const float kTwoPi = 6.28318530718;
-const float kGoldenAngle = kTwoPi / (1.0 + (1.0 + sqrt(5.0)) / 2.0);
-const int kSamples = 6;
+uniform int uSamples;
 
 vec3 screenToViewPos(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -34,29 +32,35 @@ void main() {
     vec3 viewPos = screenToViewPos(vTexCoord, centerDepth);
     vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
 
-    // Dither rotation per pixel for temporal stability
-    vec2 noiseUv = vTexCoord * vec2(textureSize(uNoiseTex, 0)) * uInvResolution;
+    // Dither rotation per pixel using tiled noise texture.
+    // gl_FragCoord.xy / noiseSize tiles the noise across the screen exactly once per noise repeat.
+    vec2 noiseUv = gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0));
     float dither = texture(uNoiseTex, noiseUv).r;
 
-    float rSteps = 1.0 / float(kSamples);
-    float maxSqLen = viewPos.z * viewPos.z * 0.25;
+    float rSteps = 1.0 / float(uSamples);
+    float maxSqLen = sqr(viewPos.z) * 0.25;
 
-    // Step size in screen space, scaled by projection
+    // Step size in screen space, scaled by projection and user radius.
+    // Scale by sqrt(sampleCount/6) so total radius grows sub-linearly with more samples,
+    // keeping occlusion spread consistent across different sample counts.
+    float stepScale = sqrt(float(uSamples) / 6.0);
     float aspect = uInvResolution.y / uInvResolution.x;
-    vec2 rayStep = vec2(0.6 * aspect, 0.6) /
-                   max((-1.0 - viewPos.z) * 0.5, 5.0) * uProjection[1][1];
+    vec2 rayStep = vec2(uRadius * aspect, uRadius) /
+                   max((-1.0 - viewPos.z) * 0.5, 5.0) * uProjection[1][1]
+                   / stepScale;
 
     // Golden-angle rotation matrix
+    const float goldenAngle = TAU / ((1.0 + sqrt(5.0)) / 2.0 + 1.0);
     mat2 goldenRotate = mat2(
-        cos(kGoldenAngle), -sin(kGoldenAngle),
-        sin(kGoldenAngle),  cos(kGoldenAngle)
+        cos(goldenAngle), -sin(goldenAngle),
+        sin(goldenAngle),  cos(goldenAngle)
     );
 
-    vec2 rot = vec2(cos(dither * kTwoPi), sin(dither * kTwoPi)) * rSteps;
+    vec2 rot = sincos(dither * TAU) * rSteps;
     vec2 radius = vec2(0.0);
     float total = 0.0;
 
-    for (int i = 0; i < kSamples; ++i, rot *= goldenRotate) {
+    for (int i = 0; i < uSamples; ++i, rot *= goldenRotate) {
         radius += rayStep;
 
         // Sample at +rot
@@ -64,10 +68,10 @@ void main() {
         float sampleDepth = texture(uDepthTex, sampleUv).r;
         vec3 samplePos = screenToViewPos(sampleUv, sampleDepth);
         vec3 diff = samplePos - viewPos;
-        float diffSqLen = dot(diff, diff);
+        float diffSqLen = dotSelf(diff);
         if (diffSqLen > 1e-5 && diffSqLen < maxSqLen) {
-            float NdotL = clamp(dot(normal, diff * inversesqrt(diffSqLen)), 0.0, 1.0);
-            total += NdotL * clamp(1.0 - diffSqLen / maxSqLen, 0.0, 1.0);
+            float NdotL = saturate(dot(normal, diff * inversesqrt(diffSqLen)));
+            total += NdotL * saturate(1.0 - diffSqLen / maxSqLen);
         }
 
         // Sample at -rot
@@ -75,14 +79,14 @@ void main() {
         sampleDepth = texture(uDepthTex, sampleUv).r;
         samplePos = screenToViewPos(sampleUv, sampleDepth);
         diff = samplePos - viewPos;
-        diffSqLen = dot(diff, diff);
+        diffSqLen = dotSelf(diff);
         if (diffSqLen > 1e-5 && diffSqLen < maxSqLen) {
-            float NdotL = clamp(dot(normal, diff * inversesqrt(diffSqLen)), 0.0, 1.0);
-            total += NdotL * clamp(1.0 - diffSqLen / maxSqLen, 0.0, 1.0);
+            float NdotL = saturate(dot(normal, diff * inversesqrt(diffSqLen)));
+            total += NdotL * saturate(1.0 - diffSqLen / maxSqLen);
         }
     }
 
-    float ao = max(1.0 - total * rSteps * uStrength, 0.0);
-    ao *= sqrt(ao);  // perceptual curve matching DerivativeMain
+    float ao = max0(1.0 - total * rSteps * uStrength);
+    ao *= sqrt(ao);  // Perceptual curve matching DerivativeMain
     FragColor = vec4(vec3(ao), 1.0);
 }
