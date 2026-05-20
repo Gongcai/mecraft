@@ -20,6 +20,7 @@ uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform float uAnimationTime;
 uniform float uTime;
+uniform vec3 uShadowLightDirection;
 uniform int uShadowPassMode; // 0 = opaque-only (existing), 1 = water shadow (DepthAll + Color)
 
 // Shadow color outputs:
@@ -58,28 +59,36 @@ vec3 decodeFaceNormal(float face) {
 
 // ---- Water caustics (ported from DerivativeMain Shadow.frag) ----
 
+vec2 curve2(vec2 x) {
+    return x * x * (3.0 - 2.0 * x);
+}
+
+float textureSmooth(vec2 coord) {
+    coord += 0.5;
+    vec2 whole = floor(coord);
+    vec2 part = curve2(coord - whole);
+    coord = whole + part - 0.5;
+    return texture(uNoiseTex, coord * (1.0 / 256.0)).r;
+}
+
 float getWaterWaveHeight(vec2 pos) {
-    // Multi-octave noise for water waves
-    vec2 p = pos * 0.05 + uTime * vec2(0.04, -0.03);
-    float h = 0.0;
-    float w = 0.5;
-    for (int i = 0; i < 4; ++i) {
-        h += texture(uNoiseTex, p).r * w;
-        p = p * 2.1 + vec2(1.3, -0.7);
-        w *= 0.5;
-    }
-    return h;
+    // DerivativeMain/lib/Water/WaterWave.glsl-style layered textureSmooth waves.
+    float wavesTime = uTime * 0.6;
+    pos.y *= 0.8;
+    float wave = 0.0;
+    wave += textureSmooth((pos + vec2(0.0, pos.x - wavesTime)) * 0.8);
+    wave += textureSmooth((pos - vec2(-wavesTime, pos.x)) * 1.6) * 0.5;
+    wave += textureSmooth((pos + vec2(wavesTime * 0.6, pos.x - wavesTime)) * 2.4) * 0.2;
+    wave += textureSmooth((pos - vec2(wavesTime * 0.6, pos.x - wavesTime)) * 3.6) * 0.1;
+    return wave;
 }
 
 vec3 getWaterWaveNormal(vec2 worldXZ) {
-    // Finite differences to compute normal from wave height
-    float eps = 0.1;
     float h0 = getWaterWaveHeight(worldXZ);
-    float hx = getWaterWaveHeight(worldXZ + vec2(eps, 0.0));
-    float hz = getWaterWaveHeight(worldXZ + vec2(0.0, eps));
-    vec3 dx = vec3(eps, hx - h0, 0.0);
-    vec3 dz = vec3(0.0, hz - h0, eps);
-    return normalize(cross(dz, dx));
+    float hx = getWaterWaveHeight(worldXZ + vec2(0.04, 0.0));
+    float hz = getWaterWaveHeight(worldXZ + vec2(0.0, 0.04));
+    vec2 waveNormal = vec2(h0 - hx, h0 - hz);
+    return normalize(vec3(waveNormal * 1.0, 0.5));
 }
 
 vec3 fastRefract(vec3 dir, vec3 normal, float eta) {
@@ -87,6 +96,19 @@ vec3 fastRefract(vec3 dir, vec3 normal, float eta) {
     float k = 1.0 - eta * eta * (1.0 - NdotD * NdotD);
     if (k < 0.0) return vec3(0.0);
     return dir * eta - normal * (sqrt(k) + NdotD * eta);
+}
+
+float waterCausticStrength(vec3 normal) {
+    vec3 oldPos = vWorldPos;
+    vec3 incidentLight = -normalize(uShadowLightDirection);
+    vec3 newPos = oldPos + fastRefract(incidentLight, normal, 1.0 / 1.33) * 6.0;
+    float oldArea = dot(dFdx(oldPos), dFdx(oldPos)) * dot(dFdy(oldPos), dFdy(oldPos));
+    float newArea = dot(dFdx(newPos), dFdx(newPos)) * dot(dFdy(newPos), dFdy(newPos));
+    float areaRatio = oldArea / max(newArea, 1.0e-6);
+    float caustics = inversesqrt(max(areaRatio, 1.0e-6)) * 0.3;
+    float lightBand = 0.65 + 0.35 * clamp(dot(normalize(normal), -normalize(uShadowLightDirection)), 0.0, 1.0);
+    float banded = caustics * lightBand;
+    return clamp(banded, 0.08, 2.0);
 }
 
 // ---- Main ----
@@ -99,10 +121,10 @@ void main() {
         }
         // Transparent pass: write water depth + caustics data
         // (DerivativeMain shadowtex0/shadowcolor0/shadowcolor1 for water)
-        vec3 waveNormal = getWaterWaveNormal(vWorldPos.xz);
-        float waveH = getWaterWaveHeight(vWorldPos.xz);
-        // shadowcolor0: RGB = water tint (blue-ish), A = 0.0 (transparent marker)
-        ShadowColor = vec4(0.2, 0.5, 0.8, 0.0);
+        vec3 waveNormal = getWaterWaveNormal(vWorldPos.xz - vWorldPos.y);
+        float caustics = waterCausticStrength(waveNormal);
+        // shadowcolor0: RGB = water caustic/tint, A = 0.0 (transparent marker)
+        ShadowColor = vec4(vec3(sqrt(sqrt(caustics))), 0.0);
         // shadowcolor1: RG = encoded normal, B = skylight, A = water height
         // DerivativeMain: shadowcolor1.w = surfaceY / 512 + 0.25
         ShadowNormal = vec4(encodeNormal(waveNormal), vSkylight, vWorldPos.y / 512.0 + 0.25);

@@ -66,7 +66,9 @@ vec4 spatialUpscaleVolumetric(vec2 uv) {
 
 void main() {
     vec3 scene = texture(uSceneTex, vTexCoord).rgb;
-    vec4 volumetric = spatialUpscaleVolumetric(vTexCoord);
+    vec4 volumetric = (uIsEyeInWater != 0)
+        ? texture(uVolumetricTex, vTexCoord)
+        : spatialUpscaleVolumetric(vTexCoord);
     // Output fog transmittance in alpha for Bloomy Fog in postprocess.
     // volumetric.a = 1 - opacity = transmittance (from volumetric_fog.fs).
     FragColor = vec4(scene * volumetric.a + volumetric.rgb, volumetric.a);

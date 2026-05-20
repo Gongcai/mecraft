@@ -1632,6 +1632,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     m_shadowDepthShader->setInt("texArray", 0);
     m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
     m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
+    m_shadowDepthShader->setVec3("uShadowLightDirection", m_shadowRenderer.lightDirection());
     m_shadowDepthShader->setInt("uNoiseTex", 1);
     m_shadowDepthShader->setInt("uGrassColormap", 2);
     m_shadowDepthShader->setInt("uFoliageColormap", 3);
@@ -1717,7 +1718,9 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
             m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
             // Water: depth write ON, no blending, no sort — just draw water faces
             glDepthMask(GL_TRUE);
+            glDepthFunc(GL_LESS);
             glDisable(GL_BLEND);
+            glDisable(GL_CULL_FACE);
             renderWaterShadowChunks(transparentEntries);
         }
     }

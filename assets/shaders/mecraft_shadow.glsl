@@ -124,12 +124,42 @@ float sampleCsmDepthAllRaw(vec2 uv, int cascadeIndex) {
     return texture(uCsmShadowDepthAllRaw, vec3(uv, float(cascadeIndex))).r;
 }
 
+float sampleCsmDepthRaw(vec2 uv, int cascadeIndex) {
+    return texture(uCsmShadowDepthRaw, vec3(uv, float(cascadeIndex))).r;
+}
+
 vec4 sampleCsmShadowColor0(vec2 uv, int cascadeIndex) {
     return texture(uCsmShadowColor0, vec3(uv, float(cascadeIndex)));
 }
 
 vec4 sampleCsmShadowColor1(vec2 uv, int cascadeIndex) {
     return texture(uCsmShadowColor1, vec3(uv, float(cascadeIndex)));
+}
+
+ivec2 sampleCsmTexelCoord(vec2 uv, int cascadeIndex, sampler2DArray shadowTex) {
+    ivec3 size = textureSize(shadowTex, 0);
+    ivec2 dims = ivec2(max(size.x, 1), max(size.y, 1));
+    return clamp(ivec2(floor(uv * vec2(dims))), ivec2(0), dims - ivec2(1));
+}
+
+float sampleCsmDepthRawTexel(vec2 uv, int cascadeIndex) {
+    ivec2 texel = sampleCsmTexelCoord(uv, cascadeIndex, uCsmShadowDepthRaw);
+    return texelFetch(uCsmShadowDepthRaw, ivec3(texel, cascadeIndex), 0).r;
+}
+
+float sampleCsmDepthAllRawTexel(vec2 uv, int cascadeIndex) {
+    ivec2 texel = sampleCsmTexelCoord(uv, cascadeIndex, uCsmShadowDepthAllRaw);
+    return texelFetch(uCsmShadowDepthAllRaw, ivec3(texel, cascadeIndex), 0).r;
+}
+
+vec4 sampleCsmShadowColor0RawTexel(vec2 uv, int cascadeIndex) {
+    ivec2 texel = sampleCsmTexelCoord(uv, cascadeIndex, uCsmShadowColor0);
+    return texelFetch(uCsmShadowColor0, ivec3(texel, cascadeIndex), 0);
+}
+
+vec4 sampleCsmShadowColor1RawTexel(vec2 uv, int cascadeIndex) {
+    ivec2 texel = sampleCsmTexelCoord(uv, cascadeIndex, uCsmShadowColor1);
+    return texelFetch(uCsmShadowColor1, ivec3(texel, cascadeIndex), 0);
 }
 
 float sampleCsmPcf3x3(vec2 uv, int cascadeIndex, float refZ, vec2 texelUv, float radius) {

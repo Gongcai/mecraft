@@ -54,6 +54,7 @@ void Game::init() {
 #endif
 }
 
+
 // initWindow and initResources removed
 
 void Game::initWorld() {
