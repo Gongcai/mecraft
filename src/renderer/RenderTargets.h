@@ -44,6 +44,9 @@ enum class Target : int {
     // --- Utility ---
     SSAO          = 30,  // R8     — raw ambient occlusion
     SSAOFiltered  = 31,  // R8     — bilateral-filtered AO
+    HistorySSAO   = 34,  // R8     — SSAO temporal history (ping-pong)
+    SSAOHalfRes   = 35,  // R8     — half-res raw ambient occlusion
+    SSAOHalfResFiltered = 36, // R8  — half-res bilateral-filtered AO
     VolumetricFog = 32,  // RGBA16F — fog scattered light.rgb + transmittance.a
     HalfRes       = 33,  // RGBA16F — generic half-resolution scratch buffer
 
@@ -79,10 +82,14 @@ inline constexpr PassIO kPassTable[] = {
 
     { "SSAO",
       { Target::GDepth, Target::GNormalAo },
-      { Target::SSAO } },
+      { Target::SSAOHalfRes } },
 
     { "SSAOFilter",
-      { Target::SSAO, Target::GDepth, Target::GNormalAo },
+      { Target::SSAOHalfRes, Target::GDepth, Target::GNormalAo },
+      { Target::SSAOHalfResFiltered } },
+
+    { "SSAOUpsample",
+      { Target::SSAOHalfResFiltered, Target::GDepth },
       { Target::SSAOFiltered } },
 
     { "DeferredLighting",
@@ -142,6 +149,10 @@ inline constexpr PassIO kPassTable[] = {
     { "TransparentComposite",
       { Target::GDepth, Target::SceneResolved, Target::SkyCapture },
       { Target::Count } },  // writes to default framebuffer
+
+    { "SSAOTemporal",
+      { Target::SSAOFiltered, Target::Velocity, Target::GDepth, Target::HistorySSAO },
+      { Target::HistorySSAO } },
 
     { "PostProcess",
       { Target::SceneResolved },

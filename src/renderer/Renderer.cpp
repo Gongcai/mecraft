@@ -114,6 +114,8 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_temporalResolveShader = resourceMgr.getShader("temporal_resolve");
     m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
     m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
+    m_ssaoTemporalShader = resourceMgr.getShader("ssao_temporal");
+    m_ssaoUpsampleShader = resourceMgr.getShader("ssao_upsample");
     m_motionBlurShader = resourceMgr.getShader("motion_blur");
     m_dofShader = resourceMgr.getShader("dof");
     if (m_deferredLightingShader != nullptr) {
@@ -1432,6 +1434,13 @@ bool Renderer::renderWorldDeferred(const World& world,
         if (m_pipelineSettings.ssaoFilterEnabled && m_ssaoFilterShader != nullptr) {
             renderSsaoFilterPass();
         }
+        // Always upsample from half-res to full-res for temporal/lighting
+        if (m_ssaoUpsampleShader != nullptr) {
+            renderSsaoUpsamplePass();
+        }
+        if (m_pipelineSettings.ssaoTemporalEnabled && m_ssaoTemporalShader != nullptr) {
+            renderSsaoTemporalPass();
+        }
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Ssao);
 #endif
@@ -1760,7 +1769,8 @@ void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
     if (m_ssaoShader == nullptr) {
         return;
     }
-    m_deferredTargets.bindSsao();
+    // Render SSAO at half resolution for performance
+    m_deferredTargets.bindSsaoHalfRes();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -1774,7 +1784,10 @@ void Renderer::renderSsaoPass(const Camera& camera, const Window& window) {
     m_ssaoShader->setMat4("uInvProjection", glm::inverse(proj));
     m_ssaoShader->setFloat("uRadius", m_pipelineSettings.ssaoRadius);
     m_ssaoShader->setFloat("uStrength", m_pipelineSettings.ssaoStrength);
-    m_ssaoShader->setVec2("uInvResolution", glm::vec2(1.0f / std::max(1, window.getWidth()), 1.0f / std::max(1, window.getHeight())));
+    // Half-res: invResolution refers to the half-res viewport for UV computation
+    const int halfW = std::max(1, window.getWidth() / 2);
+    const int halfH = std::max(1, window.getHeight() / 2);
+    m_ssaoShader->setVec2("uInvResolution", glm::vec2(1.0f / halfW, 1.0f / halfH));
     m_ssaoShader->setInt("uFrameIndex", static_cast<int>(m_frameCounter % 64));
     m_ssaoShader->setInt("uSamples", std::clamp(m_pipelineSettings.ssaoSamples, 1, 64));
 
@@ -1887,8 +1900,9 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_pipelineSettings.ssaoFilterEnabled && m_ssaoFilterShader != nullptr
-        ? m_deferredTargets.ssaoFilteredTexture() : m_deferredTargets.ssaoTexture());
+    glBindTexture(GL_TEXTURE_2D, m_pipelineSettings.ssaoTemporalEnabled && m_ssaoTemporalShader != nullptr
+        ? m_deferredTargets.ssaoTemporalTexture()
+        : m_deferredTargets.ssaoFilteredTexture());
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE11);
@@ -2022,6 +2036,7 @@ void Renderer::updateDeferredHistoryTargets() {
     m_deferredTargets.copyReflectionToHistory();
     m_deferredTargets.copyCloudToHistory();
     m_deferredTargets.swapHistory();
+    m_deferredTargets.swapSsaoHistory();
     m_deferredHistoryUpdatedThisFrame = true;
 }
 
@@ -2367,22 +2382,25 @@ void Renderer::renderSsaoFilterPass() {
         return;
     }
 
-    m_deferredTargets.bindSsaoFiltered();
+    // Bilateral filter at half resolution, reading from half-res raw SSAO
+    m_deferredTargets.bindSsaoHalfResFiltered();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
+
+    const int halfW = std::max(1, m_deferredTargets.width() / 2);
+    const int halfH = std::max(1, m_deferredTargets.height() / 2);
 
     m_ssaoFilterShader->use();
     m_ssaoFilterShader->setInt("uSsaoTex", 0);
     m_ssaoFilterShader->setInt("uDepthTex", 1);
     m_ssaoFilterShader->setInt("uNormalAoTex", 2);
     m_ssaoFilterShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+        glm::vec2(static_cast<float>(halfW), static_cast<float>(halfH)));
     m_ssaoFilterShader->setFloat("uNear", m_nearPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoHalfResTexture());
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     glActiveTexture(GL_TEXTURE2);
@@ -2393,6 +2411,92 @@ void Renderer::renderSsaoFilterPass() {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderSsaoUpsamplePass() {
+    if (m_ssaoUpsampleShader == nullptr) {
+        return;
+    }
+
+    // Upsample half-res filtered SSAO to full-res ssaoFilteredTex
+    m_deferredTargets.bindSsaoFiltered();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    const int halfW = std::max(1, m_deferredTargets.width() / 2);
+    const int halfH = std::max(1, m_deferredTargets.height() / 2);
+
+    m_ssaoUpsampleShader->use();
+    m_ssaoUpsampleShader->setInt("uSsaoHalfResTex", 0);
+    m_ssaoUpsampleShader->setInt("uDepthTex", 1);
+    m_ssaoUpsampleShader->setVec2("uHalfResSize",
+        glm::vec2(static_cast<float>(halfW), static_cast<float>(halfH)));
+    m_ssaoUpsampleShader->setFloat("uNear", m_nearPlane);
+
+    // Read from filtered half-res if filter is enabled, otherwise raw half-res
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_pipelineSettings.ssaoFilterEnabled && m_ssaoFilterShader != nullptr
+        ? m_deferredTargets.ssaoHalfResFilteredTexture() : m_deferredTargets.ssaoHalfResTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    renderFullscreen(*m_ssaoUpsampleShader);
+
+    for (int i = 1; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderSsaoTemporalPass() {
+    if (m_ssaoTemporalShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindSsaoTemporal();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_ssaoTemporalShader->use();
+    m_ssaoTemporalShader->setInt("uCurrentTex", 0);
+    m_ssaoTemporalShader->setInt("uHistoryTex", 1);
+    m_ssaoTemporalShader->setInt("uVelocityTex", 2);
+    m_ssaoTemporalShader->setInt("uDepthTex", 3);
+    m_ssaoTemporalShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_ssaoTemporalShader->setFloat("uHistoryWeight", m_pipelineSettings.ssaoHistoryWeight);
+    m_ssaoTemporalShader->setFloat("uNear", m_nearPlane);
+
+    // Current SSAO: upsampled full-res result
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoFilteredTexture());
+    // History SSAO (previous frame)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoHistoryTexturePrev());
+    // Velocity buffer
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    // GBuffer depth
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+
+    renderFullscreen(*m_ssaoTemporalShader);
+
+    for (int i = 3; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    // Copy temporal result to history[current] for next frame's reprojection
+    m_deferredTargets.copySsaoTemporalToHistory();
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -2583,7 +2687,7 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoFilteredTexture());
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
     glActiveTexture(GL_TEXTURE8);

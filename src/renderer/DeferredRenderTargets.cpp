@@ -196,6 +196,62 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    // Half-res SSAO: raw and filtered at width/2 x height/2
+    const int halfW = std::max(1, m_width / 2);
+    const int halfH = std::max(1, m_height / 2);
+    glCreateFramebuffers(1, &m_ssaoHalfResFbo);
+    m_ssaoHalfResTex = createTexture2D(GL_R8, halfW, halfH, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_ssaoHalfResFbo, GL_COLOR_ATTACHMENT0, m_ssaoHalfResTex, 0);
+    const GLenum ssaoHalfResDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_ssaoHalfResFbo, 1, &ssaoHalfResDrawBuffer);
+    if (!checkFramebufferComplete(m_ssaoHalfResFbo, "SSAOHalfRes")) {
+        shutdown();
+        return false;
+    }
+
+    glCreateFramebuffers(1, &m_ssaoHalfResFilteredFbo);
+    m_ssaoHalfResFilteredTex = createTexture2D(GL_R8, halfW, halfH, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_ssaoHalfResFilteredFbo, GL_COLOR_ATTACHMENT0, m_ssaoHalfResFilteredTex, 0);
+    const GLenum ssaoHalfResFilteredDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_ssaoHalfResFilteredFbo, 1, &ssaoHalfResFilteredDrawBuffer);
+    if (!checkFramebufferComplete(m_ssaoHalfResFilteredFbo, "SSAOHalfResFiltered")) {
+        shutdown();
+        return false;
+    }
+
+    // SSAO temporal history ping-pong (R8, matches SSAO format)
+    for (int i = 0; i < 2; ++i) {
+        glCreateFramebuffers(1, &m_ssaoHistoryFbo[i]);
+        m_ssaoHistoryTex[i] = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
+                                              GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+        glNamedFramebufferTexture(m_ssaoHistoryFbo[i], GL_COLOR_ATTACHMENT0, m_ssaoHistoryTex[i], 0);
+        const GLenum ssaoHistoryDrawBuffer = GL_COLOR_ATTACHMENT0;
+        glNamedFramebufferDrawBuffers(m_ssaoHistoryFbo[i], 1, &ssaoHistoryDrawBuffer);
+        if (!checkFramebufferComplete(m_ssaoHistoryFbo[i], "SSAOHistory")) {
+            shutdown();
+            return false;
+        }
+        // Clear to 1.0 (no occlusion) so first frame reads valid history
+        const float clearWhite = 1.0f;
+        glClearNamedFramebufferfv(m_ssaoHistoryFbo[i], GL_COLOR, 0, &clearWhite);
+    }
+    m_ssaoHistoryIndex = 0;
+
+    // SSAO temporal resolve output (R8, same format as SSAO)
+    glCreateFramebuffers(1, &m_ssaoTemporalFbo);
+    m_ssaoTemporalTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
+                                        GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_ssaoTemporalFbo, GL_COLOR_ATTACHMENT0, m_ssaoTemporalTex, 0);
+    const GLenum ssaoTemporalDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_ssaoTemporalFbo, 1, &ssaoTemporalDrawBuffer);
+    if (!checkFramebufferComplete(m_ssaoTemporalFbo, "SSAOTemporal")) {
+        shutdown();
+        return false;
+    }
+    // Clear temporal output to 1.0 (no occlusion)
+    const float clearWhiteTemporal = 1.0f;
+    glClearNamedFramebufferfv(m_ssaoTemporalFbo, GL_COLOR, 0, &clearWhiteTemporal);
+
     glCreateFramebuffers(1, &m_sceneLightingFbo);
     m_sceneLightingTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_sceneLightingFbo, GL_COLOR_ATTACHMENT0, m_sceneLightingTex, 0);
@@ -417,6 +473,27 @@ void DeferredRenderTargets::bindSsao() {
 void DeferredRenderTargets::bindSsaoFiltered() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoFilteredFbo);
     glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindSsaoTemporal() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoTemporalFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindSsaoHalfRes() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoHalfResFbo);
+    glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindSsaoHalfResFiltered() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoHalfResFilteredFbo);
+    glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
 }
@@ -689,6 +766,18 @@ void DeferredRenderTargets::copyCloudToHistory() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
 }
 
+void DeferredRenderTargets::copySsaoTemporalToHistory() {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssaoTemporalFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssaoHistoryFbo[m_ssaoHistoryIndex]);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoHistoryFbo[m_ssaoHistoryIndex]);
+}
+
 void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
@@ -843,6 +932,9 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_historyDepthTex[0], m_historyDepthTex[1],
         m_historyReflectionTex[0], m_historyReflectionTex[1],
         m_historyCloudTex[0], m_historyCloudTex[1],
+        m_ssaoHalfResTex, m_ssaoHalfResFilteredTex,
+        m_ssaoHistoryTex[0], m_ssaoHistoryTex[1],
+        m_ssaoTemporalTex,
         m_velocityTex,
         m_weatherMaskTex
     };
@@ -870,6 +962,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_csmShadowColor1 = 0;
     m_ssaoTex = 0;
     m_ssaoFilteredTex = 0;
+    m_ssaoHalfResTex = 0;
+    m_ssaoHalfResFilteredTex = 0;
     m_sceneLightingTex = 0;
     m_sceneCompositeTex = 0;
     m_sceneResolvedTex = 0;
@@ -884,10 +978,12 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_historyDepthTex[0] = 0; m_historyDepthTex[1] = 0;
     m_historyReflectionTex[0] = 0; m_historyReflectionTex[1] = 0;
     m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
+    m_ssaoHistoryTex[0] = 0; m_ssaoHistoryTex[1] = 0;
+    m_ssaoTemporalTex = 0;
     m_velocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_velocityFbo, m_weatherMaskFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -900,6 +996,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_csmShadowTransparentFbo = 0;
     m_ssaoFbo = 0;
     m_ssaoFilteredFbo = 0;
+    m_ssaoHalfResFbo = 0;
+    m_ssaoHalfResFilteredFbo = 0;
     m_sceneLightingFbo = 0;
     m_sceneCompositeFbo = 0;
     m_sceneResolvedFbo = 0;
@@ -912,6 +1010,8 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
     m_historyReflectionFbo[0] = 0; m_historyReflectionFbo[1] = 0;
     m_historyCloudFbo[0] = 0; m_historyCloudFbo[1] = 0;
+    m_ssaoHistoryFbo[0] = 0; m_ssaoHistoryFbo[1] = 0;
+    m_ssaoTemporalFbo = 0;
     m_velocityFbo = 0;
     m_weatherMaskFbo = 0;
     m_currentHistoryIndex = 0;

@@ -513,6 +513,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Cloud Shadows", &pipeline.cloudShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &pipeline.derivativeStrictMode);
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
+        pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &pipeline.ssaoTemporalEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.0f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &pipeline.bloomStrength, 0.0f, 5.0f, "%.2f");
@@ -935,6 +936,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderInt("SSAO Samples", &pipeline.ssaoSamples, 1, 64);
+        pipelineChanged |= ImGui::SliderFloat("SSAO History Weight", &pipeline.ssaoHistoryWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &pipeline.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
         pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.0f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Saturation", &pipeline.saturation, 0.0f, 2.0f, "%.2f");

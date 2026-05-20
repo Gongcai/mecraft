@@ -85,6 +85,8 @@ public:
         bool taaEnabled = true;
         bool reflectionFilterEnabled = true;
         bool ssaoFilterEnabled = true;
+        bool ssaoTemporalEnabled = true;
+        float ssaoHistoryWeight = 0.85f;
         bool motionBlurEnabled = false;
         float taaBlendMin = 0.08f;
         float taaBlendMax = 0.26f;
@@ -555,6 +557,8 @@ private:
     void compositeVolumetricFogPass();
     void renderTemporalResolvePass(const RenderFrameData& frame);
     void renderSsaoFilterPass();
+    void renderSsaoTemporalPass();
+    void renderSsaoUpsamplePass();
     void renderMotionBlurPass(const RenderFrameData& frame);
     void renderDofPass(const RenderFrameData& frame);
     void renderDeferredDebugView(GLint framebuffer, int width, int height);
@@ -635,6 +639,8 @@ private:
     Shader* m_temporalResolveShader = nullptr;
     Shader* m_reflectionFilterShader = nullptr;
     Shader* m_ssaoFilterShader = nullptr;
+    Shader* m_ssaoTemporalShader = nullptr;
+    Shader* m_ssaoUpsampleShader = nullptr;
     Shader* m_motionBlurShader = nullptr;
     Shader* m_dofShader = nullptr;
    // Shader* m_uiShader = nullptr;

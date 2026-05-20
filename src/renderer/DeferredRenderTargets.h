@@ -19,6 +19,9 @@ public:
     void bindShadowColor();
     void bindSsao();
     void bindSsaoFiltered();
+    void bindSsaoTemporal();
+    void bindSsaoHalfRes();
+    void bindSsaoHalfResFiltered();
     void bindSceneLighting();
     void bindSceneComposite();
     void bindSceneResolved();
@@ -71,6 +74,15 @@ public:
     [[nodiscard]] GLuint shadowNormalTexture() const { return m_shadowNormal; }
     [[nodiscard]] GLuint ssaoTexture() const { return m_ssaoTex; }
     [[nodiscard]] GLuint ssaoFilteredTexture() const { return m_ssaoFilteredTex; }
+    [[nodiscard]] GLuint ssaoHalfResTexture() const { return m_ssaoHalfResTex; }
+    [[nodiscard]] GLuint ssaoHalfResFilteredTexture() const { return m_ssaoHalfResFilteredTex; }
+    [[nodiscard]] int halfWidth() const { return m_width / 2; }
+    [[nodiscard]] int halfHeight() const { return m_height / 2; }
+    [[nodiscard]] GLuint ssaoHistoryTexture() const { return m_ssaoHistoryTex[m_ssaoHistoryIndex]; }
+    [[nodiscard]] GLuint ssaoHistoryTexturePrev() const { return m_ssaoHistoryTex[1 - m_ssaoHistoryIndex]; }
+    [[nodiscard]] GLuint ssaoTemporalTexture() const { return m_ssaoTemporalTex; }
+    void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
+    void copySsaoTemporalToHistory();
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] GLuint sceneCompositeTexture() const { return m_sceneCompositeTex; }
     [[nodiscard]] GLuint sceneResolvedTexture() const { return m_sceneResolvedTex; }
@@ -178,6 +190,18 @@ private:
     GLuint m_ssaoTex = 0;
     GLuint m_ssaoFilteredFbo = 0;
     GLuint m_ssaoFilteredTex = 0;
+    // Half-res SSAO: raw and filtered at width/2 x height/2
+    GLuint m_ssaoHalfResFbo = 0;
+    GLuint m_ssaoHalfResTex = 0;
+    GLuint m_ssaoHalfResFilteredFbo = 0;
+    GLuint m_ssaoHalfResFilteredTex = 0;
+    // SSAO temporal history ping-pong (R8)
+    GLuint m_ssaoHistoryFbo[2] = {0, 0};
+    GLuint m_ssaoHistoryTex[2] = {0, 0};
+    int m_ssaoHistoryIndex = 0;
+    // SSAO temporal resolve output (R8) — deferred lighting reads from this
+    GLuint m_ssaoTemporalFbo = 0;
+    GLuint m_ssaoTemporalTex = 0;
 
     GLuint m_sceneLightingFbo = 0;
     GLuint m_sceneLightingTex = 0;
