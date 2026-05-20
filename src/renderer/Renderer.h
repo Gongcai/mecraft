@@ -87,6 +87,8 @@ public:
         bool ssaoFilterEnabled = true;
         bool ssaoTemporalEnabled = true;
         float ssaoHistoryWeight = 0.85f;
+        bool reflectionTemporalEnabled = true;
+        float reflectionHistoryWeight = 0.90f;
         bool motionBlurEnabled = false;
         float taaBlendMin = 0.08f;
         float taaBlendMax = 0.26f;
@@ -552,6 +554,7 @@ private:
     void updateDeferredHistoryTargets();
     void renderReflectionPass(const RenderFrameData& frame);
     void renderReflectionFilterPass(const RenderFrameData& frame);
+    void renderReflectionTemporalPass();
     void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass();
@@ -638,6 +641,7 @@ private:
     Shader* m_bloomBlurShader = nullptr;
     Shader* m_temporalResolveShader = nullptr;
     Shader* m_reflectionFilterShader = nullptr;
+    Shader* m_reflectionTemporalShader = nullptr;
     Shader* m_ssaoFilterShader = nullptr;
     Shader* m_ssaoTemporalShader = nullptr;
     Shader* m_ssaoUpsampleShader = nullptr;

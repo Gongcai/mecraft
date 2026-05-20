@@ -67,8 +67,9 @@ void main() {
             // Spatial weight: Gaussian falloff
             float spatialWeight = exp2(-float(x * x + y * y) * 0.2);
 
-            // Confidence weight: prefer high-confidence samples
-            float confidenceWeight = max(sampleReflection.a, 0.01);
+            // Confidence weight: alpha = 1 - specular, so lower alpha = stronger reflection.
+            // Invert to prefer samples with actual reflection data.
+            float confidenceWeight = max(1.0 - sampleReflection.a, 0.01);
 
             float weight = depthWeight * normalWeight * spatialWeight * confidenceWeight;
             result += sampleReflection.rgb * weight;

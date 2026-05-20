@@ -1,0 +1,116 @@
+#version 450 core
+// Reflection temporal reprojection. Reads velocity to reproject previous frame's
+// temporally-resolved reflection, applies 3x3 neighborhood clamp and
+// depth/normal/roughness-based disocclusion rejection to prevent ghosting.
+// Operates on RGBA16F premultiplied-alpha reflection data:
+//   rgb = reflected radiance * specular weight
+//   a   = 1 - specular weight (1 = no reflection, 0 = full reflection)
+
+#include "gbuffer_contract.glsl"
+
+in vec2 vTexCoord;
+out vec4 FragColor;
+
+uniform sampler2D uCurrentTex;
+uniform sampler2D uHistoryTex;
+uniform sampler2D uVelocityTex;
+uniform sampler2D uDepthTex;
+uniform sampler2D uNormalAoTex;
+uniform sampler2D uMaterialTex;
+uniform vec2 uScreenSize;
+uniform float uHistoryWeight;
+uniform float uNear;
+
+vec3 reconstructNormal(vec3 packedNormal) {
+    return normalize(packedNormal * 2.0 - 1.0);
+}
+
+void main() {
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
+    vec2 screenCoord = gl_FragCoord.xy * texelSize;
+
+    vec4 current = texelFetch(uCurrentTex, texel, 0);
+    float depth = texelFetch(uDepthTex, texel, 0).r;
+
+    // Sky pixels: pass through (no temporal accumulation for sky reflections)
+    if (depth >= 0.9999) {
+        FragColor = current;
+        return;
+    }
+
+    // No SSR hit (alpha ~1, specular weight ~0): pass through to avoid
+    // smearing valid reflection into non-reflective regions
+    if (current.a >= 0.999) {
+        FragColor = current;
+        return;
+    }
+
+    // Reproject using velocity buffer
+    vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
+    vec2 prevCoord = screenCoord - velocity;
+
+    // Out-of-bounds history: use current frame
+    if (prevCoord.x < 0.0 || prevCoord.x > 1.0 ||
+        prevCoord.y < 0.0 || prevCoord.y > 1.0) {
+        FragColor = current;
+        return;
+    }
+
+    // Depth disocclusion: compare linearized current depth with linearized depth at
+    // reprojected position. Uses the same linearization as ssao_temporal.fs.
+    float historyDepth = texture(uDepthTex, prevCoord).r;
+    float linCurrent = 2.0 * uNear / max(1.0 - depth, 1e-7);
+    float linHistory = 2.0 * uNear / max(1.0 - historyDepth, 1e-7);
+    float relDepthDiff = abs(linCurrent - linHistory) / max(linCurrent, 0.1);
+    float depthDisocclusion = smoothstep(0.05, 0.5, relDepthDiff);
+
+    // Normal disocclusion: reject history where surface orientation changed sharply
+    vec3 currentNormal = reconstructNormal(texelFetch(uNormalAoTex, texel, 0).rgb);
+    vec3 historyNormal = reconstructNormal(texture(uNormalAoTex, prevCoord).rgb);
+    float normalDot = max(dot(currentNormal, historyNormal), 0.0);
+    float normalDisocclusion = 1.0 - smoothstep(0.5, 0.95, normalDot);
+
+    // Roughness disocclusion: smooth surfaces are more sensitive to mismatch
+    SurfaceMaterial centerMaterial = unpackGBufferMaterial(texelFetch(uMaterialTex, texel, 0));
+    float centerRoughness = clamp(centerMaterial.roughness, 0.0, 1.0);
+    float roughnessFactor = mix(0.5, 1.0, 1.0 - centerRoughness);
+
+    // Combined disocclusion
+    float disocclusion = max(depthDisocclusion, normalDisocclusion * roughnessFactor);
+
+    // 3x3 neighborhood min/max clamp for RGB.
+    // Prevents history from exceeding the local reflection range -> kills ghosting.
+    ivec2 clampedSize = ivec2(uScreenSize) - 1;
+    vec3 minColor = current.rgb;
+    vec3 maxColor = current.rgb;
+    float minAlpha = current.a;
+    float maxAlpha = current.a;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            if (x == 0 && y == 0) continue;
+            ivec2 sampleTexel = clamp(texel + ivec2(x, y), ivec2(0), clampedSize);
+            vec4 s = texelFetch(uCurrentTex, sampleTexel, 0);
+            minColor = min(minColor, s.rgb);
+            maxColor = max(maxColor, s.rgb);
+            minAlpha = min(minAlpha, s.a);
+            maxAlpha = max(maxAlpha, s.a);
+        }
+    }
+
+    // Sample and clamp history
+    vec2 safeHistoryUv = clamp(prevCoord, texelSize * 0.5, 1.0 - texelSize * 0.5);
+    vec4 history = texture(uHistoryTex, safeHistoryUv);
+    history.rgb = clamp(history.rgb, minColor, maxColor);
+    history.a = clamp(history.a, minAlpha, maxAlpha);
+
+    // Blend weight: base weight reduced by disocclusion and pixel motion magnitude.
+    // Stationary pixels get full history weight; fast-moving or disoccluded pixels get less.
+    float pixelMotion = length(velocity * uScreenSize);
+    float motionFactor = exp(-pixelMotion * 0.25);
+    float blendWeight = uHistoryWeight * (1.0 - disocclusion) * motionFactor;
+
+    vec4 result = mix(current, history, blendWeight);
+
+    FragColor = vec4(max(result.rgb, vec3(0.0)), result.a);
+}

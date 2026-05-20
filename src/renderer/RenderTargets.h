@@ -109,6 +109,11 @@ inline constexpr PassIO kPassTable[] = {
         Target::GMaterial },
       { Target::ReflectionData } },
 
+    { "ReflectionTemporal",
+      { Target::ReflectionData, Target::HistoryReflect, Target::Velocity,
+        Target::GDepth, Target::GNormalAo, Target::GMaterial },
+      { Target::ReflectionData } },
+
     { "Cloud",
       { Target::GDepth, Target::SkyCapture },
       { Target::CloudData } },

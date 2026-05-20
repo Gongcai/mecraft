@@ -35,6 +35,7 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     destroyFramebuffers();
+    m_rebuiltSinceCheck = true;
 
     m_width = targetWidth;
     m_height = targetHeight;
@@ -330,6 +331,18 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    // Reflection temporal scratch: holds a copy of the filtered reflection so
+    // the temporal pass can read it while writing the blended result to m_reflectionFbo.
+    glCreateFramebuffers(1, &m_reflectionTemporalScratchFbo);
+    m_reflectionTemporalScratchTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_reflectionTemporalScratchFbo, GL_COLOR_ATTACHMENT0, m_reflectionTemporalScratchTex, 0);
+    const GLenum reflectionTemporalScratchDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_reflectionTemporalScratchFbo, 1, &reflectionTemporalScratchDrawBuffer);
+    if (!checkFramebufferComplete(m_reflectionTemporalScratchFbo, "ReflectionTemporalScratch")) {
+        shutdown();
+        return false;
+    }
+
     glCreateFramebuffers(1, &m_cloudFbo);
     m_cloudTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_cloudFbo, GL_COLOR_ATTACHMENT0, m_cloudTex, 0);
@@ -535,6 +548,13 @@ void DeferredRenderTargets::bindHalfRes() {
 
 void DeferredRenderTargets::bindReflection() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionFbo);
+    glViewport(0, 0, m_width, m_height);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindReflectionTemporalScratch() {
+    glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionTemporalScratchFbo);
     glViewport(0, 0, m_width, m_height);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
@@ -752,6 +772,18 @@ void DeferredRenderTargets::copyReflectionToHistory() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
 }
 
+void DeferredRenderTargets::copyReflectionToTemporalScratch() const {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_reflectionFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_reflectionTemporalScratchFbo);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionTemporalScratchFbo);
+}
+
 void DeferredRenderTargets::copyCloudToHistory() const {
     if (!m_ready) {
         return;
@@ -926,6 +958,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_transparentCompositeDepth,
         m_halfResTex,
         m_reflectionTex,
+        m_reflectionTemporalScratchTex,
         m_cloudTex,
         m_skyCaptureTex,
         m_historySceneTex[0], m_historySceneTex[1],
@@ -972,6 +1005,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_transparentCompositeDepth = 0;
     m_halfResTex = 0;
     m_reflectionTex = 0;
+    m_reflectionTemporalScratchTex = 0;
     m_cloudTex = 0;
     m_skyCaptureTex = 0;
     m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;
@@ -983,7 +1017,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_velocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -1005,6 +1039,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_transparentCompositeFbo = 0;
     m_halfResFbo = 0;
     m_reflectionFbo = 0;
+    m_reflectionTemporalScratchFbo = 0;
     m_cloudFbo = 0;
     m_skyCaptureFbo = 0;
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;

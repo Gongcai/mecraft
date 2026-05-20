@@ -125,7 +125,7 @@
 - `renderGBufferTerrain`
 - `renderVelocityPass`
 - `renderShadowMap`
-- `renderSsaoPass/renderSsaoFilterPass`
+- `renderSsaoPass/renderSsaoFilterPass/renderSsaoUpsamplePass/renderSsaoTemporalPass`
 - `renderDeferredLightingPass`
 - `renderReflectionPass/renderReflectionFilterPass`
 - `renderCloudPass`
@@ -154,7 +154,8 @@
 | `ShadowDepth` | DEPTH32F | shadow map depth | `shadowtex0/shadowtex1` 的基础深度 |
 | `ShadowColor` | RGBA8 | colored shadow / caustics | `shadowcolor0` |
 | `ShadowNormal` | RGBA16F | encoded normal.rg + skylight.b + aux/height.a | `shadowcolor1` |
-| `SSAO/SSAOFiltered` | R8 | SSAO | DerivativeMain AO/GI filter 的简化替代 |
+| `SSAO/SSAOFiltered` | R8 | SSAO (half-res raw + filtered, depth-aware upsampled to full-res) | DerivativeMain AO/GI filter 的增强替代：16 samples + 7×7 bilateral + temporal reprojection |
+| `HistorySSAO` | R8 (ping-pong ×2) | SSAO temporal history | — |
 | `SceneLighting` | RGBA16F | deferred lighting HDR | `colortex4` |
 | `Reflection` | RGBA16F | SSR/reflection | `colortex2` |
 | `Cloud` | RGBA16F half-res | cloud color/transmittance | `colortex2/1` 部分语义 |
@@ -399,8 +400,10 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 ### 6.2 当前 Mecraft 对应
 
 - `assets/shaders/deferred_lighting.fs`
-- `assets/shaders/ssao.fs`
-- `assets/shaders/ssao_filter.fs`
+- `assets/shaders/ssao.fs` (half-res)
+- `assets/shaders/ssao_filter.fs` (half-res)
+- `assets/shaders/ssao_upsample.fs` (depth-aware upsample)
+- `assets/shaders/ssao_temporal.fs` (temporal reprojection)
 - `assets/shaders/render_contract.glsl`
 - `assets/shaders/atmosphere_lut.glsl`
 
@@ -883,7 +886,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `shadow` | 写 depth + `shadowcolor0/1`，用 `shadowtex0/1` 区分透明/不透明 caster | CSM depth array + `shadow_depth.*` | CSM 稳定，但 DerivativeMain 双 shadowtex 透明语义、彩色阴影、水焦散、RSM 数据链未等价 |
 | `deferred0` | 生成 sky capture raw sky、cloudy sky、metadata；写 `colortex4/5` | `renderSkyCapturePass`/`gameplay_sky.fs` | SkyCapture normalized UV 已修；metadata 由 GPU LUT pass 写入；仍需让所有后续 pass 完全消费同一 metadata |
 | `deferred1` | 云 half/full 分辨率渲染，支持 temporal upscaling/checkerboard | `cloud_target.fs` | 云体公式近似较多；缺 shaderpack 的 checkerboard temporal upscale/history 语义 |
-| `deferred4`/`SpatialFilter` | GI/AO half-res filter 或 compute 分支 | `ssao.fs/filter` | SSAO 是简化实现；RSM GI 缺失 |
+| `deferred4`/`SpatialFilter` | GI/AO half-res filter 或 compute 分支 | `ssao.fs`/`ssao_filter.fs`/`ssao_upsample.fs`/`ssao_temporal.fs` | SSAO Phase 2 完成（16 samples + 7×7 bilateral + half-res + temporal）；RSM GI 缺失 |
 | `deferred5` | 主光照、sky/cloud 合成、BRDF、SH skylight、BlockLighting、SSS | `deferred_lighting.fs` + `scene_composite.fs` | 直射主项已接 SkyCapture metadata；云只在天空像素合成已修；SH skylight、SSS depth、colored shadow、云合成能量仍需验收 |
 | `deferred6/7/8` | SSR + reflection filter，rough VNDF、sky fallback | `reflection_probe.fs/filter` | 只有线性 SSR/简化 filter；rough VNDF/rough cone/时序/Hi-Z 未达 DerivativeMain |
 | `composite` | 半分辨率体积雾/体积光 + 水雾预处理 | `volumetric_fog.fs` | ✅ 已完整对齐：SEA_LEVEL/FALLOFF/动态步数/High(Ultra FBM 密度公式/Low/Medium phase/High(Ultra OD/多瓣相函数/air density/TIME_FADE/Bloomy Fog/21 debug modes；缺 UW_VOLUMETRIC_LIGHT 水下体积光 |

@@ -28,6 +28,7 @@ public:
     void bindTransparentComposite();
     void bindHalfRes();
     void bindReflection();
+    void bindReflectionTemporalScratch();
     void bindCloud();
     void bindVelocity();
     void bindWeatherMask();
@@ -48,6 +49,7 @@ public:
     void copySceneResolvedToTemporalCurrent() const;
     void copyDepthToHistory() const;
     void copyReflectionToHistory() const;
+    void copyReflectionToTemporalScratch() const;
     void copyCloudToHistory() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
     void blitSceneCompositeTo(GLint framebuffer, int width, int height) const;
@@ -90,6 +92,7 @@ public:
     [[nodiscard]] GLuint transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
     [[nodiscard]] GLuint halfResTexture() const { return m_halfResTex; }
     [[nodiscard]] GLuint reflectionTexture() const { return m_reflectionTex; }
+    [[nodiscard]] GLuint reflectionTemporalScratchTexture() const { return m_reflectionTemporalScratchTex; }
     [[nodiscard]] GLuint cloudTexture() const { return m_cloudTex; }
     [[nodiscard]] GLuint skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
     [[nodiscard]] GLuint skyCaptureTexture() const { return m_skyCaptureTex; }
@@ -117,6 +120,9 @@ public:
     [[nodiscard]] int shadowResolution() const { return m_shadowResolution; }
     [[nodiscard]] int shadowCascadeCount() const { return kShadowCascadeCount; }
     [[nodiscard]] bool isReady() const { return m_ready; }
+    // Returns true if ensureSize() performed a rebuild since the last call.
+    // Consumes the flag — second call returns false until next rebuild.
+    [[nodiscard]] bool consumeRebuiltFlag() { bool v = m_rebuiltSinceCheck; m_rebuiltSinceCheck = false; return v; }
 
 private:
     static constexpr int kShadowCascadeCount = 4;
@@ -225,6 +231,11 @@ private:
     GLuint m_reflectionFbo = 0;
     GLuint m_reflectionTex = 0;
 
+    // Reflection temporal scratch: holds filtered reflection copy while
+    // temporal pass reads it and writes blended result to m_reflectionFbo.
+    GLuint m_reflectionTemporalScratchFbo = 0;
+    GLuint m_reflectionTemporalScratchTex = 0;
+
     GLuint m_cloudFbo = 0;
     GLuint m_cloudTex = 0;
 
@@ -240,6 +251,7 @@ private:
     GLuint m_historyCloudFbo[2] = {0, 0};
     GLuint m_historyCloudTex[2] = {0, 0};
     int m_currentHistoryIndex = 0;
+    bool m_rebuiltSinceCheck = false;
 
     // TAA current-frame scratch: avoids reading history[current] as TAA input.
     GLuint m_temporalCurrentFbo = 0;

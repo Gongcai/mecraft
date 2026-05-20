@@ -113,6 +113,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     m_temporalResolveShader = resourceMgr.getShader("temporal_resolve");
     m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
+    m_reflectionTemporalShader = resourceMgr.getShader("reflection_temporal");
     m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
     m_ssaoTemporalShader = resourceMgr.getShader("ssao_temporal");
     m_ssaoUpsampleShader = resourceMgr.getShader("ssao_upsample");
@@ -218,6 +219,7 @@ void Renderer::shutdown() {
     m_bloomBlurShader = nullptr;
     m_temporalResolveShader = nullptr;
     m_reflectionFilterShader = nullptr;
+    m_reflectionTemporalShader = nullptr;
     m_ssaoFilterShader = nullptr;
     m_motionBlurShader = nullptr;
     m_deferredFrameActive = false;
@@ -1405,6 +1407,11 @@ bool Renderer::renderWorldDeferred(const World& world,
         restoreCapturedFramebufferViewport(window);
         return false;
     }
+    // After a resize/rebuild, history textures are freshly allocated and uninitialized.
+    // Invalidate previous frame data so temporal passes skip the first frame.
+    if (m_deferredTargets.consumeRebuiltFlag()) {
+        m_hasPreviousFrameData = false;
+    }
     clearDeferredAuxiliaryTargets();
     renderSkyCapturePass(world);
 
@@ -1478,6 +1485,12 @@ bool Renderer::renderWorldDeferred(const World& world,
         m_pipelineSettings.reflectionDebugMode == 0 &&
         m_reflectionFilterShader != nullptr) {
         renderReflectionFilterPass(frame);
+    }
+    if (m_pipelineSettings.reflectionTemporalEnabled &&
+        m_pipelineSettings.reflectionDebugMode == 0 &&
+        m_reflectionTemporalShader != nullptr &&
+        m_hasPreviousFrameData) {
+        renderReflectionTemporalPass();
     }
     if (m_cloudShader != nullptr) {
 #ifdef MECRAFT_DEBUG
@@ -2325,6 +2338,63 @@ void Renderer::renderReflectionFilterPass(const RenderFrameData& frame) {
     renderFullscreen(*m_reflectionFilterShader);
 
     for (int i = 3; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderReflectionTemporalPass() {
+    if (m_reflectionTemporalShader == nullptr) {
+        return;
+    }
+
+    // Copy filtered reflection to scratch so temporal pass can read it
+    // while writing the blended result back to the reflection FBO.
+    m_deferredTargets.copyReflectionToTemporalScratch();
+
+    m_deferredTargets.bindReflection();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_reflectionTemporalShader->use();
+    m_reflectionTemporalShader->setInt("uCurrentTex", 0);
+    m_reflectionTemporalShader->setInt("uHistoryTex", 1);
+    m_reflectionTemporalShader->setInt("uVelocityTex", 2);
+    m_reflectionTemporalShader->setInt("uDepthTex", 3);
+    m_reflectionTemporalShader->setInt("uNormalAoTex", 4);
+    m_reflectionTemporalShader->setInt("uMaterialTex", 5);
+    m_reflectionTemporalShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
+                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
+    m_reflectionTemporalShader->setFloat("uHistoryWeight", m_pipelineSettings.reflectionHistoryWeight);
+    m_reflectionTemporalShader->setFloat("uNear", m_nearPlane);
+
+    // Current filtered reflection (from scratch copy)
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTemporalScratchTexture());
+    // History reflection (previous frame's temporal output)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyReflectionTexturePrev());
+    // Velocity buffer
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    // GBuffer depth
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    // GBuffer normal/AO
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
+    // GBuffer material
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+
+    renderFullscreen(*m_reflectionTemporalShader);
+
+    for (int i = 5; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
