@@ -148,6 +148,7 @@ public:
         float vfogNoiseScale = 0.04f;     // noise sampling scale for structured fog
         float vfogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
         float vfogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
+        float underwaterVolumetricLightStrength = 0.1f; // DerivativeMain UW_VOLUMETRIC_LIGHT_STRENGTH
         float noiseDitherStrength = 0.015f;
         float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
         float ssaoRadius = 2.25f;

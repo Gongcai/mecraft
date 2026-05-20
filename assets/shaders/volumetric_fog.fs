@@ -54,6 +54,7 @@ uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (de
 // Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
 uniform int uIsEyeInWater;
 uniform vec3 uWaterAbsorption; // RGB absorption coefficients (default 0.4, 0.14, 0.08)
+uniform float uUnderwaterVolumetricLightStrength; // DerivativeMain UW_VOLUMETRIC_LIGHT_STRENGTH
 
 // DerivativeMain-style VFog independent profile (decoupled from weather)
 uniform float uVFogCenterHeight;   // SEA_LEVEL: y-level where fog is densest (default 63.0)
@@ -334,10 +335,6 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
     vec3 transmittance = vec3(1.0);
     vec3 scattering = vec3(0.0);
 
-    // Transparent shadow contract is only maintained for cascade 0.
-    // Pre-compute cascade 0 projection for dual-depth detection.
-    vec3 cascade0Split = vec3(uCsmCascades[0].splitFar);
-
     for (int i = 1; i < steps; ++i) {
         float t = (float(i) + dither) * rSteps;
         vec3 samplePos = uCameraPos + worldDir * (t * rayLength);
@@ -368,11 +365,12 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
                 float waterDepth = abs(color1.w * 512.0 - 128.0 - samplePos.y);
 
                 if (color0.a < 0.5 && waterDepth > 0.1) {
-                    sampleShadow = color0.rgb * color0.rgb;
-                    sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
+                    sampleShadow = sqr(cube(color0.rgb));
                 } else {
-                    sampleShadow = color0.rgb * color0.rgb;
+                    vec3 shadowColorSample = pow4(color0.rgb);
+                    sampleShadow = shadowColorSample * (vec3(opaqueLit) - vec3(allLit)) + vec3(allLit);
                 }
+                sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
             }
         }
         // For ci > 0: transparent contract not available, opaque-only shadow.
@@ -391,8 +389,8 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
 
     // DerivativeMain: 8.0/coeff * directIlluminance * scattering * phase * STRENGTH
     vec3 env = getLightingEnvironment(uSkyCaptureTex).directIlluminance;
-    vec3 fogColor = 8.0 / coeff * env;
-    fogColor *= scattering * phase * 0.1; // UW_VOLUMETRIC_LIGHT_STRENGTH = 0.1
+    vec3 fogColor = 8.0 / coeff * env * oneMinus(0.95 * clamp(uSkyWetness, 0.0, 1.0));
+    fogColor *= scattering * phase * uUnderwaterVolumetricLightStrength;
 
     return vec4(fogColor, 1.0);
 }
@@ -421,7 +419,7 @@ void main() {
 
     // DerivativeMain composite.fsh:79-85 — UW_VOLUMETRIC_LIGHT replaces overworld VFog
     if (uIsEyeInWater == 1) {
-        float dither = fract(float(uFrameIndex) * 0.618033988);
+        float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
         vec4 uwResult = UnderwaterVolumetricLight(worldPos, viewDir, dither);
 

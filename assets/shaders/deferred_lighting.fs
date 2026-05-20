@@ -609,8 +609,9 @@ void main() {
             specular *= 0.6 + uSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
             // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
-            // Indoor surfaces with sky light = 0 get no direct sunlight
-            shadow *= saturate(voxelLight.r * 1e6);
+            // Use the DerivativeMain-adjusted sky visibility so underwater keeps
+            // its fixed mcLightmap.g = 0.75 instead of Mecraft's raw skylight.
+            shadow *= saturate(skyLightMask * 1e6);
             // Diagnostic view: show direct visibility including weather/cloud
             // attenuation, but without HDR directIlluminance to avoid pure white.
             directVisibilityDebug = clamp(shadow * diffuse * NdotL * cloudShadow, vec3(0.0), vec3(1.0));

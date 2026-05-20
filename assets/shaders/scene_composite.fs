@@ -44,10 +44,14 @@ uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
+uniform float uSkyWetness;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;
 uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta
+uniform int uIsEyeInWater;
+uniform vec3 uWaterAbsorption;
 
+#include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 
 vec3 tonemapDebugSafe(vec3 color) {
@@ -60,10 +64,33 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment env) {
+    // DerivativeMain/lib/Water/WaterFog.glsl UnderwaterFog(), adapted for
+    // Mecraft's fullscreen scene composite where the camera is already underwater.
+    const float waterSkylight = 0.75;
+    float fogDensity = (0.1 + 0.05 * uSkyWetness * waterSkylight) * max(fogDistance, 0.0);
+
+    vec3 skyFogBase = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
+    vec3 fogColor = mix(skyFogBase * 0.4,
+                        vec3(luminance(skyFogBase) * 0.1),
+                        0.8 * uSkyWetness * waterSkylight) * (1.0 / 3.14159265359);
+
+    vec3 absorption = uWaterAbsorption * 8.0 + 0.03;
+    vec3 transmittance = exp(-absorption * max(fogDensity, 2.0) + 0.4);
+
+    color *= transmittance;
+    color += fogColor * clamp(waterSkylight + 0.2, 0.0, 1.0) * (1.0 - transmittance);
+}
+
 void main() {
     vec4 scene = texture(uSceneLightingTex, vTexCoord);
     float depth = texture(uDepthTex, vTexCoord).r;
     vec3 color = scene.rgb;
+    LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
     // DerivativeMain deferred5.fsh:168-176: clouds composited ONLY on sky pixels.
     // Geometry pixels never get cloud blending (clouds are always behind geometry).
@@ -118,6 +145,12 @@ void main() {
         } else if (transMask.isIce) {
             color *= transAlbedo * transAlbedo;
         }
+    }
+
+    if (uIsEyeInWater != 0) {
+        vec3 fogWorldPos = reconstructWorldPosition(vTexCoord, depth < 0.9999 ? depth : 0.9999);
+        float fogDistance = length(fogWorldPos - uCameraPos);
+        applyUnderwaterFog(color, fogDistance, env);
     }
 
     FragColor = vec4(tonemapDebugSafe(color), scene.a);

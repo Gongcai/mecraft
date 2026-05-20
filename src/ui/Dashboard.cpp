@@ -553,6 +553,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("VFog Noise Scale", &pipeline.vfogNoiseScale, 0.001f, 0.200f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &pipeline.vfogLightStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("VFog Density Scale", &pipeline.vfogDensityScale, 0.0f, 10.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("UW VL Strength", &pipeline.underwaterVolumetricLightStrength, 0.0f, 2.0f, "%.2f");
         if (ImGui::Combo("Weather Instant (Debug)", &weatherPresetInstant, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
             world.getWeatherSystem().setDebugWeatherPresetInstant(static_cast<WeatherType>(weatherPresetInstant));
         }

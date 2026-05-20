@@ -10,6 +10,7 @@ uniform float uNearPlane;
 uniform float uFarPlane;
 uniform int uFrameIndex;
 uniform int uFreezeBias; // A/B test: 1 = use static bias (no temporal rotation)
+uniform int uIsEyeInWater;
 
 float viewDistanceFromDepth(float depth) {
     if (depth >= 0.9999) {
@@ -37,7 +38,7 @@ vec4 spatialUpscaleVolumetric(vec2 uv) {
     // DerivativeMain lib/Atmosphere/Fogs.glsl:46: bias rotates with frameCounter
     // so each frame samples a different 2x2 quarter, providing temporal variation.
     // A/B test: uFreezeBias=1 uses static bias (no temporal rotation).
-    ivec2 bias = (uFreezeBias != 0)
+    ivec2 bias = (uFreezeBias != 0 || uIsEyeInWater != 0)
         ? ivec2(floor(fullCoord)) & ivec2(1)
         : ivec2(fullCoord + float(uFrameIndex)) & ivec2(1);
     ivec2 baseTexel = ivec2(floor(fullCoord * 0.5)) + bias * 2;

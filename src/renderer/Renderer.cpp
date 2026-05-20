@@ -710,6 +710,8 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.aerialStrength = std::clamp(m_pipelineSettings.aerialStrength, 0.0f, 2.0f);
     m_pipelineSettings.horizonScatterStrength = std::clamp(m_pipelineSettings.horizonScatterStrength, 0.0f, 2.0f);
     m_pipelineSettings.volumetricFogStrength = std::clamp(m_pipelineSettings.volumetricFogStrength, 0.0f, 2.0f);
+    m_pipelineSettings.underwaterVolumetricLightStrength =
+        std::clamp(m_pipelineSettings.underwaterVolumetricLightStrength, 0.0f, 2.0f);
     m_pipelineSettings.noiseDitherStrength = std::clamp(m_pipelineSettings.noiseDitherStrength, 0.0f, 0.08f);
     m_pipelineSettings.sharpenStrength = std::clamp(m_pipelineSettings.sharpenStrength, 0.0f, 1.0f);
     m_pipelineSettings.ssaoRadius = std::clamp(m_pipelineSettings.ssaoRadius, 0.1f, 16.0f);
@@ -1255,9 +1257,12 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     shader.setVec3("uMoonDirection", frame.skyColors.moonDirection);
     shader.setFloat("uSkyIntensity", frame.skyIntensity);
     shader.setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
+    shader.setFloat("uSkyWetness", frame.skyWetness);
     shader.setFloat("uCloudCompositeStrength", m_pipelineSettings.sceneCloudCompositeStrength);
     shader.setFloat("uReflectionCompositeStrength", m_pipelineSettings.sceneReflectionCompositeStrength);
     shader.setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
+    shader.setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
+    shader.setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
@@ -1490,19 +1495,27 @@ bool Renderer::renderWorldDeferred(const World& world,
     // provides per-frame variation that TAA resolves over multiple frames.
     // UW_VOLUMETRIC_LIGHT: underwater volumetric light runs even when overworld VFog
     // strength is zero — the underwater branch is independent of fog density settings.
-    bool uwVolumetricActive = m_eyeInWater &&
+    const bool volumetricShadersAvailable =
         m_volumetricFogShader != nullptr &&
         m_volumetricCompositeShader != nullptr;
-    if ((m_pipelineSettings.volumetricFogEnabled &&
-         m_pipelineSettings.aerialPerspectiveEnabled &&
-         m_pipelineSettings.volumetricFogStrength > 0.001f &&
-         m_volumetricFogShader != nullptr &&
-         m_volumetricCompositeShader != nullptr) || uwVolumetricActive) {
+    const bool overworldVolumetricActive =
+        m_pipelineSettings.volumetricFogEnabled &&
+        m_pipelineSettings.aerialPerspectiveEnabled &&
+        m_pipelineSettings.volumetricFogStrength > 0.001f &&
+        volumetricShadersAvailable;
+    const bool uwVolumetricActive = m_eyeInWater && volumetricShadersAvailable;
+    const bool volumetricDebugActive =
+        m_pipelineSettings.debugViewMode >= 46 &&
+        m_pipelineSettings.debugViewMode <= 77 &&
+        volumetricShadersAvailable;
+    if (overworldVolumetricActive || uwVolumetricActive || volumetricDebugActive) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Volumetric);
 #endif
         renderVolumetricFogPass(frame);
-        compositeVolumetricFogPass();
+        if (!volumetricDebugActive) {
+            compositeVolumetricFogPass();
+        }
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Volumetric);
 #endif
@@ -2177,6 +2190,8 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     // Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
     m_volumetricFogShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
     m_volumetricFogShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
+    m_volumetricFogShader->setFloat("uUnderwaterVolumetricLightStrength",
+                                    m_pipelineSettings.underwaterVolumetricLightStrength);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
@@ -2239,6 +2254,7 @@ void Renderer::compositeVolumetricFogPass() {
     m_volumetricCompositeShader->setInt("uDepthTex", 2);
     m_volumetricCompositeShader->setFloat("uNearPlane", m_currentFrameData.nearPlane);
     m_volumetricCompositeShader->setFloat("uFarPlane", m_currentFrameData.farPlane);
+    m_volumetricCompositeShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
     m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(m_currentFrameData.frameIndex & 0x7fffffffULL));
     m_volumetricCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
     glActiveTexture(GL_TEXTURE0);
