@@ -228,12 +228,12 @@ public:
         float timeScale = 0.35f;
         float coverage = 0.35f;
         float density = 1.0f;
-        float height = 176.0f;
-        float thickness = 48.0f;
+        float height = 1000.0f;     // DerivativeMain CLOUD_CUMULUS_CLEAR_ALTITUDE
+        float thickness = 1400.0f;  // DerivativeMain CLOUD_CUMULUS_CLEAR_THICKNESS
         // Planar clouds (cirrus)
         float planarCoverage = 0.5f;
         float planarDensity = 1.0f;
-        float planarAltitude = 400.0f;
+        float planarAltitude = 7000.0f; // DerivativeMain CLOUD_PLANE_ALTITUDE
     };
 
     enum class FrustumPlane : size_t {

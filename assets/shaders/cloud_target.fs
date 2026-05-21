@@ -70,12 +70,22 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
-vec4 multiLobePhase(float cosTheta) {
-    float forward = atmHenyeyGreensteinPhase(cosTheta, 0.6);
-    float backward = atmHenyeyGreensteinPhase(cosTheta, -0.35);
-    float peak = cloudCornetteShanksPhase(cosTheta, 0.85);
-    float peak2 = cloudCornetteShanksPhase(cosTheta, 0.5);
-    return vec4(forward, backward, peak, peak2) * vec4(0.55, 0.20, 0.15, 0.10);
+// DerivativeMain VolumetricClouds.glsl:86 + Deferred1.glsl:138-142
+// 4-lobe multi-scatter phase: forward HG + backward HG + Cornette-Shanks peak.
+// G values and peak weight are wetness-dependent.
+const float cloudBackwardWeight = 0.25;
+
+vec4 multiLobePhase(float cosTheta, float wetness) {
+    float forwardG = 0.6 - wetness * 0.2;
+    float backwardG = -0.4 + wetness * 0.2;
+    float peakWeight = 0.1 + 0.7 * wetness;
+
+    float forward  = atmHenyeyGreensteinPhase(cosTheta, forwardG);
+    float backward = atmHenyeyGreensteinPhase(cosTheta, backwardG);
+    float peak     = cloudCornetteShanksPhase(cosTheta, 0.9);
+
+    return vec4(forward, backward, peak, 0.0)
+         * vec4(0.7, cloudBackwardWeight, peakWeight, 0.0);
 }
 
 vec3 sampleAtmosphere(vec3 ray, vec3 sunDir, vec3 moonDir, float eyeAlt, float dayFactor, float moonVis) {
@@ -129,7 +139,7 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
     if (density < 1e-5) return vec4(0.0);
 
     float powder = (1.0 - exp(-density * 2.4)) * 0.7 / (1.0 - (1.0 - exp(-density * 2.4)) * 0.7 + 0.001);
-    vec4 phases = multiLobePhase(LdotV);
+    vec4 phases = multiLobePhase(LdotV, uCloudWetness);
     float phase = dot(phases, vec4(1.0));
 
     // Sun/moon from LightingEnvironment (SkyCapture metadata).
@@ -181,7 +191,7 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
         rayLength *= 2.0;
     }
 
-    vec4 phases = multiLobePhase(LdotV);
+    vec4 phases = multiLobePhase(LdotV, uCloudWetness);
     float sunlightEnergy = exp(-opticalDepth * 1.0) * phases.x
                          + exp(-opticalDepth * 0.4) * phases.y
                          + exp(-opticalDepth * 0.15) * phases.z
@@ -327,8 +337,8 @@ void main() {
         float rayDistance = clamp(endT - startT, 0.0, 20000.0);
         float stepLength = rayDistance / float(steps);
 
-        vec4 phases = multiLobePhase(LdotV);
-        float moonPhaseVal = dot(multiLobePhase(moonLdotV), vec4(1.0));
+        vec4 phases = multiLobePhase(LdotV, uCloudWetness);
+        float moonPhaseVal = dot(multiLobePhase(moonLdotV, uCloudWetness), vec4(1.0));
         float sunVisibility = smoothstep(-0.06, 0.18, sunDir.y) * day;
 
         // Domain-warped noise detail
@@ -338,7 +348,7 @@ void main() {
         float scatteringSky = 0.0;
 
         for (int i = 0; i < steps; ++i) {
-            if (transmittance < 0.01) break;
+            if (transmittance < 0.05) break; // DerivativeMain minTransmittance
 
             float t = startT + (float(i) + jitter) * stepLength;
             vec3 pos = uCameraPos + ray * t;
@@ -372,26 +382,32 @@ void main() {
             transmittance *= stepTransmittance;
         }
 
-        float opacity = clamp(1.0 - transmittance, 0.0, 1.0);
-        float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uSkyWetness, 0.0, 1.0)));
-        opacity *= distanceFade;
+        // DerivativeMain Deferred1.glsl:238: only composite if transmittance < 1 - minTransmittance
+        if (transmittance < 0.95) {
+            float opacity = clamp(1.0 - transmittance, 0.0, 1.0);
+            float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uSkyWetness, 0.0, 1.0)));
+            opacity *= distanceFade;
 
-        // Compose with SkyCapture illuminance (unified source)
-        // DerivativeMain Deferred1.glsl:240-241: sun*22.0, sky*0.15
-        vec3 sunIllum = env.sunIlluminance * day + env.moonIlluminance * moonVis;
+            // DerivativeMain Deferred1.glsl:239-241: moonlit hard cutoff for illuminance
+            // When sun is below horizon, use moon illuminance; otherwise use sun.
+            // sunVisibility gates the sun term smoothly for twilight blending.
+            bool moonlit = sunDir.y < -0.04;
+            vec3 sunIllum = env.sunIlluminance * sunVisibility;
+            vec3 moonIllum = env.moonIlluminance * moonVis;
+            vec3 lightIlluminance = moonlit ? moonIllum : sunIllum;
 
-        // DerivativeMain VolumetricClouds.glsl:60-68: rain cloud lighting = 0.3
-        // sunlighting and skylighting drop from 1.0 (clear) to 0.3 (full wetness).
-        float wetness = clamp(uSkyWetness, 0.0, 1.0);
-        float cloudSunlighting = mix(1.0, 0.3, wetness);
-        float cloudSkylighting = mix(1.0, 0.3, wetness);
+            // DerivativeMain VolumetricClouds.glsl:60-68: rain cloud lighting = 0.3
+            float wetness = clamp(uSkyWetness, 0.0, 1.0);
+            float cloudSunlighting = mix(1.0, 0.3, wetness);
+            float cloudSkylighting = mix(1.0, 0.3, wetness);
 
-        vec3 scattering = scatteringSun * 22.0 * sunIllum * sunVisibility * cloudSunlighting;
-        scattering += scatteringSky * 0.15 * env.skyIlluminance * cloudSkylighting;
+            vec3 scattering = scatteringSun * 22.0 * lightIlluminance * cloudSunlighting;
+            scattering += scatteringSky * 0.15 * env.skyIlluminance * cloudSkylighting;
 
-        cloudColor = scattering;
-        cloudColor += atmos * opacity * mix(0.5, 0.8, clamp(uHorizonScatterStrength, 0.0, 1.0));
-        transmittance = 1.0 - opacity;
+            cloudColor = scattering;
+            cloudColor += atmos * opacity * mix(0.5, 0.8, clamp(uHorizonScatterStrength, 0.0, 1.0));
+            transmittance = 1.0 - opacity;
+        }
     }
 
     // ---- Combine planar + volumetric clouds ----

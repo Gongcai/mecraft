@@ -1131,6 +1131,10 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.cloud.timeScale = m_pipelineSettings.cloudTimeScale;
     frame.cloud.coverage = std::clamp(0.24f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
     frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
+    // DerivativeMain VolumetricClouds.glsl:53-68: wetness-based altitude/thickness interpolation
+    float cloudWet = std::clamp(frame.cloudWetness, 0.0f, 1.0f);
+    frame.cloud.height = 1000.0f + cloudWet * (800.0f - 1000.0f);    // clear 1000 → rain 800
+    frame.cloud.thickness = 1400.0f + cloudWet * (3000.0f - 1400.0f); // clear 1400 → rain 3000
     frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
     return frame;
 }
