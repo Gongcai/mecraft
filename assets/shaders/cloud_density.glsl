@@ -58,6 +58,10 @@ vec2 cloudRaySphereIntersection(vec3 pos, vec3 dir, float rad) {
 // CLOUD NOISE FUNCTIONS
 // ============================================================
 
+float cirrusCloudNoise(vec2 p) {
+    return texture(uNoiseTex, p * 1e-2).a;
+}
+
 // 2D noise texture lookup with two-octave blend
 float sampleCloudNoise(vec2 p) {
     if (!uNoiseEnabled) {
@@ -111,19 +115,18 @@ float cirrusCloudDensity(vec2 worldPos, float coverage) {
                           sin(GOLDEN_ANGLE), cos(GOLDEN_ANGLE));
 
     // First octave before loop (PlanarClouds.glsl:28)
-    float noise = sampleCloudNoise(pos);
+    float noise = cirrusCloudNoise(pos);
     // 5 more octaves with cumulative wind + frequency perturbation (PlanarClouds.glsl:29-31)
     for (int i = 1; i < 6; ++i) {
         pos = goldenRot * 3.2 * (pos - wind);
         vec2 freqPerturb = 1.0 + vec2(-0.35, 0.05) * sqrt(float(i));
-        noise += sampleCloudNoise(pos * freqPerturb) * amplitude;
+        noise += cirrusCloudNoise(pos * freqPerturb) * amplitude;
         amplitude *= 0.43;
     }
 
     // Local coverage spatial variation (PlanarClouds.glsl:34)
-    noise -= max(localCoverage * 3.0 - 1.2, 0.0);
-    // Soft coverage remap — smooth ramp instead of hard clamp (PlanarClouds.glsl:38 adapted)
-    noise = smoothstep(0.0, 0.55, noise * (0.8 + coverage));
+    noise -= max(localCoverage * 4.0 - 1.6, 0.0);
+    noise = clamp(noise * 1.36 + coverage - 1.7, 0.0, 1.0) * max(noise, 0.0);
 
     return noise;
 }

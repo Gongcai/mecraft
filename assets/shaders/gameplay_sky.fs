@@ -160,7 +160,7 @@ void main() {
         vec3 moonDir = normalize(uMoonDirection);
 
         vec3 transmittance;
-        vec3 sky = atmGetSkyRadiance(dir, sunDir, transmittance);
+        vec3 sky = atmGetSkyRadiance(max(uCameraAltitude, 0.0), dir, sunDir, transmittance);
         if (uIncludeCelestialDisks != 0) {
             sky += atmRenderSun(dir, sunDir) * transmittance * clamp(uSunVisibility, 0.0, 1.0);
             sky += atmRenderMoon(dir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
@@ -187,7 +187,7 @@ void main() {
         // Sky cache metadata texel pass — illuminance computed from atmosphere LUT.
         // Rendered as a 1x6 viewport at column x=255 of the sky capture FBO.
         int row = int(gl_FragCoord.y);
-        vec3 camera = vec3(0.0, atmPlanetRadius + max(uCameraAltitude, 0.0) + 100.0, 0.0);
+        vec3 camera = vec3(0.0, atmPlanetRadius + max(uCameraAltitude, 0.0), 0.0);
         vec3 sunDir = normalize(uSunDirection);
 
         vec3 sunIrr, moonIrr;

@@ -130,7 +130,7 @@ float getNoiseDetail(vec3 worldDir) {
 // PLANAR CLOUDS (Cirrus at ~7000m)
 // ============================================================
 
-vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
+vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, vec3 skyRadiance,
                            LightingEnvironment env) {
     if ((ray.y < 0.0 && uCameraPos.y < uPlanarCloudAltitude) ||
         (ray.y > 0.0 && uCameraPos.y > uPlanarCloudAltitude)) {
@@ -161,11 +161,11 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
     lightColor += skyAmb * 0.25;
     lightColor *= 1.0 - uCloudWetness * 0.8;
 
-    float opacity = 1.0 - exp(-density * 4.0 * uPlanarCloudDensity);
+    float opacity = 1.0 - exp(-density * 1.6 * uPlanarCloudDensity);
     float atmosFade = exp(-tPlane * (0.02 + uCloudWetness * 0.12) / max(uPlanarCloudAltitude, 1.0));
-    opacity *= atmosFade;
 
-    vec3 color = lightColor * powder * opacity;
+    vec3 scattering = lightColor * powder * opacity;
+    vec3 color = scattering * atmosFade + skyRadiance * opacity * (1.0 - atmosFade);
     return vec4(color, opacity);
 }
 
@@ -173,7 +173,7 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
 // CIRROCUMULUS CLOUDS (lower planar layer with curl noise)
 // ============================================================
 
-vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter, LightingEnvironment env) {
+vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter, vec3 skyRadiance, LightingEnvironment env) {
     float altitude = uPlanarCloudAltitude * 0.7; // below cirrus
     if ((ray.y < 0.0 && uCameraPos.y < altitude) ||
         (ray.y > 0.0 && uCameraPos.y > altitude)) {
@@ -226,9 +226,9 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
 
     float opacity = 1.0 - exp(-density * 0.02 * 1.0 * tPlane);
     float atmosFade = exp(-tPlane * (0.02 + uCloudWetness * 0.12) / max(altitude, 1.0));
-    opacity *= atmosFade;
 
     vec3 color = scattering * powder * opacity;
+    color = color * atmosFade + skyRadiance * opacity * (1.0 - atmosFade);
     return vec4(color, opacity);
 }
 
@@ -285,17 +285,17 @@ void main() {
     float moonVis = clamp(uMoonVisibility, 0.0, 1.0) * (1.0 - day);
     float eyeAltitude = max(uCameraPos.y, 0.0) + 100.0;
 
-    vec3 atmos = sampleAtmosphere(ray, sunDir, moonDir, eyeAltitude, day, moonVis);
+    vec3 skyRadiance = sampleSkyRadiance(uSkyCaptureTex, ray);
     float LdotV = dot(ray, sunDir);
     float moonLdotV = dot(ray, moonDir);
     float jitter = sampleCloudNoise(vTexCoord * 23.0 + (uTime * uCloudTimeScale) * 0.01);
 
     // ---- Planar clouds (cirrus layer) ----
-    vec4 planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis, env);
+    vec4 planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis, skyRadiance, env);
     float planarTransmittance = 1.0 - planarResult.a;
 
     // ---- Cirrocumulus planar layer ----
-    vec4 cirroResult = evaluateCirrocumulusClouds(ray, LdotV, day, moonVis, jitter, env);
+    vec4 cirroResult = evaluateCirrocumulusClouds(ray, LdotV, day, moonVis, jitter, skyRadiance, env);
     // Composite cirrocumulus behind cirrus
     planarResult.rgb += cirroResult.rgb * planarTransmittance;
     planarTransmittance *= 1.0 - cirroResult.a;
@@ -354,6 +354,7 @@ void main() {
 
         float scatteringSun = 0.0;
         float scatteringSky = 0.0;
+        float lastCloudDistance = startT;
 
         for (int i = 0; i < steps; ++i) {
             if (transmittance < 0.05) break; // DerivativeMain minTransmittance
@@ -366,6 +367,7 @@ void main() {
             float detailBlend = mix(noiseDetail, 1.0, exp(-dist * 0.001) * 0.8);
             float density = cloudDensityAt(pos, height01, weatherCoverage, detailBlend);
             if (density <= 0.001) continue;
+            lastCloudDistance = dist;
 
             // Sun optical depth — DerivativeMain Deferred1.glsl:219-222
             float sunOD = sunOcclusionAt(pos, height01, weatherCoverage, jitter);
@@ -393,19 +395,14 @@ void main() {
         // DerivativeMain Deferred1.glsl:238: only composite if transmittance < 1 - minTransmittance
         if (transmittance < 0.95) {
             float opacity = clamp(1.0 - transmittance, 0.0, 1.0);
-            float distanceFade = exp(-startT * (0.00020 + 0.00018 * clamp(uCloudWetness, 0.0, 1.0)));
-            opacity *= distanceFade;
 
             // DerivativeMain Deferred1.glsl:239-241: moonlit hard cutoff for illuminance
-            // When sun is below horizon, use moon illuminance; otherwise use sun.
-            // sunVisibility gates the sun term smoothly for twilight blending.
             bool moonlit = sunDir.y < -0.04;
             vec3 sunIllum = env.sunIlluminance * sunVisibility;
             vec3 moonIllum = env.moonIlluminance * moonVis;
             vec3 lightIlluminance = moonlit ? moonIllum : sunIllum;
 
             // DerivativeMain VolumetricClouds.glsl:60-68: rain cloud lighting = 0.3
-            // Use uCloudWetness (single wetness contract) instead of uCloudWetness
             float wetness = clamp(uCloudWetness, 0.0, 1.0);
             float cloudSunlighting = mix(1.0, 0.3, wetness);
             float cloudSkylighting = mix(1.0, 0.3, wetness);
@@ -413,15 +410,17 @@ void main() {
             vec3 scattering = scatteringSun * 22.0 * lightIlluminance * cloudSunlighting;
             scattering += scatteringSky * 0.15 * env.skyIlluminance * cloudSkylighting;
 
-            cloudColor = scattering;
-            cloudColor += atmos * opacity * mix(0.5, 0.8, clamp(uHorizonScatterStrength, 0.0, 1.0));
-            transmittance = 1.0 - opacity;
+            // DerivativeMain Deferred1.glsl:271-277: distant cloud scattering
+            // fades back toward raw sky radiance by cloud opacity.
+            float atmosFade = exp(-lastCloudDistance * (0.2 + 0.1 * wetness) * 1e-4);
+            cloudColor = scattering * atmosFade + skyRadiance * opacity * (1.0 - atmosFade);
         }
     }
 
-    // ---- Combine planar + volumetric clouds ----
+    // ---- Combine planar + volumetric clouds (premultiplied alpha, transmittance in .a) ----
+    // DerivativeMain Deferred1.glsl:378: vec4(scattering, transmittance)
     vec3 finalColor = cloudColor + planarResult.rgb * transmittance;
-    float finalOpacity = clamp(1.0 - transmittance * planarTransmittance, 0.0, 1.0);
+    float finalTransmittance = transmittance * planarTransmittance;
 
-    FragColor = vec4(max(finalColor, vec3(0.0)), finalOpacity);
+    FragColor = vec4(max(finalColor, vec3(0.0)), finalTransmittance);
 }

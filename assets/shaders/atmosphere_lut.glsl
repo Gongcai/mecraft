@@ -235,7 +235,7 @@ vec3 atmGetSkyRadianceForLight(float eyeAltitude, vec3 viewRay, vec3 lightDirect
     rayIntersectsGround = false;
 
     vec3 singleMieScattering;
-    vec3 scattering = atmGetCombinedScattering(atmModel, r, mu, muS, nu, rayIntersectsGround, singleMieScattering);
+    vec3 scattering = atmGetCombinedScattering(atmModel, r, mu, muS, nu, false, singleMieScattering);
     vec3 rayleigh = scattering * atmRayleighPhase(nu);
     vec3 mie = singleMieScattering * atmHenyeyGreensteinPhase(nu, atmMiePhaseG);
     return rayleigh + mie;
@@ -251,8 +251,8 @@ uniform float uMoonPhaseFlux;
 
 // Combined sky radiance for both sun and moon, matching DerivativeMain's GetSkyRadiance.
 // Returns sky radiance in DerivativeMain's irradiance convention (* 20.0).
-vec3 atmGetSkyRadiance(vec3 viewRay, vec3 sunDirection, out vec3 transmittance) {
-    vec3 camera = vec3(0.0, atmPlanetRadius + 100.0, 0.0);
+vec3 atmGetSkyRadiance(float eyeAltitude, vec3 viewRay, vec3 sunDirection, out vec3 transmittance) {
+    vec3 camera = vec3(0.0, atmPlanetRadius + max(eyeAltitude, 0.0), 0.0);
     float r = length(camera);
     float rMu = dot(camera, viewRay);
     float distToTop = -rMu - sqrt(rMu * rMu - r * r + atmAtmosphereTopRadiusSq);
@@ -274,10 +274,10 @@ vec3 atmGetSkyRadiance(vec3 viewRay, vec3 sunDirection, out vec3 transmittance) 
     transmittance = rayIntersectsGround ? vec3(0.0) : atmGetTransmittanceToTopAtmosphereBoundary(r, mu);
 
     vec3 sunSingleMie;
-    vec3 sunScattering = atmGetCombinedScattering(atmModel, r, mu, muS, nu, false, sunSingleMie);
+    vec3 sunScattering = atmGetCombinedScattering(atmModel, r, mu, muS, nu, rayIntersectsGround, sunSingleMie);
 
     vec3 moonSingleMie;
-    vec3 moonScattering = atmGetCombinedScattering(atmModel, r, mu, -muS, -nu, false, moonSingleMie);
+    vec3 moonScattering = atmGetCombinedScattering(atmModel, r, mu, -muS, -nu, rayIntersectsGround, moonSingleMie);
 
     float moonFlux = max(uMoonPhaseFlux, 0.0);
     vec3 rayleigh = sunScattering * atmRayleighPhase(nu)

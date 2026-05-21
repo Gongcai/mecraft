@@ -98,7 +98,9 @@ void main() {
     if (depth >= 0.9999) {
         vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
-        vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
+        // DerivativeMain composites live cloud data over raw colortex5 sky.
+        // Using the cloudy atlas half here double-applies sky/cloud attenuation.
+        vec3 sky = sampleSkyRadiance(uSkyCaptureTex, skyDir);
         // Premultiplied alpha: sceneData = sceneData * cloudData.a + cloudData.rgb
         // Strength blends between unmodified sky and full premultiplied result,
         // so reducing strength doesn't break sky transmittance energy.
