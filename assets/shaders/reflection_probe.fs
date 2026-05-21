@@ -26,6 +26,8 @@ uniform float uCloudWetness;
 uniform float uTime;
 uniform sampler2D uVoxelLightTex; // GBuffer attachment 2: sky light.r, block light.g
 uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight
+uniform float uNearPlane;
+uniform float uFarPlane;
 
 #include "atmosphere_lut.glsl"
 
@@ -34,8 +36,6 @@ float saturate(float x) { return clamp(x, 0.0, 1.0); }
 float remap(float e0, float e1, float x) { return saturate((x - e0) / (e1 - e0)); }
 
 #include "weather_surface.glsl"
-
-const int kSsrSteps = 28;
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -48,12 +48,11 @@ vec2 projectWorldUv(vec3 worldPos) {
     return clip.xy / max(clip.w, 0.00001) * 0.5 + 0.5;
 }
 
-float linearDepth01(float depth) {
+// DerivativeMain GetDepthLinear: linearize depth buffer value to view-space distance.
+// Uses the standard perspective projection inversion formula.
+float getLinearDepth(float depth) {
     float ndc = depth * 2.0 - 1.0;
-    float nearPlane = 0.05;
-    float farPlane = 512.0;
-    float linearDepth = (2.0 * nearPlane * farPlane) / max(farPlane + nearPlane - ndc * (farPlane - nearPlane), 0.0001);
-    return clamp(linearDepth / farPlane, 0.0, 1.0);
+    return (2.0 * uNearPlane * uFarPlane) / (uFarPlane + uNearPlane - ndc * (uFarPlane - uNearPlane));
 }
 
 bool traceScreenSpaceReflection(vec3 worldPos,
@@ -64,15 +63,25 @@ bool traceScreenSpaceReflection(vec3 worldPos,
     hitColor = vec3(0.0);
     hitConfidence = 0.0;
 
-    float maxDistance = mix(44.0, 8.0, clamp(roughness, 0.0, 1.0));
-    float stepLength = maxDistance / float(kSsrSteps);
-    float thickness = mix(0.006, 0.018, clamp(roughness, 0.0, 1.0));
+    // Roughness-adaptive parameters: smooth surfaces trace farther with finer steps;
+    // rough surfaces trace shorter distances with coarser steps (result gets blurred anyway).
+    float maxDistance = mix(56.0, 10.0, roughness);
+    int baseSteps = int(mix(40.0, 16.0, roughness));
+    float stepLength = maxDistance / float(baseSteps);
 
-    for (int i = 1; i <= kSsrSteps; ++i) {
+    // Dither: small offset to break up banding artifacts across pixels.
+    // Uses the screen position to create a stable per-pixel pattern.
+    float dither = fract(dot(gl_FragCoord.xy, vec2(0.754877669, 0.569840296))) * 0.9 + 0.1;
+
+    vec3 rayOrigin = worldPos + reflectedDir * stepLength * dither;
+
+    for (int i = 1; i <= baseSteps; ++i) {
         float t = float(i) * stepLength;
-        vec3 sampleWorld = worldPos + reflectedDir * t;
+        vec3 sampleWorld = rayOrigin + reflectedDir * t;
         vec2 uv = projectWorldUv(sampleWorld);
-        if (uv.x <= 0.001 || uv.x >= 0.999 || uv.y <= 0.001 || uv.y >= 0.999) {
+
+        // Screen bounds check with margin for refinement
+        if (uv.x <= 0.002 || uv.x >= 0.998 || uv.y <= 0.002 || uv.y >= 0.998) {
             break;
         }
 
@@ -81,17 +90,65 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             continue;
         }
 
-        vec3 sceneWorld = reconstructWorldPosition(uv, sceneDepth);
+        // DerivativeMain-style view-space depth comparison: relative linear depth difference.
+        // More robust than absolute thickness at varying distances.
         vec4 rayClip = uViewProj * vec4(sampleWorld, 1.0);
-        float rayDepth = linearDepth01(rayClip.z / max(rayClip.w, 0.00001) * 0.5 + 0.5);
-        float hitDepth = linearDepth01(sceneDepth);
-        float depthDelta = rayDepth - hitDepth;
-        if (depthDelta >= 0.0 && depthDelta < thickness + t * 0.00018) {
-            float edgeFade = smoothstep(0.02, 0.14, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
-            float distanceFade = 1.0 - smoothstep(maxDistance * 0.35, maxDistance, t);
-            float normalFacing = smoothstep(0.0, 0.35, dot(normalize(sceneWorld - worldPos), reflectedDir));
-            hitConfidence = clamp(edgeFade * distanceFade * normalFacing * (1.0 - roughness * 0.65), 0.0, 1.0);
-            hitColor = texture(uSceneLightingTex, uv).rgb;
+        float rayNdcZ = rayClip.z / max(rayClip.w, 0.00001);
+        float rayDepth01 = clamp(rayNdcZ * 0.5 + 0.5, 0.0, 1.0);
+        float rayLin = getLinearDepth(rayDepth01);
+        float sceneLin = getLinearDepth(sceneDepth);
+        float relDepthDiff = abs(rayLin - sceneLin) / max(rayLin, 0.1);
+
+        // Hit condition: scene surface is in front of or very close to the ray,
+        // and the relative depth difference is within threshold.
+        bool crossedSurface = sceneDepth < rayDepth01;
+        bool withinThickness = relDepthDiff < 0.25;
+
+        if (crossedSurface && withinThickness) {
+            // Binary refinement: narrow down the hit position with 4 bisection steps.
+            // Each step halves the search interval, converging on the actual surface.
+            vec3 lo = sampleWorld - reflectedDir * stepLength;
+            vec3 hi = sampleWorld;
+            for (int r = 0; r < 4; ++r) {
+                vec3 mid = (lo + hi) * 0.5;
+                vec2 midUv = projectWorldUv(mid);
+                float midDepth = texture(uDepthTex, midUv).r;
+                vec4 midClip = uViewProj * vec4(mid, 1.0);
+                float midNdcZ = midClip.z / max(midClip.w, 0.00001);
+                float midDepth01 = clamp(midNdcZ * 0.5 + 0.5, 0.0, 1.0);
+                if (midDepth < midDepth01) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            vec3 refinedWorld = (lo + hi) * 0.5;
+            vec2 refinedUv = projectWorldUv(refinedWorld);
+
+            // Re-validate refined hit
+            if (refinedUv.x < 0.001 || refinedUv.x > 0.999 || refinedUv.y < 0.001 || refinedUv.y > 0.999) {
+                break;
+            }
+
+            // Edge fade: smooth falloff near screen borders
+            vec2 edgeDist = min(refinedUv, 1.0 - refinedUv);
+            float edgeFade = smoothstep(0.0, 0.08, min(edgeDist.x, edgeDist.y));
+
+            // Distance fade: reflections weaken with distance
+            float refinedT = length(refinedWorld - worldPos);
+            float distanceFade = 1.0 - smoothstep(maxDistance * 0.3, maxDistance, refinedT);
+
+            // Grazing angle fade: reflections at grazing angles are less reliable
+            // (more likely to hit wrong surfaces or self-intersect).
+            vec3 hitNormal = normalize(texture(uNormalAoTex, refinedUv).rgb * 2.0 - 1.0);
+            float grazingDot = abs(dot(reflectedDir, hitNormal));
+            float grazingFade = smoothstep(0.0, 0.25, grazingDot);
+
+            // Normal facing: reject hits where the surface faces away from the ray
+            float normalFacing = smoothstep(0.0, 0.2, dot(normalize(refinedWorld - worldPos), reflectedDir));
+
+            hitConfidence = clamp(edgeFade * distanceFade * grazingFade * normalFacing * (1.0 - roughness * 0.5), 0.0, 1.0);
+            hitColor = texture(uSceneLightingTex, refinedUv).rgb;
             return hitConfidence > 0.001;
         }
     }
@@ -179,11 +236,21 @@ void main() {
         return;
     }
 
-    // Wet terrain gets stronger sky fallback: more sky-dominant, less scene-dark.
+    // Smooth sky fallback: roughness drives earlier blend to sky reflection.
+    // Smooth surfaces (low roughness) get more SSR contribution before blending to sky.
+    // Rough surfaces blend to sky earlier — their reflections are already blurred.
+    float skyBlendRoughness = smoothstep(0.15, 0.65, roughness);
     float fallbackSkyWeight = mix(0.74, 0.95, pixelWetness);
+    // Roughness-aware sky weight: rougher surfaces get more sky fallback
+    fallbackSkyWeight = mix(fallbackSkyWeight, min(fallbackSkyWeight + 0.18, 1.0), skyBlendRoughness);
     vec3 roughSky = mix(skyReflection, skyReflection * vec3(0.82, 0.91, 1.04), roughness * 0.45);
-    vec3 fallback = mix(sceneFallback * 0.06, roughSky, fallbackSkyWeight + smoothness * 0.20);
-    vec3 color = mix(fallback, ssrColor, ssrHit);
+    float fallbackMix = clamp(fallbackSkyWeight + smoothness * 0.20, 0.0, 1.0);
+    vec3 fallback = mix(sceneFallback * 0.06, roughSky, fallbackMix);
+
+    // Smooth SSR blend: when ssrHit is near zero, use a soft transition to fallback
+    // instead of a hard lerp. This avoids visible seams at SSR boundaries.
+    float ssrBlend = smoothstep(0.0, 0.15, ssrHit);
+    vec3 color = mix(fallback, ssrColor, ssrBlend);
 
     // Premultiplied output (DerivativeMain convention):
     // rgb = reflection * specular, a = 1 - specular (scene pass-through)

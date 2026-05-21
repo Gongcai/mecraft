@@ -38,10 +38,17 @@ uniform float uCloudCoverage;
 uniform float uCloudDensity;
 uniform float uCloudHeight;
 uniform float uCloudThickness;
+uniform float uCloudWetness;        // cloud wetness for density modulation
+
+// Planar cloud uniforms (for cloud shadow projection to cirrus layer)
+uniform float uPlanarCloudCoverage;
+uniform float uPlanarCloudDensity;
+uniform float uPlanarCloudAltitude;
 uniform int uShadowsEnabled;
 uniform int uVolumetricFogEnabled;
 uniform int uShadowLightMode;
 uniform float uTime;
+uniform float uCloudTimeScale;
 uniform bool uNoiseEnabled;
 uniform int uVolumetricDebugMode;
 uniform int uVolumetricSkyRayEnabled;
@@ -72,6 +79,7 @@ uniform float uCloudShadowSpeed;
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 #include "mecraft_shadow.glsl"
+#include "cloud_density.glsl"
 
 const int noiseTextureResolution = 256;
 const float noiseTexturePixelSize = 1.0 / float(noiseTextureResolution);
@@ -298,26 +306,53 @@ float sampleVolumetricShadow(vec3 worldPos, vec3 lightDir) {
     return sampleVolumetricShadowFiltered(data);
 }
 
-// Cloud shadow for volumetric fog (simplified from deferred_lighting.fs cloudShadowFactor)
-// Projects fog sample to cloud layer height and samples noise
+// Cloud shadow for volumetric fog — DerivativeMain VFog CalculateCloudShadow().
+// Enabled by CLOUDS_SHADOW (uCloudShadowsEnabled). When disabled, returns 1.0.
+// No strength/scale/speed modulation — shadow shape comes from real cloud density.
+// DerivativeMain VFog path: no 0.03 floor (unlike surface path).
 float vfogCloudShadow(vec3 worldPos, vec3 lightDir) {
-    if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001) return 1.0;
+    if (uCloudShadowsEnabled == 0) return 1.0;
 
     lightDir = normalize(lightDir);
-    float layerHeight = max(uCloudHeight, 1.0);
-    float denom = max(abs(lightDir.y), 0.18);
-    float t = (layerHeight - worldPos.y) / denom;
-    vec2 cloudPos = (worldPos.xz + lightDir.xz * t) * max(uCloudShadowScale, 0.0001);
-    vec2 wind = vec2(0.73, 0.31) * uTime * uCloudShadowSpeed;
+    float cloudDensity = 0.0;
+    vec3 checkOrigin = worldPos + vec3(0.0, cloudPlanetRadius, 0.0);
 
-    float large = get3DNoiseSmooth(vec3((cloudPos + wind) * 0.05, 0.0));
-    float medium = get3DNoiseSmooth(vec3((cloudPos * 2.37 - wind * 1.7) * 0.05, 0.0));
-    float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
-    float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
-    // Debug weather presets are not a real cloud-shadow/precipitation system yet.
-    // Keep procedural cloud shadows conservative to avoid roaming black fog blobs.
-    float strength = uCloudShadowStrength * max(uCloudDensity, 0.0);
-    return 1.0 - coverage * clamp(strength, 0.0, 0.45);
+    // VC_SHADOW: cumulus cloud shadow (two shell samples at 15% and 50% thickness)
+    if (uCloudHeight > 0.0 && uCloudThickness > 0.0) {
+        float cloudThick = max(uCloudThickness, 1.0);
+        float weatherCoverage = clamp(uCloudCoverage * 2.8 + 0.2 + uCloudWetness * 0.3, 0.8, 1.5);
+        float cloudShellRadius = cloudPlanetRadius + uCloudHeight;
+
+        vec2 bottomHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudShellRadius + 0.15 * cloudThick);
+        if (bottomHit.y >= 0.0) {
+            vec3 samplePos = bottomHit.y * lightDir + worldPos;
+            float sampleNH = clamp((samplePos.y - uCloudHeight) / cloudThick, 0.0, 1.0);
+            cloudDensity += cloudDensityAt(samplePos, sampleNH, weatherCoverage, 1.0);
+        }
+
+        vec2 topHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudShellRadius + 0.50 * cloudThick);
+        if (topHit.y >= 0.0) {
+            vec3 samplePos = topHit.y * lightDir + worldPos;
+            float sampleNH = clamp((samplePos.y - uCloudHeight) / cloudThick, 0.0, 1.0);
+            cloudDensity += cloudDensityAt(samplePos, sampleNH, weatherCoverage, 1.0);
+        }
+    }
+
+    // PC_SHADOW: planar cloud (cirrus) shadow
+    if (uPlanarCloudAltitude > 0.0) {
+        float cloudPlaneRadius = cloudPlanetRadius + uPlanarCloudAltitude;
+        vec2 planeHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudPlaneRadius);
+        if (planeHit.y >= 0.0) {
+            vec2 cirrusPos = planeHit.y * lightDir.xz + worldPos.xz;
+            float coverage = clamp(uPlanarCloudCoverage + uCloudWetness * 0.2, 0.05, 0.95);
+            cloudDensity += cirrusCloudDensity(cirrusPos, coverage) * 10.0;
+        }
+    }
+
+    cloudDensity = mix(0.4, cloudDensity, clamp(sqr(abs(lightDir.y) * 2.0), 0.0, 1.0));
+    cloudDensity = clamp(cloudDensity, 0.0, 1.0);
+
+    return exp2(-cloudDensity * cloudDensity * 2e2);
 }
 
 // DerivativeMain VolumetricFog.glsl:317-380 UnderwaterVolumetricLight()
@@ -1012,6 +1047,14 @@ void main() {
         // lighting, transmittance color, or weather color changes.
         float blobOpacity = 1.0 - blobTransmittanceDebug;
         FragColor = vec4(heatmap(clamp(blobOpacity * 12.0, 0.0, 1.0)), 1.0);
+        return;
+    }
+    if (uVolumetricDebugMode == 22) {
+        // Cloud shadow factor at surface position (for CLOUDS_SHADOW validation).
+        // White = fully lit, black = fully shadowed.
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
+        float cs = vfogCloudShadow(worldPos, shadowLightDir);
+        FragColor = vec4(vec3(clamp(cs, 0.0, 1.0)), 1.0);
         return;
     }
 

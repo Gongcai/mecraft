@@ -9,9 +9,10 @@
 > 2026-05-16 源码同步：体积雾主积分基线已对齐 DerivativeMain `VolumetricFog.glsl`，`TIME_FADE` 开关、Bloomy Fog、Debug 64/65 和失效 UI 清理已落地。当前体积雾风险从"主积分/后处理未接"转为 `SEA_LEVEL/FALLOFF/samples`、High/Ultra 原始密度场、天气光照联动与水下 `UW_VOLUMETRIC_LIGHT`。
 > 2026-05-18 TAA/VFog 时间管线同步：TAA temporal resolve 完全重写对齐 DerivativeMain（variance clip、0.97 fixed weight、CatmullRom、Reinhard luminance blend、taaOffset × 0.5）；velocity resolve 重写（3×3 closest fragment、远平面 reprojection、raw projection path）；GBuffer 投影注入 TAA jitter；渲染顺序重排为 VFog → TAA（DerivativeMain 原序）；VFog 恢复 R1 dither 与旋转 upscale bias；新增 TemporalCurrent scratch RT、debug 67-69、Dashboard A/B 开关。TAA 差异从"可用但非完整等价"升级为"DerivativeMain parity 基本达成"。
 
-> 2026-05-18 源码全面审计同步：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线 pass 顺序为 SkyCapture → GBuffer(jitteredViewProj) → Velocity(raw invViewProj) → Shadow(CSM) → SSAO+Filter → DeferredLighting(jitteredInvViewProj) → Reflection+Filter → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite(raw invViewProj) → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新增发现：`uIsEyeInWater` 硬编码为 0；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR；实体/手/掉落物仍纯 forward；GBuffer 无 per-pixel 法线贴图；roughness/f0 完全靠材质 ID 硬编码。
+> 2026-05-18 源码全面审计同步：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线 pass 顺序为 SkyCapture → GBuffer(jitteredViewProj) → Velocity(raw invViewProj) → Shadow(CSM) → SSAO+Filter → DeferredLighting(jitteredInvViewProj) → Reflection+Filter+Temporal → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite(raw invViewProj) → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新增发现：`uIsEyeInWater` 硬编码为 0；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR；实体/手/掉落物仍纯 forward；GBuffer 无 per-pixel 法线贴图；roughness/f0 完全靠材质 ID 硬编码。
 > 2026-05-19 源码同步：体积雾系统确认完成——`SEA_LEVEL` 通过 `uVFogCenterHeight` uniform 实现（默认 63.0），`FALLOFF` 通过 `uVFogHeightSpread` 实现（默认 100.0），动态步数 `getFogSteps()` 实现 `min(20, 20*0.4 + rayLength*0.1)`，High/Ultra 密度公式完整对齐 DerivativeMain FOG_TYPE 2/3（4/5 octave FBM）。21 个 debug mode、CSM shadow 集成、cloud shadow、Cornette-Shanks + multi-lobe HG phase、powder、High/Ultra optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路已从 PhysicsSystem → ECS → Renderer 完整接通，deferred lighting pass 已动态绑定 `m_eyeInWater`（`Renderer.cpp:1805`），但 water composite pass 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，`CalculateSubsurfaceScattering` 不可达。
 > 2026-05-20 水下渲染链路收口：`uIsEyeInWater` 全部 5 个 pass 动态绑定；SSS depth 通过 PCSS blocker delta 打通（cascade 0）；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth、caustic、Beer-Lambert、折射 HG 相函数）；water shadow contract 建立（cascade 0 DepthAll + Color0/1，`glCopyImageSubData` + 水-only draw）；水下 Fresnel IOR 修正为 `1.0/uWaterIOR`；debug 72-77 已扩展。
+> 2026-05-20 SSR/Reflection 增强：`reflection_probe.fs` 重写——深度线性化改为 uniform、view-space hit validation、roughness-adaptive steps、binary refinement、edge/grazing fade、sky fallback 软过渡。`reflection_filter.fs` alpha 语义修正。新增 `reflection_temporal.fs`（velocity 回投 + disocclusion + neighborhood clamp）。`DeferredRenderTargets` 新增 scratch FBO 避免 read-write 冲突。管线顺序更新为 Reflection+Filter+Temporal。
 
 ## 目标边界
 
@@ -76,7 +77,7 @@
 5. shadow map pass（CSM 4 cascade，per-cascade draw call）。
 6. SSAO / AO filter（6 采样 golden-angle rotation + 5×5 bilateral）。
 7. deferred lighting（使用 `jitteredInvViewProj`，FromSH skylight，天气湿润表面）。
-8. reflection / reflection filter（SSR 28 步，sky capture fallback，roughness bilateral + luma-chroma sharpen）。
+8. reflection / reflection filter / reflection temporal（roughness-adaptive SSR、view-space hit validation、binary refinement、bilateral filter + luma-chroma sharpen、temporal reprojection + neighborhood clamp）。
 9. cloud（3 层：cirrus planar、cirrocumulus planar、volumetric cumulus 32 步，光照读 LightingEnvironment）。
 10. scene composite（cloud premultiplied strength 混合，reflection composite，stained glass/ice）。
 11. water composite（pre-TAA 路径，WaterWave/WaterFog/SSR/折射/Fresnel，与 GBuffer 共享 jittered depth）。

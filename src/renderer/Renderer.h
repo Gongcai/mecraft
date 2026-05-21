@@ -58,7 +58,7 @@ public:
         bool softShadowsEnabled = true;
         bool pcssShadowsEnabled = true;
         bool contactShadowsEnabled = false;
-        bool cloudShadowsEnabled = true;
+        bool cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW: off by default
         bool ssaoEnabled = true;
         bool bloomEnabled = true;
         float bloomThreshold = 0.0f;
@@ -118,6 +118,7 @@ public:
         float cloudShadowStrength = 0.28f;
         float cloudShadowScale = 0.0045f;
         float cloudShadowSpeed = 0.018f;
+        float cloudTimeScale = 0.35f; // Mecraft time-unit adaptation for DerivativeMain CLOUDS_SPEED.
         float sunRayStrength = 0.18f;
         float volumetricLightStrength = 0.14f; // DEPRECATED: DerivativeMain volumetric path ignores this UI value.
         float colorTemperature = 1.0f;
@@ -224,6 +225,7 @@ public:
         float shadowStrength = 0.0f;
         float shadowScale = 0.0045f;
         float shadowSpeed = 0.018f;
+        float timeScale = 0.35f;
         float coverage = 0.35f;
         float density = 1.0f;
         float height = 176.0f;

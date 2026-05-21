@@ -104,6 +104,7 @@ void Game::initECS() {
     m_particleSystem.bindRegistry(reg);
 
     constexpr float kSpawnHeightOffset = 2.0f;
+
     const glm::vec3 spawnPos(0.0f,
         static_cast<float>(m_world.getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f);
 

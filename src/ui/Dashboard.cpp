@@ -510,7 +510,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &pipeline.contactShadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Cloud Shadows", &pipeline.cloudShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &pipeline.cloudShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &pipeline.derivativeStrictMode);
         pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &pipeline.ssaoTemporalEnabled);
@@ -734,6 +734,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.pcssShadowsEnabled = false;
             pipeline.contactShadowsEnabled = false;
             pipeline.cloudShadowsEnabled = false;
+            pipeline.cloudTimeScale = 0.35f;
             pipeline.directSunStrength = 1.0f;
             pipeline.skyAmbientStrength = 0.55f;
             pipeline.minimumAmbient = 0.09f;
@@ -784,7 +785,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;
             pipeline.shadowPcssStrength = 0.72f;
-            pipeline.cloudShadowsEnabled = true;
+            pipeline.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
             pipeline.directSunStrength = 1.36f;
             pipeline.skyAmbientStrength = 0.36f;
             pipeline.minimumAmbient = 0.055f;
@@ -792,6 +793,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.cloudShadowStrength = 0.28f;
             pipeline.cloudShadowScale = 0.0045f;
             pipeline.cloudShadowSpeed = 0.018f;
+            pipeline.cloudTimeScale = 0.35f;
             pipeline.shadowMinLight = 0.08f;
             pipeline.shadowContrast = 1.28f;
             pipeline.shadowTintStrength = 0.28f;
@@ -838,7 +840,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.pcssShadowsEnabled = true;
             pipeline.contactShadowsEnabled = false;
             pipeline.shadowPcssStrength = 0.82f;
-            pipeline.cloudShadowsEnabled = true;
+            pipeline.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
             pipeline.directSunStrength = 1.58f;
             pipeline.skyAmbientStrength = 0.28f;
             pipeline.minimumAmbient = 0.04f;
@@ -846,6 +848,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.cloudShadowStrength = 0.28f;
             pipeline.cloudShadowScale = 0.0055f;
             pipeline.cloudShadowSpeed = 0.020f;
+            pipeline.cloudTimeScale = 0.35f;
             pipeline.shadowMinLight = 0.055f;
             pipeline.shadowContrast = 1.52f;
             pipeline.shadowTintStrength = 0.34f;
@@ -894,7 +897,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::SliderFloat("Contact Shadow Strength", &pipeline.contactShadowStrength, 0.0f, 0.6f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &pipeline.cloudShadowStrength, 0.0f, 0.8f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &pipeline.cloudShadowScale, 0.001f, 0.02f, "%.4f");
-        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Speed", &pipeline.cloudShadowSpeed, 0.0f, 0.08f, "%.3f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Time Scale", &pipeline.cloudTimeScale, 0.05f, 2.0f, "%.2f");
+        ImGui::TextDisabled("DerivativeMain CLOUDS_SPEED adapter. Legacy Cloud Shadow Speed is ignored by the DM cloud path.");
         pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
         ImGui::TextDisabled("VFog Strength 1.00 matches DerivativeMain VOLUMETRIC_FOG_DENSITY baseline");
         pipelineChanged |= ImGui::SliderFloat("VFog Shadow Bias Scale", &pipeline.volumetricShadowBiasScale, 0.0f, 4.0f, "%.2f");

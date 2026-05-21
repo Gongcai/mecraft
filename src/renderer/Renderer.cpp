@@ -672,6 +672,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.cloudShadowStrength = std::clamp(m_pipelineSettings.cloudShadowStrength, 0.0f, 1.0f);
     m_pipelineSettings.cloudShadowScale = std::clamp(m_pipelineSettings.cloudShadowScale, 0.0005f, 0.04f);
     m_pipelineSettings.cloudShadowSpeed = std::clamp(m_pipelineSettings.cloudShadowSpeed, 0.0f, 0.20f);
+    m_pipelineSettings.cloudTimeScale = std::clamp(m_pipelineSettings.cloudTimeScale, 0.05f, 2.0f);
     m_pipelineSettings.bloomThreshold = std::clamp(m_pipelineSettings.bloomThreshold, 0.0f, 4.0f);
     m_pipelineSettings.bloomStrength = std::clamp(m_pipelineSettings.bloomStrength, 0.0f, 2.0f);
     m_pipelineSettings.autoExposureMin = std::clamp(m_pipelineSettings.autoExposureMin, 0.001f, 64.0f);
@@ -1127,6 +1128,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.cloud.shadowStrength = m_pipelineSettings.cloudShadowStrength;
     frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
     frame.cloud.shadowSpeed = m_pipelineSettings.cloudShadowSpeed;
+    frame.cloud.timeScale = m_pipelineSettings.cloudTimeScale;
     frame.cloud.coverage = std::clamp(0.24f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
     frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
     frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
@@ -1210,6 +1212,7 @@ void Renderer::bindCloudUniforms(Shader& shader, const RenderFrameData& frame) c
     shader.setFloat("uCloudShadowStrength", frame.cloud.shadowStrength);
     shader.setFloat("uCloudShadowScale", frame.cloud.shadowScale);
     shader.setFloat("uCloudShadowSpeed", frame.cloud.shadowSpeed);
+    shader.setFloat("uCloudTimeScale", frame.cloud.timeScale);
     shader.setFloat("uCloudCoverage", frame.cloud.coverage);
     shader.setFloat("uCloudDensity", frame.cloud.density);
     shader.setFloat("uCloudHeight", frame.cloud.height);
@@ -1846,6 +1849,8 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uSsaoTex", 9);
     m_deferredLightingShader->setInt("uSkyCaptureTex", 10);
     m_deferredLightingShader->setInt("uNoiseTex", 11);
+    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
+    m_deferredLightingShader->setBool("uNoiseEnabled", noiseTexture != 0);
     m_deferredLightingShader->setMat4("uViewProj",
         m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
     m_deferredLightingShader->setMat4("uInvViewProj",
@@ -1881,6 +1886,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
     m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
     bindCloudUniforms(*m_deferredLightingShader, frame);
+    m_deferredLightingShader->setFloat("uCloudWetness", frame.cloudWetness);
     m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
     m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
     m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
@@ -1919,7 +1925,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
+    glBindTexture(GL_TEXTURE_2D, noiseTexture);
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowColorTexture());
     glActiveTexture(GL_TEXTURE13);
@@ -2090,6 +2096,8 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setFloat("uCloudWetness", frame.cloudWetness);
     m_reflectionShader->setFloat("uTime", frame.shaderTime);
     m_reflectionShader->setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
+    m_reflectionShader->setFloat("uNearPlane", m_nearPlane);
+    m_reflectionShader->setFloat("uFarPlane", m_farPlane);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
@@ -2194,6 +2202,7 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     bindAtmosphereUniforms(*m_volumetricFogShader, frame);
     bindVolumetricUniforms(*m_volumetricFogShader, frame);
     bindCloudUniforms(*m_volumetricFogShader, frame);
+    m_volumetricFogShader->setFloat("uCloudWetness", frame.cloudWetness);
     m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
     m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;

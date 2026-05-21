@@ -11,6 +11,7 @@
 > 2026-05-18 源码全面审计：对 `Renderer.cpp`（3997 行）、`DeferredRenderTargets`（917 行）、`PostProcessRenderer`（549 行）、`GameplaySkyRenderer`（1152 行）和全部 75 个 shader 文件做逐文件扫描。确认管线完整 pass 顺序为 SkyCapture → GBuffer → Velocity → Shadow → SSAO+Filter → DeferredLighting → Reflection+Filter → Cloud → SceneComposite → WaterComposite(pre-TAA) → VFog+Composite → TemporalResolve → MotionBlur → DoF → HistoryUpdate。新发现：`uIsEyeInWater` 硬编码为 0（`Renderer.cpp:348`）；前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR、使用简化 BRDF（hammonDiffuseApprox）；`cloud_target.fs` 和 `water_composite.fs` 已统一读 `LightingEnvironment`；实体/手/掉落物仍纯 forward 渲染；GBuffer 无 per-pixel 法线贴图（仅面法线）；roughness/f0 完全靠材质 ID 硬编码。
 > 2026-05-19 源码同步：体积雾系统全面确认完成——`SEA_LEVEL`（`uVFogCenterHeight` 默认 63.0）、`FALLOFF`（`uVFogHeightSpread` 默认 100.0）、动态步数 `getFogSteps()`、High/Ultra 密度公式（4/5 octave FBM）全部对齐 DerivativeMain。21 个 debug mode、CSM shadow、cloud shadow、phase functions、powder、optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路完整（PhysicsSystem → ECS → Renderer::m_eyeInWater），deferred lighting 已动态绑定（`Renderer.cpp:1805`），但 water composite 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，PCSS blocker depth 未传递到 `ShadowSample` 结构体。
 > 2026-05-20 水下渲染链路收口：`uIsEyeInWater` 全部 5 个 pass 动态绑定；SSS depth 通过 PCSS blocker delta（`avgBlocker - receiverZ`）打通（cascade 0）；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth cascade 0、caustic 吸收、Beer-Lambert 消光、折射 HG 相函数）；water shadow contract 建立（cascade 0 DepthAll + Color0/1，`glCopyImageSubData` + 水-only draw）；水下 Fresnel IOR 修正为 `1.0/uWaterIOR`；debug 72-77 已扩展。
+> 2026-05-20 SSR/Reflection 增强：`reflection_probe.fs` 重写——深度线性化改为 `uNearPlane`/`uFarPlane` uniform、DerivativeMain 风格 view-space hit validation（相对线性深度比较）、roughness-adaptive step count（`mix(40,16,roughness)`）和 trace distance（`mix(56,10,roughness)`）、per-pixel dither、4-step binary refinement、edge/grazing fade、sky fallback 软过渡。`reflection_filter.fs` alpha 语义修正（`1.0 - alpha` 作为 confidence）。新增 `reflection_temporal.fs`（velocity 回投 + depth/normal/roughness disocclusion + 3×3 neighborhood clamp），`DeferredRenderTargets` 新增 scratch FBO 避免 read-write 冲突。管线顺序更新为 Reflection+Filter+Temporal。
 
 > 2026-05-13 路线修订：阴影 ghosting 已通过 `Debug Disable Greedy Meshing` 验证为 **非线性 shadow warp 与 Mecraft 贪婪合并大面片之间的插值不兼容**。开启 1x1 terrain face 后 ghosting 消失；因此当前目标不再是让 Mecraft 完整复刻 Iris/OptiFine contract，而是建立 Mecraft 自有阴影/材质/GBuffer contract，并让内置 DerivativeMain-like shader 适配该 contract。
 
@@ -41,7 +42,7 @@
 
 当前 Mecraft 已具备承载 DerivativeMain 的 Hybrid Deferred 骨架：
 
-- C++ 端已有 GBuffer、Shadow、SSAO、DeferredLighting、Reflection、Cloud、SceneComposite、VolumetricFog、TAA、MotionBlur、DoF、Water/Transparent、Post 等 17 个 pass。
+- C++ 端已有 GBuffer、Shadow、SSAO、DeferredLighting、Reflection、ReflectionTemporal、Cloud、SceneComposite、VolumetricFog、TAA、MotionBlur、DoF、Water/Transparent、Post 等 18 个 pass。
 - Render target 已覆盖 GBuffer 5 MRT、shadow depth CSM array + comparison view、scene lighting/composite/resolved、half-res fog/cloud、reflection、sky capture 256×514、velocity、history ping-pong、Atmosphere LUT 3D。
 - Shader 端已有 DerivativeMain 风格材质 ID 33+ 种、roughness/f0/emission/SSS、BRDF、PCSS shadow、sky capture、atmosphere LUT、SSR、水雾、体积雾 4 tier（完整对齐 DerivativeMain）、TAA DerivativeMain parity、AgX/ACES 后处理入口。
 
@@ -662,20 +663,25 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 已适配：
 
-- SSR ray march 与 sky fallback 有基础实现。
-- Reflection bilateral filter 有基础实现。
+- SSR ray march：roughness-adaptive step count（`mix(40,16,roughness)`）和 trace distance（`mix(56,10,roughness)`），per-pixel dither 打断 banding。
+- Hit validation：DerivativeMain 风格 view-space 相对线性深度比较（`relDepthDiff < 0.25`），取代旧固定 thickness 绝对比较。
+- Binary refinement：4-step bisection 收敛到真实表面位置。
+- Edge fade、grazing angle fade、normal facing check。
+- Sky fallback 软过渡（`smoothstep`）+ roughness-aware sky blend 权重。
+- 深度线性化使用 `uNearPlane`/`uFarPlane` uniform（不再硬编码 0.05/512.0）。
+- Reflection temporal resolve：velocity 回投 + depth/normal/roughness disocclusion reject + 3×3 neighborhood clamp。`HistoryReflection` ping-pong 已接通。
+- Reflection bilateral filter + luma-chroma sharpening。
+- Filter alpha 语义修正：`1.0 - alpha` 作为 confidence（匹配 `alpha = 1 - specular` 语义）。
 - roughness/metal/translucent mask 已参与。
 - 湿润表面影响：`ComputePixelWetness` 修改 normal/roughness/f0，`wetReflectBoost` 增强 Fresnel。
 - Premultiplied 输出：DerivativeMain convention `rgb*specular, a=1-specular`。
-- 天空回退：cloudy sky + wet-boosted sky weight。
-- Filter：roughness-based bilateral filter + luma-chroma sharpening。
 
 未完整适配：
 
-- `ScreenSpaceReflections.glsl` 的 GGX VNDF importance sampling、rough cone widening、hit validation、real sky reflection 未完整。当前 28 步线性 ray march，无 VNDF。
-- `ReflectionFilter.glsl` 与 compute path 未完整。
+- `ScreenSpaceReflections.glsl` 的 GGX VNDF importance sampling、rough cone widening 未实现。当前仍是单 ray，rough surface 只靠更少步数和更短距离近似模糊。
+- `ReflectionFilter.glsl` compute path 未完整（Mecraft 使用 fragment shader 变体）。
 - wetness/rain splash/puddle 对 reflection 的影响部分实现（`weather_surface.glsl` 已端口），但无 puddle rendering。
-- DerivativeMain 的 reflection temporal reprojection 未完成（`HistoryReflection` 纹理已绑定但未使用）。
+- 无 Hi-Z 加速。
 - 无 half-resolution SSR pass。
 
 ## 12. TAA、Motion Blur、DoF、Bloom、Grade、Final
@@ -767,7 +773,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `lib/Lighting/AmbientOcclusion.glsl` | `ssao.fs/filter` | 部分 |
 | `lib/Lighting/GlobalIllumination.glsl` | 无完整 RSM GI | 缺失 |
 | `lib/Surface/BRDF.glsl` | `derivative_brdf.glsl` | ✅ 已照抄（DiffuseHammon + SpecularBRDF 逐字复刻） |
-| `lib/Surface/ScreenSpaceReflections.glsl` | `reflection_probe.fs/water_composite.fs` | 部分；28步线性ray march，无VNDF/rough cone，history纹理已绑定未用 |
+| `lib/Surface/ScreenSpaceReflections.glsl` | `reflection_probe.fs/water_composite.fs` | 部分；roughness-adaptive步数/距离、view-space hit validation、binary refinement、edge/grazing fade、temporal resolve已落地；无VNDF/rough cone |
 | `lib/Surface/ReflectionFilter.glsl` | `reflection_filter.fs` | 部分；roughness-based bilateral + luma-chroma sharpen |
 | `lib/Surface/Refraction.glsl` | `water_composite.fs` | 低到中 |
 | `lib/Surface/RainEffect.glsl` | wetness params | 低 |

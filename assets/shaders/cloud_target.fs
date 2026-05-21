@@ -38,6 +38,7 @@ uniform float uCloudDensity;
 uniform float uCloudHeight;
 uniform float uCloudThickness;
 uniform float uTime;
+uniform float uCloudTimeScale;
 uniform bool uNoiseEnabled;
 
 // Planar cloud uniforms
@@ -54,19 +55,14 @@ uniform vec3 uMoonIlluminance;
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
+#include "cloud_density.glsl"
 
 const float PHI = 1.61803398875;
 const float GOLDEN_ANGLE = 6.28318530718 / (PHI + 1.0);
-const int noiseTextureResolution = 256;
-const float noiseTexturePixelSize = 1.0 / float(noiseTextureResolution);
-
 // DerivativeMain planet radius for sphere-intersection ray setup
 const float planetRadius = 6371000.0;
 
 vec3 saturate3(vec3 x) { return clamp(x, vec3(0.0), vec3(1.0)); }
-float curve(float x) { return x * x * (3.0 - 2.0 * x); }
-vec3 curve3(vec3 x) { return x * x * (3.0 - 2.0 * x); }
-float cube(float x) { return x * x * x; }
 
 vec3 reconstructWorldPosition(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -74,54 +70,11 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
-
-float sampleCloudNoise(vec2 p) {
-    if (!uNoiseEnabled) {
-        return hash12(p);
-    }
-    vec4 n0 = texture(uNoiseTex, p);
-    vec4 n1 = texture(uNoiseTex, p * 2.37 + vec2(0.17, -0.29));
-    return n0.r * 0.62 + n1.g * 0.38;
-}
-
-// DerivativeMain-style 3D noise: Z-slice technique using 2D noise texture
-float get3DNoiseSmooth(vec3 position) {
-    vec3 p = floor(position);
-    vec3 b = curve3(position - p);
-    vec2 uv = p.xy + b.xy + 97.0 * p.z;
-    vec2 coord = (uv + 0.5) * noiseTexturePixelSize;
-    vec2 rg = texture(uNoiseTex, coord).xy;
-    return mix(rg.x, rg.y, b.z);
-}
-
-float get3DNoise(vec3 position) {
-    vec3 p = floor(position);
-    vec3 f = position - p;
-    f = clamp(f, vec3(0.0), vec3(1.0));
-    vec2 uv = p.xy + f.xy + p.z * 97.0;
-    vec2 coord = (uv + 0.5) * noiseTexturePixelSize;
-    vec2 noiseSample = texture(uNoiseTex, coord).xy;
-    return mix(noiseSample.x, noiseSample.y, f.z);
-}
-
-float cornetteShanksPhase(float cosTheta, float g) {
-    float gg = g * g;
-    float mu2 = cosTheta * cosTheta;
-    float denom = 1.0 + gg - 2.0 * g * cosTheta;
-    return (3.0 * (1.0 - gg) * (1.0 + mu2)) /
-           (8.0 * atmPi * (2.0 + gg) * denom * sqrt(denom));
-}
-
 vec4 multiLobePhase(float cosTheta) {
     float forward = atmHenyeyGreensteinPhase(cosTheta, 0.6);
     float backward = atmHenyeyGreensteinPhase(cosTheta, -0.35);
-    float peak = cornetteShanksPhase(cosTheta, 0.85);
-    float peak2 = cornetteShanksPhase(cosTheta, 0.5);
+    float peak = cloudCornetteShanksPhase(cosTheta, 0.85);
+    float peak2 = cloudCornetteShanksPhase(cosTheta, 0.5);
     return vec4(forward, backward, peak, peak2) * vec4(0.55, 0.20, 0.15, 0.10);
 }
 
@@ -145,36 +98,18 @@ vec2 raySphereIntersection(vec3 pos, vec3 dir, float rad) {
 // Domain-warped noise detail (DerivativeMain GetNoiseDetail)
 float getNoiseDetail(vec3 worldDir) {
     vec3 dir = worldDir * 48.0;
-    vec3 wind = vec3(2e-3, 2e-4, 1e-3) * uTime;
-    float pnoise = get3DNoise(dir - wind);       dir += pnoise * 1e-3 - wind;
-    pnoise += get3DNoise(dir * 2.0);             dir += pnoise * 1e-3 - wind;
-    pnoise += get3DNoise(dir * 4.0) * 0.5;       dir += pnoise * 1e-3 - wind;
-    pnoise += get3DNoise(dir * 8.0) * 0.25;      dir += pnoise * 1e-3 - wind;
-    pnoise += get3DNoise(dir * 16.0) * 0.125;    dir += pnoise * 1e-3 - wind;
+    vec3 wind = vec3(2e-3, 2e-4, 1e-3) * (uTime * uCloudTimeScale);
+    float pnoise = cloudNoiseSharp(dir - wind);       dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 2.0);             dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 4.0) * 0.5;       dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 8.0) * 0.25;      dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 16.0) * 0.125;    dir += pnoise * 1e-3 - wind;
     return pnoise - 0.15;
 }
 
 // ============================================================
 // PLANAR CLOUDS (Cirrus at ~7000m)
 // ============================================================
-
-float cirrusCloudDensity(vec2 worldPos, float coverage) {
-    vec2 wind = vec2(uTime * 0.0003, -uTime * 0.0002);
-    vec2 pos = worldPos * 4e-5 - wind;
-
-    float noise = 0.0;
-    float amplitude = 0.5;
-    mat2 goldenRot = mat2(cos(GOLDEN_ANGLE), -sin(GOLDEN_ANGLE),
-                          sin(GOLDEN_ANGLE), cos(GOLDEN_ANGLE));
-
-    for (int i = 0; i < 5; ++i) {
-        noise += sampleCloudNoise(pos) * amplitude;
-        pos = goldenRot * 3.2 * pos;
-        amplitude *= 0.43;
-    }
-
-    return max(noise * coverage - 0.2, 0.0);
-}
 
 vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
                            LightingEnvironment env) {
@@ -218,32 +153,6 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
 // ============================================================
 // CIRROCUMULUS CLOUDS (lower planar layer with curl noise)
 // ============================================================
-
-float cirrocumulusDensity(vec2 worldPos) {
-    vec2 wind = vec2(uTime * 0.0003, -uTime * 0.0002);
-    worldPos /= 1.0 + length(worldPos - uCameraPos.xz) * 2e-5;
-    vec2 position = worldPos * 1e-4 - wind;
-
-    float baseCoverage = curve(texture(uNoiseTex, position * 0.08).z * 0.7 + 0.1);
-    baseCoverage *= max(1.07 - texture(uNoiseTex, position * 0.003).y * 1.4, 0.0);
-
-    vec2 curl = texture(uNoiseTex, position * 0.05).xy * 0.04;
-    curl += texture(uNoiseTex, position * 0.1).xy * 0.02;
-    position += curl;
-
-    float noise = 0.5 * texture(uNoiseTex, position * vec2(0.4, 0.16)).z;
-    noise += texture(uNoiseTex, position * 0.9).z - 0.24;
-    noise = clamp(noise, 0.0, 1.0);
-
-    noise *= clamp((baseCoverage + 0.5 - 0.6) * 0.9, 0.0, 0.14);
-    if (noise < 1e-6) return 0.0;
-
-    position.x += noise * 0.2;
-    noise += 0.02 * texture(uNoiseTex, position * 3.0).z;
-    noise += 0.01 * texture(uNoiseTex, position * 5.0 + curl).z - 0.05;
-
-    return cube(clamp(noise * 4.0, 0.0, 1.0));
-}
 
 vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter, LightingEnvironment env) {
     float altitude = uPlanarCloudAltitude * 0.7; // below cirrus
@@ -308,44 +217,6 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
 // VOLUMETRIC CLOUDS (Cumulus layer)
 // ============================================================
 
-float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverage, float noiseDetail) {
-    vec3 wind = vec3(2e-3, 2e-4, 1e-3) * uTime;
-    float noiseScale = 4e-4 + 6e-5 * uCloudWetness;
-    vec3 position = worldPos * noiseScale - wind;
-
-    // Local coverage
-    float localCoverage = texture(uNoiseTex, worldPos.xz * 2e-7 - wind.xz * 2e-3 + 0.5).y;
-    localCoverage = clamp(localCoverage * 3.0 + uCloudWetness - 0.4, 0.0, 1.0) * 0.5 + 0.5;
-    if (localCoverage < 0.1) return 0.0;
-
-    float density = noiseDetail * 0.03;
-    float weight = 0.5;
-    const float octWeight = 0.5;
-    const float octScale = 3.0;
-
-    for (int i = 0; i < 4; ++i) {
-        density += weight * get3DNoiseSmooth(position);
-        position = position * octScale - wind;
-        weight *= octWeight;
-    }
-    density += octWeight / octScale / 4.0;
-    if (density < 1e-6) return 0.0;
-
-    density *= localCoverage;
-
-    float heightAttenuation = clamp(normalizedHeight * 6.6, 0.0, 1.0)
-                            * clamp((1.0 - normalizedHeight) * (2.0 + uCloudWetness), 0.0, 1.0);
-
-    if (weatherCoverage != 1.0) {
-        density = clamp((density - 1.0 + weatherCoverage) / weatherCoverage, 0.0, 1.0);
-    }
-
-    density *= heightAttenuation * 1.9;
-    density -= heightAttenuation * 0.9 + normalizedHeight * 0.5 + 0.1;
-
-    return clamp(density * 3.0 * uCloudDensity, 0.0, 1.0);
-}
-
 // Sun optical depth with exponential-growth sampling (4 steps)
 float sunOcclusionAt(vec3 pos, float height01, float weatherCoverage, float lightNoise) {
     vec3 sunDir = normalize(uSunDirection);
@@ -398,7 +269,7 @@ void main() {
     vec3 atmos = sampleAtmosphere(ray, sunDir, moonDir, eyeAltitude, day, moonVis);
     float LdotV = dot(ray, sunDir);
     float moonLdotV = dot(ray, moonDir);
-    float jitter = sampleCloudNoise(vTexCoord * 23.0 + uTime * 0.01);
+    float jitter = sampleCloudNoise(vTexCoord * 23.0 + (uTime * uCloudTimeScale) * 0.01);
 
     // ---- Planar clouds (cirrus layer) ----
     vec4 planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis, env);

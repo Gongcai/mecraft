@@ -23,6 +23,7 @@ uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch (blockerSearch, 
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
+uniform bool uNoiseEnabled;  // for cloud_density.glsl noise fallback
 
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
@@ -92,7 +93,11 @@ uniform float uCloudCoverage;
 uniform float uCloudDensity;
 uniform float uCloudHeight;
 uniform float uCloudThickness;
+uniform float uPlanarCloudCoverage;
+uniform float uPlanarCloudDensity;
+uniform float uPlanarCloudAltitude;
 uniform float uTime;
+uniform float uCloudTimeScale;
 uniform int uSsaoEnabled;
 uniform int uIsEyeInWater;       // DerivativeMain isEyeInWater: 1 when camera is underwater
 uniform int uHeldBlockLightValue;
@@ -112,6 +117,8 @@ uniform sampler2D uShadowNormalTex;
 
 // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
 uniform sampler3D uAtmosphereLut;
+
+#include "cloud_density.glsl"
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -245,40 +252,66 @@ float shadowDither() {
 #include "mecraft_shadow.glsl"
 
 float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
-    // DerivativeMain/world0/deferred5.fsh:232 starts rainy direct light from
-    // cloudShadow = mix(1.0, 0.03, wetness), before CLOUDS_SHADOW optionally
-    // replaces it with sampled cloud density. Keep this weather dimming active
-    // even when procedural cloud shadows are disabled.
-    // Mecraft: when override enabled, bypass all cloud shadow computation
-    // (overcast + procedural) for energy diagnosis.
+    // DerivativeMain surface cloud shadow contract:
+    //   Default (CLOUDS_SHADOW off): cloudShadow = mix(1.0, 0.03, wetness)
+    //   CLOUDS_SHADOW on: cloudShadow = max(CloudShadow(pos, dir), 0.03)
+    // Mecraft: when override enabled, bypass all cloud shadow computation for energy diagnosis.
     if (uDirectWeatherOcclusionOverride != 0) {
         return clamp(uDirectWeatherOcclusion, 0.0, 1.0);
     }
 
-    // Auto mode: DerivativeMain overcast from skyWetness.
-    float overcastShadow = mix(1.0, 0.03, clamp(uSkyWetness, 0.0, 1.0));
+    float wetness = clamp(uSkyWetness, 0.0, 1.0);
+    float overcastShadow = mix(1.0, 0.03, wetness);
 
-    if (uCloudShadowsEnabled == 0 || uCloudShadowStrength <= 0.001 || outdoorMask <= 0.001) {
+    // CLOUDS_SHADOW disabled: DerivativeMain default — weather overcast only.
+    if (uCloudShadowsEnabled == 0 || outdoorMask <= 0.001) {
         return overcastShadow;
     }
 
+    // CLOUDS_SHADOW enabled: sample real cloud density with 0.03 floor.
+    // DerivativeMain surface CloudShadow() — VC (cumulus) + PC (cirrus).
     lightDir = normalize(lightDir);
-    float layerHeight = max(uCloudHeight, 1.0);
-    float denom = max(abs(lightDir.y), 0.18);
-    float t = (layerHeight - worldPos.y) / denom;
-    vec2 cloudPos = (worldPos.xz + lightDir.xz * t) * max(uCloudShadowScale, 0.0001);
-    vec2 wind = vec2(0.73, 0.31) * uTime * uCloudShadowSpeed;
+    float cloudDensity = 0.0;
+    vec3 checkOrigin = worldPos + vec3(0.0, cloudPlanetRadius, 0.0);
 
-    float large = noise2D(cloudPos + wind);
-    float medium = noise2D(cloudPos * 2.37 - wind * 1.7);
-    float coverageThreshold = mix(0.72, 0.42, clamp(uCloudCoverage, 0.0, 1.0));
-    float coverage = smoothstep(coverageThreshold, coverageThreshold + 0.24, large * 0.72 + medium * 0.28);
-    float strength = uCloudShadowStrength * outdoorMask * max(uCloudDensity, 0.0);
-    float proceduralShadow = 1.0 - coverage * clamp(strength, 0.0, 0.45);
+    // VC_SHADOW: cumulus cloud shadow.
+    // DerivativeMain: two shell samples at 15% and 50% of thickness.
+    if (uCloudHeight > 0.0 && uCloudThickness > 0.0) {
+        float cloudThick = max(uCloudThickness, 1.0);
+        float weatherCoverage = clamp(uCloudCoverage * 2.8 + 0.2 + wetness * 0.3, 0.8, 1.5);
+        float cloudShellRadius = cloudPlanetRadius + uCloudHeight;
 
-    // Mecraft keeps the procedural cloud texture when it is darker, then applies
-    // the weather overcast floor so rain and storms actually remove direct light.
-    return min(proceduralShadow, overcastShadow);
+        vec2 bottomHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudShellRadius + 0.15 * cloudThick);
+        if (bottomHit.y >= 0.0) {
+            vec3 samplePos = bottomHit.y * lightDir + worldPos;
+            float sampleNH = clamp((samplePos.y - uCloudHeight) / cloudThick, 0.0, 1.0);
+            cloudDensity += cloudDensityAt(samplePos, sampleNH, weatherCoverage, 1.0);
+        }
+
+        vec2 topHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudShellRadius + 0.50 * cloudThick);
+        if (topHit.y >= 0.0) {
+            vec3 samplePos = topHit.y * lightDir + worldPos;
+            float sampleNH = clamp((samplePos.y - uCloudHeight) / cloudThick, 0.0, 1.0);
+            cloudDensity += cloudDensityAt(samplePos, sampleNH, weatherCoverage, 1.0);
+        }
+    }
+
+    // PC_SHADOW: planar cloud (cirrus) shadow
+    if (uPlanarCloudAltitude > 0.0) {
+        float cloudPlaneRadius = cloudPlanetRadius + uPlanarCloudAltitude;
+        vec2 planeHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudPlaneRadius);
+        if (planeHit.y >= 0.0) {
+            vec2 cirrusPos = planeHit.y * lightDir.xz + worldPos.xz;
+            float coverage = clamp(uPlanarCloudCoverage + wetness * 0.2, 0.05, 0.95);
+            cloudDensity += cirrusCloudDensity(cirrusPos, coverage) * 10.0;
+        }
+    }
+
+    cloudDensity = mix(0.4, cloudDensity, clamp(sqr(abs(lightDir.y) * 2.0), 0.0, 1.0));
+    cloudDensity = clamp(cloudDensity, 0.0, 1.0);
+
+    // DerivativeMain: maximum 3% direct light even in dense cloud.
+    return max(exp2(-cloudDensity * cloudDensity * 2e2), 0.03);
 }
 
 vec2 spiralDiskSample(int index, int sampleCount, float jitter) {
@@ -608,10 +641,14 @@ void main() {
             // DerivativeMain deferred5.fsh:293 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
             specular *= 0.6 + uSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
-            // DerivativeMain deferred5.fsh:299 — shadow *= saturate(mcLightmap.g * 1e6)
-            // Use the DerivativeMain-adjusted sky visibility so underwater keeps
-            // its fixed mcLightmap.g = 0.75 instead of Mecraft's raw skylight.
-            shadow *= saturate(skyLightMask * 1e6);
+            // DerivativeMain uses saturate(mcLightmap.g * 1e6), effectively a
+            // boolean gate. Mecraft's interpolated voxel skylight can cross zero
+            // across underwater geometry viewed from above, which makes direct-only
+            // lighting hard-cut to black. Keep the underwater camera path fully lit
+            // like DerivativeMain's fixed 0.75, but fade exterior direct light with
+            // the same continuous raw sky visibility used by the forward path.
+            float directSkyVisibility = (uIsEyeInWater != 0) ? 1.0 : skyLightRaw;
+            shadow *= directSkyVisibility;
             // Diagnostic view: show direct visibility including weather/cloud
             // attenuation, but without HDR directIlluminance to avoid pure white.
             directVisibilityDebug = clamp(shadow * diffuse * NdotL * cloudShadow, vec3(0.0), vec3(1.0));
