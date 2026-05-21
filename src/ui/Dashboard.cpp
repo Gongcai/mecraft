@@ -536,9 +536,11 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Purkinje Shift", &pipeline.purkinjeShiftEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloomy Fog", &pipeline.bloomyFogEnabled);
         pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
+        pipelineChanged |= ImGui::Checkbox("Volumetric Light", &pipeline.volumetricLightEnabled);
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &pipeline.volumetricTimeFadeEnabled);
+        pipelineChanged |= ImGui::Checkbox("UW Volumetric Light", &pipeline.uwVolumetricLightEnabled);
         static constexpr const char* kVFogQualityTiers[] = {
             "Low: No Noise",
             "Medium: Cloudy Fog Lite",
@@ -548,6 +550,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         int qualityTier = pipeline.volumetricQualityTier;
         pipelineChanged |= ImGui::Combo("VFog Fog Type", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
         pipeline.volumetricQualityTier = qualityTier;
+        int fogSamples = pipeline.volumetricFogSamples;
+        pipelineChanged |= ImGui::SliderInt("VFog Samples", &fogSamples, 2, 50);
+        pipeline.volumetricFogSamples = fogSamples;
         // DerivativeMain-style VFog independent profile controls
         pipelineChanged |= ImGui::SliderFloat("VFog Center Height", &pipeline.vfogCenterHeight, 0.0f, 255.0f, "%.0f");
         pipelineChanged |= ImGui::SliderFloat("VFog Height Spread", &pipeline.vfogHeightSpread, 1.0f, 200.0f, "%.0f");
@@ -605,6 +610,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             ImGui::Text("Cloud cirrus: env.sunIlluminance * 40.0");
             // VFog component diagnostics (CPU approximate — actual values are GPU-side)
             ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Volumetric Fog Diagnostics (approx)");
+            ImGui::Text("Volumetric Light (haze): %s", pipeline.volumetricLightEnabled ? "ON" : "OFF");
             const auto& weather = world.getWeatherSystem().getRenderState();
             const auto targetWeather = world.getWeatherSystem().getTargetState();
             const auto& derivedWeather = world.getWeatherSystem().getDerived();
@@ -625,9 +631,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
                 float timeMidnight = (sunY < 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
                 float wetness = derivedWeather.skyWetness;
-                float airGate = pipeline.volumetricTimeFadeEnabled
-                    ? std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f
-                    : 1.0f;
+                // airDensity is NOT affected by timeFade (constant baseline haze)
+                float airGate = pipeline.volumetricLightEnabled ? 1.0f : 0.0f;
                 float mistGate = pipeline.volumetricTimeFadeEnabled
                     ? meWeight * meWeight + timeMidnight * 2.0f
                     : 1.0f;

@@ -45,6 +45,7 @@ uniform float uPlanarCloudCoverage;
 uniform float uPlanarCloudDensity;
 uniform float uPlanarCloudAltitude;
 uniform int uShadowsEnabled;
+uniform int uVolumetricLightEnabled; // DerivativeMain VOLUMETRIC_LIGHT: base haze (airDensity)
 uniform int uVolumetricFogEnabled;
 uniform int uShadowLightMode;
 uniform float uTime;
@@ -54,12 +55,14 @@ uniform int uVolumetricDebugMode;
 uniform int uVolumetricSkyRayEnabled;
 uniform int uVolumetricTimeFadeEnabled; // DerivativeMain TIME_FADE toggle
 uniform int uVolumetricQualityTier; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
+uniform int uVolumetricFogSamples; // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count (default 20)
 uniform int uVolumetricStaticJitter; // 1 = freeze jitter for stable debug
 uniform int uFrameIndex;
 uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (default 1.0)
 
 // Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
 uniform int uIsEyeInWater;
+uniform int uUwVolumetricLightEnabled; // DerivativeMain UW_VOLUMETRIC_LIGHT toggle
 uniform vec3 uWaterAbsorption; // RGB absorption coefficients (default 0.4, 0.14, 0.08)
 uniform float uUnderwaterVolumetricLightStrength; // DerivativeMain UW_VOLUMETRIC_LIGHT_STRENGTH
 
@@ -87,7 +90,7 @@ const float noiseTexturePixelSize = 1.0 / float(noiseTextureResolution);
 // Dynamic ray step count from DerivativeMain CalculateVolumetricFog().
 // FOG_TYPE controls density shape; VOLUMETRIC_FOG_SAMPLES controls march quality.
 int getFogSteps(float rayLength) {
-    const float maxSamples = 20.0; // DerivativeMain VOLUMETRIC_FOG_SAMPLES default.
+    float maxSamples = float(uVolumetricFogSamples); // DerivativeMain VOLUMETRIC_FOG_SAMPLES.
     return int(min(maxSamples, maxSamples * 0.4 + rayLength * 0.1));
 }
 
@@ -504,7 +507,7 @@ void main() {
     }
 
     // DerivativeMain composite.fsh:79-85 — UW_VOLUMETRIC_LIGHT replaces overworld VFog
-    if (uIsEyeInWater == 1) {
+    if (uIsEyeInWater == 1 && uUwVolumetricLightEnabled != 0) {
         float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
         vec4 uwResult = UnderwaterVolumetricLight(worldPos, viewDir, dither);
@@ -593,7 +596,10 @@ void main() {
     // DerivativeMain VOLUMETRIC_LIGHT: airDensity includes RayleighPhase(LdotV),
     // enters fogDensity directly (both extinction and in-scattering are phase-modulated).
     // Uses uVFogLightStrength (DerivativeMain VOLUMETRIC_LIGHT_STRENGTH, default 0.2).
-    float airDensity = uVFogLightStrength * atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0));
+    // Gated by uVolumetricLightEnabled (DerivativeMain #ifdef VOLUMETRIC_LIGHT).
+    float airDensity = (uVolumetricLightEnabled != 0)
+        ? uVFogLightStrength * atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0))
+        : 0.0;
 
     vec3 shadowLightDir = normalize(uShadowLightDirection);
 
@@ -625,16 +631,18 @@ void main() {
         mistDensity *= csPhase;
     }
 
-    // DerivativeMain TIME_FADE: modulate airDensity and mistDensity by time of day.
+    // DerivativeMain TIME_FADE: modulate mistDensity by time of day.
     // Peaks at sunrise/sunset (meWeight) and midnight. No weather wetness floor —
     // fog presence is controlled by VFog profile, not weather state.
     // DerivativeMain VolumetricFog.glsl:210-213
+    // airDensity (base haze) is NOT affected by timeFade — it provides a constant
+    // atmospheric baseline regardless of time of day, matching DerivativeMain behavior
+    // where VOLUMETRIC_LIGHT haze is always present when the define is active.
     if (uVolumetricTimeFadeEnabled != 0) {
         float sunY = uSunDirection.y;
         float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
         float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
         float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
-        airDensity *= clamp(meWeight + 0.25, 0.0, 1.0) + timeMidnight * 4.0;
         mistDensity *= meWeight * meWeight + timeMidnight * 2.0;
     }
 

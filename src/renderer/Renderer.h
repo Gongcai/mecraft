@@ -73,10 +73,13 @@ public:
         bool transparentCompositeEnabled = true;
         bool shaderpackGradingEnabled = true;
         bool aerialPerspectiveEnabled = true;
+        bool volumetricLightEnabled = true; // DerivativeMain VOLUMETRIC_LIGHT: base haze (airDensity)
         bool volumetricFogEnabled = true;
         bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
         bool volumetricTimeFadeEnabled = true; // DerivativeMain TIME_FADE
         int volumetricQualityTier = 1; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
+        bool uwVolumetricLightEnabled = true; // DerivativeMain UW_VOLUMETRIC_LIGHT: underwater volumetric light
+        int volumetricFogSamples = 20; // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
         float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
         bool freezeR1 = false;       // A/B test: freeze VFog R1 dither (no temporal variation)
         bool freezeBias = false;     // A/B test: freeze VFog upscale bias (no temporal rotation)
@@ -207,6 +210,8 @@ public:
     };
 
     struct VolumetricSettings {
+        bool lightEnabled = true; // DerivativeMain VOLUMETRIC_LIGHT: base haze (airDensity)
+        bool uwLightEnabled = true; // DerivativeMain UW_VOLUMETRIC_LIGHT: underwater volumetric light
         bool fogEnabled = true;
         float fogStrength = 1.0f;
         float baseDensity = 1.0f;
@@ -218,6 +223,7 @@ public:
         float fogNoiseScale = 0.04f;     // noise sampling scale for structured fog
         float fogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
         float fogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
+        int fogSamples = 20;             // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
     };
 
     struct CloudSettings {
