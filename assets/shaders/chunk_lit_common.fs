@@ -1,6 +1,8 @@
 out vec4 FragColor;
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
+uniform sampler3D uAtmosphereLut;
+#include "atmosphere_lut.glsl"
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
 #define MECRAFT_TRANSPARENT_COMPOSITE 0
@@ -53,6 +55,7 @@ uniform vec3 uMoonDirection;
 uniform vec3 uMoonLightColor;
 uniform float uMoonVisibility;
 uniform int uAerialPerspectiveEnabled;
+uniform int uVolumetricLightEnabled;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
 uniform float uWeatherSkylightScale;
@@ -269,60 +272,56 @@ uniform vec3 uCameraPos;
         return clamp((uFogEnd - fogDistance) / linearRange, 0.0, 1.0);
     }
 
-    vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSunColor) {
-        vec3 sunDir = normalize(uSunDirection);
-        vec3 moonDir = normalize(uMoonDirection);
-        float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
-        float nightFactor = 1.0 - dayFactor;
-        float sunVisibility = smoothstep(-0.08, 0.18, sunDir.y) * dayFactor;
-        float moonVisibility = clamp(uMoonVisibility, 0.0, 1.0);
-
-        vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.32, viewDir.z));
-        vec3 capturedFog = (uSkyCaptureEnabled != 0) ? sampleSkyCapture(captureDir) : baseFogColor;
-        vec3 skyFog = mix(capturedFog, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
-        vec3 fogColor = mix(baseFogColor, skyFog, 0.30 + 0.16 * nightFactor);
-
-        float sunForwardWide = pow(max(dot(viewDir, sunDir), 0.0), 5.0);
-        float sunForwardCore = pow(max(dot(viewDir, sunDir), 0.0), 36.0);
-        float moonForward = pow(max(dot(viewDir, moonDir), 0.0), 8.0);
-        fogColor += warmSunColor * (sunForwardWide * 0.13 + sunForwardCore * 0.20) *
-                    sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
-        fogColor += uMoonLightColor * moonForward * moonVisibility * nightFactor *
-                    (0.09 + 0.09 * clamp(uHorizonScatterStrength, 0.0, 2.0));
-        return max(fogColor, vec3(0.0));
-    }
-
+    // DerivativeMain composite1.fsh:139-170 LAND_ATMOSPHERIC_SCATTERING
+    // LUT-based physical aerial perspective (chunk version).
+    // Uses atmosphere LUT for RGB transmittance and in-scattering.
     vec3 applyAerialPerspective(vec3 sceneColor,
                                 vec3 worldPos,
                                 float fogDistance,
                                 float outdoorSkyMask,
                                 vec3 warmSunColor) {
         vec3 viewDir = normalize(worldPos - uCameraPos);
-        float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.55);
-        float distanceTransmittance = computeFogFactor(fogDistance);
-        float distanceFogOpacity = 1.0 - distanceTransmittance;
 
-        vec3 baseFogColor = srgbToLinear(uFogColor);
         if (uAerialPerspectiveEnabled == 0) {
-            return mix(baseFogColor, sceneColor, distanceTransmittance);
+            float distanceTransmittance = computeFogFactor(fogDistance);
+            return mix(srgbToLinear(uFogColor), sceneColor, distanceTransmittance);
         }
 
         float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
-        float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-        float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
-        float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
-        float airDensity = (0.00048 + 0.00105 * horizon) *
-                           clamp(uAerialStrength, 0.0, 2.0) *
-                           clearAirScale *
-                           (1.0 + weatherHaze * 0.85);
-        float aerialOpacity = (1.0 - exp(-fogDistance * airDensity)) * outdoorMask * heightDensity;
-        float fogOpacity = clamp(max(distanceFogOpacity * mix(0.55, 0.95, clamp(weatherHaze, 0.0, 1.0)),
-                                     aerialOpacity * 0.48),
-                                 0.0,
-                                 0.88);
+        if (outdoorMask < 0.01) return sceneColor;
 
-        vec3 fogColor = aerialFogColor(baseFogColor, viewDir, horizon, warmSunColor);
-        return mix(sceneColor, fogColor, fogOpacity);
+        vec3 planetCenter = vec3(0.0, atmPlanetRadius, 0.0);
+        vec3 cameraPlanet = uCameraPos + planetCenter;
+        float eyeR = max(length(cameraPlanet), atmAtmosphereBottomRadius + 1.0);
+        vec3 cameraUp = cameraPlanet / eyeR;
+        vec3 sunDir = normalize(uSunDirection);
+
+        float eyeMu = dot(viewDir, cameraUp);
+        float muS = dot(sunDir, cameraUp);
+        float nu = dot(viewDir, sunDir);
+
+        float heightDensity = 1.0 - smoothstep(96.0, 220.0, worldPos.y);
+
+        bool groundHit = atmRayIntersectsGround(eyeR, eyeMu);
+        vec3 transmittance = groundHit ? vec3(0.0) : atmGetTransmittance(eyeR, eyeMu, fogDistance, false);
+        transmittance = mix(vec3(1.0), transmittance, outdoorMask * heightDensity);
+
+        vec3 singleMieScattering;
+        vec3 scattering = atmGetCombinedScattering(atmModel, eyeR, eyeMu, muS, nu, groundHit, singleMieScattering);
+
+        float rayleighPhase = atmRayleighPhase(nu);
+        float miePhase = atmHenyeyGreensteinPhase(nu, atmMiePhaseG);
+        scattering = scattering * rayleighPhase + singleMieScattering * miePhase;
+
+        // Approximate direct illuminance from sun/moon colors (no LightingEnvironment in chunk shader)
+        vec3 directIlluminance = uSunLightColor * clamp(uSkyIntensity, 0.0, 1.0)
+                               + uMoonLightColor * clamp(uMoonVisibility, 0.0, 1.0);
+        scattering *= directIlluminance;
+
+        float wetness = clamp(uFogWetness, 0.0, 1.0);
+        scattering *= 1.0 - wetness * 0.6;
+
+        return sceneColor * transmittance + scattering * 20.0;
     }
 
     vec3 decodeFaceNormal(float face) {
@@ -532,7 +531,7 @@ uniform vec3 uCameraPos;
         }
         finalColor = desaturateLinear(finalColor, (1.0 - max(diffuse, moonDiffuse * 0.65)) * outdoorSkyMask * uShadowDesaturation * 0.45);
 
-        if (uFogEnabled != 0) {
+        if (uFogEnabled != 0 && uVolumetricLightEnabled != 0) {
             finalColor = applyAerialPerspective(finalColor, vWorldPos, vFogDist, outdoorSkyMask, warmSunColor);
         }
 

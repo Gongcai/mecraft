@@ -304,11 +304,16 @@ vec3 atmRenderSun(vec3 worldDir, vec3 sunVector) {
 }
 
 // Moon disc rendering (DerivativeMain RenderMoonReflection).
+// DerivativeMain Atmosphere.glsl:798-806 RenderMoonReflection()
+// Uses sqr(curve(saturate())) where curve(x)=x^2*(3-2x) (smoothstep).
+// The extra sqr() tightens the disc edge compared to plain smoothstep.
 vec3 atmRenderMoon(vec3 worldDir, vec3 moonVector) {
     float cosTheta = dot(worldDir, moonVector);
     float size = 5e-3;
     float hardness = 2e2;
-    float disc = smoothstep(1.0 - size, 1.0 - size + 1.0 / hardness, cosTheta);
+    float x = clamp((cosTheta - 1.0 + size) * hardness, 0.0, 1.0);
+    float curve = x * x * (3.0 - 2.0 * x); // smoothstep(0,1,x)
+    float disc = curve * curve; // sqr(curve)
     return vec3(disc) * 4.0;
 }
 

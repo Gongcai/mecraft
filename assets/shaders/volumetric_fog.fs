@@ -202,6 +202,13 @@ float CalculateVFogDensity(in vec3 rayPosition) {
         float noise = get3DNoiseSmooth(p + volFogWind) * 4.0;
         noise -= get3DNoiseSmooth(p * 4.0 + volFogWind);
         fogDensity = clamp(noise * 4.0 * fogDensity - 5.0, 0.0, 1.0) * 1.4;
+        float sunY = uSunDirection.y;
+        float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
+        float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
+        float timeNoon = (sunY > 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
+        if (uWeatherStorm < 5e-3) {
+            fogDensity = mix(fogDensity, 1.0, timeNoon);
+        }
         return fogDensity;
     }
 
@@ -456,7 +463,11 @@ void main() {
     vec3 viewDir;
     float marchDistance;
     if (depth >= 1.0) {
-        if (uVolumetricSkyRayEnabled == 0) {
+        // DerivativeMain always marches sky pixels when VOLUMETRIC_LIGHT is compiled in.
+        // Keep the debug sky-ray toggle from removing the noon airDensity haze.
+        bool needsSkyRay = (uVolumetricLightEnabled != 0) ||
+                           (uVolumetricFogEnabled != 0 && uVolumetricSkyRayEnabled != 0);
+        if (!needsSkyRay) {
             FragColor = vec4(0.0, 0.0, 0.0, 1.0);
             return;
         }

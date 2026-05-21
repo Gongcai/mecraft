@@ -46,6 +46,7 @@ uniform float uMoonVisibility;
 uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
 uniform int uAerialPerspectiveEnabled;
 uniform int uVolumetricFogActive;
+uniform int uVolumetricLightEnabled;
 uniform float uShadowTintStrength;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
@@ -118,6 +119,8 @@ uniform sampler2D uShadowNormalTex;
 
 // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
 uniform sampler3D uAtmosphereLut;
+
+#include "atmosphere_lut.glsl"
 
 #include "cloud_density.glsl"
 
@@ -408,29 +411,10 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     return shadowFactor(worldPos, normal, lightDir, 0.0, unused);
 }
 
-vec3 aerialFogColor(vec3 baseFogColor, vec3 viewDir, float horizon, vec3 warmSunColor, LightingEnvironment env) {
-    vec3 sunDir = normalize(uSunDirection);
-    vec3 moonDir = normalize(uMoonDirection);
-    float dayFactor = clamp(uSkyIntensity, 0.0, 1.0);
-    float nightFactor = 1.0 - dayFactor;
-    float sunVisibility = smoothstep(-0.08, 0.18, sunDir.y) * dayFactor;
-    float moonVisibility = clamp(uMoonVisibility, 0.0, 1.0);
-
-    vec3 captureDir = normalize(vec3(viewDir.x, viewDir.y * 0.32, viewDir.z));
-    vec3 capturedFog = sampleSkyCapture(captureDir);
-    vec3 skyFog = mix(capturedFog, uHorizonScatterColor, horizon * clamp(uHorizonScatterStrength, 0.0, 2.0));
-    vec3 fogColor = mix(baseFogColor, skyFog, 0.34 + 0.18 * nightFactor);
-
-    float sunForwardWide = pow(max(dot(viewDir, sunDir), 0.0), 5.0);
-    float sunForwardCore = pow(max(dot(viewDir, sunDir), 0.0), 36.0);
-    float moonForward = pow(max(dot(viewDir, moonDir), 0.0), 8.0);
-    fogColor += warmSunColor * (sunForwardWide * 0.14 + sunForwardCore * 0.22) *
-                sunVisibility * clamp(uHorizonScatterStrength, 0.0, 2.0);
-    fogColor += env.moonIlluminance * moonForward * moonVisibility * nightFactor *
-                (150.0 + 150.0 * clamp(uHorizonScatterStrength, 0.0, 2.0));
-    return max(fogColor, vec3(0.0));
-}
-
+// DerivativeMain composite1.fsh:139-170 LAND_ATMOSPHERIC_SCATTERING
+// LUT-based physical aerial perspective using Bruneton precomputed atmosphere.
+// Replaces the empirical fog formula with Rayleigh + Mie + ozone transmittance
+// and in-scattering from the atmosphere LUT.
 vec3 applyAerialPerspective(vec3 sceneColor,
                             vec3 worldPos,
                             float fogDistance,
@@ -438,31 +422,54 @@ vec3 applyAerialPerspective(vec3 sceneColor,
                             vec3 warmSunColor,
                             LightingEnvironment env) {
     vec3 viewDir = normalize(worldPos - uCameraPos);
-    float horizon = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 1.55);
-    float distanceTransmittance = computeFogFactor(fogDistance);
-    float distanceFogOpacity = 1.0 - distanceTransmittance;
 
-    vec3 baseFogColor = srgbToLinear(uFogColor);
+    // Fallback when disabled: use vanilla fog
     if (uAerialPerspectiveEnabled == 0) {
-        return mix(baseFogColor, sceneColor, distanceTransmittance);
+        float distanceTransmittance = computeFogFactor(fogDistance);
+        return mix(srgbToLinear(uFogColor), sceneColor, distanceTransmittance);
     }
 
     float outdoorMask = smoothstep(0.05, 0.65, outdoorSkyMask);
-    float heightDensity = (1.0 - smoothstep(96.0, 220.0, worldPos.y)) * (0.68 + 0.42 * horizon);
-    float weatherHaze = clamp(uFogWetness, 0.0, 1.0);
-    float clearAirScale = mix(clamp(uAerialReduction, 0.0, 1.0), 0.82, clamp(weatherHaze, 0.0, 1.0));
-    float airDensity = (0.00048 + 0.00105 * horizon) *
-                       clamp(uAerialStrength, 0.0, 2.0) *
-                       clearAirScale *
-                       (1.0 + weatherHaze * 0.85);
-    float aerialOpacity = (1.0 - exp(-fogDistance * airDensity)) * outdoorMask * heightDensity;
-    float fogOpacity = clamp(max(distanceFogOpacity * mix(0.55, 0.95, clamp(weatherHaze, 0.0, 1.0)),
-                                 aerialOpacity * 0.48),
-                             0.0,
-                             0.88);
+    if (outdoorMask < 0.01) return sceneColor;
 
-    vec3 fogColor = aerialFogColor(baseFogColor, viewDir, horizon, warmSunColor, env);
-    return mix(sceneColor, fogColor, fogOpacity);
+    // Atmosphere parameters: camera and endpoint in planet-centered coordinates
+    vec3 planetCenter = vec3(0.0, atmPlanetRadius, 0.0);
+    vec3 cameraPlanet = uCameraPos + planetCenter;
+    float eyeR = max(length(cameraPlanet), atmAtmosphereBottomRadius + 1.0);
+    vec3 cameraUp = cameraPlanet / eyeR;
+    vec3 sunDir = normalize(uSunDirection);
+
+    // Cosines for LUT parameterization
+    float eyeMu = dot(viewDir, cameraUp);      // view angle at camera
+    float muS = dot(sunDir, cameraUp);          // sun angle at camera
+    float nu = dot(viewDir, sunDir);            // view-sun angle
+
+    // Height density: suppress aerial fog at high altitudes
+    float heightDensity = 1.0 - smoothstep(96.0, 220.0, worldPos.y);
+
+    // RGB transmittance along the view ray (Beer-Lambert, from LUT)
+    bool groundHit = atmRayIntersectsGround(eyeR, eyeMu);
+    vec3 transmittance = groundHit ? vec3(0.0) : atmGetTransmittance(eyeR, eyeMu, fogDistance, false);
+    transmittance = mix(vec3(1.0), transmittance, outdoorMask * heightDensity);
+
+    // In-scattering: query combined Rayleigh+Mie scattering at eye position
+    vec3 singleMieScattering;
+    vec3 scattering = atmGetCombinedScattering(atmModel, eyeR, eyeMu, muS, nu, groundHit, singleMieScattering);
+
+    // Add single Mie component (DerivativeMain Atmosphere.glsl:550-553)
+    float rayleighPhase = atmRayleighPhase(nu);
+    float miePhase = atmHenyeyGreensteinPhase(nu, atmMiePhaseG);
+    scattering = scattering * rayleighPhase + singleMieScattering * miePhase;
+
+    // Scale by illuminance (DerivativeMain uses directIlluminance for sun+moon)
+    scattering *= env.directIlluminance;
+
+    // Apply wetness attenuation (DerivativeMain composite1.fsh:170)
+    float wetness = clamp(uFogWetness, 0.0, 1.0);
+    scattering *= 1.0 - wetness * 0.6;
+
+    // Composite: attenuate scene + add in-scattered light (scaled by 20.0 for irradiance convention)
+    return sceneColor * transmittance + scattering * 20.0;
 }
 
 void main() {
@@ -688,9 +695,10 @@ void main() {
     // DerivativeMain/world0/deferred5.fsh:316
     skylight *= 0.8 - uSkyWetness * 0.2;
 
-    // Lightning flash: boost sky SH uniformly so flash propagates through
-    // skylight → scene → reflections → volumetric fog consistently.
-    skylight *= 1.0 + uLightningFlash * 4.0;
+    // DerivativeMain deferred5.fsh:316: additive lightning flash.
+    // Adds fixed luminance so lightning lights up dark areas (night) too,
+    // rather than only scaling existing skylight.
+    skylight += vec3(1.0) * uLightningFlash * 1.2;
 
     // Weather profile: scale skylight during precipitation (rain/storm dimming).
     skylight *= uWeatherSkylightScale;
@@ -934,7 +942,7 @@ void main() {
     // march already integrates atmospheric transmittance at each step. Running both
     // causes double-fogging (double dimming + double scattering).
     // When volumetric fog is off, this provides the fallback land atmospheric scattering.
-    if (uDerivativeStrictMode == 0 && uFogEnabled != 0 && uVolumetricFogActive == 0) {
+    if (uDerivativeStrictMode == 0 && uFogEnabled != 0 && uVolumetricFogActive == 0 && uVolumetricLightEnabled != 0) {
         float fogDistance = length(worldPos - uCameraPos);
         color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor, env);
     }

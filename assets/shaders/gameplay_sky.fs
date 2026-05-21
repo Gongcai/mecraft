@@ -55,6 +55,21 @@ uniform sampler2D uSkyCaptureTex;
 const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
 
+// DerivativeMain Settings.glsl: STARS_COVERAGE=0.15, STARS_INTENSITY=0.1
+const float STARS_COVERAGE = 0.15;
+const float STARS_INTENSITY = 0.1;
+
+// Approximate blackbody radiation color for temperature range 4000K-8000K.
+// DerivativeMain uses a full Planck function; this polynomial approximation
+// captures the warm-orange to cool-blue-white transition visible in stars.
+vec3 Blackbody(float t) {
+    // t in [0,1]: 0=4000K (warm), 1=8000K (cool)
+    float r = 1.0;
+    float g = 0.56 + 0.22 * t;
+    float b = 0.24 + 0.60 * t;
+    return vec3(r, g, b);
+}
+
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
@@ -71,35 +86,40 @@ vec2 hash22(vec2 p) {
     return vec2(x, y);
 }
 
-vec3 starDirectionFromCell(vec2 cell) {
-    vec2 jitter = hash22(cell);
-    vec2 uv = (cell + jitter) / vec2(160.0, 80.0);
-    float phi = uv.x * kTwoPi - kPi;
-    float cosTheta = uv.y * 2.0 - 1.0;
-    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
-    return normalize(vec3(sin(phi) * sinTheta, cosTheta, -cos(phi) * sinTheta));
-}
+// DerivativeMain Atmosphere.glsl:809-835 RenderStars()
+// 3D grid with sun vector rotation and blackbody color temperature.
+vec3 renderStars(vec3 worldDir, vec3 sunDir) {
+    const float scale = 256.0;
+    const float coverage = 0.1 * STARS_COVERAGE;
+    const float maxLuminance = 0.6 * STARS_INTENSITY;
+    const float minTemperature = 4000.0;
+    const float maxTemperature = 8000.0;
 
-float starField(vec3 dir) {
-    float upperSky = smoothstep(0.04, 0.42, dir.y);
-    vec2 sphereUv = vec2(atan(dir.x, -dir.z) / kTwoPi + 0.5, dir.y * 0.5 + 0.5);
-    vec2 baseCell = floor(sphereUv * vec2(160.0, 80.0));
-    float stars = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            vec2 cell = baseCell + vec2(float(x), float(y));
-            vec2 wrappedCell = vec2(mod(cell.x, 160.0), clamp(cell.y, 0.0, 79.0));
-            float rnd = hash12(wrappedCell);
-            float visible = smoothstep(0.982, 0.998, rnd);
-            vec3 starDir = starDirectionFromCell(wrappedCell);
-            float angular = max(dot(normalize(dir), starDir), 0.0);
-            float size = mix(0.9999985, 0.9999920, hash12(wrappedCell + vec2(7.7, 91.3)));
-            float core = smoothstep(size, 1.0, angular);
-            float twinkle = mix(0.70, 1.18, hash12(wrappedCell + vec2(19.7, 4.2)));
-            stars += visible * core * twinkle;
-        }
-    }
-    return min(stars, 1.0) * upperSky;
+    // Rodrigues' rotation: align star field with sun direction
+    // DerivativeMain Atmosphere.glsl:818-821
+    float cosine = sunDir.z;
+    vec3 axis = cross(sunDir, vec3(0.0, 0.0, 1.0));
+    float cosecantSquared = 1.0 / max(dot(axis, axis), 1e-10);
+    worldDir = cosine * worldDir + cross(axis, worldDir)
+             + cosecantSquared * (1.0 - cosine) * dot(axis, worldDir) * axis;
+
+    // 3D grid hashing
+    vec3 p = worldDir * scale;
+    ivec3 i = ivec3(floor(p));
+    vec3 f = p - vec3(i);
+    float r = dot(f - 0.5, f - 0.5);
+
+    vec3 i3 = fract(vec3(i) * vec3(443.897, 441.423, 437.195));
+    i3 += dot(i3, i3.yzx + 19.19);
+    vec2 hash = fract((i3.xx + i3.yz) * i3.zy);
+    hash.y = 2.0 * hash.y - 4.0 * hash.y * hash.y + 3.0 * hash.y * hash.y * hash.y;
+
+    // Coverage gating: remap(hash.x) from [1-coverage, 1] to [0, 1]
+    float cov = clamp((hash.x - (1.0 - coverage)) / coverage, 0.0, 1.0);
+    // Distance falloff from cell center
+    float falloff = clamp((0.25 - r) / 0.25, 0.0, 1.0);
+
+    return maxLuminance * falloff * cov * cov * Blackbody(mix(0.0, 1.0, hash.y));
 }
 
 vec3 evaluateSkyRadiance(vec3 dir) {
@@ -121,8 +141,10 @@ vec3 evaluateSkyRadiance(vec3 dir) {
 
     float nightHorizon = horizon * clamp(uNightFactor, 0.0, 1.0);
     color += vec3(0.04, 0.08, 0.12) * nightHorizon;
-    float stars = starField(dir) * clamp(uNightFactor, 0.0, 1.0) * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
-    color += vec3(0.72, 0.82, 1.0) * stars * 1.15;
+    vec3 stars = renderStars(dir, normalize(uSunDirection))
+               * clamp(uNightFactor, 0.0, 1.0)
+               * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
+    color += stars;
     return color;
 }
 
@@ -139,9 +161,11 @@ void main() {
             // no additional srgbToLinear needed (was applied in the old path).
             sky = evaluateSkyRadiance(dir);
         }
-        // Add stars on top (SkyCapture doesn't include them)
-        float stars = starField(dir) * clamp(uNightFactor, 0.0, 1.0) * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
-        sky += vec3(0.72, 0.82, 1.0) * stars * 1.15;
+        // DerivativeMain Atmosphere.glsl:809-835: 3D blackbody stars with sun rotation
+        vec3 stars = renderStars(dir, normalize(uSunDirection))
+                   * clamp(uNightFactor, 0.0, 1.0)
+                   * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
+        sky += stars;
         FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;
     }

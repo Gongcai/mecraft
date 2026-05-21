@@ -319,9 +319,9 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uDepthSofteningEnabled", deferredInputsEnabled ? 1 : 0);
     const bool volumetricFogActive = !preTemporalResolve &&
-                                     m_pipelineSettings.volumetricFogEnabled &&
-                                     m_pipelineSettings.aerialPerspectiveEnabled &&
-                                     m_pipelineSettings.volumetricFogStrength > 0.001f &&
+                                     (m_pipelineSettings.volumetricLightEnabled ||
+                                      (m_pipelineSettings.volumetricFogEnabled &&
+                                       m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
                                      m_volumetricFogShader != nullptr &&
                                      m_volumetricCompositeShader != nullptr;
     m_waterCompositeShader->setInt("uVolumetricFogActive", volumetricFogActive ? 1 : 0);
@@ -1342,6 +1342,7 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     shader.setInt("uDebugLightMode", m_debugLightMode);
     bindSkyLightingUniforms(shader, frame);
     shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
+    shader.setInt("uVolumetricLightEnabled", m_pipelineSettings.volumetricLightEnabled ? 1 : 0);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
     shader.setFloat("uWeatherSkylightScale", m_pipelineSettings.weatherSkylightScale);
@@ -1351,6 +1352,7 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     shader.setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
     shader.setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
     bindAtmosphereUniforms(shader, frame);
+    shader.setInt("uAtmosphereLut", 14);
     shader.setVec3("uWaterAbsorption", glm::vec3(1.0f));
     bindWaterEffectUniforms(shader, false);
 
@@ -1370,6 +1372,8 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, m_deferredFrameActive ? m_deferredTargets.skyCaptureTexture() : 0);
+    glActiveTexture(GL_TEXTURE14);
+    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
 }
 
 void Renderer::bindWaterEffectUniforms(Shader& shader, const bool enabled) const {
@@ -1541,10 +1545,8 @@ bool Renderer::renderWorldDeferred(const World& world,
     // DerivativeMain: VOLUMETRIC_LIGHT (base haze) and VOLUMETRIC_FOG (mist/blob)
     // are independent entry points. Either one enables the volumetric march pass.
     const bool volumetricLightActive = m_pipelineSettings.volumetricLightEnabled &&
-                                       m_pipelineSettings.aerialPerspectiveEnabled &&
                                        volumetricShadersAvailable;
     const bool volumetricFogActive = m_pipelineSettings.volumetricFogEnabled &&
-                                     m_pipelineSettings.aerialPerspectiveEnabled &&
                                      m_pipelineSettings.volumetricFogStrength > 0.001f &&
                                      volumetricShadersAvailable;
     const bool overworldVolumetricActive = volumetricLightActive || volumetricFogActive;
@@ -1879,13 +1881,13 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     bindShadowFrameUniforms(*m_deferredLightingShader, frame);
     bindSkyLightingUniforms(*m_deferredLightingShader, frame);
     m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uVolumetricLightEnabled", m_pipelineSettings.volumetricLightEnabled ? 1 : 0);
     // Tell deferred lighting to skip aerial perspective when volumetric march is active.
     // The volumetric march integrates atmospheric scatter at each step, so running
     // deferred aerial perspective on top causes double-fogging.
     const bool volFogActive = (m_pipelineSettings.volumetricLightEnabled ||
                                (m_pipelineSettings.volumetricFogEnabled &&
                                 m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
-                              m_pipelineSettings.aerialPerspectiveEnabled &&
                               m_volumetricFogShader != nullptr &&
                               m_volumetricCompositeShader != nullptr;
     m_deferredLightingShader->setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
