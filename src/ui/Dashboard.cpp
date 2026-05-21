@@ -631,10 +631,13 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
                 float timeMidnight = (sunY < 0.0f ? 1.0f : 0.0f) * (1.0f - meWeight);
                 float wetness = derivedWeather.skyWetness;
-                // airDensity is NOT affected by timeFade (constant baseline haze)
-                float airGate = pipeline.volumetricLightEnabled ? 1.0f : 0.0f;
+                // DerivativeMain VolumetricFog.glsl:210-213: airDensity and mistDensity both get TIME_FADE
+                // with max(..., wetness) floor so rain never fully suppresses fog.
+                float airGate = pipeline.volumetricTimeFadeEnabled
+                    ? std::max(std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f, wetness)
+                    : 1.0f;
                 float mistGate = pipeline.volumetricTimeFadeEnabled
-                    ? meWeight * meWeight + timeMidnight * 2.0f
+                    ? std::max(meWeight * meWeight + timeMidnight * 2.0f, wetness)
                     : 1.0f;
                 float tierMultiplier = qualityTier <= 0 ? 0.5f : (qualityTier <= 1 ? 1.4f : (qualityTier <= 2 ? 9.0f : 48.0f));
                 ImGui::Text("VFog TIME_FADE gates: %s  air=%.3f mist=%.3f wet=%.2f",

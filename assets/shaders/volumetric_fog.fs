@@ -28,6 +28,7 @@ uniform float uVolumetricFogStrength;
 uniform float uVolumetricBaseDensity;
 uniform float uVolumetricMaxDistance;
 uniform float uSkyWetness;
+uniform float uWeatherStorm; // DerivativeMain BiomeSandstorm: desert storm intensity
 uniform float uLightningFlash;
 uniform float uShadowDistance;
 uniform float uShadowExtent;
@@ -593,12 +594,11 @@ void main() {
     skyFogColor *= 1.0 + uLightningFlash * 4.0;
     directFogColor *= 1.0 + uLightningFlash * 4.0;
 
-    // DerivativeMain VOLUMETRIC_LIGHT: airDensity includes RayleighPhase(LdotV),
-    // enters fogDensity directly (both extinction and in-scattering are phase-modulated).
-    // Uses uVFogLightStrength (DerivativeMain VOLUMETRIC_LIGHT_STRENGTH, default 0.2).
+    // DerivativeMain VolumetricFog.glsl:193-195: airDensity = VOLUMETRIC_LIGHT_STRENGTH + wetness * BiomeSandstorm.
+    // BiomeSandstorm is approximated by uWeatherStorm (desert storm intensity).
     // Gated by uVolumetricLightEnabled (DerivativeMain #ifdef VOLUMETRIC_LIGHT).
     float airDensity = (uVolumetricLightEnabled != 0)
-        ? uVFogLightStrength * atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0))
+        ? (uVFogLightStrength + wetness * uWeatherStorm) * atmRayleighPhase(LdotV) * (3.0 / max(uVolumetricMaxDistance, 1.0))
         : 0.0;
 
     vec3 shadowLightDir = normalize(uShadowLightDirection);
@@ -631,19 +631,15 @@ void main() {
         mistDensity *= csPhase;
     }
 
-    // DerivativeMain TIME_FADE: modulate mistDensity by time of day.
-    // Peaks at sunrise/sunset (meWeight) and midnight. No weather wetness floor —
-    // fog presence is controlled by VFog profile, not weather state.
-    // DerivativeMain VolumetricFog.glsl:210-213
-    // airDensity (base haze) is NOT affected by timeFade — it provides a constant
-    // atmospheric baseline regardless of time of day, matching DerivativeMain behavior
-    // where VOLUMETRIC_LIGHT haze is always present when the define is active.
+    // DerivativeMain VolumetricFog.glsl:210-213: TIME_FADE modulates both airDensity and mistDensity.
+    // Both use max(..., wetness) as a floor so rain/fog weather never fully suppresses haze.
     if (uVolumetricTimeFadeEnabled != 0) {
         float sunY = uSunDirection.y;
         float meFade = (sunY < 0.18) ? 0.37 + 1.2 * max(0.0, -sunY) : 1.7;
         float meWeight = pow(clamp(1.0 - meFade * abs(sunY - 0.18), 0.0, 1.0), 2.0);
         float timeMidnight = (sunY < 0.0 ? 1.0 : 0.0) * (1.0 - meWeight);
-        mistDensity *= meWeight * meWeight + timeMidnight * 2.0;
+        airDensity *= max(clamp(meWeight + 0.25, 0.0, 1.0) + timeMidnight * 4.0, wetness);
+        mistDensity *= max(meWeight * meWeight + timeMidnight * 2.0, wetness);
     }
 
     // DerivativeMain R1 dither: quasi-random low-discrepancy sequence based on
