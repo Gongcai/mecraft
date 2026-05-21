@@ -93,25 +93,39 @@ float cloudNoiseSharp(vec3 position) {
 // CLOUD DENSITY EVALUATION FUNCTIONS
 // ============================================================
 
-// Planar cloud (cirrus) density at worldPos (DerivativeMain CirrusCloudDensity)
+// Planar cloud (cirrus) density at worldPos (DerivativeMain PlanarClouds.glsl:16-38)
 float cirrusCloudDensity(vec2 worldPos, float coverage) {
     float cloudTime = uTime * uCloudTimeScale;
     vec2 wind = vec2(cloudTime * 0.0003, -cloudTime * 0.0002);
     vec2 pos = worldPos * 4e-5 - wind;
 
-    float noise = 0.0;
+    // Domain warp (PlanarClouds.glsl:20)
+    pos += texture(uNoiseTex, pos * 0.04).y * 0.1;
+
+    // Local coverage for non-linear remap (PlanarClouds.glsl:22,34,38)
+    float localCoverage = texture(uNoiseTex, pos * 2e-3 + 0.15).x;
+
     float amplitude = 0.5;
     const float GOLDEN_ANGLE = 6.28318530718 / (1.61803398875 + 1.0);
     mat2 goldenRot = mat2(cos(GOLDEN_ANGLE), -sin(GOLDEN_ANGLE),
                           sin(GOLDEN_ANGLE), cos(GOLDEN_ANGLE));
 
-    for (int i = 0; i < 5; ++i) {
-        noise += sampleCloudNoise(pos) * amplitude;
-        pos = goldenRot * 3.2 * pos;
+    // First octave before loop (PlanarClouds.glsl:28)
+    float noise = sampleCloudNoise(pos);
+    // 5 more octaves with cumulative wind + frequency perturbation (PlanarClouds.glsl:29-31)
+    for (int i = 1; i < 6; ++i) {
+        pos = goldenRot * 3.2 * (pos - wind);
+        vec2 freqPerturb = 1.0 + vec2(-0.35, 0.05) * sqrt(float(i));
+        noise += sampleCloudNoise(pos * freqPerturb) * amplitude;
         amplitude *= 0.43;
     }
 
-    return max(noise * coverage - 0.2, 0.0);
+    // Local coverage spatial variation (PlanarClouds.glsl:34)
+    noise -= max(localCoverage * 3.0 - 1.2, 0.0);
+    // Soft coverage remap — smooth ramp instead of hard clamp (PlanarClouds.glsl:38 adapted)
+    noise = smoothstep(0.0, 0.55, noise * (0.8 + coverage));
+
+    return noise;
 }
 
 // Cumulus cloud density at worldPos (DerivativeMain CloudDensity)
