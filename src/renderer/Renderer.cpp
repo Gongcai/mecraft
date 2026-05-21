@@ -1138,6 +1138,11 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     float cloudWet = std::clamp(frame.cloudWetness, 0.0f, 1.0f);
     frame.cloud.height = 1000.0f + cloudWet * (800.0f - 1000.0f);    // clear 1000 → rain 800
     frame.cloud.thickness = 1400.0f + cloudWet * (3000.0f - 1400.0f); // clear 1400 → rain 3000
+    // DerivativeMain VolumetricClouds.glsl:58: storm altitude boost
+    const float storm = frame.skyIlluminance.cloudDynamicWeather.z;
+    if (storm > 5e-3f) {
+        frame.cloud.height *= 1.0f + storm * 2.0f;
+    }
     frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
     return frame;
 }
@@ -1157,6 +1162,7 @@ void Renderer::bindSkyLightingUniforms(Shader& shader, const RenderFrameData& fr
     shader.setVec3("uSkyIlluminance", frame.skyIlluminance.skyIlluminance);
     shader.setVec3("uSunIlluminance", frame.skyIlluminance.sunIlluminance);
     shader.setVec3("uMoonIlluminance", frame.skyIlluminance.moonIlluminance);
+    shader.setVec3("uCloudDynamicWeather", frame.skyIlluminance.cloudDynamicWeather);
     shader.setInt("uHeldBlockLightValue", m_heldBlockLightValue);
     shader.setInt("uHeldBlockLightValue2", 0); // Off-hand slot (unused until dual-wield)
 }

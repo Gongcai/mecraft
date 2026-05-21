@@ -37,6 +37,7 @@ uniform float uShadowConstantBias;
 uniform float uShadowSlopeBias;
 uniform float uCloudCoverage;
 uniform float uCloudDensity;
+uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
 uniform float uCloudHeight;
 uniform float uCloudThickness;
 uniform float uCloudWetness;        // cloud wetness for density modulation

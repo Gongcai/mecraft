@@ -126,6 +126,8 @@ float cirrusCloudDensity(vec2 worldPos, float coverage) {
 
     // Local coverage spatial variation (PlanarClouds.glsl:34)
     noise -= max(localCoverage * 4.0 - 1.6, 0.0);
+    // DerivativeMain PlanarClouds.glsl:35-37: weather-based noise suppression for cirrus
+    noise -= uCloudDynamicWeather.y;
     noise = clamp(noise * 1.36 + coverage - 1.7, 0.0, 1.0) * max(noise, 0.0);
 
     return noise;
@@ -189,7 +191,10 @@ float cirrocumulusDensity(vec2 worldPos) {
     noise += texture(uNoiseTex, position * 0.9).z - 0.24;
     noise = clamp(noise, 0.0, 1.0);
 
-    noise *= clamp((baseCoverage + 0.5 - 0.6) * 0.9, 0.0, 0.14);
+    // DerivativeMain PlanarClouds.glsl:154-156: weather-based noise suppression
+    noise -= uCloudDynamicWeather.x;
+
+    noise *= clamp((baseCoverage + uPlanarCloudCoverage - 0.6) * 0.9, 0.0, 0.14);
     if (noise < 1e-6) return 0.0;
 
     position.x += noise * 0.2;

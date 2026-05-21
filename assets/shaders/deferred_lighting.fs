@@ -43,6 +43,7 @@ uniform vec3 uShadowTintColor;
 uniform vec3 uHorizonScatterColor;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
+uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
 uniform int uAerialPerspectiveEnabled;
 uniform int uVolumetricFogActive;
 uniform float uShadowTintStrength;

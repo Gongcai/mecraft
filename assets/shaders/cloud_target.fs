@@ -52,6 +52,7 @@ uniform vec3 uDirectIlluminance;
 uniform vec3 uSkyIlluminance;
 uniform vec3 uSunIlluminance;
 uniform vec3 uMoonIlluminance;
+uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
@@ -143,18 +144,19 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
     vec2 worldPos = uCameraPos.xz + ray.xz * tPlane;
     worldPos /= 1.0 + length(worldPos - uCameraPos.xz) * 5e-6;
 
-    float coverage = clamp(uPlanarCloudCoverage + uCloudWetness * 0.2, 0.05, 0.95);
+    float coverage = clamp(uPlanarCloudCoverage, 0.05, 0.95);
     float density = cirrusCloudDensity(worldPos, coverage);
     if (density < 1e-5) return vec4(0.0);
 
     float powder = (1.0 - exp(-density * 2.4)) * 0.7 / (1.0 - (1.0 - exp(-density * 2.4)) * 0.7 + 0.001);
     vec4 phases = multiLobePhase(LdotV, uCloudWetness);
     float phase = dot(phases, vec4(1.0));
+    vec3 sunDir = normalize(uSunDirection);
 
     // Sun/moon from LightingEnvironment (SkyCapture metadata).
-    // DerivativeMain PlanarClouds.glsl:245: sunlightEnergy * 1.2e2 * (moonlit ? moonIlluminance : sunIlluminance)
-    // Sun and moon share the same scattering multiplier — the phase function handles angular dependence.
-    vec3 lightIlluminance = env.sunIlluminance * dayFactor + env.moonIlluminance * moonVis;
+    // DerivativeMain PlanarClouds.glsl:245: hard moonlit cut instead of blended sun/moon.
+    bool moonlit = sunDir.y < -0.045;
+    vec3 lightIlluminance = moonlit ? env.moonIlluminance : env.sunIlluminance;
     vec3 lightColor = phase * lightIlluminance * 40.0;
     // Sky ambient from LightingEnvironment instead of CPU uSkyAmbientColor
     vec3 skyAmb = mix(env.skyHorizonAvg, env.skyZenith, 0.3);
@@ -174,7 +176,8 @@ vec4 evaluatePlanarClouds(vec3 ray, float LdotV, float dayFactor, float moonVis,
 // ============================================================
 
 vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float moonVis, float jitter, vec3 skyRadiance, LightingEnvironment env) {
-    float altitude = uPlanarCloudAltitude * 0.7; // below cirrus
+    // DerivativeMain: CLOUD_PLANE_ALTITUDE is shared by both cirrus and cirrocumulus layers.
+    float altitude = uPlanarCloudAltitude;
     if ((ray.y < 0.0 && uCameraPos.y < altitude) ||
         (ray.y > 0.0 && uCameraPos.y > altitude)) {
         return vec4(0.0);
@@ -187,7 +190,7 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
     float density = cirrocumulusDensity(worldPos);
     if (density < 1e-5) return vec4(0.0);
 
-    // Sun optical depth march (3 steps, exponential growth)
+    // DerivativeMain PlanarSample1: sun optical depth march (3 steps, exponential growth)
     vec3 sunDir = normalize(uSunDirection);
     float rayLength = 60.0;
     vec2 rayPos = worldPos;
@@ -199,6 +202,8 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
         if (d > 1e-4) opticalDepth += d * rayLength;
         rayLength *= 2.0;
     }
+    // DerivativeMain PlanarClouds.glsl:196: opticalDepth *= CLOUD_PLANE1_DENSITY
+    opticalDepth *= uPlanarCloudDensity;
 
     vec4 phases = multiLobePhase(LdotV, uCloudWetness);
     float sunlightEnergy = exp(-opticalDepth * 1.0) * phases.x
@@ -206,25 +211,32 @@ vec4 evaluateCirrocumulusClouds(vec3 ray, float LdotV, float dayFactor, float mo
                          + exp(-opticalDepth * 0.15) * phases.z
                          + exp(-opticalDepth * 0.05) * phases.w;
 
-    // Sky light march (2 steps)
+    // DerivativeMain PlanarSample1: sky light march (2 steps, along worldDir.xz)
     rayLength = 100.0;
+    vec2 skyStep = ray.xz * rayLength;
     float skyOD = 0.0;
     for (int i = 0; i < 2; ++i) {
-        vec2 samplePos = worldPos + vec2(0.0, rayLength * (jitter + 0.5));
+        vec2 samplePos = worldPos + skyStep * (jitter + 0.5);
         float d = cirrocumulusDensity(samplePos);
         if (d > 1e-4) skyOD += d * rayLength;
+        skyStep *= 2.0;
         rayLength *= 2.0;
     }
+    // DerivativeMain PlanarClouds.glsl:229: opticalDepth *= CLOUD_PLANE1_DENSITY
+    skyOD *= uPlanarCloudDensity;
     float skyEnergy = exp(-skyOD * 0.15) + 0.2 * exp(-skyOD * 0.03);
 
     float powder = (1.0 - exp(-density * 600.0)) * 0.75 / (1.0 - (1.0 - exp(-density * 600.0)) * 0.75 + 0.001);
 
-    vec3 sunIllum = env.sunIlluminance * dayFactor + env.moonIlluminance * moonVis;
+    bool moonlit = sunDir.y < -0.045;
+    vec3 sunIllum = moonlit ? env.moonIlluminance : env.sunIlluminance;
     vec3 scattering = sunlightEnergy * 120.0 * sunIllum;
     scattering += skyEnergy * 0.3 * env.skyIlluminance;
+    // DerivativeMain PlanarClouds.glsl:247: scattering *= oneMinus(0.7 * wetness)
     scattering *= 1.0 - uCloudWetness * 0.7;
 
-    float opacity = 1.0 - exp(-density * 0.02 * 1.0 * tPlane);
+    // DerivativeMain PlanarClouds.glsl:241: density = oneMinus(fastExp(-density * 2e-2 * CLOUD_PLANE1_DENSITY * dist))
+    float opacity = 1.0 - exp(-density * 0.02 * uPlanarCloudDensity * tPlane);
     float atmosFade = exp(-tPlane * (0.02 + uCloudWetness * 0.12) / max(altitude, 1.0));
 
     vec3 color = scattering * powder * opacity;
@@ -291,14 +303,22 @@ void main() {
     float jitter = sampleCloudNoise(vTexCoord * 23.0 + (uTime * uCloudTimeScale) * 0.01);
 
     // ---- Planar clouds (cirrus layer) ----
-    vec4 planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis, skyRadiance, env);
-    float planarTransmittance = 1.0 - planarResult.a;
+    // DerivativeMain Deferred1.glsl:337-338: cirrus gated by cloudDynamicWeather.y < 0.5
+    vec4 planarResult = vec4(0.0);
+    float planarTransmittance = 1.0;
+    if (uCloudDynamicWeather.y < 0.5) {
+        planarResult = evaluatePlanarClouds(ray, LdotV, day, moonVis, skyRadiance, env);
+        planarTransmittance = 1.0 - planarResult.a;
+    }
 
     // ---- Cirrocumulus planar layer ----
-    vec4 cirroResult = evaluateCirrocumulusClouds(ray, LdotV, day, moonVis, jitter, skyRadiance, env);
-    // Composite cirrocumulus behind cirrus
-    planarResult.rgb += cirroResult.rgb * planarTransmittance;
-    planarTransmittance *= 1.0 - cirroResult.a;
+    // DerivativeMain Deferred1.glsl:314-315: cirrocumulus gated by cloudDynamicWeather.x < 0.4
+    if (uCloudDynamicWeather.x < 0.4) {
+        vec4 cirroResult = evaluateCirrocumulusClouds(ray, LdotV, day, moonVis, jitter, skyRadiance, env);
+        // Composite cirrocumulus behind cirrus
+        planarResult.rgb += cirroResult.rgb * planarTransmittance;
+        planarTransmittance *= 1.0 - cirroResult.a;
+    }
 
     // ---- Volumetric clouds (cumulus layer) ----
     float cloudBottom = uCloudHeight;
