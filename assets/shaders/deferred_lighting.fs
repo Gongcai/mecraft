@@ -392,14 +392,16 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
 // Mecraft formal CSM shadow path.
 // Returns per-channel shadow value, with colored shadows deferred until the
 // transparent CSM caster contract is defined.
-vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, out float outSssDepth) {
+vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, out float outSssDepth, out float outSssWeight) {
     outSssDepth = 0.0;
+    outSssWeight = 0.0;
     if (uShadowsEnabled == 0) return vec3(1.0);
 
     lightDir = normalize(lightDir);
 
     ShadowSample csm = sampleCsmShadow(worldPos, normal, lightDir);
     outSssDepth = csm.blockerDepth;
+    outSssWeight = csm.sssWeight;
     float lit = csm.visibility;
     float shaped = shapeShadowVisibility(lit);
     return vec3(mix(1.0, shaped, csm.fade));
@@ -408,7 +410,8 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
 // Overload without SSS depth output for callers that don't need it
 vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float unused;
-    return shadowFactor(worldPos, normal, lightDir, 0.0, unused);
+    float unusedWeight;
+    return shadowFactor(worldPos, normal, lightDir, 0.0, unused, unusedWeight);
 }
 
 // DerivativeMain composite1.fsh:139-170 LAND_ATMOSPHERIC_SCATTERING
@@ -562,7 +565,8 @@ void main() {
 
     float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
     float shadowSssDepth = 0.0;
-    vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth);
+    float shadowSssWeight = 0.0;
+    vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth, shadowSssWeight);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? dot(shadowColored, vec3(0.333)) : 1.0;
@@ -616,11 +620,12 @@ void main() {
 
     // 2. SSS (DerivativeMain SunLighting.glsl:176-188 — now via derivative_sunlight.glsl include)
     //    DerivativeMain deferred5.fsh:267-272: SSS is added to sceneData BEFORE shadow/diffuse
-    if (sss > 1e-4 && shadowSssDepth < -1e-5) {
+    if (sss > 1e-4 && shadowSssDepth < -1e-5 && shadowSssWeight > 1e-4) {
         // DerivativeMain deferred5.fsh:268-271 — exactly 3 operations, no fill light
         vec3 sssContrib = CalculateSubsurfaceScattering(albedo, sss, shadowSssDepth, LdotV);
         // DerivativeMain deferred5.fsh:270 — sssContrib *= eyeSkylightFix
         sssContrib *= outdoorSkyMask;
+        sssContrib *= shadowSssWeight;
         // DerivativeMain deferred5.fsh:270 — sunlightMult MUST be reduced BEFORE SSS accumulation
         sunlightMult *= oneMinus(sss * 0.5);
         sceneData += sssContrib * sunlightMult;

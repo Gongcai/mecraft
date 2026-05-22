@@ -13,6 +13,11 @@
 > 2026-05-19 源码同步：体积雾系统确认完成——`SEA_LEVEL` 通过 `uVFogCenterHeight` uniform 实现（默认 63.0），`FALLOFF` 通过 `uVFogHeightSpread` 实现（默认 100.0），动态步数 `getFogSteps()` 实现 `min(20, 20*0.4 + rayLength*0.1)`，High/Ultra 密度公式完整对齐 DerivativeMain FOG_TYPE 2/3（4/5 octave FBM）。21 个 debug mode、CSM shadow 集成、cloud shadow、Cornette-Shanks + multi-lobe HG phase、powder、High/Ultra optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地。水下检测链路已从 PhysicsSystem → ECS → Renderer 完整接通，deferred lighting pass 已动态绑定 `m_eyeInWater`（`Renderer.cpp:1805`），但 water composite pass 仍硬编码为 0（`Renderer.cpp:348`）。SSS 仍为死代码：`outSssDepth` 恒为 0，`CalculateSubsurfaceScattering` 不可达。
 > 2026-05-20 水下渲染链路收口：`uIsEyeInWater` 全部 5 个 pass 动态绑定；SSS depth 通过 PCSS blocker delta 打通（cascade 0）；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth、caustic、Beer-Lambert、折射 HG 相函数）；water shadow contract 建立（cascade 0 DepthAll + Color0/1，`glCopyImageSubData` + 水-only draw）；水下 Fresnel IOR 修正为 `1.0/uWaterIOR`；debug 72-77 已扩展。
 > 2026-05-20 SSR/Reflection 增强：`reflection_probe.fs` 重写——深度线性化改为 uniform、view-space hit validation、roughness-adaptive steps、binary refinement、edge/grazing fade、sky fallback 软过渡。`reflection_filter.fs` alpha 语义修正。新增 `reflection_temporal.fs`（velocity 回投 + disocclusion + neighborhood clamp）。`DeferredRenderTargets` 新增 scratch FBO 避免 read-write 冲突。管线顺序更新为 Reflection+Filter+Temporal。
+> 2026-05-21 体积光/大气/云/天空对齐：
+> - VOLUMETRIC_LIGHT / VOLUMETRIC_FOG 解耦为独立开关（`volumetricLightEnabled` / `volumetricFogEnabled`），对应 DerivativeMain 编译期 `#ifdef` 分离。airDensity 包含 `wetness * uWeatherStorm`（BiomeSandstorm）+ TIME_FADE + wetness floor。UW_VOLUMETRIC_LIGHT 有独立开关。VFog Samples 可调（2-50）。Dashboard 完整接入。
+> - `applyAerialPerspective()` 从经验公式重写为 LUT-based 物理散射（`atmGetTransmittance` RGB 透射率 + `atmGetCombinedScattering` in-scattering + Rayleigh/HG phase）。`chunk_lit_common.fs` 同步。当 `uVolumetricFogActive == 1` 时跳过以避免双重雾化。
+> - 平面云对齐：cirrocumulus 高度改为与 cirrus 同高（`CLOUD_PLANE_ALTITUDE`）；OD/opacity 乘 `CLOUD_PLANE1_DENSITY`；sky light 方向改为 `worldDir.xz`；天气门控 `cloudDynamicWeather.x < 0.4` / `.y < 0.5`；天气噪声抑制。暴风雨积云高度倍增 `* (1 + storm * 2)`。
+> - 天空渲染：星场升级为 3D 黑体色温 + 太阳向量旋转（DerivativeMain RenderStars）；月亮曲线对齐 `sqr(curve(saturate()))`；skylight 闪电改为加法。
 
 ## 目标边界
 

@@ -37,6 +37,7 @@ struct ShadowSample {
     int cascadeIndex;
     float fade;
     float blockerDepth; // signed receiver-blocker delta from PCSS (negative = blocker present); 0 when unavailable
+    float sssWeight;    // contribution weight for PCSS-derived SSS; fades across cascade/projection edges
 };
 
 int selectCsmCascade(float viewDistance) {
@@ -234,9 +235,17 @@ float sampleCsmPcss(vec2 uv, int cascadeIndex,
         outBlockerDepth = 0.0;
         return 1.0;
     }
-    // Signed delta: negative when blocker is closer to light than receiver.
-    // Matches DerivativeMain BlockerSearch.y convention for SSS depth.
-    outBlockerDepth = avgBlocker - receiverZ;
+    // Signed world-space delta: negative when the blocker is closer to the
+    // light than the receiver. CalculateSubsurfaceScattering expects the
+    // DerivativeMain BlockerSearch.y convention after shadowProjectionInverse
+    // scaling, not a normalized CSM depth delta. Feeding normalized [0, 1]
+    // depth made foliage SSS barely attenuate and caused shadowed cutouts to
+    // glow near the camera.
+    float blockerGapWorld = max((receiverZ - avgBlocker) * (2.0 * depthExtent), 0.0);
+    float minSssGapWorld = max(texelWorld * 2.0, 0.10);
+    outBlockerDepth = (blockerGapWorld > minSssGapWorld)
+        ? -clamp(blockerGapWorld, 0.0, 64.0)
+        : 0.0;
 
     // Step 2: Penumbra estimation
     float pcfRadius = pcssPenumbraTexels(receiverZ, avgBlocker, depthExtent,
@@ -312,6 +321,7 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
     result.cascadeIndex = max(uCsmCascadeCount - 1, 0);
     result.fade = 0.0;
     result.blockerDepth = 0.0;
+    result.sssWeight = 0.0;
 
     lightDir = normalize(lightDir);
     normal = normalize(normal);
@@ -342,6 +352,7 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return result;
     }
     result.blockerDepth = primaryBlocker;
+    result.sssWeight = (cascadeIndex == 0 && primaryBlocker < -1.0e-5) ? 1.0 : 0.0;
 
     float lit = litPrimary;
     float projectionFade = primaryFade;
@@ -354,6 +365,14 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
             lit = mix(litPrimary, litNext, blendNext);
             projectionFade = mix(primaryFade, nextFade, blendNext);
             result.blockerDepth = mix(primaryBlocker, nextBlocker, blendNext);
+            float nextSssWeight = (nextCascade == 0 && nextBlocker < -1.0e-5) ? 1.0 : 0.0;
+            result.sssWeight = mix(result.sssWeight, nextSssWeight, blendNext);
+        } else {
+            // Cascade 0 is the only cascade that produces PCSS blocker depth.
+            // Fade SSS out through the transition window even when the next
+            // cascade sample is rejected, otherwise foliage can glow only at
+            // the split distance.
+            result.sssWeight *= oneMinus(blendNext);
         }
     }
 
@@ -364,6 +383,7 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
 
     result.visibility = clamp(lit * projectionFade, 0.0, 1.0);
     result.fade = projectionFade;
+    result.sssWeight *= projectionFade;
     return result;
 }
 #endif
