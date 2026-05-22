@@ -2,6 +2,7 @@
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aUV;
 layout (location = 2) in float aShade;
+layout (location = 3) in vec3 aNormal;  // not used in forward path; present for VAO compatibility
 
 uniform mat4 model;
 uniform mat4 viewProj;
@@ -14,4 +15,3 @@ void main() {
 	vUV = aUV;
 	vShade = aShade;
 }
-

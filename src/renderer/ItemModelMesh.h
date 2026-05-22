@@ -12,6 +12,9 @@ struct ItemModelVertex {
     float u;
     float v;
     float shade;
+    float nx;
+    float ny;
+    float nz;
 };
 
 bool buildExtrudedItemMesh(const TextureAtlas& atlas,
