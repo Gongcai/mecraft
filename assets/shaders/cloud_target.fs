@@ -54,6 +54,11 @@ uniform vec3 uSunIlluminance;
 uniform vec3 uMoonIlluminance;
 uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
 
+// Temporal cloud reprojection — blend current frame with history.
+uniform sampler2D uHistoryCloudTex;
+uniform mat4 uPreviousViewProj;
+uniform int uFrameIndex;
+
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 #include "cloud_density.glsl"
@@ -441,6 +446,47 @@ void main() {
     // DerivativeMain Deferred1.glsl:378: vec4(scattering, transmittance)
     vec3 finalColor = cloudColor + planarResult.rgb * transmittance;
     float finalTransmittance = transmittance * planarTransmittance;
+    vec4 currentCloud = vec4(max(finalColor, vec3(0.0)), finalTransmittance);
 
-    FragColor = vec4(max(finalColor, vec3(0.0)), finalTransmittance);
+    // ---- Temporal cloud reprojection ----
+    // DerivativeMain Deferred2.glsl: temporal upscale blends current frame with
+    // reprojected history to reduce per-frame noise. Camera-based reprojection
+    // since clouds are rendered in world space (no per-pixel motion vectors).
+    vec4 historyCloud = vec4(0.0, 0.0, 0.0, 1.0);
+    bool historyValid = false;
+    {
+        // Reproject current pixel's cloud world position to previous frame's screen.
+        // Use a representative cloud distance (midpoint of cloud layer).
+        float cloudDist = mix(startT, endT, 0.5);
+        if (cloudDist <= 0.0) cloudDist = 10000.0;
+        vec3 cloudWorldPos = uCameraPos + ray * cloudDist;
+        vec4 prevClip = uPreviousViewProj * vec4(cloudWorldPos, 1.0);
+        vec2 prevUv = prevClip.xy / max(prevClip.w, 0.0001) * 0.5 + 0.5;
+        if (prevUv == clamp(prevUv, 0.0, 1.0)) {
+            historyCloud = texture(uHistoryCloudTex, prevUv);
+            historyValid = true;
+        }
+    }
+
+    if (historyValid) {
+        // DerivativeMain Deferred2.glsl blend weight: 1 - rcp(max(frames - factor, 1)).
+        // Starts at 1.0, decays toward 0 as history accumulates. Clamped to MAX_BLENDED_FRAMES.
+        // Mecraft adaptation: saturating exponential with floor to prevent stale history lockup.
+        int frameCount = uFrameIndex & 0x7fffffff;
+        float blendWeight = 1.0 - 1.0 / (1.0 + float(frameCount) * 0.25);
+        blendWeight = max(blendWeight, 0.04);
+        // Disocclusion: if transmittance changed significantly, trust current frame more.
+        float transDelta = abs(currentCloud.a - historyCloud.a);
+        blendWeight = max(blendWeight, transDelta * 3.0);
+        blendWeight = clamp(blendWeight, 0.0, 1.0);
+        // Blend in log-luminance space to avoid darkening over time.
+        vec3 currentLog = log2(max(currentCloud.rgb, vec3(1e-6)));
+        vec3 historyLog = log2(max(historyCloud.rgb, vec3(1e-6)));
+        vec3 blendedLog = mix(historyLog, currentLog, blendWeight);
+        vec3 blendedColor = exp2(blendedLog);
+        float blendedAlpha = mix(historyCloud.a, currentCloud.a, blendWeight);
+        FragColor = vec4(blendedColor, blendedAlpha);
+    } else {
+        FragColor = currentCloud;
+    }
 }

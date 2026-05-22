@@ -2389,6 +2389,10 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     m_cloudShader->setFloat("uTime", frame.shaderTime);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_cloudShader->setBool("uNoiseEnabled", noiseTexture != 0);
+    // Temporal cloud reprojection: history + previous camera transform.
+    m_cloudShader->setInt("uHistoryCloudTex", 4);
+    m_cloudShader->setMat4("uPreviousViewProj", frame.previousViewProj);
+    m_cloudShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
@@ -2398,9 +2402,11 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, noiseTexture);
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyCloudTexturePrev());
     renderFullscreen(*m_cloudShader);
 
-    for (int i = 3; i >= 0; --i) {
+    for (int i = 4; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
