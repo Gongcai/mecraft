@@ -1,6 +1,7 @@
 #include "FirstPersonHeldItemRenderer.h"
 
 #include "ItemModelMesh.h"
+#include "MecraftTextureContract.h"
 #include "Shader.h"
 
 #include <algorithm>
@@ -297,21 +298,7 @@ void FirstPersonHeldItemRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_itemMeshes.clear();
-    const GLuint textures[] = {
-        m_fallbackShadowDepth,
-        m_fallbackShadowDepthCompare,
-        m_fallbackShadowColor0,
-        m_fallbackShadowColor1,
-    };
-    for (GLuint texture : textures) {
-        if (texture != 0) {
-            glDeleteTextures(1, &texture);
-        }
-    }
-    m_fallbackShadowDepth = 0;
-    m_fallbackShadowDepthCompare = 0;
-    m_fallbackShadowColor0 = 0;
-    m_fallbackShadowColor1 = 0;
+    MecraftTextureContract::destroyFallbacks();
     m_resourceMgr = nullptr;
     m_blockShader = nullptr;
     m_itemShader = nullptr;
@@ -542,89 +529,7 @@ void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
         shader.setFloat(prefix + "texelWorldSize", m_shadowData.cascadeTexelWorldSize[i]);
     }
 
-    // Shadow texture bindings (units 5-10). Use direct program uniforms so
-    // these samplers are pinned even if this helper is called while another
-    // program is current during initialization.
-    const struct {
-        const char* name;
-        GLint unit;
-    } shadowSamplers[] = {
-        {"uCsmShadowMap", 5},
-        {"uCsmShadowDepthRaw", 6},
-        {"uCsmShadowDepthAll", 7},
-        {"uCsmShadowDepthAllRaw", 8},
-        {"uCsmShadowColor0", 9},
-        {"uCsmShadowColor1", 10},
-    };
-    for (const auto& sampler : shadowSamplers) {
-        const GLint loc = glGetUniformLocation(shader.ID, sampler.name);
-        if (loc >= 0) {
-            glProgramUniform1i(shader.ID, loc, sampler.unit);
-        }
-    }
-}
-
-void FirstPersonHeldItemRenderer::ensureShadowFallbackTextures() {
-    if (m_fallbackShadowDepth != 0 &&
-        m_fallbackShadowDepthCompare != 0 &&
-        m_fallbackShadowColor0 != 0 &&
-        m_fallbackShadowColor1 != 0) {
-        return;
-    }
-
-    if (m_fallbackShadowDepth == 0) {
-        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowDepth);
-        glTextureStorage3D(m_fallbackShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-        constexpr float depth = 1.0f;
-        glClearTexImage(m_fallbackShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
-    }
-
-    if (m_fallbackShadowDepthCompare == 0) {
-        glGenTextures(1, &m_fallbackShadowDepthCompare);
-        glTextureView(m_fallbackShadowDepthCompare, GL_TEXTURE_2D_ARRAY,
-                      m_fallbackShadowDepth, GL_DEPTH_COMPONENT32F, 0, 1, 0, 1);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-    }
-
-    if (m_fallbackShadowColor0 == 0) {
-        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowColor0);
-        glTextureStorage3D(m_fallbackShadowColor0, 1, GL_RGBA8, 1, 1, 1);
-        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        const unsigned char color[] = {0, 0, 0, 255};
-        glTextureSubImage3D(m_fallbackShadowColor0, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, color);
-    }
-
-    if (m_fallbackShadowColor1 == 0) {
-        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowColor1);
-        glTextureStorage3D(m_fallbackShadowColor1, 1, GL_RGBA16F, 1, 1, 1);
-        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        const float color[] = {0.0f, 0.0f, 0.0f, 0.0f};
-        glTextureSubImage3D(m_fallbackShadowColor1, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, color);
-    }
-}
-
-GLuint FirstPersonHeldItemRenderer::shadowTextureOrFallback(const GLuint texture, const bool comparison) {
-    ensureShadowFallbackTextures();
-    if (texture != 0) {
-        return texture;
-    }
-    return comparison ? m_fallbackShadowDepthCompare : m_fallbackShadowDepth;
+    // Sampler unit assignment is handled by MecraftTextureContract::bindShadowSamplers().
 }
 
 void FirstPersonHeldItemRenderer::render(const Window& window,
@@ -807,18 +712,15 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
     // Shadow textures (units 5-10)
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowTexture, true));
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthRaw, false));
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAll, true));
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAllRaw, false));
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : m_fallbackShadowColor0);
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : m_fallbackShadowColor1);
+    MecraftTextureContract::ShadowTextureBundle shadowBundle{
+        m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::fallbackDepthCompare(),
+        m_shadowData.shadowDepthRaw != 0 ? m_shadowData.shadowDepthRaw : MecraftTextureContract::fallbackDepthRaw(),
+        m_shadowData.shadowDepthAll != 0 ? m_shadowData.shadowDepthAll : MecraftTextureContract::fallbackDepthCompare(),
+        m_shadowData.shadowDepthAllRaw != 0 ? m_shadowData.shadowDepthAllRaw : MecraftTextureContract::fallbackDepthRaw(),
+        m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : MecraftTextureContract::fallbackColor0(),
+        m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : MecraftTextureContract::fallbackColor1(),
+    };
+    MecraftTextureContract::bindShadowSamplers(m_steveShader->ID, 5, shadowBundle);
     glBindVertexArray(m_rightArmMesh.vao);
     pushDebugGroup("HeldItem.Arm");
     dumpShadowSamplerStateOnce("HeldItem.Arm", *m_steveShader);
@@ -880,18 +782,15 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
         // Shadow textures (units 5-10)
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowTexture, true));
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthRaw, false));
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAll, true));
-        glActiveTexture(GL_TEXTURE8);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAllRaw, false));
-        glActiveTexture(GL_TEXTURE9);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : m_fallbackShadowColor0);
-        glActiveTexture(GL_TEXTURE10);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : m_fallbackShadowColor1);
+        MecraftTextureContract::ShadowTextureBundle shadowBundle{
+            m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::fallbackDepthCompare(),
+            m_shadowData.shadowDepthRaw != 0 ? m_shadowData.shadowDepthRaw : MecraftTextureContract::fallbackDepthRaw(),
+            m_shadowData.shadowDepthAll != 0 ? m_shadowData.shadowDepthAll : MecraftTextureContract::fallbackDepthCompare(),
+            m_shadowData.shadowDepthAllRaw != 0 ? m_shadowData.shadowDepthAllRaw : MecraftTextureContract::fallbackDepthRaw(),
+            m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : MecraftTextureContract::fallbackColor0(),
+            m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : MecraftTextureContract::fallbackColor1(),
+        };
+        MecraftTextureContract::bindShadowSamplers(m_blockShader->ID, 5, shadowBundle);
         glBindVertexArray(mesh->vao);
         pushDebugGroup("HeldItem.Block");
         dumpShadowSamplerStateOnce("HeldItem.Block", *m_blockShader);
@@ -918,18 +817,15 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
     // Shadow textures (units 5-10)
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowTexture, true));
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthRaw, false));
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAll, true));
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAllRaw, false));
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : m_fallbackShadowColor0);
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : m_fallbackShadowColor1);
+    MecraftTextureContract::ShadowTextureBundle shadowBundle{
+        m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::fallbackDepthCompare(),
+        m_shadowData.shadowDepthRaw != 0 ? m_shadowData.shadowDepthRaw : MecraftTextureContract::fallbackDepthRaw(),
+        m_shadowData.shadowDepthAll != 0 ? m_shadowData.shadowDepthAll : MecraftTextureContract::fallbackDepthCompare(),
+        m_shadowData.shadowDepthAllRaw != 0 ? m_shadowData.shadowDepthAllRaw : MecraftTextureContract::fallbackDepthRaw(),
+        m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : MecraftTextureContract::fallbackColor0(),
+        m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : MecraftTextureContract::fallbackColor1(),
+    };
+    MecraftTextureContract::bindShadowSamplers(m_itemShader->ID, 5, shadowBundle);
     glBindVertexArray(mesh->vao);
     pushDebugGroup("HeldItem.Item");
     dumpShadowSamplerStateOnce("HeldItem.Item", *m_itemShader);

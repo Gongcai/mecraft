@@ -90,6 +90,8 @@ private:
     Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
     Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
+    GLuint m_fallbackShadowDepth = 0;
+    GLuint m_fallbackShadowDepthCompare = 0;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
     float m_inventoryPreviewBodyLookX = 0.0f;
@@ -118,6 +120,8 @@ private:
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::SkinTypeComponent::Type skinType);
+    void ensureShadowFallbackTextures();
+    void bindDisabledShadowFallback(Shader& shader);
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;

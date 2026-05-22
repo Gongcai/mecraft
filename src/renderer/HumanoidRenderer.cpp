@@ -29,6 +29,24 @@ constexpr glm::vec3 kFaceNormals[] = {
     {-1, 0, 0},  // left
     {1, 0, 0}    // right
 };
+
+void pushDebugGroup(const char* label) {
+#ifdef MECRAFT_DEBUG
+    if (glPushDebugGroup != nullptr) {
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
+    }
+#else
+    static_cast<void>(label);
+#endif
+}
+
+void popDebugGroup() {
+#ifdef MECRAFT_DEBUG
+    if (glPopDebugGroup != nullptr) {
+        glPopDebugGroup();
+    }
+#endif
+}
 } // anonymous namespace
 
 HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1) {
@@ -406,8 +424,77 @@ void HumanoidRenderer::shutdown() {
     destroyMesh(m_leftLegMesh);
     destroyMesh(m_mobLeftArmMesh);
     destroyMesh(m_mobLeftLegMesh);
+    if (m_fallbackShadowDepth != 0) {
+        glDeleteTextures(1, &m_fallbackShadowDepth);
+        m_fallbackShadowDepth = 0;
+    }
+    if (m_fallbackShadowDepthCompare != 0) {
+        glDeleteTextures(1, &m_fallbackShadowDepthCompare);
+        m_fallbackShadowDepthCompare = 0;
+    }
     m_shader = nullptr;
     m_resourceMgr = nullptr;
+}
+
+void HumanoidRenderer::ensureShadowFallbackTextures() {
+    if (m_fallbackShadowDepth != 0 && m_fallbackShadowDepthCompare != 0) {
+        return;
+    }
+
+    if (m_fallbackShadowDepth == 0) {
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowDepth);
+        glTextureStorage3D(m_fallbackShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        constexpr float depth = 1.0f;
+        glClearTexImage(m_fallbackShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    }
+
+    if (m_fallbackShadowDepthCompare == 0) {
+        glGenTextures(1, &m_fallbackShadowDepthCompare);
+        glTextureView(m_fallbackShadowDepthCompare,
+                      GL_TEXTURE_2D_ARRAY,
+                      m_fallbackShadowDepth,
+                      GL_DEPTH_COMPONENT32F,
+                      0,
+                      1,
+                      0,
+                      1);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    }
+}
+
+void HumanoidRenderer::bindDisabledShadowFallback(Shader& shader) {
+    ensureShadowFallbackTextures();
+
+    shader.setInt("uShadowsEnabled", 0);
+    shader.setInt("uSoftShadowsEnabled", 0);
+    shader.setInt("uPcssShadowsEnabled", 0);
+    shader.setInt("uCsmCascadeCount", 0);
+    shader.setFloat("uShadowDistance", 0.0f);
+    shader.setFloat("uShadowConstantBias", 0.0f);
+    shader.setFloat("uShadowSlopeBias", 0.0f);
+    shader.setFloat("uShadowNormalOffset", 0.0f);
+    shader.setFloat("uShadowSoftness", 1.0f);
+    shader.setFloat("uShadowPcssStrength", 0.0f);
+    shader.setVec3("uCameraPos", 0.0f, 0.0f, 0.0f);
+    shader.setVec3("uSunDirection", 0.25f, 0.9f, 0.35f);
+    shader.setFloat("uAmbientStrength", 0.35f);
+    shader.setInt("uCsmShadowMap", 5);
+    shader.setInt("uCsmShadowDepthRaw", 6);
+
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_fallbackShadowDepthCompare);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_fallbackShadowDepth);
 }
 
 void HumanoidRenderer::renderInventoryPreview(const float x,
@@ -510,6 +597,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     m_shader->use();
     m_shader->setMat4(viewProjLoc, projection * view);
     m_shader->setInt("uTexture", 0);
+    bindDisabledShadowFallback(*m_shader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
 
@@ -520,7 +608,9 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
         }
         m_shader->setMat4(modelLoc, model);
         glBindVertexArray(mesh->vao);
+        pushDebugGroup("UI.InventoryPreview.Steve");
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        popDebugGroup();
     };
 
     drawPart(ecs::StevePartType::Torso, torso);
@@ -539,6 +629,11 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
              torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
     glScissor(oldScissorBox[0], oldScissorBox[1], oldScissorBox[2], oldScissorBox[3]);
@@ -562,6 +657,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     shader.use();
     shader.setMat4(viewProjLoc, viewProj);
     shader.setInt("uTexture", 0);
+    bindDisabledShadowFallback(shader);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -686,6 +782,11 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     }
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& gameplayReg,
@@ -696,6 +797,7 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
     shader.use();
     shader.setMat4(viewProjLoc, viewProj);
     shader.setInt("uTexture", 0);
+    bindDisabledShadowFallback(shader);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -846,6 +948,11 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
     }
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,
