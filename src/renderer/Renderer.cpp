@@ -1334,6 +1334,10 @@ void Renderer::bindSceneCompositeInputs(Shader& shader, const RenderFrameData& f
     shader.setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
     shader.setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
     shader.setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
+    // DerivativeMain CommonFog: blindness/darkness status effect fog.
+    // Default 0 — Mecraft status effect system not yet implemented.
+    shader.setFloat("uBlindness", 0.0f);
+    shader.setFloat("uDarknessFactor", 0.0f);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());

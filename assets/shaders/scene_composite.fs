@@ -53,6 +53,12 @@ uniform vec3 uWaterAbsorption;
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
+#include "fogs.glsl"
+
+// DerivativeMain Fogs.glsl: uniform float blindness / darknessFactor
+// Mecraft: default 0 until status effect system is implemented.
+uniform float uBlindness;
+uniform float uDarknessFactor;
 
 vec3 tonemapDebugSafe(vec3 color) {
     return max(color, vec3(0.0));
@@ -149,10 +155,18 @@ void main() {
         }
     }
 
-    if (uIsEyeInWater != 0) {
+    // DerivativeMain composite1.fsh: underwater fog + CommonFog (final fog pass).
+    // Water uses detailed Beer-Lambert + sky scatter; lava/powder_snow use CommonFog only.
+    // Blindness/darkness CommonFog applies regardless of eye medium.
+    {
         vec3 fogWorldPos = reconstructWorldPosition(vTexCoord, depth < 0.9999 ? depth : 0.9999);
         float fogDistance = length(fogWorldPos - uCameraPos);
-        applyUnderwaterFog(color, fogDistance, env);
+        if (uIsEyeInWater == 1) {
+            applyUnderwaterFog(color, fogDistance, env);
+        }
+        CommonFog(color, fogDistance, uIsEyeInWater,
+                  uBlindness, uDarknessFactor, uWeatherWetness,
+                  env.skyIlluminance, env.directIlluminance);
     }
 
     FragColor = vec4(tonemapDebugSafe(color), scene.a);
