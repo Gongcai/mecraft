@@ -6,6 +6,7 @@
 
 #include "HumanoidRenderer.h"
 #include "DropRenderer.h"
+#include "../particle/ParticleSystem.h"
 #include "ChunkMesher.h"
 #include "../ecs/GameplayRegistry.h"
 #include "shadow/ShadowMatrices.h"
@@ -111,6 +112,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_ssaoShader = resourceMgr.getShader("ssao");
     m_velocityShader = resourceMgr.getShader("velocity_resolve");
+    m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_reflectionShader = resourceMgr.getShader("reflection_probe");
@@ -1583,6 +1585,13 @@ bool Renderer::renderWorldDeferred(const World& world,
         renderWaterCompositePass(world, window, true);
     }
 
+    // Particles: render into SceneComposite before volumetric fog composite
+    // because the fog composite reads SceneComposite and writes SceneResolved.
+    // Keep SceneResolved synchronized for the no-volumetric path.
+    // Matches DerivativeMain "weather before deferred/temporal" convention.
+    renderParticlesToSceneResolved(frame);
+    m_deferredTargets.copySceneCompositeToSceneResolved();
+
     // DerivativeMain-style pipeline: VFog composited BEFORE TAA so the fog
     // participates in temporal accumulation. R1 dither + checkerboard upscale
     // provides per-frame variation that TAA resolves over multiple frames.
@@ -2395,6 +2404,39 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+}
+
+void Renderer::renderParticlesToSceneResolved(const RenderFrameData& frame) {
+    if (m_particleSystem == nullptr || m_particleGBufferShader == nullptr) {
+        return;
+    }
+
+    // Bind SceneComposite so the later volumetric composite pass reads the
+    // particle contribution instead of overwriting it from the pre-particle scene.
+    m_deferredTargets.bindSceneComposite();
+
+    // Particles render here with alpha blending, depth test (read-only), and
+    // sample voxel light from the GBuffer for basic lighting. The subsequent
+    // volumetric fog composite will apply atmospheric scattering to particles.
+    const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
+    const glm::vec2 screenSize(
+        static_cast<float>(std::max(1, m_deferredTargets.width())),
+        static_cast<float>(std::max(1, m_deferredTargets.height())));
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    m_particleSystem->renderToSceneResolved(
+        *m_particleGBufferShader,
+        m_deferredTargets.voxelLightTexture(),
+        m_deferredTargets.depthTexture(),
+        frame.view, viewProj,
+        screenSize);
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 }
 
 void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {

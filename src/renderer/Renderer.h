@@ -25,6 +25,7 @@ class World;
 class Chunk;
 class HumanoidRenderer;
 class DropRenderer;
+class ParticleSystem;
 class DropSystem;
 
 namespace ecs { class GameplayRegistry; }
@@ -371,6 +372,7 @@ public:
     void setRenderLocalPlayerModel(bool visible) { m_renderLocalPlayerModel = visible; }
     void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
     void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
+    void setParticleSystem(ParticleSystem* ps) { m_particleSystem = ps; }
     void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
     void renderDeferredDebugOverlay(const Window& window);
@@ -608,6 +610,7 @@ private:
     void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass();
+    void renderParticlesToSceneResolved(const RenderFrameData& frame);
     void renderTemporalResolvePass(const RenderFrameData& frame);
     void renderSsaoFilterPass();
     void renderSsaoTemporalPass();
@@ -685,6 +688,7 @@ private:
     Shader* m_deferredDebugShader = nullptr;
     Shader* m_ssaoShader = nullptr;
     Shader* m_velocityShader = nullptr;
+    Shader* m_particleGBufferShader = nullptr;
     Shader* m_volumetricFogShader = nullptr;
     Shader* m_volumetricCompositeShader = nullptr;
     Shader* m_reflectionShader = nullptr;
@@ -718,6 +722,7 @@ private:
     GameplaySkyRenderer m_gameplaySkyRenderer;
     HumanoidRenderer* m_humanoidRenderer = nullptr;  // injected from Game
     DropRenderer* m_dropRenderer = nullptr;  // injected from Game
+    ParticleSystem* m_particleSystem = nullptr;  // injected from Game
     DropSystem* m_dropSystem = nullptr;  // injected from Game
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;

@@ -275,6 +275,7 @@ void ResourceMgr::init() {
     loadShader("inventory", SHADERS_DIR "/inventory.vs", SHADERS_DIR "/inventory.fs");
     loadShader("text", SHADERS_DIR "/text.vs", SHADERS_DIR "/text.fs");
     loadShader("particle", SHADERS_DIR "/particle.vs", SHADERS_DIR "/particle.fs");
+    loadShader("particle_gbuffer", SHADERS_DIR "/particle_gbuffer.vs", SHADERS_DIR "/particle_gbuffer.fs");
     loadShader("rain", SHADERS_DIR "/rain.vs", SHADERS_DIR "/rain.fs");
     loadShader("postprocess", SHADERS_DIR "/postprocess.vs", SHADERS_DIR "/postprocess.fs");
     loadShader("blit_texture", SHADERS_DIR "/postprocess.vs", SHADERS_DIR "/blit_texture.fs");

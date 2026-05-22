@@ -16,6 +16,7 @@ void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
 
 void ParticleSystem::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("particle");
+    m_gbufferShader = resourceMgr.getShader("particle_gbuffer");
     m_texArray = &resourceMgr.getTextureArray();
 
     glGenVertexArrays(1, &m_vao);
@@ -68,30 +69,26 @@ void ParticleSystem::update(const float dt) {
     static_cast<void>(dt);
 }
 
-void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) {
-    if (m_registry == nullptr || m_shader == nullptr || m_texArray == nullptr) {
-        return;
-    }
-
+int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& vertices) {
     auto particleView = m_registry->view<ecs::ParticleTag, ecs::TransformComponent, ecs::ParticleComponent>();
     if (particleView.begin() == particleView.end()) {
-        return;
+        return 0;
     }
 
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
     glm::vec3 up(view[0][1], view[1][1], view[2][1]);
 
-    std::vector<float> vertices;
+    vertices.clear();
     vertices.reserve(static_cast<size_t>(MAX_PARTICLES) * 48u);
 
-    int emittedParticles = 0;
+    int count = 0;
     for (const entt::entity e : particleView) {
         const auto& transform = particleView.get<ecs::TransformComponent>(e);
         const auto& particle = particleView.get<ecs::ParticleComponent>(e);
         if (particle.life <= 0.0f || particle.maxLife <= 0.0f) {
             continue;
         }
-        if (emittedParticles >= MAX_PARTICLES) {
+        if (count >= MAX_PARTICLES) {
             break;
         }
 
@@ -103,46 +100,32 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
         glm::vec3 c2 = transform.position + right * halfSize + up * halfSize;
         glm::vec3 c3 = transform.position - right * halfSize + up * halfSize;
 
-        vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
-        vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMin.y);
-        vertices.push_back(particle.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(particle.biomeTintFactor);
+        const float uvMinX = particle.uvMin.x, uvMinY = particle.uvMin.y;
+        const float uvMaxX = particle.uvMax.x, uvMaxY = particle.uvMax.y;
+        const float layer = particle.layer;
+        const float btf = particle.biomeTintFactor;
 
-        vertices.push_back(c1.x); vertices.push_back(c1.y); vertices.push_back(c1.z);
-        vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMin.y);
-        vertices.push_back(particle.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(particle.biomeTintFactor);
+        // Triangle 1: c0-c1-c2
+        vertices.insert(vertices.end(), {c0.x, c0.y, c0.z, uvMinX, uvMinY, layer, alpha, btf});
+        vertices.insert(vertices.end(), {c1.x, c1.y, c1.z, uvMaxX, uvMinY, layer, alpha, btf});
+        vertices.insert(vertices.end(), {c2.x, c2.y, c2.z, uvMaxX, uvMaxY, layer, alpha, btf});
+        // Triangle 2: c0-c2-c3
+        vertices.insert(vertices.end(), {c0.x, c0.y, c0.z, uvMinX, uvMinY, layer, alpha, btf});
+        vertices.insert(vertices.end(), {c2.x, c2.y, c2.z, uvMaxX, uvMaxY, layer, alpha, btf});
+        vertices.insert(vertices.end(), {c3.x, c3.y, c3.z, uvMinX, uvMaxY, layer, alpha, btf});
 
-        vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
-        vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMax.y);
-        vertices.push_back(particle.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(particle.biomeTintFactor);
+        ++count;
+    }
+    return count;
+}
 
-        vertices.push_back(c0.x); vertices.push_back(c0.y); vertices.push_back(c0.z);
-        vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMin.y);
-        vertices.push_back(particle.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(particle.biomeTintFactor);
-
-        vertices.push_back(c2.x); vertices.push_back(c2.y); vertices.push_back(c2.z);
-        vertices.push_back(particle.uvMax.x); vertices.push_back(particle.uvMax.y);
-        vertices.push_back(particle.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(particle.biomeTintFactor);
-
-        vertices.push_back(c3.x); vertices.push_back(c3.y); vertices.push_back(c3.z);
-        vertices.push_back(particle.uvMin.x); vertices.push_back(particle.uvMax.y);
-        vertices.push_back(particle.layer);
-        vertices.push_back(alpha);
-        vertices.push_back(particle.biomeTintFactor);
-
-        ++emittedParticles;
+void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) {
+    if (m_registry == nullptr || m_shader == nullptr || m_texArray == nullptr) {
+        return;
     }
 
-    if (vertices.empty()) {
+    std::vector<float> vertices;
+    if (buildVertices(view, vertices) == 0) {
         return;
     }
 
@@ -168,5 +151,47 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     glDisable(GL_BLEND);
 
     glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+}
+
+void ParticleSystem::renderToSceneResolved(Shader& shader, GLuint voxelLightTex, GLuint depthTex,
+                                            const glm::mat4& view, const glm::mat4& viewProj,
+                                            const glm::vec2& screenSize) {
+    if (m_registry == nullptr || m_texArray == nullptr) {
+        return;
+    }
+
+    std::vector<float> vertices;
+    if (buildVertices(view, vertices) == 0) {
+        return;
+    }
+
+    shader.use();
+    shader.setMat4("viewProj", viewProj);
+    shader.setInt("texArray", 0);
+    shader.setInt("uVoxelLightTex", 1);
+    shader.setInt("uDepthTex", 2);
+    shader.setVec2("uScreenSize", screenSize);
+    shader.setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_texArray->textureID);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, voxelLightTex);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, depthTex);
+
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
+
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 8));
+
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }

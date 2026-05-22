@@ -76,6 +76,7 @@ void Game::initRenderers() {
     m_renderer.setDropRenderer(&m_dropRenderer);
     m_renderer.setDropSystem(&m_dropSystem);
     m_renderer.setGameplayRegistry(&m_gameplayScene.registry());
+    m_renderer.setParticleSystem(&m_particleSystem);
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
@@ -320,8 +321,8 @@ void Game::renderFrame(const float frameTime) {
                                           HumanoidRenderer::kRenderMobsOnly);
             }
         }
-        m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
-                                finalCamera.getViewMatrix());
+        // Particles now render inside Renderer::renderParticlesToSceneResolved()
+        // after volumetric fog composite, so they receive unified fog.
 
         // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
         // skyLightAtCamera = fraction reaching sky. Gives smooth transitions at
