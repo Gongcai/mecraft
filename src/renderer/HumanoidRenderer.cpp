@@ -12,6 +12,8 @@
 #include "../resource/ResourceMgr.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/components/Components.h"
+#include "../world/World.h"
+#include "../world/Chunk.h"
 
 namespace {
 constexpr float SKIN_W = 64.0f;
@@ -666,6 +668,146 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     glBindVertexArray(0);
 }
 
+void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& gameplayReg,
+                                     Shader& shader, int modelLoc, int viewProjLoc,
+                                     const glm::mat4& viewProj, RenderMode mode) {
+    auto& reg = gameplayReg.registry();
+
+    shader.use();
+    shader.setMat4(viewProjLoc, viewProj);
+    shader.setInt("uTexture", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    // ── Render Steve (player) entities ──
+    if (mode == kRenderAll) {
+    const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
+    if (steveTex != 0) {
+        glBindTexture(GL_TEXTURE_2D, steveTex);
+
+        auto steveView = reg.view<ecs::SteveTag, ecs::ChildrenComponent>();
+        for (auto steveRoot : steveView) {
+            auto& rootChildren = reg.get<ecs::ChildrenComponent>(steveRoot);
+
+            // Query world light at torso position for this entity.
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+                auto& part = reg.get<ecs::StevePartComponent>(child);
+                if (part.partType != ecs::StevePartType::Torso) continue;
+                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+                glm::vec3 entityPos = glm::vec3(wt.worldMatrix[3]);
+                glm::vec2 light = queryWorldLight(world, entityPos);
+                shader.setFloat("uEntitySunlight", light.x);
+                shader.setFloat("uEntityBlockLight", light.y);
+                break;
+            }
+
+            // Torso
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+                auto& part = reg.get<ecs::StevePartComponent>(child);
+                if (part.partType != ecs::StevePartType::Torso) continue;
+
+                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+                PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
+                                                ecs::SkinTypeComponent::Type::Player);
+                if (mesh == nullptr || mesh->vao == 0) continue;
+
+                shader.setMat4(modelLoc, wt.worldMatrix);
+                glBindVertexArray(mesh->vao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            }
+
+            // Limbs (children of torso)
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::ChildrenComponent>(child)) continue;
+                auto& partChildren = reg.get<ecs::ChildrenComponent>(child);
+
+                for (auto partEntity : partChildren.children) {
+                    if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) continue;
+
+                    auto& part = reg.get<ecs::StevePartComponent>(partEntity);
+                    auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
+
+                    PartMesh* mesh = getMeshForPart(part.partType,
+                                                    ecs::SkinTypeComponent::Type::Player);
+                    if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
+
+                    shader.setMat4(modelLoc, wt.worldMatrix);
+                    glBindVertexArray(mesh->vao);
+                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                }
+            }
+        }
+    }
+    } // kRenderAll
+
+    // ── Render Mob entities ──
+    const GLuint zombieTex = m_resourceMgr->getGuiTexture("zombie");
+    if (zombieTex != 0) {
+        glBindTexture(GL_TEXTURE_2D, zombieTex);
+
+        auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
+        for (auto mobRoot : mobView) {
+            auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
+
+            // Query world light at torso position for this entity.
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+                auto& part = reg.get<ecs::StevePartComponent>(child);
+                if (part.partType != ecs::StevePartType::Torso) continue;
+                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+                glm::vec3 entityPos = glm::vec3(wt.worldMatrix[3]);
+                glm::vec2 light = queryWorldLight(world, entityPos);
+                shader.setFloat("uEntitySunlight", light.x);
+                shader.setFloat("uEntityBlockLight", light.y);
+                break;
+            }
+
+            // Torso
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+                auto& part = reg.get<ecs::StevePartComponent>(child);
+                if (part.partType != ecs::StevePartType::Torso) continue;
+
+                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+                PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
+                                                ecs::SkinTypeComponent::Type::Mob);
+                if (mesh == nullptr || mesh->vao == 0) continue;
+
+                shader.setMat4(modelLoc, wt.worldMatrix);
+                glBindVertexArray(mesh->vao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            }
+
+            // Limbs
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::ChildrenComponent>(child)) continue;
+                auto& partChildren = reg.get<ecs::ChildrenComponent>(child);
+
+                for (auto partEntity : partChildren.children) {
+                    if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) continue;
+
+                    auto& part = reg.get<ecs::StevePartComponent>(partEntity);
+                    auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
+
+                    PartMesh* mesh = getMeshForPart(part.partType,
+                                                    ecs::SkinTypeComponent::Type::Mob);
+                    if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
+
+                    shader.setMat4(modelLoc, wt.worldMatrix);
+                    glBindVertexArray(mesh->vao);
+                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                }
+            }
+        }
+    }
+
+    glBindVertexArray(0);
+}
+
 void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,
                                const Window& window, RenderMode mode) {
     if (m_shader == nullptr || m_resourceMgr == nullptr) return;
@@ -702,4 +844,48 @@ void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
     // Shadow FBO is already bound by the caller (Renderer).
     // Depth test/write enabled, blend disabled — set by caller.
     drawEntities(gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, shadowViewProj, mode);
+}
+
+void HumanoidRenderer::renderToGBuffer(const World& world, ecs::GameplayRegistry& gameplayReg,
+                                        const glm::mat4& jitteredViewProj,
+                                        RenderMode mode) {
+    if (m_gbufferShader == nullptr || m_resourceMgr == nullptr) return;
+
+    const int modelLoc = m_gbufferShader->getUniformLocation("model");
+    const int viewProjLoc = m_gbufferShader->getUniformLocation("viewProj");
+
+    drawEntities(world, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, jitteredViewProj, mode);
+}
+
+void HumanoidRenderer::renderToShadowMap(const World& world, ecs::GameplayRegistry& gameplayReg,
+                                          const glm::mat4& shadowViewProj,
+                                          RenderMode mode) {
+    if (m_shadowShader == nullptr || m_resourceMgr == nullptr) return;
+
+    const int modelLoc = m_shadowShader->getUniformLocation("model");
+    const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
+
+    drawEntities(world, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, shadowViewProj, mode);
+}
+
+glm::vec2 HumanoidRenderer::queryWorldLight(const World& world, const glm::vec3& position) {
+    const int bx = static_cast<int>(std::floor(position.x));
+    const int by = static_cast<int>(std::floor(position.y));
+    const int bz = static_cast<int>(std::floor(position.z));
+
+    if (!world.isChunkLoadedForBlock(bx, by, bz)) {
+        return {1.0f, 0.0f};
+    }
+
+    const glm::ivec2 cc = world.getChunkCoords(bx, bz);
+    const auto& chunks = world.getActiveChunks();
+    const auto it = chunks.find(World::chunkKey(cc.x, cc.y));
+    if (it == chunks.end()) {
+        return {1.0f, 0.0f};
+    }
+
+    const glm::ivec3 local = Chunk::worldToLocal(bx, by, bz);
+    const uint8_t sun = it->second->getSunlight(local.x, local.y, local.z);
+    const uint8_t block = it->second->getBlockLight(local.x, local.y, local.z);
+    return {sun / 15.0f, block / 15.0f};
 }

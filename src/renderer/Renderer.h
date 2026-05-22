@@ -589,10 +589,10 @@ private:
     void renderTransparentCompositePass(const World& world, const Window& window);
     void renderWaterCompositePass(const World& world, const Window& window, bool preTemporalResolve = false);
     void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
-    void renderGBufferEntities(const RenderFrameData& frame);
+    void renderGBufferEntities(const World& world, const RenderFrameData& frame);
     void renderGBufferDrops(const World& world, const RenderFrameData& frame);
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
-    void renderShadowEntities(const glm::mat4& shadowViewProj);
+    void renderShadowEntities(const World& world, const glm::mat4& shadowViewProj);
     void renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
                            const glm::mat4& shadowView, const glm::mat4& shadowProjection,
                            float animationTime, float shaderTime);

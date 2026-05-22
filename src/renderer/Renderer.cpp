@@ -1482,7 +1482,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     beginGpuTimer(GpuTimerPass::GBuffer);
 #endif
     renderGBufferTerrain(world, frame);
-    renderGBufferEntities(frame);
+    renderGBufferEntities(world, frame);
     renderGBufferDrops(world, frame);
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
@@ -1694,7 +1694,7 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
-void Renderer::renderGBufferEntities(const RenderFrameData& frame) {
+void Renderer::renderGBufferEntities(const World& world, const RenderFrameData& frame) {
     // Render humanoid/mob entities into the GBuffer after terrain.
     // GBuffer FBO is still bound from renderGBufferTerrain(). Depth buffer
     // contains terrain depth — entities will automatically depth-test against it.
@@ -1715,7 +1715,7 @@ void Renderer::renderGBufferEntities(const RenderFrameData& frame) {
     const HumanoidRenderer::RenderMode mode = m_renderLocalPlayerModel
         ? HumanoidRenderer::kRenderAll
         : HumanoidRenderer::kRenderMobsOnly;
-    m_humanoidRenderer->renderToGBuffer(*m_gameplayRegistry, viewProj, mode);
+    m_humanoidRenderer->renderToGBuffer(world, *m_gameplayRegistry, viewProj, mode);
 
     // Restore state
     glBindVertexArray(0);
@@ -1742,7 +1742,7 @@ void Renderer::renderGBufferDrops(const World& world, const RenderFrameData& fra
     glBindVertexArray(0);
 }
 
-void Renderer::renderShadowEntities(const glm::mat4& shadowViewProj) {
+void Renderer::renderShadowEntities(const World& world, const glm::mat4& shadowViewProj) {
     // Render humanoid/mob entities into the current shadow cascade layer.
     // Shadow FBO layer is already bound by the caller (renderShadowMap).
     if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
@@ -1759,7 +1759,7 @@ void Renderer::renderShadowEntities(const glm::mat4& shadowViewProj) {
     m_entityShadowShader->use();
     m_entityShadowShader->setInt("uTexture", 0);
 
-    m_humanoidRenderer->renderToShadowMap(*m_gameplayRegistry,
+    m_humanoidRenderer->renderToShadowMap(world, *m_gameplayRegistry,
                                           shadowViewProj, HumanoidRenderer::kRenderAll);
 
     glBindVertexArray(0);
@@ -1883,7 +1883,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         }
         renderCutoutChunks(cutoutEntries);
         // Entity shadow: render humanoid/mob depth into this cascade.
-        renderShadowEntities(cascadeData.viewProj);
+        renderShadowEntities(world, cascadeData.viewProj);
         // Drop shadow: render dropped items/blocks depth into this cascade.
         renderShadowDrops(world, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
                           frame.animationTime, frame.shaderTime);
