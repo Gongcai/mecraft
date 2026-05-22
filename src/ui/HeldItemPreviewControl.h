@@ -46,10 +46,14 @@ private:
     Mesh* getOrCreateItemMesh(ItemID itemId);
     Mesh buildItemMesh(ItemID itemId) const;
     static void destroyMesh(Mesh& mesh);
+    void ensureShadowFallbackTextures();
+    void bindPreviewShadowFallback(Shader& shader) const;
 
     ResourceMgr* m_resourceMgr = nullptr;
     Shader* m_shader = nullptr;
     Shader* m_itemShader = nullptr;
+    GLuint m_fallbackShadowDepth = 0;
+    GLuint m_fallbackShadowDepthCompare = 0;
     mutable std::unordered_map<BlockID, Mesh> m_blockMeshes;
     mutable std::unordered_map<ItemID, Mesh> m_itemMeshes;
     HeldItemPreviewLayout m_layout;

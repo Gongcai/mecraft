@@ -413,6 +413,12 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    // Per-object velocity (RG16F) — screen-space velocity written by entity/drop
+    // shaders during GBuffer fill. Temporarily attached to GBuffer FBO as
+    // GL_COLOR_ATTACHMENT5 during entity/drop rendering, detached afterward.
+    m_perObjectVelocityTex = createTexture2D(GL_RG16F, m_width, m_height, GL_RG, GL_FLOAT,
+                                             GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+
     // Weather mask (R8) — additive-blended weather particle alpha.
     // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
     glCreateFramebuffers(1, &m_weatherMaskFbo);
@@ -585,6 +591,44 @@ void DeferredRenderTargets::clearWeatherMask() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_weatherMaskFbo);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+}
+
+void DeferredRenderTargets::attachPerObjectVelocityToGBuffer() {
+    // Attach per-object velocity texture as GL_COLOR_ATTACHMENT5 on the GBuffer FBO.
+    // Entity/drop fragment shaders write velocity as layout(location=5).
+    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, m_perObjectVelocityTex, 0);
+    const GLenum drawBuffers[] = {
+        kGAlbedoAttachment,
+        kGNormalAoAttachment,
+        kGVoxelLightAttachment,
+        kGMaterialAttachment,
+        kGMaterialAuxAttachment,
+        GL_COLOR_ATTACHMENT5
+    };
+    glDrawBuffers(6, drawBuffers);
+}
+
+void DeferredRenderTargets::detachPerObjectVelocityFromGBuffer() {
+    // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.
+    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, 0, 0);
+    const GLenum drawBuffers[] = {
+        kGAlbedoAttachment,
+        kGNormalAoAttachment,
+        kGVoxelLightAttachment,
+        kGMaterialAttachment,
+        kGMaterialAuxAttachment
+    };
+    glDrawBuffers(kGBufferAttachmentCount, drawBuffers);
+}
+
+void DeferredRenderTargets::clearPerObjectVelocity() {
+    // Clear per-object velocity to zero. Attaches the texture to the GBuffer FBO
+    // as COLOR_ATTACHMENT5, clears it, then detaches. This avoids creating a
+    // temporary FBO every frame.
+    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, m_perObjectVelocityTex, 0);
+    const float zero[] = {0.0f, 0.0f, 0.0f, 0.0f};
+    glClearNamedFramebufferfv(m_gBufferFbo, GL_COLOR, 5, zero);
+    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, 0, 0);
 }
 
 void DeferredRenderTargets::bindDefaultLike(const GLint framebuffer, const int width, const int height) {
@@ -969,6 +1013,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoHistoryTex[0], m_ssaoHistoryTex[1],
         m_ssaoTemporalTex,
         m_velocityTex,
+        m_perObjectVelocityTex,
         m_weatherMaskTex
     };
     for (const GLuint texture : textures) {
@@ -1015,6 +1060,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHistoryTex[0] = 0; m_ssaoHistoryTex[1] = 0;
     m_ssaoTemporalTex = 0;
     m_velocityTex = 0;
+    m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
     const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_velocityFbo, m_weatherMaskFbo};

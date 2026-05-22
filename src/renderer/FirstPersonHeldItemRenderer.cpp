@@ -7,7 +7,10 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <iostream>
 #include <fstream>
+#include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -190,6 +193,82 @@ struct GlStateGuard {
         glActiveTexture(static_cast<GLenum>(oldActiveTexture));
     }
 };
+
+void pushDebugGroup(const char* label) {
+#ifdef MECRAFT_DEBUG
+    if (glPushDebugGroup != nullptr) {
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
+    }
+#else
+    static_cast<void>(label);
+#endif
+}
+
+void popDebugGroup() {
+#ifdef MECRAFT_DEBUG
+    if (glPopDebugGroup != nullptr) {
+        glPopDebugGroup();
+    }
+#endif
+}
+
+void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
+#ifdef MECRAFT_DEBUG
+    static std::unordered_set<std::string> dumpedLabels;
+    if (!dumpedLabels.emplace(label).second) {
+        return;
+    }
+
+    const char* names[] = {
+        "uCsmShadowMap",
+        "uCsmShadowDepthRaw",
+        "uCsmShadowDepthAll",
+        "uCsmShadowDepthAllRaw",
+        "uCsmShadowColor0",
+        "uCsmShadowColor1",
+    };
+
+    GLint previousProgram = 0;
+    GLint previousActiveTexture = GL_TEXTURE0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+
+    std::cerr << "[held-item-shadow] " << label << " program=" << shader.ID << '\n';
+    for (const char* name : names) {
+        const GLint loc = glGetUniformLocation(shader.ID, name);
+        if (loc < 0) {
+            std::cerr << "  " << name << " inactive\n";
+            continue;
+        }
+
+        GLint unit = -1;
+        glGetUniformiv(shader.ID, loc, &unit);
+        GLint binding = 0;
+        GLint compareMode = 0;
+        GLint target = 0;
+        glActiveTexture(GL_TEXTURE0 + unit);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY, &binding);
+        if (binding != 0) {
+            glGetTextureParameteriv(static_cast<GLuint>(binding), GL_TEXTURE_COMPARE_MODE, &compareMode);
+            glGetTextureLevelParameteriv(static_cast<GLuint>(binding), 0, GL_TEXTURE_INTERNAL_FORMAT, &target);
+        }
+        std::cerr << "  " << name
+                  << " unit=" << unit
+                  << " texture=" << binding
+                  << " internal=0x" << std::hex << target << std::dec
+                  << " compareMode=0x" << std::hex << compareMode << std::dec
+                  << '\n';
+    }
+
+    glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+    if (previousProgram != 0) {
+        glUseProgram(static_cast<GLuint>(previousProgram));
+    }
+#else
+    static_cast<void>(label);
+    static_cast<void>(shader);
+#endif
+}
 }
 
 void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr) {
@@ -218,6 +297,21 @@ void FirstPersonHeldItemRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_itemMeshes.clear();
+    const GLuint textures[] = {
+        m_fallbackShadowDepth,
+        m_fallbackShadowDepthCompare,
+        m_fallbackShadowColor0,
+        m_fallbackShadowColor1,
+    };
+    for (GLuint texture : textures) {
+        if (texture != 0) {
+            glDeleteTextures(1, &texture);
+        }
+    }
+    m_fallbackShadowDepth = 0;
+    m_fallbackShadowDepthCompare = 0;
+    m_fallbackShadowColor0 = 0;
+    m_fallbackShadowColor1 = 0;
     m_resourceMgr = nullptr;
     m_blockShader = nullptr;
     m_itemShader = nullptr;
@@ -416,6 +510,13 @@ void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
 }
 
 void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
+    const bool shadowInputsValid =
+        m_shadowData.shadowTexture != 0 &&
+        m_shadowData.shadowDepthRaw != 0 &&
+        m_shadowData.shadowDepthAll != 0 &&
+        m_shadowData.shadowDepthAllRaw != 0 &&
+        m_shadowData.cascadeCount > 0;
+
     // Cascade data
     shader.setFloat("uShadowDistance", m_shadowData.shadowDistance);
     shader.setFloat("uShadowConstantBias", m_shadowData.constantBias);
@@ -425,7 +526,7 @@ void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
     shader.setFloat("uShadowPcssStrength", m_shadowData.pcssStrength);
     shader.setInt("uSoftShadowsEnabled", m_shadowData.softShadowsEnabled);
     shader.setInt("uPcssShadowsEnabled", m_shadowData.pcssShadowsEnabled);
-    shader.setInt("uShadowsEnabled", m_shadowData.shadowsEnabled);
+    shader.setInt("uShadowsEnabled", (m_shadowData.shadowsEnabled != 0 && shadowInputsValid) ? 1 : 0);
     shader.setVec3("uCameraPos", m_shadowData.cameraPos);
     shader.setVec3("uSunDirection", m_shadowData.sunDirection);
     shader.setInt("uCsmCascadeCount", m_shadowData.cascadeCount);
@@ -441,13 +542,89 @@ void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
         shader.setFloat(prefix + "texelWorldSize", m_shadowData.cascadeTexelWorldSize[i]);
     }
 
-    // Shadow texture bindings (units 5-10)
-    shader.setInt("uCsmShadowMap", 5);
-    shader.setInt("uCsmShadowDepthRaw", 6);
-    shader.setInt("uCsmShadowDepthAll", 7);
-    shader.setInt("uCsmShadowDepthAllRaw", 8);
-    shader.setInt("uCsmShadowColor0", 9);
-    shader.setInt("uCsmShadowColor1", 10);
+    // Shadow texture bindings (units 5-10). Use direct program uniforms so
+    // these samplers are pinned even if this helper is called while another
+    // program is current during initialization.
+    const struct {
+        const char* name;
+        GLint unit;
+    } shadowSamplers[] = {
+        {"uCsmShadowMap", 5},
+        {"uCsmShadowDepthRaw", 6},
+        {"uCsmShadowDepthAll", 7},
+        {"uCsmShadowDepthAllRaw", 8},
+        {"uCsmShadowColor0", 9},
+        {"uCsmShadowColor1", 10},
+    };
+    for (const auto& sampler : shadowSamplers) {
+        const GLint loc = glGetUniformLocation(shader.ID, sampler.name);
+        if (loc >= 0) {
+            glProgramUniform1i(shader.ID, loc, sampler.unit);
+        }
+    }
+}
+
+void FirstPersonHeldItemRenderer::ensureShadowFallbackTextures() {
+    if (m_fallbackShadowDepth != 0 &&
+        m_fallbackShadowDepthCompare != 0 &&
+        m_fallbackShadowColor0 != 0 &&
+        m_fallbackShadowColor1 != 0) {
+        return;
+    }
+
+    if (m_fallbackShadowDepth == 0) {
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowDepth);
+        glTextureStorage3D(m_fallbackShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        constexpr float depth = 1.0f;
+        glClearTexImage(m_fallbackShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    }
+
+    if (m_fallbackShadowDepthCompare == 0) {
+        glGenTextures(1, &m_fallbackShadowDepthCompare);
+        glTextureView(m_fallbackShadowDepthCompare, GL_TEXTURE_2D_ARRAY,
+                      m_fallbackShadowDepth, GL_DEPTH_COMPONENT32F, 0, 1, 0, 1);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    }
+
+    if (m_fallbackShadowColor0 == 0) {
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowColor0);
+        glTextureStorage3D(m_fallbackShadowColor0, 1, GL_RGBA8, 1, 1, 1);
+        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowColor0, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        const unsigned char color[] = {0, 0, 0, 255};
+        glTextureSubImage3D(m_fallbackShadowColor0, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, color);
+    }
+
+    if (m_fallbackShadowColor1 == 0) {
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowColor1);
+        glTextureStorage3D(m_fallbackShadowColor1, 1, GL_RGBA16F, 1, 1, 1);
+        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowColor1, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        const float color[] = {0.0f, 0.0f, 0.0f, 0.0f};
+        glTextureSubImage3D(m_fallbackShadowColor1, 0, 0, 0, 0, 1, 1, 1, GL_RGBA, GL_FLOAT, color);
+    }
+}
+
+GLuint FirstPersonHeldItemRenderer::shadowTextureOrFallback(const GLuint texture, const bool comparison) {
+    ensureShadowFallbackTextures();
+    if (texture != 0) {
+        return texture;
+    }
+    return comparison ? m_fallbackShadowDepthCompare : m_fallbackShadowDepth;
 }
 
 void FirstPersonHeldItemRenderer::render(const Window& window,
@@ -612,7 +789,7 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
 }
 
 void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
-                                          const glm::mat4& model) const {
+                                          const glm::mat4& model) {
     if (m_resourceMgr == nullptr || m_steveShader == nullptr || m_rightArmMesh.vao == 0 || m_rightArmMesh.vertexCount == 0) {
         return;
     }
@@ -631,19 +808,22 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     glBindTexture(GL_TEXTURE_2D, steveTex);
     // Shadow textures (units 5-10)
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowTexture);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowTexture, true));
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthRaw);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthRaw, false));
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAll);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAll, true));
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAllRaw);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAllRaw, false));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : m_fallbackShadowColor0);
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : m_fallbackShadowColor1);
     glBindVertexArray(m_rightArmMesh.vao);
+    pushDebugGroup("HeldItem.Arm");
+    dumpShadowSamplerStateOnce("HeldItem.Arm", *m_steveShader);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_rightArmMesh.vertexCount));
+    popDebugGroup();
 }
 
 void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
@@ -701,19 +881,22 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
         // Shadow textures (units 5-10)
         glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowTexture);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowTexture, true));
         glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthRaw);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthRaw, false));
         glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAll);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAll, true));
         glActiveTexture(GL_TEXTURE8);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAllRaw);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAllRaw, false));
         glActiveTexture(GL_TEXTURE9);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : m_fallbackShadowColor0);
         glActiveTexture(GL_TEXTURE10);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : m_fallbackShadowColor1);
         glBindVertexArray(mesh->vao);
+        pushDebugGroup("HeldItem.Block");
+        dumpShadowSamplerStateOnce("HeldItem.Block", *m_blockShader);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        popDebugGroup();
         m_blockShader->setInt("uUseModel", 0);
         return;
     }
@@ -736,19 +919,22 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
     // Shadow textures (units 5-10)
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowTexture);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowTexture, true));
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthRaw);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthRaw, false));
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAll);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAll, true));
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAllRaw);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, shadowTextureOrFallback(m_shadowData.shadowDepthAllRaw, false));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : m_fallbackShadowColor0);
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : m_fallbackShadowColor1);
     glBindVertexArray(mesh->vao);
+    pushDebugGroup("HeldItem.Item");
+    dumpShadowSamplerStateOnce("HeldItem.Item", *m_itemShader);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    popDebugGroup();
 }
 
 FirstPersonHeldItemRenderer::Mesh* FirstPersonHeldItemRenderer::getOrCreateBlockMesh(const BlockID blockId) {

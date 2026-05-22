@@ -26,10 +26,12 @@ uniform CsmCascade uCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
 uniform sampler2DArrayShadow uCsmShadowMap;       // shadowtex1: opaque-only depth (comparison)
 uniform sampler2DArray uCsmShadowDepthRaw;         // shadowtex1: opaque-only depth (raw)
+#ifndef MECRAFT_SHADOW_OPAQUE_ONLY
 uniform sampler2DArrayShadow uCsmShadowDepthAll;   // shadowtex0: depth including water (comparison)
 uniform sampler2DArray uCsmShadowDepthAllRaw;      // shadowtex0: depth including water (raw)
 uniform sampler2DArray uCsmShadowColor0;           // shadowcolor0: RGB tint/caustics, A transparent flag
 uniform sampler2DArray uCsmShadowColor1;           // shadowcolor1: RG normal, B skylight, A water height
+#endif
 #endif
 
 struct ShadowSample {
@@ -117,6 +119,7 @@ float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
 }
 
 // Transparent shadow sampling (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
+#ifndef MECRAFT_SHADOW_OPAQUE_ONLY
 float sampleCsmDepthAllCompare(vec2 uv, int cascadeIndex, float refZ) {
     return texture(uCsmShadowDepthAll, vec4(uv, float(cascadeIndex), refZ));
 }
@@ -136,6 +139,7 @@ vec4 sampleCsmShadowColor0(vec2 uv, int cascadeIndex) {
 vec4 sampleCsmShadowColor1(vec2 uv, int cascadeIndex) {
     return texture(uCsmShadowColor1, vec3(uv, float(cascadeIndex)));
 }
+#endif
 
 ivec2 sampleCsmTexelCoord(vec2 uv, int cascadeIndex, sampler2DArray shadowTex) {
     ivec3 size = textureSize(shadowTex, 0);
@@ -148,6 +152,7 @@ float sampleCsmDepthRawTexel(vec2 uv, int cascadeIndex) {
     return texelFetch(uCsmShadowDepthRaw, ivec3(texel, cascadeIndex), 0).r;
 }
 
+#ifndef MECRAFT_SHADOW_OPAQUE_ONLY
 float sampleCsmDepthAllRawTexel(vec2 uv, int cascadeIndex) {
     ivec2 texel = sampleCsmTexelCoord(uv, cascadeIndex, uCsmShadowDepthAllRaw);
     return texelFetch(uCsmShadowDepthAllRaw, ivec3(texel, cascadeIndex), 0).r;
@@ -162,6 +167,7 @@ vec4 sampleCsmShadowColor1RawTexel(vec2 uv, int cascadeIndex) {
     ivec2 texel = sampleCsmTexelCoord(uv, cascadeIndex, uCsmShadowColor1);
     return texelFetch(uCsmShadowColor1, ivec3(texel, cascadeIndex), 0);
 }
+#endif
 
 float sampleCsmPcf3x3(vec2 uv, int cascadeIndex, float refZ, vec2 texelUv, float radius) {
     float lit = 0.0;

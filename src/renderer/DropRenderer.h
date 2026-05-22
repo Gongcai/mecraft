@@ -58,6 +58,8 @@ private:
 	Shader* m_itemShadowShader = nullptr;  // item_shadow: item drops → shadow
 	std::unordered_map<BlockID, Mesh> m_blockMeshes;
 	std::unordered_map<ItemID, Mesh> m_itemMeshes;
+	// Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
+	std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
 };
 
 #endif // MECRAFT_DROPRENDERER_H

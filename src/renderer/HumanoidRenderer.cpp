@@ -555,7 +555,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
 }
 
 void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                                     int modelLoc, int viewProjLoc,
+                                     int modelLoc, int viewProjLoc, int prevModelLoc,
                                      const glm::mat4& viewProj, RenderMode mode) {
     auto& reg = gameplayReg.registry();
 
@@ -588,9 +588,14 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                                                 ecs::SkinTypeComponent::Type::Player);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
+                if (prevModelLoc >= 0) {
+                    auto it = m_previousModelMatrices.find(child);
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                }
                 shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                m_previousModelMatrices[child] = world.worldMatrix;
             }
 
             // Limbs (children of torso)
@@ -608,9 +613,14 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                                                     ecs::SkinTypeComponent::Type::Player);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
+                    if (prevModelLoc >= 0) {
+                        auto it = m_previousModelMatrices.find(partEntity);
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    }
                     shader.setMat4(modelLoc, world.worldMatrix);
                     glBindVertexArray(mesh->vao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                    m_previousModelMatrices[partEntity] = world.worldMatrix;
                 }
             }
         }
@@ -637,9 +647,14 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                                                 ecs::SkinTypeComponent::Type::Mob);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
+                if (prevModelLoc >= 0) {
+                    auto it = m_previousModelMatrices.find(child);
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                }
                 shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                m_previousModelMatrices[child] = world.worldMatrix;
             }
 
             // Limbs
@@ -657,9 +672,14 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                                                     ecs::SkinTypeComponent::Type::Mob);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
+                    if (prevModelLoc >= 0) {
+                        auto it = m_previousModelMatrices.find(partEntity);
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    }
                     shader.setMat4(modelLoc, world.worldMatrix);
                     glBindVertexArray(mesh->vao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                    m_previousModelMatrices[partEntity] = world.worldMatrix;
                 }
             }
         }
@@ -669,7 +689,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 }
 
 void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& gameplayReg,
-                                     Shader& shader, int modelLoc, int viewProjLoc,
+                                     Shader& shader, int modelLoc, int viewProjLoc, int prevModelLoc,
                                      const glm::mat4& viewProj, RenderMode mode) {
     auto& reg = gameplayReg.registry();
 
@@ -715,9 +735,14 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
                                                 ecs::SkinTypeComponent::Type::Player);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
+                if (prevModelLoc >= 0) {
+                    auto it = m_previousModelMatrices.find(child);
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                }
                 shader.setMat4(modelLoc, wt.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                m_previousModelMatrices[child] = wt.worldMatrix;
             }
 
             // Limbs (children of torso)
@@ -735,9 +760,14 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
                                                     ecs::SkinTypeComponent::Type::Player);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
+                    if (prevModelLoc >= 0) {
+                        auto it = m_previousModelMatrices.find(partEntity);
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    }
                     shader.setMat4(modelLoc, wt.worldMatrix);
                     glBindVertexArray(mesh->vao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                    m_previousModelMatrices[partEntity] = wt.worldMatrix;
                 }
             }
         }
@@ -777,9 +807,14 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
                                                 ecs::SkinTypeComponent::Type::Mob);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
+                if (prevModelLoc >= 0) {
+                    auto it = m_previousModelMatrices.find(child);
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                }
                 shader.setMat4(modelLoc, wt.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                m_previousModelMatrices[child] = wt.worldMatrix;
             }
 
             // Limbs
@@ -797,9 +832,14 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
                                                     ecs::SkinTypeComponent::Type::Mob);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
+                    if (prevModelLoc >= 0) {
+                        auto it = m_previousModelMatrices.find(partEntity);
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    }
                     shader.setMat4(modelLoc, wt.worldMatrix);
                     glBindVertexArray(mesh->vao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                    m_previousModelMatrices[partEntity] = wt.worldMatrix;
                 }
             }
         }
@@ -816,7 +856,7 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
     const int modelLoc = m_shader->getUniformLocation("model");
     const int viewProjLoc = m_shader->getUniformLocation("viewProj");
 
-    drawEntities(gameplayReg, *m_shader, modelLoc, viewProjLoc, viewProj, mode);
+    drawEntities(gameplayReg, *m_shader, modelLoc, viewProjLoc, -1, viewProj, mode);
     glDisable(GL_CULL_FACE);
 }
 
@@ -827,10 +867,11 @@ void HumanoidRenderer::renderToGBuffer(ecs::GameplayRegistry& gameplayReg,
 
     const int modelLoc = m_gbufferShader->getUniformLocation("model");
     const int viewProjLoc = m_gbufferShader->getUniformLocation("viewProj");
+    const int prevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
 
     // GBuffer FBO is already bound by the caller (Renderer).
     // Depth test/write enabled, blend disabled — set by caller.
-    drawEntities(gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, jitteredViewProj, mode);
+    drawEntities(gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 
 void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
@@ -843,7 +884,7 @@ void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
 
     // Shadow FBO is already bound by the caller (Renderer).
     // Depth test/write enabled, blend disabled — set by caller.
-    drawEntities(gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, shadowViewProj, mode);
+    drawEntities(gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
 }
 
 void HumanoidRenderer::renderToGBuffer(const World& world, ecs::GameplayRegistry& gameplayReg,
@@ -853,8 +894,9 @@ void HumanoidRenderer::renderToGBuffer(const World& world, ecs::GameplayRegistry
 
     const int modelLoc = m_gbufferShader->getUniformLocation("model");
     const int viewProjLoc = m_gbufferShader->getUniformLocation("viewProj");
+    const int prevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
 
-    drawEntities(world, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, jitteredViewProj, mode);
+    drawEntities(world, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 
 void HumanoidRenderer::renderToShadowMap(const World& world, ecs::GameplayRegistry& gameplayReg,
@@ -865,7 +907,7 @@ void HumanoidRenderer::renderToShadowMap(const World& world, ecs::GameplayRegist
     const int modelLoc = m_shadowShader->getUniformLocation("model");
     const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
 
-    drawEntities(world, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, shadowViewProj, mode);
+    drawEntities(world, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
 }
 
 glm::vec2 HumanoidRenderer::queryWorldLight(const World& world, const glm::vec3& position) {

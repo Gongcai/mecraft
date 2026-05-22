@@ -31,6 +31,11 @@ public:
     void bindReflectionTemporalScratch();
     void bindCloud();
     void bindVelocity();
+    // Per-object velocity: temporarily attaches RG16F texture to GBuffer FBO
+    // as GL_COLOR_ATTACHMENT5 so entity/drop shaders can write velocity via MRT.
+    void attachPerObjectVelocityToGBuffer();
+    void detachPerObjectVelocityFromGBuffer();
+    void clearPerObjectVelocity();
     void bindWeatherMask();
     void clearWeatherMask();
     void bindDefaultLike(GLint framebuffer, int width, int height);
@@ -109,6 +114,7 @@ public:
     [[nodiscard]] GLuint historyCloudTexturePrev() const { return m_historyCloudTex[1 - m_currentHistoryIndex]; }
     [[nodiscard]] GLuint temporalCurrentTexture() const { return m_temporalCurrentTex; }
     [[nodiscard]] GLuint velocityTexture() const { return m_velocityTex; }
+    [[nodiscard]] GLuint perObjectVelocityTexture() const { return m_perObjectVelocityTex; }
     [[nodiscard]] GLuint weatherMaskTexture() const { return m_weatherMaskTex; }
     [[nodiscard]] GLuint atmosphereLutTexture() const { return m_atmosphereLut3d; }
     bool loadAtmosphereLut(const char* path);
@@ -260,6 +266,10 @@ private:
     // Velocity buffer (RG16F encodes screen-space velocity xy)
     GLuint m_velocityFbo = 0;
     GLuint m_velocityTex = 0;
+
+    // Per-object velocity (RG16F): written by entity/drop GBuffer shaders via MRT
+    // as GL_COLOR_ATTACHMENT5 on the GBuffer FBO. Consumed by velocity_resolve.fs.
+    GLuint m_perObjectVelocityTex = 0;
 
     // Weather mask: single-channel R8 storing accumulated weather particle alpha.
     // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.

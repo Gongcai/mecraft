@@ -556,10 +556,12 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
 
     // Block drop GBuffer setup
     int blockModelLoc = -1;
+    int blockPrevModelLoc = -1;
     if (canRenderBlocks) {
         m_gbufferShader->use();
         m_gbufferShader->setMat4("viewProj", jitteredViewProj);
         blockModelLoc = m_gbufferShader->getUniformLocation("model");
+        blockPrevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
         m_gbufferShader->setInt("texArray", 0);
         m_gbufferShader->setInt("uForceBaseLod", 0);
         m_gbufferShader->setInt("uGrassColormap", 3);
@@ -569,10 +571,12 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
 
     // Item drop GBuffer setup
     int itemModelLoc = -1;
+    int itemPrevModelLoc = -1;
     if (canRenderItems) {
         m_itemGBufferShader->use();
         m_itemGBufferShader->setMat4("viewProj", jitteredViewProj);
         itemModelLoc = m_itemGBufferShader->getUniformLocation("model");
+        itemPrevModelLoc = m_itemGBufferShader->getUniformLocation("prevModel");
         m_itemGBufferShader->setInt("uAtlas", 0);
     }
 
@@ -595,6 +599,8 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
             Mesh* mesh = getOrCreateItemMesh(drop.itemId);
             if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
                 m_itemGBufferShader->use();
+                auto it = m_previousModelMatrices.find(drop.id);
+                m_itemGBufferShader->setMat4(itemPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
                 m_itemGBufferShader->setMat4(itemModelLoc, model);
                 m_itemGBufferShader->setFloat("uDropSunlight", light.x);
                 m_itemGBufferShader->setFloat("uDropBlockLight", light.y);
@@ -602,6 +608,7 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
                 glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+                m_previousModelMatrices[drop.id] = model;
             }
             continue;
         }
@@ -616,6 +623,8 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
         }
 
         m_gbufferShader->use();
+        auto it = m_previousModelMatrices.find(drop.id);
+        m_gbufferShader->setMat4(blockPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
         m_gbufferShader->setMat4(blockModelLoc, model);
         m_gbufferShader->setFloat("uDropSunlight", light.x);
         m_gbufferShader->setFloat("uDropBlockLight", light.y);
@@ -627,6 +636,7 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        m_previousModelMatrices[drop.id] = model;
     }
 
     glBindVertexArray(0);

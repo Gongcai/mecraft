@@ -12,11 +12,13 @@ layout (location = 1) out vec4 GNormalAo;
 layout (location = 2) out vec4 GVoxelLight;
 layout (location = 3) out vec4 GMaterial;
 layout (location = 4) out vec4 GMaterialAux;
+layout (location = 5) out vec2 FragPerObjectVelocity;
 
 in vec2 vUV;
 in float vShade;
 in vec3 vWorldPos;
 in vec3 vNormal;
+in vec2 vVelocity;
 
 uniform sampler2D uAtlas;
 // Per-drop voxel light from CPU world light query (0-1 range, normalized from 0-15).
@@ -42,4 +44,7 @@ void main() {
     GVoxelLight = vec4(clamp(uDropSunlight, 0.0, 1.0), clamp(uDropBlockLight, 0.0, 1.0), 0.0, 1.0);
     GMaterial = packGBufferMaterial(surfaceMaterialForKind(float(MATERIAL_DEFAULT), 0.0));
     GMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(float(MATERIAL_DEFAULT)));
+
+    // Per-object screen-space velocity for TAA/motion blur.
+    FragPerObjectVelocity = vVelocity;
 }

@@ -9,11 +9,13 @@ layout(location = 1) in vec2 aUV;
 layout(location = 2) in vec3 aNormal;
 
 uniform mat4 model;
+uniform mat4 prevModel;
 uniform mat4 viewProj;
 
 out vec2 vUV;
 out vec3 vNormal;
 out vec3 vWorldPos;
+out vec2 vVelocity;
 
 void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
@@ -21,4 +23,11 @@ void main() {
     vUV = aUV;
     vNormal = normalize(mat3(model) * aNormal);
     vWorldPos = worldPos.xyz;
+
+    // Per-object velocity: difference in screen-space position between current
+    // and previous frame. Stored as clip-space delta (perspective-correct).
+    vec4 prevClip = viewProj * prevModel * vec4(aPos, 1.0);
+    vec2 curNdc = gl_Position.xy / max(gl_Position.w, 0.00001);
+    vec2 prevNdc = prevClip.xy / max(prevClip.w, 0.00001);
+    vVelocity = curNdc - prevNdc;
 }

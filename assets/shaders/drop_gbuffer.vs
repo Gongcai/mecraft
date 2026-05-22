@@ -21,6 +21,7 @@ layout (location = 10) in uint aTintPacked;
 
 uniform mat4 viewProj;
 uniform mat4 model;
+uniform mat4 prevModel;
 
 out vec2 vUV;
 out float vSunlight;
@@ -35,6 +36,7 @@ flat out float vTintKind;
 flat out float vMaterialKind;
 out vec2 vTintUV;
 out vec3 vWorldPos;
+out vec2 vVelocity;
 
 void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
@@ -58,4 +60,10 @@ void main() {
     vTintKind = float(tintKind);
     vMaterialKind = float(materialKind);
     vTintUV = (vec2(float(tintU), float(tintV)) + vec2(0.5)) / 16.0;
+
+    // Per-object velocity for TAA/motion blur.
+    vec4 prevClip = viewProj * prevModel * vec4(aPos, 1.0);
+    vec2 curNdc = gl_Position.xy / max(gl_Position.w, 0.00001);
+    vec2 prevNdc = prevClip.xy / max(prevClip.w, 0.00001);
+    vVelocity = curNdc - prevNdc;
 }

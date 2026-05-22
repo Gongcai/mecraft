@@ -12,6 +12,7 @@ layout (location = 1) out vec4 GNormalAo;
 layout (location = 2) out vec4 GVoxelLight;
 layout (location = 3) out vec4 GMaterial;
 layout (location = 4) out vec4 GMaterialAux;
+layout (location = 5) out vec2 FragPerObjectVelocity;
 
 in vec2 vUV;
 in float vSunlight;
@@ -26,6 +27,7 @@ flat in float vTintKind;
 flat in float vMaterialKind;
 in vec2 vTintUV;
 in vec3 vWorldPos;
+in vec2 vVelocity;
 
 uniform sampler2DArray texArray;
 uniform sampler2D uGrassColormap;
@@ -98,4 +100,7 @@ void main() {
     GVoxelLight = vec4(clamp(uDropSunlight, 0.0, 1.0), clamp(uDropBlockLight, 0.0, 1.0), 0.0, 1.0);
     GMaterial = packGBufferMaterial(surfaceMaterialForKind(vMaterialKind, emissiveHint));
     GMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(vMaterialKind));
+
+    // Per-object screen-space velocity for TAA/motion blur.
+    FragPerObjectVelocity = vVelocity;
 }

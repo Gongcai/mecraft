@@ -4,6 +4,7 @@ in vec2 vTexCoord;
 out vec2 FragVelocity;
 
 uniform sampler2D uDepthTex;
+uniform sampler2D uPerObjectVelocityTex;
 uniform mat4 uInvViewProj;
 uniform mat4 uPreviousViewProj;
 uniform vec2 uScreenSize;
@@ -56,5 +57,11 @@ void main() {
 
     // DerivativeMain raw reprojection: Reproject() uses raw projection
     // matrices and does not manually subtract current/previous jitter.
-    FragVelocity = closestUv - previousUv;
+    vec2 cameraVelocity = closestUv - previousUv;
+
+    // Per-object velocity: entity/drop GBuffer shaders write screen-space
+    // velocity to a separate texture via MRT. Use it when non-zero to
+    // override camera-only reprojection for moving objects.
+    vec2 perObjectVel = texelFetch(uPerObjectVelocityTex, ivec2(closestFragment.xy), 0).rg;
+    FragVelocity = (dot(perObjectVel, perObjectVel) > 1e-10) ? perObjectVel : cameraVelocity;
 }

@@ -130,6 +130,10 @@ void Renderer::init(ResourceMgr &resourceMgr) {
         if (csmLocation >= 0) {
             glProgramUniform1i(m_deferredLightingShader->ID, csmLocation, 15);
         }
+        const GLint csmDepthAllLocation = m_deferredLightingShader->getUniformLocation("uCsmShadowDepthAll");
+        if (csmDepthAllLocation >= 0) {
+            glProgramUniform1i(m_deferredLightingShader->ID, csmDepthAllLocation, 17);
+        }
     }
     if (m_volumetricFogShader != nullptr) {
         const GLint csmLocation = m_volumetricFogShader->getUniformLocation("uCsmShadowMap");
@@ -778,7 +782,10 @@ Renderer::HeldItemShadowData Renderer::getHeldItemShadowData() const {
     data.cameraPos = m_cameraPos;
     data.skyIntensity = m_currentFrameData.skyIntensity;
 
-    if (m_deferredFrameActive) {
+    // Held items are rendered by Game after Renderer::renderTransparentAndOverlays()
+    // calls endFrame(), which clears m_deferredFrameActive. Keep exposing the
+    // latest CSM resources as long as the deferred targets are allocated.
+    if (m_deferredTargets.isReady() && m_deferredTargets.csmShadowDepthComparisonTexture() != 0) {
         const auto& cascades = m_shadowRenderer.cascades();
         data.cascadeCount = static_cast<int>(cascades.size());
         data.sunDirection = m_shadowRenderer.lightDirection();
@@ -1709,6 +1716,11 @@ void Renderer::renderGBufferEntities(const World& world, const RenderFrameData& 
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
+    // Per-object velocity: attach RG16F texture as GL_COLOR_ATTACHMENT5 so
+    // entity GBuffer shaders can write velocity via MRT.
+    m_deferredTargets.clearPerObjectVelocity();
+    m_deferredTargets.attachPerObjectVelocityToGBuffer();
+
     // Use jittered view-projection for TAA consistency with terrain.
     const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
 
@@ -1725,7 +1737,9 @@ void Renderer::renderGBufferDrops(const World& world, const RenderFrameData& fra
     // Render dropped items/blocks into the GBuffer after entities.
     // GBuffer FBO is still bound from renderGBufferTerrain(). Depth buffer
     // contains terrain+entity depth — drops will automatically depth-test against it.
+    // Per-object velocity attachment is still active from renderGBufferEntities().
     if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
+        m_deferredTargets.detachPerObjectVelocityFromGBuffer();
         return;
     }
 
@@ -1738,6 +1752,9 @@ void Renderer::renderGBufferDrops(const World& world, const RenderFrameData& fra
 
     const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
     m_dropRenderer->renderToGBuffer(world, *m_dropSystem, viewProj, frame.animationTime);
+
+    // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.
+    m_deferredTargets.detachPerObjectVelocityFromGBuffer();
 
     glBindVertexArray(0);
 }
@@ -2072,6 +2089,11 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uShadowNormalTex", 13);
     m_deferredLightingShader->setInt("uAtmosphereLut", 14);
     m_deferredLightingShader->setInt("uCsmShadowMap", 15);
+    m_deferredLightingShader->setInt("uCsmShadowDepthRaw", 16);
+    m_deferredLightingShader->setInt("uCsmShadowDepthAll", 17);
+    m_deferredLightingShader->setInt("uCsmShadowDepthAllRaw", 18);
+    m_deferredLightingShader->setInt("uCsmShadowColor0", 19);
+    m_deferredLightingShader->setInt("uCsmShadowColor1", 20);
     bindFogUniforms(*m_deferredLightingShader, frame);
 
     glActiveTexture(GL_TEXTURE0);
@@ -2112,9 +2134,29 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
     m_deferredLightingShader->setInt("uCsmShadowDepthRaw", 16);
+    glActiveTexture(GL_TEXTURE17);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllComparisonTexture());
+    m_deferredLightingShader->setInt("uCsmShadowDepthAll", 17);
+    glActiveTexture(GL_TEXTURE18);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllTexture());
+    m_deferredLightingShader->setInt("uCsmShadowDepthAllRaw", 18);
+    glActiveTexture(GL_TEXTURE19);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor0Texture());
+    m_deferredLightingShader->setInt("uCsmShadowColor0", 19);
+    glActiveTexture(GL_TEXTURE20);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor1Texture());
+    m_deferredLightingShader->setInt("uCsmShadowColor1", 20);
     renderFullscreen(*m_deferredLightingShader);
 
     glUseProgram(0);
+    glActiveTexture(GL_TEXTURE20);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE19);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE18);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE17);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE15);
@@ -2197,6 +2239,7 @@ void Renderer::renderVelocityPass(const RenderFrameData& frame) {
 
     m_velocityShader->use();
     m_velocityShader->setInt("uDepthTex", 0);
+    m_velocityShader->setInt("uPerObjectVelocityTex", 1);
     // DerivativeMain Reproject() uses ScreenToViewSpaceRaw with the raw
     // projection matrices. The jittered screen coordinate is preserved as an
     // input to TAA, but frame-to-frame jitter is not encoded as velocity.
@@ -2209,7 +2252,12 @@ void Renderer::renderVelocityPass(const RenderFrameData& frame) {
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.perObjectVelocityTexture());
     renderFullscreen(*m_velocityShader);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glDepthMask(GL_TRUE);

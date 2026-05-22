@@ -137,8 +137,10 @@ private:
     Mesh buildRightArmMesh() const;
     static void destroyMesh(Mesh& mesh);
 
-    void drawArm(const glm::mat4& viewProj, const glm::mat4& model) const;
+    void drawArm(const glm::mat4& viewProj, const glm::mat4& model);
     void bindShadowUniforms(Shader& shader) const;
+    void ensureShadowFallbackTextures();
+    [[nodiscard]] GLuint shadowTextureOrFallback(GLuint texture, bool comparison);
     void drawItem(ItemID itemId,
                   const glm::mat4& view,
                   const glm::mat4& viewProj,
@@ -148,6 +150,10 @@ private:
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;
+    GLuint m_fallbackShadowDepth = 0;
+    GLuint m_fallbackShadowDepthCompare = 0;
+    GLuint m_fallbackShadowColor0 = 0;
+    GLuint m_fallbackShadowColor1 = 0;
     Mesh m_rightArmMesh;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;

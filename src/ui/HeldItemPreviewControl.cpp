@@ -44,6 +44,24 @@ constexpr float kActionAnimDurationSec = 0.380f;
 constexpr float kActionPitchAmplitudeDeg = 18.0f;
 constexpr float kPi = 6.28318530717958647692f / 2;
 
+void pushDebugGroup(const char* label) {
+#ifdef MECRAFT_DEBUG
+    if (glPushDebugGroup != nullptr) {
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
+    }
+#else
+    static_cast<void>(label);
+#endif
+}
+
+void popDebugGroup() {
+#ifdef MECRAFT_DEBUG
+    if (glPopDebugGroup != nullptr) {
+        glPopDebugGroup();
+    }
+#endif
+}
+
 int getFaceTextureIndex(const BlockDef& def, const int face) {
     switch (face) {
         case 0: return def.texTop;
@@ -78,6 +96,14 @@ void HeldItemPreviewControl::shutdown()
         destroyMesh(pair.second);
     }
     m_itemMeshes.clear();
+    if (m_fallbackShadowDepth != 0) {
+        glDeleteTextures(1, &m_fallbackShadowDepth);
+        m_fallbackShadowDepth = 0;
+    }
+    if (m_fallbackShadowDepthCompare != 0) {
+        glDeleteTextures(1, &m_fallbackShadowDepthCompare);
+        m_fallbackShadowDepthCompare = 0;
+    }
     m_shader = nullptr;
     m_itemShader = nullptr;
     m_resourceMgr = nullptr;
@@ -89,6 +115,67 @@ void HeldItemPreviewControl::shutdown()
     m_actionAnimActive = false;
     m_actionAnimContinuous = false;
     m_actionAnimElapsed = 0.0f;
+}
+
+void HeldItemPreviewControl::ensureShadowFallbackTextures()
+{
+    if (m_fallbackShadowDepth != 0 && m_fallbackShadowDepthCompare != 0) {
+        return;
+    }
+
+    if (m_fallbackShadowDepth == 0) {
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowDepth);
+        glTextureStorage3D(m_fallbackShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+        constexpr float depth = 1.0f;
+        glClearTexImage(m_fallbackShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    }
+
+    if (m_fallbackShadowDepthCompare == 0) {
+        glGenTextures(1, &m_fallbackShadowDepthCompare);
+        glTextureView(m_fallbackShadowDepthCompare,
+                      GL_TEXTURE_2D_ARRAY,
+                      m_fallbackShadowDepth,
+                      GL_DEPTH_COMPONENT32F,
+                      0,
+                      1,
+                      0,
+                      1);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    }
+}
+
+void HeldItemPreviewControl::bindPreviewShadowFallback(Shader& shader) const
+{
+    shader.setInt("uShadowsEnabled", 0);
+    shader.setInt("uSoftShadowsEnabled", 0);
+    shader.setInt("uPcssShadowsEnabled", 0);
+    shader.setInt("uCsmCascadeCount", 0);
+    shader.setFloat("uShadowDistance", 0.0f);
+    shader.setFloat("uShadowConstantBias", 0.0f);
+    shader.setFloat("uShadowSlopeBias", 0.0f);
+    shader.setFloat("uShadowNormalOffset", 0.0f);
+    shader.setFloat("uShadowSoftness", 1.0f);
+    shader.setFloat("uShadowPcssStrength", 0.0f);
+    shader.setVec3("uCameraPos", 0.0f, 0.0f, 0.0f);
+    shader.setVec3("uSunDirection", 0.25f, 0.9f, 0.35f);
+    shader.setFloat("uAmbientStrength", 0.35f);
+    shader.setInt("uCsmShadowMap", 5);
+    shader.setInt("uCsmShadowDepthRaw", 6);
+
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_fallbackShadowDepthCompare);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_fallbackShadowDepth);
 }
 
 void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
@@ -117,6 +204,8 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     if (!useItemMesh && !useBlockMesh) {
         return;
     }
+
+    const_cast<HeldItemPreviewControl*>(this)->ensureShadowFallbackTextures();
 
     Mesh* mesh = nullptr;
     if (useItemMesh) {
@@ -205,6 +294,8 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
         m_itemShader->setMat4("model", model);
         m_itemShader->setMat4("viewProj", viewProj);
         m_itemShader->setInt("uAtlas", 0);
+        bindPreviewShadowFallback(*m_itemShader);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
     } else {
         m_shader->use();
@@ -224,6 +315,10 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
         m_shader->setFloat("uSkyIntensity", 1.0f);
         m_shader->setInt("uLightmapDay", 1);
         m_shader->setInt("uLightmapNight", 2);
+        m_shader->setInt("uDebugLightMode", 0);
+        m_shader->setFloat("uAnimationTime", 0.0f);
+        bindPreviewShadowFallback(*m_shader);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
         // Bind lightmap textures for held item rendering
         glActiveTexture(GL_TEXTURE1);
@@ -237,9 +332,15 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     }
 
     glBindVertexArray(mesh->vao);
+    pushDebugGroup(useItemMesh ? "UI.HeldItemPreview.Item" : "UI.HeldItemPreview.Block");
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    popDebugGroup();
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     if (useBlockMesh) {
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -252,6 +353,7 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     }
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     if (useBlockMesh) {
         m_shader->setInt("uUseModel", 0);

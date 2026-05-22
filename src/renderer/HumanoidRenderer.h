@@ -2,8 +2,10 @@
 #define MECRAFT_HUMANOID_RENDERER_H
 
 #include <cstdint>
+#include <unordered_map>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
+#include <entt/entt.hpp>
 #include "../ecs/components/Components.h"
 
 class Camera;
@@ -117,14 +119,18 @@ private:
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::SkinTypeComponent::Type skinType);
 
+    // Per-object velocity: stores previous-frame model matrix per entity part.
+    std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;
+
     // Shared entity draw helper — iterates ECS and draws body parts with the given shader.
+    // prevModelLoc: uniform location for previous-frame model matrix (-1 to skip).
     void drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                      int modelLoc, int viewProjLoc, const glm::mat4& viewProj,
-                      RenderMode mode);
+                      int modelLoc, int viewProjLoc, int prevModelLoc,
+                      const glm::mat4& viewProj, RenderMode mode);
     // Overload with world light query — sets uEntitySunlight/uEntityBlockLight per entity.
     void drawEntities(const World& world, ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                      int modelLoc, int viewProjLoc, const glm::mat4& viewProj,
-                      RenderMode mode);
+                      int modelLoc, int viewProjLoc, int prevModelLoc,
+                      const glm::mat4& viewProj, RenderMode mode);
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const World& world, const glm::vec3& position);
 };

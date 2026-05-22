@@ -36,6 +36,7 @@ float shadowDither() {
 #ifndef MECRAFT_SHADOW_ENABLE_STANDARD_SAMPLE
 #define MECRAFT_SHADOW_ENABLE_STANDARD_SAMPLE
 #endif
+#define MECRAFT_SHADOW_OPAQUE_ONLY
 #include "mecraft_shadow.glsl"
 
 // ---- Held item shadow API ----
