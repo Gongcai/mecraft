@@ -72,6 +72,8 @@ void Game::initRenderers() {
     m_dropRenderer.init(m_resourceMgr);
     m_firstPersonHeldItemRenderer.init(m_resourceMgr);
     m_humanoidRenderer.init(m_resourceMgr);
+    m_renderer.setHumanoidRenderer(&m_humanoidRenderer);
+    m_renderer.setGameplayRegistry(&m_gameplayScene.registry());
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
@@ -282,6 +284,7 @@ void Game::renderFrame(const float frameTime) {
     }
 
     Camera finalCamera = m_cameraController.computeRenderCamera(renderCamera, eyePosition);
+    m_renderer.setRenderLocalPlayerModel(m_cameraController.shouldRenderPlayerModel());
 
     // Set held block light for dynamic hand illumination
     {
@@ -301,14 +304,19 @@ void Game::renderFrame(const float frameTime) {
     float cameraRainVisibility = 1.0f;
 
     if (!lightDebugActive) {
+        // In deferred mode, humanoid entities are rendered into the GBuffer during
+        // renderOpaqueAndCutout() → renderGBufferEntities(). Skip their forward pass.
+        // DropRenderer still uses forward until Phase 2 adds its GBuffer path.
+        const bool deferredActive = m_renderer.isDeferredFrameActive();
         m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
-
-        if (m_cameraController.shouldRenderPlayerModel()) {
-            m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                      HumanoidRenderer::kRenderAll);
-        } else {
-            m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                      HumanoidRenderer::kRenderMobsOnly);
+        if (!deferredActive) {
+            if (m_cameraController.shouldRenderPlayerModel()) {
+                m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
+                                          HumanoidRenderer::kRenderAll);
+            } else {
+                m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
+                                          HumanoidRenderer::kRenderMobsOnly);
+            }
         }
         m_particleSystem.render(finalCamera.getProjectionMatrix(m_window.getAspectRatio()),
                                 finalCamera.getViewMatrix());

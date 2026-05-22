@@ -39,6 +39,7 @@ const int MATERIAL_TEXTURED = 35;
 const int MATERIAL_TEXTURED_EMISSIVE = 36;
 const int MATERIAL_ORE = 57;
 const int MATERIAL_NETHER_ORE = 58;
+const int MATERIAL_SKIN = 60;  // Entity skin (player/mob) — Mecraft extension
 const float MATERIAL_ID_MAX = 63.0;
 
 // DerivativeMain Material.inc:12 — EMISSION_CURVE shapes the PBR emissiveness channel.
@@ -129,6 +130,10 @@ float derivativeHardcodedSss(int materialId) {
     if (materialId == MATERIAL_BANNER_SSS) {
         return 0.65;
     }
+    // Mecraft extension: entity skin subsurface scattering.
+    if (materialId == MATERIAL_SKIN) {
+        return 0.35;
+    }
     return 0.0;
 }
 
@@ -158,6 +163,12 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
     } else if (materialId == MATERIAL_ICE) {
         material.roughness = 0.10;
         material.f0 = 0.04;
+    } else if (materialId == MATERIAL_SKIN) {
+        // Mecraft extension: entity skin — moderate roughness, standard dielectric,
+        // moderate SSS for subsurface skin translucency.
+        material.roughness = 0.65;
+        material.f0 = 0.04;
+        material.sss = 0.35;
     }
 
     material.sss = derivativeHardcodedSss(materialId);
@@ -172,6 +183,10 @@ SurfaceMaterialAux surfaceMaterialAuxForKind(float materialKind) {
 
     if (materialId == MATERIAL_STAINED_GLASS || materialId == MATERIAL_WATER || materialId == MATERIAL_ICE) {
         aux.wetnessMask = 1.0;
+    }
+    if (materialId == MATERIAL_SKIN) {
+        aux.wetnessMask = 0.6;
+        aux.porosity = 0.3;
     }
     return aux;
 }

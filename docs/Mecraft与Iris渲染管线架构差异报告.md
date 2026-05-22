@@ -52,8 +52,8 @@
 - Mecraft Renderer Contract 系统化（`MecraftTextureContract`、`MecraftRenderContract`、`MecraftRenderPhase`）
 - SSS depth：已通过 PCSS blocker delta（`avgBlocker - receiverZ`）打通，cascade 0 可用；非 PCSS 级联仍为 0（已知限制）
 - 水下渲染：`uIsEyeInWater` 全部 5 个 pass 已动态绑定；`UW_VOLUMETRIC_LIGHT` 已实现（dual-depth cascade 0、caustic 吸收、Beer-Lambert 消光）；water shadow contract 已建立（cascade 0 DepthAll + Color0/1）
-- GBuffer Material 合同（Material.inc 逐 ID、实体/手/掉落物进 GBuffer、per-pixel normal map、PBR specular map 输入）
-- 前向路径增强：`chunk_lit_common.fs` 缺 shadow/SSAO/SSR/SH skylight，需对齐 DerivativeMain 或将实体迁入 deferred 路径
+- GBuffer Material 合同（Material.inc 逐 ID、~~实体/手/掉落物进 GBuffer~~ HumanoidRenderer 已进 GBuffer + CSM shadow、per-pixel normal map、PBR specular map 输入）
+- 前向路径增强：`chunk_lit_common.fs` 缺 shadow/SSAO/SSR/SH skylight；HumanoidRenderer 已迁入 deferred 路径，DropRenderer/FirstPersonHeldItemRenderer/粒子仍 forward
 
 ## 1. Mecraft 当前渲染管线概览
 
@@ -97,7 +97,7 @@
 - **水 pre-TAA 渲染**（步骤 11）：`Renderer.cpp:1481-1486`，DerivativeMain 风格，水面与 GBuffer 共享 jittered depth，确保水/不透明接触边缘在 TAA 中正确累积。
 - **VFog pre-TAA 渲染**（步骤 12）：R1 dither + checkerboard upscale 提供逐帧变化，TAA 多帧解析。
 - **Velocity 不编码 jitter**（步骤 4）：`Renderer.cpp:1934-1937`，DerivativeMain Reproject() 使用 raw projection 矩阵，jitter 通过 TAA 的 `uJitter` offset 处理。
-- **前向路径**（步骤 16）：所有实体（mob/player/drop/hand）使用独立 forward 路径，`chunk_lit_common.fs` 无 shadow map 采样、无 SSAO、无 SSR、使用简化 BRDF（`hammonDiffuseApprox` 非 `DiffuseHammon`）。
+- **前向路径**（步骤 16）：HumanoidRenderer（mob/player）已进入 GBuffer deferred 路径（`entity_gbuffer.fs` + `MATERIAL_SKIN=60`），deferred 模式下自动接收 CSM 阴影、SSAO、skylight SH、BRDF、SSS、wetness。DropRenderer/FirstPersonHeldItemRenderer/粒子仍 forward，`chunk_lit_common.fs` 无 shadow map 采样、无 SSAO、无 SSR、使用简化 BRDF。
 - **~~`uIsEyeInWater` 硬编码为 0~~**：已修复，全部 5 个 pass 动态绑定 `m_eyeInWater`。
 
 这个架构适合项目自有光照管线，但与 Iris 最大差别是：Mecraft 当前以"自己定义的一组 pass 和资源"为中心；Iris 以"shaderpack 声明 + Minecraft 渲染阶段 + OptiFine 兼容 uniform/texture contract"为中心。
@@ -141,7 +141,7 @@ Iris 不是简单地把 shader 编译后按固定顺序调用。它在 shaderpac
 | Render targets | Iris 管理 `shadowtex*`、`shadowcolor*`、`colortex*`、depthtex、flip/mipmap/filter | Mecraft 使用自定义 `DeferredRenderTargets`（30+ 逻辑 target） | shader 移植时 sampler 名和 buffer 语义容易"看起来对号"但不等价 |
 | Sampler/filter/mipmap | properties/directives 可控制 | C++ 固定 texture 参数为主；CSM depth 有 `sampler2DArrayShadow` comparison view（零拷贝 `glTextureView`） | PCF 从 ~15 指令/采样降至 1 指令；PCF/soft shadow/历史 buffer/噪声采样出现偏差 |
 | Cutout/alpha | Minecraft terrain render type + shaderpack alpha test 语义 | chunk pass 自行分类 cutout/transparent | 树叶/草在 shadow、GBuffer、透明 pass 中语义已统一（使用同一 cutout helper） |
-| Entity/block entity/player shadow | directives 可分别开关和距离限制 | 当前只处理 terrain；实体用纯 forward | 后续实体阴影、手持物、掉落物会继续偏离 |
+| Entity/block entity/player shadow | directives 可分别开关和距离限制 | HumanoidRenderer 已进 GBuffer + CSM shadow；DropRenderer/Hand/Item 仍 forward | 手持物、掉落物、粒子仍偏离；实体无 per-object velocity |
 | Uniform contract | OptiFine/Iris 全量兼容 uniform，时间、相机、矩阵、上一帧状态严格定义 | 当前上传项目 shader 用到的 uniform；`LightingEnvironment` 统一光照数据 | DerivativeMain 文件逐步移植时会不断撞到缺失或近似 uniform |
 | 坐标空间 | Minecraft/Iris 明确区分 camera-relative、absolute、unshifted camera | Mecraft 使用 `jitteredViewProj`/`jitteredInvViewProj`/raw `invViewProj` 三套矩阵 | TAA jitter 通过 `jitteredViewProj` 注入 GBuffer，velocity 使用 raw `invViewProj`，VFog 使用 raw `invViewProj` |
 | 状态管理 | 每个 pass 有明确 GL state/blend/depth/cull 规则 | 多数状态由 C++ pass 手动设置 | alpha/cutout/背面阴影/透明阴影非常容易残留状态 |

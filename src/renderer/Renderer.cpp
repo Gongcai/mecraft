@@ -4,7 +4,9 @@
 
 #include "Renderer.h"
 
+#include "HumanoidRenderer.h"
 #include "ChunkMesher.h"
+#include "../ecs/GameplayRegistry.h"
 #include "shadow/ShadowMatrices.h"
 #include "shadow/ShadowCasterCuller.h"
 #include "../Paths.h"
@@ -99,7 +101,9 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     }
     m_chunkShader = m_chunkForwardShader;
     m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
+    m_entityGBufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
+    m_entityShadowShader = resourceMgr.getShader("entity_shadow");
     m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
     m_sceneCompositeShader = resourceMgr.getShader("scene_composite");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
@@ -1442,6 +1446,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     beginGpuTimer(GpuTimerPass::GBuffer);
 #endif
     renderGBufferTerrain(world, frame);
+    renderGBufferEntities(frame);
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
 #endif
@@ -1652,6 +1657,56 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
+void Renderer::renderGBufferEntities(const RenderFrameData& frame) {
+    // Render humanoid/mob entities into the GBuffer after terrain.
+    // GBuffer FBO is still bound from renderGBufferTerrain(). Depth buffer
+    // contains terrain depth — entities will automatically depth-test against it.
+    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
+        m_entityGBufferShader == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    // Use jittered view-projection for TAA consistency with terrain.
+    const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
+
+    const HumanoidRenderer::RenderMode mode = m_renderLocalPlayerModel
+        ? HumanoidRenderer::kRenderAll
+        : HumanoidRenderer::kRenderMobsOnly;
+    m_humanoidRenderer->renderToGBuffer(*m_gameplayRegistry, viewProj, mode);
+
+    // Restore state
+    glBindVertexArray(0);
+}
+
+void Renderer::renderShadowEntities(const glm::mat4& shadowViewProj) {
+    // Render humanoid/mob entities into the current shadow cascade layer.
+    // Shadow FBO layer is already bound by the caller (renderShadowMap).
+    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
+        m_entityShadowShader == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    m_entityShadowShader->use();
+    m_entityShadowShader->setInt("uTexture", 0);
+
+    m_humanoidRenderer->renderToShadowMap(*m_gameplayRegistry,
+                                          shadowViewProj, HumanoidRenderer::kRenderAll);
+
+    glBindVertexArray(0);
+}
+
 void Renderer::renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame) {
     if (m_shadowDepthShader == nullptr) {
         return;
@@ -1739,6 +1794,10 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
             m_worldRenderBuffer.flushOpaque();
         }
         renderCutoutChunks(cutoutEntries);
+        // Entity shadow: render humanoid/mob depth into this cascade.
+        renderShadowEntities(cascadeData.viewProj);
+        // Restore shadow_depth shader — renderShadowEntities() activated entity_shadow.
+        m_shadowDepthShader->use();
 
         // Pass 2: Transparent/all — only cascade 0, only when needed.
         // Copy DepthOpaque → DepthAll, then draw water on top with depth writes.

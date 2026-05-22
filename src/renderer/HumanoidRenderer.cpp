@@ -379,6 +379,8 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType 
 void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_shader = resourceMgr.getShader("steve");
+    m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
+    m_shadowShader = resourceMgr.getShader("entity_shadow");
 
     // Player meshes (64x64 skin)
     m_headMesh = buildHeadMesh();
@@ -550,18 +552,14 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     glActiveTexture(static_cast<GLenum>(oldActiveTexture));
 }
 
-void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,
-                               const Window& window, RenderMode mode) {
-    if (m_shader == nullptr || m_resourceMgr == nullptr) return;
-
+void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
+                                     int modelLoc, int viewProjLoc,
+                                     const glm::mat4& viewProj, RenderMode mode) {
     auto& reg = gameplayReg.registry();
-    const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
-    const int modelLoc = m_shader->getUniformLocation("model");
-    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
 
-    m_shader->use();
-    m_shader->setMat4(viewProjLoc, viewProj);
-    m_shader->setInt("uTexture", 0);
+    shader.use();
+    shader.setMat4(viewProjLoc, viewProj);
+    shader.setInt("uTexture", 0);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -588,7 +586,7 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
                                                 ecs::SkinTypeComponent::Type::Player);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
-                m_shader->setMat4(modelLoc, world.worldMatrix);
+                shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
             }
@@ -608,7 +606,7 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
                                                     ecs::SkinTypeComponent::Type::Player);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
-                    m_shader->setMat4(modelLoc, world.worldMatrix);
+                    shader.setMat4(modelLoc, world.worldMatrix);
                     glBindVertexArray(mesh->vao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
                 }
@@ -637,7 +635,7 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
                                                 ecs::SkinTypeComponent::Type::Mob);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
-                m_shader->setMat4(modelLoc, world.worldMatrix);
+                shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
             }
@@ -657,7 +655,7 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
                                                     ecs::SkinTypeComponent::Type::Mob);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
-                    m_shader->setMat4(modelLoc, world.worldMatrix);
+                    shader.setMat4(modelLoc, world.worldMatrix);
                     glBindVertexArray(mesh->vao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
                 }
@@ -666,5 +664,42 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
     }
 
     glBindVertexArray(0);
+}
+
+void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,
+                               const Window& window, RenderMode mode) {
+    if (m_shader == nullptr || m_resourceMgr == nullptr) return;
+
+    const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
+    const int modelLoc = m_shader->getUniformLocation("model");
+    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
+
+    drawEntities(gameplayReg, *m_shader, modelLoc, viewProjLoc, viewProj, mode);
     glDisable(GL_CULL_FACE);
+}
+
+void HumanoidRenderer::renderToGBuffer(ecs::GameplayRegistry& gameplayReg,
+                                        const glm::mat4& jitteredViewProj,
+                                        RenderMode mode) {
+    if (m_gbufferShader == nullptr || m_resourceMgr == nullptr) return;
+
+    const int modelLoc = m_gbufferShader->getUniformLocation("model");
+    const int viewProjLoc = m_gbufferShader->getUniformLocation("viewProj");
+
+    // GBuffer FBO is already bound by the caller (Renderer).
+    // Depth test/write enabled, blend disabled — set by caller.
+    drawEntities(gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, jitteredViewProj, mode);
+}
+
+void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
+                                          const glm::mat4& shadowViewProj,
+                                          RenderMode mode) {
+    if (m_shadowShader == nullptr || m_resourceMgr == nullptr) return;
+
+    const int modelLoc = m_shadowShader->getUniformLocation("model");
+    const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
+
+    // Shadow FBO is already bound by the caller (Renderer).
+    // Depth test/write enabled, blend disabled — set by caller.
+    drawEntities(gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, shadowViewProj, mode);
 }

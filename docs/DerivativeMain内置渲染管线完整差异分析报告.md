@@ -60,7 +60,7 @@
 - 前向路径 `chunk_lit_common.fs` 无 shadow/SSAO/SSR/SH skylight，使用简化 BRDF（`hammonDiffuseApprox` 非 `DiffuseHammon`）。
 - ~~`uIsEyeInWater` 硬编码为 0~~ 已修复：全部 5 个 pass 动态绑定 `m_eyeInWater`。
 - GBuffer 无 per-pixel 法线贴图，roughness/f0 完全靠材质 ID 硬编码。
-- 实体/手/掉落物仍纯 forward 渲染（`steve.fs`/`block_item_lit.fs`）。
+- ~~实体/手/掉落物仍纯 forward 渲染~~ 已部分修复：HumanoidRenderer（玩家/mob）已进入 GBuffer 5 MRT + CSM shadow（`entity_gbuffer.fs`、`entity_shadow.fs`、`MATERIAL_SKIN=60`），deferred 模式下自动接收 CSM 阴影、SSAO、skylight SH、BRDF、SSS、wetness。DropRenderer/FirstPersonHeldItemRenderer/粒子仍 forward。
 
 结论：**架构地基已基本可用；后续工作必须从"复刻 Iris 宿主"转为"稳定 Mecraft Renderer Contract，并按 DerivativeMain 视觉目标收敛"。**
 
@@ -228,7 +228,7 @@
 - PBR/LabPBR/POM 路径为非目标，但原版材质 fallback 必须对齐。
 - **无 per-pixel 法线贴图**：GBuffer 仅存面法线，`chunk_gbuffer.fs` 无 normal map 采样。DerivativeMain `Terrain.frag` 有完整 tangent-space normal map + anisotropic filtering。
 - **roughness/f0 完全靠材质 ID 硬编码**：无 PBR specular map 输入，`surfaceMaterialForKind` / `surfaceMaterialAuxForKind` 返回固定值。水面/冰面/玻璃的 porosity/metalness 未设置。
-- **实体/手/掉落物/天气粒子 GBuffer**：`HumanoidRenderer`（`steve.fs`）、`FirstPersonHeldItemRenderer`（`block_item_lit.fs`）、`DropRenderer` 均为纯 forward，无 GBuffer 输出。
+- **实体/手/掉落物/天气粒子 GBuffer**：`HumanoidRenderer` 已进入 GBuffer（`entity_gbuffer.fs` 写 5 MRT，`MATERIAL_SKIN=60`，roughness=0.65/f0=0.04/sss=0.35），deferred 模式自动接收全套 deferred lighting；CSM shadow casting 已接入（`entity_shadow.fs`）。`FirstPersonHeldItemRenderer`（`block_item_lit.fs`）、`DropRenderer`、粒子仍为纯 forward，无 GBuffer 输出。
 
 建议下一步：
 
@@ -770,7 +770,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 | `lib/Head/Material.inc` | `gbuffer_contract.glsl` | ✅ EMISSIVE_CURVE=2.2 已复刻；需逐 ID 审计 |
 | `program/Gbuffers/Terrain` | `chunk_gbuffer.vs/fs` | 中等；原版 fallback 需继续对齐；无 per-pixel normal map、无 PBR specular map |
 | `program/Gbuffers/Water` | `water_composite.fs` + water mesh | 架构不同，算法部分；水面 pre-TAA 已实现 |
-| `program/Gbuffers/Block/Entities/Hand/...` | forward/entity/item shaders | 低；`steve.fs`/`block_item_lit.fs`/`item_model.fs` 无 GBuffer 输出 |
+| `program/Gbuffers/Block/Entities/Hand/...` | `entity_gbuffer.fs` + forward/entity/item shaders | 中等；HumanoidRenderer 已进 GBuffer（MATERIAL_SKIN=60）+ CSM shadow；DropRenderer/Hand/Item 仍 forward |
 | `program/Shadow` | `shadow_depth.vs/fs` | 部分完成；Derivative warp 与 sampler2DShadow 双视图已实现，但 ShadowColor.a 透明标志不是 DerivativeMain 双 shadowtex 语义，colored shadow/透明投射者需重新验收；RSM 仍缺 |
 | `lib/Lighting/ShadowDistortion.glsl` | `derivative_shadow.glsl` | ✅ 已照抄；公共 include |
 | `lib/Lighting/SunLighting.glsl` | `derivative_sunlight.glsl` + `derivative_shadow.glsl` + `deferred_lighting.fs` | 部分完成；HG phase/fake bounce/SSS 纯函数已端口，但 BlockerSearch/PCF/SSS depth/colored shadow 读取链路需逐行复核并通过 cutout/transparent 验收 |
@@ -840,7 +840,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 
 1. `Material.inc` 逐 ID 对齐。
 2. Terrain 原版材质 fallback 对齐。
-3. Entities/Hand/HandWater/Weather/Beacon/Damaged/Glint 进入 DerivativeMain GBuffer 合同。
+3. ~~Entities/Hand/HandWater/Weather/Beacon/Damaged/Glint 进入 DerivativeMain GBuffer 合同。~~ 部分完成：HumanoidRenderer（玩家/mob）已进 GBuffer + CSM shadow（`MATERIAL_SKIN=60`）。剩余：DropRenderer、FirstPersonHeldItemRenderer、天气粒子、Beacon/Damaged/Glint。
 
 ### P3：Atmosphere/Cloud/Fog/Water
 
@@ -874,7 +874,7 @@ float depthSample = texelFetch(uShadowMapRaw, texelCoord, 0).x;
 - 21 个 debug mode、CSM shadow、cloud shadow、phase functions、powder、optical depth march、TIME_FADE、R1 dither、Bloomy Fog alpha passthrough 全部落地
 
 **下一步进入 P2/P3**：
-- P2：GBuffer Material 合同（Material.inc 逐 ID 对齐、实体/手/掉落物进 GBuffer）
+- P2：GBuffer Material 合同（Material.inc 逐 ID 对齐、~~实体/手/掉落物进 GBuffer~~ HumanoidRenderer 已完成，剩余 DropRenderer/Hand/Item）
 - P3：Atmosphere/Cloud/Water 大规模视觉收敛
 - ~~P1：修复 SSS depth~~ ✅ PCSS cascade 0 已打通
 - ~~P1：修复 water composite `uIsEyeInWater` 硬编码~~ ✅ 全部 5 个 pass 动态绑定

@@ -23,7 +23,9 @@
 
 class World;
 class Chunk;
+class HumanoidRenderer;
 
+namespace ecs { class GameplayRegistry; }
 namespace shadow { class ShadowCasterCuller; }
 
 /// Decoupled data transfer structs for block interaction rendering.
@@ -363,6 +365,10 @@ public:
     [[nodiscard]] GameplaySkyRenderer::SkyColors getSkyColors() const { return m_currentFrameData.skyColors; }
     [[nodiscard]] glm::vec3 getFogColor() const { return m_currentFrameData.fogColor; }
     [[nodiscard]] bool isDeferredDebugViewActive() const;
+    [[nodiscard]] bool isDeferredFrameActive() const { return m_deferredFrameActive; }
+    void setRenderLocalPlayerModel(bool visible) { m_renderLocalPlayerModel = visible; }
+    void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
+    void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
     [[nodiscard]] GLuint gbufDepthTexture() const { return m_deferredTargets.depthTexture(); }
@@ -553,7 +559,9 @@ private:
     void renderTransparentCompositePass(const World& world, const Window& window);
     void renderWaterCompositePass(const World& world, const Window& window, bool preTemporalResolve = false);
     void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
+    void renderGBufferEntities(const RenderFrameData& frame);
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
+    void renderShadowEntities(const glm::mat4& shadowViewProj);
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const RenderFrameData& frame);
     void renderSceneCompositePass(const RenderFrameData& frame);
@@ -635,7 +643,9 @@ private:
     Shader* m_transparentCompositeShader = nullptr;
     Shader* m_waterCompositeShader = nullptr;
     Shader* m_chunkGBufferShader = nullptr;
+    Shader* m_entityGBufferShader = nullptr;
     Shader* m_shadowDepthShader = nullptr;
+    Shader* m_entityShadowShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;
     Shader* m_sceneCompositeShader = nullptr;
     Shader* m_deferredDebugShader = nullptr;
@@ -672,6 +682,8 @@ private:
     ThreadPool m_threadPool;
     ChunkMeshingService m_meshingService;
     GameplaySkyRenderer m_gameplaySkyRenderer;
+    HumanoidRenderer* m_humanoidRenderer = nullptr;  // injected from Game
+    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
@@ -685,6 +697,7 @@ private:
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     shadow::ShadowRenderer m_shadowRenderer;
     bool m_deferredFrameActive = false;
+    bool m_renderLocalPlayerModel = true;
     bool m_waterRenderedBeforeTemporal = false;
     bool m_deferredHistoryUpdatedThisFrame = false;
     std::unordered_set<int64_t> m_meshingInFlight;

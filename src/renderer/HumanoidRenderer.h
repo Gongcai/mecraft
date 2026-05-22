@@ -26,6 +26,16 @@ public:
     void shutdown();
     void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
                 RenderMode mode = kRenderAll);
+    // GBuffer path: renders entities into the deferred GBuffer (5 MRT).
+    // Caller must have already bound the GBuffer FBO with terrain depth.
+    void renderToGBuffer(ecs::GameplayRegistry& registry,
+                         const glm::mat4& jitteredViewProj,
+                         RenderMode mode = kRenderAll);
+    // Shadow path: renders entities into the CSM shadow map.
+    // Caller must have already bound the shadow FBO layer.
+    void renderToShadowMap(ecs::GameplayRegistry& registry,
+                           const glm::mat4& shadowViewProj,
+                           RenderMode mode = kRenderAll);
     void renderInventoryPreview(float x,
                                 float y,
                                 float width,
@@ -67,7 +77,9 @@ private:
     PartMesh m_mobLeftArmMesh;
     PartMesh m_mobLeftLegMesh;
 
-    Shader* m_shader = nullptr;
+    Shader* m_shader = nullptr;          // forward shader (steve.fs)
+    Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
+    Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
@@ -97,6 +109,11 @@ private:
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::SkinTypeComponent::Type skinType);
+
+    // Shared entity draw helper — iterates ECS and draws body parts with the given shader.
+    void drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
+                      int modelLoc, int viewProjLoc, const glm::mat4& viewProj,
+                      RenderMode mode);
 };
 
 #endif // MECRAFT_HUMANOID_RENDERER_H
