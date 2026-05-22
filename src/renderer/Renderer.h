@@ -24,6 +24,8 @@
 class World;
 class Chunk;
 class HumanoidRenderer;
+class DropRenderer;
+class DropSystem;
 
 namespace ecs { class GameplayRegistry; }
 namespace shadow { class ShadowCasterCuller; }
@@ -368,6 +370,8 @@ public:
     [[nodiscard]] bool isDeferredFrameActive() const { return m_deferredFrameActive; }
     void setRenderLocalPlayerModel(bool visible) { m_renderLocalPlayerModel = visible; }
     void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
+    void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
+    void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
@@ -560,8 +564,12 @@ private:
     void renderWaterCompositePass(const World& world, const Window& window, bool preTemporalResolve = false);
     void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
     void renderGBufferEntities(const RenderFrameData& frame);
+    void renderGBufferDrops(const World& world, const RenderFrameData& frame);
     void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
     void renderShadowEntities(const glm::mat4& shadowViewProj);
+    void renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
+                           const glm::mat4& shadowView, const glm::mat4& shadowProjection,
+                           float animationTime, float shaderTime);
     void renderSsaoPass(const Camera& camera, const Window& window);
     void renderDeferredLightingPass(const RenderFrameData& frame);
     void renderSceneCompositePass(const RenderFrameData& frame);
@@ -683,6 +691,8 @@ private:
     ChunkMeshingService m_meshingService;
     GameplaySkyRenderer m_gameplaySkyRenderer;
     HumanoidRenderer* m_humanoidRenderer = nullptr;  // injected from Game
+    DropRenderer* m_dropRenderer = nullptr;  // injected from Game
+    DropSystem* m_dropSystem = nullptr;  // injected from Game
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
     RenderPipelineSettings m_pipelineSettings{};

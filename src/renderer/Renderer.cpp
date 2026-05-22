@@ -5,6 +5,7 @@
 #include "Renderer.h"
 
 #include "HumanoidRenderer.h"
+#include "DropRenderer.h"
 #include "ChunkMesher.h"
 #include "../ecs/GameplayRegistry.h"
 #include "shadow/ShadowMatrices.h"
@@ -12,6 +13,7 @@
 #include "../Paths.h"
 #include "../core/Time.h"
 #include "../world/BlockSelection.h"
+#include "../world/DropSystem.h"
 #include "../world/World.h"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -1447,6 +1449,7 @@ bool Renderer::renderWorldDeferred(const World& world,
 #endif
     renderGBufferTerrain(world, frame);
     renderGBufferEntities(frame);
+    renderGBufferDrops(world, frame);
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
 #endif
@@ -1684,6 +1687,27 @@ void Renderer::renderGBufferEntities(const RenderFrameData& frame) {
     glBindVertexArray(0);
 }
 
+void Renderer::renderGBufferDrops(const World& world, const RenderFrameData& frame) {
+    // Render dropped items/blocks into the GBuffer after entities.
+    // GBuffer FBO is still bound from renderGBufferTerrain(). Depth buffer
+    // contains terrain+entity depth — drops will automatically depth-test against it.
+    if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    // Cross-shaped block drops emit single-sided quads without back-faces,
+    // so back-face culling would make them invisible from one side.
+    glDisable(GL_CULL_FACE);
+
+    const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
+    m_dropRenderer->renderToGBuffer(world, *m_dropSystem, viewProj, frame.animationTime);
+
+    glBindVertexArray(0);
+}
+
 void Renderer::renderShadowEntities(const glm::mat4& shadowViewProj) {
     // Render humanoid/mob entities into the current shadow cascade layer.
     // Shadow FBO layer is already bound by the caller (renderShadowMap).
@@ -1703,6 +1727,28 @@ void Renderer::renderShadowEntities(const glm::mat4& shadowViewProj) {
 
     m_humanoidRenderer->renderToShadowMap(*m_gameplayRegistry,
                                           shadowViewProj, HumanoidRenderer::kRenderAll);
+
+    glBindVertexArray(0);
+}
+
+void Renderer::renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
+                                  const glm::mat4& shadowView, const glm::mat4& shadowProjection,
+                                  float animationTime, float shaderTime) {
+    // Render dropped items/blocks into the current shadow cascade layer.
+    // Shadow FBO layer is already bound by the caller (renderShadowMap).
+    if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    // Cross-shaped block drops emit single-sided quads — disable culling
+    // so they cast shadows from both sides.
+    glDisable(GL_CULL_FACE);
+
+    m_dropRenderer->renderToShadowMap(world, *m_dropSystem, shadowViewProj,
+                                       shadowView, shadowProjection, animationTime, shaderTime);
 
     glBindVertexArray(0);
 }
@@ -1796,7 +1842,10 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
         renderCutoutChunks(cutoutEntries);
         // Entity shadow: render humanoid/mob depth into this cascade.
         renderShadowEntities(cascadeData.viewProj);
-        // Restore shadow_depth shader — renderShadowEntities() activated entity_shadow.
+        // Drop shadow: render dropped items/blocks depth into this cascade.
+        renderShadowDrops(world, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
+                          frame.animationTime, frame.shaderTime);
+        // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
         m_shadowDepthShader->use();
 
         // Pass 2: Transparent/all — only cascade 0, only when needed.

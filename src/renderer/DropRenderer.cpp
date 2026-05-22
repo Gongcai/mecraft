@@ -12,6 +12,8 @@
 #include "../core/Window.h"
 #include "../resource/ResourceMgr.h"
 #include "../world/DropSystem.h"
+#include "../world/World.h"
+#include "../world/Chunk.h"
 #include "../world/SubChunk.h"
 #include "../item/Item.h"
 
@@ -136,6 +138,10 @@ void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_shader = resourceMgr.getShader("drop_block");
     m_itemShader = resourceMgr.getShader("item_model");
+    m_gbufferShader = resourceMgr.getShader("drop_gbuffer");
+    m_itemGBufferShader = resourceMgr.getShader("item_gbuffer");
+    m_shadowShader = resourceMgr.getShader("shadow_depth");
+    m_itemShadowShader = resourceMgr.getShader("item_shadow");
 }
 
 void DropRenderer::shutdown() {
@@ -149,6 +155,10 @@ void DropRenderer::shutdown() {
     m_itemMeshes.clear();
     m_shader = nullptr;
     m_itemShader = nullptr;
+    m_gbufferShader = nullptr;
+    m_itemGBufferShader = nullptr;
+    m_shadowShader = nullptr;
+    m_itemShadowShader = nullptr;
     m_resourceMgr = nullptr;
 }
 
@@ -520,6 +530,248 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     glBindVertexArray(0);
 
     return mesh;
+}
+
+void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSystem,
+                                    const glm::mat4& jitteredViewProj,
+                                    float animationTime) {
+    if (m_resourceMgr == nullptr) {
+        return;
+    }
+
+    const auto& drops = dropSystem.getDrops();
+    if (drops.empty()) {
+        return;
+    }
+
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
+    const bool canRenderBlocks = (m_gbufferShader != nullptr && texArray.textureID != 0);
+    const bool canRenderItems = (m_itemGBufferShader != nullptr && itemAtlas.textureID != 0);
+    if (!canRenderBlocks && !canRenderItems) {
+        return;
+    }
+
+    // Block drop GBuffer setup
+    int blockModelLoc = -1;
+    if (canRenderBlocks) {
+        m_gbufferShader->use();
+        m_gbufferShader->setMat4("viewProj", jitteredViewProj);
+        blockModelLoc = m_gbufferShader->getUniformLocation("model");
+        m_gbufferShader->setInt("texArray", 0);
+        m_gbufferShader->setInt("uForceBaseLod", 0);
+        m_gbufferShader->setInt("uGrassColormap", 3);
+        m_gbufferShader->setInt("uFoliageColormap", 4);
+        m_gbufferShader->setFloat("uAnimationTime", animationTime);
+    }
+
+    // Item drop GBuffer setup
+    int itemModelLoc = -1;
+    if (canRenderItems) {
+        m_itemGBufferShader->use();
+        m_itemGBufferShader->setMat4("viewProj", jitteredViewProj);
+        itemModelLoc = m_itemGBufferShader->getUniformLocation("model");
+        m_itemGBufferShader->setInt("uAtlas", 0);
+    }
+
+    for (const DropEntity& drop : drops) {
+        const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
+        const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+        const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
+        const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, drop.position);
+        model = glm::rotate(model, drop.yawRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
+        model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
+
+        // Query world light at drop center position for deferred lighting.
+        const glm::vec2 light = queryWorldLight(world, drop.position);
+
+        if (!preferBlockMesh && itemTileIndex >= 0 && canRenderItems) {
+            Mesh* mesh = getOrCreateItemMesh(drop.itemId);
+            if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
+                m_itemGBufferShader->use();
+                m_itemGBufferShader->setMat4(itemModelLoc, model);
+                m_itemGBufferShader->setFloat("uDropSunlight", light.x);
+                m_itemGBufferShader->setFloat("uDropBlockLight", light.y);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+                glBindVertexArray(mesh->vao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            }
+            continue;
+        }
+
+        if (renderBlock == 0 || !canRenderBlocks) {
+            continue;
+        }
+
+        Mesh* mesh = getOrCreateBlockMesh(renderBlock);
+        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
+            continue;
+        }
+
+        m_gbufferShader->use();
+        m_gbufferShader->setMat4(blockModelLoc, model);
+        m_gbufferShader->setFloat("uDropSunlight", light.x);
+        m_gbufferShader->setFloat("uDropBlockLight", light.y);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindVertexArray(mesh->vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    }
+
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void DropRenderer::renderToShadowMap(const World& world, const DropSystem& dropSystem,
+                                      const glm::mat4& shadowViewProj,
+                                      const glm::mat4& shadowView,
+                                      const glm::mat4& shadowProjection,
+                                      float animationTime,
+                                      float shaderTime) {
+    (void)world; // Reserved for future shadow light query; shadow pass is depth-only currently.
+    if (m_resourceMgr == nullptr) {
+        return;
+    }
+
+    const auto& drops = dropSystem.getDrops();
+    if (drops.empty()) {
+        return;
+    }
+
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
+    const bool canRenderBlocks = (m_shadowShader != nullptr && texArray.textureID != 0);
+    const bool canRenderItems = (m_itemShadowShader != nullptr && itemAtlas.textureID != 0);
+    if (!canRenderBlocks && !canRenderItems) {
+        return;
+    }
+
+    // Block drop shadow setup — reuse shadow_depth shader with uUseModel=1
+    int blockModelLoc = -1;
+    if (canRenderBlocks) {
+        m_shadowShader->use();
+        m_shadowShader->setInt("uUseModel", 1);
+        m_shadowShader->setInt("uForceBaseLod", 1);
+        m_shadowShader->setInt("texArray", 0);
+        m_shadowShader->setInt("uGrassColormap", 2);
+        m_shadowShader->setInt("uFoliageColormap", 3);
+        m_shadowShader->setMat4("viewProj", shadowViewProj);
+        m_shadowShader->setMat4("uShadowModelView", shadowView);
+        m_shadowShader->setMat4("uShadowProjection", shadowProjection);
+        m_shadowShader->setMat4("uShadowProjectionInverse", glm::inverse(shadowProjection));
+        m_shadowShader->setInt("uShadowPassMode", 0);
+        m_shadowShader->setFloat("uAnimationTime", animationTime);
+        m_shadowShader->setFloat("uTime", shaderTime);
+        blockModelLoc = m_shadowShader->getUniformLocation("model");
+    }
+
+    // Item drop shadow setup
+    int itemModelLoc = -1;
+    if (canRenderItems) {
+        m_itemShadowShader->use();
+        m_itemShadowShader->setMat4("viewProj", shadowViewProj);
+        itemModelLoc = m_itemShadowShader->getUniformLocation("model");
+        m_itemShadowShader->setInt("uAtlas", 0);
+    }
+
+    for (const DropEntity& drop : drops) {
+        const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
+        const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+        const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
+        const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, drop.position);
+        model = glm::rotate(model, drop.yawRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
+        model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
+
+        if (!preferBlockMesh && itemTileIndex >= 0 && canRenderItems) {
+            Mesh* mesh = getOrCreateItemMesh(drop.itemId);
+            if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
+                m_itemShadowShader->use();
+                m_itemShadowShader->setMat4(itemModelLoc, model);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+                glBindVertexArray(mesh->vao);
+                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            }
+            continue;
+        }
+
+        if (renderBlock == 0 || !canRenderBlocks) {
+            continue;
+        }
+
+        Mesh* mesh = getOrCreateBlockMesh(renderBlock);
+        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
+            continue;
+        }
+
+        m_shadowShader->use();
+        m_shadowShader->setMat4(blockModelLoc, model);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindVertexArray(mesh->vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    }
+
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Restore uUseModel=0 so subsequent terrain shadow draws in the same
+    // cascade (or next cascade) don't pick up the drop model matrix.
+    if (canRenderBlocks) {
+        m_shadowShader->use();
+        m_shadowShader->setInt("uUseModel", 0);
+    }
+}
+
+glm::vec2 DropRenderer::queryWorldLight(const World& world, const glm::vec3& position) {
+    const int bx = static_cast<int>(std::floor(position.x));
+    const int by = static_cast<int>(std::floor(position.y));
+    const int bz = static_cast<int>(std::floor(position.z));
+
+    if (!world.isChunkLoadedForBlock(bx, by, bz)) {
+        return {1.0f, 0.0f};
+    }
+
+    const glm::ivec2 cc = world.getChunkCoords(bx, bz);
+    const auto& chunks = world.getActiveChunks();
+    const auto it = chunks.find(World::chunkKey(cc.x, cc.y));
+    if (it == chunks.end()) {
+        return {1.0f, 0.0f};
+    }
+
+    const glm::ivec3 local = Chunk::worldToLocal(bx, by, bz);
+    const uint8_t sun = it->second->getSunlight(local.x, local.y, local.z);
+    const uint8_t block = it->second->getBlockLight(local.x, local.y, local.z);
+    return {sun / 15.0f, block / 15.0f};
 }
 
 void DropRenderer::destroyMesh(Mesh& mesh) {

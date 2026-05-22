@@ -73,6 +73,8 @@ void Game::initRenderers() {
     m_firstPersonHeldItemRenderer.init(m_resourceMgr);
     m_humanoidRenderer.init(m_resourceMgr);
     m_renderer.setHumanoidRenderer(&m_humanoidRenderer);
+    m_renderer.setDropRenderer(&m_dropRenderer);
+    m_renderer.setDropSystem(&m_dropSystem);
     m_renderer.setGameplayRegistry(&m_gameplayScene.registry());
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
@@ -304,12 +306,12 @@ void Game::renderFrame(const float frameTime) {
     float cameraRainVisibility = 1.0f;
 
     if (!lightDebugActive) {
-        // In deferred mode, humanoid entities are rendered into the GBuffer during
-        // renderOpaqueAndCutout() → renderGBufferEntities(). Skip their forward pass.
-        // DropRenderer still uses forward until Phase 2 adds its GBuffer path.
+        // In deferred mode, humanoid entities and drops are rendered into the
+        // GBuffer during renderOpaqueAndCutout() → renderGBufferEntities()/
+        // renderGBufferDrops(). Skip their forward passes.
         const bool deferredActive = m_renderer.isDeferredFrameActive();
-        m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
         if (!deferredActive) {
+            m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
             if (m_cameraController.shouldRenderPlayerModel()) {
                 m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
                                           HumanoidRenderer::kRenderAll);

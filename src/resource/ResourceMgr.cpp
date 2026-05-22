@@ -282,6 +282,9 @@ void ResourceMgr::init() {
     loadShader("steve", SHADERS_DIR "/steve.vs", SHADERS_DIR "/steve.fs");
     loadShader("entity_gbuffer", SHADERS_DIR "/entity_gbuffer.vs", SHADERS_DIR "/entity_gbuffer.fs");
     loadShader("entity_shadow", SHADERS_DIR "/entity_shadow.vs", SHADERS_DIR "/entity_shadow.fs");
+    loadShader("drop_gbuffer", SHADERS_DIR "/drop_gbuffer.vs", SHADERS_DIR "/drop_gbuffer.fs");
+    loadShader("item_gbuffer", SHADERS_DIR "/item_gbuffer.vs", SHADERS_DIR "/item_gbuffer.fs");
+    loadShader("item_shadow", SHADERS_DIR "/item_shadow.vs", SHADERS_DIR "/item_shadow.fs");
     loadShader("ui_color", SHADERS_DIR "/ui_color.vs", SHADERS_DIR "/ui_color.fs");
     loadShader("skybox", SHADERS_DIR "/skybox.vs", SHADERS_DIR "/skybox.fs");
     loadShader("gameplay_sky", SHADERS_DIR "/gameplay_sky.vs", SHADERS_DIR "/gameplay_sky.fs");
