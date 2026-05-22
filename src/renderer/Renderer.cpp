@@ -2354,7 +2354,7 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
 
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, 0);
-    for (int unit = 6; unit >= 0; --unit) {
+    for (int unit = 5; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -4065,13 +4065,12 @@ void Renderer::renderBlockOutline(const World& world, const BlockTargetRenderDat
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
-    glLineWidth(2.0f);
+    // glLineWidth > 1.0 is deprecated in OpenGL 4.5+ core profile.
+    // Use 1.0 to avoid GL_INVALID_VALUE in future drivers.
 
     glBindVertexArray(m_outlineVao);
     glDrawArrays(GL_LINES, 0, 24);
     glBindVertexArray(0);
-
-    glLineWidth(1.0f);
     glDepthMask(GL_TRUE);
     ++drawCallCount;
 }

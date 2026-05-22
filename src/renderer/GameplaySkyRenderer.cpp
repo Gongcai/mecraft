@@ -206,10 +206,15 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr) {
     m_moonTexture = resourceMgr.getGuiTexture("moon_phases");
     initMeshes();
     initCloudMesh();
+    ensureDummySkyCaptureTexture();
 }
 
 void GameplaySkyRenderer::shutdown() {
     destroyMeshes();
+    if (m_dummySkyCaptureTexture != 0) {
+        glDeleteTextures(1, &m_dummySkyCaptureTexture);
+        m_dummySkyCaptureTexture = 0;
+    }
     m_shader = nullptr;
     m_sunTexture = 0;
     m_moonTexture = 0;
@@ -334,6 +339,7 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
     m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
     m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
+    bindDummySkyCaptureTexture(0);
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -341,7 +347,6 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
         glActiveTexture(GL_TEXTURE0);
     }
 
-    glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(m_skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
@@ -427,6 +432,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
     m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
     m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
+    bindDummySkyCaptureTexture(0);
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -434,7 +440,6 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
         glActiveTexture(GL_TEXTURE0);
     }
 
-    glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(m_skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
@@ -510,6 +515,7 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
     m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
+    bindDummySkyCaptureTexture(0);
     if (atmosphereLutTexture != 0) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
@@ -814,6 +820,29 @@ void GameplaySkyRenderer::destroyMeshes() {
     m_cloudMeshInfo = {};
 }
 
+void GameplaySkyRenderer::ensureDummySkyCaptureTexture() {
+    if (m_dummySkyCaptureTexture != 0) {
+        return;
+    }
+
+    constexpr std::array<float, 4> pixel = {0.0f, 0.0f, 0.0f, 1.0f};
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_dummySkyCaptureTexture);
+    glTextureStorage2D(m_dummySkyCaptureTexture, 1, GL_RGBA16F, 1, 1);
+    glTextureSubImage2D(m_dummySkyCaptureTexture, 0, 0, 0, 1, 1,
+                        GL_RGBA, GL_FLOAT, pixel.data());
+    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+}
+
+void GameplaySkyRenderer::bindDummySkyCaptureTexture(const GLint unit) {
+    ensureDummySkyCaptureTexture();
+    m_shader->setInt("uSkyCaptureTex", unit);
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_2D, m_dummySkyCaptureTexture);
+}
+
 void GameplaySkyRenderer::initCloudMesh() {
     if (m_cloudVao != 0) {
         return;
@@ -977,14 +1006,13 @@ void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float as
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
 
-    // Bind SkyCapture texture for mode 0 visible sky (atmosphere LUT radiance)
-    m_shader->setInt("uSkyCaptureTex", 1);
-    glActiveTexture(GL_TEXTURE1);
+    // Keep all gameplay_sky sampler2D uniforms on unit 0 so they never collide
+    // with uAtmosphereLut, which is a sampler3D fixed to unit 1.
+    m_shader->setInt("uSkyCaptureTex", 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, skyCaptureTexture);
 
     glDisable(GL_BLEND);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(m_skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
@@ -1014,6 +1042,7 @@ void GameplaySkyRenderer::renderClouds(const Camera& camera,
     m_shader->setMat4("uView", camera.getViewMatrix());
     m_shader->setMat4("uProjection", glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 1200.0f));
     m_shader->setVec4("uTintColor", glm::vec4(colors.cloudColor, 1.0f));
+    bindDummySkyCaptureTexture(0);
 
     GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
     GLboolean depthMaskWasEnabled = GL_TRUE;
@@ -1073,6 +1102,7 @@ void GameplaySkyRenderer::renderHalo(const Camera& camera,
     m_shader->setMat4("uProjection", glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f));
     m_shader->setMat4("uModel", model);
     m_shader->setVec4("uTintColor", colors.halo);
+    bindDummySkyCaptureTexture(0);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1121,6 +1151,7 @@ void GameplaySkyRenderer::renderCelestialBody(const Camera& camera,
     m_shader->setFloat("uBlackKeyThreshold", kBlackKeyThreshold);
     m_shader->setFloat("uBlackKeySoftness", kBlackKeySoftness);
     m_shader->setInt("uTexture", 0);
+    bindDummySkyCaptureTexture(0);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

@@ -910,14 +910,49 @@ vec3 applyTonemap(vec3 color) {
     return color;
 }
 
+// DerivativeMain Common.inc: bicubic (Mitchell-Netravali) interpolation.
+// Used for bloom mip upsampling to reduce bilinear blockiness at low resolutions.
+vec4 cubic(float x) {
+    float x2 = x * x;
+    float x3 = x2 * x;
+    vec4 w;
+    w.x = -x3 + 3.0 * x2 - 3.0 * x + 1.0;
+    w.y = 3.0 * x3 - 6.0 * x2 + 4.0;
+    w.z = -3.0 * x3 + 3.0 * x2 + 3.0 * x + 1.0;
+    w.w = x3;
+    return w * (1.0 / 6.0);
+}
+
+vec3 textureBicubic3(sampler2D tex, vec2 coord) {
+    vec2 res = vec2(textureSize(tex, 0));
+    coord = coord * res - 0.5;
+    vec2 fTexel = fract(coord);
+    coord -= fTexel;
+    vec4 xCubic = cubic(fTexel.x);
+    vec4 yCubic = cubic(fTexel.y);
+    vec4 c = coord.xxyy + vec2(-0.5, 1.5).xyxy;
+    vec4 s = vec4(xCubic.xz + xCubic.yw, yCubic.xz + yCubic.yw);
+    vec4 offset = c + vec4(xCubic.y, xCubic.w, yCubic.y, yCubic.w) / s;
+    offset *= 1.0 / res.xxyy;
+    vec3 sample0 = texture(tex, offset.xz).rgb;
+    vec3 sample1 = texture(tex, offset.yz).rgb;
+    vec3 sample2 = texture(tex, offset.xw).rgb;
+    vec3 sample3 = texture(tex, offset.yw).rgb;
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
+    return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
+}
+
 vec3 sampleBloomMip(int mip, vec2 uv) {
-    if (mip == 0) return texture(uBloomMip0, uv).rgb;
-    if (mip == 1) return texture(uBloomMip1, uv).rgb;
-    if (mip == 2) return texture(uBloomMip2, uv).rgb;
-    if (mip == 3) return texture(uBloomMip3, uv).rgb;
-    if (mip == 4) return texture(uBloomMip4, uv).rgb;
-    if (mip == 5) return texture(uBloomMip5, uv).rgb;
-    return texture(uBloomMip6, uv).rgb;
+    // DerivativeMain Grade.glsl DualBlurUpSample: bicubic sampling per mip.
+    // Mecraft adaptation: each mip is a separate texture, no atlas tile offset.
+    if (mip == 0) return textureBicubic3(uBloomMip0, uv);
+    if (mip == 1) return textureBicubic3(uBloomMip1, uv);
+    if (mip == 2) return textureBicubic3(uBloomMip2, uv);
+    if (mip == 3) return textureBicubic3(uBloomMip3, uv);
+    if (mip == 4) return textureBicubic3(uBloomMip4, uv);
+    if (mip == 5) return textureBicubic3(uBloomMip5, uv);
+    return textureBicubic3(uBloomMip6, uv);
 }
 
 void CalculateBloomFog(vec2 uv, out vec3 bloomData, out vec3 fogBloom) {

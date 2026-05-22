@@ -85,6 +85,8 @@ private:
     void initMeshes();
     void destroyMeshes();
     void initCloudMesh();
+    void ensureDummySkyCaptureTexture();
+    void bindDummySkyCaptureTexture(GLint unit);
     void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, GLuint skyCaptureTexture);
     void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
     void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
@@ -103,6 +105,7 @@ private:
     Shader* m_shader = nullptr;
     GLuint m_sunTexture = 0;
     GLuint m_moonTexture = 0;
+    GLuint m_dummySkyCaptureTexture = 0;
 
     GLuint m_skyVao = 0;
     GLuint m_skyVbo = 0;
