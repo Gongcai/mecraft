@@ -763,6 +763,40 @@ bool Renderer::isHybridDeferredReady() const {
            m_cloudShader != nullptr;
 }
 
+Renderer::HeldItemShadowData Renderer::getHeldItemShadowData() const {
+    HeldItemShadowData data{};
+    const auto& settings = m_pipelineSettings;
+    data.shadowsEnabled = settings.shadowsEnabled ? 1 : 0;
+    data.softShadowsEnabled = settings.softShadowsEnabled ? 1 : 0;
+    data.pcssShadowsEnabled = settings.pcssShadowsEnabled ? 1 : 0;
+    data.shadowDistance = settings.shadowDistance;
+    data.constantBias = settings.shadowConstantBias;
+    data.slopeBias = settings.shadowSlopeBias;
+    data.normalOffset = settings.shadowNormalOffset;
+    data.softness = settings.shadowSoftness;
+    data.pcssStrength = settings.shadowPcssStrength;
+    data.cameraPos = m_cameraPos;
+    data.skyIntensity = m_currentFrameData.skyIntensity;
+
+    if (m_deferredFrameActive) {
+        const auto& cascades = m_shadowRenderer.cascades();
+        data.cascadeCount = static_cast<int>(cascades.size());
+        data.sunDirection = m_shadowRenderer.lightDirection();
+        for (int i = 0; i < data.cascadeCount && i < 4; ++i) {
+            data.cascadeViewProj[i] = cascades[i].viewProj;
+            data.cascadeSplitFar[i] = cascades[i].splitFar;
+            data.cascadeTexelWorldSize[i] = cascades[i].texelWorldSize;
+        }
+        data.shadowTexture = m_deferredTargets.csmShadowDepthComparisonTexture();
+        data.shadowDepthRaw = m_deferredTargets.csmShadowDepthTexture();
+        data.shadowDepthAll = m_deferredTargets.csmShadowDepthAllComparisonTexture();
+        data.shadowDepthAllRaw = m_deferredTargets.csmShadowDepthAllTexture();
+        data.shadowColor0 = m_deferredTargets.csmShadowColor0Texture();
+        data.shadowColor1 = m_deferredTargets.csmShadowColor1Texture();
+    }
+    return data;
+}
+
 float Renderer::getAtlasAnisotropy() const {
     if (m_resourceMgr == nullptr) {
         return 1.0f;
@@ -1808,6 +1842,14 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         const ShadowCascadeData& cascadeData = m_shadowRenderer.cascade(cascade);
+
+        // Explicit GL state at cascade start — prevents leaked state from
+        // entity/drop shadow sub-passes in previous cascades.
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
 
         // Collect geometry once per cascade
         m_worldRenderBuffer.beginFrame();

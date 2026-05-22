@@ -1,4 +1,11 @@
+// Block/item forward lit fragment shader — Mecraft Phase 5.4 enhanced.
+// Used for held blocks in first-person view.
+// Phase 5.4: adds CSM shadow sampling via held_item_shadow.glsl.
+// The lightmap provides base lighting; shadow modulates sunlight contribution.
+
 #version 450 core
+#include "held_item_shadow.glsl"
+
 out vec4 FragColor;
 
 in vec2 vUV;
@@ -14,6 +21,7 @@ in float vAnimated;
 in float vFogDist;
 flat in float vTintKind;
 in vec2 vTintUV;
+in vec3 vWorldPos;
 
 uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
@@ -30,12 +38,26 @@ uniform float uFogDensity;
 uniform int uDebugLightMode;
 uniform float uSkyIntensity;
 uniform float uAnimationTime;
+uniform float uAmbientStrength;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
 const float aoLevels[4] = float[](0.72, 0.82, 0.91, 1.0);
+
+vec3 decodeFaceNormal(float face) {
+    if (face > -2.5 && face < -0.5) {
+        return vec3(0.0, 1.0, 0.0);
+    }
+    int idx = int(round(face));
+    if (idx == 0) return vec3(0.0, 1.0, 0.0);
+    if (idx == 1) return vec3(0.0, -1.0, 0.0);
+    if (idx == 2) return vec3(0.0, 0.0, 1.0);
+    if (idx == 3) return vec3(0.0, 0.0, -1.0);
+    if (idx == 4) return vec3(-1.0, 0.0, 0.0);
+    return vec3(1.0, 0.0, 0.0);
+}
 
 float computeFogFactor(float fogDistance) {
     if (uFogMode == 1) {
@@ -103,6 +125,14 @@ void main() {
     vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
     vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
     vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
+
+    // CSM shadow sampling for held blocks.
+    vec3 faceNormal = decodeFaceNormal(vNormal);
+    float shadow = sampleHeldItemShadow(vWorldPos, faceNormal);
+    // Modulate sunlight contribution by shadow; blocklight is unaffected.
+    float sunFraction = clamp(uSkyIntensity, 0.0, 1.0);
+    float shadowDarken = mix(1.0, shadow, sunFraction);
+    lightColor *= shadowDarken;
 
     vec3 finalColor = albedo * lightColor * aoFactor;
     if (uFogEnabled != 0) {

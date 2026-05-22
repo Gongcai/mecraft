@@ -90,6 +90,34 @@ public:
     void triggerSwing();
     void setContinuousSwing(bool active);
 
+    // Shadow data from Renderer — must be set before render() each frame.
+    struct ShadowData {
+        glm::mat4 cascadeViewProj[4]{};
+        float cascadeSplitFar[4]{};
+        float cascadeTexelWorldSize[4]{};
+        GLuint shadowTexture = 0;        // sampler2DArrayShadow (shadowtex1)
+        GLuint shadowDepthRaw = 0;       // sampler2DArray
+        GLuint shadowDepthAll = 0;       // sampler2DArrayShadow (shadowtex0)
+        GLuint shadowDepthAllRaw = 0;    // sampler2DArray
+        GLuint shadowColor0 = 0;         // sampler2DArray
+        GLuint shadowColor1 = 0;         // sampler2DArray
+        glm::vec3 cameraPos = glm::vec3(0.0f);
+        glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        float shadowDistance = 192.0f;
+        float constantBias = 0.0007f;
+        float slopeBias = 0.0022f;
+        float normalOffset = 0.035f;
+        float softness = 1.0f;
+        float pcssStrength = 0.72f;
+        int cascadeCount = 4;
+        int softShadowsEnabled = 1;
+        int pcssShadowsEnabled = 1;
+        int shadowsEnabled = 1;
+        float skyIntensity = 1.0f;
+        float ambientStrength = 0.55f;
+    };
+    void setShadowData(const ShadowData& data);
+
     void render(const Window& window,
                 const Inventory& inventory,
                 const HeldItemPreviewMotion& motion,
@@ -110,6 +138,7 @@ private:
     static void destroyMesh(Mesh& mesh);
 
     void drawArm(const glm::mat4& viewProj, const glm::mat4& model) const;
+    void bindShadowUniforms(Shader& shader) const;
     void drawItem(ItemID itemId,
                   const glm::mat4& view,
                   const glm::mat4& viewProj,
@@ -136,6 +165,7 @@ private:
     bool m_continuousSwing = false;
     float m_swingElapsed = 0.0f;
     Config m_config;
+    ShadowData m_shadowData{};
     bool m_initialized = false;
 };
 

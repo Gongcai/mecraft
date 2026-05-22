@@ -1,9 +1,17 @@
+// Steve arm fragment shader — Mecraft Phase 5.4 enhanced.
+// Player/mob arm with CSM shadow sampling and correct sun direction.
+// Phase 5.4: replaces hardcoded sun direction with uSunDirection uniform,
+// adds CSM shadow via held_item_shadow.glsl.
+
 #version 450 core
+#include "held_item_shadow.glsl"
+
 in vec2 vUV;
 in vec3 vNormal;
 in vec3 vWorldPos;
 
 uniform sampler2D uTexture;
+uniform float uAmbientStrength;
 
 out vec4 FragColor;
 
@@ -17,11 +25,12 @@ void main() {
         discard;
     }
 
-    // Simple directional lighting
-    vec3 sunDir = normalize(vec3(0.3, 1.0, 0.5));
-    float diffuse = max(dot(normalize(vNormal), sunDir), 0.0);
-    float ambient = 0.55;
-    float light = ambient + diffuse * 0.45;
+    vec3 normal = normalize(vNormal);
+    vec3 lightDir = normalize(uSunDirection);
+    float ndotl = max(dot(normal, lightDir), 0.0);
+    float shadow = sampleHeldItemShadow(vWorldPos, normal);
+    float ambient = uAmbientStrength;
+    float light = ambient + ndotl * shadow * (1.0 - ambient);
 
     FragColor = vec4(srgbToLinear(texColor.rgb) * light, texColor.a);
 }

@@ -411,6 +411,45 @@ void FirstPersonHeldItemRenderer::setContinuousSwing(const bool active) {
     }
 }
 
+void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
+    m_shadowData = data;
+}
+
+void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
+    // Cascade data
+    shader.setFloat("uShadowDistance", m_shadowData.shadowDistance);
+    shader.setFloat("uShadowConstantBias", m_shadowData.constantBias);
+    shader.setFloat("uShadowSlopeBias", m_shadowData.slopeBias);
+    shader.setFloat("uShadowNormalOffset", m_shadowData.normalOffset);
+    shader.setFloat("uShadowSoftness", m_shadowData.softness);
+    shader.setFloat("uShadowPcssStrength", m_shadowData.pcssStrength);
+    shader.setInt("uSoftShadowsEnabled", m_shadowData.softShadowsEnabled);
+    shader.setInt("uPcssShadowsEnabled", m_shadowData.pcssShadowsEnabled);
+    shader.setInt("uShadowsEnabled", m_shadowData.shadowsEnabled);
+    shader.setVec3("uCameraPos", m_shadowData.cameraPos);
+    shader.setVec3("uSunDirection", m_shadowData.sunDirection);
+    shader.setInt("uCsmCascadeCount", m_shadowData.cascadeCount);
+    shader.setFloat("uSkyIntensity", m_shadowData.skyIntensity);
+    shader.setFloat("uAmbientStrength", m_shadowData.ambientStrength);
+
+    // Cascade matrices and split data
+    for (int i = 0; i < m_shadowData.cascadeCount && i < 4; ++i) {
+        const std::string prefix = "uCsmCascades[" + std::to_string(i) + "].";
+        shader.setMat4(prefix + "viewProj", m_shadowData.cascadeViewProj[i]);
+        shader.setFloat(prefix + "splitNear", i == 0 ? 0.0f : m_shadowData.cascadeSplitFar[i - 1]);
+        shader.setFloat(prefix + "splitFar", m_shadowData.cascadeSplitFar[i]);
+        shader.setFloat(prefix + "texelWorldSize", m_shadowData.cascadeTexelWorldSize[i]);
+    }
+
+    // Shadow texture bindings (units 5-10)
+    shader.setInt("uCsmShadowMap", 5);
+    shader.setInt("uCsmShadowDepthRaw", 6);
+    shader.setInt("uCsmShadowDepthAll", 7);
+    shader.setInt("uCsmShadowDepthAllRaw", 8);
+    shader.setInt("uCsmShadowColor0", 9);
+    shader.setInt("uCsmShadowColor1", 10);
+}
+
 void FirstPersonHeldItemRenderer::render(const Window& window,
                                          const Inventory& inventory,
                                          const HeldItemPreviewMotion& motion,
@@ -587,8 +626,22 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     m_steveShader->setMat4("viewProj", viewProj);
     m_steveShader->setMat4("model", model);
     m_steveShader->setInt("uTexture", 0);
+    bindShadowUniforms(*m_steveShader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
+    // Shadow textures (units 5-10)
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowTexture);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthRaw);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAll);
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAllRaw);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1);
     glBindVertexArray(m_rightArmMesh.vao);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_rightArmMesh.vertexCount));
 }
@@ -635,6 +688,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         m_blockShader->setFloat("uAnimationTime", 0.0f);
         m_blockShader->setInt("uLightmapDay", 1);
         m_blockShader->setInt("uLightmapNight", 2);
+        bindShadowUniforms(*m_blockShader);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
         glActiveTexture(GL_TEXTURE1);
@@ -645,6 +699,19 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        // Shadow textures (units 5-10)
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowTexture);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthRaw);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAll);
+        glActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAllRaw);
+        glActiveTexture(GL_TEXTURE9);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0);
+        glActiveTexture(GL_TEXTURE10);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
         m_blockShader->setInt("uUseModel", 0);
@@ -664,8 +731,22 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     m_itemShader->setMat4("model", model);
     m_itemShader->setMat4("viewProj", viewProj);
     m_itemShader->setInt("uAtlas", 0);
+    bindShadowUniforms(*m_itemShader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+    // Shadow textures (units 5-10)
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowTexture);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthRaw);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAll);
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowDepthAllRaw);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor0);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_shadowData.shadowColor1);
     glBindVertexArray(mesh->vao);
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
 }

@@ -375,6 +375,32 @@ public:
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
+    // Shadow data for held item renderer — returns cascade matrices, textures, and settings.
+    struct HeldItemShadowData {
+        glm::mat4 cascadeViewProj[4]{};
+        float cascadeSplitFar[4]{};
+        float cascadeTexelWorldSize[4]{};
+        GLuint shadowTexture = 0;
+        GLuint shadowDepthRaw = 0;
+        GLuint shadowDepthAll = 0;
+        GLuint shadowDepthAllRaw = 0;
+        GLuint shadowColor0 = 0;
+        GLuint shadowColor1 = 0;
+        glm::vec3 cameraPos = glm::vec3(0.0f);
+        glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        float shadowDistance = 192.0f;
+        float constantBias = 0.0007f;
+        float slopeBias = 0.0022f;
+        float normalOffset = 0.035f;
+        float softness = 1.0f;
+        float pcssStrength = 0.72f;
+        int cascadeCount = 4;
+        int softShadowsEnabled = 1;
+        int pcssShadowsEnabled = 1;
+        int shadowsEnabled = 1;
+        float skyIntensity = 1.0f;
+    };
+    [[nodiscard]] HeldItemShadowData getHeldItemShadowData() const;
     [[nodiscard]] GLuint gbufDepthTexture() const { return m_deferredTargets.depthTexture(); }
     [[nodiscard]] GLuint weatherMaskTexture() const { return m_deferredTargets.weatherMaskTexture(); }
     void bindWeatherMaskFbo() { m_deferredTargets.bindWeatherMask(); }
