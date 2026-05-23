@@ -216,6 +216,13 @@ vec3 GetWavesNormal(vec2 position) {
     return normalize(vec3(wavesNormal * uWaterWaveHeight, 0.5));
 }
 
+vec3 GetReflectionWavesNormal(vec2 position) {
+    vec3 primary = GetWavesNormal(position);
+    vec3 secondary = GetWavesNormal(position * 1.75 + vec2(19.3, -7.1));
+    vec2 slope = primary.xy * 2.25 + secondary.xy * 0.85;
+    return normalize(vec3(slope, primary.z * 0.55));
+}
+
 // ---- DerivativeMain Water Parallax (lib/Surface/Parallax.glsl) ----
 // Stepped parallax mapping for water surface
 vec2 GetWaterParallaxCoord(vec3 worldPos, vec3 tangentViewDir) {
@@ -449,12 +456,22 @@ void main() {
     }
 
     // Transform to world space using TBN (DerivativeMain line 249)
+    vec3 reflectionWaveNormalTangent = GetReflectionWavesNormal(parallaxPos);
+    if (uSurfaceWetness > 0.01) {
+        float skylightFactor = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
+        vec2 rainNormal = GetRainNormal(vWorldPos, uSurfaceWetness * skylightFactor);
+        reflectionWaveNormalTangent.xy += rainNormal * 1.35;
+        reflectionWaveNormalTangent = normalize(reflectionWaveNormalTangent);
+    }
+
     vec3 normal = normalize(tbnMatrix * waveNormalTangent);
+    vec3 reflectionNormal = normalize(tbnMatrix * reflectionWaveNormalTangent);
     vec3 refractionNormal = normalize(tbnMatrix * baseWaveNormalTangent);
 
     // ---- Underwater normal flip (must precede Fresnel so wave ripples are visible) ----
     if (uIsEyeInWater == 1) {
         normal = -normal;
+        reflectionNormal = -reflectionNormal;
     }
 
     // ---- Fresnel (DerivativeMain BRDF.glsl FresnelDielectricN) ----
@@ -469,7 +486,7 @@ void main() {
 
     // ---- Water fog (DerivativeMain WaterFog.glsl, applied BEFORE reflection) ----
     float waterSkylight = cube(clamp(vSunlight, 0.0, 1.0));
-    float LdotV = dot(normalize(uSunDirection), viewDir);
+    float LdotV = dot(normalize(uSunDirection), -viewDir);
     float fogDist = depthGap;
     if (uDepthSofteningEnabled != 0 && refractDepthTex > gl_FragCoord.z && refractDepthTex < 0.9999) {
         vec3 waterSurfacePos = reconstructWorldPosition(screenUv, gl_FragCoord.z);
@@ -483,10 +500,10 @@ void main() {
     }
 
     // ---- Reflection (DerivativeMain CalculateSpecularReflections) ----
-    vec3 reflDir = reflect(-viewDir, normal);
-    vec3 skyRefl = sampleSkyReflection(reflDir, normal, waterSkylight, env);
+    vec3 reflDir = reflect(-viewDir, reflectionNormal);
+    vec3 skyRefl = sampleSkyReflection(reflDir, reflectionNormal, waterSkylight, env);
     vec3 ssrRefl = vec3(0.0);
-    bool ssrHit = traceWaterScreenSpaceReflection(vWorldPos, reflDir, normal, ssrRefl);
+    bool ssrHit = traceWaterScreenSpaceReflection(vWorldPos, reflDir, reflectionNormal, ssrRefl);
     vec3 reflection = ssrHit ? ssrRefl : skyRefl;
 
     // Underwater reflection: use sky reflection driven by flipped wave normal
