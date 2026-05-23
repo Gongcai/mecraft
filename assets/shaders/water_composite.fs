@@ -28,6 +28,7 @@ uniform sampler2D uRippleNormalTex;
 uniform sampler2D uVolumetricTex;
 uniform sampler3D uAtmosphereLut;
 uniform mat4 viewProj;
+uniform mat4 uView;
 uniform mat4 uInvViewProj;
 uniform float uNearPlane;
 uniform float uFarPlane;
@@ -282,6 +283,37 @@ vec2 GetRainNormal(vec3 worldPos, float wetness) {
     return normal * 0.75 * wet;
 }
 
+vec2 calculateDerivativeWaterRefractUv(vec2 screenUv,
+                                        float waterDepthRaw,
+                                        float opaqueDepthRaw,
+                                        vec3 worldWaveNormal,
+                                        out float refractedOpaqueDepthRaw) {
+    refractedOpaqueDepthRaw = opaqueDepthRaw;
+    if (opaqueDepthRaw >= 0.9999 || opaqueDepthRaw < waterDepthRaw) {
+        return screenUv;
+    }
+
+    float waterDepth = linearDepthFromDepth(waterDepthRaw);
+    float refractionDepth = linearDepthFromDepth(opaqueDepthRaw) - waterDepth;
+    if (refractionDepth <= 0.0) {
+        return screenUv;
+    }
+
+    vec3 wavesNormalView = normalize(mat3(uView) * worldWaveNormal);
+    vec3 viewUp = normalize(uView[1].xyz);
+    vec2 refractOffset = viewUp.xy - wavesNormalView.xy;
+    refractOffset *= clamp(refractionDepth, 0.0, 1.0) * 0.5 / (waterDepth + 1e-4);
+
+    vec2 refractUv = clamp(screenUv + refractOffset, vec2(0.0), vec2(1.0));
+    refractedOpaqueDepthRaw = texture(uOpaqueDepthTex, refractUv).r;
+    if (refractedOpaqueDepthRaw < waterDepthRaw) {
+        refractedOpaqueDepthRaw = opaqueDepthRaw;
+        return screenUv;
+    }
+
+    return refractUv;
+}
+
 // DerivativeMain FresnelDielectricN
 float FresnelDielectricN(float cosTheta, float n) {
     float cosR = n * n + cosTheta * cosTheta - 1.0;
@@ -406,6 +438,7 @@ void main() {
     // Parallax mapping: find UV offset from height field intersection
     vec2 parallaxPos = GetWaterParallaxCoord(vWorldPos, tangentViewDir);
     waveNormalTangent = GetWavesNormal(parallaxPos);
+    vec3 baseWaveNormalTangent = waveNormalTangent;
 
     // Add rain ripple normals (DerivativeMain RainEffect.glsl)
     if (uSurfaceWetness > 0.01) {
@@ -417,6 +450,7 @@ void main() {
 
     // Transform to world space using TBN (DerivativeMain line 249)
     vec3 normal = normalize(tbnMatrix * waveNormalTangent);
+    vec3 refractionNormal = normalize(tbnMatrix * baseWaveNormalTangent);
 
     // ---- Underwater normal flip (must precede Fresnel so wave ripples are visible) ----
     if (uIsEyeInWater == 1) {
@@ -427,28 +461,21 @@ void main() {
     float NdotV = max(1e-6, dot(normal, viewDir));
     float fresnel = FresnelDielectricN(NdotV, uWaterIOR);
 
-    // ---- Refraction (DerivativeMain Refraction.glsl line 87-97, exact port) ----
-    // DerivativeMain: mat3(gbufferModelView) * wavesNormal → view space
-    // nv = normalize(gbufferModelView[1].xyz) → view up
-    // refractCoord = nv.xy - wavesNormalView.xy
-    vec3 normalView = normal; // for our forward pass, normal is in world space
-    // Approximate view-space up vector in screen: project world up to screen
-    vec3 viewUp = vec3(0.0, 1.0, 0.0); // world up
-    // Refraction offset: use normal's XZ slope as screen offset (tangent space approach)
-    vec2 refractOffset = -waveNormalTangent.xy; // tangent-space slope = screen-space offset
-    float refractionDepth = depthGap * 50.0;
-    refractOffset *= clamp(refractionDepth, 0.0, 1.0) * 0.5 / (depthGap * 50.0 + 1e-4);
-    vec2 refractUv = screenUv + refractOffset;
-    // Depth rejection (DerivativeMain line 108)
-    float refractDepthTex = texture(uOpaqueDepthTex, refractUv).r;
-    if (refractDepthTex < gl_FragCoord.z) refractUv = screenUv;
-    refractUv = clamp(refractUv, vec2(0.0), vec2(1.0));
+    // ---- Refraction (DerivativeMain Refraction.glsl line 87-108) ----
+    float refractDepthTex = sceneDepth;
+    vec2 refractUv = calculateDerivativeWaterRefractUv(screenUv, gl_FragCoord.z, sceneDepth,
+                                                       refractionNormal, refractDepthTex);
     vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb;
 
     // ---- Water fog (DerivativeMain WaterFog.glsl, applied BEFORE reflection) ----
     float waterSkylight = cube(clamp(vSunlight, 0.0, 1.0));
     float LdotV = dot(normalize(uSunDirection), viewDir);
     float fogDist = depthGap;
+    if (uDepthSofteningEnabled != 0 && refractDepthTex > gl_FragCoord.z && refractDepthTex < 0.9999) {
+        vec3 waterSurfacePos = reconstructWorldPosition(screenUv, gl_FragCoord.z);
+        vec3 opaquePos = reconstructWorldPosition(refractUv, refractDepthTex);
+        fogDist = clamp(distance(waterSurfacePos, opaquePos), 0.0, 512.0);
+    }
     if (uIsEyeInWater == 1) {
         UnderwaterFog(sceneColor, length(uCameraPos - vWorldPos), env);
     } else {

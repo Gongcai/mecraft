@@ -344,6 +344,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
     m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
     m_waterCompositeShader->setFloat("uTime", frame.shaderTime);
+    m_waterCompositeShader->setMat4("uView", frame.view);
     m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
     m_waterCompositeShader->setFloat("uNearPlane", frame.nearPlane);
     m_waterCompositeShader->setFloat("uFarPlane", frame.farPlane);
@@ -1136,8 +1137,9 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.weatherStorm);
     frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
     const double gameTime = Time::getGameTime();
+    const double visualTime = Time::getRawTime();
     frame.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
-    frame.shaderTime = static_cast<float>(std::fmod(gameTime, 8192.0));
+    frame.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
 
     frame.fogEnabled = m_fogSettings.enabled;
     frame.fogMode = m_fogSettings.mode;
