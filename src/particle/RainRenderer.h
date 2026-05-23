@@ -49,14 +49,15 @@ public:
 
 private:
     struct PrecipDrop {
-        glm::vec3 offset;   // relative to camera (xz = horizontal offset, y = height above camera)
+        glm::vec3 position; // world-space position; wrapped around the camera when out of range
         float speed;        // fall speed (units/sec)
         float length;       // streak length
         float texU;         // random column in rain atlas [0,1]
     };
 
-    void ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops);
-    void updateDrops(std::vector<PrecipDrop>& drops, float dt, float baseSpeed);
+    void ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops, const glm::vec3& cameraPos);
+    void updateDrops(std::vector<PrecipDrop>& drops, float dt, float baseSpeed, const glm::vec3& cameraPos);
+    void wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& cameraPos);
     void renderPrecipitation(const glm::mat4& projection,
                              const glm::mat4& view,
                              const glm::vec3& cameraPos,

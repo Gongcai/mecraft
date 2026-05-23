@@ -881,24 +881,27 @@ vec3 g_debugColorAfterBloomyFog = vec3(0.0);
 float g_debugRainMask = 0.0;
 
 float rainMaskAt(vec2 sampleUv) {
+    ivec2 depthSize = textureSize(uDepthTex, 0);
+    if (depthSize.x <= 0 || depthSize.y <= 0) {
+        return 0.0;
+    }
+
+    ivec2 depthTexel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(depthSize));
+    float depth = texelFetch(uDepthTex, depthTexel, 0).r;
+    float skyMask = step(0.9999, depth);
+
     // DerivativeMain Grade.glsl:149 — rain = texelFetch(colortex0, texel, 0).b * 0.35
-    // Use weather mask texture (additive-blended particle alpha) if available.
+    // Use weather mask texture (additive-blended particle alpha) for sky/weather pixels only.
+    // Mecraft has no depth attachment on this pass, so letting the particle mask affect
+    // opaque pixels projects rain streak silhouettes onto dry ground as white rings.
     ivec2 weatherSize = textureSize(uWeatherMaskTex, 0);
     if (weatherSize.x > 0 && weatherSize.y > 0) {
         ivec2 weatherTexel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(weatherSize));
         float weatherAlpha = texelFetch(uWeatherMaskTex, weatherTexel, 0).r;
-        return weatherAlpha * 0.35;
+        return weatherAlpha * skyMask * 0.35;
     }
 
     // Fallback: depth-based sky mask (legacy, less accurate).
-    ivec2 texSize = textureSize(uDepthTex, 0);
-    if (texSize.x <= 0 || texSize.y <= 0) {
-        return 0.0;
-    }
-
-    ivec2 texel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(texSize));
-    float depth = texelFetch(uDepthTex, texel, 0).r;
-    float skyMask = step(0.9999, depth);
     return skyMask * clamp(uCameraRainVisibility, 0.0, 1.0);
 }
 

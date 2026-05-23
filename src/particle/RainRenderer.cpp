@@ -39,7 +39,7 @@ void RainRenderer::shutdown() {
     if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
 }
 
-void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops) {
+void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops, const glm::vec3& cameraPos) {
     if (drops.empty()) {
         drops.reserve(maxDrops);
         std::uniform_real_distribution<float> distRadius(0.0f, SPAWN_RADIUS);
@@ -52,7 +52,7 @@ void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops) {
             PrecipDrop d;
             float r = distRadius(s_rng);
             float a = distAngle(s_rng);
-            d.offset = glm::vec3(r * cosf(a), distHeight(s_rng), r * sinf(a));
+            d.position = cameraPos + glm::vec3(r * cosf(a), distHeight(s_rng), r * sinf(a));
             d.speed = distSpeed(s_rng); // multiplier, base speed applied at render
             d.length = distSpeed(s_rng); // multiplier, base length applied at render
             d.texU = (distCol(s_rng) + 0.5f) / static_cast<float>(PRECIP_ATLAS_COLUMNS);
@@ -61,24 +61,31 @@ void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops) {
     }
 }
 
-void RainRenderer::updateDrops(std::vector<PrecipDrop>& drops, float dt, float baseSpeed) {
+void RainRenderer::updateDrops(std::vector<PrecipDrop>& drops, float dt, float baseSpeed, const glm::vec3& cameraPos) {
     m_time += dt;
     if (m_time > 628.0f) m_time -= 628.0f;  // wrap at ~100*PI to prevent float precision loss
     for (auto& d : drops) {
-        d.offset.y -= d.speed * baseSpeed * dt;
+        d.position.y -= d.speed * baseSpeed * dt;
+    }
+    wrapDrops(drops, cameraPos);
+}
 
-        // Recycle drops that fell below despawn threshold.
-        if (d.offset.y < DESPAWN_BELOW) {
-            std::uniform_real_distribution<float> distRadius(0.0f, SPAWN_RADIUS);
-            std::uniform_real_distribution<float> distAngle(0.0f, 6.2831853f);
-            std::uniform_real_distribution<float> distSpeed(0.8f, 1.2f);
-            std::uniform_int_distribution<int> distCol(0, PRECIP_ATLAS_COLUMNS - 1);
+void RainRenderer::wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& cameraPos) {
+    std::uniform_real_distribution<float> distRadius(0.0f, SPAWN_RADIUS);
+    std::uniform_real_distribution<float> distAngle(0.0f, 6.2831853f);
+    std::uniform_real_distribution<float> distHeight(0.0f, SPAWN_HEIGHT);
+    std::uniform_real_distribution<float> distSpeed(0.8f, 1.2f);
+    std::uniform_int_distribution<int> distCol(0, PRECIP_ATLAS_COLUMNS - 1);
 
+    for (auto& d : drops) {
+        const glm::vec2 toCamera = glm::vec2(d.position.x - cameraPos.x, d.position.z - cameraPos.z);
+        const bool outsideCylinder = glm::dot(toCamera, toCamera) > SPAWN_RADIUS * SPAWN_RADIUS;
+        const bool belowCamera = d.position.y < cameraPos.y + DESPAWN_BELOW;
+        const bool farAboveCamera = d.position.y > cameraPos.y + SPAWN_HEIGHT + 4.0f;
+        if (outsideCylinder || belowCamera || farAboveCamera) {
             float r = distRadius(s_rng);
             float a = distAngle(s_rng);
-            d.offset.x = r * cosf(a);
-            d.offset.z = r * sinf(a);
-            d.offset.y = SPAWN_HEIGHT;
+            d.position = cameraPos + glm::vec3(r * cosf(a), distHeight(s_rng), r * sinf(a));
             d.speed = distSpeed(s_rng);
             d.texU = (distCol(s_rng) + 0.5f) / static_cast<float>(PRECIP_ATLAS_COLUMNS);
         }
@@ -102,7 +109,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
 
     // Clamp dt to avoid physics explosion on frame hitches.
     dt = std::max(0.001f, std::min(dt, 0.1f));
-    updateDrops(drops, dt, baseSpeed);
+    updateDrops(drops, dt, baseSpeed, cameraPos);
 
     // Camera-facing billboards: extract right/up from view matrix.
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
@@ -129,7 +136,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
 
     for (int i = 0; i < visibleCount && i < static_cast<int>(drops.size()); ++i) {
         const auto& d = drops[i];
-        glm::vec3 worldPos = cameraPos + d.offset;
+        glm::vec3 worldPos = d.position;
 
         float len = dropLength * d.length;
         glm::vec3 top = worldPos;
@@ -161,6 +168,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     m_shader->setFloat("uPrecipStrength", strength * skyLightAtCamera);
     m_shader->setFloat("uPrecipAlphaScale", alphaScale);
     m_shader->setVec3("uPrecipColor", color);
+    m_shader->setInt("uMaskPass", 0);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -174,6 +182,8 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
 
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 5));
@@ -190,7 +200,7 @@ void RainRenderer::render(const glm::mat4& projection,
                            float skyLightAtCamera,
                            float alphaScale,
                            float dt) {
-    ensureDrops(m_rainDrops, MAX_RAIN_DROPS);
+    ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
     renderPrecipitation(projection, view, cameraPos,
                         m_rainTex, m_rainDrops,
                         rainStrength, skyLightAtCamera,
@@ -208,7 +218,7 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                float skyLightAtCamera,
                                float alphaScale,
                                float dt) {
-    ensureDrops(m_snowDrops, MAX_SNOW_DROPS);
+    ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
     renderPrecipitation(projection, view, cameraPos,
                         m_snowTex, m_snowDrops,
                         snowStrength, skyLightAtCamera,
@@ -228,31 +238,29 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
                                       float alphaScale,
                                       float dt) {
     if (!m_shader) return;
+    static_cast<void>(dt);
 
     // Ensure drop pools are initialized.
-    if (rainStrength > 0.01f) ensureDrops(m_rainDrops, MAX_RAIN_DROPS);
-    if (snowStrength > 0.01f) ensureDrops(m_snowDrops, MAX_SNOW_DROPS);
-
-    // Clamp dt to avoid physics explosion on frame hitches.
-    dt = std::max(0.001f, std::min(dt, 0.1f));
+    if (rainStrength > 0.01f) ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
+    if (snowStrength > 0.01f) ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
 
     // Camera-facing billboards: extract right/up from view matrix.
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
     glm::vec3 fallDir = glm::normalize(glm::vec3(0.0f, -1.0f, 0.0f));
 
     auto buildVertices = [&](std::vector<PrecipDrop>& drops, float strength,
-                              float baseSpeed, float dropLength, float streakWidth,
+                              float dropLength, float streakWidth,
                               GLuint texture) -> std::vector<float> {
         if (strength < 0.01f || skyLightAtCamera < 0.05f || texture == 0) return {};
 
-        updateDrops(drops, dt, baseSpeed);
+        wrapDrops(drops, cameraPos);
         const int visibleCount = static_cast<int>(drops.size() * strength);
         std::vector<float> vertices;
         vertices.reserve(visibleCount * 6 * 5);
 
         for (int i = 0; i < visibleCount && i < static_cast<int>(drops.size()); ++i) {
             const auto& d = drops[i];
-            glm::vec3 worldPos = cameraPos + d.offset;
+            glm::vec3 worldPos = d.position;
             float len = dropLength * d.length;
             glm::vec3 top = worldPos;
             glm::vec3 bot = worldPos + fallDir * len;
@@ -277,11 +285,12 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
     m_shader->use();
     m_shader->setMat4("viewProj", projection * view);
     m_shader->setVec3("uPrecipColor", glm::vec3(1.0f)); // unused for mask, but required by shader
+    m_shader->setInt("uMaskPass", 1);
 
     // Render rain to weather mask
     {
         auto verts = buildVertices(m_rainDrops, rainStrength,
-                                   RAIN_FALL_SPEED, RAIN_DROP_LENGTH, 0.035f,
+                                   RAIN_DROP_LENGTH, 0.035f,
                                    m_rainTex);
         if (!verts.empty()) {
             m_shader->setFloat("uPrecipStrength", rainStrength * skyLightAtCamera);
@@ -302,7 +311,7 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
     // Render snow to weather mask
     {
         auto verts = buildVertices(m_snowDrops, snowStrength,
-                                   SNOW_FALL_SPEED, SNOW_DROP_LENGTH, 0.025f,
+                                   SNOW_DROP_LENGTH, 0.025f,
                                    m_snowTex);
         if (!verts.empty()) {
             m_shader->setFloat("uPrecipStrength", snowStrength * skyLightAtCamera);

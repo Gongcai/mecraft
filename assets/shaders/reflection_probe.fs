@@ -212,8 +212,8 @@ void main() {
 
     if (!transMask.isTranslucent && puddleMask > 1e-4) {
         float rippleMask = smoothstep(0.18, 0.45, puddleMask);
-        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, rippleMask, uTime, 0.60, 1.0);
-        normal = normalize(normal + vec3(rainRipple.x, 0.0, rainRipple.y));
+        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, 1.0, uTime, 0.60, 1.0);
+        normal = normalize(mix(normal, normalize(vec3(rainRipple.x, 1.0, rainRipple.y)), rippleMask * 0.5));
     }
 
     // Recompute reflected direction with wet-flattened normal.

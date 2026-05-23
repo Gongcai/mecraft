@@ -527,8 +527,8 @@ void main() {
         roughness = ApplyWetRoughness(roughness, puddleMask);
         f0Scalar = ApplyWetF0(f0Scalar, puddleMask);
         float rippleMask = smoothstep(0.18, 0.45, puddleMask);
-        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, rippleMask, uTime, 0.60, 1.0);
-        normal = normalize(normal + vec3(rainRipple.x, 0.0, rainRipple.y));
+        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, 1.0, uTime, 0.60, 1.0);
+        normal = normalize(mix(normal, normalize(vec3(rainRipple.x, 1.0, rainRipple.y)), rippleMask * 0.5));
         derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
     }
     float f0ScalarClamped = max(f0Scalar, 0.005);

@@ -367,6 +367,8 @@ void Game::renderFrame(const float frameTime) {
             m_renderer.restoreDefaultFbo();
 
             // Step 2: Render visible rain/snow particles to the main scene.
+            // The rain drops are world-space wrapped around the camera; the mask
+            // pass above is smoothed so post rain fog does not show particle rings.
             if (weather.rainStrength > 0.01f) {
                 m_rainRenderer.render(projMat, viewMat, camPos,
                                       weather.rainStrength, cameraRainVisibility,
