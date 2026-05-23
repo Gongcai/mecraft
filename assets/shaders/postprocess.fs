@@ -25,11 +25,6 @@ uniform bool uShaderpackGradingEnabled;
 uniform int uTonemapMode;
 uniform float uColorTemperature;
 uniform float uVibrance;
-uniform float uKappaGradingStrength;
-uniform float uHighlightCompression;
-uniform float uFilmEmulationStrength;
-uniform float uRedModifierStrength;
-uniform vec3 uColorLuma;
 uniform float uSplitToneStrength;
 uniform float uVignetteStrength;
 uniform float uNoiseDitherStrength;
@@ -679,106 +674,7 @@ vec3 AcademyFit(vec3 rgb) {
     return LinearToSRGB(rgb);
 }
 
-float compressLmt(float distToAch, float lim, float thr, float pwr) {
-    if (distToAch >= thr) {
-        float scl = (lim - thr) / pow(pow((1.0 - thr) / (lim - thr), -pwr) - 1.0, 1.0 / pwr);
-        float nd = (distToAch - thr) / max(scl, 0.00001);
-        return thr + scl * nd / pow(1.0 + pow(nd, pwr), 1.0 / pwr);
-    }
-    return distToAch;
-}
 
-vec3 acesCompressionLmt(vec3 color) {
-    float achromatic = max(max(color.r, color.g), color.b);
-    if (achromatic <= 0.00001) {
-        return color;
-    }
-    vec3 distToAch = (achromatic - color) / abs(achromatic);
-    const float pwr = 2.07846097; // 1.2 * sqrt(3)
-    vec3 compressedDist = vec3(
-        compressLmt(distToAch.r, 1.147, 0.815, pwr),
-        compressLmt(distToAch.g, 1.264, 0.803, pwr),
-        compressLmt(distToAch.b, 1.312, 0.880, pwr)
-    );
-    vec3 compressed = achromatic - compressedDist * abs(achromatic);
-    return mix(color, compressed, saturate(uHighlightCompression));
-}
-
-float rgbSaturation(vec3 color) {
-    float mx = max(max(color.r, color.g), color.b);
-    float mn = min(min(color.r, color.g), color.b);
-    return (mx - mn) / max(mx, 0.00001);
-}
-
-float hueWeightRed(vec3 color) {
-    float redDominance = color.r - max(color.g, color.b);
-    float chroma = max(max(color.r, color.g), color.b) - min(min(color.r, color.g), color.b);
-    return smoothstep(0.02, 0.22, redDominance) * smoothstep(0.04, 0.45, chroma);
-}
-
-vec3 rrtSweeteners(vec3 color) {
-    float lum = luma709(color);
-    float sat = rgbSaturation(color);
-    float glow = 1.0 + 0.035 * smoothstep(0.35, 0.65, sat) * smoothstep(0.05, 1.2, lum);
-    color *= glow;
-
-    float redWeight = hueWeightRed(color) * saturate(uRedModifierStrength);
-    color.r += redWeight * sat * (0.03 - color.r) * 0.18;
-
-    float gray = luma709(color);
-    color = mix(vec3(gray), color, 0.94);
-    color = pow(max(color, vec3(0.0)), vec3(0.985));
-    return color;
-}
-
-vec3 kappaVibranceSaturation(vec3 color) {
-    float lum = luma709(color);
-    float mn = min(min(color.r, color.g), color.b);
-    float mx = max(max(color.r, color.g), color.b);
-    float sat = (1.0 - saturate(mx - mn)) * saturate(1.0 - mx) * lum * 5.0;
-    vec3 light = vec3((mn + mx) * 0.5);
-    float vibranceInt = 1.0 + uVibrance;
-
-    color = mix(color, mix(light, color, vibranceInt), saturate(sat));
-    color = mix(color, light, saturate(1.0 - light) * (1.0 - vibranceInt) * 0.5 * abs(vibranceInt));
-    return color;
-}
-
-vec3 kappaFilmEmulation(vec3 color) {
-    vec3 toeSlope = vec3(1.28, 1.21, 1.19) * 1.04;
-    vec3 toeColor = color * toeSlope;
-    const float midPoint = 0.18;
-    vec3 midColor = (color - vec3(midPoint)) * vec3(1.04, 1.0, 0.97) + vec3(midPoint);
-    vec3 toeAlpha = 1.0 - saturate(color / 0.29);
-    toeAlpha = pow(toeAlpha, vec3(2.0, 1.8, 1.5));
-    vec3 film = mix(midColor * 1.02, toeColor, toeAlpha);
-    film *= 1.0 / (1.0 + max(film - vec3(midPoint), vec3(0.0)) * vec3(1.3, 1.7, 2.4) * 0.04);
-    return mix(color, film, saturate(uFilmEmulationStrength));
-}
-
-vec3 derivativeAcademyCurve(vec3 color) {
-    color = max(color, vec3(0.0));
-    vec3 shoulder = color / (color + vec3(0.86));
-    vec3 toe = 1.0 - exp(-color * vec3(1.18, 1.10, 1.02));
-    float luma = luma709(color);
-    float shoulderWeight = smoothstep(0.32, 3.8, luma);
-    vec3 mapped = mix(toe, shoulder, shoulderWeight);
-    mapped = pow(max(mapped, vec3(0.0)), vec3(0.92, 0.96, 1.02));
-    vec3 printDensity = vec3(1.045, 1.01, 0.965);
-    return saturate(mapped * printDensity);
-}
-
-vec3 kappaAcesApprox(vec3 color) {
-    color = acesCompressionLmt(max(color, vec3(0.0)));
-    color = rrtSweeteners(color);
-    color *= 1.06;
-    vec3 mapped = (color * (color + vec3(0.0313)) - vec3(0.00006)) /
-                  (color * (0.983729 * color + vec3(0.512951)) + vec3(0.168081));
-    float white = 97.409091;
-    float mappedWhite = ((white * (white + 0.0313)) - 0.00006) /
-                        (white * (0.983729 * white + 0.512951) + 0.168081);
-    return saturate(mapped / mappedWhite);
-}
 
 float tonemapReinhardScalar(float value) {
     return value / (value + 1.0);
@@ -834,20 +730,6 @@ vec3 applyVibrance(vec3 color) {
     return mix(vec3(luminance), color, 1.0 + amount);
 }
 
-vec3 applyKappaHdrGrade(vec3 color) {
-    vec3 graded = color;
-    graded = kappaVibranceSaturation(graded);
-    graded *= clamp(uColorLuma, vec3(0.5), vec3(1.5));
-    graded = kappaFilmEmulation(graded);
-    return mix(color, graded, saturate(uKappaGradingStrength));
-}
-
-// Dead code — not called from main() or applyGrade(). Kept for reference.
-vec3 applyKappaTonemap(vec3 color) {
-    vec3 mapped = kappaAcesApprox(color);
-    vec3 fallback = tonemapPreserveLuma(color);
-    return mix(fallback, mapped, saturate(uKappaGradingStrength));
-}
 
 vec3 applySplitTone(vec3 color) {
     float lum = luma709(color);
