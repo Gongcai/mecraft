@@ -86,6 +86,8 @@ public:
         bool uwVolumetricLightEnabled = true; // DerivativeMain UW_VOLUMETRIC_LIGHT: underwater volumetric light
         int volumetricFogSamples = 20; // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
         float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
+        bool volumetricTemporalEnabled = true;
+        float volumetricTemporalWeight = 0.90f;
         bool freezeR1 = false;       // A/B test: freeze VFog R1 dither (no temporal variation)
         bool freezeBias = false;     // A/B test: freeze VFog upscale bias (no temporal rotation)
         bool forceZeroVelocity = false; // A/B test: force zero velocity (verify TAA pure accumulation)
@@ -609,6 +611,7 @@ private:
     void renderReflectionTemporalPass();
     void renderCloudPass(const RenderFrameData& frame);
     void renderVolumetricFogPass(const RenderFrameData& frame);
+    void renderVolumetricTemporalPass(const RenderFrameData& frame);
     void compositeVolumetricFogPass();
     void renderParticlesToSceneResolved(const RenderFrameData& frame);
     void renderTemporalResolvePass(const RenderFrameData& frame);
@@ -690,6 +693,7 @@ private:
     Shader* m_velocityShader = nullptr;
     Shader* m_particleGBufferShader = nullptr;
     Shader* m_volumetricFogShader = nullptr;
+    Shader* m_volumetricTemporalShader = nullptr;
     Shader* m_volumetricCompositeShader = nullptr;
     Shader* m_reflectionShader = nullptr;
     Shader* m_cloudShader = nullptr;

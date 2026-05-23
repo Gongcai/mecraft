@@ -540,6 +540,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &pipeline.volumetricTimeFadeEnabled);
+        pipelineChanged |= ImGui::Checkbox("VFog Temporal Accumulation", &pipeline.volumetricTemporalEnabled);
+        pipelineChanged |= ImGui::SliderFloat("VFog Temporal Weight", &pipeline.volumetricTemporalWeight, 0.0f, 0.99f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("UW Volumetric Light", &pipeline.uwVolumetricLightEnabled);
         static constexpr const char* kVFogQualityTiers[] = {
             "Low: No Noise",
@@ -611,6 +613,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             // VFog component diagnostics (CPU approximate — actual values are GPU-side)
             ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Volumetric Fog Diagnostics (approx)");
             ImGui::Text("Volumetric Light (haze): %s", pipeline.volumetricLightEnabled ? "ON" : "OFF");
+            ImGui::Text("VFog Temporal: %s (weight: %.2f)", pipeline.volumetricTemporalEnabled ? "ON" : "OFF", pipeline.volumetricTemporalWeight);
             const auto& weather = world.getWeatherSystem().getRenderState();
             const auto targetWeather = world.getWeatherSystem().getTargetState();
             const auto& derivedWeather = world.getWeatherSystem().getDerived();

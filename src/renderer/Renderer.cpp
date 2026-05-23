@@ -114,6 +114,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_velocityShader = resourceMgr.getShader("velocity_resolve");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
+    m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_reflectionShader = resourceMgr.getShader("reflection_probe");
     m_cloudShader = resourceMgr.getShader("cloud_target");
@@ -224,6 +225,7 @@ void Renderer::shutdown() {
     m_ssaoShader = nullptr;
     m_velocityShader = nullptr;
     m_volumetricFogShader = nullptr;
+    m_volumetricTemporalShader = nullptr;
     m_volumetricCompositeShader = nullptr;
     m_reflectionShader = nullptr;
     m_cloudShader = nullptr;
@@ -1622,6 +1624,12 @@ bool Renderer::renderWorldDeferred(const World& world,
         beginGpuTimer(GpuTimerPass::Volumetric);
 #endif
         renderVolumetricFogPass(frame);
+        if (m_pipelineSettings.volumetricTemporalEnabled &&
+            m_hasPreviousFrameData &&
+            !volumetricDebugActive &&
+            m_volumetricTemporalShader != nullptr) {
+            renderVolumetricTemporalPass(frame);
+        }
         if (!volumetricDebugActive) {
             compositeVolumetricFogPass();
         }
@@ -2289,6 +2297,9 @@ void Renderer::updateDeferredHistoryTargets() {
     m_deferredTargets.copyDepthToHistory();
     m_deferredTargets.copyReflectionToHistory();
     m_deferredTargets.copyCloudToHistory();
+    if (!m_pipelineSettings.volumetricTemporalEnabled || !m_hasPreviousFrameData || m_volumetricTemporalShader == nullptr) {
+        m_deferredTargets.copyVolumetricToHistory();
+    }
     m_deferredTargets.swapHistory();
     m_deferredTargets.swapSsaoHistory();
     m_deferredHistoryUpdatedThisFrame = true;
@@ -2559,6 +2570,62 @@ void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
     glEnable(GL_DEPTH_TEST);
 }
 
+void Renderer::renderVolumetricTemporalPass(const RenderFrameData& frame) {
+    if (m_volumetricTemporalShader == nullptr) {
+        return;
+    }
+
+    m_deferredTargets.bindVolumetricTemporal();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_volumetricTemporalShader->use();
+    m_volumetricTemporalShader->setInt("uCurrentTex", 0);
+    m_volumetricTemporalShader->setInt("uHistoryTex", 1);
+    m_volumetricTemporalShader->setInt("uVelocityTex", 2);
+    m_volumetricTemporalShader->setInt("uDepthTex", 3);
+    m_volumetricTemporalShader->setInt("uHistoryDepthTex", 4);
+    
+    // Pass half-resolution screen size since we are resolving at half resolution
+    m_volumetricTemporalShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.halfWidth())),
+                   static_cast<float>(std::max(1, m_deferredTargets.halfHeight()))));
+    m_volumetricTemporalShader->setFloat("uHistoryWeight", m_pipelineSettings.volumetricTemporalWeight);
+    m_volumetricTemporalShader->setFloat("uNearPlane", frame.nearPlane);
+    m_volumetricTemporalShader->setFloat("uFarPlane", frame.farPlane);
+
+    // Current volumetric fog output (held in m_halfResTex)
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    
+    // Previous frame's temporal output
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyVolumetricTexturePrev());
+    
+    // Velocity buffer (full resolution)
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    
+    // GBuffer depth (full resolution)
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    
+    // History depth (full resolution)
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyDepthTexturePrev());
+
+    renderFullscreen(*m_volumetricTemporalShader);
+
+    for (int i = 4; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
 void Renderer::compositeVolumetricFogPass() {
     m_deferredTargets.bindSceneResolved();
     glDisable(GL_DEPTH_TEST);
@@ -2577,7 +2644,11 @@ void Renderer::compositeVolumetricFogPass() {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    if (m_pipelineSettings.volumetricTemporalEnabled && m_hasPreviousFrameData && m_volumetricTemporalShader != nullptr) {
+        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyVolumetricTexture());
+    } else {
+        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    }
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     renderFullscreen(*m_volumetricCompositeShader);
