@@ -706,6 +706,7 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 77);
+    m_pipelineSettings.reflectionDebugMode = std::clamp(m_pipelineSettings.reflectionDebugMode, 0, 17);
 
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 5);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -1605,6 +1606,13 @@ bool Renderer::renderWorldDeferred(const World& world,
     renderSceneCompositePass(frame);
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
+    if (m_pipelineSettings.reflectionDebugMode > 0) {
+        updateDeferredHistoryTargets();
+        m_deferredTargets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        m_deferredTargets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        restoreCapturedFramebufferViewport(window);
+        return true;
+    }
 
     // DerivativeMain renders water with taaOffset in gbuffers/composite before
     // the scene temporal pass. Do it before VFog so volumetric fog is applied

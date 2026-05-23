@@ -176,7 +176,7 @@ public:
         bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
         bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
         int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
-        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength
+        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength, 11=f0, 12=skyFallback, 13=reflectionRgb, 14=hasReflection, 15=skyLightRaw, 16=voxelLightRG, 17=materialAux
         float directWeatherOcclusion = -1.0f; // <0 = auto from skyWetness; >=0 = manual override
         // Weather render profile — runtime-tunable per-weather visual parameters
         float weatherSkylightScale = 1.0f;   // [0,1] multiplier on skylight during precipitation

@@ -27,7 +27,7 @@ uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uTime;
 uniform sampler2D uVoxelLightTex; // GBuffer attachment 2: sky light.r, block light.g
-uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength
+uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength, 11=f0, 12=skyFallback, 13=reflectionRgb, 14=hasReflection, 15=skyLightRaw, 16=voxelLightRG, 17=materialAux
 uniform int uRainWetSurfacesEnabled;
 uniform int uRainSurfaceRipplesEnabled;
 uniform float uNearPlane;
@@ -200,7 +200,8 @@ void main() {
     // DerivativeMain wet surface — shared implementation in weather_surface.glsl
     float roughness = material.roughness;
     float f0Scalar = material.f0;
-    float skyLightRaw01 = clamp(texture(uVoxelLightTex, vTexCoord).r, 0.0, 1.0);
+    vec2 voxelLightRaw = texture(uVoxelLightTex, vTexCoord).rg;
+    float skyLightRaw01 = clamp(voxelLightRaw.r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
     bool hasGBufferRainWetMask = uRainWetSurfacesEnabled != 0 &&
                                  !transMask.isTranslucent &&
@@ -213,6 +214,12 @@ void main() {
     vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
     float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
     float wetMix = saturate(puddleMask);
+
+    if (!transMask.isTranslucent && weatherSurfaceWetness > 1e-2) {
+        float smoothness = 1.0 - sqrt(clamp(roughness, 0.0, 1.0));
+        roughness = sqr(oneMinus(smoothness) * oneMinus(weatherSurfaceWetness * 0.3));
+        f0Scalar = max(f0Scalar, 0.04 * wetMix);
+    }
 
     // Recompute reflected direction with wet-flattened normal.
     vec3 reflectedDir = reflect(viewDir, normal);
@@ -258,6 +265,28 @@ void main() {
         FragColor = vec4(vec3(roughness), 0.0);
         return;
     }
+    if (uReflectionDebugMode == 11) {
+        FragColor = vec4(vec3(f0Scalar * 8.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 15) {
+        FragColor = vec4(vec3(skyLightRaw01), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 16) {
+        FragColor = vec4(clamp(voxelLightRaw.r, 0.0, 1.0),
+                         clamp(voxelLightRaw.g, 0.0, 1.0),
+                         0.0,
+                         0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 17) {
+        FragColor = vec4(clamp(aux.wetnessMask, 0.0, 1.0),
+                         clamp(aux.porosity, 0.0, 1.0),
+                         clamp(aux.metalness, 0.0, 1.0),
+                         0.0);
+        return;
+    }
     if (uReflectionDebugMode == 7) {
         FragColor = vec4(vec3(puddleMask), 0.0);
         return;
@@ -276,11 +305,15 @@ void main() {
     }
 
     vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
-    float smoothness = 1.0 - clamp(roughness, 0.0, 1.0);
+    // DerivativeMain Material.inc GetMaterialData(vec2):
+    // material.hasReflections = max0(0.625 - material.roughness) + material.isMetal > 5e-3.
+    float derivativeReflectionMask = max(0.625 - clamp(roughness, 0.0, 1.0), 0.0) + aux.metalness;
     bool hasDerivativeReflection = transMask.isTranslucent ||
-                                   aux.metalness > 0.5 ||
-                                   smoothness > 0.375 ||
-                                   puddleMask > 0.01;
+                                   derivativeReflectionMask > 0.005;
+    if (uReflectionDebugMode == 14) {
+        FragColor = vec4(vec3(hasDerivativeReflection ? 1.0 : 0.0), 0.0);
+        return;
+    }
     if (!hasDerivativeReflection) {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
@@ -319,7 +352,7 @@ void main() {
         return;
     }
     if (uReflectionDebugMode == 5) {
-        FragColor = vec4(vec3(reflectance), 0.0);
+        FragColor = vec4(vec3(reflectance * 8.0), 0.0);
         return;
     }
 
@@ -330,6 +363,10 @@ void main() {
     float nDotUp = saturate((dot(normal, vec3(0.0, 1.0, 0.0)) + 0.7) * 2.0) * 0.75 + 0.25;
     float skyFallbackWeight = skyLightmap * nDotUp;
     vec3 fallback = skyReflection * skyFallbackWeight;
+    if (uReflectionDebugMode == 12) {
+        FragColor = vec4(fallback, 0.0);
+        return;
+    }
 
     // Smooth SSR blend: when ssrHit is near zero, use a soft transition to fallback
     // instead of a hard lerp. This avoids visible seams at SSR boundaries.
@@ -339,8 +376,18 @@ void main() {
     // DerivativeMain world0/deferred6.fsh returns rgb = reflection * specular,
     // alpha = reflection distance/rough-filter data for opaque surfaces.
     if (transMask.isTranslucent) {
-        FragColor = vec4(max(color, vec3(0.0)) * reflectance, 1.0 - clamp(reflectance, 0.0, 1.0));
+        vec3 reflectionRgb = max(color, vec3(0.0)) * reflectance;
+        if (uReflectionDebugMode == 13) {
+            FragColor = vec4(reflectionRgb * 8.0, 0.0);
+            return;
+        }
+        FragColor = vec4(reflectionRgb, 1.0 - clamp(reflectance, 0.0, 1.0));
     } else {
-        FragColor = vec4(max(color, vec3(0.0)) * reflectance, dist);
+        vec3 reflectionRgb = max(color, vec3(0.0)) * reflectance;
+        if (uReflectionDebugMode == 13) {
+            FragColor = vec4(reflectionRgb * 8.0, 0.0);
+            return;
+        }
+        FragColor = vec4(reflectionRgb, dist);
     }
 }

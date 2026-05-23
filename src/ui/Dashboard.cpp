@@ -504,12 +504,19 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "2: Reflectance",
             "3: SSR Hit",
             "4: Roughness",
-            "5: SpecularWeight",
+            "5: SpecularWeight x8",
             "6: CompositeDelta",
             "7: Puddle Mask",
             "8: Rain Splash Mask",
             "9: Rain Ripple Normal",
-            "10: Rain Ripple Strength"
+            "10: Rain Ripple Strength",
+            "11: F0 x8",
+            "12: Sky Fallback",
+            "13: Reflection RGB x8",
+            "14: Has Reflection",
+            "15: Sky Light Raw",
+            "16: Voxel Light RG",
+            "17: Material Aux"
         };
         int reflDebugMode = pipeline.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));
