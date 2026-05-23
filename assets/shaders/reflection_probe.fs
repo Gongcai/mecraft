@@ -11,6 +11,7 @@ uniform sampler2D uMaterialTex;
 uniform sampler2D uMaterialAuxTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler3D uAtmosphereLut;
+uniform sampler2D uRippleNormalTex;
 uniform mat4 uViewProj;
 uniform mat4 uInvViewProj;
 uniform vec3 uCameraPos;
@@ -198,11 +199,21 @@ void main() {
     float f0Scalar = material.f0;
     float skyLightRaw01 = clamp(texture(uVoxelLightTex, vTexCoord).r, 0.0, 1.0);
     float pixelWetness = ComputePixelWetness(uSurfaceWetness, skyLightRaw01, aux.wetnessMask, normal.y);
+    float puddleMask = ComputeRainPuddleMask(worldPos, uSurfaceWetness, skyLightRaw01, normal.y, aux.porosity, uTime);
+    float wetFilmMask = pixelWetness * 0.25;
+    float wetMix = max(wetFilmMask, puddleMask);
 
-    if (!transMask.isTranslucent && pixelWetness > 1e-4) {
-        normal = ApplyWetNormal(normal, pixelWetness);
-        roughness = ApplyWetRoughness(roughness, pixelWetness);
-        f0Scalar = ApplyWetF0(f0Scalar, pixelWetness);
+    if (!transMask.isTranslucent && wetMix > 1e-4) {
+        float filmWetness = wetFilmMask + puddleMask;
+        normal = ApplyWetNormal(normal, filmWetness);
+        roughness = ApplyWetRoughness(roughness, filmWetness);
+        f0Scalar = ApplyWetF0(f0Scalar, filmWetness);
+    }
+
+    if (!transMask.isTranslucent && puddleMask > 1e-4) {
+        float rippleMask = smoothstep(0.18, 0.45, puddleMask);
+        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, rippleMask, uTime, 0.60, 1.0);
+        normal = normalize(normal + vec3(rainRipple.x, 0.0, rainRipple.y));
     }
 
     // Recompute reflected direction with wet-flattened normal.
@@ -254,7 +265,8 @@ void main() {
     float smoothness = 1.0 - clamp(roughness, 0.0, 1.0);
     bool hasDerivativeReflection = transMask.isTranslucent ||
                                    aux.metalness > 0.5 ||
-                                   smoothness > 0.375;
+                                   smoothness > 0.375 ||
+                                   puddleMask > 0.02;
     if (!hasDerivativeReflection) {
         FragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
@@ -262,7 +274,8 @@ void main() {
 
     float fresnel = pow(1.0 - clamp(dot(-viewDir, normal), 0.0, 1.0), 5.0);
     // Wet boost: DerivativeMain rain wet surfaces get stronger Fresnel and base reflectance.
-    float wetReflectBoost = pixelWetness * mix(0.04, 0.14, smoothness);
+    float wetReflectBoost = wetFilmMask * mix(0.02, 0.06, smoothness) +
+                            puddleMask * mix(0.18, 0.34, smoothness);
     float reflectance = clamp(f0Scalar * 2.0 + smoothness * 0.18 + fresnel * 0.18 +
                               aux.porosity * 0.16 + wetReflectBoost, 0.0, 1.0);
     vec3 ssrColor = vec3(0.0);
@@ -289,7 +302,7 @@ void main() {
     // Smooth surfaces (low roughness) get more SSR contribution before blending to sky.
     // Rough surfaces blend to sky earlier — their reflections are already blurred.
     float skyBlendRoughness = smoothstep(0.15, 0.65, roughness);
-    float fallbackSkyWeight = mix(0.74, 0.95, pixelWetness);
+    float fallbackSkyWeight = mix(0.74, 0.95, wetMix);
     // Roughness-aware sky weight: rougher surfaces get more sky fallback
     fallbackSkyWeight = mix(fallbackSkyWeight, min(fallbackSkyWeight + 0.18, 1.0), skyBlendRoughness);
     vec3 roughSky = mix(skyReflection, skyReflection * vec3(0.82, 0.91, 1.04), roughness * 0.45);
@@ -304,7 +317,7 @@ void main() {
     // Premultiplied output (DerivativeMain convention):
     // rgb = reflection * specular, a = 1 - specular (scene pass-through)
     // Wet surfaces get a higher specular floor so reflection contributes more to final scene.
-    float specularFloor = mix(0.48, 0.72, pixelWetness);
+    float specularFloor = mix(0.48, 0.72, wetMix);
     float specular = reflectance * mix(specularFloor, 1.0, ssrHit);
     FragColor = vec4(max(color, vec3(0.0)) * specular, 1.0 - specular);
 }

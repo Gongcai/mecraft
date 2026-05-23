@@ -54,4 +54,91 @@ vec3 ApplyWetAlbedo(vec3 albedo, float porosity, float pixelWetness) {
     return mix(albedo, wetAlbedo, pixelWetness);
 }
 
+// DerivativeMain RainEffect.glsl: wetnessDistribution = texture(noisetex, worldPos.xz * 0.01).r
+// Returns a smooth low-frequency scalar in [0, 1] without the previous stripe-like placeholder noise.
+float DerivativeRainHash12(vec2 p) {
+    vec3 q = fract(vec3(p.xyx) * 0.1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+
+float DerivativeRainValueNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = DerivativeRainHash12(i);
+    float b = DerivativeRainHash12(i + vec2(1.0, 0.0));
+    float c = DerivativeRainHash12(i + vec2(0.0, 1.0));
+    float d = DerivativeRainHash12(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float DerivativeRainFbm(vec2 p) {
+    float sum = 0.0;
+    float amp = 0.55;
+    vec2 q = p;
+    for (int i = 0; i < 3; ++i) {
+        sum += amp * DerivativeRainValueNoise(q);
+        q = q * 2.07 + vec2(13.7, 7.9);
+        amp *= 0.5;
+    }
+    return sum;
+}
+
+float ComputeDerivativeRainWetness(vec2 worldXZ, float surfaceWetness, float time) {
+    vec2 p = (worldXZ - time * vec2(0.01, 0.006)) * 0.01;
+    const float noiseTexFrequency = 64.0;
+    float n = DerivativeRainFbm(p * noiseTexFrequency);
+    n += DerivativeRainFbm(p * (noiseTexFrequency * 0.6) + vec2(5.7, -2.3)) * 2.0;
+    n += DerivativeRainFbm(p * (noiseTexFrequency * 0.2) + vec2(-8.1, 4.4)) * 3.0;
+    return saturate(n * 0.18) * clamp(surfaceWetness, 0.0, 1.0);
+}
+
+// DerivativeMain RainEffect.glsl: GetRainWetness + Terrain.frag wetFact thresholds.
+// Produces patchy puddle coverage instead of a full wet-film response.
+float ComputeRainPuddleMask(vec3 worldPos,
+                            float surfaceWetness,
+                            float skyLightRaw01,
+                            float normalY,
+                            float porosity,
+                            float time) {
+    float wetness = clamp(surfaceWetness, 0.0, 1.0);
+    float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0);
+    float upwardFacing = remap(0.5, 0.9, clamp(normalY, 0.0, 1.0));
+    if (wetness <= 0.0 || outdoorWetMask <= 0.0 || upwardFacing <= 0.0) {
+        return 0.0;
+    }
+
+    float rainWetness = ComputeDerivativeRainWetness(worldPos.xz - worldPos.y, wetness, time);
+    rainWetness *= outdoorWetMask * upwardFacing;
+
+    float puddleMask = remap(0.32, 0.57, rainWetness);
+    puddleMask = puddleMask * puddleMask;
+    puddleMask *= 1.0 - clamp(porosity, 0.0, 1.0) * 0.20;
+    return saturate(puddleMask);
+}
+
+// DerivativeMain RainEffect.glsl / RippleNormal.png.
+// Sample the 64-frame horizontal ripple atlas without the previous thin-strip placeholder noise.
+vec2 SampleRainRippleNormal(sampler2D rippleTex,
+                            vec3 worldPos,
+                            float wetness,
+                            float time,
+                            float worldScale,
+                            float rippleSpeed) {
+    float wet = saturate(wetness);
+    if (wet <= 0.0) {
+        return vec2(0.0);
+    }
+
+    vec2 rippleUv = worldPos.xz * worldScale;
+    rippleUv.x = (rippleUv.x + floor(fract(time * rippleSpeed) * 64.0)) * (1.0 / 64.0);
+
+    vec2 ripple = texture(rippleTex, rippleUv).rg * 2.0 - 1.0;
+    float lod = dot(abs(fwidth(worldPos)), vec3(5.0));
+    ripple /= 1.0 + lod;
+    return ripple * 0.75 * wet;
+}
+
 #endif // WEATHER_SURFACE_GLSL

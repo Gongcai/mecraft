@@ -23,6 +23,7 @@ uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch (blockerSearch, 
 uniform sampler2D uSsaoTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uNoiseTex;
+uniform sampler2D uRippleNormalTex;
 uniform bool uNoiseEnabled;  // for cloud_density.glsl noise fallback
 
 uniform mat4 uViewProj;
@@ -507,16 +508,30 @@ void main() {
     float skyLightRaw01 = clamp(voxelLight.r, 0.0, 1.0);
     float pixelWetness = ComputePixelWetness(uSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y);
 
-    if (!transMask.isTranslucent && pixelWetness > 1e-4) {
-        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, pixelWetness);
-        normal = ApplyWetNormal(normal, pixelWetness);
-        roughness = ApplyWetRoughness(roughness, pixelWetness);
-        f0Scalar = ApplyWetF0(f0Scalar, pixelWetness);
+    float wetFilm = pixelWetness * 0.35;
+    if (!transMask.isTranslucent && wetFilm > 1e-4) {
+        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, wetFilm);
+        normal = ApplyWetNormal(normal, wetFilm);
+        roughness = ApplyWetRoughness(roughness, wetFilm);
+        f0Scalar = ApplyWetF0(f0Scalar, wetFilm);
     }
     bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;
     float derivativeSpecularMask = hasDerivativeSpecular ? 1.0 : 0.0;
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+    float puddleMask = ComputeRainPuddleMask(worldPos, uSurfaceWetness, skyLightRaw01, normal.y, surface.aux.porosity, uTime);
+
+    if (!transMask.isTranslucent && puddleMask > 1e-4) {
+        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, puddleMask * 0.75);
+        normal = ApplyWetNormal(normal, puddleMask * 0.85);
+        roughness = ApplyWetRoughness(roughness, puddleMask);
+        f0Scalar = ApplyWetF0(f0Scalar, puddleMask);
+        float rippleMask = smoothstep(0.18, 0.45, puddleMask);
+        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, rippleMask, uTime, 0.60, 1.0);
+        normal = normalize(normal + vec3(rainRipple.x, 0.0, rainRipple.y));
+        derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
+    }
+    float f0ScalarClamped = max(f0Scalar, 0.005);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
     vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
@@ -586,8 +601,6 @@ void main() {
     // --- BRDF preparation (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
     float alpha = max(roughness * roughness, 0.002);
     float alpha2 = alpha * alpha;
-    float f0ScalarClamped = max(f0Scalar, 0.005);
-
     // === DerivativeMain lighting order ===
     // Reference: deferred5.fsh main() — sceneData starts at 0
 
@@ -652,7 +665,7 @@ void main() {
             specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
                        mix(vec3(1.0), albedo, surface.aux.metalness);
             // DerivativeMain deferred5.fsh:293 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
-            specular *= 0.6 + uSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
+            specular *= 0.6 + wetFilm * 0.75 + puddleMask * 0.85; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
             // DerivativeMain uses saturate(mcLightmap.g * 1e6), effectively a
             // boolean gate. Mecraft's interpolated voxel skylight can cross zero

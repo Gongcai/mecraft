@@ -328,6 +328,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setInt("uReflectionTex", 9);
     m_waterCompositeShader->setInt("uAtmosphereLut", 10);
     m_waterCompositeShader->setInt("uVolumetricTex", 11);
+    m_waterCompositeShader->setInt("uRippleNormalTex", 12);
     m_waterCompositeShader->setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
@@ -390,6 +391,8 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -461,6 +464,8 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_3D, 0);
     glActiveTexture(GL_TEXTURE0);
@@ -2059,6 +2064,7 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     m_deferredLightingShader->setInt("uSsaoTex", 9);
     m_deferredLightingShader->setInt("uSkyCaptureTex", 10);
     m_deferredLightingShader->setInt("uNoiseTex", 11);
+    m_deferredLightingShader->setInt("uRippleNormalTex", 21);
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
     m_deferredLightingShader->setBool("uNoiseEnabled", noiseTexture != 0);
     m_deferredLightingShader->setMat4("uViewProj",
@@ -2167,8 +2173,12 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE20);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor1Texture());
     m_deferredLightingShader->setInt("uCsmShadowColor1", 20);
+    glActiveTexture(GL_TEXTURE21);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
     renderFullscreen(*m_deferredLightingShader);
 
+    glActiveTexture(GL_TEXTURE21);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glUseProgram(0);
     glActiveTexture(GL_TEXTURE20);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -2326,6 +2336,7 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uSkyCaptureTex", 5);
     m_reflectionShader->setInt("uAtmosphereLut", 6);
     m_reflectionShader->setInt("uVoxelLightTex", 7);
+    m_reflectionShader->setInt("uRippleNormalTex", 8);
     m_reflectionShader->setMat4("uViewProj",
         m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
     m_reflectionShader->setMat4("uInvViewProj",
@@ -2361,9 +2372,13 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
     renderFullscreen(*m_reflectionShader);
 
     glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, 0);
     for (int unit = 5; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
