@@ -110,7 +110,7 @@ public:
         float dofAperture = 2.8f;
         float dofFocusDistance = 5.0f;
         float sceneCloudCompositeStrength = 0.85f;
-        float sceneReflectionCompositeStrength = 0.36f;
+        float sceneReflectionCompositeStrength = 1.0f;
         int debugViewMode = 0;
         int deferredLightDebugMode = 0; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=beforePost
         bool derivativeStrictMode = false;
@@ -176,7 +176,7 @@ public:
         bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
         bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
         int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
-        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal
+        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength
         float directWeatherOcclusion = -1.0f; // <0 = auto from skyWetness; >=0 = manual override
         // Weather render profile — runtime-tunable per-weather visual parameters
         float weatherSkylightScale = 1.0f;   // [0,1] multiplier on skylight during precipitation

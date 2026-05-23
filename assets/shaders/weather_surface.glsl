@@ -1,7 +1,7 @@
-// weather_surface.glsl — Shared wet surface computation for Mecraft weather system.
-// DerivativeMain reference: RainEffect.glsl + Terrain.frag + deferred5.fsh
-// Single source of truth for pixelWetness and wet material modifications.
-// Consumed by: deferred_lighting.fs, reflection_probe.fs
+// weather_surface.glsl - Shared wet surface computation for Mecraft weather system.
+// DerivativeMain reference: RainEffect.glsl + Terrain.frag + deferred5.fsh.
+// GBuffer writers apply the DerivativeMain rain wet normal/material mutation;
+// fullscreen consumers use the debug helpers only.
 //
 // Prerequisite: consumer must provide saturate() and remap() before including this file.
 //   - deferred_lighting.fs gets them via derivative_shadow.glsl include chain
@@ -87,6 +87,35 @@ float ComputeRainSurfaceWetnessNoise(sampler2D noiseTex,
     return rainWetness;
 }
 
+float ComputeRainSurfaceWetnessNoiseFromFacing(sampler2D noiseTex,
+                                               vec3 worldPos,
+                                               float surfaceWetness,
+                                               float skyLightRaw01,
+                                               float upwardFacing,
+                                               float time) {
+    float wetness = clamp(surfaceWetness, 0.0, 1.0);
+    float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0);
+    float facing = clamp(upwardFacing, 0.0, 1.0);
+    if (wetness <= 0.0 || outdoorWetMask <= 0.0 || facing <= 0.0) {
+        return 0.0;
+    }
+
+    float rainWetness = ComputeDerivativeRainWetness(noiseTex, worldPos.xz - worldPos.y, wetness, time);
+    rainWetness *= outdoorWetMask * facing;
+    return rainWetness;
+}
+
+float ComputeRainSplashMaskFromNoise(float rainWetness) {
+    return smoothstep(0.54, 0.62, rainWetness);
+}
+
+float ComputeRainPuddleMaskFromNoise(float rainWetness, float porosity) {
+    float puddleMask = remap(0.35, 0.57, rainWetness);
+    puddleMask = puddleMask * puddleMask;
+    puddleMask *= 1.0 - clamp(porosity, 0.0, 1.0) * 0.20;
+    return saturate(puddleMask);
+}
+
 // DerivativeMain Terrain.frag: wetFact = smoothstep(0.54, 0.62, noise)
 // This narrow mask drives the RippleNormal splash normal only.
 float ComputeRainSplashMask(sampler2D noiseTex,
@@ -96,7 +125,7 @@ float ComputeRainSplashMask(sampler2D noiseTex,
                             float normalY,
                             float time) {
     float rainWetness = ComputeRainSurfaceWetnessNoise(noiseTex, worldPos, surfaceWetness, skyLightRaw01, normalY, time);
-    return smoothstep(0.54, 0.62, rainWetness);
+    return ComputeRainSplashMaskFromNoise(rainWetness);
 }
 
 // DerivativeMain RainEffect.glsl: GetRainWetness + Terrain.frag wet spec thresholds.
@@ -110,10 +139,7 @@ float ComputeRainPuddleMask(sampler2D noiseTex,
                             float time) {
     float rainWetness = ComputeRainSurfaceWetnessNoise(noiseTex, worldPos, surfaceWetness, skyLightRaw01, normalY, time);
 
-    float puddleMask = remap(0.35, 0.57, rainWetness);
-    puddleMask = puddleMask * puddleMask;
-    puddleMask *= 1.0 - clamp(porosity, 0.0, 1.0) * 0.20;
-    return saturate(puddleMask);
+    return ComputeRainPuddleMaskFromNoise(rainWetness, porosity);
 }
 
 // DerivativeMain RainEffect.glsl / RippleNormal.png.

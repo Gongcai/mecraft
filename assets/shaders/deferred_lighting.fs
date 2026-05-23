@@ -509,28 +509,22 @@ void main() {
     // DerivativeMain-style wet surface effects — shared implementation in weather_surface.glsl
     float skyLightRaw01 = clamp(voxelLight.r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
-    float pixelWetness = ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y);
+    bool hasGBufferRainWetMask = uRainWetSurfacesEnabled != 0 &&
+                                 !transMask.isTranslucent &&
+                                 materialKind != MATERIAL_SKIN;
+    float gbufferRainWetMask = hasGBufferRainWetMask ? surface.aux.wetnessMask : 0.0;
+    float pixelWetness = max(ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y),
+                             gbufferRainWetMask);
 
     bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;
     float derivativeSpecularMask = hasDerivativeSpecular ? 1.0 : 0.0;
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-    float puddleMask = ComputeRainPuddleMask(uNoiseTex, worldPos, weatherSurfaceWetness, skyLightRaw01, normal.y, surface.aux.porosity, uTime);
-    float rainSplashMask = ComputeRainSplashMask(uNoiseTex, worldPos, weatherSurfaceWetness, skyLightRaw01, normal.y, uTime);
-    vec2 rainRippleDebug = vec2(0.0);
-
-    if (!transMask.isTranslucent && puddleMask > 1e-4) {
-        float wetStrength = saturate(puddleMask * 1.25);
-        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, wetStrength * 0.75);
-        normal = ApplyWetNormal(normal, wetStrength * 0.85);
-        roughness = ApplyWetRoughness(roughness, wetStrength);
-        f0Scalar = ApplyWetF0(f0Scalar, wetStrength);
-        derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
-    }
-    if (uRainSurfaceRipplesEnabled != 0 && !transMask.isTranslucent && rainSplashMask > 1e-4) {
-        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, 1.0, uTime, 0.60, 1.0);
-        rainRippleDebug = rainRipple;
-        normal = normalize(mix(normal, normalize(vec3(rainRipple.x, 1.0, rainRipple.y)), rainSplashMask * 0.5));
+    float puddleMask = gbufferRainWetMask;
+    float rainSplashMask = hasGBufferRainWetMask ? smoothstep(0.001, 0.08, length(normal.xz)) : 0.0;
+    vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
+    float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
+    if (uRainSurfaceRipplesEnabled != 0 && rainRippleStrengthDebug > 1e-4) {
         derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
     }
     float f0ScalarClamped = max(f0Scalar, 0.005);
@@ -601,8 +595,7 @@ void main() {
     warmSunColor = mix(warmSunColor, warmSunColor * vec3(1.16, 1.03, 0.78), clamp(uSunWarmth, 0.0, 1.5) * 0.65);
 
     // --- BRDF preparation (DerivativeMain BRDF.glsl — now via derivative_brdf.glsl include) ---
-    float alpha = max(roughness * roughness, 0.002);
-    float alpha2 = alpha * alpha;
+    float alpha2 = sqr(roughness);
     // === DerivativeMain lighting order ===
     // Reference: deferred5.fsh main() — sceneData starts at 0
 
@@ -667,7 +660,7 @@ void main() {
             specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
                        mix(vec3(1.0), albedo, surface.aux.metalness);
             // DerivativeMain deferred5.fsh:297 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom.
-            specular *= 0.6 + weatherSurfaceWetness * puddleMask; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
+            specular *= 0.6 + weatherSurfaceWetness; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
             // DerivativeMain uses saturate(mcLightmap.g * 1e6), effectively a
             // boolean gate. Mecraft's interpolated voxel skylight can cross zero
@@ -1006,6 +999,7 @@ void main() {
     else if (uDeferredDebugMode == 20) { color = vec3(puddleMask); }
     else if (uDeferredDebugMode == 21) { color = vec3(rainSplashMask); }
     else if (uDeferredDebugMode == 22) { color = vec3(abs(rainRippleDebug), 0.0) * 2.0; }
+    else if (uDeferredDebugMode == 23) { color = vec3(rainRippleStrengthDebug * 4.0); }
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.

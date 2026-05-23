@@ -114,9 +114,9 @@ void main() {
         color = mix(sky, premul, clamp(uCloudCompositeStrength, 0.0, 1.0));
     }
 
-    // Premultiplied reflection data (DerivativeMain composite1 convention):
-    // reflection.rgb = reflection * specular weight, reflection.a = 1 - specular
-    // DerivativeMain: sceneData = sceneData * reflectionData.a + reflectionData.rgb
+    // DerivativeMain composite1 convention:
+    // - translucent surfaces use reflection.a as scene pass-through
+    // - opaque reflective surfaces add reflection.rgb directly
     vec4 reflection = texture(uReflectionTex, vTexCoord);
 
     // Reflection debug: bypass composite, output raw reflection data.
@@ -124,7 +124,11 @@ void main() {
         if (uReflectionDebugMode == 6) {
             // Composite delta: actual contribution of reflection to final scene.
             float compositeStr = clamp(uReflectionCompositeStrength, 0.0, 1.0);
-            vec3 delta = compositeStr * (reflection.rgb - color * (1.0 - reflection.a));
+            SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+            TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
+            vec3 delta = transMask.isTranslucent
+                ? compositeStr * (reflection.rgb - color * (1.0 - reflection.a))
+                : compositeStr * reflection.rgb;
             FragColor = vec4(abs(delta), 1.0);
         } else {
             FragColor = vec4(reflection.rgb, 1.0);
@@ -136,10 +140,15 @@ void main() {
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
     float compositeStrength = clamp(uReflectionCompositeStrength, 0.0, 1.0);
-    // Blend between full scene pass-through (1.0) and premultiplied reflection
-    float sceneWeight = mix(1.0, reflection.a, compositeStrength);
-    vec3 reflContrib = reflection.rgb * compositeStrength;
-    color = color * sceneWeight + reflContrib;
+    if (transMask.isTranslucent) {
+        // DerivativeMain composite1.fsh: sceneData = sceneData * reflectionData.a + reflectionData.rgb
+        float sceneWeight = mix(1.0, reflection.a, compositeStrength);
+        color = color * sceneWeight + reflection.rgb * compositeStrength;
+    } else {
+        // DerivativeMain opaque path: sceneData += reflectionData.rgb * mix(1, albedo, metal).
+        // Mecraft has already applied the metal tint in reflection_probe.fs.
+        color += reflection.rgb * compositeStrength;
+    }
 
     // Translucent tinting (DerivativeMain composite1 equivalent).
     // For stained glass: absorb light through colored medium.

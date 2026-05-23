@@ -8,6 +8,7 @@ uniform sampler2D uReflectionTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uNormalAoTex;
 uniform sampler2D uMaterialTex;
+uniform sampler2D uMaterialAuxTex;
 
 uniform vec2 uScreenSize;
 uniform float uFilterStrength;
@@ -19,7 +20,6 @@ vec3 reconstructNormal(vec3 packedNormal) {
 void main() {
     vec4 reflection = texture(uReflectionTex, vTexCoord);
     float depth = texture(uDepthTex, vTexCoord).r;
-    float centerStrength = max(1.0 - reflection.a, 0.0);
 
     // Sky pixels: pass through
     if (depth >= 0.9999) {
@@ -27,9 +27,15 @@ void main() {
         return;
     }
 
-    // Weak reflections should not collect bright neighbors. They are the main
-    // source of rain-time fireflies after temporal resolve.
-    if (centerStrength < 0.025) {
+    SurfaceMaterialAux centerAux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+    TranslucentMask centerTransMask = decodeTranslucentMask(centerAux.materialKind);
+    if (centerTransMask.isTranslucent) {
+        FragColor = reflection;
+        return;
+    }
+
+    float centerLuma = dot(reflection.rgb, vec3(0.2126, 0.7152, 0.0722));
+    if (centerLuma < 1e-5) {
         FragColor = reflection;
         return;
     }
@@ -69,23 +75,16 @@ void main() {
             // Spatial weight: Gaussian falloff
             float spatialWeight = exp2(-float(x * x + y * y) * 0.2);
 
-            // Premultiplied reflection data uses alpha = 1 - specular. Keep the
-            // blur inside similarly reflective pixels so isolated SSR/sky fireflies
-            // do not spread across mostly dry terrain.
-            float sampleStrength = max(1.0 - sampleReflection.a, 0.0);
-            float strengthWeight = exp2(-abs(sampleStrength - centerStrength) * 48.0);
-
             float centerLumaForWeight = dot(reflection.rgb, vec3(0.2126, 0.7152, 0.0722));
             float sampleLumaForWeight = dot(sampleReflection.rgb, vec3(0.2126, 0.7152, 0.0722));
             float lumaScale = max(centerLumaForWeight * 0.75, 0.04);
             float lumaWeight = exp2(-abs(sampleLumaForWeight - centerLumaForWeight) / lumaScale);
 
-            // Confidence weight: alpha = 1 - specular, so lower alpha means a
-            // stronger reflection, but keep a small floor for stable rough blur.
-            float confidenceWeight = max(sampleStrength, 0.01);
+            float distanceWeight = exp2(-abs(sampleReflection.a - reflection.a) * 4.0);
+            float confidenceWeight = max(sampleLumaForWeight, 0.01);
 
             float weight = depthWeight * normalWeight * spatialWeight *
-                           strengthWeight * lumaWeight * confidenceWeight;
+                           distanceWeight * lumaWeight * confidenceWeight;
             result += sampleReflection.rgb * weight;
             totalWeight += weight;
         }
@@ -94,7 +93,6 @@ void main() {
     result /= max(totalWeight, 0.0001);
 
     // Luma-chroma sharpening: separate luminance and chroma
-    float centerLuma = dot(reflection.rgb, vec3(0.2126, 0.7152, 0.0722));
     float filteredLuma = dot(result, vec3(0.2126, 0.7152, 0.0722));
 
     // Sharpen luminance slightly, keep filtered chroma

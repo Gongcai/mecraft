@@ -482,7 +482,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "19: Contact Shadow",
             "20: Puddle Mask",
             "21: Rain Splash Mask",
-            "22: Rain Ripple Normal"
+            "22: Rain Ripple Normal",
+            "23: Rain Ripple Strength"
         };
         int lightDebugMode = pipeline.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
@@ -507,7 +508,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "6: CompositeDelta",
             "7: Puddle Mask",
             "8: Rain Splash Mask",
-            "9: Rain Ripple Normal"
+            "9: Rain Ripple Normal",
+            "10: Rain Ripple Strength"
         };
         int reflDebugMode = pipeline.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));

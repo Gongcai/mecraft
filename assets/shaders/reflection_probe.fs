@@ -27,7 +27,7 @@ uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uTime;
 uniform sampler2D uVoxelLightTex; // GBuffer attachment 2: sky light.r, block light.g
-uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal
+uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength
 uniform int uRainWetSurfacesEnabled;
 uniform int uRainSurfaceRipplesEnabled;
 uniform float uNearPlane;
@@ -202,23 +202,17 @@ void main() {
     float f0Scalar = material.f0;
     float skyLightRaw01 = clamp(texture(uVoxelLightTex, vTexCoord).r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
-    float pixelWetness = ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, aux.wetnessMask, normal.y);
-    float puddleMask = ComputeRainPuddleMask(uNoiseTex, worldPos, weatherSurfaceWetness, skyLightRaw01, normal.y, aux.porosity, uTime);
-    float rainSplashMask = ComputeRainSplashMask(uNoiseTex, worldPos, weatherSurfaceWetness, skyLightRaw01, normal.y, uTime);
-    vec2 rainRippleDebug = vec2(0.0);
-    float wetMix = saturate(puddleMask * 1.25);
-
-    if (!transMask.isTranslucent && puddleMask > 1e-4) {
-        normal = ApplyWetNormal(normal, wetMix);
-        roughness = ApplyWetRoughness(roughness, wetMix);
-        f0Scalar = ApplyWetF0(f0Scalar, wetMix);
-    }
-
-    if (uRainSurfaceRipplesEnabled != 0 && !transMask.isTranslucent && rainSplashMask > 1e-4) {
-        vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, 1.0, uTime, 0.60, 1.0);
-        rainRippleDebug = rainRipple;
-        normal = normalize(mix(normal, normalize(vec3(rainRipple.x, 1.0, rainRipple.y)), rainSplashMask * 0.5));
-    }
+    bool hasGBufferRainWetMask = uRainWetSurfacesEnabled != 0 &&
+                                 !transMask.isTranslucent &&
+                                 materialKindId(aux.materialKind) != MATERIAL_SKIN;
+    float gbufferRainWetMask = hasGBufferRainWetMask ? aux.wetnessMask : 0.0;
+    float pixelWetness = max(ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, aux.wetnessMask, normal.y),
+                             gbufferRainWetMask);
+    float puddleMask = gbufferRainWetMask;
+    float rainSplashMask = hasGBufferRainWetMask ? smoothstep(0.001, 0.08, length(normal.xz)) : 0.0;
+    vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
+    float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
+    float wetMix = saturate(puddleMask);
 
     // Recompute reflected direction with wet-flattened normal.
     vec3 reflectedDir = reflect(viewDir, normal);
@@ -276,6 +270,10 @@ void main() {
         FragColor = vec4(vec3(abs(rainRippleDebug), 0.0) * 2.0, 0.0);
         return;
     }
+    if (uReflectionDebugMode == 10) {
+        FragColor = vec4(vec3(rainRippleStrengthDebug * 4.0), 0.0);
+        return;
+    }
 
     vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
     float smoothness = 1.0 - clamp(roughness, 0.0, 1.0);
@@ -288,14 +286,28 @@ void main() {
         return;
     }
 
-    float fresnel = pow(1.0 - clamp(dot(-viewDir, normal), 0.0, 1.0), 5.0);
-    // Wet boost: DerivativeMain rain wet surfaces get stronger Fresnel and base reflectance.
-    float wetReflectBoost = wetMix * mix(0.06, 0.24, smoothness);
-    float reflectance = clamp(f0Scalar * 2.0 + smoothness * 0.18 + fresnel * 0.18 +
-                              aux.porosity * 0.16 + wetReflectBoost, 0.0, 1.0);
     vec3 ssrColor = vec3(0.0);
     float ssrHit = 0.0;
     traceScreenSpaceReflection(worldPos + normal * 0.025, reflectedDir, roughness, ssrColor, ssrHit);
+
+    float nDotRay = max(dot(normal, reflectedDir), 0.0);
+    float nDotView = max(dot(normal, -viewDir), 1e-6);
+    float specular = 0.0;
+    float dist = 0.0;
+    if (roughness > 0.005 || weatherSurfaceWetness > 1e-2) {
+        vec3 halfWay = normalize(reflectedDir - viewDir);
+        float lDotH = saturate(dot(reflectedDir, halfWay));
+        float F = FresnelSchlick(lDotH, f0Scalar);
+        float alpha2 = roughness * roughness;
+        float V2 = V2SmithGGX(nDotView, max(nDotRay, 1e-6), alpha2);
+        float V1Inverse = V1SmithGGXInverse(nDotView, alpha2);
+        specular = nDotRay * F * V2 * V1Inverse;
+        dist = saturate(max(ssrHit * 2.0, roughness * 3.0));
+    } else {
+        specular = FresnelDielectric(nDotView, f0Scalar);
+    }
+    specular *= oneMinus(aux.metalness);
+    float reflectance = specular + aux.metalness;
 
     // Late debug: reflectance and ssrHit only valid after SSR trace.
     if (uReflectionDebugMode == 2) {
@@ -307,9 +319,7 @@ void main() {
         return;
     }
     if (uReflectionDebugMode == 5) {
-        float specularFloor = mix(0.10, 0.32, wetMix);
-        float specular = reflectance * mix(specularFloor, 1.0, ssrHit);
-        FragColor = vec4(vec3(specular), 0.0);
+        FragColor = vec4(vec3(reflectance), 0.0);
         return;
     }
 
@@ -326,9 +336,11 @@ void main() {
     float ssrBlend = smoothstep(0.0, 0.15, ssrHit);
     vec3 color = mix(fallback, ssrColor, ssrBlend);
 
-    // Premultiplied output (DerivativeMain convention):
-    // rgb = reflection * specular, a = 1 - specular (scene pass-through)
-    float specularFloor = mix(0.10, 0.32, wetMix);
-    float specular = reflectance * mix(specularFloor, 1.0, ssrHit);
-    FragColor = vec4(max(color, vec3(0.0)) * specular, 1.0 - specular);
+    // DerivativeMain world0/deferred6.fsh returns rgb = reflection * specular,
+    // alpha = reflection distance/rough-filter data for opaque surfaces.
+    if (transMask.isTranslucent) {
+        FragColor = vec4(max(color, vec3(0.0)) * reflectance, 1.0 - clamp(reflectance, 0.0, 1.0));
+    } else {
+        FragColor = vec4(max(color, vec3(0.0)) * reflectance, dist);
+    }
 }

@@ -2,9 +2,9 @@
 // Reflection temporal reprojection. Reads velocity to reproject previous frame's
 // temporally-resolved reflection, applies 3x3 neighborhood clamp and
 // depth/normal/roughness-based disocclusion rejection to prevent ghosting.
-// Operates on RGBA16F premultiplied-alpha reflection data:
-//   rgb = reflected radiance * specular weight
-//   a   = 1 - specular weight (1 = no reflection, 0 = full reflection)
+// Operates on RGBA16F DerivativeMain-style reflection data:
+//   opaque:      rgb = reflected radiance * specular, a = trace distance/filter data
+//   translucent: rgb = reflected radiance * specular, a = scene pass-through
 
 #include "gbuffer_contract.glsl"
 
@@ -17,6 +17,7 @@ uniform sampler2D uVelocityTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uNormalAoTex;
 uniform sampler2D uMaterialTex;
+uniform sampler2D uMaterialAuxTex;
 uniform vec2 uScreenSize;
 uniform float uHistoryWeight;
 uniform float uNear;
@@ -39,9 +40,11 @@ void main() {
         return;
     }
 
-    // No SSR hit (alpha ~1, specular weight ~0): pass through to avoid
-    // smearing valid reflection into non-reflective regions
-    if (current.a >= 0.999) {
+    SurfaceMaterialAux centerAux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTex, texel, 0));
+    TranslucentMask centerTransMask = decodeTranslucentMask(centerAux.materialKind);
+
+    // Opaque pixels with no reflection contribution should not accumulate history.
+    if (!centerTransMask.isTranslucent && dot(current.rgb, current.rgb) < 1e-10) {
         FragColor = current;
         return;
     }

@@ -1,5 +1,7 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#include "derivative_shadow.glsl"
+#include "weather_surface.glsl"
 
 layout (location = 0) out vec4 GAlbedoMaterial;
 layout (location = 1) out vec4 GNormalAo;
@@ -22,10 +24,16 @@ in vec2 vTintUV;
 in vec3 vWorldPos;
 
 uniform sampler2DArray texArray;
+uniform sampler2D uNoiseTex;
+uniform sampler2D uRippleNormalTex;
 uniform sampler2D uGrassColormap;
 uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform float uAnimationTime;
+uniform float uShaderTime;
+uniform float uSurfaceWetness;
+uniform int uRainWetSurfacesEnabled;
+uniform int uRainSurfaceRipplesEnabled;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -77,10 +85,39 @@ void main() {
     float emissivePeak = max(max(albedo.r, albedo.g), albedo.b);
     float emissiveMask = smoothstep(0.34, 0.72, max(emissiveLuma, emissivePeak * 0.72));
     float emissiveHint = isEmissiveMaterial ? emissiveMask * clamp(vBlockLight * 1.25, 0.0, 1.0) : 0.0;
+    SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, emissiveHint);
+    SurfaceMaterialAux aux = surfaceMaterialAuxForKind(vMaterialKind);
+
+    bool canReceiveTerrainRain = !isCrossVegetation &&
+                                 derivativeMaterialId != MATERIAL_WATER &&
+                                 derivativeMaterialId != MATERIAL_ICE &&
+                                 derivativeMaterialId != MATERIAL_STAINED_GLASS;
+    if (canReceiveTerrainRain && uRainWetSurfacesEnabled != 0 && uSurfaceWetness > 1e-2) {
+        float upwardFacing = remap(0.5, 0.9, normal.y);
+        float rainWetness = ComputeRainSurfaceWetnessNoiseFromFacing(uNoiseTex, vWorldPos, uSurfaceWetness, vSunlight, upwardFacing, uShaderTime);
+        float splashWetFact = ComputeRainSplashMaskFromNoise(rainWetness);
+
+        if (uRainSurfaceRipplesEnabled != 0 && splashWetFact > 1e-4) {
+            vec2 rainNormal = SampleRainRippleNormal(uRippleNormalTex, vWorldPos, 1.0, uShaderTime, 0.60, 1.0);
+            normal = normalize(mix(normal, vec3(rainNormal.x, 1.0, rainNormal.y), splashWetFact * 0.5));
+        } else if (splashWetFact > 1e-4) {
+            normal = normalize(mix(normal, vec3(0.0, 1.0, 0.0), splashWetFact));
+        }
+
+        float wetFact = ComputeRainPuddleMaskFromNoise(rainWetness, aux.porosity);
+        if (wetFact > 1e-4) {
+            aux.wetnessMask = max(aux.wetnessMask, wetFact);
+            float smoothness = 1.0 - sqrt(clamp(material.roughness, 0.0, 1.0));
+            smoothness = mix(smoothness, 1.0, wetFact);
+            material.roughness = sqr(1.0 - smoothness);
+            material.f0 = max(material.f0, 0.04 * wetFact);
+            albedo = ApplyWetAlbedo(albedo, aux.porosity, wetFact);
+        }
+    }
 
     GAlbedoMaterial = vec4(albedo, emissiveHint);
     GNormalAo = vec4(normal * 0.5 + 0.5, ao);
     GVoxelLight = vec4(clamp(vSunlight, 0.0, 1.0), clamp(vBlockLight, 0.0, 1.0), 0.0, 1.0);
-    GMaterial = packGBufferMaterial(surfaceMaterialForKind(vMaterialKind, emissiveHint));
-    GMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(vMaterialKind));
+    GMaterial = packGBufferMaterial(material);
+    GMaterialAux = packGBufferMaterialAux(aux);
 }

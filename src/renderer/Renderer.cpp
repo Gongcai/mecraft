@@ -1033,6 +1033,10 @@ void Renderer::renderWorldForward(const World& world, const RenderFrameData& fra
     renderCutoutChunks(cutoutEntries);
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE5);
@@ -1395,6 +1399,8 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     shader.setInt("uSkyCaptureTex", 6);
     shader.setInt("uSceneColorTex", 7);
     shader.setInt("uWaterNoiseTex", 8);
+    shader.setInt("uNoiseTex", 9);
+    shader.setInt("uRippleNormalTex", 10);
     shader.setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
     shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uWaterCompositeEnabled", 0);
@@ -1402,6 +1408,10 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     shader.setInt("uDepthSofteningEnabled", 0);
     bindFogUniforms(shader, frame);
     shader.setFloat("uAnimationTime", frame.animationTime);
+    shader.setFloat("uShaderTime", frame.shaderTime);
+    shader.setFloat("uSurfaceWetness", frame.surfaceWetness);
+    shader.setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
+    shader.setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
     shader.setInt("uDebugLightMode", m_debugLightMode);
     bindSkyLightingUniforms(shader, frame);
     shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
@@ -1435,6 +1445,10 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, m_deferredFrameActive ? m_deferredTargets.skyCaptureTexture() : 0);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
 }
@@ -1714,6 +1728,10 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     renderCutoutChunks(cutoutEntries);
 
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE5);
@@ -2697,6 +2715,10 @@ void Renderer::renderReflectionFilterPass(const RenderFrameData& frame) {
         return;
     }
 
+    // Avoid feedback: filter reads the previous reflection image and writes the
+    // filtered result back to the reflection target.
+    m_deferredTargets.copyReflectionToTemporalScratch();
+
     m_deferredTargets.bindReflection();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -2707,22 +2729,25 @@ void Renderer::renderReflectionFilterPass(const RenderFrameData& frame) {
     m_reflectionFilterShader->setInt("uDepthTex", 1);
     m_reflectionFilterShader->setInt("uNormalAoTex", 2);
     m_reflectionFilterShader->setInt("uMaterialTex", 3);
+    m_reflectionFilterShader->setInt("uMaterialAuxTex", 4);
     m_reflectionFilterShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
     m_reflectionFilterShader->setFloat("uFilterStrength", m_pipelineSettings.reflectionFilterStrength);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTemporalScratchTexture());
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
     renderFullscreen(*m_reflectionFilterShader);
 
-    for (int i = 3; i >= 0; --i) {
+    for (int i = 4; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -2752,6 +2777,7 @@ void Renderer::renderReflectionTemporalPass() {
     m_reflectionTemporalShader->setInt("uDepthTex", 3);
     m_reflectionTemporalShader->setInt("uNormalAoTex", 4);
     m_reflectionTemporalShader->setInt("uMaterialTex", 5);
+    m_reflectionTemporalShader->setInt("uMaterialAuxTex", 6);
     m_reflectionTemporalShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
@@ -2776,10 +2802,13 @@ void Renderer::renderReflectionTemporalPass() {
     // GBuffer material
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
+    // GBuffer material aux
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
 
     renderFullscreen(*m_reflectionTemporalShader);
 
-    for (int i = 5; i >= 0; --i) {
+    for (int i = 6; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
