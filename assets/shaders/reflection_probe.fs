@@ -31,9 +31,20 @@ uniform float uFarPlane;
 
 #include "atmosphere_lut.glsl"
 
-// DerivativeMain Common.inc helpers (mirrored from derivative_shadow.glsl)
-float saturate(float x) { return clamp(x, 0.0, 1.0); }
-float remap(float e0, float e1, float x) { return saturate((x - e0) / (e1 - e0)); }
+#include "derivative_brdf.glsl"
+
+// PCG-based 2D hash function for high-quality pseudo-random offset
+vec2 Hash2D(vec2 p) {
+    p = fract(p * vec2(0.1031, 0.1030));
+    p += dot(p, p.yx + 33.33);
+    return fract((p.x + p.y) * p);
+}
+
+vec2 GenerateRandomOffset(vec2 screenPos, float time) {
+    // Add a temporally animated offset using Golden Ratio to distribute noise over frames
+    vec2 p = screenPos + fract(time * 0.6180339887498949) * 1000.0;
+    return Hash2D(p);
+}
 
 #include "weather_surface.glsl"
 
@@ -75,8 +86,12 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 
     vec3 rayOrigin = worldPos + reflectedDir * stepLength * dither;
 
+    float prevT = 0.0;
     for (int i = 1; i <= baseSteps; ++i) {
-        float t = float(i) * stepLength;
+        float progress = float(i) / float(baseSteps);
+        // Step size grows with distance and roughness (rough cone widening)
+        float stepScale = 1.0 + roughness * progress * 0.5;
+        float t = float(i) * stepLength * stepScale;
         vec3 sampleWorld = rayOrigin + reflectedDir * t;
         vec2 uv = projectWorldUv(sampleWorld);
 
@@ -87,6 +102,7 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 
         float sceneDepth = texture(uDepthTex, uv).r;
         if (sceneDepth >= 0.9999) {
+            prevT = t;
             continue;
         }
 
@@ -101,13 +117,15 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 
         // Hit condition: scene surface is in front of or very close to the ray,
         // and the relative depth difference is within threshold.
+        // As the reflection cone widens, we grow the thickness threshold.
         bool crossedSurface = sceneDepth < rayDepth01;
-        bool withinThickness = relDepthDiff < 0.25;
+        float thicknessThreshold = 0.25 + roughness * t * 0.05;
+        bool withinThickness = relDepthDiff < thicknessThreshold;
 
         if (crossedSurface && withinThickness) {
             // Binary refinement: narrow down the hit position with 4 bisection steps.
             // Each step halves the search interval, converging on the actual surface.
-            vec3 lo = sampleWorld - reflectedDir * stepLength;
+            vec3 lo = sampleWorld - reflectedDir * (t - prevT);
             vec3 hi = sampleWorld;
             for (int r = 0; r < 4; ++r) {
                 vec3 mid = (lo + hi) * 0.5;
@@ -189,6 +207,37 @@ void main() {
 
     // Recompute reflected direction with wet-flattened normal.
     vec3 reflectedDir = reflect(viewDir, normal);
+
+    // GGX VNDF Importance Sampling for rough surfaces
+    vec3 sampleNormal = normal;
+    if (roughness > 0.0) {
+        // Construct orthonormal basis around normal (tangentToWorld)
+        vec3 up = abs(normal.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        vec3 tangent = normalize(cross(up, normal));
+        vec3 bitangent = cross(normal, tangent);
+        mat3 tangentToWorld = mat3(tangent, bitangent, normal);
+
+        // View direction in tangent space (pointing towards viewer)
+        vec3 tangentView = -viewDir * tangentToWorld;
+
+        // Generate temporal-spatial random offset
+        vec2 xyNoise = GenerateRandomOffset(gl_FragCoord.xy, uTime);
+
+        // Sample micro-normal in tangent space
+        vec3 tangentHalfway = SampleGGXVNDF(tangentView, roughness, xyNoise);
+
+        // Transform back to world space
+        sampleNormal = tangentToWorld * tangentHalfway;
+
+        // Compute reflection ray
+        reflectedDir = reflect(viewDir, sampleNormal);
+
+        // Fallback to standard reflection direction if ray points below the surface hemisphere
+        if (dot(normal, reflectedDir) < 1e-6) {
+            reflectedDir = reflect(viewDir, normal);
+        }
+    }
+
     vec3 skyReflection = sampleSkyRadianceCloudy(uSkyCaptureTex, reflectedDir);
 
     // Early debug: pixelWetness and roughness are available for ALL pixels.

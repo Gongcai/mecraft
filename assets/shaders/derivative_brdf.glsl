@@ -120,4 +120,33 @@ float SpecularBRDF(in float LdotH, in float NdotV, in float NdotL, in float Ndot
     return min(NdotL * D * V * F, 4.0);
 }
 
+//----------------------------------------------------------------------------//
+// GGX VNDF Importance Sampling — DerivativeMain/lib/Surface/ScreenSpaceReflections.glsl:163-185
+//----------------------------------------------------------------------------//
+
+// https://ggx-research.github.io/publication/2023/06/09/publication-ggx.html
+vec3 SampleGGXVNDF(in vec3 viewDir, in float roughness, in vec2 xy) {
+    #define SPECULAR_TAIL_CLAMP
+
+    #ifdef SPECULAR_TAIL_CLAMP
+        xy.y = clamp(xy.y * 0.25, 1e-3, 0.25);
+    #endif
+    // Transform viewer direction to the hemisphere configuration
+    viewDir = normalize(vec3(roughness * viewDir.xy, viewDir.z));
+
+    // Sample a reflection direction off the hemisphere
+    float phi = TAU * xy.x;
+    float cosTheta = oneMinus(xy.y) * (1.0 + viewDir.z) - viewDir.z;
+    float sinTheta = sqrt(saturate(1.0 - cosTheta * cosTheta));
+    vec3 reflected = vec3(cossin(phi) * sinTheta, cosTheta);
+
+    // Evaluate halfway direction
+    // This gives the normal on the hemisphere
+    vec3 halfway = reflected + viewDir;
+
+    // Transform the halfway direction back to hemiellispoid configuation
+    // This gives the final sampled normal
+    return normalize(vec3(roughness * halfway.xy, halfway.z));
+}
+
 #endif
