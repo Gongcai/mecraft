@@ -357,27 +357,24 @@ void Game::renderFrame(const float frameTime) {
             auto projMat = finalCamera.getProjectionMatrix(m_window.getAspectRatio());
             auto viewMat = finalCamera.getViewMatrix();
             float alphaScale = pipelineCfg.weatherRainAlphaScale;
+            const glm::vec2 precipitationScreenSize(
+                static_cast<float>(std::max(1, m_window.getWidth())),
+                static_cast<float>(std::max(1, m_window.getHeight())));
 
-            // Step 1: Render weather mask to dedicated FBO (DerivativeMain gbuffers_weather equivalent).
-            // This provides the postprocess with a proper weather coverage mask.
-            m_renderer.bindWeatherMaskFbo();
-            m_rainRenderer.renderWeatherMask(projMat, viewMat, camPos,
-                                             weather.rainStrength, weather.snowStrength,
-                                             cameraRainVisibility, alphaScale, frameTime);
-            m_renderer.restoreDefaultFbo();
-
-            // Step 2: Render visible rain/snow particles to the main scene.
+            // Render visible rain/snow particles to the main scene.
             // The rain drops are world-space wrapped around the camera; the mask
             // pass above is smoothed so post rain fog does not show particle rings.
-            if (weather.rainStrength > 0.01f) {
+            if (pipelineCfg.weatherRainLinesEnabled && weather.rainStrength > 0.01f) {
                 m_rainRenderer.render(projMat, viewMat, camPos,
                                       weather.rainStrength, cameraRainVisibility,
-                                      alphaScale, frameTime);
+                                      alphaScale, m_renderer.gbufDepthTexture(),
+                                      precipitationScreenSize, frameTime);
             }
-            if (weather.snowStrength > 0.01f) {
+            if (pipelineCfg.weatherRainLinesEnabled && weather.snowStrength > 0.01f) {
                 m_rainRenderer.renderSnow(projMat, viewMat, camPos,
                                           weather.snowStrength, cameraRainVisibility,
-                                          alphaScale * 0.6f, frameTime);
+                                          alphaScale * 0.6f, m_renderer.gbufDepthTexture(),
+                                          precipitationScreenSize, frameTime);
             }
         }
     }

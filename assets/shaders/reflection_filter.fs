@@ -19,6 +19,7 @@ vec3 reconstructNormal(vec3 packedNormal) {
 void main() {
     vec4 reflection = texture(uReflectionTex, vTexCoord);
     float depth = texture(uDepthTex, vTexCoord).r;
+    float centerStrength = max(1.0 - reflection.a, 0.0);
 
     // Sky pixels: pass through
     if (depth >= 0.9999) {
@@ -26,8 +27,9 @@ void main() {
         return;
     }
 
-    // Low confidence: pass through without filtering
-    if (reflection.a < 0.001) {
+    // Weak reflections should not collect bright neighbors. They are the main
+    // source of rain-time fireflies after temporal resolve.
+    if (centerStrength < 0.025) {
         FragColor = reflection;
         return;
     }
@@ -67,11 +69,23 @@ void main() {
             // Spatial weight: Gaussian falloff
             float spatialWeight = exp2(-float(x * x + y * y) * 0.2);
 
-            // Confidence weight: alpha = 1 - specular, so lower alpha = stronger reflection.
-            // Invert to prefer samples with actual reflection data.
-            float confidenceWeight = max(1.0 - sampleReflection.a, 0.01);
+            // Premultiplied reflection data uses alpha = 1 - specular. Keep the
+            // blur inside similarly reflective pixels so isolated SSR/sky fireflies
+            // do not spread across mostly dry terrain.
+            float sampleStrength = max(1.0 - sampleReflection.a, 0.0);
+            float strengthWeight = exp2(-abs(sampleStrength - centerStrength) * 48.0);
 
-            float weight = depthWeight * normalWeight * spatialWeight * confidenceWeight;
+            float centerLumaForWeight = dot(reflection.rgb, vec3(0.2126, 0.7152, 0.0722));
+            float sampleLumaForWeight = dot(sampleReflection.rgb, vec3(0.2126, 0.7152, 0.0722));
+            float lumaScale = max(centerLumaForWeight * 0.75, 0.04);
+            float lumaWeight = exp2(-abs(sampleLumaForWeight - centerLumaForWeight) / lumaScale);
+
+            // Confidence weight: alpha = 1 - specular, so lower alpha means a
+            // stronger reflection, but keep a small floor for stable rough blur.
+            float confidenceWeight = max(sampleStrength, 0.01);
+
+            float weight = depthWeight * normalWeight * spatialWeight *
+                           strengthWeight * lumaWeight * confidenceWeight;
             result += sampleReflection.rgb * weight;
             totalWeight += weight;
         }

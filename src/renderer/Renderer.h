@@ -175,14 +175,18 @@ public:
         float contrast = 1.0f;
         bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
         bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
-        int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog
-        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta
+        int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
+        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal
         float directWeatherOcclusion = -1.0f; // <0 = auto from skyWetness; >=0 = manual override
         // Weather render profile — runtime-tunable per-weather visual parameters
         float weatherSkylightScale = 1.0f;   // [0,1] multiplier on skylight during precipitation
         float weatherExposureBias = 0.0f;    // EV offset on auto exposure during precipitation
         float weatherPostRainFog = 1.0f;     // [0,2] multiplier on post-process rain/snow fog
         float weatherRainAlphaScale = 2.5f;  // [0,5] rain particle alpha boost
+        bool weatherRainLinesEnabled = true; // Debug isolation for visible precipitation lines
+        bool sceneParticlesEnabled = true;    // Debug isolation for ECS particles
+        bool rainWetSurfacesEnabled = true;   // Debug isolation for wet terrain material/reflection response
+        bool rainSurfaceRipplesEnabled = true; // Debug isolation for wet-surface ripple normals
     };
 
 

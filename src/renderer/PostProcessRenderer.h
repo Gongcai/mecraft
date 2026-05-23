@@ -105,7 +105,7 @@ private:
 
     GLuint m_sceneFbo = 0;
     GLuint m_sceneColorTex = 0;
-    GLuint m_sceneDepthRbo = 0;
+    GLuint m_sceneDepthTex = 0;
     GLuint m_bloomFbos[kBloomMipCount][2] = {};
     GLuint m_bloomTex[kBloomMipCount][2] = {};
     glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};

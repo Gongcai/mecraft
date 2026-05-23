@@ -48,7 +48,7 @@ uniform float uCameraRainVisibility; // 0=indoors, 1=outdoors (from 5-ray check)
 uniform float uWeatherExposureBias;  // EV offset on auto exposure during precipitation
 uniform float uWeatherPostRainFog;   // [0,2] multiplier on post-process rain/snow fog
 uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
-uniform sampler2D uWeatherMaskTex;  // Weather particle alpha (R8, additive-blended)
+uniform sampler2D uSceneDepthTex;   // Final scene depth, including forward first-person items
 uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
 
 vec3 srgbToLinear(vec3 color) {
@@ -888,20 +888,21 @@ float rainMaskAt(vec2 sampleUv) {
 
     ivec2 depthTexel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(depthSize));
     float depth = texelFetch(uDepthTex, depthTexel, 0).r;
-    float skyMask = step(0.9999, depth);
+    float gbufferSkyMask = step(0.9999, depth);
 
-    // DerivativeMain Grade.glsl:149 — rain = texelFetch(colortex0, texel, 0).b * 0.35
-    // Use weather mask texture (additive-blended particle alpha) for sky/weather pixels only.
-    // Mecraft has no depth attachment on this pass, so letting the particle mask affect
-    // opaque pixels projects rain streak silhouettes onto dry ground as white rings.
-    ivec2 weatherSize = textureSize(uWeatherMaskTex, 0);
-    if (weatherSize.x > 0 && weatherSize.y > 0) {
-        ivec2 weatherTexel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(weatherSize));
-        float weatherAlpha = texelFetch(uWeatherMaskTex, weatherTexel, 0).r;
-        return weatherAlpha * skyMask * 0.35;
+    float sceneSkyMask = 1.0;
+    ivec2 sceneDepthSize = textureSize(uSceneDepthTex, 0);
+    if (sceneDepthSize.x > 0 && sceneDepthSize.y > 0) {
+        ivec2 sceneDepthTexel = ivec2(clamp(sampleUv, vec2(0.0), vec2(0.999999)) * vec2(sceneDepthSize));
+        float sceneDepth = texelFetch(uSceneDepthTex, sceneDepthTexel, 0).r;
+        sceneSkyMask = step(0.9999, sceneDepth);
     }
+    float skyMask = gbufferSkyMask * sceneSkyMask;
 
-    // Fallback: depth-based sky mask (legacy, less accurate).
+    // Mecraft adaptation of DerivativeMain Grade.glsl rain fog:
+    // use smooth sky visibility instead of the particle weather mask. The mask is
+    // generated without scene depth here, so sampling it in post exposes rain
+    // particle silhouettes as a second vertical rain layer.
     return skyMask * clamp(uCameraRainVisibility, 0.0, 1.0);
 }
 

@@ -51,7 +51,7 @@ void GameManager::initResources() {
     m_resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
     m_resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);
     m_resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH, false, true, false, false);
-    m_resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH, false, true, true, false);
+    m_resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH, false, true, false, false);
     m_resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH, false, false, true, false);
     m_resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH, false, false, false, false);  // NEAREST for sharp streaks
     m_resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH, false, false, false, false);  // NEAREST for sharp flakes

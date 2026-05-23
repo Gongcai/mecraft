@@ -365,6 +365,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
     m_waterCompositeShader->setFloat("uWaterWaveHeight", 1.0f);
     m_waterCompositeShader->setFloat("uWaterWaveSpeed", 1.0f);
     m_waterCompositeShader->setFloat("uWaterIOR", 1.33f);
+    m_waterCompositeShader->setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
     m_waterCompositeShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
 
     if (m_resourceMgr) {
@@ -2088,6 +2089,8 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
                               m_volumetricCompositeShader != nullptr;
     m_deferredLightingShader->setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
     m_deferredLightingShader->setInt("uDeferredDebugMode", m_pipelineSettings.deferredLightDebugMode);
+    m_deferredLightingShader->setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
+    m_deferredLightingShader->setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
     m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
     m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     m_deferredLightingShader->setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
@@ -2338,7 +2341,8 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setInt("uSkyCaptureTex", 5);
     m_reflectionShader->setInt("uAtmosphereLut", 6);
     m_reflectionShader->setInt("uVoxelLightTex", 7);
-    m_reflectionShader->setInt("uRippleNormalTex", 8);
+    m_reflectionShader->setInt("uNoiseTex", 8);
+    m_reflectionShader->setInt("uRippleNormalTex", 9);
     m_reflectionShader->setMat4("uViewProj",
         m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
     m_reflectionShader->setMat4("uInvViewProj",
@@ -2355,6 +2359,8 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     m_reflectionShader->setFloat("uCloudWetness", frame.cloudWetness);
     m_reflectionShader->setFloat("uTime", frame.shaderTime);
     m_reflectionShader->setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
+    m_reflectionShader->setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
+    m_reflectionShader->setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
     m_reflectionShader->setFloat("uNearPlane", m_nearPlane);
     m_reflectionShader->setFloat("uFarPlane", m_farPlane);
 
@@ -2375,12 +2381,16 @@ void Renderer::renderReflectionPass(const RenderFrameData& frame) {
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
     glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0);
+    glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
     renderFullscreen(*m_reflectionShader);
 
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, 0);
     for (int unit = 5; unit >= 0; --unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
@@ -2445,7 +2455,9 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
 }
 
 void Renderer::renderParticlesToSceneResolved(const RenderFrameData& frame) {
-    if (m_particleSystem == nullptr || m_particleGBufferShader == nullptr) {
+    if (!m_pipelineSettings.sceneParticlesEnabled ||
+        m_particleSystem == nullptr ||
+        m_particleGBufferShader == nullptr) {
         return;
     }
 

@@ -235,16 +235,13 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     m_postProcessShader->setFloat("uWeatherExposureBias", m_effects.weatherExposureBias);
     m_postProcessShader->setFloat("uWeatherPostRainFog", m_effects.weatherPostRainFog);
     m_postProcessShader->setInt("uDepthTex", 9);
-    m_postProcessShader->setInt("uWeatherMaskTex", 10);
+    m_postProcessShader->setInt("uSceneDepthTex", 11);
     m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
 
-    // Bind weather mask texture (R8, additive-blended weather particle alpha).
-    // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, weatherMaskTex != 0 ? weatherMaskTex : 0);
+    static_cast<void>(weatherMaskTex);
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         glActiveTexture(GL_TEXTURE1 + mip);
         glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[mip][0] : 0);
@@ -253,10 +250,14 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
     glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, gbufDepthTex);
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, m_sceneDepthTex);
 
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE8);
@@ -421,13 +422,15 @@ bool PostProcessRenderer::ensureRenderTargets(const int width, const int height)
     const GLenum sceneDrawBuffer = GL_COLOR_ATTACHMENT0;
     glNamedFramebufferDrawBuffers(m_sceneFbo, 1, &sceneDrawBuffer);
 
-    glGenRenderbuffers(1, &m_sceneDepthRbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, m_sceneDepthRbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, width, height);
-    glNamedFramebufferRenderbuffer(m_sceneFbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_sceneDepthRbo);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_sceneDepthTex);
+    glTextureStorage2D(m_sceneDepthTex, 1, GL_DEPTH_COMPONENT32F, width, height);
+    glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_sceneFbo, GL_DEPTH_ATTACHMENT, m_sceneDepthTex, 0);
 
     const bool complete = glCheckNamedFramebufferStatus(m_sceneFbo, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
     if (!complete) {
         destroyRenderTargets();
@@ -493,9 +496,9 @@ bool PostProcessRenderer::ensureRenderTargets(const int width, const int height)
 }
 
 void PostProcessRenderer::destroyRenderTargets() {
-    if (m_sceneDepthRbo != 0) {
-        glDeleteRenderbuffers(1, &m_sceneDepthRbo);
-        m_sceneDepthRbo = 0;
+    if (m_sceneDepthTex != 0) {
+        glDeleteTextures(1, &m_sceneDepthTex);
+        m_sceneDepthTex = 0;
     }
     if (m_sceneColorTex != 0) {
         glDeleteTextures(1, &m_sceneColorTex);

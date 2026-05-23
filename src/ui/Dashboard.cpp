@@ -479,7 +479,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "16: Vertex AO",
             "17: SSAO",
             "18: Normal Y",
-            "19: Contact Shadow"
+            "19: Contact Shadow",
+            "20: Puddle Mask",
+            "21: Rain Splash Mask",
+            "22: Rain Ripple Normal"
         };
         int lightDebugMode = pipeline.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
@@ -501,7 +504,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "3: SSR Hit",
             "4: Roughness",
             "5: SpecularWeight",
-            "6: CompositeDelta"
+            "6: CompositeDelta",
+            "7: Puddle Mask",
+            "8: Rain Splash Mask",
+            "9: Rain Ripple Normal"
         };
         int reflDebugMode = pipeline.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));
@@ -724,6 +730,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                 pipelineChanged |= ImGui::SliderFloat("Exposure Bias##weather", &pipeline.weatherExposureBias, -2.0f, 2.0f, "%.2f EV");
                 pipelineChanged |= ImGui::SliderFloat("Post Rain Fog##weather", &pipeline.weatherPostRainFog, 0.0f, 2.0f, "%.2f (x DerivMain)");
                 pipelineChanged |= ImGui::SliderFloat("Rain Alpha Scale##weather", &pipeline.weatherRainAlphaScale, 0.0f, 5.0f, "%.2f");
+                pipelineChanged |= ImGui::Checkbox("Weather Rain Lines", &pipeline.weatherRainLinesEnabled);
+                pipelineChanged |= ImGui::Checkbox("Scene Particles", &pipeline.sceneParticlesEnabled);
+                pipelineChanged |= ImGui::Checkbox("Rain Wet Surfaces", &pipeline.rainWetSurfacesEnabled);
+                pipelineChanged |= ImGui::Checkbox("Rain Surface Ripples", &pipeline.rainSurfaceRipplesEnabled);
             }
             ImGui::Separator();
         }

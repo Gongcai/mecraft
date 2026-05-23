@@ -32,9 +32,12 @@ vec3 ApplyWetNormal(vec3 normal, float pixelWetness) {
 }
 
 // Wet roughness reduction: wet surfaces are smoother / more reflective.
-// DerivativeMain deferred5.fsh:210 — roughness = sqr(oneMinus(roughness) * oneMinus(wetness*0.3))
+// DerivativeMain terrain starts from smoothness in specTex.r and converts to
+// roughness as sqr(1.0 - specTex.r). Mecraft stores roughness directly, so the
+// equivalent wet smoothness mix becomes roughness * sqr(1.0 - wetness).
 float ApplyWetRoughness(float roughness, float pixelWetness) {
-    return mix(roughness, max(0.08, roughness * 0.36), pixelWetness);
+    float wet = clamp(pixelWetness, 0.0, 1.0);
+    return max(roughness * (1.0 - wet) * (1.0 - wet), 0.02);
 }
 
 // Wet F0 boost: wet surfaces have stronger Fresnel (water IOR ~0.04).
@@ -56,53 +59,22 @@ vec3 ApplyWetAlbedo(vec3 albedo, float porosity, float pixelWetness) {
 
 // DerivativeMain RainEffect.glsl: wetnessDistribution = texture(noisetex, worldPos.xz * 0.01).r
 // Returns a smooth low-frequency scalar in [0, 1] without the previous stripe-like placeholder noise.
-float DerivativeRainHash12(vec2 p) {
-    vec3 q = fract(vec3(p.xyx) * 0.1031);
-    q += dot(q, q.yzx + 33.33);
-    return fract((q.x + q.y) * q.z);
-}
-
-float DerivativeRainValueNoise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float a = DerivativeRainHash12(i);
-    float b = DerivativeRainHash12(i + vec2(1.0, 0.0));
-    float c = DerivativeRainHash12(i + vec2(0.0, 1.0));
-    float d = DerivativeRainHash12(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-float DerivativeRainFbm(vec2 p) {
-    float sum = 0.0;
-    float amp = 0.55;
-    vec2 q = p;
-    for (int i = 0; i < 3; ++i) {
-        sum += amp * DerivativeRainValueNoise(q);
-        q = q * 2.07 + vec2(13.7, 7.9);
-        amp *= 0.5;
-    }
-    return sum;
-}
-
-float ComputeDerivativeRainWetness(vec2 worldXZ, float surfaceWetness, float time) {
+float ComputeDerivativeRainWetness(sampler2D noiseTex, vec2 worldXZ, float surfaceWetness, float time) {
     vec2 p = (worldXZ - time * vec2(0.01, 0.006)) * 0.01;
-    const float noiseTexFrequency = 64.0;
-    float n = DerivativeRainFbm(p * noiseTexFrequency);
-    n += DerivativeRainFbm(p * (noiseTexFrequency * 0.6) + vec2(5.7, -2.3)) * 2.0;
-    n += DerivativeRainFbm(p * (noiseTexFrequency * 0.2) + vec2(-8.1, 4.4)) * 3.0;
+    float n = texture(noiseTex, p).z;
+    n += texture(noiseTex, p * 0.6).x * 2.0;
+    n += texture(noiseTex, p * 0.2).y * 3.0;
     return saturate(n * 0.18) * clamp(surfaceWetness, 0.0, 1.0);
 }
 
-// DerivativeMain RainEffect.glsl: GetRainWetness + Terrain.frag wetFact thresholds.
-// Produces patchy puddle coverage instead of a full wet-film response.
-float ComputeRainPuddleMask(vec3 worldPos,
-                            float surfaceWetness,
-                            float skyLightRaw01,
-                            float normalY,
-                            float porosity,
-                            float time) {
+// DerivativeMain RainEffect.glsl: GetRainWetness(), including outdoor and
+// upward-facing gates from Terrain.frag before each wetFact threshold is applied.
+float ComputeRainSurfaceWetnessNoise(sampler2D noiseTex,
+                                     vec3 worldPos,
+                                     float surfaceWetness,
+                                     float skyLightRaw01,
+                                     float normalY,
+                                     float time) {
     float wetness = clamp(surfaceWetness, 0.0, 1.0);
     float outdoorWetMask = saturate(skyLightRaw01 * 10.0 - 9.0);
     float upwardFacing = remap(0.5, 0.9, clamp(normalY, 0.0, 1.0));
@@ -110,10 +82,35 @@ float ComputeRainPuddleMask(vec3 worldPos,
         return 0.0;
     }
 
-    float rainWetness = ComputeDerivativeRainWetness(worldPos.xz - worldPos.y, wetness, time);
+    float rainWetness = ComputeDerivativeRainWetness(noiseTex, worldPos.xz - worldPos.y, wetness, time);
     rainWetness *= outdoorWetMask * upwardFacing;
+    return rainWetness;
+}
 
-    float puddleMask = remap(0.32, 0.57, rainWetness);
+// DerivativeMain Terrain.frag: wetFact = smoothstep(0.54, 0.62, noise)
+// This narrow mask drives the RippleNormal splash normal only.
+float ComputeRainSplashMask(sampler2D noiseTex,
+                            vec3 worldPos,
+                            float surfaceWetness,
+                            float skyLightRaw01,
+                            float normalY,
+                            float time) {
+    float rainWetness = ComputeRainSurfaceWetnessNoise(noiseTex, worldPos, surfaceWetness, skyLightRaw01, normalY, time);
+    return smoothstep(0.54, 0.62, rainWetness);
+}
+
+// DerivativeMain RainEffect.glsl: GetRainWetness + Terrain.frag wet spec thresholds.
+// Produces patchy puddle coverage instead of a full wet-film response.
+float ComputeRainPuddleMask(sampler2D noiseTex,
+                            vec3 worldPos,
+                            float surfaceWetness,
+                            float skyLightRaw01,
+                            float normalY,
+                            float porosity,
+                            float time) {
+    float rainWetness = ComputeRainSurfaceWetnessNoise(noiseTex, worldPos, surfaceWetness, skyLightRaw01, normalY, time);
+
+    float puddleMask = remap(0.35, 0.57, rainWetness);
     puddleMask = puddleMask * puddleMask;
     puddleMask *= 1.0 - clamp(porosity, 0.0, 1.0) * 0.20;
     return saturate(puddleMask);

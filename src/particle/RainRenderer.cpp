@@ -104,6 +104,9 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         float streakWidth,
                                         float alphaScale,
                                         const glm::vec3& color,
+                                        bool proceduralLines,
+                                        GLuint sceneDepthTex,
+                                        const glm::vec2& screenSize,
                                         float dt) {
     if (!m_shader || texture == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
 
@@ -149,16 +152,17 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
         glm::vec3 v2 = bot + rOff;
         glm::vec3 v3 = bot - rOff;
 
-        float u = d.texU;
+        float u0 = proceduralLines ? 0.0f : d.texU;
+        float u1 = proceduralLines ? 1.0f : d.texU;
 
         // Triangle 1: v0 v1 v2
-        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u); vertices.push_back(0.0f);
-        vertices.push_back(v1.x); vertices.push_back(v1.y); vertices.push_back(v1.z); vertices.push_back(u); vertices.push_back(0.0f);
-        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u); vertices.push_back(1.0f);
+        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u0); vertices.push_back(0.0f);
+        vertices.push_back(v1.x); vertices.push_back(v1.y); vertices.push_back(v1.z); vertices.push_back(u1); vertices.push_back(0.0f);
+        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u1); vertices.push_back(1.0f);
         // Triangle 2: v0 v2 v3
-        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u); vertices.push_back(0.0f);
-        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u); vertices.push_back(1.0f);
-        vertices.push_back(v3.x); vertices.push_back(v3.y); vertices.push_back(v3.z); vertices.push_back(u); vertices.push_back(1.0f);
+        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u0); vertices.push_back(0.0f);
+        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u1); vertices.push_back(1.0f);
+        vertices.push_back(v3.x); vertices.push_back(v3.y); vertices.push_back(v3.z); vertices.push_back(u0); vertices.push_back(1.0f);
     }
 
     if (vertices.empty()) return;
@@ -169,10 +173,16 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     m_shader->setFloat("uPrecipAlphaScale", alphaScale);
     m_shader->setVec3("uPrecipColor", color);
     m_shader->setInt("uMaskPass", 0);
+    m_shader->setInt("uProceduralLines", proceduralLines ? 1 : 0);
+    m_shader->setInt("uDepthFadeEnabled", sceneDepthTex != 0 ? 1 : 0);
+    m_shader->setVec2("uScreenSize", screenSize);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
     m_shader->setInt("uPrecipTex", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, sceneDepthTex);
+    m_shader->setInt("uSceneDepthTex", 1);
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -191,6 +201,9 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void RainRenderer::render(const glm::mat4& projection,
@@ -199,15 +212,20 @@ void RainRenderer::render(const glm::mat4& projection,
                            float rainStrength,
                            float skyLightAtCamera,
                            float alphaScale,
+                           GLuint sceneDepthTex,
+                           const glm::vec2& screenSize,
                            float dt) {
     ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
     renderPrecipitation(projection, view, cameraPos,
                         m_rainTex, m_rainDrops,
                         rainStrength, skyLightAtCamera,
                         RAIN_FALL_SPEED, RAIN_DROP_LENGTH,
-                        0.035f,  // streakWidth: wider for visibility
+                        0.006f,  // streakWidth: DerivativeMain-like thin rain lines
                         alphaScale,
                         glm::vec3(0.72f, 0.78f, 0.85f), // rain blue-gray
+                        true,
+                        sceneDepthTex,
+                        screenSize,
                         dt);
 }
 
@@ -217,6 +235,8 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                float snowStrength,
                                float skyLightAtCamera,
                                float alphaScale,
+                               GLuint sceneDepthTex,
+                               const glm::vec2& screenSize,
                                float dt) {
     ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
     renderPrecipitation(projection, view, cameraPos,
@@ -226,6 +246,9 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                         0.025f,  // streakWidth: snow flakes are shorter
                         alphaScale,
                         glm::vec3(0.92f, 0.95f, 1.0f), // snow white
+                        false,
+                        sceneDepthTex,
+                        screenSize,
                         dt);
 }
 
@@ -286,6 +309,8 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
     m_shader->setMat4("viewProj", projection * view);
     m_shader->setVec3("uPrecipColor", glm::vec3(1.0f)); // unused for mask, but required by shader
     m_shader->setInt("uMaskPass", 1);
+    m_shader->setInt("uProceduralLines", 0);
+    m_shader->setInt("uDepthFadeEnabled", 0);
 
     // Render rain to weather mask
     {

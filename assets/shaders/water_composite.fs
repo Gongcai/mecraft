@@ -58,6 +58,7 @@ uniform float uSurfaceWetness;
 uniform float uWaterWaveHeight;
 uniform float uWaterWaveSpeed;
 uniform float uWaterIOR;
+uniform int uRainSurfaceRipplesEnabled;
 uniform int uIsEyeInWater;
 uniform float uWaterStillFirstLayer;
 uniform float uWaterStillLayerCount;
@@ -448,7 +449,7 @@ void main() {
     vec3 baseWaveNormalTangent = waveNormalTangent;
 
     // Add rain ripple normals (DerivativeMain RainEffect.glsl)
-    if (uSurfaceWetness > 0.01) {
+    if (uRainSurfaceRipplesEnabled != 0 && uSurfaceWetness > 0.01) {
         float skylightFactor = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
         vec2 rainNormal = GetRainNormal(vWorldPos, uSurfaceWetness * skylightFactor);
         waveNormalTangent.xy += rainNormal;
@@ -457,7 +458,7 @@ void main() {
 
     // Transform to world space using TBN (DerivativeMain line 249)
     vec3 reflectionWaveNormalTangent = GetReflectionWavesNormal(parallaxPos);
-    if (uSurfaceWetness > 0.01) {
+    if (uRainSurfaceRipplesEnabled != 0 && uSurfaceWetness > 0.01) {
         float skylightFactor = clamp(vSunlight * 10.0 - 9.0, 0.0, 1.0);
         vec2 rainNormal = GetRainNormal(vWorldPos, uSurfaceWetness * skylightFactor);
         reflectionWaveNormalTangent.xy += rainNormal * 1.35;

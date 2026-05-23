@@ -111,8 +111,10 @@ uniform vec3 uFogColor;
 uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
-uniform int uDeferredDebugMode; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=scene, 7=skyDirRatio, 8=NdotL, 9=cloudShadow, 10=outdoorMask, 11=directFrac, 12=beforeAO, 13=afterAO, 14=rawSkyLight, 15=skyLightMask, 16=vertexAO, 17=SSAO, 18=normalY, 19=contactShadow
+uniform int uDeferredDebugMode; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=scene, 7=skyDirRatio, 8=NdotL, 9=cloudShadow, 10=outdoorMask, 11=directFrac, 12=beforeAO, 13=afterAO, 14=rawSkyLight, 15=skyLightMask, 16=vertexAO, 17=SSAO, 18=normalY, 19=contactShadow, 20=puddleMask, 21=rainSplashMask, 22=rainRippleNormal
 uniform int uDerivativeStrictMode; // 1=disable Mecraft extras (minimumAmbient, sky specular, fake bounce) to match DerivativeMain baseline
+uniform int uRainWetSurfacesEnabled;
+uniform int uRainSurfaceRipplesEnabled;
 
 // Shadow color/normal textures (DerivativeMain shadowcolor0/1 equivalent)
 uniform sampler2D uShadowColorTex;
@@ -506,29 +508,29 @@ void main() {
 
     // DerivativeMain-style wet surface effects — shared implementation in weather_surface.glsl
     float skyLightRaw01 = clamp(voxelLight.r, 0.0, 1.0);
-    float pixelWetness = ComputePixelWetness(uSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y);
+    float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
+    float pixelWetness = ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, surface.aux.wetnessMask, normal.y);
 
-    float wetFilm = pixelWetness * 0.35;
-    if (!transMask.isTranslucent && wetFilm > 1e-4) {
-        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, wetFilm);
-        normal = ApplyWetNormal(normal, wetFilm);
-        roughness = ApplyWetRoughness(roughness, wetFilm);
-        f0Scalar = ApplyWetF0(f0Scalar, wetFilm);
-    }
     bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;
     float derivativeSpecularMask = hasDerivativeSpecular ? 1.0 : 0.0;
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-    float puddleMask = ComputeRainPuddleMask(worldPos, uSurfaceWetness, skyLightRaw01, normal.y, surface.aux.porosity, uTime);
+    float puddleMask = ComputeRainPuddleMask(uNoiseTex, worldPos, weatherSurfaceWetness, skyLightRaw01, normal.y, surface.aux.porosity, uTime);
+    float rainSplashMask = ComputeRainSplashMask(uNoiseTex, worldPos, weatherSurfaceWetness, skyLightRaw01, normal.y, uTime);
+    vec2 rainRippleDebug = vec2(0.0);
 
     if (!transMask.isTranslucent && puddleMask > 1e-4) {
-        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, puddleMask * 0.75);
-        normal = ApplyWetNormal(normal, puddleMask * 0.85);
-        roughness = ApplyWetRoughness(roughness, puddleMask);
-        f0Scalar = ApplyWetF0(f0Scalar, puddleMask);
-        float rippleMask = smoothstep(0.18, 0.45, puddleMask);
+        float wetStrength = saturate(puddleMask * 1.25);
+        albedo = ApplyWetAlbedo(albedo, surface.aux.porosity, wetStrength * 0.75);
+        normal = ApplyWetNormal(normal, wetStrength * 0.85);
+        roughness = ApplyWetRoughness(roughness, wetStrength);
+        f0Scalar = ApplyWetF0(f0Scalar, wetStrength);
+        derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
+    }
+    if (uRainSurfaceRipplesEnabled != 0 && !transMask.isTranslucent && rainSplashMask > 1e-4) {
         vec2 rainRipple = SampleRainRippleNormal(uRippleNormalTex, worldPos, 1.0, uTime, 0.60, 1.0);
-        normal = normalize(mix(normal, normalize(vec3(rainRipple.x, 1.0, rainRipple.y)), rippleMask * 0.5));
+        rainRippleDebug = rainRipple;
+        normal = normalize(mix(normal, normalize(vec3(rainRipple.x, 1.0, rainRipple.y)), rainSplashMask * 0.5));
         derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
     }
     float f0ScalarClamped = max(f0Scalar, 0.005);
@@ -664,8 +666,8 @@ void main() {
             // Specular (DerivativeMain deferred5.fsh:291-292)
             specular = vec3(SpecularBRDF(LdotH, NdotV, rawNdotL, NdotH, alpha2, f0ScalarClamped)) *
                        mix(vec3(1.0), albedo, surface.aux.metalness);
-            // DerivativeMain deferred5.fsh:293 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom
-            specular *= 0.6 + wetFilm * 0.75 + puddleMask * 0.85; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
+            // DerivativeMain deferred5.fsh:297 — specular *= SPECULAR_HIGHLIGHT_BRIGHTNESS + wetnessCustom.
+            specular *= 0.6 + weatherSurfaceWetness * puddleMask; // SPECULAR_HIGHLIGHT_BRIGHTNESS=0.6 (DerivativeMain Settings.glsl:133)
 
             // DerivativeMain uses saturate(mcLightmap.g * 1e6), effectively a
             // boolean gate. Mecraft's interpolated voxel skylight can cross zero
@@ -1001,6 +1003,9 @@ void main() {
     else if (uDeferredDebugMode == 17) { color = vec3(ssao); }
     else if (uDeferredDebugMode == 18) { color = vec3(normal.y * 0.5 + 0.5); }
     else if (uDeferredDebugMode == 19) { color = vec3(dbgContactShadow); }
+    else if (uDeferredDebugMode == 20) { color = vec3(puddleMask); }
+    else if (uDeferredDebugMode == 21) { color = vec3(rainSplashMask); }
+    else if (uDeferredDebugMode == 22) { color = vec3(abs(rainRippleDebug), 0.0) * 2.0; }
 
     // Alpha encodes translucency: 0 = opaque, 1 = translucent (water/glass/ice/stained glass).
     // Downstream composite passes use this to apply refraction/tinting selectively.

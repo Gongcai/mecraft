@@ -24,6 +24,8 @@ public:
                 float rainStrength,
                 float skyLightAtCamera,
                 float alphaScale,
+                GLuint sceneDepthTex,
+                const glm::vec2& screenSize,
                 float dt);
 
     // Render snow around the given camera position.
@@ -33,6 +35,8 @@ public:
                     float snowStrength,
                     float skyLightAtCamera,
                     float alphaScale,
+                    GLuint sceneDepthTex,
+                    const glm::vec2& screenSize,
                     float dt);
 
     // Render weather mask to the currently bound FBO with additive blending.
@@ -70,6 +74,9 @@ private:
                              float streakWidth,
                              float alphaScale,
                              const glm::vec3& color,
+                             bool proceduralLines,
+                             GLuint sceneDepthTex,
+                             const glm::vec2& screenSize,
                              float dt);
 
     Shader* m_shader = nullptr;
