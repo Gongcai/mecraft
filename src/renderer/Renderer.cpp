@@ -2445,8 +2445,8 @@ void Renderer::renderCloudPass(const RenderFrameData& frame) {
     m_cloudShader->setInt("uSkyCaptureTex", 1);
     m_cloudShader->setInt("uNoiseTex", 2);
     m_cloudShader->setInt("uAtmosphereLut", 3);
-    m_cloudShader->setMat4("uInvViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
+    // Clouds are world-space ray-marched — use non-jittered matrix to avoid TAA-induced jitter.
+    m_cloudShader->setMat4("uInvViewProj", frame.invViewProj);
     bindSkyLightingUniforms(*m_cloudShader, frame);
     bindAtmosphereUniforms(*m_cloudShader, frame);
     bindCloudUniforms(*m_cloudShader, frame);
