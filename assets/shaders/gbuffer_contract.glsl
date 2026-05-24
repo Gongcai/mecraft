@@ -1,6 +1,51 @@
 // Shared DerivativeMain-compatible G-buffer and material contract.
 // Material ids mirror DerivativeMain/block.properties after subtracting 10000
 // from OptiFine/Iris mc_Entity ids.
+//
+// Material ID Mapping (Mecraft ↔ DerivativeMain block.properties):
+// ┌─────────────────────────┬────┬──────────────────────────────────────────────────────────────────────────────────┐
+// │ Category                │ ID │ Blocks (DerivativeMain block.properties)                                          │
+// ├─────────────────────────┼────┼──────────────────────────────────────────────────────────────────────────────────┤
+// │ Plants (animation)      │  1 │ fern, grass/short_grass, nether_sprouts, warped_roots, crimson_roots              │
+// │ Crops                   │  2 │ wheat, carrots, potatoes, beetroots, seagrass                                    │
+// │ Flowers                 │  3 │ dandelion, poppy, blue_orchid, allium, tulips, etc.                              │
+// │ Tall plants (upper)     │  4 │ sunflower:upper, lilac:upper, tall_grass:upper, etc.                             │
+// │ Tall plants (lower)     │  5 │ sunflower:lower, lilac:lower, tall_grass:lower, etc.                             │
+// │ Grass-like (merged)     │  6 │ saplings, dead_bush, bamboo, sugar_cane, cactus, kelp, stems, coral blocks, etc. │
+// │ Leaves                  │  7 │ oak/spruce/birch/jungle/acacia/dark_oak/cherry/mangrove leaves, vine              │
+// │ Banner SSS              │  9 │ wall banners, standing banners                                                   │
+// │ Snow/Ice SSS            │ 10 │ frosted_ice, blue_ice, packed_ice, snow, snow_block, powder_snow                 │
+// │ Lava                    │ 15 │ lava, flowing_lava                                                               │
+// │ Stained glass           │ 16 │ (stained glass variants — translucent mask)                                      │
+// │ Water                   │ 17 │ water, flowing_water                                                             │
+// │ Ice                     │ 18 │ ice (translucent mask)                                                           │
+// │ End portal              │ 19 │ end_portal, end_gateway                                                          │
+// │ Total glowing           │ 20 │ candles, froglight, lapis_block, emerald_block, end_rod                          │
+// │ Torch-like              │ 21 │ torch, wall_torch, campfire, lantern, furnace, blast_furnace, smoker             │
+// │ Fire                    │ 22 │ fire, lava_cauldron                                                              │
+// │ Glowstone-like          │ 23 │ glowstone, magma_block, shroomlight, redstone_lamp, jack_o_lantern               │
+// │ Sea lantern-like        │ 24 │ sea_lantern, warped_stem, warped_hyphae, redstone_wire                           │
+// │ Redstone                │ 25 │ redstone_torch, redstone_wall_torch, repeater, comparator                        │
+// │ Soul fire               │ 26 │ sea_pickle, dragon_head, spawner, enchanting_table, soul_fire, soul_torch, etc.   │
+// │ Amethyst                │ 27 │ small/medium/large amethyst bud, amethyst_cluster, amethyst_block, budding_amethyst│
+// │ Glowberry               │ 28 │ cave_vines_plant:berries=true, cave_vines:berries=true                           │
+// │ Rails                   │ 29 │ redstone_block, powered_rail, activator_rail, detector_rail, observer             │
+// │ Beacon core             │ 30 │ beacon                                                                           │
+// │ Sculk                   │ 31 │ sculk, sculk_catalyst, sculk_shrieker, sculk_vein, sculk_sensor                  │
+// │ Glow lichen             │ 32 │ glow_lichen                                                                      │
+// │ Partial glowing         │ 33 │ weeping_vines, chorus_plant/flower, crimson/warped_fungus                        │
+// │ Middle glowing          │ 34 │ candle_cake, brewing_stand                                                       │
+// │ Textured                │ 35 │ (generic textured blocks)                                                        │
+// │ Textured emissive       │ 36 │ (textured blocks with emission)                                                  │
+// │ Ores                    │ 57 │ iron/copper/gold/redstone/lapis/emerald/diamond ore, deepslate variants, gilded  │
+// │ Nether ores             │ 58 │ nether_gold_ore, nether_quartz_ore                                               │
+// │ Entity skin             │ 60 │ Mecraft extension: player/mob humanoid renderer                                  │
+// └─────────────────────────┴────┴──────────────────────────────────────────────────────────────────────────────────┘
+//
+// Roughness/F0/Emission/SSS defaults (no PBR specular map):
+// - DerivativeMain Material.inc: without MC_SPECULAR_MAP, roughness=specTex.r, f0=specTex.g, emissiveness=0.0
+// - Mecraft: hardcoded per ID since no PBR texture pipeline; emission from BlockLighting.glsl logic
+// - SSS from DerivativeMain hardcoded fallback: grass=0.45, leaves/snow_ice=0.70, banner=0.65
 
 #ifndef MECRAFT_GBUFFER_CONTRACT_GLSL
 #define MECRAFT_GBUFFER_CONTRACT_GLSL
@@ -154,6 +199,8 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
     SurfaceMaterial material = defaultSurfaceMaterial();
     int materialId = derivativeFragmentMaterialId(materialKindId(materialKind));
 
+    // DerivativeMain Material.inc: roughness/f0 from specTex when no PBR map.
+    // Mecraft hardcodes per ID since no PBR texture pipeline.
     if (materialId == MATERIAL_STAINED_GLASS) {
         material.roughness = 0.04;
         material.f0 = 0.04;
@@ -164,14 +211,15 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
         material.roughness = 0.10;
         material.f0 = 0.04;
     } else if (materialId == MATERIAL_SKIN) {
-        // Mecraft extension: entity skin — moderate roughness, standard dielectric,
-        // moderate SSS for subsurface skin translucency.
+        // Mecraft extension: entity skin — moderate roughness, standard dielectric.
         material.roughness = 0.65;
         material.f0 = 0.04;
-        material.sss = 0.35;
     }
 
+    // SSS from DerivativeMain hardcoded fallback (no PBR specular map).
+    // grass=0.45, leaves/snow_ice=0.70, banner=0.65, skin=0.35
     material.sss = derivativeHardcodedSss(materialId);
+    // Emission from BlockLighting.glsl per-ID logic; pass albedo-based hint through.
     material.emission = derivativeEmissionHint(materialId, emissiveHint);
     return material;
 }
@@ -181,9 +229,14 @@ SurfaceMaterialAux surfaceMaterialAuxForKind(float materialKind) {
     int materialId = derivativeFragmentMaterialId(materialKindId(materialKind));
     aux.materialKind = clamp(float(materialId), 0.0, MATERIAL_ID_MAX);
 
+    // Wetness mask: translucent surfaces (water/ice/glass) are fully wet.
     if (materialId == MATERIAL_STAINED_GLASS || materialId == MATERIAL_WATER || materialId == MATERIAL_ICE) {
         aux.wetnessMask = 1.0;
     }
+    // Porosity: skin has moderate porosity for wetness absorption.
+    // Metalness: DerivativeMain sets isMetal from PBR specTex; without PBR maps,
+    // all blocks default to non-metal (metalness=0.0). Metal blocks (iron/gold/copper)
+    // would need PBR specular maps to be properly identified.
     if (materialId == MATERIAL_SKIN) {
         aux.wetnessMask = 0.6;
         aux.porosity = 0.3;
