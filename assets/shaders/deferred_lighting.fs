@@ -337,10 +337,39 @@ float shapeShadowVisibility(float lit) {
     return mix(clamp(uShadowMinLight, 0.0, 0.8), 1.0, contrasted);
 }
 
-vec3 sampleShadowColorTint(vec3 worldPos, vec3 normal, vec3 lightDir, float shadowVisibility) {
-    // Mecraft CSM first pass is depth-only. Colored shadows / shadowcolor0 tint
-    // will return after transparent shadow semantics are defined for the CSM array.
-    return vec3(1.0);
+vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
+    // Mecraft adaptation of DerivativeMain SunLighting.glsl colored shadows:
+    // compare shadowtex0 (DepthAll) with shadowtex1 (opaque-only), then read
+    // shadowcolor0. Cascade 0 is the only cascade with transparent caster data.
+    float viewDistance = length(worldPos - uCameraPos);
+    int cascadeIndex = selectCsmCascade(viewDistance);
+    if (cascadeIndex != 0) return vec3(1.0);
+
+    normal = normalize(normal);
+    lightDir = normalize(lightDir);
+    float ndotl = saturate(dot(normal, lightDir));
+    if (ndotl <= 1.0e-3) return vec3(1.0);
+
+    ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
+    float texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
+    float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistance, texelWorld,
+                                                 uShadowDistance, uShadowNormalOffset);
+    vec3 proj = csmProjectWorld(worldPos + normal * normalOffset, cascadeIndex);
+    if (shadowProjOutOfBounds(proj)) return vec3(1.0);
+
+    float bias = csmDepthBias(ndotl, viewDistance, cascadeIndex, shadowSize,
+                              uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
+    float refZ = proj.z - bias;
+    float opaqueLit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
+    float allLit = sampleCsmDepthAllCompare(proj.xy, cascadeIndex, refZ);
+    float transparentHit = saturate(opaqueLit - allLit);
+    if (transparentHit <= 1.0e-3) return vec3(1.0);
+
+    vec4 colorSample = sampleCsmShadowColor0RawTexel(proj.xy, cascadeIndex);
+    if (colorSample.a >= 0.5) return vec3(1.0);
+
+    vec3 tint = pow4(colorSample.rgb);
+    return mix(vec3(1.0), tint, transparentHit);
 }
 
 // DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)
@@ -396,8 +425,7 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
 }
 
 // Mecraft formal CSM shadow path.
-// Returns per-channel shadow value, with colored shadows deferred until the
-// transparent CSM caster contract is defined.
+// Returns per-channel shadow value with colored shadow tint from transparent casters.
 vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, out float outSssDepth, out float outSssWeight) {
     outSssDepth = 0.0;
     outSssWeight = 0.0;
@@ -410,7 +438,11 @@ vec3 shadowFactor(vec3 worldPos, vec3 normal, vec3 lightDir, float sssAmount, ou
     outSssWeight = csm.sssWeight;
     float lit = csm.visibility;
     float shaped = shapeShadowVisibility(lit);
-    return vec3(mix(1.0, shaped, csm.fade));
+    float shadowScalar = mix(1.0, shaped, csm.fade);
+
+    // Apply colored transparent caster tint (glass/water) from DepthAll + shadowcolor0.
+    vec3 colorTint = sampleTransparentShadowTint(worldPos, normal, lightDir);
+    return colorTint * shadowScalar;
 }
 
 // Overload without SSS depth output for callers that don't need it

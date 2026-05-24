@@ -639,7 +639,7 @@ private:
                                             shadow::ShadowCasterCuller* shadowCuller = nullptr);
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
     void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
-    void renderWaterShadowChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
+    void renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);
     void syncChunkRenderColumns(const World& world);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);

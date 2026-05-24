@@ -21,7 +21,7 @@ uniform int uForceBaseLod;
 uniform float uAnimationTime;
 uniform float uTime;
 uniform vec3 uShadowLightDirection;
-uniform int uShadowPassMode; // 0 = opaque-only (existing), 1 = water shadow (DepthAll + Color)
+uniform int uShadowPassMode; // 0 = opaque-only, 1 = transparent shadow (DepthAll + Color)
 
 // Shadow color outputs:
 // layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics),
@@ -130,6 +130,10 @@ void main() {
         // DerivativeMain: shadowcolor1.w = surfaceY / 512 + 0.25
         ShadowNormal = vec4(encodeNormal(waveNormal), vSkylight, vWorldPos.y / 512.0 + 0.25);
     } else {
+        if (uShadowPassMode != 0 && vMaterialKind != MATERIAL_STAINED_GLASS) {
+            discard;
+        }
+
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
         bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
