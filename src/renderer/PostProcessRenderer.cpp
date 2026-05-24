@@ -43,7 +43,7 @@ void PostProcessRenderer::setEffects(const PostProcessEffects& effects) {
     m_effects = effects;
     m_effects.underwaterStrength = std::clamp(m_effects.underwaterStrength, 0.0f, 1.0f);
     m_effects.bloomThreshold = std::clamp(m_effects.bloomThreshold, 0.0f, 4.0f);
-    m_effects.bloomStrength = std::clamp(m_effects.bloomStrength, 0.0f, 2.0f);
+    m_effects.bloomStrength = std::clamp(m_effects.bloomStrength, 0.0f, 20.0f);
     m_effects.autoExposureMin = std::clamp(m_effects.autoExposureMin, 0.001f, 64.0f);
     m_effects.autoExposureMax = std::clamp(m_effects.autoExposureMax, m_effects.autoExposureMin, 64.0f);
     m_effects.autoExposureSpeed = std::clamp(m_effects.autoExposureSpeed, 0.05f, 12.0f);
@@ -132,7 +132,6 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
 
         m_bloomExtractShader->use();
         m_bloomExtractShader->setInt("uSceneTex", 0);
-        m_bloomExtractShader->setFloat("uExposure", resolvedExposure);
         glBindVertexArray(m_fullscreenVao);
         for (int mip = 0; mip < kBloomMipCount; ++mip) {
             if (m_bloomFbos[mip][0] == 0) {
@@ -141,7 +140,9 @@ void PostProcessRenderer::endSceneAndComposite(const Window& window, const float
             glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
             glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
             glClear(GL_COLOR_BUFFER_BIT);
-            m_bloomExtractShader->setInt("uSourceLod", mip);
+            // DerivativeMain/program/Post/DownSample.glsl writes lod 1..7 into
+            // atlas tiles. Mecraft stores those tiles as separate textures.
+            m_bloomExtractShader->setInt("uSourceLod", mip + 1);
             glDrawArrays(GL_TRIANGLES, 0, 3);
         }
 

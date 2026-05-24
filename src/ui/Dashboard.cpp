@@ -547,7 +547,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &pipeline.ssaoTemporalEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &pipeline.bloomStrength, 0.0f, 5.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &pipeline.bloomStrength, 0.0f, 20.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Depth of Field", &pipeline.dofEnabled);
         pipelineChanged |= ImGui::SliderFloat("DoF Focus", &pipeline.dofFocusDistance, 0.5f, 50.0f, "%.1f blocks");
         pipelineChanged |= ImGui::SliderFloat("DoF Aperture", &pipeline.dofAperture, 0.8f, 22.0f, "%.1f");

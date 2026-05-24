@@ -1,6 +1,9 @@
 #version 450 core
 
-// DerivativeMain BlurH/BlurV: 9-tap symmetric binomial Gaussian.
+// DerivativeMain/program/Post/BlurH.glsl and BlurV.glsl:
+// 9-tap symmetric binomial Gaussian using integer texel taps.
+// Mecraft adaptation: each bloom tile is a separate texture, so edge taps are
+// clamped to the texture bounds instead of crossing atlas tile borders.
 // Weights are 8th-order binomial coefficients normalized to sum to 1:
 //   [70, 56, 28, 8, 1] / 256
 
@@ -17,16 +20,18 @@ const float w2 = 28.0 / 256.0;  // +/-2
 const float w3 =  8.0 / 256.0;  // +/-3
 const float w4 =  1.0 / 256.0;  // +/-4
 
+vec3 FetchTap(ivec2 texel, ivec2 offset) {
+    ivec2 maxTexel = textureSize(uImage, 0) - ivec2(1);
+    return texelFetch(uImage, clamp(texel + offset, ivec2(0), maxTexel), 0).rgb;
+}
+
 void main() {
-    vec2 texel = uDirection / vec2(textureSize(uImage, 0));
-    vec3 color = texture(uImage, vTexCoord).rgb * w0;
-    color += (texture(uImage, vTexCoord + texel * 1.0).rgb +
-              texture(uImage, vTexCoord - texel * 1.0).rgb) * w1;
-    color += (texture(uImage, vTexCoord + texel * 2.0).rgb +
-              texture(uImage, vTexCoord - texel * 2.0).rgb) * w2;
-    color += (texture(uImage, vTexCoord + texel * 3.0).rgb +
-              texture(uImage, vTexCoord - texel * 3.0).rgb) * w3;
-    color += (texture(uImage, vTexCoord + texel * 4.0).rgb +
-              texture(uImage, vTexCoord - texel * 4.0).rgb) * w4;
+    ivec2 texel = ivec2(gl_FragCoord.xy);
+    ivec2 direction = ivec2(round(uDirection));
+    vec3 color = FetchTap(texel, direction * 0) * w0;
+    color += (FetchTap(texel, direction * 1) + FetchTap(texel, direction * -1)) * w1;
+    color += (FetchTap(texel, direction * 2) + FetchTap(texel, direction * -2)) * w2;
+    color += (FetchTap(texel, direction * 3) + FetchTap(texel, direction * -3)) * w3;
+    color += (FetchTap(texel, direction * 4) + FetchTap(texel, direction * -4)) * w4;
     FragColor = vec4(color * uWeight, 1.0);
 }
