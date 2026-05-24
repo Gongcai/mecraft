@@ -1668,11 +1668,21 @@ bool Renderer::renderWorldDeferred(const World& world,
             m_volumetricTemporalShader != nullptr) {
             renderVolumetricTemporalPass(frame);
         }
-        if (!volumetricDebugActive) {
-            compositeVolumetricFogPass();
-        }
+    }
+    // Always run volumetric composite to ensure alpha channel has correct fog transmittance.
+    // When volumetric fog is disabled, this outputs transmittance=1.0 (no fog) so Bloomy Fog
+    // doesn't misinterpret the alpha channel as "fully fogged".
+    if (!volumetricDebugActive && m_volumetricCompositeShader != nullptr) {
 #ifdef MECRAFT_DEBUG
-        endGpuTimer(GpuTimerPass::Volumetric);
+        if (!(overworldVolumetricActive || uwVolumetricActive || volumetricDebugActive)) {
+            beginGpuTimer(GpuTimerPass::Volumetric);
+        }
+#endif
+        compositeVolumetricFogPass();
+#ifdef MECRAFT_DEBUG
+        if (!(overworldVolumetricActive || uwVolumetricActive || volumetricDebugActive)) {
+            endGpuTimer(GpuTimerPass::Volumetric);
+        }
 #endif
     }
 
@@ -2704,6 +2714,12 @@ void Renderer::compositeVolumetricFogPass() {
     m_volumetricCompositeShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
     m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(m_currentFrameData.frameIndex & 0x7fffffffULL));
     m_volumetricCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
+    // Inform shader whether volumetric fog is active; when disabled, output transmittance=1.0
+    // so Bloomy Fog doesn't misinterpret alpha as "fully fogged".
+    const bool volFogCompositeActive = (m_pipelineSettings.volumetricLightEnabled ||
+                                        (m_pipelineSettings.volumetricFogEnabled &&
+                                         m_pipelineSettings.volumetricFogStrength > 0.001f));
+    m_volumetricCompositeShader->setInt("uVolumetricFogActive", volFogCompositeActive ? 1 : 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
     glActiveTexture(GL_TEXTURE1);

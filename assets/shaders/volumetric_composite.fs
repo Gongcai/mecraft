@@ -11,6 +11,7 @@ uniform float uFarPlane;
 uniform int uFrameIndex;
 uniform int uFreezeBias; // A/B test: 1 = use static bias (no temporal rotation)
 uniform int uIsEyeInWater;
+uniform int uVolumetricFogActive; // 0 = fog disabled, output transmittance=1.0
 
 float viewDistanceFromDepth(float depth) {
     if (depth >= 0.9999) {
@@ -66,6 +67,14 @@ vec4 spatialUpscaleVolumetric(vec2 uv) {
 
 void main() {
     vec3 scene = texture(uSceneTex, vTexCoord).rgb;
+
+    // When volumetric fog is disabled, output transmittance=1.0 (no fog) so that
+    // Bloomy Fog in postprocess doesn't misinterpret alpha=0 as "fully fogged".
+    if (uVolumetricFogActive == 0) {
+        FragColor = vec4(scene, 1.0);
+        return;
+    }
+
     vec4 volumetric = (uIsEyeInWater != 0)
         ? texture(uVolumetricTex, vTexCoord)
         : spatialUpscaleVolumetric(vTexCoord);
