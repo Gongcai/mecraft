@@ -451,7 +451,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "74: UW VL Phase",
             "75: Shadow Depth Gap",
             "76: Shadow Color0",
-            "77: Shadow Color1"
+            "77: Shadow Color1",
+            "78: Reflection Composite Delta x32",
+            "79: TAA Loss x32",
+            "80: TAA Wet Reject Mask"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
@@ -516,7 +519,20 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             "14: Has Reflection",
             "15: Sky Light Raw",
             "16: Voxel Light RG",
-            "17: Material Aux"
+            "17: Material Aux",
+            "18: Sky Gradient x64",
+            "19: Final Contribution",
+            "20: Reflection Source",
+            "21: Reflectance x32",
+            "22: F0 x32",
+            "23: Roughness",
+            "24: Reflection Source x8",
+            "25: Final Contribution x32",
+            "26: Reflection/Scene Ratio",
+            "27: Scene Luma",
+            "28: Reflection Luma x64",
+            "29: Reflectance x128",
+            "30: Source Gradient x128"
         };
         int reflDebugMode = pipeline.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));

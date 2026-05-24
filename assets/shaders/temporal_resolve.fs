@@ -5,15 +5,21 @@
 // - Reinhard luminance-weighted tonemapping
 // - taaOffset * 0.5 applied to current sample coordinate
 
+#include "gbuffer_contract.glsl"
+
 in vec2 vTexCoord;
 out vec4 FragColor;
 
 uniform sampler2D uCurrentTex;
 uniform sampler2D uHistoryTex;
 uniform sampler2D uVelocityTex;
+uniform sampler2D uDepthTex;
+uniform sampler2D uMaterialAuxTex;
 
 uniform vec2 uScreenSize;
 uniform vec2 uJitter;
+uniform float uSurfaceWetness;
+uniform int uRainWetSurfacesEnabled;
 
 vec3 RGBtoYCoCgR(in vec3 rgbColor) {
     vec3 ycocg;
@@ -152,6 +158,25 @@ void main() {
     float blendWeight = 0.97;
     vec2 pixelVelocity = 1.0 - abs(fract(previousCoord * uScreenSize) * 2.0 - 1.0);
     blendWeight *= sqrt(pixelVelocity.x * pixelVelocity.y) * 0.25 + 0.75;
+
+    // Mecraft adaptation: DerivativeMain writes rain ripple normals into the
+    // G-buffer before its TAA pass. In this renderer the animated wet-reflection
+    // signal is much smaller relative to the lit scene, so a full 0.97 history
+    // average can converge the moving RippleNormal contribution away. Keep the
+    // base Temporal.frag path for ordinary pixels, but make puddle pixels
+    // current-frame dominant so the DerivativeMain ripple source survives resolve.
+    if (uRainWetSurfacesEnabled != 0 && uSurfaceWetness > 1e-2) {
+        float depth = texelFetch(uDepthTex, sampleTexel, 0).r;
+        if (depth < 0.9999) {
+            SurfaceMaterialAux aux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTex, sampleTexel, 0));
+            TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
+            if (!transMask.isTranslucent) {
+                float wetHistoryReject = smoothstep(0.02, 0.25, aux.wetnessMask) *
+                                         clamp(uSurfaceWetness, 0.0, 1.0);
+                blendWeight = mix(blendWeight, 0.06, wetHistoryReject);
+            }
+        }
+    }
 
     // DerivativeMain: Reinhard luminance-weighted blend
     vec3 result = invReinhard(mix(reinhard(currentSample), reinhard(previousSample), blendWeight));

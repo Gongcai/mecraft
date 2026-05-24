@@ -96,22 +96,33 @@ void main() {
         float upwardFacing = remap(0.5, 0.9, normal.y);
         float rainWetness = ComputeRainSurfaceWetnessNoiseFromFacing(uNoiseTex, vWorldPos, uSurfaceWetness, vSunlight, upwardFacing, uShaderTime);
         float splashWetFact = ComputeRainSplashMaskFromNoise(rainWetness);
+        float puddleFact = ComputeRainPuddleMaskFromNoise(rainWetness, aux.porosity);
 
-        if (uRainSurfaceRipplesEnabled != 0 && splashWetFact > 1e-4) {
+        if (uRainSurfaceRipplesEnabled != 0 && max(splashWetFact, puddleFact) > 1e-4) {
+            // DerivativeMain Terrain.frag drives visible rings with the narrow
+            // splash mask, while its smooth puddle mask makes the reflective
+            // interior energetic enough for those rings to read. Mecraft stores
+            // the final world normal directly and filters reflections in a later
+            // pass, so keep a stronger ripple floor on puddles to survive that
+            // resolve without exceeding DerivativeMain's 0.5 normal blend cap.
+            float rippleFact = max(splashWetFact, puddleFact * 0.75);
             vec2 rainNormal = SampleRainRippleNormal(uRippleNormalTex, vWorldPos, 1.0, uShaderTime, 0.60, 1.0);
-            normal = normalize(mix(normal, vec3(rainNormal.x, 1.0, rainNormal.y), splashWetFact * 0.5));
+            normal = normalize(mix(normal, vec3(rainNormal.x, 1.0, rainNormal.y), min(rippleFact * 0.65, 0.5)));
         } else if (splashWetFact > 1e-4) {
             normal = normalize(mix(normal, vec3(0.0, 1.0, 0.0), splashWetFact));
         }
 
-        float wetFact = ComputeRainPuddleMaskFromNoise(rainWetness, aux.porosity);
-        if (wetFact > 1e-4) {
-            aux.wetnessMask = max(aux.wetnessMask, wetFact);
+        if (puddleFact > 1e-4) {
+            aux.wetnessMask = max(aux.wetnessMask, puddleFact);
             float smoothness = 1.0 - sqrt(clamp(material.roughness, 0.0, 1.0));
-            smoothness = mix(smoothness, 1.0, wetFact);
+            smoothness = mix(smoothness, 1.0, puddleFact);
             material.roughness = sqr(1.0 - smoothness);
-            material.f0 = max(material.f0, 0.04 * wetFact);
-            albedo = ApplyWetAlbedo(albedo, aux.porosity, wetFact);
+            material.f0 = max(material.f0, 0.04 * puddleFact);
+        }
+
+        float wetAlbedoFact = ComputeRainWetAlbedoMaskFromNoise(rainWetness);
+        if (wetAlbedoFact > 1e-4) {
+            albedo = ApplyWetAlbedo(albedo, aux.porosity, wetAlbedoFact);
         }
     }
 

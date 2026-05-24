@@ -705,8 +705,8 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     m_pipelineSettings.volumetricShadowBiasScale = std::clamp(m_pipelineSettings.volumetricShadowBiasScale, 0.0f, 4.0f);
     m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
     m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 77);
-    m_pipelineSettings.reflectionDebugMode = std::clamp(m_pipelineSettings.reflectionDebugMode, 0, 17);
+    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 80);
+    m_pipelineSettings.reflectionDebugMode = std::clamp(m_pipelineSettings.reflectionDebugMode, 0, 30);
 
     m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 5);
     m_pipelineSettings.debugDisableGreedyMeshing = false;
@@ -2742,6 +2742,12 @@ void Renderer::renderReflectionFilterPass(const RenderFrameData& frame) {
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
     m_reflectionFilterShader->setFloat("uFilterStrength", m_pipelineSettings.reflectionFilterStrength);
+    m_reflectionFilterShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
+    m_reflectionFilterShader->setMat4("uInvViewProj",
+        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
+    m_reflectionFilterShader->setVec3("uCameraPos", frame.cameraPos);
+    m_reflectionFilterShader->setFloat("uNearPlane", frame.nearPlane);
+    m_reflectionFilterShader->setFloat("uFarPlane", frame.farPlane);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTemporalScratchTexture());
@@ -2844,10 +2850,14 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
     m_temporalResolveShader->setInt("uCurrentTex", 0);
     m_temporalResolveShader->setInt("uHistoryTex", 1);
     m_temporalResolveShader->setInt("uVelocityTex", 2);
+    m_temporalResolveShader->setInt("uDepthTex", 3);
+    m_temporalResolveShader->setInt("uMaterialAuxTex", 4);
     m_temporalResolveShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
                    static_cast<float>(std::max(1, m_deferredTargets.height()))));
     m_temporalResolveShader->setVec2("uJitter", frame.jitter);
+    m_temporalResolveShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
+    m_temporalResolveShader->setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
 
     // uCurrentTex = this frame's unresolved color (TemporalCurrent scratch)
     glActiveTexture(GL_TEXTURE0);
@@ -2857,10 +2867,14 @@ void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexturePrev());
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
 
     renderFullscreen(*m_temporalResolveShader);
 
-    for (int i = 2; i >= 0; --i) {
+    for (int i = 4; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -3194,7 +3208,9 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
     glActiveTexture(GL_TEXTURE13);
     const bool materialAuxDebug =
-        m_pipelineSettings.debugViewMode == 26 || m_pipelineSettings.debugViewMode == 27;
+        m_pipelineSettings.debugViewMode == 26 ||
+        m_pipelineSettings.debugViewMode == 27 ||
+        m_pipelineSettings.debugViewMode == 80;
     const bool historyDepthDebug = m_pipelineSettings.debugViewMode == 19;
     const bool shadowCompareDebug =
         m_pipelineSettings.debugViewMode == 21 ||
@@ -3215,8 +3231,12 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
                                                               : m_deferredTargets.reflectionTexture()));
     glActiveTexture(GL_TEXTURE15);
     const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 29;
-    const bool sceneCompositeDebug = m_pipelineSettings.debugViewMode == 11;
-    const bool sceneResolvedDebug = m_pipelineSettings.debugViewMode == 31;
+    const bool sceneCompositeDebug =
+        m_pipelineSettings.debugViewMode == 11 ||
+        m_pipelineSettings.debugViewMode == 78;
+    const bool sceneResolvedDebug =
+        m_pipelineSettings.debugViewMode == 31 ||
+        m_pipelineSettings.debugViewMode == 79;
     glBindTexture(GL_TEXTURE_2D,
                   shadowCasterDebug ? m_deferredTargets.shadowNormalTexture()
                                     : (sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
@@ -3257,6 +3277,22 @@ void Renderer::renderSkyCapturePass(const World& world) {
     const WeatherState& weather = world.getWeatherSystem().getRenderState();
     const float weatherWetness = weather.wetness;
     const float weatherStorm = weather.storm;
+    auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(
+        m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()),
+        weatherWetness, weatherStorm);
+    // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.
+    const int worldDay = world.getDayNightSystem().getElapsedDays();
+    const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
+    illum.cloudDynamicWeather = GameplaySkyRenderer::computeCloudDynamicWeather(worldDay, worldTime);
+    const float cloudWetness = std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);
+    float cloudHeight = 1000.0f + cloudWetness * (800.0f - 1000.0f);
+    const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
+    if (illum.cloudDynamicWeather.z > 5e-3f) {
+        cloudHeight *= 1.0f + illum.cloudDynamicWeather.z * 2.0f;
+    }
+    const float cloudCoverage = std::clamp(0.24f + weatherWetness * 0.18f + weatherStorm * 0.32f, 0.0f, 1.0f);
+    const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
+    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
 
     // Raw sky radiance (rows 0..257) — weather-tinted for SH skylight
     m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),
@@ -3272,16 +3308,16 @@ void Renderer::renderSkyCapturePass(const World& world) {
                                                   m_deferredTargets.skyCaptureWidth(),
                                                   m_deferredTargets.skyCaptureHeight(),
                                                   cameraAltitude, atmosphereLut, moonPhaseFlux,
+                                                  noiseTexture, m_currentFrameData.shaderTime,
+                                                  illum,
+                                                  cloudCoverage, cloudDensity,
+                                                  cloudHeight, cloudThickness,
+                                                  0.5f,
+                                                  1.0f,
+                                                  7000.0f,
+                                                  m_pipelineSettings.cloudTimeScale,
+                                                  m_currentFrameData.cameraPos,
                                                   weatherWetness, weatherStorm);
-
-    // Compute illuminance metadata and cloud dynamic weather
-    auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(
-        m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()),
-        weatherWetness, weatherStorm);
-    // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.
-    const int worldDay = world.getDayNightSystem().getElapsedDays();
-    const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
-    illum.cloudDynamicWeather = GameplaySkyRenderer::computeCloudDynamicWeather(worldDay, worldTime);
 
     m_gameplaySkyRenderer.writeSkyCacheMetadata(illum,
                                                  m_deferredTargets.skyCaptureFramebuffer(),

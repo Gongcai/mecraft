@@ -800,6 +800,40 @@ void main() {
         return;
     }
 
+    // Debug 78: reflection contribution after scene composite.
+    // Shows how much SceneComposite differs from SceneLighting before water/VFog/TAA.
+    if (uDebugViewMode == 78) {
+        vec3 lighting = texture(uSceneLightingTex, vTexCoord).rgb;
+        vec3 composite = texture(uSceneCompositeTex, vTexCoord).rgb;
+        FragColor = vec4(tonemapPreview(abs(composite - lighting) * 32.0), 1.0);
+        return;
+    }
+
+    // Debug 79: scene TAA loss.
+    // Shows the difference between unresolved current scene and resolved scene.
+    if (uDebugViewMode == 79) {
+        vec3 current = texture(uTemporalCurrentTex, vTexCoord).rgb;
+        vec3 resolved = texture(uSceneResolvedTex, vTexCoord).rgb;
+        FragColor = vec4(tonemapPreview(abs(current - resolved) * 32.0), 1.0);
+        return;
+    }
+
+    // Debug 80: wet surface mask used by scene TAA rain-ripple history rejection.
+    if (uDebugViewMode == 80) {
+        float depth = texture(uDepthTex, vTexCoord).r;
+        if (depth >= 0.9999) {
+            FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+        TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
+        float wetHistoryReject = transMask.isTranslucent
+            ? 0.0
+            : smoothstep(0.02, 0.25, aux.wetnessMask);
+        FragColor = vec4(vec3(wetHistoryReject), 1.0);
+        return;
+    }
+
     // Debug 46-77: Volumetric fog / UW VL / shadow contract debug.
     // The volumetric fog pass outputs debug colors when uVolumetricDebugMode is active.
     if (uDebugViewMode >= 46 && uDebugViewMode <= 77) {

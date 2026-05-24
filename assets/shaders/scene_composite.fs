@@ -47,7 +47,7 @@ uniform float uMoonVisibility;
 uniform float uSkyWetness;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;
-uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta
+uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
 uniform int uIsEyeInWater;
 uniform vec3 uWaterAbsorption;
 
@@ -130,6 +130,15 @@ void main() {
                 ? compositeStr * (reflection.rgb - color * (1.0 - reflection.a))
                 : compositeStr * reflection.rgb;
             FragColor = vec4(abs(delta), 1.0);
+        } else if (uReflectionDebugMode == 26) {
+            float sceneLum = max(luminance(color), 1e-5);
+            float reflLum = luminance(reflection.rgb) * clamp(uReflectionCompositeStrength, 0.0, 1.0);
+            FragColor = vec4(vec3(clamp(reflLum / sceneLum, 0.0, 1.0)), 1.0);
+        } else if (uReflectionDebugMode == 27) {
+            FragColor = vec4(vec3(luminance(color)), 1.0);
+        } else if (uReflectionDebugMode == 28) {
+            float reflLum = luminance(reflection.rgb) * clamp(uReflectionCompositeStrength, 0.0, 1.0);
+            FragColor = vec4(vec3(reflLum * 64.0), 1.0);
         } else {
             FragColor = vec4(reflection.rgb, 1.0);
         }

@@ -58,7 +58,14 @@ public:
                           float weatherWetness = 0.0f, float weatherStorm = 0.0f);
     void renderCloudySkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int skyCaptureWidth,
                                 int skyCaptureHeight, float cameraAltitude, GLuint atmosphereLutTexture,
-                                float moonPhaseFlux, float weatherWetness = 0.0f, float weatherStorm = 0.0f);
+                                float moonPhaseFlux, GLuint noiseTexture, float shaderTime,
+                                const SkyIlluminanceData& illuminance,
+                                float cloudCoverage, float cloudDensity,
+                                float cloudHeight, float cloudThickness,
+                                float planarCloudCoverage, float planarCloudDensity,
+                                float planarCloudAltitude,
+                                float cloudTimeScale, const glm::vec3& cameraPos,
+                                float weatherWetness = 0.0f, float weatherStorm = 0.0f);
     void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, GLuint framebuffer, int skyCaptureWidth,
                                float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux,
                                float weatherWetness = 0.0f, float weatherStorm = 0.0f);

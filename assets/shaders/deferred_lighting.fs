@@ -524,9 +524,7 @@ void main() {
     float rainSplashMask = hasGBufferRainWetMask ? smoothstep(0.001, 0.08, length(normal.xz)) : 0.0;
     vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
     float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
-    if (uRainSurfaceRipplesEnabled != 0 && rainRippleStrengthDebug > 1e-4) {
-        derivativeSpecularMask = max(derivativeSpecularMask, 1.0);
-    }
+    bool isRainWetSurface = hasGBufferRainWetMask && gbufferRainWetMask > 1e-4;
     float f0ScalarClamped = max(f0Scalar, 0.005);
 
     vec2 lightmapUV = vec2(voxelLight.g, 1.0 - voxelLight.r);
@@ -939,7 +937,7 @@ void main() {
 
     // Sky specular (environment reflection) — Mecraft extension, not in DerivativeMain deferred5.fsh
     // DerivativeMain handles sky reflections in a separate SSR pass (deferred6.fsh)
-    if (uDerivativeStrictMode == 0) {
+    if (uDerivativeStrictMode == 0 && !isRainWetSurface) {
         color += evaluateSkySH(skySH, normal) * FresnelSchlick(max(dot(normal, viewDir), 0.0), f0ScalarClamped) *
                  pow(oneMinus(roughness), 1.65) * (0.018 + 0.105 * outdoorSkyMask) * derivativeSpecularMask;
     }

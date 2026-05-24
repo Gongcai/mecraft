@@ -22,6 +22,19 @@ uniform float uNightFactor;
 uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
 uniform int uIncludeCelestialDisks;
+uniform int uCloudySkyCapture;
+uniform sampler2D uNoiseTex;
+uniform bool uNoiseEnabled;
+uniform float uTime;
+uniform float uCloudTimeScale;
+uniform float uCloudCoverage;
+uniform float uCloudDensity;
+uniform float uCloudHeight;
+uniform float uCloudThickness;
+uniform float uPlanarCloudCoverage;
+uniform float uPlanarCloudDensity;
+uniform float uPlanarCloudAltitude;
+uniform vec3 uCameraPos;
 
 // CPU illuminance uniforms — legacy/fallback only. Mode 5 computes illuminance
 // from atmosphere LUT via atmGetSunAndSkyIrradiance(), not from these uniforms.
@@ -51,6 +64,7 @@ uniform sampler2D uSkyCaptureTex;
 
 #include "atmosphere_lut.glsl"
 #include "render_contract.glsl"
+#include "cloud_density.glsl"
 
 const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
@@ -148,6 +162,121 @@ vec3 evaluateSkyRadiance(vec3 dir) {
     return color;
 }
 
+float captureNoiseDetail(vec3 worldDir) {
+    vec3 dir = worldDir * 48.0;
+    vec3 wind = vec3(2e-3, 2e-4, 1e-3) * (uTime * uCloudTimeScale);
+    float pnoise = cloudNoiseSharp(dir - wind);       dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 2.0);             dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 4.0) * 0.5;       dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 8.0) * 0.25;      dir += pnoise * 1e-3 - wind;
+    pnoise += cloudNoiseSharp(dir * 16.0) * 0.125;    dir += pnoise * 1e-3 - wind;
+    return pnoise - 0.15;
+}
+
+vec4 capturePlanarClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunDir, vec3 moonDir) {
+    if (worldDir.y <= 0.01) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float altitude = max(uPlanarCloudAltitude, 64.0);
+    float distanceToPlane = altitude / max(worldDir.y, 0.01);
+    vec2 cloudXZ = worldDir.xz * distanceToPlane;
+    float cirrus = cirrusCloudDensity(cloudXZ, clamp(uPlanarCloudCoverage, 0.0, 1.0));
+    float cirrocumulus = cirrocumulusDensity(cloudXZ);
+    float coverage = clamp((cirrus + cirrocumulus) * clamp(uPlanarCloudDensity, 0.0, 2.0), 0.0, 1.0);
+    if (coverage <= 1e-4) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float wetness = clamp(uCloudWetness, 0.0, 1.0);
+    float forward = atmHenyeyGreensteinPhase(LdotV, 0.6 - wetness * 0.2) * 0.7;
+    float backward = atmHenyeyGreensteinPhase(LdotV, -0.4 + wetness * 0.2) * 0.25;
+    float peak = cloudCornetteShanksPhase(LdotV, 0.9) * (0.1 + 0.7 * wetness);
+    float phase = forward + backward + peak;
+
+    vec3 sunLight = uSunIlluminance * clamp(uSunVisibility, 0.0, 1.0);
+    vec3 moonLight = uMoonIlluminance * clamp(uMoonVisibility, 0.0, 1.0);
+    vec3 light = max(sunLight + moonLight, vec3(0.0));
+    vec3 cloudLit = skyRadiance * (0.25 + 0.55 * wetness);
+    cloudLit += light * phase * mix(4.0, 1.4, wetness);
+    cloudLit += uSkyIlluminance * mix(0.35, 0.18, wetness);
+
+    float atmosFade = exp(-distanceToPlane * (0.1 + 0.1 * wetness) * 0.00015);
+    vec3 color = mix(skyRadiance * coverage, cloudLit * coverage, atmosFade);
+    float transmittance = exp(-coverage * mix(1.15, 2.4, wetness));
+    return vec4(max(color, vec3(0.0)), transmittance);
+}
+
+vec4 captureVolumetricClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunDir, vec3 moonDir) {
+    float cloudBottom = max(uCloudHeight, 64.0);
+    float cloudTop = cloudBottom + max(uCloudThickness, 16.0);
+    if (worldDir.y <= 0.01) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float startT = cloudBottom / max(worldDir.y, 0.01);
+    float endT = cloudTop / max(worldDir.y, 0.01);
+    if (endT <= startT || startT < 0.0) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    const int steps = 10;
+    float stepLen = (endT - startT) / float(steps);
+    vec3 rayStep = worldDir * stepLen;
+    vec3 rayPos = worldDir * (startT + stepLen * 0.5);
+    float noiseDetail = captureNoiseDetail(worldDir);
+    float transmittance = 1.0;
+
+    for (int i = 0; i < steps; ++i, rayPos += rayStep) {
+        float h = clamp((rayPos.y - cloudBottom) / max(cloudTop - cloudBottom, 1.0), 0.0, 1.0);
+        float density = cloudDensityAt(rayPos, h, clamp(uCloudCoverage, 0.05, 1.0), noiseDetail);
+        if (density <= 1e-4) {
+            continue;
+        }
+        transmittance *= exp(-density * 0.12 * stepLen);
+        if (transmittance < 0.03) {
+            break;
+        }
+    }
+
+    float opacity = clamp(1.0 - transmittance, 0.0, 1.0);
+    if (opacity <= 1e-4) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float wetness = clamp(uCloudWetness, 0.0, 1.0);
+    float phase = atmHenyeyGreensteinPhase(LdotV, 0.6 - wetness * 0.2) * 0.7
+                + atmHenyeyGreensteinPhase(LdotV, -0.4 + wetness * 0.2) * 0.25
+                + cloudCornetteShanksPhase(LdotV, 0.9) * (0.1 + 0.7 * wetness);
+    vec3 sunLight = uSunIlluminance * clamp(uSunVisibility, 0.0, 1.0);
+    vec3 moonLight = uMoonIlluminance * clamp(uMoonVisibility, 0.0, 1.0);
+    vec3 cloudLit = (sunLight + moonLight) * phase * mix(8.0, 2.0, wetness);
+    cloudLit += uSkyIlluminance * mix(0.28, 0.12, wetness);
+
+    float meanDistance = mix(startT, endT, 0.5);
+    float atmosFade = exp(-meanDistance * (0.2 + 0.1 * wetness) * 1e-4);
+    vec3 color = cloudLit * opacity * atmosFade + skyRadiance * opacity * (1.0 - atmosFade);
+    return vec4(max(color, vec3(0.0)), transmittance);
+}
+
+vec3 captureCloudySkybox(vec3 worldDir, vec3 skyRadiance, vec3 sunDir, vec3 moonDir, vec3 transmittance) {
+    float LdotV = dot(worldDir, sunDir);
+    vec4 cloudsData = vec4(0.0, 0.0, 0.0, 1.0);
+
+    vec4 volumeClouds = captureVolumetricClouds(worldDir, LdotV, skyRadiance, sunDir, moonDir);
+    cloudsData.rgb += volumeClouds.rgb * cloudsData.a;
+    cloudsData.a *= volumeClouds.a;
+
+    vec4 planarClouds = capturePlanarClouds(worldDir, LdotV, skyRadiance, sunDir, moonDir);
+    cloudsData.rgb += planarClouds.rgb * cloudsData.a;
+    cloudsData.a *= planarClouds.a;
+
+    vec3 skyboxData = skyRadiance * cloudsData.a + cloudsData.rgb;
+    skyboxData += atmRenderSun(worldDir, sunDir) * transmittance * clamp(uSunVisibility, 0.0, 1.0);
+    skyboxData += atmRenderMoon(worldDir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
+    return max(skyboxData, vec3(0.0));
+}
+
 void main() {
     if (uMode == 0) {
         // Visible sky: prefer SkyCapture (atmosphere LUT) for consistency with deferred.
@@ -185,7 +314,9 @@ void main() {
 
         vec3 transmittance;
         vec3 sky = atmGetSkyRadiance(max(uCameraAltitude, 0.0), dir, sunDir, transmittance);
-        if (uIncludeCelestialDisks != 0) {
+        if (uCloudySkyCapture != 0) {
+            sky = captureCloudySkybox(dir, sky, sunDir, moonDir, transmittance);
+        } else if (uIncludeCelestialDisks != 0) {
             sky += atmRenderSun(dir, sunDir) * transmittance * clamp(uSunVisibility, 0.0, 1.0);
             sky += atmRenderMoon(dir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
         }

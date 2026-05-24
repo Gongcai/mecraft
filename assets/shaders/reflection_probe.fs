@@ -27,7 +27,7 @@ uniform float uFogWetness;
 uniform float uCloudWetness;
 uniform float uTime;
 uniform sampler2D uVoxelLightTex; // GBuffer attachment 2: sky light.r, block light.g
-uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength, 11=f0, 12=skyFallback, 13=reflectionRgb, 14=hasReflection, 15=skyLightRaw, 16=voxelLightRG, 17=materialAux
+uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength, 11=f0, 12=skyFallback, 13=reflectionRgb, 14=hasReflection, 15=skyLightRaw, 16=voxelLightRG, 17=materialAux, 18=skyGradient, 19=finalContribution, 20=reflectionSource, 21=reflectanceX32, 22=f0X32, 23=roughness, 24=reflectionSourceX8, 25=finalContributionX32, 29=reflectanceX128, 30=sourceGradientX128
 uniform int uRainWetSurfacesEnabled;
 uniform int uRainSurfaceRipplesEnabled;
 uniform float uNearPlane;
@@ -209,24 +209,41 @@ void main() {
     float gbufferRainWetMask = hasGBufferRainWetMask ? aux.wetnessMask : 0.0;
     float pixelWetness = max(ComputePixelWetness(weatherSurfaceWetness, skyLightRaw01, aux.wetnessMask, normal.y),
                              gbufferRainWetMask);
-    float puddleMask = gbufferRainWetMask;
+    float puddleMask = saturate(gbufferRainWetMask);
+    float puddleCoreMask = smoothstep(0.08, 0.65, puddleMask);
     float rainSplashMask = hasGBufferRainWetMask ? smoothstep(0.001, 0.08, length(normal.xz)) : 0.0;
     vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
     float rainRippleStrengthDebug = length(rainRippleDebug) * gbufferRainWetMask;
-    float wetMix = saturate(puddleMask);
-
+    // DerivativeMain world0/deferred5.fsh writes specularData.x for the
+    // reflection pass after Terrain.frag's wet smoothness mix. Mecraft stores
+    // roughness directly, so apply that deferred5 conversion here at the same
+    // consumer boundary.
     if (!transMask.isTranslucent && weatherSurfaceWetness > 1e-2) {
-        float smoothness = 1.0 - sqrt(clamp(roughness, 0.0, 1.0));
-        roughness = sqr(oneMinus(smoothness) * oneMinus(weatherSurfaceWetness * 0.3));
-        f0Scalar = max(f0Scalar, 0.04 * wetMix);
+        float wetRoughnessScale = oneMinus(weatherSurfaceWetness * 0.3);
+        roughness = sqr(sqrt(clamp(roughness, 0.0, 1.0)) * wetRoughnessScale);
+        if (puddleMask > 1e-4) {
+            // Terrain.frag promotes puddles through specularData.r smoothness and
+            // specularData.g F0 before deferred5 converts smoothness to roughness.
+            // Re-assert that contract after Mecraft's direct roughness packing so
+            // the global rain wetness cannot make puddles read like nearby damp
+            // blocks in the reflection pass.
+            float derivativePuddleRoughness = sqr(oneMinus(puddleMask) * wetRoughnessScale);
+            roughness = min(roughness, derivativePuddleRoughness);
+            f0Scalar = max(f0Scalar, 0.04 * puddleMask);
+        }
     }
 
     // Recompute reflected direction with wet-flattened normal.
     vec3 reflectedDir = reflect(viewDir, normal);
 
+    // DerivativeMain world0/deferred6.fsh only samples a GGX facet normal when
+    // material.isRough is true. Smooth rain puddles must keep the actual
+    // GBuffer normal so RippleNormal can bend the reflection source visibly.
+    bool materialIsRough = roughness > 0.005;
+
     // GGX VNDF Importance Sampling for rough surfaces
     vec3 sampleNormal = normal;
-    if (roughness > 0.0) {
+    if (materialIsRough) {
         // Construct orthonormal basis around normal (tangentToWorld)
         vec3 up = abs(normal.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
         vec3 tangent = normalize(cross(up, normal));
@@ -255,6 +272,7 @@ void main() {
     }
 
     vec3 skyReflection = sampleSkyRadianceCloudy(uSkyCaptureTex, reflectedDir);
+    vec3 skyGradientDebug = abs(dFdx(skyReflection)) + abs(dFdy(skyReflection));
 
     // Early debug: pixelWetness and roughness are available for ALL pixels.
     if (uReflectionDebugMode == 1) {
@@ -304,10 +322,10 @@ void main() {
         return;
     }
 
-    vec3 sceneFallback = texture(uSceneLightingTex, vTexCoord).rgb;
     // DerivativeMain Material.inc GetMaterialData(vec2):
     // material.hasReflections = max0(0.625 - material.roughness) + material.isMetal > 5e-3.
-    float derivativeReflectionMask = max(0.625 - clamp(roughness, 0.0, 1.0), 0.0) + aux.metalness;
+    float derivativeReflectionMask = max(max(0.625 - clamp(roughness, 0.0, 1.0), 0.0),
+                                         puddleMask * 0.625) + aux.metalness;
     bool hasDerivativeReflection = transMask.isTranslucent ||
                                    derivativeReflectionMask > 0.005;
     if (uReflectionDebugMode == 14) {
@@ -327,7 +345,8 @@ void main() {
     float nDotView = max(dot(normal, -viewDir), 1e-6);
     float specular = 0.0;
     float dist = 0.0;
-    if (roughness > 0.005 || weatherSurfaceWetness > 1e-2) {
+    bool usesRoughReflection = materialIsRough || weatherSurfaceWetness > 1e-2;
+    if (usesRoughReflection) {
         vec3 halfWay = normalize(reflectedDir - viewDir);
         float lDotH = saturate(dot(reflectedDir, halfWay));
         float F = FresnelSchlick(lDotH, f0Scalar);
@@ -341,6 +360,15 @@ void main() {
     }
     specular *= oneMinus(aux.metalness);
     float reflectance = specular + aux.metalness;
+    if (!transMask.isTranslucent && puddleMask > 1e-4) {
+        // Mecraft adaptation: DerivativeMain's sky reflection source is sampled
+        // from an HDR sky capture in the same composite chain. Our separated
+        // reflection target plus temporal/filter passes made smooth puddles too
+        // close to damp terrain, so use the same water F0 as a smooth dielectric
+        // Fresnel floor only where Terrain.frag already wrote a puddle mask.
+        float waterFresnel = FresnelDielectric(nDotView, max(f0Scalar, 0.04));
+        reflectance = max(reflectance, waterFresnel * puddleCoreMask);
+    }
 
     // Late debug: reflectance and ssrHit only valid after SSR trace.
     if (uReflectionDebugMode == 2) {
@@ -353,6 +381,22 @@ void main() {
     }
     if (uReflectionDebugMode == 5) {
         FragColor = vec4(vec3(reflectance * 8.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 21) {
+        FragColor = vec4(vec3(reflectance * 32.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 29) {
+        FragColor = vec4(vec3(reflectance * 128.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 22) {
+        FragColor = vec4(vec3(f0Scalar * 32.0), 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 23) {
+        FragColor = vec4(vec3(roughness), 0.0);
         return;
     }
 
@@ -372,22 +416,43 @@ void main() {
     // instead of a hard lerp. This avoids visible seams at SSR boundaries.
     float ssrBlend = smoothstep(0.0, 0.15, ssrHit);
     vec3 color = mix(fallback, ssrColor, ssrBlend);
+    if (uReflectionDebugMode == 20) {
+        FragColor = vec4(color, 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 24) {
+        FragColor = vec4(color * 8.0, 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 30) {
+        vec3 sourceGradient = abs(dFdx(color)) + abs(dFdy(color));
+        FragColor = vec4(sourceGradient * 128.0, 0.0);
+        return;
+    }
 
     // DerivativeMain world0/deferred6.fsh returns rgb = reflection * specular,
     // alpha = reflection distance/rough-filter data for opaque surfaces.
+    vec3 reflectionRgb = max(color, vec3(0.0)) * reflectance;
+    if (uReflectionDebugMode == 13) {
+        FragColor = vec4(reflectionRgb * 8.0, 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 18) {
+        FragColor = vec4(skyGradientDebug * 64.0, 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 19) {
+        FragColor = vec4(reflectionRgb, 0.0);
+        return;
+    }
+    if (uReflectionDebugMode == 25) {
+        FragColor = vec4(reflectionRgb * 32.0, 0.0);
+        return;
+    }
+
     if (transMask.isTranslucent) {
-        vec3 reflectionRgb = max(color, vec3(0.0)) * reflectance;
-        if (uReflectionDebugMode == 13) {
-            FragColor = vec4(reflectionRgb * 8.0, 0.0);
-            return;
-        }
         FragColor = vec4(reflectionRgb, 1.0 - clamp(reflectance, 0.0, 1.0));
     } else {
-        vec3 reflectionRgb = max(color, vec3(0.0)) * reflectance;
-        if (uReflectionDebugMode == 13) {
-            FragColor = vec4(reflectionRgb * 8.0, 0.0);
-            return;
-        }
         FragColor = vec4(reflectionRgb, dist);
     }
 }

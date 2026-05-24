@@ -47,14 +47,16 @@ float ApplyWetF0(float f0, float pixelWetness) {
 }
 
 // Wet albedo: desaturate 25%, darken 15%, with porosity correction.
-// DerivativeMain Terrain.frag:225-230
+// DerivativeMain Terrain.frag:225-230 applies this to texture-space sRGB
+// albedo before deferred5.fsh linearizes it, so convert at the boundary.
 vec3 ApplyWetAlbedo(vec3 albedo, float porosity, float pixelWetness) {
-    float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
-    vec3 wetAlbedo = mix(vec3(luma), albedo, 0.75) * 0.85;
+    vec3 albedoSrgb = LinearToSRGB(albedo);
+    float luma = dot(albedoSrgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 wetAlbedo = mix(vec3(luma), albedoSrgb, 0.75) * 0.85;
     float p = clamp(porosity, 0.0, 1.0);
     vec3 porosityFactor = (1.0 - p) / max(vec3(1.0) - p * wetAlbedo, vec3(0.01));
     wetAlbedo *= porosityFactor;
-    return mix(albedo, wetAlbedo, pixelWetness);
+    return mix(albedo, SRGBtoLinear(wetAlbedo), pixelWetness);
 }
 
 // DerivativeMain RainEffect.glsl: wetnessDistribution = texture(noisetex, worldPos.xz * 0.01).r
@@ -112,8 +114,15 @@ float ComputeRainSplashMaskFromNoise(float rainWetness) {
 float ComputeRainPuddleMaskFromNoise(float rainWetness, float porosity) {
     float puddleMask = remap(0.35, 0.57, rainWetness);
     puddleMask = puddleMask * puddleMask;
-    puddleMask *= 1.0 - clamp(porosity, 0.0, 1.0) * 0.20;
+    // DerivativeMain Terrain.frag:217-221 applies porosity only to wet albedo,
+    // not to the smoothness/F0 puddle mask. Keep the reflective puddle coverage
+    // unattenuated so the interior does not collapse into an edge-only highlight.
     return saturate(puddleMask);
+}
+
+float ComputeRainWetAlbedoMaskFromNoise(float rainWetness) {
+    float wetAlbedoMask = remap(0.3, 0.56, rainWetness);
+    return saturate(wetAlbedoMask * wetAlbedoMask);
 }
 
 // DerivativeMain Terrain.frag: wetFact = smoothstep(0.54, 0.62, noise)
