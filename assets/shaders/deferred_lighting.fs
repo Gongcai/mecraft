@@ -952,11 +952,12 @@ void main() {
         color = desaturateLinear(color, shadowDesatMask * uShadowDesaturation);
     }
 
-    // Aerial perspective: skip when volumetric fog is active, because the volumetric
-    // march already integrates atmospheric transmittance at each step. Running both
-    // causes double-fogging (double dimming + double scattering).
-    // When volumetric fog is off, this provides the fallback land atmospheric scattering.
-    if (uDerivativeStrictMode == 0 && uFogEnabled != 0 && uVolumetricFogActive == 0 && uVolumetricLightEnabled != 0) {
+    // Aerial perspective: skip when volumetric fog OR volumetric light is active,
+    // because the volumetric march already integrates atmospheric transmittance at
+    // each step. Running both causes double-fogging (double dimming + double scattering).
+    // DerivativeMain Settings.glsl: #undef LAND_ATMOSPHERIC_SCATTERING when
+    // VOLUMETRIC_FOG || VOLUMETRIC_LIGHT is defined. Only apply as fallback when both are off.
+    if (uDerivativeStrictMode == 0 && uFogEnabled != 0 && uVolumetricFogActive == 0 && uVolumetricLightEnabled == 0) {
         float fogDistance = length(worldPos - uCameraPos);
         color = applyAerialPerspective(color, worldPos, fogDistance, outdoorSkyMask, warmSunColor, env);
     }

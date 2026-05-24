@@ -56,6 +56,7 @@ uniform vec3 uMoonLightColor;
 uniform float uMoonVisibility;
 uniform int uAerialPerspectiveEnabled;
 uniform int uVolumetricLightEnabled;
+uniform int uVolumetricFogActive;
 uniform float uDirectSunStrength;
 uniform float uSkyAmbientStrength;
 uniform float uWeatherSkylightScale;
@@ -531,7 +532,10 @@ uniform vec3 uCameraPos;
         }
         finalColor = desaturateLinear(finalColor, (1.0 - max(diffuse, moonDiffuse * 0.65)) * outdoorSkyMask * uShadowDesaturation * 0.45);
 
-        if (uFogEnabled != 0 && uVolumetricLightEnabled != 0) {
+        // Aerial perspective: skip when volumetric fog OR volumetric light is active.
+        // DerivativeMain Settings.glsl: #undef LAND_ATMOSPHERIC_SCATTERING when
+        // VOLUMETRIC_FOG || VOLUMETRIC_LIGHT is defined. Only apply as fallback when both are off.
+        if (uFogEnabled != 0 && uVolumetricFogActive == 0 && uVolumetricLightEnabled == 0) {
             finalColor = applyAerialPerspective(finalColor, vWorldPos, vFogDist, outdoorSkyMask, warmSunColor);
         }
 

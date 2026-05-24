@@ -1417,6 +1417,14 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     bindSkyLightingUniforms(shader, frame);
     shader.setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
     shader.setInt("uVolumetricLightEnabled", m_pipelineSettings.volumetricLightEnabled ? 1 : 0);
+    // Aerial perspective mutual exclusion: skip when volumetric fog OR light is active.
+    // Matches deferred_lighting.fs condition for consistent behavior across deferred/forward paths.
+    const bool volFogActive = (m_pipelineSettings.volumetricLightEnabled ||
+                               (m_pipelineSettings.volumetricFogEnabled &&
+                                m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
+                              m_volumetricFogShader != nullptr &&
+                              m_volumetricCompositeShader != nullptr;
+    shader.setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
     shader.setFloat("uWeatherSkylightScale", m_pipelineSettings.weatherSkylightScale);
