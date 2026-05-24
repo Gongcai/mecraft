@@ -78,14 +78,14 @@ bool traceScreenSpaceReflection(vec3 worldPos,
     hitColor = vec3(0.0);
     hitConfidence = 0.0;
 
-    // Roughness-adaptive parameters: smooth surfaces trace farther with finer steps;
-    // rough surfaces trace shorter distances with coarser steps (result gets blurred anyway).
+    // DerivativeMain ScreenSpaceReflections.glsl: RAYTRACE_SAMPLES * oneMinus(roughness)
+    // Smooth surfaces trace farther with more steps; rough surfaces get fewer steps.
     float maxDistance = mix(56.0, 10.0, roughness);
     int baseSteps = int(mix(40.0, 16.0, roughness));
     float stepLength = maxDistance / float(baseSteps);
 
     // Dither: small offset to break up banding artifacts across pixels.
-    // Uses the screen position to create a stable per-pixel pattern.
+    // DerivativeMain uses InterleavedGradientNoiseTemporal; we use a PCG hash.
     float dither = fract(dot(gl_FragCoord.xy, vec2(0.754877669, 0.569840296))) * 0.9 + 0.1;
 
     vec3 rayOrigin = worldPos + reflectedDir * stepLength * dither;
@@ -93,7 +93,8 @@ bool traceScreenSpaceReflection(vec3 worldPos,
     float prevT = 0.0;
     for (int i = 1; i <= baseSteps; ++i) {
         float progress = float(i) / float(baseSteps);
-        // Step size grows with distance and roughness (rough cone widening)
+        // DerivativeMain ScreenSpaceRayTrace: adaptive step size based on depth difference.
+        // Step grows with distance and roughness (rough cone widening).
         float stepScale = 1.0 + roughness * progress * 0.5;
         float t = float(i) * stepLength * stepScale;
         vec3 sampleWorld = rayOrigin + reflectedDir * t;
@@ -110,8 +111,8 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             continue;
         }
 
-        // DerivativeMain-style view-space depth comparison: relative linear depth difference.
-        // More robust than absolute thickness at varying distances.
+        // DerivativeMain ScreenSpaceRayTrace:51 — relative linear depth comparison.
+        // abs(linearSample - currentDepth) / currentDepth < 0.2
         vec4 rayClip = uViewProj * vec4(sampleWorld, 1.0);
         float rayNdcZ = rayClip.z / max(rayClip.w, 0.00001);
         float rayDepth01 = clamp(rayNdcZ * 0.5 + 0.5, 0.0, 1.0);
@@ -121,17 +122,17 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 
         // Hit condition: scene surface is in front of or very close to the ray,
         // and the relative depth difference is within threshold.
-        // As the reflection cone widens, we grow the thickness threshold.
+        // DerivativeMain threshold: 0.2
         bool crossedSurface = sceneDepth < rayDepth01;
-        float thicknessThreshold = 0.25 + roughness * t * 0.05;
+        float thicknessThreshold = 0.2 + roughness * t * 0.05;
         bool withinThickness = relDepthDiff < thicknessThreshold;
 
         if (crossedSurface && withinThickness) {
-            // Binary refinement: narrow down the hit position with 4 bisection steps.
+            // DerivativeMain RAYTRACE_REFINEMENT: 6 bisection steps (default).
             // Each step halves the search interval, converging on the actual surface.
             vec3 lo = sampleWorld - reflectedDir * (t - prevT);
             vec3 hi = sampleWorld;
-            for (int r = 0; r < 4; ++r) {
+            for (int r = 0; r < 6; ++r) {
                 vec3 mid = (lo + hi) * 0.5;
                 vec2 midUv = projectWorldUv(mid);
                 float midDepth = texture(uDepthTex, midUv).r;
