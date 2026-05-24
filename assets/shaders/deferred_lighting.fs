@@ -368,6 +368,16 @@ vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
     vec4 colorSample = sampleCsmShadowColor0RawTexel(proj.xy, cascadeIndex);
     if (colorSample.a >= 0.5) return vec3(1.0);
 
+    vec4 auxSample = sampleCsmShadowColor1RawTexel(proj.xy, cascadeIndex);
+    bool waterCaster = auxSample.a > 0.20 && auxSample.a < 0.60;
+    if (waterCaster) {
+        float caustic = dot(colorSample.rgb, vec3(0.333333));
+        float line = smoothstep(0.52, 0.92, caustic);
+        line *= line;
+        vec3 causticTint = vec3(1.0) + vec3(0.35, 0.85, 1.20) * line * 1.65;
+        return mix(vec3(1.0), causticTint, transparentHit);
+    }
+
     vec3 tint = pow4(colorSample.rgb);
     return mix(vec3(1.0), tint, transparentHit);
 }

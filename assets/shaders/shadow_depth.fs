@@ -21,6 +21,7 @@ uniform int uForceBaseLod;
 uniform float uAnimationTime;
 uniform float uTime;
 uniform vec3 uShadowLightDirection;
+uniform mat4 uShadowModelView;
 uniform int uShadowPassMode; // 0 = opaque-only, 1 = transparent shadow (DepthAll + Color)
 
 // Shadow color outputs:
@@ -33,6 +34,7 @@ layout(location = 1) out vec4 ShadowNormal;
 const int MATERIAL_WATER = 17;
 const int MATERIAL_STAINED_GLASS = 16;
 const int MATERIAL_LEAVES = 7;
+const float WATER_CAUSTIC_PROJECTION_DISTANCE = 6.0;
 
 vec2 encodeNormal(vec3 n) {
     n = normalize(n);
@@ -89,7 +91,7 @@ vec3 getWaterWaveNormal(vec2 worldXZ) {
     float hx = getWaterWaveHeight(worldXZ + vec2(0.04, 0.0));
     float hz = getWaterWaveHeight(worldXZ + vec2(0.0, 0.04));
     vec2 waveNormal = vec2(h0 - hx, h0 - hz);
-    return normalize(vec3(waveNormal * 1.0, 0.5));
+    return normalize(vec3(waveNormal.x, 0.5, waveNormal.y));
 }
 
 vec3 fastRefract(vec3 dir, vec3 normal, float eta) {
@@ -100,16 +102,16 @@ vec3 fastRefract(vec3 dir, vec3 normal, float eta) {
 }
 
 float waterCausticStrength(vec3 normal) {
-    vec3 oldPos = vWorldPos;
+    vec3 oldPos = mat3(uShadowModelView) * vWorldPos + uShadowModelView[3].xyz;
     vec3 incidentLight = -normalize(uShadowLightDirection);
-    vec3 newPos = oldPos + fastRefract(incidentLight, normal, 1.0 / 1.33) * 6.0;
+    vec3 viewNormal = normalize(mat3(uShadowModelView) * normal);
+    vec3 newPos = oldPos + fastRefract(vec3(0.0, 0.0, -1.0), viewNormal, 1.0 / 1.33) * WATER_CAUSTIC_PROJECTION_DISTANCE;
     float oldArea = dot(dFdx(oldPos), dFdx(oldPos)) * dot(dFdy(oldPos), dFdy(oldPos));
     float newArea = dot(dFdx(newPos), dFdx(newPos)) * dot(dFdy(newPos), dFdy(newPos));
-    float areaRatio = oldArea / max(newArea, 1.0e-6);
-    float caustics = inversesqrt(max(areaRatio, 1.0e-6)) * 0.3;
+    float caustics = inversesqrt(max(oldArea / max(newArea, 1.0e-6), 1.0e-6)) * 0.3;
     float lightBand = 0.65 + 0.35 * clamp(dot(normalize(normal), -normalize(uShadowLightDirection)), 0.0, 1.0);
     float banded = caustics * lightBand;
-    return clamp(banded, 0.08, 2.0);
+    return clamp(banded, 0.25, 2.5);
 }
 
 // ---- Main ----
