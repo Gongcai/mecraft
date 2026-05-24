@@ -133,7 +133,6 @@ public:
         float volumetricLightStrength = 0.14f; // DEPRECATED: DerivativeMain volumetric path ignores this UI value.
         float colorTemperature = 1.0f;
         float vibrance = 0.0f;
-        float kappaGradingStrength = 0.0f;
         float highlightCompression = 0.0f;
         float filmEmulationStrength = 0.0f;
         float redModifierStrength = 0.35f;

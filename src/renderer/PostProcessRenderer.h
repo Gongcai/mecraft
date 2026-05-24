@@ -31,7 +31,6 @@ struct PostProcessEffects {
     int tonemapMode = 1;
     float colorTemperature = 1.0f;
     float vibrance = 0.0f;
-    float kappaGradingStrength = 0.0f;
     float highlightCompression = 0.0f;
     float filmEmulationStrength = 0.0f;
     float redModifierStrength = 0.35f;

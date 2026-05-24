@@ -413,7 +413,6 @@ void Game::renderFrame(const float frameTime) {
     effects.tonemapMode = pipelineSettings.tonemapMode;
     effects.colorTemperature = pipelineSettings.colorTemperature;
     effects.vibrance = pipelineSettings.vibrance;
-    effects.kappaGradingStrength = pipelineSettings.kappaGradingStrength;
     effects.highlightCompression = pipelineSettings.highlightCompression;
     effects.filmEmulationStrength = pipelineSettings.filmEmulationStrength;
     effects.redModifierStrength = pipelineSettings.redModifierStrength;

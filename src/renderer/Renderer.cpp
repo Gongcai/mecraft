@@ -713,7 +713,6 @@ void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings)
     ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
     m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
     m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
-    m_pipelineSettings.kappaGradingStrength = std::clamp(m_pipelineSettings.kappaGradingStrength, 0.0f, 1.0f);
     m_pipelineSettings.highlightCompression = std::clamp(m_pipelineSettings.highlightCompression, 0.0f, 1.5f);
     m_pipelineSettings.filmEmulationStrength = std::clamp(m_pipelineSettings.filmEmulationStrength, 0.0f, 1.0f);
     m_pipelineSettings.redModifierStrength = std::clamp(m_pipelineSettings.redModifierStrength, 0.0f, 1.0f);

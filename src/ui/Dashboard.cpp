@@ -805,7 +805,6 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.autoExposureBias = 0.0f;
             pipeline.exposure = 12.0f;
             pipeline.vibrance = 0.0f;
-            pipeline.kappaGradingStrength = 0.0f;
             pipeline.highlightCompression = 0.35f;
             pipeline.filmEmulationStrength = 0.0f;
             pipeline.redModifierStrength = 0.0f;
@@ -860,7 +859,6 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.autoExposureBias = 0.0f;
             pipeline.exposure = 12.0f;
             pipeline.vibrance = 0.0f;
-            pipeline.kappaGradingStrength = 0.0f;
             pipeline.highlightCompression = 0.0f;
             pipeline.filmEmulationStrength = 0.0f;
             pipeline.redModifierStrength = 0.35f;
@@ -915,7 +913,6 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
             pipeline.autoExposureBias = 0.0f;
             pipeline.exposure = 12.0f;
             pipeline.vibrance = 0.04f;
-            pipeline.kappaGradingStrength = 0.0f;
             pipeline.highlightCompression = 0.0f;
             pipeline.filmEmulationStrength = 0.0f;
             pipeline.redModifierStrength = 0.45f;
@@ -957,7 +954,6 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         pipelineChanged |= ImGui::Checkbox("Freeze TAA Jitter", &pipeline.freezeTaaJitter);
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Kappa Grade", &pipeline.kappaGradingStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Highlight Compress", &pipeline.highlightCompression, 0.0f, 1.5f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Film Emulation", &pipeline.filmEmulationStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Red Modifier", &pipeline.redModifierStrength, 0.0f, 1.0f, "%.2f");
