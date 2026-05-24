@@ -169,24 +169,42 @@ vec4 sampleCsmShadowColor1RawTexel(vec2 uv, int cascadeIndex) {
 }
 #endif
 
-float sampleCsmPcf3x3(vec2 uv, int cascadeIndex, float refZ, vec2 texelUv, float radius) {
-    float lit = 0.0;
-    for (int y = -1; y <= 1; ++y) {
-        for (int x = -1; x <= 1; ++x) {
-            lit += sampleCsmDepthCompare(uv + vec2(x, y) * texelUv * radius,
-                                         cascadeIndex,
-                                         refZ);
-        }
+vec2 csmRotateOffset(vec2 offset, float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+    return vec2(offset.x * c - offset.y * s,
+                offset.x * s + offset.y * c);
+}
+
+float csmKernelAngle(vec2 uv, int cascadeIndex, vec2 texelUv) {
+    return (0.125 + float(cascadeIndex) * 0.173205) * TAU;
+}
+
+float sampleCsmPcfPoisson(vec2 uv, int cascadeIndex, float refZ, vec2 texelUv, float radius) {
+    const vec2 offsets[12] = vec2[12](
+        vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696,  0.457),
+        vec2(-0.203,  0.621), vec2( 0.962, -0.195), vec2( 0.473, -0.480),
+        vec2( 0.519,  0.767), vec2( 0.185, -0.893), vec2( 0.507,  0.064),
+        vec2( 0.896,  0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598)
+    );
+
+    float angle = csmKernelAngle(uv, cascadeIndex, texelUv);
+    float lit = sampleCsmDepthCompare(uv, cascadeIndex, refZ) * 2.0;
+    float weight = 2.0;
+    for (int i = 0; i < 12; ++i) {
+        vec2 offset = csmRotateOffset(offsets[i], angle) * texelUv * radius;
+        lit += sampleCsmDepthCompare(uv + offset, cascadeIndex, refZ);
+        weight += 1.0;
     }
-    return lit * (1.0 / 9.0);
+    return lit / weight;
 }
 
 #ifdef MECRAFT_SHADOW_ENABLE_STANDARD_SAMPLE
 // Cascade-specific PCF radius: near cascades get softer shadows, far cascades get sharper.
 float cascadePcfRadius(int cascadeIndex, float baseSoftness) {
-    // Cascade 0: 2.0x, Cascade 1: 1.5x, Cascade 2: 1.2x, Cascade 3: 1.0x
-    float scale = max(1.0, 2.0 - float(cascadeIndex) * 0.35);
-    return max(1.0, baseSoftness) * scale;
+    float softness = clamp(baseSoftness, 0.0, 3.0);
+    float cascadeScale = max(0.85, 1.30 - float(cascadeIndex) * 0.13);
+    return max(0.75, (0.70 + softness * 0.45) * cascadeScale);
 }
 
 // ---- PCSS (Percentage Closer Soft Shadows) ----
@@ -197,24 +215,31 @@ float sampleCsmRawDepth(vec2 uv, int cascadeIndex) {
 
 // Blocker search: find average depth of blockers in a neighborhood.
 float pcssBlockerSearch(vec2 uv, int cascadeIndex, float blockerCompareZ,
-                        vec2 texelUv, float searchRadius) {
+                        vec2 texelUv, float searchRadius,
+                        out int blockerCount) {
     float avgBlockerDepth = 0.0;
-    int blockerCount = 0;
-    // 4x4 Poisson-like search for performance
-    const vec2 offsets[8] = vec2[8](
-        vec2(-0.7, -0.7), vec2( 0.7, -0.7), vec2(-0.7,  0.7), vec2( 0.7,  0.7),
-        vec2(-1.0,  0.0), vec2( 1.0,  0.0), vec2( 0.0, -1.0), vec2( 0.0,  1.0)
+    float blockerWeight = 0.0;
+    blockerCount = 0;
+    const vec2 offsets[12] = vec2[12](
+        vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696,  0.457),
+        vec2(-0.203,  0.621), vec2( 0.962, -0.195), vec2( 0.473, -0.480),
+        vec2( 0.519,  0.767), vec2( 0.185, -0.893), vec2( 0.507,  0.064),
+        vec2( 0.896,  0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598)
     );
-    for (int i = 0; i < 8; ++i) {
-        vec2 sampleUv = uv + offsets[i] * texelUv * searchRadius;
+    float angle = csmKernelAngle(uv, cascadeIndex, texelUv) + 0.618;
+    for (int i = 0; i < 12; ++i) {
+        vec2 kernel = csmRotateOffset(offsets[i], angle);
+        vec2 sampleUv = uv + kernel * texelUv * searchRadius;
         float depth = sampleCsmRawDepth(sampleUv, cascadeIndex);
-        if (depth < blockerCompareZ) {
-            avgBlockerDepth += depth;
+        if (depth < blockerCompareZ && depth < 0.9999) {
+            float weight = mix(1.0, 0.65, saturate(dotSelf(kernel)));
+            avgBlockerDepth += depth * weight;
+            blockerWeight += weight;
             ++blockerCount;
         }
     }
-    if (blockerCount == 0) return -1.0; // no blockers
-    return avgBlockerDepth / float(blockerCount);
+    if (blockerCount == 0 || blockerWeight <= 0.0) return -1.0; // no blockers
+    return avgBlockerDepth / blockerWeight;
 }
 
 // Estimate penumbra width from blocker separation.
@@ -225,7 +250,7 @@ float pcssPenumbraTexels(float receiverZ, float avgBlockerZ,
                          float lightAngularScale) {
     float blockerGapWorld = max(receiverZ - avgBlockerZ, 0.0) * (2.0 * depthExtent);
     float penumbraWorld = blockerGapWorld * lightAngularScale;
-    return clamp(1.0 + penumbraWorld / max(texelWorld, 0.0001), 1.0, 8.0);
+    return clamp(0.85 + penumbraWorld / max(texelWorld, 0.0001), 0.85, 6.0);
 }
 
 float sampleCsmPcss(vec2 uv, int cascadeIndex,
@@ -234,8 +259,13 @@ float sampleCsmPcss(vec2 uv, int cascadeIndex,
                     float lightAngularScale, float searchRadius,
                     out float outBlockerDepth) {
     // Step 1: Blocker search
-    float blockerCompareZ = receiverZ - max(receiverZ - refZ, 2.0e-5) * 0.35;
-    float avgBlocker = pcssBlockerSearch(uv, cascadeIndex, blockerCompareZ, texelUv, searchRadius);
+    // Search more conservatively than the final PCF compare. Otherwise the
+    // receiver's own depth can become a near blocker after normal offset and
+    // PCSS amplifies that into dirty gray patches on lit flat surfaces.
+    float receiverBias = max(receiverZ - refZ, 2.0e-5);
+    float blockerCompareZ = receiverZ - receiverBias * 1.35;
+    int blockerCount = 0;
+    float avgBlocker = pcssBlockerSearch(uv, cascadeIndex, blockerCompareZ, texelUv, searchRadius, blockerCount);
     if (avgBlocker < 0.0) {
         // No blockers — fully lit
         outBlockerDepth = 0.0;
@@ -256,21 +286,27 @@ float sampleCsmPcss(vec2 uv, int cascadeIndex,
     // Step 2: Penumbra estimation
     float pcfRadius = pcssPenumbraTexels(receiverZ, avgBlocker, depthExtent,
                                          texelWorld, lightAngularScale);
+    float blockerConfidence = smoothstep(1.0, 5.0, float(blockerCount));
+    pcfRadius = mix(0.85, pcfRadius, blockerConfidence);
 
     // Step 3: Variable PCF
     float lit = 0.0;
-    // 4x4 rotated PCF kernel
+    float angle = csmKernelAngle(uv + vec2(0.137, 0.071), cascadeIndex, texelUv);
     const vec2 offsets[16] = vec2[16](
-        vec2(-1.5, -1.5), vec2(-0.5, -1.5), vec2( 0.5, -1.5), vec2( 1.5, -1.5),
-        vec2(-1.5, -0.5), vec2(-0.5, -0.5), vec2( 0.5, -0.5), vec2( 1.5, -0.5),
-        vec2(-1.5,  0.5), vec2(-0.5,  0.5), vec2( 0.5,  0.5), vec2( 1.5,  0.5),
-        vec2(-1.5,  1.5), vec2(-0.5,  1.5), vec2( 0.5,  1.5), vec2( 1.5,  1.5)
+        vec2(-0.942, -0.399), vec2( 0.946, -0.769), vec2(-0.094, -0.929), vec2( 0.345,  0.294),
+        vec2(-0.916,  0.458), vec2(-0.816, -0.879), vec2(-0.383,  0.276), vec2( 0.974,  0.756),
+        vec2( 0.443, -0.975), vec2( 0.537, -0.474), vec2(-0.264, -0.418), vec2( 0.792,  0.190),
+        vec2(-0.242,  0.998), vec2(-0.814,  0.914), vec2( 0.200,  0.786), vec2( 0.143, -0.142)
     );
+    lit += sampleCsmDepthCompare(uv, cascadeIndex, refZ) * 1.5;
+    float weight = 1.5;
     for (int i = 0; i < 16; ++i) {
-        lit += sampleCsmDepthCompare(uv + offsets[i] * texelUv * pcfRadius,
+        vec2 offset = csmRotateOffset(offsets[i], angle) * texelUv * pcfRadius;
+        lit += sampleCsmDepthCompare(uv + offset,
                                      cascadeIndex, refZ);
+        weight += 1.0;
     }
-    return lit * (1.0 / 16.0);
+    return lit / weight;
 }
 
 float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
@@ -296,9 +332,8 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
 
     float bias = csmDepthBias(ndotl, viewDistance, cascadeIndex, shadowSize,
                               uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
-    float dither = shadowDither();
     float receiverZ = proj.z;
-    float refZ = receiverZ - bias + dither * 1.5e-5;
+    float refZ = receiverZ - bias;
     float lit;
     if (uSoftShadowsEnabled == 0) {
         lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
@@ -308,15 +343,14 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
         float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
         float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
         float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
-        // Reduced angular scale multiplier (0.035 vs 0.052) to keep near shadows crisper
-        float lightAngularScale = 0.012 + strength * 0.035;
-        float searchRadius = 2.0 + strength * 3.5;
+        float lightAngularScale = 0.010 + strength * 0.028;
+        float searchRadius = 1.75 + strength * 2.75;
         lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
                             texelWorld, depthExtent, lightAngularScale, searchRadius,
                             outBlockerDepth);
     } else {
-        lit = sampleCsmPcf3x3(proj.xy, cascadeIndex, refZ, texelUv,
-                              cascadePcfRadius(cascadeIndex, uShadowSoftness));
+        lit = sampleCsmPcfPoisson(proj.xy, cascadeIndex, refZ, texelUv,
+                                  cascadePcfRadius(cascadeIndex, uShadowSoftness));
     }
     return clamp(lit, 0.0, 1.0);
 }

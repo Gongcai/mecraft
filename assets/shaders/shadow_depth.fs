@@ -32,6 +32,7 @@ layout(location = 1) out vec4 ShadowNormal;
 
 const int MATERIAL_WATER = 17;
 const int MATERIAL_STAINED_GLASS = 16;
+const int MATERIAL_LEAVES = 7;
 
 vec2 encodeNormal(vec3 n) {
     n = normalize(n);
@@ -140,8 +141,16 @@ void main() {
         vec4 texColor = forceBaseLod
             ? textureLod(texArray, vec3(vUV, sampledLayer), 0.0)
             : texture(texArray, vec3(vUV, sampledLayer));
-        if (texColor.a < 0.1) {
+        // Foliage cutout textures are a high-frequency opaque/transparent
+        // checker in shadow space. PCF/PCSS averages that into dirty gray
+        // blotches, so leaves cast a coarse solid shadow in the CSM depth
+        // pass while keeping their visual alpha in the G-buffer pass.
+        bool solidFoliageCaster = (vMaterialKind == MATERIAL_LEAVES);
+        if (!solidFoliageCaster && texColor.a < 0.1) {
             discard;
+        }
+        if (solidFoliageCaster) {
+            texColor.a = 1.0;
         }
 
         vec3 shadowColor = texColor.rgb;
