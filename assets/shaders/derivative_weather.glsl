@@ -45,7 +45,7 @@ struct CloudWeatherProperties {
     float cloudPeakWeight;
 };
 
-CloudWeatherProperties ComputeCloudProperties(float wetness) {
+CloudWeatherProperties ComputeCloudProperties(float wetness, float stormIntensity) {
     CloudWeatherProperties p;
     p.altitude    = mix(CLOUD_CUMULUS_CLEAR_ALTITUDE,    CLOUD_CUMULUS_RAIN_ALTITUDE,    wetness);
     p.thickness   = mix(CLOUD_CUMULUS_CLEAR_THICKNESS,   CLOUD_CUMULUS_RAIN_THICKNESS,   wetness);
@@ -55,6 +55,17 @@ CloudWeatherProperties ComputeCloudProperties(float wetness) {
     p.skylighting = mix(CLOUD_CUMULUS_CLEAR_SKYLIGHTING, CLOUD_CUMULUS_RAIN_SKYLIGHTING, wetness);
     p.noiseScale  = 4e-4 + 6e-5 * wetness;
     p.cloudPeakWeight = 0.1 + 0.7 * wetness;
+
+    // DerivativeMain VolumetricClouds.glsl:57-61: storm intensity non-linear correction.
+    // cloudDynamicWeather.z modifies altitude (rises), density (thins), and lighting (slight boost).
+    // Thickness is NOT scaled — altitude-only scaling stretches the cloud layer naturally.
+    if (stormIntensity > 5e-3) {
+        p.altitude    *= 1.0 + stormIntensity * 2.0;
+        p.density     *= 1.0 - stormIntensity * 0.3;
+        p.sunlighting *= 1.0 + stormIntensity * 0.2;
+        p.skylighting *= 1.0 + stormIntensity * 0.2;
+    }
+
     return p;
 }
 

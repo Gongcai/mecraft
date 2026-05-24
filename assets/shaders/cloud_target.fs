@@ -326,7 +326,10 @@ void main() {
     }
 
     // ---- Volumetric clouds (cumulus layer) ----
-    float cloudBottom = uCloudHeight;
+    // DerivativeMain VolumetricClouds.glsl:57-61: storm intensity raises cloud altitude,
+    // thins the layer, and slightly boosts lighting — breaking up the flat grey overcast.
+    float stormZ = uCloudDynamicWeather.z;
+    float cloudBottom = uCloudHeight * (1.0 + stormZ * 2.0);
     float cloudThickness = max(uCloudThickness, 1.0);
     float cloudTop = cloudBottom + cloudThickness;
 
@@ -367,7 +370,9 @@ void main() {
         int steps = 32;
         steps = int(mix(float(steps), float(steps) / 1.6, abs(ray.y)));
 
-        float weatherCoverage = clamp(uCloudCoverage * 2.8 + 0.2 + uCloudWetness * 0.3, 0.8, 1.5);
+        // DerivativeMain VolumetricClouds.glsl:24: coverage 1.0 (clear) to 1.2 (rain).
+        // CPU computes final coverage; storm intensity reduces it to prevent grey wall.
+        float weatherCoverage = clamp(uCloudCoverage * (1.0 - stormZ * 0.3), 0.5, 1.5);
         float rayDistance = clamp(endT - startT, 0.0, 20000.0);
         float stepLength = rayDistance / float(steps);
 
@@ -428,9 +433,10 @@ void main() {
             vec3 lightIlluminance = moonlit ? moonIllum : sunIllum;
 
             // DerivativeMain VolumetricClouds.glsl:60-68: rain cloud lighting = 0.3
+            // DerivativeMain VolumetricClouds.glsl:66-67: storm intensity slightly boosts lighting
             float wetness = clamp(uCloudWetness, 0.0, 1.0);
-            float cloudSunlighting = mix(1.0, 0.3, wetness);
-            float cloudSkylighting = mix(1.0, 0.3, wetness);
+            float cloudSunlighting = mix(1.0, 0.3, wetness) * (1.0 + stormZ * 0.2);
+            float cloudSkylighting = mix(1.0, 0.3, wetness) * (1.0 + stormZ * 0.2);
 
             vec3 scattering = scatteringSun * 22.0 * lightIlluminance * cloudSunlighting;
             scattering += scatteringSky * 0.15 * env.skyIlluminance * cloudSkylighting;

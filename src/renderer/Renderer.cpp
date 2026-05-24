@@ -1196,17 +1196,17 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
     frame.cloud.shadowSpeed = m_pipelineSettings.cloudShadowSpeed;
     frame.cloud.timeScale = m_pipelineSettings.cloudTimeScale;
-    frame.cloud.coverage = std::clamp(0.24f + frame.weatherWetness * 0.18f + frame.weatherStorm * 0.32f, 0.0f, 1.0f);
+    // DerivativeMain VolumetricClouds.glsl:24: coverage = 1.0 (clear) to 1.2 (rain).
+    // Shader uses uCloudCoverage directly — no additional weather amplification.
+    const float cloudWetForCoverage = std::clamp(frame.weatherWetness + frame.weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);
+    frame.cloud.coverage = std::clamp(1.0f + cloudWetForCoverage * 0.2f, 0.0f, 1.5f);
     frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
     // DerivativeMain VolumetricClouds.glsl:53-68: wetness-based altitude/thickness interpolation
     float cloudWet = std::clamp(frame.cloudWetness, 0.0f, 1.0f);
     frame.cloud.height = 1000.0f + cloudWet * (800.0f - 1000.0f);    // clear 1000 → rain 800
     frame.cloud.thickness = 1400.0f + cloudWet * (3000.0f - 1400.0f); // clear 1400 → rain 3000
-    // DerivativeMain VolumetricClouds.glsl:58: storm altitude boost
-    const float storm = frame.skyIlluminance.cloudDynamicWeather.z;
-    if (storm > 5e-3f) {
-        frame.cloud.height *= 1.0f + storm * 2.0f;
-    }
+    // Storm altitude/thickness/density corrections are applied in shaders via
+    // uCloudDynamicWeather.z to avoid double-application across render paths.
     frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
     return frame;
 }
@@ -3285,12 +3285,13 @@ void Renderer::renderSkyCapturePass(const World& world) {
     const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
     illum.cloudDynamicWeather = GameplaySkyRenderer::computeCloudDynamicWeather(worldDay, worldTime);
     const float cloudWetness = std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);
+    // DerivativeMain VolumetricClouds.glsl:53-54: clear=1000, rain=800
     float cloudHeight = 1000.0f + cloudWetness * (800.0f - 1000.0f);
     const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
-    if (illum.cloudDynamicWeather.z > 5e-3f) {
-        cloudHeight *= 1.0f + illum.cloudDynamicWeather.z * 2.0f;
-    }
-    const float cloudCoverage = std::clamp(0.24f + weatherWetness * 0.18f + weatherStorm * 0.32f, 0.0f, 1.0f);
+    // Storm altitude correction is applied in shaders via uCloudDynamicWeather.z.
+    // DerivativeMain VolumetricClouds.glsl:24: coverage = 1.0 (clear) to 1.2 (rain).
+    // Shader uses uCloudCoverage directly — no additional weather amplification.
+    const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
     const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
 

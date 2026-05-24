@@ -283,22 +283,25 @@ float cloudShadowFactor(vec3 worldPos, vec3 lightDir, float outdoorMask) {
 
     // VC_SHADOW: cumulus cloud shadow.
     // DerivativeMain: two shell samples at 15% and 50% of thickness.
+    // DerivativeMain VolumetricClouds.glsl:57: storm raises altitude — must match main renderer.
     if (uCloudHeight > 0.0 && uCloudThickness > 0.0) {
+        float stormZ = uCloudDynamicWeather.z;
+        float stormCloudHeight = uCloudHeight * (1.0 + stormZ * 2.0);
         float cloudThick = max(uCloudThickness, 1.0);
-        float weatherCoverage = clamp(uCloudCoverage * 2.8 + 0.2 + wetness * 0.3, 0.8, 1.5);
-        float cloudShellRadius = cloudPlanetRadius + uCloudHeight;
+        float weatherCoverage = clamp(uCloudCoverage * (1.0 - stormZ * 0.3), 0.5, 1.5);
+        float cloudShellRadius = cloudPlanetRadius + stormCloudHeight;
 
         vec2 bottomHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudShellRadius + 0.15 * cloudThick);
         if (bottomHit.y >= 0.0) {
             vec3 samplePos = bottomHit.y * lightDir + worldPos;
-            float sampleNH = clamp((samplePos.y - uCloudHeight) / cloudThick, 0.0, 1.0);
+            float sampleNH = clamp((samplePos.y - stormCloudHeight) / cloudThick, 0.0, 1.0);
             cloudDensity += cloudDensityAt(samplePos, sampleNH, weatherCoverage, 1.0);
         }
 
         vec2 topHit = cloudRaySphereIntersection(checkOrigin, lightDir, cloudShellRadius + 0.50 * cloudThick);
         if (topHit.y >= 0.0) {
             vec3 samplePos = topHit.y * lightDir + worldPos;
-            float sampleNH = clamp((samplePos.y - uCloudHeight) / cloudThick, 0.0, 1.0);
+            float sampleNH = clamp((samplePos.y - stormCloudHeight) / cloudThick, 0.0, 1.0);
             cloudDensity += cloudDensityAt(samplePos, sampleNH, weatherCoverage, 1.0);
         }
     }
