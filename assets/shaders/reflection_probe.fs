@@ -134,6 +134,49 @@ bool traceScreenSpaceReflection(vec3 worldPos,
         float thicknessThreshold = 0.2 + coneWidth * (0.5 + t * 0.1);
         bool withinThickness = relDepthDiff < thicknessThreshold;
 
+        if (crossedSurface && withinThickness) {
+            // DerivativeMain RAYTRACE_REFINEMENT: 6 bisection steps (default).
+            // Each step halves the search interval, converging on the actual surface.
+            vec3 lo = sampleWorld - reflectedDir * (t - prevT);
+            vec3 hi = sampleWorld;
+            for (int r = 0; r < 6; ++r) {
+                vec3 mid = (lo + hi) * 0.5;
+                vec2 midUv = projectWorldUv(mid);
+                float midDepth = texture(uDepthTex, midUv).r;
+                vec4 midClip = uViewProj * vec4(mid, 1.0);
+                float midNdcZ = midClip.z / max(midClip.w, 0.00001);
+                float midDepth01 = clamp(midNdcZ * 0.5 + 0.5, 0.0, 1.0);
+                if (midDepth < midDepth01) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            vec3 refinedWorld = (lo + hi) * 0.5;
+            vec2 refinedUv = projectWorldUv(refinedWorld);
+
+            // Re-validate refined hit
+            if (refinedUv.x < 0.001 || refinedUv.x > 0.999 || refinedUv.y < 0.001 || refinedUv.y > 0.999) {
+                break;
+            }
+
+            // Edge fade: smooth falloff near screen borders
+            vec2 edgeDist = min(refinedUv, 1.0 - refinedUv);
+            float edgeFade = smoothstep(0.0, 0.08, min(edgeDist.x, edgeDist.y));
+
+            // Distance fade: reflections weaken with distance
+            float refinedT = length(refinedWorld - worldPos);
+            float distanceFade = 1.0 - smoothstep(maxDistance * 0.3, maxDistance, refinedT);
+
+            // Grazing angle fade: reflections at grazing angles are less reliable
+            // (more likely to hit wrong surfaces or self-intersect).
+            vec3 hitNormal = normalize(texture(uNormalAoTex, refinedUv).rgb * 2.0 - 1.0);
+            float grazingDot = abs(dot(reflectedDir, hitNormal));
+            float grazingFade = smoothstep(0.0, 0.25, grazingDot);
+
+            // Normal facing: reject hits where the surface faces away from the ray
+            float normalFacing = smoothstep(0.0, 0.2, dot(normalize(refinedWorld - worldPos), reflectedDir));
+
             // Rough cone widening: confidence decreases with roughness and distance.
             // For rough surfaces, a single ray is less representative of the full lobe.
             // Distance amplifies this effect since the cone covers more screen area.
