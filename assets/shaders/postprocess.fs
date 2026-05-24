@@ -597,19 +597,19 @@ vec3 AgX_Full(vec3 rgb) {
 // from cone-mediated (photopic) to rod-mediated (scotopic) perception,
 // biasing sensitivity toward blue-green wavelengths.
 //
-// Mecraft adaptation: clamp scotopicLuminance to prevent numerical instability
-// when xyz.x is near zero (dark scenes). Without this, (xyz.y+xyz.z)/xyz.x
-// explodes, causing purkinje → fastExp(-purkinje*90) → 0, replacing the scene
-// with large blue-white blocks.
+// Mecraft adaptation: clamp scotopicLuminance and purkinje to prevent
+// numerical instability. Without clamping, dark scenes cause (xyz.y+xyz.z)/xyz.x
+// to explode, producing blue-white blocks. The purkinje clamp ensures the effect
+// remains subtle even during daytime.
 
 vec3 PurkinjeShift(vec3 color) {
     const vec3 rodResponse = vec3(7.15e-5, 4.81e-1, 3.28e-1);
     vec3 xyz = color * rgbToXyz;
-    // Clamp denominator to avoid division by zero; clamp result to avoid overflow.
+    // Clamp denominator to avoid division by zero.
     float denom = max(xyz.x, 1e-5);
     float scalar = 1.33 * (1.0 + (xyz.y + xyz.z) / denom) - 1.68;
-    vec3 scotopicLuminance = clamp(xyz * scalar, vec3(0.0), vec3(10.0));
-    float purkinje = dot(rodResponse, scotopicLuminance * xyzToRgb);
+    vec3 scotopicLuminance = clamp(xyz * scalar, vec3(0.0), vec3(1.0));
+    float purkinje = clamp(dot(rodResponse, scotopicLuminance * xyzToRgb), 0.0, 0.08);
     return mix(color, purkinje * vec3(0.5, 0.7, 1.0), fastExp(-purkinje * 90.0));
 }
 
