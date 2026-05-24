@@ -596,11 +596,19 @@ vec3 AgX_Full(vec3 rgb) {
 // Simulates the Purkinje effect: at very low luminance, human vision shifts
 // from cone-mediated (photopic) to rod-mediated (scotopic) perception,
 // biasing sensitivity toward blue-green wavelengths.
+//
+// Mecraft adaptation: clamp scotopicLuminance to prevent numerical instability
+// when xyz.x is near zero (dark scenes). Without this, (xyz.y+xyz.z)/xyz.x
+// explodes, causing purkinje → fastExp(-purkinje*90) → 0, replacing the scene
+// with large blue-white blocks.
 
 vec3 PurkinjeShift(vec3 color) {
     const vec3 rodResponse = vec3(7.15e-5, 4.81e-1, 3.28e-1);
     vec3 xyz = color * rgbToXyz;
-    vec3 scotopicLuminance = max0(xyz * (1.33 * (1.0 + (xyz.y + xyz.z) / max(xyz.x, 1e-10)) - 1.68));
+    // Clamp denominator to avoid division by zero; clamp result to avoid overflow.
+    float denom = max(xyz.x, 1e-5);
+    float scalar = 1.33 * (1.0 + (xyz.y + xyz.z) / denom) - 1.68;
+    vec3 scotopicLuminance = clamp(xyz * scalar, vec3(0.0), vec3(10.0));
     float purkinje = dot(rodResponse, scotopicLuminance * xyzToRgb);
     return mix(color, purkinje * vec3(0.5, 0.7, 1.0), fastExp(-purkinje * 90.0));
 }
