@@ -341,6 +341,75 @@ int main() {
     }
 
     {
+        Chunk center(0, 0);
+        Chunk posX(1, 0);
+        Chunk negX(-1, 0);
+        Chunk posZ(0, 1);
+        Chunk negZ(0, -1);
+        Chunk above(0, 0);
+        Chunk below(0, 0);
+
+        center.neighbors[0] = &posX;
+        center.neighbors[1] = &negX;
+        center.neighbors[2] = &posZ;
+        center.neighbors[3] = &negZ;
+        posX.neighbors[1] = &center;
+        negX.neighbors[0] = &center;
+        posZ.neighbors[3] = &center;
+        negZ.neighbors[2] = &center;
+
+        fillSubChunk(center, 0, BlockIds::STONE);
+        fillSubChunk(center, 1, BlockIds::STONE);
+        fillSubChunk(center, 2, BlockIds::STONE);
+        fillSubChunk(posX, 1, BlockIds::STONE);
+        fillSubChunk(negX, 1, BlockIds::STONE);
+        fillSubChunk(posZ, 1, BlockIds::STONE);
+        fillSubChunk(negZ, 1, BlockIds::STONE);
+        fillSubChunk(above, 1, BlockIds::STONE);
+        fillSubChunk(below, 1, BlockIds::STONE);
+
+        SubChunk* centerSubChunk = center.getSubChunk(1);
+        if (!centerSubChunk) {
+            return fail("center solid sub-chunk should exist");
+        }
+        centerSubChunk->neighbors[2] = above.getSubChunk(1);
+        centerSubChunk->neighbors[3] = below.getSubChunk(1);
+        if (above.getSubChunk(1)) {
+            above.getSubChunk(1)->neighbors[3] = centerSubChunk;
+        }
+        if (below.getSubChunk(1)) {
+            below.getSubChunk(1)->neighbors[2] = centerSubChunk;
+        }
+
+        SubChunkMesh staleMesh;
+        staleMesh.vertexCount = 6;
+        staleMesh.hasBounds = true;
+        center.setSubChunkMesh(1, staleMesh);
+        ChunkMeshData staleData;
+        staleData.hasBounds = true;
+        staleData.boundsMin = glm::vec3(0.0f, 16.0f, 0.0f);
+        staleData.boundsMax = glm::vec3(1.0f, 17.0f, 1.0f);
+        staleData.opaqueVertices.push_back({});
+        center.updateColumnAggregateData(1, staleData, true);
+        center.markSubChunkDirty(1);
+
+        if (!ChunkMesher::shouldSkipSubChunk(center, 1)) {
+            return fail("fully occluded dirty solid sub-chunk should become skippable");
+        }
+
+        ChunkMeshData emptyData;
+        center.setSubChunkMesh(1, SubChunkMesh{});
+        center.updateColumnAggregateData(1, emptyData, true);
+        const SubChunkMesh& clearedMesh = center.getSubChunkMesh(1);
+        if (center.isSubChunkDirty(1) ||
+            clearedMesh.vertexCount != 0 ||
+            clearedMesh.hasBounds ||
+            center.getColumnMesh().hasBounds) {
+            return fail("skipped dirty sub-chunks should clear stale mesh and aggregate bounds");
+        }
+    }
+
+    {
         Chunk chunk(0, 0);
         chunk.setBlock(0, 15, 0, BlockIds::STONE);
         chunk.recalcHeightMap(0, 0);

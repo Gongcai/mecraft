@@ -1100,6 +1100,22 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
                     lightStats.queued,
                     lightStats.dirty,
                     lightStats.pendingCompleted);
+        ImGui::Text("Light Submitted Reasons C/B/N: %d / %d / %d",
+                    lightStats.submittedChunkLoaded,
+                    lightStats.submittedBlockChanged,
+                    lightStats.submittedNeighborBoundary);
+        ImGui::Text("Light Dirty Reasons C/B/N: %d / %d / %d",
+                    lightStats.dirtyChunkLoaded,
+                    lightStats.dirtyBlockChanged,
+                    lightStats.dirtyNeighborBoundary);
+        ImGui::Text("Light Block Changes: %d calls, %d chunks, last (%d,%d,%d) %u -> %u",
+                    lightStats.blockChangeCalls,
+                    lightStats.blockChangeUniqueChunks,
+                    lightStats.lastBlockChangeX,
+                    lightStats.lastBlockChangeY,
+                    lightStats.lastBlockChangeZ,
+                    static_cast<unsigned>(lightStats.lastBlockChangeOld),
+                    static_cast<unsigned>(lightStats.lastBlockChangeNew));
         ImGui::Text("Light Boundary Sync: %d", lightStats.boundarySync);
         ImGui::Text("Light Nodes Visited: %d", lightStats.nodesVisited);
         ImGui::Text("Light Stale Dropped: %d", lightStats.staleDropped);

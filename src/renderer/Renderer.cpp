@@ -3409,16 +3409,34 @@ void Renderer::submitMeshingJobs(const World& world) {
     std::vector<MeshingCandidate> candidates;
     const auto& activeChunks = world.getActiveChunks();
 
-    auto findSharedByPtr = [&](const Chunk* raw) -> std::shared_ptr<Chunk> {
-        if (!raw) return nullptr;
-        const int64_t key = World::chunkKey(raw->m_chunkX, raw->m_chunkZ);
+    auto findSharedByCoords = [&](const int cx, const int cz) -> std::shared_ptr<Chunk> {
+        const int64_t key = World::chunkKey(cx, cz);
         auto it = activeChunks.find(key);
-        return (it != activeChunks.end() && it->second.get() == raw) ? it->second : nullptr;
+        return (it != activeChunks.end()) ? it->second : nullptr;
     };
 
     // Build sub-chunk key for in-flight tracking: pack chunkKey + scy
     auto subChunkFlightKey = [](int64_t chunkKey, int scy) -> int64_t {
         return (chunkKey & 0x00FFFFFFFFFFFFFFLL) | (static_cast<int64_t>(scy) << 56);
+    };
+
+    auto clearSkippedSubChunkMesh = [&](Chunk& chunk, const int64_t chunkKey, const int scy) {
+        const SubChunk* sc = chunk.getSubChunk(scy);
+        if (!sc) {
+            return;
+        }
+
+        releaseMdiAllocation(SubChunkGpuKey{chunkKey, scy});
+
+        SubChunkMesh emptyMesh;
+        chunk.setSubChunkMesh(scy, emptyMesh);
+
+        ChunkMeshData emptyMeshData;
+        if (m_useMultiDrawIndirect) {
+            chunk.updateColumnAggregateBoundsOnly(scy, emptyMeshData, false);
+        } else {
+            chunk.updateColumnAggregateData(scy, emptyMeshData);
+        }
     };
 
     for (const auto& pair : activeChunks) {
@@ -3430,12 +3448,17 @@ void Renderer::submitMeshingJobs(const World& world) {
             // Skip if not dirty
             if (!chunk.isSubChunkDirty(scy)) continue;
 
-            // Skip Air sub-chunks / fully occluded solid sub-chunks
-            if (ChunkMesher::shouldSkipSubChunk(chunk, scy)) continue;
-
             // Skip if already in flight
             const int64_t flightKey = subChunkFlightKey(chunkKey, scy);
             if (m_meshingInFlight.find(flightKey) != m_meshingInFlight.end()) continue;
+
+            // Air / fully occluded solid sub-chunks still need to replace any
+            // previous mesh with an empty one; otherwise stale border faces
+            // can survive after a neighbor loads.
+            if (ChunkMesher::shouldSkipSubChunk(chunk, scy)) {
+                clearSkippedSubChunkMesh(chunk, chunkKey, scy);
+                continue;
+            }
 
             const glm::ivec3 offset = chunk.getWorldOffset();
             const float centerX = static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f;
@@ -3449,10 +3472,10 @@ void Renderer::submitMeshingJobs(const World& world) {
             candidate.scy = scy;
             candidate.distanceSq = dx * dx + dz * dz;
             candidate.chunkRef = pair.second;
-            candidate.neighborPosX = findSharedByPtr(chunk.neighbors[0]);
-            candidate.neighborNegX = findSharedByPtr(chunk.neighbors[1]);
-            candidate.neighborPosZ = findSharedByPtr(chunk.neighbors[2]);
-            candidate.neighborNegZ = findSharedByPtr(chunk.neighbors[3]);
+            candidate.neighborPosX = findSharedByCoords(chunk.m_chunkX + 1, chunk.m_chunkZ);
+            candidate.neighborNegX = findSharedByCoords(chunk.m_chunkX - 1, chunk.m_chunkZ);
+            candidate.neighborPosZ = findSharedByCoords(chunk.m_chunkX, chunk.m_chunkZ + 1);
+            candidate.neighborNegZ = findSharedByCoords(chunk.m_chunkX, chunk.m_chunkZ - 1);
             candidates.push_back(std::move(candidate));
         }
     }
@@ -3487,12 +3510,17 @@ void Renderer::submitMeshingJobs(const World& world) {
         job.chunkKey = candidate.chunkKey;
         job.scy = candidate.scy;
         job.revision = candidate.chunk->getSubChunkMeshRevision(candidate.scy);
-        job.chunk = std::move(candidate.chunkRef);
-        job.neighborPosX = std::move(candidate.neighborPosX);
-        job.neighborNegX = std::move(candidate.neighborNegX);
-        job.neighborPosZ = std::move(candidate.neighborPosZ);
-        job.neighborNegZ = std::move(candidate.neighborNegZ);
-        job.world = &world;
+        job.snapshot = ChunkMesher::captureSubChunkSnapshot(
+            *candidate.chunk,
+            candidate.scy,
+            candidate.neighborPosX.get(),
+            candidate.neighborNegX.get(),
+            candidate.neighborPosZ.get(),
+            candidate.neighborNegZ.get(),
+            &world);
+        if (!job.snapshot) {
+            continue;
+        }
 
         const int priority = static_cast<int>(candidate.distanceSq);
         m_meshingService.submit(std::move(job), priority);

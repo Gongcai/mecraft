@@ -11,14 +11,10 @@
 #include "World.h"
 
 namespace {
-std::shared_ptr<const Chunk> findSharedByRawPtr(const World& world, const Chunk* raw) {
-    if (raw == nullptr) {
-        return nullptr;
-    }
-
-    const int64_t key = World::chunkKey(raw->m_chunkX, raw->m_chunkZ);
+std::shared_ptr<const Chunk> findSharedByCoords(const World& world, const int cx, const int cz) {
+    const int64_t key = World::chunkKey(cx, cz);
     auto it = world.getActiveChunks().find(key);
-    if (it == world.getActiveChunks().end() || !it->second || it->second.get() != raw) {
+    if (it == world.getActiveChunks().end() || !it->second) {
         return nullptr;
     }
 
@@ -34,6 +30,56 @@ int reasonBias(const LightDirtyReason reason) {
         case LightDirtyReason::NeighborBoundary:
         default:
             return 1000;
+    }
+}
+
+int dirtyReasonPriority(const LightDirtyReason reason) {
+    switch (reason) {
+        case LightDirtyReason::BlockChanged:
+            return 2;
+        case LightDirtyReason::ChunkLoaded:
+            return 1;
+        case LightDirtyReason::NeighborBoundary:
+        default:
+            return 0;
+    }
+}
+
+bool shouldReplaceDirtyReason(const LightDirtyReason current, const LightDirtyReason incoming) {
+    return dirtyReasonPriority(incoming) > dirtyReasonPriority(current);
+}
+
+bool sameBoundaryNodes(const BorderUpdateBatch& lhs, const BorderUpdateBatch& rhs) {
+    if (lhs.nodes.size() != rhs.nodes.size()) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < lhs.nodes.size(); ++i) {
+        const BorderLightNode& a = lhs.nodes[i];
+        const BorderLightNode& b = rhs.nodes[i];
+        if (a.localX != b.localX ||
+            a.y != b.y ||
+            a.localZ != b.localZ ||
+            a.level != b.level ||
+            a.kind != b.kind) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void countReason(const LightDirtyReason reason, int& chunkLoaded, int& blockChanged, int& neighborBoundary) {
+    switch (reason) {
+        case LightDirtyReason::ChunkLoaded:
+            ++chunkLoaded;
+            break;
+        case LightDirtyReason::BlockChanged:
+            ++blockChanged;
+            break;
+        case LightDirtyReason::NeighborBoundary:
+        default:
+            ++neighborBoundary;
+            break;
     }
 }
 }
@@ -52,6 +98,7 @@ void LightService::shutdown() {
     m_running = false;
     m_pool = nullptr;
     m_frameStats = {};
+    m_frameBlockChangedChunks.clear();
     m_completedCount.store(0);
 
     std::lock_guard<std::mutex> stateLock(m_stateMutex);
@@ -98,11 +145,12 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
 
             const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
             LightChunkState& neighborState = m_chunkStates[neighborKey];
+            const bool wasDirty = neighborState.dirty;
             neighborState.pendingPreviousBoundaryCache[direction] = neighborState.boundaryCache[direction];
             neighborState.boundaryCache[direction].reset();
             neighborState.pendingBoundaryChanged[direction] = true;
             neighborState.dirty = true;
-            if (neighborState.reason != LightDirtyReason::BlockChanged) {
+            if (!wasDirty || shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
                 neighborState.reason = LightDirtyReason::NeighborBoundary;
             }
 
@@ -125,6 +173,15 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz,
 
     const glm::ivec2 chunkCoords = m_world.getChunkCoords(wx, wz);
     const int64_t key = World::chunkKey(chunkCoords.x, chunkCoords.y);
+    ++m_frameStats.blockChangeCalls;
+    m_frameStats.lastBlockChangeX = wx;
+    m_frameStats.lastBlockChangeY = wy;
+    m_frameStats.lastBlockChangeZ = wz;
+    m_frameStats.lastBlockChangeOld = oldId;
+    m_frameStats.lastBlockChangeNew = newId;
+    m_frameBlockChangedChunks.insert(key);
+    m_frameStats.blockChangeUniqueChunks = static_cast<int>(m_frameBlockChangedChunks.size());
+
     auto it = m_world.getActiveChunks().find(key);
     if (it != m_world.getActiveChunks().end() && it->second) {
         const int localX = wx - chunkCoords.x * Chunk::SIZE_X;
@@ -144,15 +201,6 @@ void LightService::onBlockChanged(const int wx, const int wy, const int wz,
                 newId
             });
         }
-
-        for (int direction = 0; direction < 4; ++direction) {
-            Chunk* neighbor = it->second->neighbors[direction];
-            if (!neighbor) {
-                continue;
-            }
-            markChunkDirty(World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ),
-                           LightDirtyReason::NeighborBoundary);
-        }
     }
     markChunkDirty(key, LightDirtyReason::BlockChanged);
 }
@@ -165,6 +213,9 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
     m_frameStats.mergeMs = 0.0f;
     m_frameStats.staleDropped = 0;
     m_frameStats.requeued = 0;
+    m_frameStats.submittedChunkLoaded = 0;
+    m_frameStats.submittedBlockChanged = 0;
+    m_frameStats.submittedNeighborBoundary = 0;
 
     if (!m_running || m_pool == nullptr || submitBudget <= 0) {
         return;
@@ -226,10 +277,18 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.revision = chunkIt->second->getLightRevision();
                     job.reason = pickedReason;
                     job.chunk = chunkIt->second;
-                    job.neighborPosX = findSharedByRawPtr(m_world, chunkIt->second->neighbors[0]);
-                    job.neighborNegX = findSharedByRawPtr(m_world, chunkIt->second->neighbors[1]);
-                    job.neighborPosZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[2]);
-                    job.neighborNegZ = findSharedByRawPtr(m_world, chunkIt->second->neighbors[3]);
+                    job.neighborPosX = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX + 1,
+                                                          chunkIt->second->m_chunkZ);
+                    job.neighborNegX = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX - 1,
+                                                          chunkIt->second->m_chunkZ);
+                    job.neighborPosZ = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX,
+                                                          chunkIt->second->m_chunkZ + 1);
+                    job.neighborNegZ = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX,
+                                                          chunkIt->second->m_chunkZ - 1);
                     job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
                     job.blockChanges = state.pendingBlockChanges;
                     job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
@@ -258,6 +317,10 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
 
         ++submitted;
         ++m_frameStats.submitted;
+        countReason(pickedReason,
+                    m_frameStats.submittedChunkLoaded,
+                    m_frameStats.submittedBlockChanged,
+                    m_frameStats.submittedNeighborBoundary);
 
         m_pool->submit([this, job = std::move(job)]() {
             CompletedTicket ticket;
@@ -358,25 +421,25 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                 }
 
                 LightChunkState& neighborState = m_chunkStates[batch.targetChunkKey];
+                bool boundaryChanged = true;
                 if (batch.fromDirection < neighborState.boundaryCache.size()) {
-                    neighborState.pendingPreviousBoundaryCache[batch.fromDirection] =
-                        neighborState.boundaryCache[batch.fromDirection];
-                    neighborState.boundaryCache[batch.fromDirection] = batch;
-                    neighborState.pendingBoundaryChanged[batch.fromDirection] = true;
+                    const std::optional<BorderUpdateBatch>& previous = neighborState.boundaryCache[batch.fromDirection];
+                    boundaryChanged = !previous.has_value() || !sameBoundaryNodes(*previous, batch);
+                    if (boundaryChanged) {
+                        neighborState.pendingPreviousBoundaryCache[batch.fromDirection] = previous;
+                        neighborState.boundaryCache[batch.fromDirection] = batch;
+                        neighborState.pendingBoundaryChanged[batch.fromDirection] = true;
+                    }
                 }
-                neighborState.dirty = true;
-                if (neighborState.reason != LightDirtyReason::BlockChanged) {
-                    neighborState.reason = LightDirtyReason::NeighborBoundary;
-                }
-                if (!neighborState.inFlight && !neighborState.queued) {
-                    neighborState.queued = true;
-                    neighborChunkIt->second->setLightQueued(true);
-                }
-                if (batch.dirtySubChunkMask != 0) {
-                    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-                        if ((batch.dirtySubChunkMask & (1u << scy)) != 0u) {
-                            neighborChunkIt->second->markSubChunkDirty(scy);
-                        }
+                if (boundaryChanged) {
+                    const bool wasDirty = neighborState.dirty;
+                    neighborState.dirty = true;
+                    if (!wasDirty || shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
+                        neighborState.reason = LightDirtyReason::NeighborBoundary;
+                    }
+                    if (!neighborState.inFlight && !neighborState.queued) {
+                        neighborState.queued = true;
+                        neighborChunkIt->second->setLightQueued(true);
                     }
                 }
                 ++m_frameStats.boundarySync;
@@ -424,6 +487,9 @@ LightFrameStats LightService::getFrameStats() const {
     stats.inFlight = 0;
     stats.queued = 0;
     stats.dirty = 0;
+    stats.dirtyChunkLoaded = 0;
+    stats.dirtyBlockChanged = 0;
+    stats.dirtyNeighborBoundary = 0;
     for (const auto& entry : m_chunkStates) {
         if (entry.second.inFlight) {
             ++stats.inFlight;
@@ -433,6 +499,10 @@ LightFrameStats LightService::getFrameStats() const {
         }
         if (entry.second.dirty) {
             ++stats.dirty;
+            countReason(entry.second.reason,
+                        stats.dirtyChunkLoaded,
+                        stats.dirtyBlockChanged,
+                        stats.dirtyNeighborBoundary);
         }
     }
     return stats;
@@ -441,13 +511,11 @@ LightFrameStats LightService::getFrameStats() const {
 void LightService::markChunkDirty(const int64_t chunkKey, const LightDirtyReason reason) {
     std::lock_guard<std::mutex> lock(m_stateMutex);
     LightChunkState& state = m_chunkStates[chunkKey];
+    const bool wasDirty = state.dirty;
     state.dirty = true;
 
-    if (state.reason != LightDirtyReason::BlockChanged) {
-        if (reason == LightDirtyReason::BlockChanged ||
-            (reason == LightDirtyReason::ChunkLoaded && state.reason == LightDirtyReason::NeighborBoundary)) {
-            state.reason = reason;
-        }
+    if (!wasDirty || shouldReplaceDirtyReason(state.reason, reason)) {
+        state.reason = reason;
     }
 
     if (!state.inFlight && !state.queued) {

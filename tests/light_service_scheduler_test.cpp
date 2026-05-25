@@ -91,13 +91,13 @@ void testAdjacentChunksCanBeInFlightTogether() {
     world.setBlock(14, torchY, zA, BlockIds::TORCH);
     world.setBlock(17, torchY, zB, BlockIds::TORCH);
 
-    bool sawConcurrentInFlight = false;
+    bool sawConcurrentSubmit = false;
     bool bothCrossChunkLit = false;
     for (int i = 0; i < 180; ++i) {
         world.update(playerPos);
         const LightFrameStats stats = world.getLightFrameStats();
-        if (stats.inFlight >= 2) {
-            sawConcurrentInFlight = true;
+        if (stats.submittedBlockChanged >= 2 || stats.inFlight >= 2) {
+            sawConcurrentSubmit = true;
         }
 
         Chunk* leftChunk = findChunk(world, 0, 0);
@@ -110,14 +110,14 @@ void testAdjacentChunksCanBeInFlightTogether() {
             bothCrossChunkLit = leftToRight && rightToLeft;
         }
 
-        if (sawConcurrentInFlight && bothCrossChunkLit) {
+        if (sawConcurrentSubmit && bothCrossChunkLit) {
             break;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    if (!sawConcurrentInFlight) {
-        fail("adjacent dirty chunks should be in flight concurrently");
+    if (!sawConcurrentSubmit) {
+        fail("adjacent dirty chunks should be submitted concurrently");
     }
     if (!bothCrossChunkLit) {
         fail("adjacent chunks should both finish correct cross-chunk propagation");
@@ -161,11 +161,16 @@ void testUnloadDropsLateLightingResults() {
         fail("expected dirty chunks to submit lighting work before unload");
     }
 
-    if (!waitUntil(world, farPos, 30, [&]() { return !hasChunk(world, 0, 0); })) {
+    bool sawStaleDrop = false;
+    if (!waitUntil(world, farPos, 30, [&]() {
+            if (world.getLightFrameStats().staleDropped > 0) {
+                sawStaleDrop = true;
+            }
+            return !hasChunk(world, 0, 0);
+        })) {
         fail("origin chunk should unload after moving far away");
     }
 
-    bool sawStaleDrop = false;
     for (int i = 0; i < 240; ++i) {
         world.update(farPos);
         if (world.getLightFrameStats().staleDropped > 0) {
@@ -267,6 +272,89 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
         fail("final lighting should match the last high-frequency block edits");
     }
 }
+
+void testInteriorBlockChangeOnlyQueuesOwningChunk() {
+    ThreadPool pool(2);
+    pool.start();
+
+    World world;
+    ThreadPoolGuard poolGuard{pool};
+    world.init(20260417);
+    world.setRenderDistance(1);
+    world.setThreadPool(&pool);
+
+    const glm::vec3 playerPos(8.0f, 80.0f, 8.0f);
+    tickWorld(world, playerPos, 10);
+
+    const bool settled = waitUntil(world, playerPos, 240, [&]() {
+        const LightFrameStats stats = world.getLightFrameStats();
+        return stats.queued == 0 && stats.dirty == 0 && stats.inFlight == 0 && stats.pendingCompleted == 0;
+    });
+    if (!settled) {
+        fail("loaded area should settle before testing a single interior edit");
+    }
+
+    world.setBlock(8, 80, 8, BlockIds::STONE);
+    const LightFrameStats stats = world.getLightFrameStats();
+    if (stats.queued != 1 || stats.dirty != 1) {
+        fail("interior block change should queue only the owning chunk");
+    }
+}
+
+void testBoundaryInboxDoesNotDirtyMeshBeforeLightApply() {
+    ThreadPool pool(2);
+    pool.start();
+
+    World world;
+    ThreadPoolGuard poolGuard{pool};
+    world.init(20260417);
+    world.setRenderDistance(1);
+    world.setThreadPool(&pool);
+
+    const glm::vec3 playerPos(8.0f, 80.0f, 8.0f);
+    tickWorld(world, playerPos, 10);
+    settleLoadedArea(world, playerPos);
+
+    constexpr int y = 80;
+    constexpr int z = 8;
+    for (int x = 14; x <= 17; ++x) {
+        world.setBlock(x, y, z, BlockIds::STONE);
+    }
+    tickWorld(world, playerPos, 40);
+    const bool settled = waitUntil(world, playerPos, 240, [&]() {
+        const LightFrameStats stats = world.getLightFrameStats();
+        return stats.queued == 0 && stats.dirty == 0 && stats.inFlight == 0 && stats.pendingCompleted == 0;
+    });
+    if (!settled) {
+        fail("tunnel setup should settle before testing boundary mesh dirtiness");
+    }
+
+    Chunk* rightChunk = findChunk(world, 1, 0);
+    if (!rightChunk) {
+        fail("expected +X neighbor chunk to stay loaded");
+    }
+    rightChunk->markMeshClean();
+
+    world.setBlock(14, y + 1, z, BlockIds::TORCH);
+
+    bool sawBoundarySync = false;
+    for (int i = 0; i < 120; ++i) {
+        world.update(playerPos);
+        const LightFrameStats stats = world.getLightFrameStats();
+        if (stats.boundarySync > 0 && rightChunk->getBlockLight(0, y + 1, z) == 0) {
+            sawBoundarySync = true;
+            if (rightChunk->isSubChunkDirty(Chunk::toSubChunkIndex(y + 1))) {
+                fail("boundary inbox should not dirty neighbor mesh before neighbor light is applied");
+            }
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    if (!sawBoundarySync) {
+        fail("expected a boundary sync before the neighbor light apply");
+    }
+}
 } // namespace
 
 int main() {
@@ -275,6 +363,8 @@ int main() {
     testAdjacentChunksCanBeInFlightTogether();
     testUnloadDropsLateLightingResults();
     testHighFrequencyContinuousBlockChangesRequeueCleanly();
+    testInteriorBlockChangeOnlyQueuesOwningChunk();
+    testBoundaryInboxDoesNotDirtyMeshBeforeLightApply();
 
     pass();
 }

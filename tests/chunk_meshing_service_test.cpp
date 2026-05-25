@@ -45,8 +45,7 @@ SubChunkMeshingJob makeDenseJob(const int64_t chunkKey,
     job.chunkKey = chunkKey;
     job.scy = scy;
     job.revision = chunkPtr->getSubChunkMeshRevision(scy);
-    job.chunk = chunkPtr;
-    job.world = nullptr;
+    job.snapshot = ChunkMesher::captureSubChunkSnapshot(*chunkPtr, scy);
     return job;
 }
 } // namespace

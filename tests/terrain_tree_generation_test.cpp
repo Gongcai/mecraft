@@ -130,6 +130,21 @@ bool findUnsuitableRoot(const TerrainGenerator& generator, int& outX, int& outZ,
     }
     return false;
 }
+
+bool findNaturalWaterColumn(const TerrainGenerator& generator, int& outX, int& outZ, int& outSurfaceY) {
+    for (int z = -128; z <= 128; ++z) {
+        for (int x = -128; x <= 128; ++x) {
+            const int surfaceY = generator.sampleSurfaceY(x, z);
+            if (surfaceY < kSeaLevel) {
+                outX = x;
+                outZ = z;
+                outSurfaceY = surfaceY;
+                return true;
+            }
+        }
+    }
+    return false;
+}
 } // namespace
 
 int main() {
@@ -137,6 +152,22 @@ int main() {
 
     TerrainGenerator generator;
     generator.init(kSeed, kSeaLevel);
+
+    int waterX = 0;
+    int waterZ = 0;
+    int waterSurfaceY = 0;
+    if (!findNaturalWaterColumn(generator, waterX, waterZ, waterSurfaceY)) {
+        return fail("expected to find a deterministic natural water column");
+    }
+
+    const int waterY = waterSurfaceY + 1;
+    const BlockID sampledWater = generator.sampleBlock(waterX, waterY, waterZ);
+    if (!FluidState::isWater(sampledWater) || sampledWater == BlockIds::WATER) {
+        return fail("sampled natural water should use the canonical fluid state");
+    }
+    if (chunkBlockAt(generator, waterX, waterY, waterZ) != sampledWater) {
+        return fail("generated chunk water should match sampled canonical water state");
+    }
 
     TreeRoot root;
     if (!findTreeRoot(generator, root)) {

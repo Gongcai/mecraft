@@ -5,9 +5,18 @@
 
 #include <glad/glad.h>
 
+#include "FluidState.h"
+
 namespace {
 uint8_t clampLight(const uint8_t level) {
     return static_cast<uint8_t>(std::min<int>(level, 15));
+}
+
+BlockID normalizeStoredState(const BlockID id) {
+    if (BlockIds::WATER != BlockIds::AIR && id == BlockIds::WATER) {
+        return FluidState::makeWater(0, false);
+    }
+    return id;
 }
 } // namespace
 
@@ -93,14 +102,15 @@ void SubChunk::setBlockImpl(const int x, const int y, const int z, const BlockID
         return;
     }
 
+    const BlockID normalizedId = normalizeStoredState(id);
     const size_t index = toIndex(x, y, z);
     const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_blockData.get(index));
     const BlockID oldId = m_palette.getRuntimeId(oldPaletteIdx);
-    if (oldId == id) {
+    if (oldId == normalizedId) {
         return;
     }
 
-    const uint16_t paletteIdx = m_palette.getOrCreateIndex(id);
+    const uint16_t paletteIdx = m_palette.getOrCreateIndex(normalizedId);
     const uint8_t neededBits = m_palette.bitsPerEntry();
     if (neededBits > m_blockData.bitsPerEntry()) {
         m_blockData.resize(neededBits);
@@ -120,7 +130,7 @@ void SubChunk::setBlockImpl(const int x, const int y, const int z, const BlockID
         }
     };
     decrementCount(oldId);
-    ++m_blockCounts[id];
+    ++m_blockCounts[normalizedId];
 
     inferType();
     if (markMeshDirty) {
@@ -142,14 +152,15 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockID
         return;
     }
 
+    const BlockID normalizedId = normalizeStoredState(id);
     const size_t index = toIndex(x, y, z);
     const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_blockData.get(index));
     const BlockID oldId = m_palette.getRuntimeId(oldPaletteIdx);
-    if (oldId == id) {
+    if (oldId == normalizedId) {
         return;
     }
 
-    const uint16_t paletteIdx = m_palette.getOrCreateIndex(id);
+    const uint16_t paletteIdx = m_palette.getOrCreateIndex(normalizedId);
     const uint8_t neededBits = m_palette.bitsPerEntry();
     if (neededBits > m_blockData.bitsPerEntry()) {
         m_blockData.resize(neededBits);
@@ -169,7 +180,7 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockID
         }
     };
     decrementCount(oldId);
-    ++m_blockCounts[id];
+    ++m_blockCounts[normalizedId];
 }
 
 void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& blocks) {
@@ -180,7 +191,7 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
 
     std::array<uint16_t, BLOCK_COUNT> paletteIndices{};
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
-        const BlockID id = blocks[index];
+        const BlockID id = normalizeStoredState(blocks[index]);
         paletteIndices[index] = m_palette.getOrCreateIndex(id);
         ++m_blockCounts[id];
     }
@@ -220,14 +231,15 @@ void SubChunk::setFluidLayer(const int x, const int y, const int z, const BlockI
         return;
     }
 
+    const BlockID normalizedId = normalizeStoredState(id);
     const size_t index = toIndex(x, y, z);
     const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_fluidData.get(index));
     const BlockID oldId = m_fluidPalette.getRuntimeId(oldPaletteIdx);
-    if (oldId == id) {
+    if (oldId == normalizedId) {
         return;
     }
 
-    const uint16_t paletteIdx = m_fluidPalette.getOrCreateIndex(id);
+    const uint16_t paletteIdx = m_fluidPalette.getOrCreateIndex(normalizedId);
     const uint8_t neededBits = m_fluidPalette.bitsPerEntry();
     if (neededBits > m_fluidData.bitsPerEntry()) {
         m_fluidData.resize(neededBits);
@@ -247,7 +259,7 @@ void SubChunk::setFluidLayer(const int x, const int y, const int z, const BlockI
         }
     };
     decrementCount(oldId);
-    ++m_fluidCounts[id];
+    ++m_fluidCounts[normalizedId];
 
     inferType();
 

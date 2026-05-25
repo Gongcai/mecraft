@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "FluidState.h"
+
 #if defined(__SSE2__) || defined(_M_X64) || defined(__AVX2__)
 #include <immintrin.h>
 #endif
@@ -62,6 +64,13 @@ constexpr uint32_t kOreCutoffCoal = static_cast<uint32_t>(0.0240 * 4294967295.0)
 
 constexpr int kTreeLeafRadius = 2;
 constexpr int kTreeScanRadius = kTreeLeafRadius;
+
+BlockID naturalWaterState() {
+    if (BlockIds::WATER == BlockIds::AIR) {
+        return BlockIds::WATER;
+    }
+    return FluidState::makeWater(0, false);
+}
 
 double hashToUnit(uint32_t value) {
     return static_cast<double>(value) / static_cast<double>(0xFFFFFFFFU);
@@ -798,7 +807,7 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
             id = sampleOreBlock(worldX, y, worldZ, id);
         }
     } else if (y <= m_seaLevel) {
-        id = BlockIds::WATER;
+        id = naturalWaterState();
     }
 
     if (id == 0) {
@@ -902,6 +911,7 @@ BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID 
 
 void TerrainGenerator::generateChunk(Chunk& chunk) const {
     const glm::ivec3 offset = chunk.getWorldOffset();
+    const BlockID waterState = naturalWaterState();
     std::array<std::array<BlockID, SubChunk::BLOCK_COUNT>, Chunk::NUM_SUB_CHUNKS> generatedBlocks{};
     std::array<bool, Chunk::NUM_SUB_CHUNKS> hasGeneratedBlocks{};
 
@@ -1011,7 +1021,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                             }
                         }
                     } else if (y <= m_seaLevel) {
-                        id = BlockIds::WATER;
+                        id = waterState;
                     }
 
                     if (id != 0) {

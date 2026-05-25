@@ -18,6 +18,7 @@
 #include "../src/renderer/ChunkMesher.h"
 #include "../src/renderer/ChunkMeshingService.h"
 #include "../src/thread/ThreadPool.h"
+#include "../src/world/FluidState.h"
 
 namespace {
 
@@ -240,7 +241,7 @@ std::shared_ptr<Chunk> makeLargeChunk(int cx, int cz, uint32_t seed) {
         const int baseY = 60 + static_cast<int>(state % 50);
         for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
             if (chunk->getBlock(fx, y, fz) != BlockIds::AIR &&
-                chunk->getBlock(fx, y, fz) != BlockIds::WATER) {
+                !FluidState::isWater(chunk->getBlock(fx, y, fz))) {
                 if (y + 1 < Chunk::SIZE_Y) {
                     nextRand(state);
                     const uint32_t t = state % 3U;
@@ -346,8 +347,7 @@ std::vector<SubChunkMeshingJob> collectMeshingJobs(const std::vector<std::shared
             job.chunkKey = static_cast<int64_t>(chunkIndex);
             job.scy = scy;
             job.revision = chunk->getSubChunkMeshRevision(scy);
-            job.chunk = chunk;
-            job.world = nullptr;
+            job.snapshot = ChunkMesher::captureSubChunkSnapshot(*chunk, scy);
             jobs.push_back(std::move(job));
         }
     }

@@ -48,21 +48,14 @@ void ChunkMeshingService::submit(SubChunkMeshingJob job, const int priority) {
         result.scy = job.scy;
         result.revision = job.revision;
 
-        if (job.chunk) {
-            SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
-                *job.chunk, job.scy,
-                job.neighborPosX.get(), job.neighborNegX.get(),
-                job.neighborPosZ.get(), job.neighborNegZ.get(),
-                job.world);
-            if (snapshot) {
-                result.meshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
+        if (job.snapshot) {
+            result.meshData = ChunkMesher::buildSubChunkMeshData(*job.snapshot);
 
-                // Offset bounds from sub-chunk local to column-local
-                const int yBase = job.scy * SubChunk::SIZE;
-                if (result.meshData.hasBounds) {
-                    result.meshData.boundsMin.y += static_cast<float>(yBase);
-                    result.meshData.boundsMax.y += static_cast<float>(yBase);
-                }
+            // Offset bounds from sub-chunk local to column-local
+            const int yBase = job.scy * SubChunk::SIZE;
+            if (result.meshData.hasBounds) {
+                result.meshData.boundsMin.y += static_cast<float>(yBase);
+                result.meshData.boundsMax.y += static_cast<float>(yBase);
             }
         }
 

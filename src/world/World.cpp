@@ -31,6 +31,13 @@ bool changesFluidPathing(const StateID oldState, const StateID newState) {
     return canWaterOccupyBlockLayer(oldState) != canWaterOccupyBlockLayer(newState);
 }
 
+StateID normalizeFluidBlockState(const StateID stateId) {
+    if (BlockIds::WATER != BlockIds::AIR && stateId == BlockIds::WATER) {
+        return FluidState::makeWater(0, false);
+    }
+    return stateId;
+}
+
 bool isWithinChunkRenderDistance(const int cx,
                                  const int cz,
                                  const int playerChunkX,
@@ -285,6 +292,7 @@ void World::setBlock(int x, int y, int z, BlockID id) {
 
 void World::setFluidState(const int x, const int y, const int z, const StateID stateId) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
+    const StateID normalizedStateId = normalizeFluidBlockState(stateId);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -303,7 +311,7 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     }
 
     const int localY = Chunk::toSubChunkLocalY(y);
-    const DecodedFluid newFluid = FluidState::decode(stateId);
+    const DecodedFluid newFluid = FluidState::decode(normalizedStateId);
     const BlockID currentBlock = sc->getBlock(localX, localY, localZ);
     const DecodedFluid currentBlockFluid = FluidState::decode(currentBlock);
 
@@ -312,7 +320,7 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
         // If new state is also fluid of same kind, update block layer directly.
         // If new state is air/no-fluid, clear block layer to air.
         const StateID targetBlockState = (newFluid.kind != FluidKind::None)
-            ? stateId
+            ? normalizedStateId
             : BlockIds::AIR;
         setBlockState(x, y, z, targetBlockState);
         return;
@@ -329,10 +337,10 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     } else {
         // Adding/updating fluid in a waterlogged cell
         if (BlockRegistry::getFast(currentBlock).allowsFluidCoexistence) {
-            sc->setFluidLayer(localX, localY, localZ, stateId);
+            sc->setFluidLayer(localX, localY, localZ, normalizedStateId);
         } else {
             // Block doesn't allow fluid coexistence — replace the block with fluid
-            setBlockState(x, y, z, stateId);
+            setBlockState(x, y, z, normalizedStateId);
             return;
         }
     }
@@ -371,6 +379,7 @@ bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
 
 void World::setBlockState(int x, int y, int z, StateID id) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
+    id = normalizeFluidBlockState(id);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);

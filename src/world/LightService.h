@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
@@ -78,6 +79,7 @@ private:
     LightFrameStats m_frameStats{};
     std::unordered_map<int64_t, LightChunkState> m_chunkStates;
     std::unordered_map<int64_t, CachedBaseLight> m_baseLightCaches;
+    std::unordered_set<int64_t> m_frameBlockChangedChunks;
     std::queue<CompletedTicket> m_completed;
     mutable std::mutex m_stateMutex;
     mutable std::mutex m_completedMutex;
