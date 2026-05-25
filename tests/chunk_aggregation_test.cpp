@@ -45,14 +45,21 @@ ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
         const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
         for (auto& vertex : scMeshData.opaqueVertices) { vertex.y += yOffset; }
         for (auto& vertex : scMeshData.cutoutVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.cutoutDistanceVertices) { vertex.y += yOffset; }
         for (auto& vertex : scMeshData.transparentVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.waterVertices) { vertex.y += yOffset; }
 
         merged.opaqueVertices.insert(merged.opaqueVertices.end(),
                                      scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
         merged.cutoutVertices.insert(merged.cutoutVertices.end(),
                                      scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
+        merged.cutoutDistanceVertices.insert(merged.cutoutDistanceVertices.end(),
+                                             scMeshData.cutoutDistanceVertices.begin(),
+                                             scMeshData.cutoutDistanceVertices.end());
         merged.transparentVertices.insert(merged.transparentVertices.end(),
                                           scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
+        merged.waterVertices.insert(merged.waterVertices.end(),
+                                    scMeshData.waterVertices.begin(), scMeshData.waterVertices.end());
         merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
         merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
         merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
@@ -76,12 +83,20 @@ float minVertexY(const std::vector<BlockVertex>& vertices) {
     return minY;
 }
 
+float minVertexY(const std::vector<BlockVertex>& first, const std::vector<BlockVertex>& second) {
+    return std::min(minVertexY(first), minVertexY(second));
+}
+
 float maxVertexY(const std::vector<BlockVertex>& vertices) {
     float maxY = std::numeric_limits<float>::lowest();
     for (const BlockVertex& vertex : vertices) {
         maxY = std::max(maxY, vertex.y);
     }
     return maxY;
+}
+
+float maxVertexY(const std::vector<BlockVertex>& first, const std::vector<BlockVertex>& second) {
+    return std::max(maxVertexY(first), maxVertexY(second));
 }
 } // namespace
 
@@ -100,7 +115,10 @@ int main() {
     if (aggregated.transparentFaceCountBeforeGreedy != 6 || aggregated.transparentFaceCountAfterGreedy != 6) {
         return fail("single transparent cube should aggregate as six faces");
     }
-    if (aggregated.opaqueVertices.empty() || aggregated.cutoutVertices.empty() || aggregated.transparentVertices.empty()) {
+    const bool hasCutoutPass =
+        !aggregated.cutoutVertices.empty() ||
+        !aggregated.cutoutDistanceVertices.empty();
+    if (aggregated.opaqueVertices.empty() || !hasCutoutPass || aggregated.waterVertices.empty()) {
         return fail("aggregation should preserve all render passes across sub-chunks");
     }
     if (!aggregated.hasBounds ||
@@ -111,10 +129,12 @@ int main() {
 
     const float opaqueMinY = minVertexY(aggregated.opaqueVertices);
     const float opaqueMaxY = maxVertexY(aggregated.opaqueVertices);
-    const float cutoutMinY = minVertexY(aggregated.cutoutVertices);
-    const float cutoutMaxY = maxVertexY(aggregated.cutoutVertices);
-    const float transparentMinY = minVertexY(aggregated.transparentVertices);
-    const float transparentMaxY = maxVertexY(aggregated.transparentVertices);
+    const float cutoutMinY = minVertexY(aggregated.cutoutVertices,
+                                        aggregated.cutoutDistanceVertices);
+    const float cutoutMaxY = maxVertexY(aggregated.cutoutVertices,
+                                        aggregated.cutoutDistanceVertices);
+    const float transparentMinY = minVertexY(aggregated.waterVertices);
+    const float transparentMaxY = maxVertexY(aggregated.waterVertices);
 
     if (opaqueMinY < 1.0f || opaqueMaxY > 2.0f) {
         return fail("opaque vertices should remain offset into the owning low sub-chunk slice");
@@ -125,8 +145,11 @@ int main() {
     if (transparentMinY < 33.0f || transparentMaxY > 34.0f) {
         return fail("transparent vertices should remain offset into the owning high sub-chunk slice");
     }
-    const bool hasAnimatedWaterVertex = std::any_of(aggregated.transparentVertices.begin(),
-                                                    aggregated.transparentVertices.end(),
+    if (!aggregated.transparentVertices.empty()) {
+        return fail("water aggregation should stay in the dedicated water pass");
+    }
+    const bool hasAnimatedWaterVertex = std::any_of(aggregated.waterVertices.begin(),
+                                                    aggregated.waterVertices.end(),
                                                     [](const BlockVertex& vertex) {
                                                         return vertex.animated > 0.5f &&
                                                                vertex.animationFrameCount >= 32.0f &&

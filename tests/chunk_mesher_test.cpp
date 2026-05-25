@@ -9,6 +9,7 @@
 #include "../src/world/FluidFlow.h"
 #include "../src/world/FluidState.h"
 #include "../src/world/PropIndices.h"
+#include "../src/world/World.h"
 
 namespace {
 int fail(const char* message) {
@@ -48,14 +49,21 @@ ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
         const float yOffset = static_cast<float>(scy * SubChunk::SIZE);
         for (auto& vertex : scMeshData.opaqueVertices) { vertex.y += yOffset; }
         for (auto& vertex : scMeshData.cutoutVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.cutoutDistanceVertices) { vertex.y += yOffset; }
         for (auto& vertex : scMeshData.transparentVertices) { vertex.y += yOffset; }
+        for (auto& vertex : scMeshData.waterVertices) { vertex.y += yOffset; }
 
         merged.opaqueVertices.insert(merged.opaqueVertices.end(),
                                      scMeshData.opaqueVertices.begin(), scMeshData.opaqueVertices.end());
         merged.cutoutVertices.insert(merged.cutoutVertices.end(),
                                      scMeshData.cutoutVertices.begin(), scMeshData.cutoutVertices.end());
+        merged.cutoutDistanceVertices.insert(merged.cutoutDistanceVertices.end(),
+                                             scMeshData.cutoutDistanceVertices.begin(),
+                                             scMeshData.cutoutDistanceVertices.end());
         merged.transparentVertices.insert(merged.transparentVertices.end(),
                                           scMeshData.transparentVertices.begin(), scMeshData.transparentVertices.end());
+        merged.waterVertices.insert(merged.waterVertices.end(),
+                                    scMeshData.waterVertices.begin(), scMeshData.waterVertices.end());
         merged.opaqueFaceCountBeforeGreedy += scMeshData.opaqueFaceCountBeforeGreedy;
         merged.opaqueFaceCountAfterGreedy += scMeshData.opaqueFaceCountAfterGreedy;
         merged.transparentFaceCountBeforeGreedy += scMeshData.transparentFaceCountBeforeGreedy;
@@ -73,6 +81,16 @@ ChunkMeshData buildMeshDataFor(const Chunk& chunk) {
 
 bool approxEqual(const float lhs, const float rhs, const float epsilon = 0.001f) {
     return std::fabs(lhs - rhs) <= epsilon;
+}
+
+std::size_t snapshotHaloIndex(const int x, const int y, const int z) {
+    return static_cast<std::size_t>(x + 1) +
+           static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
+           static_cast<std::size_t>(y + 1) * SC_HALO_SIZE * SC_HALO_SIZE;
+}
+
+std::size_t snapshotBorderIndex(const int y, const int xz) {
+    return static_cast<std::size_t>(y) + static_cast<std::size_t>(xz) * SubChunk::SIZE;
 }
 
 std::vector<const BlockVertex*> collectTopFaceVertices(const ChunkMeshData& meshData,
@@ -158,6 +176,46 @@ int main() {
         const BlockDef& waterDef = BlockRegistry::get(BlockIds::WATER);
         if (waterDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("water")) {
             return fail("water block should resolve renderShapeTag through the mesh builder registry");
+        }
+    }
+
+    {
+        World world;
+        world.init(20260525);
+        constexpr int sampleY = 1;
+        const BlockID generatedNeighbor = world.sampleGeneratedBlock(Chunk::SIZE_X, sampleY, 0);
+        const BlockID generatedDiagonal = world.sampleGeneratedBlock(Chunk::SIZE_X, sampleY, Chunk::SIZE_Z);
+        if (generatedNeighbor == BlockIds::AIR || generatedDiagonal == BlockIds::AIR) {
+            return fail("snapshot fallback test seed should generate solid missing neighbor samples");
+        }
+
+        Chunk center(0, 0);
+        center.setBlock(0, sampleY, 0, BlockIds::STONE);
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
+            center, 0, nullptr, nullptr, nullptr, nullptr, &world);
+        if (!snapshot) {
+            return fail("snapshot fallback test should capture a sub-chunk");
+        }
+        if (snapshot->posXBorder[snapshotBorderIndex(sampleY, 0)] != BlockIds::AIR) {
+            return fail("missing +X neighbor border should be air instead of generated terrain");
+        }
+        if (snapshot->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != BlockIds::AIR) {
+            return fail("missing +X neighbor halo should be air instead of generated terrain");
+        }
+        if (snapshot->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, Chunk::SIZE_Z)] != BlockIds::AIR) {
+            return fail("missing diagonal neighbor halo should be air instead of generated terrain");
+        }
+
+        Chunk posX(1, 0);
+        posX.setBlock(0, sampleY, 0, BlockIds::DIRT);
+        const SubChunkMeshingSnapshotPtr snapshotWithNeighbor = ChunkMesher::captureSubChunkSnapshot(
+            center, 0, &posX, nullptr, nullptr, nullptr, &world);
+        if (!snapshotWithNeighbor) {
+            return fail("snapshot fallback test should capture with a held neighbor");
+        }
+        if (snapshotWithNeighbor->posXBorder[snapshotBorderIndex(sampleY, 0)] != BlockIds::DIRT ||
+            snapshotWithNeighbor->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != BlockIds::DIRT) {
+            return fail("held +X neighbor should still be sampled from the job snapshot");
         }
     }
 
@@ -428,7 +486,9 @@ int main() {
         if (meshData.transparentFaceCountBeforeGreedy != 0 || meshData.transparentFaceCountAfterGreedy != 0) {
             return fail("opaque strip should not contribute transparent greedy stats");
         }
-        if (!meshData.transparentVertices.empty() || !meshData.cutoutVertices.empty()) {
+        if (!meshData.transparentVertices.empty() ||
+            !meshData.cutoutVertices.empty() ||
+            !meshData.cutoutDistanceVertices.empty()) {
             return fail("opaque strip should not emit transparent or cutout geometry");
         }
     }
@@ -451,11 +511,14 @@ int main() {
             meshData.transparentFaceCountAfterGreedy > meshData.transparentFaceCountBeforeGreedy) {
             return fail("water meshing should report a sane emitted quad count");
         }
-        if (meshData.transparentVertices.size() != static_cast<size_t>(meshData.transparentFaceCountAfterGreedy) * 6) {
-            return fail("transparent vertex count should stay aligned to merged quad count");
+        if (meshData.waterVertices.size() != static_cast<size_t>(meshData.transparentFaceCountAfterGreedy) * 6) {
+            return fail("water vertex count should stay aligned to merged quad count");
         }
-        const bool hasAnimatedWaterVertex = std::any_of(meshData.transparentVertices.begin(),
-                                                        meshData.transparentVertices.end(),
+        if (!meshData.transparentVertices.empty()) {
+            return fail("water strip should not emit generic transparent geometry");
+        }
+        const bool hasAnimatedWaterVertex = std::any_of(meshData.waterVertices.begin(),
+                                                        meshData.waterVertices.end(),
                                                         [](const BlockVertex& vertex) {
                                                             return vertex.animated > 0.5f &&
                                                                    vertex.animationFrameCount >= 32.0f &&
@@ -464,7 +527,7 @@ int main() {
         if (!hasAnimatedWaterVertex) {
             return fail("water vertices should carry animation sampling metadata");
         }
-        if (!meshData.cutoutVertices.empty()) {
+        if (!meshData.cutoutVertices.empty() || !meshData.cutoutDistanceVertices.empty()) {
             return fail("water strip should not emit cutout geometry");
         }
     }
@@ -498,7 +561,7 @@ int main() {
         if (meshData.transparentFaceCountBeforeGreedy != 5 || meshData.transparentFaceCountAfterGreedy != 5) {
             return fail("same-water faces across chunk borders should be culled");
         }
-        if (meshData.transparentVertices.size() != 30) {
+        if (meshData.waterVertices.size() != 30) {
             return fail("cross-chunk water culling should leave exactly five faces for one boundary block");
         }
     }
@@ -509,7 +572,7 @@ int main() {
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         const auto topFaceVertices = collectFaceVertices(
-            meshData.transparentVertices,
+            meshData.waterVertices,
             0.0f,
             15.0f, 16.0f,
             32.0f, 33.0f,
@@ -537,10 +600,10 @@ int main() {
         if (meshData.transparentFaceCountBeforeGreedy != 6 || meshData.transparentFaceCountAfterGreedy != 6) {
             return fail("isolated water block should still contribute six transparent faces");
         }
-        if (meshData.transparentVertices.empty()) {
+        if (meshData.waterVertices.empty()) {
             return fail("water should still emit transparent geometry when mixed with cutout blocks");
         }
-        if (meshData.cutoutVertices.empty()) {
+        if (meshData.cutoutVertices.empty() && meshData.cutoutDistanceVertices.empty()) {
             return fail("tall grass should stay in the cutout pass");
         }
     }
@@ -559,7 +622,7 @@ int main() {
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         const auto topFaceVertices = collectFaceVertices(
-            meshData.transparentVertices,
+            meshData.waterVertices,
             0.0f,
             0.0f, 1.0f,
             33.0f, 33.0f,
@@ -577,7 +640,7 @@ int main() {
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         float topMinY = 9999.0f;
         float topMaxY = -9999.0f;
-        for (const BlockVertex& vertex : meshData.transparentVertices) {
+        for (const BlockVertex& vertex : meshData.waterVertices) {
             if (!approxEqual(vertex.normal, 0.0f)) {
                 continue;
             }
@@ -599,7 +662,7 @@ int main() {
         eastFlowChunk.setBlock(1, 32, 0, FluidState::makeWater(3, false));
         const ChunkMeshData meshData = buildMeshDataFor(eastFlowChunk);
         const auto topFaceVertices = collectFaceVertices(
-            meshData.transparentVertices,
+            meshData.waterVertices,
             0.0f,
             0.0f, 1.0f,
             32.0f, 33.0f,
@@ -636,7 +699,7 @@ int main() {
         fallingChunk.setBlock(0, 32, 0, FluidState::makeWater(0, true));
         const ChunkMeshData meshData = buildMeshDataFor(fallingChunk);
         const auto frontFaceVertices = collectFaceVertices(
-            meshData.transparentVertices,
+            meshData.waterVertices,
             2.0f,
             0.0f, 1.0f,
             32.0f, 33.0f,
@@ -682,7 +745,7 @@ int main() {
         }
 
         const auto backFaceVertices = collectFaceVertices(
-            meshData.transparentVertices,
+            meshData.waterVertices,
             3.0f,
             0.0f, 1.0f,
             32.0f, 33.0f,
@@ -718,7 +781,7 @@ int main() {
         }
 
         const auto rightFaceVertices = collectFaceVertices(
-            meshData.transparentVertices,
+            meshData.waterVertices,
             5.0f,
             1.0f, 1.0f,
             32.0f, 33.0f,

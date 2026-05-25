@@ -531,6 +531,11 @@ void WorldRenderBuffer::flushTransparent() {
     flushPass(m_transparentCommands, m_transparentIndirectBuf, m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
 }
 
+void WorldRenderBuffer::bindTransparentVao() {
+    ensureVaoVertexBuffer(m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
+    glBindVertexArray(m_transparentVao);
+}
+
 void WorldRenderBuffer::ensureVaoVertexBuffer(const GLuint vao, const GLuint vbo, GLuint& cachedVbo) {
     if (cachedVbo == vbo) {
         return;

@@ -642,42 +642,6 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
 
 // ======================== Snapshot capture helpers ========================
 
-BlockID sampleMissingNeighborBlock(const World* world, const int wx, const int y, const int wz) {
-    if (world == nullptr) {
-        return 0;
-    }
-    return world->sampleGeneratedBlock(wx, y, wz);
-}
-
-bool matchesChunkCoords(const Chunk* chunk, const int cx, const int cz) {
-    return chunk != nullptr && chunk->m_chunkX == cx && chunk->m_chunkZ == cz;
-}
-
-const Chunk* resolveHeldChunkByCoords(const Chunk& chunk,
-                                      const int cx,
-                                      const int cz,
-                                      const Chunk* neighborPosX,
-                                      const Chunk* neighborNegX,
-                                      const Chunk* neighborPosZ,
-                                      const Chunk* neighborNegZ) {
-    if (matchesChunkCoords(&chunk, cx, cz)) {
-        return &chunk;
-    }
-    if (matchesChunkCoords(neighborPosX, cx, cz)) {
-        return neighborPosX;
-    }
-    if (matchesChunkCoords(neighborNegX, cx, cz)) {
-        return neighborNegX;
-    }
-    if (matchesChunkCoords(neighborPosZ, cx, cz)) {
-        return neighborPosZ;
-    }
-    if (matchesChunkCoords(neighborNegZ, cx, cz)) {
-        return neighborNegZ;
-    }
-    return nullptr;
-}
-
 const Chunk* getDirectHorizontalNeighbor(const int dx,
                                          const int dz,
                                          const Chunk* neighborPosX,
@@ -777,25 +741,11 @@ BlockID sampleHaloBlock(const Chunk& chunk,
                         const Chunk* neighborPosZ,
                         const Chunk* neighborNegZ,
                         const World* world) {
-    const glm::ivec3 offset = chunk.getWorldOffset();
+    static_cast<void>(world);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
     if (xInRange && zInRange) {
         return chunk.getBlock(localX, worldY, localZ);
-    }
-
-    if (world != nullptr) {
-        const int wx = offset.x + localX;
-        const int wz = offset.z + localZ;
-        const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
-        if (const Chunk* heldChunk = resolveHeldChunkByCoords(chunk, chunkCoords.x, chunkCoords.y,
-                                                              neighborPosX, neighborNegX,
-                                                              neighborPosZ, neighborNegZ)) {
-            const int sampleX = wx - chunkCoords.x * Chunk::SIZE_X;
-            const int sampleZ = wz - chunkCoords.y * Chunk::SIZE_Z;
-            return heldChunk->getBlock(sampleX, worldY, sampleZ);
-        }
-        return world->sampleGeneratedBlock(wx, worldY, wz);
     }
 
     int sampleX = 0;
@@ -807,19 +757,7 @@ BlockID sampleHaloBlock(const Chunk& chunk,
         return sampleChunk->getBlock(sampleX, worldY, sampleZ);
     }
 
-    if (!zInRange) {
-        return 0;
-    }
-    if (localX < 0) {
-        return neighborNegX ? neighborNegX->getBlock(Chunk::SIZE_X - 1, worldY, localZ) : 0;
-    }
-    if (localX >= Chunk::SIZE_X) {
-        return neighborPosX ? neighborPosX->getBlock(0, worldY, localZ) : 0;
-    }
-    if (localZ < 0) {
-        return neighborNegZ ? neighborNegZ->getBlock(localX, worldY, Chunk::SIZE_Z - 1) : 0;
-    }
-    return neighborPosZ ? neighborPosZ->getBlock(localX, worldY, 0) : 0;
+    return 0;
 }
 
 BlockID sampleHaloFluid(const Chunk& chunk,
@@ -831,25 +769,11 @@ BlockID sampleHaloFluid(const Chunk& chunk,
                         const Chunk* neighborPosZ,
                         const Chunk* neighborNegZ,
                         const World* world) {
+    static_cast<void>(world);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
     if (xInRange && zInRange) {
         return chunk.getFluidState(localX, worldY, localZ);
-    }
-
-    if (world != nullptr) {
-        const glm::ivec3 offset = chunk.getWorldOffset();
-        const int wx = offset.x + localX;
-        const int wz = offset.z + localZ;
-        const glm::ivec2 chunkCoords = world->getChunkCoords(wx, wz);
-        if (const Chunk* heldChunk = resolveHeldChunkByCoords(chunk, chunkCoords.x, chunkCoords.y,
-                                                              neighborPosX, neighborNegX,
-                                                              neighborPosZ, neighborNegZ)) {
-            const int sampleX = wx - chunkCoords.x * Chunk::SIZE_X;
-            const int sampleZ = wz - chunkCoords.y * Chunk::SIZE_Z;
-            return heldChunk->getFluidState(sampleX, worldY, sampleZ);
-        }
-        return 0;
     }
 
     int sampleX = 0;
@@ -861,19 +785,7 @@ BlockID sampleHaloFluid(const Chunk& chunk,
         return sampleChunk->getFluidState(sampleX, worldY, sampleZ);
     }
 
-    if (!zInRange) {
-        return 0;
-    }
-    if (localX < 0) {
-        return neighborNegX ? neighborNegX->getFluidState(Chunk::SIZE_X - 1, worldY, localZ) : 0;
-    }
-    if (localX >= Chunk::SIZE_X) {
-        return neighborPosX ? neighborPosX->getFluidState(0, worldY, localZ) : 0;
-    }
-    if (localZ < 0) {
-        return neighborNegZ ? neighborNegZ->getFluidState(localX, worldY, Chunk::SIZE_Z - 1) : 0;
-    }
-    return neighborPosZ ? neighborPosZ->getFluidState(localX, worldY, 0) : 0;
+    return 0;
 }
 
 uint8_t sampleHaloLight(const Chunk& chunk,
@@ -885,7 +797,7 @@ uint8_t sampleHaloLight(const Chunk& chunk,
                         const Chunk* neighborPosZ,
                         const Chunk* neighborNegZ,
                         const World* world) {
-    const glm::ivec3 offset = chunk.getWorldOffset();
+    static_cast<void>(world);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
     if (xInRange && zInRange) {
@@ -901,26 +813,9 @@ uint8_t sampleHaloLight(const Chunk& chunk,
         return sampleChunk->getPackedLight(sampleX, worldY, sampleZ);
     }
 
-    if (localX < 0 || localX >= Chunk::SIZE_X ||
-        localZ < 0 || localZ >= Chunk::SIZE_Z) {
-        return fallbackHorizontalEdgeLight(chunk, localX, worldY, localZ,
-                                           neighborPosX, neighborNegX,
-                                           neighborPosZ, neighborNegZ);
-    }
-
-    if (!zInRange) {
-        return 0;
-    }
-    if (localX < 0) {
-        return neighborNegX ? neighborNegX->getPackedLight(Chunk::SIZE_X - 1, worldY, localZ) : 0;
-    }
-    if (localX >= Chunk::SIZE_X) {
-        return neighborPosX ? neighborPosX->getPackedLight(0, worldY, localZ) : 0;
-    }
-    if (localZ < 0) {
-        return neighborNegZ ? neighborNegZ->getPackedLight(localX, worldY, Chunk::SIZE_Z - 1) : 0;
-    }
-    return neighborPosZ ? neighborPosZ->getPackedLight(localX, worldY, 0) : 0;
+    return fallbackHorizontalEdgeLight(chunk, localX, worldY, localZ,
+                                       neighborPosX, neighborNegX,
+                                       neighborPosZ, neighborNegZ);
 }
 
 void captureSubChunkHalo(const Chunk& chunk,
@@ -963,7 +858,7 @@ void captureSubChunkBorders(const Chunk& chunk,
                             const Chunk* neighborPosZ,
                             const Chunk* neighborNegZ,
                             const World* world) {
-    const glm::ivec3 offset = chunk.getWorldOffset();
+    static_cast<void>(world);
     const int yBase = scy * SubChunk::SIZE;
 
     // +Y border: query through Chunk so missing sky-only sub-chunks still expose implicit sunlight.
@@ -991,17 +886,18 @@ void captureSubChunkBorders(const Chunk& chunk,
         }
     }
 
-    // Horizontal borders (+X, -X, +Z, -Z) — same as before but only for yBase..yBase+15
+    // Horizontal borders: sample only neighbors captured by this job; missing
+    // neighbors stay air so the worker never invents terrain outside its snapshot.
     for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
         const int columnY = yBase + ly;
         for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
             const auto idx = toBorderXZIndex(ly, lz);
             snapshot.posXBorder[idx] = neighborPosX
                 ? neighborPosX->getBlock(0, columnY, lz)
-                : sampleMissingNeighborBlock(world, offset.x + Chunk::SIZE_X, columnY, offset.z + lz);
+                : BlockIds::AIR;
             snapshot.negXBorder[idx] = neighborNegX
                 ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz)
-                : sampleMissingNeighborBlock(world, offset.x - 1, columnY, offset.z + lz);
+                : BlockIds::AIR;
             snapshot.posXLightBorder[idx] = neighborPosX
                 ? neighborPosX->getPackedLight(0, columnY, lz) : 0;
             snapshot.negXLightBorder[idx] = neighborNegX
@@ -1011,10 +907,10 @@ void captureSubChunkBorders(const Chunk& chunk,
             const auto idx = toBorderXZIndex(ly, lx);
             snapshot.posZBorder[idx] = neighborPosZ
                 ? neighborPosZ->getBlock(lx, columnY, 0)
-                : sampleMissingNeighborBlock(world, offset.x + lx, columnY, offset.z + Chunk::SIZE_Z);
+                : BlockIds::AIR;
             snapshot.negZBorder[idx] = neighborNegZ
                 ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1)
-                : sampleMissingNeighborBlock(world, offset.x + lx, columnY, offset.z - 1);
+                : BlockIds::AIR;
             snapshot.posZLightBorder[idx] = neighborPosZ
                 ? neighborPosZ->getPackedLight(lx, columnY, 0) : 0;
             snapshot.negZLightBorder[idx] = neighborNegZ

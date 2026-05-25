@@ -1088,12 +1088,18 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
         ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
         ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);
+        ImGui::Text("Meshing Stale Dropped: %d / frame", meshingStats.staleDropped);
+        ImGui::Text("Meshing Deferred Results: %d", meshingStats.deferredResults);
         ImGui::Text("Meshing Build: last %.3f ms, avg %.3f ms", meshingStats.lastBuildMs, meshingStats.averageBuildMs);
 
         const LightFrameStats lightStats = world.getLightFrameStats();
         ImGui::Text("Light Submitted: %d / frame", lightStats.submitted);
         ImGui::Text("Light Completed: %d / frame", lightStats.completed);
         ImGui::Text("Light In-Flight: %d", lightStats.inFlight);
+        ImGui::Text("Light Queued/Dirty/Pending: %d / %d / %d",
+                    lightStats.queued,
+                    lightStats.dirty,
+                    lightStats.pendingCompleted);
         ImGui::Text("Light Boundary Sync: %d", lightStats.boundarySync);
         ImGui::Text("Light Nodes Visited: %d", lightStats.nodesVisited);
         ImGui::Text("Light Stale Dropped: %d", lightStats.staleDropped);

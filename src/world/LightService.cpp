@@ -417,7 +417,25 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
 }
 
 LightFrameStats LightService::getFrameStats() const {
-    return m_frameStats;
+    LightFrameStats stats = m_frameStats;
+    stats.pendingCompleted = m_completedCount.load();
+
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    stats.inFlight = 0;
+    stats.queued = 0;
+    stats.dirty = 0;
+    for (const auto& entry : m_chunkStates) {
+        if (entry.second.inFlight) {
+            ++stats.inFlight;
+        }
+        if (entry.second.queued) {
+            ++stats.queued;
+        }
+        if (entry.second.dirty) {
+            ++stats.dirty;
+        }
+    }
+    return stats;
 }
 
 void LightService::markChunkDirty(const int64_t chunkKey, const LightDirtyReason reason) {

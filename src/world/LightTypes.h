@@ -81,6 +81,9 @@ struct LightFrameStats {
     int submitted = 0;
     int completed = 0;
     int inFlight = 0;
+    int queued = 0;
+    int dirty = 0;
+    int pendingCompleted = 0;
     int boundarySync = 0;
     int nodesVisited = 0;
     int staleDropped = 0;

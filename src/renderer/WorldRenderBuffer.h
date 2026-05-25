@@ -102,6 +102,7 @@ public:
     void flushOpaque();
     void flushCutout();
     void flushTransparent();
+    void bindTransparentVao();
 
     GLuint transparentVao() const { return m_transparentVao; }
     int glSubmitCount() const { return m_glSubmitCount; }

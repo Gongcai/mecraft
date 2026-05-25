@@ -268,6 +268,8 @@ public:
         int submitted = 0;
         int completed = 0;
         int inFlight = 0;
+        int staleDropped = 0;
+        int deferredResults = 0;
         double lastBuildMs = 0.0;
         double averageBuildMs = 0.0;
         uint32_t lastOpaqueFacesBeforeGreedy = 0;
@@ -547,6 +549,7 @@ private:
         glm::vec3 columnBoundsMin = glm::vec3(0.0f);
         glm::vec3 columnBoundsMax = glm::vec3(0.0f);
         std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshRevisions{};
+        std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshFingerprints{};
         std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
         std::array<TransparentSubChunkCache, Chunk::NUM_SUB_CHUNKS> transparentSubChunks{};
         int transparentCount = 0;
@@ -762,6 +765,7 @@ private:
     bool m_chunkCullingDebugEnabled = false;
     int m_meshingSubmittedThisFrame = 0;
     int m_meshingCompletedThisFrame = 0;
+    int m_meshingStaleDroppedThisFrame = 0;
     double m_meshingBuildMsThisFrame = 0.0;
     double m_lastMeshingBuildMs = 0.0;
     uint32_t m_lastOpaqueFacesBeforeGreedy = 0;

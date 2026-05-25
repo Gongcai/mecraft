@@ -49,6 +49,27 @@ struct MeshingCandidate {
     std::shared_ptr<Chunk> neighborNegZ;
 };
 
+uint64_t hashCombine64(uint64_t seed, const uint64_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+    return seed;
+}
+
+uint64_t meshFingerprint(const SubChunkMesh& mesh) {
+    uint64_t hash = 1469598103934665603ULL;
+    hash = hashCombine64(hash, mesh.vertexCount);
+    hash = hashCombine64(hash, mesh.cutoutVertexCount);
+    hash = hashCombine64(hash, mesh.cutoutDistanceVertexCount);
+    hash = hashCombine64(hash, mesh.transparentVertexCount);
+    hash = hashCombine64(hash, mesh.waterVertexCount);
+    hash = hashCombine64(hash, mesh.opaqueRange.generation);
+    hash = hashCombine64(hash, mesh.cutoutRange.generation);
+    hash = hashCombine64(hash, mesh.cutoutDistanceRange.generation);
+    hash = hashCombine64(hash, mesh.transparentRange.generation);
+    hash = hashCombine64(hash, mesh.waterRange.generation);
+    hash = hashCombine64(hash, mesh.hasBounds ? 1ULL : 0ULL);
+    return hash;
+}
+
 void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
     if (!hasBounds) {
@@ -417,7 +438,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
                 return a->distanceSq > b->distanceSq;
             });
 
-        glBindVertexArray(m_worldRenderBuffer.transparentVao());
+        m_worldRenderBuffer.bindTransparentVao();
         for (const auto* entry : waterEntries) {
             glDrawArrays(GL_TRIANGLES,
                          static_cast<GLint>(entry->range.firstVertex),
@@ -852,6 +873,8 @@ Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
     stats.submitted = m_meshingSubmittedThisFrame;
     stats.completed = m_meshingCompletedThisFrame;
     stats.inFlight = static_cast<int>(m_meshingInFlight.size());
+    stats.staleDropped = m_meshingStaleDroppedThisFrame;
+    stats.deferredResults = static_cast<int>(m_deferredMeshResults.size());
     stats.lastBuildMs = m_lastMeshingBuildMs;
     stats.averageBuildMs = m_meshingCompletedThisFrame > 0
         ? (m_meshingBuildMsThisFrame / static_cast<double>(m_meshingCompletedThisFrame))
@@ -978,6 +1001,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
 #ifdef MECRAFT_DEBUG
     m_meshingSubmittedThisFrame = 0;
     m_meshingCompletedThisFrame = 0;
+    m_meshingStaleDroppedThisFrame = 0;
     m_meshingBuildMsThisFrame = 0.0;
     m_regionTestsThisFrame = 0;
     m_regionPassedThisFrame = 0;
@@ -3617,7 +3641,8 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     if (mesh.opaqueRange.vertexCount == 0 &&
                         mesh.cutoutRange.vertexCount == 0 &&
                         mesh.cutoutDistanceRange.vertexCount == 0 &&
-                        mesh.transparentRange.vertexCount == 0) {
+                        mesh.transparentRange.vertexCount == 0 &&
+                        mesh.waterRange.vertexCount == 0) {
                         continue;
                     }
 
@@ -3835,7 +3860,8 @@ void Renderer::releaseStaleMdiAllocations(const World& world) {
                     current.opaqueRange.generation != it->second.mesh.opaque.generation ||
                     current.cutoutRange.generation != it->second.mesh.cutout.generation ||
                     current.cutoutDistanceRange.generation != it->second.mesh.cutoutDistance.generation ||
-                    current.transparentRange.generation != it->second.mesh.transparent.generation;
+                    current.transparentRange.generation != it->second.mesh.transparent.generation ||
+                    current.waterRange.generation != it->second.mesh.water.generation;
             }
         }
 
@@ -3858,8 +3884,13 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
     bool needsRefresh = !column.stateValid;
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         const uint64_t revision = column.chunk->getSubChunkMeshRevision(scy);
-        if (!column.stateValid || column.subChunkMeshRevisions[scy] != revision) {
+        const SubChunk* sc = column.chunk->getSubChunk(scy);
+        const uint64_t fingerprint = sc ? meshFingerprint(sc->getMesh()) : 0ULL;
+        if (!column.stateValid ||
+            column.subChunkMeshRevisions[scy] != revision ||
+            column.subChunkMeshFingerprints[scy] != fingerprint) {
             column.subChunkMeshRevisions[scy] = revision;
+            column.subChunkMeshFingerprints[scy] = fingerprint;
             needsRefresh = true;
         }
     }
@@ -4413,6 +4444,9 @@ void Renderer::drainMeshingResults(const World& world) {
 
         Chunk& chunk = *it->second;
         if (chunk.getSubChunkMeshRevision(result.scy) != result.revision) {
+#ifdef MECRAFT_DEBUG
+            ++m_meshingStaleDroppedThisFrame;
+#endif
             continue;
         }
 
