@@ -9,8 +9,8 @@
 #include "InventoryDragController.h"
 #include "CraftingGridController.h"
 #include "../../player/Inventory.h"
-#include "../../ui/UIInputAdapter.h"
-#include "../../ui/UIRenderer.h"
+#include "../../ui/core/UIInputAdapter.h"
+#include "../../ui/core/UIRenderer.h"
 #include "../../core/Time.h"
 #include "../../world/DropSystem.h"
 

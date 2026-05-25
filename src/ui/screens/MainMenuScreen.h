@@ -5,8 +5,8 @@
 #include <vector>
 #include <string>
 
-#include "../UIScene.h"
-#include "../Tween.h"
+#include "../core/UIScene.h"
+#include "../core/Tween.h"
 
 class UIImage;
 class UIButton;

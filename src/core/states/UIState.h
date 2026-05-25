@@ -5,8 +5,8 @@
 #include "../GameStateMachine.h"
 #include "../InputContextManager.h"
 #include "StateDependencies.h"
-#include "../../ui/UIInputAdapter.h"
-#include "../../ui/UIRenderer.h"
+#include "../../ui/core/UIInputAdapter.h"
+#include "../../ui/core/UIRenderer.h"
 #include "../../ui/screens/PauseMenuScreen.h"
 #include "../../locale/LocaleManager.h"
 

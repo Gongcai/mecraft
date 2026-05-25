@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/HotbarControl.h"
+#include "../src/ui/hud/HotbarControl.h"
 
 namespace {
 int fail(const char* message) {

@@ -6,8 +6,8 @@
 #include "AppStateDependencies.h"
 #include "GameplayAppState.h"
 #include "../../ui/screens/MainMenuScreen.h"
-#include "../../ui/ScreenTransition.h"
-#include "../../ui/UIInputAdapter.h"
+#include "../../ui/core/ScreenTransition.h"
+#include "../../ui/core/UIInputAdapter.h"
 #include "../../renderer/SkyboxRenderer.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>

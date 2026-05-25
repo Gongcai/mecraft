@@ -8,7 +8,7 @@
 #include "../../resource/ResourceMgr.h"
 #include "../../audio/AudioEngine.h"
 #include "../../audio/BgmSystem.h"
-#include "../../ui/UIRenderer.h"
+#include "../../ui/core/UIRenderer.h"
 #include "../../locale/LocaleManager.h"
 
 class AppStateMachine;

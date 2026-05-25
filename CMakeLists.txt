@@ -116,39 +116,52 @@ set(SRC_RENDERER
 )
 
 set(SRC_UI
+        # Core UI Framework
         src/ui/Dashboard.cpp
-        src/ui/KeyboardInputBox.cpp
-        src/ui/ConsoleDisplayBox.cpp
-        src/ui/CrosshairControl.cpp
-        src/ui/TextRenderer.cpp
-        src/ui/GlyphAtlas.cpp
-        src/ui/UILayout.cpp
-        src/ui/HotbarControl.cpp
-        src/ui/HudControl.cpp
-        src/ui/HeldItemPreviewControl.cpp
-        src/ui/CommandInputOverlay.cpp
-        src/ui/ConsoleOverlay.cpp
-        src/ui/PickableOverlay.cpp
-        src/ui/Pickable.cpp
-        src/ui/UIInputAdapter.cpp
-        src/ui/ItemGridControl.cpp
-        src/ui/InventoryPanelControl.cpp
-        src/ui/CreativeInventoryPanelControl.cpp
-        src/ui/CraftingGridControl.cpp
-        src/ui/UIRenderer.cpp
-        src/ui/UIPanel.cpp
-        src/ui/UIText.cpp
-        src/ui/UIButton.cpp
-        src/ui/UIScene.cpp
-        src/ui/ScreenTransition.cpp
-        src/ui/UITheme.cpp
-        src/ui/UIThemePresets.cpp
-        src/ui/UISlider.cpp
-        src/ui/UICheckbox.cpp
-        src/ui/UIDropdown.cpp
-        src/ui/UIScrollArea.cpp
-        src/ui/UIImage.cpp
-        src/ui/UIGridLayout.cpp
+        src/ui/core/UIInputAdapter.cpp
+        src/ui/core/UIRenderer.cpp
+        src/ui/core/UIScene.cpp
+        src/ui/core/ScreenTransition.cpp
+        src/ui/core/UITheme.cpp
+        src/ui/core/UIThemePresets.cpp
+
+        # Font & Text
+        src/ui/font/TextRenderer.cpp
+        src/ui/font/GlyphAtlas.cpp
+
+        # Layouts
+        src/ui/layout/UILayout.cpp
+        src/ui/layout/UIGridLayout.cpp
+
+        # Common Widgets
+        src/ui/widgets/UIPanel.cpp
+        src/ui/widgets/UIImage.cpp
+        src/ui/widgets/UIText.cpp
+        src/ui/widgets/UIButton.cpp
+        src/ui/widgets/UICheckbox.cpp
+        src/ui/widgets/UISlider.cpp
+        src/ui/widgets/UIDropdown.cpp
+        src/ui/widgets/UIScrollArea.cpp
+        src/ui/widgets/KeyboardInputBox.cpp
+        src/ui/widgets/ConsoleDisplayBox.cpp
+
+        # HUD & Overlays
+        src/ui/hud/CrosshairControl.cpp
+        src/ui/hud/HotbarControl.cpp
+        src/ui/hud/HudControl.cpp
+        src/ui/hud/PickableOverlay.cpp
+        src/ui/hud/Pickable.cpp
+        src/ui/hud/ConsoleOverlay.cpp
+        src/ui/hud/CommandInputOverlay.cpp
+
+        # Inventory UI
+        src/ui/inventory/ItemGridControl.cpp
+        src/ui/inventory/CraftingGridControl.cpp
+        src/ui/inventory/InventoryPanelControl.cpp
+        src/ui/inventory/CreativeInventoryPanelControl.cpp
+        src/ui/inventory/HeldItemPreviewControl.cpp
+
+        # Screens
         src/ui/screens/MainMenuScreen.cpp
         src/ui/screens/PauseMenuScreen.cpp
 )

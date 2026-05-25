@@ -7,8 +7,8 @@
 #include "StateDependencies.h"
 #include "../../item/Item.h"
 #include "../../player/Inventory.h"
-#include "../../ui/UIInputAdapter.h"
-#include "../../ui/UIRenderer.h"
+#include "../../ui/core/UIInputAdapter.h"
+#include "../../ui/core/UIRenderer.h"
 
 class CreativeInventoryState final : public IGameState {
 public:

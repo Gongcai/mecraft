@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/PickableOverlay.h"
+#include "../src/ui/hud/PickableOverlay.h"
 
 namespace {
 int fail(const char* message) {

@@ -23,7 +23,7 @@
 #include "../Paths.h"
 #include "../player/Inventory.h"
 #include "../resource/ResourceMgr.h"
-#include "../ui/UIRenderContext.h"
+#include "../ui/core/UIRenderContext.h"
 #include "../world/chunk/SubChunk.h"
 
 namespace {

@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/CrosshairControl.h"
+#include "../src/ui/hud/CrosshairControl.h"
 
 namespace {
 int fail(const char* message) {

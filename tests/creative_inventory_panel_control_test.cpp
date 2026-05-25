@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/CreativeInventoryPanelControl.h"
+#include "../src/ui/inventory/CreativeInventoryPanelControl.h"
 
 namespace {
 int fail(const char* message) {

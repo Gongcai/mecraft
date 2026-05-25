@@ -8,7 +8,7 @@
 #include "StateDependencies.h"
 #include "../../player/Inventory.h"
 #include "../../item/Item.h"
-#include "../../ui/UIRenderer.h"
+#include "../../ui/core/UIRenderer.h"
 #include "../../ecs/util/PlayerQuery.h"
 
 class CraftingGridControl;

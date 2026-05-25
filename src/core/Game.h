@@ -28,7 +28,7 @@
 #ifdef MECRAFT_DEBUG
 #include "../ui/Dashboard.h"
 #endif
-#include "../ui/UIRenderer.h"
+#include "../ui/core/UIRenderer.h"
 #include "../audio/AudioEngine.h"
 #include "../audio/BgmSystem.h"
 #include "../particle/ParticleSystem.h"

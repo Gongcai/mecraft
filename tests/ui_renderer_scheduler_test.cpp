@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/UIRenderer.h"
+#include "../src/ui/core/UIRenderer.h"
 
 namespace {
 int fail(const char* message) {

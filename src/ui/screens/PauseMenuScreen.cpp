@@ -1,9 +1,9 @@
 #include "PauseMenuScreen.h"
 
-#include "../UIPanel.h"
-#include "../UIText.h"
-#include "../UIButton.h"
-#include "../UIStackLayout.h"
+#include "../widgets/UIPanel.h"
+#include "../widgets/UIText.h"
+#include "../widgets/UIButton.h"
+#include "../layout/UIStackLayout.h"
 #include "../../locale/LocaleManager.h"
 
 void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {

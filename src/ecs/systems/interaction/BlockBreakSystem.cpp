@@ -9,7 +9,7 @@
 #include "../../components/Components.h"
 #include "../../../core/states/GameplayModeRules.h"
 #include "../../../world/World.h"
-#include "../../../ui/UIRenderer.h"
+#include "../../../ui/core/UIRenderer.h"
 
 namespace ecs {
 

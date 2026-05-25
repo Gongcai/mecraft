@@ -1,8 +1,8 @@
 #include "MainMenuScreen.h"
 
-#include "../UIButton.h"
-#include "../UIImage.h"
-#include "../UIDropdown.h"
+#include "../widgets/UIButton.h"
+#include "../widgets/UIImage.h"
+#include "../widgets/UIDropdown.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"

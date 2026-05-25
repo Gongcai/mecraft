@@ -1,8 +1,8 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/CommandInputOverlay.h"
-#include "../src/ui/TextRenderer.h"
+#include "../src/ui/hud/CommandInputOverlay.h"
+#include "../src/ui/font/TextRenderer.h"
 
 namespace {
 int fail(const char* message) {

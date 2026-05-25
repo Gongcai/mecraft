@@ -9,7 +9,7 @@
 #include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
-#include "../../../ui/UIRenderer.h"
+#include "../../../ui/core/UIRenderer.h"
 #include "../../../item/Item.h"
 
 namespace ecs {

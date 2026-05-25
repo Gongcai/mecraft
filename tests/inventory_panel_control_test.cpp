@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/InventoryPanelControl.h"
+#include "../src/ui/inventory/InventoryPanelControl.h"
 #include "../src/player/Inventory.h"
 
 namespace {

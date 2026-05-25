@@ -8,8 +8,8 @@
 #include "../../ecs/util/PlayerQuery.h"
 #include "../../player/Inventory.h"
 #include "../../item/Item.h"
-#include "../../ui/UIRenderer.h"
-#include "../../ui/CraftingGridControl.h"
+#include "../../ui/core/UIRenderer.h"
+#include "../../ui/inventory/CraftingGridControl.h"
 
 class InventoryDragController;
 

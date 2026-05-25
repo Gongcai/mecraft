@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/ItemGridControl.h"
+#include "../src/ui/inventory/ItemGridControl.h"
 
 namespace {
 int fail(const char* message) {

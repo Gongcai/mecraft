@@ -2,8 +2,8 @@
 #include <iostream>
 #include <memory>
 
-#include "../src/ui/UIButton.h"
-#include "../src/ui/UIScene.h"
+#include "../src/ui/widgets/UIButton.h"
+#include "../src/ui/core/UIScene.h"
 
 namespace {
 

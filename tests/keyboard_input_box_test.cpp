@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/ui/KeyboardInputBox.h"
+#include "../src/ui/widgets/KeyboardInputBox.h"
 
 namespace {
 int fail(const char* message) {

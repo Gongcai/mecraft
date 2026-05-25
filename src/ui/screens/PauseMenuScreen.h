@@ -2,8 +2,8 @@
 
 #include <functional>
 
-#include "../UIScene.h"
-#include "../Tween.h"
+#include "../core/UIScene.h"
+#include "../core/Tween.h"
 
 class UIPanel;
 class UIText;

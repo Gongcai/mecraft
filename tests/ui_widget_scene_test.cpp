@@ -3,7 +3,7 @@
 #include <iostream>
 #include <memory>
 
-#include "../src/ui/UIScene.h"
+#include "../src/ui/core/UIScene.h"
 
 namespace {
 

@@ -12,7 +12,7 @@
 #include "../../ecs/components/Components.h"
 #include "../../ecs/util/GameplayRuntimeContext.h"
 #include "../../player/Inventory.h"
-#include "../../ui/UIRenderer.h"
+#include "../../ui/core/UIRenderer.h"
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
