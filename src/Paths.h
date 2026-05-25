@@ -1,9 +1,10 @@
 #pragma once
 
-// 平台相关的资源根路径
-// Linux:   可执行文件通常在项目根目录或 build/ 子目录，使用 "assets"
-// Windows: 可执行文件在 build/ 子目录，需要 "../assets" 向上回溯
-#ifdef __linux__
+// CMake builds inject an absolute assets directory. The platform fallbacks are
+// kept for ad-hoc compiles that do not provide MECRAFT_ASSETS_DIR.
+#ifdef MECRAFT_ASSETS_DIR
+    #define ASSETS_DIR MECRAFT_ASSETS_DIR
+#elif defined(__linux__)
     #define ASSETS_DIR "assets"
 #else
     #define ASSETS_DIR "../assets"

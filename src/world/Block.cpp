@@ -320,11 +320,11 @@ BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool is
 
 // Initialize BlockIds constants
 namespace BlockIds {
-#define MECRAFT_DEFINE_BLOCK_ID(symbol, path) BlockID symbol = 0;
+#define MECRAFT_DEFINE_BLOCK_ID(symbol, path) MECRAFT_API BlockID symbol = 0;
 MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_DEFINE_BLOCK_ID)
 #undef MECRAFT_DEFINE_BLOCK_ID
 
-void init() {
+MECRAFT_API void init() {
 #define MECRAFT_INIT_BLOCK_ID(symbol, path) symbol = BlockRegistry::getId(NamespacedId("minecraft", path));
     MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_INIT_BLOCK_ID)
 #undef MECRAFT_INIT_BLOCK_ID

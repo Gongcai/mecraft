@@ -9,7 +9,9 @@
       "Bash(powershell -Command \"Get-ChildItem -Path 'd:\\\\project\\\\mecraft\\\\docs\\\\accomplished' -Name\")",
       "Bash(python3 -c \"from PIL import Image; img=Image.open\\('D:/project/mecraft/assets/textures/shaderpacks/noise2D.png'\\); print\\(img.size\\)\")",
       "Bash(dir \"d:\\\\project\\\\mecraft\\\\derivativemain\" /b)",
-      "Bash(dir \"d:\\\\project\\\\mecraft\\\\derivativemain\\\\world0\" /b)"
+      "Bash(dir \"d:\\\\project\\\\mecraft\\\\derivativemain\\\\world0\" /b)",
+      "Bash(mv \"d:\\\\project\\\\mecraft\\\\docs\\\\Mecraft与Iris渲染管线架构差异报告.md\" \"d:\\\\project\\\\mecraft\\\\docs\\\\accomplished\\\\\" && mv \"d:\\\\project\\\\mecraft\\\\docs\\\\DerivativeMain内置渲染管线完整差异分析报告.md\" \"d:\\\\project\\\\mecraft\\\\docs\\\\accomplished\\\\\")",
+      "Bash(mv \"d:\\\\project\\\\mecraft\\\\docs\\\\渲染管线实现状态分析与开发路线图.md\" \"d:\\\\project\\\\mecraft\\\\docs\\\\accomplished\\\\\")"
     ]
   }
 }

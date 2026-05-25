@@ -12,6 +12,7 @@
 #include <string_view>
 #include <unordered_map>
 
+#include "../MecraftExport.h"
 #include "../core/NamespacedId.h"
 #include "../core/BuiltinIds.h"
 #include "../core/IdRegistry.h"
@@ -23,11 +24,11 @@ using BlockID = RuntimeId;
 
 // Block ID constants — initialized after BlockRegistry::init()
 namespace BlockIds {
-#define MECRAFT_DECLARE_BLOCK_ID(symbol, path) extern BlockID symbol;
+#define MECRAFT_DECLARE_BLOCK_ID(symbol, path) extern MECRAFT_API BlockID symbol;
     MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_DECLARE_BLOCK_ID)
 #undef MECRAFT_DECLARE_BLOCK_ID
 
-    void init();  // Called after BlockRegistry::init()
+    MECRAFT_API void init();  // Called after BlockRegistry::init()
 }
 
 namespace BlockMaterialKinds {

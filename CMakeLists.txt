@@ -4,16 +4,35 @@ project(mecraft LANGUAGES C CXX)
 # ===========================================================================
 # 全局设置
 # ===========================================================================
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 开启链接期优化
+option(MECRAFT_ENABLE_IPO "Enable IPO/LTO for optimized configurations" ON)
+option(MECRAFT_ENABLE_PCH "Enable precompiled headers" ON)
+option(MECRAFT_BUILD_TESTS "Build Mecraft tests" ON)
+set(MECRAFT_ASSETS_DIR "${PROJECT_SOURCE_DIR}/assets" CACHE PATH "Absolute path to Mecraft runtime assets")
+file(TO_CMAKE_PATH "${MECRAFT_ASSETS_DIR}" MECRAFT_ASSETS_DIR_COMPILE)
+
+# 检查链接期优化支持
 include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported OUTPUT error)
-if(ipo_supported)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+if(MECRAFT_ENABLE_IPO)
+    check_ipo_supported(RESULT MECRAFT_IPO_SUPPORTED OUTPUT MECRAFT_IPO_ERROR)
+else()
+    set(MECRAFT_IPO_SUPPORTED FALSE)
 endif()
+
+function(mecraft_apply_msvc_defaults TARGET_NAME)
+    if(MSVC)
+        target_compile_options(${TARGET_NAME} PRIVATE /utf-8 /FS)
+    endif()
+endfunction()
+
+function(mecraft_apply_project_warnings TARGET_NAME)
+    if(MSVC)
+        target_compile_options(${TARGET_NAME} PRIVATE /W4 /WX-)
+    else()
+        target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wextra -pedantic)
+    endif()
+endfunction()
 
 # 查找依赖
 
@@ -24,19 +43,6 @@ find_package(OpenAL CONFIG REQUIRED)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
 
-
-# [第三方库]
-set(SRC_THIRD_PARTY
-        assets/third_party/glad/glad.c
-        assets/third_party/imgui/imgui.cpp
-        assets/third_party/imgui/imgui_demo.cpp
-        assets/third_party/imgui/imgui_draw.cpp
-        assets/third_party/imgui/imgui_impl_glfw.cpp
-        assets/third_party/imgui/imgui_impl_opengl3.cpp
-        assets/third_party/imgui/imgui_tables.cpp
-        assets/third_party/imgui/imgui_widgets.cpp
-        assets/third_party/FastNoise/FastNoiseLite.h
-)
 
 # [核心逻辑]
 set(SRC_CORE
@@ -141,6 +147,7 @@ set(SRC_UI
         src/ui/UIDropdown.cpp
         src/ui/UIScrollArea.cpp
         src/ui/UIImage.cpp
+        src/ui/UIGridLayout.cpp
         src/ui/screens/MainMenuScreen.cpp
         src/ui/screens/PauseMenuScreen.cpp
 )
@@ -207,9 +214,72 @@ set(CORE_SOURCES
 )
 
 # ===========================================================================
-# 3. 构建核心静态库
+# 3. 预编译头
 # ===========================================================================
-add_library(mecraft_core STATIC ${CORE_SOURCES} ${SRC_THIRD_PARTY})
+if(MECRAFT_ENABLE_PCH)
+    add_library(mecraft_pch OBJECT src/MecraftPch.cpp)
+    target_compile_features(mecraft_pch PUBLIC cxx_std_17)
+    target_include_directories(mecraft_pch PUBLIC src)
+    target_link_libraries(mecraft_pch PUBLIC
+            glm::glm
+            nlohmann_json::nlohmann_json
+            EnTT::EnTT
+    )
+    mecraft_apply_project_warnings(mecraft_pch)
+    mecraft_apply_msvc_defaults(mecraft_pch)
+    target_precompile_headers(mecraft_pch PRIVATE
+            <algorithm>
+            <array>
+            <chrono>
+            <cstdint>
+            <memory>
+            <optional>
+            <string>
+            <unordered_map>
+            <vector>
+            <entt/entt.hpp>
+            <glm/glm.hpp>
+            <nlohmann/json.hpp>
+    )
+endif()
+
+# ===========================================================================
+# 4. 第三方源码库
+# ===========================================================================
+add_library(mecraft_third_party STATIC
+        assets/third_party/glad/glad.c
+        assets/third_party/imgui/imgui.cpp
+        assets/third_party/imgui/imgui_demo.cpp
+        assets/third_party/imgui/imgui_draw.cpp
+        assets/third_party/imgui/imgui_impl_glfw.cpp
+        assets/third_party/imgui/imgui_impl_opengl3.cpp
+        assets/third_party/imgui/imgui_tables.cpp
+        assets/third_party/imgui/imgui_widgets.cpp
+)
+target_compile_features(mecraft_third_party PUBLIC cxx_std_17)
+set_target_properties(mecraft_third_party PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mecraft_third_party SYSTEM PUBLIC assets/third_party)
+target_link_libraries(mecraft_third_party PUBLIC glfw)
+target_compile_definitions(mecraft_third_party PUBLIC GLFW_INCLUDE_NONE)
+if (MSVC)
+    target_compile_options(mecraft_third_party PRIVATE /W0)
+else()
+    target_compile_options(mecraft_third_party PRIVATE -w)
+endif()
+mecraft_apply_msvc_defaults(mecraft_third_party)
+
+# ===========================================================================
+# 5. 构建核心库
+# ===========================================================================
+add_library(mecraft_core ${CORE_SOURCES})
+target_compile_features(mecraft_core PUBLIC cxx_std_17)
+set_target_properties(mecraft_core PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
+target_compile_definitions(mecraft_core PRIVATE MECRAFT_CORE_BUILD)
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(mecraft_core PUBLIC MECRAFT_SHARED)
+endif()
 
 
 
@@ -219,7 +289,7 @@ target_include_directories(mecraft_core SYSTEM PUBLIC assets/third_party)
 
 # 统一链接依赖
 target_link_libraries(mecraft_core PUBLIC
-        glfw
+        mecraft_third_party
         glm::glm
         nlohmann_json::nlohmann_json
         OpenAL::OpenAL
@@ -230,86 +300,115 @@ target_link_libraries(mecraft_core PUBLIC
 # 统一宏定义
 target_compile_definitions(mecraft_core PUBLIC
         GLFW_INCLUDE_NONE
+        "MECRAFT_ASSETS_DIR=\"${MECRAFT_ASSETS_DIR_COMPILE}\""
         $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
 )
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
-if (MSVC)
-    target_compile_options(mecraft_core PRIVATE /utf-8 /W4 /WX-)
-else()
-    target_compile_options(mecraft_core PRIVATE -Wall -Wextra -pedantic)
+mecraft_apply_project_warnings(mecraft_core)
+mecraft_apply_msvc_defaults(mecraft_core)
+
+if(MECRAFT_ENABLE_PCH)
+    target_precompile_headers(mecraft_core REUSE_FROM mecraft_pch)
+endif()
+
+if(MECRAFT_IPO_SUPPORTED)
+    set_property(TARGET mecraft_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set_property(TARGET mecraft_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+    set_property(TARGET mecraft_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
 endif()
 
 # ===========================================================================
-# 4. 主程序入口
+# 6. 主程序入口
 # ===========================================================================
 add_executable(mecraft main.cpp)
+target_compile_features(mecraft PRIVATE cxx_std_17)
 target_link_libraries(mecraft PRIVATE mecraft_core)
 if (MSVC)
-    target_compile_options(mecraft PRIVATE /utf-8)
+    mecraft_apply_msvc_defaults(mecraft)
+endif()
+if(MECRAFT_IPO_SUPPORTED)
+    set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+    set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+    set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
 endif()
 
 # ===========================================================================
-# 5. 测试用例
+# 7. 测试用例
 # ===========================================================================
-enable_testing()
+if(MECRAFT_BUILD_TESTS)
+    enable_testing()
 
-# 辅助宏：减少重复代码
-macro(add_mecraft_test TEST_NAME SOURCE_FILE)
-    add_executable(${TEST_NAME} ${SOURCE_FILE})
-    target_link_libraries(${TEST_NAME} PRIVATE mecraft_core)
-    add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-endmacro()
+    # 辅助函数：减少重复代码
+    function(add_mecraft_test TEST_NAME SOURCE_FILE)
+        add_executable(${TEST_NAME} ${SOURCE_FILE})
+        target_compile_features(${TEST_NAME} PRIVATE cxx_std_17)
+        target_link_libraries(${TEST_NAME} PRIVATE mecraft_core)
+        mecraft_apply_project_warnings(${TEST_NAME})
+        mecraft_apply_msvc_defaults(${TEST_NAME})
+        if(MECRAFT_ENABLE_PCH)
+            target_precompile_headers(${TEST_NAME} REUSE_FROM mecraft_pch)
+        endif()
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endfunction()
 
-# 物理测试 (需要特殊宏定义)
-add_executable(physics_mvp_test tests/physics_mvp_test.cpp)
-target_link_libraries(physics_mvp_test PRIVATE mecraft_core)
-target_compile_definitions(physics_mvp_test PRIVATE MECRAFT_NO_TEXTURES)
-add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
+    # 物理测试 (需要特殊宏定义)
+    add_executable(physics_mvp_test tests/physics_mvp_test.cpp)
+    target_compile_features(physics_mvp_test PRIVATE cxx_std_17)
+    target_link_libraries(physics_mvp_test PRIVATE mecraft_core)
+    target_compile_definitions(physics_mvp_test PRIVATE MECRAFT_NO_TEXTURES)
+    mecraft_apply_project_warnings(physics_mvp_test)
+    mecraft_apply_msvc_defaults(physics_mvp_test)
+    if(MECRAFT_ENABLE_PCH)
+        target_precompile_headers(physics_mvp_test REUSE_FROM mecraft_pch)
+    endif()
+    add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 
-# 测试列表
-add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
-add_mecraft_test(terrain_tree_generation_test tests/terrain_tree_generation_test.cpp)
-add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
-add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
-add_mecraft_test(audio_test tests/audio_test.cpp)
-add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
-add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
-add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
-add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
+    # 测试列表
+    add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
+    add_mecraft_test(terrain_tree_generation_test tests/terrain_tree_generation_test.cpp)
+    add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
+    add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
+    add_mecraft_test(audio_test tests/audio_test.cpp)
+    add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
+    add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
+    add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
+    add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
 
-add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
-add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
-add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)
-add_mecraft_test(crosshair_control_test tests/crosshair_control_test.cpp)
-add_mecraft_test(hotbar_control_test tests/hotbar_control_test.cpp)
-add_mecraft_test(text_renderer_test tests/text_renderer_test.cpp)
-add_mecraft_test(command_input_overlay_test tests/command_input_overlay_test.cpp)
-add_mecraft_test(console_overlay_test tests/console_overlay_test.cpp)
-add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
-add_mecraft_test(item_grid_control_test tests/item_grid_control_test.cpp)
-add_mecraft_test(inventory_panel_control_test tests/inventory_panel_control_test.cpp)
-add_mecraft_test(creative_inventory_panel_control_test tests/creative_inventory_panel_control_test.cpp)
-add_mecraft_test(inventory_drag_logic_test tests/inventory_drag_logic_test.cpp)
-add_mecraft_test(ui_renderer_scheduler_test tests/ui_renderer_scheduler_test.cpp)
-add_mecraft_test(ui_widget_scene_test tests/ui_widget_scene_test.cpp)
-add_mecraft_test(ui_focus_navigation_test tests/ui_focus_navigation_test.cpp)
-add_mecraft_test(player_intent_build_system_test tests/player_intent_build_system_test.cpp)
-add_mecraft_test(creative_flight_system_test tests/creative_flight_system_test.cpp)
-# add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
-add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
-add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
-add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
-add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)
-add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp)
-add_mecraft_test(chunk_section_test tests/chunk_section_test.cpp)
-add_mecraft_test(chunk_aggregation_test tests/chunk_aggregation_test.cpp)
-add_mecraft_test(meshing_perf_test tests/meshing_perf_test.cpp)
-add_mecraft_test(chunk_initial_lightmap_test tests/chunk_initial_lightmap_test.cpp)
-add_mecraft_test(light_solver_sky_rules_test tests/light_solver_sky_rules_test.cpp)
-add_mecraft_test(light_solver_cross_chunk_block_rules_test tests/light_solver_cross_chunk_block_rules_test.cpp)
-add_mecraft_test(light_solver_perf_test tests/light_solver_perf_test.cpp)
-add_mecraft_test(light_cross_chunk_removal_test tests/light_cross_chunk_removal_test.cpp)
-add_mecraft_test(light_service_cross_chunk_block_test tests/light_service_cross_chunk_block_test.cpp)
-add_mecraft_test(light_service_scheduler_test tests/light_service_scheduler_test.cpp)
+    add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
+    add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
+    add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)
+    add_mecraft_test(crosshair_control_test tests/crosshair_control_test.cpp)
+    add_mecraft_test(hotbar_control_test tests/hotbar_control_test.cpp)
+    add_mecraft_test(text_renderer_test tests/text_renderer_test.cpp)
+    add_mecraft_test(command_input_overlay_test tests/command_input_overlay_test.cpp)
+    add_mecraft_test(console_overlay_test tests/console_overlay_test.cpp)
+    add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
+    add_mecraft_test(item_grid_control_test tests/item_grid_control_test.cpp)
+    add_mecraft_test(inventory_panel_control_test tests/inventory_panel_control_test.cpp)
+    add_mecraft_test(creative_inventory_panel_control_test tests/creative_inventory_panel_control_test.cpp)
+    add_mecraft_test(inventory_drag_logic_test tests/inventory_drag_logic_test.cpp)
+    add_mecraft_test(ui_renderer_scheduler_test tests/ui_renderer_scheduler_test.cpp)
+    add_mecraft_test(ui_widget_scene_test tests/ui_widget_scene_test.cpp)
+    add_mecraft_test(ui_focus_navigation_test tests/ui_focus_navigation_test.cpp)
+    add_mecraft_test(player_intent_build_system_test tests/player_intent_build_system_test.cpp)
+    add_mecraft_test(creative_flight_system_test tests/creative_flight_system_test.cpp)
+    # add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
+    add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
+    add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
+    add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
+    add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)
+    add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)
+    add_mecraft_test(chunk_meshing_service_test tests/chunk_meshing_service_test.cpp)
+    add_mecraft_test(chunk_section_test tests/chunk_section_test.cpp)
+    add_mecraft_test(chunk_aggregation_test tests/chunk_aggregation_test.cpp)
+    add_mecraft_test(meshing_perf_test tests/meshing_perf_test.cpp)
+    add_mecraft_test(chunk_initial_lightmap_test tests/chunk_initial_lightmap_test.cpp)
+    add_mecraft_test(light_solver_sky_rules_test tests/light_solver_sky_rules_test.cpp)
+    add_mecraft_test(light_solver_cross_chunk_block_rules_test tests/light_solver_cross_chunk_block_rules_test.cpp)
+    add_mecraft_test(light_solver_perf_test tests/light_solver_perf_test.cpp)
+    add_mecraft_test(light_cross_chunk_removal_test tests/light_cross_chunk_removal_test.cpp)
+    add_mecraft_test(light_service_cross_chunk_block_test tests/light_service_cross_chunk_block_test.cpp)
+    add_mecraft_test(light_service_scheduler_test tests/light_service_scheduler_test.cpp)
+endif()
 

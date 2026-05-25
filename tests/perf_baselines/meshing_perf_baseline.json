@@ -3,69 +3,69 @@
   "build": {
     "config": "Release"
   },
-  "captured_at": "2026-04-20",
+  "captured_at": "2026-05-25",
   "focus": "SubChunk meshing + ChunkMeshingService throughput",
   "scenario_1_single_thread": [
     {
-      "avg_ms": 4.31199,
-      "calls_per_sec": 1880.5608772816495,
-      "checksum": 247,
-      "max_ms": 4.6913,
-      "median_ms": 4.254049999999999,
-      "min_ms": 4.0428,
+      "avg_ms": 8.60569,
+      "calls_per_sec": 925.7223527233596,
+      "checksum": 23,
+      "max_ms": 9.1598,
+      "median_ms": 8.6419,
+      "min_ms": 8.1176,
       "name": "small",
-      "ns_per_call": 531756.2499999999,
-      "p95_ms": 4.642
+      "ns_per_call": 1080237.5,
+      "p95_ms": 9.0398
     },
     {
-      "avg_ms": 78.79563,
-      "calls_per_sec": 204.66704828543382,
-      "checksum": 119,
-      "max_ms": 82.1278,
-      "median_ms": 78.17575,
-      "min_ms": 76.9074,
+      "avg_ms": 153.23113,
+      "calls_per_sec": 106.45977982786785,
+      "checksum": 27,
+      "max_ms": 184.4245,
+      "median_ms": 150.29149999999998,
+      "min_ms": 143.5711,
       "name": "medium",
-      "ns_per_call": 4885984.375,
-      "p95_ms": 81.1233
+      "ns_per_call": 9393218.749999998,
+      "p95_ms": 156.5346
     },
     {
-      "avg_ms": 201.45306,
-      "calls_per_sec": 158.61438439155148,
+      "avg_ms": 378.50721999999996,
+      "calls_per_sec": 86.49872488715633,
       "checksum": 1,
-      "max_ms": 205.3795,
-      "median_ms": 201.74715,
-      "min_ms": 195.9295,
+      "max_ms": 445.1137,
+      "median_ms": 369.94765,
+      "min_ms": 364.0239,
       "name": "large",
-      "ns_per_call": 6304598.4375,
-      "p95_ms": 204.5507
+      "ns_per_call": 11560864.0625,
+      "p95_ms": 381.4796
     }
   ],
   "scenario_2_throughput": [
     {
-      "avg_total_ms": 15.183240000000001,
-      "checksum": 120,
+      "avg_total_ms": 15.409110000000002,
+      "checksum": 20,
       "chunks": 8,
-      "chunks_per_sec": 526.8967624828429,
+      "chunks_per_sec": 519.173398074256,
       "median_ms": 0.0,
       "name": "small",
       "p95_ms": 0.0,
       "threads": 4
     },
     {
-      "avg_total_ms": 30.799240000000005,
-      "checksum": 984,
+      "avg_total_ms": 46.4363,
+      "checksum": 2028,
       "chunks": 87,
-      "chunks_per_sec": 2824.74502617597,
+      "chunks_per_sec": 1873.5342824471372,
       "median_ms": 0.0,
       "name": "medium",
       "p95_ms": 0.0,
       "threads": 4
     },
     {
-      "avg_total_ms": 61.45998000000001,
-      "checksum": 220,
+      "avg_total_ms": 92.88913,
+      "checksum": 3536,
       "chunks": 246,
-      "chunks_per_sec": 4002.604621739219,
+      "chunks_per_sec": 2648.318484627857,
       "median_ms": 0.0,
       "name": "large",
       "p95_ms": 0.0,
