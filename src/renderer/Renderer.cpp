@@ -13,7 +13,7 @@
 #include "shadow/ShadowCasterCuller.h"
 #include "../Paths.h"
 #include "../core/Time.h"
-#include "../world/BlockSelection.h"
+#include "../world/block/BlockSelection.h"
 #include "../world/DropSystem.h"
 #include "../world/World.h"
 

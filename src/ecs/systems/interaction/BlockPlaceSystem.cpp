@@ -6,7 +6,7 @@
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../components/Components.h"
 #include "../../../core/states/GameplayModeRules.h"
-#include "../../../world/Placement.h"
+#include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
 #include "../../../ui/UIRenderer.h"

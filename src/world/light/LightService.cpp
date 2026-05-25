@@ -5,10 +5,10 @@
 #include <limits>
 #include <utility>
 
-#include "Chunk.h"
+#include "../chunk/Chunk.h"
 #include "LightSolver.h"
-#include "../thread/ThreadPool.h"
-#include "World.h"
+#include "../../thread/ThreadPool.h"
+#include "../World.h"
 
 namespace {
 std::shared_ptr<const Chunk> findSharedByCoords(const World& world, const int cx, const int cz) {

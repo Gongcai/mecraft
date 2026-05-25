@@ -9,7 +9,7 @@
 #include "../player/Inventory.h"
 #include "../resource/ResourceMgr.h"
 #include "../renderer/Shader.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../item/Item.h"
 #include "TextRenderer.h"
 #include "UILayout.h"

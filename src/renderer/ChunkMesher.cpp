@@ -11,10 +11,10 @@
 #include <glm/vec2.hpp>
 
 #include "MeshBuilderRegistry.h"
-#include "../world/FluidFlow.h"
-#include "../world/BlockStateRegistry.h"
-#include "../world/FluidState.h"
-#include "../world/PropIndices.h"
+#include "../world/fluid/FluidFlow.h"
+#include "../world/block/BlockStateRegistry.h"
+#include "../world/fluid/FluidState.h"
+#include "../world/block/PropIndices.h"
 #include "../world/World.h"
 
 namespace {

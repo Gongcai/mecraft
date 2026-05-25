@@ -2,9 +2,9 @@
 #include <algorithm>
 #include <cmath>
 #include "../core/Time.h"
-#include "BlockSelection.h"
-#include "FluidRegistry.h"
-#include "FluidState.h"
+#include "block/BlockSelection.h"
+#include "fluid/FluidRegistry.h"
+#include "fluid/FluidState.h"
 
 namespace {
 int worldToChunkCoord(const int world, const int chunkSize) {

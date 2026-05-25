@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "../world/SubChunk.h"
+#include "../world/chunk/SubChunk.h"
 
 struct DrawArraysIndirectCommand {
     uint32_t count;

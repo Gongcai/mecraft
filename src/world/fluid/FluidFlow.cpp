@@ -3,9 +3,9 @@
 #include <array>
 #include <cmath>
 
-#include "../renderer/ChunkMesher.h"
+#include "../../renderer/ChunkMesher.h"
 #include "FluidState.h"
-#include "World.h"
+#include "../World.h"
 
 namespace {
 constexpr std::array<glm::ivec3, 4> kHorizontalOffsets = {{

@@ -2,9 +2,9 @@
 
 #include <algorithm>
 
-#include "Block.h"
+#include "../block/Block.h"
 #include "FluidRegistry.h"
-#include "PropIndices.h"
+#include "../block/PropIndices.h"
 
 namespace {
 

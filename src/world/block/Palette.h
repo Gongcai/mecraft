@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../core/IdRegistry.h"
+#include "../../core/IdRegistry.h"
 
 #include <cstdint>
 #include <unordered_map>

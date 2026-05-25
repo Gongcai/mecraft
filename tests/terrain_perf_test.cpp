@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "../src/world/TerrainGenerator.h"
-#include "../src/world/Chunk.h"
+#include "../src/world/gen/TerrainGenerator.h"
+#include "../src/world/light/Chunk.h"
 
 namespace {
 struct BenchmarkStats {

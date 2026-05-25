@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 
 struct ChunkMeshData;
 struct SubChunkMeshingSnapshot;

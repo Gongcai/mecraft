@@ -18,7 +18,7 @@
 #include "../src/renderer/ChunkMesher.h"
 #include "../src/renderer/ChunkMeshingService.h"
 #include "../src/thread/ThreadPool.h"
-#include "../src/world/FluidState.h"
+#include "../src/world/fluid/FluidState.h"
 
 namespace {
 

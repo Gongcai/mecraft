@@ -68,24 +68,24 @@ set(SRC_CORE
 
 # [世界与地形]
 set(SRC_WORLD
-        src/world/Block.cpp
-        src/world/BlockSelection.cpp
-        src/world/BlockStateRegistry.cpp
-        src/world/Chunk.cpp
-        src/world/SubChunk.cpp
-        src/world/Palette.cpp
-        src/world/BitPackedArray.cpp
-        src/world/LightSolver.cpp
-        src/world/LightService.cpp
-        src/world/LightCache.cpp
-        src/world/Placement.cpp
-        src/world/PropIndices.cpp
-        src/world/FluidRegistry.cpp
-        src/world/FluidState.cpp
-        src/world/FluidFlow.cpp
-        src/world/FluidSystem.cpp
-        src/world/BlockNeighborUpdateQueue.cpp
-        src/world/TerrainGenerator.cpp
+        src/world/block/Block.cpp
+        src/world/block/BlockSelection.cpp
+        src/world/block/BlockStateRegistry.cpp
+        src/world/chunk/Chunk.cpp
+        src/world/chunk/SubChunk.cpp
+        src/world/block/Palette.cpp
+        src/world/chunk/BitPackedArray.cpp
+        src/world/light/LightSolver.cpp
+        src/world/light/LightService.cpp
+        src/world/light/LightCache.cpp
+        src/world/block/Placement.cpp
+        src/world/block/PropIndices.cpp
+        src/world/fluid/FluidRegistry.cpp
+        src/world/fluid/FluidState.cpp
+        src/world/fluid/FluidFlow.cpp
+        src/world/fluid/FluidSystem.cpp
+        src/world/block/BlockNeighborUpdateQueue.cpp
+        src/world/gen/TerrainGenerator.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
         src/world/DayNightSystem.cpp
@@ -248,18 +248,18 @@ endif()
 # 4. 第三方源码库
 # ===========================================================================
 add_library(mecraft_third_party STATIC
-        assets/third_party/glad/glad.c
-        assets/third_party/imgui/imgui.cpp
-        assets/third_party/imgui/imgui_demo.cpp
-        assets/third_party/imgui/imgui_draw.cpp
-        assets/third_party/imgui/imgui_impl_glfw.cpp
-        assets/third_party/imgui/imgui_impl_opengl3.cpp
-        assets/third_party/imgui/imgui_tables.cpp
-        assets/third_party/imgui/imgui_widgets.cpp
+        third_party/glad/glad.c
+        third_party/imgui/imgui.cpp
+        third_party/imgui/imgui_demo.cpp
+        third_party/imgui/imgui_draw.cpp
+        third_party/imgui/imgui_impl_glfw.cpp
+        third_party/imgui/imgui_impl_opengl3.cpp
+        third_party/imgui/imgui_tables.cpp
+        third_party/imgui/imgui_widgets.cpp
 )
 target_compile_features(mecraft_third_party PUBLIC cxx_std_17)
 set_target_properties(mecraft_third_party PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(mecraft_third_party SYSTEM PUBLIC assets/third_party)
+target_include_directories(mecraft_third_party SYSTEM PUBLIC third_party)
 target_link_libraries(mecraft_third_party PUBLIC glfw)
 target_compile_definitions(mecraft_third_party PUBLIC GLFW_INCLUDE_NONE)
 if (MSVC)
@@ -286,7 +286,7 @@ endif()
 
 # 设置包含路径：注意这里将 third_party 标记为 SYSTEM，编译器将不再报告里面的警告
 target_include_directories(mecraft_core PUBLIC src)
-target_include_directories(mecraft_core SYSTEM PUBLIC assets/third_party)
+target_include_directories(mecraft_core SYSTEM PUBLIC third_party)
 
 # 统一链接依赖
 target_link_libraries(mecraft_core PUBLIC

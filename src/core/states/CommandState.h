@@ -12,7 +12,7 @@
 #include "../../ui/KeyboardInputBox.h"
 #include "../../ui/UIRenderer.h"
 #include "../../world/World.h"
-#include "../../world/Block.h"
+#include "../../world/block/Block.h"
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../audio/AudioEngine.h"

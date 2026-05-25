@@ -15,7 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "../src/world/Chunk.h"
-#include "../src/world/LightSolver.h"
+#include "../src/world/light/LightSolver.h"
 
 namespace {
 

@@ -1,6 +1,6 @@
 #include "LightCache.h"
 
-#include "Block.h"
+#include "../block/Block.h"
 
 namespace {
 

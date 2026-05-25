@@ -5,10 +5,10 @@
 #include <vector>
 
 #include "../src/world/Block.h"
-#include "../src/world/BlockStateRegistry.h"
-#include "../src/world/FluidRegistry.h"
-#include "../src/world/FluidState.h"
-#include "../src/world/Placement.h"
+#include "../src/world/block/BlockStateRegistry.h"
+#include "../src/world/fluid/FluidRegistry.h"
+#include "../src/world/fluid/FluidState.h"
+#include "../src/world/block/Placement.h"
 #include "../src/world/PropIndices.h"
 #include "../src/world/SubChunk.h"
 

@@ -2,7 +2,7 @@
 #include "app_states/MainMenuAppState.h"
 #include "Paths.h"
 #include "Time.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../item/Item.h"
 #include <iostream>
 #include <string>

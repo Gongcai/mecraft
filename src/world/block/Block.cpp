@@ -4,11 +4,11 @@
 
 #include "Block.h"
 #include "BlockStateRegistry.h"
-#include "FluidRegistry.h"
+#include "../fluid/FluidRegistry.h"
 #include "Placement.h"
 #include "PropIndices.h"
 #include "Paths.h"
-#include "../renderer/MeshBuilderRegistry.h"
+#include "../../renderer/MeshBuilderRegistry.h"
 
 #include <algorithm>
 #include <fstream>
@@ -18,7 +18,7 @@
 #include <string>
 #include <string_view>
 
-#include "../resource/ResourceMgr.h"
+#include "../../resource/ResourceMgr.h"
 
 IdRegistry BlockRegistry::s_idRegistry{};
 std::vector<BlockDef> BlockRegistry::s_blocks{};

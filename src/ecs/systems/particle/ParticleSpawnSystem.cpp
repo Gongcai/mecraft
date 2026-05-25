@@ -6,7 +6,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/ParticleEventBuffer.h"
-#include "../../../world/Block.h"
+#include "../../../world/block/Block.h"
 
 namespace ecs {
 

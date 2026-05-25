@@ -2,7 +2,7 @@
 
 #include <array>
 #include <cstdint>
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../item/Item.h"
 
 class Inventory {

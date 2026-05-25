@@ -14,7 +14,7 @@
 #include <vector>
 #include <nlohmann/json.hpp>
 #include "../third_party/stb/stb_image.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 
 namespace {
 struct Vec2f {

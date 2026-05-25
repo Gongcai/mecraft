@@ -15,7 +15,7 @@
 #include "../renderer/Shader.h"
 #include "../resource/ResourceMgr.h"
 #include "../item/Item.h"
-#include "../world/SubChunk.h"
+#include "../world/chunk/SubChunk.h"
 
 namespace {
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{

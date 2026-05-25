@@ -1,6 +1,6 @@
 #include "Item.h"
 #include "Paths.h"
-#include "../world/BlockStateRegistry.h"
+#include "../world/block/BlockStateRegistry.h"
 
 #include <algorithm>
 #include <array>

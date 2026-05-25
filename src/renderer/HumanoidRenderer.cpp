@@ -13,7 +13,7 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/components/Components.h"
 #include "../world/World.h"
-#include "../world/Chunk.h"
+#include "../world/chunk/Chunk.h"
 
 namespace {
 constexpr float SKIN_W = 64.0f;

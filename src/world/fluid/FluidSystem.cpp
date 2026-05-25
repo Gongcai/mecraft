@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "FluidState.h"
-#include "World.h"
+#include "../World.h"
 
 namespace {
 

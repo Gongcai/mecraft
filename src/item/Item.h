@@ -6,7 +6,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../core/NamespacedId.h"
 #include "../core/BuiltinIds.h"
 #include "../core/IdRegistry.h"

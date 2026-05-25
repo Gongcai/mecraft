@@ -5,9 +5,9 @@
 #include "../../util/ParticleEventBuffer.h"
 #include "../../components/Components.h"
 #include "../../../world/World.h"
-#include "../../../world/Block.h"
-#include "../../../world/BlockStateRegistry.h"
-#include "../../../world/PropIndices.h"
+#include "../../../world/block/Block.h"
+#include "../../../world/block/BlockStateRegistry.h"
+#include "../../../world/block/PropIndices.h"
 
 namespace ecs {
 

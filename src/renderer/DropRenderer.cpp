@@ -13,8 +13,8 @@
 #include "../resource/ResourceMgr.h"
 #include "../world/DropSystem.h"
 #include "../world/World.h"
-#include "../world/Chunk.h"
-#include "../world/SubChunk.h"
+#include "../world/chunk/Chunk.h"
+#include "../world/chunk/SubChunk.h"
 #include "../item/Item.h"
 
 namespace {

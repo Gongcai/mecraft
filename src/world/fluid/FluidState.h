@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "BlockStateRegistry.h"
+#include "../block/BlockStateRegistry.h"
 #include "FluidRegistry.h"
 
 struct DecodedFluid {

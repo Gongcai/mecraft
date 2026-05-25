@@ -4,7 +4,7 @@
 #include "Game.h"
 #include "Paths.h"
 #include "states/GameplayState.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../item/Item.h"
 #include "../audio/AudioListener.h"
 #include "../ecs/entity/SteveModelFactory.h"

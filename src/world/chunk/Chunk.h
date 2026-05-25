@@ -8,7 +8,7 @@
 
 #include <glm/vec3.hpp>
 
-#include "Block.h"
+#include "../block/Block.h"
 #include "SubChunk.h"
 
 struct ChunkMeshData;

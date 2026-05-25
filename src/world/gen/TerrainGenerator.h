@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-#include "Chunk.h"
+#include "../chunk/Chunk.h"
 
 enum class TerrainBiome : uint8_t {
     Temperate = 0,

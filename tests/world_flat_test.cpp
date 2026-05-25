@@ -3,7 +3,7 @@
 
 #include <glm/vec3.hpp>
 
-#include "../src/world/FluidState.h"
+#include "../src/world/fluid/FluidState.h"
 #include "../src/world/World.h"
 
 namespace {

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "FluidState.h"
+#include "../fluid/FluidState.h"
 
 #if defined(__SSE2__) || defined(_M_X64) || defined(__AVX2__)
 #include <immintrin.h>

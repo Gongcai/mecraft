@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "Chunk.h"
+#include "../chunk/Chunk.h"
 
 struct LightSourceEntry {
     uint16_t packedIndex = 0;

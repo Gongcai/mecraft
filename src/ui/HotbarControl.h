@@ -5,7 +5,7 @@
 #include <glad/glad.h>
 
 #include "UIWidget.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../item/Item.h"
 class Window;
 class Inventory;

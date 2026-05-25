@@ -8,7 +8,7 @@
 #include <glm/mat4x4.hpp>
 
 #include "../item/Item.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 
 class Inventory;
 class ResourceMgr;

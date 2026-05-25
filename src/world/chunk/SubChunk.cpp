@@ -5,7 +5,7 @@
 
 #include <glad/glad.h>
 
-#include "FluidState.h"
+#include "../fluid/FluidState.h"
 
 namespace {
 uint8_t clampLight(const uint8_t level) {

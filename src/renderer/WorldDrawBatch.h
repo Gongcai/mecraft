@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "../world/SubChunk.h"
+#include "../world/chunk/SubChunk.h"
 
 enum class TransparentBatchKind : uint8_t {
     Generic = 0,

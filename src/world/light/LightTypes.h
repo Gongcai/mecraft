@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-#include "Block.h"
+#include "../block/Block.h"
 
 class Chunk;
 

@@ -9,8 +9,8 @@
 #include <glad/glad.h>
 #include <glm/vec3.hpp>
 
-#include "Block.h"
-#include "Palette.h"
+#include "../block/Block.h"
+#include "../block/Palette.h"
 #include "BitPackedArray.h"
 
 // GPU buffer range handle used by the global vertex pool (MDI path).

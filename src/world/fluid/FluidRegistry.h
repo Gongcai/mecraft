@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "Block.h"
+#include "../block/Block.h"
 
 enum class FluidKind : uint8_t {
     None = 0,

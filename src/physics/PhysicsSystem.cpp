@@ -5,9 +5,9 @@
 #include <cmath>
 
 #include "PhysicsInfo.h"
-#include "../world/Block.h"
-#include "../world/FluidFlow.h"
-#include "../world/FluidState.h"
+#include "../world/block/Block.h"
+#include "../world/fluid/FluidFlow.h"
+#include "../world/fluid/FluidState.h"
 #include "../world/World.h"
 #include "core/Time.h"
 

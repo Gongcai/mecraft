@@ -175,19 +175,19 @@ mecraft/
 
 | 文档 | 说明 |
 | --- | --- |
-| `docs/渲染管线实现状态分析与开发路线图.md` | 各系统实现状态详细分析与 Phase 0-10 开发路线图 |
-| `docs/内置光影完整渲染管线设计.md` | 渲染管线架构设计，目标管线与里程碑规划 (M0-M7) |
-| `docs/DerivativeMain内置渲染管线完整差异分析报告.md` | Mecraft 与 DerivativeMain 完整差异分析 |
-| `docs/Mecraft与Iris渲染管线架构差异报告.md` | 与 Iris/OptiFine 管线的架构对比 |
-| `docs/延迟渲染管线架构技术分析.md` | 延迟渲染架构技术分析 |
-| `docs/阴影映射系统技术分析.md` | 阴影系统技术分析 |
-| `docs/大气散射系统技术分析.md` | 大气散射技术分析 |
-| `docs/体积云渲染系统技术分析.md` | 体积云技术分析 |
-| `docs/水体渲染系统技术分析.md` | 水体渲染技术分析 |
-| `docs/光照模型与全局照明技术分析.md` | 光照模型与 GI 技术分析 |
-| `docs/后处理管线技术分析.md` | 后处理管线技术分析 |
-| `docs/表面渲染与材质系统技术分析.md` | 表面渲染与材质系统技术分析 |
-| `docs/体积光与体积雾系统技术分析.md` | 体积光与体积雾技术分析 |
+| `docs/accomplished/渲染管线实现状态分析与开发路线图.md` | 各系统实现状态详细分析与 Phase 0-10 开发路线图 |
+| `docs/accomplished/内置光影完整渲染管线设计.md` | 渲染管线架构设计，目标管线与里程碑规划 (M0-M7) |
+| `docs/accomplished/DerivativeMain内置渲染管线完整差异分析报告.md` | Mecraft 与 DerivativeMain 完整差异分析 |
+| `docs/accomplished/Mecraft与Iris渲染管线架构差异报告.md` | 与 Iris/OptiFine 管线的架构对比 |
+| `docs/accomplished/延迟渲染管线架构技术分析.md` | 延迟渲染架构技术分析 |
+| `docs/accomplished/阴影映射系统技术分析.md` | 阴影系统技术分析 |
+| `docs/accomplished/大气散射系统技术分析.md` | 大气散射技术分析 |
+| `docs/accomplished/体积云渲染系统技术分析.md` | 体积云技术分析 |
+| `docs/accomplished/水体渲染系统技术分析.md` | 水体渲染技术分析 |
+| `docs/accomplished/光照模型与全局照明技术分析.md` | 光照模型与 GI 技术分析 |
+| `docs/accomplished/后处理管线技术分析.md` | 后处理管线技术分析 |
+| `docs/accomplished/表面渲染与材质系统技术分析.md` | 表面渲染与材质系统技术分析 |
+| `docs/accomplished/体积光与体积雾系统技术分析.md` | 体积光与体积雾技术分析 |
 
 ## 参与贡献
 

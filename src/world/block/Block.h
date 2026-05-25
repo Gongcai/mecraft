@@ -12,10 +12,10 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "../MecraftExport.h"
-#include "../core/NamespacedId.h"
-#include "../core/BuiltinIds.h"
-#include "../core/IdRegistry.h"
+#include "../../MecraftExport.h"
+#include "../../core/NamespacedId.h"
+#include "../../core/BuiltinIds.h"
+#include "../../core/IdRegistry.h"
 
 class ResourceMgr;
 

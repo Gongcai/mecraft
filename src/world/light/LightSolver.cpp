@@ -6,8 +6,8 @@
 #include <cstddef>
 #include <utility>
 
-#include "Block.h"
-#include "Chunk.h"
+#include "../block/Block.h"
+#include "../chunk/Chunk.h"
 #include "LightCache.h"
 
 namespace {

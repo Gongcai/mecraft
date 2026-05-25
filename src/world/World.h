@@ -10,14 +10,14 @@
 
 #include <glm/glm.hpp>
 
-#include "BlockNeighborUpdateQueue.h"
-#include "Chunk.h"
+#include "block/BlockNeighborUpdateQueue.h"
+#include "chunk/Chunk.h"
 #include "DayNightSystem.h"
-#include "FluidState.h"
-#include "FluidSystem.h"
+#include "fluid/FluidState.h"
+#include "fluid/FluidSystem.h"
 #include "WeatherSystem.h"
-#include "LightService.h"
-#include "TerrainGenerator.h"
+#include "light/LightService.h"
+#include "gen/TerrainGenerator.h"
 #include "../physics/PhysicsInfo.h"
 #include "../thread/ThreadPool.h"
 

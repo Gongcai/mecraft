@@ -5,8 +5,8 @@
 
 #include <glm/vec3.hpp>
 
-#include "../src/world/BlockSelection.h"
-#include "../src/world/PropIndices.h"
+#include "../src/world/block/BlockSelection.h"
+#include "../src/world/block/PropIndices.h"
 #include "../src/world/World.h"
 
 namespace {

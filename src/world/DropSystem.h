@@ -7,7 +7,7 @@
 
 #include <glm/glm.hpp>
 
-#include "Block.h"
+#include "block/Block.h"
 #include "../item/Item.h"
 
 class World;

@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "../src/world/TerrainGenerator.h"
-#include "../src/world/Block.h"
+#include "../src/world/gen/TerrainGenerator.h"
+#include "../src/world/block/Block.h"
 
 class TerrainGeneratorPerfAccess {
 public:

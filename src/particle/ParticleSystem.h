@@ -4,7 +4,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <glad/glad.h>
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 
 class ResourceMgr;
 class Shader;

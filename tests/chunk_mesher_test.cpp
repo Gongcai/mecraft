@@ -5,10 +5,10 @@
 
 #include "../src/renderer/ChunkMesher.h"
 #include "../src/renderer/MeshBuilderRegistry.h"
-#include "../src/world/BlockStateRegistry.h"
-#include "../src/world/FluidFlow.h"
-#include "../src/world/FluidState.h"
-#include "../src/world/PropIndices.h"
+#include "../src/world/block/BlockStateRegistry.h"
+#include "../src/world/fluid/FluidFlow.h"
+#include "../src/world/fluid/FluidState.h"
+#include "../src/world/block/PropIndices.h"
 #include "../src/world/World.h"
 
 namespace {

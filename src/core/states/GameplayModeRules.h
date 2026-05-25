@@ -4,8 +4,8 @@
 #include <string>
 #include <random>
 #include <algorithm>
-#include "../../world/Block.h"
-#include "../../world/FluidState.h"
+#include "../../world/block/Block.h"
+#include "../../world/fluid/FluidState.h"
 
 namespace gameplay_state_detail {
     inline std::string getRandomName(const std::string& name, int maxRandomLength) {

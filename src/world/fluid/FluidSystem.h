@@ -8,7 +8,7 @@
 
 #include <glm/glm.hpp>
 
-#include "BlockStateRegistry.h"
+#include "../block/BlockStateRegistry.h"
 #include "FluidRegistry.h"
 
 class World;

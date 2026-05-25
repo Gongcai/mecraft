@@ -4,8 +4,8 @@
 #include <glm/vec3.hpp>
 
 #include "../src/ecs/GameplayRegistry.h"
-#include "../src/world/BlockStateRegistry.h"
-#include "../src/world/PropIndices.h"
+#include "../src/world/block/BlockStateRegistry.h"
+#include "../src/world/block/PropIndices.h"
 #include "../src/world/DropSystem.h"
 #include "../src/world/World.h"
 #include "../src/player/Inventory.h"

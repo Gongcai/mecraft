@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <cstddef>
 
-#include "FluidState.h"
-#include "../renderer/ChunkMesher.h"
+#include "../fluid/FluidState.h"
+#include "../../renderer/ChunkMesher.h"
 
 namespace {
 int wrapToChunkAxis(const int value) {

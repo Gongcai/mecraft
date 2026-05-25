@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 
 #include "EventBus.h"
-#include "../../world/Block.h"
+#include "../../world/block/Block.h"
 
 namespace ecs {
 

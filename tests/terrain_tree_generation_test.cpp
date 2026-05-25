@@ -2,8 +2,8 @@
 #include <cmath>
 #include <iostream>
 
-#include "../src/world/FluidState.h"
-#include "../src/world/TerrainGenerator.h"
+#include "../src/world/fluid/FluidState.h"
+#include "../src/world/gen/TerrainGenerator.h"
 #include "../src/world/World.h"
 
 namespace {

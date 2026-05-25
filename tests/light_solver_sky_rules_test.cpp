@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "../src/world/Chunk.h"
-#include "../src/world/LightSolver.h"
+#include "../src/world/light/LightSolver.h"
 
 namespace {
 [[noreturn]] void fail(const char* message) {

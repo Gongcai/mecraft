@@ -9,7 +9,7 @@
 #include <glm/vec3.hpp>
 
 #include "../resource/ResourceMgr.h"
-#include "../world/Chunk.h"
+#include "../world/chunk/Chunk.h"
 
 class World;
 

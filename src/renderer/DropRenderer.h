@@ -8,7 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "Shader.h"
-#include "../world/Block.h"
+#include "../world/block/Block.h"
 #include "../item/Item.h"
 
 class Camera;
