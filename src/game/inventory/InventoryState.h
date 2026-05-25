@@ -1,17 +1,17 @@
 #ifndef MECRAFT_INVENTORYSTATE_H
 #define MECRAFT_INVENTORYSTATE_H
 
-#include "../IGameState.h"
-#include "../GameStateMachine.h"
-#include "../InputContextManager.h"
-#include "GameplayModeRules.h"
-#include "StateDependencies.h"
+#include "../states/IGameState.h"
+#include "../states/GameStateMachine.h"
+#include "engine/input/InputContextManager.h"
+#include "../modes/GameplayModeRules.h"
+#include "../states/StateDependencies.h"
 #include "InventoryDragController.h"
 #include "CraftingGridController.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../ui/core/UIRenderer.h"
-#include "../../core/Time.h"
+#include "engine/platform/Time.h"
 #include "../../world/DropSystem.h"
 
 class InventoryState final : public IGameState {

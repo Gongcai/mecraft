@@ -9,9 +9,10 @@
 
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
-#include "../../core/Time.h"
+#include "engine/platform/Window.h"
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
+#include "engine/platform/Time.h"
 
 namespace {
 void applyOverlayBlendState()

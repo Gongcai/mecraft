@@ -13,9 +13,9 @@
 #include <unordered_map>
 
 #include "../../MecraftExport.h"
-#include "../../core/NamespacedId.h"
-#include "../../core/BuiltinIds.h"
-#include "../../core/IdRegistry.h"
+#include "../../engine/registry/NamespacedId.h"
+#include "../../game/content/BuiltinIds.h"
+#include "../../engine/registry/IdRegistry.h"
 
 class ResourceMgr;
 

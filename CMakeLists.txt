@@ -44,23 +44,35 @@ find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
 
 
-# [核心逻辑]
+# [应用层]
+set(SRC_APP
+        src/app/GameManager.cpp
+        src/app/states/AppStateMachine.cpp
+        src/app/states/GameplayAppState.cpp
+)
+
+# [引擎层]
+set(SRC_ENGINE
+        src/engine/camera/Camera.cpp
+        src/engine/input/InputManager.cpp
+        src/engine/input/InputContextManager.cpp
+        src/engine/platform/Window.cpp
+        src/engine/platform/Time.cpp
+        src/engine/registry/IdRegistry.cpp
+        src/engine/registry/NamespacedId.cpp
+)
+
+# [游戏层]
+set(SRC_GAME
+        src/game/Game.cpp
+        src/game/camera/CameraController.cpp
+        src/game/states/GameStateMachine.cpp
+        src/game/states/GameplayState.cpp
+        src/game/states/CommandState.cpp
+)
+
+# [核心基础]
 set(SRC_CORE
-        src/core/Window.cpp
-        src/core/Camera.cpp
-        src/core/InputManager.cpp
-        src/core/InputContextManager.cpp
-        src/core/GameManager.cpp
-        src/core/app_states/AppStateMachine.cpp
-        src/core/app_states/GameplayAppState.cpp
-        src/core/Game.cpp
-        src/core/Time.cpp
-        src/core/GameStateMachine.cpp
-        src/core/states/GameplayState.cpp
-        src/core/states/CommandState.cpp
-        src/core/NamespacedId.cpp
-        src/core/IdRegistry.cpp
-        src/core/CameraController.cpp
         src/thread/ThreadPool.cpp
         src/resource/ResourceMgr.cpp
         src/locale/LocaleManager.cpp
@@ -236,7 +248,8 @@ set(SRC_AUDIO
 
 # 合并所有核心代码
 set(CORE_SOURCES
-        ${SRC_CORE} ${SRC_WORLD} ${SRC_RENDERER} ${SRC_UI}
+        ${SRC_APP} ${SRC_ENGINE} ${SRC_GAME} ${SRC_CORE}
+        ${SRC_WORLD} ${SRC_RENDERER} ${SRC_UI}
         ${SRC_ECS} ${SRC_PLAYER} ${SRC_PHYSICS} ${SRC_PARTICLE}
         ${SRC_ITEM} ${SRC_CRAFTING} ${SRC_AUDIO}
 )

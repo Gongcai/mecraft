@@ -5,9 +5,9 @@
 #include <sstream>
 #include <vector>
 
-#include "../IGameState.h"
-#include "../GameStateMachine.h"
-#include "../InputContextManager.h"
+#include "IGameState.h"
+#include "GameStateMachine.h"
+#include "engine//input/InputContextManager.h"
 #include "StateDependencies.h"
 #include "../../ui/widgets/KeyboardInputBox.h"
 #include "../../ui/core/UIRenderer.h"

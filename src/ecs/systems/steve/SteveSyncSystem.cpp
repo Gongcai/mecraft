@@ -2,7 +2,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/InputFrameState.h"
-#include "../../../core/CameraController.h"
+#include "game/camera/CameraController.h"
 
 namespace ecs {
 

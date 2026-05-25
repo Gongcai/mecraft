@@ -3,7 +3,7 @@
 
 #include "IAppState.h"
 #include "AppStateDependencies.h"
-#include "../Game.h"
+#include "game/Game.h"
 #include <memory>
 
 class GameplayAppState : public IAppState {

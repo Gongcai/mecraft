@@ -7,7 +7,7 @@
 #include "../../util/ParticleEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../components/Components.h"
-#include "../../../core/states/GameplayModeRules.h"
+#include "../../../game/modes/GameplayModeRules.h"
 #include "../../../world/World.h"
 #include "../../../ui/core/UIRenderer.h"
 

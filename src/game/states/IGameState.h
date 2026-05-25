@@ -1,7 +1,7 @@
 #ifndef MECRAFT_IGAMESTATE_H
 #define MECRAFT_IGAMESTATE_H
 
-#include "InputManager.h"
+#include "engine/input/InputManager.h"
 
 // Forward declaration
 class GameStateMachine;

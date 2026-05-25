@@ -1,5 +1,5 @@
 #include "ShadowRenderer.h"
-#include "../../core/Camera.h"
+#include "engine/camera/Camera.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>

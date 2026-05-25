@@ -5,7 +5,7 @@
 #include <glm/vec3.hpp>
 
 #include "InventorySlotTypes.h"
-#include "StateDependencies.h"
+#include "../states/StateDependencies.h"
 #include "../../player/Inventory.h"
 #include "../../item/Item.h"
 #include "../../ui/core/UIRenderer.h"

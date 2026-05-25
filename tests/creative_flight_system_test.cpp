@@ -4,7 +4,7 @@
 
 #include <glm/vec3.hpp>
 
-#include "../src/core/states/GameplayModeRules.h"
+#include "../src/game/modes/GameplayModeRules.h"
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/GameplayServices.h"
 #include "../src/ecs/SystemContext.h"

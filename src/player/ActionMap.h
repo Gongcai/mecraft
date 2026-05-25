@@ -8,7 +8,7 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
-#include "../core/InputManager.h" // Given this includes GLFW, we have key codes
+#include "engine/input/InputManager.h"
 
 enum class InputContextType {
     Gameplay,

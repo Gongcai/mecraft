@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../../core/InputContextManager.h"
-#include "../../core/InputManager.h"
+#include "engine/input/InputContextManager.h"
+#include "engine/input/InputManager.h"
 #include "UIRenderer.h"
 
 namespace {

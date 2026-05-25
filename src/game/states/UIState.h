@@ -1,9 +1,9 @@
 #ifndef MECRAFT_UISTATE_H
 #define MECRAFT_UISTATE_H
 
-#include "../IGameState.h"
-#include "../GameStateMachine.h"
-#include "../InputContextManager.h"
+#include "IGameState.h"
+#include "GameStateMachine.h"
+#include "engine/input/InputContextManager.h"
 #include "StateDependencies.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../ui/core/UIRenderer.h"

@@ -1,5 +1,5 @@
 #include "IdRegistry.h"
-#include "BuiltinIds.h"
+#include "../../game/content/BuiltinIds.h"
 
 RuntimeId IdRegistry::registerId(const NamespacedId& namespacedId) {
     auto it = m_toRuntime.find(namespacedId);

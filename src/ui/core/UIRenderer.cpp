@@ -4,9 +4,9 @@
 
 #include <glad/glad.h>
 
-#include "../../core/Time.h"
-#include "../../core/InputManager.h"
-#include "../../core/Window.h"
+#include "engine/platform/Time.h"
+#include "engine/input/InputManager.h"
+#include "engine/platform/Window.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
 #include "UIRenderUtils.h"

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../IGameState.h"
-#include "../GameStateMachine.h"
-#include "../InputContextManager.h"
+#include "../states/IGameState.h"
+#include "../states/GameStateMachine.h"
+#include "engine//input/InputContextManager.h"
 #include "InventoryDragController.h"
-#include "StateDependencies.h"
+#include "../states/StateDependencies.h"
 #include "../../item/Item.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIInputAdapter.h"

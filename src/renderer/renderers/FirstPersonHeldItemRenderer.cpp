@@ -19,7 +19,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
 
-#include "../../core/Window.h"
+#include "engine/platform/Window.h"
 #include "../../Paths.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"

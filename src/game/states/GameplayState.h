@@ -1,7 +1,7 @@
 #ifndef MECRAFT_GAMEPLAYSTATE_H
 #define MECRAFT_GAMEPLAYSTATE_H
-#include "../IGameState.h"
-#include "GameplayModeRules.h"
+#include "IGameState.h"
+#include "../modes/GameplayModeRules.h"
 #include "StateDependencies.h"
 
 class GameplayState : public IGameState {

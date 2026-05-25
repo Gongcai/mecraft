@@ -8,20 +8,20 @@
 #include <cstddef>
 #include <iostream>
 
-#include "Camera.h"
-#include "InputManager.h"
-#include "Window.h"
-#include "Time.h"
+#include "../engine/camera/Camera.h"
+#include "../engine/input/InputManager.h"
+#include "../engine/platform/Window.h"
+#include "../engine/platform/Time.h"
 
 #include "../renderer/core/Renderer.h"
 #include "../renderer/renderers/DropRenderer.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/renderers/PostProcessRenderer.h"
 #include "../renderer/renderers/HumanoidRenderer.h"
-#include "CameraController.h"
-#include "InputContextManager.h"
+#include "camera/CameraController.h"
+#include "../engine/input/InputContextManager.h"
 #include "../player/ActionMap.h"
-#include "GameStateMachine.h"
+#include "states/GameStateMachine.h"
 #include "../world/World.h"
 #include "../world/DropSystem.h"
 #include "../physics/PhysicsSystem.h"

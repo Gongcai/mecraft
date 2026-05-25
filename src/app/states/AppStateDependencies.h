@@ -1,10 +1,10 @@
 #ifndef MECRAFT_APPSTATEDEPENDENCIES_H
 #define MECRAFT_APPSTATEDEPENDENCIES_H
 
-#include "../Window.h"
-#include "../InputManager.h"
+#include "engine/platform/Window.h"
+#include "engine/input/InputManager.h"
 #include "../../player/ActionMap.h"
-#include "../InputContextManager.h"
+#include "engine/input/InputContextManager.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../audio/AudioEngine.h"
 #include "../../audio/BgmSystem.h"

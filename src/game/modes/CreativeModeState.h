@@ -1,7 +1,7 @@
 #ifndef MECRAFT_CREATIVEMODESTATE_H
 #define MECRAFT_CREATIVEMODESTATE_H
 
-#include "GameplayState.h"
+#include "../states/GameplayState.h"
 
 namespace physics {
 class PhysicsSystem;

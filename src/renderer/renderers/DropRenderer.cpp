@@ -8,8 +8,8 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "../../core/Camera.h"
-#include "../../core/Window.h"
+#include "engine/camera/Camera.h"
+#include "engine/platform/Window.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/DropSystem.h"
 #include "../../world/World.h"

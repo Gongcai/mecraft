@@ -1,7 +1,7 @@
 #include "PostProcessRenderer.h"
 
 #include "../core/Shader.h"
-#include "../../core/Window.h"
+#include "engine//platform/Window.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <algorithm>

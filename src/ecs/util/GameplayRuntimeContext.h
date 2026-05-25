@@ -1,7 +1,7 @@
 #ifndef MECRAFT_ECS_GAMEPLAY_RUNTIME_CONTEXT_H
 #define MECRAFT_ECS_GAMEPLAY_RUNTIME_CONTEXT_H
 
-#include "../../core/states/GameplayModeRules.h"
+#include "../../game/modes/GameplayModeRules.h"
 
 class IGameplayModeRules;
 

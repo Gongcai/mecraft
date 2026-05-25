@@ -1,6 +1,6 @@
 #include "CommandState.h"
 #include "GameplayState.h"
-#include "CreativeModeState.h"
+#include "../modes/CreativeModeState.h"
 #include "../../world/World.h"
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"

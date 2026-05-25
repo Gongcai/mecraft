@@ -1,7 +1,7 @@
 #ifndef MECRAFT_CAMERA_CONTROLLER_H
 #define MECRAFT_CAMERA_CONTROLLER_H
 
-#include "Camera.h"
+#include "../../engine/camera/Camera.h"
 #include <glm/glm.hpp>
 
 class CameraController {

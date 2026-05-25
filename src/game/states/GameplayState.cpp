@@ -2,11 +2,11 @@
 
 #include <memory>
 
-#include "../GameStateMachine.h"
-#include "../InputContextManager.h"
+#include "GameStateMachine.h"
+#include "engine//input/InputContextManager.h"
 #include "CommandState.h"
-#include "CreativeInventoryState.h"
-#include "InventoryState.h"
+#include "../inventory/CreativeInventoryState.h"
+#include "../inventory/InventoryState.h"
 #include "UIState.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/components/Components.h"

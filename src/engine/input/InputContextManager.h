@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <memory>
-#include "../player/ActionMap.h"
+#include "../../player/ActionMap.h"
 
 // InputContextType enum is defined in ActionMap.h
 

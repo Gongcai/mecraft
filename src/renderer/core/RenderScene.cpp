@@ -1,7 +1,7 @@
 #include "RenderScene.h"
 #include "Renderer.h"
-#include "../../core/Camera.h"
-#include "../../core/Window.h"
+#include "engine/camera/Camera.h"
+#include "engine/platform/Window.h"
 #include "../../world/World.h"
 
 RenderScene::RenderScene() = default;

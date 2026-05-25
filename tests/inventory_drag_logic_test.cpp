@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/core/InputManager.h"
+#include "../src/input/InputManager.h"
 #include "../src/player/Inventory.h"
 
 namespace {

@@ -2,7 +2,7 @@
 
 #include "../../util/InputFrameState.h"
 #include "../../components/Components.h"
-#include "../../../core/InputContextManager.h"
+#include "engine/input/InputContextManager.h"
 
 namespace ecs {
 

@@ -7,9 +7,9 @@
 #include <unordered_map>
 
 #include "../world/block/Block.h"
-#include "../core/NamespacedId.h"
-#include "../core/BuiltinIds.h"
-#include "../core/IdRegistry.h"
+#include "../engine/registry/NamespacedId.h"
+#include "../game/content/BuiltinIds.h"
+#include "../engine/registry/IdRegistry.h"
 
 // ItemID is now a separate RuntimeId from BlockID
 using ItemID = RuntimeId;

@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "../core/Shader.h"
-#include "../../core/Camera.h"
+#include "engine/camera/Camera.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
 #include "stb/stb_image.h"

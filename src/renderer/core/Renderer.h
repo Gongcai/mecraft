@@ -4,10 +4,10 @@
 
 #ifndef MECRAFT_RENDERER_H
 #define MECRAFT_RENDERER_H
-#include "../../core/Camera.h"
+#include "engine/camera/Camera.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../thread/ThreadPool.h"
-#include "../../core/Window.h"
+#include "engine/platform/Window.h"
 #include "../mesh/ChunkMeshingService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"

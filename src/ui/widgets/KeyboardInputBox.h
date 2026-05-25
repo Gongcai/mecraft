@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <string>
 
-#include "../../core/InputManager.h"
+#include "engine/input/InputManager.h"
 
 class InputContextManager;
 
