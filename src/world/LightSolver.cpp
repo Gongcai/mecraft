@@ -753,7 +753,8 @@ void buildOutgoingBatches(SolverContext& context,
 
         emitBoundarySeeds(context, after, direction, batch);
         batch.dirtySubChunkMask = borderFaceDirtyMask(before, after, direction);
-        if (batch.dirtySubChunkMask != 0) {
+        if (batch.dirtySubChunkMask != 0 ||
+            (context.job.forceOutgoingBoundaryMask & (1u << direction)) != 0u) {
             outgoing.push_back(std::move(batch));
         }
     }

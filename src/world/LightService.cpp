@@ -68,6 +68,45 @@ bool sameBoundaryNodes(const BorderUpdateBatch& lhs, const BorderUpdateBatch& rh
     return true;
 }
 
+uint8_t directionBit(const int direction) {
+    return static_cast<uint8_t>(1u << direction);
+}
+
+int oppositeDirection(const int direction) {
+    switch (direction) {
+        case 0: return 1;
+        case 1: return 0;
+        case 2: return 3;
+        case 3: return 2;
+        default: return 0;
+    }
+}
+
+uint32_t expandSubChunkMaskVertical(uint32_t mask) {
+    uint32_t expanded = mask;
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if ((mask & (1u << scy)) == 0u) {
+            continue;
+        }
+        if (scy > 0) {
+            expanded |= (1u << (scy - 1));
+        }
+        if (scy + 1 < Chunk::NUM_SUB_CHUNKS) {
+            expanded |= (1u << (scy + 1));
+        }
+    }
+    return expanded;
+}
+
+void markSubChunksDirtyByMask(Chunk& chunk, uint32_t mask) {
+    mask = expandSubChunkMaskVertical(mask);
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if ((mask & (1u << scy)) != 0u) {
+            chunk.markSubChunkDirty(scy);
+        }
+    }
+}
+
 void countReason(const LightDirtyReason reason, int& chunkLoaded, int& blockChanged, int& neighborBoundary) {
     switch (reason) {
         case LightDirtyReason::ChunkLoaded:
@@ -118,13 +157,25 @@ void LightService::onChunkLoaded(const std::shared_ptr<Chunk>& chunk) {
     ensureBaseLightCache(chunk);
 
     // New chunk and loaded neighbors both need one boundary synchronization pass.
+    uint8_t newChunkForceOutgoingMask = 0;
     for (int direction = 0; direction < 4; ++direction) {
         Chunk* neighbor = chunk->neighbors[direction];
         if (!neighbor) {
             continue;
         }
-        markChunkDirty(World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ),
-                       LightDirtyReason::NeighborBoundary);
+        newChunkForceOutgoingMask |= directionBit(direction);
+        const int64_t neighborKey = World::chunkKey(neighbor->m_chunkX, neighbor->m_chunkZ);
+        {
+            std::lock_guard<std::mutex> lock(m_stateMutex);
+            LightChunkState& state = m_chunkStates[neighborKey];
+            state.pendingForceOutgoingBoundaryMask |= directionBit(oppositeDirection(direction));
+        }
+        markChunkDirty(neighborKey, LightDirtyReason::NeighborBoundary);
+    }
+    if (newChunkForceOutgoingMask != 0u) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        LightChunkState& state = m_chunkStates[key];
+        state.pendingForceOutgoingBoundaryMask |= newChunkForceOutgoingMask;
     }
 }
 
@@ -295,6 +346,11 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.changedBoundaryDirections = state.pendingBoundaryChanged;
                     job.inbox = collectBoundaryInputs(state);
                     job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
+                    job.forceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
+                    state.inFlightHaloMeshDirtyMask = state.pendingHaloMeshDirtyMask;
+                    state.inFlightForceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
+                    state.pendingHaloMeshDirtyMask = 0;
+                    state.pendingForceOutgoingBoundaryMask = 0;
 
                     // Snapshot the incrementally-maintained base-light cache so
                     // the solver can skip the expensive buildCurrentBasePacked() scan.
@@ -392,6 +448,8 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                 state.queued = false;
                 shouldRequeue = state.dirty;
                 if (shouldRequeue) {
+                    state.pendingHaloMeshDirtyMask |= state.inFlightHaloMeshDirtyMask;
+                    state.pendingForceOutgoingBoundaryMask |= state.inFlightForceOutgoingBoundaryMask;
                     state.queued = true;
                     ++m_frameStats.requeued;
                     // If the dropped job was ChunkLoaded, preserve the reason so
@@ -405,14 +463,22 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                         chunkIt->second->setLightQueued(true);
                     }
                 }
+                state.inFlightHaloMeshDirtyMask = 0;
+                state.inFlightForceOutgoingBoundaryMask = 0;
                 continue;
             }
 
+            const uint32_t haloMeshDirtyMask = state.inFlightHaloMeshDirtyMask;
             if (!ticket.result.selfDelta.packedLight.empty()) {
                 chunkIt->second->replacePackedLight(ticket.result.selfDelta.packedLight.data(),
                                                     ticket.result.selfDelta.packedLight.size(),
                                                     nullptr);
+                if (haloMeshDirtyMask != 0u) {
+                    markSubChunksDirtyByMask(*chunkIt->second, haloMeshDirtyMask);
+                }
             }
+            state.inFlightHaloMeshDirtyMask = 0;
+            state.inFlightForceOutgoingBoundaryMask = 0;
 
             for (const BorderUpdateBatch& batch : ticket.result.outgoing) {
                 auto neighborChunkIt = world.getActiveChunks().find(batch.targetChunkKey);
@@ -432,6 +498,9 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                     }
                 }
                 if (boundaryChanged) {
+                    if (batch.dirtySubChunkMask != 0u) {
+                        neighborState.pendingHaloMeshDirtyMask |= batch.dirtySubChunkMask;
+                    }
                     const bool wasDirty = neighborState.dirty;
                     neighborState.dirty = true;
                     if (!wasDirty || shouldReplaceDirtyReason(neighborState.reason, LightDirtyReason::NeighborBoundary)) {
@@ -441,6 +510,8 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                         neighborState.queued = true;
                         neighborChunkIt->second->setLightQueued(true);
                     }
+                } else if (batch.dirtySubChunkMask != 0u) {
+                    markSubChunksDirtyByMask(*neighborChunkIt->second, batch.dirtySubChunkMask);
                 }
                 ++m_frameStats.boundarySync;
             }
@@ -460,6 +531,8 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
                 state.queued = true;
                 ++m_frameStats.requeued;
                 chunkIt->second->setLightQueued(true);
+            } else {
+                state.pendingHaloMeshDirtyMask = 0;
             }
         }
     }

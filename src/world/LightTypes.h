@@ -60,6 +60,7 @@ struct LightJob {
     std::vector<BorderUpdateBatch> previousInbox;
     std::vector<BorderUpdateBatch> inbox;
     std::array<bool, 4> changedBoundaryDirections{};
+    uint8_t forceOutgoingBoundaryMask = 0;
     LightDirtyReason reason = LightDirtyReason::NeighborBoundary;
 };
 

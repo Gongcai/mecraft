@@ -49,6 +49,10 @@ private:
         std::array<std::optional<BorderUpdateBatch>, 4> boundaryCache;
         std::array<std::optional<BorderUpdateBatch>, 4> pendingPreviousBoundaryCache;
         std::array<bool, 4> pendingBoundaryChanged{};
+        uint32_t pendingHaloMeshDirtyMask = 0;
+        uint32_t inFlightHaloMeshDirtyMask = 0;
+        uint8_t pendingForceOutgoingBoundaryMask = 0;
+        uint8_t inFlightForceOutgoingBoundaryMask = 0;
         LightDirtyReason reason = LightDirtyReason::NeighborBoundary;
         LightDirtyReason lastSubmitReason = LightDirtyReason::NeighborBoundary;
     };

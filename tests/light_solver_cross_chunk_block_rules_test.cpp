@@ -96,6 +96,16 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     leftLitJob.neighborPosX = right;
     const LightResult leftLit = LightSolver::solve(leftLitJob);
     const BorderUpdateBatch litBoundary = findOutgoingToPosXNeighbor(leftLit, World::chunkKey(1, 0));
+    left->replacePackedLight(leftLit.selfDelta.packedLight.data(), leftLit.selfDelta.packedLight.size(), nullptr);
+
+    LightJob leftStableSyncJob = buildJob(left);
+    leftStableSyncJob.neighborPosX = right;
+    leftStableSyncJob.forceOutgoingBoundaryMask = 1u << 0;
+    const LightResult leftStableSync = LightSolver::solve(leftStableSyncJob);
+    const BorderUpdateBatch stableBoundary = findOutgoingToPosXNeighbor(leftStableSync, World::chunkKey(1, 0));
+    if (stableBoundary.dirtySubChunkMask != 0 || stableBoundary.nodes.empty()) {
+        fail("forced boundary sync should resend stable border light without reporting a light delta");
+    }
 
     LightJob rightLitJob = buildJob(right);
     rightLitJob.reason = LightDirtyReason::NeighborBoundary;

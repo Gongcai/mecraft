@@ -98,6 +98,11 @@ int main() {
         fail("torch should propagate block light into the neighboring chunk before removal");
     }
 
+    const int scy = Chunk::toSubChunkIndex(torchY);
+    if (!rightChunk.isSubChunkDirty(scy)) {
+        fail("neighboring chunk light apply should dirty the mesh that samples changed cross-chunk halo light");
+    }
+
     clearChunkDirtyFlags(world);
 
     world.setBlock(torchX, torchY, z, BlockIds::AIR);
@@ -112,7 +117,6 @@ int main() {
         fail("neighboring chunk block light should be cleared after removing the torch");
     }
 
-    const int scy = Chunk::toSubChunkIndex(torchY);
     if (!rightChunk.isSubChunkDirty(scy)) {
         fail("neighboring chunk should be marked dirty after cross-chunk light removal");
     }
