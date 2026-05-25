@@ -96,6 +96,7 @@ set(SRC_WORLD
 set(SRC_RENDERER
         src/renderer/Shader.cpp
         src/renderer/Renderer.cpp
+        src/renderer/RenderScene.cpp
         src/renderer/DropRenderer.cpp
         src/renderer/FirstPersonHeldItemRenderer.cpp
         src/renderer/ItemModelMesh.cpp
