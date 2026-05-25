@@ -3,7 +3,7 @@
 #include <array>
 #include <cmath>
 
-#include "../../renderer/ChunkMesher.h"
+#include "../../renderer/mesh/ChunkMesher.h"
 #include "FluidState.h"
 #include "../World.h"
 

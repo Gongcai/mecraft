@@ -4,18 +4,18 @@
 
 #include "Renderer.h"
 
-#include "HumanoidRenderer.h"
-#include "DropRenderer.h"
-#include "../particle/ParticleSystem.h"
-#include "ChunkMesher.h"
-#include "../ecs/GameplayRegistry.h"
-#include "shadow/ShadowMatrices.h"
-#include "shadow/ShadowCasterCuller.h"
-#include "../Paths.h"
-#include "../core/Time.h"
-#include "../world/block/BlockSelection.h"
-#include "../world/DropSystem.h"
-#include "../world/World.h"
+#include "../renderers/HumanoidRenderer.h"
+#include "../renderers/DropRenderer.h"
+#include "../../particle/ParticleSystem.h"
+#include "../mesh/ChunkMesher.h"
+#include "../../ecs/GameplayRegistry.h"
+#include "../shadow/ShadowMatrices.h"
+#include "../shadow/ShadowCasterCuller.h"
+#include "../../Paths.h"
+#include "../../core/Time.h"
+#include "../../world/block/BlockSelection.h"
+#include "../../world/DropSystem.h"
+#include "../../world/World.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>

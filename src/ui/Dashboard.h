@@ -20,8 +20,8 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/util/PlayerQuery.h"
 #include "../world/World.h"
-#include "../renderer/Renderer.h"
-#include "../renderer/PostProcessRenderer.h"
+#include "../renderer/core/Renderer.h"
+#include "../renderer/renderers/PostProcessRenderer.h"
 class FirstPersonHeldItemRenderer;
 class UIRenderer;
 class Dashboard {

@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "../../crafting/CraftingSystem.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 void CraftingGridControl::init(ResourceMgr& resourceMgr)

@@ -8,7 +8,7 @@
 #include "Placement.h"
 #include "PropIndices.h"
 #include "Paths.h"
-#include "../../renderer/MeshBuilderRegistry.h"
+#include "../../renderer/mesh/MeshBuilderRegistry.h"
 
 #include <algorithm>
 #include <fstream>

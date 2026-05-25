@@ -1,6 +1,6 @@
 #include "ItemGridControl.h"
 
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 void ItemGridControl::init(ResourceMgr& resourceMgr)

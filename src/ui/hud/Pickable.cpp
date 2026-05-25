@@ -3,7 +3,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../item/Item.h"
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"

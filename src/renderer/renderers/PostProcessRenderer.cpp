@@ -1,8 +1,8 @@
 #include "PostProcessRenderer.h"
 
-#include "Shader.h"
-#include "../core/Window.h"
-#include "../resource/ResourceMgr.h"
+#include "../core/Shader.h"
+#include "../../core/Window.h"
+#include "../../resource/ResourceMgr.h"
 
 #include <algorithm>
 #include <cmath>

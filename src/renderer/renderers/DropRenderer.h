@@ -7,9 +7,9 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
-#include "Shader.h"
-#include "../world/block/Block.h"
-#include "../item/Item.h"
+#include "../core/Shader.h"
+#include "../../world/block/Block.h"
+#include "../../item/Item.h"
 
 class Camera;
 class ResourceMgr;

@@ -8,7 +8,7 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../resource/ResourceMgr.h"
-#include "../renderer/Shader.h"
+#include "../renderer/core/Shader.h"
 
 void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
     m_registry = &registry;

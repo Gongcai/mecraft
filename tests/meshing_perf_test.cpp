@@ -15,8 +15,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "../src/renderer/ChunkMesher.h"
-#include "../src/renderer/ChunkMeshingService.h"
+#include "../src/renderer/mesh/ChunkMesher.h"
+#include "../src/renderer/mesh/ChunkMeshingService.h"
 #include "../src/thread/ThreadPool.h"
 #include "../src/world/fluid/FluidState.h"
 

@@ -1,8 +1,8 @@
 #include "RenderScene.h"
 #include "Renderer.h"
-#include "../core/Camera.h"
-#include "../core/Window.h"
-#include "../world/World.h"
+#include "../../core/Camera.h"
+#include "../../core/Window.h"
+#include "../../world/World.h"
 
 RenderScene::RenderScene() = default;
 RenderScene::~RenderScene() = default;

@@ -6,7 +6,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"

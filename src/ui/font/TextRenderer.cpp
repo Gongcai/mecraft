@@ -8,7 +8,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../Paths.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 static uint32_t decodeUtf8(const char*& ptr, const char* end) {

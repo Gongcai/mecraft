@@ -14,8 +14,8 @@
 #include "../../crafting/CraftingSystem.h"
 #include "../../item/Item.h"
 #include "../../player/Inventory.h"
-#include "../../renderer/HumanoidRenderer.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/renderers/HumanoidRenderer.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"
 

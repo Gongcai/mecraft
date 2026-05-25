@@ -1,8 +1,8 @@
 #include "FirstPersonHeldItemRenderer.h"
 
-#include "ItemModelMesh.h"
-#include "MecraftTextureContract.h"
-#include "Shader.h"
+#include "../mesh/ItemModelMesh.h"
+#include "../contracts/MecraftTextureContract.h"
+#include "../core/Shader.h"
 
 #include <algorithm>
 #include <array>
@@ -19,12 +19,12 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
 
-#include "../core/Window.h"
-#include "../Paths.h"
-#include "../player/Inventory.h"
-#include "../resource/ResourceMgr.h"
-#include "../ui/core/UIRenderContext.h"
-#include "../world/chunk/SubChunk.h"
+#include "../../core/Window.h"
+#include "../../Paths.h"
+#include "../../player/Inventory.h"
+#include "../../resource/ResourceMgr.h"
+#include "../../ui/core/UIRenderContext.h"
+#include "../../world/chunk/SubChunk.h"
 
 namespace {
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{

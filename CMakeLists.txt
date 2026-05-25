@@ -94,25 +94,39 @@ set(SRC_WORLD
 
 # [渲染与UI]
 set(SRC_RENDERER
-        src/renderer/Shader.cpp
-        src/renderer/Renderer.cpp
-        src/renderer/RenderScene.cpp
-        src/renderer/DropRenderer.cpp
-        src/renderer/FirstPersonHeldItemRenderer.cpp
-        src/renderer/ItemModelMesh.cpp
-        src/renderer/MeshBuilderRegistry.cpp
-        src/renderer/PostProcessRenderer.cpp
-        src/renderer/DeferredRenderTargets.cpp
-        src/renderer/stb_image.cpp
-        src/renderer/ChunkMesher.cpp
-        src/renderer/ChunkMeshingService.cpp
-        src/renderer/GameplaySkyRenderer.cpp
-        src/renderer/HumanoidRenderer.cpp
-        src/renderer/SkyboxRenderer.cpp
-        src/renderer/WorldRenderBuffer.cpp
+        # Core framework
+        src/renderer/core/Shader.cpp
+        src/renderer/core/Renderer.cpp
+        src/renderer/core/RenderScene.cpp
+
+        # Render targets
+        src/renderer/targets/CommonFrameTargets.cpp
+        src/renderer/targets/DeferredFrameTargets.cpp
+        src/renderer/targets/DeferredRenderTargets.cpp
+        src/renderer/targets/ShadowTargets.cpp
+
+        # Sub-renderers
+        src/renderer/renderers/DropRenderer.cpp
+        src/renderer/renderers/FirstPersonHeldItemRenderer.cpp
+        src/renderer/renderers/GameplaySkyRenderer.cpp
+        src/renderer/renderers/HumanoidRenderer.cpp
+        src/renderer/renderers/PostProcessRenderer.cpp
+        src/renderer/renderers/SkyboxRenderer.cpp
+
+        # Mesh system
+        src/renderer/mesh/ChunkMesher.cpp
+        src/renderer/mesh/ChunkMeshingService.cpp
+        src/renderer/mesh/ItemModelMesh.cpp
+        src/renderer/mesh/MeshBuilderRegistry.cpp
+        src/renderer/mesh/WorldRenderBuffer.cpp
+
+        # Shadow system
         src/renderer/shadow/ShadowMatrices.cpp
         src/renderer/shadow/ShadowCasterCuller.cpp
         src/renderer/shadow/ShadowRenderer.cpp
+
+        # Utility
+        src/renderer/stb_image.cpp
 )
 
 set(SRC_UI

@@ -2,7 +2,7 @@
 
 #include <glad/glad.h>
 
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 void PickableOverlay::init(ResourceMgr& resourceMgr)

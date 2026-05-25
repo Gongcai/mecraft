@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/renderer/GameplaySkyRenderer.h"
+#include "../src/renderer/renderers/GameplaySkyRenderer.h"
 
 namespace {
 int fail(const char* message) {

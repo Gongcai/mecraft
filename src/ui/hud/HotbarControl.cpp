@@ -8,7 +8,7 @@
 
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
 #include "../font/TextRenderer.h"

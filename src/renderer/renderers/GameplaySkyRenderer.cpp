@@ -6,12 +6,12 @@
 #include <deque>
 #include <vector>
 
-#include "Shader.h"
-#include "../core/Camera.h"
-#include "../Paths.h"
-#include "../resource/ResourceMgr.h"
+#include "../core/Shader.h"
+#include "../../core/Camera.h"
+#include "../../Paths.h"
+#include "../../resource/ResourceMgr.h"
 #include "stb/stb_image.h"
-#include "../world/DayNightSystem.h"
+#include "../../world/DayNightSystem.h"
 
 #include <glm/gtc/matrix_transform.hpp>
 

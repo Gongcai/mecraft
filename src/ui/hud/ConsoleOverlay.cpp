@@ -5,7 +5,7 @@
 
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 void ConsoleOverlay::init(ResourceMgr& resourceMgr)

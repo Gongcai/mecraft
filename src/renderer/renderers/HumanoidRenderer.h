@@ -6,7 +6,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
-#include "../ecs/components/Components.h"
+#include "../../ecs/components/Components.h"
 
 class Camera;
 class Shader;

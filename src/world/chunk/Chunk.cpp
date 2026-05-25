@@ -4,7 +4,7 @@
 #include <cstddef>
 
 #include "../fluid/FluidState.h"
-#include "../../renderer/ChunkMesher.h"
+#include "../../renderer/mesh/ChunkMesher.h"
 
 namespace {
 int wrapToChunkAxis(const int value) {

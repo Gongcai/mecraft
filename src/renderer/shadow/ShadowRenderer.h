@@ -4,8 +4,8 @@
 #include "ShadowMatrices.h"
 #include "ShadowCasterCuller.h"
 
-#include "../GameplaySkyRenderer.h"
-#include "../Shader.h"
+#include "../renderers/GameplaySkyRenderer.h"
+#include "../core/Shader.h"
 
 #include <glm/glm.hpp>
 #include <array>

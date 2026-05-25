@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-#include "../src/renderer/ChunkMeshingService.h"
+#include "../src/renderer/mesh/ChunkMeshingService.h"
 #include "../src/thread/ThreadPool.h"
 
 namespace {

@@ -11,11 +11,11 @@
 #include <glm/vec2.hpp>
 
 #include "MeshBuilderRegistry.h"
-#include "../world/fluid/FluidFlow.h"
-#include "../world/block/BlockStateRegistry.h"
-#include "../world/fluid/FluidState.h"
-#include "../world/block/PropIndices.h"
-#include "../world/World.h"
+#include "../../world/fluid/FluidFlow.h"
+#include "../../world/block/BlockStateRegistry.h"
+#include "../../world/fluid/FluidState.h"
+#include "../../world/block/PropIndices.h"
+#include "../../world/World.h"
 
 namespace {
 std::atomic_bool g_debugDisableGreedyMeshing{false};

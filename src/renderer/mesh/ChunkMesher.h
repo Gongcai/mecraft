@@ -8,8 +8,8 @@
 
 #include <glm/vec3.hpp>
 
-#include "../resource/ResourceMgr.h"
-#include "../world/chunk/Chunk.h"
+#include "../../resource/ResourceMgr.h"
+#include "../../world/chunk/Chunk.h"
 
 class World;
 

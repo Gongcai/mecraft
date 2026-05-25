@@ -1,5 +1,5 @@
 #include "HumanoidRenderer.h"
-#include "Shader.h"
+#include "../core/Shader.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,13 +7,13 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "../core/Camera.h"
-#include "../core/Window.h"
-#include "../resource/ResourceMgr.h"
-#include "../ecs/GameplayRegistry.h"
-#include "../ecs/components/Components.h"
-#include "../world/World.h"
-#include "../world/chunk/Chunk.h"
+#include "../../core/Camera.h"
+#include "../../core/Window.h"
+#include "../../resource/ResourceMgr.h"
+#include "../../ecs/GameplayRegistry.h"
+#include "../../ecs/components/Components.h"
+#include "../../world/World.h"
+#include "../../world/chunk/Chunk.h"
 
 namespace {
 constexpr float SKIN_W = 64.0f;

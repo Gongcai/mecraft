@@ -4,17 +4,17 @@
 
 #ifndef MECRAFT_RENDERER_H
 #define MECRAFT_RENDERER_H
-#include "../core/Camera.h"
-#include "../resource/ResourceMgr.h"
-#include "../thread/ThreadPool.h"
-#include "../core/Window.h"
-#include "ChunkMeshingService.h"
-#include "DeferredRenderTargets.h"
-#include "GameplaySkyRenderer.h"
+#include "../../core/Camera.h"
+#include "../../resource/ResourceMgr.h"
+#include "../../thread/ThreadPool.h"
+#include "../../core/Window.h"
+#include "../mesh/ChunkMeshingService.h"
+#include "../targets/DeferredRenderTargets.h"
+#include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
-#include "shadow/ShadowRenderer.h"
-#include "WorldRenderBuffer.h"
-#include "WorldDrawBatch.h"
+#include "../shadow/ShadowRenderer.h"
+#include "../mesh/WorldRenderBuffer.h"
+#include "../mesh/WorldDrawBatch.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <unordered_set>

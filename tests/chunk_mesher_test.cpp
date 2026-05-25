@@ -3,8 +3,8 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/renderer/ChunkMesher.h"
-#include "../src/renderer/MeshBuilderRegistry.h"
+#include "../src/renderer/mesh/ChunkMesher.h"
+#include "../src/renderer/mesh/MeshBuilderRegistry.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/fluid/FluidFlow.h"
 #include "../src/world/fluid/FluidState.h"

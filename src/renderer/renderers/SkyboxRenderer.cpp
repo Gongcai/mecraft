@@ -4,8 +4,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "Shader.h"
-#include "../resource/ResourceMgr.h"
+#include "../core/Shader.h"
+#include "../../resource/ResourceMgr.h"
 
 namespace {
 constexpr float kCubeVertices[] = {

@@ -1,6 +1,6 @@
 #include "HeldItemPreviewControl.h"
 
-#include "../../renderer/ItemModelMesh.h"
+#include "../../renderer/mesh/ItemModelMesh.h"
 
 #include <algorithm>
 #include <array>
@@ -12,7 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../../player/Inventory.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../item/Item.h"
 #include "../../world/chunk/SubChunk.h"

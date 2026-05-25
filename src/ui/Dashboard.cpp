@@ -9,7 +9,7 @@
 
 #include "UIRenderer.h"
 #include "../ecs/components/Components.h"
-#include "../renderer/FirstPersonHeldItemRenderer.h"
+#include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 
 #include <algorithm>
 #include <array>

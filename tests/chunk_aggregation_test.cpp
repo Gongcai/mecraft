@@ -5,7 +5,7 @@
 
 #include <glm/vec3.hpp>
 
-#include "../src/renderer/ChunkMesher.h"
+#include "../src/renderer/mesh/ChunkMesher.h"
 
 namespace {
 int fail(const char* message) {

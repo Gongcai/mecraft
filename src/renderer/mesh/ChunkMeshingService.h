@@ -7,7 +7,7 @@
 #include <queue>
 
 #include "ChunkMesher.h"
-#include "../thread/ThreadPool.h"
+#include "../../thread/ThreadPool.h"
 
 class World;
 

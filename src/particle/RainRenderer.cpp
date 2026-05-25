@@ -4,7 +4,7 @@
 #include <glm/gtc/random.hpp>
 
 #include "../resource/ResourceMgr.h"
-#include "../renderer/Shader.h"
+#include "../renderer/core/Shader.h"
 
 static std::mt19937 s_rng{42};
 static constexpr int PRECIP_ATLAS_COLUMNS = 64;

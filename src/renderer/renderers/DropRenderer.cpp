@@ -1,5 +1,5 @@
 #include "DropRenderer.h"
-#include "ItemModelMesh.h"
+#include "../mesh/ItemModelMesh.h"
 
 #include <array>
 #include <cstddef>
@@ -8,14 +8,14 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "../core/Camera.h"
-#include "../core/Window.h"
-#include "../resource/ResourceMgr.h"
-#include "../world/DropSystem.h"
-#include "../world/World.h"
-#include "../world/chunk/Chunk.h"
-#include "../world/chunk/SubChunk.h"
-#include "../item/Item.h"
+#include "../../core/Camera.h"
+#include "../../core/Window.h"
+#include "../../resource/ResourceMgr.h"
+#include "../../world/DropSystem.h"
+#include "../../world/World.h"
+#include "../../world/chunk/Chunk.h"
+#include "../../world/chunk/SubChunk.h"
+#include "../../item/Item.h"
 
 namespace {
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{

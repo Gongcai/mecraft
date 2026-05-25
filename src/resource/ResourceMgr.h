@@ -11,7 +11,7 @@
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <utility>
-#include "../renderer/Shader.h"
+#include "../renderer/core/Shader.h"
 struct TextureAtlas {
     GLuint textureID = 0;
     int atlasWidth  = 0;     // 像素宽度

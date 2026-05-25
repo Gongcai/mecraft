@@ -10,7 +10,7 @@
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
 #include "../../core/Time.h"
-#include "../../renderer/Shader.h"
+#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 namespace {
