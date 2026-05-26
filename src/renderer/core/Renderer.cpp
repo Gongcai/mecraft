@@ -128,13 +128,11 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_entityGBufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
-    m_sceneCompositeShader = resourceMgr.getShader("scene_composite");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
     m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
-    m_cloudShader = resourceMgr.getShader("cloud_target");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
 
@@ -154,6 +152,10 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredLightingPass = std::make_unique<DeferredLightingPass>();
     m_deferredLightingPass->init(resourceMgr);
     m_deferredLightingPass->setShadowRenderer(&m_shadowRenderer);
+    m_cloudPass = std::make_unique<CloudPass>();
+    m_cloudPass->init(resourceMgr);
+    m_sceneCompositePass = std::make_unique<SceneCompositePass>();
+    m_sceneCompositePass->init(resourceMgr);
 
     if (m_volumetricFogShader != nullptr) {
         const GLint csmLocation = m_volumetricFogShader->getUniformLocation("uCsmShadowMap");
@@ -204,6 +206,8 @@ void Renderer::shutdown() {
     if (m_motionBlurPass) { m_motionBlurPass->shutdown(); m_motionBlurPass.reset(); }
     if (m_dofPass) { m_dofPass->shutdown(); m_dofPass.reset(); }
     if (m_deferredLightingPass) { m_deferredLightingPass->shutdown(); m_deferredLightingPass.reset(); }
+    if (m_cloudPass) { m_cloudPass->shutdown(); m_cloudPass.reset(); }
+    if (m_sceneCompositePass) { m_sceneCompositePass->shutdown(); m_sceneCompositePass.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     m_worldRenderBuffer.shutdown();
@@ -799,7 +803,7 @@ bool Renderer::isHybridDeferredReady() const {
            m_ssaoPass != nullptr &&
            m_velocityPass != nullptr &&
            m_reflectionPass != nullptr &&
-           m_cloudShader != nullptr;
+           m_cloudPass != nullptr;
 }
 
 Renderer::HeldItemShadowData Renderer::getHeldItemShadowData() const {
@@ -1594,6 +1598,9 @@ RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     rs.reflection.temporalEnabled = m_pipelineSettings.reflectionTemporalEnabled;
     rs.reflection.historyWeight = m_pipelineSettings.reflectionHistoryWeight;
     rs.reflection.filterStrength = m_pipelineSettings.reflectionFilterStrength;
+    rs.reflection.sceneReflectionCompositeStrength = m_pipelineSettings.sceneReflectionCompositeStrength;
+    // Cloud
+    rs.cloud.sceneCloudCompositeStrength = m_pipelineSettings.sceneCloudCompositeStrength;
     // Post-process
     rs.postProcess.motionBlurStrength = m_pipelineSettings.motionBlurStrength;
     rs.postProcess.motionBlurSamples = m_pipelineSettings.motionBlurSamples;
@@ -1734,16 +1741,23 @@ bool Renderer::renderWorldDeferred(const World& world,
         endGpuTimer(GpuTimerPass::Reflection);
 #endif
     }
-    if (m_cloudShader != nullptr) {
+    if (m_cloudPass) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Cloud);
 #endif
-        renderCloudPass(frame);
+        FrameContext cloudCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings cloudRs = buildRenderSettingsFromPipelineSettings();
+        m_cloudPass->execute(cloudCtx, cloudRs, m_deferredTargets);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Cloud);
 #endif
     }
-    renderSceneCompositePass(frame);
+    // Phase 5b: Scene composite
+    {
+        FrameContext compCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings compRs = buildRenderSettingsFromPipelineSettings();
+        m_sceneCompositePass->execute(compCtx, compRs, m_deferredTargets);
+    }
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
     if (m_pipelineSettings.reflectionDebugMode > 0) {
@@ -2185,32 +2199,8 @@ void Renderer::renderDeferredLightingPass(const RenderFrameData& /*frame*/) {
     // Phase 5a: Delegated to DeferredLightingPass::execute()
 }
 
-void Renderer::renderSceneCompositePass(const RenderFrameData& frame) {
-    if (m_sceneCompositeShader == nullptr) {
-        m_deferredTargets.copySceneLightingToSceneComposite();
-        return;
-    }
-
-    m_deferredTargets.bindSceneComposite();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    m_sceneCompositeShader->use();
-    bindSceneCompositeInputs(*m_sceneCompositeShader, frame);
-    renderFullscreen(*m_sceneCompositeShader);
-
-    for (int unit = 13; unit >= 0; --unit) {
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderSceneCompositePass(const RenderFrameData& /*frame*/) {
+    // Phase 5b: Delegated to SceneCompositePass::execute()
 }
 
 void Renderer::clearDeferredAuxiliaryTargets() {
@@ -2267,56 +2257,8 @@ void Renderer::renderReflectionPass(const RenderFrameData& /*frame*/) {
     // Phase 4: Delegated to ReflectionPass::execute()
 }
 
-void Renderer::renderCloudPass(const RenderFrameData& frame) {
-    if (m_cloudShader == nullptr) {
-        return;
-    }
-
-    m_deferredTargets.bindCloud();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    m_cloudShader->use();
-    m_cloudShader->setInt("uDepthTex", 0);
-    m_cloudShader->setInt("uSkyCaptureTex", 1);
-    m_cloudShader->setInt("uNoiseTex", 2);
-    m_cloudShader->setInt("uAtmosphereLut", 3);
-    // Clouds are world-space ray-marched — use non-jittered matrix to avoid TAA-induced jitter.
-    m_cloudShader->setMat4("uInvViewProj", frame.invViewProj);
-    bindSkyLightingUniforms(*m_cloudShader, frame);
-    bindAtmosphereUniforms(*m_cloudShader, frame);
-    bindCloudUniforms(*m_cloudShader, frame);
-    m_cloudShader->setFloat("uTime", frame.shaderTime);
-    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-    m_cloudShader->setBool("uNoiseEnabled", noiseTexture != 0);
-    // Temporal cloud reprojection: history + previous camera transform.
-    m_cloudShader->setInt("uHistoryCloudTex", 4);
-    m_cloudShader->setMat4("uPreviousViewProj", frame.previousViewProj);
-    m_cloudShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, noiseTexture);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyCloudTexturePrev());
-    renderFullscreen(*m_cloudShader);
-
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderCloudPass(const RenderFrameData& /*frame*/) {
+    // Phase 5b: Delegated to CloudPass::execute()
 }
 
 void Renderer::renderParticlesToSceneResolved(const RenderFrameData& frame) {

@@ -126,6 +126,8 @@ set(SRC_RENDERER
         src/renderer/passes/MotionBlurPass.cpp
         src/renderer/passes/DepthOfFieldPass.cpp
         src/renderer/passes/DeferredLightingPass.cpp
+        src/renderer/passes/CloudPass.cpp
+        src/renderer/passes/SceneCompositePass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp

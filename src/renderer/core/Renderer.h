@@ -17,6 +17,8 @@
 #include "../passes/MotionBlurPass.h"
 #include "../passes/DepthOfFieldPass.h"
 #include "../passes/DeferredLightingPass.h"
+#include "../passes/CloudPass.h"
+#include "../passes/SceneCompositePass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
@@ -753,6 +755,8 @@ private:
     std::unique_ptr<MotionBlurPass> m_motionBlurPass;
     std::unique_ptr<DepthOfFieldPass> m_dofPass;
     std::unique_ptr<DeferredLightingPass> m_deferredLightingPass;
+    std::unique_ptr<CloudPass> m_cloudPass;
+    std::unique_ptr<SceneCompositePass> m_sceneCompositePass;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;
