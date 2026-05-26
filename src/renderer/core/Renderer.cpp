@@ -162,10 +162,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
         m_deferredPipeline->shadowPass()->setWorldRenderBuffer(&m_worldRenderBuffer);
     }
     // Phase 5c: Inject WaterCompositePass dependencies
-    if (m_deferredPipeline->waterCompositePass()) {
-        m_deferredPipeline->waterCompositePass()->setTerrainRenderer(&m_terrainRenderer);
-        m_deferredPipeline->waterCompositePass()->setWorldRenderBuffer(&m_worldRenderBuffer);
-    }
     m_deferredTargets.init();
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
@@ -329,6 +325,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
         m_pipelineSettings.rainSurfaceRipplesEnabled,
         volumetricFogActive,
         m_useMultiDrawIndirect,
+        m_worldRenderBuffer,
         m_deferredTransparentBatch,
         m_transparentPassPlan,
         m_deferredTransparentEntries);

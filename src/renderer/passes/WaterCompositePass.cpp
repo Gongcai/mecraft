@@ -33,13 +33,13 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
                                    bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                                    bool volumetricFogActive,
                                    bool useMultiDrawIndirect,
+                                   WorldRenderBuffer& worldRenderBuffer,
                                    const std::vector<DrawBatchEntry>& transparentBatch,
                                    const TransparentPassPlan& transparentPlan,
                                    const std::vector<ChunkRenderEntry>& transparentEntries) {
     if (!waterEffectsEnabled ||
         m_waterCompositeShader == nullptr ||
-        m_resourceMgr == nullptr ||
-        m_worldRenderBuffer == nullptr) {
+        m_resourceMgr == nullptr) {
         return false;
     }
 
@@ -166,7 +166,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
             });
 
         if (!waterEntries.empty()) {
-            m_worldRenderBuffer->bindTransparentVao();
+            worldRenderBuffer.bindTransparentVao();
             for (const auto* entry : waterEntries) {
                 glDrawArrays(GL_TRIANGLES,
                              static_cast<GLint>(entry->range.firstVertex),

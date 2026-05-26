@@ -30,10 +30,6 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "WaterComposite"; }
 
-    /// Inject external dependencies (non-owning pointers).
-    void setTerrainRenderer(TerrainRenderer* tr) { m_terrainRenderer = tr; }
-    void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
-
     /// Execute water composite rendering.
     /// @param ctx Frame context
     /// @param settings Render settings
@@ -49,6 +45,7 @@ public:
     /// @param rainSurfaceRipplesEnabled Whether rain surface ripples are enabled
     /// @param volumetricFogActive Whether volumetric fog pass is active and has shaders
     /// @param useMultiDrawIndirect Whether MDI rendering is active
+    /// @param worldRenderBuffer Main-view world render buffer used for the MDI transparent VAO
     /// @param transparentEntries Non-MDI path: transparent chunk entries for per-VAO draw
     /// @return true if water was rendered before temporal resolve (caller must set m_waterRenderedBeforeTemporal)
     bool execute(const FrameContext& ctx, const RenderSettings& settings,
@@ -60,14 +57,13 @@ public:
                  bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                  bool volumetricFogActive,
                  bool useMultiDrawIndirect,
+                 WorldRenderBuffer& worldRenderBuffer,
                  const std::vector<DrawBatchEntry>& transparentBatch,
                  const TransparentPassPlan& transparentPlan,
                  const std::vector<ChunkRenderEntry>& transparentEntries);
 
 private:
     Shader* m_waterCompositeShader = nullptr;
-    TerrainRenderer* m_terrainRenderer = nullptr;
-    WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 };
 

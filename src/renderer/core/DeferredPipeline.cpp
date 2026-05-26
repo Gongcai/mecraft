@@ -39,8 +39,7 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
         m_volumetricPass->setShadowRenderer(shadowRenderer);
     }
 
-    // WaterCompositePass needs TerrainRenderer and WorldRenderBuffer —
-    // injected later by Renderer after those are created.
+    // Passes that consume renderer-owned state receive it through execute().
 }
 
 void DeferredPipeline::shutdown() {
