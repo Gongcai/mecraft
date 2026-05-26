@@ -1,0 +1,288 @@
+#include "VolumetricPass.h"
+#include "../targets/DeferredRenderTargets.h"
+#include "../core/Shader.h"
+#include "../../resource/ResourceMgr.h"
+#include "../shadow/ShadowRenderer.h"
+
+#include <glm/glm.hpp>
+#include <algorithm>
+
+void VolumetricPass::init(ResourceMgr& resourceMgr) {
+    m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
+    m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
+    m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
+    m_resourceMgr = &resourceMgr;
+    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+}
+
+void VolumetricPass::shutdown() {
+    m_volumetricFogShader = nullptr;
+    m_volumetricTemporalShader = nullptr;
+    m_volumetricCompositeShader = nullptr;
+    m_shadowRenderer = nullptr;
+    m_resourceMgr = nullptr;
+    m_noiseTexture = 0;
+}
+
+void VolumetricPass::execute(const FrameContext& ctx, const RenderSettings& settings,
+                              DeferredRenderTargets& targets, bool hasPreviousFrame) {
+    // Volumetric march (always runs when active)
+    renderFog(ctx, settings, targets);
+
+    // Temporal resolve (optional)
+    if (settings.volumetric.temporalEnabled && hasPreviousFrame && m_volumetricTemporalShader != nullptr) {
+        renderTemporal(ctx, settings, targets);
+    }
+
+    // Composite (always runs to ensure correct transmittance)
+    if (m_volumetricCompositeShader != nullptr) {
+        composite(ctx, settings, targets, hasPreviousFrame);
+    }
+}
+
+void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& settings,
+                                DeferredRenderTargets& targets) {
+    if (m_volumetricFogShader == nullptr) return;
+
+    targets.bindHalfRes();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Pre-bind CSM shadow array on unit 6
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthComparisonTexture());
+
+    m_volumetricFogShader->use();
+    m_volumetricFogShader->setInt("uDepthTex", 0);
+    m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
+    m_volumetricFogShader->setInt("uNoiseTex", 2);
+    m_volumetricFogShader->setInt("uShadowMapRaw", 3);
+    m_volumetricFogShader->setInt("uShadowColorTex", 4);
+    m_volumetricFogShader->setInt("uAtmosphereLut", 5);
+    m_volumetricFogShader->setInt("uCsmShadowMap", 6);
+    m_volumetricFogShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
+    m_volumetricFogShader->setVec2("uJitter", ctx.jitter);
+
+    // Shadow uniforms
+    if (m_shadowRenderer) {
+        m_shadowRenderer->bindShadowUniforms(*m_volumetricFogShader, ctx.moonShadowActive);
+    }
+
+    // Sky lighting (inlined)
+    m_volumetricFogShader->setVec3("uCameraPos", ctx.camera.position);
+    m_volumetricFogShader->setVec3("uSunDirection", ctx.skyColors.sunDirection);
+    m_volumetricFogShader->setVec3("uMoonDirection", ctx.skyColors.moonDirection);
+    m_volumetricFogShader->setVec3("uSunLightColor", ctx.skyColors.sunLightColor);
+    m_volumetricFogShader->setVec3("uMoonLightColor", ctx.skyColors.moonLightColor);
+    m_volumetricFogShader->setVec3("uSkyAmbientColor", ctx.skyColors.skyAmbientColor);
+    m_volumetricFogShader->setVec3("uShadowTintColor", ctx.skyColors.shadowTintColor);
+    m_volumetricFogShader->setVec3("uHorizonScatterColor", ctx.skyColors.horizonScatterColor);
+    m_volumetricFogShader->setFloat("uSkyIntensity", ctx.skyIntensity);
+    m_volumetricFogShader->setFloat("uMoonVisibility", ctx.skyColors.moonVisibility);
+    m_volumetricFogShader->setVec3("uDirectIlluminance", ctx.skyIlluminance.directIlluminance);
+    m_volumetricFogShader->setVec3("uSkyIlluminance", ctx.skyIlluminance.skyIlluminance);
+    m_volumetricFogShader->setVec3("uSunIlluminance", ctx.skyIlluminance.sunIlluminance);
+    m_volumetricFogShader->setVec3("uMoonIlluminance", ctx.skyIlluminance.moonIlluminance);
+    m_volumetricFogShader->setVec3("uCloudDynamicWeather", ctx.skyIlluminance.cloudDynamicWeather);
+
+    // Atmosphere (inlined)
+    m_volumetricFogShader->setFloat("uAerialStrength", ctx.atmosphere.aerialStrength);
+    m_volumetricFogShader->setFloat("uHorizonScatterStrength", ctx.atmosphere.horizonScatterStrength);
+    m_volumetricFogShader->setFloat("uSunWarmth", ctx.atmosphere.sunWarmth);
+    m_volumetricFogShader->setFloat("uSkyCoolness", ctx.atmosphere.skyCoolness);
+    m_volumetricFogShader->setFloat("uWeatherWetness", ctx.weather.wetness);
+    m_volumetricFogShader->setFloat("uWeatherStorm", ctx.weather.storm);
+    m_volumetricFogShader->setFloat("uAerialReduction", ctx.weather.aerialReduction);
+    m_volumetricFogShader->setFloat("uLightningFlash", ctx.weather.lightningFlash);
+    m_volumetricFogShader->setFloat("uSurfaceWetness", ctx.weather.surfaceWetness);
+    m_volumetricFogShader->setFloat("uSkyWetness", ctx.weather.skyWetness);
+    m_volumetricFogShader->setFloat("uFogWetness", ctx.weather.fogWetness);
+    m_volumetricFogShader->setFloat("uCloudWetness", ctx.weather.cloudWetness);
+    m_volumetricFogShader->setFloat("uPrecipitation", ctx.weather.precipitation);
+    m_volumetricFogShader->setFloat("uDirectWeatherOcclusion", ctx.atmosphere.directWeatherOcclusion);
+    m_volumetricFogShader->setInt("uDirectWeatherOcclusionOverride", ctx.atmosphere.directWeatherOcclusionOverride);
+
+    // Volumetric (inlined from bindVolumetricUniforms)
+    m_volumetricFogShader->setInt("uVolumetricLightEnabled", ctx.volumetric.lightEnabled ? 1 : 0);
+    m_volumetricFogShader->setInt("uVolumetricFogEnabled", ctx.volumetric.fogEnabled ? 1 : 0);
+    m_volumetricFogShader->setFloat("uVolumetricFogStrength", ctx.volumetric.fogStrength);
+    m_volumetricFogShader->setFloat("uVolumetricBaseDensity", ctx.volumetric.baseDensity);
+    m_volumetricFogShader->setFloat("uVolumetricMaxDistance", ctx.volumetric.maxDistance);
+    m_volumetricFogShader->setFloat("uVFogCenterHeight", ctx.volumetric.fogCenterHeight);
+    m_volumetricFogShader->setFloat("uVFogHeightSpread", ctx.volumetric.fogHeightSpread);
+    m_volumetricFogShader->setFloat("uVFogNoiseScale", ctx.volumetric.fogNoiseScale);
+    m_volumetricFogShader->setFloat("uVFogLightStrength", ctx.volumetric.fogLightStrength);
+    m_volumetricFogShader->setFloat("uVFogDensityScale", ctx.volumetric.fogDensityScale);
+    m_volumetricFogShader->setInt("uVolumetricFogSamples", ctx.volumetric.fogSamples);
+
+    // Cloud (inlined)
+    m_volumetricFogShader->setInt("uCloudShadowsEnabled", ctx.cloud.shadowsEnabled ? 1 : 0);
+    m_volumetricFogShader->setFloat("uCloudShadowStrength", ctx.cloud.shadowStrength);
+    m_volumetricFogShader->setFloat("uCloudShadowScale", ctx.cloud.shadowScale);
+    m_volumetricFogShader->setFloat("uCloudShadowSpeed", ctx.cloud.shadowSpeed);
+    m_volumetricFogShader->setFloat("uCloudTimeScale", ctx.cloud.timeScale);
+    m_volumetricFogShader->setFloat("uCloudCoverage", ctx.cloud.coverage);
+    m_volumetricFogShader->setFloat("uCloudDensity", ctx.cloud.density);
+    m_volumetricFogShader->setFloat("uCloudHeight", ctx.cloud.height);
+    m_volumetricFogShader->setFloat("uCloudThickness", ctx.cloud.thickness);
+    m_volumetricFogShader->setFloat("uPlanarCloudCoverage", ctx.cloud.planarCoverage);
+    m_volumetricFogShader->setFloat("uPlanarCloudDensity", ctx.cloud.planarDensity);
+    m_volumetricFogShader->setFloat("uPlanarCloudAltitude", ctx.cloud.planarAltitude);
+
+    m_volumetricFogShader->setFloat("uCloudWetness", ctx.weather.cloudWetness);
+    m_volumetricFogShader->setInt("uShadowsEnabled", settings.shadow.enabled ? 1 : 0);
+    m_volumetricFogShader->setFloat("uTime", ctx.shaderTime);
+    m_volumetricFogShader->setBool("uNoiseEnabled", m_noiseTexture != 0);
+    m_volumetricFogShader->setInt("uVolumetricSkyRayEnabled", settings.volumetric.skyRayEnabled ? 1 : 0);
+    m_volumetricFogShader->setInt("uVolumetricTimeFadeEnabled", settings.volumetric.timeFadeEnabled ? 1 : 0);
+    m_volumetricFogShader->setInt("uVolumetricQualityTier", settings.volumetric.qualityTier);
+
+    // Debug mode
+    int vfDebugMode = 0;
+    if (settings.debug.viewMode >= 46 && settings.debug.viewMode <= 77) {
+        vfDebugMode = settings.debug.viewMode - 45;
+    }
+    m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
+    m_volumetricFogShader->setInt("uVolumetricStaticJitter",
+        (vfDebugMode > 0 || settings.volumetric.freezeR1) ? 1 : 0);
+    m_volumetricFogShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
+    m_volumetricFogShader->setFloat("uVolumetricShadowBiasScale", settings.volumetric.shadowBiasScale);
+
+    // Underwater
+    m_volumetricFogShader->setInt("uIsEyeInWater", ctx.eyeInWater ? 1 : 0);
+    m_volumetricFogShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
+    m_volumetricFogShader->setFloat("uUnderwaterVolumetricLightStrength", settings.volumetric.fogStrength);
+    m_volumetricFogShader->setInt("uUwVolumetricLightEnabled", settings.volumetric.uwLightEnabled ? 1 : 0);
+
+    // Texture bindings
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, targets.shadowDepthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, targets.shadowColorTexture());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
+    // Units 6-11: CSM shadow arrays (6 already bound)
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthTexture());
+    glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthAllComparisonTexture());
+    glActiveTexture(GL_TEXTURE9);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthAllTexture());
+    glActiveTexture(GL_TEXTURE10);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor0Texture());
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor1Texture());
+
+    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricFogShader);
+
+    glUseProgram(0);
+    for (int i = 11; i >= 6; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    }
+    for (int i = 5; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_3D, 0);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSettings& settings,
+                                     DeferredRenderTargets& targets) {
+    if (m_volumetricTemporalShader == nullptr) return;
+
+    targets.bindVolumetricTemporal();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_volumetricTemporalShader->use();
+    m_volumetricTemporalShader->setInt("uCurrentTex", 0);
+    m_volumetricTemporalShader->setInt("uHistoryTex", 1);
+    m_volumetricTemporalShader->setInt("uVelocityTex", 2);
+    m_volumetricTemporalShader->setInt("uDepthTex", 3);
+    m_volumetricTemporalShader->setInt("uHistoryDepthTex", 4);
+    m_volumetricTemporalShader->setVec2("uScreenSize",
+        glm::vec2(static_cast<float>(std::max(1, targets.halfWidth())),
+                   static_cast<float>(std::max(1, targets.halfHeight()))));
+    m_volumetricTemporalShader->setFloat("uHistoryWeight", settings.volumetric.temporalWeight);
+    m_volumetricTemporalShader->setFloat("uNearPlane", ctx.camera.nearPlane);
+    m_volumetricTemporalShader->setFloat("uFarPlane", ctx.camera.farPlane);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, targets.historyVolumetricTexturePrev());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
+
+    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricTemporalShader);
+
+    for (int i = 4; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& settings,
+                                DeferredRenderTargets& targets, bool hasPreviousFrame) {
+    if (m_volumetricCompositeShader == nullptr) return;
+
+    targets.bindSceneResolved();
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    m_volumetricCompositeShader->use();
+    m_volumetricCompositeShader->setInt("uSceneTex", 0);
+    m_volumetricCompositeShader->setInt("uVolumetricTex", 1);
+    m_volumetricCompositeShader->setInt("uDepthTex", 2);
+    m_volumetricCompositeShader->setFloat("uNearPlane", ctx.camera.nearPlane);
+    m_volumetricCompositeShader->setFloat("uFarPlane", ctx.camera.farPlane);
+    m_volumetricCompositeShader->setInt("uIsEyeInWater", ctx.eyeInWater ? 1 : 0);
+    m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
+    m_volumetricCompositeShader->setInt("uFreezeBias", settings.volumetric.freezeBias ? 1 : 0);
+
+    const bool volFogCompositeActive = (settings.volumetric.lightEnabled ||
+                                        (settings.volumetric.fogEnabled &&
+                                         settings.volumetric.fogStrength > 0.001f));
+    m_volumetricCompositeShader->setInt("uVolumetricFogActive", volFogCompositeActive ? 1 : 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, targets.sceneCompositeTexture());
+    glActiveTexture(GL_TEXTURE1);
+    if (settings.volumetric.temporalEnabled && hasPreviousFrame && m_volumetricTemporalShader != nullptr) {
+        glBindTexture(GL_TEXTURE_2D, targets.historyVolumetricTexture());
+    } else {
+        glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
+    }
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+
+    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricCompositeShader);
+
+    for (int i = 2; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}

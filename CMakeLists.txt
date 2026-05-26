@@ -128,6 +128,7 @@ set(SRC_RENDERER
         src/renderer/passes/DeferredLightingPass.cpp
         src/renderer/passes/CloudPass.cpp
         src/renderer/passes/SceneCompositePass.cpp
+        src/renderer/passes/VolumetricPass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp

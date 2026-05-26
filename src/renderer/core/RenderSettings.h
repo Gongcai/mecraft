@@ -58,6 +58,8 @@ struct VolumetricSettings {
     float fogNoiseScale = 0.04f;
     float fogLightStrength = 0.2f;
     float fogDensityScale = 1.0f;
+    float baseDensity = 1.0f;
+    float maxDistance = 260.0f;
     // A/B testing
     bool freezeR1 = false;
     bool freezeBias = false;

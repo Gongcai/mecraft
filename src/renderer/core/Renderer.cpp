@@ -130,9 +130,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
-    m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
-    m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
-    m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
 
@@ -156,13 +153,10 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_cloudPass->init(resourceMgr);
     m_sceneCompositePass = std::make_unique<SceneCompositePass>();
     m_sceneCompositePass->init(resourceMgr);
+    m_volumetricPass = std::make_unique<VolumetricPass>();
+    m_volumetricPass->init(resourceMgr);
+    m_volumetricPass->setShadowRenderer(&m_shadowRenderer);
 
-    if (m_volumetricFogShader != nullptr) {
-        const GLint csmLocation = m_volumetricFogShader->getUniformLocation("uCsmShadowMap");
-        if (csmLocation >= 0) {
-            glProgramUniform1i(m_volumetricFogShader->ID, csmLocation, 6);
-        }
-    }
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
@@ -208,6 +202,7 @@ void Renderer::shutdown() {
     if (m_deferredLightingPass) { m_deferredLightingPass->shutdown(); m_deferredLightingPass.reset(); }
     if (m_cloudPass) { m_cloudPass->shutdown(); m_cloudPass.reset(); }
     if (m_sceneCompositePass) { m_sceneCompositePass->shutdown(); m_sceneCompositePass.reset(); }
+    if (m_volumetricPass) { m_volumetricPass->shutdown(); m_volumetricPass.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     m_worldRenderBuffer.shutdown();
@@ -365,8 +360,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
                                      (m_pipelineSettings.volumetricLightEnabled ||
                                       (m_pipelineSettings.volumetricFogEnabled &&
                                        m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
-                                     m_volumetricFogShader != nullptr &&
-                                     m_volumetricCompositeShader != nullptr;
+                                     m_volumetricPass && m_volumetricPass->hasShaders();
     m_waterCompositeShader->setInt("uVolumetricFogActive", volumetricFogActive ? 1 : 0);
     m_waterCompositeShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
     m_waterCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
@@ -1452,8 +1446,7 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     const bool volFogActive = (m_pipelineSettings.volumetricLightEnabled ||
                                (m_pipelineSettings.volumetricFogEnabled &&
                                 m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
-                              m_volumetricFogShader != nullptr &&
-                              m_volumetricCompositeShader != nullptr;
+                              m_volumetricPass && m_volumetricPass->hasShaders();
     shader.setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
@@ -1577,6 +1570,19 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     ctx.atmosphere.skyCoolness = frame.atmosphere.skyCoolness;
     ctx.atmosphere.directWeatherOcclusion = frame.atmosphere.directWeatherOcclusion;
     ctx.atmosphere.directWeatherOcclusionOverride = frame.atmosphere.directWeatherOcclusionOverride;
+    // Volumetric
+    ctx.volumetric.lightEnabled = frame.volumetric.lightEnabled;
+    ctx.volumetric.uwLightEnabled = frame.volumetric.uwLightEnabled;
+    ctx.volumetric.fogEnabled = frame.volumetric.fogEnabled;
+    ctx.volumetric.fogStrength = frame.volumetric.fogStrength;
+    ctx.volumetric.baseDensity = frame.volumetric.baseDensity;
+    ctx.volumetric.maxDistance = frame.volumetric.maxDistance;
+    ctx.volumetric.fogCenterHeight = frame.volumetric.fogCenterHeight;
+    ctx.volumetric.fogHeightSpread = frame.volumetric.fogHeightSpread;
+    ctx.volumetric.fogNoiseScale = frame.volumetric.fogNoiseScale;
+    ctx.volumetric.fogLightStrength = frame.volumetric.fogLightStrength;
+    ctx.volumetric.fogDensityScale = frame.volumetric.fogDensityScale;
+    ctx.volumetric.fogSamples = frame.volumetric.fogSamples;
     return ctx;
 }
 
@@ -1635,7 +1641,19 @@ RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     rs.shadow.constantBias = m_pipelineSettings.shadowConstantBias;
     rs.shadow.slopeBias = m_pipelineSettings.shadowSlopeBias;
     // Volumetric
+    rs.volumetric.lightEnabled = m_pipelineSettings.volumetricLightEnabled;
+    rs.volumetric.uwLightEnabled = m_pipelineSettings.uwVolumetricLightEnabled;
     rs.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
+    rs.volumetric.skyRayEnabled = m_pipelineSettings.volumetricSkyRayEnabled;
+    rs.volumetric.timeFadeEnabled = m_pipelineSettings.volumetricTimeFadeEnabled;
+    rs.volumetric.temporalEnabled = m_pipelineSettings.volumetricTemporalEnabled;
+    rs.volumetric.qualityTier = m_pipelineSettings.volumetricQualityTier;
+    rs.volumetric.temporalWeight = m_pipelineSettings.volumetricTemporalWeight;
+    rs.volumetric.shadowBiasScale = m_pipelineSettings.volumetricShadowBiasScale;
+    rs.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
+    rs.volumetric.freezeR1 = m_pipelineSettings.freezeR1;
+    rs.volumetric.freezeBias = m_pipelineSettings.freezeBias;
+    rs.debug.viewMode = m_pipelineSettings.debugViewMode;
     // Weather
     rs.weather.skylightScale = m_pipelineSettings.weatherSkylightScale;
     rs.weather.rainLinesEnabled = m_pipelineSettings.rainWetSurfacesEnabled;
@@ -1787,48 +1805,16 @@ bool Renderer::renderWorldDeferred(const World& world,
     // provides per-frame variation that TAA resolves over multiple frames.
     // UW_VOLUMETRIC_LIGHT: underwater volumetric light runs even when overworld VFog
     // strength is zero — the underwater branch is independent of fog density settings.
-    const bool volumetricShadersAvailable =
-        m_volumetricFogShader != nullptr &&
-        m_volumetricCompositeShader != nullptr;
-    // DerivativeMain: VOLUMETRIC_LIGHT (base haze) and VOLUMETRIC_FOG (mist/blob)
-    // are independent entry points. Either one enables the volumetric march pass.
-    const bool volumetricLightActive = m_pipelineSettings.volumetricLightEnabled &&
-                                       volumetricShadersAvailable;
-    const bool volumetricFogActive = m_pipelineSettings.volumetricFogEnabled &&
-                                     m_pipelineSettings.volumetricFogStrength > 0.001f &&
-                                     volumetricShadersAvailable;
-    const bool overworldVolumetricActive = volumetricLightActive || volumetricFogActive;
-    const bool uwVolumetricActive = m_eyeInWater && volumetricShadersAvailable;
-    const bool volumetricDebugActive =
-        m_pipelineSettings.debugViewMode >= 46 &&
-        m_pipelineSettings.debugViewMode <= 77 &&
-        volumetricShadersAvailable;
-    if (overworldVolumetricActive || uwVolumetricActive || volumetricDebugActive) {
+    // Phase 5c: Volumetric fog
+    if (m_volumetricPass) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Volumetric);
 #endif
-        renderVolumetricFogPass(frame);
-        if (m_pipelineSettings.volumetricTemporalEnabled &&
-            m_hasPreviousFrameData &&
-            !volumetricDebugActive &&
-            m_volumetricTemporalShader != nullptr) {
-            renderVolumetricTemporalPass(frame);
-        }
-    }
-    // Always run volumetric composite to ensure alpha channel has correct fog transmittance.
-    // When volumetric fog is disabled, this outputs transmittance=1.0 (no fog) so Bloomy Fog
-    // doesn't misinterpret the alpha channel as "fully fogged".
-    if (!volumetricDebugActive && m_volumetricCompositeShader != nullptr) {
+        FrameContext volCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings volRs = buildRenderSettingsFromPipelineSettings();
+        m_volumetricPass->execute(volCtx, volRs, m_deferredTargets, m_hasPreviousFrameData);
 #ifdef MECRAFT_DEBUG
-        if (!(overworldVolumetricActive || uwVolumetricActive || volumetricDebugActive)) {
-            beginGpuTimer(GpuTimerPass::Volumetric);
-        }
-#endif
-        compositeVolumetricFogPass();
-#ifdef MECRAFT_DEBUG
-        if (!(overworldVolumetricActive || uwVolumetricActive || volumetricDebugActive)) {
-            endGpuTimer(GpuTimerPass::Volumetric);
-        }
+        endGpuTimer(GpuTimerPass::Volumetric);
 #endif
     }
 
@@ -2245,7 +2231,7 @@ void Renderer::updateDeferredHistoryTargets() {
     m_deferredTargets.copyDepthToHistory();
     m_deferredTargets.copyReflectionToHistory();
     m_deferredTargets.copyCloudToHistory();
-    if (!m_pipelineSettings.volumetricTemporalEnabled || !m_hasPreviousFrameData || m_volumetricTemporalShader == nullptr) {
+    if (!m_pipelineSettings.volumetricTemporalEnabled || !m_hasPreviousFrameData || !(m_volumetricPass && m_volumetricPass->hasTemporalShader())) {
         m_deferredTargets.copyVolumetricToHistory();
     }
     m_deferredTargets.swapHistory();
@@ -2296,213 +2282,16 @@ void Renderer::renderParticlesToSceneResolved(const RenderFrameData& frame) {
     glDisable(GL_BLEND);
 }
 
-void Renderer::renderVolumetricFogPass(const RenderFrameData& frame) {
-    m_deferredTargets.bindHalfRes();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
-    m_volumetricFogShader->use();
-    m_volumetricFogShader->setInt("uDepthTex", 0);
-    m_volumetricFogShader->setInt("uSkyCaptureTex", 1);
-    m_volumetricFogShader->setInt("uNoiseTex", 2);
-    m_volumetricFogShader->setInt("uShadowMapRaw", 3);
-    m_volumetricFogShader->setInt("uShadowColorTex", 4);
-    m_volumetricFogShader->setInt("uAtmosphereLut", 5);
-    m_volumetricFogShader->setInt("uCsmShadowMap", 6);
-    // Bind raw inverse and let the shader subtract taaOffset in NDC, matching
-    // DerivativeMain ScreenToViewSpace() for jittered depth.
-    m_volumetricFogShader->setMat4("uInvViewProj", frame.invViewProj);
-    m_volumetricFogShader->setVec2("uJitter", frame.jitter);
-    bindShadowFrameUniforms(*m_volumetricFogShader, frame);
-    bindSkyLightingUniforms(*m_volumetricFogShader, frame);
-    bindAtmosphereUniforms(*m_volumetricFogShader, frame);
-    bindVolumetricUniforms(*m_volumetricFogShader, frame);
-    bindCloudUniforms(*m_volumetricFogShader, frame);
-    m_volumetricFogShader->setFloat("uCloudWetness", frame.cloudWetness);
-    m_volumetricFogShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
-    m_volumetricFogShader->setFloat("uTime", frame.shaderTime);
-    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-    m_volumetricFogShader->setBool("uNoiseEnabled", noiseTexture != 0);
-
-    // Sky ray A/B toggle: when enabled, sky pixels (depth >= 1.0) also march volumetric fog
-    m_volumetricFogShader->setInt("uVolumetricSkyRayEnabled", m_pipelineSettings.volumetricSkyRayEnabled ? 1 : 0);
-    m_volumetricFogShader->setInt("uVolumetricTimeFadeEnabled", m_pipelineSettings.volumetricTimeFadeEnabled ? 1 : 0);
-
-    // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
-    m_volumetricFogShader->setInt("uVolumetricQualityTier", m_pipelineSettings.volumetricQualityTier);
-
-    // Volumetric fog debug mode: active when debug view 46-77 is selected
-    // 46-66: overworld VFog modes (1-21), 72-74: UW volumetric (27-29), 75-77: shadow contract (30-32)
-    int vfDebugMode = 0;
-    if (m_pipelineSettings.debugViewMode >= 46 && m_pipelineSettings.debugViewMode <= 77) {
-        vfDebugMode = m_pipelineSettings.debugViewMode - 45; // 46->1, ..., 77->32
-    }
-    m_volumetricFogShader->setInt("uVolumetricDebugMode", vfDebugMode);
-    // Freeze jitter for stable debug visualization or A/B test
-    m_volumetricFogShader->setInt("uVolumetricStaticJitter",
-        (vfDebugMode > 0 || m_pipelineSettings.freezeR1) ? 1 : 0);
-    m_volumetricFogShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
-    // Shadow bias scale for A/B testing (only affects volumetric fog)
-    m_volumetricFogShader->setFloat("uVolumetricShadowBiasScale", m_pipelineSettings.volumetricShadowBiasScale);
-    // Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
-    m_volumetricFogShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
-    m_volumetricFogShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
-    m_volumetricFogShader->setFloat("uUnderwaterVolumetricLightStrength",
-                                    m_pipelineSettings.underwaterVolumetricLightStrength);
-    m_volumetricFogShader->setInt("uUwVolumetricLightEnabled",
-                                  m_pipelineSettings.uwVolumetricLightEnabled ? 1 : 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, noiseTexture);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowColorTexture());
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
-    m_volumetricFogShader->setInt("uCsmShadowMap", 6);
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
-    m_volumetricFogShader->setInt("uCsmShadowDepthRaw", 7);
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllComparisonTexture());
-    m_volumetricFogShader->setInt("uCsmShadowDepthAll", 8);
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllTexture());
-    m_volumetricFogShader->setInt("uCsmShadowDepthAllRaw", 9);
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor0Texture());
-    m_volumetricFogShader->setInt("uCsmShadowColor0", 10);
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor1Texture());
-    m_volumetricFogShader->setInt("uCsmShadowColor1", 11);
-    renderFullscreen(*m_volumetricFogShader);
-    glUseProgram(0);
-    for (int i = 11; i >= 7; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    }
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    for (int i = 5; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_3D, 0);
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderVolumetricFogPass(const RenderFrameData& /*frame*/) {
+    // Phase 5c: Delegated to VolumetricPass::execute()
 }
 
-void Renderer::renderVolumetricTemporalPass(const RenderFrameData& frame) {
-    if (m_volumetricTemporalShader == nullptr) {
-        return;
-    }
-
-    m_deferredTargets.bindVolumetricTemporal();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_volumetricTemporalShader->use();
-    m_volumetricTemporalShader->setInt("uCurrentTex", 0);
-    m_volumetricTemporalShader->setInt("uHistoryTex", 1);
-    m_volumetricTemporalShader->setInt("uVelocityTex", 2);
-    m_volumetricTemporalShader->setInt("uDepthTex", 3);
-    m_volumetricTemporalShader->setInt("uHistoryDepthTex", 4);
-    
-    // Pass half-resolution screen size since we are resolving at half resolution
-    m_volumetricTemporalShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.halfWidth())),
-                   static_cast<float>(std::max(1, m_deferredTargets.halfHeight()))));
-    m_volumetricTemporalShader->setFloat("uHistoryWeight", m_pipelineSettings.volumetricTemporalWeight);
-    m_volumetricTemporalShader->setFloat("uNearPlane", frame.nearPlane);
-    m_volumetricTemporalShader->setFloat("uFarPlane", frame.farPlane);
-
-    // Current volumetric fog output (held in m_halfResTex)
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
-    
-    // Previous frame's temporal output
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyVolumetricTexturePrev());
-    
-    // Velocity buffer (full resolution)
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
-    
-    // GBuffer depth (full resolution)
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    
-    // History depth (full resolution)
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyDepthTexturePrev());
-
-    renderFullscreen(*m_volumetricTemporalShader);
-
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderVolumetricTemporalPass(const RenderFrameData& /*frame*/) {
+    // Phase 5c: Delegated to VolumetricPass::execute()
 }
 
 void Renderer::compositeVolumetricFogPass() {
-    m_deferredTargets.bindSceneResolved();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_volumetricCompositeShader->use();
-    m_volumetricCompositeShader->setInt("uSceneTex", 0);
-    m_volumetricCompositeShader->setInt("uVolumetricTex", 1);
-    m_volumetricCompositeShader->setInt("uDepthTex", 2);
-    m_volumetricCompositeShader->setFloat("uNearPlane", m_currentFrameData.nearPlane);
-    m_volumetricCompositeShader->setFloat("uFarPlane", m_currentFrameData.farPlane);
-    m_volumetricCompositeShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
-    m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(m_currentFrameData.frameIndex & 0x7fffffffULL));
-    m_volumetricCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
-    // Inform shader whether volumetric fog is active; when disabled, output transmittance=1.0
-    // so Bloomy Fog doesn't misinterpret alpha as "fully fogged".
-    const bool volFogCompositeActive = (m_pipelineSettings.volumetricLightEnabled ||
-                                        (m_pipelineSettings.volumetricFogEnabled &&
-                                         m_pipelineSettings.volumetricFogStrength > 0.001f));
-    m_volumetricCompositeShader->setInt("uVolumetricFogActive", volFogCompositeActive ? 1 : 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneCompositeTexture());
-    glActiveTexture(GL_TEXTURE1);
-    if (m_pipelineSettings.volumetricTemporalEnabled && m_hasPreviousFrameData && m_volumetricTemporalShader != nullptr) {
-        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyVolumetricTexture());
-    } else {
-        glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
-    }
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    renderFullscreen(*m_volumetricCompositeShader);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    // Phase 5c: Delegated to VolumetricPass::execute()
 }
 
 void Renderer::renderReflectionFilterPass(const RenderFrameData& /*frame*/) {
