@@ -10,6 +10,8 @@
 #include "engine/platform/Window.h"
 #include "../mesh/ChunkMeshingService.h"
 #include "../targets/DeferredRenderTargets.h"
+#include "../passes/SsaoPass.h"
+#include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
 #include "../shadow/ShadowRenderer.h"
@@ -736,6 +738,7 @@ private:
     DropSystem* m_dropSystem = nullptr;  // injected from Game
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
+    std::unique_ptr<SsaoPass> m_ssaoPass;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;

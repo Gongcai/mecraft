@@ -117,6 +117,10 @@ set(SRC_RENDERER
         src/renderer/targets/DeferredRenderTargets.cpp
         src/renderer/targets/ShadowTargets.cpp
 
+        # Render passes
+        src/renderer/passes/RenderPass.cpp
+        src/renderer/passes/SsaoPass.cpp
+
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp
         src/renderer/renderers/FirstPersonHeldItemRenderer.cpp

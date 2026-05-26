@@ -127,6 +127,10 @@ struct FrameContext {
     float animationTime = 0.0f;
     float shaderTime = 0.0f;
 
+    // Screen dimensions (populated from Window at frame start)
+    int frameWidth = 0;
+    int frameHeight = 0;
+
     // TAA jitter
     glm::vec2 jitter = glm::vec2(0.0f);
     glm::vec2 prevJitter = glm::vec2(0.0f);
