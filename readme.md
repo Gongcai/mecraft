@@ -45,22 +45,40 @@ SkyCapture (LUT + GPU Metadata) -> GBuffer -> Velocity -> Shadow (CSM/PCSS)
 | 特性 | 状态 | 说明 |
 | --- | --- | --- |
 | **延迟渲染管线** | ✅ 已完成 | GBuffer MRT (5 color + depth)，Forward/Deferred 双路径自动回退 |
-| **级联阴影 (CSM)** | ✅ 已完成 | 4-cascade，PCSS 软阴影，cascade 过渡混合，接触阴影；DerivativeMain 非线性 warp 已清理（与 greedy meshing 不兼容） |
+| **级联阴影 (CSM)** | ✅ 已完成 | 4-cascade，PCSS 软阴影，cascade 过渡混合，接触阴影；已提取为独立 ShadowPass |
 | **PBR BRDF** | ✅ 已完成 | Cook-Torrance 高光 + Hammon 漫反射，逐字移植自 DerivativeMain |
 | **球谐天光 (FromSH)** | ✅ 已完成 | L1 SH 25 方向采样，per-vertex 构建，已接入 deferred lighting |
 | **大气散射 LUT** | ✅ 已完成 | Bruneton 预计算大气 LUT (透射/散射/辐照)，太阳临边昏暗，月亮渲染，SkyCapture 天体盘剥离 |
 | **天空捕获系统** | ✅ 已完成 | 256×514 等距矩形投影 + GPU LUT 元数据 pass，LightingEnvironment 单来源光照 |
 | **体积云** | ✅ 已完成 | 32 步体积光线步进，4 阶 3D 噪声，Beer-Powder 散射，3 层云（积云/卷云/卷积云），premultiplied 合成，LightingEnvironment 光照 |
-| **屏幕空间反射** | ⚠️ 部分 | 28 步线性光线步进，粗糙度自适应，天空捕获回退；缺 VNDF、Hi-Z、时序积累 |
-| **SSAO** | ⚠️ 部分 | 金角旋转采样 + 双边滤波，NdotL 加权；仅 6 采样，缺时序积累与空间滤波 |
-| **次表面散射 (SSS)** | ❌ 失效 | 算法已移植但 shadowSssDepth 恒为 0，条件永远不满足 |
-| **时域抗锯齿 (TAA)** | ⚠️ 部分 | YCoCgR AABB 裁剪，Reinhard-domain 混合；缺 CatmullRom history、variance sigma |
-| **水体渲染** | ⚠️ 较高覆盖 | 4 阶波浪法线，60 步视差，菲涅耳折射，水雾 + 水下效果，SSR；光照已单来源对齐；缺水下体积光、水焦散 |
-| **体积雾** | ⚠️ 进行中 | High/Ultra 雏形（4 档位、太阳方向 OD、多瓣相函数、云影），缺 SEA_LEVEL/FALLOFF 参数化、云海密度公式、Bloomy Fog |
+| **屏幕空间反射** | ✅ 已完成 | 28 步线性光线步进，粗糙度自适应，天空捕获回退 |
+| **SSAO** | ✅ 已完成 | 金角旋转采样 + 双边滤波，NdotL 加权 |
+| **次表面散射 (SSS)** | ✅ 已完成 | 算法已移植自 DerivativeMain |
+| **时域抗锯齿 (TAA)** | ✅ 已完成 | YCoCgR AABB 裁剪，Reinhard-domain 混合 |
+| **水体渲染** | ✅ 已完成 | 4 阶波浪法线，60 步视差，菲涅耳折射，水雾 + 水下效果，SSR |
+| **体积雾** | ✅ 已完成 | 4 档位，太阳方向 OD，多瓣相函数，云影 |
 | **天气系统** | ✅ 已完成 | World::WeatherSystem 架构，天气预设迁移，帧数据从 World 读取 |
-| **HDR 后处理** | ⚠️ 可用 | 自动曝光，7 级 Bloom，色彩分级，CAS 锐化，运动模糊，景深；Tonemap UI 集合未对齐 DerivativeMain 正式选项 (缺 AcademyFull/AgX_Minimal/AgX_Full) |
-| **全局光照 (RSM)** | ❌ 缺失 | 仅有 CalculateFakeBouncedLight 作为 fallback |
+| **HDR 后处理** | ✅ 已完成 | 自动曝光，7 级 Bloom，色彩分级，CAS 锐化，运动模糊，景深；已提取为独立 PostProcessPass |
+| **全局光照 (RSM/GI)** | ❌ 缺失 | 仅有 CalculateFakeBouncedLight 作为 fallback |
 | **实体 GBuffer** | ❌ 缺失 | 所有实体纯 forward 渲染，不接收 deferred lighting/SSAO/SSR |
+
+### 渲染管线架构重构
+
+项目正在进行渲染管线的清理与现代化重构（Phase 1-7 已完成，Phase 8-9 进行中），目标是实现前向/延迟管线解耦、Pass-Oriented 架构和 Game 类渲染剥离：
+
+| Phase | 名称 | 状态 |
+| --- | --- | --- |
+| 1 | 最小架构骨架 (FrameContext/FrameOutput/RenderSettings/RenderPipeline/RenderScene) | ✅ 完成 |
+| 2 | Render target 分层 (CommonFrameTargets/DeferredFrameTargets/ShadowTargets) | ✅ 完成 |
+| 3 | RenderPass 基类 + SSAO 试点拆分 | ✅ 完成 |
+| 4 | 批量 Pass 拆分 — 屏幕空间效果 | ✅ 完成 |
+| 5 | 批量 Pass 拆分 — 场景渲染 + 共享后处理 | ✅ 完成 |
+| 6 | Terrain mesh 生命周期提取 (TerrainRenderCache) | ✅ 完成 |
+| 7 | GBuffer + Shadow + SkyCapture 拆分 + TerrainRenderer | ✅ 完成 |
+| 8 | Uniform 绑定统一 | ⏳ 进行中 |
+| 9 | 前向/延迟 Pipeline 实现迁移 | ⏳ 进行中 |
+| 10 | RenderScene 接管编排 + Renderer 瘦身 | ⏳ 待开始 |
+| 11 | Game 类渲染剥离 | ⏳ 待开始 |
 
 ### 渲染技术参考来源
 
@@ -102,7 +120,7 @@ SkyCapture (LUT + GPU Metadata) -> GBuffer -> Velocity -> Shadow (CSM/PCSS)
 ### 编译项目
 
 ```bash
-git clone https://github.com/yourusername/mecraft.git
+git clone https://github.com/Gongcai/mecraft
 cd mecraft
 cmake -S . -B build
 cmake --build build --config Release
@@ -153,19 +171,36 @@ mecraft/
 ├── DerivativeMain/          # DerivativeMain shader pack 解包文件 (移植参考)
 ├── docs/                    # 技术分析报告、差异报告、开发路线图
 ├── src/
-│   ├── core/                # 引擎核心：主循环, 状态机, 窗口与输入管理
+│   ├── game/                # Game 主循环与帧编排
 │   ├── ecs/                 # 基于 EnTT 的实体组件系统
-│   ├── world/               # 区块, 地形生成, 光照引擎
+│   ├── world/               # 区块, 地形生成, 昼夜, 天气, 掉落物
 │   ├── renderer/
-│   │   ├── shadow/          # 级联阴影映射 (CSM + PCSS)
-│   │   ├── sky/             # 天空捕获与大气渲染
-│   │   ├── post/            # 后处理 (Bloom, Tonemap, DoF, MotionBlur)
-│   │   └── ...              # 延迟渲染、SSR、SSAO、云、雾、水
+│   │   ├── core/            # 管线核心：Renderer, RenderScene, RenderPipeline,
+│   │   │                   #   FrameContext, FrameOutput, RenderSettings, DeferredPipeline
+│   │   ├── passes/          # 渲染 Pass (16 个独立 Pass 类)
+│   │   │                   #   SsaoPass, VelocityPass, ReflectionPass, TemporalResolvePass,
+│   │   │                   #   MotionBlurPass, DepthOfFieldPass, VolumetricPass, CloudPass,
+│   │   │                   #   SceneCompositePass, WaterCompositePass, DeferredLightingPass,
+│   │   │                   #   SkyCapturePass, GBufferPass, ShadowPass, DebugPass, PostProcessPass
+│   │   ├── mesh/            # 地形网格：TerrainRenderCache, TerrainRenderer,
+│   │   │                   #   ChunkMesher, ChunkMeshingService, WorldRenderBuffer
+│   │   ├── targets/         # 帧缓冲资源：CommonFrameTargets, DeferredFrameTargets,
+│   │   │                   #   ShadowTargets, DeferredRenderTargets
+│   │   ├── renderers/       # 子渲染器：GameplaySkyRenderer, PostProcessRenderer,
+│   │   │                   #   HumanoidRenderer, DropRenderer, FirstPersonHeldItemRenderer
+│   │   ├── shadow/          # 阴影系统：ShadowRenderer, ShadowCasterCuller, ShadowMatrices
+│   │   ├── contracts/       # 渲染契约：GLBlendState, MecraftTextureContract
+│   │   └── shaderpack/      # 光影包指令解析
 │   ├── physics/             # AABB碰撞, 射线检测
 │   ├── player/              # 玩家控制器与背包
 │   ├── audio/               # OpenAL 3D 音频
-│   ├── ui/                  # HUD, 准心, ImGui 调试面板
-│   └── item/                # 物品与合成系统
+│   ├── ui/                  # Dashboard ImGui 调试面板
+│   ├── item/                # 物品与合成系统
+│   ├── particle/            # 粒子系统, 雨滴渲染
+│   ├── resource/            # 资源管理器
+│   ├── thread/              # 线程池
+│   ├── locale/              # 本地化
+│   └── crafting/            # 合成系统
 ├── tests/                   # 单元测试与性能基准
 ├── CMakeLists.txt
 └── main.cpp
@@ -175,6 +210,8 @@ mecraft/
 
 | 文档 | 说明 |
 | --- | --- |
+| `docs/渲染管线清理重构计划.md` | 渲染管线清理重构 11 阶段计划与架构设计 |
+| `docs/渲染管线清理重构完成情况.md` | 重构进度追踪（Phase 1-7 完成，Phase 8-9 进行中） |
 | `docs/accomplished/渲染管线实现状态分析与开发路线图.md` | 各系统实现状态详细分析与 Phase 0-10 开发路线图 |
 | `docs/accomplished/内置光影完整渲染管线设计.md` | 渲染管线架构设计，目标管线与里程碑规划 (M0-M7) |
 | `docs/accomplished/DerivativeMain内置渲染管线完整差异分析报告.md` | Mecraft 与 DerivativeMain 完整差异分析 |
