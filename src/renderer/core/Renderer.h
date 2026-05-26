@@ -530,13 +530,8 @@ private:
     [[nodiscard]] FrameContext buildFrameContextFromRenderFrameData(const RenderFrameData& frame) const;
     [[nodiscard]] RenderSettings buildRenderSettingsFromPipelineSettings() const;
     void bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, bool bindAerialReduction) const;
     void bindFogUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindAtmosphereUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindVolumetricUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindCloudUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindShadowFrameUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindSceneCompositeInputs(Shader& shader, const RenderFrameData& frame) const;
     void bindChunkRenderState(const RenderFrameData& frame, const TextureArray& texArray) const;
     void bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const;
     void bindWaterEffectUniforms(Shader& shader, bool enabled) const;
