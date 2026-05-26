@@ -125,6 +125,7 @@ set(SRC_RENDERER
         src/renderer/passes/TemporalResolvePass.cpp
         src/renderer/passes/MotionBlurPass.cpp
         src/renderer/passes/DepthOfFieldPass.cpp
+        src/renderer/passes/DeferredLightingPass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp

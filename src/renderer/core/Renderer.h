@@ -16,6 +16,7 @@
 #include "../passes/TemporalResolvePass.h"
 #include "../passes/MotionBlurPass.h"
 #include "../passes/DepthOfFieldPass.h"
+#include "../passes/DeferredLightingPass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
@@ -751,6 +752,7 @@ private:
     std::unique_ptr<TemporalResolvePass> m_temporalResolvePass;
     std::unique_ptr<MotionBlurPass> m_motionBlurPass;
     std::unique_ptr<DepthOfFieldPass> m_dofPass;
+    std::unique_ptr<DeferredLightingPass> m_deferredLightingPass;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;

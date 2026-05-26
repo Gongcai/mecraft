@@ -114,6 +114,16 @@ struct CloudData {
     float planarAltitude = 7000.0f;
 };
 
+/// Atmosphere settings for current frame
+struct AtmosphereData {
+    float aerialStrength = 0.65f;
+    float horizonScatterStrength = 0.78f;
+    float sunWarmth = 0.34f;
+    float skyCoolness = 0.18f;
+    float directWeatherOcclusion = 1.0f;
+    int directWeatherOcclusionOverride = 0;
+};
+
 /// Unified frame context passed to all render passes
 /// This is the single source of truth for per-frame data
 struct FrameContext {
@@ -156,6 +166,9 @@ struct FrameContext {
 
     // Cloud
     CloudData cloud;
+
+    // Atmosphere
+    AtmosphereData atmosphere;
 
     // State flags
     bool eyeInWater = false;

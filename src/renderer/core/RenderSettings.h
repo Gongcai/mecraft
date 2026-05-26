@@ -148,6 +148,7 @@ struct PostProcessSettings {
     float fakeBounceStrength = 0.06f;
 
     // Atmosphere
+    bool aerialPerspectiveEnabled = true;
     float aerialStrength = 0.65f;
     float horizonScatterStrength = 0.78f;
 
@@ -178,6 +179,7 @@ struct PostProcessSettings {
 struct DebugSettings {
     int viewMode = 0;
     int lightDebugMode = 0;
+    int deferredLightDebugMode = 0;
     int postprocessDebugMode = 0;
     int reflectionDebugMode = 0;
     bool derivativeStrictMode = false;

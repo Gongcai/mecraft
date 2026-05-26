@@ -7,7 +7,7 @@
 
 #include "Dashboard.h"
 
-#include "UIRenderer.h"
+#include "ui/core/UIRenderer.h"
 #include "../ecs/components/Components.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 

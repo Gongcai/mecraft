@@ -128,7 +128,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_entityGBufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
-    m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
     m_sceneCompositeShader = resourceMgr.getShader("scene_composite");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
@@ -152,17 +151,10 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_motionBlurPass->init(resourceMgr);
     m_dofPass = std::make_unique<DepthOfFieldPass>();
     m_dofPass->init(resourceMgr);
+    m_deferredLightingPass = std::make_unique<DeferredLightingPass>();
+    m_deferredLightingPass->init(resourceMgr);
+    m_deferredLightingPass->setShadowRenderer(&m_shadowRenderer);
 
-    if (m_deferredLightingShader != nullptr) {
-        const GLint csmLocation = m_deferredLightingShader->getUniformLocation("uCsmShadowMap");
-        if (csmLocation >= 0) {
-            glProgramUniform1i(m_deferredLightingShader->ID, csmLocation, 15);
-        }
-        const GLint csmDepthAllLocation = m_deferredLightingShader->getUniformLocation("uCsmShadowDepthAll");
-        if (csmDepthAllLocation >= 0) {
-            glProgramUniform1i(m_deferredLightingShader->ID, csmDepthAllLocation, 17);
-        }
-    }
     if (m_volumetricFogShader != nullptr) {
         const GLint csmLocation = m_volumetricFogShader->getUniformLocation("uCsmShadowMap");
         if (csmLocation >= 0) {
@@ -211,6 +203,7 @@ void Renderer::shutdown() {
     if (m_temporalResolvePass) { m_temporalResolvePass->shutdown(); m_temporalResolvePass.reset(); }
     if (m_motionBlurPass) { m_motionBlurPass->shutdown(); m_motionBlurPass.reset(); }
     if (m_dofPass) { m_dofPass->shutdown(); m_dofPass.reset(); }
+    if (m_deferredLightingPass) { m_deferredLightingPass->shutdown(); m_deferredLightingPass.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     m_worldRenderBuffer.shutdown();
@@ -801,7 +794,7 @@ bool Renderer::isHybridDeferredReady() const {
     return m_deferredTargets.isReady() &&
            m_chunkGBufferShader != nullptr &&
            m_shadowDepthShader != nullptr &&
-           m_deferredLightingShader != nullptr &&
+           m_deferredLightingPass != nullptr &&
            m_deferredDebugShader != nullptr &&
            m_ssaoPass != nullptr &&
            m_velocityPass != nullptr &&
@@ -1573,6 +1566,13 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     ctx.eyeInWater = frame.eyeInWater;
     ctx.moonShadowActive = frame.moonShadowActive;
     ctx.hasPreviousFrame = m_hasPreviousFrameData;
+    // Atmosphere
+    ctx.atmosphere.aerialStrength = frame.atmosphere.aerialStrength;
+    ctx.atmosphere.horizonScatterStrength = frame.atmosphere.horizonScatterStrength;
+    ctx.atmosphere.sunWarmth = frame.atmosphere.sunWarmth;
+    ctx.atmosphere.skyCoolness = frame.atmosphere.skyCoolness;
+    ctx.atmosphere.directWeatherOcclusion = frame.atmosphere.directWeatherOcclusion;
+    ctx.atmosphere.directWeatherOcclusionOverride = frame.atmosphere.directWeatherOcclusionOverride;
     return ctx;
 }
 
@@ -1601,8 +1601,36 @@ RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     rs.postProcess.dofAperture = m_pipelineSettings.dofAperture;
     rs.postProcess.dofIntensity = m_pipelineSettings.dofIntensity;
     // Debug
+    rs.debug.deferredLightDebugMode = m_pipelineSettings.deferredLightDebugMode;
     rs.debug.reflectionDebugMode = m_pipelineSettings.reflectionDebugMode;
+    rs.debug.derivativeStrictMode = m_pipelineSettings.derivativeStrictMode;
+    // Post-process lighting
+    rs.postProcess.aerialPerspectiveEnabled = m_pipelineSettings.aerialPerspectiveEnabled;
+    rs.postProcess.shadowTintStrength = m_pipelineSettings.shadowTintStrength;
+    rs.postProcess.directSunStrength = m_pipelineSettings.directSunStrength;
+    rs.postProcess.skyAmbientStrength = m_pipelineSettings.skyAmbientStrength;
+    rs.postProcess.minimumAmbient = m_pipelineSettings.minimumAmbient;
+    rs.postProcess.shadowMinLight = m_pipelineSettings.shadowMinLight;
+    rs.postProcess.shadowContrast = m_pipelineSettings.shadowContrast;
+    rs.postProcess.blockLightStrength = m_pipelineSettings.blockLightStrength;
+    rs.postProcess.fakeBounceStrength = m_pipelineSettings.fakeBounceStrength;
+    rs.postProcess.albedoDesaturation = m_pipelineSettings.albedoDesaturation;
+    rs.postProcess.shadowDesaturation = m_pipelineSettings.shadowDesaturation;
+    // Shadow
+    rs.shadow.enabled = m_pipelineSettings.shadowsEnabled;
+    rs.shadow.softShadowsEnabled = m_pipelineSettings.softShadowsEnabled;
+    rs.shadow.pcssShadowsEnabled = m_pipelineSettings.pcssShadowsEnabled;
+    rs.shadow.contactShadowsEnabled = m_pipelineSettings.contactShadowsEnabled;
+    rs.shadow.softness = m_pipelineSettings.shadowSoftness;
+    rs.shadow.pcssStrength = m_pipelineSettings.shadowPcssStrength;
+    rs.shadow.normalOffset = m_pipelineSettings.shadowNormalOffset;
+    rs.shadow.contactShadowStrength = m_pipelineSettings.contactShadowStrength;
+    rs.shadow.constantBias = m_pipelineSettings.shadowConstantBias;
+    rs.shadow.slopeBias = m_pipelineSettings.shadowSlopeBias;
+    // Volumetric
+    rs.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
     // Weather
+    rs.weather.skylightScale = m_pipelineSettings.weatherSkylightScale;
     rs.weather.rainLinesEnabled = m_pipelineSettings.rainWetSurfacesEnabled;
     rs.weather.surfaceRipplesEnabled = m_pipelineSettings.rainSurfaceRipplesEnabled;
     return rs;
@@ -1614,7 +1642,7 @@ bool Renderer::renderWorldDeferred(const World& world,
                                    const RenderFrameData& frame) {
     if (m_resourceMgr == nullptr ||
         m_chunkGBufferShader == nullptr ||
-        m_deferredLightingShader == nullptr ||
+        m_deferredLightingPass == nullptr ||
         m_ssaoPass == nullptr ||
         !m_deferredTargets.init()) {
         return false;
@@ -1675,7 +1703,13 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
     beginGpuTimer(GpuTimerPass::Lighting);
 #endif
-    renderDeferredLightingPass(frame);
+    // Phase 5a: Deferred lighting pass
+    if (m_deferredLightingPass) {
+        FrameContext lightCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings lightRs = buildRenderSettingsFromPipelineSettings();
+        m_deferredLightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
+        m_deferredLightingPass->execute(lightCtx, lightRs, m_deferredTargets);
+    }
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
 #endif
@@ -2147,173 +2181,8 @@ void Renderer::renderSsaoPass(const Camera& /*camera*/, const Window& /*window*/
     // Phase 3: Delegated to SsaoPass::execute()
 }
 
-void Renderer::renderDeferredLightingPass(const RenderFrameData& frame) {
-    if (m_deferredLightingShader == nullptr) {
-        return;
-    }
-
-    m_deferredTargets.bindSceneLighting();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    if (m_pipelineSettings.deferredLightDebugMode > 0) {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-
-    glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
-    m_deferredLightingShader->use();
-    m_deferredLightingShader->setInt("uAlbedoTex", 0);
-    m_deferredLightingShader->setInt("uNormalAoTex", 1);
-    m_deferredLightingShader->setInt("uVoxelLightTex", 2);
-    m_deferredLightingShader->setInt("uMaterialTex", 3);
-    m_deferredLightingShader->setInt("uMaterialAuxTex", 4);
-    m_deferredLightingShader->setInt("uDepthTex", 5);
-    m_deferredLightingShader->setInt("uLightmapDay", 6);
-    m_deferredLightingShader->setInt("uLightmapNight", 7);
-    m_deferredLightingShader->setInt("uShadowMapRaw", 8);
-    m_deferredLightingShader->setInt("uSsaoTex", 9);
-    m_deferredLightingShader->setInt("uSkyCaptureTex", 10);
-    m_deferredLightingShader->setInt("uNoiseTex", 11);
-    m_deferredLightingShader->setInt("uRippleNormalTex", 21);
-    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-    m_deferredLightingShader->setBool("uNoiseEnabled", noiseTexture != 0);
-    m_deferredLightingShader->setMat4("uViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
-    m_deferredLightingShader->setMat4("uInvViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
-    m_deferredLightingShader->setMat4("uProjection", frame.projection);
-    bindShadowFrameUniforms(*m_deferredLightingShader, frame);
-    bindSkyLightingUniforms(*m_deferredLightingShader, frame);
-    m_deferredLightingShader->setInt("uAerialPerspectiveEnabled", m_pipelineSettings.aerialPerspectiveEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uVolumetricLightEnabled", m_pipelineSettings.volumetricLightEnabled ? 1 : 0);
-    // Tell deferred lighting to skip aerial perspective when volumetric march is active.
-    // The volumetric march integrates atmospheric scatter at each step, so running
-    // deferred aerial perspective on top causes double-fogging.
-    const bool volFogActive = (m_pipelineSettings.volumetricLightEnabled ||
-                               (m_pipelineSettings.volumetricFogEnabled &&
-                                m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
-                              m_volumetricFogShader != nullptr &&
-                              m_volumetricCompositeShader != nullptr;
-    m_deferredLightingShader->setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
-    m_deferredLightingShader->setInt("uDeferredDebugMode", m_pipelineSettings.deferredLightDebugMode);
-    m_deferredLightingShader->setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
-    m_deferredLightingShader->setFloat("uShadowTintStrength", m_pipelineSettings.shadowTintStrength);
-    m_deferredLightingShader->setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
-    m_deferredLightingShader->setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
-    m_deferredLightingShader->setFloat("uWeatherSkylightScale", m_pipelineSettings.weatherSkylightScale);
-    m_deferredLightingShader->setFloat("uMinimumAmbient", m_pipelineSettings.minimumAmbient);
-    m_deferredLightingShader->setFloat("uShadowMinLight", m_pipelineSettings.shadowMinLight);
-    m_deferredLightingShader->setFloat("uShadowContrast", m_pipelineSettings.shadowContrast);
-    m_deferredLightingShader->setFloat("uBlockLightStrength", m_pipelineSettings.blockLightStrength);
-    m_deferredLightingShader->setFloat("uFakeBounceStrength", m_pipelineSettings.fakeBounceStrength);
-    m_deferredLightingShader->setFloat("uAlbedoDesaturation", m_pipelineSettings.albedoDesaturation);
-    m_deferredLightingShader->setFloat("uShadowDesaturation", m_pipelineSettings.shadowDesaturation);
-    m_deferredLightingShader->setInt("uDerivativeStrictMode", m_pipelineSettings.derivativeStrictMode ? 1 : 0);
-    bindAtmosphereUniforms(*m_deferredLightingShader, frame);
-    m_deferredLightingShader->setInt("uShadowsEnabled", m_pipelineSettings.shadowsEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uSoftShadowsEnabled", m_pipelineSettings.softShadowsEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uPcssShadowsEnabled", m_pipelineSettings.pcssShadowsEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uContactShadowsEnabled", m_pipelineSettings.contactShadowsEnabled ? 1 : 0);
-    bindCloudUniforms(*m_deferredLightingShader, frame);
-    m_deferredLightingShader->setFloat("uCloudWetness", frame.cloudWetness);
-    m_deferredLightingShader->setFloat("uShadowSoftness", m_pipelineSettings.shadowSoftness);
-    m_deferredLightingShader->setFloat("uShadowPcssStrength", m_pipelineSettings.shadowPcssStrength);
-    m_deferredLightingShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
-    m_deferredLightingShader->setFloat("uContactShadowStrength", m_pipelineSettings.contactShadowStrength);
-    m_deferredLightingShader->setFloat("uTime", frame.shaderTime);
-    m_deferredLightingShader->setInt("uSsaoEnabled", m_pipelineSettings.ssaoEnabled ? 1 : 0);
-    m_deferredLightingShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
-    m_deferredLightingShader->setInt("uShadowColorTex", 12);
-    m_deferredLightingShader->setInt("uShadowNormalTex", 13);
-    m_deferredLightingShader->setInt("uAtmosphereLut", 14);
-    m_deferredLightingShader->setInt("uCsmShadowMap", 15);
-    m_deferredLightingShader->setInt("uCsmShadowDepthRaw", 16);
-    m_deferredLightingShader->setInt("uCsmShadowDepthAll", 17);
-    m_deferredLightingShader->setInt("uCsmShadowDepthAllRaw", 18);
-    m_deferredLightingShader->setInt("uCsmShadowColor0", 19);
-    m_deferredLightingShader->setInt("uCsmShadowColor1", 20);
-    bindFogUniforms(*m_deferredLightingShader, frame);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_pipelineSettings.ssaoTemporalEnabled && m_ssaoTemporalShader != nullptr
-        ? m_deferredTargets.ssaoTemporalTexture()
-        : m_deferredTargets.ssaoFilteredTexture());
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, noiseTexture);
-    glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowColorTexture());
-    glActiveTexture(GL_TEXTURE13);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowNormalTexture());
-    glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
-    glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthComparisonTexture());
-    m_deferredLightingShader->setInt("uCsmShadowMap", 15);
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
-    m_deferredLightingShader->setInt("uCsmShadowDepthRaw", 16);
-    glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllComparisonTexture());
-    m_deferredLightingShader->setInt("uCsmShadowDepthAll", 17);
-    glActiveTexture(GL_TEXTURE18);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthAllTexture());
-    m_deferredLightingShader->setInt("uCsmShadowDepthAllRaw", 18);
-    glActiveTexture(GL_TEXTURE19);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor0Texture());
-    m_deferredLightingShader->setInt("uCsmShadowColor0", 19);
-    glActiveTexture(GL_TEXTURE20);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowColor1Texture());
-    m_deferredLightingShader->setInt("uCsmShadowColor1", 20);
-    glActiveTexture(GL_TEXTURE21);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
-    renderFullscreen(*m_deferredLightingShader);
-
-    glActiveTexture(GL_TEXTURE21);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glUseProgram(0);
-    glActiveTexture(GL_TEXTURE20);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE19);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE18);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    for (int i = 14; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderDeferredLightingPass(const RenderFrameData& /*frame*/) {
+    // Phase 5a: Delegated to DeferredLightingPass::execute()
 }
 
 void Renderer::renderSceneCompositePass(const RenderFrameData& frame) {
