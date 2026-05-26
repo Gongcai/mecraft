@@ -27,6 +27,7 @@
 #include "Shader.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../mesh/TerrainRenderCache.h"
+#include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
 #include <glm/glm.hpp>
@@ -463,12 +464,6 @@ private:
         float d = 0.0f;
     };
 
-    struct ChunkRenderEntry {
-        Chunk* chunk = nullptr;
-        int scy = -1;  // -1 = column aggregate, otherwise sub-chunk index
-        bool aggregated = false;
-    };
-
     static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUNT;
     using ShadowCascadeData = shadow::ShadowRenderer::Cascade;
 
@@ -528,6 +523,7 @@ private:
     void renderWorld(const World& world);
     [[nodiscard]] RenderFrameData buildRenderFrameData(const World& world) const;
     [[nodiscard]] FrameContext buildFrameContextFromRenderFrameData(const RenderFrameData& frame) const;
+    [[nodiscard]] TerrainFrameData buildTerrainFrameData(const RenderFrameData& frame) const;
     [[nodiscard]] RenderSettings buildRenderSettingsFromPipelineSettings() const;
     void bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindFogUniforms(Shader& shader, const RenderFrameData& frame) const;
@@ -588,6 +584,7 @@ private:
     void syncChunkRenderColumns(const World& world);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
     void syncTerrainCacheFrameStats();
+    void syncTerrainRendererFrameStats();
     void clearTransparentBatches();
     void syncTransparentBatches();
     void releaseStaleMdiAllocations(const World& world);
@@ -776,6 +773,7 @@ private:
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
     TerrainRenderCache m_terrainCache;
+    TerrainRenderer m_terrainRenderer;
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
     std::vector<ChunkRenderEntry> m_deferredTransparentEntries;

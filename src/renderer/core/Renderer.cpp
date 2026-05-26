@@ -171,6 +171,15 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
     m_terrainCache.setUseMultiDrawIndirect(m_useMultiDrawIndirect);
+    m_terrainRenderer.init(resourceMgr);
+    m_terrainRenderer.setWorldRenderBuffer(&m_worldRenderBuffer);
+    m_terrainRenderer.setTerrainRenderCache(&m_terrainCache);
+    m_terrainRenderer.setUseMultiDrawIndirect(m_useMultiDrawIndirect);
+    m_terrainRenderer.setCutoutDistanceLimitEnabled(m_cutoutDistanceLimitEnabled);
+    m_terrainRenderer.setCutoutRenderDistanceChunks(m_cutoutRenderDistanceChunks);
+#ifdef MECRAFT_DEBUG
+    m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
+#endif
     m_deferredTargets.init();
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
@@ -878,6 +887,7 @@ float Renderer::getAtlasMaxAnisotropy() const {
 #ifdef MECRAFT_DEBUG
 void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
     m_chunkCullingDebugEnabled = enabled;
+    m_terrainRenderer.setChunkCullingDebugEnabled(enabled);
 }
 
 int Renderer::getMeshingSubmitBudget() const {
@@ -976,6 +986,7 @@ bool Renderer::isGpuTimerEnabled() const {
 
 void Renderer::setCutoutDistanceLimitEnabled(const bool enabled) {
     m_cutoutDistanceLimitEnabled = enabled;
+    m_terrainRenderer.setCutoutDistanceLimitEnabled(enabled);
 }
 
 bool Renderer::isCutoutDistanceLimitEnabled() const {
@@ -984,6 +995,7 @@ bool Renderer::isCutoutDistanceLimitEnabled() const {
 
 void Renderer::setCutoutRenderDistanceChunks(const float distanceChunks) {
     m_cutoutRenderDistanceChunks = std::clamp(distanceChunks, 1.0f, 32.0f);
+    m_terrainRenderer.setCutoutRenderDistanceChunks(m_cutoutRenderDistanceChunks);
 }
 
 float Renderer::getCutoutRenderDistanceChunks() const {
@@ -1023,6 +1035,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_deferredHistoryUpdatedThisFrame = false;
     updateFrustum(m_projection * m_view);
     drawCallCount = 0;
+    m_terrainRenderer.resetDebugCounters();
 
 #ifdef MECRAFT_DEBUG
     m_meshingSubmittedThisFrame = 0;
@@ -1483,6 +1496,53 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     return ctx;
 }
 
+TerrainFrameData Renderer::buildTerrainFrameData(const RenderFrameData& frame) const {
+    TerrainFrameData tfd{};
+    tfd.view = frame.view;
+    tfd.viewProj = frame.viewProj;
+    tfd.cameraPos = frame.cameraPos;
+    tfd.animationTime = frame.animationTime;
+    tfd.shaderTime = frame.shaderTime;
+    tfd.surfaceWetness = frame.surfaceWetness;
+    tfd.fog.enabled = frame.fogEnabled;
+    tfd.fog.mode = static_cast<int>(frame.fogMode);
+    tfd.fog.color = frame.fogColor;
+    tfd.fog.start = frame.fogStart;
+    tfd.fog.end = frame.fogEnd;
+    tfd.fog.density = frame.fogDensity;
+    tfd.skyLighting.cameraPos = frame.cameraPos;
+    tfd.skyLighting.sunDirection = frame.skyColors.sunDirection;
+    tfd.skyLighting.moonDirection = frame.skyColors.moonDirection;
+    tfd.skyLighting.sunLightColor = frame.skyColors.sunLightColor;
+    tfd.skyLighting.moonLightColor = frame.skyColors.moonLightColor;
+    tfd.skyLighting.skyAmbientColor = frame.skyColors.skyAmbientColor;
+    tfd.skyLighting.shadowTintColor = frame.skyColors.shadowTintColor;
+    tfd.skyLighting.horizonScatterColor = frame.skyColors.horizonScatterColor;
+    tfd.skyLighting.skyIntensity = frame.skyIntensity;
+    tfd.skyLighting.moonVisibility = frame.skyColors.moonVisibility;
+    tfd.skyLighting.directIlluminance = frame.skyIlluminance.directIlluminance;
+    tfd.skyLighting.skyIlluminance = frame.skyIlluminance.skyIlluminance;
+    tfd.skyLighting.sunIlluminance = frame.skyIlluminance.sunIlluminance;
+    tfd.skyLighting.moonIlluminance = frame.skyIlluminance.moonIlluminance;
+    tfd.skyLighting.cloudDynamicWeather = frame.skyIlluminance.cloudDynamicWeather;
+    tfd.atmosphere.aerialStrength = frame.atmosphere.aerialStrength;
+    tfd.atmosphere.horizonScatterStrength = frame.atmosphere.horizonScatterStrength;
+    tfd.atmosphere.sunWarmth = frame.atmosphere.sunWarmth;
+    tfd.atmosphere.skyCoolness = frame.atmosphere.skyCoolness;
+    tfd.atmosphere.weatherWetness = frame.atmosphere.weatherWetness;
+    tfd.atmosphere.weatherStorm = frame.atmosphere.weatherStorm;
+    tfd.atmosphere.aerialReduction = frame.atmosphere.aerialReduction;
+    tfd.atmosphere.lightningFlash = frame.atmosphere.lightningFlash;
+    tfd.atmosphere.surfaceWetness = frame.atmosphere.surfaceWetness;
+    tfd.atmosphere.skyWetness = frame.atmosphere.skyWetness;
+    tfd.atmosphere.fogWetness = frame.atmosphere.fogWetness;
+    tfd.atmosphere.cloudWetness = frame.atmosphere.cloudWetness;
+    tfd.atmosphere.precipitation = frame.atmosphere.precipitation;
+    tfd.atmosphere.directWeatherOcclusion = frame.atmosphere.directWeatherOcclusion;
+    tfd.atmosphere.directWeatherOcclusionOverride = frame.atmosphere.directWeatherOcclusionOverride;
+    return tfd;
+}
+
 RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     RenderSettings rs;
     // SSAO
@@ -1775,13 +1835,34 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     releaseStaleMdiAllocations(world);
     drainMeshingResults(world);
     m_worldRenderBuffer.beginFrame();
-    clearTransparentBatches();
+    m_terrainRenderer.clearTransparentBatches();
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     m_chunkShader = m_chunkGBufferShader;
-    bindChunkRenderStateForShader(frame, texArray, *m_chunkGBufferShader);
-    // DerivativeMain-style TAA: jitter GBuffer projection so vertices shift
-    // sub-pixel each frame, enabling proper temporal accumulation.
+    TerrainFrameData tfd = buildTerrainFrameData(frame);
+    m_terrainRenderer.setCameraPos(m_cameraPos);
+    m_terrainRenderer.updateFrustum(frame.viewProj);
+    TerrainRenderSettings trs;
+    trs.rainWetSurfacesEnabled = m_pipelineSettings.rainWetSurfacesEnabled;
+    trs.rainSurfaceRipplesEnabled = m_pipelineSettings.rainSurfaceRipplesEnabled;
+    trs.aerialPerspectiveEnabled = m_pipelineSettings.aerialPerspectiveEnabled;
+    trs.volumetricLightEnabled = m_pipelineSettings.volumetricLightEnabled;
+    trs.volumetricFogEnabled = m_pipelineSettings.volumetricFogEnabled;
+    trs.volumetricFogStrength = m_pipelineSettings.volumetricFogStrength;
+    trs.directSunStrength = m_pipelineSettings.directSunStrength;
+    trs.skyAmbientStrength = m_pipelineSettings.skyAmbientStrength;
+    trs.weatherSkylightScale = m_pipelineSettings.weatherSkylightScale;
+    trs.minimumAmbient = m_pipelineSettings.minimumAmbient;
+    trs.blockLightStrength = m_pipelineSettings.blockLightStrength;
+    trs.fakeBounceStrength = m_pipelineSettings.fakeBounceStrength;
+    trs.albedoDesaturation = m_pipelineSettings.albedoDesaturation;
+    trs.shadowDesaturation = m_pipelineSettings.shadowDesaturation;
+    const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
+    m_terrainRenderer.bindChunkRenderState(tfd, texArray, *m_chunkGBufferShader,
+                                            m_deferredFrameActive, m_debugLightMode,
+                                            m_eyeInWater, m_heldBlockLightValue,
+                                            m_deferredTargets, m_resourceMgr,
+                                            volFogShadersReady, trs);
     if (m_pipelineSettings.taaEnabled) {
         m_chunkGBufferShader->setMat4("viewProj", frame.jitteredViewProj);
     }
@@ -1791,12 +1872,21 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     cutoutEntries.reserve(world.getActiveChunks().size() * 2);
     m_deferredTransparentEntries.clear();
     m_deferredTransparentEntries.reserve(world.getActiveChunks().size() * 2);
-    renderOpaqueChunksAndCollectPasses(world, cutoutEntries, m_deferredTransparentEntries);
-    syncTransparentBatches();
+    m_terrainRenderer.renderOpaqueChunksAndCollectPasses(world, cutoutEntries,
+                                                          m_deferredTransparentEntries,
+                                                          true);
+    m_terrainRenderer.syncTransparentBatches();
+    m_deferredTransparentBatch = m_terrainRenderer.transparentBatches();
+    m_transparentPassPlan = m_terrainRenderer.transparentPassPlan();
+    syncTerrainRendererFrameStats();
     if (m_useMultiDrawIndirect) {
         m_worldRenderBuffer.flushOpaque();
     }
-    renderCutoutChunks(cutoutEntries);
+    m_terrainRenderer.renderCutoutChunks(cutoutEntries, *m_chunkShader);
+    syncTerrainRendererFrameStats();
+    if (!m_useMultiDrawIndirect) {
+        drawCallCount += m_terrainRenderer.drawCallCount();
+    }
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE10);
@@ -2716,6 +2806,23 @@ void Renderer::syncTerrainCacheFrameStats() {
     m_meshUploadDeferredCount = static_cast<size_t>(m_terrainCache.meshUploadDeferredCount());
     m_worldBufferUploadMsThisFrame = m_terrainCache.worldBufferUploadMsThisFrame();
     m_worldBufferExpandCountThisFrame = static_cast<size_t>(m_terrainCache.worldBufferExpandCountThisFrame());
+}
+
+void Renderer::syncTerrainRendererFrameStats() {
+#ifdef MECRAFT_DEBUG
+    m_regionTestsThisFrame = m_terrainRenderer.regionTestsThisFrame();
+    m_regionPassedThisFrame = m_terrainRenderer.regionPassedThisFrame();
+    m_columnTestsThisFrame = m_terrainRenderer.columnTestsThisFrame();
+    m_columnPassedThisFrame = m_terrainRenderer.columnPassedThisFrame();
+    m_chunkTestsThisFrame = m_terrainRenderer.chunkTestsThisFrame();
+    m_chunkPassedThisFrame = m_terrainRenderer.chunkPassedThisFrame();
+    m_chunkCulledThisFrame = m_terrainRenderer.chunkCulledThisFrame();
+    m_chunkCulledByPlaneThisFrame = m_terrainRenderer.chunkCulledByPlaneThisFrame();
+    m_cutoutCandidatesThisFrame = m_terrainRenderer.cutoutCandidatesThisFrame();
+    m_cutoutSkippedByDistanceThisFrame = m_terrainRenderer.cutoutSkippedByDistanceThisFrame();
+    m_mdiSubChunkTestsThisFrame = m_terrainRenderer.mdiSubChunkTestsThisFrame();
+    m_mdiSubChunksCulledThisFrame = m_terrainRenderer.mdiSubChunksCulledThisFrame();
+#endif
 }
 
 void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {
