@@ -63,6 +63,11 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     m_volumetricFogShader->setInt("uShadowColorTex", 4);
     m_volumetricFogShader->setInt("uAtmosphereLut", 5);
     m_volumetricFogShader->setInt("uCsmShadowMap", 6);
+    m_volumetricFogShader->setInt("uCsmShadowDepthRaw", 7);
+    m_volumetricFogShader->setInt("uCsmShadowDepthAll", 8);
+    m_volumetricFogShader->setInt("uCsmShadowDepthAllRaw", 9);
+    m_volumetricFogShader->setInt("uCsmShadowColor0", 10);
+    m_volumetricFogShader->setInt("uCsmShadowColor1", 11);
     m_volumetricFogShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
     m_volumetricFogShader->setVec2("uJitter", ctx.jitter);
 
