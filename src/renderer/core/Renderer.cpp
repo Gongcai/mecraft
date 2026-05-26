@@ -125,7 +125,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     }
     m_chunkShader = m_chunkForwardShader;
     m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
-    m_entityGBufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
@@ -156,6 +155,10 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_volumetricPass = std::make_unique<VolumetricPass>();
     m_volumetricPass->init(resourceMgr);
     m_volumetricPass->setShadowRenderer(&m_shadowRenderer);
+    m_skyCapturePass = std::make_unique<SkyCapturePass>();
+    m_skyCapturePass->init(resourceMgr);
+    m_gbufferPass = std::make_unique<GBufferPass>();
+    m_gbufferPass->init(resourceMgr);
 
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
@@ -214,6 +217,8 @@ void Renderer::shutdown() {
     if (m_cloudPass) { m_cloudPass->shutdown(); m_cloudPass.reset(); }
     if (m_sceneCompositePass) { m_sceneCompositePass->shutdown(); m_sceneCompositePass.reset(); }
     if (m_volumetricPass) { m_volumetricPass->shutdown(); m_volumetricPass.reset(); }
+    if (m_skyCapturePass) { m_skyCapturePass->shutdown(); m_skyCapturePass.reset(); }
+    if (m_gbufferPass) { m_gbufferPass->shutdown(); m_gbufferPass.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     m_terrainCache.shutdown();
@@ -1704,15 +1709,29 @@ bool Renderer::renderWorldDeferred(const World& world,
         m_hasPreviousFrameData = false;
     }
     clearDeferredAuxiliaryTargets();
-    renderSkyCapturePass(world);
+    // Phase 7a: Sky capture
+    if (m_skyCapturePass) {
+        m_skyCapturePass->execute(world, m_deferredTargets, m_gameplaySkyRenderer,
+                                   m_resourceMgr, m_cameraPos.y, m_currentFrameData.shaderTime,
+                                   m_currentFrameData.cameraPos, m_pipelineSettings.cloudTimeScale);
+    }
 
     m_deferredFrameActive = true;
 #ifdef MECRAFT_DEBUG
     beginGpuTimer(GpuTimerPass::GBuffer);
 #endif
     renderGBufferTerrain(world, frame);
-    renderGBufferEntities(world, frame);
-    renderGBufferDrops(world, frame);
+    // Phase 7a: Entity and drop GBuffer
+    {
+        FrameContext gbufCtx = buildFrameContextFromRenderFrameData(frame);
+        if (m_gbufferPass) {
+            m_gbufferPass->executeEntities(world, gbufCtx, m_deferredTargets,
+                                            m_humanoidRenderer, m_gameplayRegistry,
+                                            m_renderLocalPlayerModel);
+            m_gbufferPass->executeDrops(world, gbufCtx, m_deferredTargets,
+                                         m_dropRenderer, m_dropSystem);
+        }
+    }
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
 #endif
@@ -1928,62 +1947,12 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
-void Renderer::renderGBufferEntities(const World& world, const RenderFrameData& frame) {
-    // Render humanoid/mob entities into the GBuffer after terrain.
-    // GBuffer FBO is still bound from renderGBufferTerrain(). Depth buffer
-    // contains terrain depth — entities will automatically depth-test against it.
-    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
-        m_entityGBufferShader == nullptr) {
-        return;
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
-    // Per-object velocity: attach RG16F texture as GL_COLOR_ATTACHMENT5 so
-    // entity GBuffer shaders can write velocity via MRT.
-    m_deferredTargets.clearPerObjectVelocity();
-    m_deferredTargets.attachPerObjectVelocityToGBuffer();
-
-    // Use jittered view-projection for TAA consistency with terrain.
-    const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
-
-    const HumanoidRenderer::RenderMode mode = m_renderLocalPlayerModel
-        ? HumanoidRenderer::kRenderAll
-        : HumanoidRenderer::kRenderMobsOnly;
-    m_humanoidRenderer->renderToGBuffer(world, *m_gameplayRegistry, viewProj, mode);
-
-    // Restore state
-    glBindVertexArray(0);
+void Renderer::renderGBufferEntities(const World& /*world*/, const RenderFrameData& /*frame*/) {
+    // Phase 7a: Delegated to GBufferPass::executeEntities()
 }
 
-void Renderer::renderGBufferDrops(const World& world, const RenderFrameData& frame) {
-    // Render dropped items/blocks into the GBuffer after entities.
-    // GBuffer FBO is still bound from renderGBufferTerrain(). Depth buffer
-    // contains terrain+entity depth — drops will automatically depth-test against it.
-    // Per-object velocity attachment is still active from renderGBufferEntities().
-    if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
-        m_deferredTargets.detachPerObjectVelocityFromGBuffer();
-        return;
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    // Cross-shaped block drops emit single-sided quads without back-faces,
-    // so back-face culling would make them invisible from one side.
-    glDisable(GL_CULL_FACE);
-
-    const glm::mat4& viewProj = m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj;
-    m_dropRenderer->renderToGBuffer(world, *m_dropSystem, viewProj, frame.animationTime);
-
-    // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.
-    m_deferredTargets.detachPerObjectVelocityFromGBuffer();
-
-    glBindVertexArray(0);
+void Renderer::renderGBufferDrops(const World& /*world*/, const RenderFrameData& /*frame*/) {
+    // Phase 7a: Delegated to GBufferPass::executeDrops()
 }
 
 void Renderer::renderShadowEntities(const World& world, const glm::mat4& shadowViewProj) {
@@ -2515,69 +2484,8 @@ void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width,
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::renderSkyCapturePass(const World& world) {
-    const float cameraAltitude = m_cameraPos.y;
-    const GLuint atmosphereLut = m_deferredTargets.atmosphereLutTexture();
-    const int moonPhase = world.getDayNightSystem().getMoonPhaseIndex();
-    // DerivativeMain MoonFlux: vec3(abs(moonPhase - 4.0) * 0.25 + 0.2) * NIGHT_BRIGHTNESS.
-    // Phase factor ranges 0.2 (full moon) to 1.2 (new moon).
-    // NIGHT_BRIGHTNESS = 0.0005 (DerivativeMain Settings.glsl:91).
-    // Without this scaling, moon contribution is ~2000x too bright.
-    constexpr float kNightBrightness = 0.0005f;
-    const float moonPhaseFlux = (static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f) * kNightBrightness;
-
-    // Weather state for SkyCapture modulation
-    const WeatherState& weather = world.getWeatherSystem().getRenderState();
-    const float weatherWetness = weather.wetness;
-    const float weatherStorm = weather.storm;
-    auto illum = m_gameplaySkyRenderer.computeSkyIlluminance(
-        m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem()),
-        weatherWetness, weatherStorm);
-    // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.
-    const int worldDay = world.getDayNightSystem().getElapsedDays();
-    const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
-    illum.cloudDynamicWeather = GameplaySkyRenderer::computeCloudDynamicWeather(worldDay, worldTime);
-    const float cloudWetness = std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);
-    // DerivativeMain VolumetricClouds.glsl:53-54: clear=1000, rain=800
-    float cloudHeight = 1000.0f + cloudWetness * (800.0f - 1000.0f);
-    const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
-    // Storm altitude correction is applied in shaders via uCloudDynamicWeather.z.
-    // DerivativeMain VolumetricClouds.glsl:24: coverage = 1.0 (clear) to 1.2 (rain).
-    // Shader uses uCloudCoverage directly — no additional weather amplification.
-    const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
-    const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
-    const GLuint noiseTexture = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-
-    // Raw sky radiance (rows 0..257) — weather-tinted for SH skylight
-    m_gameplaySkyRenderer.renderSkyCapture(world.getDayNightSystem(),
-                                           m_deferredTargets.skyCaptureFramebuffer(),
-                                           m_deferredTargets.skyCaptureWidth(),
-                                           m_deferredTargets.skyCaptureHeight(),
-                                           cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                           weatherWetness, weatherStorm);
-
-    // Cloudy sky radiance (rows 258..513) — same atmosphere pass, composited with cloud data
-    m_gameplaySkyRenderer.renderCloudySkyCapture(world.getDayNightSystem(),
-                                                  m_deferredTargets.skyCaptureFramebuffer(),
-                                                  m_deferredTargets.skyCaptureWidth(),
-                                                  m_deferredTargets.skyCaptureHeight(),
-                                                  cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                                  noiseTexture, m_currentFrameData.shaderTime,
-                                                  illum,
-                                                  cloudCoverage, cloudDensity,
-                                                  cloudHeight, cloudThickness,
-                                                  0.5f,
-                                                  1.0f,
-                                                  7000.0f,
-                                                  m_pipelineSettings.cloudTimeScale,
-                                                  m_currentFrameData.cameraPos,
-                                                  weatherWetness, weatherStorm);
-
-    m_gameplaySkyRenderer.writeSkyCacheMetadata(illum,
-                                                 m_deferredTargets.skyCaptureFramebuffer(),
-                                                 m_deferredTargets.skyCaptureWidth(),
-                                                 cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                                 weatherWetness, weatherStorm);
+void Renderer::renderSkyCapturePass(const World& /*world*/) {
+    // Phase 7a: Delegated to SkyCapturePass::execute()
 }
 
 void Renderer::renderFullscreen(Shader& shader) const {

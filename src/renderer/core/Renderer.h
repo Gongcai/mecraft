@@ -20,6 +20,8 @@
 #include "../passes/CloudPass.h"
 #include "../passes/SceneCompositePass.h"
 #include "../passes/VolumetricPass.h"
+#include "../passes/SkyCapturePass.h"
+#include "../passes/GBufferPass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
@@ -694,6 +696,8 @@ private:
     std::unique_ptr<CloudPass> m_cloudPass;
     std::unique_ptr<SceneCompositePass> m_sceneCompositePass;
     std::unique_ptr<VolumetricPass> m_volumetricPass;
+    std::unique_ptr<SkyCapturePass> m_skyCapturePass;
+    std::unique_ptr<GBufferPass> m_gbufferPass;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;
