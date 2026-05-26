@@ -24,6 +24,7 @@
 #include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
 #include "../shadow/ShadowRenderer.h"
+#include "../mesh/TerrainRenderCache.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
 #include <glm/glm.hpp>
@@ -466,11 +467,6 @@ private:
         bool aggregated = false;
     };
 
-    struct TransparentSubChunkCache {
-        glm::vec3 boundsMin = glm::vec3(0.0f);
-        glm::vec3 boundsMax = glm::vec3(0.0f);
-    };
-
     static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUNT;
     using ShadowCascadeData = shadow::ShadowRenderer::Cascade;
 
@@ -523,70 +519,6 @@ private:
         glm::mat4 previousInvViewProj = glm::mat4(1.0f);
         float deltaTime = 0.0f;
     };
-
-    struct TransparentPassPlan {
-        size_t genericCommands = 0;
-        size_t waterCommands = 0;
-        uint64_t genericVertices = 0;
-        uint64_t waterVertices = 0;
-
-        void clear() {
-            genericCommands = 0;
-            waterCommands = 0;
-            genericVertices = 0;
-            waterVertices = 0;
-        }
-
-        [[nodiscard]] bool hasGeneric() const { return genericCommands > 0; }
-        [[nodiscard]] bool hasWater() const { return waterCommands > 0; }
-        [[nodiscard]] bool hasAny() const { return hasGeneric() || hasWater(); }
-    };
-
-    struct ChunkRenderColumnCache {
-        Chunk* chunk = nullptr;
-        int64_t chunkKey = 0;
-        int regionX = 0;
-        int regionZ = 0;
-        int chunkX = 0;
-        int chunkZ = 0;
-        glm::vec3 worldOffset = glm::vec3(0.0f);
-        bool stateValid = false;
-        bool aggregatedPresent = false;
-        bool aggregatedHasOpaque = false;
-        bool aggregatedHasCutout = false;
-        glm::vec3 aggregatedBoundsMin = glm::vec3(0.0f);
-        glm::vec3 aggregatedBoundsMax = glm::vec3(0.0f);
-        bool columnHasBounds = false;
-        glm::vec3 columnBoundsMin = glm::vec3(0.0f);
-        glm::vec3 columnBoundsMax = glm::vec3(0.0f);
-        std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshRevisions{};
-        std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshFingerprints{};
-        std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
-        std::array<TransparentSubChunkCache, Chunk::NUM_SUB_CHUNKS> transparentSubChunks{};
-        int transparentCount = 0;
-    };
-
-    struct MdiMeshAllocation {
-        WorldGpuMesh mesh;
-    };
-
-    struct SubChunkGpuKey {
-        int64_t chunkKey = 0;
-        int scy = 0;
-
-        bool operator==(const SubChunkGpuKey& other) const {
-            return chunkKey == other.chunkKey && scy == other.scy;
-        }
-    };
-
-    struct SubChunkGpuKeyHash {
-        size_t operator()(const SubChunkGpuKey& key) const {
-            const uint64_t chunk = static_cast<uint64_t>(key.chunkKey);
-            const uint64_t mixed = chunk ^ (static_cast<uint64_t>(key.scy) + 0x9e3779b97f4a7c15ULL + (chunk << 6) + (chunk >> 2));
-            return static_cast<size_t>(mixed);
-        }
-    };
-
 
     void recordMeshingHistory();
     void drainMeshingResults(const World& world);
@@ -658,6 +590,9 @@ private:
     void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);
     void syncChunkRenderColumns(const World& world);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
+    void syncTerrainCacheFrameStats();
+    void clearTransparentBatches();
+    void syncTransparentBatches();
     void releaseStaleMdiAllocations(const World& world);
     void releaseMdiAllocation(const SubChunkGpuKey& key);
     void initOutlineMesh();
@@ -841,6 +776,7 @@ private:
     float m_cutoutRenderDistanceChunks = 4.0f;
     // 视锥体6个平面
     std::array<Plane, 6> m_frustumPlanes{};
+    TerrainRenderCache m_terrainCache;
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
     std::vector<ChunkRenderEntry> m_deferredTransparentEntries;

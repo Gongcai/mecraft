@@ -144,6 +144,7 @@ set(SRC_RENDERER
         src/renderer/mesh/ItemModelMesh.cpp
         src/renderer/mesh/MeshBuilderRegistry.cpp
         src/renderer/mesh/WorldRenderBuffer.cpp
+        src/renderer/mesh/TerrainRenderCache.cpp
 
         # Shadow system
         src/renderer/shadow/ShadowMatrices.cpp
