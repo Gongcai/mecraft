@@ -132,33 +132,9 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
 
-    // Phase 3-4: Passes own their shaders
-    m_ssaoPass = std::make_unique<SsaoPass>();
-    m_ssaoPass->init(resourceMgr);
-    m_velocityPass = std::make_unique<VelocityPass>();
-    m_velocityPass->init(resourceMgr);
-    m_reflectionPass = std::make_unique<ReflectionPass>();
-    m_reflectionPass->init(resourceMgr);
-    m_temporalResolvePass = std::make_unique<TemporalResolvePass>();
-    m_temporalResolvePass->init(resourceMgr);
-    m_motionBlurPass = std::make_unique<MotionBlurPass>();
-    m_motionBlurPass->init(resourceMgr);
-    m_dofPass = std::make_unique<DepthOfFieldPass>();
-    m_dofPass->init(resourceMgr);
-    m_deferredLightingPass = std::make_unique<DeferredLightingPass>();
-    m_deferredLightingPass->init(resourceMgr);
-    m_deferredLightingPass->setShadowRenderer(&m_shadowRenderer);
-    m_cloudPass = std::make_unique<CloudPass>();
-    m_cloudPass->init(resourceMgr);
-    m_sceneCompositePass = std::make_unique<SceneCompositePass>();
-    m_sceneCompositePass->init(resourceMgr);
-    m_volumetricPass = std::make_unique<VolumetricPass>();
-    m_volumetricPass->init(resourceMgr);
-    m_volumetricPass->setShadowRenderer(&m_shadowRenderer);
-    m_skyCapturePass = std::make_unique<SkyCapturePass>();
-    m_skyCapturePass->init(resourceMgr);
-    m_gbufferPass = std::make_unique<GBufferPass>();
-    m_gbufferPass->init(resourceMgr);
+    // Phase 9a: DeferredPipeline owns all extracted passes
+    m_deferredPipeline = std::make_unique<DeferredPipeline>();
+    m_deferredPipeline->init(resourceMgr, &m_shadowRenderer);
 
     //m_uiShader = resourceMgr.getShader("ui");
     m_outlineShader = resourceMgr.getShader("outline");
@@ -216,18 +192,7 @@ void Renderer::shutdown() {
     shutdownGpuTimers();
 #endif
     m_mdiMeshAllocations.clear();
-    if (m_ssaoPass) { m_ssaoPass->shutdown(); m_ssaoPass.reset(); }
-    if (m_velocityPass) { m_velocityPass->shutdown(); m_velocityPass.reset(); }
-    if (m_reflectionPass) { m_reflectionPass->shutdown(); m_reflectionPass.reset(); }
-    if (m_temporalResolvePass) { m_temporalResolvePass->shutdown(); m_temporalResolvePass.reset(); }
-    if (m_motionBlurPass) { m_motionBlurPass->shutdown(); m_motionBlurPass.reset(); }
-    if (m_dofPass) { m_dofPass->shutdown(); m_dofPass.reset(); }
-    if (m_deferredLightingPass) { m_deferredLightingPass->shutdown(); m_deferredLightingPass.reset(); }
-    if (m_cloudPass) { m_cloudPass->shutdown(); m_cloudPass.reset(); }
-    if (m_sceneCompositePass) { m_sceneCompositePass->shutdown(); m_sceneCompositePass.reset(); }
-    if (m_volumetricPass) { m_volumetricPass->shutdown(); m_volumetricPass.reset(); }
-    if (m_skyCapturePass) { m_skyCapturePass->shutdown(); m_skyCapturePass.reset(); }
-    if (m_gbufferPass) { m_gbufferPass->shutdown(); m_gbufferPass.reset(); }
+    if (m_deferredPipeline) { m_deferredPipeline->shutdown(); m_deferredPipeline.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     m_terrainCache.shutdown();
@@ -386,7 +351,7 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
                                      (m_pipelineSettings.volumetricLightEnabled ||
                                       (m_pipelineSettings.volumetricFogEnabled &&
                                        m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
-                                     m_volumetricPass && m_volumetricPass->hasShaders();
+                                     m_deferredPipeline->volumetricPass() && m_deferredPipeline->volumetricPass()->hasShaders();
     m_waterCompositeShader->setInt("uVolumetricFogActive", volumetricFogActive ? 1 : 0);
     m_waterCompositeShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
     m_waterCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
@@ -825,12 +790,12 @@ bool Renderer::isHybridDeferredReady() const {
     return m_deferredTargets.isReady() &&
            m_chunkGBufferShader != nullptr &&
            m_shadowDepthShader != nullptr &&
-           m_deferredLightingPass != nullptr &&
+           m_deferredPipeline->lightingPass() != nullptr &&
            m_deferredDebugShader != nullptr &&
-           m_ssaoPass != nullptr &&
-           m_velocityPass != nullptr &&
-           m_reflectionPass != nullptr &&
-           m_cloudPass != nullptr;
+           m_deferredPipeline->ssaoPass() != nullptr &&
+           m_deferredPipeline->velocityPass() != nullptr &&
+           m_deferredPipeline->reflectionPass() != nullptr &&
+           m_deferredPipeline->cloudPass() != nullptr;
 }
 
 Renderer::HeldItemShadowData Renderer::getHeldItemShadowData() const {
@@ -1356,7 +1321,7 @@ void Renderer::bindChunkRenderStateForShader(const RenderFrameData& frame, const
     const bool volFogActive = (m_pipelineSettings.volumetricLightEnabled ||
                                (m_pipelineSettings.volumetricFogEnabled &&
                                 m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
-                              m_volumetricPass && m_volumetricPass->hasShaders();
+                              m_deferredPipeline->volumetricPass() && m_deferredPipeline->volumetricPass()->hasShaders();
     shader.setInt("uVolumetricFogActive", volFogActive ? 1 : 0);
     shader.setFloat("uDirectSunStrength", m_pipelineSettings.directSunStrength);
     shader.setFloat("uSkyAmbientStrength", m_pipelineSettings.skyAmbientStrength);
@@ -1624,8 +1589,8 @@ bool Renderer::renderWorldDeferred(const World& world,
                                    const RenderFrameData& frame) {
     if (m_resourceMgr == nullptr ||
         m_chunkGBufferShader == nullptr ||
-        m_deferredLightingPass == nullptr ||
-        m_ssaoPass == nullptr ||
+        m_deferredPipeline->lightingPass() == nullptr ||
+        m_deferredPipeline->ssaoPass() == nullptr ||
         !m_deferredTargets.init()) {
         return false;
     }
@@ -1642,8 +1607,8 @@ bool Renderer::renderWorldDeferred(const World& world,
     }
     clearDeferredAuxiliaryTargets();
     // Phase 7a: Sky capture
-    if (m_skyCapturePass) {
-        m_skyCapturePass->execute(world, m_deferredTargets, m_gameplaySkyRenderer,
+    if (m_deferredPipeline->skyCapturePass()) {
+        m_deferredPipeline->skyCapturePass()->execute(world, m_deferredTargets, m_gameplaySkyRenderer,
                                    m_resourceMgr, m_cameraPos.y, m_currentFrameData.shaderTime,
                                    m_currentFrameData.cameraPos, m_pipelineSettings.cloudTimeScale);
     }
@@ -1656,11 +1621,11 @@ bool Renderer::renderWorldDeferred(const World& world,
     // Phase 7a: Entity and drop GBuffer
     {
         FrameContext gbufCtx = buildFrameContextFromRenderFrameData(frame);
-        if (m_gbufferPass) {
-            m_gbufferPass->executeEntities(world, gbufCtx, m_deferredTargets,
+        if (m_deferredPipeline->gbufferPass()) {
+            m_deferredPipeline->gbufferPass()->executeEntities(world, gbufCtx, m_deferredTargets,
                                             m_humanoidRenderer, m_gameplayRegistry,
                                             m_renderLocalPlayerModel);
-            m_gbufferPass->executeDrops(world, gbufCtx, m_deferredTargets,
+            m_deferredPipeline->gbufferPass()->executeDrops(world, gbufCtx, m_deferredTargets,
                                          m_dropRenderer, m_dropSystem);
         }
     }
@@ -1671,7 +1636,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     {
         FrameContext velCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings velRs = buildRenderSettingsFromPipelineSettings();
-        m_velocityPass->execute(velCtx, velRs, m_deferredTargets);
+        m_deferredPipeline->velocityPass()->execute(velCtx, velRs, m_deferredTargets);
     }
     if (m_pipelineSettings.shadowsEnabled && m_shadowDepthShader != nullptr) {
 #ifdef MECRAFT_DEBUG
@@ -1682,13 +1647,13 @@ bool Renderer::renderWorldDeferred(const World& world,
         endGpuTimer(GpuTimerPass::Shadow);
 #endif
     }
-    if (m_ssaoPass) {
+    if (m_deferredPipeline->ssaoPass()) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Ssao);
 #endif
         FrameContext ssaoCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings ssaoRs = buildRenderSettingsFromPipelineSettings();
-        m_ssaoPass->execute(ssaoCtx, ssaoRs, m_deferredTargets);
+        m_deferredPipeline->ssaoPass()->execute(ssaoCtx, ssaoRs, m_deferredTargets);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Ssao);
 #endif
@@ -1700,11 +1665,11 @@ bool Renderer::renderWorldDeferred(const World& world,
     beginGpuTimer(GpuTimerPass::Lighting);
 #endif
     // Phase 5a: Deferred lighting pass
-    if (m_deferredLightingPass) {
+    if (m_deferredPipeline->lightingPass()) {
         FrameContext lightCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings lightRs = buildRenderSettingsFromPipelineSettings();
-        m_deferredLightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
-        m_deferredLightingPass->execute(lightCtx, lightRs, m_deferredTargets);
+        m_deferredPipeline->lightingPass()->setHeldBlockLightValue(m_heldBlockLightValue);
+        m_deferredPipeline->lightingPass()->execute(lightCtx, lightRs, m_deferredTargets);
     }
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::Lighting);
@@ -1719,24 +1684,24 @@ bool Renderer::renderWorldDeferred(const World& world,
         restoreCapturedFramebufferViewport(window);
         return true;
     }
-    if (m_reflectionPass) {
+    if (m_deferredPipeline->reflectionPass()) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Reflection);
 #endif
         FrameContext reflCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings reflRs = buildRenderSettingsFromPipelineSettings();
-        m_reflectionPass->execute(reflCtx, reflRs, m_deferredTargets);
+        m_deferredPipeline->reflectionPass()->execute(reflCtx, reflRs, m_deferredTargets);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Reflection);
 #endif
     }
-    if (m_cloudPass) {
+    if (m_deferredPipeline->cloudPass()) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Cloud);
 #endif
         FrameContext cloudCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings cloudRs = buildRenderSettingsFromPipelineSettings();
-        m_cloudPass->execute(cloudCtx, cloudRs, m_deferredTargets);
+        m_deferredPipeline->cloudPass()->execute(cloudCtx, cloudRs, m_deferredTargets);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Cloud);
 #endif
@@ -1745,7 +1710,7 @@ bool Renderer::renderWorldDeferred(const World& world,
     {
         FrameContext compCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings compRs = buildRenderSettingsFromPipelineSettings();
-        m_sceneCompositePass->execute(compCtx, compRs, m_deferredTargets);
+        m_deferredPipeline->sceneCompositePass()->execute(compCtx, compRs, m_deferredTargets);
     }
     m_deferredTargets.copySceneCompositeToTransparentComposite();
     m_deferredTargets.copySceneCompositeToSceneResolved();
@@ -1777,35 +1742,35 @@ bool Renderer::renderWorldDeferred(const World& world,
     // UW_VOLUMETRIC_LIGHT: underwater volumetric light runs even when overworld VFog
     // strength is zero — the underwater branch is independent of fog density settings.
     // Phase 5c: Volumetric fog
-    if (m_volumetricPass) {
+    if (m_deferredPipeline->volumetricPass()) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Volumetric);
 #endif
         FrameContext volCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings volRs = buildRenderSettingsFromPipelineSettings();
-        m_volumetricPass->execute(volCtx, volRs, m_deferredTargets, m_hasPreviousFrameData);
+        m_deferredPipeline->volumetricPass()->execute(volCtx, volRs, m_deferredTargets, m_hasPreviousFrameData);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Volumetric);
 #endif
     }
 
     // Phase 4: TAA resolve
-    if (m_temporalResolvePass && m_pipelineSettings.taaEnabled && m_hasPreviousFrameData) {
+    if (m_deferredPipeline->taaPass() && m_pipelineSettings.taaEnabled && m_hasPreviousFrameData) {
         FrameContext taaCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings taaRs = buildRenderSettingsFromPipelineSettings();
-        m_temporalResolvePass->execute(taaCtx, taaRs, m_deferredTargets);
+        m_deferredPipeline->taaPass()->execute(taaCtx, taaRs, m_deferredTargets);
     }
     // Phase 4: Motion blur
-    if (m_motionBlurPass && m_pipelineSettings.motionBlurEnabled && m_hasPreviousFrameData) {
+    if (m_deferredPipeline->motionBlurPass() && m_pipelineSettings.motionBlurEnabled && m_hasPreviousFrameData) {
         FrameContext mbCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings mbRs = buildRenderSettingsFromPipelineSettings();
-        m_motionBlurPass->execute(mbCtx, mbRs, m_deferredTargets);
+        m_deferredPipeline->motionBlurPass()->execute(mbCtx, mbRs, m_deferredTargets);
     }
     // Phase 4: Depth of field
-    if (m_dofPass && m_pipelineSettings.dofEnabled) {
+    if (m_deferredPipeline->dofPass() && m_pipelineSettings.dofEnabled) {
         FrameContext dofCtx = buildFrameContextFromRenderFrameData(frame);
         RenderSettings dofRs = buildRenderSettingsFromPipelineSettings();
-        m_dofPass->execute(dofCtx, dofRs, m_deferredTargets);
+        m_deferredPipeline->dofPass()->execute(dofCtx, dofRs, m_deferredTargets);
     }
     updateDeferredHistoryTargets();
     m_deferredTargets.copySceneResolvedToTransparentComposite();
@@ -1857,7 +1822,7 @@ void Renderer::renderGBufferTerrain(const World& world, const RenderFrameData& f
     trs.fakeBounceStrength = m_pipelineSettings.fakeBounceStrength;
     trs.albedoDesaturation = m_pipelineSettings.albedoDesaturation;
     trs.shadowDesaturation = m_pipelineSettings.shadowDesaturation;
-    const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
+    const bool volFogShadersReady = m_deferredPipeline->volumetricPass() && m_deferredPipeline->volumetricPass()->hasShaders();
     m_terrainRenderer.bindChunkRenderState(tfd, texArray, *m_chunkGBufferShader,
                                             m_deferredFrameActive, m_debugLightMode,
                                             m_eyeInWater, m_heldBlockLightValue,
@@ -2181,7 +2146,7 @@ void Renderer::updateDeferredHistoryTargets() {
     m_deferredTargets.copyDepthToHistory();
     m_deferredTargets.copyReflectionToHistory();
     m_deferredTargets.copyCloudToHistory();
-    if (!m_pipelineSettings.volumetricTemporalEnabled || !m_hasPreviousFrameData || !(m_volumetricPass && m_volumetricPass->hasTemporalShader())) {
+    if (!m_pipelineSettings.volumetricTemporalEnabled || !m_hasPreviousFrameData || !(m_deferredPipeline->volumetricPass() && m_deferredPipeline->volumetricPass()->hasTemporalShader())) {
         m_deferredTargets.copyVolumetricToHistory();
     }
     m_deferredTargets.swapHistory();

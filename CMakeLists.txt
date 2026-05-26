@@ -110,6 +110,7 @@ set(SRC_RENDERER
         src/renderer/core/Shader.cpp
         src/renderer/core/Renderer.cpp
         src/renderer/core/RenderScene.cpp
+        src/renderer/core/DeferredPipeline.cpp
 
         # Render targets
         src/renderer/targets/CommonFrameTargets.cpp

@@ -30,6 +30,7 @@
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
+#include "DeferredPipeline.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <unordered_set>
@@ -678,18 +679,7 @@ private:
     DropSystem* m_dropSystem = nullptr;  // injected from Game
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
-    std::unique_ptr<SsaoPass> m_ssaoPass;
-    std::unique_ptr<VelocityPass> m_velocityPass;
-    std::unique_ptr<ReflectionPass> m_reflectionPass;
-    std::unique_ptr<TemporalResolvePass> m_temporalResolvePass;
-    std::unique_ptr<MotionBlurPass> m_motionBlurPass;
-    std::unique_ptr<DepthOfFieldPass> m_dofPass;
-    std::unique_ptr<DeferredLightingPass> m_deferredLightingPass;
-    std::unique_ptr<CloudPass> m_cloudPass;
-    std::unique_ptr<SceneCompositePass> m_sceneCompositePass;
-    std::unique_ptr<VolumetricPass> m_volumetricPass;
-    std::unique_ptr<SkyCapturePass> m_skyCapturePass;
-    std::unique_ptr<GBufferPass> m_gbufferPass;
+    std::unique_ptr<DeferredPipeline> m_deferredPipeline;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;
