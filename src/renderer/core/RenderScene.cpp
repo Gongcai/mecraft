@@ -142,6 +142,7 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         legacy.volumetricTemporalWeight = settings.volumetric.temporalWeight;
         legacy.volumetricShadowBiasScale = settings.volumetric.shadowBiasScale;
         legacy.volumetricFogStrength = settings.volumetric.fogStrength;
+        legacy.underwaterVolumetricLightStrength = settings.volumetric.underwaterLightStrength;
         legacy.vfogCenterHeight = settings.volumetric.fogCenterHeight;
         legacy.vfogHeightSpread = settings.volumetric.fogHeightSpread;
         legacy.vfogNoiseScale = settings.volumetric.fogNoiseScale;

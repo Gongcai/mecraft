@@ -240,6 +240,7 @@ public:
         bool uwLightEnabled = true; // DerivativeMain UW_VOLUMETRIC_LIGHT: underwater volumetric light
         bool fogEnabled = true;
         float fogStrength = 1.0f;
+        float underwaterLightStrength = 0.1f;
         float baseDensity = 1.0f;
         float heightFalloff = 0.022f;
         float maxDistance = 260.0f;
@@ -393,11 +394,27 @@ public:
     [[nodiscard]] bool isDeferredDebugViewActive() const;
     [[nodiscard]] bool isDeferredFrameActive() const { return m_deferredFrameActive; }
     void setRenderLocalPlayerModel(bool visible) { m_renderLocalPlayerModel = visible; }
-    void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
-    void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
+    void setHumanoidRenderer(HumanoidRenderer* hr) {
+        m_humanoidRenderer = hr;
+        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
+            m_deferredPipeline->shadowPass()->setHumanoidRenderer(hr);
+    }
+    void setDropRenderer(DropRenderer* dr) {
+        m_dropRenderer = dr;
+        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
+            m_deferredPipeline->shadowPass()->setDropRenderer(dr);
+    }
     void setParticleSystem(ParticleSystem* ps) { m_particleSystem = ps; }
-    void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
-    void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
+    void setDropSystem(DropSystem* ds) {
+        m_dropSystem = ds;
+        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
+            m_deferredPipeline->shadowPass()->setDropSystem(ds);
+    }
+    void setGameplayRegistry(ecs::GameplayRegistry* reg) {
+        m_gameplayRegistry = reg;
+        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
+            m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
+    }
     void renderDeferredDebugOverlay(const Window& window);
     [[nodiscard]] bool isHybridDeferredReady() const;
     // Shadow data for held item renderer — returns cascade matrices, textures, and settings.

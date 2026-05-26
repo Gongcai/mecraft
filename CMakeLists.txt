@@ -132,6 +132,8 @@ set(SRC_RENDERER
         src/renderer/passes/VolumetricPass.cpp
         src/renderer/passes/SkyCapturePass.cpp
         src/renderer/passes/GBufferPass.cpp
+        src/renderer/passes/ShadowPass.cpp
+        src/renderer/passes/WaterCompositePass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp

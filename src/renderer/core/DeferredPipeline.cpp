@@ -5,6 +5,8 @@
 void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
     m_skyCapturePass = std::make_unique<SkyCapturePass>();
     m_gbufferPass = std::make_unique<GBufferPass>();
+    m_shadowPass = std::make_unique<ShadowPass>();
+    m_waterCompositePass = std::make_unique<WaterCompositePass>();
     m_velocityPass = std::make_unique<VelocityPass>();
     m_ssaoPass = std::make_unique<SsaoPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
@@ -18,6 +20,8 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
 
     m_skyCapturePass->init(resourceMgr);
     m_gbufferPass->init(resourceMgr);
+    m_shadowPass->init(resourceMgr);
+    m_waterCompositePass->init(resourceMgr);
     m_velocityPass->init(resourceMgr);
     m_ssaoPass->init(resourceMgr);
     m_lightingPass->init(resourceMgr);
@@ -30,9 +34,13 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     m_dofPass->init(resourceMgr);
 
     if (shadowRenderer) {
+        m_shadowPass->setShadowRenderer(shadowRenderer);
         m_lightingPass->setShadowRenderer(shadowRenderer);
         m_volumetricPass->setShadowRenderer(shadowRenderer);
     }
+
+    // WaterCompositePass needs TerrainRenderer and WorldRenderBuffer —
+    // injected later by Renderer after those are created.
 }
 
 void DeferredPipeline::shutdown() {
@@ -46,6 +54,8 @@ void DeferredPipeline::shutdown() {
     m_lightingPass.reset();
     m_ssaoPass.reset();
     m_velocityPass.reset();
+    m_shadowPass.reset();
+    m_waterCompositePass.reset();
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
 }

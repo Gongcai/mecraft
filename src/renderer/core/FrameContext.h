@@ -90,6 +90,7 @@ struct VolumetricData {
     bool uwLightEnabled = true;
     bool fogEnabled = true;
     float fogStrength = 1.0f;
+    float underwaterLightStrength = 0.1f;
     float fogCenterHeight = 63.0f;
     float fogHeightSpread = 100.0f;
     float fogNoiseScale = 0.04f;

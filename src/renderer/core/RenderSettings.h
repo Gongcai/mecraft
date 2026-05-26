@@ -53,6 +53,7 @@ struct VolumetricSettings {
     float temporalWeight = 0.90f;
     float shadowBiasScale = 1.0f;
     float fogStrength = 1.0f;
+    float underwaterLightStrength = 0.1f;
     float fogCenterHeight = 63.0f;
     float fogHeightSpread = 100.0f;
     float fogNoiseScale = 0.04f;

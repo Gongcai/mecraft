@@ -154,7 +154,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     // Underwater
     m_volumetricFogShader->setInt("uIsEyeInWater", ctx.eyeInWater ? 1 : 0);
     m_volumetricFogShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
-    m_volumetricFogShader->setFloat("uUnderwaterVolumetricLightStrength", settings.volumetric.fogStrength);
+    m_volumetricFogShader->setFloat("uUnderwaterVolumetricLightStrength", ctx.volumetric.underwaterLightStrength);
     m_volumetricFogShader->setInt("uUwVolumetricLightEnabled", settings.volumetric.uwLightEnabled ? 1 : 0);
 
     // Texture bindings
@@ -261,7 +261,9 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
     m_volumetricCompositeShader->setInt("uFreezeBias", settings.volumetric.freezeBias ? 1 : 0);
 
-    const bool volFogCompositeActive = (settings.volumetric.lightEnabled ||
+    const bool underwaterVolumetricActive = ctx.eyeInWater && settings.volumetric.uwLightEnabled;
+    const bool volFogCompositeActive = (underwaterVolumetricActive ||
+                                        settings.volumetric.lightEnabled ||
                                         (settings.volumetric.fogEnabled &&
                                          settings.volumetric.fogStrength > 0.001f));
     m_volumetricCompositeShader->setInt("uVolumetricFogActive", volFogCompositeActive ? 1 : 0);

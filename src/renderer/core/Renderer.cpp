@@ -156,6 +156,16 @@ void Renderer::init(ResourceMgr &resourceMgr) {
 #ifdef MECRAFT_DEBUG
     m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
 #endif
+    // Phase 7b: Inject ShadowPass dependencies
+    if (m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setTerrainRenderer(&m_terrainRenderer);
+        m_deferredPipeline->shadowPass()->setWorldRenderBuffer(&m_worldRenderBuffer);
+    }
+    // Phase 5c: Inject WaterCompositePass dependencies
+    if (m_deferredPipeline->waterCompositePass()) {
+        m_deferredPipeline->waterCompositePass()->setTerrainRenderer(&m_terrainRenderer);
+        m_deferredPipeline->waterCompositePass()->setWorldRenderBuffer(&m_worldRenderBuffer);
+    }
     m_deferredTargets.init();
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
@@ -298,208 +308,33 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
 }
 
 void Renderer::renderWaterCompositePass(const World& world, const Window& window, const bool preTemporalResolve) {
-    if (!m_pipelineSettings.waterEffectsEnabled ||
-        !m_transparentPassPlan.hasWater() ||
-        m_waterCompositeShader == nullptr ||
-        m_resourceMgr == nullptr) {
+    // Phase 5c: Delegated to WaterCompositePass::execute()
+    if (!m_deferredPipeline->waterCompositePass()) {
         return;
     }
-
-    const bool deferredInputsEnabled = m_deferredFrameActive && m_deferredTargets.isReady();
-    const bool compositeInputsEnabled = deferredInputsEnabled &&
-                                        (preTemporalResolve || m_pipelineSettings.transparentCompositeEnabled);
-    const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
-    const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
-
-    if (compositeInputsEnabled) {
-        m_deferredTargets.copySceneResolvedToTransparentComposite();
-        m_deferredTargets.copyDepthToTransparentComposite();
-        m_deferredTargets.bindTransparentComposite();
-    } else if (m_deferredFrameActive) {
-        restoreCapturedFramebufferViewport(window);
-    }
-
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    const RenderFrameData frame = m_currentFrameDataValid ? m_currentFrameData : buildRenderFrameData(world);
-
-    m_waterCompositeShader->use();
-    m_waterCompositeShader->setMat4("view", frame.view);
-    // DerivativeMain parity: water vertices also carry taaOffset when the
-    // water pass runs before temporal resolve. The post-TAA fallback stays raw
-    // because there is no later TAA pass to accumulate it.
-    const bool useJitteredWater = preTemporalResolve && m_pipelineSettings.taaEnabled;
-    m_waterCompositeShader->setMat4("viewProj",
-        useJitteredWater ? frame.jitteredViewProj : frame.viewProj);
-    m_waterCompositeShader->setMat4("uInvViewProj",
-        useJitteredWater ? frame.jitteredInvViewProj : frame.invViewProj);
-    m_waterCompositeShader->setMat4("model", glm::mat4(1.0f));
-    m_waterCompositeShader->setInt("uUseModel", 0);
-    m_waterCompositeShader->setInt("texArray", 0);
-    m_waterCompositeShader->setInt("uOpaqueDepthTex", 5);
-    m_waterCompositeShader->setInt("uSkyCaptureTex", 6);
-    m_waterCompositeShader->setInt("uSceneColorTex", 7);
-    m_waterCompositeShader->setInt("uNoiseTex", 8);
-    m_waterCompositeShader->setInt("uReflectionTex", 9);
-    m_waterCompositeShader->setInt("uAtmosphereLut", 10);
-    m_waterCompositeShader->setInt("uVolumetricTex", 11);
-    m_waterCompositeShader->setInt("uRippleNormalTex", 12);
-    m_waterCompositeShader->setInt("uSkyCaptureEnabled", m_deferredFrameActive ? 1 : 0);
-    m_waterCompositeShader->setInt("uCompositeInputsEnabled", compositeInputsEnabled ? 1 : 0);
-    m_waterCompositeShader->setInt("uWaterCompositeEnabled", compositeInputsEnabled ? 1 : 0);
-    m_waterCompositeShader->setInt("uDepthSofteningEnabled", deferredInputsEnabled ? 1 : 0);
+    FrameContext waterCtx = buildFrameContextFromRenderFrameData(
+        m_currentFrameDataValid ? m_currentFrameData : buildRenderFrameData(world));
+    RenderSettings waterRs = buildRenderSettingsFromPipelineSettings();
     const bool volumetricFogActive = !preTemporalResolve &&
                                      (m_pipelineSettings.volumetricLightEnabled ||
                                       (m_pipelineSettings.volumetricFogEnabled &&
                                        m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
                                      m_deferredPipeline->volumetricPass() && m_deferredPipeline->volumetricPass()->hasShaders();
-    m_waterCompositeShader->setInt("uVolumetricFogActive", volumetricFogActive ? 1 : 0);
-    m_waterCompositeShader->setInt("uFrameIndex", static_cast<int>(frame.frameIndex & 0x7fffffffULL));
-    m_waterCompositeShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
-    m_waterCompositeShader->setFloat("uAnimationTime", frame.animationTime);
-    m_waterCompositeShader->setFloat("uTime", frame.shaderTime);
-    m_waterCompositeShader->setMat4("uView", frame.view);
-    m_waterCompositeShader->setVec3("uCameraPos", frame.cameraPos);
-    m_waterCompositeShader->setFloat("uNearPlane", frame.nearPlane);
-    m_waterCompositeShader->setFloat("uFarPlane", frame.farPlane);
-    // DerivativeMain shaders.properties: uniform.vec3.waterAbsorption = vec3(0.4, 0.14, 0.08)
-    m_waterCompositeShader->setVec3("uWaterAbsorption", glm::vec3(0.4f, 0.14f, 0.08f));
-    m_waterCompositeShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
-    m_waterCompositeShader->setVec3("uMoonDirection", frame.skyColors.moonDirection);
-    m_waterCompositeShader->setVec3("uSunLightColor", frame.skyColors.sunLightColor);
-    m_waterCompositeShader->setVec3("uMoonLightColor", frame.skyColors.moonLightColor);
-    m_waterCompositeShader->setVec3("uSkyAmbientColor", frame.skyColors.skyAmbientColor);
-    m_waterCompositeShader->setFloat("uSkyIntensity", frame.skyIntensity);
-    m_waterCompositeShader->setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
-    m_waterCompositeShader->setFloat("uWeatherWetness", frame.weatherWetness);
-    m_waterCompositeShader->setFloat("uSkyWetness", frame.skyWetness);
-    m_waterCompositeShader->setFloat("uFogWetness", frame.fogWetness);
-    m_waterCompositeShader->setFloat("uCloudWetness", frame.cloudWetness);
-    m_waterCompositeShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
-    m_waterCompositeShader->setFloat("uWaterWaveHeight", 1.0f);
-    m_waterCompositeShader->setFloat("uWaterWaveSpeed", 1.0f);
-    m_waterCompositeShader->setFloat("uWaterIOR", 1.33f);
-    m_waterCompositeShader->setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
-    m_waterCompositeShader->setInt("uIsEyeInWater", m_eyeInWater ? 1 : 0);
-
-    if (m_resourceMgr) {
-        const TextureAnimationInfo still = m_resourceMgr->getTextureAnimation("water_still");
-        const TextureAnimationInfo flow = m_resourceMgr->getTextureAnimation("water_flow");
-        m_waterCompositeShader->setFloat("uWaterStillFirstLayer", static_cast<float>(still.firstLayer));
-        m_waterCompositeShader->setFloat("uWaterStillLayerCount", static_cast<float>(std::max(1, still.frameCount)));
-        m_waterCompositeShader->setFloat("uWaterFlowFirstLayer", static_cast<float>(flow.firstLayer));
-        m_waterCompositeShader->setFloat("uWaterFlowLayerCount", static_cast<float>(std::max(1, flow.frameCount)));
-    }
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneResolvedTexture());
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTexture());
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
-    glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDisable(GL_BLEND);
-    glDepthMask(GL_FALSE);
-
-#ifdef MECRAFT_DEBUG
-    beginGpuTimer(GpuTimerPass::Water);
-#endif
-    if (m_useMultiDrawIndirect) {
-        // Sort water entries back-to-front
-        std::vector<const DrawBatchEntry*> waterEntries;
-        for (const auto& entry : m_deferredTransparentBatch) {
-            if (entry.kind == TransparentBatchKind::Water) {
-                waterEntries.push_back(&entry);
-            }
-        }
-        std::sort(waterEntries.begin(), waterEntries.end(),
-            [](const DrawBatchEntry* a, const DrawBatchEntry* b) {
-                return a->distanceSq > b->distanceSq;
-            });
-
-        m_worldRenderBuffer.bindTransparentVao();
-        for (const auto* entry : waterEntries) {
-            glDrawArrays(GL_TRIANGLES,
-                         static_cast<GLint>(entry->range.firstVertex),
-                         static_cast<GLsizei>(entry->range.vertexCount));
-            ++drawCallCount;
-        }
-    } else {
-        // Non-MDI: sort and draw water sub-chunks
-        struct WaterItem {
-            const ChunkRenderEntry* entry = nullptr;
-            float distanceSq = 0.0f;
-        };
-        std::vector<WaterItem> waterItems;
-        for (const auto& entry : m_deferredTransparentEntries) {
-            if (!entry.chunk) continue;
-            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-            if (!sc || sc->getMesh().waterVertexCount == 0) continue;
-            const glm::ivec3 offset = entry.chunk->getWorldOffset();
-            const int yBase = entry.scy * SubChunk::SIZE;
-            const glm::vec3 center(
-                static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
-                static_cast<float>(yBase + offset.y) + SubChunk::SIZE * 0.5f,
-                static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
-            const glm::vec3 toCamera = center - m_cameraPos;
-            waterItems.push_back({&entry, glm::dot(toCamera, toCamera)});
-        }
-        std::sort(waterItems.begin(), waterItems.end(),
-            [](const WaterItem& a, const WaterItem& b) {
-                return a.distanceSq > b.distanceSq;
-            });
-        for (const auto& item : waterItems) {
-            const SubChunk* sc = item.entry->chunk->getSubChunk(item.entry->scy);
-            glBindVertexArray(sc->getMesh().transparentVao);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(sc->getMesh().waterVertexCount));
-            ++drawCallCount;
-        }
-    }
-
-#ifdef MECRAFT_DEBUG
-    endGpuTimer(GpuTimerPass::Water);
-#endif
-    glBindVertexArray(0);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    for (int i = 11; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glActiveTexture(GL_TEXTURE0);
-
-    if (preTemporalResolve && compositeInputsEnabled) {
-        m_deferredTargets.copyTransparentCompositeToSceneComposite();
-        m_deferredTargets.copyTransparentCompositeToSceneResolved();
+    const bool waterRenderedBeforeTemporal = m_deferredPipeline->waterCompositePass()->execute(
+        waterCtx, waterRs, m_deferredTargets, world, window,
+        m_deferredFrameActive, preTemporalResolve,
+        m_capturedFramebuffer, m_capturedViewport,
+        m_pipelineSettings.transparentCompositeEnabled,
+        m_pipelineSettings.waterEffectsEnabled,
+        m_pipelineSettings.rainSurfaceRipplesEnabled,
+        volumetricFogActive,
+        m_useMultiDrawIndirect,
+        m_deferredTransparentBatch,
+        m_transparentPassPlan,
+        m_deferredTransparentEntries);
+    if (waterRenderedBeforeTemporal) {
         m_waterRenderedBeforeTemporal = true;
-    } else if (compositeInputsEnabled) {
-        m_deferredTargets.blitTransparentCompositeTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
-        restoreCapturedFramebufferViewport(window);
     }
-
-    for (int unit = 8; unit >= 5; --unit) {
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
 void Renderer::renderTransparentCompositePass(const World& world, const Window& window) {
@@ -1212,6 +1047,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     frame.volumetric.uwLightEnabled = m_pipelineSettings.uwVolumetricLightEnabled;
     frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
     frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
+    frame.volumetric.underwaterLightStrength = m_pipelineSettings.underwaterVolumetricLightStrength;
     frame.volumetric.fogCenterHeight = m_pipelineSettings.vfogCenterHeight;
     frame.volumetric.fogHeightSpread = m_pipelineSettings.vfogHeightSpread;
     frame.volumetric.fogNoiseScale = m_pipelineSettings.vfogNoiseScale;
@@ -1235,6 +1071,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     // Storm altitude/thickness/density corrections are applied in shaders via
     // uCloudDynamicWeather.z to avoid double-application across render paths.
     frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
+    frame.eyeInWater = m_eyeInWater;
     return frame;
 }
 
@@ -1419,12 +1256,39 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     ctx.jitter = frame.jitter;
     ctx.prevJitter = frame.previousJitter;
     // Sky colors
+    ctx.skyColors.top = frame.skyColors.top;
+    ctx.skyColors.horizon = frame.skyColors.horizon;
+    ctx.skyColors.fog = frame.skyColors.fog;
+    ctx.skyColors.halo = frame.skyColors.halo;
     ctx.skyColors.sunDirection = frame.skyColors.sunDirection;
+    ctx.skyColors.sunScatter = frame.skyColors.sunScatter;
+    ctx.skyColors.sunLightColor = frame.skyColors.sunLightColor;
+    ctx.skyColors.skyAmbientColor = frame.skyColors.skyAmbientColor;
+    ctx.skyColors.shadowTintColor = frame.skyColors.shadowTintColor;
+    ctx.skyColors.horizonScatterColor = frame.skyColors.horizonScatterColor;
+    ctx.skyColors.cloudColor = frame.skyColors.cloudColor;
     ctx.skyColors.moonDirection = frame.skyColors.moonDirection;
+    ctx.skyColors.moonLightColor = frame.skyColors.moonLightColor;
+    ctx.skyColors.haloStrength = frame.skyColors.haloStrength;
+    ctx.skyColors.horizonHaze = frame.skyColors.horizonHaze;
+    ctx.skyColors.sunGlare = frame.skyColors.sunGlare;
+    ctx.skyColors.sunVisibility = frame.skyColors.sunVisibility;
     ctx.skyColors.moonVisibility = frame.skyColors.moonVisibility;
+    ctx.skyColors.dayFactor = frame.skyColors.dayFactor;
+    ctx.skyColors.nightFactor = frame.skyColors.nightFactor;
+    ctx.skyColors.horizonFactor = frame.skyColors.horizonFactor;
+    ctx.skyColors.rainFactor = frame.skyColors.rainFactor;
+    ctx.skyColors.wetnessFactor = frame.skyColors.wetnessFactor;
+    ctx.skyColors.cloudinessFactor = frame.skyColors.cloudinessFactor;
+    ctx.skyIlluminance.directIlluminance = frame.skyIlluminance.directIlluminance;
+    ctx.skyIlluminance.skyIlluminance = frame.skyIlluminance.skyIlluminance;
+    ctx.skyIlluminance.sunIlluminance = frame.skyIlluminance.sunIlluminance;
+    ctx.skyIlluminance.moonIlluminance = frame.skyIlluminance.moonIlluminance;
+    ctx.skyIlluminance.cloudDynamicWeather = frame.skyIlluminance.cloudDynamicWeather;
     ctx.skyIntensity = frame.skyIntensity;
     // Weather
     ctx.weather.wetness = frame.weatherWetness;
+    ctx.weather.storm = frame.weatherStorm;
     ctx.weather.surfaceWetness = frame.surfaceWetness;
     ctx.weather.skyWetness = frame.skyWetness;
     ctx.weather.fogWetness = frame.fogWetness;
@@ -1445,11 +1309,18 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     ctx.atmosphere.skyCoolness = frame.atmosphere.skyCoolness;
     ctx.atmosphere.directWeatherOcclusion = frame.atmosphere.directWeatherOcclusion;
     ctx.atmosphere.directWeatherOcclusionOverride = frame.atmosphere.directWeatherOcclusionOverride;
+    // Fog
+    ctx.fog.enabled = frame.fogEnabled;
+    ctx.fog.color = frame.fogColor;
+    ctx.fog.startDistance = frame.fogStart;
+    ctx.fog.endDistance = frame.fogEnd;
+    ctx.fog.density = frame.fogDensity;
     // Volumetric
     ctx.volumetric.lightEnabled = frame.volumetric.lightEnabled;
     ctx.volumetric.uwLightEnabled = frame.volumetric.uwLightEnabled;
     ctx.volumetric.fogEnabled = frame.volumetric.fogEnabled;
     ctx.volumetric.fogStrength = frame.volumetric.fogStrength;
+    ctx.volumetric.underwaterLightStrength = frame.volumetric.underwaterLightStrength;
     ctx.volumetric.baseDensity = frame.volumetric.baseDensity;
     ctx.volumetric.maxDistance = frame.volumetric.maxDistance;
     ctx.volumetric.fogCenterHeight = frame.volumetric.fogCenterHeight;
@@ -1458,6 +1329,19 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     ctx.volumetric.fogLightStrength = frame.volumetric.fogLightStrength;
     ctx.volumetric.fogDensityScale = frame.volumetric.fogDensityScale;
     ctx.volumetric.fogSamples = frame.volumetric.fogSamples;
+    // Cloud
+    ctx.cloud.shadowsEnabled = frame.cloud.shadowsEnabled;
+    ctx.cloud.shadowStrength = frame.cloud.shadowStrength;
+    ctx.cloud.shadowScale = frame.cloud.shadowScale;
+    ctx.cloud.shadowSpeed = frame.cloud.shadowSpeed;
+    ctx.cloud.timeScale = frame.cloud.timeScale;
+    ctx.cloud.coverage = frame.cloud.coverage;
+    ctx.cloud.density = frame.cloud.density;
+    ctx.cloud.height = frame.cloud.height;
+    ctx.cloud.thickness = frame.cloud.thickness;
+    ctx.cloud.planarCoverage = frame.cloud.planarCoverage;
+    ctx.cloud.planarDensity = frame.cloud.planarDensity;
+    ctx.cloud.planarAltitude = frame.cloud.planarAltitude;
     return ctx;
 }
 
@@ -1556,12 +1440,18 @@ RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     rs.shadow.softShadowsEnabled = m_pipelineSettings.softShadowsEnabled;
     rs.shadow.pcssShadowsEnabled = m_pipelineSettings.pcssShadowsEnabled;
     rs.shadow.contactShadowsEnabled = m_pipelineSettings.contactShadowsEnabled;
+    rs.shadow.cloudShadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
+    rs.shadow.resolution = m_pipelineSettings.shadowResolution;
+    rs.shadow.distance = m_pipelineSettings.shadowDistance;
     rs.shadow.softness = m_pipelineSettings.shadowSoftness;
     rs.shadow.pcssStrength = m_pipelineSettings.shadowPcssStrength;
     rs.shadow.normalOffset = m_pipelineSettings.shadowNormalOffset;
     rs.shadow.contactShadowStrength = m_pipelineSettings.contactShadowStrength;
     rs.shadow.constantBias = m_pipelineSettings.shadowConstantBias;
     rs.shadow.slopeBias = m_pipelineSettings.shadowSlopeBias;
+    rs.shadow.cloudShadowStrength = m_pipelineSettings.cloudShadowStrength;
+    rs.shadow.cloudShadowScale = m_pipelineSettings.cloudShadowScale;
+    rs.shadow.cloudShadowSpeed = m_pipelineSettings.cloudShadowSpeed;
     // Volumetric
     rs.volumetric.lightEnabled = m_pipelineSettings.volumetricLightEnabled;
     rs.volumetric.uwLightEnabled = m_pipelineSettings.uwVolumetricLightEnabled;
@@ -1573,6 +1463,7 @@ RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     rs.volumetric.temporalWeight = m_pipelineSettings.volumetricTemporalWeight;
     rs.volumetric.shadowBiasScale = m_pipelineSettings.volumetricShadowBiasScale;
     rs.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
+    rs.volumetric.underwaterLightStrength = m_pipelineSettings.underwaterVolumetricLightStrength;
     rs.volumetric.freezeR1 = m_pipelineSettings.freezeR1;
     rs.volumetric.freezeBias = m_pipelineSettings.freezeBias;
     rs.debug.viewMode = m_pipelineSettings.debugViewMode;
@@ -1882,214 +1773,28 @@ void Renderer::renderGBufferDrops(const World& /*world*/, const RenderFrameData&
     // Phase 7a: Delegated to GBufferPass::executeDrops()
 }
 
-void Renderer::renderShadowEntities(const World& world, const glm::mat4& shadowViewProj) {
-    // Render humanoid/mob entities into the current shadow cascade layer.
-    // Shadow FBO layer is already bound by the caller (renderShadowMap).
-    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
-        m_entityShadowShader == nullptr) {
-        return;
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
-    m_entityShadowShader->use();
-    m_entityShadowShader->setInt("uTexture", 0);
-
-    m_humanoidRenderer->renderToShadowMap(world, *m_gameplayRegistry,
-                                          shadowViewProj, HumanoidRenderer::kRenderAll);
-
-    glBindVertexArray(0);
+void Renderer::renderShadowEntities(const World& /*world*/, const glm::mat4& /*shadowViewProj*/) {
+    // Phase 7b: Delegated to ShadowPass::renderShadowEntities()
 }
 
-void Renderer::renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
-                                  const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                                  float animationTime, float shaderTime) {
-    // Render dropped items/blocks into the current shadow cascade layer.
-    // Shadow FBO layer is already bound by the caller (renderShadowMap).
-    if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
-        return;
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    // Cross-shaped block drops emit single-sided quads — disable culling
-    // so they cast shadows from both sides.
-    glDisable(GL_CULL_FACE);
-
-    m_dropRenderer->renderToShadowMap(world, *m_dropSystem, shadowViewProj,
-                                       shadowView, shadowProjection, animationTime, shaderTime);
-
-    glBindVertexArray(0);
+void Renderer::renderShadowDrops(const World& /*world*/, const glm::mat4& /*shadowViewProj*/,
+                                  const glm::mat4& /*shadowView*/, const glm::mat4& /*shadowProjection*/,
+                                  float /*animationTime*/, float /*shaderTime*/) {
+    // Phase 7b: Delegated to ShadowPass::renderShadowDrops()
 }
 
 void Renderer::renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame) {
-    if (m_shadowDepthShader == nullptr) {
+    // Phase 7b: Delegated to ShadowPass::execute()
+    if (!m_deferredPipeline->shadowPass()) {
         return;
     }
-    std::vector<DrawBatchEntry> preservedTransparentBatch = m_deferredTransparentBatch;
-    const TransparentPassPlan preservedTransparentPlan = m_transparentPassPlan;
-    clearTransparentBatches();
-
-    // Update shadow cascades via ShadowRenderer.
-    m_shadowRenderer.computeLightDirection(frame.skyColors);
-    shadow::ShadowMatrices::Settings settings;
-    settings.shadowDistance = m_pipelineSettings.shadowDistance;
-    settings.shadowResolution = m_pipelineSettings.shadowResolution;
-    m_shadowRenderer.update(camera, settings, m_deferredTargets.width(), m_deferredTargets.height());
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
-    m_chunkShader = m_shadowDepthShader;
-    m_shadowDepthShader->use();
-    m_shadowDepthShader->setInt("uUseModel", 0);
-    m_shadowDepthShader->setInt("uForceBaseLod", 1);
-    m_shadowDepthShader->setInt("texArray", 0);
-    m_shadowDepthShader->setFloat("uAnimationTime", frame.animationTime);
-    m_shadowDepthShader->setFloat("uTime", frame.shaderTime);
-    m_shadowDepthShader->setVec3("uShadowLightDirection", m_shadowRenderer.lightDirection());
-    m_shadowDepthShader->setInt("uNoiseTex", 1);
-    m_shadowDepthShader->setInt("uGrassColormap", 2);
-    m_shadowDepthShader->setInt("uFoliageColormap", 3);
-    const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, noiseTex);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
-
-    const float shadowDist = std::max(64.0f, m_pipelineSettings.shadowDistance);
-    int visibleTotal = 0;
-    int culledTotal = 0;
-    float maxCasterDistance = 0.0f;
-    const char* cullingMode = "CSMBoxCulling";
-
-    // Transparent shadow pass: writes DepthAll + Color0/Color1 for:
-    // 1. UW VL dual-depth detection (water caustics)
-    // 2. Colored shadows (stained glass tint)
-    // Always runs for cascade 0 to support colored shadow tinting.
-    const bool needTransparentShadow = true;
-
-    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
-        const ShadowCascadeData& cascadeData = m_shadowRenderer.cascade(cascade);
-
-        // Explicit GL state at cascade start — prevents leaked state from
-        // entity/drop shadow sub-passes in previous cascades.
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
-        glDisable(GL_BLEND);
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
-
-        // Collect geometry once per cascade
-        m_worldRenderBuffer.beginFrame();
-        std::vector<ChunkRenderEntry> cutoutEntries;
-        cutoutEntries.reserve(world.getActiveChunks().size() * 2);
-        std::vector<ChunkRenderEntry> transparentEntries;
-        transparentEntries.reserve(world.getActiveChunks().size() * 2);
-        clearTransparentBatches();
-
-        shadow::ShadowCasterCuller shadowCuller;
-        shadowCuller.setup(shadowDist, 1.0f, camera.getPosition());
-        shadowCuller.resetCounters();
-        renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
-                                           shadowDist, &shadowCuller);
-        syncTransparentBatches();
-        visibleTotal += shadowCuller.getVisibleCount();
-        culledTotal += shadowCuller.getCulledCount();
-        maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
-        cullingMode = shadowCuller.getCullingMode();
-
-        // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
-        m_deferredTargets.bindCsmShadowLayer(cascade);
-        glClear(GL_DEPTH_BUFFER_BIT);
-        m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-        m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-        m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-        m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-        m_shadowDepthShader->setInt("uShadowPassMode", 0);
-        if (m_useMultiDrawIndirect) {
-            m_worldRenderBuffer.flushOpaque();
-        }
-        renderCutoutChunks(cutoutEntries);
-        // Entity shadow: render humanoid/mob depth into this cascade.
-        renderShadowEntities(world, cascadeData.viewProj);
-        // Drop shadow: render dropped items/blocks depth into this cascade.
-        renderShadowDrops(world, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
-                          frame.animationTime, frame.shaderTime);
-        // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
-        m_shadowDepthShader->use();
-
-        // Pass 2: Transparent/all — only cascade 0.
-        // Copy DepthOpaque → DepthAll, then draw water + stained glass on top with depth writes.
-        if (needTransparentShadow && cascade == 0) {
-            const int res = m_deferredTargets.shadowResolution();
-            // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
-            glCopyImageSubData(
-                m_deferredTargets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
-                0, 0, 0, cascade,
-                m_deferredTargets.csmShadowDepthAllTexture(), GL_TEXTURE_2D_ARRAY,
-                0, 0, 0, cascade,
-                res, res, 1);
-
-            m_deferredTargets.bindCsmShadowTransparentLayer(cascade);
-            // Depth already contains opaque from the copy; clear color explicitly
-            const float clearColor0[] = {0.0f, 0.0f, 0.0f, 1.0f}; // no transparent marker
-            const float clearColor1[] = {0.0f, 0.0f, 0.0f, 0.0f};
-            glClearBufferfv(GL_COLOR, 0, clearColor0);
-            glClearBufferfv(GL_COLOR, 1, clearColor1);
-            m_shadowDepthShader->setInt("uShadowPassMode", 1);
-            m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-            m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-            m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-            m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-            // Transparent casters: depth write ON, no blending, no sort.
-            glDepthMask(GL_TRUE);
-            glDepthFunc(GL_LESS);
-            glDisable(GL_BLEND);
-            glDisable(GL_CULL_FACE);
-            renderTransparentShadowChunks(transparentEntries);
-        }
-    }
-
-    static int frameCounter = 0;
-    if (++frameCounter % 120 == 0) {
-        printf("[shadow:csm] cascades=%d submitted=%d culled=%d maxDist=%.1f mode=%s halfPlane=%.1f\n",
-               SHADOW_CASCADE_COUNT, visibleTotal, culledTotal, maxCasterDistance, cullingMode, shadowDist);
-    }
-
-    // Transitional compatibility for historical debug modes that still inspect
-    // the legacy single-map projection: expose cascade 0 there.
-    glCopyImageSubData(m_deferredTargets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
-                       0, 0, 0, 0,
-                       m_deferredTargets.shadowDepthTexture(), GL_TEXTURE_2D,
-                       0, 0, 0, 0,
-                       m_deferredTargets.shadowResolution(),
-                       m_deferredTargets.shadowResolution(),
-                       1);
-
-    m_worldRenderBuffer.beginFrame();
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    m_deferredTransparentBatch = std::move(preservedTransparentBatch);
-    m_transparentPassPlan = preservedTransparentPlan;
+    FrameContext shadowCtx = buildFrameContextFromRenderFrameData(frame);
+    RenderSettings shadowRs = buildRenderSettingsFromPipelineSettings();
+    auto result = m_deferredPipeline->shadowPass()->execute(
+        shadowCtx, shadowRs, m_deferredTargets, world, camera,
+        m_deferredTransparentBatch, m_transparentPassPlan, m_useMultiDrawIndirect);
+    m_deferredTransparentBatch = std::move(result.transparentBatch);
+    m_transparentPassPlan = result.transparentPlan;
 }
 
 void Renderer::renderSsaoPass(const Camera& /*camera*/, const Window& /*window*/) {
@@ -2961,32 +2666,8 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
 
 // Transparent shadow pass: writes water/glass depth to DepthAll + color to Color0/Color1.
 // This is the Mecraft CSM equivalent of DerivativeMain shadowtex0 + shadowcolor0/1.
-void Renderer::renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
-    m_chunkShader->setInt("uForceBaseLod", 1);
-
-    if (m_useMultiDrawIndirect) {
-        m_worldRenderBuffer.beginFrame();
-        for (const DrawBatchEntry& entry : m_deferredTransparentBatch) {
-            if (entry.kind == TransparentBatchKind::Water) {
-                m_worldRenderBuffer.addWater(entry.range);
-            } else {
-                m_worldRenderBuffer.addTransparent(entry.range);
-            }
-        }
-        m_worldRenderBuffer.flushTransparent();
-    } else {
-        for (const ChunkRenderEntry& entry : transparentEntries) {
-            if (entry.chunk == nullptr) continue;
-            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-            if (!sc) continue;
-            const SubChunkMesh& mesh = sc->getMesh();
-            if (mesh.transparentVertexCount == 0) continue;
-            glBindVertexArray(mesh.transparentVao);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
-        }
-    }
-
-    m_chunkShader->setInt("uForceBaseLod", 0);
+void Renderer::renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& /*transparentEntries*/) {
+    // Phase 7b: Delegated to ShadowPass (inline in execute())
 }
 
 
