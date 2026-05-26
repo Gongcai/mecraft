@@ -654,7 +654,6 @@ private:
     Shader* m_entityShadowShader = nullptr;
     Shader* m_deferredLightingShader = nullptr;
     Shader* m_sceneCompositeShader = nullptr;
-    Shader* m_deferredDebugShader = nullptr;
     Shader* m_ssaoShader = nullptr;
     Shader* m_velocityShader = nullptr;
     Shader* m_particleGBufferShader = nullptr;

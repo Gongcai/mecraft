@@ -17,6 +17,7 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     m_taaPass = std::make_unique<TemporalResolvePass>();
     m_motionBlurPass = std::make_unique<MotionBlurPass>();
     m_dofPass = std::make_unique<DepthOfFieldPass>();
+    m_debugPass = std::make_unique<DebugPass>();
 
     m_skyCapturePass->init(resourceMgr);
     m_gbufferPass->init(resourceMgr);
@@ -32,11 +33,13 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     m_taaPass->init(resourceMgr);
     m_motionBlurPass->init(resourceMgr);
     m_dofPass->init(resourceMgr);
+    m_debugPass->init(resourceMgr);
 
     if (shadowRenderer) {
         m_shadowPass->setShadowRenderer(shadowRenderer);
         m_lightingPass->setShadowRenderer(shadowRenderer);
         m_volumetricPass->setShadowRenderer(shadowRenderer);
+        m_debugPass->setShadowRenderer(shadowRenderer);
     }
 
     // Passes that consume renderer-owned state receive it through execute().
@@ -57,4 +60,5 @@ void DeferredPipeline::shutdown() {
     m_waterCompositePass.reset();
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
+    m_debugPass.reset();
 }

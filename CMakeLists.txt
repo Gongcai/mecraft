@@ -134,6 +134,8 @@ set(SRC_RENDERER
         src/renderer/passes/GBufferPass.cpp
         src/renderer/passes/ShadowPass.cpp
         src/renderer/passes/WaterCompositePass.cpp
+        src/renderer/passes/DebugPass.cpp
+        src/renderer/passes/PostProcessPass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp

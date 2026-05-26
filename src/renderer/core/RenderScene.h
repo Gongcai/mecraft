@@ -5,6 +5,7 @@
 #include "RenderPipeline.h"
 #include "FrameContext.h"
 #include "FrameOutput.h"
+#include "../passes/PostProcessPass.h"
 
 #include <memory>
 
@@ -78,6 +79,11 @@ public:
     // Frame output access
     const FrameOutput& getLastFrameOutput() const;
 
+    /// Access the shared post-process pass.
+    /// Used by Dashboard for exposure diagnostics and by Game for legacy API.
+    PostProcessPass& postProcessPass() { return m_postProcessPass; }
+    const PostProcessPass& postProcessPass() const { return m_postProcessPass; }
+
     // Legacy compatibility (temporary bridge to existing Renderer)
     void setLegacyRenderer(Renderer* renderer);
 
@@ -91,8 +97,11 @@ private:
     // Configuration
     RenderSettings m_settings;
 
-    // Shared infrastructure (will be populated in later phases)
+    // Shared infrastructure
     SharedRenderResources m_shared;
+
+    // Shared post-processing pass (used by both Forward and Deferred pipelines)
+    PostProcessPass m_postProcessPass;
 
     // Frame state
     FrameOutput m_lastFrameOutput;

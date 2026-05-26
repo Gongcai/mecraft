@@ -15,6 +15,7 @@
 #include "../passes/GBufferPass.h"
 #include "../passes/ShadowPass.h"
 #include "../passes/WaterCompositePass.h"
+#include "../passes/DebugPass.h"
 
 #include <memory>
 
@@ -45,6 +46,7 @@ public:
     GBufferPass* gbufferPass() const { return m_gbufferPass.get(); }
     ShadowPass* shadowPass() const { return m_shadowPass.get(); }
     WaterCompositePass* waterCompositePass() const { return m_waterCompositePass.get(); }
+    DebugPass* debugPass() const { return m_debugPass.get(); }
 
 private:
     std::unique_ptr<SsaoPass> m_ssaoPass;
@@ -61,6 +63,7 @@ private:
     std::unique_ptr<GBufferPass> m_gbufferPass;
     std::unique_ptr<ShadowPass> m_shadowPass;
     std::unique_ptr<WaterCompositePass> m_waterCompositePass;
+    std::unique_ptr<DebugPass> m_debugPass;
 };
 
 #endif // MECRAFT_DEFERRED_PIPELINE_H

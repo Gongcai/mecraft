@@ -8,13 +8,13 @@ RenderScene::RenderScene() = default;
 RenderScene::~RenderScene() = default;
 
 void RenderScene::init(ResourceMgr& resourceMgr) {
-    // Phase 1: Minimal initialization
-    // In later phases, this will initialize shared infrastructure
+    // Phase 5: Initialize shared post-process pass
+    m_postProcessPass.init(resourceMgr);
 }
 
 void RenderScene::shutdown() {
-    // Phase 1: Minimal shutdown
-    // In later phases, this will shutdown shared infrastructure
+    // Phase 5: Shutdown shared post-process pass
+    m_postProcessPass.shutdown();
 }
 
 void RenderScene::renderFrame(const World& world, const Camera& camera, const Window& window,

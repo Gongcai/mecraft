@@ -127,7 +127,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
-    m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
@@ -241,7 +240,6 @@ void Renderer::shutdown() {
     m_shadowDepthShader = nullptr;
     m_deferredLightingShader = nullptr;
     m_sceneCompositeShader = nullptr;
-    m_deferredDebugShader = nullptr;
     m_ssaoShader = nullptr;
     m_velocityShader = nullptr;
     m_volumetricFogShader = nullptr;
@@ -284,7 +282,7 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
 
     if (m_deferredFrameActive &&
         m_deferredTargets.isReady() &&
-        (m_pipelineSettings.debugViewMode == 0 || m_deferredDebugShader == nullptr)) {
+        (m_pipelineSettings.debugViewMode == 0 || m_deferredPipeline == nullptr || m_deferredPipeline->debugPass() == nullptr)) {
         const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
         const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
         m_deferredTargets.copyFramebufferColorToSceneResolved(m_capturedFramebuffer, capturedWidth, capturedHeight);
@@ -608,7 +606,7 @@ bool Renderer::isDeferredDebugViewActive() const {
     return m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred &&
            m_pipelineSettings.debugViewMode > 0 &&
            m_deferredTargets.isReady() &&
-           m_deferredDebugShader != nullptr;
+           m_deferredPipeline && m_deferredPipeline->debugPass() != nullptr;
 }
 
 void Renderer::renderDeferredDebugOverlay(const Window& window) {
@@ -623,7 +621,7 @@ bool Renderer::isHybridDeferredReady() const {
            m_chunkGBufferShader != nullptr &&
            m_shadowDepthShader != nullptr &&
            m_deferredPipeline->lightingPass() != nullptr &&
-           m_deferredDebugShader != nullptr &&
+           m_deferredPipeline->debugPass() != nullptr &&
            m_deferredPipeline->ssaoPass() != nullptr &&
            m_deferredPipeline->velocityPass() != nullptr &&
            m_deferredPipeline->reflectionPass() != nullptr &&
@@ -1944,173 +1942,16 @@ void Renderer::renderDofPass(const RenderFrameData& /*frame*/) {
 }
 
 void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width, const int height) {
-    if (m_deferredDebugShader == nullptr) {
-        return;
+    // Phase 5: Delegated to DebugPass::execute()
+    if (m_deferredPipeline && m_deferredPipeline->debugPass()) {
+        const RenderFrameData& debugFrame = m_currentFrameDataValid
+            ? m_currentFrameData
+            : (m_hasPreviousFrameData ? m_previousFrameData : m_currentFrameData);
+        FrameContext ctx = buildFrameContextFromRenderFrameData(debugFrame);
+        RenderSettings rs = buildRenderSettingsFromPipelineSettings();
+        m_deferredPipeline->debugPass()->execute(ctx, rs, m_deferredTargets,
+                                                   framebuffer, width, height);
     }
-
-    m_deferredTargets.bindDefaultLike(framebuffer, width, height);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_deferredDebugShader->use();
-    m_deferredDebugShader->setInt("uAlbedoTex", 0);
-    m_deferredDebugShader->setInt("uNormalAoTex", 1);
-    m_deferredDebugShader->setInt("uVoxelLightTex", 2);
-    m_deferredDebugShader->setInt("uMaterialTex", 3);
-    m_deferredDebugShader->setInt("uDepthTex", 4);
-    m_deferredDebugShader->setInt("uShadowMapRaw", 5);
-    m_deferredDebugShader->setInt("uSsaoTex", 6);
-    m_deferredDebugShader->setInt("uSceneLightingTex", 7);
-    m_deferredDebugShader->setInt("uTransparentCompositeTex", 8);
-    m_deferredDebugShader->setInt("uTransparentCompositeDepthTex", 9);
-    m_deferredDebugShader->setInt("uVolumetricTex", 10);
-    m_deferredDebugShader->setInt("uSkyCaptureTex", 11);
-    m_deferredDebugShader->setInt("uVelocityTex", 12);
-    m_deferredDebugShader->setInt("uHistorySceneTex", 13);
-    m_deferredDebugShader->setInt("uHistoryDepthTex", 13);
-    m_deferredDebugShader->setInt("uNoiseTex", 13);
-    m_deferredDebugShader->setInt("uReflectionTex", 14);
-    m_deferredDebugShader->setInt("uCloudTex", 15);
-    m_deferredDebugShader->setInt("uSceneCompositeTex", 15);
-    m_deferredDebugShader->setInt("uSceneResolvedTex", 15);
-    m_deferredDebugShader->setInt("uTemporalCurrentTex", 17);
-    m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
-    m_deferredDebugShader->setInt("uShadowColorTex", 14);
-    m_deferredDebugShader->setInt("uShadowNormalTex", 15);
-    m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
-    m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
-    m_deferredDebugShader->setInt("uCsmShadowDepthTex", 16);
-    const RenderFrameData* debugFrame = m_currentFrameDataValid
-        ? &m_currentFrameData
-        : (m_hasPreviousFrameData ? &m_previousFrameData : nullptr);
-    m_deferredDebugShader->setMat4("uShadowModelView", m_shadowRenderer.modelView());
-    m_deferredDebugShader->setMat4("uShadowProjection", m_shadowRenderer.projection());
-    m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowRenderer.projectionInverse());
-    m_deferredDebugShader->setFloat("uShadowExtent", m_shadowRenderer.shadowExtent());
-    m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowRenderer.texelWorldSize());
-    m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(m_pipelineSettings.shadowResolution));
-    m_deferredDebugShader->setFloat("uShadowDistance", std::max(64.0f, m_pipelineSettings.shadowDistance));
-    m_deferredDebugShader->setFloat("uShadowConstantBias", m_pipelineSettings.shadowConstantBias);
-    m_deferredDebugShader->setFloat("uShadowSlopeBias", m_pipelineSettings.shadowSlopeBias);
-    m_deferredDebugShader->setFloat("uShadowNormalOffset", m_pipelineSettings.shadowNormalOffset);
-    if (debugFrame != nullptr) {
-        const shadow::ShadowRenderer::BiasSettings bias{
-            m_pipelineSettings.shadowConstantBias,
-            m_pipelineSettings.shadowSlopeBias,
-            m_pipelineSettings.shadowNormalOffset
-        };
-        m_shadowRenderer.bindShadowUniforms(*m_deferredDebugShader, debugFrame->moonShadowActive, bias);
-    } else {
-        m_deferredDebugShader->setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
-        for (int i = 0; i < SHADOW_CASCADE_COUNT; ++i) {
-            const std::string prefix = "uCsmCascades[" + std::to_string(i) + "]";
-            m_deferredDebugShader->setMat4(prefix + ".viewProj", m_shadowRenderer.cascade(i).viewProj);
-            m_deferredDebugShader->setFloat(prefix + ".splitNear", m_shadowRenderer.cascade(i).splitNear);
-            m_deferredDebugShader->setFloat(prefix + ".splitFar", m_shadowRenderer.cascade(i).splitFar);
-            m_deferredDebugShader->setFloat(prefix + ".texelWorldSize", m_shadowRenderer.cascade(i).texelWorldSize);
-        }
-    }
-    m_deferredDebugShader->setInt("uDebugViewMode", m_pipelineSettings.debugViewMode);
-    m_deferredDebugShader->setInt("uFrameIndex", static_cast<int>(m_frameCounter & 0x7fffffffULL));
-    m_deferredDebugShader->setInt("uFreezeBias", m_pipelineSettings.freezeBias ? 1 : 0);
-    m_deferredDebugShader->setMat4("uInvViewProj", debugFrame != nullptr ? debugFrame->invViewProj : glm::mat4(1.0f));
-    m_deferredDebugShader->setFloat("uNearPlane", debugFrame != nullptr ? debugFrame->nearPlane : m_nearPlane);
-    m_deferredDebugShader->setFloat("uFarPlane", debugFrame != nullptr ? debugFrame->farPlane : m_farPlane);
-    m_deferredDebugShader->setVec3("uCameraPos", debugFrame != nullptr ? debugFrame->cameraPos : m_cameraPos);
-    m_deferredDebugShader->setVec3("uSunDirection", debugFrame != nullptr ? debugFrame->skyColors.sunDirection : glm::vec3(0.0f, 1.0f, 0.0f));
-    m_deferredDebugShader->setVec3("uMoonDirection", debugFrame != nullptr ? debugFrame->skyColors.moonDirection : glm::vec3(0.0f, 1.0f, 0.0f));
-    m_deferredDebugShader->setVec3("uShadowLightDirection", m_shadowRenderer.lightDirection());
-    m_deferredDebugShader->setInt("uShadowLightMode", (debugFrame != nullptr && debugFrame->moonShadowActive) ? 1 : 0);
-
-    // Lighting diagnostic uniforms (for debug view 45)
-    if (debugFrame != nullptr) {
-        m_deferredDebugShader->setVec3("uSunLightColor", debugFrame->skyColors.sunLightColor);
-        m_deferredDebugShader->setVec3("uSkyAmbientColor", debugFrame->skyColors.skyAmbientColor);
-        m_deferredDebugShader->setVec3("uHorizonScatterColor", debugFrame->skyColors.horizonScatterColor);
-        m_deferredDebugShader->setVec3("uFogColor", debugFrame->fogColor);
-    }
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.albedoTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.shadowDepthTexture());
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.ssaoFilteredTexture());
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.transparentCompositeTexture());
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.transparentCompositeDepthTexture());
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.halfResTexture());
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
-    glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
-    glActiveTexture(GL_TEXTURE13);
-    const bool materialAuxDebug =
-        m_pipelineSettings.debugViewMode == 26 ||
-        m_pipelineSettings.debugViewMode == 27 ||
-        m_pipelineSettings.debugViewMode == 80;
-    const bool historyDepthDebug = m_pipelineSettings.debugViewMode == 19;
-    const bool shadowCompareDebug =
-        m_pipelineSettings.debugViewMode == 21 ||
-        m_pipelineSettings.debugViewMode == 22 ||
-        m_pipelineSettings.debugViewMode == 34 ||
-        m_pipelineSettings.debugViewMode == 35;
-    glBindTexture(GL_TEXTURE_2D,
-                  shadowCompareDebug ? m_resourceMgr->getTexture2D("shader_noise2d")
-                                     : (materialAuxDebug ? m_deferredTargets.materialAuxTexture()
-                                                         : (historyDepthDebug ? m_deferredTargets.historyDepthTexturePrev()
-                                                                              : m_deferredTargets.historySceneTexturePrev())));
-    glActiveTexture(GL_TEXTURE14);
-    const bool shadowCasterDebug = m_pipelineSettings.debugViewMode == 35;
-    const bool reflectionHistoryDebug = m_pipelineSettings.debugViewMode == 28;
-    glBindTexture(GL_TEXTURE_2D,
-                  shadowCasterDebug ? m_deferredTargets.shadowColorTexture()
-                                    : (reflectionHistoryDebug ? m_deferredTargets.historyReflectionTexturePrev()
-                                                              : m_deferredTargets.reflectionTexture()));
-    glActiveTexture(GL_TEXTURE15);
-    const bool cloudHistoryDebug = m_pipelineSettings.debugViewMode == 29;
-    const bool sceneCompositeDebug =
-        m_pipelineSettings.debugViewMode == 11 ||
-        m_pipelineSettings.debugViewMode == 78;
-    const bool sceneResolvedDebug =
-        m_pipelineSettings.debugViewMode == 31 ||
-        m_pipelineSettings.debugViewMode == 79;
-    glBindTexture(GL_TEXTURE_2D,
-                  shadowCasterDebug ? m_deferredTargets.shadowNormalTexture()
-                                    : (sceneResolvedDebug ? m_deferredTargets.sceneResolvedTexture()
-                                                          : (sceneCompositeDebug ? m_deferredTargets.sceneCompositeTexture()
-                                                                                 : (cloudHistoryDebug ? m_deferredTargets.historyCloudTexturePrev()
-                                                                                                      : m_deferredTargets.cloudTexture()))));
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_deferredTargets.csmShadowDepthTexture());
-    glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.temporalCurrentTexture());
-    renderFullscreen(*m_deferredDebugShader);
-
-    glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    for (int unit = 15; unit >= 0; --unit) {
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
 }
 
 void Renderer::renderSkyCapturePass(const World& /*world*/) {
