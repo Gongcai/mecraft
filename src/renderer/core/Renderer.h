@@ -11,6 +11,11 @@
 #include "../mesh/ChunkMeshingService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../passes/SsaoPass.h"
+#include "../passes/VelocityPass.h"
+#include "../passes/ReflectionPass.h"
+#include "../passes/TemporalResolvePass.h"
+#include "../passes/MotionBlurPass.h"
+#include "../passes/DepthOfFieldPass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
 #include "Shader.h"
@@ -584,6 +589,8 @@ private:
     void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
     void renderWorld(const World& world);
     [[nodiscard]] RenderFrameData buildRenderFrameData(const World& world) const;
+    [[nodiscard]] FrameContext buildFrameContextFromRenderFrameData(const RenderFrameData& frame) const;
+    [[nodiscard]] RenderSettings buildRenderSettingsFromPipelineSettings() const;
     void bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const;
     void bindWeatherUniforms(Shader& shader, const RenderFrameData& frame, bool bindAerialReduction) const;
     void bindFogUniforms(Shader& shader, const RenderFrameData& frame) const;
@@ -739,6 +746,11 @@ private:
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
     std::unique_ptr<SsaoPass> m_ssaoPass;
+    std::unique_ptr<VelocityPass> m_velocityPass;
+    std::unique_ptr<ReflectionPass> m_reflectionPass;
+    std::unique_ptr<TemporalResolvePass> m_temporalResolvePass;
+    std::unique_ptr<MotionBlurPass> m_motionBlurPass;
+    std::unique_ptr<DepthOfFieldPass> m_dofPass;
     RenderPipelineSettings m_pipelineSettings{};
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;

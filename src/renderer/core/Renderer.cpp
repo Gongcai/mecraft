@@ -131,24 +131,27 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
     m_sceneCompositeShader = resourceMgr.getShader("scene_composite");
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
-    m_velocityShader = resourceMgr.getShader("velocity_resolve");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
     m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
-    m_reflectionShader = resourceMgr.getShader("reflection_probe");
     m_cloudShader = resourceMgr.getShader("cloud_target");
     m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
-    m_temporalResolveShader = resourceMgr.getShader("temporal_resolve");
-    m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
-    m_reflectionTemporalShader = resourceMgr.getShader("reflection_temporal");
-    m_motionBlurShader = resourceMgr.getShader("motion_blur");
-    m_dofShader = resourceMgr.getShader("dof");
 
-    // Phase 3: SSAO pass owns its shaders
+    // Phase 3-4: Passes own their shaders
     m_ssaoPass = std::make_unique<SsaoPass>();
     m_ssaoPass->init(resourceMgr);
+    m_velocityPass = std::make_unique<VelocityPass>();
+    m_velocityPass->init(resourceMgr);
+    m_reflectionPass = std::make_unique<ReflectionPass>();
+    m_reflectionPass->init(resourceMgr);
+    m_temporalResolvePass = std::make_unique<TemporalResolvePass>();
+    m_temporalResolvePass->init(resourceMgr);
+    m_motionBlurPass = std::make_unique<MotionBlurPass>();
+    m_motionBlurPass->init(resourceMgr);
+    m_dofPass = std::make_unique<DepthOfFieldPass>();
+    m_dofPass->init(resourceMgr);
 
     if (m_deferredLightingShader != nullptr) {
         const GLint csmLocation = m_deferredLightingShader->getUniformLocation("uCsmShadowMap");
@@ -202,10 +205,12 @@ void Renderer::shutdown() {
     shutdownGpuTimers();
 #endif
     m_mdiMeshAllocations.clear();
-    if (m_ssaoPass) {
-        m_ssaoPass->shutdown();
-        m_ssaoPass.reset();
-    }
+    if (m_ssaoPass) { m_ssaoPass->shutdown(); m_ssaoPass.reset(); }
+    if (m_velocityPass) { m_velocityPass->shutdown(); m_velocityPass.reset(); }
+    if (m_reflectionPass) { m_reflectionPass->shutdown(); m_reflectionPass.reset(); }
+    if (m_temporalResolvePass) { m_temporalResolvePass->shutdown(); m_temporalResolvePass.reset(); }
+    if (m_motionBlurPass) { m_motionBlurPass->shutdown(); m_motionBlurPass.reset(); }
+    if (m_dofPass) { m_dofPass->shutdown(); m_dofPass.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     m_worldRenderBuffer.shutdown();
@@ -799,8 +804,8 @@ bool Renderer::isHybridDeferredReady() const {
            m_deferredLightingShader != nullptr &&
            m_deferredDebugShader != nullptr &&
            m_ssaoPass != nullptr &&
-           m_velocityShader != nullptr &&
-           m_reflectionShader != nullptr &&
+           m_velocityPass != nullptr &&
+           m_reflectionPass != nullptr &&
            m_cloudShader != nullptr;
 }
 
@@ -1526,6 +1531,83 @@ void Renderer::bindTransparentCompositeInputs(Shader& shader,
     }
 }
 
+FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameData& frame) const {
+    FrameContext ctx{};
+    ctx.camera.view = frame.view;
+    ctx.camera.projection = frame.projection;
+    ctx.camera.viewProj = frame.viewProj;
+    ctx.camera.jitteredViewProj = frame.jitteredViewProj;
+    ctx.camera.jitteredInvViewProj = frame.jitteredInvViewProj;
+    ctx.camera.invViewProj = frame.invViewProj;
+    ctx.camera.position = frame.cameraPos;
+    ctx.camera.nearPlane = frame.nearPlane;
+    ctx.camera.farPlane = frame.farPlane;
+    ctx.previousViewProj = frame.previousViewProj;
+    ctx.previousInvViewProj = frame.previousInvViewProj;
+    ctx.previousJitteredViewProj = frame.previousJitteredViewProj;
+    ctx.frameIndex = frame.frameIndex;
+    ctx.deltaTime = frame.deltaTime;
+    ctx.animationTime = frame.animationTime;
+    ctx.shaderTime = frame.shaderTime;
+    ctx.frameWidth = m_deferredTargets.width();
+    ctx.frameHeight = m_deferredTargets.height();
+    ctx.jitter = frame.jitter;
+    ctx.prevJitter = frame.previousJitter;
+    // Sky colors
+    ctx.skyColors.sunDirection = frame.skyColors.sunDirection;
+    ctx.skyColors.moonDirection = frame.skyColors.moonDirection;
+    ctx.skyColors.moonVisibility = frame.skyColors.moonVisibility;
+    ctx.skyIntensity = frame.skyIntensity;
+    // Weather
+    ctx.weather.wetness = frame.weatherWetness;
+    ctx.weather.surfaceWetness = frame.surfaceWetness;
+    ctx.weather.skyWetness = frame.skyWetness;
+    ctx.weather.fogWetness = frame.fogWetness;
+    ctx.weather.cloudWetness = frame.cloudWetness;
+    ctx.weather.precipitation = frame.precipitation;
+    ctx.weather.rainStrength = frame.rainStrength;
+    ctx.weather.thunderStrength = frame.thunderStrength;
+    ctx.weather.lightningFlash = frame.lightningFlash;
+    ctx.weather.aerialReduction = frame.aerialReduction;
+    // State
+    ctx.eyeInWater = frame.eyeInWater;
+    ctx.moonShadowActive = frame.moonShadowActive;
+    ctx.hasPreviousFrame = m_hasPreviousFrameData;
+    return ctx;
+}
+
+RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
+    RenderSettings rs;
+    // SSAO
+    rs.ssao.enabled = m_pipelineSettings.ssaoEnabled;
+    rs.ssao.filterEnabled = m_pipelineSettings.ssaoFilterEnabled;
+    rs.ssao.temporalEnabled = m_pipelineSettings.ssaoTemporalEnabled;
+    rs.ssao.historyWeight = m_pipelineSettings.ssaoHistoryWeight;
+    rs.ssao.radius = m_pipelineSettings.ssaoRadius;
+    rs.ssao.strength = m_pipelineSettings.ssaoStrength;
+    rs.ssao.samples = m_pipelineSettings.ssaoSamples;
+    // TAA
+    rs.taa.enabled = m_pipelineSettings.taaEnabled;
+    rs.taa.forceZeroVelocity = m_pipelineSettings.forceZeroVelocity;
+    // Reflection
+    rs.reflection.filterEnabled = m_pipelineSettings.reflectionFilterEnabled;
+    rs.reflection.temporalEnabled = m_pipelineSettings.reflectionTemporalEnabled;
+    rs.reflection.historyWeight = m_pipelineSettings.reflectionHistoryWeight;
+    rs.reflection.filterStrength = m_pipelineSettings.reflectionFilterStrength;
+    // Post-process
+    rs.postProcess.motionBlurStrength = m_pipelineSettings.motionBlurStrength;
+    rs.postProcess.motionBlurSamples = m_pipelineSettings.motionBlurSamples;
+    rs.postProcess.dofFocusDistance = m_pipelineSettings.dofFocusDistance;
+    rs.postProcess.dofAperture = m_pipelineSettings.dofAperture;
+    rs.postProcess.dofIntensity = m_pipelineSettings.dofIntensity;
+    // Debug
+    rs.debug.reflectionDebugMode = m_pipelineSettings.reflectionDebugMode;
+    // Weather
+    rs.weather.rainLinesEnabled = m_pipelineSettings.rainWetSurfacesEnabled;
+    rs.weather.surfaceRipplesEnabled = m_pipelineSettings.rainSurfaceRipplesEnabled;
+    return rs;
+}
+
 bool Renderer::renderWorldDeferred(const World& world,
                                    const Camera& camera,
                                    const Window& window,
@@ -1561,7 +1643,12 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
     endGpuTimer(GpuTimerPass::GBuffer);
 #endif
-    renderVelocityPass(frame);
+    // Phase 4: Velocity pass
+    {
+        FrameContext velCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings velRs = buildRenderSettingsFromPipelineSettings();
+        m_velocityPass->execute(velCtx, velRs, m_deferredTargets);
+    }
     if (m_pipelineSettings.shadowsEnabled && m_shadowDepthShader != nullptr) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Shadow);
@@ -1575,27 +1662,9 @@ bool Renderer::renderWorldDeferred(const World& world,
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Ssao);
 #endif
-        // Phase 3: Build minimal FrameContext for SsaoPass
-        FrameContext ssaoCtx{};
-        ssaoCtx.camera.projection = frame.projection;
-        ssaoCtx.camera.nearPlane = frame.nearPlane;
-        ssaoCtx.camera.farPlane = frame.farPlane;
-        ssaoCtx.frameIndex = frame.frameIndex;
-        ssaoCtx.frameWidth = m_deferredTargets.width();
-        ssaoCtx.frameHeight = m_deferredTargets.height();
-
-        SsaoSettings ssaoCfg;
-        ssaoCfg.enabled = m_pipelineSettings.ssaoEnabled;
-        ssaoCfg.filterEnabled = m_pipelineSettings.ssaoFilterEnabled;
-        ssaoCfg.temporalEnabled = m_pipelineSettings.ssaoTemporalEnabled;
-        ssaoCfg.historyWeight = m_pipelineSettings.ssaoHistoryWeight;
-        ssaoCfg.radius = m_pipelineSettings.ssaoRadius;
-        ssaoCfg.strength = m_pipelineSettings.ssaoStrength;
-        ssaoCfg.samples = m_pipelineSettings.ssaoSamples;
-        RenderSettings rs;
-        rs.ssao = ssaoCfg;
-
-        m_ssaoPass->execute(ssaoCtx, rs, m_deferredTargets);
+        FrameContext ssaoCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings ssaoRs = buildRenderSettingsFromPipelineSettings();
+        m_ssaoPass->execute(ssaoCtx, ssaoRs, m_deferredTargets);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Ssao);
 #endif
@@ -1620,25 +1689,16 @@ bool Renderer::renderWorldDeferred(const World& world,
         restoreCapturedFramebufferViewport(window);
         return true;
     }
-    if (m_reflectionShader != nullptr) {
+    if (m_reflectionPass) {
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Reflection);
 #endif
-        renderReflectionPass(frame);
+        FrameContext reflCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings reflRs = buildRenderSettingsFromPipelineSettings();
+        m_reflectionPass->execute(reflCtx, reflRs, m_deferredTargets);
 #ifdef MECRAFT_DEBUG
         endGpuTimer(GpuTimerPass::Reflection);
 #endif
-    }
-    if (m_pipelineSettings.reflectionFilterEnabled &&
-        m_pipelineSettings.reflectionDebugMode == 0 &&
-        m_reflectionFilterShader != nullptr) {
-        renderReflectionFilterPass(frame);
-    }
-    if (m_pipelineSettings.reflectionTemporalEnabled &&
-        m_pipelineSettings.reflectionDebugMode == 0 &&
-        m_reflectionTemporalShader != nullptr &&
-        m_hasPreviousFrameData) {
-        renderReflectionTemporalPass();
     }
     if (m_cloudShader != nullptr) {
 #ifdef MECRAFT_DEBUG
@@ -1724,21 +1784,23 @@ bool Renderer::renderWorldDeferred(const World& world,
 #endif
     }
 
-    // TAA resolve: blend current SceneResolved (with fog) with reprojected history
-    if (m_pipelineSettings.taaEnabled &&
-        m_temporalResolveShader != nullptr &&
-        m_hasPreviousFrameData) {
-        renderTemporalResolvePass(frame);
+    // Phase 4: TAA resolve
+    if (m_temporalResolvePass && m_pipelineSettings.taaEnabled && m_hasPreviousFrameData) {
+        FrameContext taaCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings taaRs = buildRenderSettingsFromPipelineSettings();
+        m_temporalResolvePass->execute(taaCtx, taaRs, m_deferredTargets);
     }
-    // Motion blur (applied after TAA, before transparent compositing)
-    if (m_pipelineSettings.motionBlurEnabled &&
-        m_motionBlurShader != nullptr &&
-        m_hasPreviousFrameData) {
-        renderMotionBlurPass(frame);
+    // Phase 4: Motion blur
+    if (m_motionBlurPass && m_pipelineSettings.motionBlurEnabled && m_hasPreviousFrameData) {
+        FrameContext mbCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings mbRs = buildRenderSettingsFromPipelineSettings();
+        m_motionBlurPass->execute(mbCtx, mbRs, m_deferredTargets);
     }
-    // Depth of Field (after motion blur, before transparent compositing)
-    if (m_pipelineSettings.dofEnabled && m_dofShader != nullptr) {
-        renderDofPass(frame);
+    // Phase 4: Depth of field
+    if (m_dofPass && m_pipelineSettings.dofEnabled) {
+        FrameContext dofCtx = buildFrameContextFromRenderFrameData(frame);
+        RenderSettings dofRs = buildRenderSettingsFromPipelineSettings();
+        m_dofPass->execute(dofCtx, dofRs, m_deferredTargets);
     }
     updateDeferredHistoryTargets();
     m_deferredTargets.copySceneResolvedToTransparentComposite();
@@ -2308,43 +2370,8 @@ void Renderer::clearDeferredAuxiliaryTargets() {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::renderVelocityPass(const RenderFrameData& frame) {
-    if (m_velocityShader == nullptr) {
-        return;
-    }
-
-    m_deferredTargets.bindVelocity();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    m_velocityShader->use();
-    m_velocityShader->setInt("uDepthTex", 0);
-    m_velocityShader->setInt("uPerObjectVelocityTex", 1);
-    // DerivativeMain Reproject() uses ScreenToViewSpaceRaw with the raw
-    // projection matrices. The jittered screen coordinate is preserved as an
-    // input to TAA, but frame-to-frame jitter is not encoded as velocity.
-    m_velocityShader->setMat4("uInvViewProj", frame.invViewProj);
-    m_velocityShader->setMat4("uPreviousViewProj", frame.previousViewProj);
-    m_velocityShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
-    m_velocityShader->setInt("uForceZeroVelocity", m_pipelineSettings.forceZeroVelocity ? 1 : 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.perObjectVelocityTexture());
-    renderFullscreen(*m_velocityShader);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderVelocityPass(const RenderFrameData& /*frame*/) {
+    // Phase 4: Delegated to VelocityPass::execute()
 }
 
 void Renderer::updateDeferredHistoryTargets() {
@@ -2367,86 +2394,8 @@ void Renderer::updateDeferredHistoryTargets() {
     m_deferredHistoryUpdatedThisFrame = true;
 }
 
-void Renderer::renderReflectionPass(const RenderFrameData& frame) {
-    if (m_reflectionShader == nullptr) {
-        return;
-    }
-
-    m_deferredTargets.bindReflection();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    m_reflectionShader->use();
-    m_reflectionShader->setInt("uSceneLightingTex", 0);
-    m_reflectionShader->setInt("uDepthTex", 1);
-    m_reflectionShader->setInt("uNormalAoTex", 2);
-    m_reflectionShader->setInt("uMaterialTex", 3);
-    m_reflectionShader->setInt("uMaterialAuxTex", 4);
-    m_reflectionShader->setInt("uSkyCaptureTex", 5);
-    m_reflectionShader->setInt("uAtmosphereLut", 6);
-    m_reflectionShader->setInt("uVoxelLightTex", 7);
-    m_reflectionShader->setInt("uNoiseTex", 8);
-    m_reflectionShader->setInt("uRippleNormalTex", 9);
-    m_reflectionShader->setMat4("uViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredViewProj : frame.viewProj);
-    m_reflectionShader->setMat4("uInvViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
-    m_reflectionShader->setVec3("uCameraPos", frame.cameraPos);
-    m_reflectionShader->setVec3("uSunDirection", frame.skyColors.sunDirection);
-    m_reflectionShader->setVec3("uMoonDirection", frame.skyColors.moonDirection);
-    m_reflectionShader->setFloat("uSkyIntensity", frame.skyIntensity);
-    m_reflectionShader->setFloat("uMoonVisibility", frame.skyColors.moonVisibility);
-    m_reflectionShader->setFloat("uWeatherWetness", frame.weatherWetness);
-    m_reflectionShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
-    m_reflectionShader->setFloat("uSkyWetness", frame.skyWetness);
-    m_reflectionShader->setFloat("uFogWetness", frame.fogWetness);
-    m_reflectionShader->setFloat("uCloudWetness", frame.cloudWetness);
-    m_reflectionShader->setFloat("uTime", frame.shaderTime);
-    m_reflectionShader->setInt("uReflectionDebugMode", m_pipelineSettings.reflectionDebugMode);
-    m_reflectionShader->setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
-    m_reflectionShader->setInt("uRainSurfaceRipplesEnabled", m_pipelineSettings.rainSurfaceRipplesEnabled ? 1 : 0);
-    m_reflectionShader->setFloat("uNearPlane", m_nearPlane);
-    m_reflectionShader->setFloat("uFarPlane", m_farPlane);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.sceneLightingTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.skyCaptureTexture());
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_3D, m_deferredTargets.atmosphereLutTexture());
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.voxelLightTexture());
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0);
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
-    renderFullscreen(*m_reflectionShader);
-
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    for (int unit = 5; unit >= 0; --unit) {
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderReflectionPass(const RenderFrameData& /*frame*/) {
+    // Phase 4: Delegated to ReflectionPass::execute()
 }
 
 void Renderer::renderCloudPass(const RenderFrameData& frame) {
@@ -2745,169 +2694,16 @@ void Renderer::compositeVolumetricFogPass() {
     glEnable(GL_DEPTH_TEST);
 }
 
-void Renderer::renderReflectionFilterPass(const RenderFrameData& frame) {
-    if (m_reflectionFilterShader == nullptr) {
-        return;
-    }
-
-    // Avoid feedback: filter reads the previous reflection image and writes the
-    // filtered result back to the reflection target.
-    m_deferredTargets.copyReflectionToTemporalScratch();
-
-    m_deferredTargets.bindReflection();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_reflectionFilterShader->use();
-    m_reflectionFilterShader->setInt("uReflectionTex", 0);
-    m_reflectionFilterShader->setInt("uDepthTex", 1);
-    m_reflectionFilterShader->setInt("uNormalAoTex", 2);
-    m_reflectionFilterShader->setInt("uMaterialTex", 3);
-    m_reflectionFilterShader->setInt("uMaterialAuxTex", 4);
-    m_reflectionFilterShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
-    m_reflectionFilterShader->setFloat("uFilterStrength", m_pipelineSettings.reflectionFilterStrength);
-    m_reflectionFilterShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
-    m_reflectionFilterShader->setMat4("uInvViewProj",
-        m_pipelineSettings.taaEnabled ? frame.jitteredInvViewProj : frame.invViewProj);
-    m_reflectionFilterShader->setVec3("uCameraPos", frame.cameraPos);
-    m_reflectionFilterShader->setFloat("uNearPlane", frame.nearPlane);
-    m_reflectionFilterShader->setFloat("uFarPlane", frame.farPlane);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTemporalScratchTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-    renderFullscreen(*m_reflectionFilterShader);
-
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderReflectionFilterPass(const RenderFrameData& /*frame*/) {
+    // Phase 4: Delegated to ReflectionPass::execute()
 }
 
 void Renderer::renderReflectionTemporalPass() {
-    if (m_reflectionTemporalShader == nullptr) {
-        return;
-    }
-
-    // Copy filtered reflection to scratch so temporal pass can read it
-    // while writing the blended result back to the reflection FBO.
-    m_deferredTargets.copyReflectionToTemporalScratch();
-
-    m_deferredTargets.bindReflection();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_reflectionTemporalShader->use();
-    m_reflectionTemporalShader->setInt("uCurrentTex", 0);
-    m_reflectionTemporalShader->setInt("uHistoryTex", 1);
-    m_reflectionTemporalShader->setInt("uVelocityTex", 2);
-    m_reflectionTemporalShader->setInt("uDepthTex", 3);
-    m_reflectionTemporalShader->setInt("uNormalAoTex", 4);
-    m_reflectionTemporalShader->setInt("uMaterialTex", 5);
-    m_reflectionTemporalShader->setInt("uMaterialAuxTex", 6);
-    m_reflectionTemporalShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
-    m_reflectionTemporalShader->setFloat("uHistoryWeight", m_pipelineSettings.reflectionHistoryWeight);
-    m_reflectionTemporalShader->setFloat("uNear", m_nearPlane);
-
-    // Current filtered reflection (from scratch copy)
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.reflectionTemporalScratchTexture());
-    // History reflection (previous frame's temporal output)
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historyReflectionTexturePrev());
-    // Velocity buffer
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
-    // GBuffer depth
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    // GBuffer normal/AO
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.normalAoTexture());
-    // GBuffer material
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialTexture());
-    // GBuffer material aux
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-
-    renderFullscreen(*m_reflectionTemporalShader);
-
-    for (int i = 6; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    // Phase 4: Delegated to ReflectionPass::execute()
 }
 
-void Renderer::renderTemporalResolvePass(const RenderFrameData& frame) {
-    if (m_temporalResolveShader == nullptr) {
-        return;
-    }
-
-    // DerivativeMain parity: copy current scene to a dedicated scratch buffer
-    // so TAA reads from TemporalCurrent + HistoryPrev, writes to SceneResolved.
-    // History is only updated at frame end (updateDeferredHistoryTargets).
-    m_deferredTargets.copySceneResolvedToTemporalCurrent();
-
-    m_deferredTargets.bindSceneResolved();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_temporalResolveShader->use();
-    m_temporalResolveShader->setInt("uCurrentTex", 0);
-    m_temporalResolveShader->setInt("uHistoryTex", 1);
-    m_temporalResolveShader->setInt("uVelocityTex", 2);
-    m_temporalResolveShader->setInt("uDepthTex", 3);
-    m_temporalResolveShader->setInt("uMaterialAuxTex", 4);
-    m_temporalResolveShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
-    m_temporalResolveShader->setVec2("uJitter", frame.jitter);
-    m_temporalResolveShader->setFloat("uSurfaceWetness", frame.surfaceWetness);
-    m_temporalResolveShader->setInt("uRainWetSurfacesEnabled", m_pipelineSettings.rainWetSurfacesEnabled ? 1 : 0);
-
-    // uCurrentTex = this frame's unresolved color (TemporalCurrent scratch)
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.temporalCurrentTexture());
-    // uHistoryTex = previous frame's resolved color
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexturePrev());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.materialAuxTexture());
-
-    renderFullscreen(*m_temporalResolveShader);
-
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderTemporalResolvePass(const RenderFrameData& /*frame*/) {
+    // Phase 4: Delegated to TemporalResolvePass::execute()
 }
 
 void Renderer::renderSsaoFilterPass() {
@@ -2922,88 +2718,12 @@ void Renderer::renderSsaoTemporalPass() {
     // Phase 3: Delegated to SsaoPass::execute()
 }
 
-void Renderer::renderMotionBlurPass(const RenderFrameData& frame) {
-    if (m_motionBlurShader == nullptr) {
-        return;
-    }
-
-    // Save current SceneResolved to history[current] so we can read it while writing SceneResolved
-    m_deferredTargets.copySceneResolvedToHistory();
-
-    m_deferredTargets.bindSceneResolved();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_motionBlurShader->use();
-    m_motionBlurShader->setInt("uSceneTex", 0);
-    m_motionBlurShader->setInt("uVelocityTex", 1);
-    m_motionBlurShader->setInt("uDepthTex", 2);
-    m_motionBlurShader->setFloat("uStrength", m_pipelineSettings.motionBlurStrength);
-    m_motionBlurShader->setInt("uSamples", m_pipelineSettings.motionBlurSamples);
-    m_motionBlurShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.velocityTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    renderFullscreen(*m_motionBlurShader);
-
-    for (int i = 2; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderMotionBlurPass(const RenderFrameData& /*frame*/) {
+    // Phase 4: Delegated to MotionBlurPass::execute()
 }
 
-void Renderer::renderDofPass(const RenderFrameData& frame) {
-    if (m_dofShader == nullptr) {
-        return;
-    }
-
-    m_deferredTargets.copySceneResolvedToHistory();
-    m_deferredTargets.bindSceneResolved();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_dofShader->use();
-    m_dofShader->setInt("uSceneTex", 0);
-    m_dofShader->setInt("uDepthTex", 1);
-    m_dofShader->setInt("uNoiseTex", 2);
-    m_dofShader->setMat4("uProjection", frame.projection);
-    m_dofShader->setMat4("uInvProjection", glm::inverse(frame.projection));
-    m_dofShader->setFloat("uFocusDistance", m_pipelineSettings.dofFocusDistance);
-    m_dofShader->setFloat("uAperture", m_pipelineSettings.dofAperture);
-    m_dofShader->setFloat("uDofIntensity", m_pipelineSettings.dofIntensity);
-    m_dofShader->setFloat("uDofAnamorphic", 1.0f);
-    m_dofShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, m_deferredTargets.width())),
-                   static_cast<float>(std::max(1, m_deferredTargets.height()))));
-
-    const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.historySceneTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_deferredTargets.depthTexture());
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, noiseTex);
-    renderFullscreen(*m_dofShader);
-
-    for (int i = 2; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void Renderer::renderDofPass(const RenderFrameData& /*frame*/) {
+    // Phase 4: Delegated to DepthOfFieldPass::execute()
 }
 
 void Renderer::renderDeferredDebugView(const GLint framebuffer, const int width, const int height) {

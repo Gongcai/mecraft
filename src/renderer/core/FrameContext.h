@@ -135,6 +135,11 @@ struct FrameContext {
     glm::vec2 jitter = glm::vec2(0.0f);
     glm::vec2 prevJitter = glm::vec2(0.0f);
 
+    // Previous frame matrices (for velocity/temporal passes)
+    glm::mat4 previousViewProj = glm::mat4(1.0f);
+    glm::mat4 previousInvViewProj = glm::mat4(1.0f);
+    glm::mat4 previousJitteredViewProj = glm::mat4(1.0f);
+
     // Sky / Atmosphere
     SkyColorsData skyColors;
     SkyIlluminanceData skyIlluminance;

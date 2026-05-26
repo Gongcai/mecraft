@@ -120,6 +120,11 @@ set(SRC_RENDERER
         # Render passes
         src/renderer/passes/RenderPass.cpp
         src/renderer/passes/SsaoPass.cpp
+        src/renderer/passes/VelocityPass.cpp
+        src/renderer/passes/ReflectionPass.cpp
+        src/renderer/passes/TemporalResolvePass.cpp
+        src/renderer/passes/MotionBlurPass.cpp
+        src/renderer/passes/DepthOfFieldPass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp
