@@ -5,57 +5,12 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
+// Use PostProcessEffects from PostProcessPass.h (single source of truth)
+#include "../passes/PostProcessPass.h"
+
 class ResourceMgr;
 class Shader;
 class Window;
-
-struct PostProcessEffects {
-    bool underwaterEnabled = false;
-    glm::vec3 underwaterTint = glm::vec3(0.24f, 0.46f, 0.72f);
-    float underwaterStrength = 0.68f;
-    float screenRollRadians = 0.0f;
-    bool bloomEnabled = true;
-    float bloomThreshold = 0.0f;    // DerivativeMain: no threshold, raw HDR feeds bloom
-    float bloomStrength = 1.0f;  // DerivativeMain BLOOM_AMOUNT default
-    bool autoExposureEnabled = true;
-    float autoExposureMin = 0.001f; // Legacy UI field; DerivativeMain auto exposure does not clamp the target.
-    float autoExposureMax = 64.0f;  // Legacy UI field; kept for settings compatibility.
-    float autoExposureSpeed = 1.0f; // DerivativeMain EXPOSURE_SPEED
-    float autoExposureBias = 0.0f;
-    float autoExposureDayFactor = 1.0f;
-    bool sunRaysEnabled = false;
-    glm::vec2 sunScreenPos = glm::vec2(0.5f);
-    float sunVisibility = 0.0f;
-    float sunRayStrength = 0.18f;
-    bool shaderpackGradingEnabled = true;
-    int tonemapMode = 1;
-    float colorTemperature = 1.0f;
-    float vibrance = 0.0f;
-    float highlightCompression = 0.0f;
-    float filmEmulationStrength = 0.0f;
-    float redModifierStrength = 0.35f;
-    glm::vec3 colorLuma = glm::vec3(1.02f, 1.0f, 0.96f);
-    float splitToneStrength = 0.0f;
-    float vignetteStrength = 0.0f;
-    float noiseDitherStrength = 0.015f;
-    float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
-    float exposure = 12.0f;   // DerivativeMain MANUAL_EXPOSURE_VALUE
-    float gamma = 1.0f;
-    float saturation = 1.0f;
-    float contrast = 1.0f;
-    bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift (default off, matches #define guard)
-    bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG (default on)
-    float weatherWetness = 0.0f;
-    float weatherStorm = 0.0f;
-    float snowStrength = 0.0f;       // [0,1] snow-only intensity for snow fog branch
-    float skyWetness = 0.0f;
-    float fogWetness = 0.0f;
-    float cloudWetness = 0.0f;
-    float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
-    float weatherExposureBias = 0.0f;  // EV offset on auto exposure during precipitation
-    float weatherPostRainFog = 1.0f;   // [0,2] multiplier on post-process rain/snow fog
-    int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
-};
 
 class PostProcessRenderer {
 public:

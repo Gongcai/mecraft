@@ -14,6 +14,7 @@
 #include "../engine/platform/Time.h"
 
 #include "../renderer/core/Renderer.h"
+#include "../renderer/core/RenderScene.h"
 #include "../renderer/renderers/DropRenderer.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/renderers/PostProcessRenderer.h"
@@ -82,6 +83,7 @@ private:
     World         m_world;
     physics::PhysicsSystem m_physicsSystem;
     Renderer      m_renderer;
+    RenderScene   m_renderScene;
     DropRenderer  m_dropRenderer;
     FirstPersonHeldItemRenderer m_firstPersonHeldItemRenderer;
     HumanoidRenderer  m_humanoidRenderer;

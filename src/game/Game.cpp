@@ -69,6 +69,10 @@ void Game::initRenderers() {
     m_world.setThreadPool(m_renderer.getThreadPool());
     m_renderer.setFogEnabled(true);
 
+    // Initialize RenderScene and connect to Renderer
+    m_renderScene.init(m_resourceMgr);
+    m_renderScene.setLegacyRenderer(&m_renderer);
+
     m_dropRenderer.init(m_resourceMgr);
     m_firstPersonHeldItemRenderer.init(m_resourceMgr);
     m_humanoidRenderer.init(m_resourceMgr);
@@ -77,6 +81,11 @@ void Game::initRenderers() {
     m_renderer.setDropSystem(&m_dropSystem);
     m_renderer.setGameplayRegistry(&m_gameplayScene.registry());
     m_renderer.setParticleSystem(&m_particleSystem);
+    m_renderScene.setHumanoidRenderer(&m_humanoidRenderer);
+    m_renderScene.setDropRenderer(&m_dropRenderer);
+    m_renderScene.setDropSystem(&m_dropSystem);
+    m_renderScene.setGameplayRegistry(&m_gameplayScene.registry());
+    m_renderScene.setParticleSystem(&m_particleSystem);
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
     m_particleSystem.init(m_resourceMgr);
