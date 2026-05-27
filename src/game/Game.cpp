@@ -330,39 +330,9 @@ void Game::renderFrame(const float frameTime) {
                                           HumanoidRenderer::kRenderMobsOnly);
             }
         }
-        // Particles now render inside Renderer::renderParticlesToSceneResolved()
-        // after volumetric fog composite, so they receive unified fog.
 
-        // Multi-ray outdoor check: compute camera rain visibility via RenderScene.
         cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
-
-        // Precipitation particles: render after opaque geometry, before transparent compositing.
-        {
-            const auto& weather = m_world.getWeatherSystem().getDerived();
-            const glm::vec3 camPos = finalCamera.getPosition();
-            auto projMat = finalCamera.getProjectionMatrix(m_window.getAspectRatio());
-            auto viewMat = finalCamera.getViewMatrix();
-            float alphaScale = pipelineCfg.weatherRainAlphaScale;
-            const glm::vec2 precipitationScreenSize(
-                static_cast<float>(std::max(1, m_window.getWidth())),
-                static_cast<float>(std::max(1, m_window.getHeight())));
-
-            // Render visible rain/snow particles to the main scene.
-            // The rain drops are world-space wrapped around the camera; the mask
-            // pass above is smoothed so post rain fog does not show particle rings.
-            if (pipelineCfg.weatherRainLinesEnabled && weather.rainStrength > 0.01f) {
-                m_rainRenderer.render(projMat, viewMat, camPos,
-                                      weather.rainStrength, cameraRainVisibility,
-                                      alphaScale, m_renderer.gbufDepthTexture(),
-                                      precipitationScreenSize, frameTime);
-            }
-            if (pipelineCfg.weatherRainLinesEnabled && weather.snowStrength > 0.01f) {
-                m_rainRenderer.renderSnow(projMat, viewMat, camPos,
-                                          weather.snowStrength, cameraRainVisibility,
-                                          alphaScale * 0.6f, m_renderer.gbufDepthTexture(),
-                                          precipitationScreenSize, frameTime);
-            }
-        }
+        renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
     }
 
     // Read block interaction data from ECS and pass to Renderer
@@ -399,26 +369,9 @@ void Game::renderFrame(const float frameTime) {
     const Inventory& inventory = playerQuery.getInventory();
 
     if (lightDebugActive) {
-        // Skip overlays and postprocess — blit raw lighting debug output directly.
         m_postProcessRenderer.blitSceneToBackbuffer(m_window);
     } else {
-        if (m_cameraController.isFirstPerson()) {
-            if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
-                m_firstPersonHeldItemRenderer.triggerSwing();
-            }
-            m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
-            // Pass shadow data from deferred pipeline to held item renderer.
-            m_firstPersonHeldItemRenderer.setShadowData(
-                FirstPersonHeldItemRenderer::fromFirstPersonShadowData(m_renderScene.getHeldItemShadowData()));
-            m_firstPersonHeldItemRenderer.render(m_window,
-                                                 inventory,
-                                                 heldItemMotion,
-                                                 static_cast<float>(Time::getGameTime()));
-        } else {
-            static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
-            m_firstPersonHeldItemRenderer.setContinuousSwing(false);
-        }
-
+        renderHeldItem(inventory, heldItemMotion);
         m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
                                                    m_renderer.gbufDepthTexture(),
                                                    m_renderer.weatherMaskTexture());
@@ -451,6 +404,49 @@ void Game::renderFrame(const float frameTime) {
                        m_dashboardProfilerStats);
 #endif
     m_window.swapBuffers();
+}
+
+void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility, float frameTime) {
+    const auto& pipelineCfg = m_renderer.getRenderPipelineSettings();
+    if (!pipelineCfg.weatherRainLinesEnabled) return;
+
+    const auto& weather = m_world.getWeatherSystem().getDerived();
+    const glm::vec3 camPos = camera.getPosition();
+    auto projMat = camera.getProjectionMatrix(m_window.getAspectRatio());
+    auto viewMat = camera.getViewMatrix();
+    float alphaScale = pipelineCfg.weatherRainAlphaScale;
+    const glm::vec2 precipitationScreenSize(
+        static_cast<float>(std::max(1, m_window.getWidth())),
+        static_cast<float>(std::max(1, m_window.getHeight())));
+
+    if (weather.rainStrength > 0.01f) {
+        m_rainRenderer.render(projMat, viewMat, camPos,
+                              weather.rainStrength, cameraRainVisibility,
+                              alphaScale, m_renderer.gbufDepthTexture(),
+                              precipitationScreenSize, frameTime);
+    }
+    if (weather.snowStrength > 0.01f) {
+        m_rainRenderer.renderSnow(projMat, viewMat, camPos,
+                                  weather.snowStrength, cameraRainVisibility,
+                                  alphaScale * 0.6f, m_renderer.gbufDepthTexture(),
+                                  precipitationScreenSize, frameTime);
+    }
+}
+
+void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotion& motion) {
+    if (m_cameraController.isFirstPerson()) {
+        if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
+            m_firstPersonHeldItemRenderer.triggerSwing();
+        }
+        m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
+        m_firstPersonHeldItemRenderer.setShadowData(
+            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(m_renderScene.getHeldItemShadowData()));
+        m_firstPersonHeldItemRenderer.render(m_window, inventory, motion,
+                                             static_cast<float>(Time::getGameTime()));
+    } else {
+        static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
+        m_firstPersonHeldItemRenderer.setContinuousSwing(false);
+    }
 }
 
 #ifdef MECRAFT_DEBUG
