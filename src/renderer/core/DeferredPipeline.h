@@ -2,6 +2,7 @@
 #define MECRAFT_DEFERRED_PIPELINE_H
 
 #include "RenderPipeline.h"
+#include "RenderSettings.h"
 #include "../passes/SsaoPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
@@ -18,9 +19,13 @@
 #include "../passes/WaterCompositePass.h"
 #include "../passes/DebugPass.h"
 
+#include <glad/glad.h>
 #include <memory>
 
 class ResourceMgr;
+class World;
+class Camera;
+class Window;
 
 namespace shadow { class ShadowRenderer; }
 
@@ -40,6 +45,9 @@ public:
     bool supportsDeferred() const override { return true; }
     bool supportsDebugView() const override { return true; }
 
+    // Held block light value (set from Game)
+    void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
+
     // Pass accessors
     SsaoPass* ssaoPass() const { return m_ssaoPass.get(); }
     VelocityPass* velocityPass() const { return m_velocityPass.get(); }
@@ -58,6 +66,7 @@ public:
     DebugPass* debugPass() const { return m_debugPass.get(); }
 
 private:
+    // Pass instances
     std::unique_ptr<SsaoPass> m_ssaoPass;
     std::unique_ptr<VelocityPass> m_velocityPass;
     std::unique_ptr<ReflectionPass> m_reflectionPass;
@@ -78,6 +87,27 @@ private:
     ResourceMgr* m_resourceMgr = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     SharedRenderResources* m_shared = nullptr;
+
+    // Orchestration state (migrated from Renderer)
+    bool m_deferredFrameActive = false;
+    bool m_hasPreviousFrameData = false;
+    bool m_waterRenderedBeforeTemporal = false;
+    bool m_deferredHistoryUpdatedThisFrame = false;
+    GLint m_capturedFramebuffer = 0;
+    GLint m_capturedViewport[4] = {};
+    int m_heldBlockLightValue = 0;
+
+    // Settings (cached from RenderSettings for current frame)
+    RenderSettings m_currentSettings;
+
+    // Private orchestration methods
+    void captureCurrentFramebuffer();
+    void restoreCapturedFramebufferViewport(int windowWidth, int windowHeight);
+    void clearDeferredAuxiliaryTargets();
+    void updateDeferredHistoryTargets();
+    void renderParticlesToSceneResolved(const FrameContext& ctx);
+    void renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve);
+    FrameOutput buildFrameOutput(const FrameContext& ctx);
 };
 
 #endif // MECRAFT_DEFERRED_PIPELINE_H
