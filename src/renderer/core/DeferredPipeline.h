@@ -77,6 +77,7 @@ private:
     // Shared resources (non-owning, set during init)
     ResourceMgr* m_resourceMgr = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
+    SharedRenderResources* m_shared = nullptr;
 };
 
 #endif // MECRAFT_DEFERRED_PIPELINE_H

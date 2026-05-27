@@ -449,10 +449,14 @@ public:
     void restoreDefaultFbo();
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 
-    // Shared resource accessors (Phase 9: for RenderScene integration)
+    // Shared resource accessors (Phase 9/10: for RenderScene integration)
     [[nodiscard]] TerrainRenderCache& getTerrainRenderCache() { return m_terrainCache; }
     [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
     [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
+    [[nodiscard]] DeferredRenderTargets& getDeferredRenderTargets() { return m_deferredTargets; }
+    [[nodiscard]] shadow::ShadowRenderer& getShadowRenderer() { return m_shadowRenderer; }
+    [[nodiscard]] WorldRenderBuffer& getWorldRenderBuffer() { return m_worldRenderBuffer; }
+    [[nodiscard]] ChunkMeshingService& getChunkMeshingService() { return m_meshingService; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;

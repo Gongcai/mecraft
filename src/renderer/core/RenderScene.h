@@ -22,9 +22,12 @@ class DropSystem;
 class TerrainRenderCache;
 class TerrainRenderer;
 class CommonFrameTargets;
-class DeferredFrameTargets;
+class DeferredRenderTargets;
 class ShadowTargets;
 class GameplaySkyRenderer;
+class WorldRenderBuffer;
+class ChunkMeshingService;
+class ThreadPool;
 class ForwardPipeline;
 class DeferredPipeline;
 
@@ -32,21 +35,27 @@ struct BlockTargetRenderData;
 struct BlockBreakRenderData;
 
 namespace ecs { class GameplayRegistry; }
+namespace shadow { class ShadowRenderer; }
 
-/// Shared render resources used by both pipelines
+/// Shared render resources used by both pipelines.
+/// All pointers are non-owning; lifetime is managed by Renderer.
 struct SharedRenderResources {
     // Terrain
     TerrainRenderCache* terrainCache = nullptr;
     TerrainRenderer* terrain = nullptr;
+    WorldRenderBuffer* worldRenderBuffer = nullptr;
+    ChunkMeshingService* meshingService = nullptr;
 
     // Render targets
     CommonFrameTargets* commonTargets = nullptr;
-    DeferredFrameTargets* deferredTargets = nullptr;
+    DeferredRenderTargets* deferredTargets = nullptr;
     ShadowTargets* shadowTargets = nullptr;
 
     // Renderers
     GameplaySkyRenderer* sky = nullptr;
+    shadow::ShadowRenderer* shadowRenderer = nullptr;
     ResourceMgr* resources = nullptr;
+    ThreadPool* threadPool = nullptr;
 
     // Sub-renderers (non-owning)
     HumanoidRenderer* humanoidRenderer = nullptr;
@@ -86,6 +95,9 @@ public:
     void setDropSystem(DropSystem* ds);
     void setGameplayRegistry(ecs::GameplayRegistry* reg);
 
+    // State
+    void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
+
     // Frame output access
     const FrameOutput& getLastFrameOutput() const;
 
@@ -116,6 +128,10 @@ private:
     // Frame state
     FrameOutput m_lastFrameOutput;
     FrameContext m_currentContext;
+    FrameContext m_previousContext;
+    bool m_hasPreviousContext = false;
+    uint64_t m_frameCounter = 0;
+    bool m_eyeInWater = false;
 
     // Legacy bridge (Phase 1 only - will be removed when pipelines are extracted)
     Renderer* m_legacyRenderer = nullptr;

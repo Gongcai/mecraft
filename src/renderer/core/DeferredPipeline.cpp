@@ -50,9 +50,13 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
 }
 
 void DeferredPipeline::init(SharedRenderResources& shared) {
-    // Extract ResourceMgr from shared resources
+    // Store shared resources pointer
+    m_shared = &shared;
+
+    // Extract ResourceMgr and ShadowRenderer from shared resources
     if (shared.resources) {
         m_resourceMgr = shared.resources;
+        m_shadowRenderer = shared.shadowRenderer;
         init(*m_resourceMgr, m_shadowRenderer);
     }
 }

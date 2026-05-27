@@ -5,6 +5,51 @@
 #include "engine/camera/Camera.h"
 #include "engine/platform/Window.h"
 #include "../../world/World.h"
+#include "engine/platform/Time.h"
+#include "../renderers/GameplaySkyRenderer.h"
+
+namespace {
+/// Convert GameplaySkyRenderer::SkyColors to SkyColorsData
+SkyColorsData toSkyColorsData(const GameplaySkyRenderer::SkyColors& src) {
+    SkyColorsData dst;
+    dst.top = src.top;
+    dst.horizon = src.horizon;
+    dst.fog = src.fog;
+    dst.halo = src.halo;
+    dst.sunDirection = src.sunDirection;
+    dst.sunScatter = src.sunScatter;
+    dst.sunLightColor = src.sunLightColor;
+    dst.skyAmbientColor = src.skyAmbientColor;
+    dst.shadowTintColor = src.shadowTintColor;
+    dst.horizonScatterColor = src.horizonScatterColor;
+    dst.cloudColor = src.cloudColor;
+    dst.moonDirection = src.moonDirection;
+    dst.moonLightColor = src.moonLightColor;
+    dst.haloStrength = src.haloStrength;
+    dst.horizonHaze = src.horizonHaze;
+    dst.sunGlare = src.sunGlare;
+    dst.sunVisibility = src.sunVisibility;
+    dst.moonVisibility = src.moonVisibility;
+    dst.dayFactor = src.dayFactor;
+    dst.nightFactor = src.nightFactor;
+    dst.horizonFactor = src.horizonFactor;
+    dst.rainFactor = src.rainFactor;
+    dst.wetnessFactor = src.wetnessFactor;
+    dst.cloudinessFactor = src.cloudinessFactor;
+    return dst;
+}
+
+/// Convert GameplaySkyRenderer::SkyIlluminanceData to SkyIlluminanceData
+SkyIlluminanceData toSkyIlluminanceData(const GameplaySkyRenderer::SkyIlluminanceData& src) {
+    SkyIlluminanceData dst;
+    dst.directIlluminance = src.directIlluminance;
+    dst.skyIlluminance = src.skyIlluminance;
+    dst.sunIlluminance = src.sunIlluminance;
+    dst.moonIlluminance = src.moonIlluminance;
+    dst.cloudDynamicWeather = src.cloudDynamicWeather;
+    return dst;
+}
+} // anonymous namespace
 
 RenderScene::RenderScene() = default;
 RenderScene::~RenderScene() = default;
@@ -362,34 +407,166 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
 void RenderScene::setLegacyRenderer(Renderer* renderer) {
     m_legacyRenderer = renderer;
 
-    // Phase 9: Populate shared resources from legacy renderer
+    // Phase 9/10: Populate shared resources from legacy renderer
     if (renderer) {
         m_shared.terrainCache = &renderer->getTerrainRenderCache();
         m_shared.terrain = &renderer->getTerrainRenderer();
+        m_shared.worldRenderBuffer = &renderer->getWorldRenderBuffer();
+        m_shared.meshingService = &renderer->getChunkMeshingService();
+        m_shared.deferredTargets = &renderer->getDeferredRenderTargets();
         m_shared.sky = &renderer->getGameplaySkyRenderer();
-        // Note: commonTargets and deferredTargets are not yet accessible from Renderer
-        // They will be added in Phase 10 when RenderScene takes over orchestration
+        m_shared.shadowRenderer = &renderer->getShadowRenderer();
+        m_shared.threadPool = renderer->getThreadPool();
+        // Note: commonTargets will be added when CommonFrameTargets is fully integrated
     }
 }
 
 FrameContext RenderScene::buildFrameContext(const World& world, const Camera& camera, const Window& window) {
     FrameContext ctx;
 
-    // Camera data (Phase 1: minimal bridge)
-    // In later phases, this will be computed from camera state
+    // Camera matrices
+    ctx.camera.view = camera.getViewMatrix();
+    ctx.camera.projection = camera.getProjectionMatrix(window.getAspectRatio());
+    ctx.camera.viewProj = ctx.camera.projection * ctx.camera.view;
+    ctx.camera.invViewProj = glm::inverse(ctx.camera.viewProj);
     ctx.camera.position = camera.getPosition();
-    ctx.camera.nearPlane = 0.1f;
-    ctx.camera.farPlane = 500.0f;
+    ctx.camera.nearPlane = camera.getNear();
+    ctx.camera.farPlane = camera.getFar();
+
+    // Screen dimensions
+    ctx.frameWidth = window.getWidth();
+    ctx.frameHeight = window.getHeight();
 
     // Frame timing
-    ctx.frameIndex = 0; // Will be populated from renderer state
-    ctx.deltaTime = 0.0f;
-    ctx.animationTime = 0.0f;
-    ctx.shaderTime = 0.0f;
+    ctx.frameIndex = m_frameCounter++;
+    ctx.deltaTime = static_cast<float>(Time::deltaTime);
+    const double gameTime = Time::getGameTime();
+    const double visualTime = Time::getRawTime();
+    ctx.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
+    ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
 
-    // State
-    ctx.world = &world;
+    // TAA jitter (DerivativeMain shaders.properties)
+    if (m_shared.deferredTargets) {
+        const float invW = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->width()));
+        const float invH = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->height()));
+        const float frameCounter = static_cast<float>(ctx.frameIndex);
+        const float frameX = glm::fract(frameCounter / 1.3247179572f + 0.5f) * 2.0f - 1.0f;
+        const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
+        ctx.jitter.x = frameX * invW;
+        ctx.jitter.y = frameY * invH;
+    }
+
+    // Jittered projection matrix
+    {
+        glm::mat4 jitteredProj = ctx.camera.projection;
+        for (int column = 0; column < 4; ++column) {
+            jitteredProj[column][0] += ctx.jitter.x * ctx.camera.projection[column][3];
+            jitteredProj[column][1] += ctx.jitter.y * ctx.camera.projection[column][3];
+        }
+        ctx.camera.jitteredViewProj = jitteredProj * ctx.camera.view;
+        ctx.camera.jitteredInvViewProj = glm::inverse(ctx.camera.jitteredViewProj);
+    }
+
+    // Previous frame data (temporal)
+    if (m_hasPreviousContext) {
+        ctx.prevCamera = m_previousContext.camera;
+        ctx.prevJitter = m_previousContext.jitter;
+        ctx.previousViewProj = m_previousContext.camera.viewProj;
+        ctx.previousInvViewProj = m_previousContext.camera.invViewProj;
+        ctx.previousJitteredViewProj = m_previousContext.camera.jitteredViewProj;
+        ctx.hasPreviousFrame = true;
+    } else {
+        ctx.prevCamera = ctx.camera;
+        ctx.prevJitter = ctx.jitter;
+        ctx.previousViewProj = ctx.camera.viewProj;
+        ctx.previousInvViewProj = ctx.camera.invViewProj;
+        ctx.previousJitteredViewProj = ctx.camera.jitteredViewProj;
+        ctx.hasPreviousFrame = false;
+    }
+
+    // Weather state from World::WeatherSystem
+    const WeatherState& weather = world.getWeatherSystem().getRenderState();
+    const WeatherDerived& weatherDerived = world.getWeatherSystem().getDerived();
+    ctx.weather.wetness = weather.wetness;
+    ctx.weather.storm = weather.storm;
+    ctx.weather.surfaceWetness = weatherDerived.surfaceWetness;
+    ctx.weather.skyWetness = weatherDerived.skyWetness;
+    ctx.weather.fogWetness = weatherDerived.fogWetness;
+    ctx.weather.cloudWetness = weatherDerived.cloudWetness;
+    ctx.weather.precipitation = weatherDerived.precipitation;
+    ctx.weather.rainStrength = weatherDerived.rainStrength;
+    ctx.weather.thunderStrength = weatherDerived.thunderStrength;
+    ctx.weather.lightningFlash = weatherDerived.lightningFlash;
+    ctx.weather.aerialReduction = weather.aerialReduction;
+
+    // Sky colors and illuminance
+    if (m_shared.sky) {
+        auto skyColors = m_shared.sky->computeSkyColors(world.getDayNightSystem());
+        ctx.skyColors = toSkyColorsData(skyColors);
+        ctx.skyIlluminance = toSkyIlluminanceData(
+            m_shared.sky->computeSkyIlluminance(skyColors, ctx.weather.wetness, ctx.weather.storm));
+        ctx.skyIntensity = world.getDayNightSystem().getSkyIntensity();
+    }
+
+    // Fog settings
+    ctx.fog.enabled = m_settings.fog.enabled;
+    ctx.fog.color = m_settings.fog.color;
+    ctx.fog.startDistance = m_settings.fog.startDistance;
+    ctx.fog.endDistance = m_settings.fog.endDistance;
+    ctx.fog.density = m_settings.fog.density;
+    if (m_settings.fog.autoDistanceByRenderDistance) {
+        const float chunkSize = 16.0f; // Chunk::SIZE_X
+        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
+        ctx.fog.endDistance = std::max(0.0f, (renderDistanceChunks + m_settings.fog.autoEndOffsetChunks) * chunkSize);
+        ctx.fog.startDistance = std::max(0.0f, ctx.fog.endDistance - m_settings.fog.autoFadeWidthChunks * chunkSize);
+    }
+    ctx.fog.endDistance = std::max(ctx.fog.endDistance, ctx.fog.startDistance + 0.1f);
+
+    // Volumetric settings
+    ctx.volumetric.lightEnabled = m_settings.volumetric.lightEnabled;
+    ctx.volumetric.uwLightEnabled = m_settings.volumetric.uwLightEnabled;
+    ctx.volumetric.fogEnabled = m_settings.volumetric.fogEnabled;
+    ctx.volumetric.fogStrength = m_settings.volumetric.fogStrength;
+    ctx.volumetric.underwaterLightStrength = m_settings.volumetric.underwaterLightStrength;
+    ctx.volumetric.fogCenterHeight = m_settings.volumetric.fogCenterHeight;
+    ctx.volumetric.fogHeightSpread = m_settings.volumetric.fogHeightSpread;
+    ctx.volumetric.fogNoiseScale = m_settings.volumetric.fogNoiseScale;
+    ctx.volumetric.fogLightStrength = m_settings.volumetric.fogLightStrength;
+    ctx.volumetric.fogDensityScale = m_settings.volumetric.fogDensityScale;
+    ctx.volumetric.fogSamples = std::clamp(m_settings.volumetric.fogSamples, 2, 50);
+
+    // Cloud settings
+    ctx.cloud.shadowsEnabled = m_settings.cloud.shadowsEnabled;
+    ctx.cloud.shadowStrength = m_settings.cloud.shadowStrength;
+    ctx.cloud.shadowScale = m_settings.cloud.shadowScale;
+    ctx.cloud.shadowSpeed = m_settings.cloud.shadowSpeed;
+    ctx.cloud.timeScale = m_settings.cloud.timeScale;
+    const float cloudWetForCoverage = std::clamp(ctx.weather.wetness + ctx.weather.storm * (4.0f / 3.0f), 0.0f, 1.0f);
+    ctx.cloud.coverage = std::clamp(1.0f + cloudWetForCoverage * 0.2f, 0.0f, 1.5f);
+    ctx.cloud.density = 0.85f + ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.55f;
+    float cloudWet = std::clamp(ctx.weather.cloudWetness, 0.0f, 1.0f);
+    ctx.cloud.height = 1000.0f + cloudWet * (800.0f - 1000.0f);
+    ctx.cloud.thickness = 1400.0f + cloudWet * (3000.0f - 1400.0f);
+
+    // Atmosphere settings (from PostProcessSettings and WeatherRenderSettings)
+    ctx.atmosphere.aerialStrength = m_settings.postProcess.aerialStrength;
+    ctx.atmosphere.horizonScatterStrength = m_settings.postProcess.horizonScatterStrength;
+    ctx.atmosphere.sunWarmth = m_settings.postProcess.sunWarmth;
+    ctx.atmosphere.skyCoolness = m_settings.postProcess.skyCoolness;
+    ctx.atmosphere.directWeatherOcclusionOverride = (m_settings.weather.directWeatherOcclusion >= 0.0f) ? 1 : 0;
+    ctx.atmosphere.directWeatherOcclusion = std::clamp(m_settings.weather.directWeatherOcclusion, 0.0f, 1.0f);
+
+    // State flags
+    ctx.moonShadowActive = ctx.skyColors.moonVisibility > ctx.skyColors.sunVisibility;
+    ctx.eyeInWater = m_eyeInWater;
+
+    // Shared resources and world pointer
     ctx.shared = &m_shared;
+    ctx.world = &world;
+
+    // Store current context as previous for next frame
+    m_previousContext = ctx;
+    m_hasPreviousContext = true;
 
     return ctx;
 }
