@@ -434,6 +434,49 @@ void RenderScene::syncFrameOutputFromLegacyRenderer() {
     m_lastFrameOutput.heldItemShadow = heldItemShadow;
 }
 
+void RenderScene::setEyeInWater(bool inWater) {
+    m_eyeInWater = inWater;
+    if (m_legacyRenderer) m_legacyRenderer->setEyeInWater(inWater);
+}
+
+void RenderScene::setRenderLocalPlayerModel(bool visible) {
+    if (m_legacyRenderer) m_legacyRenderer->setRenderLocalPlayerModel(visible);
+}
+
+void RenderScene::setHeldBlockLightValue(int value) {
+    if (m_legacyRenderer) m_legacyRenderer->setHeldBlockLightValue(value);
+}
+
+void RenderScene::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
+    if (m_legacyRenderer) m_legacyRenderer->renderOpaqueAndCutout(world, camera, window);
+}
+
+void RenderScene::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target,
+                                               const BlockBreakRenderData& blockBreak, const Window& window) {
+    if (m_legacyRenderer) m_legacyRenderer->renderTransparentAndOverlays(world, target, blockBreak, window);
+    syncFrameOutputFromLegacyRenderer();
+}
+
+void RenderScene::renderDeferredDebugOverlay(const Window& window) {
+    if (m_legacyRenderer) m_legacyRenderer->renderDeferredDebugOverlay(window);
+}
+
+bool RenderScene::isDeferredFrameActive() const {
+    return m_legacyRenderer ? m_legacyRenderer->isDeferredFrameActive() : false;
+}
+
+GLuint RenderScene::gbufDepthTexture() const {
+    return m_legacyRenderer ? m_legacyRenderer->gbufDepthTexture() : 0;
+}
+
+GLuint RenderScene::weatherMaskTexture() const {
+    return m_legacyRenderer ? m_legacyRenderer->weatherMaskTexture() : 0;
+}
+
+bool RenderScene::isLightDebugActive() const {
+    return m_settings.debug.deferredLightDebugMode > 0 || m_settings.debug.reflectionDebugMode > 0;
+}
+
 PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, const Camera& camera,
                                                          const Window& window, float cameraRainVisibility,
                                                          float screenRollRadians) const {

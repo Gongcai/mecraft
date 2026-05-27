@@ -18,7 +18,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
                                    DeferredRenderTargets& targets) {
     if (m_temporalResolveShader == nullptr) return;
 
-    // Copy current scene to scratch so TAA reads from TemporalCurrent + HistoryPrev
+    // Copy current scene to scratch so TAA reads from TempWralCurrent + HistoryPrev
     targets.copySceneResolvedToTemporalCurrent();
 
     targets.bindSceneResolved();

@@ -96,7 +96,23 @@ public:
     void setGameplayRegistry(ecs::GameplayRegistry* reg);
 
     // State
-    void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
+    void setEyeInWater(bool inWater);
+    void setRenderLocalPlayerModel(bool visible);
+    void setHeldBlockLightValue(int value);
+
+    // Rendering (Phase R1: bridge to legacy Renderer)
+    void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
+    void renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target,
+                                      const BlockBreakRenderData& blockBreak, const Window& window);
+    void renderDeferredDebugOverlay(const Window& window);
+
+    // Query (Phase R1: bridge to legacy Renderer)
+    bool isDeferredFrameActive() const;
+    GLuint gbufDepthTexture() const;
+    GLuint weatherMaskTexture() const;
+
+    // Debug query helpers (replaces direct RenderPipelineSettings access)
+    bool isLightDebugActive() const;
 
     // Frame output access
     const FrameOutput& getLastFrameOutput() const;

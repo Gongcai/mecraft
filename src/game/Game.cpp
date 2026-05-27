@@ -296,30 +296,23 @@ void Game::renderFrame(const float frameTime) {
     }
 
     Camera finalCamera = m_cameraController.computeRenderCamera(renderCamera, eyePosition);
-    m_renderer.setRenderLocalPlayerModel(m_cameraController.shouldRenderPlayerModel());
+    m_renderScene.setRenderLocalPlayerModel(m_cameraController.shouldRenderPlayerModel());
 
     // Set held block light for dynamic hand illumination
     {
         ecs::PlayerQuery pq(reg);
         const BlockID heldBlock = pq.getInventory().getSelectedBlock();
         const int lightLevel = BlockRegistry::getLightLevelFast(heldBlock);
-        m_renderer.setHeldBlockLightValue(lightLevel);
+        m_renderScene.setHeldBlockLightValue(lightLevel);
     }
 
-    m_renderer.renderOpaqueAndCutout(m_world, finalCamera, m_window);
+    m_renderScene.renderOpaqueAndCutout(m_world, finalCamera, m_window);
 
-    // When lighting or reflection debug mode is active, skip overlays and postprocess
-    // to show raw debug output without contamination from bloom/tonemap/rain fog.
-    const auto& pipelineCfg = m_renderer.getRenderPipelineSettings();
-    const bool lightDebugActive = pipelineCfg.deferredLightDebugMode > 0 ||
-                                  pipelineCfg.reflectionDebugMode > 0;
+    const bool lightDebugActive = m_renderScene.isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
     if (!lightDebugActive) {
-        // In deferred mode, humanoid entities and drops are rendered into the
-        // GBuffer during renderOpaqueAndCutout() → renderGBufferEntities()/
-        // renderGBufferDrops(). Skip their forward passes.
-        const bool deferredActive = m_renderer.isDeferredFrameActive();
+        const bool deferredActive = m_renderScene.isDeferredFrameActive();
         if (!deferredActive) {
             m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
             if (m_cameraController.shouldRenderPlayerModel()) {
@@ -346,11 +339,9 @@ void Game::renderFrame(const float frameTime) {
         breakData.progress01 = playerQuery.getBlockBreakProgress();
         breakData.blockPos = playerQuery.getBreakTargetBlock();
     }
-    m_renderer.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
-    m_renderScene.syncFrameOutputFromLegacyRenderer();
+    m_renderScene.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
 
     ecs::PlayerQuery playerQuery(reg);
-    m_renderer.setEyeInWater(playerQuery.isEyesInWater());
     m_renderScene.setEyeInWater(playerQuery.isEyesInWater());
 
     // Phase 11: Build post-process effects via RenderScene (replaces ~70 lines of parameter assembly)
@@ -373,10 +364,10 @@ void Game::renderFrame(const float frameTime) {
     } else {
         renderHeldItem(inventory, heldItemMotion);
         m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
-                                                   m_renderer.gbufDepthTexture(),
-                                                   m_renderer.weatherMaskTexture());
+                                                   m_renderScene.gbufDepthTexture(),
+                                                   m_renderScene.weatherMaskTexture());
     }
-    m_renderer.renderDeferredDebugOverlay(m_window);
+    m_renderScene.renderDeferredDebugOverlay(m_window);
 
     // UI rendering
     renderUI(reg, inventory, heldItemMotion, finalCamera);
@@ -384,14 +375,15 @@ void Game::renderFrame(const float frameTime) {
 }
 
 void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility, float frameTime) {
-    const auto& pipelineCfg = m_renderer.getRenderPipelineSettings();
-    if (!pipelineCfg.weatherRainLinesEnabled) return;
+    const auto& settings = m_renderScene.getSettings();
+    if (!settings.weather.rainLinesEnabled) return;
 
     const auto& weather = m_world.getWeatherSystem().getDerived();
     const glm::vec3 camPos = camera.getPosition();
     auto projMat = camera.getProjectionMatrix(m_window.getAspectRatio());
     auto viewMat = camera.getViewMatrix();
-    float alphaScale = pipelineCfg.weatherRainAlphaScale;
+    float alphaScale = settings.weather.rainAlphaScale;
+    const GLuint depthTex = m_renderScene.gbufDepthTexture();
     const glm::vec2 precipitationScreenSize(
         static_cast<float>(std::max(1, m_window.getWidth())),
         static_cast<float>(std::max(1, m_window.getHeight())));
@@ -399,13 +391,13 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
     if (weather.rainStrength > 0.01f) {
         m_rainRenderer.render(projMat, viewMat, camPos,
                               weather.rainStrength, cameraRainVisibility,
-                              alphaScale, m_renderer.gbufDepthTexture(),
+                              alphaScale, depthTex,
                               precipitationScreenSize, frameTime);
     }
     if (weather.snowStrength > 0.01f) {
         m_rainRenderer.renderSnow(projMat, viewMat, camPos,
                                   weather.snowStrength, cameraRainVisibility,
-                                  alphaScale * 0.6f, m_renderer.gbufDepthTexture(),
+                                  alphaScale * 0.6f, depthTex,
                                   precipitationScreenSize, frameTime);
     }
 }
