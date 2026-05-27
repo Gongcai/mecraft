@@ -19,6 +19,14 @@ class HumanoidRenderer;
 class DropRenderer;
 class ParticleSystem;
 class DropSystem;
+class TerrainRenderCache;
+class TerrainRenderer;
+class CommonFrameTargets;
+class DeferredFrameTargets;
+class ShadowTargets;
+class GameplaySkyRenderer;
+class ForwardPipeline;
+class DeferredPipeline;
 
 struct BlockTargetRenderData;
 struct BlockBreakRenderData;
@@ -27,22 +35,24 @@ namespace ecs { class GameplayRegistry; }
 
 /// Shared render resources used by both pipelines
 struct SharedRenderResources {
-    // Will be populated in later phases with:
-    // - TerrainRenderCache* terrainCache;
-    // - TerrainRenderer* terrain;
-    // - CommonFrameTargets* commonTargets;
-    // - DeferredFrameTargets* deferredTargets;
-    // - ShadowTargets* shadowTargets;
-    // - ShaderManager* shaders;
-    // - GameplaySkyRenderer* sky;
-    // - ResourceMgr* resources;
-    // - HumanoidRenderer* humanoidRenderer;
-    // - DropRenderer* dropRenderer;
-    // - ParticleSystem* particleSystem;
-    // - DropSystem* dropSystem;
+    // Terrain
+    TerrainRenderCache* terrainCache = nullptr;
+    TerrainRenderer* terrain = nullptr;
 
-    // Phase 1: Initially empty, will be populated as we extract components
-    void* placeholder = nullptr;
+    // Render targets
+    CommonFrameTargets* commonTargets = nullptr;
+    DeferredFrameTargets* deferredTargets = nullptr;
+    ShadowTargets* shadowTargets = nullptr;
+
+    // Renderers
+    GameplaySkyRenderer* sky = nullptr;
+    ResourceMgr* resources = nullptr;
+
+    // Sub-renderers (non-owning)
+    HumanoidRenderer* humanoidRenderer = nullptr;
+    DropRenderer* dropRenderer = nullptr;
+    ParticleSystem* particleSystem = nullptr;
+    DropSystem* dropSystem = nullptr;
 };
 
 /// Entry point for all rendering
@@ -109,6 +119,12 @@ private:
 
     // Legacy bridge (Phase 1 only - will be removed when pipelines are extracted)
     Renderer* m_legacyRenderer = nullptr;
+
+    // Pipeline implementations (Phase 9)
+    std::unique_ptr<ForwardPipeline> m_forwardPipeline;
+    std::unique_ptr<DeferredPipeline> m_deferredPipeline;
+    RenderPipeline* m_activePipeline = nullptr;
+    bool m_newPipelineActive = false; // Set to true when shared resources are fully populated
 
     // Sub-renderers (non-owning)
     HumanoidRenderer* m_humanoidRenderer = nullptr;

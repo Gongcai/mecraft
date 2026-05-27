@@ -1,6 +1,7 @@
 #ifndef MECRAFT_DEFERRED_PIPELINE_H
 #define MECRAFT_DEFERRED_PIPELINE_H
 
+#include "RenderPipeline.h"
 #include "../passes/SsaoPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
@@ -25,11 +26,19 @@ namespace shadow { class ShadowRenderer; }
 
 /// Container for all extracted deferred rendering passes.
 /// Owns pass lifecycle (init/shutdown) and provides accessors.
-/// Renderer still orchestrates the frame using individual pass calls.
-class DeferredPipeline {
+/// Implements RenderPipeline interface for pipeline switching.
+class DeferredPipeline : public RenderPipeline {
 public:
+    // Legacy init (used during transition)
     void init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer);
-    void shutdown();
+
+    // RenderPipeline interface
+    void init(SharedRenderResources& shared) override;
+    void shutdown() override;
+    FrameOutput renderFrame(const FrameContext& ctx) override;
+    const char* name() const override { return "Deferred (Shader Effects)"; }
+    bool supportsDeferred() const override { return true; }
+    bool supportsDebugView() const override { return true; }
 
     // Pass accessors
     SsaoPass* ssaoPass() const { return m_ssaoPass.get(); }
@@ -64,6 +73,10 @@ private:
     std::unique_ptr<ShadowPass> m_shadowPass;
     std::unique_ptr<WaterCompositePass> m_waterCompositePass;
     std::unique_ptr<DebugPass> m_debugPass;
+
+    // Shared resources (non-owning, set during init)
+    ResourceMgr* m_resourceMgr = nullptr;
+    shadow::ShadowRenderer* m_shadowRenderer = nullptr;
 };
 
 #endif // MECRAFT_DEFERRED_PIPELINE_H

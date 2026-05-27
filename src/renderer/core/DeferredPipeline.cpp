@@ -1,8 +1,12 @@
 #include "DeferredPipeline.h"
+#include "RenderScene.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 
 void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
+    m_resourceMgr = &resourceMgr;
+    m_shadowRenderer = shadowRenderer;
+
     m_skyCapturePass = std::make_unique<SkyCapturePass>();
     m_gbufferPass = std::make_unique<GBufferPass>();
     m_shadowPass = std::make_unique<ShadowPass>();
@@ -45,6 +49,14 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     // Passes that consume renderer-owned state receive it through execute().
 }
 
+void DeferredPipeline::init(SharedRenderResources& shared) {
+    // Extract ResourceMgr from shared resources
+    if (shared.resources) {
+        m_resourceMgr = shared.resources;
+        init(*m_resourceMgr, m_shadowRenderer);
+    }
+}
+
 void DeferredPipeline::shutdown() {
     m_dofPass.reset();
     m_motionBlurPass.reset();
@@ -61,4 +73,17 @@ void DeferredPipeline::shutdown() {
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
     m_debugPass.reset();
+}
+
+FrameOutput DeferredPipeline::renderFrame(const FrameContext& /*ctx*/) {
+    // The actual rendering is still orchestrated by Renderer in the current phase.
+    // This method will be fully implemented in Phase 10 when RenderScene takes over.
+    // For now, return an empty FrameOutput - the legacy path handles rendering.
+    FrameOutput output;
+
+    // Deferred pipeline produces deferred inputs
+    output.hasDeferredInputs = true;
+    output.hasDebugView = (m_debugPass != nullptr);
+
+    return output;
 }

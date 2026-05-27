@@ -448,6 +448,11 @@ public:
     void bindWeatherMaskFbo() { m_deferredTargets.bindWeatherMask(); }
     void restoreDefaultFbo();
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
+
+    // Shared resource accessors (Phase 9: for RenderScene integration)
+    [[nodiscard]] TerrainRenderCache& getTerrainRenderCache() { return m_terrainCache; }
+    [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
+    [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;

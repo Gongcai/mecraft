@@ -16,9 +16,6 @@
 ## 项目简介
 
 Mecraft 是一个从零构建的桌面端体素沙盒游戏项目，旨在还原 Minecraft 的核心体验并提供一个高性能的体素引擎架构。项目采用现代 C++17 标准，结合 Entity Component System (ECS) 架构，实现了程序化地形生成、动态区块加载、物理碰撞、光照传播以及 3D 空间音频等核心特性。
-
-当前项目目标为 **主世界 (world0) + 原版 Minecraft 材质包 + 内置 DerivativeMain-like 光影效果**——将 DerivativeMain shader pack 的大气、光照、色调、HDR、水体、体积雾、材质风格等视觉算法移植为引擎内置渲染管线，而非外部 shader pack 替换。Mecraft 引擎拥有自己的 Renderer Contract，DerivativeMain 作为视觉与算法参考，当其运行假设与引擎基础设施冲突时以 Mecraft contract 为准（例如保留 greedy meshing + MDI，不使用非线性 shadow warp）。
-
 ## 核心特性
 
 ### 体素引擎

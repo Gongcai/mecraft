@@ -1,5 +1,7 @@
 #include "RenderScene.h"
 #include "Renderer.h"
+#include "ForwardPipeline.h"
+#include "DeferredPipeline.h"
 #include "engine/camera/Camera.h"
 #include "engine/platform/Window.h"
 #include "../../world/World.h"
@@ -10,23 +12,63 @@ RenderScene::~RenderScene() = default;
 void RenderScene::init(ResourceMgr& resourceMgr) {
     // Phase 5: Initialize shared post-process pass
     m_postProcessPass.init(resourceMgr);
+
+    // Phase 9: Populate shared resources
+    m_shared.resources = &resourceMgr;
+
+    // Phase 9: Initialize pipelines
+    m_forwardPipeline = std::make_unique<ForwardPipeline>();
+    m_deferredPipeline = std::make_unique<DeferredPipeline>();
+
+    // Set initial active pipeline based on settings
+    if (m_settings.pipelineMode == PipelineMode::Deferred) {
+        m_activePipeline = m_deferredPipeline.get();
+    } else {
+        m_activePipeline = m_forwardPipeline.get();
+    }
+
+    // Note: Pipeline init is deferred until shared resources are fully populated
+    // (terrain, targets, sky). This happens when setLegacyRenderer() is called
+    // and the Renderer exposes its resources.
 }
 
 void RenderScene::shutdown() {
+    // Phase 9: Shutdown pipelines
+    if (m_activePipeline) {
+        m_activePipeline->shutdown();
+        m_activePipeline = nullptr;
+    }
+    m_forwardPipeline.reset();
+    m_deferredPipeline.reset();
+
     // Phase 5: Shutdown shared post-process pass
     m_postProcessPass.shutdown();
 }
 
 void RenderScene::renderFrame(const World& world, const Camera& camera, const Window& window,
                               const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
-    // Phase 1: Delegate to legacy Renderer
-    // In later phases, this will orchestrate the active pipeline
+    // Build frame context
+    m_currentContext = buildFrameContext(world, camera, window);
 
-    if (m_legacyRenderer) {
-        // Build frame context for future use
-        m_currentContext = buildFrameContext(world, camera, window);
+    // Phase 9: Use active pipeline only if fully initialized and ready.
+    // All shared resources must be populated AND pipeline must have been init'd.
+    const bool newPipelineReady = m_activePipeline &&
+                                  m_shared.terrain &&
+                                  m_shared.commonTargets &&
+                                  m_shared.sky &&
+                                  m_shared.resources;
 
-        // Delegate to legacy renderer
+    if (newPipelineReady && m_newPipelineActive) {
+        // New pipeline path (Phase 10+ will fully implement this)
+        m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext);
+
+        // Post-process is handled by RenderScene for both pipelines
+        // if (!m_lastFrameOutput.skipPostProcess) {
+        //     m_postProcessPass.execute(m_currentContext, m_lastFrameOutput);
+        // }
+    } else if (m_legacyRenderer) {
+        // Legacy path (Phase 1-8 compatibility)
+        // This is the active rendering path until Phase 10 migrates orchestration.
         m_legacyRenderer->render(world, camera, window, target, blockBreak);
 
         // Update frame output from legacy state (bridge)
@@ -69,8 +111,23 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
     m_settings.pipelineMode = mode;
     invalidateFrameHistory();
 
-    // Phase 1: Update legacy renderer settings
-    // In later phases, this will switch active pipeline
+    // Phase 9: Switch active pipeline
+    if (m_forwardPipeline && m_deferredPipeline) {
+        // Shutdown current pipeline
+        if (m_activePipeline) {
+            m_activePipeline->shutdown();
+        }
+
+        // Switch to new pipeline
+        m_activePipeline = (mode == PipelineMode::Deferred)
+            ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
+            : static_cast<RenderPipeline*>(m_forwardPipeline.get());
+
+        // Initialize new pipeline with shared resources
+        m_activePipeline->init(m_shared);
+    }
+
+    // Phase 1: Also update legacy renderer settings for compatibility
     if (m_legacyRenderer) {
         auto legacySettings = m_legacyRenderer->getRenderPipelineSettings();
         legacySettings.mode = (mode == PipelineMode::Deferred)
@@ -85,6 +142,12 @@ PipelineMode RenderScene::getPipelineMode() const {
 }
 
 const char* RenderScene::activePipelineName() const {
+    // Phase 9: Use active pipeline name if available
+    if (m_activePipeline) {
+        return m_activePipeline->name();
+    }
+
+    // Fallback to settings-based name
     switch (m_settings.pipelineMode) {
         case PipelineMode::Forward: return "Forward (Vanilla)";
         case PipelineMode::Deferred: return "Deferred (Shader Effects)";
@@ -93,6 +156,11 @@ const char* RenderScene::activePipelineName() const {
 }
 
 void RenderScene::setSettings(const RenderSettings& settings) {
+    // Phase 9: Detect pipeline mode change and trigger switch
+    if (settings.pipelineMode != m_settings.pipelineMode) {
+        setPipelineMode(settings.pipelineMode);
+    }
+
     m_settings = settings;
 
     // Phase 1: Convert and apply to legacy renderer
@@ -250,6 +318,7 @@ const RenderSettings& RenderScene::getSettings() const {
 
 void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
     m_humanoidRenderer = hr;
+    m_shared.humanoidRenderer = hr;
     if (m_legacyRenderer) {
         m_legacyRenderer->setHumanoidRenderer(hr);
     }
@@ -257,6 +326,7 @@ void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
 
 void RenderScene::setDropRenderer(DropRenderer* dr) {
     m_dropRenderer = dr;
+    m_shared.dropRenderer = dr;
     if (m_legacyRenderer) {
         m_legacyRenderer->setDropRenderer(dr);
     }
@@ -264,6 +334,7 @@ void RenderScene::setDropRenderer(DropRenderer* dr) {
 
 void RenderScene::setParticleSystem(ParticleSystem* ps) {
     m_particleSystem = ps;
+    m_shared.particleSystem = ps;
     if (m_legacyRenderer) {
         m_legacyRenderer->setParticleSystem(ps);
     }
@@ -271,6 +342,7 @@ void RenderScene::setParticleSystem(ParticleSystem* ps) {
 
 void RenderScene::setDropSystem(DropSystem* ds) {
     m_dropSystem = ds;
+    m_shared.dropSystem = ds;
     if (m_legacyRenderer) {
         m_legacyRenderer->setDropSystem(ds);
     }
@@ -289,6 +361,15 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
 
 void RenderScene::setLegacyRenderer(Renderer* renderer) {
     m_legacyRenderer = renderer;
+
+    // Phase 9: Populate shared resources from legacy renderer
+    if (renderer) {
+        m_shared.terrainCache = &renderer->getTerrainRenderCache();
+        m_shared.terrain = &renderer->getTerrainRenderer();
+        m_shared.sky = &renderer->getGameplaySkyRenderer();
+        // Note: commonTargets and deferredTargets are not yet accessible from Renderer
+        // They will be added in Phase 10 when RenderScene takes over orchestration
+    }
 }
 
 FrameContext RenderScene::buildFrameContext(const World& world, const Camera& camera, const Window& window) {
