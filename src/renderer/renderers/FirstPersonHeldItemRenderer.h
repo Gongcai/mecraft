@@ -9,6 +9,7 @@
 
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
+#include "../core/FrameOutput.h"
 
 class Inventory;
 class ResourceMgr;
@@ -117,6 +118,9 @@ public:
         float ambientStrength = 0.55f;
     };
     void setShadowData(const ShadowData& data);
+
+    /// Convert FirstPersonShadowData (from FrameOutput) to ShadowData.
+    static ShadowData fromFirstPersonShadowData(const FirstPersonShadowData& sd);
 
     void render(const Window& window,
                 const Inventory& inventory,

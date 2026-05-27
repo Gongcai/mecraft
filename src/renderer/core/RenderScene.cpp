@@ -120,38 +120,7 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
         // Legacy path (Phase 1-8 compatibility)
         // This is the active rendering path until Phase 10 migrates orchestration.
         m_legacyRenderer->render(world, camera, window, target, blockBreak);
-
-        // Update frame output from legacy state (bridge)
-        m_lastFrameOutput.hasDeferredInputs = m_legacyRenderer->isDeferredFrameActive();
-        m_lastFrameOutput.gbufferDepthTex = m_legacyRenderer->gbufDepthTexture();
-        m_lastFrameOutput.weatherMaskTex = m_legacyRenderer->weatherMaskTexture();
-
-        // Convert HeldItemShadowData to FirstPersonShadowData (field-by-field copy)
-        auto legacyShadow = m_legacyRenderer->getHeldItemShadowData();
-        for (int i = 0; i < 4; ++i) {
-            m_lastFrameOutput.heldItemShadow.cascadeViewProj[i] = legacyShadow.cascadeViewProj[i];
-            m_lastFrameOutput.heldItemShadow.cascadeSplitFar[i] = legacyShadow.cascadeSplitFar[i];
-            m_lastFrameOutput.heldItemShadow.cascadeTexelWorldSize[i] = legacyShadow.cascadeTexelWorldSize[i];
-        }
-        m_lastFrameOutput.heldItemShadow.shadowTexture = legacyShadow.shadowTexture;
-        m_lastFrameOutput.heldItemShadow.shadowDepthRaw = legacyShadow.shadowDepthRaw;
-        m_lastFrameOutput.heldItemShadow.shadowDepthAll = legacyShadow.shadowDepthAll;
-        m_lastFrameOutput.heldItemShadow.shadowDepthAllRaw = legacyShadow.shadowDepthAllRaw;
-        m_lastFrameOutput.heldItemShadow.shadowColor0 = legacyShadow.shadowColor0;
-        m_lastFrameOutput.heldItemShadow.shadowColor1 = legacyShadow.shadowColor1;
-        m_lastFrameOutput.heldItemShadow.cameraPos = legacyShadow.cameraPos;
-        m_lastFrameOutput.heldItemShadow.sunDirection = legacyShadow.sunDirection;
-        m_lastFrameOutput.heldItemShadow.shadowDistance = legacyShadow.shadowDistance;
-        m_lastFrameOutput.heldItemShadow.constantBias = legacyShadow.constantBias;
-        m_lastFrameOutput.heldItemShadow.slopeBias = legacyShadow.slopeBias;
-        m_lastFrameOutput.heldItemShadow.normalOffset = legacyShadow.normalOffset;
-        m_lastFrameOutput.heldItemShadow.softness = legacyShadow.softness;
-        m_lastFrameOutput.heldItemShadow.pcssStrength = legacyShadow.pcssStrength;
-        m_lastFrameOutput.heldItemShadow.cascadeCount = legacyShadow.cascadeCount;
-        m_lastFrameOutput.heldItemShadow.softShadowsEnabled = legacyShadow.softShadowsEnabled;
-        m_lastFrameOutput.heldItemShadow.pcssShadowsEnabled = legacyShadow.pcssShadowsEnabled;
-        m_lastFrameOutput.heldItemShadow.shadowsEnabled = legacyShadow.shadowsEnabled;
-        m_lastFrameOutput.heldItemShadow.skyIntensity = legacyShadow.skyIntensity;
+        syncFrameOutputFromLegacyRenderer();
     }
 }
 
@@ -424,6 +393,45 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
         m_shared.threadPool = renderer->getThreadPool();
         // Note: commonTargets will be added when CommonFrameTargets is fully integrated
     }
+}
+
+void RenderScene::syncFrameOutputFromLegacyRenderer() {
+    if (m_legacyRenderer == nullptr) {
+        return;
+    }
+
+    // Keep FrameOutput current while Game still drives legacy Renderer passes directly.
+    m_lastFrameOutput.hasDeferredInputs = m_legacyRenderer->isDeferredFrameActive();
+    m_lastFrameOutput.gbufferDepthTex = m_legacyRenderer->gbufDepthTexture();
+    m_lastFrameOutput.weatherMaskTex = m_legacyRenderer->weatherMaskTexture();
+
+    const auto legacyShadow = m_legacyRenderer->getHeldItemShadowData();
+    FirstPersonShadowData heldItemShadow{};
+    for (int i = 0; i < 4; ++i) {
+        heldItemShadow.cascadeViewProj[i] = legacyShadow.cascadeViewProj[i];
+        heldItemShadow.cascadeSplitFar[i] = legacyShadow.cascadeSplitFar[i];
+        heldItemShadow.cascadeTexelWorldSize[i] = legacyShadow.cascadeTexelWorldSize[i];
+    }
+    heldItemShadow.shadowTexture = legacyShadow.shadowTexture;
+    heldItemShadow.shadowDepthRaw = legacyShadow.shadowDepthRaw;
+    heldItemShadow.shadowDepthAll = legacyShadow.shadowDepthAll;
+    heldItemShadow.shadowDepthAllRaw = legacyShadow.shadowDepthAllRaw;
+    heldItemShadow.shadowColor0 = legacyShadow.shadowColor0;
+    heldItemShadow.shadowColor1 = legacyShadow.shadowColor1;
+    heldItemShadow.cameraPos = legacyShadow.cameraPos;
+    heldItemShadow.sunDirection = legacyShadow.sunDirection;
+    heldItemShadow.shadowDistance = legacyShadow.shadowDistance;
+    heldItemShadow.constantBias = legacyShadow.constantBias;
+    heldItemShadow.slopeBias = legacyShadow.slopeBias;
+    heldItemShadow.normalOffset = legacyShadow.normalOffset;
+    heldItemShadow.softness = legacyShadow.softness;
+    heldItemShadow.pcssStrength = legacyShadow.pcssStrength;
+    heldItemShadow.cascadeCount = legacyShadow.cascadeCount;
+    heldItemShadow.softShadowsEnabled = legacyShadow.softShadowsEnabled;
+    heldItemShadow.pcssShadowsEnabled = legacyShadow.pcssShadowsEnabled;
+    heldItemShadow.shadowsEnabled = legacyShadow.shadowsEnabled;
+    heldItemShadow.skyIntensity = legacyShadow.skyIntensity;
+    m_lastFrameOutput.heldItemShadow = heldItemShadow;
 }
 
 PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, const Camera& camera,

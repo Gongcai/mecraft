@@ -108,6 +108,7 @@ public:
 
     // Legacy compatibility (temporary bridge to existing Renderer)
     void setLegacyRenderer(Renderer* renderer);
+    void syncFrameOutputFromLegacyRenderer();
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().

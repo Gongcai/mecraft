@@ -377,6 +377,7 @@ void Game::renderFrame(const float frameTime) {
         breakData.blockPos = playerQuery.getBreakTargetBlock();
     }
     m_renderer.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
+    m_renderScene.syncFrameOutputFromLegacyRenderer();
 
     ecs::PlayerQuery playerQuery(reg);
     m_renderer.setEyeInWater(playerQuery.isEyesInWater());
@@ -407,36 +408,8 @@ void Game::renderFrame(const float frameTime) {
             }
             m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
             // Pass shadow data from deferred pipeline to held item renderer.
-            {
-                const auto& sd = m_renderScene.getHeldItemShadowData();
-                FirstPersonHeldItemRenderer::ShadowData shadow{};
-                for (int i = 0; i < 4; ++i) {
-                    shadow.cascadeViewProj[i] = sd.cascadeViewProj[i];
-                    shadow.cascadeSplitFar[i] = sd.cascadeSplitFar[i];
-                    shadow.cascadeTexelWorldSize[i] = sd.cascadeTexelWorldSize[i];
-                }
-                shadow.shadowTexture = sd.shadowTexture;
-                shadow.shadowDepthRaw = sd.shadowDepthRaw;
-                shadow.shadowDepthAll = sd.shadowDepthAll;
-                shadow.shadowDepthAllRaw = sd.shadowDepthAllRaw;
-                shadow.shadowColor0 = sd.shadowColor0;
-                shadow.shadowColor1 = sd.shadowColor1;
-                shadow.cameraPos = sd.cameraPos;
-                shadow.sunDirection = sd.sunDirection;
-                shadow.shadowDistance = sd.shadowDistance;
-                shadow.constantBias = sd.constantBias;
-                shadow.slopeBias = sd.slopeBias;
-                shadow.normalOffset = sd.normalOffset;
-                shadow.softness = sd.softness;
-                shadow.pcssStrength = sd.pcssStrength;
-                shadow.cascadeCount = sd.cascadeCount;
-                shadow.softShadowsEnabled = sd.softShadowsEnabled;
-                shadow.pcssShadowsEnabled = sd.pcssShadowsEnabled;
-                shadow.shadowsEnabled = sd.shadowsEnabled;
-                shadow.skyIntensity = sd.skyIntensity;
-                shadow.ambientStrength = 0.55f;
-                m_firstPersonHeldItemRenderer.setShadowData(shadow);
-            }
+            m_firstPersonHeldItemRenderer.setShadowData(
+                FirstPersonHeldItemRenderer::fromFirstPersonShadowData(m_renderScene.getHeldItemShadowData()));
             m_firstPersonHeldItemRenderer.render(m_window,
                                                  inventory,
                                                  heldItemMotion,
