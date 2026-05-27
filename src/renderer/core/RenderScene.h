@@ -109,6 +109,15 @@ public:
     // Legacy compatibility (temporary bridge to existing Renderer)
     void setLegacyRenderer(Renderer* renderer);
 
+    /// Build PostProcessEffects from current settings and world state.
+    /// Replaces the ~70 line parameter assembly in Game::renderFrame().
+    PostProcessEffects buildPostProcessEffects(const World& world, const Camera& camera,
+                                                const Window& window, float cameraRainVisibility,
+                                                float screenRollRadians) const;
+
+    /// Get held item shadow data from the last frame output.
+    const FirstPersonShadowData& getHeldItemShadowData() const { return m_lastFrameOutput.heldItemShadow; }
+
 private:
     /// Build FrameContext from world state
     FrameContext buildFrameContext(const World& world, const Camera& camera, const Window& window);

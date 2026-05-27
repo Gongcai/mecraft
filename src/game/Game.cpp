@@ -402,77 +402,12 @@ void Game::renderFrame(const float frameTime) {
     m_renderer.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
 
     ecs::PlayerQuery playerQuery(reg);
-    PostProcessEffects effects;
-    effects.underwaterEnabled = playerQuery.isEyesInWater();
-    m_renderer.setEyeInWater(effects.underwaterEnabled);
-    m_renderScene.setEyeInWater(effects.underwaterEnabled);
-    effects.screenRollRadians = fallRollRadians;
-    const Renderer::RenderPipelineSettings pipelineSettings = m_renderer.getRenderPipelineSettings();
-    effects.bloomEnabled = pipelineSettings.bloomEnabled;
-    effects.bloomThreshold = pipelineSettings.bloomThreshold;
-    effects.bloomStrength = pipelineSettings.bloomStrength;
-    effects.autoExposureEnabled = pipelineSettings.autoExposureEnabled;
-    effects.autoExposureMin = pipelineSettings.autoExposureMin;
-    effects.autoExposureMax = pipelineSettings.autoExposureMax;
-    effects.autoExposureSpeed = pipelineSettings.autoExposureSpeed;
-    effects.autoExposureBias = pipelineSettings.autoExposureBias;
-    effects.autoExposureDayFactor = m_world.getDayNightSystem().getSkyIntensity();
-    effects.sunRaysEnabled = pipelineSettings.sunRaysEnabled;
-    effects.sunRayStrength = pipelineSettings.sunRayStrength;
-    effects.shaderpackGradingEnabled = pipelineSettings.shaderpackGradingEnabled;
-    effects.tonemapMode = pipelineSettings.tonemapMode;
-    effects.colorTemperature = pipelineSettings.colorTemperature;
-    effects.vibrance = pipelineSettings.vibrance;
-    effects.highlightCompression = pipelineSettings.highlightCompression;
-    effects.filmEmulationStrength = pipelineSettings.filmEmulationStrength;
-    effects.redModifierStrength = pipelineSettings.redModifierStrength;
-    effects.colorLuma = glm::vec3(pipelineSettings.colorLumaR,
-                                  pipelineSettings.colorLumaG,
-                                  pipelineSettings.colorLumaB);
-    effects.splitToneStrength = pipelineSettings.splitToneStrength;
-    effects.vignetteStrength = pipelineSettings.vignetteStrength;
-    effects.noiseDitherStrength = pipelineSettings.noiseDitherStrength;
-    effects.sharpenStrength = pipelineSettings.sharpenStrength;
-    effects.exposure = pipelineSettings.exposure;
-    effects.gamma = pipelineSettings.gamma;
-    effects.saturation = pipelineSettings.saturation;
-    effects.contrast = pipelineSettings.contrast;
-    effects.purkinjeShiftEnabled = pipelineSettings.purkinjeShiftEnabled;
-    effects.bloomyFogEnabled = pipelineSettings.bloomyFogEnabled;
-    {
-        const WeatherState& weather = m_world.getWeatherSystem().getRenderState();
-        const WeatherDerived& derived = m_world.getWeatherSystem().getDerived();
-        effects.weatherWetness = weather.wetness;
-        effects.weatherStorm = weather.storm;
-        effects.snowStrength = derived.snowStrength;
-        effects.skyWetness = derived.skyWetness;
-        effects.fogWetness = derived.fogWetness;
-        effects.cloudWetness = derived.cloudWetness;
-    }
-    effects.weatherExposureBias = pipelineSettings.weatherExposureBias;
-    effects.weatherPostRainFog = pipelineSettings.weatherPostRainFog;
-    effects.cameraRainVisibility = cameraRainVisibility;
-    effects.postprocessDebugMode = pipelineSettings.postprocessDebugMode;
-    {
-        const float sunAngle = m_world.getDayNightSystem().getCelestialAngleRadians();
-        glm::vec3 sunDirection(0.25f, std::sin(sunAngle), -std::cos(sunAngle));
-        if (glm::length(sunDirection) > 0.0001f) {
-            sunDirection = glm::normalize(sunDirection);
-        } else {
-            sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
-        }
+    m_renderer.setEyeInWater(playerQuery.isEyesInWater());
+    m_renderScene.setEyeInWater(playerQuery.isEyesInWater());
 
-        const glm::mat4 viewProj = finalCamera.getProjectionMatrix(m_window.getAspectRatio()) * finalCamera.getViewMatrix();
-        const glm::vec4 clip = viewProj * glm::vec4(finalCamera.getPosition() + sunDirection * 256.0f, 1.0f);
-        if (clip.w > 0.0001f) {
-            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f);
-            const float onScreenX = 1.0f - std::clamp(std::abs(effects.sunScreenPos.x - 0.5f) * 2.0f, 0.0f, 1.0f);
-            const float onScreenY = 1.0f - std::clamp(std::abs(effects.sunScreenPos.y - 0.5f) * 2.0f, 0.0f, 1.0f);
-            const float horizonFade = std::clamp((sunDirection.y + 0.05f) / 0.45f, 0.0f, 1.0f);
-            effects.sunVisibility = std::clamp(onScreenX * onScreenY * horizonFade, 0.0f, 1.0f);
-        }
-    }
+    // Phase 11: Build post-process effects via RenderScene (replaces ~70 lines of parameter assembly)
+    PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
+        m_world, finalCamera, m_window, cameraRainVisibility, fallRollRadians);
     m_postProcessRenderer.setEffects(effects);
 
     HeldItemPreviewMotion heldItemMotion;
@@ -496,7 +431,7 @@ void Game::renderFrame(const float frameTime) {
             m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
             // Pass shadow data from deferred pipeline to held item renderer.
             {
-                const auto sd = m_renderer.getHeldItemShadowData();
+                const auto& sd = m_renderScene.getHeldItemShadowData();
                 FirstPersonHeldItemRenderer::ShadowData shadow{};
                 for (int i = 0; i < 4; ++i) {
                     shadow.cascadeViewProj[i] = sd.cascadeViewProj[i];

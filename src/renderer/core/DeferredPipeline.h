@@ -48,6 +48,9 @@ public:
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
 
+    // Settings (set from RenderScene before renderFrame)
+    void setCurrentSettings(const RenderSettings& settings) { m_currentSettings = settings; }
+
     // Pass accessors
     SsaoPass* ssaoPass() const { return m_ssaoPass.get(); }
     VelocityPass* velocityPass() const { return m_velocityPass.get(); }

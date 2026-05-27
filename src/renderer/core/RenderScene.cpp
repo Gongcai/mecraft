@@ -99,12 +99,16 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
     // All shared resources must be populated AND pipeline must have been init'd.
     const bool newPipelineReady = m_activePipeline &&
                                   m_shared.terrain &&
-                                  m_shared.commonTargets &&
+                                  m_shared.deferredTargets &&
                                   m_shared.sky &&
                                   m_shared.resources;
 
     if (newPipelineReady && m_newPipelineActive) {
         // New pipeline path (Phase 10+ will fully implement this)
+        // Pass settings to deferred pipeline
+        if (m_deferredPipeline) {
+            m_deferredPipeline->setCurrentSettings(m_settings);
+        }
         m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext);
 
         // Post-process is handled by RenderScene for both pipelines
@@ -419,6 +423,87 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
         m_shared.threadPool = renderer->getThreadPool();
         // Note: commonTargets will be added when CommonFrameTargets is fully integrated
     }
+}
+
+PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, const Camera& camera,
+                                                         const Window& window, float cameraRainVisibility,
+                                                         float screenRollRadians) const {
+    PostProcessEffects effects;
+
+    // Basic state
+    effects.underwaterEnabled = m_eyeInWater;
+    effects.screenRollRadians = screenRollRadians;
+
+    // Post-process settings from RenderSettings
+    effects.bloomEnabled = m_settings.postProcess.bloomEnabled;
+    effects.bloomThreshold = m_settings.postProcess.bloomThreshold;
+    effects.bloomStrength = m_settings.postProcess.bloomStrength;
+    effects.autoExposureEnabled = m_settings.postProcess.autoExposureEnabled;
+    effects.autoExposureMin = m_settings.postProcess.autoExposureMin;
+    effects.autoExposureMax = m_settings.postProcess.autoExposureMax;
+    effects.autoExposureSpeed = m_settings.postProcess.autoExposureSpeed;
+    effects.autoExposureBias = m_settings.postProcess.autoExposureBias;
+    effects.autoExposureDayFactor = world.getDayNightSystem().getSkyIntensity();
+    effects.sunRaysEnabled = m_settings.postProcess.sunRaysEnabled;
+    effects.sunRayStrength = m_settings.postProcess.sunRayStrength;
+    effects.shaderpackGradingEnabled = true; // Always enabled in current pipeline
+    effects.tonemapMode = m_settings.postProcess.tonemapMode;
+    effects.colorTemperature = m_settings.postProcess.colorTemperature;
+    effects.vibrance = m_settings.postProcess.vibrance;
+    effects.highlightCompression = m_settings.postProcess.highlightCompression;
+    effects.filmEmulationStrength = m_settings.postProcess.filmEmulationStrength;
+    effects.redModifierStrength = m_settings.postProcess.redModifierStrength;
+    effects.colorLuma = glm::vec3(m_settings.postProcess.colorLumaR,
+                                   m_settings.postProcess.colorLumaG,
+                                   m_settings.postProcess.colorLumaB);
+    effects.splitToneStrength = m_settings.postProcess.splitToneStrength;
+    effects.vignetteStrength = m_settings.postProcess.vignetteStrength;
+    effects.noiseDitherStrength = m_settings.postProcess.noiseDitherStrength;
+    effects.sharpenStrength = m_settings.postProcess.sharpenStrength;
+    effects.exposure = m_settings.postProcess.exposure;
+    effects.gamma = m_settings.postProcess.gamma;
+    effects.saturation = m_settings.postProcess.saturation;
+    effects.contrast = m_settings.postProcess.contrast;
+    effects.purkinjeShiftEnabled = m_settings.postProcess.purkinjeShiftEnabled;
+    effects.bloomyFogEnabled = m_settings.postProcess.bloomyFogEnabled;
+
+    // Weather state
+    const WeatherState& weather = world.getWeatherSystem().getRenderState();
+    const WeatherDerived& derived = world.getWeatherSystem().getDerived();
+    effects.weatherWetness = weather.wetness;
+    effects.weatherStorm = weather.storm;
+    effects.snowStrength = derived.snowStrength;
+    effects.skyWetness = derived.skyWetness;
+    effects.fogWetness = derived.fogWetness;
+    effects.cloudWetness = derived.cloudWetness;
+    effects.weatherExposureBias = m_settings.weather.exposureBias;
+    effects.weatherPostRainFog = m_settings.weather.postRainFog;
+    effects.cameraRainVisibility = cameraRainVisibility;
+    effects.postprocessDebugMode = m_settings.debug.postprocessDebugMode;
+
+    // Sun screen position calculation
+    {
+        const float sunAngle = world.getDayNightSystem().getCelestialAngleRadians();
+        glm::vec3 sunDirection(0.25f, std::sin(sunAngle), -std::cos(sunAngle));
+        if (glm::length(sunDirection) > 0.0001f) {
+            sunDirection = glm::normalize(sunDirection);
+        } else {
+            sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+
+        const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
+        const glm::vec4 clip = viewProj * glm::vec4(camera.getPosition() + sunDirection * 256.0f, 1.0f);
+        if (clip.w > 0.0001f) {
+            const glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f);
+            const float onScreenX = 1.0f - std::clamp(std::abs(effects.sunScreenPos.x - 0.5f) * 2.0f, 0.0f, 1.0f);
+            const float onScreenY = 1.0f - std::clamp(std::abs(effects.sunScreenPos.y - 0.5f) * 2.0f, 0.0f, 1.0f);
+            const float horizonFade = std::clamp((sunDirection.y + 0.05f) / 0.45f, 0.0f, 1.0f);
+            effects.sunVisibility = std::clamp(onScreenX * onScreenY * horizonFade, 0.0f, 1.0f);
+        }
+    }
+
+    return effects;
 }
 
 FrameContext RenderScene::buildFrameContext(const World& world, const Camera& camera, const Window& window) {
