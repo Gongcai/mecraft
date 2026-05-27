@@ -111,6 +111,10 @@ private:
     /// Render held item (first/third person) with shadow data.
     void renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotion& motion);
 
+    /// Render UI overlay (player stats, dashboard, state machine).
+    void renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
+                  const HeldItemPreviewMotion& motion, Camera& camera);
+
     // Camera controller (first/third person)
     CameraController m_cameraController;
     bool m_initialized = false;

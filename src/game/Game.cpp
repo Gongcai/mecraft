@@ -378,31 +378,8 @@ void Game::renderFrame(const float frameTime) {
     }
     m_renderer.renderDeferredDebugOverlay(m_window);
 
-    PlayerStatsData playerStats;
-    playerStats.health = playerQuery.getHealth();
-    playerStats.maxHealth = playerQuery.getMaxHealth();
-    playerStats.armor = playerQuery.getArmor();
-    playerStats.maxArmor = playerQuery.getMaxArmor();
-    playerStats.food = playerQuery.getFood();
-    playerStats.maxFood = playerQuery.getMaxFood();
-
-    // Hide survival stats in creative mode
-    if (reg.ctxHas<ecs::GameplayRuntimeContext>()) {
-        playerStats.showSurvivalStats = reg.ctxGet<ecs::GameplayRuntimeContext>().gameplayMode != GameplayMode::Creative;
-    }
-
-    m_uiRenderer.render(m_window, inventory, playerStats, heldItemMotion, m_input.snapshot());
-    m_stateMachine.render();
-#ifdef MECRAFT_DEBUG
-    m_dashboard.render(reg,
-                       m_world,
-                       finalCamera,
-                       m_renderer,
-                       m_renderScene,
-                       m_postProcessRenderer,
-                       m_uiRenderer,
-                       m_dashboardProfilerStats);
-#endif
+    // UI rendering
+    renderUI(reg, inventory, heldItemMotion, finalCamera);
     m_window.swapBuffers();
 }
 
@@ -447,6 +424,29 @@ void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotio
         static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
         m_firstPersonHeldItemRenderer.setContinuousSwing(false);
     }
+}
+
+void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
+                    const HeldItemPreviewMotion& motion, Camera& camera) {
+    ecs::PlayerQuery playerQuery(reg);
+    PlayerStatsData playerStats;
+    playerStats.health = playerQuery.getHealth();
+    playerStats.maxHealth = playerQuery.getMaxHealth();
+    playerStats.armor = playerQuery.getArmor();
+    playerStats.maxArmor = playerQuery.getMaxArmor();
+    playerStats.food = playerQuery.getFood();
+    playerStats.maxFood = playerQuery.getMaxFood();
+
+    if (reg.ctxHas<ecs::GameplayRuntimeContext>()) {
+        playerStats.showSurvivalStats = reg.ctxGet<ecs::GameplayRuntimeContext>().gameplayMode != GameplayMode::Creative;
+    }
+
+    m_uiRenderer.render(m_window, inventory, playerStats, motion, m_input.snapshot());
+    m_stateMachine.render();
+#ifdef MECRAFT_DEBUG
+    m_dashboard.render(reg, m_world, camera, m_renderer, m_renderScene,
+                       m_postProcessRenderer, m_uiRenderer, m_dashboardProfilerStats);
+#endif
 }
 
 #ifdef MECRAFT_DEBUG
