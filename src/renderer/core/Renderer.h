@@ -653,37 +653,27 @@ private:
     WorldRenderBuffer m_worldRenderBuffer;
     bool m_useMultiDrawIndirect = true;
 
+    // Shaders actively used by Renderer rendering methods
     Shader* m_chunkShader = nullptr;
     Shader* m_chunkForwardShader = nullptr;
     Shader* m_transparentCompositeShader = nullptr;
-    Shader* m_waterCompositeShader = nullptr;
     Shader* m_chunkGBufferShader = nullptr;
-    Shader* m_entityGBufferShader = nullptr;
-    Shader* m_shadowDepthShader = nullptr;
-    Shader* m_entityShadowShader = nullptr;
-    Shader* m_deferredLightingShader = nullptr;
-    Shader* m_sceneCompositeShader = nullptr;
-    Shader* m_ssaoShader = nullptr;
-    Shader* m_velocityShader = nullptr;
     Shader* m_particleGBufferShader = nullptr;
-    Shader* m_volumetricFogShader = nullptr;
-    Shader* m_volumetricTemporalShader = nullptr;
-    Shader* m_volumetricCompositeShader = nullptr;
-    Shader* m_reflectionShader = nullptr;
-    Shader* m_cloudShader = nullptr;
-    Shader* m_bloomExtractShader = nullptr;
-    Shader* m_bloomBlurShader = nullptr;
-    Shader* m_temporalResolveShader = nullptr;
-    Shader* m_reflectionFilterShader = nullptr;
-    Shader* m_reflectionTemporalShader = nullptr;
-    Shader* m_ssaoFilterShader = nullptr;
-    Shader* m_ssaoTemporalShader = nullptr;
-    Shader* m_ssaoUpsampleShader = nullptr;
-    Shader* m_motionBlurShader = nullptr;
-    Shader* m_dofShader = nullptr;
-   // Shader* m_uiShader = nullptr;
+    Shader* m_shadowDepthShader = nullptr;
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;
+
+    // Shaders used only for null-check guards (loaded but operations delegated to passes)
+    Shader* m_entityGBufferShader = nullptr;
+    Shader* m_entityShadowShader = nullptr;
+
+    // Shaders fully owned by pass classes — removed from Renderer (Phase 10f):
+    // m_waterCompositeShader, m_deferredLightingShader, m_sceneCompositeShader,
+    // m_ssaoShader, m_velocityShader, m_volumetricFogShader, m_volumetricTemporalShader,
+    // m_volumetricCompositeShader, m_reflectionShader, m_cloudShader, m_bloomExtractShader,
+    // m_bloomBlurShader, m_temporalResolveShader, m_reflectionFilterShader,
+    // m_reflectionTemporalShader, m_ssaoFilterShader, m_ssaoTemporalShader,
+    // m_ssaoUpsampleShader, m_motionBlurShader, m_dofShader
     ResourceMgr* m_resourceMgr = nullptr;
 
     GLuint m_outlineVao = 0;

@@ -560,6 +560,7 @@ void Game::renderFrame(const float frameTime) {
                        m_world,
                        finalCamera,
                        m_renderer,
+                       m_renderScene,
                        m_postProcessRenderer,
                        m_uiRenderer,
                        m_dashboardProfilerStats);

@@ -119,7 +119,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
     m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
-    m_waterCompositeShader = resourceMgr.getShader("water_composite");
     if (m_transparentCompositeShader == nullptr) {
         m_transparentCompositeShader = m_chunkForwardShader;
     }
@@ -128,8 +127,6 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
-    m_bloomExtractShader = resourceMgr.getShader("bloom_extract");
-    m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
 
     // Phase 9a: DeferredPipeline owns all extracted passes
     m_deferredPipeline = std::make_unique<DeferredPipeline>();
@@ -235,25 +232,13 @@ void Renderer::shutdown() {
     m_chunkShader = nullptr;
     m_chunkForwardShader = nullptr;
     m_transparentCompositeShader = nullptr;
-    m_waterCompositeShader = nullptr;
     m_chunkGBufferShader = nullptr;
     m_shadowDepthShader = nullptr;
-    m_deferredLightingShader = nullptr;
-    m_sceneCompositeShader = nullptr;
-    m_ssaoShader = nullptr;
-    m_velocityShader = nullptr;
-    m_volumetricFogShader = nullptr;
-    m_volumetricTemporalShader = nullptr;
-    m_volumetricCompositeShader = nullptr;
-    m_reflectionShader = nullptr;
-    m_cloudShader = nullptr;
-    m_bloomExtractShader = nullptr;
-    m_bloomBlurShader = nullptr;
-    m_temporalResolveShader = nullptr;
-    m_reflectionFilterShader = nullptr;
-    m_reflectionTemporalShader = nullptr;
-    m_ssaoFilterShader = nullptr;
-    m_motionBlurShader = nullptr;
+    m_entityGBufferShader = nullptr;
+    m_entityShadowShader = nullptr;
+    m_particleGBufferShader = nullptr;
+    m_outlineShader = nullptr;
+    m_breakOverlayShader = nullptr;
     m_deferredFrameActive = false;
 }
 

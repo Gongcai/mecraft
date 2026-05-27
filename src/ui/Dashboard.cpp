@@ -49,6 +49,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
                        World &world,
                        Camera &camera,
                        Renderer &render,
+                       RenderScene& renderScene,
                        PostProcessRenderer& postProcess,
                        UIRenderer& uiRenderer,
                        const FrameProfilerStats& profilerStats) {
@@ -65,7 +66,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
         showPlayerStats(registry);
         showCameraStats(camera);
         showWorldStats(world, registry);
-        showPerformanceStats(world, render, postProcess, profilerStats);
+        showPerformanceStats(world, render, renderScene, postProcess, profilerStats);
         showCrosshairSettings(uiRenderer);
         showHotbarSettings(uiRenderer);
         showInventoryPanelSettings(uiRenderer);
@@ -190,7 +191,7 @@ void Dashboard::showCameraStats( Camera &camera) {
     }
 }
 
-void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats) {
+void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
@@ -992,6 +993,20 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, PostProcess
         ImGui::Text("Hybrid Deferred: %s", render.isHybridDeferredReady() ? "ready" : "not ready");
         if (pipelineChanged) {
             render.setRenderPipelineSettings(pipeline);
+            // Phase 10e: Sync settings to RenderScene
+            RenderSettings rs = renderScene.getSettings();
+            rs.ssao.enabled = pipeline.ssaoEnabled;
+            rs.ssao.filterEnabled = pipeline.ssaoFilterEnabled;
+            rs.ssao.temporalEnabled = pipeline.ssaoTemporalEnabled;
+            rs.ssao.historyWeight = pipeline.ssaoHistoryWeight;
+            rs.ssao.samples = pipeline.ssaoSamples;
+            rs.reflection.temporalEnabled = pipeline.reflectionTemporalEnabled;
+            rs.reflection.historyWeight = pipeline.reflectionHistoryWeight;
+            rs.postProcess.exposure = pipeline.exposure;
+            rs.postProcess.gamma = pipeline.gamma;
+            rs.postProcess.saturation = pipeline.saturation;
+            rs.postProcess.contrast = pipeline.contrast;
+            renderScene.setSettings(rs);
         }
 
         ImGui::Separator();
