@@ -405,6 +405,7 @@ void Game::renderFrame(const float frameTime) {
     PostProcessEffects effects;
     effects.underwaterEnabled = playerQuery.isEyesInWater();
     m_renderer.setEyeInWater(effects.underwaterEnabled);
+    m_renderScene.setEyeInWater(effects.underwaterEnabled);
     effects.screenRollRadians = fallRollRadians;
     const Renderer::RenderPipelineSettings pipelineSettings = m_renderer.getRenderPipelineSettings();
     effects.bloomEnabled = pipelineSettings.bloomEnabled;
