@@ -118,6 +118,13 @@ public:
     /// Get held item shadow data from the last frame output.
     const FirstPersonShadowData& getHeldItemShadowData() const { return m_lastFrameOutput.heldItemShadow; }
 
+    /// Get camera rain visibility from the current frame context.
+    float getCameraRainVisibility() const { return m_currentContext.cameraRainVisibility; }
+
+    /// Pre-compute camera rain visibility for a given camera position.
+    /// Used by Game before rain rendering.
+    float computeCameraRainVisibility(const World& world, const glm::vec3& cameraPos) const;
+
 private:
     /// Build FrameContext from world state
     FrameContext buildFrameContext(const World& world, const Camera& camera, const Window& window);

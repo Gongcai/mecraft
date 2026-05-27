@@ -177,6 +177,7 @@ struct FrameContext {
     bool eyeInWater = false;
     bool moonShadowActive = false;
     bool hasPreviousFrame = false;
+    float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
 
     // Shared resources (non-owning pointer)
     SharedRenderResources* shared = nullptr;

@@ -333,31 +333,8 @@ void Game::renderFrame(const float frameTime) {
         // Particles now render inside Renderer::renderParticlesToSceneResolved()
         // after volumetric fog composite, so they receive unified fog.
 
-        // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
-        // skyLightAtCamera = fraction reaching sky. Gives smooth transitions at
-        // tree edges, doorways, overhangs instead of binary 0/1.
-        // Used by both RainRenderer and PostProcessEffects.
-        {
-            const glm::vec3 camPos = finalCamera.getPosition();
-            constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
-            constexpr int kRayCount = 5;
-            int skyHits = 0;
-            const int startY = static_cast<int>(std::floor(camPos.y)) + 1;
-            for (int r = 0; r < kRayCount; ++r) {
-                const int bx = static_cast<int>(std::floor(camPos.x + kOffsets[r][0]));
-                const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
-                bool blocked = false;
-                for (int y = startY; y < 256; ++y) {
-                    BlockID above = m_world.getBlock(bx, y, bz);
-                    if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
-                        blocked = true;
-                        break;
-                    }
-                }
-                if (!blocked) ++skyHits;
-            }
-            cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
-        }
+        // Multi-ray outdoor check: compute camera rain visibility via RenderScene.
+        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
 
         // Precipitation particles: render after opaque geometry, before transparent compositing.
         {

@@ -5,6 +5,7 @@
 #include "engine/camera/Camera.h"
 #include "engine/platform/Window.h"
 #include "../../world/World.h"
+#include "../../world/block/Block.h"
 #include "engine/platform/Time.h"
 #include "../renderers/GameplaySkyRenderer.h"
 
@@ -645,6 +646,31 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.moonShadowActive = ctx.skyColors.moonVisibility > ctx.skyColors.sunVisibility;
     ctx.eyeInWater = m_eyeInWater;
 
+    // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
+    // cameraRainVisibility = fraction reaching sky. Gives smooth transitions at
+    // tree edges, doorways, overhangs instead of binary 0/1.
+    {
+        const glm::vec3 camPos = ctx.camera.position;
+        constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
+        constexpr int kRayCount = 5;
+        int skyHits = 0;
+        const int startY = static_cast<int>(std::floor(camPos.y)) + 1;
+        for (int r = 0; r < kRayCount; ++r) {
+            const int bx = static_cast<int>(std::floor(camPos.x + kOffsets[r][0]));
+            const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
+            bool blocked = false;
+            for (int y = startY; y < 256; ++y) {
+                BlockID above = world.getBlock(bx, y, bz);
+                if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (!blocked) ++skyHits;
+        }
+        ctx.cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
+    }
+
     // Shared resources and world pointer
     ctx.shared = &m_shared;
     ctx.world = &world;
@@ -659,4 +685,25 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
 void RenderScene::invalidateFrameHistory() {
     // Phase 1: Notify legacy renderer to invalidate temporal resources
     // In later phases, this will reset TAA history, SSAO history, etc.
+}
+
+float RenderScene::computeCameraRainVisibility(const World& world, const glm::vec3& cameraPos) const {
+    constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
+    constexpr int kRayCount = 5;
+    int skyHits = 0;
+    const int startY = static_cast<int>(std::floor(cameraPos.y)) + 1;
+    for (int r = 0; r < kRayCount; ++r) {
+        const int bx = static_cast<int>(std::floor(cameraPos.x + kOffsets[r][0]));
+        const int bz = static_cast<int>(std::floor(cameraPos.z + kOffsets[r][1]));
+        bool blocked = false;
+        for (int y = startY; y < 256; ++y) {
+            BlockID above = world.getBlock(bx, y, bz);
+            if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
+                blocked = true;
+                break;
+            }
+        }
+        if (!blocked) ++skyHits;
+    }
+    return static_cast<float>(skyHits) / static_cast<float>(kRayCount);
 }
