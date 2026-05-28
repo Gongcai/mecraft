@@ -1,5 +1,6 @@
 #include "WaterCompositePass.h"
 #include "../targets/DeferredRenderTargets.h"
+#include "../gl/GlStateGuard.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
@@ -43,7 +44,18 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         return false;
     }
 
-    if (!transparentPlan.hasWater()) {
+    const auto hasNonMdiWater = [&transparentEntries]() {
+        for (const auto& entry : transparentEntries) {
+            if (!entry.chunk) continue;
+            const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+            if (sc && sc->getMesh().waterVertexCount > 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (useMultiDrawIndirect ? !transparentPlan.hasWater() : !hasNonMdiWater()) {
         return false;
     }
 
@@ -150,6 +162,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glDepthFunc(GL_LESS);
     glDisable(GL_BLEND);
     glDepthMask(GL_FALSE);
+    renderer::gl::ScopedCullFaceDisable cullFaceGuard;
 
     int drawCallCount = 0;
     if (useMultiDrawIndirect) {
@@ -200,8 +213,12 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
             });
         for (const auto& item : waterItems) {
             const SubChunk* sc = item.entry->chunk->getSubChunk(item.entry->scy);
-            glBindVertexArray(sc->getMesh().transparentVao);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(sc->getMesh().waterVertexCount));
+            const SubChunkMesh& mesh = sc->getMesh();
+            const uint32_t firstWaterVertex = mesh.transparentVertexCount - mesh.waterVertexCount;
+            glBindVertexArray(mesh.transparentVao);
+            glDrawArrays(GL_TRIANGLES,
+                         static_cast<GLint>(firstWaterVertex),
+                         static_cast<GLsizei>(mesh.waterVertexCount));
             ++drawCallCount;
         }
     }

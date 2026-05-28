@@ -610,9 +610,13 @@ void TerrainRenderCache::drainMeshingResults(const World& world) {
             mesh.uploadCutoutDistance(result.meshData.cutoutDistanceVertices);
 
             std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
+            const uint32_t genericTransparentVertexCount = static_cast<uint32_t>(transparentVerts.size());
+            const uint32_t waterVertexCount = static_cast<uint32_t>(result.meshData.waterVertices.size());
             transparentVerts.insert(transparentVerts.end(), result.meshData.waterVertices.begin(), result.meshData.waterVertices.end());
             bakeWorldOffset(transparentVerts);
             mesh.uploadTransparent(transparentVerts);
+            mesh.waterVertexCount = waterVertexCount;
+            mesh.transparentVertexCount = genericTransparentVertexCount + waterVertexCount;
 
             mesh.hasBounds = result.meshData.hasBounds;
             mesh.boundsMin = result.meshData.boundsMin;

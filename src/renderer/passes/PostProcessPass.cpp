@@ -114,7 +114,7 @@ void PostProcessPass::execute(const FrameContext& ctx, const RenderSettings& set
     effects.vignetteStrength = settings.postProcess.vignetteStrength;
     effects.noiseDitherStrength = settings.postProcess.noiseDitherStrength;
     effects.sharpenStrength = settings.postProcess.sharpenStrength;
-    effects.shaderpackGradingEnabled = settings.postProcess.aerialPerspectiveEnabled;
+    effects.shaderpackGradingEnabled = settings.postProcess.shaderpackGradingEnabled;
     effects.purkinjeShiftEnabled = settings.postProcess.purkinjeShiftEnabled;
     effects.bloomyFogEnabled = settings.postProcess.bloomyFogEnabled;
     effects.underwaterEnabled = ctx.eyeInWater;

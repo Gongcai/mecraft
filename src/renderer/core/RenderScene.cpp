@@ -323,6 +323,12 @@ void RenderScene::setHeldBlockLightValue(int value) {
     if (m_legacyRenderer) m_legacyRenderer->setHeldBlockLightValue(value);
 }
 
+void RenderScene::syncFogFromRenderer() {
+    if (m_legacyRenderer) {
+        settings_mapper::syncFogToRenderSettings(m_legacyRenderer->getFogSettings(), m_settings.fog);
+    }
+}
+
 void RenderScene::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
     if (m_legacyRenderer) m_legacyRenderer->renderOpaqueAndCutout(world, camera, window);
 }
@@ -415,7 +421,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, cons
     effects.autoExposureDayFactor = world.getDayNightSystem().getSkyIntensity();
     effects.sunRaysEnabled = m_settings.postProcess.sunRaysEnabled;
     effects.sunRayStrength = m_settings.postProcess.sunRayStrength;
-    effects.shaderpackGradingEnabled = true; // Always enabled in current pipeline
+    effects.shaderpackGradingEnabled = m_settings.postProcess.shaderpackGradingEnabled;
     effects.tonemapMode = m_settings.postProcess.tonemapMode;
     effects.colorTemperature = m_settings.postProcess.colorTemperature;
     effects.vibrance = m_settings.postProcess.vibrance;

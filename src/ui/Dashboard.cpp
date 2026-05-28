@@ -1105,6 +1105,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             render.setFogDensity(fogDensity);
         }
 
+        // Sync fog settings from Renderer to RenderScene
+        renderScene.syncFogFromRenderer();
+
         const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
         ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
         ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);

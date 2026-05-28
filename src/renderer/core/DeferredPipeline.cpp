@@ -111,6 +111,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Per-frame state reset
     m_deferredHistoryUpdatedThisFrame = false;
+    m_waterRenderedBeforeTemporal = false;
 
     // Capture current framebuffer for later restore
     captureCurrentFramebuffer();
@@ -158,7 +159,14 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Shadow pass
     if (m_shadowPass && m_currentSettings.shadow.enabled && m_shadowPass->hasShaders() &&
         m_shared->shadowRenderer && ctx.world) {
-        m_shadowPass->execute(ctx, m_currentSettings, targets, *ctx.world, {}, {}, true);
+        const bool useMultiDrawIndirect = m_shared->terrain != nullptr
+            ? m_shared->terrain->useMultiDrawIndirect()
+            : true;
+        auto shadowOutput = m_shadowPass->execute(
+            ctx, m_currentSettings, targets, *ctx.world,
+            m_transparentBatch, m_transparentPassPlan, useMultiDrawIndirect);
+        m_transparentBatch = std::move(shadowOutput.transparentBatch);
+        m_transparentPassPlan = shadowOutput.transparentPlan;
     }
 
     // SSAO pass
@@ -249,6 +257,13 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     targets.copySceneResolvedToTransparentComposite();
     targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+
+    // Match the legacy split path: if water was not rendered before temporal
+    // resolve, composite it over the already-blitted final scene.
+    if (!m_waterRenderedBeforeTemporal) {
+        renderWaterCompositePass(ctx, false);
+    }
+
     restoreCapturedFramebufferViewport(windowWidth, windowHeight);
 
     // Mark that we now have valid previous frame data for temporal effects
@@ -514,19 +529,26 @@ void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool pr
                                        m_currentSettings.volumetric.fogStrength > 0.001f)) &&
                                      m_volumetricPass && m_volumetricPass->hasShaders();
 
-    m_waterCompositePass->execute(ctx, m_currentSettings, targets, *ctx.world,
-                                   ctx.frameWidth, ctx.frameHeight,
-                                   m_deferredFrameActive, preTemporalResolve,
-                                   m_capturedFramebuffer, m_capturedViewport,
-                                   m_currentSettings.postProcess.sharpenStrength > 0.0f, // transparentCompositeEnabled proxy
-                                   true,  // waterEffectsEnabled
-                                   m_currentSettings.weather.surfaceRipplesEnabled,
-                                   volumetricFogActive,
-                                   true,  // useMultiDrawIndirect
-                                   *m_shared->worldRenderBuffer,
-                                   m_transparentBatch,
-                                   m_transparentPassPlan,
-                                   m_transparentEntries);
+    const bool useMultiDrawIndirect = m_shared->terrain != nullptr
+        ? m_shared->terrain->useMultiDrawIndirect()
+        : true;
+    const bool waterRenderedBeforeTemporal = m_waterCompositePass->execute(
+        ctx, m_currentSettings, targets, *ctx.world,
+        ctx.frameWidth, ctx.frameHeight,
+        m_deferredFrameActive, preTemporalResolve,
+        m_capturedFramebuffer, m_capturedViewport,
+        m_currentSettings.transparent.compositeEnabled,
+        m_currentSettings.transparent.waterEffectsEnabled,
+        m_currentSettings.weather.surfaceRipplesEnabled,
+        volumetricFogActive,
+        useMultiDrawIndirect,
+        *m_shared->worldRenderBuffer,
+        m_transparentBatch,
+        m_transparentPassPlan,
+        m_transparentEntries);
+    if (waterRenderedBeforeTemporal) {
+        m_waterRenderedBeforeTemporal = true;
+    }
 }
 
 FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {

@@ -100,6 +100,10 @@ public:
     void setRenderLocalPlayerModel(bool visible);
     void setHeldBlockLightValue(int value);
 
+    /// Sync fog settings from legacy Renderer to RenderSettings.
+    /// Call this after Dashboard changes fog via Renderer methods.
+    void syncFogFromRenderer();
+
     // Rendering (Phase R1: bridge to legacy Renderer)
     void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
     void renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target,

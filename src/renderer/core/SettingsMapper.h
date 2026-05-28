@@ -66,6 +66,10 @@ inline RenderSettings toRenderSettings(const Renderer::RenderPipelineSettings& p
     rs.volumetric.freezeBias = p.freezeBias;
 
     // Cloud
+    rs.cloud.shadowsEnabled = p.cloudShadowsEnabled;
+    rs.cloud.shadowStrength = p.cloudShadowStrength;
+    rs.cloud.shadowScale = p.cloudShadowScale;
+    rs.cloud.shadowSpeed = p.cloudShadowSpeed;
     rs.cloud.timeScale = p.cloudTimeScale;
     rs.cloud.sceneCloudCompositeStrength = p.sceneCloudCompositeStrength;
 
@@ -75,6 +79,10 @@ inline RenderSettings toRenderSettings(const Renderer::RenderPipelineSettings& p
     rs.reflection.historyWeight = p.reflectionHistoryWeight;
     rs.reflection.filterStrength = p.reflectionFilterStrength;
     rs.reflection.sceneReflectionCompositeStrength = p.sceneReflectionCompositeStrength;
+
+    // Transparent / water
+    rs.transparent.waterEffectsEnabled = p.waterEffectsEnabled;
+    rs.transparent.compositeEnabled = p.transparentCompositeEnabled;
 
     // TAA
     rs.taa.enabled = p.taaEnabled;
@@ -127,6 +135,7 @@ inline RenderSettings toRenderSettings(const Renderer::RenderPipelineSettings& p
     rs.postProcess.noiseDitherStrength = p.noiseDitherStrength;
     rs.postProcess.purkinjeShiftEnabled = p.purkinjeShiftEnabled;
     rs.postProcess.sunRaysEnabled = p.sunRaysEnabled;
+    rs.postProcess.shaderpackGradingEnabled = p.shaderpackGradingEnabled;
     rs.postProcess.sunRayStrength = p.sunRayStrength;
     rs.postProcess.motionBlurEnabled = p.motionBlurEnabled;
     rs.postProcess.motionBlurStrength = p.motionBlurStrength;
@@ -219,6 +228,10 @@ inline Renderer::RenderPipelineSettings toLegacySettings(const RenderSettings& s
     p.freezeBias = s.volumetric.freezeBias;
 
     // Cloud
+    p.cloudShadowsEnabled = s.cloud.shadowsEnabled;
+    p.cloudShadowStrength = s.cloud.shadowStrength;
+    p.cloudShadowScale = s.cloud.shadowScale;
+    p.cloudShadowSpeed = s.cloud.shadowSpeed;
     p.cloudTimeScale = s.cloud.timeScale;
     p.sceneCloudCompositeStrength = s.cloud.sceneCloudCompositeStrength;
 
@@ -228,6 +241,10 @@ inline Renderer::RenderPipelineSettings toLegacySettings(const RenderSettings& s
     p.reflectionHistoryWeight = s.reflection.historyWeight;
     p.reflectionFilterStrength = s.reflection.filterStrength;
     p.sceneReflectionCompositeStrength = s.reflection.sceneReflectionCompositeStrength;
+
+    // Transparent / water
+    p.waterEffectsEnabled = s.transparent.waterEffectsEnabled;
+    p.transparentCompositeEnabled = s.transparent.compositeEnabled;
 
     // TAA
     p.taaEnabled = s.taa.enabled;
@@ -280,6 +297,7 @@ inline Renderer::RenderPipelineSettings toLegacySettings(const RenderSettings& s
     p.noiseDitherStrength = s.postProcess.noiseDitherStrength;
     p.purkinjeShiftEnabled = s.postProcess.purkinjeShiftEnabled;
     p.sunRaysEnabled = s.postProcess.sunRaysEnabled;
+    p.shaderpackGradingEnabled = s.postProcess.shaderpackGradingEnabled;
     p.sunRayStrength = s.postProcess.sunRayStrength;
     p.motionBlurEnabled = s.postProcess.motionBlurEnabled;
     p.motionBlurStrength = s.postProcess.motionBlurStrength;
@@ -311,6 +329,19 @@ inline Renderer::RenderPipelineSettings toLegacySettings(const RenderSettings& s
     p.directWeatherOcclusion = s.weather.directWeatherOcclusion;
 
     return p;
+}
+
+/// Sync fog settings from Renderer::FogSettings to RenderSettings::FogSettings.
+/// Fog is managed separately from RenderPipelineSettings, so this is a dedicated sync path.
+inline void syncFogToRenderSettings(const Renderer::FogSettings& src, FogSettings& dst) {
+    dst.enabled = src.enabled;
+    dst.color = src.color;
+    dst.startDistance = src.startDistance;
+    dst.endDistance = src.endDistance;
+    dst.density = src.density;
+    dst.autoDistanceByRenderDistance = src.autoDistanceByRenderDistance;
+    dst.autoEndOffsetChunks = src.autoEndOffsetChunks;
+    dst.autoFadeWidthChunks = src.autoFadeWidthChunks;
 }
 
 } // namespace settings_mapper

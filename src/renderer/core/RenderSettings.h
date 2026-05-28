@@ -92,6 +92,12 @@ struct ReflectionSettings {
     float sceneReflectionCompositeStrength = 1.0f;
 };
 
+/// Transparent and water composition settings
+struct TransparentSettings {
+    bool waterEffectsEnabled = true;
+    bool compositeEnabled = true;
+};
+
 /// TAA settings
 struct TaaSettings {
     bool enabled = true;
@@ -164,6 +170,7 @@ struct PostProcessSettings {
     // Effects
     bool purkinjeShiftEnabled = false;
     bool sunRaysEnabled = false;
+    bool shaderpackGradingEnabled = true;
     float sunRayStrength = 0.18f;
 
     // Motion blur
@@ -224,6 +231,7 @@ struct RenderSettings {
     VolumetricSettings volumetric;
     CloudSettings cloud;
     ReflectionSettings reflection;
+    TransparentSettings transparent;
     TaaSettings taa;
     PostProcessSettings postProcess;
     DebugSettings debug;
