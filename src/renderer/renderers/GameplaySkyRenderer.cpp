@@ -1,5 +1,6 @@
 #include "GameplaySkyRenderer.h"
 
+#include "../gl/GlStateGuard.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -226,20 +227,7 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
         return;
     }
 
-    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-    GLboolean depthMaskWasEnabled = GL_TRUE;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskWasEnabled);
-
-    GLint blendSrcRgb = GL_ONE;
-    GLint blendDstRgb = GL_ZERO;
-    GLint blendSrcAlpha = GL_ONE;
-    GLint blendDstAlpha = GL_ZERO;
-    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrcRgb);
-    glGetIntegerv(GL_BLEND_DST_RGB, &blendDstRgb);
-    glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSrcAlpha);
-    glGetIntegerv(GL_BLEND_DST_ALPHA, &blendDstAlpha);
+    const renderer::gl::ScopedStateSnapshot stateGuard;
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -257,24 +245,6 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
     const float moonDiscAlpha = 0.18f * moonPhaseFactor * m_lastColors.moonVisibility;
     renderCelestialBody(camera, aspect, moonAngle, kMoonSize, m_moonTexture, moonUv.uvMin, moonUv.uvMax, moonDiscAlpha);
     renderClouds(camera, aspect, dayNight, m_lastColors);
-
-    if (blendWasEnabled) {
-        glEnable(GL_BLEND);
-    } else {
-        glDisable(GL_BLEND);
-    }
-    glBlendFuncSeparate(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha);
-    if (cullFaceWasEnabled) {
-        glEnable(GL_CULL_FACE);
-    } else {
-        glDisable(GL_CULL_FACE);
-    }
-    if (depthTestWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
-    glDepthMask(depthMaskWasEnabled);
 }
 
 void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
@@ -291,11 +261,7 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
         return;
     }
 
-    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-    GLint viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, viewport);
+    const renderer::gl::ScopedStateSnapshot stateGuard;
     GLint previousFramebuffer = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
@@ -353,22 +319,7 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     glBindVertexArray(0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-    if (blendWasEnabled) {
-        glEnable(GL_BLEND);
-    } else {
-        glDisable(GL_BLEND);
-    }
-    if (cullFaceWasEnabled) {
-        glEnable(GL_CULL_FACE);
-    } else {
-        glDisable(GL_CULL_FACE);
-    }
-    if (depthTestWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
+    // GL state restored by ScopedStateSnapshot destructor
 }
 
 void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
@@ -397,11 +348,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
         return;
     }
 
-    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-    GLint viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, viewport);
+    const renderer::gl::ScopedStateSnapshot stateGuard;
     GLint previousFramebuffer = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
@@ -482,22 +429,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     glActiveTexture(GL_TEXTURE0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-    if (blendWasEnabled) {
-        glEnable(GL_BLEND);
-    } else {
-        glDisable(GL_BLEND);
-    }
-    if (cullFaceWasEnabled) {
-        glEnable(GL_CULL_FACE);
-    } else {
-        glDisable(GL_CULL_FACE);
-    }
-    if (depthTestWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
+    // GL state restored by ScopedStateSnapshot destructor
 }
 
 void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illuminance,
@@ -512,11 +444,7 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
         return;
     }
 
-    GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-    GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-    GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-    GLint viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, viewport);
+    const renderer::gl::ScopedStateSnapshot stateGuard;
     GLint previousFramebuffer = 0;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
@@ -566,22 +494,7 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     glBindVertexArray(0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
-    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-    if (blendWasEnabled) {
-        glEnable(GL_BLEND);
-    } else {
-        glDisable(GL_BLEND);
-    }
-    if (cullFaceWasEnabled) {
-        glEnable(GL_CULL_FACE);
-    } else {
-        glDisable(GL_CULL_FACE);
-    }
-    if (depthTestWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
+    // GL state restored by ScopedStateSnapshot destructor
 }
 
 GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNightSystem& dayNight) const {

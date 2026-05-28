@@ -1,4 +1,5 @@
 #include "HumanoidRenderer.h"
+#include "../gl/GlStateGuard.h"
 #include "../core/Shader.h"
 
 #include <algorithm>
@@ -519,32 +520,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     const GLsizei viewportW = std::max<GLsizei>(1, static_cast<GLsizei>(std::lround(width * uiScale)));
     const GLsizei viewportH = std::max<GLsizei>(1, static_cast<GLsizei>(std::lround(height * uiScale)));
 
-    GLint oldViewport[4] = {0, 0, 0, 0};
-    GLint oldScissorBox[4] = {0, 0, 0, 0};
-    GLint oldCullFace = GL_BACK;
-    GLint oldDepthFunc = GL_LESS;
-    GLint oldBlendSrc = GL_SRC_ALPHA;
-    GLint oldBlendDst = GL_ONE_MINUS_SRC_ALPHA;
-    GLint oldActiveTexture = GL_TEXTURE0;
-    GLboolean oldScissor = GL_FALSE;
-    GLboolean oldDepthTest = GL_FALSE;
-    GLboolean oldDepthMask = GL_TRUE;
-    GLboolean oldCull = GL_FALSE;
-    GLboolean oldBlend = GL_FALSE;
-    GLdouble oldDepthClear = 1.0;
-    glGetIntegerv(GL_VIEWPORT, oldViewport);
-    glGetIntegerv(GL_SCISSOR_BOX, oldScissorBox);
-    oldScissor = glIsEnabled(GL_SCISSOR_TEST);
-    oldDepthTest = glIsEnabled(GL_DEPTH_TEST);
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &oldDepthMask);
-    oldCull = glIsEnabled(GL_CULL_FACE);
-    oldBlend = glIsEnabled(GL_BLEND);
-    glGetIntegerv(GL_CULL_FACE_MODE, &oldCullFace);
-    glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunc);
-    glGetIntegerv(GL_BLEND_SRC_RGB, &oldBlendSrc);
-    glGetIntegerv(GL_BLEND_DST_RGB, &oldBlendDst);
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
-    glGetDoublev(GL_DEPTH_CLEAR_VALUE, &oldDepthClear);
+    const renderer::gl::ScopedStateSnapshot stateGuard;
 
     glViewport(viewportX, viewportY, viewportW, viewportH);
     glEnable(GL_SCISSOR_TEST);
@@ -635,18 +611,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]);
-    glScissor(oldScissorBox[0], oldScissorBox[1], oldScissorBox[2], oldScissorBox[3]);
-    if (oldScissor) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
-    if (oldDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-    glDepthMask(oldDepthMask);
-    glDepthFunc(oldDepthFunc);
-    if (oldCull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
-    glCullFace(oldCullFace);
-    if (oldBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
-    glBlendFunc(oldBlendSrc, oldBlendDst);
-    glClearDepth(oldDepthClear);
-    glActiveTexture(static_cast<GLenum>(oldActiveTexture));
+    // GL state (including scissor) restored by ScopedStateSnapshot destructor
 }
 
 void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,

@@ -42,6 +42,8 @@ public:
         glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthMask);
         m_cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
         m_blendEnabled = glIsEnabled(GL_BLEND);
+        m_scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        glGetIntegerv(GL_SCISSOR_BOX, m_scissorBox);
         glGetIntegerv(GL_CULL_FACE_MODE, &m_cullFaceMode);
         glGetIntegerv(GL_DEPTH_FUNC, &m_depthFunc);
         glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrcRgb);
@@ -66,6 +68,8 @@ public:
             static_cast<GLenum>(m_blendSrcAlpha),
             static_cast<GLenum>(m_blendDstAlpha)
         );
+        restoreCapability(GL_SCISSOR_TEST, m_scissorEnabled);
+        glScissor(m_scissorBox[0], m_scissorBox[1], m_scissorBox[2], m_scissorBox[3]);
         glClearDepth(m_depthClearValue);
         glActiveTexture(static_cast<GLenum>(m_activeTexture));
     }
@@ -83,6 +87,7 @@ private:
     }
 
     GLint m_viewport[4] = {0, 0, 0, 0};
+    GLint m_scissorBox[4] = {0, 0, 0, 0};
     GLint m_cullFaceMode = GL_BACK;
     GLint m_depthFunc = GL_LESS;
     GLint m_blendSrcRgb = GL_SRC_ALPHA;
@@ -94,6 +99,7 @@ private:
     GLboolean m_depthMask = GL_TRUE;
     GLboolean m_cullFaceEnabled = GL_FALSE;
     GLboolean m_blendEnabled = GL_FALSE;
+    GLboolean m_scissorEnabled = GL_FALSE;
     GLdouble m_depthClearValue = 1.0;
 };
 

@@ -1,5 +1,6 @@
 #include "FirstPersonHeldItemRenderer.h"
 
+#include "../gl/GlStateGuard.h"
 #include "../mesh/ItemModelMesh.h"
 #include "../contracts/MecraftTextureContract.h"
 #include "../core/Shader.h"
@@ -153,47 +154,6 @@ void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertice
         vertices.push_back({p.x, p.y, p.z, t.x, t.y, normal.x, normal.y, normal.z});
     }
 }
-
-struct GlStateGuard {
-    GLint viewport[4] = {0, 0, 0, 0};
-    GLint oldCullFace = GL_BACK;
-    GLint oldDepthFunc = GL_LESS;
-    GLint oldBlendSrc = GL_SRC_ALPHA;
-    GLint oldBlendDst = GL_ONE_MINUS_SRC_ALPHA;
-    GLint oldActiveTexture = GL_TEXTURE0;
-    GLboolean oldDepthTest = GL_FALSE;
-    GLboolean oldDepthMask = GL_TRUE;
-    GLboolean oldCull = GL_FALSE;
-    GLboolean oldBlend = GL_FALSE;
-    GLdouble oldDepthClear = 1.0;
-
-    GlStateGuard() {
-        glGetIntegerv(GL_VIEWPORT, viewport);
-        oldDepthTest = glIsEnabled(GL_DEPTH_TEST);
-        glGetBooleanv(GL_DEPTH_WRITEMASK, &oldDepthMask);
-        oldCull = glIsEnabled(GL_CULL_FACE);
-        oldBlend = glIsEnabled(GL_BLEND);
-        glGetIntegerv(GL_CULL_FACE_MODE, &oldCullFace);
-        glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunc);
-        glGetIntegerv(GL_BLEND_SRC_RGB, &oldBlendSrc);
-        glGetIntegerv(GL_BLEND_DST_RGB, &oldBlendDst);
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &oldActiveTexture);
-        glGetDoublev(GL_DEPTH_CLEAR_VALUE, &oldDepthClear);
-    }
-
-    ~GlStateGuard() {
-        glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
-        if (oldDepthTest) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-        glDepthMask(oldDepthMask);
-        glDepthFunc(oldDepthFunc);
-        if (oldCull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
-        glCullFace(oldCullFace);
-        if (oldBlend) glEnable(GL_BLEND); else glDisable(GL_BLEND);
-        glBlendFunc(oldBlendSrc, oldBlendDst);
-        glClearDepth(oldDepthClear);
-        glActiveTexture(static_cast<GLenum>(oldActiveTexture));
-    }
-};
 
 void pushDebugGroup(const char* label) {
 #ifdef MECRAFT_DEBUG
@@ -630,7 +590,7 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
         }
     }
 
-    const GlStateGuard stateGuard;
+    const renderer::gl::ScopedStateSnapshot stateGuard;
     glViewport(0, 0, window.getWidth(), window.getHeight());
     glDepthMask(GL_TRUE);
     glClearDepth(1.0);

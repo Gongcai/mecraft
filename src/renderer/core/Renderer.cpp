@@ -3,6 +3,7 @@
 //
 
 #include "Renderer.h"
+#include "SettingsMapper.h"
 
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
@@ -1374,85 +1375,7 @@ TerrainFrameData Renderer::buildTerrainFrameData(const RenderFrameData& frame) c
 }
 
 RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
-    RenderSettings rs;
-    // SSAO
-    rs.ssao.enabled = m_pipelineSettings.ssaoEnabled;
-    rs.ssao.filterEnabled = m_pipelineSettings.ssaoFilterEnabled;
-    rs.ssao.temporalEnabled = m_pipelineSettings.ssaoTemporalEnabled;
-    rs.ssao.historyWeight = m_pipelineSettings.ssaoHistoryWeight;
-    rs.ssao.radius = m_pipelineSettings.ssaoRadius;
-    rs.ssao.strength = m_pipelineSettings.ssaoStrength;
-    rs.ssao.samples = m_pipelineSettings.ssaoSamples;
-    // TAA
-    rs.taa.enabled = m_pipelineSettings.taaEnabled;
-    rs.taa.forceZeroVelocity = m_pipelineSettings.forceZeroVelocity;
-    // Reflection
-    rs.reflection.filterEnabled = m_pipelineSettings.reflectionFilterEnabled;
-    rs.reflection.temporalEnabled = m_pipelineSettings.reflectionTemporalEnabled;
-    rs.reflection.historyWeight = m_pipelineSettings.reflectionHistoryWeight;
-    rs.reflection.filterStrength = m_pipelineSettings.reflectionFilterStrength;
-    rs.reflection.sceneReflectionCompositeStrength = m_pipelineSettings.sceneReflectionCompositeStrength;
-    // Cloud
-    rs.cloud.sceneCloudCompositeStrength = m_pipelineSettings.sceneCloudCompositeStrength;
-    // Post-process
-    rs.postProcess.motionBlurStrength = m_pipelineSettings.motionBlurStrength;
-    rs.postProcess.motionBlurSamples = m_pipelineSettings.motionBlurSamples;
-    rs.postProcess.dofFocusDistance = m_pipelineSettings.dofFocusDistance;
-    rs.postProcess.dofAperture = m_pipelineSettings.dofAperture;
-    rs.postProcess.dofIntensity = m_pipelineSettings.dofIntensity;
-    // Debug
-    rs.debug.deferredLightDebugMode = m_pipelineSettings.deferredLightDebugMode;
-    rs.debug.reflectionDebugMode = m_pipelineSettings.reflectionDebugMode;
-    rs.debug.derivativeStrictMode = m_pipelineSettings.derivativeStrictMode;
-    // Post-process lighting
-    rs.postProcess.aerialPerspectiveEnabled = m_pipelineSettings.aerialPerspectiveEnabled;
-    rs.postProcess.shadowTintStrength = m_pipelineSettings.shadowTintStrength;
-    rs.postProcess.directSunStrength = m_pipelineSettings.directSunStrength;
-    rs.postProcess.skyAmbientStrength = m_pipelineSettings.skyAmbientStrength;
-    rs.postProcess.minimumAmbient = m_pipelineSettings.minimumAmbient;
-    rs.postProcess.shadowMinLight = m_pipelineSettings.shadowMinLight;
-    rs.postProcess.shadowContrast = m_pipelineSettings.shadowContrast;
-    rs.postProcess.blockLightStrength = m_pipelineSettings.blockLightStrength;
-    rs.postProcess.fakeBounceStrength = m_pipelineSettings.fakeBounceStrength;
-    rs.postProcess.albedoDesaturation = m_pipelineSettings.albedoDesaturation;
-    rs.postProcess.shadowDesaturation = m_pipelineSettings.shadowDesaturation;
-    // Shadow
-    rs.shadow.enabled = m_pipelineSettings.shadowsEnabled;
-    rs.shadow.softShadowsEnabled = m_pipelineSettings.softShadowsEnabled;
-    rs.shadow.pcssShadowsEnabled = m_pipelineSettings.pcssShadowsEnabled;
-    rs.shadow.contactShadowsEnabled = m_pipelineSettings.contactShadowsEnabled;
-    rs.shadow.cloudShadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
-    rs.shadow.resolution = m_pipelineSettings.shadowResolution;
-    rs.shadow.distance = m_pipelineSettings.shadowDistance;
-    rs.shadow.softness = m_pipelineSettings.shadowSoftness;
-    rs.shadow.pcssStrength = m_pipelineSettings.shadowPcssStrength;
-    rs.shadow.normalOffset = m_pipelineSettings.shadowNormalOffset;
-    rs.shadow.contactShadowStrength = m_pipelineSettings.contactShadowStrength;
-    rs.shadow.constantBias = m_pipelineSettings.shadowConstantBias;
-    rs.shadow.slopeBias = m_pipelineSettings.shadowSlopeBias;
-    rs.shadow.cloudShadowStrength = m_pipelineSettings.cloudShadowStrength;
-    rs.shadow.cloudShadowScale = m_pipelineSettings.cloudShadowScale;
-    rs.shadow.cloudShadowSpeed = m_pipelineSettings.cloudShadowSpeed;
-    // Volumetric
-    rs.volumetric.lightEnabled = m_pipelineSettings.volumetricLightEnabled;
-    rs.volumetric.uwLightEnabled = m_pipelineSettings.uwVolumetricLightEnabled;
-    rs.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
-    rs.volumetric.skyRayEnabled = m_pipelineSettings.volumetricSkyRayEnabled;
-    rs.volumetric.timeFadeEnabled = m_pipelineSettings.volumetricTimeFadeEnabled;
-    rs.volumetric.temporalEnabled = m_pipelineSettings.volumetricTemporalEnabled;
-    rs.volumetric.qualityTier = m_pipelineSettings.volumetricQualityTier;
-    rs.volumetric.temporalWeight = m_pipelineSettings.volumetricTemporalWeight;
-    rs.volumetric.shadowBiasScale = m_pipelineSettings.volumetricShadowBiasScale;
-    rs.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
-    rs.volumetric.underwaterLightStrength = m_pipelineSettings.underwaterVolumetricLightStrength;
-    rs.volumetric.freezeR1 = m_pipelineSettings.freezeR1;
-    rs.volumetric.freezeBias = m_pipelineSettings.freezeBias;
-    rs.debug.viewMode = m_pipelineSettings.debugViewMode;
-    // Weather
-    rs.weather.skylightScale = m_pipelineSettings.weatherSkylightScale;
-    rs.weather.rainLinesEnabled = m_pipelineSettings.weatherRainLinesEnabled;
-    rs.weather.surfaceRipplesEnabled = m_pipelineSettings.rainSurfaceRipplesEnabled;
-    return rs;
+    return settings_mapper::toRenderSettings(m_pipelineSettings);
 }
 
 bool Renderer::renderWorldDeferred(const World& world,

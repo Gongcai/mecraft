@@ -10,6 +10,7 @@
 #include "ui/core/UIRenderer.h"
 #include "../ecs/components/Components.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
+#include "../renderer/core/SettingsMapper.h"
 
 #include <algorithm>
 #include <array>
@@ -1010,136 +1011,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         ImGui::Text("Hybrid Deferred: %s", render.isHybridDeferredReady() ? "ready" : "not ready");
         if (pipelineChanged || syncRenderSceneSettings) {
             render.setRenderPipelineSettings(pipeline);
-            // Phase 10e: Sync settings to RenderScene
-            RenderSettings rs = renderScene.getSettings();
-            rs.pipelineMode = (pipeline.mode == Renderer::RenderPipelineMode::HybridDeferred)
-                ? PipelineMode::Deferred
-                : PipelineMode::Forward;
-            rs.shadow.enabled = pipeline.shadowsEnabled;
-            rs.shadow.softShadowsEnabled = pipeline.softShadowsEnabled;
-            rs.shadow.pcssShadowsEnabled = pipeline.pcssShadowsEnabled;
-            rs.shadow.contactShadowsEnabled = pipeline.contactShadowsEnabled;
-            rs.shadow.cloudShadowsEnabled = pipeline.cloudShadowsEnabled;
-            rs.shadow.resolution = pipeline.shadowResolution;
-            rs.shadow.distance = pipeline.shadowDistance;
-            rs.shadow.softness = pipeline.shadowSoftness;
-            rs.shadow.pcssStrength = pipeline.shadowPcssStrength;
-            rs.shadow.constantBias = pipeline.shadowConstantBias;
-            rs.shadow.slopeBias = pipeline.shadowSlopeBias;
-            rs.shadow.normalOffset = pipeline.shadowNormalOffset;
-            rs.shadow.contactShadowStrength = pipeline.contactShadowStrength;
-            rs.shadow.cloudShadowStrength = pipeline.cloudShadowStrength;
-            rs.shadow.cloudShadowScale = pipeline.cloudShadowScale;
-            rs.shadow.cloudShadowSpeed = pipeline.cloudShadowSpeed;
-            rs.ssao.enabled = pipeline.ssaoEnabled;
-            rs.ssao.filterEnabled = pipeline.ssaoFilterEnabled;
-            rs.ssao.temporalEnabled = pipeline.ssaoTemporalEnabled;
-            rs.ssao.historyWeight = pipeline.ssaoHistoryWeight;
-            rs.ssao.radius = pipeline.ssaoRadius;
-            rs.ssao.strength = pipeline.ssaoStrength;
-            rs.ssao.samples = pipeline.ssaoSamples;
-            rs.volumetric.lightEnabled = pipeline.volumetricLightEnabled;
-            rs.volumetric.uwLightEnabled = pipeline.uwVolumetricLightEnabled;
-            rs.volumetric.fogEnabled = pipeline.volumetricFogEnabled;
-            rs.volumetric.skyRayEnabled = pipeline.volumetricSkyRayEnabled;
-            rs.volumetric.timeFadeEnabled = pipeline.volumetricTimeFadeEnabled;
-            rs.volumetric.temporalEnabled = pipeline.volumetricTemporalEnabled;
-            rs.volumetric.qualityTier = pipeline.volumetricQualityTier;
-            rs.volumetric.fogSamples = pipeline.volumetricFogSamples;
-            rs.volumetric.temporalWeight = pipeline.volumetricTemporalWeight;
-            rs.volumetric.shadowBiasScale = pipeline.volumetricShadowBiasScale;
-            rs.volumetric.fogStrength = pipeline.volumetricFogStrength;
-            rs.volumetric.underwaterLightStrength = pipeline.underwaterVolumetricLightStrength;
-            rs.volumetric.fogCenterHeight = pipeline.vfogCenterHeight;
-            rs.volumetric.fogHeightSpread = pipeline.vfogHeightSpread;
-            rs.volumetric.fogNoiseScale = pipeline.vfogNoiseScale;
-            rs.volumetric.fogLightStrength = pipeline.vfogLightStrength;
-            rs.volumetric.fogDensityScale = pipeline.vfogDensityScale;
-            rs.volumetric.freezeR1 = pipeline.freezeR1;
-            rs.volumetric.freezeBias = pipeline.freezeBias;
-            rs.cloud.shadowsEnabled = pipeline.cloudShadowsEnabled;
-            rs.cloud.shadowStrength = pipeline.cloudShadowStrength;
-            rs.cloud.shadowScale = pipeline.cloudShadowScale;
-            rs.cloud.shadowSpeed = pipeline.cloudShadowSpeed;
-            rs.cloud.timeScale = pipeline.cloudTimeScale;
-            rs.cloud.sceneCloudCompositeStrength = pipeline.sceneCloudCompositeStrength;
-            rs.reflection.filterEnabled = pipeline.reflectionFilterEnabled;
-            rs.reflection.temporalEnabled = pipeline.reflectionTemporalEnabled;
-            rs.reflection.historyWeight = pipeline.reflectionHistoryWeight;
-            rs.reflection.filterStrength = pipeline.reflectionFilterStrength;
-            rs.reflection.sceneReflectionCompositeStrength = pipeline.sceneReflectionCompositeStrength;
-            rs.taa.enabled = pipeline.taaEnabled;
-            rs.taa.blendMin = pipeline.taaBlendMin;
-            rs.taa.blendMax = pipeline.taaBlendMax;
-            rs.taa.forceZeroVelocity = pipeline.forceZeroVelocity;
-            rs.taa.freezeJitter = pipeline.freezeTaaJitter;
-            rs.postProcess.bloomEnabled = pipeline.bloomEnabled;
-            rs.postProcess.bloomThreshold = pipeline.bloomThreshold;
-            rs.postProcess.bloomStrength = pipeline.bloomStrength;
-            rs.postProcess.bloomyFogEnabled = pipeline.bloomyFogEnabled;
-            rs.postProcess.autoExposureEnabled = pipeline.autoExposureEnabled;
-            rs.postProcess.autoExposureMin = pipeline.autoExposureMin;
-            rs.postProcess.autoExposureMax = pipeline.autoExposureMax;
-            rs.postProcess.autoExposureSpeed = pipeline.autoExposureSpeed;
-            rs.postProcess.autoExposureBias = pipeline.autoExposureBias;
-            rs.postProcess.exposure = pipeline.exposure;
-            rs.postProcess.tonemapMode = pipeline.tonemapMode;
-            rs.postProcess.gamma = pipeline.gamma;
-            rs.postProcess.saturation = pipeline.saturation;
-            rs.postProcess.contrast = pipeline.contrast;
-            rs.postProcess.colorTemperature = pipeline.colorTemperature;
-            rs.postProcess.vibrance = pipeline.vibrance;
-            rs.postProcess.highlightCompression = pipeline.highlightCompression;
-            rs.postProcess.filmEmulationStrength = pipeline.filmEmulationStrength;
-            rs.postProcess.redModifierStrength = pipeline.redModifierStrength;
-            rs.postProcess.colorLumaR = pipeline.colorLumaR;
-            rs.postProcess.colorLumaG = pipeline.colorLumaG;
-            rs.postProcess.colorLumaB = pipeline.colorLumaB;
-            rs.postProcess.albedoDesaturation = pipeline.albedoDesaturation;
-            rs.postProcess.splitToneStrength = pipeline.splitToneStrength;
-            rs.postProcess.vignetteStrength = pipeline.vignetteStrength;
-            rs.postProcess.sunWarmth = pipeline.sunWarmth;
-            rs.postProcess.skyCoolness = pipeline.skyCoolness;
-            rs.postProcess.shadowDesaturation = pipeline.shadowDesaturation;
-            rs.postProcess.shadowTintStrength = pipeline.shadowTintStrength;
-            rs.postProcess.directSunStrength = pipeline.directSunStrength;
-            rs.postProcess.skyAmbientStrength = pipeline.skyAmbientStrength;
-            rs.postProcess.minimumAmbient = pipeline.minimumAmbient;
-            rs.postProcess.shadowMinLight = pipeline.shadowMinLight;
-            rs.postProcess.shadowContrast = pipeline.shadowContrast;
-            rs.postProcess.blockLightStrength = pipeline.blockLightStrength;
-            rs.postProcess.fakeBounceStrength = pipeline.fakeBounceStrength;
-            rs.postProcess.aerialPerspectiveEnabled = pipeline.aerialPerspectiveEnabled;
-            rs.postProcess.aerialStrength = pipeline.aerialStrength;
-            rs.postProcess.horizonScatterStrength = pipeline.horizonScatterStrength;
-            rs.postProcess.sharpenStrength = pipeline.sharpenStrength;
-            rs.postProcess.noiseDitherStrength = pipeline.noiseDitherStrength;
-            rs.postProcess.purkinjeShiftEnabled = pipeline.purkinjeShiftEnabled;
-            rs.postProcess.sunRaysEnabled = pipeline.sunRaysEnabled;
-            rs.postProcess.sunRayStrength = pipeline.sunRayStrength;
-            rs.postProcess.motionBlurEnabled = pipeline.motionBlurEnabled;
-            rs.postProcess.motionBlurStrength = pipeline.motionBlurStrength;
-            rs.postProcess.motionBlurSamples = pipeline.motionBlurSamples;
-            rs.postProcess.dofEnabled = pipeline.dofEnabled;
-            rs.postProcess.dofIntensity = pipeline.dofIntensity;
-            rs.postProcess.dofAperture = pipeline.dofAperture;
-            rs.postProcess.dofFocusDistance = pipeline.dofFocusDistance;
-            rs.debug.viewMode = pipeline.debugViewMode;
-            rs.debug.deferredLightDebugMode = pipeline.deferredLightDebugMode;
-            rs.debug.postprocessDebugMode = pipeline.postprocessDebugMode;
-            rs.debug.reflectionDebugMode = pipeline.reflectionDebugMode;
-            rs.debug.derivativeStrictMode = pipeline.derivativeStrictMode;
-            rs.debug.disableGreedyMeshing = pipeline.debugDisableGreedyMeshing;
-            rs.weather.skylightScale = pipeline.weatherSkylightScale;
-            rs.weather.exposureBias = pipeline.weatherExposureBias;
-            rs.weather.postRainFog = pipeline.weatherPostRainFog;
-            rs.weather.rainAlphaScale = pipeline.weatherRainAlphaScale;
-            rs.weather.rainLinesEnabled = pipeline.weatherRainLinesEnabled;
-            rs.weather.particlesEnabled = pipeline.sceneParticlesEnabled;
-            rs.weather.wetSurfacesEnabled = pipeline.rainWetSurfacesEnabled;
-            rs.weather.surfaceRipplesEnabled = pipeline.rainSurfaceRipplesEnabled;
-            rs.weather.directWeatherOcclusion = pipeline.directWeatherOcclusion;
-            renderScene.setSettings(rs);
+            // Sync to RenderScene via unified mapper
+            renderScene.setSettings(settings_mapper::toRenderSettings(pipeline));
         }
 
         ImGui::Separator();
