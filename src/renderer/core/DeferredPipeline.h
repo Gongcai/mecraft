@@ -105,6 +105,7 @@ private:
     void restoreCapturedFramebufferViewport(int windowWidth, int windowHeight);
     void clearDeferredAuxiliaryTargets();
     void updateDeferredHistoryTargets();
+    void renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings);
     void renderParticlesToSceneResolved(const FrameContext& ctx);
     void renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve);
     FrameOutput buildFrameOutput(const FrameContext& ctx);

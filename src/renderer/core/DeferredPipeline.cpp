@@ -5,6 +5,10 @@
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../mesh/TerrainRenderer.h"
+#include "../mesh/WorldRenderBuffer.h"
+#include "../mesh/TerrainRenderCache.h"
+#include "../../world/World.h"
 
 #include <glad/glad.h>
 
@@ -124,9 +128,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     m_deferredFrameActive = true;
 
-    // GBuffer terrain (delegated to TerrainRenderer)
-    // Note: This is still handled by Renderer in the current phase.
-    // In Phase 10f, this will be fully migrated.
+    // GBuffer terrain
+    renderGBufferTerrain(ctx, m_currentSettings);
 
     // Entity and drop GBuffer
     if (m_gbufferPass) {
@@ -281,6 +284,148 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+}
+
+void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings) {
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->terrain ||
+        !m_shared->worldRenderBuffer || !m_shared->resources) {
+        return;
+    }
+
+    auto& targets = *m_shared->deferredTargets;
+    auto& terrain = *m_shared->terrain;
+    auto& worldBuffer = *m_shared->worldRenderBuffer;
+
+    // Bind GBuffer and clear
+    targets.bindGBuffer();
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    constexpr GLfloat clearAlbedo[] = {0.0f, 0.0f, 0.0f, 0.0f};
+    constexpr GLfloat clearNormal[] = {0.5f, 0.5f, 1.0f, 1.0f};
+    constexpr GLfloat clearLight[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    constexpr GLfloat clearMaterial[] = {0.86f, 0.035f, 0.0f, 0.0f};
+    constexpr GLfloat clearMaterialAux[] = {0.0f, 0.0f, 0.65f, 0.0f};
+    glClearBufferfv(GL_COLOR, 0, clearAlbedo);
+    glClearBufferfv(GL_COLOR, 1, clearNormal);
+    glClearBufferfv(GL_COLOR, 2, clearLight);
+    glClearBufferfv(GL_COLOR, 3, clearMaterial);
+    glClearBufferfv(GL_COLOR, 4, clearMaterialAux);
+    glClear(GL_DEPTH_BUFFER_BIT);
+
+    // Terrain cache operations
+    if (m_shared->terrainCache) {
+        m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.world);
+        m_shared->terrainCache->drainMeshingResults(*ctx.world);
+    }
+    worldBuffer.beginFrame();
+    terrain.clearTransparentBatches();
+
+    // Get GBuffer shader from resource manager
+    Shader* gbufferShader = m_shared->resources->getShader("chunk_gbuffer");
+    if (!gbufferShader) return;
+
+    // Build terrain frame data from FrameContext
+    TerrainFrameData tfd;
+    tfd.view = ctx.camera.view;
+    tfd.viewProj = ctx.camera.viewProj;
+    tfd.cameraPos = ctx.camera.position;
+    tfd.animationTime = ctx.animationTime;
+    tfd.shaderTime = ctx.shaderTime;
+    tfd.surfaceWetness = ctx.weather.surfaceWetness;
+    tfd.fog.enabled = ctx.fog.enabled;
+    tfd.fog.color = ctx.fog.color;
+    tfd.fog.start = ctx.fog.startDistance;
+    tfd.fog.end = ctx.fog.endDistance;
+    tfd.fog.density = ctx.fog.density;
+    tfd.skyLighting.cameraPos = ctx.camera.position;
+    tfd.skyLighting.sunDirection = ctx.skyColors.sunDirection;
+    tfd.skyLighting.moonDirection = ctx.skyColors.moonDirection;
+    tfd.skyLighting.sunLightColor = ctx.skyColors.sunLightColor;
+    tfd.skyLighting.moonLightColor = ctx.skyColors.moonLightColor;
+    tfd.skyLighting.skyAmbientColor = ctx.skyColors.skyAmbientColor;
+    tfd.skyLighting.shadowTintColor = ctx.skyColors.shadowTintColor;
+    tfd.skyLighting.horizonScatterColor = ctx.skyColors.horizonScatterColor;
+    tfd.skyLighting.skyIntensity = ctx.skyIntensity;
+    tfd.skyLighting.moonVisibility = ctx.skyColors.moonVisibility;
+    tfd.skyLighting.directIlluminance = ctx.skyIlluminance.directIlluminance;
+    tfd.skyLighting.skyIlluminance = ctx.skyIlluminance.skyIlluminance;
+    tfd.skyLighting.sunIlluminance = ctx.skyIlluminance.sunIlluminance;
+    tfd.skyLighting.moonIlluminance = ctx.skyIlluminance.moonIlluminance;
+    tfd.skyLighting.cloudDynamicWeather = ctx.skyIlluminance.cloudDynamicWeather;
+    tfd.atmosphere.aerialStrength = ctx.atmosphere.aerialStrength;
+    tfd.atmosphere.horizonScatterStrength = ctx.atmosphere.horizonScatterStrength;
+    tfd.atmosphere.sunWarmth = ctx.atmosphere.sunWarmth;
+    tfd.atmosphere.skyCoolness = ctx.atmosphere.skyCoolness;
+    tfd.atmosphere.weatherWetness = ctx.weather.wetness;
+    tfd.atmosphere.weatherStorm = ctx.weather.storm;
+    tfd.atmosphere.aerialReduction = ctx.weather.aerialReduction;
+    tfd.atmosphere.lightningFlash = ctx.weather.lightningFlash;
+    tfd.atmosphere.surfaceWetness = ctx.weather.surfaceWetness;
+    tfd.atmosphere.skyWetness = ctx.weather.skyWetness;
+    tfd.atmosphere.fogWetness = ctx.weather.fogWetness;
+    tfd.atmosphere.cloudWetness = ctx.weather.cloudWetness;
+    tfd.atmosphere.precipitation = ctx.weather.precipitation;
+    tfd.atmosphere.directWeatherOcclusion = ctx.atmosphere.directWeatherOcclusion;
+    tfd.atmosphere.directWeatherOcclusionOverride = ctx.atmosphere.directWeatherOcclusionOverride;
+
+    terrain.setCameraPos(ctx.camera.position);
+    terrain.updateFrustum(ctx.camera.viewProj);
+
+    // Build terrain render settings from RenderSettings
+    TerrainRenderSettings trs;
+    trs.rainWetSurfacesEnabled = settings.weather.wetSurfacesEnabled;
+    trs.rainSurfaceRipplesEnabled = settings.weather.surfaceRipplesEnabled;
+    trs.aerialPerspectiveEnabled = settings.postProcess.aerialPerspectiveEnabled;
+    trs.volumetricLightEnabled = settings.volumetric.lightEnabled;
+    trs.volumetricFogEnabled = settings.volumetric.fogEnabled;
+    trs.volumetricFogStrength = settings.volumetric.fogStrength;
+    trs.directSunStrength = settings.postProcess.directSunStrength;
+    trs.skyAmbientStrength = settings.postProcess.skyAmbientStrength;
+    trs.weatherSkylightScale = settings.weather.skylightScale;
+    trs.minimumAmbient = settings.postProcess.minimumAmbient;
+    trs.blockLightStrength = settings.postProcess.blockLightStrength;
+    trs.fakeBounceStrength = settings.postProcess.fakeBounceStrength;
+    trs.albedoDesaturation = settings.postProcess.albedoDesaturation;
+    trs.shadowDesaturation = settings.postProcess.shadowDesaturation;
+
+    const TextureArray& texArray = m_shared->resources->getTextureArray();
+    const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
+    terrain.bindChunkRenderState(tfd, texArray, *gbufferShader,
+                                  m_deferredFrameActive, settings.debug.viewMode,
+                                  ctx.eyeInWater, m_heldBlockLightValue,
+                                  targets, m_resourceMgr,
+                                  volFogShadersReady, trs);
+
+    if (settings.taa.enabled) {
+        gbufferShader->setMat4("viewProj", ctx.camera.jitteredViewProj);
+    }
+
+    // Submit meshing jobs
+    if (m_shared->terrainCache) {
+        m_shared->terrainCache->submitMeshingJobs(*ctx.world, ctx.camera.position);
+    }
+
+    // Render opaque chunks and collect cutout/transparent entries
+    std::vector<ChunkRenderEntry> cutoutEntries;
+    std::vector<ChunkRenderEntry> transparentEntries;
+    cutoutEntries.reserve(ctx.world->getActiveChunks().size() * 2);
+    transparentEntries.reserve(ctx.world->getActiveChunks().size() * 2);
+    terrain.renderOpaqueChunksAndCollectPasses(*ctx.world, cutoutEntries, transparentEntries, true);
+    terrain.syncTransparentBatches();
+
+    // Flush MDI buffer
+    worldBuffer.flushOpaque();
+
+    // Render cutout chunks
+    terrain.renderCutoutChunks(cutoutEntries, *gbufferShader);
+
+    // Unbind textures
+    glBindVertexArray(0);
+    for (int i = 10; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
+    }
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {
