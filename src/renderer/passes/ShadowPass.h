@@ -14,7 +14,6 @@ class DeferredRenderTargets;
 class ResourceMgr;
 class Shader;
 class World;
-class Camera;
 class HumanoidRenderer;
 class DropRenderer;
 class DropSystem;
@@ -46,11 +45,11 @@ public:
     [[nodiscard]] bool hasShaders() const { return m_shadowDepthShader != nullptr; }
 
     /// Execute the full CSM shadow pass for all cascades.
+    /// Camera data is extracted from FrameContext internally.
     /// @param ctx Frame context (camera, sky, timing)
     /// @param settings Render settings (shadow parameters)
     /// @param targets Deferred render targets (shadow FBOs)
     /// @param world World for chunk queries
-    /// @param camera Camera for cascade computation
     /// @param preservedTransparentBatch Transparent batch to save/restore around the pass
     /// @param preservedTransparentPlan Transparent plan to save/restore around the pass
     /// @param useMultiDrawIndirect Whether MDI rendering is active
@@ -61,7 +60,6 @@ public:
     };
     ShadowPassOutput execute(const FrameContext& ctx, const RenderSettings& settings,
                               DeferredRenderTargets& targets, const World& world,
-                              const Camera& camera,
                               const std::vector<DrawBatchEntry>& preservedTransparentBatch,
                               const TransparentPassPlan& preservedTransparentPlan,
                               bool useMultiDrawIndirect);

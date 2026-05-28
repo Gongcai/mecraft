@@ -9,6 +9,7 @@
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../../world/World.h"
+#include "../../particle/ParticleSystem.h"
 
 #include <glad/glad.h>
 
@@ -145,9 +146,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     // Shadow pass
-    if (m_shadowPass && m_currentSettings.shadow.enabled) {
-        // Shadow rendering is handled by ShadowPass
-        // m_shadowPass->execute(...);
+    if (m_shadowPass && m_currentSettings.shadow.enabled && m_shadowPass->hasShaders() &&
+        m_shared->shadowRenderer && ctx.world) {
+        m_shadowPass->execute(ctx, m_currentSettings, targets, *ctx.world, {}, {}, true);
     }
 
     // SSAO pass
@@ -447,16 +448,22 @@ void DeferredPipeline::updateDeferredHistoryTargets() {
     m_deferredHistoryUpdatedThisFrame = true;
 }
 
-void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& /*ctx*/) {
-    if (!m_currentSettings.weather.particlesEnabled || !m_shared || !m_shared->particleSystem) {
+void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
+    if (!m_currentSettings.weather.particlesEnabled || !m_shared || !m_shared->particleSystem || !m_resourceMgr) {
         return;
     }
 
     if (!m_shared->deferredTargets) return;
     auto& targets = *m_shared->deferredTargets;
 
+    Shader* particleShader = m_resourceMgr->getShader("particle_gbuffer");
+    if (!particleShader) return;
+
     targets.bindSceneComposite();
 
+    const glm::mat4& viewProj = m_currentSettings.taa.enabled
+        ? ctx.camera.jitteredViewProj
+        : ctx.camera.viewProj;
     const glm::vec2 screenSize(
         static_cast<float>(std::max(1, targets.width())),
         static_cast<float>(std::max(1, targets.height())));
@@ -466,17 +473,40 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& /*ctx*
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Particle rendering will be implemented when ParticleSystem is integrated
-    // m_shared->particleSystem->renderToSceneResolved(...);
+    m_shared->particleSystem->renderToSceneResolved(
+        *particleShader,
+        targets.voxelLightTexture(),
+        targets.depthTexture(),
+        ctx.camera.view, viewProj,
+        screenSize);
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 }
 
-void DeferredPipeline::renderWaterCompositePass(const FrameContext& /*ctx*/, bool /*preTemporalResolve*/) {
-    // Water composite requires many parameters from Renderer state.
-    // This will be fully implemented in Phase 10f when Renderer is slimmed down.
-    // For now, water rendering is handled by the legacy Renderer path.
+void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve) {
+    if (!m_waterCompositePass || !m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer || !ctx.world) {
+        return;
+    }
+
+    auto& targets = *m_shared->deferredTargets;
+    const bool volumetricFogActive = !preTemporalResolve &&
+                                     (m_currentSettings.volumetric.lightEnabled ||
+                                      (m_currentSettings.volumetric.fogEnabled &&
+                                       m_currentSettings.volumetric.fogStrength > 0.001f)) &&
+                                     m_volumetricPass && m_volumetricPass->hasShaders();
+
+    m_waterCompositePass->execute(ctx, m_currentSettings, targets, *ctx.world,
+                                   ctx.frameWidth, ctx.frameHeight,
+                                   m_deferredFrameActive, preTemporalResolve,
+                                   m_capturedFramebuffer, m_capturedViewport,
+                                   m_currentSettings.postProcess.sharpenStrength > 0.0f, // transparentCompositeEnabled proxy
+                                   true,  // waterEffectsEnabled
+                                   m_currentSettings.weather.surfaceRipplesEnabled,
+                                   volumetricFogActive,
+                                   true,  // useMultiDrawIndirect
+                                   *m_shared->worldRenderBuffer,
+                                   {}, {}, {});
 }
 
 FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {

@@ -26,7 +26,7 @@ void WaterCompositePass::shutdown() {
 
 bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets, const World& world,
-                                   const Window& window,
+                                   int windowWidth, int windowHeight,
                                    bool deferredFrameActive, bool preTemporalResolve,
                                    GLint capturedFramebuffer, const GLint* capturedViewport,
                                    bool transparentCompositeEnabled,
@@ -50,8 +50,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     const bool deferredInputsEnabled = deferredFrameActive && targets.isReady();
     const bool compositeInputsEnabled = deferredInputsEnabled &&
                                         (preTemporalResolve || transparentCompositeEnabled);
-    const int capturedWidth = capturedViewport[2] > 0 ? capturedViewport[2] : window.getWidth();
-    const int capturedHeight = capturedViewport[3] > 0 ? capturedViewport[3] : window.getHeight();
+    const int capturedWidth = capturedViewport[2] > 0 ? capturedViewport[2] : windowWidth;
+    const int capturedHeight = capturedViewport[3] > 0 ? capturedViewport[3] : windowHeight;
 
     if (compositeInputsEnabled) {
         targets.copySceneResolvedToTransparentComposite();

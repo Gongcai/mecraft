@@ -8,7 +8,6 @@
 #include "../core/Shader.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../engine/camera/Camera.h"
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
@@ -101,7 +100,6 @@ void ShadowPass::renderShadowDrops(const World& world, const glm::mat4& shadowVi
 ShadowPass::ShadowPassOutput ShadowPass::execute(
     const FrameContext& ctx, const RenderSettings& settings,
     DeferredRenderTargets& targets, const World& world,
-    const Camera& camera,
     const std::vector<DrawBatchEntry>& preservedTransparentBatch,
     const TransparentPassPlan& preservedTransparentPlan,
     bool useMultiDrawIndirect) {
@@ -120,10 +118,22 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // Update shadow cascades via ShadowRenderer.
     m_shadowRenderer->computeLightDirection(toLegacySkyColors(ctx.skyColors));
 
+    // Build camera basis from FrameContext view matrix
+    const glm::mat4& view = ctx.camera.view;
+    shadow::ShadowMatrices::CameraBasis basis;
+    basis.position = ctx.camera.position;
+    basis.forward = -glm::vec3(view[0][2], view[1][2], view[2][2]);
+    basis.right = glm::vec3(view[0][0], view[1][0], view[2][0]);
+    basis.up = glm::vec3(view[0][1], view[1][1], view[2][1]);
+    basis.nearPlane = ctx.camera.nearPlane;
+    basis.verticalFovDegrees = 70.0f; // Default FOV; will be refined
+    basis.aspectRatio = static_cast<float>(std::max(1, targets.width())) /
+                        static_cast<float>(std::max(1, targets.height()));
+
     shadow::ShadowMatrices::Settings smSettings;
     smSettings.shadowDistance = settings.shadow.distance;
     smSettings.shadowResolution = settings.shadow.resolution;
-    m_shadowRenderer->update(camera, smSettings, targets.width(), targets.height());
+    m_shadowRenderer->updateFromBasis(basis, smSettings);
 
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -181,7 +191,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_terrainRenderer->clearTransparentBatches();
 
         shadow::ShadowCasterCuller shadowCuller;
-        shadowCuller.setup(shadowDist, 1.0f, camera.getPosition());
+        shadowCuller.setup(shadowDist, 1.0f, ctx.camera.position);
         shadowCuller.resetCounters();
         m_terrainRenderer->renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
                                                                 shadowDist, &shadowCuller);

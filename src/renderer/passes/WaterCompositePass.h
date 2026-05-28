@@ -50,7 +50,7 @@ public:
     /// @return true if water was rendered before temporal resolve (caller must set m_waterRenderedBeforeTemporal)
     bool execute(const FrameContext& ctx, const RenderSettings& settings,
                  DeferredRenderTargets& targets, const World& world,
-                 const Window& window,
+                 int windowWidth, int windowHeight,
                  bool deferredFrameActive, bool preTemporalResolve,
                  GLint capturedFramebuffer, const GLint* capturedViewport,
                  bool transparentCompositeEnabled,

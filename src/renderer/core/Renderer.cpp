@@ -300,7 +300,8 @@ void Renderer::renderWaterCompositePass(const World& world, const Window& window
                                        m_pipelineSettings.volumetricFogStrength > 0.001f)) &&
                                      m_deferredPipeline->volumetricPass() && m_deferredPipeline->volumetricPass()->hasShaders();
     const bool waterRenderedBeforeTemporal = m_deferredPipeline->waterCompositePass()->execute(
-        waterCtx, waterRs, m_deferredTargets, world, window,
+        waterCtx, waterRs, m_deferredTargets, world,
+        window.getWidth(), window.getHeight(),
         m_deferredFrameActive, preTemporalResolve,
         m_capturedFramebuffer, m_capturedViewport,
         m_pipelineSettings.transparentCompositeEnabled,
@@ -1763,7 +1764,7 @@ void Renderer::renderShadowDrops(const World& /*world*/, const glm::mat4& /*shad
     // Phase 7b: Delegated to ShadowPass::renderShadowDrops()
 }
 
-void Renderer::renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame) {
+void Renderer::renderShadowMap(const World& world, const Camera& /*camera*/, const RenderFrameData& frame) {
     // Phase 7b: Delegated to ShadowPass::execute()
     if (!m_deferredPipeline->shadowPass()) {
         return;
@@ -1771,7 +1772,7 @@ void Renderer::renderShadowMap(const World& world, const Camera& camera, const R
     FrameContext shadowCtx = buildFrameContextFromRenderFrameData(frame);
     RenderSettings shadowRs = buildRenderSettingsFromPipelineSettings();
     auto result = m_deferredPipeline->shadowPass()->execute(
-        shadowCtx, shadowRs, m_deferredTargets, world, camera,
+        shadowCtx, shadowRs, m_deferredTargets, world,
         m_deferredTransparentBatch, m_transparentPassPlan, m_useMultiDrawIndirect);
     m_deferredTransparentBatch = std::move(result.transparentBatch);
     m_transparentPassPlan = result.transparentPlan;

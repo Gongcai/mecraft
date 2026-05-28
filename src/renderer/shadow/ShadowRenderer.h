@@ -51,6 +51,10 @@ public:
                 int framebufferWidth,
                 int framebufferHeight);
 
+    // Build CSM cascades from a CameraBasis directly (no Camera dependency).
+    void updateFromBasis(const ShadowMatrices::CameraBasis& basis,
+                         const ShadowMatrices::Settings& settings);
+
     // Bind all CSM shadow uniforms to a shader.
     // Called by deferred lighting, volumetric fog, and debug passes.
     void bindShadowUniforms(Shader& shader, bool moonShadowActive,

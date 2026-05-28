@@ -57,6 +57,20 @@ void ShadowRenderer::update(const Camera& camera,
     m_shadowDistance = settings.shadowDistance;
 }
 
+void ShadowRenderer::updateFromBasis(const ShadowMatrices::CameraBasis& basis,
+                                     const ShadowMatrices::Settings& settings) {
+    m_cascades = ShadowMatrices::buildCascades(basis, m_lightDirection, settings);
+
+    // Cache legacy cascade-0 matrices for debug/history compatibility.
+    m_modelView = m_cascades[0].view;
+    m_projection = m_cascades[0].projection;
+    m_projectionInverse = glm::inverse(m_cascades[0].projection);
+    m_viewProj = m_cascades[0].viewProj;
+    m_shadowExtent = std::max(1.0f, m_cascades[0].splitFar);
+    m_texelWorldSize = m_cascades[0].texelWorldSize;
+    m_shadowDistance = settings.shadowDistance;
+}
+
 void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive,
                                         const BiasSettings& bias) const {
     shader.setMat4("uShadowViewProj", m_viewProj);
