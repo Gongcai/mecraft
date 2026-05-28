@@ -21,6 +21,7 @@ struct CameraData {
     glm::vec3 position = glm::vec3(0.0f);
     float nearPlane = 0.1f;
     float farPlane = 500.0f;
+    float fovDegrees = 70.0f; // Vertical field of view in degrees
 };
 
 /// Sky illuminance data from SkyCapture metadata

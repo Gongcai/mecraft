@@ -3,6 +3,9 @@
 
 #include "RenderPipeline.h"
 #include "RenderSettings.h"
+#include "../mesh/WorldDrawBatch.h"
+#include "../mesh/TerrainRenderer.h"
+#include "../mesh/TerrainRenderCache.h"
 #include "../passes/SsaoPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
@@ -99,6 +102,11 @@ private:
 
     // Settings (cached from RenderSettings for current frame)
     RenderSettings m_currentSettings;
+
+    // Transparent batch state (populated by renderGBufferTerrain, consumed by water/transparent)
+    std::vector<DrawBatchEntry> m_transparentBatch;
+    TransparentPassPlan m_transparentPassPlan;
+    std::vector<ChunkRenderEntry> m_transparentEntries;
 
     // Private orchestration methods
     void captureCurrentFramebuffer();

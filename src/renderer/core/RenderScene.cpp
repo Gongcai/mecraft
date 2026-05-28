@@ -473,6 +473,24 @@ bool RenderScene::isLightDebugActive() const {
     return m_settings.debug.deferredLightDebugMode > 0 || m_settings.debug.reflectionDebugMode > 0;
 }
 
+bool RenderScene::isNewPipelineReady() const {
+    return m_activePipeline &&
+           m_shared.terrain &&
+           m_shared.deferredTargets &&
+           m_shared.sky &&
+           m_shared.resources;
+}
+
+const char* RenderScene::getPipelineStatus() const {
+    if (!m_activePipeline) return "No active pipeline";
+    if (!m_shared.terrain) return "Missing: terrain";
+    if (!m_shared.deferredTargets) return "Missing: deferredTargets";
+    if (!m_shared.sky) return "Missing: sky";
+    if (!m_shared.resources) return "Missing: resources";
+    if (!m_newPipelineActive) return "Ready (inactive)";
+    return "Active";
+}
+
 PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, const Camera& camera,
                                                          const Window& window, float cameraRainVisibility,
                                                          float screenRollRadians) const {
@@ -565,6 +583,7 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.camera.position = camera.getPosition();
     ctx.camera.nearPlane = camera.getNear();
     ctx.camera.farPlane = camera.getFar();
+    ctx.camera.fovDegrees = camera.getFOV();
 
     // Screen dimensions
     ctx.frameWidth = window.getWidth();

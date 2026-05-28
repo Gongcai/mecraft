@@ -126,7 +126,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     basis.right = glm::vec3(view[0][0], view[1][0], view[2][0]);
     basis.up = glm::vec3(view[0][1], view[1][1], view[2][1]);
     basis.nearPlane = ctx.camera.nearPlane;
-    basis.verticalFovDegrees = 70.0f; // Default FOV; will be refined
+    basis.verticalFovDegrees = ctx.camera.fovDegrees;
     basis.aspectRatio = static_cast<float>(std::max(1, targets.width())) /
                         static_cast<float>(std::max(1, targets.height()));
 

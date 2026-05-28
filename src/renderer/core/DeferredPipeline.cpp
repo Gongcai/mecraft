@@ -69,6 +69,13 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
         m_shadowRenderer = shared.shadowRenderer;
         init(*m_resourceMgr, m_shadowRenderer);
     }
+
+    // Inject ShadowPass dependencies from shared resources
+    if (m_shadowPass) {
+        m_shadowPass->setTerrainRenderer(shared.terrain);
+        m_shadowPass->setWorldRenderBuffer(shared.worldRenderBuffer);
+        // Entity/drop/registry injection deferred until Game provides them
+    }
 }
 
 void DeferredPipeline::shutdown() {
@@ -101,6 +108,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Use settings from RenderScene
     m_currentSettings = settings;
+
+    // Per-frame state reset
+    m_deferredHistoryUpdatedThisFrame = false;
 
     // Capture current framebuffer for later restore
     captureCurrentFramebuffer();
@@ -240,6 +250,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
     restoreCapturedFramebufferViewport(windowWidth, windowHeight);
+
+    // Mark that we now have valid previous frame data for temporal effects
+    m_hasPreviousFrameData = true;
 
     return buildFrameOutput(ctx);
 }
@@ -415,6 +428,11 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     terrain.renderOpaqueChunksAndCollectPasses(*ctx.world, cutoutEntries, transparentEntries, true);
     terrain.syncTransparentBatches();
 
+    // Save transparent batch for water/transparent passes
+    m_transparentBatch = terrain.transparentBatches();
+    m_transparentPassPlan = terrain.transparentPassPlan();
+    m_transparentEntries = transparentEntries;
+
     // Flush MDI buffer
     worldBuffer.flushOpaque();
 
@@ -506,7 +524,9 @@ void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool pr
                                    volumetricFogActive,
                                    true,  // useMultiDrawIndirect
                                    *m_shared->worldRenderBuffer,
-                                   {}, {}, {});
+                                   m_transparentBatch,
+                                   m_transparentPassPlan,
+                                   m_transparentEntries);
 }
 
 FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {

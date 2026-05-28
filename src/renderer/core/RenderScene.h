@@ -114,6 +114,14 @@ public:
     // Debug query helpers (replaces direct RenderPipelineSettings access)
     bool isLightDebugActive() const;
 
+    // Pipeline readiness (R2.6a)
+    /// Check if the new pipeline path is ready to use.
+    bool isNewPipelineReady() const;
+    /// Enable or disable the new pipeline path (experimental).
+    void setNewPipelineActive(bool active) { m_newPipelineActive = active; }
+    /// Get human-readable pipeline status string.
+    const char* getPipelineStatus() const;
+
     // Frame output access
     const FrameOutput& getLastFrameOutput() const;
 
