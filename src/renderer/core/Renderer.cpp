@@ -1450,7 +1450,7 @@ RenderSettings Renderer::buildRenderSettingsFromPipelineSettings() const {
     rs.debug.viewMode = m_pipelineSettings.debugViewMode;
     // Weather
     rs.weather.skylightScale = m_pipelineSettings.weatherSkylightScale;
-    rs.weather.rainLinesEnabled = m_pipelineSettings.rainWetSurfacesEnabled;
+    rs.weather.rainLinesEnabled = m_pipelineSettings.weatherRainLinesEnabled;
     rs.weather.surfaceRipplesEnabled = m_pipelineSettings.rainSurfaceRipplesEnabled;
     return rs;
 }

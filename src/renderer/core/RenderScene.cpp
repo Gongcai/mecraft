@@ -82,6 +82,7 @@ void RenderScene::shutdown() {
     // Phase 9: Shutdown pipelines
     if (m_activePipeline) {
         m_activePipeline->shutdown();
+        m_activePipelineInitialized = false;
         m_activePipeline = nullptr;
     }
     m_forwardPipeline.reset();
@@ -129,8 +130,9 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
     // Phase 9: Switch active pipeline
     if (m_forwardPipeline && m_deferredPipeline) {
         // Shutdown current pipeline
-        if (m_activePipeline) {
+        if (m_activePipeline && m_activePipelineInitialized) {
             m_activePipeline->shutdown();
+            m_activePipelineInitialized = false;
         }
 
         // Switch to new pipeline
@@ -138,8 +140,13 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
             ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
             : static_cast<RenderPipeline*>(m_forwardPipeline.get());
 
-        // Initialize new pipeline with shared resources
-        m_activePipeline->init(m_shared);
+        // Initialize when all shared resources required by the active path are present.
+        if (isNewPipelineReady()) {
+            m_activePipeline->init(m_shared);
+            m_activePipelineInitialized = true;
+        } else {
+            m_newPipelineActive = false;
+        }
     }
 
     // Phase 1: Also update legacy renderer settings for compatibility
@@ -334,6 +341,9 @@ const RenderSettings& RenderScene::getSettings() const {
 void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
     m_humanoidRenderer = hr;
     m_shared.humanoidRenderer = hr;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setHumanoidRenderer(hr);
+    }
     if (m_legacyRenderer) {
         m_legacyRenderer->setHumanoidRenderer(hr);
     }
@@ -342,6 +352,9 @@ void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
 void RenderScene::setDropRenderer(DropRenderer* dr) {
     m_dropRenderer = dr;
     m_shared.dropRenderer = dr;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setDropRenderer(dr);
+    }
     if (m_legacyRenderer) {
         m_legacyRenderer->setDropRenderer(dr);
     }
@@ -358,6 +371,9 @@ void RenderScene::setParticleSystem(ParticleSystem* ps) {
 void RenderScene::setDropSystem(DropSystem* ds) {
     m_dropSystem = ds;
     m_shared.dropSystem = ds;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setDropSystem(ds);
+    }
     if (m_legacyRenderer) {
         m_legacyRenderer->setDropSystem(ds);
     }
@@ -365,6 +381,9 @@ void RenderScene::setDropSystem(DropSystem* ds) {
 
 void RenderScene::setGameplayRegistry(ecs::GameplayRegistry* reg) {
     m_gameplayRegistry = reg;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
+    }
     if (m_legacyRenderer) {
         m_legacyRenderer->setGameplayRegistry(reg);
     }
@@ -440,6 +459,9 @@ void RenderScene::setRenderLocalPlayerModel(bool visible) {
 }
 
 void RenderScene::setHeldBlockLightValue(int value) {
+    if (m_deferredPipeline) {
+        m_deferredPipeline->setHeldBlockLightValue(value);
+    }
     if (m_legacyRenderer) m_legacyRenderer->setHeldBlockLightValue(value);
 }
 
@@ -454,18 +476,30 @@ void RenderScene::renderTransparentAndOverlays(const World& world, const BlockTa
 }
 
 void RenderScene::renderDeferredDebugOverlay(const Window& window) {
+    if (m_newPipelineActive) {
+        return;
+    }
     if (m_legacyRenderer) m_legacyRenderer->renderDeferredDebugOverlay(window);
 }
 
 bool RenderScene::isDeferredFrameActive() const {
+    if (m_newPipelineActive && m_lastFrameOutput.hasDeferredInputs) {
+        return true;
+    }
     return m_legacyRenderer ? m_legacyRenderer->isDeferredFrameActive() : false;
 }
 
 GLuint RenderScene::gbufDepthTexture() const {
+    if (m_newPipelineActive && m_lastFrameOutput.gbufferDepthTex != 0) {
+        return m_lastFrameOutput.gbufferDepthTex;
+    }
     return m_legacyRenderer ? m_legacyRenderer->gbufDepthTexture() : 0;
 }
 
 GLuint RenderScene::weatherMaskTexture() const {
+    if (m_newPipelineActive && m_lastFrameOutput.weatherMaskTex != 0) {
+        return m_lastFrameOutput.weatherMaskTex;
+    }
     return m_legacyRenderer ? m_legacyRenderer->weatherMaskTexture() : 0;
 }
 
@@ -475,18 +509,29 @@ bool RenderScene::isLightDebugActive() const {
 
 bool RenderScene::isNewPipelineReady() const {
     return m_activePipeline &&
+           m_activePipeline->supportsDeferred() &&
            m_shared.terrain &&
            m_shared.deferredTargets &&
            m_shared.sky &&
            m_shared.resources;
 }
 
+void RenderScene::setNewPipelineActive(bool active) {
+    if (active && !m_activePipelineInitialized && isNewPipelineReady()) {
+        m_activePipeline->init(m_shared);
+        m_activePipelineInitialized = true;
+    }
+    m_newPipelineActive = active && isNewPipelineReady() && m_activePipelineInitialized;
+}
+
 const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipeline) return "No active pipeline";
+    if (!m_activePipeline->supportsDeferred()) return "Unavailable for forward pipeline";
     if (!m_shared.terrain) return "Missing: terrain";
     if (!m_shared.deferredTargets) return "Missing: deferredTargets";
     if (!m_shared.sky) return "Missing: sky";
     if (!m_shared.resources) return "Missing: resources";
+    if (!m_activePipelineInitialized) return "Ready (not initialized)";
     if (!m_newPipelineActive) return "Ready (inactive)";
     return "Active";
 }

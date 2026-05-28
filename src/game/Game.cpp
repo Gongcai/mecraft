@@ -306,43 +306,53 @@ void Game::renderFrame(const float frameTime) {
         m_renderScene.setHeldBlockLightValue(lightLevel);
     }
 
-    m_renderScene.renderOpaqueAndCutout(m_world, finalCamera, m_window);
+    ecs::PlayerQuery playerQuery(reg);
+    m_renderScene.setEyeInWater(playerQuery.isEyesInWater());
+
+    // Read block interaction data from ECS and pass to the active render path.
+    BlockTargetRenderData targetData;
+    BlockBreakRenderData breakData;
+    targetData.hasTarget = playerQuery.hasTargetBlock();
+    targetData.targetBlock = playerQuery.getTargetBlock();
+    breakData.active = playerQuery.hasBlockBreakProgress();
+    breakData.progress01 = playerQuery.getBlockBreakProgress();
+    breakData.blockPos = playerQuery.getBreakTargetBlock();
 
     const bool lightDebugActive = m_renderScene.isLightDebugActive();
     float cameraRainVisibility = 1.0f;
+    const bool useNewPipeline = m_renderScene.isNewPipelineActive() && m_renderScene.isNewPipelineReady();
 
-    if (!lightDebugActive) {
-        const bool deferredActive = m_renderScene.isDeferredFrameActive();
-        if (!deferredActive) {
-            m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
-            if (m_cameraController.shouldRenderPlayerModel()) {
-                m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                          HumanoidRenderer::kRenderAll);
-            } else {
-                m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                          HumanoidRenderer::kRenderMobsOnly);
+    if (useNewPipeline) {
+        // Experimental single-frame path. Some overlays are still being migrated
+        // from the legacy split render path.
+        m_renderScene.renderFrame(m_world, finalCamera, m_window, targetData, breakData);
+
+        if (!lightDebugActive) {
+            cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
+            renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
+        }
+    } else {
+        m_renderScene.renderOpaqueAndCutout(m_world, finalCamera, m_window);
+
+        if (!lightDebugActive) {
+            const bool deferredActive = m_renderScene.isDeferredFrameActive();
+            if (!deferredActive) {
+                m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
+                if (m_cameraController.shouldRenderPlayerModel()) {
+                    m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
+                                              HumanoidRenderer::kRenderAll);
+                } else {
+                    m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
+                                              HumanoidRenderer::kRenderMobsOnly);
+                }
             }
+
+            cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
+            renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
         }
 
-        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
-        renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
+        m_renderScene.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
     }
-
-    // Read block interaction data from ECS and pass to Renderer
-    BlockTargetRenderData targetData;
-    BlockBreakRenderData breakData;
-    {
-        ecs::PlayerQuery playerQuery(reg);
-        targetData.hasTarget = playerQuery.hasTargetBlock();
-        targetData.targetBlock = playerQuery.getTargetBlock();
-        breakData.active = playerQuery.hasBlockBreakProgress();
-        breakData.progress01 = playerQuery.getBlockBreakProgress();
-        breakData.blockPos = playerQuery.getBreakTargetBlock();
-    }
-    m_renderScene.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
-
-    ecs::PlayerQuery playerQuery(reg);
-    m_renderScene.setEyeInWater(playerQuery.isEyesInWater());
 
     // Phase 11: Build post-process effects via RenderScene (replaces ~70 lines of parameter assembly)
     PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
@@ -384,6 +394,7 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
     auto viewMat = camera.getViewMatrix();
     float alphaScale = settings.weather.rainAlphaScale;
     const GLuint depthTex = m_renderScene.gbufDepthTexture();
+    const bool hardwareDepthTest = !m_renderScene.isNewPipelineActive();
     const glm::vec2 precipitationScreenSize(
         static_cast<float>(std::max(1, m_window.getWidth())),
         static_cast<float>(std::max(1, m_window.getHeight())));
@@ -392,13 +403,15 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
         m_rainRenderer.render(projMat, viewMat, camPos,
                               weather.rainStrength, cameraRainVisibility,
                               alphaScale, depthTex,
-                              precipitationScreenSize, frameTime);
+                              precipitationScreenSize, frameTime,
+                              hardwareDepthTest);
     }
     if (weather.snowStrength > 0.01f) {
         m_rainRenderer.renderSnow(projMat, viewMat, camPos,
                                   weather.snowStrength, cameraRainVisibility,
                                   alphaScale * 0.6f, depthTex,
-                                  precipitationScreenSize, frameTime);
+                                  precipitationScreenSize, frameTime,
+                                  hardwareDepthTest);
     }
 }
 

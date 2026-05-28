@@ -107,7 +107,8 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         bool proceduralLines,
                                         GLuint sceneDepthTex,
                                         const glm::vec2& screenSize,
-                                        float dt) {
+                                        float dt,
+                                        bool hardwareDepthTest) {
     if (!m_shader || texture == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
 
     // Clamp dt to avoid physics explosion on frame hitches.
@@ -192,13 +193,18 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_DEPTH_TEST);
+    if (hardwareDepthTest) {
+        glEnable(GL_DEPTH_TEST);
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
 
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 5));
 
     glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE1);
@@ -214,7 +220,8 @@ void RainRenderer::render(const glm::mat4& projection,
                            float alphaScale,
                            GLuint sceneDepthTex,
                            const glm::vec2& screenSize,
-                           float dt) {
+                           float dt,
+                           bool hardwareDepthTest) {
     ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
     renderPrecipitation(projection, view, cameraPos,
                         m_rainTex, m_rainDrops,
@@ -226,7 +233,8 @@ void RainRenderer::render(const glm::mat4& projection,
                         true,
                         sceneDepthTex,
                         screenSize,
-                        dt);
+                        dt,
+                        hardwareDepthTest);
 }
 
 void RainRenderer::renderSnow(const glm::mat4& projection,
@@ -237,7 +245,8 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                float alphaScale,
                                GLuint sceneDepthTex,
                                const glm::vec2& screenSize,
-                               float dt) {
+                               float dt,
+                               bool hardwareDepthTest) {
     ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
     renderPrecipitation(projection, view, cameraPos,
                         m_snowTex, m_snowDrops,
@@ -249,7 +258,8 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                         false,
                         sceneDepthTex,
                         screenSize,
-                        dt);
+                        dt,
+                        hardwareDepthTest);
 }
 
 void RainRenderer::renderWeatherMask(const glm::mat4& projection,

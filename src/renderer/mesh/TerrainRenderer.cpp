@@ -2,6 +2,7 @@
 #include "TerrainRenderCache.h"
 #include "WorldRenderBuffer.h"
 #include "../core/Shader.h"
+#include "../gl/GlStateGuard.h"
 #include "../shadow/ShadowCasterCuller.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../../world/World.h"
@@ -573,6 +574,8 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
 
 void TerrainRenderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries,
                                           Shader& chunkShader) {
+    renderer::gl::ScopedCullFaceDisable cullFaceGuard;
+
     if (m_useMultiDrawIndirect) {
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);

@@ -118,7 +118,9 @@ public:
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;
     /// Enable or disable the new pipeline path (experimental).
-    void setNewPipelineActive(bool active) { m_newPipelineActive = active; }
+    void setNewPipelineActive(bool active);
+    /// Check whether the experimental new pipeline path is enabled.
+    bool isNewPipelineActive() const { return m_newPipelineActive; }
     /// Get human-readable pipeline status string.
     const char* getPipelineStatus() const;
 
@@ -182,6 +184,7 @@ private:
     std::unique_ptr<DeferredPipeline> m_deferredPipeline;
     RenderPipeline* m_activePipeline = nullptr;
     bool m_newPipelineActive = false; // Set to true when shared resources are fully populated
+    bool m_activePipelineInitialized = false;
 
     // Sub-renderers (non-owning)
     HumanoidRenderer* m_humanoidRenderer = nullptr;

@@ -26,7 +26,8 @@ public:
                 float alphaScale,
                 GLuint sceneDepthTex,
                 const glm::vec2& screenSize,
-                float dt);
+                float dt,
+                bool hardwareDepthTest = true);
 
     // Render snow around the given camera position.
     void renderSnow(const glm::mat4& projection,
@@ -37,7 +38,8 @@ public:
                     float alphaScale,
                     GLuint sceneDepthTex,
                     const glm::vec2& screenSize,
-                    float dt);
+                    float dt,
+                    bool hardwareDepthTest = true);
 
     // Render weather mask to the currently bound FBO with additive blending.
     // Equivalent to DerivativeMain gbuffers_weather: writes particle alpha to a single channel.
@@ -77,7 +79,8 @@ private:
                              bool proceduralLines,
                              GLuint sceneDepthTex,
                              const glm::vec2& screenSize,
-                             float dt);
+                             float dt,
+                             bool hardwareDepthTest);
 
     Shader* m_shader = nullptr;
     GLuint m_rainTex = 0;
