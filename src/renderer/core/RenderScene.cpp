@@ -105,12 +105,8 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
                                   m_shared.resources;
 
     if (newPipelineReady && m_newPipelineActive) {
-        // New pipeline path (Phase 10+ will fully implement this)
-        // Pass settings to deferred pipeline
-        if (m_deferredPipeline) {
-            m_deferredPipeline->setCurrentSettings(m_settings);
-        }
-        m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext);
+        // New pipeline path
+        m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
 
         // Post-process is handled by RenderScene for both pipelines
         // if (!m_lastFrameOutput.skipPostProcess) {

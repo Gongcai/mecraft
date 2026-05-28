@@ -40,16 +40,13 @@ public:
     // RenderPipeline interface
     void init(SharedRenderResources& shared) override;
     void shutdown() override;
-    FrameOutput renderFrame(const FrameContext& ctx) override;
+    FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings) override;
     const char* name() const override { return "Deferred (Shader Effects)"; }
     bool supportsDeferred() const override { return true; }
     bool supportsDebugView() const override { return true; }
 
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
-
-    // Settings (set from RenderScene before renderFrame)
-    void setCurrentSettings(const RenderSettings& settings) { m_currentSettings = settings; }
 
     // Pass accessors
     SsaoPass* ssaoPass() const { return m_ssaoPass.get(); }

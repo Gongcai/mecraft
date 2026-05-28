@@ -84,7 +84,7 @@ void DeferredPipeline::shutdown() {
     m_debugPass.reset();
 }
 
-FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx) {
+FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
     // Pre-condition checks
     if (!m_shared || !m_resourceMgr || !m_shared->deferredTargets) {
         return {};
@@ -94,8 +94,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx) {
     const int windowWidth = ctx.frameWidth;
     const int windowHeight = ctx.frameHeight;
 
-    // Cache settings for this frame (will be populated from RenderScene in Phase 10d)
-    m_currentSettings = RenderSettings{};
+    // Use settings from RenderScene
+    m_currentSettings = settings;
 
     // Capture current framebuffer for later restore
     captureCurrentFramebuffer();

@@ -25,7 +25,7 @@ public:
     // RenderPipeline interface
     void init(SharedRenderResources& shared) override;
     void shutdown() override;
-    FrameOutput renderFrame(const FrameContext& ctx) override;
+    FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings) override;
     const char* name() const override { return "Forward (Vanilla)"; }
     bool supportsDeferred() const override { return false; }
     bool supportsDebugView() const override { return false; }

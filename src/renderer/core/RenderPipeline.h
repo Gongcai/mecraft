@@ -3,6 +3,7 @@
 
 #include "FrameContext.h"
 #include "FrameOutput.h"
+#include "RenderSettings.h"
 
 struct SharedRenderResources;
 
@@ -21,8 +22,9 @@ public:
 
     /// Render a frame
     /// @param ctx Unified frame context
+    /// @param settings Render settings for this frame
     /// @return Frame output with render targets and metadata
-    virtual FrameOutput renderFrame(const FrameContext& ctx) = 0;
+    virtual FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings) = 0;
 
     /// Get pipeline name for UI/debug display
     virtual const char* name() const = 0;

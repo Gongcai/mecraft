@@ -29,7 +29,7 @@ void ForwardPipeline::shutdown() {
     m_initialized = false;
 }
 
-FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx) {
+FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& /*settings*/) {
     if (!m_initialized || !ctx.shared) {
         return {};
     }
