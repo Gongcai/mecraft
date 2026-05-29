@@ -291,7 +291,9 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                           std::vector<ChunkRenderEntry>& transparentEntries,
                                                           const bool frustumCull,
                                                           const float maxCameraDistance,
-                                                          shadow::ShadowCasterCuller* shadowCuller) {
+                                                          shadow::ShadowCasterCuller* shadowCuller,
+                                                          AabbVisibilityFn extraAabbCuller,
+                                                          void* extraAabbCullerUserData) {
     m_terrainCache->syncChunkRenderColumns(world);
     std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache->chunkRenderColumns();
     if (chunkRenderColumns.empty()) {
@@ -325,6 +327,11 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
         const float dx = clampedX - m_cameraPos.x;
         const float dz = clampedZ - m_cameraPos.z;
         return dx * dx + dz * dz <= maxCameraDistanceSq;
+    };
+
+    auto boundsVisibleToExtraCuller = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
+        return extraAabbCuller == nullptr ||
+               extraAabbCuller(boundsMin, boundsMax, extraAabbCullerUserData);
     };
 
     size_t regionBegin = 0;
@@ -362,6 +369,10 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
             regionBegin = regionEnd;
             continue;
         }
+        if (!boundsVisibleToExtraCuller(regionMin, regionMax)) {
+            regionBegin = regionEnd;
+            continue;
+        }
 
 #ifdef MECRAFT_DEBUG
         ++m_regionTestsThisFrame;
@@ -390,6 +401,9 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
             const int columnCandidateCount = (column.aggregatedPresent ? 1 : 0) + column.transparentCount;
 
             if (!boundsWithinCameraDistance(column.columnBoundsMin, column.columnBoundsMax)) {
+                continue;
+            }
+            if (!boundsVisibleToExtraCuller(column.columnBoundsMin, column.columnBoundsMax)) {
                 continue;
             }
 
@@ -444,6 +458,9 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
                     const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : fallbackMin;
                     const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
                     if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
+                        continue;
+                    }
+                    if (!boundsVisibleToExtraCuller(boundsMin, boundsMax)) {
                         continue;
                     }
 #ifdef MECRAFT_DEBUG
@@ -509,6 +526,7 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
             } else {
                 // Old path: draw from column aggregate.
                 if (column.aggregatedPresent) {
+                    if (boundsVisibleToExtraCuller(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
 #ifdef MECRAFT_DEBUG
                     ++m_chunkTestsThisFrame;
                     if (frustumCull && !isChunkInFrustum(column.aggregatedBoundsMin, column.aggregatedBoundsMax,
@@ -537,11 +555,16 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
                             cutoutEntries.push_back({column.chunk, -1, true});
                         }
                     }
+                    }
                 }
 
                 for (int transparentIndex = 0; transparentIndex < column.transparentCount; ++transparentIndex) {
                     const int scy = column.transparentScys[transparentIndex];
                     const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
+
+                    if (!boundsVisibleToExtraCuller(transparent.boundsMin, transparent.boundsMax)) {
+                        continue;
+                    }
 
 #ifdef MECRAFT_DEBUG
                     ++m_chunkTestsThisFrame;

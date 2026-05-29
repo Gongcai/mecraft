@@ -1,4 +1,5 @@
 #include "CommonFrameTargets.h"
+#include "../debug/RenderDebugLabels.h"
 #include <cstdio>
 
 CommonFrameTargets::~CommonFrameTargets() {
@@ -61,6 +62,13 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Label GL objects for RenderDoc / KHR_debug inspection
+    renderer::debug::labelFramebuffer(m_sceneColorFbo, "CommonTargets.SceneColor");
+    renderer::debug::labelTexture(m_sceneColorTex, "CommonTargets.SceneColorTex");
+    renderer::debug::labelTexture(m_sceneDepthTex, "CommonTargets.SceneDepthTex");
+    renderer::debug::labelVertexArray(m_fullscreenVao, "CommonTargets.FullscreenVAO");
+
     m_ready = true;
     return true;
 }

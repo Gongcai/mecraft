@@ -1,6 +1,7 @@
 #include "DeferredPipeline.h"
 #include "RenderScene.h"
 #include "FrameOutput.h"
+#include "../debug/RenderDebugLabels.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
@@ -132,6 +133,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Sky capture
     if (m_skyCapturePass && m_shared->sky) {
+        renderer::debug::ScopedDebugGroup passGroup("SkyCapture");
         m_skyCapturePass->execute(*ctx.world, targets, *m_shared->sky,
                                   m_resourceMgr, ctx.camera.position.y,
                                   ctx.shaderTime, ctx.camera.position,
@@ -141,24 +143,29 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     m_deferredFrameActive = true;
 
     // GBuffer terrain
-    renderGBufferTerrain(ctx, m_currentSettings);
+    {
+        renderer::debug::ScopedDebugGroup passGroup("GBuffer");
+        renderGBufferTerrain(ctx, m_currentSettings);
 
-    // Entity and drop GBuffer
-    if (m_gbufferPass) {
-        m_gbufferPass->executeEntities(*ctx.world, ctx, targets,
-                                       m_shared->humanoidRenderer, nullptr, true);
-        m_gbufferPass->executeDrops(*ctx.world, ctx, targets,
-                                    m_shared->dropRenderer, m_shared->dropSystem);
+        // Entity and drop GBuffer
+        if (m_gbufferPass) {
+            m_gbufferPass->executeEntities(*ctx.world, ctx, targets,
+                                           m_shared->humanoidRenderer, nullptr, true);
+            m_gbufferPass->executeDrops(*ctx.world, ctx, targets,
+                                        m_shared->dropRenderer, m_shared->dropSystem);
+        }
     }
 
     // Velocity pass
     if (m_velocityPass) {
+        renderer::debug::ScopedDebugGroup passGroup("Velocity");
         m_velocityPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Shadow pass
     if (m_shadowPass && m_currentSettings.shadow.enabled && m_shadowPass->hasShaders() &&
         m_shared->shadowRenderer && ctx.world) {
+        renderer::debug::ScopedDebugGroup passGroup("Shadow");
         const bool useMultiDrawIndirect = m_shared->terrain != nullptr
             ? m_shared->terrain->useMultiDrawIndirect()
             : true;
@@ -171,6 +178,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // SSAO pass
     if (m_ssaoPass) {
+        renderer::debug::ScopedDebugGroup passGroup("SSAO");
         m_ssaoPass->execute(ctx, m_currentSettings, targets);
     }
 
@@ -181,6 +189,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Deferred lighting
     if (m_lightingPass) {
+        renderer::debug::ScopedDebugGroup passGroup("DeferredLighting");
         m_lightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
         m_lightingPass->execute(ctx, m_currentSettings, targets);
     }
@@ -199,16 +208,19 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Reflection pass
     if (m_reflectionPass) {
+        renderer::debug::ScopedDebugGroup passGroup("Reflection");
         m_reflectionPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Cloud pass
     if (m_cloudPass) {
+        renderer::debug::ScopedDebugGroup passGroup("Cloud");
         m_cloudPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Scene composite
     if (m_sceneCompositePass) {
+        renderer::debug::ScopedDebugGroup passGroup("SceneComposite");
         m_sceneCompositePass->execute(ctx, m_currentSettings, targets);
     }
     targets.copySceneCompositeToTransparentComposite();
@@ -225,6 +237,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Water composite (before TAA)
     if (m_currentSettings.taa.enabled) {
+        renderer::debug::ScopedDebugGroup passGroup("WaterComposite.PreTAA");
         renderWaterCompositePass(ctx, true);
     }
 
@@ -234,21 +247,25 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Volumetric fog
     if (m_volumetricPass) {
+        renderer::debug::ScopedDebugGroup passGroup("Volumetric");
         m_volumetricPass->execute(ctx, m_currentSettings, targets, m_hasPreviousFrameData);
     }
 
     // TAA resolve
     if (m_taaPass && m_currentSettings.taa.enabled && m_hasPreviousFrameData) {
+        renderer::debug::ScopedDebugGroup passGroup("TemporalResolve");
         m_taaPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Motion blur
     if (m_motionBlurPass && m_currentSettings.postProcess.motionBlurEnabled && m_hasPreviousFrameData) {
+        renderer::debug::ScopedDebugGroup passGroup("MotionBlur");
         m_motionBlurPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Depth of field
     if (m_dofPass && m_currentSettings.postProcess.dofEnabled) {
+        renderer::debug::ScopedDebugGroup passGroup("DepthOfField");
         m_dofPass->execute(ctx, m_currentSettings, targets);
     }
 
@@ -261,6 +278,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Match the legacy split path: if water was not rendered before temporal
     // resolve, composite it over the already-blitted final scene.
     if (!m_waterRenderedBeforeTemporal) {
+        renderer::debug::ScopedDebugGroup passGroup("WaterComposite.PostTAAFallback");
         renderWaterCompositePass(ctx, false);
     }
 

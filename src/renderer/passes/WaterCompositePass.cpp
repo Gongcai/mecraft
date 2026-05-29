@@ -1,4 +1,5 @@
 #include "WaterCompositePass.h"
+#include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../gl/GlStateGuard.h"
 #include "../mesh/TerrainRenderer.h"
@@ -141,6 +142,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    renderer::debug::ScopedDebugGroup bindGroup("WaterComposite.BindInputs");
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
     glActiveTexture(GL_TEXTURE6);
@@ -167,6 +169,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     int drawCallCount = 0;
     if (useMultiDrawIndirect) {
         // MDI path: sort water entries back-to-front, build water command list, flush via MDI
+        renderer::debug::ScopedDebugGroup mdiGroup("WaterComposite.DrawWater.MDI");
         std::vector<const DrawBatchEntry*> waterEntries;
         for (const auto& entry : transparentBatch) {
             if (entry.kind == TransparentBatchKind::Water) {
@@ -188,6 +191,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         }
     } else {
         // Non-MDI path: sort and draw water sub-chunks individually
+        renderer::debug::ScopedDebugGroup cpuGroup("WaterComposite.DrawWater.CPU");
         struct WaterItem {
             const ChunkRenderEntry* entry = nullptr;
             float distanceSq = 0.0f;

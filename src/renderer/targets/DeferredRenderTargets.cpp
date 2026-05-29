@@ -1,6 +1,8 @@
 #include "DeferredRenderTargets.h"
+#include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -443,6 +445,104 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // Label GL objects for RenderDoc / KHR_debug inspection
+    renderer::debug::labelFramebuffer(m_gBufferFbo, "DeferredTargets.GBuffer");
+    renderer::debug::labelTexture(m_gAlbedo, "DeferredTargets.GBufferAlbedo");
+    renderer::debug::labelTexture(m_gNormalAo, "DeferredTargets.GBufferNormalAo");
+    renderer::debug::labelTexture(m_gVoxelLight, "DeferredTargets.GBufferVoxelLight");
+    renderer::debug::labelTexture(m_gMaterial, "DeferredTargets.GBufferMaterial");
+    renderer::debug::labelTexture(m_gMaterialAux, "DeferredTargets.GBufferMaterialAux");
+    renderer::debug::labelTexture(m_gDepth, "DeferredTargets.GBufferDepth");
+    renderer::debug::labelFramebuffer(m_shadowFbo, "DeferredTargets.ShadowMap");
+    renderer::debug::labelTexture(m_shadowDepth, "DeferredTargets.ShadowDepth");
+    renderer::debug::labelTexture(m_shadowDepthComparison, "DeferredTargets.ShadowDepthComparison");
+    renderer::debug::labelTexture(m_shadowColor, "DeferredTargets.ShadowColor");
+    renderer::debug::labelTexture(m_shadowNormal, "DeferredTargets.ShadowNormal");
+    renderer::debug::labelFramebuffer(m_csmShadowFbo, "DeferredTargets.CSMDepth");
+    renderer::debug::labelTexture(m_csmShadowDepth, "DeferredTargets.CSMDepthArray");
+    renderer::debug::labelTexture(m_csmShadowDepthComparison, "DeferredTargets.CSMDepthComparison");
+    renderer::debug::labelFramebuffer(m_csmShadowTransparentFbo, "DeferredTargets.CSMTransparent");
+    renderer::debug::labelTexture(m_csmShadowDepthAll, "DeferredTargets.CSMDepthAll");
+    renderer::debug::labelTexture(m_csmShadowDepthAllComparison, "DeferredTargets.CSMDepthAllComparison");
+    renderer::debug::labelTexture(m_csmShadowColor0, "DeferredTargets.CSMColor0");
+    renderer::debug::labelTexture(m_csmShadowColor1, "DeferredTargets.CSMColor1");
+    renderer::debug::labelFramebuffer(m_ssaoFbo, "DeferredTargets.SSAO");
+    renderer::debug::labelTexture(m_ssaoTex, "DeferredTargets.SSAOTex");
+    renderer::debug::labelFramebuffer(m_ssaoFilteredFbo, "DeferredTargets.SSAOFiltered");
+    renderer::debug::labelTexture(m_ssaoFilteredTex, "DeferredTargets.SSAOFilteredTex");
+    renderer::debug::labelFramebuffer(m_ssaoHalfResFbo, "DeferredTargets.SSAOHalfRes");
+    renderer::debug::labelTexture(m_ssaoHalfResTex, "DeferredTargets.SSAOHalfResTex");
+    renderer::debug::labelFramebuffer(m_ssaoHalfResFilteredFbo, "DeferredTargets.SSAOHalfResFiltered");
+    renderer::debug::labelTexture(m_ssaoHalfResFilteredTex, "DeferredTargets.SSAOHalfResFilteredTex");
+    renderer::debug::labelFramebuffer(m_ssaoTemporalFbo, "DeferredTargets.SSAOTemporal");
+    renderer::debug::labelTexture(m_ssaoTemporalTex, "DeferredTargets.SSAOTemporalTex");
+    for (int i = 0; i < 2; ++i) {
+        char fboName[48], texName[48];
+        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSAOHistory[%d]", i);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.SSAOHistoryTex[%d]", i);
+        renderer::debug::labelFramebuffer(m_ssaoHistoryFbo[i], fboName);
+        renderer::debug::labelTexture(m_ssaoHistoryTex[i], texName);
+    }
+    renderer::debug::labelFramebuffer(m_sceneLightingFbo, "DeferredTargets.SceneLighting");
+    renderer::debug::labelTexture(m_sceneLightingTex, "DeferredTargets.SceneLightingTex");
+    renderer::debug::labelFramebuffer(m_sceneCompositeFbo, "DeferredTargets.SceneComposite");
+    renderer::debug::labelTexture(m_sceneCompositeTex, "DeferredTargets.SceneCompositeTex");
+    renderer::debug::labelFramebuffer(m_sceneResolvedFbo, "DeferredTargets.SceneResolved");
+    renderer::debug::labelTexture(m_sceneResolvedTex, "DeferredTargets.SceneResolvedTex");
+    renderer::debug::labelFramebuffer(m_transparentCompositeFbo, "DeferredTargets.TransparentComposite");
+    renderer::debug::labelTexture(m_transparentCompositeTex, "DeferredTargets.TransparentCompositeTex");
+    renderer::debug::labelTexture(m_transparentCompositeDepth, "DeferredTargets.TransparentCompositeDepth");
+    renderer::debug::labelFramebuffer(m_halfResFbo, "DeferredTargets.HalfRes");
+    renderer::debug::labelTexture(m_halfResTex, "DeferredTargets.HalfResTex");
+    renderer::debug::labelFramebuffer(m_reflectionFbo, "DeferredTargets.Reflection");
+    renderer::debug::labelTexture(m_reflectionTex, "DeferredTargets.ReflectionTex");
+    renderer::debug::labelFramebuffer(m_reflectionTemporalScratchFbo, "DeferredTargets.ReflectionTemporalScratch");
+    renderer::debug::labelTexture(m_reflectionTemporalScratchTex, "DeferredTargets.ReflectionTemporalScratchTex");
+    renderer::debug::labelFramebuffer(m_cloudFbo, "DeferredTargets.Cloud");
+    renderer::debug::labelTexture(m_cloudTex, "DeferredTargets.CloudTex");
+    renderer::debug::labelFramebuffer(m_skyCaptureFbo, "DeferredTargets.SkyCapture");
+    renderer::debug::labelTexture(m_skyCaptureTex, "DeferredTargets.SkyCaptureTex");
+    for (int i = 0; i < 2; ++i) {
+        char fboName[48], texName[48], depthName[48];
+        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryScene[%d]", i);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistorySceneTex[%d]", i);
+        std::snprintf(depthName, sizeof(depthName), "DeferredTargets.HistoryDepthTex[%d]", i);
+        renderer::debug::labelFramebuffer(m_historySceneFbo[i], fboName);
+        renderer::debug::labelTexture(m_historySceneTex[i], texName);
+        renderer::debug::labelTexture(m_historyDepthTex[i], depthName);
+    }
+    for (int i = 0; i < 2; ++i) {
+        char fboName[48], texName[48];
+        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryReflection[%d]", i);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryReflectionTex[%d]", i);
+        renderer::debug::labelFramebuffer(m_historyReflectionFbo[i], fboName);
+        renderer::debug::labelTexture(m_historyReflectionTex[i], texName);
+    }
+    for (int i = 0; i < 2; ++i) {
+        char fboName[48], texName[48];
+        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryCloud[%d]", i);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryCloudTex[%d]", i);
+        renderer::debug::labelFramebuffer(m_historyCloudFbo[i], fboName);
+        renderer::debug::labelTexture(m_historyCloudTex[i], texName);
+    }
+    for (int i = 0; i < 2; ++i) {
+        char fboName[48], texName[48];
+        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryVolumetric[%d]", i);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryVolumetricTex[%d]", i);
+        renderer::debug::labelFramebuffer(m_historyVolumetricFbo[i], fboName);
+        renderer::debug::labelTexture(m_historyVolumetricTex[i], texName);
+    }
+    renderer::debug::labelFramebuffer(m_temporalCurrentFbo, "DeferredTargets.TemporalCurrent");
+    renderer::debug::labelTexture(m_temporalCurrentTex, "DeferredTargets.TemporalCurrentTex");
+    renderer::debug::labelFramebuffer(m_velocityFbo, "DeferredTargets.Velocity");
+    renderer::debug::labelTexture(m_velocityTex, "DeferredTargets.VelocityTex");
+    renderer::debug::labelTexture(m_perObjectVelocityTex, "DeferredTargets.PerObjectVelocity");
+    renderer::debug::labelFramebuffer(m_weatherMaskFbo, "DeferredTargets.WeatherMask");
+    renderer::debug::labelTexture(m_weatherMaskTex, "DeferredTargets.WeatherMaskTex");
+    renderer::debug::labelTexture(m_atmosphereLut3d, "DeferredTargets.AtmosphereLUT");
+    renderer::debug::labelVertexArray(m_fullscreenVao, "DeferredTargets.FullscreenVAO");
+
     m_ready = true;
     return true;
 }

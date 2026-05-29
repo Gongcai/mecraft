@@ -1,6 +1,8 @@
 #include "WorldRenderBuffer.h"
+#include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -391,6 +393,18 @@ void WorldRenderBuffer::init() {
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
 
+    // Label GL objects for RenderDoc / KHR_debug inspection
+    renderer::debug::labelVertexArray(m_opaqueVao, "WorldRenderBuffer.OpaqueVAO");
+    renderer::debug::labelVertexArray(m_cutoutVao, "WorldRenderBuffer.CutoutVAO");
+    renderer::debug::labelVertexArray(m_transparentVao, "WorldRenderBuffer.TransparentVAO");
+    renderer::debug::labelBuffer(m_opaquePool.vbo(), "WorldRenderBuffer.OpaqueVBO");
+    renderer::debug::labelBuffer(m_cutoutPool.vbo(), "WorldRenderBuffer.CutoutVBO");
+    renderer::debug::labelBuffer(m_transparentPool.vbo(), "WorldRenderBuffer.TransparentVBO");
+    renderer::debug::labelBuffer(m_opaqueIndirectBuf, "WorldRenderBuffer.OpaqueIndirect");
+    renderer::debug::labelBuffer(m_cutoutIndirectBuf, "WorldRenderBuffer.CutoutIndirect");
+    renderer::debug::labelBuffer(m_transparentIndirectBuf, "WorldRenderBuffer.TransparentIndirect");
+    renderer::debug::labelBuffer(m_waterIndirectBuf, "WorldRenderBuffer.WaterIndirectBuffer");
+
     m_opaqueCommands.reserve(kInitialIndirectCapacity);
     m_cutoutCommands.reserve(kInitialIndirectCapacity);
     m_transparentCommands.reserve(kInitialIndirectCapacity);
@@ -497,6 +511,7 @@ void WorldRenderBuffer::beginFrame() {
     m_opaqueVertexCount = 0;
     m_cutoutVertexCount = 0;
     m_transparentVertexCount = 0;
+    m_waterVertexCount = 0;
     m_opaquePool.beginFrame();
     m_cutoutPool.beginFrame();
     m_transparentPool.beginFrame();
@@ -528,14 +543,21 @@ void WorldRenderBuffer::addWater(const GpuMeshRange& range) {
     // Water uses the transparent pool VAO/VBO, but has its own command list
     // so it can be flushed independently for the water composite pass.
     m_waterCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_waterVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::clearWaterCommands() {
     m_waterCommands.clear();
+    m_waterVertexCount = 0;
 }
 
 void WorldRenderBuffer::flushWater() {
     if (m_waterCommands.empty()) return;
+    char label[64];
+    std::snprintf(label, sizeof(label), "Water.MDI commands=%zu vertices=%llu",
+                  m_waterCommands.size(),
+                  static_cast<unsigned long long>(m_waterVertexCount));
+    renderer::debug::ScopedDebugGroup group(label);
     ensureVaoVertexBuffer(m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
     ensureIndirectCapacity(m_waterCommands, m_waterIndirectBuf, m_waterIndirectCapacity, m_waterCommands.size());
 
@@ -556,15 +578,30 @@ void WorldRenderBuffer::flushWater() {
 
 void WorldRenderBuffer::flushOpaque() {
     maybeMergeAdjacentCommands(m_opaqueCommands, kCommandMergeThreshold);
+    char label[64];
+    std::snprintf(label, sizeof(label), "Terrain.Opaque.MDI commands=%zu vertices=%llu",
+                  m_opaqueCommands.size(),
+                  static_cast<unsigned long long>(m_opaqueVertexCount));
+    renderer::debug::ScopedDebugGroup group(label);
     flushPass(m_opaqueCommands, m_opaqueIndirectBuf, m_opaqueVao, m_opaquePool.vbo(), m_opaqueVaoBoundVbo);
 }
 
 void WorldRenderBuffer::flushCutout() {
     maybeMergeAdjacentCommands(m_cutoutCommands, kCommandMergeThreshold);
+    char label[64];
+    std::snprintf(label, sizeof(label), "Terrain.Cutout.MDI commands=%zu vertices=%llu",
+                  m_cutoutCommands.size(),
+                  static_cast<unsigned long long>(m_cutoutVertexCount));
+    renderer::debug::ScopedDebugGroup group(label);
     flushPass(m_cutoutCommands, m_cutoutIndirectBuf, m_cutoutVao, m_cutoutPool.vbo(), m_cutoutVaoBoundVbo);
 }
 
 void WorldRenderBuffer::flushTransparent() {
+    char label[64];
+    std::snprintf(label, sizeof(label), "Terrain.Transparent.MDI commands=%zu vertices=%llu",
+                  m_transparentCommands.size(),
+                  static_cast<unsigned long long>(m_transparentVertexCount));
+    renderer::debug::ScopedDebugGroup group(label);
     flushPass(m_transparentCommands, m_transparentIndirectBuf, m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
 }
 

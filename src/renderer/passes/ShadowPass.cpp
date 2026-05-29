@@ -1,4 +1,5 @@
 #include "ShadowPass.h"
+#include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../shadow/ShadowMatrices.h"
@@ -18,6 +19,9 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstdio>
 
 #include "renderer/core/FrameContext.h"
 
@@ -34,6 +38,46 @@ GameplaySkyRenderer::SkyColors toLegacySkyColors(const SkyColorsData& src) {
     dst.sunVisibility = src.sunVisibility;
     dst.moonVisibility = src.moonVisibility;
     return dst;
+}
+
+struct CascadeAabbCuller {
+    glm::mat4 viewProj = glm::mat4(1.0f);
+    float xyPaddingNdc = 0.0f;
+    int visibleCount = 0;
+    int culledCount = 0;
+};
+
+bool cascadeAabbVisible(const glm::vec3& boundsMin,
+                        const glm::vec3& boundsMax,
+                        void* userData) {
+    auto* culler = static_cast<CascadeAabbCuller*>(userData);
+    if (culler == nullptr) {
+        return true;
+    }
+
+    glm::vec2 minNdc(FLT_MAX);
+    glm::vec2 maxNdc(-FLT_MAX);
+    for (int corner = 0; corner < 8; ++corner) {
+        const glm::vec3 p(
+            (corner & 1) != 0 ? boundsMax.x : boundsMin.x,
+            (corner & 2) != 0 ? boundsMax.y : boundsMin.y,
+            (corner & 4) != 0 ? boundsMax.z : boundsMin.z);
+        const glm::vec4 clip = culler->viewProj * glm::vec4(p, 1.0f);
+        const float invW = std::abs(clip.w) > 1.0e-6f ? 1.0f / clip.w : 1.0f;
+        const glm::vec2 ndc(clip.x * invW, clip.y * invW);
+        minNdc = glm::min(minNdc, ndc);
+        maxNdc = glm::max(maxNdc, ndc);
+    }
+
+    const float pad = culler->xyPaddingNdc;
+    const bool visible = !(maxNdc.x < -1.0f - pad || minNdc.x > 1.0f + pad ||
+                           maxNdc.y < -1.0f - pad || minNdc.y > 1.0f + pad);
+    if (visible) {
+        ++culler->visibleCount;
+    } else {
+        ++culler->culledCount;
+    }
+    return visible;
 }
 } // namespace
 
@@ -172,6 +216,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     const bool needTransparentShadow = true;
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        char cascadeLabel[32];
+        std::snprintf(cascadeLabel, sizeof(cascadeLabel), "Shadow.CSM.Cascade%d", cascade);
+        renderer::debug::ScopedDebugGroup cascadeGroup(cascadeLabel);
+
         const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
 
         // Explicit GL state at cascade start — prevents leaked state from
@@ -193,37 +241,59 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         shadow::ShadowCasterCuller shadowCuller;
         shadowCuller.setup(shadowDist, 1.0f, ctx.camera.position);
         shadowCuller.resetCounters();
+        const float cascadePaddingWorld = std::max(16.0f, cascadeData.texelWorldSize * 16.0f);
+        // Conservative cascade culling: clip against the cascade's light-space
+        // X/Y box only. Z stays unculled to avoid dropping long shadow casters
+        // at low sun angles.
+        CascadeAabbCuller cascadeCuller{
+            cascadeData.viewProj,
+            cascadePaddingWorld / std::max(1.0f, cascadeData.radius)
+        };
         m_terrainRenderer->renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
-                                                                shadowDist, &shadowCuller);
+                                                                shadowDist, &shadowCuller,
+                                                                cascadeAabbVisible, &cascadeCuller);
         m_terrainRenderer->syncTransparentBatches();
+        char cullerLabel[128];
+        std::snprintf(cullerLabel, sizeof(cullerLabel),
+                      "Shadow.Cascade%d.Culler boxVisible=%d boxCulled=%d distanceVisible=%d distanceCulled=%d",
+                      cascade,
+                      cascadeCuller.visibleCount,
+                      cascadeCuller.culledCount,
+                      shadowCuller.getVisibleCount(),
+                      shadowCuller.getCulledCount());
+        renderer::debug::insertEvent(cullerLabel);
         visibleTotal += shadowCuller.getVisibleCount();
         culledTotal += shadowCuller.getCulledCount();
         maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
         cullingMode = shadowCuller.getCullingMode();
 
         // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
-        targets.bindCsmShadowLayer(cascade);
-        glClear(GL_DEPTH_BUFFER_BIT);
-        m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-        m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-        m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-        m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-        m_shadowDepthShader->setInt("uShadowPassMode", 0);
-        if (useMultiDrawIndirect) {
-            m_worldRenderBuffer->flushOpaque();
+        {
+            renderer::debug::ScopedDebugGroup opaqueGroup("Opaque");
+            targets.bindCsmShadowLayer(cascade);
+            glClear(GL_DEPTH_BUFFER_BIT);
+            m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+            m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+            m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+            m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+            m_shadowDepthShader->setInt("uShadowPassMode", 0);
+            if (useMultiDrawIndirect) {
+                m_worldRenderBuffer->flushOpaque();
+            }
+            m_terrainRenderer->renderCutoutChunks(cutoutEntries, *m_shadowDepthShader);
+            // Entity shadow: render humanoid/mob depth into this cascade.
+            renderShadowEntities(world, cascadeData.viewProj);
+            // Drop shadow: render dropped items/blocks depth into this cascade.
+            renderShadowDrops(world, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
+                              ctx.animationTime, ctx.shaderTime);
+            // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
+            m_shadowDepthShader->use();
         }
-        m_terrainRenderer->renderCutoutChunks(cutoutEntries, *m_shadowDepthShader);
-        // Entity shadow: render humanoid/mob depth into this cascade.
-        renderShadowEntities(world, cascadeData.viewProj);
-        // Drop shadow: render dropped items/blocks depth into this cascade.
-        renderShadowDrops(world, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
-                          ctx.animationTime, ctx.shaderTime);
-        // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
-        m_shadowDepthShader->use();
 
         // Pass 2: Transparent/all — only cascade 0.
         // Copy DepthOpaque → DepthAll, then draw water + stained glass on top with depth writes.
         if (needTransparentShadow && cascade == 0) {
+            renderer::debug::ScopedDebugGroup transparentGroup("Transparent");
             const int res = targets.shadowResolution();
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
             glCopyImageSubData(

@@ -4,6 +4,7 @@
 #include "../mesh/ItemModelMesh.h"
 #include "../contracts/MecraftTextureContract.h"
 #include "../core/Shader.h"
+#include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
 #include <array>
@@ -153,24 +154,6 @@ void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertice
         const glm::vec2& t = uv[static_cast<size_t>(idx)];
         vertices.push_back({p.x, p.y, p.z, t.x, t.y, normal.x, normal.y, normal.z});
     }
-}
-
-void pushDebugGroup(const char* label) {
-#ifdef MECRAFT_DEBUG
-    if (glPushDebugGroup != nullptr) {
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
-    }
-#else
-    static_cast<void>(label);
-#endif
-}
-
-void popDebugGroup() {
-#ifdef MECRAFT_DEBUG
-    if (glPopDebugGroup != nullptr) {
-        glPopDebugGroup();
-    }
-#endif
 }
 
 void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
@@ -712,10 +695,11 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     };
     MecraftTextureContract::bindShadowSamplers(m_steveShader->ID, 5, shadowBundle);
     glBindVertexArray(m_rightArmMesh.vao);
-    pushDebugGroup("HeldItem.Arm");
-    dumpShadowSamplerStateOnce("HeldItem.Arm", *m_steveShader);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_rightArmMesh.vertexCount));
-    popDebugGroup();
+    {
+        renderer::debug::ScopedDebugGroup group("HeldItem.Arm");
+        dumpShadowSamplerStateOnce("HeldItem.Arm", *m_steveShader);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_rightArmMesh.vertexCount));
+    }
 }
 
 void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
@@ -782,10 +766,11 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         };
         MecraftTextureContract::bindShadowSamplers(m_blockShader->ID, 5, shadowBundle);
         glBindVertexArray(mesh->vao);
-        pushDebugGroup("HeldItem.Block");
-        dumpShadowSamplerStateOnce("HeldItem.Block", *m_blockShader);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-        popDebugGroup();
+        {
+            renderer::debug::ScopedDebugGroup group("HeldItem.Block");
+            dumpShadowSamplerStateOnce("HeldItem.Block", *m_blockShader);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        }
         m_blockShader->setInt("uUseModel", 0);
         return;
     }
@@ -817,10 +802,11 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     };
     MecraftTextureContract::bindShadowSamplers(m_itemShader->ID, 5, shadowBundle);
     glBindVertexArray(mesh->vao);
-    pushDebugGroup("HeldItem.Item");
-    dumpShadowSamplerStateOnce("HeldItem.Item", *m_itemShader);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-    popDebugGroup();
+    {
+        renderer::debug::ScopedDebugGroup group("HeldItem.Item");
+        dumpShadowSamplerStateOnce("HeldItem.Item", *m_itemShader);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    }
 }
 
 FirstPersonHeldItemRenderer::Mesh* FirstPersonHeldItemRenderer::getOrCreateBlockMesh(const BlockID blockId) {

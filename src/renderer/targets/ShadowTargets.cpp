@@ -1,4 +1,5 @@
 #include "ShadowTargets.h"
+#include "../debug/RenderDebugLabels.h"
 #include <cstdio>
 
 ShadowTargets::~ShadowTargets() {
@@ -96,6 +97,16 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
         destroyFramebuffers();
         return false;
     }
+
+    // Label GL objects for RenderDoc / KHR_debug inspection
+    renderer::debug::labelFramebuffer(m_csmShadowFbo, "ShadowTargets.CSMDepth");
+    renderer::debug::labelTexture(m_csmShadowDepth, "ShadowTargets.CSMDepthArray");
+    renderer::debug::labelTexture(m_csmShadowDepthComparison, "ShadowTargets.CSMDepthComparison");
+    renderer::debug::labelFramebuffer(m_csmShadowTransparentFbo, "ShadowTargets.CSMTransparent");
+    renderer::debug::labelTexture(m_csmShadowDepthAll, "ShadowTargets.CSMDepthAll");
+    renderer::debug::labelTexture(m_csmShadowDepthAllComparison, "ShadowTargets.CSMDepthAllComparison");
+    renderer::debug::labelTexture(m_csmShadowColor0, "ShadowTargets.CSMTransparentColor0");
+    renderer::debug::labelTexture(m_csmShadowColor1, "ShadowTargets.CSMTransparentColor1");
 
     m_ready = true;
     return true;

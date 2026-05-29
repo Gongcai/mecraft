@@ -3,7 +3,10 @@
 #include "SettingsMapper.h"
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
+#include "../debug/RenderDebugLabels.h"
 #include "engine/camera/Camera.h"
+
+#include <cstdio>
 #include "engine/platform/Window.h"
 #include "../../world/World.h"
 #include "../../world/block/Block.h"
@@ -108,6 +111,10 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
 
     if (newPipelineReady && m_newPipelineActive) {
         // New pipeline path
+        char frameLabel[64];
+        std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu DeferredPipeline",
+                      static_cast<unsigned long long>(m_currentContext.frameIndex));
+        renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
         m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
 
         // Post-process is handled by RenderScene for both pipelines
@@ -117,6 +124,7 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
     } else if (m_legacyRenderer) {
         // Legacy path (Phase 1-8 compatibility)
         // This is the active rendering path until Phase 10 migrates orchestration.
+        renderer::debug::ScopedDebugGroup frameGroup("Frame.LegacyPipeline");
         m_legacyRenderer->render(world, camera, window, target, blockBreak);
         syncFrameOutputFromLegacyRenderer();
     }

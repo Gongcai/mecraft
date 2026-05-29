@@ -113,6 +113,10 @@ struct TerrainFrameData {
 /// Non-owning class: receives dependencies via pointers/references.
 class TerrainRenderer {
 public:
+    using AabbVisibilityFn = bool (*)(const glm::vec3& boundsMin,
+                                      const glm::vec3& boundsMax,
+                                      void* userData);
+
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
@@ -145,7 +149,9 @@ public:
         std::vector<ChunkRenderEntry>& transparentEntries,
         bool frustumCull = true,
         float maxCameraDistance = 0.0f,
-        shadow::ShadowCasterCuller* shadowCuller = nullptr);
+        shadow::ShadowCasterCuller* shadowCuller = nullptr,
+        AabbVisibilityFn extraAabbCuller = nullptr,
+        void* extraAabbCullerUserData = nullptr);
 
     /// Renders cutout chunks (MDI: flushes cutout buffer; non-MDI: draws individual VAOs).
     void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries,

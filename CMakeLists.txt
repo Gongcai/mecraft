@@ -106,6 +106,9 @@ set(SRC_WORLD
 
 # [渲染与UI]
 set(SRC_RENDERER
+        # Debug utilities
+        src/renderer/debug/RenderDebugLabels.cpp
+
         # Core framework
         src/renderer/core/Shader.cpp
         src/renderer/core/Renderer.cpp

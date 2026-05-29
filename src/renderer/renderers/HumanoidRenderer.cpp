@@ -1,6 +1,7 @@
 #include "HumanoidRenderer.h"
 #include "../gl/GlStateGuard.h"
 #include "../core/Shader.h"
+#include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
 #include <cmath>
@@ -31,23 +32,6 @@ constexpr glm::vec3 kFaceNormals[] = {
     {1, 0, 0}    // right
 };
 
-void pushDebugGroup(const char* label) {
-#ifdef MECRAFT_DEBUG
-    if (glPushDebugGroup != nullptr) {
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
-    }
-#else
-    static_cast<void>(label);
-#endif
-}
-
-void popDebugGroup() {
-#ifdef MECRAFT_DEBUG
-    if (glPopDebugGroup != nullptr) {
-        glPopDebugGroup();
-    }
-#endif
-}
 } // anonymous namespace
 
 HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1) {
@@ -584,9 +568,10 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
         }
         m_shader->setMat4(modelLoc, model);
         glBindVertexArray(mesh->vao);
-        pushDebugGroup("UI.InventoryPreview.Steve");
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-        popDebugGroup();
+        {
+            renderer::debug::ScopedDebugGroup group("UI.InventoryPreview.Steve");
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        }
     };
 
     drawPart(ecs::StevePartType::Torso, torso);

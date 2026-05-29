@@ -128,6 +128,7 @@ public:
     uint64_t opaqueVertexCount() const { return m_opaqueVertexCount; }
     uint64_t cutoutVertexCount() const { return m_cutoutVertexCount; }
     uint64_t transparentVertexCount() const { return m_transparentVertexCount; }
+    uint64_t waterVertexCount() const { return m_waterVertexCount; }
 
     // Per-frame pool stats
     size_t opaqueExpandCount() const { return m_opaquePool.expandCountThisFrame(); }
@@ -173,6 +174,7 @@ private:
     uint64_t m_opaqueVertexCount = 0;
     uint64_t m_cutoutVertexCount = 0;
     uint64_t m_transparentVertexCount = 0;
+    uint64_t m_waterVertexCount = 0;
 
     void ensureVaoVertexBuffer(GLuint vao, GLuint vbo, GLuint& cachedVbo);
     void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,

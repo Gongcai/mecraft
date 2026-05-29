@@ -13,6 +13,7 @@
 
 #include "../../player/Inventory.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/debug/RenderDebugLabels.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../item/Item.h"
 #include "../../world/chunk/SubChunk.h"
@@ -43,24 +44,6 @@ constexpr float kTorchHeight = 10.0f / 16.0f;
 constexpr float kActionAnimDurationSec = 0.380f;
 constexpr float kActionPitchAmplitudeDeg = 18.0f;
 constexpr float kPi = 6.28318530717958647692f / 2;
-
-void pushDebugGroup(const char* label) {
-#ifdef MECRAFT_DEBUG
-    if (glPushDebugGroup != nullptr) {
-        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, label);
-    }
-#else
-    static_cast<void>(label);
-#endif
-}
-
-void popDebugGroup() {
-#ifdef MECRAFT_DEBUG
-    if (glPopDebugGroup != nullptr) {
-        glPopDebugGroup();
-    }
-#endif
-}
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
     switch (face) {
@@ -332,9 +315,10 @@ void HeldItemPreviewControl::renderSelf(const UIRenderContext& context) const
     }
 
     glBindVertexArray(mesh->vao);
-    pushDebugGroup(useItemMesh ? "UI.HeldItemPreview.Item" : "UI.HeldItemPreview.Block");
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-    popDebugGroup();
+    {
+        renderer::debug::ScopedDebugGroup group(useItemMesh ? "UI.HeldItemPreview.Item" : "UI.HeldItemPreview.Block");
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    }
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE6);
