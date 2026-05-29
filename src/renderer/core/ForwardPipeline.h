@@ -4,19 +4,20 @@
 #include "RenderPipeline.h"
 #include "FrameContext.h"
 #include "FrameOutput.h"
+#include "../mesh/TerrainRenderer.h"
 
-#include <memory>
+#include <vector>
 
 class ResourceMgr;
 class TerrainRenderer;
 class TerrainRenderCache;
+class WorldRenderBuffer;
 class CommonFrameTargets;
 class GameplaySkyRenderer;
 
-/// Forward rendering pipeline implementation.
-/// Uses chunk_lit_common.fs with simplified lighting, no GBuffer.
-/// Features: terrain draw, sky, forward fog, simplified post-process.
-/// Does NOT allocate deferred resources (GBuffer/SSAO/SSR/VFog/TAA) — saves VRAM.
+/// Forward rendering pipeline — vanilla/basic fallback renderer.
+/// No skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric, or deferred resources.
+/// Renders: sky gradient, opaque/cutout terrain, transparent terrain, simple fog.
 class ForwardPipeline : public RenderPipeline {
 public:
     ForwardPipeline();
@@ -31,21 +32,26 @@ public:
     bool supportsDebugView() const override { return false; }
 
 private:
-    /// Render opaque and cutout terrain
-    void renderTerrain(const FrameContext& ctx);
-
-    /// Render transparent terrain (water, glass, etc.)
-    void renderTransparent(const FrameContext& ctx);
-
-    /// Build FrameOutput from current state
+    void renderSky(const FrameContext& ctx);
+    void renderTerrain(const FrameContext& ctx, const RenderSettings& settings);
+    void renderTransparent(const FrameContext& ctx, const RenderSettings& settings);
     FrameOutput buildFrameOutput(const FrameContext& ctx);
+
+    static TerrainFrameData buildTerrainFrameData(const FrameContext& ctx);
+    static TerrainRenderSettings buildTerrainRenderSettings(const RenderSettings& settings);
 
     // Shared resources (non-owning, set during init)
     TerrainRenderer* m_terrainRenderer = nullptr;
     TerrainRenderCache* m_terrainCache = nullptr;
+    WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     CommonFrameTargets* m_commonTargets = nullptr;
     GameplaySkyRenderer* m_skyRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
+
+    // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)
+    std::vector<DrawBatchEntry> m_transparentBatch;
+    TransparentPassPlan m_transparentPassPlan;
+    std::vector<ChunkRenderEntry> m_transparentEntries;
 
     bool m_initialized = false;
 };

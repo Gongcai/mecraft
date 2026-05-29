@@ -1293,6 +1293,7 @@ FrameContext Renderer::buildFrameContextFromRenderFrameData(const RenderFrameDat
     ctx.atmosphere.directWeatherOcclusionOverride = frame.atmosphere.directWeatherOcclusionOverride;
     // Fog
     ctx.fog.enabled = frame.fogEnabled;
+    ctx.fog.mode = static_cast<int>(frame.fogMode);
     ctx.fog.color = frame.fogColor;
     ctx.fog.startDistance = frame.fogStart;
     ctx.fog.endDistance = frame.fogEnd;

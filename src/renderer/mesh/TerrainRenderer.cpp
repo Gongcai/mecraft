@@ -282,6 +282,67 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
 }
 
+void TerrainRenderer::bindBasicForwardState(const TerrainFrameData& frame, const TextureArray& texArray,
+                                             Shader& shader, bool /*eyeInWater*/, int heldBlockLightValue,
+                                             ResourceMgr* resourceMgr, const TerrainRenderSettings& /*settings*/) {
+    shader.use();
+    shader.setMat4("view", frame.view);
+    shader.setMat4("viewProj", frame.viewProj);
+    shader.setInt("uUseModel", 0);
+
+    // Texture unit assignments (subset of full bindChunkRenderState)
+    shader.setInt("texArray", 0);
+    shader.setInt("uLightmapDay", 1);
+    shader.setInt("uLightmapNight", 2);
+    shader.setInt("uGrassColormap", 3);
+    shader.setInt("uFoliageColormap", 4);
+
+    // No deferred resources
+    shader.setInt("uForceBaseLod", 0);
+
+    // Fog
+    bindFogUniforms(shader, frame.fog);
+
+    // Animation
+    shader.setFloat("uAnimationTime", frame.animationTime);
+
+    // Simplified sky lighting — only what forward_basic_terrain.frag reads
+    shader.setVec3("uCameraPos", frame.cameraPos);
+    shader.setVec3("uSunDirection", frame.skyLighting.sunDirection);
+    shader.setVec3("uSunLightColor", frame.skyLighting.sunLightColor);
+    shader.setVec3("uMoonLightColor", frame.skyLighting.moonLightColor);
+    shader.setVec3("uSkyAmbientColor", frame.skyLighting.skyAmbientColor);
+    shader.setFloat("uSkyIntensity", frame.skyLighting.skyIntensity);
+    shader.setFloat("uMoonVisibility", frame.skyLighting.moonVisibility);
+    shader.setInt("uHeldBlockLightValue", heldBlockLightValue);
+
+    // Water effects (minimal — just layer identification)
+    shader.setInt("uWaterEffectsEnabled", 1);
+
+    // Bind textures: only units 0-4 (texArray, lightmap day/night, grass/foliage colormap)
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getLightmapDay() : 0);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getLightmapNight() : 0);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getGrassColormap() : 0);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getFoliageColormap() : 0);
+
+    // Water layer info
+    if (resourceMgr) {
+        const TextureAnimationInfo still = resourceMgr->getTextureAnimation("water_still");
+        const TextureAnimationInfo flow = resourceMgr->getTextureAnimation("water_flow");
+        shader.setFloat("uWaterStillFirstLayer", static_cast<float>(still.firstLayer));
+        shader.setFloat("uWaterStillLayerCount", static_cast<float>(std::max(1, still.frameCount)));
+        shader.setFloat("uWaterFlowFirstLayer", static_cast<float>(flow.firstLayer));
+        shader.setFloat("uWaterFlowLayerCount", static_cast<float>(std::max(1, flow.frameCount)));
+    }
+}
+
 // ============================================================================
 // Opaque chunk traversal with hierarchical frustum culling
 // ============================================================================

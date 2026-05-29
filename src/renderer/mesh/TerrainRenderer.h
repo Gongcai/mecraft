@@ -138,6 +138,13 @@ public:
                               bool volumetricFogShadersReady,
                               const TerrainRenderSettings& settings);
 
+    /// Lightweight forward-only state binding — no deferred resources.
+    /// Binds only: texture array, lightmap, biome colormap, fog, simple sky lighting, water effects.
+    /// Does NOT bind: skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric.
+    void bindBasicForwardState(const TerrainFrameData& frame, const TextureArray& texArray,
+                               Shader& shader, bool eyeInWater, int heldBlockLightValue,
+                               ResourceMgr* resourceMgr, const TerrainRenderSettings& settings);
+
     // --- Main rendering methods ---
     /// Traverses chunk columns with hierarchical frustum culling.
     /// In MDI mode, adds draw ranges to WorldRenderBuffer.

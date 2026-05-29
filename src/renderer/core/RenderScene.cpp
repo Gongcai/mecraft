@@ -103,17 +103,14 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
 
     // Phase 9: Use active pipeline only if fully initialized and ready.
     // All shared resources must be populated AND pipeline must have been init'd.
-    const bool newPipelineReady = m_activePipeline &&
-                                  m_shared.terrain &&
-                                  m_shared.deferredTargets &&
-                                  m_shared.sky &&
-                                  m_shared.resources;
+    const bool newPipelineReady = m_activePipelineInitialized && isNewPipelineReady();
 
     if (newPipelineReady && m_newPipelineActive) {
         // New pipeline path
         char frameLabel[64];
-        std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu DeferredPipeline",
-                      static_cast<unsigned long long>(m_currentContext.frameIndex));
+        std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu %s",
+                      static_cast<unsigned long long>(m_currentContext.frameIndex),
+                      m_activePipeline ? m_activePipeline->name() : "Unknown");
         renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
         m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
 
@@ -153,6 +150,8 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
         if (isNewPipelineReady()) {
             m_activePipeline->init(m_shared);
             m_activePipelineInitialized = true;
+            // Re-evaluate: if new pipeline checkbox was checked, keep it active for the new pipeline
+            m_newPipelineActive = m_newPipelineActive && isNewPipelineReady() && m_activePipelineInitialized;
         } else {
             m_newPipelineActive = false;
         }
@@ -380,12 +379,14 @@ bool RenderScene::isLightDebugActive() const {
 }
 
 bool RenderScene::isNewPipelineReady() const {
-    return m_activePipeline &&
-           m_activePipeline->supportsDeferred() &&
-           m_shared.terrain &&
-           m_shared.deferredTargets &&
-           m_shared.sky &&
-           m_shared.resources;
+    if (!m_activePipeline || !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
+        return false;
+    }
+    // Deferred pipeline requires deferredTargets; forward pipeline does not.
+    if (m_activePipeline->supportsDeferred()) {
+        return m_shared.deferredTargets != nullptr;
+    }
+    return true;
 }
 
 void RenderScene::setNewPipelineActive(bool active) {
@@ -398,11 +399,10 @@ void RenderScene::setNewPipelineActive(bool active) {
 
 const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipeline) return "No active pipeline";
-    if (!m_activePipeline->supportsDeferred()) return "Unavailable for forward pipeline";
     if (!m_shared.terrain) return "Missing: terrain";
-    if (!m_shared.deferredTargets) return "Missing: deferredTargets";
     if (!m_shared.sky) return "Missing: sky";
     if (!m_shared.resources) return "Missing: resources";
+    if (m_activePipeline->supportsDeferred() && !m_shared.deferredTargets) return "Missing: deferredTargets";
     if (!m_activePipelineInitialized) return "Ready (not initialized)";
     if (!m_newPipelineActive) return "Ready (inactive)";
     return "Active";
@@ -501,6 +501,7 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.camera.nearPlane = camera.getNear();
     ctx.camera.farPlane = camera.getFar();
     ctx.camera.fovDegrees = camera.getFOV();
+    ctx.cameraPtr = &camera;
 
     // Screen dimensions
     ctx.frameWidth = window.getWidth();
@@ -579,6 +580,7 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
 
     // Fog settings
     ctx.fog.enabled = m_settings.fog.enabled;
+    ctx.fog.mode = m_settings.fog.mode;
     ctx.fog.color = m_settings.fog.color;
     ctx.fog.startDistance = m_settings.fog.startDistance;
     ctx.fog.endDistance = m_settings.fog.endDistance;

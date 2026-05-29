@@ -382,7 +382,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         int debugViewMode = pipeline.debugViewMode;
         int weatherPresetInstant = static_cast<int>(world.getWeatherSystem().getRenderState().type);
         int weatherPresetSmooth = static_cast<int>(world.getWeatherSystem().getTargetState().type);
-        static constexpr const char* kPipelineModes[] = {"Forward Legacy", "Hybrid Deferred"};
+        static constexpr const char* kPipelineModes[] = {"Forward (Vanilla)", "Deferred (Shader Effects)"};
         static constexpr const char* kTonemapModes[] = {
             "Reinhard [Mecraft extra]",
             "AcademyFit [DerivativeMain]",
@@ -1008,7 +1008,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.0f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Saturation", &pipeline.saturation, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Contrast", &pipeline.contrast, 0.5f, 2.0f, "%.2f");
-        ImGui::Text("Hybrid Deferred: %s", render.isHybridDeferredReady() ? "ready" : "not ready");
+        ImGui::Text("Active Pipeline: %s", renderScene.activePipelineName());
+        ImGui::Text("Pipeline Status: %s", renderScene.getPipelineStatus());
         if (pipelineChanged || syncRenderSceneSettings) {
             render.setRenderPipelineSettings(pipeline);
             // Sync to RenderScene via unified mapper

@@ -8,6 +8,7 @@
 
 // Forward declarations to avoid heavy includes
 class World;
+class Camera;
 struct SharedRenderResources;
 
 /// Camera data for current and previous frame (for temporal effects)
@@ -79,6 +80,7 @@ struct WeatherData {
 /// Fog configuration for current frame
 struct FogData {
     bool enabled = true;
+    int mode = 0; // 0=linear, 1=exp, 2=exp2 (matches GL fog modes)
     glm::vec3 color = glm::vec3(0.67f, 0.84f, 1.0f);
     float startDistance = 140.0f;
     float endDistance = 260.0f;
@@ -185,6 +187,9 @@ struct FrameContext {
 
     // Pointer to original World (for passes that need world queries)
     const World* world = nullptr;
+
+    // Pointer to original Camera (for renderers that need Camera object, e.g. GameplaySkyRenderer)
+    const Camera* cameraPtr = nullptr;
 };
 
 #endif // MECRAFT_FRAME_CONTEXT_H

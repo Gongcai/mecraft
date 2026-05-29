@@ -335,6 +335,7 @@ inline Renderer::RenderPipelineSettings toLegacySettings(const RenderSettings& s
 /// Fog is managed separately from RenderPipelineSettings, so this is a dedicated sync path.
 inline void syncFogToRenderSettings(const Renderer::FogSettings& src, FogSettings& dst) {
     dst.enabled = src.enabled;
+    dst.mode = static_cast<int>(src.mode);
     dst.color = src.color;
     dst.startDistance = src.startDistance;
     dst.endDistance = src.endDistance;

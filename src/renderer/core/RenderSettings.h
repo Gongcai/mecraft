@@ -199,6 +199,7 @@ struct DebugSettings {
 /// Fog settings
 struct FogSettings {
     bool enabled = true;
+    int mode = 0; // 0=linear, 1=exp, 2=exp2 (matches GL fog modes)
     glm::vec3 color = glm::vec3(0.67f, 0.84f, 1.0f);
     float startDistance = 140.0f;
     float endDistance = 260.0f;
