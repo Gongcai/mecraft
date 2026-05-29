@@ -43,6 +43,8 @@ GameplaySkyRenderer::SkyColors toLegacySkyColors(const SkyColorsData& src) {
 struct CascadeAabbCuller {
     glm::mat4 viewProj = glm::mat4(1.0f);
     float xyPaddingNdc = 0.0f;
+    float zPaddingNdc = 0.0f;
+    bool useZCulling = true;
     int visibleCount = 0;
     int culledCount = 0;
 };
@@ -55,8 +57,8 @@ bool cascadeAabbVisible(const glm::vec3& boundsMin,
         return true;
     }
 
-    glm::vec2 minNdc(FLT_MAX);
-    glm::vec2 maxNdc(-FLT_MAX);
+    glm::vec3 minNdc(FLT_MAX);
+    glm::vec3 maxNdc(-FLT_MAX);
     for (int corner = 0; corner < 8; ++corner) {
         const glm::vec3 p(
             (corner & 1) != 0 ? boundsMax.x : boundsMin.x,
@@ -64,14 +66,18 @@ bool cascadeAabbVisible(const glm::vec3& boundsMin,
             (corner & 4) != 0 ? boundsMax.z : boundsMin.z);
         const glm::vec4 clip = culler->viewProj * glm::vec4(p, 1.0f);
         const float invW = std::abs(clip.w) > 1.0e-6f ? 1.0f / clip.w : 1.0f;
-        const glm::vec2 ndc(clip.x * invW, clip.y * invW);
+        const glm::vec3 ndc(clip.x * invW, clip.y * invW, clip.z * invW);
         minNdc = glm::min(minNdc, ndc);
         maxNdc = glm::max(maxNdc, ndc);
     }
 
-    const float pad = culler->xyPaddingNdc;
-    const bool visible = !(maxNdc.x < -1.0f - pad || minNdc.x > 1.0f + pad ||
-                           maxNdc.y < -1.0f - pad || minNdc.y > 1.0f + pad);
+    const float xyPad = culler->xyPaddingNdc;
+    const float zPad = culler->zPaddingNdc;
+    bool visible = !(maxNdc.x < -1.0f - xyPad || minNdc.x > 1.0f + xyPad ||
+                     maxNdc.y < -1.0f - xyPad || minNdc.y > 1.0f + xyPad);
+    if (visible && culler->useZCulling) {
+        visible = !(maxNdc.z < -1.0f - zPad || minNdc.z > 1.0f + zPad);
+    }
     if (visible) {
         ++culler->visibleCount;
     } else {
@@ -243,11 +249,15 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         shadowCuller.resetCounters();
         const float cascadePaddingWorld = std::max(16.0f, cascadeData.texelWorldSize * 16.0f);
         // Conservative cascade culling: clip against the cascade's light-space
-        // X/Y box only. Z stays unculled to avoid dropping long shadow casters
-        // at low sun angles.
+        // orthographic box with padding. The same box is used by the GPU shadow
+        // projection, so this mainly avoids submitting geometry that would be
+        // clipped before rasterization.
         CascadeAabbCuller cascadeCuller{
             cascadeData.viewProj,
-            cascadePaddingWorld / std::max(1.0f, cascadeData.radius)
+            cascadePaddingWorld / std::max(1.0f, cascadeData.radius),
+            std::max(64.0f, cascadeData.texelWorldSize * 64.0f) /
+                std::max(1.0f, cascadeData.depthExtent),
+            true
         };
         m_terrainRenderer->renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
                                                                 shadowDist, &shadowCuller,
@@ -255,10 +265,11 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_terrainRenderer->syncTransparentBatches();
         char cullerLabel[128];
         std::snprintf(cullerLabel, sizeof(cullerLabel),
-                      "Shadow.Cascade%d.Culler boxVisible=%d boxCulled=%d distanceVisible=%d distanceCulled=%d",
+                      "Shadow.Cascade%d.Culler boxVisible=%d boxCulled=%d zCull=%d distanceVisible=%d distanceCulled=%d",
                       cascade,
                       cascadeCuller.visibleCount,
                       cascadeCuller.culledCount,
+                      cascadeCuller.useZCulling ? 1 : 0,
                       shadowCuller.getVisibleCount(),
                       shadowCuller.getCulledCount());
         renderer::debug::insertEvent(cullerLabel);
