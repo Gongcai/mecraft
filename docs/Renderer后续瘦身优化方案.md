@@ -133,6 +133,37 @@ public:
 - `DeferredPipeline::renderFrame()` 输出完整 `FrameOutput`：scene depth、gbuf depth、weather mask、held item shadow、debug skip 标志。
 - deferred 画面与迁移前一致，debug view 正常。
 
+#### R2 后续性能任务：WaterComposite 真 MDI 化
+
+当前状态：
+
+- `WorldRenderBuffer::flushPass()` 已具备真正的 `glMultiDrawArraysIndirect` 提交能力。
+- 但 `WaterCompositePass` 的 `useMultiDrawIndirect` 分支目前只表示“使用全局 transparent 顶点池和批次范围”，实际水面提交仍是按水面 range 循环 `glDrawArrays`。
+- `WorldRenderBuffer::addWater()` 当前别名到 `addTransparent()`，水体和普通透明共用 `m_transparentCommands` / `flushTransparent()`；直接把水体提交改成 MDI 会改变普通透明、透明阴影和水体 composite 的命令队列语义。
+
+结论：
+
+- 不建议在水下/水面正确性刚修复的同一轮里立刻改。
+- 建议在新旧 deferred 管线画面一致稳定后，单独作为 R2.x/R3 前的性能小阶段处理，便于 RenderDoc 对比和快速回滚。
+
+建议实现：
+
+- 在 `WorldRenderBuffer` 中增加 water-only indirect command list 和 indirect buffer，例如 `m_waterCommands` / `m_waterIndirectBuf` / `m_waterIndirectCapacity`。
+- `addWater()` 不再别名到 `addTransparent()`，而是只写入 water command list。
+- 新增 `flushWater()`，内部复用 `flushPass()`，提交 `glMultiDrawArraysIndirect`，VAO/VBO 仍使用 transparent pool。
+- `WaterCompositePass` MDI 分支排序 water entries 后调用 `addWater()` + `flushWater()`，不再循环 `glDrawArrays`。
+- 普通透明 pass 继续使用 `addTransparent()` + `flushTransparent()`，避免 generic transparent 与 water command queue 互相污染。
+- `ShadowPass` 需要同步审计：如果透明阴影仍希望一次性画普通透明 + 水，应显式选择 `addTransparent()`，或新增清晰的 transparent-shadow 专用提交路径，避免 `addWater()` 语义变化导致水体阴影丢失。
+
+验收：
+
+- RenderDoc 中水面 composite pass 显示为 `glMultiDrawArraysIndirect`，不再是多次 CPU `glDrawArrays`。
+- 新/旧 deferred 管线视觉一致。
+- `Water Effects` 开/关一致，水下天空光和水面光照不回归。
+- TAA 开/关、pre-TAA water composite 与 post-TAA fallback 均正常。
+- 草、树叶、玻璃等 generic transparent/cutout 顺序不回归。
+- 透明阴影 color0/color1、DepthAll 仍包含期望的水体/透明贡献。
+
 ### Phase R3：让 ForwardPipeline 接管前向路径
 
 目标：
@@ -354,6 +385,7 @@ rg "setLegacyRenderer|syncFrameOutputFromLegacyRenderer|RenderPipelineSettings|R
 |------|------|
 | DeferredPipeline 当前不是完整路径，直接删除 Renderer 会破画面 | 先迁 terrain/shadow/water/particle，逐帧对比 |
 | Transparent/water 顺序微妙，容易影响 TAA/VFog | 保留现有注释中的 DerivativeMain 顺序，迁移后用 debug view 和水边缘检查 |
+| WaterComposite 当前 MDI 分支不是真正 indirect 提交，贸然改会影响透明阴影和普通透明 | 单独开 WaterComposite 真 MDI 化阶段，先拆 water command queue，再用 RenderDoc 验收 |
 | Meshing 与 render buffer 交织，移动过大会影响性能 | `TerrainStreamingService` 分步提取，先移动状态，再移动调用 |
 | Dashboard 仍依赖 legacy settings | 先统一 `RenderSettings`，再动 pipeline 编排 |
 | FrameOutput 旧帧/默认值问题复发 | 禁止从 legacy renderer 同步作为正式路径，FrameOutput 由 active pipeline 直接生成 |

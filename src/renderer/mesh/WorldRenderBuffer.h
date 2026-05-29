@@ -102,13 +102,17 @@ public:
     void flushOpaque();
     void flushCutout();
     void flushTransparent();
+    void flushWater();
     void bindTransparentVao();
+
+    void clearWaterCommands();
 
     GLuint transparentVao() const { return m_transparentVao; }
     int glSubmitCount() const { return m_glSubmitCount; }
     size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
     size_t cutoutCommandCount() const { return m_cutoutCommands.size(); }
     size_t transparentCommandCount() const { return m_transparentCommands.size(); }
+    size_t waterCommandCount() const { return m_waterCommands.size(); }
     size_t opaqueLogicalCommandCount() const { return m_opaqueLogicalCommandCount; }
     size_t cutoutLogicalCommandCount() const { return m_cutoutLogicalCommandCount; }
     size_t transparentLogicalCommandCount() const { return m_transparentLogicalCommandCount; }
@@ -150,14 +154,17 @@ private:
     GLuint m_opaqueIndirectBuf = 0;
     GLuint m_cutoutIndirectBuf = 0;
     GLuint m_transparentIndirectBuf = 0;
+    GLuint m_waterIndirectBuf = 0;
 
     size_t m_opaqueIndirectCapacity = 0;
     size_t m_cutoutIndirectCapacity = 0;
     size_t m_transparentIndirectCapacity = 0;
+    size_t m_waterIndirectCapacity = 0;
 
     std::vector<DrawArraysIndirectCommand> m_opaqueCommands;
     std::vector<DrawArraysIndirectCommand> m_cutoutCommands;
     std::vector<DrawArraysIndirectCommand> m_transparentCommands;
+    std::vector<DrawArraysIndirectCommand> m_waterCommands;
 
     int m_glSubmitCount = 0;
     size_t m_opaqueLogicalCommandCount = 0;

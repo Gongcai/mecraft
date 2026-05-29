@@ -368,6 +368,7 @@ void WorldRenderBuffer::init() {
     m_opaqueIndirectCapacity = kInitialIndirectCapacity;
     m_cutoutIndirectCapacity = kInitialIndirectCapacity;
     m_transparentIndirectCapacity = kInitialIndirectCapacity;
+    m_waterIndirectCapacity = kInitialIndirectCapacity;
 
     glCreateBuffers(1, &m_opaqueIndirectBuf);
     glNamedBufferStorage(m_opaqueIndirectBuf,
@@ -384,10 +385,16 @@ void WorldRenderBuffer::init() {
                          static_cast<GLsizeiptr>(m_transparentIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
+    glCreateBuffers(1, &m_waterIndirectBuf);
+    glNamedBufferStorage(m_waterIndirectBuf,
+                         static_cast<GLsizeiptr>(m_waterIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
+                         nullptr,
+                         GL_DYNAMIC_STORAGE_BIT);
 
     m_opaqueCommands.reserve(kInitialIndirectCapacity);
     m_cutoutCommands.reserve(kInitialIndirectCapacity);
     m_transparentCommands.reserve(kInitialIndirectCapacity);
+    m_waterCommands.reserve(kInitialIndirectCapacity);
 }
 
 void WorldRenderBuffer::shutdown() {
@@ -405,10 +412,12 @@ void WorldRenderBuffer::shutdown() {
     if (m_opaqueIndirectBuf != 0) { glDeleteBuffers(1, &m_opaqueIndirectBuf); m_opaqueIndirectBuf = 0; }
     if (m_cutoutIndirectBuf != 0) { glDeleteBuffers(1, &m_cutoutIndirectBuf); m_cutoutIndirectBuf = 0; }
     if (m_transparentIndirectBuf != 0) { glDeleteBuffers(1, &m_transparentIndirectBuf); m_transparentIndirectBuf = 0; }
+    if (m_waterIndirectBuf != 0) { glDeleteBuffers(1, &m_waterIndirectBuf); m_waterIndirectBuf = 0; }
 
     m_opaqueIndirectCapacity = 0;
     m_cutoutIndirectCapacity = 0;
     m_transparentIndirectCapacity = 0;
+    m_waterIndirectCapacity = 0;
 }
 
 WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
@@ -480,6 +489,7 @@ void WorldRenderBuffer::beginFrame() {
     m_opaqueCommands.clear();
     m_cutoutCommands.clear();
     m_transparentCommands.clear();
+    m_waterCommands.clear();
     m_glSubmitCount = 0;
     m_opaqueLogicalCommandCount = 0;
     m_cutoutLogicalCommandCount = 0;
@@ -514,7 +524,34 @@ void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
 }
 
 void WorldRenderBuffer::addWater(const GpuMeshRange& range) {
-    addTransparent(range);
+    if (range.vertexCount == 0) return;
+    // Water uses the transparent pool VAO/VBO, but has its own command list
+    // so it can be flushed independently for the water composite pass.
+    m_waterCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+}
+
+void WorldRenderBuffer::clearWaterCommands() {
+    m_waterCommands.clear();
+}
+
+void WorldRenderBuffer::flushWater() {
+    if (m_waterCommands.empty()) return;
+    ensureVaoVertexBuffer(m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
+    ensureIndirectCapacity(m_waterCommands, m_waterIndirectBuf, m_waterIndirectCapacity, m_waterCommands.size());
+
+    glNamedBufferSubData(m_waterIndirectBuf, 0,
+                         static_cast<GLsizeiptr>(m_waterCommands.size() * sizeof(DrawArraysIndirectCommand)),
+                         m_waterCommands.data());
+
+    glBindVertexArray(m_transparentVao);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_waterIndirectBuf);
+    glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr,
+                              static_cast<GLsizei>(m_waterCommands.size()),
+                              0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+
+    ++m_glSubmitCount;
 }
 
 void WorldRenderBuffer::flushOpaque() {

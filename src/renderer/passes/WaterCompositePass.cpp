@@ -166,7 +166,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
 
     int drawCallCount = 0;
     if (useMultiDrawIndirect) {
-        // MDI path: sort water entries back-to-front and draw via transparent VAO
+        // MDI path: sort water entries back-to-front, build water command list, flush via MDI
         std::vector<const DrawBatchEntry*> waterEntries;
         for (const auto& entry : transparentBatch) {
             if (entry.kind == TransparentBatchKind::Water) {
@@ -179,13 +179,12 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
             });
 
         if (!waterEntries.empty()) {
-            worldRenderBuffer.bindTransparentVao();
+            worldRenderBuffer.clearWaterCommands();
             for (const auto* entry : waterEntries) {
-                glDrawArrays(GL_TRIANGLES,
-                             static_cast<GLint>(entry->range.firstVertex),
-                             static_cast<GLsizei>(entry->range.vertexCount));
-                ++drawCallCount;
+                worldRenderBuffer.addWater(entry->range);
             }
+            worldRenderBuffer.flushWater();
+            drawCallCount = static_cast<int>(waterEntries.size());
         }
     } else {
         // Non-MDI path: sort and draw water sub-chunks individually

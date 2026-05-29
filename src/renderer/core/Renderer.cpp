@@ -2331,11 +2331,8 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
                   });
 
         for (const DrawBatchEntry& entry : m_deferredTransparentBatch) {
-            if (entry.kind == TransparentBatchKind::Water) {
-                m_worldRenderBuffer.addWater(entry.range);
-            } else {
-                m_worldRenderBuffer.addTransparent(entry.range);
-            }
+            // Legacy path: all transparent (including water) in one list
+            m_worldRenderBuffer.addTransparent(entry.range);
         }
 #ifdef MECRAFT_DEBUG
         beginGpuTimer(GpuTimerPass::Transparent);

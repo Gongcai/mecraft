@@ -256,11 +256,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 m_worldRenderBuffer->beginFrame();
                 const auto& batch = m_terrainRenderer->transparentBatches();
                 for (const DrawBatchEntry& entry : batch) {
-                    if (entry.kind == TransparentBatchKind::Water) {
-                        m_worldRenderBuffer->addWater(entry.range);
-                    } else {
-                        m_worldRenderBuffer->addTransparent(entry.range);
-                    }
+                    // Shadow pass needs all transparent (including water) in one list
+                    m_worldRenderBuffer->addTransparent(entry.range);
                 }
                 m_worldRenderBuffer->flushTransparent();
             } else {
