@@ -349,7 +349,8 @@ void Game::renderFrame(const float frameTime) {
                                                    m_renderScene.gbufDepthTexture(),
                                                    m_renderScene.weatherMaskTexture());
     }
-    m_renderScene.renderDeferredDebugOverlay(m_window);
+
+    // R7: Debug overlay is now handled by the pipeline internally
 
     // UI rendering
     renderUI(reg, *snap.inventory, heldItemMotion, snap.renderCamera);

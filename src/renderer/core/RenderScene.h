@@ -111,11 +111,7 @@ public:
     /// Call this after Dashboard changes fog via Renderer methods.
     void syncFogFromRenderer();
 
-    // Rendering (Phase R1: bridge to legacy Renderer)
-    void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
-    void renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target,
-                                      const BlockBreakRenderData& blockBreak, const Window& window);
-    void renderDeferredDebugOverlay(const Window& window);
+    // R7: Legacy bridge methods removed — use renderFrame() instead
 
     // Query (Phase R1: bridge to legacy Renderer)
     bool isDeferredFrameActive() const;
@@ -149,7 +145,7 @@ public:
 
     // Legacy compatibility (temporary bridge to existing Renderer)
     void setLegacyRenderer(Renderer* renderer);
-    void syncFrameOutputFromLegacyRenderer();
+    // R7: syncFrameOutputFromLegacyRenderer() removed — new pipeline generates FrameOutput directly
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().

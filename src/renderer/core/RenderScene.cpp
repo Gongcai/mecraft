@@ -130,29 +130,23 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
     // All shared resources must be populated AND pipeline must have been init'd.
     const bool newPipelineReady = m_activePipelineInitialized && isNewPipelineReady();
 
-    if (newPipelineReady && m_newPipelineActive) {
-        // New pipeline path
-        char frameLabel[64];
-        std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu %s",
-                      static_cast<unsigned long long>(m_currentContext.frameIndex),
-                      m_activePipeline ? m_activePipeline->name() : "Unknown");
-        renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
-        m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
-
-        // R5: Render block interaction overlays (outline + break overlay)
-        const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
-        m_overlayRenderer.render(world, viewProj, target, blockBreak);
-    } else if (m_legacyRenderer) {
-        // Legacy path (Phase 1-8 compatibility)
-        // This is the active rendering path until Phase 10 migrates orchestration.
-        renderer::debug::ScopedDebugGroup frameGroup("Frame.LegacyPipeline");
-        m_legacyRenderer->renderOpaqueAndCutout(world, camera, window);
-        if (!m_legacyRenderer->isDeferredFrameActive()) {
-            m_legacyRenderer->renderForwardSceneObjects(world, camera, window);
-        }
-        m_legacyRenderer->renderTransparentAndOverlays(world, target, blockBreak, window);
-        syncFrameOutputFromLegacyRenderer();
+    // R7: New pipeline is the only path (legacy fallback removed)
+    if (!newPipelineReady || !m_newPipelineActive) {
+        // This should not happen if Game properly initializes the pipeline
+        return;
     }
+
+    // New pipeline path
+    char frameLabel[64];
+    std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu %s",
+                  static_cast<unsigned long long>(m_currentContext.frameIndex),
+                  m_activePipeline ? m_activePipeline->name() : "Unknown");
+    renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
+    m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
+
+    // R5: Render block interaction overlays (outline + break overlay)
+    const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
+    m_overlayRenderer.render(world, viewProj, target, blockBreak);
 }
 
 void RenderScene::setPipelineMode(PipelineMode mode) {
@@ -322,44 +316,7 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
     }
 }
 
-void RenderScene::syncFrameOutputFromLegacyRenderer() {
-    if (m_legacyRenderer == nullptr) {
-        return;
-    }
-
-    // Keep FrameOutput current while Game still drives legacy Renderer passes directly.
-    m_lastFrameOutput.hasDeferredInputs = m_legacyRenderer->isDeferredFrameActive();
-    m_lastFrameOutput.gbufferDepthTex = m_legacyRenderer->gbufDepthTexture();
-    m_lastFrameOutput.weatherMaskTex = m_legacyRenderer->weatherMaskTexture();
-
-    const auto legacyShadow = m_legacyRenderer->getHeldItemShadowData();
-    FirstPersonShadowData heldItemShadow{};
-    for (int i = 0; i < 4; ++i) {
-        heldItemShadow.cascadeViewProj[i] = legacyShadow.cascadeViewProj[i];
-        heldItemShadow.cascadeSplitFar[i] = legacyShadow.cascadeSplitFar[i];
-        heldItemShadow.cascadeTexelWorldSize[i] = legacyShadow.cascadeTexelWorldSize[i];
-    }
-    heldItemShadow.shadowTexture = legacyShadow.shadowTexture;
-    heldItemShadow.shadowDepthRaw = legacyShadow.shadowDepthRaw;
-    heldItemShadow.shadowDepthAll = legacyShadow.shadowDepthAll;
-    heldItemShadow.shadowDepthAllRaw = legacyShadow.shadowDepthAllRaw;
-    heldItemShadow.shadowColor0 = legacyShadow.shadowColor0;
-    heldItemShadow.shadowColor1 = legacyShadow.shadowColor1;
-    heldItemShadow.cameraPos = legacyShadow.cameraPos;
-    heldItemShadow.sunDirection = legacyShadow.sunDirection;
-    heldItemShadow.shadowDistance = legacyShadow.shadowDistance;
-    heldItemShadow.constantBias = legacyShadow.constantBias;
-    heldItemShadow.slopeBias = legacyShadow.slopeBias;
-    heldItemShadow.normalOffset = legacyShadow.normalOffset;
-    heldItemShadow.softness = legacyShadow.softness;
-    heldItemShadow.pcssStrength = legacyShadow.pcssStrength;
-    heldItemShadow.cascadeCount = legacyShadow.cascadeCount;
-    heldItemShadow.softShadowsEnabled = legacyShadow.softShadowsEnabled;
-    heldItemShadow.pcssShadowsEnabled = legacyShadow.pcssShadowsEnabled;
-    heldItemShadow.shadowsEnabled = legacyShadow.shadowsEnabled;
-    heldItemShadow.skyIntensity = legacyShadow.skyIntensity;
-    m_lastFrameOutput.heldItemShadow = heldItemShadow;
-}
+// R7: syncFrameOutputFromLegacyRenderer() removed — new pipeline generates FrameOutput directly
 
 void RenderScene::setEyeInWater(bool inWater) {
     m_eyeInWater = inWater;
@@ -384,22 +341,7 @@ void RenderScene::syncFogFromRenderer() {
     }
 }
 
-void RenderScene::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
-    if (m_legacyRenderer) m_legacyRenderer->renderOpaqueAndCutout(world, camera, window);
-}
-
-void RenderScene::renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target,
-                                               const BlockBreakRenderData& blockBreak, const Window& window) {
-    if (m_legacyRenderer) m_legacyRenderer->renderTransparentAndOverlays(world, target, blockBreak, window);
-    syncFrameOutputFromLegacyRenderer();
-}
-
-void RenderScene::renderDeferredDebugOverlay(const Window& window) {
-    if (m_newPipelineActive) {
-        return;
-    }
-    if (m_legacyRenderer) m_legacyRenderer->renderDeferredDebugOverlay(window);
-}
+// R7: Legacy bridge methods removed — use renderFrame() instead
 
 bool RenderScene::isDeferredFrameActive() const {
     if (m_newPipelineActive && m_lastFrameOutput.hasDeferredInputs) {
