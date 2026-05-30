@@ -245,6 +245,9 @@ void Renderer::shutdown() {
 
 void Renderer::render(const World& world, const Camera &camera, const Window &window, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
     renderOpaqueAndCutout(world, camera, window);
+    if (!m_deferredFrameActive) {
+        renderForwardSceneObjects(world, camera, window);
+    }
     renderTransparentAndOverlays(world, target, blockBreak, window);
 }
 
@@ -287,6 +290,29 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
 #endif
 }
 
+void Renderer::renderForwardSceneObjects(const World& world, const Camera& camera, const Window& window) {
+    if (m_deferredFrameActive || m_pipelineSettings.deferredLightDebugMode > 0 ||
+        m_pipelineSettings.reflectionDebugMode > 0) {
+        return;
+    }
+
+    if (m_dropRenderer != nullptr && m_dropSystem != nullptr) {
+        m_dropRenderer->render(*m_dropSystem, camera, window);
+    }
+
+    if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr) {
+        const auto mode = m_renderLocalPlayerModel
+            ? HumanoidRenderer::kRenderAll
+            : HumanoidRenderer::kRenderMobsOnly;
+        m_humanoidRenderer->render(*m_gameplayRegistry, camera, window, mode);
+    }
+
+    if (m_pipelineSettings.sceneParticlesEnabled && m_particleSystem != nullptr) {
+        m_particleSystem->render(camera.getProjectionMatrix(window.getAspectRatio()),
+                                 camera.getViewMatrix());
+    }
+}
+
 void Renderer::renderWaterCompositePass(const World& world, const Window& window, const bool preTemporalResolve) {
     // Phase 5c: Delegated to WaterCompositePass::execute()
     if (!m_deferredPipeline->waterCompositePass()) {
@@ -325,10 +351,12 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         return;
     }
 
+    const bool forwardLegacy = m_pipelineSettings.mode == RenderPipelineMode::ForwardLegacy;
+
     // Step 1: Render water with dedicated shader. In the deferred/TAA path it
     // has already been rendered into SceneResolved before temporal resolve so
     // water/opaque contact edges share the same jittered depth and history.
-    if (!m_waterRenderedBeforeTemporal) {
+    if (!forwardLegacy && !m_waterRenderedBeforeTemporal) {
         renderWaterCompositePass(world, window);
     }
 
@@ -337,16 +365,21 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         restoreCapturedFramebufferViewport(window);
     }
 
-    if (!m_transparentPassPlan.hasGeneric()) {
+    const bool hasTransparentForCurrentPath = forwardLegacy
+        ? m_transparentPassPlan.hasAny()
+        : m_transparentPassPlan.hasGeneric();
+    if (!hasTransparentForCurrentPath) {
         if (m_deferredFrameActive) {
             restoreCapturedFramebufferViewport(window);
         }
         return;
     }
 
-    m_chunkShader = m_transparentCompositeShader != nullptr ? m_transparentCompositeShader : m_chunkForwardShader;
+    m_chunkShader = forwardLegacy
+        ? m_chunkForwardShader
+        : (m_transparentCompositeShader != nullptr ? m_transparentCompositeShader : m_chunkForwardShader);
     if (m_chunkShader != nullptr && m_resourceMgr != nullptr) {
-        const bool deferredInputsEnabled = m_deferredFrameActive && m_deferredTargets.isReady();
+        const bool deferredInputsEnabled = !forwardLegacy && m_deferredFrameActive && m_deferredTargets.isReady();
         const bool compositeInputsEnabled = deferredInputsEnabled && m_pipelineSettings.transparentCompositeEnabled;
         const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : window.getWidth();
         const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : window.getHeight();
@@ -367,8 +400,8 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
         bindTransparentCompositeInputs(*m_chunkShader, deferredInputsEnabled, compositeInputsEnabled);
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
-        // Render generic transparent only; water is handled by renderWaterCompositePass
-        // either before TAA (deferred temporal path) or at the start of this pass.
+        // Deferred renders water through WaterComposite. Forward legacy keeps
+        // water in the transparent list for vanilla-style alpha blending.
         if (m_useMultiDrawIndirect) {
             if (!m_deferredTransparentBatch.empty()) {
                 m_chunkShader->setInt("uForceBaseLod", 1);
@@ -382,7 +415,7 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
                           });
 
                 for (const auto& entry : m_deferredTransparentBatch) {
-                    if (entry.kind == TransparentBatchKind::Generic) {
+                    if (forwardLegacy || entry.kind == TransparentBatchKind::Generic) {
                         m_worldRenderBuffer.addTransparent(entry.range);
                     }
                 }
@@ -398,15 +431,15 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
                 glDisable(GL_BLEND);
             }
         } else {
-            // Non-MDI: filter to generic transparent only
+            // Non-MDI: deferred filters to generic transparent only; forward
+            // legacy renders water as regular transparent terrain.
             std::vector<ChunkRenderEntry> genericEntries;
             for (const auto& entry : m_deferredTransparentEntries) {
                 if (!entry.chunk) continue;
                 const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
                 if (!sc) continue;
                 const SubChunkMesh& mesh = sc->getMesh();
-                // Non-MDI path: water vertex count is tracked, generic = total - water
-                if (mesh.transparentVertexCount > mesh.waterVertexCount) {
+                if (forwardLegacy || mesh.transparentVertexCount > mesh.waterVertexCount) {
                     genericEntries.push_back(entry);
                 }
             }

@@ -86,7 +86,8 @@ private:
     PartMesh m_mobLeftArmMesh;
     PartMesh m_mobLeftLegMesh;
 
-    Shader* m_shader = nullptr;          // forward shader (steve.fs)
+    Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
+    Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
     Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
     Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;

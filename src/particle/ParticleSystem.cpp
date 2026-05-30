@@ -92,7 +92,8 @@ int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& ver
             break;
         }
 
-        const float alpha = glm::clamp(particle.life / particle.maxLife, 0.0f, 1.0f);
+        const float lifeRatio = glm::clamp(particle.life / particle.maxLife, 0.0f, 1.0f);
+        const float alpha = lifeRatio < 0.25f ? glm::smoothstep(0.0f, 0.25f, lifeRatio) : 1.0f;
         const float halfSize = particle.size * 0.5f;
 
         glm::vec3 c0 = transform.position - right * halfSize - up * halfSize;

@@ -61,6 +61,7 @@ uniform float uCameraAltitude;
 
 // Sky capture texture for mode 0 visible sky (atmosphere LUT radiance)
 uniform sampler2D uSkyCaptureTex;
+uniform int uSkyCaptureEnabled;
 
 #include "atmosphere_lut.glsl"
 #include "render_contract.glsl"
@@ -286,7 +287,7 @@ void main() {
         // Fallback to gradient model if SkyCapture texture is not bound (forward path).
         vec3 dir = normalize(vWorldDir);
         vec3 sky;
-        if (textureSize(uSkyCaptureTex, 0).x > 0) {
+        if (uSkyCaptureEnabled != 0) {
             sky = sampleSkyRadiance(uSkyCaptureTex, dir);
         } else {
             // Forward fallback: evaluateSkyRadiance() is already in display-referred space,

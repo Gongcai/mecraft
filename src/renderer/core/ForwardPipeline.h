@@ -15,7 +15,7 @@ class WorldRenderBuffer;
 class CommonFrameTargets;
 class GameplaySkyRenderer;
 
-/// Forward rendering pipeline — vanilla/basic fallback renderer.
+/// Forward rendering pipeline - vanilla/basic fallback renderer.
 /// No skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric, or deferred resources.
 /// Renders: sky gradient, opaque/cutout terrain, transparent terrain, simple fog.
 class ForwardPipeline : public RenderPipeline {
@@ -32,8 +32,10 @@ public:
     bool supportsDebugView() const override { return false; }
 
 private:
+    void beginBackbufferFrame(const FrameContext& ctx);
     void renderSky(const FrameContext& ctx);
     void renderTerrain(const FrameContext& ctx, const RenderSettings& settings);
+    void renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings);
     void renderTransparent(const FrameContext& ctx, const RenderSettings& settings);
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 
@@ -47,6 +49,7 @@ private:
     CommonFrameTargets* m_commonTargets = nullptr;
     GameplaySkyRenderer* m_skyRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
+    SharedRenderResources* m_shared = nullptr;
 
     // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)
     std::vector<DrawBatchEntry> m_transparentBatch;

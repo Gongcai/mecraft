@@ -9,6 +9,7 @@
 // Forward declarations to avoid heavy includes
 class World;
 class Camera;
+class Window;
 struct SharedRenderResources;
 
 /// Camera data for current and previous frame (for temporal effects)
@@ -190,6 +191,12 @@ struct FrameContext {
 
     // Pointer to original Camera (for renderers that need Camera object, e.g. GameplaySkyRenderer)
     const Camera* cameraPtr = nullptr;
+
+    // Pointer to original Window for legacy renderer adapters used by forward vanilla.
+    const Window* windowPtr = nullptr;
+
+    // Whether first-person camera should hide the local player model.
+    bool renderLocalPlayerModel = false;
 };
 
 #endif // MECRAFT_FRAME_CONTEXT_H

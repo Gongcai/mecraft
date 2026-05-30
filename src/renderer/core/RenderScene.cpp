@@ -246,6 +246,7 @@ void RenderScene::setDropSystem(DropSystem* ds) {
 
 void RenderScene::setGameplayRegistry(ecs::GameplayRegistry* reg) {
     m_gameplayRegistry = reg;
+    m_shared.gameplayRegistry = reg;
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
     }
@@ -320,6 +321,7 @@ void RenderScene::setEyeInWater(bool inWater) {
 }
 
 void RenderScene::setRenderLocalPlayerModel(bool visible) {
+    m_renderLocalPlayerModel = visible;
     if (m_legacyRenderer) m_legacyRenderer->setRenderLocalPlayerModel(visible);
 }
 
@@ -502,6 +504,8 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.camera.farPlane = camera.getFar();
     ctx.camera.fovDegrees = camera.getFOV();
     ctx.cameraPtr = &camera;
+    ctx.windowPtr = &window;
+    ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
     // Screen dimensions
     ctx.frameWidth = window.getWidth();

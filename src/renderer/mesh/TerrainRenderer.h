@@ -138,8 +138,8 @@ public:
                               bool volumetricFogShadersReady,
                               const TerrainRenderSettings& settings);
 
-    /// Lightweight forward-only state binding — no deferred resources.
-    /// Binds only: texture array, lightmap, biome colormap, fog, simple sky lighting, water effects.
+    /// Lightweight forward-only state binding - no deferred resources.
+    /// Binds only: texture array, lightmap, biome colormap, fog, and sky intensity.
     /// Does NOT bind: skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric.
     void bindBasicForwardState(const TerrainFrameData& frame, const TextureArray& texArray,
                                Shader& shader, bool eyeInWater, int heldBlockLightValue,

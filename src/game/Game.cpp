@@ -13,6 +13,7 @@
 #include "../ecs/util/PlayerQuery.h"
 #include "../ecs/util/GameplayRuntimeContext.h"
 
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/vec3.hpp>
 #include <algorithm>
@@ -257,7 +258,18 @@ void Game::renderFrame(const float frameTime) {
         }
     }
 
-    m_postProcessRenderer.beginScene(m_window);
+    // Forward vanilla renders directly to the backbuffer and must not bind the
+    // legacy post-process scene FBO. This is a current-frame decision, not a
+    // previous FrameOutput decision.
+    const bool useNewPipelineForFrame = m_renderScene.isNewPipelineActive() && m_renderScene.isNewPipelineReady();
+    const bool skipPostProcess = useNewPipelineForFrame &&
+                                  m_renderScene.getPipelineMode() == PipelineMode::Forward;
+    if (!skipPostProcess) {
+        m_postProcessRenderer.beginScene(m_window);
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, std::max(1, m_window.getWidth()), std::max(1, m_window.getHeight()));
+    }
 
     // Build render camera from ECS state
     Camera renderCamera;
@@ -320,7 +332,7 @@ void Game::renderFrame(const float frameTime) {
 
     const bool lightDebugActive = m_renderScene.isLightDebugActive();
     float cameraRainVisibility = 1.0f;
-    const bool useNewPipeline = m_renderScene.isNewPipelineActive() && m_renderScene.isNewPipelineReady();
+    const bool useNewPipeline = useNewPipelineForFrame;
 
     if (useNewPipeline) {
         // Experimental single-frame path. Some overlays are still being migrated
@@ -335,16 +347,8 @@ void Game::renderFrame(const float frameTime) {
         m_renderScene.renderOpaqueAndCutout(m_world, finalCamera, m_window);
 
         if (!lightDebugActive) {
-            const bool deferredActive = m_renderScene.isDeferredFrameActive();
-            if (!deferredActive) {
-                m_dropRenderer.render(m_dropSystem, finalCamera, m_window);
-                if (m_cameraController.shouldRenderPlayerModel()) {
-                    m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                              HumanoidRenderer::kRenderAll);
-                } else {
-                    m_humanoidRenderer.render(m_gameplayScene.registry(), finalCamera, m_window,
-                                              HumanoidRenderer::kRenderMobsOnly);
-                }
+            if (!m_renderScene.isDeferredFrameActive()) {
+                m_renderer.renderForwardSceneObjects(m_world, finalCamera, m_window);
             }
 
             cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
@@ -355,9 +359,12 @@ void Game::renderFrame(const float frameTime) {
     }
 
     // Phase 11: Build post-process effects via RenderScene (replaces ~70 lines of parameter assembly)
-    PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
-        m_world, finalCamera, m_window, cameraRainVisibility, fallRollRadians);
-    m_postProcessRenderer.setEffects(effects);
+    // Forward vanilla skips post-process entirely.
+    if (!skipPostProcess) {
+        PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
+            m_world, finalCamera, m_window, cameraRainVisibility, fallRollRadians);
+        m_postProcessRenderer.setEffects(effects);
+    }
 
     HeldItemPreviewMotion heldItemMotion;
     heldItemMotion.moving = playerQuery.isMoving();
@@ -369,7 +376,11 @@ void Game::renderFrame(const float frameTime) {
 
     const Inventory& inventory = playerQuery.getInventory();
 
-    if (lightDebugActive) {
+    if (skipPostProcess) {
+        // Forward vanilla already rendered to the backbuffer. Render held item
+        // directly and do not blit the stale post-process scene texture over it.
+        renderHeldItem(inventory, heldItemMotion);
+    } else if (lightDebugActive) {
         m_postProcessRenderer.blitSceneToBackbuffer(m_window);
     } else {
         renderHeldItem(inventory, heldItemMotion);
@@ -393,8 +404,10 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
     auto projMat = camera.getProjectionMatrix(m_window.getAspectRatio());
     auto viewMat = camera.getViewMatrix();
     float alphaScale = settings.weather.rainAlphaScale;
-    const GLuint depthTex = m_renderScene.gbufDepthTexture();
-    const bool hardwareDepthTest = !m_renderScene.isNewPipelineActive();
+    const bool forwardVanillaActive = m_renderScene.isNewPipelineActive() &&
+                                      m_renderScene.getPipelineMode() == PipelineMode::Forward;
+    const GLuint depthTex = forwardVanillaActive ? 0 : m_renderScene.gbufDepthTexture();
+    const bool hardwareDepthTest = !m_renderScene.isNewPipelineActive() || forwardVanillaActive;
     const glm::vec2 precipitationScreenSize(
         static_cast<float>(std::max(1, m_window.getWidth())),
         static_cast<float>(std::max(1, m_window.getHeight())));

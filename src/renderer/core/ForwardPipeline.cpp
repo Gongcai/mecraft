@@ -4,17 +4,23 @@
 #include "../mesh/WorldRenderBuffer.h"
 #include "../targets/CommonFrameTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../renderers/HumanoidRenderer.h"
+#include "../renderers/DropRenderer.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../engine/camera/Camera.h"
+#include "../../engine/platform/Window.h"
 #include "../../world/World.h"
 #include "../../world/DayNightSystem.h"
+#include "../../particle/ParticleSystem.h"
 
 #include <glad/glad.h>
+#include <algorithm>
 
 ForwardPipeline::ForwardPipeline() = default;
 ForwardPipeline::~ForwardPipeline() = default;
 
 void ForwardPipeline::init(SharedRenderResources& shared) {
+    m_shared = &shared;
     m_terrainRenderer = shared.terrain;
     m_terrainCache = shared.terrainCache;
     m_worldRenderBuffer = shared.worldRenderBuffer;
@@ -25,6 +31,7 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
 }
 
 void ForwardPipeline::shutdown() {
+    m_shared = nullptr;
     m_terrainRenderer = nullptr;
     m_terrainCache = nullptr;
     m_worldRenderBuffer = nullptr;
@@ -42,17 +49,38 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
         return {};
     }
 
+    beginBackbufferFrame(ctx);
+
     // 1. Sky background (sun, moon, clouds, gradient)
     renderSky(ctx);
 
     // 2. Opaque + cutout terrain
     renderTerrain(ctx, settings);
 
-    // 3. Transparent terrain (water, glass, etc.)
+    // 3. Forward-only scene objects that should depth-test against terrain.
+    renderEntitiesAndParticles(ctx, settings);
+
+    // 4. Transparent terrain (water, glass, etc.)
     renderTransparent(ctx, settings);
 
-    // 4. Build and return frame output
+    // 5. Build and return frame output
     return buildFrameOutput(ctx);
+}
+
+void ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDrawBuffer(GL_BACK);
+    glReadBuffer(GL_BACK);
+    glViewport(0, 0, std::max(1, ctx.frameWidth), std::max(1, ctx.frameHeight));
+
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glClearDepth(1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 // ============================================================================
@@ -67,7 +95,7 @@ void ForwardPipeline::renderSky(const FrameContext& ctx) {
         ? static_cast<float>(ctx.frameWidth) / static_cast<float>(ctx.frameHeight)
         : 1.0f;
 
-    // Forward mode: pass 0 for skyCaptureTexture — sky gradient mode doesn't read it
+    // Forward mode: pass 0 for skyCaptureTexture because sky gradient mode doesn't read it.
     m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, 0);
 }
 
@@ -137,6 +165,31 @@ void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSetting
     }
 }
 
+void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings) {
+    if (!m_shared || !ctx.cameraPtr || !ctx.windowPtr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+
+    if (m_shared->dropRenderer && m_shared->dropSystem) {
+        m_shared->dropRenderer->render(*m_shared->dropSystem, *ctx.cameraPtr, *ctx.windowPtr);
+    }
+
+    if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {
+        const auto mode = ctx.renderLocalPlayerModel
+            ? HumanoidRenderer::kRenderAll
+            : HumanoidRenderer::kRenderMobsOnly;
+        m_shared->humanoidRenderer->render(*m_shared->gameplayRegistry, *ctx.cameraPtr, *ctx.windowPtr, mode);
+    }
+
+    if (settings.weather.particlesEnabled && m_shared->particleSystem) {
+        m_shared->particleSystem->render(ctx.camera.projection, ctx.camera.view);
+    }
+}
+
 // ============================================================================
 // Transparent rendering (water, glass, etc.)
 // ============================================================================
@@ -167,6 +220,10 @@ void ForwardPipeline::renderTransparent(const FrameContext& ctx, const RenderSet
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
+    std::sort(m_transparentBatch.begin(), m_transparentBatch.end(),
+              [](const DrawBatchEntry& a, const DrawBatchEntry& b) {
+                  return a.distanceSq > b.distanceSq;
+              });
     for (const auto& entry : m_transparentBatch) {
         worldBuffer.addTransparent(entry.range);
     }
@@ -194,10 +251,10 @@ FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
         output.sceneColorTex = m_commonTargets->sceneColorTexture();
         output.sceneDepthTex = m_commonTargets->sceneDepthTexture();
     }
-    // Forward pipeline does not produce deferred inputs
+    // Forward vanilla: no deferred inputs, skip post-process (bloom/exposure/grading)
     output.hasDeferredInputs = false;
     output.hasDebugView = false;
-    output.skipPostProcess = false;
+    output.skipPostProcess = true;
     return output;
 }
 
@@ -207,14 +264,14 @@ FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
 
 TerrainFrameData ForwardPipeline::buildTerrainFrameData(const FrameContext& ctx) {
     TerrainFrameData tfd{};
+    // Camera
     tfd.view = ctx.camera.view;
     tfd.viewProj = ctx.camera.viewProj;
     tfd.cameraPos = ctx.camera.position;
     tfd.animationTime = ctx.animationTime;
     tfd.shaderTime = ctx.shaderTime;
-    tfd.surfaceWetness = ctx.weather.surfaceWetness;
 
-    // Fog
+    // Fog (used by forward_basic_terrain.frag)
     tfd.fog.enabled = ctx.fog.enabled;
     tfd.fog.mode = ctx.fog.mode;
     tfd.fog.color = ctx.fog.color;
@@ -222,58 +279,14 @@ TerrainFrameData ForwardPipeline::buildTerrainFrameData(const FrameContext& ctx)
     tfd.fog.end = ctx.fog.endDistance;
     tfd.fog.density = ctx.fog.density;
 
-    // Sky lighting
-    tfd.skyLighting.cameraPos = ctx.camera.position;
-    tfd.skyLighting.sunDirection = ctx.skyColors.sunDirection;
-    tfd.skyLighting.moonDirection = ctx.skyColors.moonDirection;
-    tfd.skyLighting.sunLightColor = ctx.skyColors.sunLightColor;
-    tfd.skyLighting.moonLightColor = ctx.skyColors.moonLightColor;
-    tfd.skyLighting.skyAmbientColor = ctx.skyColors.skyAmbientColor;
-    tfd.skyLighting.shadowTintColor = ctx.skyColors.shadowTintColor;
-    tfd.skyLighting.horizonScatterColor = ctx.skyColors.horizonScatterColor;
+    // Only skyIntensity needed for day/night lightmap interpolation
     tfd.skyLighting.skyIntensity = ctx.skyIntensity;
-    tfd.skyLighting.moonVisibility = ctx.skyColors.moonVisibility;
-    tfd.skyLighting.directIlluminance = ctx.skyIlluminance.directIlluminance;
-    tfd.skyLighting.skyIlluminance = ctx.skyIlluminance.skyIlluminance;
-    tfd.skyLighting.sunIlluminance = ctx.skyIlluminance.sunIlluminance;
-    tfd.skyLighting.moonIlluminance = ctx.skyIlluminance.moonIlluminance;
-    tfd.skyLighting.cloudDynamicWeather = ctx.skyIlluminance.cloudDynamicWeather;
-
-    // Atmosphere
-    tfd.atmosphere.aerialStrength = ctx.atmosphere.aerialStrength;
-    tfd.atmosphere.horizonScatterStrength = ctx.atmosphere.horizonScatterStrength;
-    tfd.atmosphere.sunWarmth = ctx.atmosphere.sunWarmth;
-    tfd.atmosphere.skyCoolness = ctx.atmosphere.skyCoolness;
-    tfd.atmosphere.weatherWetness = ctx.weather.wetness;
-    tfd.atmosphere.weatherStorm = ctx.weather.storm;
-    tfd.atmosphere.aerialReduction = ctx.weather.aerialReduction;
-    tfd.atmosphere.lightningFlash = ctx.weather.lightningFlash;
-    tfd.atmosphere.surfaceWetness = ctx.weather.surfaceWetness;
-    tfd.atmosphere.skyWetness = ctx.weather.skyWetness;
-    tfd.atmosphere.fogWetness = ctx.weather.fogWetness;
-    tfd.atmosphere.cloudWetness = ctx.weather.cloudWetness;
-    tfd.atmosphere.precipitation = ctx.weather.precipitation;
-    tfd.atmosphere.directWeatherOcclusion = ctx.atmosphere.directWeatherOcclusion;
-    tfd.atmosphere.directWeatherOcclusionOverride = ctx.atmosphere.directWeatherOcclusionOverride;
 
     return tfd;
 }
 
-TerrainRenderSettings ForwardPipeline::buildTerrainRenderSettings(const RenderSettings& settings) {
-    TerrainRenderSettings trs{};
-    trs.rainWetSurfacesEnabled = settings.weather.wetSurfacesEnabled;
-    trs.rainSurfaceRipplesEnabled = settings.weather.surfaceRipplesEnabled;
-    trs.aerialPerspectiveEnabled = settings.postProcess.aerialPerspectiveEnabled;
-    trs.volumetricLightEnabled = false; // Forward has no volumetric
-    trs.volumetricFogEnabled = false;
-    trs.volumetricFogStrength = 0.0f;
-    trs.directSunStrength = settings.postProcess.directSunStrength;
-    trs.skyAmbientStrength = settings.postProcess.skyAmbientStrength;
-    trs.weatherSkylightScale = settings.weather.skylightScale;
-    trs.minimumAmbient = settings.postProcess.minimumAmbient;
-    trs.blockLightStrength = settings.postProcess.blockLightStrength;
-    trs.fakeBounceStrength = settings.postProcess.fakeBounceStrength;
-    trs.albedoDesaturation = settings.postProcess.albedoDesaturation;
-    trs.shadowDesaturation = settings.postProcess.shadowDesaturation;
-    return trs;
+TerrainRenderSettings ForwardPipeline::buildTerrainRenderSettings(const RenderSettings& /*settings*/) {
+    // Forward vanilla: TerrainRenderSettings is unused by bindBasicForwardState.
+    // Return defaults. No deferred/shaderpack parameters are read.
+    return TerrainRenderSettings{};
 }

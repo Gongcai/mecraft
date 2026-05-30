@@ -956,6 +956,7 @@ void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float as
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
+    m_shader->setInt("uSkyCaptureEnabled", skyCaptureTexture != 0 ? 1 : 0);
 
     // Keep all gameplay_sky sampler2D uniforms on unit 0 so they never collide
     // with uAtmosphereLut, which is a sampler3D fixed to unit 1.

@@ -1,7 +1,8 @@
 #version 450 core
-// Forward basic terrain fragment shader — vanilla-style fallback renderer.
-// No skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric, or deferred resources.
-// Reads only: block texture array, lightmap, biome colormap, fog, simple sky lighting.
+// Forward vanilla terrain fragment shader - pure Minecraft-style rendering.
+// No directional light, no Hammon diffuse, no sRGB linearize, no water composite,
+// no skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric.
+// Contract: texture array + lightmap day/night + AO levels + biome tint + fog.
 
 out vec4 FragColor;
 
@@ -28,14 +29,10 @@ uniform sampler2D uLightmapNight;
 uniform sampler2D uGrassColormap;
 uniform sampler2D uFoliageColormap;
 
-// Lighting
-uniform vec3 uSunDirection;
-uniform vec3 uSunLightColor;
-uniform vec3 uMoonLightColor;
-uniform vec3 uSkyAmbientColor;
-uniform float uSkyIntensity;
-uniform float uMoonVisibility;
-uniform vec3 uCameraPos;
+// Control
+uniform int uForceBaseLod;
+uniform float uSkyIntensity; // 0.0-1.0, day/night interpolation factor
+uniform float uAnimationTime;
 
 // Fog
 uniform int uFogEnabled;
@@ -45,115 +42,103 @@ uniform float uFogStart;
 uniform float uFogEnd;
 uniform float uFogDensity;
 
-// Water effects (minimal)
-uniform int uWaterEffectsEnabled;
-uniform float uWaterStillFirstLayer;
-uniform float uWaterStillLayerCount;
-uniform float uWaterFlowFirstLayer;
-uniform float uWaterFlowLayerCount;
-uniform int uForceBaseLod;
-uniform float uAnimationTime;
+// Debug
+uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined
 
-const float kPi = 3.14159265359;
+// Ambient Occlusion brightness levels
+// Level 0 (fully occluded corner) = 0.62, level 3 (open) = 1.0.
+const float aoLevels[4] = float[](0.62, 0.75, 0.87, 1.0);
 
-bool layerInRange(float layer, float firstLayer, float layerCount) {
-    return layerCount > 0.5 && layer >= firstLayer - 0.5 && layer < firstLayer + layerCount - 0.5;
-}
-
-bool isWaterLayer(float layer) {
-    return layerInRange(layer, uWaterStillFirstLayer, uWaterStillLayerCount) ||
-           layerInRange(layer, uWaterFlowFirstLayer, uWaterFlowLayerCount);
-}
-
-vec3 srgbToLinear(vec3 color) {
-    return pow(max(color, vec3(0.0)), vec3(2.2));
-}
-
-float hammonDiffuseApprox(float ndotl, float roughness) {
-    float lit = max(ndotl, 0.0);
-    return pow(lit, mix(1.18, 0.78, roughness));
+float computeFogFactor(float fogDistance) {
+    if (uFogMode == 1) {
+        return clamp(exp(-uFogDensity * fogDistance), 0.0, 1.0);
+    }
+    if (uFogMode == 2) {
+        float d = uFogDensity * fogDistance;
+        return clamp(exp(-(d * d)), 0.0, 1.0);
+    }
+    float linearRange = max(uFogEnd - uFogStart, 0.0001);
+    return clamp((uFogEnd - fogDistance) / linearRange, 0.0, 1.0);
 }
 
 void main() {
-    // Sample block texture
-    vec2 uv = vUV;
-    int lod = uForceBaseLod;
-    vec4 texColor = textureLod(texArray, vec3(uv, vLayer), float(lod));
-    if (texColor.a < 0.01) discard;
+    // Debug light visualization modes
+    if (uDebugLightMode != 0) {
+        float val;
+        if (uDebugLightMode == 1) {
+            val = vSunlight;
+        } else if (uDebugLightMode == 2) {
+            val = vBlockLight;
+        } else {
+            val = vLight;
+        }
+        // Heatmap: black -> blue -> cyan -> green -> yellow -> red -> white
+        vec3 heatmap;
+        if (val < 0.25) {
+            heatmap = mix(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), val * 4.0);
+        } else if (val < 0.5) {
+            heatmap = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), (val - 0.25) * 4.0);
+        } else if (val < 0.75) {
+            heatmap = mix(vec3(0.0, 1.0, 1.0), vec3(1.0, 1.0, 0.0), (val - 0.5) * 4.0);
+        } else {
+            heatmap = mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), (val - 0.75) * 4.0);
+        }
+        FragColor = vec4(heatmap, 1.0);
+        return;
+    }
+
+    // Cross vegetation alpha-cutout mips can darken noticeably at distance.
+    bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
+    bool forceBaseLodFlag = (uForceBaseLod != 0) || isCrossVegetation;
+    float sampledLayer = vLayer;
+    if (vAnimated > 0.5 && vAnimationFrameCount > 1.0 && vAnimationFps > 0.0) {
+        float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
+        sampledLayer += frame;
+    }
+
+    vec3 sampleCoord = vec3(vUV, sampledLayer);
+    vec4 texColor = forceBaseLodFlag
+        ? textureLod(texArray, sampleCoord, 0.0)
+        : texture(texArray, sampleCoord);
+
+    if (texColor.a < 0.1)
+        discard;
 
     // Biome tinting: grass (kind=1) and foliage (kind=2)
-    vec3 albedo = srgbToLinear(texColor.rgb);
-    float tintKind = vTintKind;
-    if (tintKind > 0.5 && tintKind < 1.5) {
-        vec3 tint = srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
-        albedo *= tint;
-    } else if (tintKind > 1.5 && tintKind < 2.5) {
-        vec3 tint = srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
-        albedo *= tint;
+    if (vTintKind > 0.5 && vTintKind < 1.5) {
+        texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
+    } else if (vTintKind > 1.5 && vTintKind < 2.5) {
+        texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
     }
 
-    // Normal from face index (axis-aligned faces)
-    vec3 normal = vec3(0.0, 1.0, 0.0); // default up
-    float faceIdx = vNormal;
-    if (faceIdx < 0.5) normal = vec3(0.0, 1.0, 0.0);       // top
-    else if (faceIdx < 1.5) normal = vec3(0.0, -1.0, 0.0);  // bottom
-    else if (faceIdx < 2.5) normal = vec3(1.0, 0.0, 0.0);   // east
-    else if (faceIdx < 3.5) normal = vec3(-1.0, 0.0, 0.0);  // west
-    else if (faceIdx < 4.5) normal = vec3(0.0, 0.0, 1.0);   // south
-    else if (faceIdx < 5.5) normal = vec3(0.0, 0.0, -1.0);  // north
+    // AO: bilinear interpolate through the discrete AO levels
+    // GPU smoothly interpolates vAO between vertex values (e.g., 2.3),
+    // so we must NOT discretize with int() - that destroys the gradient.
+    float aoIdx = clamp(vAO, 0.0, 3.0);
+    int aoLow = int(aoIdx);
+    int aoHigh = min(aoLow + 1, 3);
+    float aoFactor = mix(aoLevels[aoLow], aoLevels[aoHigh], fract(aoIdx));
 
-    // Lightmap sampling
-    float skyLight = vSunlight;
-    float blockLightVal = vBlockLight;
-    vec2 lmUV = vec2(blockLightVal, skyLight);
-    vec3 lightmapDay = texture(uLightmapDay, lmUV).rgb;
-    vec3 lightmapNight = texture(uLightmapNight, lmUV).rgb;
-    vec3 vanillaLight = mix(lightmapNight, lightmapDay, uSkyIntensity);
+    // Lightmap lookup:
+    // vBlockLight and vSunlight are raw light levels normalized to [0,1] range (level/15).
+    // The lightmap image layout:
+    //   X axis (left to right) = block light 0 -> 15
+    //   Y axis (top to bottom) = sky light 15 -> 0 (inverted)
+    // OpenGL V=0 is the top of the image (sky=15, brightest), V=1 is bottom (sky=0, darkest).
+    // So we invert vSunlight: high sky level -> low V -> top of texture -> bright.
+    vec2 lightmapUV = vec2(vBlockLight, 1.0 - vSunlight);
+    vec3 dayLight = texture(uLightmapDay, lightmapUV).rgb;
+    vec3 nightLight = texture(uLightmapNight, lightmapUV).rgb;
+    vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
 
-    // Simple directional sun/moon lighting
-    float ndotSun = max(dot(normal, uSunDirection), 0.0);
-    float ndotMoon = max(dot(normal, -uSunDirection), 0.0);
-    float diffuse = hammonDiffuseApprox(ndotSun, 0.86);
-
-    // Sky ambient: brighter on top faces, dimmer on bottom
-    float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 skyAmbient = uSkyAmbientColor * (0.3 + 0.5 * upward) * 0.5;
-
-    // Combine lighting
-    vec3 sunContribution = uSunLightColor * diffuse * 0.8;
-    vec3 moonContribution = uMoonLightColor * ndotMoon * uMoonVisibility * 0.15;
-    vec3 lightColor = sunContribution + moonContribution + skyAmbient + vanillaLight * 0.5;
-    lightColor = max(lightColor, vec3(0.05)); // minimum ambient
-
-    // AO
-    float aoFactor = mix(0.4, 1.0, vAO);
-
-    // Final color
-    vec3 finalColor = albedo * lightColor * aoFactor;
-
-    // Water tint for water layers
-    bool waterLayer = (uWaterEffectsEnabled != 0) && isWaterLayer(vLayer);
-    if (waterLayer) {
-        vec3 waterTint = srgbToLinear(vec3(0.28, 0.58, 0.78));
-        finalColor = mix(finalColor, waterTint * lightColor, 0.35);
-    }
+    // Combine texture, lightmap color, and AO
+    vec3 finalColor = texColor.rgb * lightColor * aoFactor;
 
     // Fog
-    float alpha = texColor.a;
     if (uFogEnabled != 0) {
-        float fogFactor = 0.0;
-        if (uFogMode == 0) {
-            // Linear fog
-            fogFactor = clamp((uFogEnd - vFogDist) / max(uFogEnd - uFogStart, 0.001), 0.0, 1.0);
-        } else if (uFogMode == 1) {
-            // Exponential fog
-            fogFactor = exp(-uFogDensity * vFogDist);
-        } else {
-            // Exponential squared fog
-            fogFactor = exp(-uFogDensity * uFogDensity * vFogDist * vFogDist);
-        }
+        float fogFactor = computeFogFactor(vFogDist);
         finalColor = mix(uFogColor, finalColor, fogFactor);
     }
 
-    FragColor = vec4(finalColor, alpha);
+    FragColor = vec4(finalColor, texColor.a);
 }

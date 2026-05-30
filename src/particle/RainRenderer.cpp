@@ -119,7 +119,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
     glm::vec3 up(view[0][1], view[1][1], view[2][1]);
 
-    // DerivativeMain gbuffers_weather.vsh:19-23 — wind animation.
+    // DerivativeMain gbuffers_weather.vsh:19-23 - wind animation.
     // windPos = dot(worldPos + cameraPosition, vec3(2.0))
     // wind = fma(sin(windPos + frameTimeCounter * 0.1), 0.25, 0.25)
     // worldPos.xz -= worldPos.y * wind * vec2(cos(windAngle), sin(windAngle))
@@ -191,6 +191,9 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                     static_cast<GLsizeiptr>(vertices.size() * sizeof(float)),
                     vertices.data());
 
+    GLint previousDepthFunc = GL_LESS;
+    glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunc);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     if (hardwareDepthTest) {
@@ -203,6 +206,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
 
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 5));
 
+    glDepthFunc(static_cast<GLenum>(previousDepthFunc));
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);

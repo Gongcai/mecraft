@@ -62,6 +62,7 @@ struct SharedRenderResources {
     DropRenderer* dropRenderer = nullptr;
     ParticleSystem* particleSystem = nullptr;
     DropSystem* dropSystem = nullptr;
+    ecs::GameplayRegistry* gameplayRegistry = nullptr;
 };
 
 /// Entry point for all rendering
@@ -179,6 +180,7 @@ private:
     bool m_hasPreviousContext = false;
     uint64_t m_frameCounter = 0;
     bool m_eyeInWater = false;
+    bool m_renderLocalPlayerModel = false;
 
     // Legacy bridge (Phase 1 only - will be removed when pipelines are extracted)
     Renderer* m_legacyRenderer = nullptr;

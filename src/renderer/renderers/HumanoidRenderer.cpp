@@ -384,6 +384,7 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType 
 void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_shader = resourceMgr.getShader("steve");
+    m_forwardShader = resourceMgr.getShader("steve_forward");
     m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowShader = resourceMgr.getShader("entity_shadow");
 
@@ -418,6 +419,7 @@ void HumanoidRenderer::shutdown() {
         m_fallbackShadowDepthCompare = 0;
     }
     m_shader = nullptr;
+    m_forwardShader = nullptr;
     m_resourceMgr = nullptr;
 }
 
@@ -607,7 +609,6 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     shader.use();
     shader.setMat4(viewProjLoc, viewProj);
     shader.setInt("uTexture", 0);
-    bindDisabledShadowFallback(shader);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -747,7 +748,6 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
     shader.use();
     shader.setMat4(viewProjLoc, viewProj);
     shader.setInt("uTexture", 0);
-    bindDisabledShadowFallback(shader);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -907,13 +907,13 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
 
 void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,
                                const Window& window, RenderMode mode) {
-    if (m_shader == nullptr || m_resourceMgr == nullptr) return;
+    if (m_forwardShader == nullptr || m_resourceMgr == nullptr) return;
 
     const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
-    const int modelLoc = m_shader->getUniformLocation("model");
-    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
+    const int modelLoc = m_forwardShader->getUniformLocation("model");
+    const int viewProjLoc = m_forwardShader->getUniformLocation("viewProj");
 
-    drawEntities(gameplayReg, *m_shader, modelLoc, viewProjLoc, -1, viewProj, mode);
+    drawEntities(gameplayReg, *m_forwardShader, modelLoc, viewProjLoc, -1, viewProj, mode);
     glDisable(GL_CULL_FACE);
 }
 
