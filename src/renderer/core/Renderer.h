@@ -32,6 +32,7 @@
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
+#include "../debug/RenderDebugService.h"
 #include "DeferredPipeline.h"
 #include <glm/glm.hpp>
 #include <array>
@@ -260,81 +261,12 @@ public:
         float planarAltitude = 7000.0f; // DerivativeMain CLOUD_PLANE_ALTITUDE
     };
 
-    enum class FrustumPlane : size_t {
-        Left = 0,
-        Right = 1,
-        Bottom = 2,
-        Top = 3,
-        Near = 4,
-        Far = 5,
-        Count = 6
-    };
+    // FrustumPlane is now defined in RenderDebugService.h
 
 #ifdef MECRAFT_DEBUG
-    // Type alias for backward compatibility — actual definition in TerrainStreamingService
+    // Type aliases for backward compatibility — actual definitions in TerrainStreamingService and RenderDebugService
     using MeshingFrameStats = TerrainStreamingService::MeshingFrameStats;
-
-    struct CullingFrameStats {
-        int regionTests = 0;
-        int regionPassed = 0;
-        int columnTests = 0;
-        int columnPassed = 0;
-        int chunkTests = 0;
-        int chunkPassed = 0;
-        int chunkCulled = 0;
-        std::array<int, static_cast<size_t>(FrustumPlane::Count)> chunkCulledByPlane{};
-    };
-
-    struct GpuFrameStats {
-        bool supported = false;
-        bool valid = false;
-        double gbufferMs = 0.0;
-        double shadowMs = 0.0;
-        double ssaoMs = 0.0;
-        double lightingMs = 0.0;
-        double transparentMs = 0.0;
-        double volumetricMs = 0.0;
-        double reflectionMs = 0.0;
-        double cloudMs = 0.0;
-        double waterMs = 0.0;
-        double postMs = 0.0;
-    };
-
-    struct RenderWorkStats {
-        size_t blockVertexBytes = 0;
-        size_t opaqueCommands = 0;
-        size_t cutoutCommands = 0;
-        size_t transparentCommands = 0;
-        size_t transparentGenericCommands = 0;
-        size_t transparentWaterCommands = 0;
-        size_t opaqueLogicalCommands = 0;
-        size_t cutoutLogicalCommands = 0;
-        size_t transparentLogicalCommands = 0;
-        size_t opaquePoolCapacityVertices = 0;
-        size_t cutoutPoolCapacityVertices = 0;
-        size_t transparentPoolCapacityVertices = 0;
-        size_t opaquePoolUsedVertices = 0;
-        size_t cutoutPoolUsedVertices = 0;
-        size_t transparentPoolUsedVertices = 0;
-        float opaquePoolFragmentation = 0.0f;
-        float cutoutPoolFragmentation = 0.0f;
-        float transparentPoolFragmentation = 0.0f;
-        uint64_t opaqueVertices = 0;
-        uint64_t cutoutVertices = 0;
-        uint64_t transparentVertices = 0;
-        uint64_t transparentGenericVertices = 0;
-        uint64_t transparentWaterVertices = 0;
-        int cutoutCandidates = 0;
-        int cutoutSkippedByDistance = 0;
-        int mdiSubChunkTests = 0;
-        int mdiSubChunksCulled = 0;
-        // Upload budget stats
-        size_t meshUploadBytesThisFrame = 0;
-        size_t meshUploadVerticesThisFrame = 0;
-        size_t meshUploadDeferredCount = 0;
-        size_t worldBufferExpandCount = 0;
-        double worldBufferUploadMs = 0.0;
-    };
+    // CullingFrameStats, GpuFrameStats, RenderWorkStats are now defined in RenderDebugService.h (global scope)
 
     // Constant alias for backward compatibility — actual definition in TerrainStreamingService
     static constexpr size_t MESHING_HISTORY_SIZE = TerrainStreamingService::MESHING_HISTORY_SIZE;
@@ -441,6 +373,8 @@ public:
     void setTerrainStreamingService(TerrainStreamingService* svc);
     [[nodiscard]] BlockInteractionOverlayRenderer* getOverlayRenderer() { return m_overlayRenderer; }
     void setOverlayRenderer(BlockInteractionOverlayRenderer* renderer) { m_overlayRenderer = renderer; }
+    [[nodiscard]] RenderDebugService* getDebugService() { return m_debugService; }
+    void setDebugService(RenderDebugService* svc) { m_debugService = svc; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
@@ -607,19 +541,6 @@ private:
 #ifdef MECRAFT_DEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
-    enum class GpuTimerPass : size_t {
-        GBuffer = 0,
-        Shadow = 1,
-        Ssao = 2,
-        Lighting = 3,
-        Transparent = 4,
-        Volumetric = 5,
-        Reflection = 6,
-        Cloud = 7,
-        Water = 8,
-        Post = 9,
-        Count = 10
-    };
     void initGpuTimers();
     void shutdownGpuTimers();
     void beginGpuTimerFrame();
@@ -662,6 +583,8 @@ private:
 
     // R5: Overlay renderer — injected from RenderScene, null = use legacy members
     BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;
+    // R6: Debug service — injected from RenderScene, null = use legacy members
+    RenderDebugService* m_debugService = nullptr;
 
     GLuint m_outlineVao = 0;
     GLuint m_outlineVbo = 0;

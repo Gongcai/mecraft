@@ -75,7 +75,10 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
     if (m_shadowPass) {
         m_shadowPass->setTerrainRenderer(shared.terrain);
         m_shadowPass->setWorldRenderBuffer(shared.worldRenderBuffer);
-        // Entity/drop/registry injection deferred until Game provides them
+        m_shadowPass->setHumanoidRenderer(shared.humanoidRenderer);
+        m_shadowPass->setDropRenderer(shared.dropRenderer);
+        m_shadowPass->setDropSystem(shared.dropSystem);
+        m_shadowPass->setGameplayRegistry(shared.gameplayRegistry);
     }
 }
 

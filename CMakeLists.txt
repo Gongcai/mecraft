@@ -108,6 +108,7 @@ set(SRC_WORLD
 set(SRC_RENDERER
         # Debug utilities
         src/renderer/debug/RenderDebugLabels.cpp
+        src/renderer/debug/RenderDebugService.cpp
 
         # Core framework
         src/renderer/core/Shader.cpp

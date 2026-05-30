@@ -8,6 +8,7 @@
 #include "../passes/PostProcessPass.h"
 #include "../mesh/TerrainStreamingService.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
+#include "../debug/RenderDebugService.h"
 
 #include <memory>
 
@@ -142,6 +143,10 @@ public:
     PostProcessPass& postProcessPass() { return m_postProcessPass; }
     const PostProcessPass& postProcessPass() const { return m_postProcessPass; }
 
+    /// Access the debug service for GPU timers and stats.
+    RenderDebugService& debugService() { return m_debugService; }
+    const RenderDebugService& debugService() const { return m_debugService; }
+
     // Legacy compatibility (temporary bridge to existing Renderer)
     void setLegacyRenderer(Renderer* renderer);
     void syncFrameOutputFromLegacyRenderer();
@@ -180,6 +185,9 @@ private:
 
     // R5: Block interaction overlay renderer (owned by RenderScene)
     BlockInteractionOverlayRenderer m_overlayRenderer;
+
+    // R6: Debug service (owned by RenderScene)
+    RenderDebugService m_debugService;
 
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;

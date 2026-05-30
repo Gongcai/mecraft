@@ -73,6 +73,9 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     // Phase R5: Initialize overlay renderer
     m_overlayRenderer.init(resourceMgr);
 
+    // Phase R6: Initialize debug service
+    m_debugService.init();
+
     // Phase 9: Initialize pipelines
     m_forwardPipeline = std::make_unique<ForwardPipeline>();
     m_deferredPipeline = std::make_unique<DeferredPipeline>();
@@ -104,6 +107,9 @@ void RenderScene::shutdown() {
 
     // Phase R5: Shutdown overlay renderer
     m_overlayRenderer.shutdown();
+
+    // Phase R6: Shutdown debug service
+    m_debugService.shutdown();
 
     // Phase 5: Shutdown shared post-process pass
     m_postProcessPass.shutdown();
@@ -284,6 +290,9 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
         // Phase R5: Inject overlay renderer
         renderer->setOverlayRenderer(&m_overlayRenderer);
         m_shared.overlayRenderer = &m_overlayRenderer;
+
+        // Phase R6: Inject debug service
+        renderer->setDebugService(&m_debugService);
 
         m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
         m_shared.terrainStreaming = &m_terrainStreamingService;

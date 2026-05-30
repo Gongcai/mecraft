@@ -88,8 +88,8 @@ void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
     maxBounds.z = std::max(maxBounds.z, candidateMax.z);
 }
 
-constexpr Renderer::FrustumPlane kPlaneFromIndex(const size_t index) {
-    return static_cast<Renderer::FrustumPlane>(index);
+constexpr FrustumPlane kPlaneFromIndex(const size_t index) {
+    return static_cast<FrustumPlane>(index);
 }
 
 
@@ -167,7 +167,11 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
     m_gameplaySkyRenderer.init(resourceMgr);
 #ifdef MECRAFT_DEBUG
-    initGpuTimers();
+    if (m_debugService) {
+        m_debugService->init();
+    } else {
+        initGpuTimers();
+    }
 #endif
     m_threadPool.start();
     if (!m_meshingSubmitBudgetOverridden) {
@@ -195,7 +199,11 @@ void Renderer::init(ResourceMgr &resourceMgr) {
 
 void Renderer::shutdown() {
 #ifdef MECRAFT_DEBUG
-    shutdownGpuTimers();
+    if (m_debugService) {
+        m_debugService->shutdown();
+    } else {
+        shutdownGpuTimers();
+    }
 #endif
     m_mdiMeshAllocations.clear();
     if (m_deferredPipeline) { m_deferredPipeline->shutdown(); m_deferredPipeline.reset(); }
@@ -773,7 +781,10 @@ Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
     return stats;
 }
 
-Renderer::CullingFrameStats Renderer::getCullingFrameStats() const {
+CullingFrameStats Renderer::getCullingFrameStats() const {
+    if (m_debugService) {
+        return m_debugService->getCullingFrameStats();
+    }
     CullingFrameStats stats;
     stats.regionTests = m_regionTestsThisFrame;
     stats.regionPassed = m_regionPassedThisFrame;
@@ -786,11 +797,17 @@ Renderer::CullingFrameStats Renderer::getCullingFrameStats() const {
     return stats;
 }
 
-Renderer::GpuFrameStats Renderer::getGpuFrameStats() const {
+GpuFrameStats Renderer::getGpuFrameStats() const {
+    if (m_debugService) {
+        return m_debugService->getGpuFrameStats();
+    }
     return m_gpuFrameStats;
 }
 
-Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
+RenderWorkStats Renderer::getRenderWorkStats() const {
+    if (m_debugService) {
+        return m_debugService->getRenderWorkStats();
+    }
     RenderWorkStats stats;
     stats.blockVertexBytes = sizeof(BlockVertex);
     stats.opaqueCommands = m_worldRenderBuffer.opaqueCommandCount();
@@ -828,10 +845,17 @@ Renderer::RenderWorkStats Renderer::getRenderWorkStats() const {
 }
 
 void Renderer::setGpuTimerEnabled(const bool enabled) {
+    if (m_debugService) {
+        m_debugService->setGpuTimerEnabled(enabled);
+        return;
+    }
     m_gpuTimerEnabled = enabled;
 }
 
 bool Renderer::isGpuTimerEnabled() const {
+    if (m_debugService) {
+        return m_debugService->isGpuTimerEnabled();
+    }
     return m_gpuTimerEnabled;
 }
 
@@ -2105,11 +2129,11 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 
 #ifdef MECRAFT_DEBUG
             ++m_columnTestsThisFrame;
-            FrustumPlane culledPlane = FrustumPlane::Count;
+            FrustumPlane columnCulledPlane = FrustumPlane::Count;
             if (frustumCull && !isChunkInFrustum(column.columnBoundsMin, column.columnBoundsMax,
-                                  m_chunkCullingDebugEnabled ? &culledPlane : nullptr)) {
+                                  m_chunkCullingDebugEnabled ? &columnCulledPlane : nullptr)) {
                 if (m_chunkCullingDebugEnabled) {
-                    recordChunkCull(culledPlane, columnCandidateCount);
+                    recordChunkCull(columnCulledPlane, columnCandidateCount);
                 }
                 continue;
             }
@@ -2835,6 +2859,10 @@ void Renderer::shutdownGpuTimers() {
 }
 
 void Renderer::beginGpuTimerFrame() {
+    if (m_debugService) {
+        m_debugService->beginFrame();
+        return;
+    }
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled) {
         m_gpuFrameStats.supported = m_gpuTimersInitialized && m_gpuFrameStats.supported;
         m_gpuFrameStats.valid = false;
@@ -2910,6 +2938,10 @@ void Renderer::beginGpuTimerFrame() {
 }
 
 void Renderer::beginGpuTimer(const GpuTimerPass pass) {
+    if (m_debugService) {
+        m_debugService->beginGpuTimer(pass);
+        return;
+    }
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame || m_gpuTimerActive) {
         return;
     }
@@ -2921,6 +2953,10 @@ void Renderer::beginGpuTimer(const GpuTimerPass pass) {
 }
 
 void Renderer::endGpuTimer(const GpuTimerPass pass) {
+    if (m_debugService) {
+        m_debugService->endGpuTimer(pass);
+        return;
+    }
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerActive || m_activeGpuTimerPass != pass) {
         return;
     }

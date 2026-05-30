@@ -11,6 +11,7 @@
 #include "../ecs/components/Components.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/core/SettingsMapper.h"
+#include "../renderer/debug/RenderDebugService.h"
 
 #include <algorithm>
 #include <array>
@@ -245,7 +246,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
         }
 
-        Renderer::GpuFrameStats gpuStats = render.getGpuFrameStats();
+        GpuFrameStats gpuStats = render.getGpuFrameStats();
         bool gpuTimerEnabled = render.isGpuTimerEnabled();
         if (ImGui::Checkbox("GPU Timer Query", &gpuTimerEnabled)) {
             render.setGpuTimerEnabled(gpuTimerEnabled);
@@ -267,7 +268,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             ImGui::Text("GPU Post: %.3f ms", gpuStats.postMs);
         }
 
-        Renderer::RenderWorkStats renderWork = render.getRenderWorkStats();
+        RenderWorkStats renderWork = render.getRenderWorkStats();
         const double vertexBytes = static_cast<double>(renderWork.blockVertexBytes);
         const auto toMiB = [&](const uint64_t vertices) {
             return static_cast<double>(vertices) * vertexBytes / (1024.0 * 1024.0);
@@ -1176,7 +1177,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             ImGui::PlotLines("In-Flight History", inFlightHistory.data(), static_cast<int>(historyCount), 0, nullptr, 0.0f, 256.0f, ImVec2(0.0f, 60.0f));
         }
 
-        const Renderer::CullingFrameStats cullingStats = render.getCullingFrameStats();
+        const CullingFrameStats cullingStats = render.getCullingFrameStats();
         const float regionPassRate = cullingStats.regionTests > 0
             ? (100.0f * static_cast<float>(cullingStats.regionPassed) / static_cast<float>(cullingStats.regionTests))
             : 0.0f;
@@ -1195,12 +1196,12 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         ImGui::Text("Chunk Culled: %d", cullingStats.chunkCulled);
         if (chunkCullingDebugEnabled) {
             ImGui::Indent();
-            ImGui::Text("Left:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Left)]);
-            ImGui::Text("Right:  %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Right)]);
-            ImGui::Text("Bottom: %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Bottom)]);
-            ImGui::Text("Top:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Top)]);
-            ImGui::Text("Near:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Near)]);
-            ImGui::Text("Far:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(Renderer::FrustumPlane::Far)]);
+            ImGui::Text("Left:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Left)]);
+            ImGui::Text("Right:  %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Right)]);
+            ImGui::Text("Bottom: %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Bottom)]);
+            ImGui::Text("Top:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Top)]);
+            ImGui::Text("Near:   %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Near)]);
+            ImGui::Text("Far:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Far)]);
             ImGui::Unindent();
         }
     }
