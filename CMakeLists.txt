@@ -156,6 +156,7 @@ set(SRC_RENDERER
         src/renderer/mesh/MeshBuilderRegistry.cpp
         src/renderer/mesh/WorldRenderBuffer.cpp
         src/renderer/mesh/TerrainRenderCache.cpp
+        src/renderer/mesh/TerrainStreamingService.cpp
         src/renderer/mesh/TerrainRenderer.cpp
 
         # Shadow system

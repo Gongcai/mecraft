@@ -27,6 +27,7 @@
 #include "Shader.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../mesh/TerrainRenderCache.h"
+#include "../mesh/TerrainStreamingService.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
@@ -280,21 +281,8 @@ public:
     };
 
 #ifdef MECRAFT_DEBUG
-    struct MeshingFrameStats {
-        int submitBudget = 0;
-        int submitted = 0;
-        int completed = 0;
-        int inFlight = 0;
-        int staleDropped = 0;
-        int deferredResults = 0;
-        double lastBuildMs = 0.0;
-        double averageBuildMs = 0.0;
-        uint32_t lastOpaqueFacesBeforeGreedy = 0;
-        uint32_t lastOpaqueFacesAfterGreedy = 0;
-        uint32_t lastTransparentFacesBeforeGreedy = 0;
-        uint32_t lastTransparentFacesAfterGreedy = 0;
-        uint32_t lastOpaqueVertexCount = 0;
-    };
+    // Type alias for backward compatibility — actual definition in TerrainStreamingService
+    using MeshingFrameStats = TerrainStreamingService::MeshingFrameStats;
 
     struct CullingFrameStats {
         int regionTests = 0;
@@ -358,7 +346,8 @@ public:
         double worldBufferUploadMs = 0.0;
     };
 
-    static constexpr size_t MESHING_HISTORY_SIZE = 120;
+    // Constant alias for backward compatibility — actual definition in TerrainStreamingService
+    static constexpr size_t MESHING_HISTORY_SIZE = TerrainStreamingService::MESHING_HISTORY_SIZE;
 #endif
 
     ~Renderer();
@@ -451,13 +440,15 @@ public:
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 
     // Shared resource accessors (Phase 9/10: for RenderScene integration)
-    [[nodiscard]] TerrainRenderCache& getTerrainRenderCache() { return m_terrainCache; }
+    [[nodiscard]] TerrainRenderCache& getTerrainRenderCache() { return m_terrainStreamingService ? m_terrainStreamingService->terrainCache() : m_terrainCache; }
     [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
     [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
     [[nodiscard]] DeferredRenderTargets& getDeferredRenderTargets() { return m_deferredTargets; }
     [[nodiscard]] shadow::ShadowRenderer& getShadowRenderer() { return m_shadowRenderer; }
     [[nodiscard]] WorldRenderBuffer& getWorldRenderBuffer() { return m_worldRenderBuffer; }
-    [[nodiscard]] ChunkMeshingService& getChunkMeshingService() { return m_meshingService; }
+    [[nodiscard]] ChunkMeshingService& getChunkMeshingService() { return m_terrainStreamingService ? m_terrainStreamingService->meshingService() : m_meshingService; }
+    [[nodiscard]] TerrainStreamingService* getTerrainStreamingService() { return m_terrainStreamingService; }
+    void setTerrainStreamingService(TerrainStreamingService* svc);
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
@@ -688,6 +679,7 @@ private:
 
     ThreadPool m_threadPool;
     ChunkMeshingService m_meshingService;
+    TerrainStreamingService* m_terrainStreamingService = nullptr;  // injected from RenderScene, null = use legacy members
     GameplaySkyRenderer m_gameplaySkyRenderer;
     HumanoidRenderer* m_humanoidRenderer = nullptr;  // injected from Game
     DropRenderer* m_dropRenderer = nullptr;  // injected from Game

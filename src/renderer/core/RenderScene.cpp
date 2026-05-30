@@ -5,6 +5,7 @@
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
 #include "engine/camera/Camera.h"
+#include "../mesh/TerrainStreamingService.h"
 
 #include <cstdio>
 #include "engine/platform/Window.h"
@@ -66,6 +67,9 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     // Phase 9: Populate shared resources
     m_shared.resources = &resourceMgr;
 
+    // Phase R4: Initialize terrain streaming service
+    // Note: Thread pool initialization is deferred until setLegacyRenderer() is called
+
     // Phase 9: Initialize pipelines
     m_forwardPipeline = std::make_unique<ForwardPipeline>();
     m_deferredPipeline = std::make_unique<DeferredPipeline>();
@@ -91,6 +95,9 @@ void RenderScene::shutdown() {
     }
     m_forwardPipeline.reset();
     m_deferredPipeline.reset();
+
+    // Phase R4: Shutdown terrain streaming service
+    m_terrainStreamingService.shutdown();
 
     // Phase 5: Shutdown shared post-process pass
     m_postProcessPass.shutdown();
@@ -264,10 +271,15 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
 
     // Phase 9/10: Populate shared resources from legacy renderer
     if (renderer) {
-        m_shared.terrainCache = &renderer->getTerrainRenderCache();
+        // Phase R4: Initialize terrain streaming service with thread pool from Renderer
+        m_terrainStreamingService.init(renderer->getThreadPool());
+        renderer->setTerrainStreamingService(&m_terrainStreamingService);
+
+        m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
+        m_shared.terrainStreaming = &m_terrainStreamingService;
         m_shared.terrain = &renderer->getTerrainRenderer();
         m_shared.worldRenderBuffer = &renderer->getWorldRenderBuffer();
-        m_shared.meshingService = &renderer->getChunkMeshingService();
+        m_shared.meshingService = &m_terrainStreamingService.meshingService();
         m_shared.deferredTargets = &renderer->getDeferredRenderTargets();
         m_shared.sky = &renderer->getGameplaySkyRenderer();
         m_shared.shadowRenderer = &renderer->getShadowRenderer();

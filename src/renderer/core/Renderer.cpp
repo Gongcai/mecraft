@@ -198,9 +198,12 @@ void Renderer::shutdown() {
     if (m_deferredPipeline) { m_deferredPipeline->shutdown(); m_deferredPipeline.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
-    m_terrainCache.shutdown();
+    // Only shutdown legacy terrain cache if service is not injected
+    if (!m_terrainStreamingService) {
+        m_terrainCache.shutdown();
+        m_meshingService.shutdown();
+    }
     m_worldRenderBuffer.shutdown();
-    m_meshingService.shutdown();
     m_threadPool.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
@@ -475,6 +478,10 @@ void Renderer::renderTransparentCompositePass(const World& world, const Window& 
 }
 
 void Renderer::setMeshingSubmitBudget(const int budget) {
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->setMeshingSubmitBudget(budget);
+        return;
+    }
     m_meshingSubmitBudget = std::max(1, budget);
     m_meshingSubmitBudgetOverridden = true;
     m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget,
@@ -486,8 +493,23 @@ void Renderer::setMeshingSubmitBudget(const int budget) {
 }
 
 void Renderer::setRegionChunkSize(const int chunkSize) {
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->setRegionChunkSize(chunkSize);
+        return;
+    }
     m_regionChunkSize = std::max(1, chunkSize);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
+}
+
+void Renderer::setTerrainStreamingService(TerrainStreamingService* svc) {
+    m_terrainStreamingService = svc;
+    if (svc) {
+        // Update TerrainRenderer to use the service's cache
+        m_terrainRenderer.setTerrainRenderCache(&svc->terrainCache());
+        // Update WorldRenderBuffer reference in the service's cache
+        svc->terrainCache().setWorldRenderBuffer(&m_worldRenderBuffer);
+        svc->terrainCache().setUseMultiDrawIndirect(m_useMultiDrawIndirect);
+    }
 }
 
 void Renderer::setAtlasAnisotropy(const float anisotropy) {
@@ -706,11 +728,11 @@ void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
 }
 
 int Renderer::getMeshingSubmitBudget() const {
-    return m_meshingSubmitBudget;
+    return m_terrainStreamingService ? m_terrainStreamingService->meshingSubmitBudget() : m_meshingSubmitBudget;
 }
 
 int Renderer::getRegionChunkSize() const {
-    return m_regionChunkSize;
+    return m_terrainStreamingService ? m_terrainStreamingService->regionChunkSize() : m_regionChunkSize;
 }
 
 bool Renderer::isChunkCullingDebugEnabled() const {
@@ -718,6 +740,9 @@ bool Renderer::isChunkCullingDebugEnabled() const {
 }
 
 Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
+    if (m_terrainStreamingService) {
+        return m_terrainStreamingService->getMeshingFrameStats();
+    }
     MeshingFrameStats stats;
     stats.submitBudget = m_meshingSubmitBudget;
     stats.submitted = m_meshingSubmittedThisFrame;
@@ -818,25 +843,42 @@ float Renderer::getCutoutRenderDistanceChunks() const {
 }
 
 const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingSubmittedHistory() const {
+    if (m_terrainStreamingService) {
+        return m_terrainStreamingService->getMeshingSubmittedHistory();
+    }
     return m_meshingSubmittedHistory;
 }
 
 const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingCompletedHistory() const {
+    if (m_terrainStreamingService) {
+        return m_terrainStreamingService->getMeshingCompletedHistory();
+    }
     return m_meshingCompletedHistory;
 }
 
 const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingInFlightHistory() const {
+    if (m_terrainStreamingService) {
+        return m_terrainStreamingService->getMeshingInFlightHistory();
+    }
     return m_meshingInFlightHistory;
 }
 
 size_t Renderer::getMeshingHistoryCount() const {
+    if (m_terrainStreamingService) {
+        return m_terrainStreamingService->getMeshingHistoryCount();
+    }
     return m_meshingHistoryCount;
 }
 #endif
 
 void Renderer::beginFrame(const Camera &camera, const Window &window) {
     ++m_frameCounter;
-    m_terrainCache.beginFrame();
+    // Use service's cache if available, otherwise use legacy cache
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->beginFrame();
+    } else {
+        m_terrainCache.beginFrame();
+    }
     glClearColor(m_fogSettings.color.r, m_fogSettings.color.g, m_fogSettings.color.b, 1.0f);
     glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1933,6 +1975,10 @@ void Renderer::restoreCapturedFramebufferViewport(const Window& window) {
 }
 
 void Renderer::submitMeshingJobs(const World& world) {
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->submitMeshingJobs(world, m_cameraPos);
+        return;
+    }
     m_terrainCache.submitMeshingJobs(world, m_cameraPos);
     m_meshingInFlight = m_terrainCache.meshingInFlight();
     syncTerrainCacheFrameStats();
@@ -1945,7 +1991,8 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                   const float maxCameraDistance,
                                                   shadow::ShadowCasterCuller* shadowCuller) {
     syncChunkRenderColumns(world);
-    std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache.chunkRenderColumns();
+    TerrainRenderCache& cache = m_terrainStreamingService ? m_terrainStreamingService->terrainCache() : m_terrainCache;
+    std::vector<ChunkRenderColumnCache>& chunkRenderColumns = cache.chunkRenderColumns();
     if (chunkRenderColumns.empty()) {
         return;
     }
@@ -2221,25 +2268,45 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
 }
 
 void Renderer::syncChunkRenderColumns(const World& world) {
-    m_terrainCache.syncChunkRenderColumns(world);
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->terrainCache().syncChunkRenderColumns(world);
+    } else {
+        m_terrainCache.syncChunkRenderColumns(world);
+    }
     m_chunkRenderColumns.clear();
 }
 
 void Renderer::releaseMdiAllocation(const SubChunkGpuKey& key) {
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->releaseMdiAllocation(key);
+        return;
+    }
     m_terrainCache.releaseMdiAllocation(key);
     m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();
 }
 
 void Renderer::releaseStaleMdiAllocations(const World& world) {
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->releaseStaleMdiAllocations(world);
+        return;
+    }
     m_terrainCache.releaseStaleMdiAllocations(world);
     m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();
 }
 
 void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
-    m_terrainCache.refreshChunkRenderColumnCache(column);
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->terrainCache().refreshChunkRenderColumnCache(column);
+    } else {
+        m_terrainCache.refreshChunkRenderColumnCache(column);
+    }
 }
 
 void Renderer::syncTerrainCacheFrameStats() {
+    // When service is injected, stats are accessed through the service's cache
+    if (m_terrainStreamingService) {
+        return;
+    }
 #ifdef MECRAFT_DEBUG
     m_meshingSubmittedThisFrame = m_terrainCache.meshingSubmittedThisFrame();
     m_meshingCompletedThisFrame = m_terrainCache.meshingCompletedThisFrame();
@@ -2635,6 +2702,10 @@ void Renderer::renderBlockBreakOverlay(const World& world, const BlockBreakRende
 
 void Renderer::recordMeshingHistory() {
 #ifdef MECRAFT_DEBUG
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->endFrame();
+        return;
+    }
     if (m_meshingHistoryCount < MESHING_HISTORY_SIZE) {
         m_meshingSubmittedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingSubmittedThisFrame);
         m_meshingCompletedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingCompletedThisFrame);
@@ -2656,6 +2727,10 @@ void Renderer::recordMeshingHistory() {
 }
 
 void Renderer::drainMeshingResults(const World& world) {
+    if (m_terrainStreamingService) {
+        m_terrainStreamingService->drainMeshingResults(world);
+        return;
+    }
     m_terrainCache.drainMeshingResults(world);
     m_meshingInFlight = m_terrainCache.meshingInFlight();
     m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();

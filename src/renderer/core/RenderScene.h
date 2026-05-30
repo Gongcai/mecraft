@@ -6,6 +6,7 @@
 #include "FrameContext.h"
 #include "FrameOutput.h"
 #include "../passes/PostProcessPass.h"
+#include "../mesh/TerrainStreamingService.h"
 
 #include <memory>
 
@@ -20,6 +21,7 @@ class DropRenderer;
 class ParticleSystem;
 class DropSystem;
 class TerrainRenderCache;
+class TerrainStreamingService;
 class TerrainRenderer;
 class CommonFrameTargets;
 class DeferredRenderTargets;
@@ -42,6 +44,7 @@ namespace shadow { class ShadowRenderer; }
 struct SharedRenderResources {
     // Terrain
     TerrainRenderCache* terrainCache = nullptr;
+    TerrainStreamingService* terrainStreaming = nullptr;
     TerrainRenderer* terrain = nullptr;
     WorldRenderBuffer* worldRenderBuffer = nullptr;
     ChunkMeshingService* meshingService = nullptr;
@@ -169,6 +172,9 @@ private:
 
     // Shared infrastructure
     SharedRenderResources m_shared;
+
+    // Terrain streaming service (owned by RenderScene)
+    TerrainStreamingService m_terrainStreamingService;
 
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;
