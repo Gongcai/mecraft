@@ -100,6 +100,11 @@ void DeferredPipeline::shutdown() {
     m_debugPass.reset();
 }
 
+void DeferredPipeline::invalidateHistory() {
+    m_hasPreviousFrameData = false;
+    m_deferredHistoryUpdatedThisFrame = false;
+}
+
 FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
     // Pre-condition checks
     if (!m_shared || !m_resourceMgr || !m_shared->deferredTargets) {

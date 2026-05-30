@@ -171,6 +171,9 @@ private:
     /// Build FrameContext from world state
     FrameContext buildFrameContext(const World& world, const Camera& camera, const Window& window);
 
+    /// Prepare active pipeline targets that FrameContext depends on.
+    bool prepareFrameResources(const Window& window);
+
     /// Invalidate temporal/history resources when pipeline changes
     void invalidateFrameHistory();
 

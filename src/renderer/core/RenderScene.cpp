@@ -4,6 +4,8 @@
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../targets/DeferredRenderTargets.h"
+#include <glad/glad.h>
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
 
@@ -117,6 +119,10 @@ void RenderScene::shutdown() {
 
 void RenderScene::renderFrame(const World& world, const Camera& camera, const Window& window,
                               const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
+    if (!prepareFrameResources(window)) {
+        return;
+    }
+
     // Build frame context
     m_currentContext = buildFrameContext(world, camera, window);
 
@@ -133,10 +139,9 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
         renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
         m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
 
-        // Post-process is handled by RenderScene for both pipelines
-        // if (!m_lastFrameOutput.skipPostProcess) {
-        //     m_postProcessPass.execute(m_currentContext, m_lastFrameOutput);
-        // }
+        // R5: Render block interaction overlays (outline + break overlay)
+        const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
+        m_overlayRenderer.render(world, viewProj, target, blockBreak);
     } else if (m_legacyRenderer) {
         // Legacy path (Phase 1-8 compatibility)
         // This is the active rendering path until Phase 10 migrates orchestration.
@@ -287,6 +292,12 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
 
     // Phase 9/10: Populate shared resources from legacy renderer
     if (renderer) {
+        m_settings = settings_mapper::toRenderSettings(renderer->getRenderPipelineSettings());
+        settings_mapper::syncFogToRenderSettings(renderer->getFogSettings(), m_settings.fog);
+        m_activePipeline = (m_settings.pipelineMode == PipelineMode::Deferred)
+            ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
+            : static_cast<RenderPipeline*>(m_forwardPipeline.get());
+
         // Phase R4: Initialize terrain streaming service with thread pool from Renderer
         m_terrainStreamingService.init(renderer->getThreadPool());
         renderer->setTerrainStreamingService(&m_terrainStreamingService);
@@ -427,11 +438,15 @@ bool RenderScene::isNewPipelineReady() const {
 }
 
 void RenderScene::setNewPipelineActive(bool active) {
+    const bool wasActive = m_newPipelineActive;
     if (active && !m_activePipelineInitialized && isNewPipelineReady()) {
         m_activePipeline->init(m_shared);
         m_activePipelineInitialized = true;
     }
     m_newPipelineActive = active && isNewPipelineReady() && m_activePipelineInitialized;
+    if (m_newPipelineActive && !wasActive) {
+        invalidateFrameHistory();
+    }
 }
 
 const char* RenderScene::getPipelineStatus() const {
@@ -443,6 +458,33 @@ const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipelineInitialized) return "Ready (not initialized)";
     if (!m_newPipelineActive) return "Ready (inactive)";
     return "Active";
+}
+
+bool RenderScene::prepareFrameResources(const Window& window) {
+    if (!m_activePipeline || !m_activePipeline->supportsDeferred() || m_shared.deferredTargets == nullptr) {
+        return true;
+    }
+
+    GLint previousDrawFramebuffer = 0;
+    GLint previousReadFramebuffer = 0;
+    GLint previousViewport[4] = {};
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+    glGetIntegerv(GL_VIEWPORT, previousViewport);
+
+    DeferredRenderTargets& targets = *m_shared.deferredTargets;
+    if (!targets.init()) {
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
+        glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
+        return false;
+    }
+
+    const bool ready = targets.ensureSize(window.getWidth(), window.getHeight(), m_settings.shadow.resolution);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
+    glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
+    return ready;
 }
 
 PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, const Camera& camera,
@@ -707,8 +749,11 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
 }
 
 void RenderScene::invalidateFrameHistory() {
-    // Phase 1: Notify legacy renderer to invalidate temporal resources
-    // In later phases, this will reset TAA history, SSAO history, etc.
+    m_hasPreviousContext = false;
+    if (m_deferredPipeline) {
+        m_deferredPipeline->invalidateHistory();
+    }
+    m_lastFrameOutput = {};
 }
 
 float RenderScene::computeCameraRainVisibility(const World& world, const glm::vec3& cameraPos) const {

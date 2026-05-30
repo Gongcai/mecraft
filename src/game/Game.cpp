@@ -247,6 +247,12 @@ void Game::renderFrame(const float frameTime) {
     if (!m_initialized) {
         return;
     }
+
+    // R7: Activate new pipeline on first frame (after render targets are ready)
+    if (!m_renderScene.isNewPipelineActive() && m_renderScene.isNewPipelineReady()) {
+        m_renderScene.setNewPipelineActive(true);
+    }
+
     (void)frameTime;
     // Read fall-roll radians from ECS component.
     float fallRollRadians = 0.0f;

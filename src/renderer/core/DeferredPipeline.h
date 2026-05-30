@@ -50,6 +50,7 @@ public:
 
     // Held block light value (set from Game)
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
+    void invalidateHistory();
 
     // Pass accessors
     SsaoPass* ssaoPass() const { return m_ssaoPass.get(); }
