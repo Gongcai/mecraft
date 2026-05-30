@@ -776,11 +776,11 @@ RenderResourceHub::RenderFrameData RenderResourceHub::buildRenderFrameData(const
     return frame;
 }
 
-void RenderResourceHub::renderSkyCapturePass(const World& /*world*/) {
+void RenderResourceHub::executeSkyCapturePass(const World& /*world*/) {
     // Phase 7a: Delegated to SkyCapturePass::execute()
 }
 
-void RenderResourceHub::renderFullscreen(Shader& shader) const {
+void RenderResourceHub::drawFullscreen(Shader& shader) const {
     shader.use();
     glBindVertexArray(m_deferredTargets.fullscreenVao());
     glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -817,7 +817,7 @@ void RenderResourceHub::submitMeshingJobs(const World& world) {
     syncTerrainCacheFrameStats();
 }
 
-void RenderResourceHub::renderOpaqueChunksAndCollectPasses(const World& world,
+void RenderResourceHub::collectAndDrawOpaqueChunks(const World& world,
                                                   std::vector<ChunkRenderEntry>& cutoutEntries,
                                                   std::vector<ChunkRenderEntry>& transparentEntries,
                                                   const bool frustumCull,
@@ -1176,7 +1176,7 @@ void RenderResourceHub::syncTerrainRendererFrameStats() {
 #endif
 }
 
-void RenderResourceHub::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {
+void RenderResourceHub::drawCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {
     if (m_useMultiDrawIndirect) {
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
@@ -1248,7 +1248,7 @@ void RenderResourceHub::syncTransparentBatches() {
     m_transparentPassPlan = m_terrainCache.transparentPassPlan();
 }
 
-void RenderResourceHub::renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
+void RenderResourceHub::drawTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
     if (m_useMultiDrawIndirect) {
         if (!m_transparentPassPlan.hasAny()) return;
 
@@ -1343,7 +1343,7 @@ void RenderResourceHub::renderTransparentChunks(const std::vector<ChunkRenderEnt
 
 // Transparent shadow pass: writes water/glass depth to DepthAll + color to Color0/Color1.
 // This is the Mecraft CSM equivalent of DerivativeMain shadowtex0 + shadowcolor0/1.
-void RenderResourceHub::renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& /*transparentEntries*/) {
+void RenderResourceHub::executeTransparentShadowChunks(const std::vector<ChunkRenderEntry>& /*transparentEntries*/) {
     // Phase 7b: Delegated to ShadowPass (inline in execute())
 }
 

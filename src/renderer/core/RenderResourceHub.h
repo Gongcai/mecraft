@@ -308,21 +308,21 @@ private:
     void beginFrame(const Camera& camera, const Window &window);
     // R8: Legacy rendering methods removed — use DeferredPipeline/ForwardPipeline
     [[nodiscard]] RenderFrameData buildRenderFrameData(const World& world) const;
-    void renderSkyCapturePass(const World& world);
-    void renderFullscreen(Shader& shader) const;
+    void executeSkyCapturePass(const World& world);
+    void drawFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
     void submitMeshingJobs(const World& world);
-    void renderOpaqueChunksAndCollectPasses(const World& world,
+    void collectAndDrawOpaqueChunks(const World& world,
                                             std::vector<ChunkRenderEntry>& cutoutEntries,
                                             std::vector<ChunkRenderEntry>& transparentEntries,
                                             bool frustumCull = true,
                                             float maxCameraDistance = 0.0f,
                                             shadow::ShadowCasterCuller* shadowCuller = nullptr);
-    void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
-    void renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
-    void renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
+    void drawCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries);
+    void drawTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
+    void executeTransparentShadowChunks(const std::vector<ChunkRenderEntry>& transparentEntries);
     void addTransparentBatch(const GpuMeshRange& range, float distanceSq, TransparentBatchKind kind);
     void syncChunkRenderColumns(const World& world);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);

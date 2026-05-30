@@ -20,28 +20,19 @@
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/renderers/PostProcessRenderer.h"
 #include "../renderer/renderers/HumanoidRenderer.h"
-#include "camera/CameraController.h"
 #include "../engine/input/InputContextManager.h"
 #include "../player/ActionMap.h"
 #include "states/GameStateMachine.h"
-#include "../world/World.h"
-#include "../world/DropSystem.h"
-#include "../physics/PhysicsSystem.h"
 #ifdef MECRAFT_DEBUG
 #include "../ui/Dashboard.h"
 #endif
 #include "../ui/core/UIRenderer.h"
 #include "../audio/AudioEngine.h"
 #include "../audio/BgmSystem.h"
-#include "../particle/ParticleSystem.h"
-#include "../particle/RainRenderer.h"
-#include "../crafting/CraftingSystem.h"
-#include "../ecs/GameplayScene.h"
 #include "states/StateDependencies.h"
 #include "../locale/LocaleManager.h"
 #include "session/GameSessionConfig.h"
 #include "session/GameSession.h"
-#include "presentation/GameplayPresentationBuilder.h"
 #include "presentation/GameplayHudPresenter.h"
 #include "audio/AudioListenerSyncSystem.h"
 
@@ -113,16 +104,6 @@ private:
     std::unique_ptr<GameplayHudPresenter> m_hudPresenter;
     std::unique_ptr<AudioListenerSyncSystem> m_audioSyncSystem;
 
-    // Legacy members (will be removed when Game fully delegates to GameSession)
-    World         m_world;
-    physics::PhysicsSystem m_physicsSystem;
-    ParticleSystem m_particleSystem;
-    RainRenderer m_rainRenderer;
-    DropSystem m_dropSystem;
-    CraftingSystem m_craftingSystem;
-    ecs::GameplayScene m_gameplayScene;
-    GameplayPresentationBuilder m_presentationBuilder;
-
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG
     Dashboard      m_dashboard;
@@ -145,8 +126,6 @@ private:
     void renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
                   const HeldItemPreviewMotion& motion, const Camera& camera);
 
-    // Camera controller (first/third person)
-    CameraController m_cameraController;
     bool m_initialized = false;
 
 #ifdef MECRAFT_DEBUG

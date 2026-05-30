@@ -12,6 +12,15 @@
 #include "../ecs/components/Components.h"
 #include "../ecs/util/PlayerQuery.h"
 #include "../ecs/util/GameplayRuntimeContext.h"
+#include "../ecs/GameplayScene.h"
+#include "../world/World.h"
+#include "../physics/PhysicsSystem.h"
+#include "../world/DropSystem.h"
+#include "../particle/ParticleSystem.h"
+#include "../particle/RainRenderer.h"
+#include "../crafting/CraftingSystem.h"
+#include "camera/CameraController.h"
+#include "presentation/GameplayPresentationBuilder.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -38,8 +47,7 @@ Game::Game(const GameInitParams& params)
       m_audioEngine(*params.audioEngine),
       m_bgmSystem(*params.bgmSystem),
       m_uiRenderer(*params.uiRenderer),
-      m_localeManager(*params.localeManager),
-      m_physicsSystem(&m_world) {
+      m_localeManager(*params.localeManager) {
 }
 
 Game::Game(GameSessionConfig config, GameSessionDependencies deps)
@@ -56,8 +64,7 @@ Game::Game(GameSessionConfig config, GameSessionDependencies deps)
       m_audioEngine(m_deps.audioEngine),
       m_bgmSystem(m_deps.bgmSystem),
       m_uiRenderer(m_deps.uiRenderer),
-      m_localeManager(m_deps.localeManager),
-      m_physicsSystem(&m_world) {
+      m_localeManager(m_deps.localeManager) {
 }
 
 void Game::init() {
@@ -65,6 +72,7 @@ void Game::init() {
         return;
     }
     m_initialized = true;
+    m_session.init(m_config, m_resourceMgr, m_renderer.getThreadPool());
     initWorld();
     initRenderers();
     initECS();
@@ -85,15 +93,11 @@ void Game::init() {
 // initWindow and initResources removed
 
 void Game::initWorld() {
-    constexpr int kRenderDistance = 16;
-
-    m_world.init(m_params.seed);
-    m_world.setRenderDistance(kRenderDistance);
+    m_session.world().init(m_config.seed);
 }
 
 void Game::initRenderers() {
     m_renderer.init(m_resourceMgr);
-    m_world.setThreadPool(m_renderer.getThreadPool());
 
     // Initialize RenderScene and connect to Renderer
     m_renderScene.init(m_resourceMgr);
@@ -109,18 +113,18 @@ void Game::initRenderers() {
     m_humanoidRenderer.init(m_resourceMgr);
     m_renderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_renderer.setDropRenderer(&m_dropRenderer);
-    m_renderer.setDropSystem(&m_dropSystem);
-    m_renderer.setGameplayRegistry(&m_gameplayScene.registry());
-    m_renderer.setParticleSystem(&m_particleSystem);
+    m_renderer.setDropSystem(&m_session.dropSystem());
+    m_renderer.setGameplayRegistry(&m_session.gameplayScene().registry());
+    m_renderer.setParticleSystem(&m_session.particleSystem());
     m_renderScene.setHumanoidRenderer(&m_humanoidRenderer);
     m_renderScene.setDropRenderer(&m_dropRenderer);
-    m_renderScene.setDropSystem(&m_dropSystem);
-    m_renderScene.setGameplayRegistry(&m_gameplayScene.registry());
-    m_renderScene.setParticleSystem(&m_particleSystem);
+    m_renderScene.setDropSystem(&m_session.dropSystem());
+    m_renderScene.setGameplayRegistry(&m_session.gameplayScene().registry());
+    m_renderScene.setParticleSystem(&m_session.particleSystem());
     m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
     m_postProcessRenderer.init(m_resourceMgr);
-    m_particleSystem.init(m_resourceMgr);
-    m_rainRenderer.init(m_resourceMgr);
+    m_session.particleSystem().init(m_resourceMgr);
+    m_session.rainRenderer().init(m_resourceMgr);
 
     glEnable(GL_DEPTH_TEST);
 }
@@ -128,32 +132,32 @@ void Game::initRenderers() {
 // initAudio removed
 
 void Game::initECS() {
-    auto& svc = m_gameplayScene.services();
-    svc.world              = &m_world;
+    auto& svc = m_session.gameplayScene().services();
+    svc.world              = &m_session.world();
     svc.audioEngine        = &m_audioEngine;
     svc.inputContextManager = &m_contextManager;
     svc.resourceMgr        = &m_resourceMgr;
-    svc.dropSystem         = &m_dropSystem;
-    svc.particleSystem     = &m_particleSystem;
+    svc.dropSystem         = &m_session.dropSystem();
+    svc.particleSystem     = &m_session.particleSystem();
     svc.uiRenderer         = &m_uiRenderer;
-    svc.physicsSystem      = &m_physicsSystem;
-    svc.cameraController   = &m_cameraController;
+    svc.physicsSystem      = &m_session.physicsSystem();
+    svc.cameraController   = &m_session.cameraController();
 
     // UIRenderer is initialized in GameManager
-    m_craftingSystem.loadRecipes(RECIPES_CONFIG_PATH);
-    m_uiRenderer.setCraftingSystem(&m_craftingSystem);
+    m_session.craftingSystem().loadRecipes(RECIPES_CONFIG_PATH);
+    m_uiRenderer.setCraftingSystem(&m_session.craftingSystem());
 
-    auto& reg = m_gameplayScene.registry();
-    m_dropSystem.bindRegistry(reg);
-    m_dropSystem.bindServices(svc);
-    m_particleSystem.bindRegistry(reg);
+    auto& reg = m_session.gameplayScene().registry();
+    m_session.dropSystem().bindRegistry(reg);
+    m_session.dropSystem().bindServices(svc);
+    m_session.particleSystem().bindRegistry(reg);
 
     constexpr float kSpawnHeightOffset = 2.0f;
 
     const glm::vec3 spawnPos(0.0f,
-        static_cast<float>(m_world.getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f);
+        static_cast<float>(m_session.world().getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f);
 
-    m_gameplayScene.initLocalPlayer(spawnPos);
+    m_session.gameplayScene().initLocalPlayer(spawnPos);
 
     ecs::PlayerQuery query(reg);
     auto steveRoot = ecs::SteveModelFactory::createSteve(reg, query.getPosition());
@@ -176,7 +180,7 @@ void Game::initECS() {
 
 StateDependencies Game::makeStateDependencies() {
     // Get inventory from ECS
-    auto& reg = m_gameplayScene.registry();
+    auto& reg = m_session.gameplayScene().registry();
     Inventory* inventory = nullptr;
     auto view = reg.view<ecs::LocalPlayerTag, ecs::InventoryDataComponent>();
     for (auto e : view) {
@@ -194,12 +198,12 @@ StateDependencies Game::makeStateDependencies() {
         m_input,
         m_uiRenderer,
         m_lastSubmittedCommand,
-        m_physicsSystem,
-        m_world,
+        m_session.physicsSystem(),
+        m_session.world(),
         m_audioEngine,
-        m_particleSystem,
-        m_dropSystem,
-        m_gameplayScene.registry(),
+        m_session.particleSystem(),
+        m_session.dropSystem(),
+        m_session.gameplayScene().registry(),
         m_localeManager
     };
 }
@@ -218,14 +222,14 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     accumulator -= fixedStep;
 
     // ECS pre-state stage: sample input and build intents before states consume them.
-    m_gameplayScene.runFixedUpdate(static_cast<float>(fixedStep));
+    m_session.gameplayScene().runFixedUpdate(static_cast<float>(fixedStep));
 
-    m_gameplayScene.tickClock().advance(fixedStep);
+    m_session.gameplayScene().tickClock().advance(fixedStep);
     uint32_t ticksThisFrame = 0;
-    while (m_gameplayScene.tickClock().shouldTick()
-           && ticksThisFrame < m_gameplayScene.tickClock().maxTicksPerFrame()) {
-        m_gameplayScene.runOneTick();
-        m_gameplayScene.tickClock().consumeTick();
+    while (m_session.gameplayScene().tickClock().shouldTick()
+           && ticksThisFrame < m_session.gameplayScene().tickClock().maxTicksPerFrame()) {
+        m_session.gameplayScene().runOneTick();
+        m_session.gameplayScene().tickClock().consumeTick();
         ++ticksThisFrame;
     }
 
@@ -238,8 +242,8 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     const auto worldStart = std::chrono::steady_clock::now();
 #endif
 
-    ecs::PlayerQuery query(m_gameplayScene.registry());
-    m_world.update(query.getPosition());
+    ecs::PlayerQuery query(m_session.gameplayScene().registry());
+    m_session.world().update(query.getPosition());
 #ifdef MECRAFT_DEBUG
     const auto worldEnd = std::chrono::steady_clock::now();
 #endif
@@ -264,12 +268,12 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 void Game::syncAudioListener(const float deltaTime) {
     // G3: Delegate to AudioListenerSyncSystem
     if (m_audioSyncSystem) {
-        m_audioSyncSystem->update(deltaTime, m_gameplayScene.registry());
+        m_audioSyncSystem->update(deltaTime, m_session.gameplayScene().registry());
     } else {
         // Fallback during early init before audioSyncSystem is created
         m_bgmSystem.update(deltaTime);
         m_audioEngine.update(deltaTime);
-        ecs::PlayerQuery query(m_gameplayScene.registry());
+        ecs::PlayerQuery query(m_session.gameplayScene().registry());
         AudioListener::setPosition(query.getEyePosition());
         AudioListener::setOrientation(
             query.getCameraFront(),
@@ -289,8 +293,8 @@ void Game::renderFrame(const float frameTime) {
     }
 
     // G2: Build presentation snapshot from ECS (single point of ECS access)
-    auto& reg = m_gameplayScene.registry();
-    const auto snap = m_presentationBuilder.build(reg, m_cameraController);
+    auto& reg = m_session.gameplayScene().registry();
+    const auto snap = m_session.presentationBuilder().build(reg, m_session.cameraController());
 
     // Apply snapshot state to RenderScene
     m_renderScene.setRenderLocalPlayerModel(snap.renderLocalPlayerModel);
@@ -319,17 +323,17 @@ void Game::renderFrame(const float frameTime) {
     breakData.blockPos = snap.blockBreak.blockPos;
 
     // R7: Use new pipeline path (RenderScene handles all rendering)
-    m_renderScene.renderFrame(m_world, snap.renderCamera, m_window, targetData, breakData);
+    m_renderScene.renderFrame(m_session.world(), snap.renderCamera, m_window, targetData, breakData);
 
     if (!lightDebugActive) {
-        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, snap.renderCamera.getPosition());
+        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_session.world(), snap.renderCamera.getPosition());
         renderPrecipitation(snap.renderCamera, cameraRainVisibility, frameTime);
     }
 
     // Phase 11: Build post-process effects via RenderScene
     if (!skipPostProcess) {
         PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
-            m_world, snap.renderCamera, m_window, cameraRainVisibility, snap.fallRollRadians);
+            m_session.world(), snap.renderCamera, m_window, cameraRainVisibility, snap.fallRollRadians);
         m_postProcessRenderer.setEffects(effects);
     }
 
@@ -366,7 +370,7 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
     const auto& settings = m_renderScene.getSettings();
     if (!settings.weather.rainLinesEnabled) return;
 
-    const auto& weather = m_world.getWeatherSystem().getDerived();
+    const auto& weather = m_session.world().getWeatherSystem().getDerived();
     const glm::vec3 camPos = camera.getPosition();
     auto projMat = camera.getProjectionMatrix(m_window.getAspectRatio());
     auto viewMat = camera.getViewMatrix();
@@ -381,14 +385,14 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
         static_cast<float>(std::max(1, m_window.getHeight())));
 
     if (weather.rainStrength > 0.01f) {
-        m_rainRenderer.render(projMat, viewMat, camPos,
+        m_session.rainRenderer().render(projMat, viewMat, camPos,
                               weather.rainStrength, cameraRainVisibility,
                               alphaScale, depthTex,
                               precipitationScreenSize, frameTime,
                               hardwareDepthTest);
     }
     if (weather.snowStrength > 0.01f) {
-        m_rainRenderer.renderSnow(projMat, viewMat, camPos,
+        m_session.rainRenderer().renderSnow(projMat, viewMat, camPos,
                                   weather.snowStrength, cameraRainVisibility,
                                   alphaScale * 0.6f, depthTex,
                                   precipitationScreenSize, frameTime,
@@ -397,7 +401,7 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
 }
 
 void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotion& motion) {
-    if (m_cameraController.isFirstPerson()) {
+    if (m_session.cameraController().isFirstPerson()) {
         const bool forwardVanillaActive = m_renderScene.isNewPipelineActive() &&
                                           m_renderScene.isNewPipelineReady() &&
                                           m_renderScene.getPipelineMode() == PipelineMode::Forward;
@@ -437,7 +441,7 @@ void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
     m_stateMachine.render();
 #ifdef MECRAFT_DEBUG
     Camera mutableCamera = camera;
-    m_dashboard.render(reg, m_world, mutableCamera, m_renderer, m_renderScene,
+    m_dashboard.render(reg, m_session.world(), mutableCamera, m_renderer, m_renderScene,
                        m_postProcessRenderer, m_uiRenderer, m_dashboardProfilerStats);
 #endif
 }
@@ -551,12 +555,11 @@ void Game::shutdown() {
     if (!m_initialized) {
         return;
     }
-    m_rainRenderer.shutdown();
-    m_particleSystem.shutdown();
     m_postProcessRenderer.shutdown();
     m_humanoidRenderer.shutdown();
     m_firstPersonHeldItemRenderer.shutdown();
     m_dropRenderer.shutdown();
     m_renderer.shutdown();
+    m_session.shutdown();
     m_initialized = false;
 }

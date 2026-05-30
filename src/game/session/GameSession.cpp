@@ -14,6 +14,8 @@ GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
 
 void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool) {
+    (void)resourceMgr;  // Resource-dependent init deferred to Game::initRenderers()
+
     // Create core systems
     m_world = std::make_unique<World>();
     m_physicsSystem = std::make_unique<physics::PhysicsSystem>(m_world.get());
@@ -27,11 +29,9 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
     m_world->setRenderDistance(config.renderDistance);
     m_world->setThreadPool(threadPool);
 
-    // Create and initialize renderers
+    // Create particle and rain systems (actual init happens in Game::initRenderers)
     m_particleSystem = std::make_unique<ParticleSystem>();
     m_rainRenderer = std::make_unique<RainRenderer>();
-    m_particleSystem->init(resourceMgr);
-    m_rainRenderer->init(resourceMgr);
 }
 
 void GameSession::shutdown() {
