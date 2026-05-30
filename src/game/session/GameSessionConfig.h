@@ -1,0 +1,37 @@
+#ifndef MECRAFT_GAME_SESSION_CONFIG_H
+#define MECRAFT_GAME_SESSION_CONFIG_H
+
+#include <glm/glm.hpp>
+
+class Window;
+class InputManager;
+class ActionMap;
+class InputContextManager;
+class ResourceMgr;
+class AudioEngine;
+class BgmSystem;
+class UIRenderer;
+class LocaleManager;
+
+/// Configuration for a gameplay session (seed, render distance, etc.)
+struct GameSessionConfig {
+    int seed = 1234;
+    int renderDistance = 16;
+    glm::vec3 debugMobOffset = glm::vec3(5.0f, 0.0f, 0.0f);
+};
+
+/// External service dependencies required by a gameplay session.
+/// All references are non-owning; lifetime is managed by the caller (GameManager).
+struct GameSessionDependencies {
+    Window& window;
+    InputManager& input;
+    ActionMap& actionMap;
+    InputContextManager& contextManager;
+    ResourceMgr& resourceMgr;
+    AudioEngine& audioEngine;
+    BgmSystem& bgmSystem;
+    UIRenderer& uiRenderer;
+    LocaleManager& localeManager;
+};
+
+#endif // MECRAFT_GAME_SESSION_CONFIG_H

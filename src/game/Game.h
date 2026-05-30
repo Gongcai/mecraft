@@ -38,6 +38,9 @@
 #include "../ecs/GameplayScene.h"
 #include "states/StateDependencies.h"
 #include "../locale/LocaleManager.h"
+#include "session/GameSessionConfig.h"
+
+/// Legacy init params (kept for backward compatibility with GameplayAppState).
 struct GameInitParams {
     Window* window = nullptr;
     InputManager* input = nullptr;
@@ -54,7 +57,12 @@ struct GameInitParams {
 class Game {
 
 public:
+    /// Legacy constructor (kept for backward compatibility with GameplayAppState).
     explicit Game(const GameInitParams& params);
+
+    /// New constructor using structured config and dependencies.
+    Game(GameSessionConfig config, GameSessionDependencies deps);
+
     void init();
     void shutdown();
 
@@ -68,6 +76,11 @@ public:
 private:
     static constexpr double TICK_RATE = 1.0 / 60.0;
 
+    // G1: Structured config and dependencies (replaces individual member references)
+    GameSessionConfig m_config;
+    GameSessionDependencies m_deps;
+
+    // Legacy members (kept for backward compatibility, will be removed in G4)
     GameInitParams m_params;
     Window& m_window;
     InputManager& m_input;

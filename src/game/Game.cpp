@@ -24,8 +24,12 @@
 #include <chrono>
 #endif
 
-Game::Game(const GameInitParams& params) 
-    : m_params(params),
+Game::Game(const GameInitParams& params)
+    : m_config{params.seed, 16, glm::vec3(5.0f, 0.0f, 0.0f)},
+      m_deps{*params.window, *params.input, *params.actionMap, *params.contextManager,
+             *params.resourceMgr, *params.audioEngine, *params.bgmSystem,
+             *params.uiRenderer, *params.localeManager},
+      m_params(params),
       m_window(*params.window),
       m_input(*params.input),
       m_actionMap(*params.actionMap),
@@ -35,6 +39,24 @@ Game::Game(const GameInitParams& params)
       m_bgmSystem(*params.bgmSystem),
       m_uiRenderer(*params.uiRenderer),
       m_localeManager(*params.localeManager),
+      m_physicsSystem(&m_world) {
+}
+
+Game::Game(GameSessionConfig config, GameSessionDependencies deps)
+    : m_config(std::move(config)),
+      m_deps(std::move(deps)),
+      m_params{&m_deps.window, &m_deps.input, &m_deps.actionMap, &m_deps.contextManager,
+               &m_deps.resourceMgr, &m_deps.audioEngine, &m_deps.bgmSystem,
+               &m_deps.uiRenderer, &m_deps.localeManager, m_config.seed},
+      m_window(m_deps.window),
+      m_input(m_deps.input),
+      m_actionMap(m_deps.actionMap),
+      m_contextManager(m_deps.contextManager),
+      m_resourceMgr(m_deps.resourceMgr),
+      m_audioEngine(m_deps.audioEngine),
+      m_bgmSystem(m_deps.bgmSystem),
+      m_uiRenderer(m_deps.uiRenderer),
+      m_localeManager(m_deps.localeManager),
       m_physicsSystem(&m_world) {
 }
 
