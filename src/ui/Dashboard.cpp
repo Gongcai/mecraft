@@ -1017,96 +1017,71 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
 
         ImGui::Separator();
         ImGui::Text("Distance Fog");
-        Renderer::FogSettings fog = render.getFogSettings();
-        bool fogPresetApplied = false;
+        bool fogChanged = false;
         if (ImGui::Button("Natural Distance")) {
-            render.setFogEnabled(true);
-            render.setFogMode(Renderer::FogMode::Linear);
-            render.setFogAutoDistanceEnabled(true);
-            render.setFogAutoEndOffsetChunks(-0.25f);
-            render.setFogAutoFadeWidthChunks(2.5f);
-            render.setFogDensity(0.006f);
-            fogPresetApplied = true;
+            settings.fog.enabled = true;
+            settings.fog.mode = 0; // Linear
+            settings.fog.autoDistanceByRenderDistance = true;
+            settings.fog.autoEndOffsetChunks = -0.25f;
+            settings.fog.autoFadeWidthChunks = 2.5f;
+            settings.fog.density = 0.006f;
+            fogChanged = true;
         }
         ImGui::SameLine();
         if (ImGui::Button("Cinematic Haze")) {
-            render.setFogEnabled(true);
-            render.setFogMode(Renderer::FogMode::Exp2);
-            render.setFogAutoDistanceEnabled(true);
-            render.setFogAutoEndOffsetChunks(-0.8f);
-            render.setFogAutoFadeWidthChunks(3.0f);
-            render.setFogDensity(0.020f);
-            fogPresetApplied = true;
-        }
-        if (fogPresetApplied) {
-            fog = render.getFogSettings();
+            settings.fog.enabled = true;
+            settings.fog.mode = 2; // Exp2
+            settings.fog.autoDistanceByRenderDistance = true;
+            settings.fog.autoEndOffsetChunks = -0.8f;
+            settings.fog.autoFadeWidthChunks = 3.0f;
+            settings.fog.density = 0.020f;
+            fogChanged = true;
         }
 
-        bool fogEnabled = fog.enabled;
-        if (ImGui::Checkbox("Enable Fog", &fogEnabled)) {
-            render.setFogEnabled(fogEnabled);
-            fog.enabled = fogEnabled;
-        }
+        fogChanged |= ImGui::Checkbox("Enable Fog", &settings.fog.enabled);
 
-        int fogMode = static_cast<int>(fog.mode);
+        int fogMode = settings.fog.mode;
         static constexpr const char* kFogModeItems[] = { "Linear", "Exp", "Exp2" };
         if (ImGui::Combo("Fog Mode", &fogMode, kFogModeItems, IM_ARRAYSIZE(kFogModeItems))) {
-            render.setFogMode(static_cast<Renderer::FogMode>(fogMode));
+            settings.fog.mode = fogMode;
+            fogChanged = true;
         }
 
-        float fogColor[3] = { fog.color.x, fog.color.y, fog.color.z };
+        float fogColor[3] = { settings.fog.color.x, settings.fog.color.y, settings.fog.color.z };
         if (ImGui::ColorEdit3("Fog Color", fogColor)) {
-            render.setFogColor(glm::vec3(fogColor[0], fogColor[1], fogColor[2]));
+            settings.fog.color = glm::vec3(fogColor[0], fogColor[1], fogColor[2]);
+            fogChanged = true;
         }
 
-        bool fogAutoDistance = fog.autoDistanceByRenderDistance;
-        if (ImGui::Checkbox("Auto Distance (Render Distance)", &fogAutoDistance)) {
-            render.setFogAutoDistanceEnabled(fogAutoDistance);
-            fog.autoDistanceByRenderDistance = fogAutoDistance;
-        }
+        fogChanged |= ImGui::Checkbox("Auto Distance (Render Distance)", &settings.fog.autoDistanceByRenderDistance);
 
-        float fogAutoEndOffset = fog.autoEndOffsetChunks;
-        if (ImGui::SliderFloat("Auto End Offset (chunks)", &fogAutoEndOffset, -2.0f, 1.0f, "%.2f")) {
-            render.setFogAutoEndOffsetChunks(fogAutoEndOffset);
-            fog.autoEndOffsetChunks = fogAutoEndOffset;
-        }
+        fogChanged |= ImGui::SliderFloat("Auto End Offset (chunks)", &settings.fog.autoEndOffsetChunks, -2.0f, 1.0f, "%.2f");
 
-        float fogAutoFadeWidth = fog.autoFadeWidthChunks;
-        if (ImGui::SliderFloat("Auto Fade Width (chunks)", &fogAutoFadeWidth, 0.25f, 4.0f, "%.2f")) {
-            render.setFogAutoFadeWidthChunks(fogAutoFadeWidth);
-            fog.autoFadeWidthChunks = fogAutoFadeWidth;
-        }
+        fogChanged |= ImGui::SliderFloat("Auto Fade Width (chunks)", &settings.fog.autoFadeWidthChunks, 0.25f, 4.0f, "%.2f");
 
-        if (fog.autoDistanceByRenderDistance) {
+        if (settings.fog.autoDistanceByRenderDistance) {
             const float chunkSize = static_cast<float>(Chunk::SIZE_X);
             const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
-            const float autoEnd = std::max(0.0f, (renderDistanceChunks + fog.autoEndOffsetChunks) * chunkSize);
-            const float autoStart = std::max(0.0f, autoEnd - fog.autoFadeWidthChunks * chunkSize);
+            const float autoEnd = std::max(0.0f, (renderDistanceChunks + settings.fog.autoEndOffsetChunks) * chunkSize);
+            const float autoStart = std::max(0.0f, autoEnd - settings.fog.autoFadeWidthChunks * chunkSize);
             ImGui::Text("Auto Fog Range: %.1f -> %.1f", autoStart, autoEnd);
         }
 
-        float fogStart = fog.startDistance;
-        float fogEnd = fog.endDistance;
-        bool fogDistanceChanged = false;
-        if (fog.autoDistanceByRenderDistance) {
+        if (settings.fog.autoDistanceByRenderDistance) {
             ImGui::BeginDisabled();
         }
-        fogDistanceChanged |= ImGui::SliderFloat("Fog Start", &fogStart, 0.0f, 600.0f, "%.1f");
-        fogDistanceChanged |= ImGui::SliderFloat("Fog End", &fogEnd, 1.0f, 800.0f, "%.1f");
-        if (fog.autoDistanceByRenderDistance) {
+        fogChanged |= ImGui::SliderFloat("Fog Start", &settings.fog.startDistance, 0.0f, 600.0f, "%.1f");
+        fogChanged |= ImGui::SliderFloat("Fog End", &settings.fog.endDistance, 1.0f, 800.0f, "%.1f");
+        if (settings.fog.autoDistanceByRenderDistance) {
             ImGui::EndDisabled();
         }
-        if (fogDistanceChanged) {
-            render.setFogLinearDistances(fogStart, fogEnd);
-        }
 
-        float fogDensity = fog.density;
-        if (ImGui::SliderFloat("Fog Density", &fogDensity, 0.001f, 0.05f, "%.4f")) {
-            render.setFogDensity(fogDensity);
-        }
+        fogChanged |= ImGui::SliderFloat("Fog Density", &settings.fog.density, 0.001f, 0.05f, "%.4f");
 
-        // Sync fog settings from Renderer to RenderScene
-        renderScene.syncFogFromRenderer();
+        // Apply fog settings to RenderScene
+        if (fogChanged) {
+            renderScene.setSettings(settings);
+        }
 
         const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
         ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);

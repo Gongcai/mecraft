@@ -107,10 +107,6 @@ public:
     void setRenderLocalPlayerModel(bool visible);
     void setHeldBlockLightValue(int value);
 
-    /// Sync fog settings from Renderer to RenderSettings.
-    /// Call this after Dashboard changes fog via Renderer methods.
-    void syncFogFromRenderer();
-
     // R7: Legacy bridge methods removed — use renderFrame() instead
 
     // Query methods (now use FrameOutput directly)

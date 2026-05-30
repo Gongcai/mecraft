@@ -94,11 +94,15 @@ void Game::initWorld() {
 void Game::initRenderers() {
     m_renderer.init(m_resourceMgr);
     m_world.setThreadPool(m_renderer.getThreadPool());
-    m_renderer.setFogEnabled(true);
 
     // Initialize RenderScene and connect to Renderer
     m_renderScene.init(m_resourceMgr);
     m_renderScene.initFromRenderer(&m_renderer);
+
+    // Enable fog via RenderSettings
+    RenderSettings settings = m_renderScene.getSettings();
+    settings.fog.enabled = true;
+    m_renderScene.setSettings(settings);
 
     m_dropRenderer.init(m_resourceMgr);
     m_firstPersonHeldItemRenderer.init(m_resourceMgr);

@@ -590,8 +590,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_currentFrameDataValid = false;
     m_waterRenderedBeforeTemporal = false;
     m_deferredHistoryUpdatedThisFrame = false;
-    // R8: Frustum update removed — pipelines call TerrainRenderer::updateFrustum directly
-    drawCallCount = 0;
+     drawCallCount = 0;
     m_terrainRenderer.resetDebugCounters();
 
 #ifdef MECRAFT_DEBUG

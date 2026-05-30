@@ -335,12 +335,6 @@ void RenderScene::setHeldBlockLightValue(int value) {
     if (m_sourceRenderer) m_sourceRenderer->setHeldBlockLightValue(value);
 }
 
-void RenderScene::syncFogFromRenderer() {
-    if (m_sourceRenderer) {
-        settings_mapper::syncFogToRenderSettings(m_sourceRenderer->getFogSettings(), m_settings.fog);
-    }
-}
-
 // R7: Legacy bridge methods removed — use renderFrame() instead
 
 // R8: These methods now use FrameOutput directly (legacy fallback removed)
