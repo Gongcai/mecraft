@@ -13,6 +13,7 @@
 #include "../engine/input/InputManager.h"
 #include "../engine/platform/Window.h"
 #include "../engine/platform/Time.h"
+#include "orchestrator/GameFrameOrchestrator.h"
 
 #include "../renderer/core/RenderResourceHub.h"
 #include "../renderer/core/RenderScene.h"
@@ -103,6 +104,9 @@ private:
     // G3: Audio and HUD systems
     std::unique_ptr<GameplayHudPresenter> m_hudPresenter;
     std::unique_ptr<AudioListenerSyncSystem> m_audioSyncSystem;
+
+    // G5: Frame orchestrator
+    GameFrameOrchestrator m_frameOrchestrator;
 
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG

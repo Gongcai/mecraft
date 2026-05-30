@@ -219,56 +219,29 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
     const auto inputEnd = std::chrono::steady_clock::now();
     const auto stateStart = std::chrono::steady_clock::now();
 #endif
-    accumulator -= fixedStep;
 
-    // ECS pre-state stage: sample input and build intents before states consume them.
-    m_session.gameplayScene().runFixedUpdate(static_cast<float>(fixedStep));
-
-    m_session.gameplayScene().tickClock().advance(fixedStep);
-    uint32_t ticksThisFrame = 0;
-    while (m_session.gameplayScene().tickClock().shouldTick()
-           && ticksThisFrame < m_session.gameplayScene().tickClock().maxTicksPerFrame()) {
-        m_session.gameplayScene().runOneTick();
-        m_session.gameplayScene().tickClock().consumeTick();
-        ++ticksThisFrame;
-    }
+    // G5: Delegate to orchestrator
+    m_frameOrchestrator.runFixedUpdate(m_session, m_stateMachine, fixedStep, accumulator);
 
     m_stateMachine.update(static_cast<float>(fixedStep), inputSnapshot);
-    if (m_stateMachine.isQuitToMenuRequested()) {
-        return;
-    }
 #ifdef MECRAFT_DEBUG
     const auto stateEnd = std::chrono::steady_clock::now();
-    const auto worldStart = std::chrono::steady_clock::now();
 #endif
 
-    ecs::PlayerQuery query(m_session.gameplayScene().registry());
-    m_session.world().update(query.getPosition());
 #ifdef MECRAFT_DEBUG
-    const auto worldEnd = std::chrono::steady_clock::now();
-#endif
-
-
-
-#ifdef MECRAFT_DEBUG
-
     m_frameProfilerDebug.fixedInputAccumMs += std::chrono::duration<double, std::milli>(inputEnd - inputStart).count();
     m_frameProfilerDebug.fixedStateAccumMs += std::chrono::duration<double, std::milli>(stateEnd - stateStart).count();
-    // Particle simulation has moved into GameplayScene ECS systems.
     m_frameProfilerDebug.fixedParticleAccumMs += 0.0;
-    // Drop update/collect has moved into GameplayScene ECS bridge systems.
     m_frameProfilerDebug.fixedDropAccumMs += 0.0;
-
-
-    m_frameProfilerDebug.fixedWorldAccumMs += std::chrono::duration<double, std::milli>(worldEnd - worldStart).count();
+    m_frameProfilerDebug.fixedWorldAccumMs += 0.0;  // World update is now inside orchestrator
     ++m_frameProfilerDebug.fixedStepCount;
 #endif
 }
 
 void Game::syncAudioListener(const float deltaTime) {
-    // G3: Delegate to AudioListenerSyncSystem
+    // G5: Delegate to orchestrator
     if (m_audioSyncSystem) {
-        m_audioSyncSystem->update(deltaTime, m_session.gameplayScene().registry());
+        m_frameOrchestrator.syncAudioListener(*m_audioSyncSystem, deltaTime, m_session.gameplayScene().registry());
     } else {
         // Fallback during early init before audioSyncSystem is created
         m_bgmSystem.update(deltaTime);
@@ -287,83 +260,10 @@ void Game::renderFrame(const float frameTime) {
         return;
     }
 
-    // R7: Activate new pipeline on first frame (after render targets are ready)
-    if (!m_renderScene.isNewPipelineActive() && m_renderScene.isNewPipelineReady()) {
-        m_renderScene.setNewPipelineActive(true);
-    }
-
-    // G2: Build presentation snapshot from ECS (single point of ECS access)
-    auto& reg = m_session.gameplayScene().registry();
-    const auto snap = m_session.presentationBuilder().build(reg, m_session.cameraController());
-
-    // Apply snapshot state to RenderScene
-    m_renderScene.setRenderLocalPlayerModel(snap.renderLocalPlayerModel);
-    m_renderScene.setHeldBlockLightValue(snap.heldBlockLightLevel);
-    m_renderScene.setEyeInWater(snap.eyeInWater);
-
-    // R7: New pipeline is always active. Forward vanilla renders directly to backbuffer.
-    const bool skipPostProcess = m_renderScene.getPipelineMode() == PipelineMode::Forward;
-    if (!skipPostProcess) {
-        m_postProcessRenderer.beginScene(m_window);
-    } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, std::max(1, m_window.getWidth()), std::max(1, m_window.getHeight()));
-    }
-
-    const bool lightDebugActive = m_renderScene.isLightDebugActive();
-    float cameraRainVisibility = 1.0f;
-
-    // Convert snapshot types to renderer types
-    BlockTargetRenderData targetData;
-    targetData.hasTarget = snap.blockTarget.hasTarget;
-    targetData.targetBlock = snap.blockTarget.targetBlock;
-    BlockBreakRenderData breakData;
-    breakData.active = snap.blockBreak.active;
-    breakData.progress01 = snap.blockBreak.progress01;
-    breakData.blockPos = snap.blockBreak.blockPos;
-
-    // R7: Use new pipeline path (RenderScene handles all rendering)
-    m_renderScene.renderFrame(m_session.world(), snap.renderCamera, m_window, targetData, breakData);
-
-    if (!lightDebugActive) {
-        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_session.world(), snap.renderCamera.getPosition());
-        renderPrecipitation(snap.renderCamera, cameraRainVisibility, frameTime);
-    }
-
-    // Phase 11: Build post-process effects via RenderScene
-    if (!skipPostProcess) {
-        PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
-            m_session.world(), snap.renderCamera, m_window, cameraRainVisibility, snap.fallRollRadians);
-        m_postProcessRenderer.setEffects(effects);
-    }
-
-    // Convert held item motion to renderer type
-    HeldItemPreviewMotion heldItemMotion;
-    heldItemMotion.moving = snap.heldItemMotion.moving;
-    heldItemMotion.sprinting = snap.heldItemMotion.sprinting;
-    heldItemMotion.bobFrequency = snap.heldItemMotion.bobFrequency;
-    heldItemMotion.bobPhaseOffset = snap.heldItemMotion.bobPhaseOffset;
-    heldItemMotion.cameraYawDegrees = snap.heldItemMotion.cameraYawDegrees;
-    heldItemMotion.cameraPitchDegrees = snap.heldItemMotion.cameraPitchDegrees;
-
-    // Held item rendering
-    if (skipPostProcess) {
-        renderHeldItem(*snap.inventory, heldItemMotion);
-    } else if (lightDebugActive) {
-        m_postProcessRenderer.blitSceneToBackbuffer(m_window);
-    } else {
-        renderHeldItem(*snap.inventory, heldItemMotion);
-        const auto& frameOutput = m_renderScene.getLastFrameOutput();
-        m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
-                                                   frameOutput.gbufferDepthTex,
-                                                   frameOutput.weatherMaskTex);
-    }
-
-    // R7: Debug overlay is now handled by the pipeline internally
-
-    // UI rendering
-    renderUI(reg, *snap.inventory, heldItemMotion, snap.renderCamera);
-    m_window.swapBuffers();
+    // G5: Delegate frame rendering to orchestrator
+    m_frameOrchestrator.renderFrame(m_session, m_renderer, m_renderScene, m_stateMachine,
+                                    m_postProcessRenderer, m_hudPresenter.get(), m_input,
+                                    m_uiRenderer, m_window, frameTime);
 }
 
 void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility, float frameTime) {

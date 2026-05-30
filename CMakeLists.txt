@@ -73,6 +73,7 @@ set(SRC_GAME
         src/game/presentation/GameplayHudPresenter.cpp
         src/game/audio/AudioListenerSyncSystem.cpp
         src/game/session/GameSession.cpp
+        src/game/orchestrator/GameFrameOrchestrator.cpp
 )
 
 # [核心基础]
