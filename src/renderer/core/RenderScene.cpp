@@ -343,25 +343,17 @@ void RenderScene::syncFogFromRenderer() {
 
 // R7: Legacy bridge methods removed — use renderFrame() instead
 
+// R8: These methods now use FrameOutput directly (legacy fallback removed)
 bool RenderScene::isDeferredFrameActive() const {
-    if (m_newPipelineActive && m_lastFrameOutput.hasDeferredInputs) {
-        return true;
-    }
-    return m_legacyRenderer ? m_legacyRenderer->isDeferredFrameActive() : false;
+    return m_lastFrameOutput.hasDeferredInputs;
 }
 
 GLuint RenderScene::gbufDepthTexture() const {
-    if (m_newPipelineActive && m_lastFrameOutput.gbufferDepthTex != 0) {
-        return m_lastFrameOutput.gbufferDepthTex;
-    }
-    return m_legacyRenderer ? m_legacyRenderer->gbufDepthTexture() : 0;
+    return m_lastFrameOutput.gbufferDepthTex;
 }
 
 GLuint RenderScene::weatherMaskTexture() const {
-    if (m_newPipelineActive && m_lastFrameOutput.weatherMaskTex != 0) {
-        return m_lastFrameOutput.weatherMaskTex;
-    }
-    return m_legacyRenderer ? m_legacyRenderer->weatherMaskTexture() : 0;
+    return m_lastFrameOutput.weatherMaskTex;
 }
 
 bool RenderScene::isLightDebugActive() const {

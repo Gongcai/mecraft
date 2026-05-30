@@ -345,9 +345,10 @@ void Game::renderFrame(const float frameTime) {
         m_postProcessRenderer.blitSceneToBackbuffer(m_window);
     } else {
         renderHeldItem(*snap.inventory, heldItemMotion);
+        const auto& frameOutput = m_renderScene.getLastFrameOutput();
         m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
-                                                   m_renderScene.gbufDepthTexture(),
-                                                   m_renderScene.weatherMaskTexture());
+                                                   frameOutput.gbufferDepthTex,
+                                                   frameOutput.weatherMaskTex);
     }
 
     // R7: Debug overlay is now handled by the pipeline internally
@@ -368,7 +369,8 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
     float alphaScale = settings.weather.rainAlphaScale;
     const bool forwardVanillaActive = m_renderScene.isNewPipelineActive() &&
                                       m_renderScene.getPipelineMode() == PipelineMode::Forward;
-    const GLuint depthTex = forwardVanillaActive ? 0 : m_renderScene.gbufDepthTexture();
+    const auto& frameOutput = m_renderScene.getLastFrameOutput();
+    const GLuint depthTex = forwardVanillaActive ? 0 : frameOutput.gbufferDepthTex;
     const bool hardwareDepthTest = !m_renderScene.isNewPipelineActive() || forwardVanillaActive;
     const glm::vec2 precipitationScreenSize(
         static_cast<float>(std::max(1, m_window.getWidth())),
