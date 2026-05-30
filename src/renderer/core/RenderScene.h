@@ -114,7 +114,7 @@ public:
     GLuint gbufDepthTexture() const;
     GLuint weatherMaskTexture() const;
 
-    // Debug query helpers (replaces direct RenderPipelineSettings access)
+    // Debug query helpers
     bool isLightDebugActive() const;
 
     // Pipeline readiness (R2.6a)

@@ -560,7 +560,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &settings.shadow.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &settings.shadow.pcssShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &settings.shadow.contactShadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &settings.shadow.cloudShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &settings.cloud.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
@@ -798,7 +798,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             settings.shadow.softShadowsEnabled = true;
             settings.shadow.pcssShadowsEnabled = false;
             settings.shadow.contactShadowsEnabled = false;
-            settings.shadow.cloudShadowsEnabled = false;
+            settings.cloud.shadowsEnabled = false;
             settings.cloud.timeScale = 0.35f;
             settings.postProcess.directSunStrength = 1.0f;
             settings.postProcess.skyAmbientStrength = 0.55f;
@@ -849,14 +849,14 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             settings.shadow.pcssShadowsEnabled = true;
             settings.shadow.contactShadowsEnabled = false;
             settings.shadow.pcssStrength = 0.72f;
-            settings.shadow.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
+            settings.cloud.shadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
             settings.postProcess.directSunStrength = 1.36f;
             settings.postProcess.skyAmbientStrength = 0.36f;
             settings.postProcess.minimumAmbient = 0.055f;
             settings.shadow.contactShadowStrength = 0.12f;
-            settings.shadow.cloudShadowStrength = 0.28f;
-            settings.shadow.cloudShadowScale = 0.0045f;
-            settings.shadow.cloudShadowSpeed = 0.018f;
+            settings.cloud.shadowStrength = 0.28f;
+            settings.cloud.shadowScale = 0.0045f;
+            settings.cloud.shadowSpeed = 0.018f;
             settings.cloud.timeScale = 0.35f;
             settings.postProcess.shadowMinLight = 0.08f;
             settings.postProcess.shadowContrast = 1.28f;
@@ -903,14 +903,14 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             settings.shadow.pcssShadowsEnabled = true;
             settings.shadow.contactShadowsEnabled = false;
             settings.shadow.pcssStrength = 0.82f;
-            settings.shadow.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
+            settings.cloud.shadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
             settings.postProcess.directSunStrength = 1.58f;
             settings.postProcess.skyAmbientStrength = 0.28f;
             settings.postProcess.minimumAmbient = 0.04f;
             settings.shadow.contactShadowStrength = 0.16f;
-            settings.shadow.cloudShadowStrength = 0.28f;
-            settings.shadow.cloudShadowScale = 0.0055f;
-            settings.shadow.cloudShadowSpeed = 0.020f;
+            settings.cloud.shadowStrength = 0.28f;
+            settings.cloud.shadowScale = 0.0055f;
+            settings.cloud.shadowSpeed = 0.020f;
             settings.cloud.timeScale = 0.35f;
             settings.postProcess.shadowMinLight = 0.055f;
             settings.postProcess.shadowContrast = 1.52f;
@@ -957,8 +957,8 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         pipelineChanged |= ImGui::SliderFloat("Shadow Slope Bias", &settings.shadow.slopeBias, 0.0f, 0.012f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Shadow Normal Offset", &settings.shadow.normalOffset, 0.0f, 0.12f, "%.3f");
         pipelineChanged |= ImGui::SliderFloat("Contact Shadow Strength", &settings.shadow.contactShadowStrength, 0.0f, 0.6f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &settings.shadow.cloudShadowStrength, 0.0f, 0.8f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &settings.shadow.cloudShadowScale, 0.001f, 0.02f, "%.4f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &settings.cloud.shadowStrength, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &settings.cloud.shadowScale, 0.001f, 0.02f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Time Scale", &settings.cloud.timeScale, 0.05f, 2.0f, "%.2f");
         ImGui::TextDisabled("DerivativeMain CLOUDS_SPEED adapter. Legacy Cloud Shadow Speed is ignored by the DM cloud path.");
         pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &settings.postProcess.sunRayStrength, 0.0f, 0.6f, "%.2f");

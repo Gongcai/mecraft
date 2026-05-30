@@ -34,6 +34,7 @@
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
 #include "DeferredPipeline.h"
+#include "RenderSettings.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <unordered_set>
@@ -54,148 +55,11 @@ namespace shadow { class ShadowCasterCuller; }
 
 class Renderer {
 public:
-    enum class RenderPipelineMode : int {
-        ForwardLegacy = 0,
-        HybridDeferred = 1
-    };
-
     enum class FogMode : int {
         Linear = 0,
         Exp = 1,
         Exp2 = 2
     };
-
-    struct RenderPipelineSettings {
-        RenderPipelineMode mode = RenderPipelineMode::HybridDeferred;
-        bool shadowsEnabled = true;
-        bool softShadowsEnabled = true;
-        bool pcssShadowsEnabled = true;
-        bool contactShadowsEnabled = false;
-        bool cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW: off by default
-        bool ssaoEnabled = true;
-        bool bloomEnabled = true;
-        float bloomThreshold = 0.0f;
-        float bloomStrength = 1.0f;
-        bool autoExposureEnabled = true;
-        float autoExposureMin = 0.001f;
-        float autoExposureMax = 64.0f; // Legacy UI field; DerivativeMain target exposure is not clamped.
-        float autoExposureSpeed = 1.0f;
-        float autoExposureBias = 0.0f;
-        bool sunRaysEnabled = false;
-        bool waterEffectsEnabled = true;
-        bool transparentCompositeEnabled = true;
-        bool shaderpackGradingEnabled = true;
-        bool aerialPerspectiveEnabled = true;
-        bool volumetricLightEnabled = true; // DerivativeMain VOLUMETRIC_LIGHT: base haze (airDensity)
-        bool volumetricFogEnabled = true;
-        bool volumetricSkyRayEnabled = true; // A/B toggle: sky pixels march volumetric fog
-        bool volumetricTimeFadeEnabled = true; // DerivativeMain TIME_FADE
-        int volumetricQualityTier = 1; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
-        bool uwVolumetricLightEnabled = true; // DerivativeMain UW_VOLUMETRIC_LIGHT: underwater volumetric light
-        int volumetricFogSamples = 20; // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
-        float volumetricShadowBiasScale = 1.0f; // bias multiplier for VFog A/B testing
-        bool volumetricTemporalEnabled = true;
-        float volumetricTemporalWeight = 0.90f;
-        bool freezeR1 = false;       // A/B test: freeze VFog R1 dither (no temporal variation)
-        bool freezeBias = false;     // A/B test: freeze VFog upscale bias (no temporal rotation)
-        bool forceZeroVelocity = false; // A/B test: force zero velocity (verify TAA pure accumulation)
-        bool freezeTaaJitter = false; // A/B test: disable projection jitter while keeping TAA resolve active
-        bool taaEnabled = true;
-        bool reflectionFilterEnabled = true;
-        bool ssaoFilterEnabled = true;
-        bool ssaoTemporalEnabled = true;
-        float ssaoHistoryWeight = 0.85f;
-        bool reflectionTemporalEnabled = true;
-        float reflectionHistoryWeight = 0.90f;
-        bool motionBlurEnabled = false;
-        float taaBlendMin = 0.08f;
-        float taaBlendMax = 0.26f;
-        float reflectionFilterStrength = 1.0f;
-        float motionBlurStrength = 1.0f;
-        int motionBlurSamples = 8;
-        bool dofEnabled = false;
-        float dofIntensity = 0.15f;
-        float dofAperture = 2.8f;
-        float dofFocusDistance = 5.0f;
-        float sceneCloudCompositeStrength = 0.85f;
-        float sceneReflectionCompositeStrength = 1.0f;
-        int debugViewMode = 0;
-        int deferredLightDebugMode = 0; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=beforePost
-        bool derivativeStrictMode = false;
-        int weatherPreset = 0; // DEPRECATED: weather state now lives in World::WeatherSystem
-        int tonemapMode = 1; // 0=Reinhard, 1=AcademyFit, 2=Filmic, 3=AgX_Minimal, 4=AcademyFull, 5=AgX_Full
-        bool debugDisableGreedyMeshing = false;
-        int shadowResolution = 2048;
-        float shadowDistance = 192.0f;
-        float shadowSoftness = 1.0f;
-        float shadowPcssStrength = 0.72f;
-        float shadowConstantBias = 0.0007f;
-        float shadowSlopeBias = 0.0022f;
-        float shadowNormalOffset = 0.035f;
-        float contactShadowStrength = 0.12f;
-        float cloudShadowStrength = 0.28f;
-        float cloudShadowScale = 0.0045f;
-        float cloudShadowSpeed = 0.018f;
-        float cloudTimeScale = 0.35f; // Mecraft time-unit adaptation for DerivativeMain CLOUDS_SPEED.
-        float sunRayStrength = 0.18f;
-        float volumetricLightStrength = 0.14f; // DEPRECATED: DerivativeMain volumetric path ignores this UI value.
-        float colorTemperature = 1.0f;
-        float vibrance = 0.0f;
-        float highlightCompression = 0.0f;
-        float filmEmulationStrength = 0.0f;
-        float redModifierStrength = 0.35f;
-        float colorLumaR = 1.02f;
-        float colorLumaG = 1.00f;
-        float colorLumaB = 0.96f;
-        float albedoDesaturation = 0.0f;
-        float sunWarmth = 0.34f;
-        float skyCoolness = 0.18f;
-        float shadowDesaturation = 0.22f;
-        float splitToneStrength = 0.0f;
-        float vignetteStrength = 0.0f;
-        float shadowTintStrength = 0.40f;
-        float directSunStrength = 1.0f;
-        float skyAmbientStrength = 0.36f;
-        float minimumAmbient = 0.055f;
-        float shadowMinLight = 0.0f;
-        float shadowContrast = 1.0f;
-        float blockLightStrength = 1.00f;
-        float fakeBounceStrength = 0.06f;
-        float aerialStrength = 0.65f;
-        float horizonScatterStrength = 0.78f;
-        float volumetricFogStrength = 1.0f;
-        // DerivativeMain-style VFog independent profile (decoupled from weather)
-        float vfogCenterHeight = 63.0f;   // SEA_LEVEL: y-level where fog is densest
-        float vfogHeightSpread = 100.0f;  // DerivativeMain falloff denominator: 100 -> exponent 0.01
-        float vfogNoiseScale = 0.04f;     // noise sampling scale for structured fog
-        float vfogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
-        float vfogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
-        float underwaterVolumetricLightStrength = 0.1f; // DerivativeMain UW_VOLUMETRIC_LIGHT_STRENGTH
-        float noiseDitherStrength = 0.015f;
-        float sharpenStrength = 0.3f; // DerivativeMain CAS_STRENGTH
-        float ssaoRadius = 0.6f;
-        float ssaoStrength = 0.75f;
-        int ssaoSamples = 16;
-        float exposure = 12.0f;
-        float gamma = 1.0f;
-        float saturation = 1.0f;
-        float contrast = 1.0f;
-        bool purkinjeShiftEnabled = false; // DerivativeMain PurkinjeShift
-        bool bloomyFogEnabled = true; // DerivativeMain BLOOMY_FOG
-        int postprocessDebugMode = 0; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
-        int reflectionDebugMode = 0; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 6=compositeDelta, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength, 11=f0, 12=skyFallback, 13=reflectionRgb, 14=hasReflection, 15=skyLightRaw, 16=voxelLightRG, 17=materialAux, 18=skyGradient, 19=finalContribution, 20=reflectionSource, 21=reflectanceX32, 22=f0X32, 23=roughness, 24=reflectionSourceX8, 25=finalContributionX32, 26=reflectionSceneRatio, 27=sceneLuma, 28=reflectionLumaX64, 29=reflectanceX128, 30=sourceGradientX128
-        float directWeatherOcclusion = -1.0f; // <0 = auto from skyWetness; >=0 = manual override
-        // Weather render profile — runtime-tunable per-weather visual parameters
-        float weatherSkylightScale = 1.0f;   // [0,1] multiplier on skylight during precipitation
-        float weatherExposureBias = 0.0f;    // EV offset on auto exposure during precipitation
-        float weatherPostRainFog = 1.0f;     // [0,2] multiplier on post-process rain/snow fog
-        float weatherRainAlphaScale = 2.5f;  // [0,5] rain particle alpha boost
-        bool weatherRainLinesEnabled = true; // Debug isolation for visible precipitation lines
-        bool sceneParticlesEnabled = true;    // Debug isolation for ECS particles
-        bool rainWetSurfacesEnabled = true;   // Debug isolation for wet terrain material/reflection response
-        bool rainSurfaceRipplesEnabled = true; // Debug isolation for wet-surface ripple normals
-    };
-
 
     struct FogSettings {
         bool enabled = true;
@@ -294,9 +158,9 @@ public:
     // Debug light visualization: 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined heatmap
     void setDebugLightMode(int mode);
     [[nodiscard]] int getDebugLightMode() const;
-    void setRenderPipelineSettings(const RenderPipelineSettings& settings);
+    void setSettings(const RenderSettings& settings);
     void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
-    [[nodiscard]] RenderPipelineSettings getRenderPipelineSettings() const;
+    [[nodiscard]] const RenderSettings& getSettings() const;
     [[nodiscard]] GameplaySkyRenderer::SkyIlluminanceData getSkyIlluminanceData() const { return m_currentFrameData.skyIlluminance; }
     [[nodiscard]] GameplaySkyRenderer::SkyColors getSkyColors() const { return m_currentFrameData.skyColors; }
     [[nodiscard]] glm::vec3 getFogColor() const { return m_currentFrameData.fogColor; }
@@ -547,7 +411,7 @@ private:
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
     std::unique_ptr<DeferredPipeline> m_deferredPipeline;
-    RenderPipelineSettings m_pipelineSettings{};
+    RenderSettings m_settings;
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;
     RenderFrameData m_currentFrameData{};

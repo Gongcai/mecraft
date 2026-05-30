@@ -319,76 +319,81 @@ int Renderer::getDebugLightMode() const {
     return m_debugLightMode;
 }
 
-void Renderer::setRenderPipelineSettings(const RenderPipelineSettings& settings) {
-    m_pipelineSettings = settings;
-    m_pipelineSettings.shadowResolution = std::clamp(m_pipelineSettings.shadowResolution, 256, 8192);
-    m_pipelineSettings.shadowDistance = std::clamp(m_pipelineSettings.shadowDistance, 64.0f, 512.0f);
-    m_pipelineSettings.shadowSoftness = std::clamp(m_pipelineSettings.shadowSoftness, 0.1f, 8.0f);
-    m_pipelineSettings.shadowPcssStrength = std::clamp(m_pipelineSettings.shadowPcssStrength, 0.0f, 1.5f);
-    m_pipelineSettings.shadowConstantBias = std::clamp(m_pipelineSettings.shadowConstantBias, 0.0f, 0.01f);
-    m_pipelineSettings.shadowSlopeBias = std::clamp(m_pipelineSettings.shadowSlopeBias, 0.0f, 0.03f);
-    m_pipelineSettings.shadowNormalOffset = std::clamp(m_pipelineSettings.shadowNormalOffset, 0.0f, 0.25f);
-    m_pipelineSettings.contactShadowStrength = std::clamp(m_pipelineSettings.contactShadowStrength, 0.0f, 1.0f);
-    m_pipelineSettings.cloudShadowStrength = std::clamp(m_pipelineSettings.cloudShadowStrength, 0.0f, 1.0f);
-    m_pipelineSettings.cloudShadowScale = std::clamp(m_pipelineSettings.cloudShadowScale, 0.0005f, 0.04f);
-    m_pipelineSettings.cloudShadowSpeed = std::clamp(m_pipelineSettings.cloudShadowSpeed, 0.0f, 0.20f);
-    m_pipelineSettings.cloudTimeScale = std::clamp(m_pipelineSettings.cloudTimeScale, 0.05f, 2.0f);
-    m_pipelineSettings.bloomThreshold = std::clamp(m_pipelineSettings.bloomThreshold, 0.0f, 4.0f);
-    m_pipelineSettings.bloomStrength = std::clamp(m_pipelineSettings.bloomStrength, 0.0f, 20.0f);
-    m_pipelineSettings.autoExposureMin = std::clamp(m_pipelineSettings.autoExposureMin, 0.001f, 64.0f);
-    m_pipelineSettings.autoExposureMax = std::clamp(m_pipelineSettings.autoExposureMax, m_pipelineSettings.autoExposureMin, 64.0f);
-    m_pipelineSettings.autoExposureSpeed = std::clamp(m_pipelineSettings.autoExposureSpeed, 0.05f, 12.0f);
-    m_pipelineSettings.autoExposureBias = std::clamp(m_pipelineSettings.autoExposureBias, -3.0f, 3.0f);
-    m_pipelineSettings.sunRayStrength = std::clamp(m_pipelineSettings.sunRayStrength, 0.0f, 1.0f);
-    m_pipelineSettings.volumetricQualityTier = std::clamp(m_pipelineSettings.volumetricQualityTier, 0, 3);
-    m_pipelineSettings.volumetricShadowBiasScale = std::clamp(m_pipelineSettings.volumetricShadowBiasScale, 0.0f, 4.0f);
-    m_pipelineSettings.sceneCloudCompositeStrength = std::clamp(m_pipelineSettings.sceneCloudCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.sceneReflectionCompositeStrength = std::clamp(m_pipelineSettings.sceneReflectionCompositeStrength, 0.0f, 1.0f);
-    m_pipelineSettings.debugViewMode = std::clamp(m_pipelineSettings.debugViewMode, 0, 80);
-    m_pipelineSettings.reflectionDebugMode = std::clamp(m_pipelineSettings.reflectionDebugMode, 0, 30);
-
-    m_pipelineSettings.tonemapMode = std::clamp(m_pipelineSettings.tonemapMode, 0, 5);
-    m_pipelineSettings.debugDisableGreedyMeshing = false;
-    ChunkMesher::setDebugDisableGreedyMeshing(m_pipelineSettings.debugDisableGreedyMeshing);
-    m_pipelineSettings.colorTemperature = std::clamp(m_pipelineSettings.colorTemperature, 0.0f, 2.0f);
-    m_pipelineSettings.vibrance = std::clamp(m_pipelineSettings.vibrance, -1.0f, 1.0f);
-    m_pipelineSettings.highlightCompression = std::clamp(m_pipelineSettings.highlightCompression, 0.0f, 1.5f);
-    m_pipelineSettings.filmEmulationStrength = std::clamp(m_pipelineSettings.filmEmulationStrength, 0.0f, 1.0f);
-    m_pipelineSettings.redModifierStrength = std::clamp(m_pipelineSettings.redModifierStrength, 0.0f, 1.0f);
-    m_pipelineSettings.colorLumaR = std::clamp(m_pipelineSettings.colorLumaR, 0.5f, 1.5f);
-    m_pipelineSettings.colorLumaG = std::clamp(m_pipelineSettings.colorLumaG, 0.5f, 1.5f);
-    m_pipelineSettings.colorLumaB = std::clamp(m_pipelineSettings.colorLumaB, 0.5f, 1.5f);
-    m_pipelineSettings.albedoDesaturation = std::clamp(m_pipelineSettings.albedoDesaturation, 0.0f, 0.8f);
-    m_pipelineSettings.sunWarmth = std::clamp(m_pipelineSettings.sunWarmth, 0.0f, 1.5f);
-    m_pipelineSettings.skyCoolness = std::clamp(m_pipelineSettings.skyCoolness, 0.0f, 1.0f);
-    m_pipelineSettings.shadowDesaturation = std::clamp(m_pipelineSettings.shadowDesaturation, 0.0f, 1.0f);
-    m_pipelineSettings.splitToneStrength = std::clamp(m_pipelineSettings.splitToneStrength, 0.0f, 1.0f);
-    m_pipelineSettings.vignetteStrength = std::clamp(m_pipelineSettings.vignetteStrength, 0.0f, 0.5f);
-    m_pipelineSettings.shadowTintStrength = std::clamp(m_pipelineSettings.shadowTintStrength, 0.0f, 1.0f);
-    m_pipelineSettings.directSunStrength = std::clamp(m_pipelineSettings.directSunStrength, 0.0f, 4.0f);
-    m_pipelineSettings.skyAmbientStrength = std::clamp(m_pipelineSettings.skyAmbientStrength, 0.0f, 2.5f);
-    m_pipelineSettings.minimumAmbient = std::clamp(m_pipelineSettings.minimumAmbient, 0.0f, 0.6f);
-    m_pipelineSettings.shadowMinLight = std::clamp(m_pipelineSettings.shadowMinLight, 0.0f, 0.6f);
-    m_pipelineSettings.shadowContrast = std::clamp(m_pipelineSettings.shadowContrast, 0.25f, 3.0f);
-    m_pipelineSettings.blockLightStrength = std::clamp(m_pipelineSettings.blockLightStrength, 0.0f, 3.0f);
-    m_pipelineSettings.fakeBounceStrength = std::clamp(m_pipelineSettings.fakeBounceStrength, 0.0f, 0.5f);
-    m_pipelineSettings.aerialStrength = std::clamp(m_pipelineSettings.aerialStrength, 0.0f, 2.0f);
-    m_pipelineSettings.horizonScatterStrength = std::clamp(m_pipelineSettings.horizonScatterStrength, 0.0f, 2.0f);
-    m_pipelineSettings.volumetricFogStrength = std::clamp(m_pipelineSettings.volumetricFogStrength, 0.0f, 2.0f);
-    m_pipelineSettings.underwaterVolumetricLightStrength =
-        std::clamp(m_pipelineSettings.underwaterVolumetricLightStrength, 0.0f, 2.0f);
-    m_pipelineSettings.noiseDitherStrength = std::clamp(m_pipelineSettings.noiseDitherStrength, 0.0f, 0.08f);
-    m_pipelineSettings.sharpenStrength = std::clamp(m_pipelineSettings.sharpenStrength, 0.0f, 1.0f);
-    m_pipelineSettings.ssaoRadius = std::clamp(m_pipelineSettings.ssaoRadius, 0.1f, 16.0f);
-    m_pipelineSettings.ssaoStrength = std::clamp(m_pipelineSettings.ssaoStrength, 0.0f, 4.0f);
-    m_pipelineSettings.exposure = std::clamp(m_pipelineSettings.exposure, 0.1f, 50.0f);
-    m_pipelineSettings.gamma = std::clamp(m_pipelineSettings.gamma, 1.0f, 3.5f);
-    m_pipelineSettings.saturation = std::clamp(m_pipelineSettings.saturation, 0.0f, 3.0f);
-    m_pipelineSettings.contrast = std::clamp(m_pipelineSettings.contrast, 0.25f, 3.0f);
+void Renderer::setSettings(const RenderSettings& settings) {
+    m_settings = settings;
+    // Shadow clamps
+    m_settings.shadow.resolution = std::clamp(m_settings.shadow.resolution, 256, 8192);
+    m_settings.shadow.distance = std::clamp(m_settings.shadow.distance, 64.0f, 512.0f);
+    m_settings.shadow.softness = std::clamp(m_settings.shadow.softness, 0.1f, 8.0f);
+    m_settings.shadow.pcssStrength = std::clamp(m_settings.shadow.pcssStrength, 0.0f, 1.5f);
+    m_settings.shadow.constantBias = std::clamp(m_settings.shadow.constantBias, 0.0f, 0.01f);
+    m_settings.shadow.slopeBias = std::clamp(m_settings.shadow.slopeBias, 0.0f, 0.03f);
+    m_settings.shadow.normalOffset = std::clamp(m_settings.shadow.normalOffset, 0.0f, 0.25f);
+    m_settings.shadow.contactShadowStrength = std::clamp(m_settings.shadow.contactShadowStrength, 0.0f, 1.0f);
+    // Cloud clamps
+    m_settings.cloud.shadowStrength = std::clamp(m_settings.cloud.shadowStrength, 0.0f, 1.0f);
+    m_settings.cloud.shadowScale = std::clamp(m_settings.cloud.shadowScale, 0.0005f, 0.04f);
+    m_settings.cloud.shadowSpeed = std::clamp(m_settings.cloud.shadowSpeed, 0.0f, 0.20f);
+    m_settings.cloud.timeScale = std::clamp(m_settings.cloud.timeScale, 0.05f, 2.0f);
+    m_settings.cloud.sceneCloudCompositeStrength = std::clamp(m_settings.cloud.sceneCloudCompositeStrength, 0.0f, 1.0f);
+    // Post-process clamps
+    m_settings.postProcess.bloomThreshold = std::clamp(m_settings.postProcess.bloomThreshold, 0.0f, 4.0f);
+    m_settings.postProcess.bloomStrength = std::clamp(m_settings.postProcess.bloomStrength, 0.0f, 20.0f);
+    m_settings.postProcess.autoExposureMin = std::clamp(m_settings.postProcess.autoExposureMin, 0.001f, 64.0f);
+    m_settings.postProcess.autoExposureMax = std::clamp(m_settings.postProcess.autoExposureMax, m_settings.postProcess.autoExposureMin, 64.0f);
+    m_settings.postProcess.autoExposureSpeed = std::clamp(m_settings.postProcess.autoExposureSpeed, 0.05f, 12.0f);
+    m_settings.postProcess.autoExposureBias = std::clamp(m_settings.postProcess.autoExposureBias, -3.0f, 3.0f);
+    m_settings.postProcess.sunRayStrength = std::clamp(m_settings.postProcess.sunRayStrength, 0.0f, 1.0f);
+    m_settings.postProcess.tonemapMode = std::clamp(m_settings.postProcess.tonemapMode, 0, 5);
+    m_settings.postProcess.colorTemperature = std::clamp(m_settings.postProcess.colorTemperature, 0.0f, 2.0f);
+    m_settings.postProcess.vibrance = std::clamp(m_settings.postProcess.vibrance, -1.0f, 1.0f);
+    m_settings.postProcess.highlightCompression = std::clamp(m_settings.postProcess.highlightCompression, 0.0f, 1.5f);
+    m_settings.postProcess.filmEmulationStrength = std::clamp(m_settings.postProcess.filmEmulationStrength, 0.0f, 1.0f);
+    m_settings.postProcess.redModifierStrength = std::clamp(m_settings.postProcess.redModifierStrength, 0.0f, 1.0f);
+    m_settings.postProcess.colorLumaR = std::clamp(m_settings.postProcess.colorLumaR, 0.5f, 1.5f);
+    m_settings.postProcess.colorLumaG = std::clamp(m_settings.postProcess.colorLumaG, 0.5f, 1.5f);
+    m_settings.postProcess.colorLumaB = std::clamp(m_settings.postProcess.colorLumaB, 0.5f, 1.5f);
+    m_settings.postProcess.albedoDesaturation = std::clamp(m_settings.postProcess.albedoDesaturation, 0.0f, 0.8f);
+    m_settings.postProcess.sunWarmth = std::clamp(m_settings.postProcess.sunWarmth, 0.0f, 1.5f);
+    m_settings.postProcess.skyCoolness = std::clamp(m_settings.postProcess.skyCoolness, 0.0f, 1.0f);
+    m_settings.postProcess.shadowDesaturation = std::clamp(m_settings.postProcess.shadowDesaturation, 0.0f, 1.0f);
+    m_settings.postProcess.splitToneStrength = std::clamp(m_settings.postProcess.splitToneStrength, 0.0f, 1.0f);
+    m_settings.postProcess.vignetteStrength = std::clamp(m_settings.postProcess.vignetteStrength, 0.0f, 0.5f);
+    m_settings.postProcess.shadowTintStrength = std::clamp(m_settings.postProcess.shadowTintStrength, 0.0f, 1.0f);
+    m_settings.postProcess.directSunStrength = std::clamp(m_settings.postProcess.directSunStrength, 0.0f, 4.0f);
+    m_settings.postProcess.skyAmbientStrength = std::clamp(m_settings.postProcess.skyAmbientStrength, 0.0f, 2.5f);
+    m_settings.postProcess.minimumAmbient = std::clamp(m_settings.postProcess.minimumAmbient, 0.0f, 0.6f);
+    m_settings.postProcess.shadowMinLight = std::clamp(m_settings.postProcess.shadowMinLight, 0.0f, 0.6f);
+    m_settings.postProcess.shadowContrast = std::clamp(m_settings.postProcess.shadowContrast, 0.25f, 3.0f);
+    m_settings.postProcess.blockLightStrength = std::clamp(m_settings.postProcess.blockLightStrength, 0.0f, 3.0f);
+    m_settings.postProcess.fakeBounceStrength = std::clamp(m_settings.postProcess.fakeBounceStrength, 0.0f, 0.5f);
+    m_settings.postProcess.aerialStrength = std::clamp(m_settings.postProcess.aerialStrength, 0.0f, 2.0f);
+    m_settings.postProcess.horizonScatterStrength = std::clamp(m_settings.postProcess.horizonScatterStrength, 0.0f, 2.0f);
+    m_settings.postProcess.noiseDitherStrength = std::clamp(m_settings.postProcess.noiseDitherStrength, 0.0f, 0.08f);
+    m_settings.postProcess.sharpenStrength = std::clamp(m_settings.postProcess.sharpenStrength, 0.0f, 1.0f);
+    m_settings.postProcess.exposure = std::clamp(m_settings.postProcess.exposure, 0.1f, 50.0f);
+    m_settings.postProcess.gamma = std::clamp(m_settings.postProcess.gamma, 1.0f, 3.5f);
+    m_settings.postProcess.saturation = std::clamp(m_settings.postProcess.saturation, 0.0f, 3.0f);
+    m_settings.postProcess.contrast = std::clamp(m_settings.postProcess.contrast, 0.25f, 3.0f);
+    // Reflection clamps
+    m_settings.reflection.sceneReflectionCompositeStrength = std::clamp(m_settings.reflection.sceneReflectionCompositeStrength, 0.0f, 1.0f);
+    // Volumetric clamps
+    m_settings.volumetric.qualityTier = std::clamp(m_settings.volumetric.qualityTier, 0, 3);
+    m_settings.volumetric.shadowBiasScale = std::clamp(m_settings.volumetric.shadowBiasScale, 0.0f, 4.0f);
+    m_settings.volumetric.fogStrength = std::clamp(m_settings.volumetric.fogStrength, 0.0f, 2.0f);
+    m_settings.volumetric.underwaterLightStrength = std::clamp(m_settings.volumetric.underwaterLightStrength, 0.0f, 2.0f);
+    // SSAO clamps
+    m_settings.ssao.radius = std::clamp(m_settings.ssao.radius, 0.1f, 16.0f);
+    m_settings.ssao.strength = std::clamp(m_settings.ssao.strength, 0.0f, 4.0f);
+    // Debug clamps
+    m_settings.debug.viewMode = std::clamp(m_settings.debug.viewMode, 0, 80);
+    m_settings.debug.reflectionDebugMode = std::clamp(m_settings.debug.reflectionDebugMode, 0, 30);
+    m_settings.debug.disableGreedyMeshing = false;
+    ChunkMesher::setDebugDisableGreedyMeshing(m_settings.debug.disableGreedyMeshing);
 }
 
-Renderer::RenderPipelineSettings Renderer::getRenderPipelineSettings() const {
-    return m_pipelineSettings;
+const RenderSettings& Renderer::getSettings() const {
+    return m_settings;
 }
 
 float Renderer::getAtlasAnisotropy() const {
@@ -645,7 +650,7 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
         frame.jitter.x = frameX * invW;
         frame.jitter.y = frameY * invH;
-        if (m_pipelineSettings.freezeTaaJitter) {
+        if (m_settings.taa.freezeJitter) {
             frame.jitter = glm::vec2(0.0f);
         }
     }
@@ -721,10 +726,10 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
         frame.fogStart = std::max(0.0f, frame.fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
     }
     frame.fogEnd = std::max(frame.fogEnd, frame.fogStart + 0.1f);
-    frame.atmosphere.aerialStrength = m_pipelineSettings.aerialStrength;
-    frame.atmosphere.horizonScatterStrength = m_pipelineSettings.horizonScatterStrength;
-    frame.atmosphere.sunWarmth = m_pipelineSettings.sunWarmth;
-    frame.atmosphere.skyCoolness = m_pipelineSettings.skyCoolness;
+    frame.atmosphere.aerialStrength = m_settings.postProcess.aerialStrength;
+    frame.atmosphere.horizonScatterStrength = m_settings.postProcess.horizonScatterStrength;
+    frame.atmosphere.sunWarmth = m_settings.postProcess.sunWarmth;
+    frame.atmosphere.skyCoolness = m_settings.postProcess.skyCoolness;
     frame.atmosphere.weatherWetness = frame.weatherWetness;
     frame.atmosphere.weatherStorm = frame.weatherStorm;
     frame.atmosphere.aerialReduction = frame.aerialReduction;
@@ -737,24 +742,24 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     // DerivativeMain default: mix(1.0, 0.03, skyWetness). Exposed for energy tuning.
     // slider < 0: auto mode (shader computes from skyWetness + procedural cloud shadow)
     // slider >= 0: manual override (shader bypasses all cloud shadow, returns slider value)
-    frame.atmosphere.directWeatherOcclusionOverride = (m_pipelineSettings.directWeatherOcclusion >= 0.0f) ? 1 : 0;
-    frame.atmosphere.directWeatherOcclusion = std::clamp(m_pipelineSettings.directWeatherOcclusion, 0.0f, 1.0f);
-    frame.volumetric.lightEnabled = m_pipelineSettings.volumetricLightEnabled;
-    frame.volumetric.uwLightEnabled = m_pipelineSettings.uwVolumetricLightEnabled;
-    frame.volumetric.fogEnabled = m_pipelineSettings.volumetricFogEnabled;
-    frame.volumetric.fogStrength = m_pipelineSettings.volumetricFogStrength;
-    frame.volumetric.underwaterLightStrength = m_pipelineSettings.underwaterVolumetricLightStrength;
-    frame.volumetric.fogCenterHeight = m_pipelineSettings.vfogCenterHeight;
-    frame.volumetric.fogHeightSpread = m_pipelineSettings.vfogHeightSpread;
-    frame.volumetric.fogNoiseScale = m_pipelineSettings.vfogNoiseScale;
-    frame.volumetric.fogLightStrength = m_pipelineSettings.vfogLightStrength;
-    frame.volumetric.fogDensityScale = m_pipelineSettings.vfogDensityScale;
-    frame.volumetric.fogSamples = std::clamp(m_pipelineSettings.volumetricFogSamples, 2, 50);
-    frame.cloud.shadowsEnabled = m_pipelineSettings.cloudShadowsEnabled;
-    frame.cloud.shadowStrength = m_pipelineSettings.cloudShadowStrength;
-    frame.cloud.shadowScale = m_pipelineSettings.cloudShadowScale;
-    frame.cloud.shadowSpeed = m_pipelineSettings.cloudShadowSpeed;
-    frame.cloud.timeScale = m_pipelineSettings.cloudTimeScale;
+    frame.atmosphere.directWeatherOcclusionOverride = (m_settings.weather.directWeatherOcclusion >= 0.0f) ? 1 : 0;
+    frame.atmosphere.directWeatherOcclusion = std::clamp(m_settings.weather.directWeatherOcclusion, 0.0f, 1.0f);
+    frame.volumetric.lightEnabled = m_settings.volumetric.lightEnabled;
+    frame.volumetric.uwLightEnabled = m_settings.volumetric.uwLightEnabled;
+    frame.volumetric.fogEnabled = m_settings.volumetric.fogEnabled;
+    frame.volumetric.fogStrength = m_settings.volumetric.fogStrength;
+    frame.volumetric.underwaterLightStrength = m_settings.volumetric.underwaterLightStrength;
+    frame.volumetric.fogCenterHeight = m_settings.volumetric.fogCenterHeight;
+    frame.volumetric.fogHeightSpread = m_settings.volumetric.fogHeightSpread;
+    frame.volumetric.fogNoiseScale = m_settings.volumetric.fogNoiseScale;
+    frame.volumetric.fogLightStrength = m_settings.volumetric.fogLightStrength;
+    frame.volumetric.fogDensityScale = m_settings.volumetric.fogDensityScale;
+    frame.volumetric.fogSamples = std::clamp(m_settings.volumetric.fogSamples, 2, 50);
+    frame.cloud.shadowsEnabled = m_settings.cloud.shadowsEnabled;
+    frame.cloud.shadowStrength = m_settings.cloud.shadowStrength;
+    frame.cloud.shadowScale = m_settings.cloud.shadowScale;
+    frame.cloud.shadowSpeed = m_settings.cloud.shadowSpeed;
+    frame.cloud.timeScale = m_settings.cloud.timeScale;
     // DerivativeMain VolumetricClouds.glsl:24: coverage = 1.0 (clear) to 1.2 (rain).
     // Shader uses uCloudCoverage directly — no additional weather amplification.
     const float cloudWetForCoverage = std::clamp(frame.weatherWetness + frame.weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);

@@ -15,7 +15,6 @@ struct ShadowSettings {
     bool softShadowsEnabled = true;
     bool pcssShadowsEnabled = true;
     bool contactShadowsEnabled = false;
-    bool cloudShadowsEnabled = false;
     int resolution = 2048;
     float distance = 192.0f;
     float softness = 1.0f;
@@ -24,9 +23,7 @@ struct ShadowSettings {
     float slopeBias = 0.0022f;
     float normalOffset = 0.035f;
     float contactShadowStrength = 0.12f;
-    float cloudShadowStrength = 0.28f;
-    float cloudShadowScale = 0.0045f;
-    float cloudShadowSpeed = 0.018f;
+    // R8: Cloud shadow settings moved to CloudSettings to avoid duplication
 };
 
 /// SSAO subsystem settings
@@ -222,7 +219,7 @@ struct WeatherRenderSettings {
     float directWeatherOcclusion = -1.0f;
 };
 
-/// Complete render settings (replaces Renderer::RenderPipelineSettings)
+/// Complete render settings — single source of truth for the renderer configuration.
 struct RenderSettings {
     PipelineMode pipelineMode = PipelineMode::Deferred;
 

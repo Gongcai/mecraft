@@ -179,13 +179,11 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
         }
     }
 
-    // Phase 1: Also update legacy renderer settings for compatibility
+    // Sync pipeline mode to legacy renderer
     if (m_sourceRenderer) {
-        auto legacySettings = m_sourceRenderer->getRenderPipelineSettings();
-        legacySettings.mode = (mode == PipelineMode::Deferred)
-            ? Renderer::RenderPipelineMode::HybridDeferred
-            : Renderer::RenderPipelineMode::ForwardLegacy;
-        m_sourceRenderer->setRenderPipelineSettings(legacySettings);
+        auto settings = m_sourceRenderer->getSettings();
+        settings.pipelineMode = mode;
+        m_sourceRenderer->setSettings(settings);
     }
 }
 
@@ -215,9 +213,9 @@ void RenderScene::setSettings(const RenderSettings& settings) {
 
     m_settings = settings;
 
-    // Sync to legacy renderer via unified mapper
+    // Sync to legacy renderer
     if (m_sourceRenderer) {
-        m_sourceRenderer->setRenderPipelineSettings(settings_mapper::toLegacySettings(settings));
+        m_sourceRenderer->setSettings(settings);
     }
 }
 
@@ -286,7 +284,7 @@ void RenderScene::initFromRenderer(Renderer* renderer) {
 
     // Phase 9/10: Populate shared resources from legacy renderer
     if (renderer) {
-        m_settings = settings_mapper::toRenderSettings(renderer->getRenderPipelineSettings());
+        m_settings = renderer->getSettings();
         settings_mapper::syncFogToRenderSettings(renderer->getFogSettings(), m_settings.fog);
         m_activePipeline = (m_settings.pipelineMode == PipelineMode::Deferred)
             ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
