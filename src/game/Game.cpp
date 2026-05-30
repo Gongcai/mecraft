@@ -264,12 +264,8 @@ void Game::renderFrame(const float frameTime) {
         }
     }
 
-    // Forward vanilla renders directly to the backbuffer and must not bind the
-    // legacy post-process scene FBO. This is a current-frame decision, not a
-    // previous FrameOutput decision.
-    const bool useNewPipelineForFrame = m_renderScene.isNewPipelineActive() && m_renderScene.isNewPipelineReady();
-    const bool skipPostProcess = useNewPipelineForFrame &&
-                                  m_renderScene.getPipelineMode() == PipelineMode::Forward;
+    // R7: New pipeline is always active. Forward vanilla renders directly to backbuffer.
+    const bool skipPostProcess = m_renderScene.getPipelineMode() == PipelineMode::Forward;
     if (!skipPostProcess) {
         m_postProcessRenderer.beginScene(m_window);
     } else {
@@ -338,30 +334,13 @@ void Game::renderFrame(const float frameTime) {
 
     const bool lightDebugActive = m_renderScene.isLightDebugActive();
     float cameraRainVisibility = 1.0f;
-    const bool useNewPipeline = useNewPipelineForFrame;
 
-    if (useNewPipeline) {
-        // Experimental single-frame path. Some overlays are still being migrated
-        // from the legacy split render path.
-        m_renderScene.renderFrame(m_world, finalCamera, m_window, targetData, breakData);
+    // R7: Use new pipeline path (RenderScene handles all rendering)
+    m_renderScene.renderFrame(m_world, finalCamera, m_window, targetData, breakData);
 
-        if (!lightDebugActive) {
-            cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
-            renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
-        }
-    } else {
-        m_renderScene.renderOpaqueAndCutout(m_world, finalCamera, m_window);
-
-        if (!lightDebugActive) {
-            if (!m_renderScene.isDeferredFrameActive()) {
-                m_renderer.renderForwardSceneObjects(m_world, finalCamera, m_window);
-            }
-
-            cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
-            renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
-        }
-
-        m_renderScene.renderTransparentAndOverlays(m_world, targetData, breakData, m_window);
+    if (!lightDebugActive) {
+        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
+        renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
     }
 
     // Phase 11: Build post-process effects via RenderScene (replaces ~70 lines of parameter assembly)
