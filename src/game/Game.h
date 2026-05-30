@@ -39,6 +39,7 @@
 #include "states/StateDependencies.h"
 #include "../locale/LocaleManager.h"
 #include "session/GameSessionConfig.h"
+#include "presentation/GameplayPresentationBuilder.h"
 
 /// Legacy init params (kept for backward compatibility with GameplayAppState).
 struct GameInitParams {
@@ -106,6 +107,7 @@ private:
     DropSystem m_dropSystem;
     CraftingSystem m_craftingSystem;
     ecs::GameplayScene m_gameplayScene;
+    GameplayPresentationBuilder m_presentationBuilder;  // G2: ECS snapshot builder
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG
     Dashboard      m_dashboard;
@@ -126,7 +128,7 @@ private:
 
     /// Render UI overlay (player stats, dashboard, state machine).
     void renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
-                  const HeldItemPreviewMotion& motion, Camera& camera);
+                  const HeldItemPreviewMotion& motion, const Camera& camera);
 
     // Camera controller (first/third person)
     CameraController m_cameraController;

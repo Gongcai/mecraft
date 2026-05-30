@@ -275,16 +275,14 @@ void Game::renderFrame(const float frameTime) {
         m_renderScene.setNewPipelineActive(true);
     }
 
-    (void)frameTime;
-    // Read fall-roll radians from ECS component.
-    float fallRollRadians = 0.0f;
+    // G2: Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = m_gameplayScene.registry();
-    {
-        auto view = reg.view<ecs::LocalPlayerTag, ecs::FallRollComponent>();
-        for (auto e : view) {
-            fallRollRadians = reg.get<ecs::FallRollComponent>(e).currentRadians;
-        }
-    }
+    const auto snap = m_presentationBuilder.build(reg, m_cameraController);
+
+    // Apply snapshot state to RenderScene
+    m_renderScene.setRenderLocalPlayerModel(snap.renderLocalPlayerModel);
+    m_renderScene.setHeldBlockLightValue(snap.heldBlockLightLevel);
+    m_renderScene.setEyeInWater(snap.eyeInWater);
 
     // R7: New pipeline is always active. Forward vanilla renders directly to backbuffer.
     const bool skipPostProcess = m_renderScene.getPipelineMode() == PipelineMode::Forward;
@@ -295,102 +293,49 @@ void Game::renderFrame(const float frameTime) {
         glViewport(0, 0, std::max(1, m_window.getWidth()), std::max(1, m_window.getHeight()));
     }
 
-    // Build render camera from ECS state
-    Camera renderCamera;
-    glm::vec3 eyePosition(0.0f);
-    {
-        ecs::PlayerQuery query(reg);
-        auto camView = reg.view<ecs::LocalPlayerTag, ecs::CameraStateComponent>();
-        auto transformView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
-        auto viewBobView = reg.view<ecs::LocalPlayerTag, ecs::ViewBobComponent>();
-
-        for (auto e : camView) {
-            const auto& cam = camView.get<ecs::CameraStateComponent>(e);
-            const auto& transform = transformView.get<ecs::TransformComponent>(e);
-            const auto& viewBob = viewBobView.get<ecs::ViewBobComponent>(e);
-
-            renderCamera.setYawPitch(cam.yaw, cam.pitch);
-            renderCamera.setFOV(cam.fov);
-
-            // Eye position with view bob offsets
-            eyePosition = transform.position +
-                glm::vec3(0.0f, transform.eyeHeight + viewBob.verticalOffset, 0.0f);
-
-            // Apply horizontal bob
-            glm::vec3 right = cam.right;
-            right.y = 0.0f;
-            if (glm::length(right) > 0.001f) {
-                right = glm::normalize(right);
-            } else {
-                right = glm::vec3(1.0f, 0.0f, 0.0f);
-            }
-            eyePosition += right * viewBob.horizontalOffset;
-
-            renderCamera.setPosition(eyePosition);
-            break;
-        }
-    }
-
-    Camera finalCamera = m_cameraController.computeRenderCamera(renderCamera, eyePosition);
-    m_renderScene.setRenderLocalPlayerModel(m_cameraController.shouldRenderPlayerModel());
-
-    // Set held block light for dynamic hand illumination
-    {
-        ecs::PlayerQuery pq(reg);
-        const BlockID heldBlock = pq.getInventory().getSelectedBlock();
-        const int lightLevel = BlockRegistry::getLightLevelFast(heldBlock);
-        m_renderScene.setHeldBlockLightValue(lightLevel);
-    }
-
-    ecs::PlayerQuery playerQuery(reg);
-    m_renderScene.setEyeInWater(playerQuery.isEyesInWater());
-
-    // Read block interaction data from ECS and pass to the active render path.
-    BlockTargetRenderData targetData;
-    BlockBreakRenderData breakData;
-    targetData.hasTarget = playerQuery.hasTargetBlock();
-    targetData.targetBlock = playerQuery.getTargetBlock();
-    breakData.active = playerQuery.hasBlockBreakProgress();
-    breakData.progress01 = playerQuery.getBlockBreakProgress();
-    breakData.blockPos = playerQuery.getBreakTargetBlock();
-
     const bool lightDebugActive = m_renderScene.isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
+    // Convert snapshot types to renderer types
+    BlockTargetRenderData targetData;
+    targetData.hasTarget = snap.blockTarget.hasTarget;
+    targetData.targetBlock = snap.blockTarget.targetBlock;
+    BlockBreakRenderData breakData;
+    breakData.active = snap.blockBreak.active;
+    breakData.progress01 = snap.blockBreak.progress01;
+    breakData.blockPos = snap.blockBreak.blockPos;
+
     // R7: Use new pipeline path (RenderScene handles all rendering)
-    m_renderScene.renderFrame(m_world, finalCamera, m_window, targetData, breakData);
+    m_renderScene.renderFrame(m_world, snap.renderCamera, m_window, targetData, breakData);
 
     if (!lightDebugActive) {
-        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, finalCamera.getPosition());
-        renderPrecipitation(finalCamera, cameraRainVisibility, frameTime);
+        cameraRainVisibility = m_renderScene.computeCameraRainVisibility(m_world, snap.renderCamera.getPosition());
+        renderPrecipitation(snap.renderCamera, cameraRainVisibility, frameTime);
     }
 
-    // Phase 11: Build post-process effects via RenderScene (replaces ~70 lines of parameter assembly)
-    // Forward vanilla skips post-process entirely.
+    // Phase 11: Build post-process effects via RenderScene
     if (!skipPostProcess) {
         PostProcessEffects effects = m_renderScene.buildPostProcessEffects(
-            m_world, finalCamera, m_window, cameraRainVisibility, fallRollRadians);
+            m_world, snap.renderCamera, m_window, cameraRainVisibility, snap.fallRollRadians);
         m_postProcessRenderer.setEffects(effects);
     }
 
+    // Convert held item motion to renderer type
     HeldItemPreviewMotion heldItemMotion;
-    heldItemMotion.moving = playerQuery.isMoving();
-    heldItemMotion.sprinting = playerQuery.isSprinting();
-    heldItemMotion.bobFrequency = playerQuery.getEyeBobFrequency();
-    heldItemMotion.bobPhaseOffset = playerQuery.getEyeBobPhaseOffset();
-    heldItemMotion.cameraYawDegrees = playerQuery.getCameraYaw();
-    heldItemMotion.cameraPitchDegrees = playerQuery.getCameraPitch();
+    heldItemMotion.moving = snap.heldItemMotion.moving;
+    heldItemMotion.sprinting = snap.heldItemMotion.sprinting;
+    heldItemMotion.bobFrequency = snap.heldItemMotion.bobFrequency;
+    heldItemMotion.bobPhaseOffset = snap.heldItemMotion.bobPhaseOffset;
+    heldItemMotion.cameraYawDegrees = snap.heldItemMotion.cameraYawDegrees;
+    heldItemMotion.cameraPitchDegrees = snap.heldItemMotion.cameraPitchDegrees;
 
-    const Inventory& inventory = playerQuery.getInventory();
-
+    // Held item rendering
     if (skipPostProcess) {
-        // Forward vanilla already rendered to the backbuffer. Render held item
-        // directly and do not blit the stale post-process scene texture over it.
-        renderHeldItem(inventory, heldItemMotion);
+        renderHeldItem(*snap.inventory, heldItemMotion);
     } else if (lightDebugActive) {
         m_postProcessRenderer.blitSceneToBackbuffer(m_window);
     } else {
-        renderHeldItem(inventory, heldItemMotion);
+        renderHeldItem(*snap.inventory, heldItemMotion);
         m_postProcessRenderer.endSceneAndComposite(m_window, frameTime,
                                                    m_renderScene.gbufDepthTexture(),
                                                    m_renderScene.weatherMaskTexture());
@@ -398,7 +343,7 @@ void Game::renderFrame(const float frameTime) {
     m_renderScene.renderDeferredDebugOverlay(m_window);
 
     // UI rendering
-    renderUI(reg, inventory, heldItemMotion, finalCamera);
+    renderUI(reg, *snap.inventory, heldItemMotion, snap.renderCamera);
     m_window.swapBuffers();
 }
 
@@ -456,7 +401,9 @@ void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotio
 }
 
 void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
-                    const HeldItemPreviewMotion& motion, Camera& camera) {
+                    const HeldItemPreviewMotion& motion, const Camera& camera) {
+    // G2: Player stats are now in the snapshot, but renderUI still builds them locally
+    // (will be simplified when snapshot is passed directly)
     ecs::PlayerQuery playerQuery(reg);
     PlayerStatsData playerStats;
     playerStats.health = playerQuery.getHealth();
@@ -473,7 +420,9 @@ void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
     m_uiRenderer.render(m_window, inventory, playerStats, motion, m_input.snapshot());
     m_stateMachine.render();
 #ifdef MECRAFT_DEBUG
-    m_dashboard.render(reg, m_world, camera, m_renderer, m_renderScene,
+    // Dashboard requires non-const Camera reference
+    Camera mutableCamera = camera;
+    m_dashboard.render(reg, m_world, mutableCamera, m_renderer, m_renderScene,
                        m_postProcessRenderer, m_uiRenderer, m_dashboardProfilerStats);
 #endif
 }
