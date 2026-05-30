@@ -300,8 +300,7 @@ public:
     [[nodiscard]] GameplaySkyRenderer::SkyIlluminanceData getSkyIlluminanceData() const { return m_currentFrameData.skyIlluminance; }
     [[nodiscard]] GameplaySkyRenderer::SkyColors getSkyColors() const { return m_currentFrameData.skyColors; }
     [[nodiscard]] glm::vec3 getFogColor() const { return m_currentFrameData.fogColor; }
-    [[nodiscard]] bool isDeferredDebugViewActive() const;
-    [[nodiscard]] bool isDeferredFrameActive() const { return m_deferredFrameActive; }
+    // R8: isDeferredDebugViewActive/isDeferredFrameActive removed — use RenderScene
     void setRenderLocalPlayerModel(bool visible) { m_renderLocalPlayerModel = visible; }
     void setHumanoidRenderer(HumanoidRenderer* hr) {
         m_humanoidRenderer = hr;
@@ -324,8 +323,7 @@ public:
         if (m_deferredPipeline && m_deferredPipeline->shadowPass())
             m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
     }
-    void renderDeferredDebugOverlay(const Window& window);
-    [[nodiscard]] bool isHybridDeferredReady() const;
+    // R8: renderDeferredDebugOverlay/isHybridDeferredReady removed — use RenderScene/DeferredPipeline
     // Shadow data for held item renderer — returns cascade matrices, textures, and settings.
     struct HeldItemShadowData {
         glm::mat4 cascadeViewProj[4]{};
@@ -351,26 +349,18 @@ public:
         int shadowsEnabled = 1;
         float skyIntensity = 1.0f;
     };
-    [[nodiscard]] HeldItemShadowData getHeldItemShadowData() const;
-    [[nodiscard]] GLuint gbufDepthTexture() const { return m_deferredTargets.depthTexture(); }
-    [[nodiscard]] GLuint weatherMaskTexture() const { return m_deferredTargets.weatherMaskTexture(); }
-    void bindWeatherMaskFbo() { m_deferredTargets.bindWeatherMask(); }
+    // R8: getHeldItemShadowData/gbufDepthTexture/weatherMaskTexture/bindWeatherMaskFbo removed — use RenderScene
     void restoreDefaultFbo();
     [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
 
-    // Shared resource accessors (Phase 9/10: for RenderScene integration)
-    [[nodiscard]] TerrainRenderCache& getTerrainRenderCache() { return m_terrainStreamingService ? m_terrainStreamingService->terrainCache() : m_terrainCache; }
+    // Shared resource accessors (for RenderScene integration)
     [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
     [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
     [[nodiscard]] DeferredRenderTargets& getDeferredRenderTargets() { return m_deferredTargets; }
     [[nodiscard]] shadow::ShadowRenderer& getShadowRenderer() { return m_shadowRenderer; }
     [[nodiscard]] WorldRenderBuffer& getWorldRenderBuffer() { return m_worldRenderBuffer; }
-    [[nodiscard]] ChunkMeshingService& getChunkMeshingService() { return m_terrainStreamingService ? m_terrainStreamingService->meshingService() : m_meshingService; }
-    [[nodiscard]] TerrainStreamingService* getTerrainStreamingService() { return m_terrainStreamingService; }
     void setTerrainStreamingService(TerrainStreamingService* svc);
-    [[nodiscard]] BlockInteractionOverlayRenderer* getOverlayRenderer() { return m_overlayRenderer; }
     void setOverlayRenderer(BlockInteractionOverlayRenderer* renderer) { m_overlayRenderer = renderer; }
-    [[nodiscard]] RenderDebugService* getDebugService() { return m_debugService; }
     void setDebugService(RenderDebugService* svc) { m_debugService = svc; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
@@ -394,7 +384,7 @@ public:
 #endif
 
     // 视锥剔除
-    void updateFrustum(const glm::mat4& viewProj);
+    // R8: updateFrustum removed — use TerrainRenderer::updateFrustum
     [[nodiscard]] int getDrawCallCount() const;
     [[nodiscard]] bool isMultiDrawIndirectEnabled() const { return m_useMultiDrawIndirect; }
     [[nodiscard]] int getGlSubmitCount() const;

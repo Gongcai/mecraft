@@ -57,9 +57,11 @@ void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
     maxBounds.z = std::max(maxBounds.z, candidateMax.z);
 }
 
+#ifdef MECRAFT_DEBUG
 constexpr FrustumPlane kPlaneFromIndex(const size_t index) {
     return static_cast<FrustumPlane>(index);
 }
+#endif
 
 std::string resolveAtmosphereFinalLutPath() {
     const std::array<const char*, 4> candidates = {
@@ -389,62 +391,6 @@ Renderer::RenderPipelineSettings Renderer::getRenderPipelineSettings() const {
     return m_pipelineSettings;
 }
 
-bool Renderer::isDeferredDebugViewActive() const {
-    return m_pipelineSettings.mode == RenderPipelineMode::HybridDeferred &&
-           m_pipelineSettings.debugViewMode > 0 &&
-           m_deferredTargets.isReady() &&
-           m_deferredPipeline && m_deferredPipeline->debugPass() != nullptr;
-}
-
-bool Renderer::isHybridDeferredReady() const {
-    return m_deferredTargets.isReady() &&
-           m_chunkGBufferShader != nullptr &&
-           m_shadowDepthShader != nullptr &&
-           m_deferredPipeline->lightingPass() != nullptr &&
-           m_deferredPipeline->debugPass() != nullptr &&
-           m_deferredPipeline->ssaoPass() != nullptr &&
-           m_deferredPipeline->velocityPass() != nullptr &&
-           m_deferredPipeline->reflectionPass() != nullptr &&
-           m_deferredPipeline->cloudPass() != nullptr;
-}
-
-Renderer::HeldItemShadowData Renderer::getHeldItemShadowData() const {
-    HeldItemShadowData data{};
-    const auto& settings = m_pipelineSettings;
-    data.shadowsEnabled = settings.shadowsEnabled ? 1 : 0;
-    data.softShadowsEnabled = settings.softShadowsEnabled ? 1 : 0;
-    data.pcssShadowsEnabled = settings.pcssShadowsEnabled ? 1 : 0;
-    data.shadowDistance = settings.shadowDistance;
-    data.constantBias = settings.shadowConstantBias;
-    data.slopeBias = settings.shadowSlopeBias;
-    data.normalOffset = settings.shadowNormalOffset;
-    data.softness = settings.shadowSoftness;
-    data.pcssStrength = settings.shadowPcssStrength;
-    data.cameraPos = m_cameraPos;
-    data.skyIntensity = m_currentFrameData.skyIntensity;
-
-    // Held items are rendered by Game after Renderer::renderTransparentAndOverlays()
-    // calls endFrame(), which clears m_deferredFrameActive. Keep exposing the
-    // latest CSM resources as long as the deferred targets are allocated.
-    if (m_deferredTargets.isReady() && m_deferredTargets.csmShadowDepthComparisonTexture() != 0) {
-        const auto& cascades = m_shadowRenderer.cascades();
-        data.cascadeCount = static_cast<int>(cascades.size());
-        data.sunDirection = m_shadowRenderer.lightDirection();
-        for (int i = 0; i < data.cascadeCount && i < 4; ++i) {
-            data.cascadeViewProj[i] = cascades[i].viewProj;
-            data.cascadeSplitFar[i] = cascades[i].splitFar;
-            data.cascadeTexelWorldSize[i] = cascades[i].texelWorldSize;
-        }
-        data.shadowTexture = m_deferredTargets.csmShadowDepthComparisonTexture();
-        data.shadowDepthRaw = m_deferredTargets.csmShadowDepthTexture();
-        data.shadowDepthAll = m_deferredTargets.csmShadowDepthAllComparisonTexture();
-        data.shadowDepthAllRaw = m_deferredTargets.csmShadowDepthAllTexture();
-        data.shadowColor0 = m_deferredTargets.csmShadowColor0Texture();
-        data.shadowColor1 = m_deferredTargets.csmShadowColor1Texture();
-    }
-    return data;
-}
-
 float Renderer::getAtlasAnisotropy() const {
     if (m_resourceMgr == nullptr) {
         return 1.0f;
@@ -644,7 +590,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_currentFrameDataValid = false;
     m_waterRenderedBeforeTemporal = false;
     m_deferredHistoryUpdatedThisFrame = false;
-    updateFrustum(m_projection * m_view);
+    // R8: Frustum update removed — pipelines call TerrainRenderer::updateFrustum directly
     drawCallCount = 0;
     m_terrainRenderer.resetDebugCounters();
 
@@ -847,10 +793,6 @@ glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonSh
 void Renderer::captureCurrentFramebuffer() {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_capturedFramebuffer);
     glGetIntegerv(GL_VIEWPORT, m_capturedViewport);
-}
-
-void Renderer::restoreDefaultFbo() {
-    m_deferredTargets.bindDefaultLike(m_capturedFramebuffer, m_capturedViewport[2], m_capturedViewport[3]);
 }
 
 void Renderer::restoreCapturedFramebufferViewport(const Window& window) {
@@ -1448,36 +1390,6 @@ void Renderer::drainMeshingResults(const World& world) {
     m_meshingInFlight = m_terrainCache.meshingInFlight();
     m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();
     syncTerrainCacheFrameStats();
-}
-
-void Renderer::updateFrustum(const glm::mat4 &viewProj) {
-    m_viewProj = viewProj;
-
-    const glm::vec4 row0(viewProj[0][0], viewProj[1][0], viewProj[2][0], viewProj[3][0]);
-    const glm::vec4 row1(viewProj[0][1], viewProj[1][1], viewProj[2][1], viewProj[3][1]);
-    const glm::vec4 row2(viewProj[0][2], viewProj[1][2], viewProj[2][2], viewProj[3][2]);
-    const glm::vec4 row3(viewProj[0][3], viewProj[1][3], viewProj[2][3], viewProj[3][3]);
-
-    const std::array<glm::vec4, 6> rawPlanes = {
-        row3 + row0, // left
-        row3 - row0, // right
-        row3 + row1, // bottom
-        row3 - row1, // top
-        row3 + row2, // near
-        row3 - row2  // far
-    };
-
-    for (size_t i = 0; i < rawPlanes.size(); ++i) {
-        const glm::vec3 n(rawPlanes[i].x, rawPlanes[i].y, rawPlanes[i].z);
-        const float length = glm::length(n);
-        if (length > 0.0f) {
-            m_frustumPlanes[i].n = n / length;
-            m_frustumPlanes[i].d = rawPlanes[i].w / length;
-        } else {
-            m_frustumPlanes[i].n = glm::vec3(0.0f);
-            m_frustumPlanes[i].d = 0.0f;
-        }
-    }
 }
 
 #ifdef MECRAFT_DEBUG
