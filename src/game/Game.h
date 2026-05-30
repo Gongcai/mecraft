@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <memory>
 
 #include "../engine/camera/Camera.h"
 #include "../engine/input/InputManager.h"
@@ -40,6 +41,8 @@
 #include "../locale/LocaleManager.h"
 #include "session/GameSessionConfig.h"
 #include "presentation/GameplayPresentationBuilder.h"
+#include "presentation/GameplayHudPresenter.h"
+#include "audio/AudioListenerSyncSystem.h"
 
 /// Legacy init params (kept for backward compatibility with GameplayAppState).
 struct GameInitParams {
@@ -108,6 +111,8 @@ private:
     CraftingSystem m_craftingSystem;
     ecs::GameplayScene m_gameplayScene;
     GameplayPresentationBuilder m_presentationBuilder;  // G2: ECS snapshot builder
+    std::unique_ptr<GameplayHudPresenter> m_hudPresenter;  // G3: HUD presenter (lazily initialized)
+    std::unique_ptr<AudioListenerSyncSystem> m_audioSyncSystem;  // G3: Audio sync (lazily initialized)
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG
     Dashboard      m_dashboard;

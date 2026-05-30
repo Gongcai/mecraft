@@ -70,6 +70,8 @@ set(SRC_GAME
         src/game/states/GameplayState.cpp
         src/game/states/CommandState.cpp
         src/game/presentation/GameplayPresentationBuilder.cpp
+        src/game/presentation/GameplayHudPresenter.cpp
+        src/game/audio/AudioListenerSyncSystem.cpp
 )
 
 # [核心基础]

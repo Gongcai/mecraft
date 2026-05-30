@@ -69,6 +69,10 @@ void Game::init() {
     initRenderers();
     initECS();
 
+    // G3: Initialize audio sync and HUD presenter
+    m_audioSyncSystem = std::make_unique<AudioListenerSyncSystem>(m_bgmSystem, m_audioEngine);
+    m_hudPresenter = std::make_unique<GameplayHudPresenter>(m_window, m_uiRenderer, m_input);
+
     m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
 
 #ifdef MECRAFT_DEBUG
@@ -254,15 +258,20 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 }
 
 void Game::syncAudioListener(const float deltaTime) {
-    // Update BGM before AudioEngine cleanup so track-end detection keeps a valid source pointer.
-    m_bgmSystem.update(deltaTime);
-    m_audioEngine.update(deltaTime);
-    ecs::PlayerQuery query(m_gameplayScene.registry());
-    AudioListener::setPosition(query.getEyePosition());
-    AudioListener::setOrientation(
-        query.getCameraFront(),
-        query.getCameraUp()
-    );
+    // G3: Delegate to AudioListenerSyncSystem
+    if (m_audioSyncSystem) {
+        m_audioSyncSystem->update(deltaTime, m_gameplayScene.registry());
+    } else {
+        // Fallback during early init before audioSyncSystem is created
+        m_bgmSystem.update(deltaTime);
+        m_audioEngine.update(deltaTime);
+        ecs::PlayerQuery query(m_gameplayScene.registry());
+        AudioListener::setPosition(query.getEyePosition());
+        AudioListener::setOrientation(
+            query.getCameraFront(),
+            query.getCameraUp()
+        );
+    }
 }
 
 void Game::renderFrame(const float frameTime) {
@@ -402,10 +411,10 @@ void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotio
 
 void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
                     const HeldItemPreviewMotion& motion, const Camera& camera) {
-    // G2: Player stats are now in the snapshot, but renderUI still builds them locally
-    // (will be simplified when snapshot is passed directly)
-    ecs::PlayerQuery playerQuery(reg);
+    // G3: Build player stats from snapshot (already computed in renderFrame)
+    // Note: This still queries ECS for now; will be fully snapshot-driven in G4
     PlayerStatsData playerStats;
+    ecs::PlayerQuery playerQuery(reg);
     playerStats.health = playerQuery.getHealth();
     playerStats.maxHealth = playerQuery.getMaxHealth();
     playerStats.armor = playerQuery.getArmor();
@@ -420,7 +429,6 @@ void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
     m_uiRenderer.render(m_window, inventory, playerStats, motion, m_input.snapshot());
     m_stateMachine.render();
 #ifdef MECRAFT_DEBUG
-    // Dashboard requires non-const Camera reference
     Camera mutableCamera = camera;
     m_dashboard.render(reg, m_world, mutableCamera, m_renderer, m_renderScene,
                        m_postProcessRenderer, m_uiRenderer, m_dashboardProfilerStats);
