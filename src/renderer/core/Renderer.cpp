@@ -134,10 +134,13 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredPipeline->init(resourceMgr, &m_shadowRenderer);
 
     //m_uiShader = resourceMgr.getShader("ui");
-    m_outlineShader = resourceMgr.getShader("outline");
-    m_breakOverlayShader = resourceMgr.getShader("break_overlay");
-    initOutlineMesh();
-    initBreakOverlayMesh();
+    // R5: Overlay shaders and meshes are only loaded when no external overlay renderer is injected
+    if (!m_overlayRenderer) {
+        m_outlineShader = resourceMgr.getShader("outline");
+        m_breakOverlayShader = resourceMgr.getShader("break_overlay");
+        initOutlineMesh();
+        initBreakOverlayMesh();
+    }
     m_worldRenderBuffer.init();
     m_terrainCache.init();
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
@@ -207,32 +210,35 @@ void Renderer::shutdown() {
     m_threadPool.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
-    if (m_outlineVbo != 0) {
-        glDeleteBuffers(1, &m_outlineVbo);
-        m_outlineVbo = 0;
+    // R5: Only cleanup overlay GL resources when no external overlay renderer is injected
+    if (!m_overlayRenderer) {
+        if (m_outlineVbo != 0) {
+            glDeleteBuffers(1, &m_outlineVbo);
+            m_outlineVbo = 0;
+        }
+        if (m_outlineVao != 0) {
+            glDeleteVertexArrays(1, &m_outlineVao);
+            m_outlineVao = 0;
+        }
+        if (m_breakOverlayVbo != 0) {
+            glDeleteBuffers(1, &m_breakOverlayVbo);
+            m_breakOverlayVbo = 0;
+        }
+        if (m_breakOverlayVao != 0) {
+            glDeleteVertexArrays(1, &m_breakOverlayVao);
+            m_breakOverlayVao = 0;
+        }
+        if (m_breakOverlayCrossVbo != 0) {
+            glDeleteBuffers(1, &m_breakOverlayCrossVbo);
+            m_breakOverlayCrossVbo = 0;
+        }
+        if (m_breakOverlayCrossVao != 0) {
+            glDeleteVertexArrays(1, &m_breakOverlayCrossVao);
+            m_breakOverlayCrossVao = 0;
+        }
+        m_breakOverlayVertexCount = 0;
+        m_breakOverlayCrossVertexCount = 0;
     }
-    if (m_outlineVao != 0) {
-        glDeleteVertexArrays(1, &m_outlineVao);
-        m_outlineVao = 0;
-    }
-    if (m_breakOverlayVbo != 0) {
-        glDeleteBuffers(1, &m_breakOverlayVbo);
-        m_breakOverlayVbo = 0;
-    }
-    if (m_breakOverlayVao != 0) {
-        glDeleteVertexArrays(1, &m_breakOverlayVao);
-        m_breakOverlayVao = 0;
-    }
-    if (m_breakOverlayCrossVbo != 0) {
-        glDeleteBuffers(1, &m_breakOverlayCrossVbo);
-        m_breakOverlayCrossVbo = 0;
-    }
-    if (m_breakOverlayCrossVao != 0) {
-        glDeleteVertexArrays(1, &m_breakOverlayCrossVao);
-        m_breakOverlayCrossVao = 0;
-    }
-    m_breakOverlayVertexCount = 0;
-    m_breakOverlayCrossVertexCount = 0;
     m_chunkShader = nullptr;
     m_chunkForwardShader = nullptr;
     m_transparentCompositeShader = nullptr;
@@ -282,8 +288,13 @@ void Renderer::renderTransparentAndOverlays(const World& world, const BlockTarge
         restoreCapturedFramebufferViewport(window);
     }
 
-    renderBlockBreakOverlay(world, blockBreak);
-    renderBlockOutline(world, target);
+    // R5: Delegate to overlay renderer if available, otherwise use legacy methods
+    if (m_overlayRenderer) {
+        m_overlayRenderer->render(world, m_projection * m_view, target, blockBreak);
+    } else {
+        renderBlockBreakOverlay(world, blockBreak);
+        renderBlockOutline(world, target);
+    }
 #ifdef MECRAFT_DEBUG
     beginGpuTimer(GpuTimerPass::Post);
 #endif

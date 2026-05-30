@@ -70,6 +70,9 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     // Phase R4: Initialize terrain streaming service
     // Note: Thread pool initialization is deferred until setLegacyRenderer() is called
 
+    // Phase R5: Initialize overlay renderer
+    m_overlayRenderer.init(resourceMgr);
+
     // Phase 9: Initialize pipelines
     m_forwardPipeline = std::make_unique<ForwardPipeline>();
     m_deferredPipeline = std::make_unique<DeferredPipeline>();
@@ -98,6 +101,9 @@ void RenderScene::shutdown() {
 
     // Phase R4: Shutdown terrain streaming service
     m_terrainStreamingService.shutdown();
+
+    // Phase R5: Shutdown overlay renderer
+    m_overlayRenderer.shutdown();
 
     // Phase 5: Shutdown shared post-process pass
     m_postProcessPass.shutdown();
@@ -274,6 +280,10 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
         // Phase R4: Initialize terrain streaming service with thread pool from Renderer
         m_terrainStreamingService.init(renderer->getThreadPool());
         renderer->setTerrainStreamingService(&m_terrainStreamingService);
+
+        // Phase R5: Inject overlay renderer
+        renderer->setOverlayRenderer(&m_overlayRenderer);
+        m_shared.overlayRenderer = &m_overlayRenderer;
 
         m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
         m_shared.terrainStreaming = &m_terrainStreamingService;

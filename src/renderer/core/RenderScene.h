@@ -7,6 +7,7 @@
 #include "FrameOutput.h"
 #include "../passes/PostProcessPass.h"
 #include "../mesh/TerrainStreamingService.h"
+#include "../overlays/BlockInteractionOverlayRenderer.h"
 
 #include <memory>
 
@@ -57,6 +58,7 @@ struct SharedRenderResources {
     // Renderers
     GameplaySkyRenderer* sky = nullptr;
     shadow::ShadowRenderer* shadowRenderer = nullptr;
+    BlockInteractionOverlayRenderer* overlayRenderer = nullptr;
     ResourceMgr* resources = nullptr;
     ThreadPool* threadPool = nullptr;
 
@@ -175,6 +177,9 @@ private:
 
     // Terrain streaming service (owned by RenderScene)
     TerrainStreamingService m_terrainStreamingService;
+
+    // R5: Block interaction overlay renderer (owned by RenderScene)
+    BlockInteractionOverlayRenderer m_overlayRenderer;
 
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;

@@ -164,6 +164,9 @@ set(SRC_RENDERER
         src/renderer/shadow/ShadowCasterCuller.cpp
         src/renderer/shadow/ShadowRenderer.cpp
 
+        # Overlays
+        src/renderer/overlays/BlockInteractionOverlayRenderer.cpp
+
         # Utility
         src/renderer/stb_image.cpp
 )

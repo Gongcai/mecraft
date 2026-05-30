@@ -31,6 +31,7 @@
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
+#include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "DeferredPipeline.h"
 #include <glm/glm.hpp>
 #include <array>
@@ -48,18 +49,7 @@ class DropSystem;
 namespace ecs { class GameplayRegistry; }
 namespace shadow { class ShadowCasterCuller; }
 
-/// Decoupled data transfer structs for block interaction rendering.
-/// These allow Renderer to draw block outlines/overlays without depending on Player or ECS.
-struct BlockTargetRenderData {
-    bool hasTarget = false;
-    glm::ivec3 targetBlock{};
-};
-
-struct BlockBreakRenderData {
-    bool active = false;
-    float progress01 = 0.0f;
-    glm::ivec3 blockPos{};
-};
+// BlockTargetRenderData and BlockBreakRenderData are now defined in BlockInteractionOverlayRenderer.h
 
 class Renderer {
 public:
@@ -449,6 +439,8 @@ public:
     [[nodiscard]] ChunkMeshingService& getChunkMeshingService() { return m_terrainStreamingService ? m_terrainStreamingService->meshingService() : m_meshingService; }
     [[nodiscard]] TerrainStreamingService* getTerrainStreamingService() { return m_terrainStreamingService; }
     void setTerrainStreamingService(TerrainStreamingService* svc);
+    [[nodiscard]] BlockInteractionOverlayRenderer* getOverlayRenderer() { return m_overlayRenderer; }
+    void setOverlayRenderer(BlockInteractionOverlayRenderer* renderer) { m_overlayRenderer = renderer; }
 #ifdef MECRAFT_DEBUG
     void setChunkCullingDebugEnabled(bool enabled);
     [[nodiscard]] int getMeshingSubmitBudget() const;
@@ -667,6 +659,9 @@ private:
     // m_reflectionTemporalShader, m_ssaoFilterShader, m_ssaoTemporalShader,
     // m_ssaoUpsampleShader, m_motionBlurShader, m_dofShader
     ResourceMgr* m_resourceMgr = nullptr;
+
+    // R5: Overlay renderer — injected from RenderScene, null = use legacy members
+    BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;
 
     GLuint m_outlineVao = 0;
     GLuint m_outlineVbo = 0;
