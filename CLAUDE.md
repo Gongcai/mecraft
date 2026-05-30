@@ -1,6 +1,5 @@
 # WARNING
-- 编译指令：D:\JetBrain\CLion\bin\cmake\win\x64\bin\cmake.exe --build D:\project\mecraft\cmake-build-relwithdebinfo --target mecraft
-如果你要编译测试，使用CLion的环境编译，使用以上指令
+- 当前环境在控制台中编译困难且缓慢，如果你需要编译构建代码，请通知我，由我通过ide编译，将结果反馈给你。 
 # Task
 当前任务是清理和重构渲染管线相关的代码，以提高代码质量、可维护性和性能。
 # 参考文档

@@ -40,6 +40,7 @@
 #include "states/StateDependencies.h"
 #include "../locale/LocaleManager.h"
 #include "session/GameSessionConfig.h"
+#include "session/GameSession.h"
 #include "presentation/GameplayPresentationBuilder.h"
 #include "presentation/GameplayHudPresenter.h"
 #include "audio/AudioListenerSyncSystem.h"
@@ -84,7 +85,7 @@ private:
     GameSessionConfig m_config;
     GameSessionDependencies m_deps;
 
-    // Legacy members (kept for backward compatibility, will be removed in G4)
+    // External service references (from GameSessionDependencies)
     GameInitParams m_params;
     Window& m_window;
     InputManager& m_input;
@@ -96,23 +97,32 @@ private:
     UIRenderer& m_uiRenderer;
     LocaleManager& m_localeManager;
 
-    GameStateMachine m_stateMachine; // Add StateMachine
-    World         m_world;
-    physics::PhysicsSystem m_physicsSystem;
+    // G4: Game session (owns World, ECS, physics, crafting, particles, camera, presentation)
+    GameSession m_session;
+
+    // Renderers and state (session-level but currently owned by Game)
+    GameStateMachine m_stateMachine;
     Renderer      m_renderer;
     RenderScene   m_renderScene;
     DropRenderer  m_dropRenderer;
     FirstPersonHeldItemRenderer m_firstPersonHeldItemRenderer;
     HumanoidRenderer  m_humanoidRenderer;
     PostProcessRenderer m_postProcessRenderer;
+
+    // G3: Audio and HUD systems
+    std::unique_ptr<GameplayHudPresenter> m_hudPresenter;
+    std::unique_ptr<AudioListenerSyncSystem> m_audioSyncSystem;
+
+    // Legacy members (will be removed when Game fully delegates to GameSession)
+    World         m_world;
+    physics::PhysicsSystem m_physicsSystem;
     ParticleSystem m_particleSystem;
     RainRenderer m_rainRenderer;
     DropSystem m_dropSystem;
     CraftingSystem m_craftingSystem;
     ecs::GameplayScene m_gameplayScene;
-    GameplayPresentationBuilder m_presentationBuilder;  // G2: ECS snapshot builder
-    std::unique_ptr<GameplayHudPresenter> m_hudPresenter;  // G3: HUD presenter (lazily initialized)
-    std::unique_ptr<AudioListenerSyncSystem> m_audioSyncSystem;  // G3: Audio sync (lazily initialized)
+    GameplayPresentationBuilder m_presentationBuilder;
+
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG
     Dashboard      m_dashboard;
