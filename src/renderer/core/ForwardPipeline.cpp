@@ -27,10 +27,21 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
     m_commonTargets = shared.commonTargets;
     m_skyRenderer = shared.sky;
     m_resourceMgr = shared.resources;
+
+    // Enable forward vanilla shaders on sub-renderers (no deferred/shaderpack contracts)
+    if (shared.sky) shared.sky->setForwardMode(true);
+    if (shared.dropRenderer) shared.dropRenderer->setForwardMode(true);
+
     m_initialized = true;
 }
 
 void ForwardPipeline::shutdown() {
+    // Revert sub-renderers to deferred shaders
+    if (m_shared) {
+        if (m_shared->sky) m_shared->sky->setForwardMode(false);
+        if (m_shared->dropRenderer) m_shared->dropRenderer->setForwardMode(false);
+    }
+
     m_shared = nullptr;
     m_terrainRenderer = nullptr;
     m_terrainCache = nullptr;

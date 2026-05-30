@@ -170,17 +170,35 @@ public:
 
 - 删除 `Renderer::renderWorldForward()` 的业务价值。
 - Forward fallback 不再依赖 `Renderer::m_chunkShader`、`bindChunkRenderState()`、`RenderFrameData`。
+- Forward Vanilla 拥有独立 shader contract，不混用 deferred / shaderpack / held-item shadow shader。
 
 具体任务：
 
 - 将 forward terrain 渲染接入 `TerrainRenderer` 的明确 forward API。
 - `ForwardPipeline` 负责 sky、opaque/cutout、transparent、overlay 前的 scene output。
 - 将 forward fog/sky/weather uniforms 从 `Renderer::bind*Uniforms()` 迁入 terrain render state builder。
+- 拆分 Forward Vanilla 专用 shader：
+  - 已完成：`forward_basic_terrain.frag`，替代 forward terrain 对 `chunk_lit.frag` / deferred lighting contract 的依赖。
+  - 已完成：`steve_forward.frag`，世界实体前向路径不再复用带 CSM sampler 的 `steve.frag`。
+  - 待拆：`item_model_forward.frag`，从 `legacyshaders/item_model.fs` 改出，供前向掉落物/物品 sprite 使用，不 include `held_item_shadow.glsl`。
+  - 待拆：`block_item_forward.frag`，供 Forward Vanilla 手持方块使用，不 include CSM shadow contract。
+  - 待拆：`gameplay_sky_forward.frag`，从 `legacyshaders/gameplay_sky.fs` 改出，前向天空不依赖 atmosphere LUT / sky capture / DerivativeMain contract。
+  - 待拆：`drop_block_forward.frag`，供前向掉落方块使用，避免当前 `drop_block.frag` 的 sRGB/linear 与 legacy vanilla contract 不一致。
+  - 可选：`rain_forward.frag`，前向雨雪仅使用硬件深度或简单深度淡出，不依赖 deferred scene depth contract。
+- 建立命名规则：Forward Vanilla 只能使用 `forward_*` 或 `*_forward` shader；禁止 include `held_item_shadow.glsl`、`mecraft_shadow.glsl`、`gbuffer_contract.glsl`、`render_contract.glsl`、`atmosphere_lut.glsl` 这类 deferred/shaderpack contract。
 
 验收：
 
 - forward 模式不调用 `Renderer::renderWorldForward()`。
 - Forward/Deferred 运行时切换正常。
+- Forward Vanilla 路径中 world terrain/entity/drop/particle/sky/held-item 不使用 deferred/shaderpack shader。
+- 搜索规则：
+
+```text
+rg "held_item_shadow|mecraft_shadow|gbuffer_contract|render_contract|atmosphere_lut|uCsm|uShadow|SkyCapture|SceneDepth|GBuffer" assets/shaders/*forward*.frag
+```
+
+  只允许命中明确注释说明“不使用该 contract”的文本，不允许出现真实 uniform/include 依赖。
 
 ### Phase R4：提取 TerrainStreamingService
 
@@ -386,6 +404,7 @@ rg "setLegacyRenderer|syncFrameOutputFromLegacyRenderer|RenderPipelineSettings|R
 | DeferredPipeline 当前不是完整路径，直接删除 Renderer 会破画面 | 先迁 terrain/shadow/water/particle，逐帧对比 |
 | Transparent/water 顺序微妙，容易影响 TAA/VFog | 保留现有注释中的 DerivativeMain 顺序，迁移后用 debug view 和水边缘检查 |
 | WaterComposite 当前 MDI 分支不是真正 indirect 提交，贸然改会影响透明阴影和普通透明 | 单独开 WaterComposite 真 MDI 化阶段，先拆 water command queue，再用 RenderDoc 验收 |
+| Forward Vanilla 混用 deferred/shaderpack shader，后续可编辑 pipeline 或 shaderpack 参数会污染原版前向路径 | R3 中建立 `forward_*` / `*_forward` shader contract，禁止 include shadow/gbuffer/atmosphere/postprocess contract |
 | Meshing 与 render buffer 交织，移动过大会影响性能 | `TerrainStreamingService` 分步提取，先移动状态，再移动调用 |
 | Dashboard 仍依赖 legacy settings | 先统一 `RenderSettings`，再动 pipeline 编排 |
 | FrameOutput 旧帧/默认值问题复发 | 禁止从 legacy renderer 同步作为正式路径，FrameOutput 由 active pipeline 直接生成 |

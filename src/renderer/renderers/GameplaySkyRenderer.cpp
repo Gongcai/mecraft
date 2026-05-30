@@ -202,7 +202,9 @@ void appendGreedySurface(std::vector<CloudVertex>& vertices,
 }
 
 void GameplaySkyRenderer::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("gameplay_sky");
+    m_resourceMgr = &resourceMgr;
+    m_deferredShader = resourceMgr.getShader("gameplay_sky");
+    m_shader = m_deferredShader;
     m_sunTexture = resourceMgr.getGuiTexture("sun");
     m_moonTexture = resourceMgr.getGuiTexture("moon_phases");
     initMeshes();
@@ -217,8 +219,20 @@ void GameplaySkyRenderer::shutdown() {
         m_dummySkyCaptureTexture = 0;
     }
     m_shader = nullptr;
+    m_deferredShader = nullptr;
+    m_resourceMgr = nullptr;
     m_sunTexture = 0;
     m_moonTexture = 0;
+}
+
+void GameplaySkyRenderer::setForwardMode(bool forward) {
+    if (m_resourceMgr == nullptr) return;
+    if (forward) {
+        Shader* fwd = m_resourceMgr->getShader("gameplay_sky_forward");
+        m_shader = fwd ? fwd : m_deferredShader;
+    } else {
+        m_shader = m_deferredShader;
+    }
 }
 
 void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, GLuint skyCaptureTexture) {

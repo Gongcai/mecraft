@@ -52,6 +52,9 @@ public:
 
     void init(ResourceMgr& resourceMgr);
     void shutdown();
+    /// Switch to forward vanilla shader (no atmosphere LUT / sky capture / DerivativeMain contract).
+    /// Must be called after init(). Reverts to deferred shader if false.
+    void setForwardMode(bool forward);
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, GLuint skyCaptureTexture);
     void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height,
                           float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux,
@@ -110,6 +113,8 @@ private:
     [[nodiscard]] MoonPhaseUv getMoonPhaseUvInternal(int phaseIndex) const;
 
     Shader* m_shader = nullptr;
+    Shader* m_deferredShader = nullptr;  // Original deferred shader (gameplay_sky)
+    ResourceMgr* m_resourceMgr = nullptr;
     GLuint m_sunTexture = 0;
     GLuint m_moonTexture = 0;
     GLuint m_dummySkyCaptureTexture = 0;

@@ -136,8 +136,10 @@ void emitTorchModelFace(std::vector<BlockVertex>& vertices,
 
 void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_shader = resourceMgr.getShader("drop_block");
-    m_itemShader = resourceMgr.getShader("item_model");
+    m_deferredShader = resourceMgr.getShader("drop_block");
+    m_deferredItemShader = resourceMgr.getShader("item_model");
+    m_shader = m_deferredShader;
+    m_itemShader = m_deferredItemShader;
     m_gbufferShader = resourceMgr.getShader("drop_gbuffer");
     m_itemGBufferShader = resourceMgr.getShader("item_gbuffer");
     m_shadowShader = resourceMgr.getShader("shadow_depth");
@@ -155,11 +157,26 @@ void DropRenderer::shutdown() {
     m_itemMeshes.clear();
     m_shader = nullptr;
     m_itemShader = nullptr;
+    m_deferredShader = nullptr;
+    m_deferredItemShader = nullptr;
     m_gbufferShader = nullptr;
     m_itemGBufferShader = nullptr;
     m_shadowShader = nullptr;
     m_itemShadowShader = nullptr;
     m_resourceMgr = nullptr;
+}
+
+void DropRenderer::setForwardMode(bool forward) {
+    if (m_resourceMgr == nullptr) return;
+    if (forward) {
+        Shader* fwdBlock = m_resourceMgr->getShader("drop_block_forward");
+        Shader* fwdItem = m_resourceMgr->getShader("item_model_forward");
+        m_shader = fwdBlock ? fwdBlock : m_deferredShader;
+        m_itemShader = fwdItem ? fwdItem : m_deferredItemShader;
+    } else {
+        m_shader = m_deferredShader;
+        m_itemShader = m_deferredItemShader;
+    }
 }
 
 void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, const Window& window) {

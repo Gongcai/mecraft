@@ -220,9 +220,12 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr) {
         shutdown();
     }
     m_resourceMgr = &resourceMgr;
-    m_blockShader = resourceMgr.getShader("block_item_lit");
-    m_itemShader = resourceMgr.getShader("item_model");
-    m_steveShader = resourceMgr.getShader("steve");
+    m_deferredBlockShader = resourceMgr.getShader("block_item_lit");
+    m_deferredItemShader = resourceMgr.getShader("item_model");
+    m_deferredSteveShader = resourceMgr.getShader("steve");
+    m_blockShader = m_deferredBlockShader;
+    m_itemShader = m_deferredItemShader;
+    m_steveShader = m_deferredSteveShader;
     loadConfig();
     m_initialized = true;
 }
@@ -246,6 +249,9 @@ void FirstPersonHeldItemRenderer::shutdown() {
     m_blockShader = nullptr;
     m_itemShader = nullptr;
     m_steveShader = nullptr;
+    m_deferredBlockShader = nullptr;
+    m_deferredItemShader = nullptr;
+    m_deferredSteveShader = nullptr;
     m_hasPrevSample = false;
     m_prevTimeSeconds = 0.0f;
     m_visibleItemId = 0;
@@ -259,6 +265,22 @@ void FirstPersonHeldItemRenderer::shutdown() {
     m_continuousSwing = false;
     m_swingElapsed = 0.0f;
     m_initialized = false;
+}
+
+void FirstPersonHeldItemRenderer::setForwardMode(bool forward) {
+    if (m_resourceMgr == nullptr) return;
+    if (forward) {
+        Shader* fwdBlock = m_resourceMgr->getShader("block_item_forward");
+        Shader* fwdItem = m_resourceMgr->getShader("item_model_forward");
+        Shader* fwdSteve = m_resourceMgr->getShader("steve_forward");
+        m_blockShader = fwdBlock ? fwdBlock : m_deferredBlockShader;
+        m_itemShader = fwdItem ? fwdItem : m_deferredItemShader;
+        m_steveShader = fwdSteve ? fwdSteve : m_deferredSteveShader;
+    } else {
+        m_blockShader = m_deferredBlockShader;
+        m_itemShader = m_deferredItemShader;
+        m_steveShader = m_deferredSteveShader;
+    }
 }
 
 namespace {

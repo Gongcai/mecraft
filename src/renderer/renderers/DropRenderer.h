@@ -21,6 +21,9 @@ class DropRenderer {
 public:
 	void init(ResourceMgr& resourceMgr);
 	void shutdown();
+	/// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
+	/// Must be called after init(). Reverts to deferred shaders if false.
+	void setForwardMode(bool forward);
 	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
 	// GBuffer path: renders drops into the deferred GBuffer (5 MRT).
 	// Caller must have already bound the GBuffer FBO with terrain+entity depth.
@@ -52,6 +55,8 @@ private:
 	ResourceMgr* m_resourceMgr = nullptr;
 	Shader* m_shader = nullptr;
 	Shader* m_itemShader = nullptr;
+	Shader* m_deferredShader = nullptr;     // Original deferred block shader (drop_block)
+	Shader* m_deferredItemShader = nullptr; // Original deferred item shader (item_model)
 	Shader* m_gbufferShader = nullptr;     // drop_gbuffer: block drops → GBuffer
 	Shader* m_itemGBufferShader = nullptr; // item_gbuffer: item drops → GBuffer
 	Shader* m_shadowShader = nullptr;      // shadow_depth: block drops → shadow (reused)

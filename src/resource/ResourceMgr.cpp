@@ -247,6 +247,7 @@ void ResourceMgr::init() {
     loadShader("transparent_composite", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/transparent_composite.frag");
     loadShader("water_composite", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/water_composite.frag");
     loadShader("block_item_lit", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_lit.frag");
+    loadShader("block_item_forward", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_forward.frag");
     loadShader("forward_basic_terrain", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/forward_basic_terrain.frag");
     loadShader("chunk_gbuffer", SHADERS_DIR "/chunk_gbuffer.vert", SHADERS_DIR "/chunk_gbuffer.frag");
     loadShader("shadow_depth", SHADERS_DIR "/shadow_depth.vert", SHADERS_DIR "/shadow_depth.frag");
@@ -271,6 +272,7 @@ void ResourceMgr::init() {
     loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/bloom_blur.frag");
     loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/exposure_downsample.frag");
     loadShader("drop_block", SHADERS_DIR "/drop_block.vert", SHADERS_DIR "/drop_block.frag");
+    loadShader("drop_block_forward", SHADERS_DIR "/drop_block.vert", SHADERS_DIR "/drop_block_forward.frag");
     loadShader("outline", SHADERS_DIR "/outline.vert", SHADERS_DIR "/outline.frag");
     loadShader("break_overlay", SHADERS_DIR "/break_overlay.vert", SHADERS_DIR "/break_overlay.frag");
     loadShader("crosshair", SHADERS_DIR "/crosshair.vert", SHADERS_DIR "/crosshair.frag");
@@ -282,6 +284,7 @@ void ResourceMgr::init() {
     loadShader("postprocess", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/postprocess.frag");
     loadShader("blit_texture", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/blit_texture.frag");
     loadShader("item_model", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model.frag");
+    loadShader("item_model_forward", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model_forward.frag");
     loadShader("steve", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve.frag");
     loadShader("steve_forward", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve_forward.frag");
     loadShader("entity_gbuffer", SHADERS_DIR "/entity_gbuffer.vert", SHADERS_DIR "/entity_gbuffer.frag");
@@ -292,6 +295,7 @@ void ResourceMgr::init() {
     loadShader("ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag");
     loadShader("skybox", SHADERS_DIR "/skybox.vert", SHADERS_DIR "/skybox.frag");
     loadShader("gameplay_sky", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky.frag");
+    loadShader("gameplay_sky_forward", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky_forward.frag");
     loadShader("blur", SHADERS_DIR "/blur.vert", SHADERS_DIR "/blur.frag");
 
     loadCubemap("menu_skybox",

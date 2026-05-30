@@ -81,6 +81,9 @@ public:
 
     void init(ResourceMgr& resourceMgr);
     void shutdown();
+    /// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
+    /// Must be called after init(). Reverts to deferred shaders if false.
+    void setForwardMode(bool forward);
     void loadConfig();
     void saveConfig() const;
 
@@ -152,6 +155,9 @@ private:
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;
+    Shader* m_deferredBlockShader = nullptr;  // Original deferred shader (block_item_lit)
+    Shader* m_deferredItemShader = nullptr;   // Original deferred shader (item_model)
+    Shader* m_deferredSteveShader = nullptr;  // Original deferred shader (steve)
     Mesh m_rightArmMesh;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;

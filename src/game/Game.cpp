@@ -430,6 +430,10 @@ void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility,
 
 void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotion& motion) {
     if (m_cameraController.isFirstPerson()) {
+        const bool forwardVanillaActive = m_renderScene.isNewPipelineActive() &&
+                                          m_renderScene.isNewPipelineReady() &&
+                                          m_renderScene.getPipelineMode() == PipelineMode::Forward;
+        m_firstPersonHeldItemRenderer.setForwardMode(forwardVanillaActive);
         if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
             m_firstPersonHeldItemRenderer.triggerSwing();
         }
