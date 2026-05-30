@@ -70,7 +70,7 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     m_shared.resources = &resourceMgr;
 
     // Phase R4: Initialize terrain streaming service
-    // Note: Thread pool initialization is deferred until setLegacyRenderer() is called
+    // Note: Thread pool initialization is deferred until initFromRenderer() is called
 
     // Phase R5: Initialize overlay renderer
     m_overlayRenderer.init(resourceMgr);
@@ -90,7 +90,7 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     }
 
     // Note: Pipeline init is deferred until shared resources are fully populated
-    // (terrain, targets, sky). This happens when setLegacyRenderer() is called
+    // (terrain, targets, sky). This happens when initFromRenderer() is called
     // and the Renderer exposes its resources.
 }
 
@@ -180,12 +180,12 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
     }
 
     // Phase 1: Also update legacy renderer settings for compatibility
-    if (m_legacyRenderer) {
-        auto legacySettings = m_legacyRenderer->getRenderPipelineSettings();
+    if (m_sourceRenderer) {
+        auto legacySettings = m_sourceRenderer->getRenderPipelineSettings();
         legacySettings.mode = (mode == PipelineMode::Deferred)
             ? Renderer::RenderPipelineMode::HybridDeferred
             : Renderer::RenderPipelineMode::ForwardLegacy;
-        m_legacyRenderer->setRenderPipelineSettings(legacySettings);
+        m_sourceRenderer->setRenderPipelineSettings(legacySettings);
     }
 }
 
@@ -216,8 +216,8 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     m_settings = settings;
 
     // Sync to legacy renderer via unified mapper
-    if (m_legacyRenderer) {
-        m_legacyRenderer->setRenderPipelineSettings(settings_mapper::toLegacySettings(settings));
+    if (m_sourceRenderer) {
+        m_sourceRenderer->setRenderPipelineSettings(settings_mapper::toLegacySettings(settings));
     }
 }
 
@@ -231,8 +231,8 @@ void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setHumanoidRenderer(hr);
     }
-    if (m_legacyRenderer) {
-        m_legacyRenderer->setHumanoidRenderer(hr);
+    if (m_sourceRenderer) {
+        m_sourceRenderer->setHumanoidRenderer(hr);
     }
 }
 
@@ -242,16 +242,16 @@ void RenderScene::setDropRenderer(DropRenderer* dr) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setDropRenderer(dr);
     }
-    if (m_legacyRenderer) {
-        m_legacyRenderer->setDropRenderer(dr);
+    if (m_sourceRenderer) {
+        m_sourceRenderer->setDropRenderer(dr);
     }
 }
 
 void RenderScene::setParticleSystem(ParticleSystem* ps) {
     m_particleSystem = ps;
     m_shared.particleSystem = ps;
-    if (m_legacyRenderer) {
-        m_legacyRenderer->setParticleSystem(ps);
+    if (m_sourceRenderer) {
+        m_sourceRenderer->setParticleSystem(ps);
     }
 }
 
@@ -261,8 +261,8 @@ void RenderScene::setDropSystem(DropSystem* ds) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setDropSystem(ds);
     }
-    if (m_legacyRenderer) {
-        m_legacyRenderer->setDropSystem(ds);
+    if (m_sourceRenderer) {
+        m_sourceRenderer->setDropSystem(ds);
     }
 }
 
@@ -272,8 +272,8 @@ void RenderScene::setGameplayRegistry(ecs::GameplayRegistry* reg) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
     }
-    if (m_legacyRenderer) {
-        m_legacyRenderer->setGameplayRegistry(reg);
+    if (m_sourceRenderer) {
+        m_sourceRenderer->setGameplayRegistry(reg);
     }
 }
 
@@ -281,8 +281,8 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
     return m_lastFrameOutput;
 }
 
-void RenderScene::setLegacyRenderer(Renderer* renderer) {
-    m_legacyRenderer = renderer;
+void RenderScene::initFromRenderer(Renderer* renderer) {
+    m_sourceRenderer = renderer;
 
     // Phase 9/10: Populate shared resources from legacy renderer
     if (renderer) {
@@ -320,24 +320,24 @@ void RenderScene::setLegacyRenderer(Renderer* renderer) {
 
 void RenderScene::setEyeInWater(bool inWater) {
     m_eyeInWater = inWater;
-    if (m_legacyRenderer) m_legacyRenderer->setEyeInWater(inWater);
+    if (m_sourceRenderer) m_sourceRenderer->setEyeInWater(inWater);
 }
 
 void RenderScene::setRenderLocalPlayerModel(bool visible) {
     m_renderLocalPlayerModel = visible;
-    if (m_legacyRenderer) m_legacyRenderer->setRenderLocalPlayerModel(visible);
+    if (m_sourceRenderer) m_sourceRenderer->setRenderLocalPlayerModel(visible);
 }
 
 void RenderScene::setHeldBlockLightValue(int value) {
     if (m_deferredPipeline) {
         m_deferredPipeline->setHeldBlockLightValue(value);
     }
-    if (m_legacyRenderer) m_legacyRenderer->setHeldBlockLightValue(value);
+    if (m_sourceRenderer) m_sourceRenderer->setHeldBlockLightValue(value);
 }
 
 void RenderScene::syncFogFromRenderer() {
-    if (m_legacyRenderer) {
-        settings_mapper::syncFogToRenderSettings(m_legacyRenderer->getFogSettings(), m_settings.fog);
+    if (m_sourceRenderer) {
+        settings_mapper::syncFogToRenderSettings(m_sourceRenderer->getFogSettings(), m_settings.fog);
     }
 }
 

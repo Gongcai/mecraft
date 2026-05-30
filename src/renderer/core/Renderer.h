@@ -275,9 +275,7 @@ public:
     ~Renderer();
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
-    void renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window);
-    void renderForwardSceneObjects(const World& world, const Camera& camera, const Window& window);
+    // R8: Rendering methods removed — use RenderScene::renderFrame() with DeferredPipeline/ForwardPipeline
 
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
@@ -463,52 +461,9 @@ private:
 
     void recordMeshingHistory();
     void drainMeshingResults(const World& world);
-    void beginFrame(const Camera& camera, const Window &window);   // 设置 VP 矩阵, 清屏
-    void renderWorld(const World& world);
+    void beginFrame(const Camera& camera, const Window &window);
+    // R8: Legacy rendering methods removed — use DeferredPipeline/ForwardPipeline
     [[nodiscard]] RenderFrameData buildRenderFrameData(const World& world) const;
-    [[nodiscard]] FrameContext buildFrameContextFromRenderFrameData(const RenderFrameData& frame) const;
-    [[nodiscard]] TerrainFrameData buildTerrainFrameData(const RenderFrameData& frame) const;
-    [[nodiscard]] RenderSettings buildRenderSettingsFromPipelineSettings() const;
-    void bindSkyLightingUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindFogUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindAtmosphereUniforms(Shader& shader, const RenderFrameData& frame) const;
-    void bindChunkRenderState(const RenderFrameData& frame, const TextureArray& texArray) const;
-    void bindChunkRenderStateForShader(const RenderFrameData& frame, const TextureArray& texArray, Shader& shader) const;
-    void bindWaterEffectUniforms(Shader& shader, bool enabled) const;
-    void bindTransparentCompositeInputs(Shader& shader, bool deferredInputsEnabled, bool compositeInputsEnabled) const;
-    void renderWorldForward(const World& world, const RenderFrameData& frame);
-    bool renderWorldDeferred(const World& world, const Camera& camera, const Window& window, const RenderFrameData& frame);
-    void renderTransparentCompositePass(const World& world, const Window& window);
-    void renderWaterCompositePass(const World& world, const Window& window, bool preTemporalResolve = false);
-    void renderGBufferTerrain(const World& world, const RenderFrameData& frame);
-    void renderGBufferEntities(const World& world, const RenderFrameData& frame);
-    void renderGBufferDrops(const World& world, const RenderFrameData& frame);
-    void renderShadowMap(const World& world, const Camera& camera, const RenderFrameData& frame);
-    void renderShadowEntities(const World& world, const glm::mat4& shadowViewProj);
-    void renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
-                           const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                           float animationTime, float shaderTime);
-    void renderSsaoPass(const Camera& camera, const Window& window);
-    void renderDeferredLightingPass(const RenderFrameData& frame);
-    void renderSceneCompositePass(const RenderFrameData& frame);
-    void clearDeferredAuxiliaryTargets();
-    void renderVelocityPass(const RenderFrameData& frame);
-    void updateDeferredHistoryTargets();
-    void renderReflectionPass(const RenderFrameData& frame);
-    void renderReflectionFilterPass(const RenderFrameData& frame);
-    void renderReflectionTemporalPass();
-    void renderCloudPass(const RenderFrameData& frame);
-    void renderVolumetricFogPass(const RenderFrameData& frame);
-    void renderVolumetricTemporalPass(const RenderFrameData& frame);
-    void compositeVolumetricFogPass();
-    void renderParticlesToSceneResolved(const RenderFrameData& frame);
-    void renderTemporalResolvePass(const RenderFrameData& frame);
-    void renderSsaoFilterPass();
-    void renderSsaoTemporalPass();
-    void renderSsaoUpsamplePass();
-    void renderMotionBlurPass(const RenderFrameData& frame);
-    void renderDofPass(const RenderFrameData& frame);
-    void renderDeferredDebugView(GLint framebuffer, int width, int height);
     void renderSkyCapturePass(const World& world);
     void renderFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;

@@ -107,13 +107,13 @@ public:
     void setRenderLocalPlayerModel(bool visible);
     void setHeldBlockLightValue(int value);
 
-    /// Sync fog settings from legacy Renderer to RenderSettings.
+    /// Sync fog settings from Renderer to RenderSettings.
     /// Call this after Dashboard changes fog via Renderer methods.
     void syncFogFromRenderer();
 
     // R7: Legacy bridge methods removed — use renderFrame() instead
 
-    // Query (Phase R1: bridge to legacy Renderer)
+    // Query methods (now use FrameOutput directly)
     bool isDeferredFrameActive() const;
     GLuint gbufDepthTexture() const;
     GLuint weatherMaskTexture() const;
@@ -143,9 +143,8 @@ public:
     RenderDebugService& debugService() { return m_debugService; }
     const RenderDebugService& debugService() const { return m_debugService; }
 
-    // Legacy compatibility (temporary bridge to existing Renderer)
-    void setLegacyRenderer(Renderer* renderer);
-    // R7: syncFrameOutputFromLegacyRenderer() removed — new pipeline generates FrameOutput directly
+    // R8: Initialize shared resources from Renderer (terrain, sky, overlay, debug, etc.)
+    void initFromRenderer(Renderer* renderer);
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().
@@ -200,8 +199,8 @@ private:
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;
 
-    // Legacy bridge (Phase 1 only - will be removed when pipelines are extracted)
-    Renderer* m_legacyRenderer = nullptr;
+    // Renderer reference (for shared resource initialization)
+    Renderer* m_sourceRenderer = nullptr;
 
     // Pipeline implementations (Phase 9)
     std::unique_ptr<ForwardPipeline> m_forwardPipeline;

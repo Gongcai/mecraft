@@ -98,7 +98,7 @@ void Game::initRenderers() {
 
     // Initialize RenderScene and connect to Renderer
     m_renderScene.init(m_resourceMgr);
-    m_renderScene.setLegacyRenderer(&m_renderer);
+    m_renderScene.initFromRenderer(&m_renderer);
 
     m_dropRenderer.init(m_resourceMgr);
     m_firstPersonHeldItemRenderer.init(m_resourceMgr);
