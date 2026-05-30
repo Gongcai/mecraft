@@ -10,7 +10,7 @@
 #include "ui/core/UIRenderer.h"
 #include "../ecs/components/Components.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
-#include "../renderer/core/SettingsMapper.h"
+#include "../renderer/core/RenderSettings.h"
 #include "../renderer/debug/RenderDebugService.h"
 
 #include <algorithm>
@@ -377,10 +377,10 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         }
         ImGui::TextDisabled("Experimental: overlays and transparent ordering are still under validation.");
 
-        Renderer::RenderPipelineSettings pipeline = render.getRenderPipelineSettings();
-        int pipelineMode = static_cast<int>(pipeline.mode);
-        int tonemapMode = pipeline.tonemapMode;
-        int debugViewMode = pipeline.debugViewMode;
+        RenderSettings settings = renderScene.getSettings();
+        int pipelineMode = static_cast<int>(settings.pipelineMode);
+        int tonemapMode = settings.postProcess.tonemapMode;
+        int debugViewMode = settings.debug.viewMode;
         int weatherPresetInstant = static_cast<int>(world.getWeatherSystem().getRenderState().type);
         int weatherPresetSmooth = static_cast<int>(world.getWeatherSystem().getTargetState().type);
         static constexpr const char* kPipelineModes[] = {"Forward (Vanilla)", "Deferred (Shader Effects)"};
@@ -478,9 +478,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
-        pipeline.mode = static_cast<Renderer::RenderPipelineMode>(pipelineMode);
+        settings.pipelineMode = static_cast<PipelineMode>(pipelineMode);
         pipelineChanged |= ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));
-        pipeline.debugViewMode = debugViewMode;
+        settings.debug.viewMode = debugViewMode;
         static constexpr const char* kLightDebugModes[] = {
             "0: Off",
             "1: Direct Only",
@@ -507,9 +507,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             "22: Rain Ripple Normal",
             "23: Rain Ripple Strength"
         };
-        int lightDebugMode = pipeline.deferredLightDebugMode;
+        int lightDebugMode = settings.debug.deferredLightDebugMode;
         pipelineChanged |= ImGui::Combo("Light Debug", &lightDebugMode, kLightDebugModes, IM_ARRAYSIZE(kLightDebugModes));
-        pipeline.deferredLightDebugMode = lightDebugMode;
+        settings.debug.deferredLightDebugMode = lightDebugMode;
         static constexpr const char* kPostprocessDebugModes[] = {
             "0: Off",
             "1: BloomData",
@@ -517,9 +517,9 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             "3: BloomyFog",
             "4: RainMask"
         };
-        int ppDebugMode = pipeline.postprocessDebugMode;
+        int ppDebugMode = settings.debug.postprocessDebugMode;
         pipelineChanged |= ImGui::Combo("Postprocess Debug", &ppDebugMode, kPostprocessDebugModes, IM_ARRAYSIZE(kPostprocessDebugModes));
-        pipeline.postprocessDebugMode = ppDebugMode;
+        settings.debug.postprocessDebugMode = ppDebugMode;
         static constexpr const char* kReflectionDebugModes[] = {
             "0: Off",
             "1: PixelWetness",
@@ -553,65 +553,65 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             "29: Reflectance x128",
             "30: Source Gradient x128"
         };
-        int reflDebugMode = pipeline.reflectionDebugMode;
+        int reflDebugMode = settings.debug.reflectionDebugMode;
         pipelineChanged |= ImGui::Combo("Reflection Debug", &reflDebugMode, kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));
-        pipeline.reflectionDebugMode = reflDebugMode;
-        pipelineChanged |= ImGui::Checkbox("Sun Shadows", &pipeline.shadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Soft Shadows", &pipeline.softShadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &pipeline.pcssShadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Contact Shadows", &pipeline.contactShadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &pipeline.cloudShadowsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Derivative Strict", &pipeline.derivativeStrictMode);
-        pipelineChanged |= ImGui::Checkbox("SSAO", &pipeline.ssaoEnabled);
-        pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &pipeline.ssaoTemporalEnabled);
-        pipelineChanged |= ImGui::Checkbox("Bloom Flag", &pipeline.bloomEnabled);
-        pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &pipeline.bloomThreshold, 0.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &pipeline.bloomStrength, 0.0f, 20.0f, "%.2f");
-        pipelineChanged |= ImGui::Checkbox("Depth of Field", &pipeline.dofEnabled);
-        pipelineChanged |= ImGui::SliderFloat("DoF Focus", &pipeline.dofFocusDistance, 0.5f, 50.0f, "%.1f blocks");
-        pipelineChanged |= ImGui::SliderFloat("DoF Aperture", &pipeline.dofAperture, 0.8f, 22.0f, "%.1f");
-        pipelineChanged |= ImGui::SliderFloat("DoF Intensity", &pipeline.dofIntensity, 0.0f, 1.0f, "%.3f");
-        pipelineChanged |= ImGui::Checkbox("Auto Exposure", &pipeline.autoExposureEnabled);
-        pipelineChanged |= ImGui::SliderFloat("Auto Exp Min", &pipeline.autoExposureMin, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-        pipelineChanged |= ImGui::SliderFloat("Auto Exp Max", &pipeline.autoExposureMax, 1.0f, 64.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        settings.debug.reflectionDebugMode = reflDebugMode;
+        pipelineChanged |= ImGui::Checkbox("Sun Shadows", &settings.shadow.enabled);
+        pipelineChanged |= ImGui::Checkbox("Soft Shadows", &settings.shadow.softShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &settings.shadow.pcssShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Contact Shadows", &settings.shadow.contactShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &settings.shadow.cloudShadowsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);
+        pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
+        pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
+        pipelineChanged |= ImGui::Checkbox("Bloom Flag", &settings.postProcess.bloomEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &settings.postProcess.bloomThreshold, 0.0f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &settings.postProcess.bloomStrength, 0.0f, 20.0f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("Depth of Field", &settings.postProcess.dofEnabled);
+        pipelineChanged |= ImGui::SliderFloat("DoF Focus", &settings.postProcess.dofFocusDistance, 0.5f, 50.0f, "%.1f blocks");
+        pipelineChanged |= ImGui::SliderFloat("DoF Aperture", &settings.postProcess.dofAperture, 0.8f, 22.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("DoF Intensity", &settings.postProcess.dofIntensity, 0.0f, 1.0f, "%.3f");
+        pipelineChanged |= ImGui::Checkbox("Auto Exposure", &settings.postProcess.autoExposureEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Min", &settings.postProcess.autoExposureMin, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Max", &settings.postProcess.autoExposureMax, 1.0f, 64.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
         ImGui::TextDisabled("DerivativeMain exposure target is unclamped; min/max are legacy UI fields.");
-        pipelineChanged |= ImGui::SliderFloat("Auto Exp Speed", &pipeline.autoExposureSpeed, 0.1f, 6.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Auto Exp Bias", &pipeline.autoExposureBias, -2.0f, 2.0f, "%.2f EV");
-        pipelineChanged |= ImGui::Checkbox("Sun Rays", &pipeline.sunRaysEnabled);
-        pipelineChanged |= ImGui::Checkbox("Water Effects", &pipeline.waterEffectsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Transparent Composite", &pipeline.transparentCompositeEnabled);
-        pipelineChanged |= ImGui::SliderFloat("Scene Cloud Composite", &pipeline.sceneCloudCompositeStrength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Scene Reflection Composite", &pipeline.sceneReflectionCompositeStrength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &pipeline.shaderpackGradingEnabled);
-        pipelineChanged |= ImGui::Checkbox("Purkinje Shift", &pipeline.purkinjeShiftEnabled);
-        pipelineChanged |= ImGui::Checkbox("Bloomy Fog", &pipeline.bloomyFogEnabled);
-        pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &pipeline.aerialPerspectiveEnabled);
-        pipelineChanged |= ImGui::Checkbox("Volumetric Light", &pipeline.volumetricLightEnabled);
-        pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &pipeline.volumetricFogEnabled);
-        pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &pipeline.volumetricSkyRayEnabled);
-        pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &pipeline.volumetricTimeFadeEnabled);
-        pipelineChanged |= ImGui::Checkbox("VFog Temporal Accumulation", &pipeline.volumetricTemporalEnabled);
-        pipelineChanged |= ImGui::SliderFloat("VFog Temporal Weight", &pipeline.volumetricTemporalWeight, 0.0f, 0.99f, "%.2f");
-        pipelineChanged |= ImGui::Checkbox("UW Volumetric Light", &pipeline.uwVolumetricLightEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Speed", &settings.postProcess.autoExposureSpeed, 0.1f, 6.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Auto Exp Bias", &settings.postProcess.autoExposureBias, -2.0f, 2.0f, "%.2f EV");
+        pipelineChanged |= ImGui::Checkbox("Sun Rays", &settings.postProcess.sunRaysEnabled);
+        pipelineChanged |= ImGui::Checkbox("Water Effects", &settings.transparent.waterEffectsEnabled);
+        pipelineChanged |= ImGui::Checkbox("Transparent Composite", &settings.transparent.compositeEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Scene Cloud Composite", &settings.cloud.sceneCloudCompositeStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Scene Reflection Composite", &settings.reflection.sceneReflectionCompositeStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("Shaderpack Grading", &settings.postProcess.shaderpackGradingEnabled);
+        pipelineChanged |= ImGui::Checkbox("Purkinje Shift", &settings.postProcess.purkinjeShiftEnabled);
+        pipelineChanged |= ImGui::Checkbox("Bloomy Fog", &settings.postProcess.bloomyFogEnabled);
+        pipelineChanged |= ImGui::Checkbox("Aerial Perspective", &settings.postProcess.aerialPerspectiveEnabled);
+        pipelineChanged |= ImGui::Checkbox("Volumetric Light", &settings.volumetric.lightEnabled);
+        pipelineChanged |= ImGui::Checkbox("Volumetric Fog", &settings.volumetric.fogEnabled);
+        pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &settings.volumetric.skyRayEnabled);
+        pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &settings.volumetric.timeFadeEnabled);
+        pipelineChanged |= ImGui::Checkbox("VFog Temporal Accumulation", &settings.volumetric.temporalEnabled);
+        pipelineChanged |= ImGui::SliderFloat("VFog Temporal Weight", &settings.volumetric.temporalWeight, 0.0f, 0.99f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("UW Volumetric Light", &settings.volumetric.uwLightEnabled);
         static constexpr const char* kVFogQualityTiers[] = {
             "Low: No Noise",
             "Medium: Cloudy Fog Lite",
             "High: Cloudy Fog",
             "Ultra: Cloudy Sea"
         };
-        int qualityTier = pipeline.volumetricQualityTier;
+        int qualityTier = settings.volumetric.qualityTier;
         pipelineChanged |= ImGui::Combo("VFog Fog Type", &qualityTier, kVFogQualityTiers, IM_ARRAYSIZE(kVFogQualityTiers));
-        pipeline.volumetricQualityTier = qualityTier;
-        int fogSamples = pipeline.volumetricFogSamples;
+        settings.volumetric.qualityTier = qualityTier;
+        int fogSamples = settings.volumetric.fogSamples;
         pipelineChanged |= ImGui::SliderInt("VFog Samples", &fogSamples, 2, 50);
-        pipeline.volumetricFogSamples = fogSamples;
+        settings.volumetric.fogSamples = fogSamples;
         // DerivativeMain-style VFog independent profile controls
-        pipelineChanged |= ImGui::SliderFloat("VFog Center Height", &pipeline.vfogCenterHeight, 0.0f, 255.0f, "%.0f");
-        pipelineChanged |= ImGui::SliderFloat("VFog Height Spread", &pipeline.vfogHeightSpread, 1.0f, 200.0f, "%.0f");
-        pipelineChanged |= ImGui::SliderFloat("VFog Noise Scale", &pipeline.vfogNoiseScale, 0.001f, 0.200f, "%.3f");
-        pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &pipeline.vfogLightStrength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("VFog Density Scale", &pipeline.vfogDensityScale, 0.0f, 10.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("UW VL Strength", &pipeline.underwaterVolumetricLightStrength, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Center Height", &settings.volumetric.fogCenterHeight, 0.0f, 255.0f, "%.0f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Height Spread", &settings.volumetric.fogHeightSpread, 1.0f, 200.0f, "%.0f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Noise Scale", &settings.volumetric.fogNoiseScale, 0.001f, 0.200f, "%.3f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Light Strength", &settings.volumetric.fogLightStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Density Scale", &settings.volumetric.fogDensityScale, 0.0f, 10.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("UW VL Strength", &settings.volumetric.underwaterLightStrength, 0.0f, 2.0f, "%.2f");
         if (ImGui::Combo("Weather Instant (Debug)", &weatherPresetInstant, kWeatherPresets, IM_ARRAYSIZE(kWeatherPresets))) {
             world.getWeatherSystem().setDebugWeatherPresetInstant(static_cast<WeatherType>(weatherPresetInstant));
         }
@@ -619,21 +619,21 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             world.getWeatherSystem().setDebugWeatherPresetSmooth(static_cast<WeatherType>(weatherPresetSmooth));
         }
         pipelineChanged |= ImGui::Combo("Tonemap Mode", &tonemapMode, kTonemapModes, IM_ARRAYSIZE(kTonemapModes));
-        pipeline.tonemapMode = tonemapMode;
+        settings.postProcess.tonemapMode = tonemapMode;
         // Exposure diagnostics
         {
             float adapted = postProcess.getAdaptedExposure();
             float target = postProcess.getTargetExposure();
             float avgLum = postProcess.getAverageLuminance();
-            float resolvedExposure = pipeline.autoExposureEnabled ? adapted : (0.8f / std::max(pipeline.exposure, 0.0001f));
+            float resolvedExposure = settings.postProcess.autoExposureEnabled ? adapted : (0.8f / std::max(settings.postProcess.exposure, 0.0001f));
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "Exposure Diagnostics");
             ImGui::Text("Resolved Exposure: %.4f", resolvedExposure);
-            if (pipeline.autoExposureEnabled) {
+            if (settings.postProcess.autoExposureEnabled) {
                 ImGui::Text("Adapted: %.4f  Target: %.4f", adapted, target);
                 ImGui::Text("Avg Luminance: %.3f", avgLum);
             } else {
-                ImGui::Text("Manual Exposure: %.2f (1/exposure=%.4f)", pipeline.exposure, resolvedExposure);
+                ImGui::Text("Manual Exposure: %.2f (1/exposure=%.4f)", settings.postProcess.exposure, resolvedExposure);
             }
             // SkyCapture metadata
             auto skyLux = render.getSkyIlluminanceData();
@@ -650,20 +650,20 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             ImGui::Text("SkyAmbientColor(CPU): (%.2f, %.2f, %.2f)", skyColors.skyAmbientColor.r, skyColors.skyAmbientColor.g, skyColors.skyAmbientColor.b);
             ImGui::Text("FogColor(CPU):      (%.2f, %.2f, %.2f)", fogColor.r, fogColor.g, fogColor.b);
             ImGui::Text("HorizonScatter(CPU): (%.2f, %.2f, %.2f)", skyColors.horizonScatterColor.r, skyColors.horizonScatterColor.g, skyColors.horizonScatterColor.b);
-            ImGui::Text("DirectSunStrength: %.2f  SkyAmbientStrength: %.2f", pipeline.directSunStrength, pipeline.skyAmbientStrength);
-            ImGui::Text("SunWarmth: %.2f  SkyCoolness: %.2f", pipeline.sunWarmth, pipeline.skyCoolness);
+            ImGui::Text("DirectSunStrength: %.2f  SkyAmbientStrength: %.2f", settings.postProcess.directSunStrength, settings.postProcess.skyAmbientStrength);
+            ImGui::Text("SunWarmth: %.2f  SkyCoolness: %.2f", settings.postProcess.sunWarmth, settings.postProcess.skyCoolness);
             // Effective after-tint values (what passes actually use)
             ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.5f, 1.0f), "Effective After Tint");
             // coolSkyColor = mix(skyAmbient, skyAmbient * coolness tint, skyCoolness)
-            float coolR = skyColors.skyAmbientColor.r * (1.0f - pipeline.skyCoolness * 0.22f);
-            float coolG = skyColors.skyAmbientColor.g * (1.0f + pipeline.skyCoolness * 0.08f);
-            float coolB = skyColors.skyAmbientColor.b * (1.0f + pipeline.skyCoolness * 0.18f);
+            float coolR = skyColors.skyAmbientColor.r * (1.0f - settings.postProcess.skyCoolness * 0.22f);
+            float coolG = skyColors.skyAmbientColor.g * (1.0f + settings.postProcess.skyCoolness * 0.08f);
+            float coolB = skyColors.skyAmbientColor.b * (1.0f + settings.postProcess.skyCoolness * 0.18f);
             ImGui::Text("coolSkyColor: (%.2f, %.2f, %.2f)", coolR, coolG, coolB);
             ImGui::Text("Cloud cirrus: env.sunIlluminance * 40.0");
             // VFog component diagnostics (CPU approximate — actual values are GPU-side)
             ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.3f, 1.0f), "Volumetric Fog Diagnostics (approx)");
-            ImGui::Text("Volumetric Light (haze): %s", pipeline.volumetricLightEnabled ? "ON" : "OFF");
-            ImGui::Text("VFog Temporal: %s (weight: %.2f)", pipeline.volumetricTemporalEnabled ? "ON" : "OFF", pipeline.volumetricTemporalWeight);
+            ImGui::Text("Volumetric Light (haze): %s", settings.volumetric.lightEnabled ? "ON" : "OFF");
+            ImGui::Text("VFog Temporal: %s (weight: %.2f)", settings.volumetric.temporalEnabled ? "ON" : "OFF", settings.volumetric.temporalWeight);
             const auto& weather = world.getWeatherSystem().getRenderState();
             const auto targetWeather = world.getWeatherSystem().getTargetState();
             const auto& derivedWeather = world.getWeatherSystem().getDerived();
@@ -672,13 +672,13 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             ImGui::Text("env.sunIlluminance: (%.2f, %.2f, %.2f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
             ImGui::Text("env.skyIlluminance:  (%.2f, %.2f, %.2f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
             ImGui::Text("sunVisibility(CPU): %.3f  (sunDir.y=%.2f)", sunVis, sunY);
-            ImGui::Text("VFog strength: %.2f", pipeline.volumetricFogStrength);
+            ImGui::Text("VFog strength: %.2f", settings.volumetric.fogStrength);
             ImGui::Text("VFog profile: center=%.0f  spread=%.0f  noise=%.3f  light=%.2f  density=%.2f",
-                pipeline.vfogCenterHeight, pipeline.vfogHeightSpread, pipeline.vfogNoiseScale,
-                pipeline.vfogLightStrength, pipeline.vfogDensityScale);
+                settings.volumetric.fogCenterHeight, settings.volumetric.fogHeightSpread, settings.volumetric.fogNoiseScale,
+                settings.volumetric.fogLightStrength, settings.volumetric.fogDensityScale);
             ImGui::Text("VFog baseDensity: 1.0  (VolumetricSettings defaults)");
             const char* tierNames[] = {"Low(0.5x)", "Medium(1.4x)", "High(9.0x)", "Ultra(48.0x)"};
-            ImGui::Text("VFog tier: %s  maxDist: 260  heightSpread: %.0f", tierNames[qualityTier], pipeline.vfogHeightSpread);
+            ImGui::Text("VFog tier: %s  maxDist: 260  heightSpread: %.0f", tierNames[qualityTier], settings.volumetric.fogHeightSpread);
             {
                 float meFade = (sunY < 0.18f) ? 0.37f + 1.2f * std::max(0.0f, -sunY) : 1.7f;
                 float meWeight = std::pow(std::clamp(1.0f - meFade * std::abs(sunY - 0.18f), 0.0f, 1.0f), 2.0f);
@@ -686,15 +686,15 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
                 float wetness = derivedWeather.skyWetness;
                 // DerivativeMain VolumetricFog.glsl:210-213: airDensity and mistDensity both get TIME_FADE
                 // with max(..., wetness) floor so rain never fully suppresses fog.
-                float airGate = pipeline.volumetricTimeFadeEnabled
+                float airGate = settings.volumetric.timeFadeEnabled
                     ? std::max(std::clamp(meWeight + 0.25f, 0.0f, 1.0f) + timeMidnight * 4.0f, wetness)
                     : 1.0f;
-                float mistGate = pipeline.volumetricTimeFadeEnabled
+                float mistGate = settings.volumetric.timeFadeEnabled
                     ? std::max(meWeight * meWeight + timeMidnight * 2.0f, wetness)
                     : 1.0f;
                 float tierMultiplier = qualityTier <= 0 ? 0.5f : (qualityTier <= 1 ? 1.4f : (qualityTier <= 2 ? 9.0f : 48.0f));
                 ImGui::Text("VFog TIME_FADE gates: %s  air=%.3f mist=%.3f wet=%.2f",
-                    pipeline.volumetricTimeFadeEnabled ? "ON" : "OFF", airGate, mistGate, wetness);
+                    settings.volumetric.timeFadeEnabled ? "ON" : "OFF", airGate, mistGate, wetness);
                 ImGui::Text("VFog effective tier density: %.2f x mistGate = %.3f", tierMultiplier, tierMultiplier * mistGate);
                 if (weather.type == WeatherType::Clear && mistGate < 0.02f) {
                     ImGui::TextDisabled("Clear noon: DerivativeMain TIME_FADE suppresses mist density; FOG_TYPE mostly affects density shape.");
@@ -743,7 +743,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
                 "AcademyFull [DerivMain]",
                 "AgX_Full [DerivMain]"
             };
-            ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(pipeline.tonemapMode, 0, 5)]);
+            ImGui::Text("Tonemap: %s", tonemapNames[std::clamp(settings.postProcess.tonemapMode, 0, 5)]);
             const char* weatherNames[] = {"Clear", "Rain", "Storm", "Snow"};
             ImGui::Text("Weather current: %s  wet=%.2f storm=%.2f aerialRed=%.2f",
                 weatherNames[static_cast<int>(weather.type)],
@@ -761,7 +761,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
                     derivedWeather.rainStrength);
                 ImGui::Text("Weather direct shadow: %.3f  (mix(1.0, 0.03, derived.skyWetness))",
                     overcastShadow);
-                pipelineChanged |= ImGui::SliderFloat("Direct Occlusion Override", &pipeline.directWeatherOcclusion, -1.0f, 1.0f, "%.2f (<0=auto, >=0=bypass all cloud shadow)");
+                pipelineChanged |= ImGui::SliderFloat("Direct Occlusion Override", &settings.weather.directWeatherOcclusion, -1.0f, 1.0f, "%.2f (<0=auto, >=0=bypass all cloud shadow)");
                 ImGui::TextDisabled("SkyCapture metadata stays weather-independent; direct rain dimming happens in deferred cloudShadow.");
             }
             // Weather debug overrides — multiply against DerivativeMain formula.
@@ -770,20 +770,20 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
                 ImGui::Separator();
                 ImGui::TextColored(ImVec4(0.85f, 0.75f, 0.5f, 1.0f), "Weather Debug Override");
                 ImGui::TextDisabled("Multiplies against DerivativeMain formula. 1.0/0.0 = no override.");
-                pipelineChanged |= ImGui::SliderFloat("Skylight Scale##weather", &pipeline.weatherSkylightScale, 0.0f, 1.0f, "%.2f (x DerivMain)");
-                pipelineChanged |= ImGui::SliderFloat("Exposure Bias##weather", &pipeline.weatherExposureBias, -2.0f, 2.0f, "%.2f EV");
-                pipelineChanged |= ImGui::SliderFloat("Post Rain Fog##weather", &pipeline.weatherPostRainFog, 0.0f, 2.0f, "%.2f (x DerivMain)");
-                pipelineChanged |= ImGui::SliderFloat("Rain Alpha Scale##weather", &pipeline.weatherRainAlphaScale, 0.0f, 5.0f, "%.2f");
-                pipelineChanged |= ImGui::Checkbox("Weather Rain Lines", &pipeline.weatherRainLinesEnabled);
-                pipelineChanged |= ImGui::Checkbox("Scene Particles", &pipeline.sceneParticlesEnabled);
-                pipelineChanged |= ImGui::Checkbox("Rain Wet Surfaces", &pipeline.rainWetSurfacesEnabled);
-                pipelineChanged |= ImGui::Checkbox("Rain Surface Ripples", &pipeline.rainSurfaceRipplesEnabled);
+                pipelineChanged |= ImGui::SliderFloat("Skylight Scale##weather", &settings.weather.skylightScale, 0.0f, 1.0f, "%.2f (x DerivMain)");
+                pipelineChanged |= ImGui::SliderFloat("Exposure Bias##weather", &settings.weather.exposureBias, -2.0f, 2.0f, "%.2f EV");
+                pipelineChanged |= ImGui::SliderFloat("Post Rain Fog##weather", &settings.weather.postRainFog, 0.0f, 2.0f, "%.2f (x DerivMain)");
+                pipelineChanged |= ImGui::SliderFloat("Rain Alpha Scale##weather", &settings.weather.rainAlphaScale, 0.0f, 5.0f, "%.2f");
+                pipelineChanged |= ImGui::Checkbox("Weather Rain Lines", &settings.weather.rainLinesEnabled);
+                pipelineChanged |= ImGui::Checkbox("Scene Particles", &settings.weather.particlesEnabled);
+                pipelineChanged |= ImGui::Checkbox("Rain Wet Surfaces", &settings.weather.wetSurfacesEnabled);
+                pipelineChanged |= ImGui::Checkbox("Rain Surface Ripples", &settings.weather.surfaceRipplesEnabled);
             }
             ImGui::Separator();
         }
         ImGui::TextUnformatted("Shadow Projection: CSM Linear");
-        if (pipeline.debugDisableGreedyMeshing) {
-            pipeline.debugDisableGreedyMeshing = false;
+        if (settings.debug.disableGreedyMeshing) {
+            settings.debug.disableGreedyMeshing = false;
             for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
                 (void)chunkKey;
                 if (chunk) {
@@ -793,228 +793,226 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             pipelineChanged = true;
         }
         if (ImGui::Button("Preset Neutral")) {
-            pipeline.tonemapMode = 1;
+            settings.postProcess.tonemapMode = 1;
 
-            pipeline.softShadowsEnabled = true;
-            pipeline.pcssShadowsEnabled = false;
-            pipeline.contactShadowsEnabled = false;
-            pipeline.cloudShadowsEnabled = false;
-            pipeline.cloudTimeScale = 0.35f;
-            pipeline.directSunStrength = 1.0f;
-            pipeline.skyAmbientStrength = 0.55f;
-            pipeline.minimumAmbient = 0.09f;
-            pipeline.shadowMinLight = 0.18f;
-            pipeline.shadowContrast = 1.0f;
-            pipeline.shadowTintStrength = 0.18f;
-            pipeline.blockLightStrength = 1.0f;
-            pipeline.fakeBounceStrength = 0.04f;
+            settings.shadow.softShadowsEnabled = true;
+            settings.shadow.pcssShadowsEnabled = false;
+            settings.shadow.contactShadowsEnabled = false;
+            settings.shadow.cloudShadowsEnabled = false;
+            settings.cloud.timeScale = 0.35f;
+            settings.postProcess.directSunStrength = 1.0f;
+            settings.postProcess.skyAmbientStrength = 0.55f;
+            settings.postProcess.minimumAmbient = 0.09f;
+            settings.postProcess.shadowMinLight = 0.18f;
+            settings.postProcess.shadowContrast = 1.0f;
+            settings.postProcess.shadowTintStrength = 0.18f;
+            settings.postProcess.blockLightStrength = 1.0f;
+            settings.postProcess.fakeBounceStrength = 0.04f;
             world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
-            pipeline.aerialStrength = 0.25f;
-            pipeline.horizonScatterStrength = 0.35f;
-            pipeline.volumetricFogStrength = 0.0f;
-            pipeline.vfogDensityScale = 0.0f;
-            pipeline.bloomThreshold = 1.05f;
-            pipeline.bloomStrength = 0.10f;
-            pipeline.sunRaysEnabled = false;
-            pipeline.dofEnabled = false;
-            pipeline.autoExposureEnabled = false;
-            pipeline.autoExposureMin = 0.70f;
-            pipeline.autoExposureMax = 1.40f;
-            pipeline.autoExposureSpeed = 1.0f;
-            pipeline.autoExposureBias = 0.0f;
-            pipeline.exposure = 12.0f;
-            pipeline.vibrance = 0.0f;
-            pipeline.highlightCompression = 0.35f;
-            pipeline.filmEmulationStrength = 0.0f;
-            pipeline.redModifierStrength = 0.0f;
-            pipeline.colorLumaR = 1.0f;
-            pipeline.colorLumaG = 1.0f;
-            pipeline.colorLumaB = 1.0f;
-            pipeline.albedoDesaturation = 0.0f;
-            pipeline.sunWarmth = 0.0f;
-            pipeline.skyCoolness = 0.0f;
-            pipeline.shadowDesaturation = 0.0f;
-            pipeline.splitToneStrength = 0.0f;
-            pipeline.vignetteStrength = 0.0f;
-            pipeline.sharpenStrength = 0.0f;
-            pipeline.saturation = 1.0f;
-            pipeline.contrast = 1.0f;
+            settings.postProcess.aerialStrength = 0.25f;
+            settings.postProcess.horizonScatterStrength = 0.35f;
+            settings.volumetric.fogStrength = 0.0f;
+            settings.volumetric.fogDensityScale = 0.0f;
+            settings.postProcess.bloomThreshold = 1.05f;
+            settings.postProcess.bloomStrength = 0.10f;
+            settings.postProcess.sunRaysEnabled = false;
+            settings.postProcess.dofEnabled = false;
+            settings.postProcess.autoExposureEnabled = false;
+            settings.postProcess.autoExposureMin = 0.70f;
+            settings.postProcess.autoExposureMax = 1.40f;
+            settings.postProcess.autoExposureSpeed = 1.0f;
+            settings.postProcess.autoExposureBias = 0.0f;
+            settings.postProcess.exposure = 12.0f;
+            settings.postProcess.vibrance = 0.0f;
+            settings.postProcess.highlightCompression = 0.35f;
+            settings.postProcess.filmEmulationStrength = 0.0f;
+            settings.postProcess.redModifierStrength = 0.0f;
+            settings.postProcess.colorLumaR = 1.0f;
+            settings.postProcess.colorLumaG = 1.0f;
+            settings.postProcess.colorLumaB = 1.0f;
+            settings.postProcess.albedoDesaturation = 0.0f;
+            settings.postProcess.sunWarmth = 0.0f;
+            settings.postProcess.skyCoolness = 0.0f;
+            settings.postProcess.shadowDesaturation = 0.0f;
+            settings.postProcess.splitToneStrength = 0.0f;
+            settings.postProcess.vignetteStrength = 0.0f;
+            settings.postProcess.sharpenStrength = 0.0f;
+            settings.postProcess.saturation = 1.0f;
+            settings.postProcess.contrast = 1.0f;
             pipelineChanged = true;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset Natural")) {
-            pipeline.tonemapMode = 1;
+            settings.postProcess.tonemapMode = 1;
 
-            pipeline.softShadowsEnabled = true;
-            pipeline.pcssShadowsEnabled = true;
-            pipeline.contactShadowsEnabled = false;
-            pipeline.shadowPcssStrength = 0.72f;
-            pipeline.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
-            pipeline.directSunStrength = 1.36f;
-            pipeline.skyAmbientStrength = 0.36f;
-            pipeline.minimumAmbient = 0.055f;
-            pipeline.contactShadowStrength = 0.12f;
-            pipeline.cloudShadowStrength = 0.28f;
-            pipeline.cloudShadowScale = 0.0045f;
-            pipeline.cloudShadowSpeed = 0.018f;
-            pipeline.cloudTimeScale = 0.35f;
-            pipeline.shadowMinLight = 0.08f;
-            pipeline.shadowContrast = 1.28f;
-            pipeline.shadowTintStrength = 0.28f;
-            pipeline.blockLightStrength = 1.0f;
-            pipeline.fakeBounceStrength = 0.06f;
+            settings.shadow.softShadowsEnabled = true;
+            settings.shadow.pcssShadowsEnabled = true;
+            settings.shadow.contactShadowsEnabled = false;
+            settings.shadow.pcssStrength = 0.72f;
+            settings.shadow.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
+            settings.postProcess.directSunStrength = 1.36f;
+            settings.postProcess.skyAmbientStrength = 0.36f;
+            settings.postProcess.minimumAmbient = 0.055f;
+            settings.shadow.contactShadowStrength = 0.12f;
+            settings.shadow.cloudShadowStrength = 0.28f;
+            settings.shadow.cloudShadowScale = 0.0045f;
+            settings.shadow.cloudShadowSpeed = 0.018f;
+            settings.cloud.timeScale = 0.35f;
+            settings.postProcess.shadowMinLight = 0.08f;
+            settings.postProcess.shadowContrast = 1.28f;
+            settings.postProcess.shadowTintStrength = 0.28f;
+            settings.postProcess.blockLightStrength = 1.0f;
+            settings.postProcess.fakeBounceStrength = 0.06f;
             world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
-            pipeline.aerialStrength = 0.48f;
-            pipeline.horizonScatterStrength = 0.70f;
-            pipeline.volumetricFogStrength = 1.0f;
-            pipeline.bloomThreshold = 0.0f;
-            pipeline.bloomStrength = 1.0f;
-            pipeline.sunRaysEnabled = false;
-            pipeline.dofEnabled = false;
-            pipeline.autoExposureEnabled = true;
-            pipeline.autoExposureMin = 0.001f;
-            pipeline.autoExposureMax = 64.0f;
-            pipeline.autoExposureSpeed = 1.0f;
-            pipeline.autoExposureBias = 0.0f;
-            pipeline.exposure = 12.0f;
-            pipeline.vibrance = 0.0f;
-            pipeline.highlightCompression = 0.0f;
-            pipeline.filmEmulationStrength = 0.0f;
-            pipeline.redModifierStrength = 0.35f;
-            pipeline.colorLumaR = 1.02f;
-            pipeline.colorLumaG = 1.0f;
-            pipeline.colorLumaB = 0.96f;
-            pipeline.albedoDesaturation = 0.0f;
-            pipeline.sunWarmth = 0.34f;
-            pipeline.skyCoolness = 0.18f;
-            pipeline.shadowDesaturation = 0.22f;
-            pipeline.splitToneStrength = 0.0f;
-            pipeline.vignetteStrength = 0.0f;
-            pipeline.sharpenStrength = 0.3f;
-            pipeline.saturation = 1.0f;
-            pipeline.contrast = 1.0f;
+            settings.postProcess.aerialStrength = 0.48f;
+            settings.postProcess.horizonScatterStrength = 0.70f;
+            settings.volumetric.fogStrength = 1.0f;
+            settings.postProcess.bloomThreshold = 0.0f;
+            settings.postProcess.bloomStrength = 1.0f;
+            settings.postProcess.sunRaysEnabled = false;
+            settings.postProcess.dofEnabled = false;
+            settings.postProcess.autoExposureEnabled = true;
+            settings.postProcess.autoExposureMin = 0.001f;
+            settings.postProcess.autoExposureMax = 64.0f;
+            settings.postProcess.autoExposureSpeed = 1.0f;
+            settings.postProcess.autoExposureBias = 0.0f;
+            settings.postProcess.exposure = 12.0f;
+            settings.postProcess.vibrance = 0.0f;
+            settings.postProcess.highlightCompression = 0.0f;
+            settings.postProcess.filmEmulationStrength = 0.0f;
+            settings.postProcess.redModifierStrength = 0.35f;
+            settings.postProcess.colorLumaR = 1.02f;
+            settings.postProcess.colorLumaG = 1.0f;
+            settings.postProcess.colorLumaB = 0.96f;
+            settings.postProcess.albedoDesaturation = 0.0f;
+            settings.postProcess.sunWarmth = 0.34f;
+            settings.postProcess.skyCoolness = 0.18f;
+            settings.postProcess.shadowDesaturation = 0.22f;
+            settings.postProcess.splitToneStrength = 0.0f;
+            settings.postProcess.vignetteStrength = 0.0f;
+            settings.postProcess.sharpenStrength = 0.3f;
+            settings.postProcess.saturation = 1.0f;
+            settings.postProcess.contrast = 1.0f;
             pipelineChanged = true;
         }
         ImGui::SameLine();
         if (ImGui::Button("Preset Contrast")) {
-            pipeline.tonemapMode = 1;
+            settings.postProcess.tonemapMode = 1;
 
-            pipeline.softShadowsEnabled = true;
-            pipeline.pcssShadowsEnabled = true;
-            pipeline.contactShadowsEnabled = false;
-            pipeline.shadowPcssStrength = 0.82f;
-            pipeline.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
-            pipeline.directSunStrength = 1.58f;
-            pipeline.skyAmbientStrength = 0.28f;
-            pipeline.minimumAmbient = 0.04f;
-            pipeline.contactShadowStrength = 0.16f;
-            pipeline.cloudShadowStrength = 0.28f;
-            pipeline.cloudShadowScale = 0.0055f;
-            pipeline.cloudShadowSpeed = 0.020f;
-            pipeline.cloudTimeScale = 0.35f;
-            pipeline.shadowMinLight = 0.055f;
-            pipeline.shadowContrast = 1.52f;
-            pipeline.shadowTintStrength = 0.34f;
-            pipeline.blockLightStrength = 1.05f;
-            pipeline.fakeBounceStrength = 0.08f;
+            settings.shadow.softShadowsEnabled = true;
+            settings.shadow.pcssShadowsEnabled = true;
+            settings.shadow.contactShadowsEnabled = false;
+            settings.shadow.pcssStrength = 0.82f;
+            settings.shadow.cloudShadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
+            settings.postProcess.directSunStrength = 1.58f;
+            settings.postProcess.skyAmbientStrength = 0.28f;
+            settings.postProcess.minimumAmbient = 0.04f;
+            settings.shadow.contactShadowStrength = 0.16f;
+            settings.shadow.cloudShadowStrength = 0.28f;
+            settings.shadow.cloudShadowScale = 0.0055f;
+            settings.shadow.cloudShadowSpeed = 0.020f;
+            settings.cloud.timeScale = 0.35f;
+            settings.postProcess.shadowMinLight = 0.055f;
+            settings.postProcess.shadowContrast = 1.52f;
+            settings.postProcess.shadowTintStrength = 0.34f;
+            settings.postProcess.blockLightStrength = 1.05f;
+            settings.postProcess.fakeBounceStrength = 0.08f;
             world.getWeatherSystem().setDebugWeatherPreset(WeatherType::Clear);
-            pipeline.aerialStrength = 0.58f;
-            pipeline.horizonScatterStrength = 0.82f;
-            pipeline.volumetricFogStrength = 1.0f;
-            pipeline.bloomThreshold = 0.0f;
-            pipeline.bloomStrength = 1.0f;
-            pipeline.sunRaysEnabled = false;
-            pipeline.dofEnabled = false;
-            pipeline.autoExposureEnabled = true;
-            pipeline.autoExposureMin = 0.001f;
-            pipeline.autoExposureMax = 64.0f;
-            pipeline.autoExposureSpeed = 1.0f;
-            pipeline.autoExposureBias = 0.0f;
-            pipeline.exposure = 12.0f;
-            pipeline.vibrance = 0.04f;
-            pipeline.highlightCompression = 0.0f;
-            pipeline.filmEmulationStrength = 0.0f;
-            pipeline.redModifierStrength = 0.45f;
-            pipeline.colorLumaR = 1.04f;
-            pipeline.colorLumaG = 1.0f;
-            pipeline.colorLumaB = 0.93f;
-            pipeline.albedoDesaturation = 0.0f;
-            pipeline.sunWarmth = 0.48f;
-            pipeline.skyCoolness = 0.24f;
-            pipeline.shadowDesaturation = 0.34f;
-            pipeline.splitToneStrength = 0.0f;
-            pipeline.vignetteStrength = 0.0f;
-            pipeline.sharpenStrength = 0.3f;
-            pipeline.saturation = 1.0f;
-            pipeline.contrast = 1.06f;
+            settings.postProcess.aerialStrength = 0.58f;
+            settings.postProcess.horizonScatterStrength = 0.82f;
+            settings.volumetric.fogStrength = 1.0f;
+            settings.postProcess.bloomThreshold = 0.0f;
+            settings.postProcess.bloomStrength = 1.0f;
+            settings.postProcess.sunRaysEnabled = false;
+            settings.postProcess.dofEnabled = false;
+            settings.postProcess.autoExposureEnabled = true;
+            settings.postProcess.autoExposureMin = 0.001f;
+            settings.postProcess.autoExposureMax = 64.0f;
+            settings.postProcess.autoExposureSpeed = 1.0f;
+            settings.postProcess.autoExposureBias = 0.0f;
+            settings.postProcess.exposure = 12.0f;
+            settings.postProcess.vibrance = 0.04f;
+            settings.postProcess.highlightCompression = 0.0f;
+            settings.postProcess.filmEmulationStrength = 0.0f;
+            settings.postProcess.redModifierStrength = 0.45f;
+            settings.postProcess.colorLumaR = 1.04f;
+            settings.postProcess.colorLumaG = 1.0f;
+            settings.postProcess.colorLumaB = 0.93f;
+            settings.postProcess.albedoDesaturation = 0.0f;
+            settings.postProcess.sunWarmth = 0.48f;
+            settings.postProcess.skyCoolness = 0.24f;
+            settings.postProcess.shadowDesaturation = 0.34f;
+            settings.postProcess.splitToneStrength = 0.0f;
+            settings.postProcess.vignetteStrength = 0.0f;
+            settings.postProcess.sharpenStrength = 0.3f;
+            settings.postProcess.saturation = 1.0f;
+            settings.postProcess.contrast = 1.06f;
             pipelineChanged = true;
         }
-        pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &pipeline.shadowResolution, 512, 4096);
-        pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &pipeline.shadowDistance, 64.0f, 192.0f, "%.1f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Softness", &pipeline.shadowSoftness, 0.1f, 4.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("PCSS Strength", &pipeline.shadowPcssStrength, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Const Bias", &pipeline.shadowConstantBias, 0.0f, 0.004f, "%.4f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Slope Bias", &pipeline.shadowSlopeBias, 0.0f, 0.012f, "%.4f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Normal Offset", &pipeline.shadowNormalOffset, 0.0f, 0.12f, "%.3f");
-        pipelineChanged |= ImGui::SliderFloat("Contact Shadow Strength", &pipeline.contactShadowStrength, 0.0f, 0.6f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &pipeline.cloudShadowStrength, 0.0f, 0.8f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &pipeline.cloudShadowScale, 0.001f, 0.02f, "%.4f");
-        pipelineChanged |= ImGui::SliderFloat("Cloud Time Scale", &pipeline.cloudTimeScale, 0.05f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("Shadow Resolution", &settings.shadow.resolution, 512, 4096);
+        pipelineChanged |= ImGui::SliderFloat("Shadow Distance", &settings.shadow.distance, 64.0f, 192.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Softness", &settings.shadow.softness, 0.1f, 4.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("PCSS Strength", &settings.shadow.pcssStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Const Bias", &settings.shadow.constantBias, 0.0f, 0.004f, "%.4f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Slope Bias", &settings.shadow.slopeBias, 0.0f, 0.012f, "%.4f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Normal Offset", &settings.shadow.normalOffset, 0.0f, 0.12f, "%.3f");
+        pipelineChanged |= ImGui::SliderFloat("Contact Shadow Strength", &settings.shadow.contactShadowStrength, 0.0f, 0.6f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &settings.shadow.cloudShadowStrength, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &settings.shadow.cloudShadowScale, 0.001f, 0.02f, "%.4f");
+        pipelineChanged |= ImGui::SliderFloat("Cloud Time Scale", &settings.cloud.timeScale, 0.05f, 2.0f, "%.2f");
         ImGui::TextDisabled("DerivativeMain CLOUDS_SPEED adapter. Legacy Cloud Shadow Speed is ignored by the DM cloud path.");
-        pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &pipeline.sunRayStrength, 0.0f, 0.6f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &settings.postProcess.sunRayStrength, 0.0f, 0.6f, "%.2f");
         ImGui::TextDisabled("VFog Strength 1.00 matches DerivativeMain VOLUMETRIC_FOG_DENSITY baseline");
-        pipelineChanged |= ImGui::SliderFloat("VFog Shadow Bias Scale", &pipeline.volumetricShadowBiasScale, 0.0f, 4.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("VFog Shadow Bias Scale", &settings.volumetric.shadowBiasScale, 0.0f, 4.0f, "%.2f");
         // A/B test toggles for TAA/VFog temporal convergence diagnosis
         ImGui::Separator();
         ImGui::TextDisabled("TAA/VFog A/B Test");
-        pipelineChanged |= ImGui::Checkbox("Freeze R1 Dither", &pipeline.freezeR1);
-        pipelineChanged |= ImGui::Checkbox("Freeze Upscale Bias", &pipeline.freezeBias);
-        pipelineChanged |= ImGui::Checkbox("TAA", &pipeline.taaEnabled);
-        pipelineChanged |= ImGui::Checkbox("Force Zero Velocity", &pipeline.forceZeroVelocity);
-        pipelineChanged |= ImGui::Checkbox("Freeze TAA Jitter", &pipeline.freezeTaaJitter);
-        pipelineChanged |= ImGui::SliderFloat("Color Temperature", &pipeline.colorTemperature, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Vibrance", &pipeline.vibrance, -0.5f, 0.8f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Highlight Compress", &pipeline.highlightCompression, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Film Emulation", &pipeline.filmEmulationStrength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Red Modifier", &pipeline.redModifierStrength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Channel R", &pipeline.colorLumaR, 0.5f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Channel G", &pipeline.colorLumaG, 0.5f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Channel B", &pipeline.colorLumaB, 0.5f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Albedo Desat", &pipeline.albedoDesaturation, 0.0f, 0.8f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Sun Warmth", &pipeline.sunWarmth, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Sky Coolness", &pipeline.skyCoolness, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Desat", &pipeline.shadowDesaturation, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Split Tone", &pipeline.splitToneStrength, 0.0f, 1.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Vignette", &pipeline.vignetteStrength, 0.0f, 0.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Tint", &pipeline.shadowTintStrength, 0.0f, 0.8f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Direct Sun", &pipeline.directSunStrength, 0.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Sky Ambient", &pipeline.skyAmbientStrength, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Minimum Ambient", &pipeline.minimumAmbient, 0.0f, 0.4f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Min Light", &pipeline.shadowMinLight, 0.0f, 0.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Shadow Contrast", &pipeline.shadowContrast, 0.5f, 2.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Block Light", &pipeline.blockLightStrength, 0.0f, 2.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Fake Bounce", &pipeline.fakeBounceStrength, 0.0f, 0.3f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &pipeline.aerialStrength, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &pipeline.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Volumetric Fog Strength", &pipeline.volumetricFogStrength, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Noise Dither", &pipeline.noiseDitherStrength, 0.0f, 0.05f, "%.3f");
-        pipelineChanged |= ImGui::SliderFloat("CAS Sharpen", &pipeline.sharpenStrength, 0.0f, 0.5f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &pipeline.ssaoRadius, 0.25f, 8.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &pipeline.ssaoStrength, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderInt("SSAO Samples", &pipeline.ssaoSamples, 1, 64);
-        pipelineChanged |= ImGui::SliderFloat("SSAO History Weight", &pipeline.ssaoHistoryWeight, 0.0f, 0.98f, "%.2f");
-        pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &pipeline.reflectionTemporalEnabled);
-        pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &pipeline.reflectionHistoryWeight, 0.0f, 0.98f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &pipeline.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-        pipelineChanged |= ImGui::SliderFloat("Gamma", &pipeline.gamma, 1.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Saturation", &pipeline.saturation, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Contrast", &pipeline.contrast, 0.5f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("Freeze R1 Dither", &settings.volumetric.freezeR1);
+        pipelineChanged |= ImGui::Checkbox("Freeze Upscale Bias", &settings.volumetric.freezeBias);
+        pipelineChanged |= ImGui::Checkbox("TAA", &settings.taa.enabled);
+        pipelineChanged |= ImGui::Checkbox("Force Zero Velocity", &settings.taa.forceZeroVelocity);
+        pipelineChanged |= ImGui::Checkbox("Freeze TAA Jitter", &settings.taa.freezeJitter);
+        pipelineChanged |= ImGui::SliderFloat("Color Temperature", &settings.postProcess.colorTemperature, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Vibrance", &settings.postProcess.vibrance, -0.5f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Highlight Compress", &settings.postProcess.highlightCompression, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Film Emulation", &settings.postProcess.filmEmulationStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Red Modifier", &settings.postProcess.redModifierStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Channel R", &settings.postProcess.colorLumaR, 0.5f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Channel G", &settings.postProcess.colorLumaG, 0.5f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Channel B", &settings.postProcess.colorLumaB, 0.5f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Albedo Desat", &settings.postProcess.albedoDesaturation, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Sun Warmth", &settings.postProcess.sunWarmth, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Sky Coolness", &settings.postProcess.skyCoolness, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Desat", &settings.postProcess.shadowDesaturation, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Split Tone", &settings.postProcess.splitToneStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Vignette", &settings.postProcess.vignetteStrength, 0.0f, 0.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Tint", &settings.postProcess.shadowTintStrength, 0.0f, 0.8f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Direct Sun", &settings.postProcess.directSunStrength, 0.0f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Sky Ambient", &settings.postProcess.skyAmbientStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Minimum Ambient", &settings.postProcess.minimumAmbient, 0.0f, 0.4f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Min Light", &settings.postProcess.shadowMinLight, 0.0f, 0.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Shadow Contrast", &settings.postProcess.shadowContrast, 0.5f, 2.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Block Light", &settings.postProcess.blockLightStrength, 0.0f, 2.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Fake Bounce", &settings.postProcess.fakeBounceStrength, 0.0f, 0.3f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Aerial Strength", &settings.postProcess.aerialStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Horizon Scatter", &settings.postProcess.horizonScatterStrength, 0.0f, 1.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Volumetric Fog Strength", &settings.volumetric.fogStrength, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Noise Dither", &settings.postProcess.noiseDitherStrength, 0.0f, 0.05f, "%.3f");
+        pipelineChanged |= ImGui::SliderFloat("CAS Sharpen", &settings.postProcess.sharpenStrength, 0.0f, 0.5f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSAO Radius", &settings.ssao.radius, 0.25f, 8.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &settings.ssao.strength, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("SSAO Samples", &settings.ssao.samples, 1, 64);
+        pipelineChanged |= ImGui::SliderFloat("SSAO History Weight", &settings.ssao.historyWeight, 0.0f, 0.98f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        pipelineChanged |= ImGui::SliderFloat("Gamma", &settings.postProcess.gamma, 1.0f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Saturation", &settings.postProcess.saturation, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Contrast", &settings.postProcess.contrast, 0.5f, 2.0f, "%.2f");
         ImGui::Text("Active Pipeline: %s", renderScene.activePipelineName());
         ImGui::Text("Pipeline Status: %s", renderScene.getPipelineStatus());
         if (pipelineChanged || syncRenderSceneSettings) {
-            render.setRenderPipelineSettings(pipeline);
-            // Sync to RenderScene via unified mapper
-            renderScene.setSettings(settings_mapper::toRenderSettings(pipeline));
+            renderScene.setSettings(settings);
         }
 
         ImGui::Separator();

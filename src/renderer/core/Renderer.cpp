@@ -27,14 +27,6 @@
 #include <vector>
 
 namespace {
-int floorDiv(const int value, const int divisor) {
-    int q = value / divisor;
-    const int r = value % divisor;
-    if (r != 0 && ((r > 0) != (divisor > 0))) {
-        --q;
-    }
-    return q;
-}
 
 struct MeshingCandidate {
     int64_t chunkKey = 0;
@@ -47,27 +39,6 @@ struct MeshingCandidate {
     std::shared_ptr<Chunk> neighborPosZ;
     std::shared_ptr<Chunk> neighborNegZ;
 };
-
-uint64_t hashCombine64(uint64_t seed, const uint64_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
-    return seed;
-}
-
-uint64_t meshFingerprint(const SubChunkMesh& mesh) {
-    uint64_t hash = 1469598103934665603ULL;
-    hash = hashCombine64(hash, mesh.vertexCount);
-    hash = hashCombine64(hash, mesh.cutoutVertexCount);
-    hash = hashCombine64(hash, mesh.cutoutDistanceVertexCount);
-    hash = hashCombine64(hash, mesh.transparentVertexCount);
-    hash = hashCombine64(hash, mesh.waterVertexCount);
-    hash = hashCombine64(hash, mesh.opaqueRange.generation);
-    hash = hashCombine64(hash, mesh.cutoutRange.generation);
-    hash = hashCombine64(hash, mesh.cutoutDistanceRange.generation);
-    hash = hashCombine64(hash, mesh.transparentRange.generation);
-    hash = hashCombine64(hash, mesh.waterRange.generation);
-    hash = hashCombine64(hash, mesh.hasBounds ? 1ULL : 0ULL);
-    return hash;
-}
 
 void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
@@ -131,13 +102,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_deferredPipeline->init(resourceMgr, &m_shadowRenderer);
 
     //m_uiShader = resourceMgr.getShader("ui");
-    // R5: Overlay shaders and meshes are only loaded when no external overlay renderer is injected
-    if (!m_overlayRenderer) {
-        m_outlineShader = resourceMgr.getShader("outline");
-        m_breakOverlayShader = resourceMgr.getShader("break_overlay");
-        initOutlineMesh();
-        initBreakOverlayMesh();
-    }
+    // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
     m_worldRenderBuffer.init();
     m_terrainCache.init();
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);

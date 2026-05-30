@@ -488,10 +488,7 @@ private:
     void syncTransparentBatches();
     void releaseStaleMdiAllocations(const World& world);
     void releaseMdiAllocation(const SubChunkGpuKey& key);
-    void initOutlineMesh();
-    void initBreakOverlayMesh();
-    void renderBlockOutline(const World& world, const BlockTargetRenderData& target);
-    void renderBlockBreakOverlay(const World& world, const BlockBreakRenderData& blockBreak);
+    // R8: Overlay methods removed — use BlockInteractionOverlayRenderer
 #ifdef MECRAFT_DEBUG
     bool isChunkInFrustum(const glm::vec3& chunkMin, const glm::vec3& chunkMax, FrustumPlane* culledPlane) const;
     void recordChunkCull(FrustumPlane plane, int count);
