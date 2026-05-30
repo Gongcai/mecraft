@@ -13,7 +13,7 @@
 #include <memory>
 
 // Forward declarations
-class Renderer;
+class RenderResourceHub;
 class ResourceMgr;
 class World;
 class Camera;
@@ -140,7 +140,7 @@ public:
     const RenderDebugService& debugService() const { return m_debugService; }
 
     // R8: Initialize shared resources from Renderer (terrain, sky, overlay, debug, etc.)
-    void initFromRenderer(Renderer* renderer);
+    void initFromRenderer(RenderResourceHub* renderer);
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().
@@ -196,7 +196,7 @@ private:
     bool m_renderLocalPlayerModel = false;
 
     // Renderer reference (for shared resource initialization)
-    Renderer* m_sourceRenderer = nullptr;
+    RenderResourceHub* m_sourceRenderer = nullptr;
 
     // Pipeline implementations (Phase 9)
     std::unique_ptr<ForwardPipeline> m_forwardPipeline;

@@ -20,7 +20,7 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/util/PlayerQuery.h"
 #include "../world/World.h"
-#include "../renderer/core/Renderer.h"
+#include "../renderer/core/RenderResourceHub.h"
 #include "../renderer/core/RenderScene.h"
 #include "../renderer/renderers/PostProcessRenderer.h"
 class FirstPersonHeldItemRenderer;
@@ -57,7 +57,7 @@ public:
     void render(ecs::GameplayRegistry& registry,
                 World &world,
                 Camera &camera,
-                Renderer &render,
+                RenderResourceHub &render,
                 RenderScene& renderScene,
                 PostProcessRenderer& postProcess,
                 UIRenderer& uiRenderer,
@@ -66,7 +66,7 @@ private:
     void showPlayerStats(ecs::GameplayRegistry& registry);
     void showWorldStats(World& world, ecs::GameplayRegistry& registry);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats(World& world, Renderer &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats);
+    void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);

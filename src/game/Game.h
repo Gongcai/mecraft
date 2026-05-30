@@ -14,7 +14,7 @@
 #include "../engine/platform/Window.h"
 #include "../engine/platform/Time.h"
 
-#include "../renderer/core/Renderer.h"
+#include "../renderer/core/RenderResourceHub.h"
 #include "../renderer/core/RenderScene.h"
 #include "../renderer/renderers/DropRenderer.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
@@ -102,7 +102,7 @@ private:
 
     // Renderers and state (session-level but currently owned by Game)
     GameStateMachine m_stateMachine;
-    Renderer      m_renderer;
+    RenderResourceHub      m_renderer;
     RenderScene   m_renderScene;
     DropRenderer  m_dropRenderer;
     FirstPersonHeldItemRenderer m_firstPersonHeldItemRenderer;

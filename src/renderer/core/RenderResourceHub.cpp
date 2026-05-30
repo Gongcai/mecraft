@@ -2,7 +2,7 @@
 // Created by Caiwe on 2026/3/21.
 //
 
-#include "Renderer.h"
+#include "RenderResourceHub.h"
 
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
@@ -82,11 +82,11 @@ std::string resolveAtmosphereFinalLutPath() {
 }
 }
 
-Renderer::~Renderer() {
+RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-void Renderer::init(ResourceMgr &resourceMgr) {
+void RenderResourceHub::init(ResourceMgr &resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
     m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
@@ -161,7 +161,7 @@ void Renderer::init(ResourceMgr &resourceMgr) {
     m_meshingService.start(&m_threadPool);
 }
 
-void Renderer::shutdown() {
+void RenderResourceHub::shutdown() {
 #ifdef MECRAFT_DEBUG
     if (m_debugService) {
         m_debugService->shutdown();
@@ -224,7 +224,7 @@ void Renderer::shutdown() {
     m_deferredFrameActive = false;
 }
 
-void Renderer::setMeshingSubmitBudget(const int budget) {
+void RenderResourceHub::setMeshingSubmitBudget(const int budget) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->setMeshingSubmitBudget(budget);
         return;
@@ -239,7 +239,7 @@ void Renderer::setMeshingSubmitBudget(const int budget) {
                                      m_meshingDrainVertexBudget);
 }
 
-void Renderer::setRegionChunkSize(const int chunkSize) {
+void RenderResourceHub::setRegionChunkSize(const int chunkSize) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->setRegionChunkSize(chunkSize);
         return;
@@ -248,7 +248,7 @@ void Renderer::setRegionChunkSize(const int chunkSize) {
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
 }
 
-void Renderer::setTerrainStreamingService(TerrainStreamingService* svc) {
+void RenderResourceHub::setTerrainStreamingService(TerrainStreamingService* svc) {
     m_terrainStreamingService = svc;
     if (svc) {
         // Update TerrainRenderer to use the service's cache
@@ -259,67 +259,67 @@ void Renderer::setTerrainStreamingService(TerrainStreamingService* svc) {
     }
 }
 
-void Renderer::setAtlasAnisotropy(const float anisotropy) {
+void RenderResourceHub::setAtlasAnisotropy(const float anisotropy) {
     if (m_resourceMgr == nullptr) {
         return;
     }
     m_resourceMgr->setAtlasAnisotropy(anisotropy);
 }
 
-void Renderer::setFogEnabled(const bool enabled) {
+void RenderResourceHub::setFogEnabled(const bool enabled) {
     m_fogSettings.enabled = enabled;
 }
 
-void Renderer::setFogMode(const FogMode mode) {
+void RenderResourceHub::setFogMode(const FogMode mode) {
     m_fogSettings.mode = mode;
 }
 
-void Renderer::setFogColor(const glm::vec3& color) {
+void RenderResourceHub::setFogColor(const glm::vec3& color) {
     m_fogSettings.color.x = std::clamp(color.x, 0.0f, 1.0f);
     m_fogSettings.color.y = std::clamp(color.y, 0.0f, 1.0f);
     m_fogSettings.color.z = std::clamp(color.z, 0.0f, 1.0f);
 }
 
-void Renderer::setFogLinearDistances(const float startDistance, const float endDistance) {
+void RenderResourceHub::setFogLinearDistances(const float startDistance, const float endDistance) {
     const float startClamped = std::max(0.0f, startDistance);
     const float endClamped = std::max(startClamped + 0.1f, endDistance);
     m_fogSettings.startDistance = startClamped;
     m_fogSettings.endDistance = endClamped;
 }
 
-void Renderer::setFogDensity(const float density) {
+void RenderResourceHub::setFogDensity(const float density) {
     m_fogSettings.density = std::max(0.0001f, density);
 }
 
-void Renderer::setFogAutoDistanceEnabled(const bool enabled) {
+void RenderResourceHub::setFogAutoDistanceEnabled(const bool enabled) {
     m_fogSettings.autoDistanceByRenderDistance = enabled;
 }
 
-void Renderer::setFogAutoEndOffsetChunks(const float offsetChunks) {
+void RenderResourceHub::setFogAutoEndOffsetChunks(const float offsetChunks) {
     m_fogSettings.autoEndOffsetChunks = std::clamp(offsetChunks, -2.0f, 1.0f);
 }
 
-void Renderer::setFogAutoFadeWidthChunks(const float fadeWidthChunks) {
+void RenderResourceHub::setFogAutoFadeWidthChunks(const float fadeWidthChunks) {
     m_fogSettings.autoFadeWidthChunks = std::clamp(fadeWidthChunks, 0.25f, 4.0f);
 }
 
-Renderer::FogSettings Renderer::getFogSettings() const {
+RenderResourceHub::FogSettings RenderResourceHub::getFogSettings() const {
     return m_fogSettings;
 }
 
-void Renderer::setHeldBlockLightValue(const int value) {
+void RenderResourceHub::setHeldBlockLightValue(const int value) {
     m_heldBlockLightValue = std::clamp(value, 0, 15);
 }
 
-void Renderer::setDebugLightMode(const int mode) {
+void RenderResourceHub::setDebugLightMode(const int mode) {
     m_debugLightMode = std::clamp(mode, 0, 3);
 }
 
-int Renderer::getDebugLightMode() const {
+int RenderResourceHub::getDebugLightMode() const {
     return m_debugLightMode;
 }
 
-void Renderer::setSettings(const RenderSettings& settings) {
+void RenderResourceHub::setSettings(const RenderSettings& settings) {
     m_settings = settings;
     // Shadow clamps
     m_settings.shadow.resolution = std::clamp(m_settings.shadow.resolution, 256, 8192);
@@ -392,18 +392,18 @@ void Renderer::setSettings(const RenderSettings& settings) {
     ChunkMesher::setDebugDisableGreedyMeshing(m_settings.debug.disableGreedyMeshing);
 }
 
-const RenderSettings& Renderer::getSettings() const {
+const RenderSettings& RenderResourceHub::getSettings() const {
     return m_settings;
 }
 
-float Renderer::getAtlasAnisotropy() const {
+float RenderResourceHub::getAtlasAnisotropy() const {
     if (m_resourceMgr == nullptr) {
         return 1.0f;
     }
     return m_resourceMgr->getAtlasAnisotropy();
 }
 
-float Renderer::getAtlasMaxAnisotropy() const {
+float RenderResourceHub::getAtlasMaxAnisotropy() const {
     if (m_resourceMgr == nullptr) {
         return 1.0f;
     }
@@ -411,24 +411,24 @@ float Renderer::getAtlasMaxAnisotropy() const {
 }
 
 #ifdef MECRAFT_DEBUG
-void Renderer::setChunkCullingDebugEnabled(const bool enabled) {
+void RenderResourceHub::setChunkCullingDebugEnabled(const bool enabled) {
     m_chunkCullingDebugEnabled = enabled;
     m_terrainRenderer.setChunkCullingDebugEnabled(enabled);
 }
 
-int Renderer::getMeshingSubmitBudget() const {
+int RenderResourceHub::getMeshingSubmitBudget() const {
     return m_terrainStreamingService ? m_terrainStreamingService->meshingSubmitBudget() : m_meshingSubmitBudget;
 }
 
-int Renderer::getRegionChunkSize() const {
+int RenderResourceHub::getRegionChunkSize() const {
     return m_terrainStreamingService ? m_terrainStreamingService->regionChunkSize() : m_regionChunkSize;
 }
 
-bool Renderer::isChunkCullingDebugEnabled() const {
+bool RenderResourceHub::isChunkCullingDebugEnabled() const {
     return m_chunkCullingDebugEnabled;
 }
 
-Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
+RenderResourceHub::MeshingFrameStats RenderResourceHub::getMeshingFrameStats() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingFrameStats();
     }
@@ -451,7 +451,7 @@ Renderer::MeshingFrameStats Renderer::getMeshingFrameStats() const {
     return stats;
 }
 
-CullingFrameStats Renderer::getCullingFrameStats() const {
+CullingFrameStats RenderResourceHub::getCullingFrameStats() const {
     if (m_debugService) {
         return m_debugService->getCullingFrameStats();
     }
@@ -467,14 +467,14 @@ CullingFrameStats Renderer::getCullingFrameStats() const {
     return stats;
 }
 
-GpuFrameStats Renderer::getGpuFrameStats() const {
+GpuFrameStats RenderResourceHub::getGpuFrameStats() const {
     if (m_debugService) {
         return m_debugService->getGpuFrameStats();
     }
     return m_gpuFrameStats;
 }
 
-RenderWorkStats Renderer::getRenderWorkStats() const {
+RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     if (m_debugService) {
         return m_debugService->getRenderWorkStats();
     }
@@ -514,7 +514,7 @@ RenderWorkStats Renderer::getRenderWorkStats() const {
     return stats;
 }
 
-void Renderer::setGpuTimerEnabled(const bool enabled) {
+void RenderResourceHub::setGpuTimerEnabled(const bool enabled) {
     if (m_debugService) {
         m_debugService->setGpuTimerEnabled(enabled);
         return;
@@ -522,53 +522,53 @@ void Renderer::setGpuTimerEnabled(const bool enabled) {
     m_gpuTimerEnabled = enabled;
 }
 
-bool Renderer::isGpuTimerEnabled() const {
+bool RenderResourceHub::isGpuTimerEnabled() const {
     if (m_debugService) {
         return m_debugService->isGpuTimerEnabled();
     }
     return m_gpuTimerEnabled;
 }
 
-void Renderer::setCutoutDistanceLimitEnabled(const bool enabled) {
+void RenderResourceHub::setCutoutDistanceLimitEnabled(const bool enabled) {
     m_cutoutDistanceLimitEnabled = enabled;
     m_terrainRenderer.setCutoutDistanceLimitEnabled(enabled);
 }
 
-bool Renderer::isCutoutDistanceLimitEnabled() const {
+bool RenderResourceHub::isCutoutDistanceLimitEnabled() const {
     return m_cutoutDistanceLimitEnabled;
 }
 
-void Renderer::setCutoutRenderDistanceChunks(const float distanceChunks) {
+void RenderResourceHub::setCutoutRenderDistanceChunks(const float distanceChunks) {
     m_cutoutRenderDistanceChunks = std::clamp(distanceChunks, 1.0f, 32.0f);
     m_terrainRenderer.setCutoutRenderDistanceChunks(m_cutoutRenderDistanceChunks);
 }
 
-float Renderer::getCutoutRenderDistanceChunks() const {
+float RenderResourceHub::getCutoutRenderDistanceChunks() const {
     return m_cutoutRenderDistanceChunks;
 }
 
-const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingSubmittedHistory() const {
+const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>& RenderResourceHub::getMeshingSubmittedHistory() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingSubmittedHistory();
     }
     return m_meshingSubmittedHistory;
 }
 
-const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingCompletedHistory() const {
+const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>& RenderResourceHub::getMeshingCompletedHistory() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingCompletedHistory();
     }
     return m_meshingCompletedHistory;
 }
 
-const std::array<float, Renderer::MESHING_HISTORY_SIZE>& Renderer::getMeshingInFlightHistory() const {
+const std::array<float, RenderResourceHub::MESHING_HISTORY_SIZE>& RenderResourceHub::getMeshingInFlightHistory() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingInFlightHistory();
     }
     return m_meshingInFlightHistory;
 }
 
-size_t Renderer::getMeshingHistoryCount() const {
+size_t RenderResourceHub::getMeshingHistoryCount() const {
     if (m_terrainStreamingService) {
         return m_terrainStreamingService->getMeshingHistoryCount();
     }
@@ -576,7 +576,7 @@ size_t Renderer::getMeshingHistoryCount() const {
 }
 #endif
 
-void Renderer::beginFrame(const Camera &camera, const Window &window) {
+void RenderResourceHub::beginFrame(const Camera &camera, const Window &window) {
     ++m_frameCounter;
     // Use service's cache if available, otherwise use legacy cache
     if (m_terrainStreamingService) {
@@ -624,7 +624,7 @@ void Renderer::beginFrame(const Camera &camera, const Window &window) {
     m_worldBufferUploadMsThisFrame = 0.0;
 }
 
-Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) const {
+RenderResourceHub::RenderFrameData RenderResourceHub::buildRenderFrameData(const World& world) const {
     RenderFrameData frame;
     frame.view = m_view;
     frame.projection = m_projection;
@@ -776,30 +776,30 @@ Renderer::RenderFrameData Renderer::buildRenderFrameData(const World& world) con
     return frame;
 }
 
-void Renderer::renderSkyCapturePass(const World& /*world*/) {
+void RenderResourceHub::renderSkyCapturePass(const World& /*world*/) {
     // Phase 7a: Delegated to SkyCapturePass::execute()
 }
 
-void Renderer::renderFullscreen(Shader& shader) const {
+void RenderResourceHub::renderFullscreen(Shader& shader) const {
     shader.use();
     glBindVertexArray(m_deferredTargets.fullscreenVao());
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 }
 
-glm::vec3 Renderer::currentShadowLightDirection(const World& world, bool* moonShadowActive) const {
+glm::vec3 RenderResourceHub::currentShadowLightDirection(const World& world, bool* moonShadowActive) const {
     const GameplaySkyRenderer::SkyColors skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
     // Use a temporary ShadowRenderer to compute light direction without modifying state.
     shadow::ShadowRenderer temp;
     return temp.computeLightDirection(skyColors, moonShadowActive);
 }
 
-void Renderer::captureCurrentFramebuffer() {
+void RenderResourceHub::captureCurrentFramebuffer() {
     glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_capturedFramebuffer);
     glGetIntegerv(GL_VIEWPORT, m_capturedViewport);
 }
 
-void Renderer::restoreCapturedFramebufferViewport(const Window& window) {
+void RenderResourceHub::restoreCapturedFramebufferViewport(const Window& window) {
     const int fallbackWidth = std::max(1, window.getWidth());
     const int fallbackHeight = std::max(1, window.getHeight());
     const int width = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : fallbackWidth;
@@ -807,7 +807,7 @@ void Renderer::restoreCapturedFramebufferViewport(const Window& window) {
     m_deferredTargets.bindDefaultLike(m_capturedFramebuffer, width, height);
 }
 
-void Renderer::submitMeshingJobs(const World& world) {
+void RenderResourceHub::submitMeshingJobs(const World& world) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->submitMeshingJobs(world, m_cameraPos);
         return;
@@ -817,7 +817,7 @@ void Renderer::submitMeshingJobs(const World& world) {
     syncTerrainCacheFrameStats();
 }
 
-void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
+void RenderResourceHub::renderOpaqueChunksAndCollectPasses(const World& world,
                                                   std::vector<ChunkRenderEntry>& cutoutEntries,
                                                   std::vector<ChunkRenderEntry>& transparentEntries,
                                                   const bool frustumCull,
@@ -1100,7 +1100,7 @@ void Renderer::renderOpaqueChunksAndCollectPasses(const World& world,
     }
 }
 
-void Renderer::syncChunkRenderColumns(const World& world) {
+void RenderResourceHub::syncChunkRenderColumns(const World& world) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->terrainCache().syncChunkRenderColumns(world);
     } else {
@@ -1109,7 +1109,7 @@ void Renderer::syncChunkRenderColumns(const World& world) {
     m_chunkRenderColumns.clear();
 }
 
-void Renderer::releaseMdiAllocation(const SubChunkGpuKey& key) {
+void RenderResourceHub::releaseMdiAllocation(const SubChunkGpuKey& key) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->releaseMdiAllocation(key);
         return;
@@ -1118,7 +1118,7 @@ void Renderer::releaseMdiAllocation(const SubChunkGpuKey& key) {
     m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();
 }
 
-void Renderer::releaseStaleMdiAllocations(const World& world) {
+void RenderResourceHub::releaseStaleMdiAllocations(const World& world) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->releaseStaleMdiAllocations(world);
         return;
@@ -1127,7 +1127,7 @@ void Renderer::releaseStaleMdiAllocations(const World& world) {
     m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();
 }
 
-void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
+void RenderResourceHub::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->terrainCache().refreshChunkRenderColumnCache(column);
     } else {
@@ -1135,7 +1135,7 @@ void Renderer::refreshChunkRenderColumnCache(ChunkRenderColumnCache& column) {
     }
 }
 
-void Renderer::syncTerrainCacheFrameStats() {
+void RenderResourceHub::syncTerrainCacheFrameStats() {
     // When service is injected, stats are accessed through the service's cache
     if (m_terrainStreamingService) {
         return;
@@ -1159,7 +1159,7 @@ void Renderer::syncTerrainCacheFrameStats() {
     m_worldBufferExpandCountThisFrame = static_cast<size_t>(m_terrainCache.worldBufferExpandCountThisFrame());
 }
 
-void Renderer::syncTerrainRendererFrameStats() {
+void RenderResourceHub::syncTerrainRendererFrameStats() {
 #ifdef MECRAFT_DEBUG
     m_regionTestsThisFrame = m_terrainRenderer.regionTestsThisFrame();
     m_regionPassedThisFrame = m_terrainRenderer.regionPassedThisFrame();
@@ -1176,7 +1176,7 @@ void Renderer::syncTerrainRendererFrameStats() {
 #endif
 }
 
-void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {
+void RenderResourceHub::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries) {
     if (m_useMultiDrawIndirect) {
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
@@ -1231,24 +1231,24 @@ void Renderer::renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEnt
     m_chunkShader->setInt("uForceBaseLod", 0);
 }
 
-void Renderer::addTransparentBatch(const GpuMeshRange& range,
+void RenderResourceHub::addTransparentBatch(const GpuMeshRange& range,
                                    const float distanceSq,
                                    const TransparentBatchKind kind) {
     m_terrainCache.addTransparentBatch(range, distanceSq, kind);
 }
 
-void Renderer::clearTransparentBatches() {
+void RenderResourceHub::clearTransparentBatches() {
     m_terrainCache.clearTransparentBatches();
     m_deferredTransparentBatch.clear();
     m_transparentPassPlan.clear();
 }
 
-void Renderer::syncTransparentBatches() {
+void RenderResourceHub::syncTransparentBatches() {
     m_deferredTransparentBatch = m_terrainCache.deferredTransparentBatch();
     m_transparentPassPlan = m_terrainCache.transparentPassPlan();
 }
 
-void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
+void RenderResourceHub::renderTransparentChunks(const std::vector<ChunkRenderEntry>& transparentEntries) {
     if (m_useMultiDrawIndirect) {
         if (!m_transparentPassPlan.hasAny()) return;
 
@@ -1343,11 +1343,11 @@ void Renderer::renderTransparentChunks(const std::vector<ChunkRenderEntry>& tran
 
 // Transparent shadow pass: writes water/glass depth to DepthAll + color to Color0/Color1.
 // This is the Mecraft CSM equivalent of DerivativeMain shadowtex0 + shadowcolor0/1.
-void Renderer::renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& /*transparentEntries*/) {
+void RenderResourceHub::renderTransparentShadowChunks(const std::vector<ChunkRenderEntry>& /*transparentEntries*/) {
     // Phase 7b: Delegated to ShadowPass (inline in execute())
 }
 
-void Renderer::endFrame(const Window &window) {
+void RenderResourceHub::endFrame(const Window &window) {
     (void)window;
     if (m_currentFrameDataValid) {
         m_previousFrameData = m_currentFrameData;
@@ -1359,7 +1359,7 @@ void Renderer::endFrame(const Window &window) {
     m_waterRenderedBeforeTemporal = false;
 }
 
-void Renderer::recordMeshingHistory() {
+void RenderResourceHub::recordMeshingHistory() {
 #ifdef MECRAFT_DEBUG
     if (m_terrainStreamingService) {
         m_terrainStreamingService->endFrame();
@@ -1385,7 +1385,7 @@ void Renderer::recordMeshingHistory() {
 #endif
 }
 
-void Renderer::drainMeshingResults(const World& world) {
+void RenderResourceHub::drainMeshingResults(const World& world) {
     if (m_terrainStreamingService) {
         m_terrainStreamingService->drainMeshingResults(world);
         return;
@@ -1397,11 +1397,11 @@ void Renderer::drainMeshingResults(const World& world) {
 }
 
 #ifdef MECRAFT_DEBUG
-bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
+bool RenderResourceHub::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
     return isChunkInFrustum(chunkMin, chunkMax, nullptr);
 }
 
-void Renderer::recordChunkCull(const FrustumPlane plane, const int count) {
+void RenderResourceHub::recordChunkCull(const FrustumPlane plane, const int count) {
     if (!m_chunkCullingDebugEnabled || count <= 0) {
         return;
     }
@@ -1413,7 +1413,7 @@ void Renderer::recordChunkCull(const FrustumPlane plane, const int count) {
     }
 }
 
-void Renderer::initGpuTimers() {
+void RenderResourceHub::initGpuTimers() {
     if (m_gpuTimersInitialized) {
         return;
     }
@@ -1432,7 +1432,7 @@ void Renderer::initGpuTimers() {
     m_gpuTimersInitialized = true;
 }
 
-void Renderer::shutdownGpuTimers() {
+void RenderResourceHub::shutdownGpuTimers() {
     if (!m_gpuTimersInitialized) {
         return;
     }
@@ -1452,7 +1452,7 @@ void Renderer::shutdownGpuTimers() {
     m_gpuFrameStats.valid = false;
 }
 
-void Renderer::beginGpuTimerFrame() {
+void RenderResourceHub::beginGpuTimerFrame() {
     if (m_debugService) {
         m_debugService->beginFrame();
         return;
@@ -1531,7 +1531,7 @@ void Renderer::beginGpuTimerFrame() {
     m_gpuTimerIssued[m_gpuTimerWriteIndex].fill(false);
 }
 
-void Renderer::beginGpuTimer(const GpuTimerPass pass) {
+void RenderResourceHub::beginGpuTimer(const GpuTimerPass pass) {
     if (m_debugService) {
         m_debugService->beginGpuTimer(pass);
         return;
@@ -1546,7 +1546,7 @@ void Renderer::beginGpuTimer(const GpuTimerPass pass) {
     m_activeGpuTimerPass = pass;
 }
 
-void Renderer::endGpuTimer(const GpuTimerPass pass) {
+void RenderResourceHub::endGpuTimer(const GpuTimerPass pass) {
     if (m_debugService) {
         m_debugService->endGpuTimer(pass);
         return;
@@ -1560,9 +1560,9 @@ void Renderer::endGpuTimer(const GpuTimerPass pass) {
     m_gpuTimerActive = false;
 }
 
-bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax, FrustumPlane* culledPlane) const {
+bool RenderResourceHub::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax, FrustumPlane* culledPlane) const {
 #else
-bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
+bool RenderResourceHub::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chunkMax) const {
     constexpr FrustumPlane* culledPlane = nullptr;
 #endif
     for (const Plane& plane : m_frustumPlanes) {
@@ -1591,11 +1591,11 @@ bool Renderer::isChunkInFrustum(const glm::vec3 &chunkMin, const glm::vec3 &chun
     return true;
 }
 
-int Renderer::getDrawCallCount() const {
+int RenderResourceHub::getDrawCallCount() const {
     return drawCallCount;
 }
 
-int Renderer::getGlSubmitCount() const {
+int RenderResourceHub::getGlSubmitCount() const {
     if (m_useMultiDrawIndirect) {
         return m_worldRenderBuffer.glSubmitCount();
     }

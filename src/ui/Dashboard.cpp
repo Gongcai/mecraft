@@ -50,7 +50,7 @@ void Dashboard::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* rend
 void Dashboard::render(ecs::GameplayRegistry &registry,
                        World &world,
                        Camera &camera,
-                       Renderer &render,
+                       RenderResourceHub &render,
                        RenderScene& renderScene,
                        PostProcessRenderer& postProcess,
                        UIRenderer& uiRenderer,
@@ -193,7 +193,7 @@ void Dashboard::showCameraStats( Camera &camera) {
     }
 }
 
-void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats) {
+void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
@@ -1083,7 +1083,7 @@ void Dashboard::showPerformanceStats(World& world, Renderer &render, RenderScene
             renderScene.setSettings(settings);
         }
 
-        const Renderer::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
+        const RenderResourceHub::MeshingFrameStats meshingStats = render.getMeshingFrameStats();
         ImGui::Text("Meshing Submitted: %d / frame", meshingStats.submitted);
         ImGui::Text("Meshing Completed: %d / frame", meshingStats.completed);
         ImGui::Text("Meshing In-Flight: %d", meshingStats.inFlight);

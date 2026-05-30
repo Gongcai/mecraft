@@ -116,7 +116,7 @@ set(SRC_RENDERER
 
         # Core framework
         src/renderer/core/Shader.cpp
-        src/renderer/core/Renderer.cpp
+        src/renderer/core/RenderResourceHub.cpp
         src/renderer/core/RenderScene.cpp
         src/renderer/core/DeferredPipeline.cpp
         src/renderer/core/ForwardPipeline.cpp

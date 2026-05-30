@@ -1,5 +1,5 @@
 #include "RenderScene.h"
-#include "Renderer.h"
+#include "RenderResourceHub.h"
 #include "SettingsMapper.h"
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
@@ -279,7 +279,7 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
     return m_lastFrameOutput;
 }
 
-void RenderScene::initFromRenderer(Renderer* renderer) {
+void RenderScene::initFromRenderer(RenderResourceHub* renderer) {
     m_sourceRenderer = renderer;
 
     // Phase 9/10: Populate shared resources from legacy renderer

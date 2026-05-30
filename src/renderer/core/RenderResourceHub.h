@@ -10,17 +10,7 @@
 #include "engine/platform/Window.h"
 #include "../mesh/ChunkMeshingService.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../passes/SsaoPass.h"
-#include "../passes/VelocityPass.h"
-#include "../passes/ReflectionPass.h"
-#include "../passes/TemporalResolvePass.h"
-#include "../passes/MotionBlurPass.h"
-#include "../passes/DepthOfFieldPass.h"
-#include "../passes/DeferredLightingPass.h"
-#include "../passes/CloudPass.h"
-#include "../passes/SceneCompositePass.h"
-#include "../passes/VolumetricPass.h"
-#include "../passes/SkyCapturePass.h"
+
 #include "../passes/GBufferPass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
@@ -53,7 +43,7 @@ namespace shadow { class ShadowCasterCuller; }
 
 // BlockTargetRenderData and BlockBreakRenderData are now defined in BlockInteractionOverlayRenderer.h
 
-class Renderer {
+class RenderResourceHub {
 public:
     enum class FogMode : int {
         Linear = 0,
@@ -136,7 +126,7 @@ public:
     static constexpr size_t MESHING_HISTORY_SIZE = TerrainStreamingService::MESHING_HISTORY_SIZE;
 #endif
 
-    ~Renderer();
+    ~RenderResourceHub();
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     // R8: Rendering methods removed — use RenderScene::renderFrame() with DeferredPipeline/ForwardPipeline

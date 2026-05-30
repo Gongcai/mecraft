@@ -2,7 +2,7 @@
 #define MECRAFT_SETTINGS_MAPPER_H
 
 #include "RenderSettings.h"
-#include "Renderer.h"
+#include "RenderResourceHub.h"
 
 /// Utility to sync Renderer-owned settings into the unified RenderSettings struct.
 /// Fog settings are managed separately via Renderer::FogSettings (not part of RenderSettings),
@@ -10,7 +10,7 @@
 namespace settings_mapper {
 
 /// Sync fog settings from Renderer::FogSettings to RenderSettings::FogSettings.
-inline void syncFogToRenderSettings(const Renderer::FogSettings& src, FogSettings& dst) {
+inline void syncFogToRenderSettings(const RenderResourceHub::FogSettings& src, FogSettings& dst) {
     dst.enabled = src.enabled;
     dst.mode = static_cast<int>(src.mode);
     dst.color = src.color;
