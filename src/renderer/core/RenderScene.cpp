@@ -141,7 +141,11 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
         // Legacy path (Phase 1-8 compatibility)
         // This is the active rendering path until Phase 10 migrates orchestration.
         renderer::debug::ScopedDebugGroup frameGroup("Frame.LegacyPipeline");
-        m_legacyRenderer->render(world, camera, window, target, blockBreak);
+        m_legacyRenderer->renderOpaqueAndCutout(world, camera, window);
+        if (!m_legacyRenderer->isDeferredFrameActive()) {
+            m_legacyRenderer->renderForwardSceneObjects(world, camera, window);
+        }
+        m_legacyRenderer->renderTransparentAndOverlays(world, target, blockBreak, window);
         syncFrameOutputFromLegacyRenderer();
     }
 }

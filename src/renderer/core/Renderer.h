@@ -275,7 +275,6 @@ public:
     ~Renderer();
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void render(const World& world, const Camera &camera, const Window &window, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak);
     void renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window);
     void renderTransparentAndOverlays(const World& world, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak, const Window& window);
     void renderForwardSceneObjects(const World& world, const Camera& camera, const Window& window);

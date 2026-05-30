@@ -260,14 +260,6 @@ void Renderer::shutdown() {
     m_deferredFrameActive = false;
 }
 
-void Renderer::render(const World& world, const Camera &camera, const Window &window, const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
-    renderOpaqueAndCutout(world, camera, window);
-    if (!m_deferredFrameActive) {
-        renderForwardSceneObjects(world, camera, window);
-    }
-    renderTransparentAndOverlays(world, target, blockBreak, window);
-}
-
 void Renderer::renderOpaqueAndCutout(const World& world, const Camera& camera, const Window& window) {
     beginFrame(camera, window);
     m_currentFrameData = buildRenderFrameData(world);
