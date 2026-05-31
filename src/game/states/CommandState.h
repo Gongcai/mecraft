@@ -2,29 +2,19 @@
 #define MECRAFT_COMMANDSTATE_H
 
 #include <string>
-#include <sstream>
 #include <vector>
+#include <cstdlib>
 
 #include "IGameState.h"
 #include "GameStateMachine.h"
-#include "engine//input/InputContextManager.h"
 #include "StateDependencies.h"
+#include "engine/input/InputContextManager.h"
 #include "../../ui/widgets/KeyboardInputBox.h"
 #include "../../ui/core/UIRenderer.h"
-#include "../../world/World.h"
-#include "../../world/block/Block.h"
-#include "../../world/DropSystem.h"
-#include "../../particle/ParticleSystem.h"
-#include "../../audio/AudioEngine.h"
-#include "../../ecs/GameplayRegistry.h"
-#include "../../ecs/util/PlayerQuery.h"
-#include "../../ecs/entity/MobModelFactory.h"
-#include "../../locale/LocaleManager.h"
-#include <cstdlib>
-namespace physics {
-class PhysicsSystem;
-}
 
+/// G6: CommandState uses CommandStateContext — only command-relevant dependencies.
+/// Creates child states (CreativeModeState, GameplayState) via StateDependencies
+/// which is stored internally for backward compatibility.
 class CommandState : public IGameState {
 public:
     explicit CommandState(StateDependencies deps)
@@ -89,74 +79,9 @@ public:
     }
 
 private:
-    bool executeCommand(const std::string& command) {
-        if (command.empty() || command[0] != '/') {
-            return false;
-        }
-
-        std::istringstream iss(command.substr(1));
-        std::string primary;
-        iss >> primary;
-
-        if (primary == "gamemode") {
-            std::string secondary;
-            iss >> secondary;
-            if (secondary == "creative" || secondary == "1") {
-                switchToCreativeMode();
-                return true;
-            } else if (secondary == "survival" || secondary == "0") {
-                switchToSurvivalMode();
-                return true;
-            } else {
-                m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_gamemode"));
-                return false;
-            }
-        }
-        if (primary == "time") {
-            std::string secondary;
-            iss >> secondary;
-            if (secondary == "set") {
-                std::string valueStr;
-                iss >> valueStr;
-                if (valueStr.empty()) {
-                    m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
-                    return false;
-                }
-                char* endPtr = nullptr;
-                const float value = std::strtof(valueStr.c_str(), &endPtr);
-                if (endPtr == valueStr.c_str() || value < 0.0f || value > 1200.0f) {
-                    m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
-                    return false;
-                }
-                m_deps.world.getDayNightSystem().setTimeOfDay(value);
-                m_deps.uiRenderer.appendCommandLine(m_deps.localeManager.tr("time_set_to") + std::to_string(static_cast<int>(value)));
-                return false;
-            } else {
-                m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
-                return false;
-            }
-        }
-        if (primary == "spawn") {
-            std::string mobType;
-            iss >> mobType;
-            if (mobType == "zombie") {
-                ecs::PlayerQuery query(m_deps.ecsRegistry);
-                glm::vec3 playerPos = query.getPosition();
-                ecs::MobModelFactory::createZombie(m_deps.ecsRegistry, playerPos);
-                m_deps.uiRenderer.appendCommandLine(m_deps.localeManager.tr("spawned_zombie"));
-                return false;
-            }
-            m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("unknown_mob") + mobType);
-            return false;
-        }
-        m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("unknown_command") + primary);
-        return false;
-
-
-    }
+    bool executeCommand(const std::string& command);
 
     void switchToCreativeMode();
-
     void switchToSurvivalMode();
 
     void commitCommandToHistory(const std::string& command) {
@@ -217,7 +142,7 @@ private:
         return s_history;
     }
 
-    StateDependencies m_deps;
+    StateDependencies m_deps;  // Full deps needed for child state creation
     KeyboardInputBox m_inputBox;
     std::string m_historyDraft;
     int m_historyCursor = -1;

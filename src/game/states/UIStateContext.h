@@ -1,7 +1,8 @@
 #ifndef MECRAFT_UI_STATE_CONTEXT_H
 #define MECRAFT_UI_STATE_CONTEXT_H
 
-class GameStateMachine;
+#include "GameStateMachine.h"
+
 class InputContextManager;
 class InputManager;
 class UIRenderer;

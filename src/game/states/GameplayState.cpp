@@ -8,6 +8,7 @@
 #include "../inventory/CreativeInventoryState.h"
 #include "../inventory/InventoryState.h"
 #include "UIState.h"
+#include "UIStateContext.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/components/Components.h"
 #include "../../ecs/util/GameplayRuntimeContext.h"
@@ -82,7 +83,9 @@ bool GameplayState::handleMenuTransition()
         return false;
     }
 
-    m_deps.fsm.pushState(std::make_unique<UIState>(m_deps));
+    // G6: Create UIState with narrow UIStateContext
+    UIStateContext uiCtx{m_deps.fsm, m_deps.context, m_deps.input, m_deps.uiRenderer, m_deps.localeManager};
+    m_deps.fsm.pushState(std::make_unique<UIState>(uiCtx));
     return true;
 }
 

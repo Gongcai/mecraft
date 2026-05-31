@@ -2,6 +2,7 @@
 #define MECRAFT_STATE_DEPENDENCIES_H
 
 #include <string>
+#include "../../world/DropSystem.h"
 
 class GameStateMachine;
 class Inventory;
@@ -11,7 +12,6 @@ class UIRenderer;
 class World;
 class AudioEngine;
 class ParticleSystem;
-class DropSystem;
 
 namespace physics {
 class PhysicsSystem;
@@ -23,6 +23,8 @@ class GameplayRegistry;
 
 class LocaleManager;
 
+/// Legacy state dependencies (kept for backward compatibility).
+/// New states should use narrow context structs (GameplayStateContext, UIStateContext, etc.)
 struct StateDependencies {
     GameStateMachine& fsm;
     Inventory& inventory;
@@ -37,6 +39,7 @@ struct StateDependencies {
     DropSystem& dropSystem;
     ecs::GameplayRegistry& ecsRegistry;
     const LocaleManager& localeManager;
+
 };
 
 #endif // MECRAFT_STATE_DEPENDENCIES_H

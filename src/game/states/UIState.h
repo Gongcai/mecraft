@@ -2,71 +2,69 @@
 #define MECRAFT_UISTATE_H
 
 #include "IGameState.h"
-#include "GameStateMachine.h"
-#include "engine/input/InputContextManager.h"
-#include "StateDependencies.h"
+#include "UIStateContext.h"
 #include "../../ui/core/UIInputAdapter.h"
-#include "../../ui/core/UIRenderer.h"
 #include "../../ui/screens/PauseMenuScreen.h"
-#include "../../locale/LocaleManager.h"
 
+/// G6: UIState uses UIStateContext — only UI-relevant dependencies.
+/// Does not create child states, so narrow context is safe.
 class UIState : public IGameState {
 public:
-    explicit UIState(StateDependencies deps)
-            : m_deps(deps) {}
+    explicit UIState(UIStateContext ctx)
+            : m_ctx(ctx) {}
 
     void onEnter() override {
-        m_deps.context.pushContext(InputContextType::UI);
-        m_deps.input.captureMouse(false);
+        m_ctx.context.pushContext(InputContextType::UI);
+        m_ctx.input.captureMouse(false);
 
-        ResourceMgr* rm = m_deps.uiRenderer.getResourceMgr();
+        ResourceMgr* rm = m_ctx.uiRenderer.getResourceMgr();
         if (rm) {
-            m_pauseScreen.setLocaleManager(&m_deps.localeManager);
+            m_pauseScreen.setLocaleManager(&m_ctx.localeManager);
             m_pauseScreen.init(*rm);
             m_pauseScreen.onResume = [this]() {
-                m_deps.fsm.popState();
+                m_ctx.fsm.popState();
             };
             m_pauseScreen.onQuitToMenu = [this]() {
                 m_quitToMenu = true;
             };
-            m_deps.uiRenderer.setActiveScene(&m_pauseScreen);
+            m_ctx.uiRenderer.setActiveScene(&m_pauseScreen);
             m_pauseScreen.enterScene();
         }
     }
 
     void onExit() override {
-        m_deps.uiRenderer.setActiveScene(nullptr);
+        m_ctx.uiRenderer.setActiveScene(nullptr);
         m_pauseScreen.shutdown();
-        m_deps.context.popContext();
-        if (m_deps.context.getCurrentContext() == InputContextType::Gameplay) {
-            m_deps.input.captureMouse(true);
+        m_ctx.context.popContext();
+        if (m_ctx.context.getCurrentContext() == InputContextType::Gameplay) {
+            m_ctx.input.captureMouse(true);
         }
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
         const UIInputRouteResult uiRouteResult =
-            UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
+            UIInputAdapter::routeInput(m_ctx.uiRenderer, snapshot, m_ctx.context);
 
-        const bool cancel = m_deps.context.isActionTriggered(Action::Cancel);
-        const bool menu = m_deps.context.isActionTriggered(Action::Menu);
+        const bool cancel = m_ctx.context.isActionTriggered(Action::Cancel);
+        const bool menu = m_ctx.context.isActionTriggered(Action::Menu);
 
         m_pauseScreen.updateAnimations(dt);
 
         if ((menu || cancel) && uiRouteResult.aggregate != UIEventResult::Consumed) {
-            m_deps.fsm.popState();
+            m_ctx.fsm.popState();
             return;
         }
 
         if (m_quitToMenu) {
             m_quitToMenu = false;
-            m_deps.fsm.requestQuitToMenu();
-            m_deps.fsm.popState();
+            m_ctx.fsm.requestQuitToMenu();
+            m_ctx.fsm.popState();
             return;
         }
     }
 
 private:
-    StateDependencies m_deps;
+    UIStateContext m_ctx;
     PauseMenuScreen m_pauseScreen;
     bool m_quitToMenu = false;
 };

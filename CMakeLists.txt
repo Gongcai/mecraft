@@ -69,6 +69,7 @@ set(SRC_GAME
         src/game/states/GameStateMachine.cpp
         src/game/states/GameplayState.cpp
         src/game/states/CommandState.cpp
+        src/game/states/StateDependencies.cpp
         src/game/presentation/GameplayPresentationBuilder.cpp
         src/game/presentation/GameplayHudPresenter.cpp
         src/game/audio/AudioListenerSyncSystem.cpp
