@@ -9,11 +9,8 @@
 
 class GameSession;
 class GameStateMachine;
-class RenderResourceHub;
-class RenderScene;
+class GameplayRenderRuntime;
 class Window;
-class PostProcessRenderer;
-class FirstPersonHeldItemRenderer;
 class AudioListenerSyncSystem;
 class GameplayHudPresenter;
 
@@ -38,11 +35,8 @@ public:
 
     /// Render a full frame (scene, precipitation, UI).
     void renderFrame(GameSession& session,
-                     RenderResourceHub& renderer,
-                     RenderScene& renderScene,
-                     FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer,
+                     GameplayRenderRuntime& renderRuntime,
                      GameStateMachine& stateMachine,
-                     PostProcessRenderer& postProcess,
                      GameplayHudPresenter* hudPresenter,
                      Window& window,
                      float frameTime);

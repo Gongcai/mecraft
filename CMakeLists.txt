@@ -77,6 +77,7 @@ set(SRC_GAME
         src/game/session/GameSession.cpp
         src/game/orchestrator/GameFrameOrchestrator.cpp
         src/game/debug/DebugFrameProfiler.cpp
+        src/game/render/GameplayRenderRuntime.cpp
 )
 
 # [核心基础]

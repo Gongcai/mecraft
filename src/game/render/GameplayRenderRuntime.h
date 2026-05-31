@@ -1,0 +1,50 @@
+#ifndef MECRAFT_GAMEPLAY_RENDER_RUNTIME_H
+#define MECRAFT_GAMEPLAY_RENDER_RUNTIME_H
+
+#include <memory>
+
+class ResourceMgr;
+class GameSession;
+class UIRenderer;
+class RenderResourceHub;
+class RenderScene;
+class FirstPersonHeldItemRenderer;
+class PostProcessRenderer;
+class ThreadPool;
+
+/// Owns all render-time objects for a gameplay session.
+/// Extracted from Game's internal RenderRuntime struct and initRenderers().
+///
+/// Initialization order: must be called after GameSession::init() and
+/// GameSession::initWorld(), but before GameSession::initECS().
+/// Lifetime: one gameplay session (from world load to return to menu).
+class GameplayRenderRuntime {
+public:
+    GameplayRenderRuntime();
+    ~GameplayRenderRuntime();
+
+    // Non-copyable, non-movable (owns GPU resources)
+    GameplayRenderRuntime(const GameplayRenderRuntime&) = delete;
+    GameplayRenderRuntime& operator=(const GameplayRenderRuntime&) = delete;
+
+    /// Initialize all renderers and connect to session systems.
+    void init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer);
+
+    /// Shutdown all renderers in reverse order of initialization.
+    void shutdown();
+
+    /// Get the thread pool from RenderResourceHub (available before init()).
+    [[nodiscard]] ThreadPool* getThreadPool();
+
+    // Accessors (valid after init())
+    [[nodiscard]] RenderResourceHub& resourceHub();
+    [[nodiscard]] RenderScene& renderScene();
+    [[nodiscard]] FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer();
+    [[nodiscard]] PostProcessRenderer& postProcessRenderer();
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+#endif // MECRAFT_GAMEPLAY_RENDER_RUNTIME_H

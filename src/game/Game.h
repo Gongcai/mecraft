@@ -14,6 +14,7 @@
 class GameplayHudPresenter;
 class AudioListenerSyncSystem;
 class GameFrameOrchestrator;
+class GameplayRenderRuntime;
 
 /// Legacy init params (kept for backward compatibility with GameplayAppState).
 struct GameInitParams {
@@ -71,10 +72,8 @@ private:
     // G4: Game session (owns World, ECS, physics, crafting, particles, camera, presentation)
     GameSession m_session;
 
-    // Renderers and state (session-level but currently owned by Game)
-    GameStateMachine m_stateMachine;
-    struct RenderRuntime;
-    std::unique_ptr<RenderRuntime> m_render;
+    // Render runtime (owns RenderResourceHub, RenderScene, entity renderers, post-process)
+    std::unique_ptr<GameplayRenderRuntime> m_renderRuntime;
 
     // G3: Audio and HUD systems
     std::unique_ptr<GameplayHudPresenter> m_hudPresenter;
@@ -90,8 +89,9 @@ private:
     void publishDebugFrameProfiler(double frameTime);
 #endif
 
+    GameStateMachine m_stateMachine;
+
     void initWorld();
-    void initRenderers();
 
     bool m_initialized = false;
 };

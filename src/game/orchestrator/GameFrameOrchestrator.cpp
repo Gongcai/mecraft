@@ -7,6 +7,7 @@
 #include "../../renderer/core/RenderScene.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/PostProcessRenderer.h"
+#include "../render/GameplayRenderRuntime.h"
 #include "../presentation/GameplayHudPresenter.h"
 #include "../audio/AudioListenerSyncSystem.h"
 #include "../../engine/platform/Window.h"
@@ -49,14 +50,17 @@ void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync
 }
 
 void GameFrameOrchestrator::renderFrame(GameSession& session,
-                                         RenderResourceHub& renderer,
-                                         RenderScene& renderScene,
-                                         FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer,
+                                         GameplayRenderRuntime& renderRuntime,
                                          GameStateMachine& stateMachine,
-                                         PostProcessRenderer& postProcess,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
                                          float frameTime) {
+    // Obtain renderer references from the aggregate
+    auto& renderScene = renderRuntime.renderScene();
+    auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
+    auto& postProcess = renderRuntime.postProcessRenderer();
+    auto& renderer = renderRuntime.resourceHub();
+
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
     const auto snap = session.presentationBuilder().build(reg, session.cameraController());

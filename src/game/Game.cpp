@@ -11,12 +11,7 @@
 #include "../particle/ParticleSystem.h"
 #include "../particle/RainRenderer.h"
 #include "../crafting/CraftingSystem.h"
-#include "../renderer/core/RenderResourceHub.h"
-#include "../renderer/core/RenderScene.h"
-#include "../renderer/renderers/DropRenderer.h"
-#include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
-#include "../renderer/renderers/HumanoidRenderer.h"
-#include "../renderer/renderers/PostProcessRenderer.h"
+#include "render/GameplayRenderRuntime.h"
 #include "audio/AudioListenerSyncSystem.h"
 #include "camera/CameraController.h"
 #include "orchestrator/GameFrameOrchestrator.h"
@@ -45,15 +40,6 @@ struct Game::DebugRuntime {
 };
 #endif
 
-struct Game::RenderRuntime {
-    RenderResourceHub resourceHub;
-    RenderScene scene;
-    DropRenderer dropRenderer;
-    FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
-    HumanoidRenderer humanoidRenderer;
-    PostProcessRenderer postProcessRenderer;
-};
-
 Game::Game(const GameInitParams& params)
     : m_config{params.seed, 16, glm::vec3(5.0f, 0.0f, 0.0f)},
       m_deps{*params.window, *params.input, *params.actionMap, *params.contextManager,
@@ -69,7 +55,7 @@ Game::Game(const GameInitParams& params)
       m_bgmSystem(*params.bgmSystem),
       m_uiRenderer(*params.uiRenderer),
       m_localeManager(*params.localeManager),
-      m_render(std::make_unique<RenderRuntime>()),
+      m_renderRuntime(std::make_unique<GameplayRenderRuntime>()),
       m_hudPresenter(nullptr),
       m_audioSyncSystem(nullptr),
       m_frameOrchestrator(std::make_unique<GameFrameOrchestrator>()) {
@@ -90,7 +76,7 @@ Game::Game(GameSessionConfig config, GameSessionDependencies deps)
       m_bgmSystem(m_deps.bgmSystem),
       m_uiRenderer(m_deps.uiRenderer),
       m_localeManager(m_deps.localeManager),
-      m_render(std::make_unique<RenderRuntime>()),
+      m_renderRuntime(std::make_unique<GameplayRenderRuntime>()),
       m_hudPresenter(nullptr),
       m_audioSyncSystem(nullptr),
       m_frameOrchestrator(std::make_unique<GameFrameOrchestrator>()) {
@@ -103,9 +89,9 @@ void Game::init() {
         return;
     }
     m_initialized = true;
-    m_session.init(m_config, m_resourceMgr, m_render->resourceHub.getThreadPool());
+    m_session.init(m_config, m_resourceMgr, m_renderRuntime->getThreadPool());
     initWorld();
-    initRenderers();
+    m_renderRuntime->init(m_resourceMgr, m_session, m_uiRenderer);
     m_session.initECS(m_deps);
 
     // G3: Initialize audio sync and HUD presenter
@@ -117,58 +103,18 @@ void Game::init() {
 #ifdef MECRAFT_DEBUG
     m_debug = std::make_unique<DebugRuntime>();
     m_debug->dashboard.init(m_window);
-    m_debug->dashboard.setFirstPersonHeldItemRenderer(&m_render->firstPersonHeldItemRenderer);
+    m_debug->dashboard.setFirstPersonHeldItemRenderer(&m_renderRuntime->firstPersonHeldItemRenderer());
     // Inject Dashboard into presenter (Game owns, presenter renders)
     m_hudPresenter->setDashboard(&m_debug->dashboard);
 #endif
 }
 
 
-// initWindow and initResources removed
-
 void Game::initWorld() {
     m_session.initWorld(m_config.seed);
 }
 
-void Game::initRenderers() {
-    auto& renderer = m_render->resourceHub;
-    auto& renderScene = m_render->scene;
-    auto& dropRenderer = m_render->dropRenderer;
-    auto& firstPersonHeldItemRenderer = m_render->firstPersonHeldItemRenderer;
-    auto& humanoidRenderer = m_render->humanoidRenderer;
-    auto& postProcessRenderer = m_render->postProcessRenderer;
 
-    renderer.init(m_resourceMgr);
-
-    // Initialize RenderScene and connect to Renderer
-    renderScene.init(m_resourceMgr);
-    renderScene.initFromRenderer(&renderer);
-
-    // Enable fog via RenderSettings
-    RenderSettings settings = renderScene.getSettings();
-    settings.fog.enabled = true;
-    renderScene.setSettings(settings);
-
-    dropRenderer.init(m_resourceMgr);
-    firstPersonHeldItemRenderer.init(m_resourceMgr);
-    humanoidRenderer.init(m_resourceMgr);
-    renderer.setHumanoidRenderer(&humanoidRenderer);
-    renderer.setDropRenderer(&dropRenderer);
-    renderer.setDropSystem(&m_session.dropSystem());
-    renderer.setGameplayRegistry(&m_session.gameplayScene().registry());
-    renderer.setParticleSystem(&m_session.particleSystem());
-    renderScene.setHumanoidRenderer(&humanoidRenderer);
-    renderScene.setDropRenderer(&dropRenderer);
-    renderScene.setDropSystem(&m_session.dropSystem());
-    renderScene.setGameplayRegistry(&m_session.gameplayScene().registry());
-    renderScene.setParticleSystem(&m_session.particleSystem());
-    m_uiRenderer.setHumanoidRenderer(&humanoidRenderer);
-    postProcessRenderer.init(m_resourceMgr);
-    m_session.particleSystem().init(m_resourceMgr);
-    m_session.rainRenderer().init(m_resourceMgr);
-
-    glEnable(GL_DEPTH_TEST);
-}
 
 void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 #ifdef MECRAFT_DEBUG
@@ -224,9 +170,8 @@ void Game::renderFrame(const float frameTime) {
 #endif
 
     // G5: Delegate frame rendering to orchestrator
-    m_frameOrchestrator->renderFrame(m_session, m_render->resourceHub, m_render->scene,
-                                     m_render->firstPersonHeldItemRenderer, m_stateMachine,
-                                     m_render->postProcessRenderer,
+    m_frameOrchestrator->renderFrame(m_session, *m_renderRuntime,
+                                     m_stateMachine,
                                      m_hudPresenter.get(),
                                      m_window, frameTime);
 }
@@ -276,11 +221,7 @@ void Game::shutdown() {
     if (!m_initialized) {
         return;
     }
-    m_render->postProcessRenderer.shutdown();
-    m_render->humanoidRenderer.shutdown();
-    m_render->firstPersonHeldItemRenderer.shutdown();
-    m_render->dropRenderer.shutdown();
-    m_render->resourceHub.shutdown();
+    m_renderRuntime->shutdown();
     m_session.shutdown();
 #ifdef MECRAFT_DEBUG
     m_debug.reset();
