@@ -282,7 +282,11 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Final history update and blit
     updateDeferredHistoryTargets();
     targets.copySceneResolvedToTransparentComposite();
-    targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    if (m_currentSettings.debug.viewMode > 0 && m_debugPass) {
+        m_debugPass->execute(ctx, m_currentSettings, targets, m_capturedFramebuffer, capturedWidth, capturedHeight);
+    } else {
+        targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    }
     targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
 
     // Match the legacy split path: if water was not rendered before temporal
