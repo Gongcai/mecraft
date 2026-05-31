@@ -86,6 +86,8 @@ void Game::init() {
 #ifdef MECRAFT_DEBUG
     m_dashboard.init(m_window);
     m_dashboard.setFirstPersonHeldItemRenderer(&m_firstPersonHeldItemRenderer);
+    // Inject Dashboard into presenter (Game owns, presenter renders)
+    m_hudPresenter->setDashboard(&m_dashboard);
 #endif
 }
 
@@ -93,7 +95,7 @@ void Game::init() {
 // initWindow and initResources removed
 
 void Game::initWorld() {
-    m_session.world().init(m_config.seed);
+    m_session.initWorld(m_config.seed);
 }
 
 void Game::initRenderers() {
@@ -260,90 +262,16 @@ void Game::renderFrame(const float frameTime) {
         return;
     }
 
+#ifdef MECRAFT_DEBUG
+    // G7: Publish debug profiler data and pass to orchestrator for dashboard
+    publishDebugFrameProfiler(frameTime);
+    m_frameOrchestrator.setDebugProfilerStats(&m_dashboardProfilerStats);
+#endif
+
     // G5: Delegate frame rendering to orchestrator
     m_frameOrchestrator.renderFrame(m_session, m_renderer, m_renderScene, m_stateMachine,
-                                    m_postProcessRenderer, m_hudPresenter.get(), m_input,
-                                    m_uiRenderer, m_window, frameTime);
-}
-
-void Game::renderPrecipitation(const Camera& camera, float cameraRainVisibility, float frameTime) {
-    const auto& settings = m_renderScene.getSettings();
-    if (!settings.weather.rainLinesEnabled) return;
-
-    const auto& weather = m_session.world().getWeatherSystem().getDerived();
-    const glm::vec3 camPos = camera.getPosition();
-    auto projMat = camera.getProjectionMatrix(m_window.getAspectRatio());
-    auto viewMat = camera.getViewMatrix();
-    float alphaScale = settings.weather.rainAlphaScale;
-    const bool forwardVanillaActive = m_renderScene.isNewPipelineActive() &&
-                                      m_renderScene.getPipelineMode() == PipelineMode::Forward;
-    const auto& frameOutput = m_renderScene.getLastFrameOutput();
-    const GLuint depthTex = forwardVanillaActive ? 0 : frameOutput.gbufferDepthTex;
-    const bool hardwareDepthTest = !m_renderScene.isNewPipelineActive() || forwardVanillaActive;
-    const glm::vec2 precipitationScreenSize(
-        static_cast<float>(std::max(1, m_window.getWidth())),
-        static_cast<float>(std::max(1, m_window.getHeight())));
-
-    if (weather.rainStrength > 0.01f) {
-        m_session.rainRenderer().render(projMat, viewMat, camPos,
-                              weather.rainStrength, cameraRainVisibility,
-                              alphaScale, depthTex,
-                              precipitationScreenSize, frameTime,
-                              hardwareDepthTest);
-    }
-    if (weather.snowStrength > 0.01f) {
-        m_session.rainRenderer().renderSnow(projMat, viewMat, camPos,
-                                  weather.snowStrength, cameraRainVisibility,
-                                  alphaScale * 0.6f, depthTex,
-                                  precipitationScreenSize, frameTime,
-                                  hardwareDepthTest);
-    }
-}
-
-void Game::renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotion& motion) {
-    if (m_session.cameraController().isFirstPerson()) {
-        const bool forwardVanillaActive = m_renderScene.isNewPipelineActive() &&
-                                          m_renderScene.isNewPipelineReady() &&
-                                          m_renderScene.getPipelineMode() == PipelineMode::Forward;
-        m_firstPersonHeldItemRenderer.setForwardMode(forwardVanillaActive);
-        if (m_uiRenderer.consumeHeldItemPreviewSwingTrigger()) {
-            m_firstPersonHeldItemRenderer.triggerSwing();
-        }
-        m_firstPersonHeldItemRenderer.setContinuousSwing(m_uiRenderer.isHeldItemPreviewActionAnimationActive());
-        m_firstPersonHeldItemRenderer.setShadowData(
-            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(m_renderScene.getHeldItemShadowData()));
-        m_firstPersonHeldItemRenderer.render(m_window, inventory, motion,
-                                             static_cast<float>(Time::getGameTime()));
-    } else {
-        static_cast<void>(m_uiRenderer.consumeHeldItemPreviewSwingTrigger());
-        m_firstPersonHeldItemRenderer.setContinuousSwing(false);
-    }
-}
-
-void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
-                    const HeldItemPreviewMotion& motion, const Camera& camera) {
-    // G3: Build player stats from snapshot (already computed in renderFrame)
-    // Note: This still queries ECS for now; will be fully snapshot-driven in G4
-    PlayerStatsData playerStats;
-    ecs::PlayerQuery playerQuery(reg);
-    playerStats.health = playerQuery.getHealth();
-    playerStats.maxHealth = playerQuery.getMaxHealth();
-    playerStats.armor = playerQuery.getArmor();
-    playerStats.maxArmor = playerQuery.getMaxArmor();
-    playerStats.food = playerQuery.getFood();
-    playerStats.maxFood = playerQuery.getMaxFood();
-
-    if (reg.ctxHas<ecs::GameplayRuntimeContext>()) {
-        playerStats.showSurvivalStats = reg.ctxGet<ecs::GameplayRuntimeContext>().gameplayMode != GameplayMode::Creative;
-    }
-
-    m_uiRenderer.render(m_window, inventory, playerStats, motion, m_input.snapshot());
-    m_stateMachine.render();
-#ifdef MECRAFT_DEBUG
-    Camera mutableCamera = camera;
-    m_dashboard.render(reg, m_session.world(), mutableCamera, m_renderer, m_renderScene,
-                       m_postProcessRenderer, m_uiRenderer, m_dashboardProfilerStats);
-#endif
+                                    m_postProcessRenderer, m_hudPresenter.get(),
+                                    m_window, frameTime);
 }
 
 #ifdef MECRAFT_DEBUG
@@ -366,20 +294,20 @@ void Game::publishDebugFrameProfiler(const double frameTime) {
     m_dashboardProfilerStats.fixedHistoryCount = history.count;
 
     // Copy history ring buffer entries in chronological order for the dashboard
-    const size_t historySize = DebugFrameProfiler::kHistorySamples;
-    const auto copyHistory = [&](const std::array<float, DebugFrameProfiler::kHistorySamples>& src,
-                                 std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples>& dst) {
-        dst.fill(0.0f);
-        for (size_t i = 0; i < history.count; ++i) {
-            dst[i] = src[(history.writeIndex + historySize - history.count + i) % historySize];
+    const size_t srcSize = DebugFrameProfiler::kHistorySamples;
+    const auto& h = history;
+    auto copyHistory = [&h, srcSize](const float* src, float* dst, size_t dstSize) {
+        std::fill(dst, dst + dstSize, 0.0f);
+        for (size_t i = 0; i < h.count; ++i) {
+            dst[i] = src[(h.writeIndex + srcSize - h.count + i) % srcSize];
         }
     };
-    copyHistory(history.fixedUpdateHistory, m_dashboardProfilerStats.fixedUpdateHistory);
-    copyHistory(history.fixedInputHistory, m_dashboardProfilerStats.fixedInputHistory);
-    copyHistory(history.fixedStateHistory, m_dashboardProfilerStats.fixedStateHistory);
-    copyHistory(history.fixedParticleHistory, m_dashboardProfilerStats.fixedParticleHistory);
-    copyHistory(history.fixedDropHistory, m_dashboardProfilerStats.fixedDropHistory);
-    copyHistory(history.fixedWorldHistory, m_dashboardProfilerStats.fixedWorldHistory);
+    copyHistory(history.fixedUpdateHistory.data(), m_dashboardProfilerStats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedInputHistory.data(), m_dashboardProfilerStats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedStateHistory.data(), m_dashboardProfilerStats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedParticleHistory.data(), m_dashboardProfilerStats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedDropHistory.data(), m_dashboardProfilerStats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedWorldHistory.data(), m_dashboardProfilerStats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
 }
 #endif
 

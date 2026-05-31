@@ -9,9 +9,7 @@
 #include "../../particle/RainRenderer.h"
 #include "../presentation/GameplayHudPresenter.h"
 #include "../audio/AudioListenerSyncSystem.h"
-#include "../../engine/input/InputManager.h"
 #include "../../engine/camera/Camera.h"
-#include "../../ui/core/UIRenderer.h"
 #include "../../engine/platform/Window.h"
 #include "../../ecs/GameplayScene.h"
 #include "../../ecs/util/PlayerQuery.h"
@@ -19,7 +17,6 @@
 #include "../../world/WeatherSystem.h"
 #include "../../player/Inventory.h"
 #include "../../renderer/overlays/BlockInteractionOverlayRenderer.h"
-#include "../../ui/core/UIRenderContext.h"
 #include "../camera/CameraController.h"
 
 #include <glad/glad.h>
@@ -64,8 +61,6 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameStateMachine& stateMachine,
                                          PostProcessRenderer& postProcess,
                                          GameplayHudPresenter* hudPresenter,
-                                         InputManager& input,
-                                         UIRenderer& uiRenderer,
                                          Window& window,
                                          float frameTime) {
     // Activate new pipeline on first frame (after render targets are ready)
@@ -149,29 +144,16 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
         postProcess.setEffects(effects);
     }
 
-    // Convert held item motion to renderer type
-    HeldItemPreviewMotion heldItemMotion;
-    heldItemMotion.moving = snap.heldItemMotion.moving;
-    heldItemMotion.sprinting = snap.heldItemMotion.sprinting;
-    heldItemMotion.bobFrequency = snap.heldItemMotion.bobFrequency;
-    heldItemMotion.bobPhaseOffset = snap.heldItemMotion.bobPhaseOffset;
-    heldItemMotion.cameraYawDegrees = snap.heldItemMotion.cameraYawDegrees;
-    heldItemMotion.cameraPitchDegrees = snap.heldItemMotion.cameraPitchDegrees;
-
-    // Note: renderHeldItem is still in Game because it depends on FirstPersonHeldItemRenderer
-    // which is a Game-level resource. This will be moved when GameSession owns all renderers.
-
-    // UI rendering
-    PlayerStatsData playerStats;
-    playerStats.health = snap.playerStats.health;
-    playerStats.maxHealth = snap.playerStats.maxHealth;
-    playerStats.armor = snap.playerStats.armor;
-    playerStats.maxArmor = snap.playerStats.maxArmor;
-    playerStats.food = snap.playerStats.food;
-    playerStats.maxFood = snap.playerStats.maxFood;
-    playerStats.showSurvivalStats = snap.playerStats.showSurvivalStats;
-
-    uiRenderer.render(window, *snap.inventory, playerStats, heldItemMotion, input.snapshot());
-    stateMachine.render();
+    // G3: Delegate UI rendering to GameplayHudPresenter
+    if (hudPresenter) {
+        hudPresenter->render(snap, stateMachine);
+#ifdef MECRAFT_DEBUG
+        // G7: Render debug dashboard (Dashboard is injected into presenter by Game)
+        if (m_debugProfilerStats) {
+            hudPresenter->renderDashboard(reg, session.world(), snap.renderCamera,
+                                          renderer, renderScene, postProcess, *m_debugProfilerStats);
+        }
+#endif
+    }
     window.swapBuffers();
 }

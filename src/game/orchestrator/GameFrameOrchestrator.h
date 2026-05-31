@@ -1,20 +1,18 @@
 #ifndef MECRAFT_GAME_FRAME_ORCHESTRATOR_H
 #define MECRAFT_GAME_FRAME_ORCHESTRATOR_H
 
+#ifdef MECRAFT_DEBUG
+#include "../../ui/Dashboard.h"
+#endif
+
 class GameSession;
 class GameStateMachine;
 class RenderResourceHub;
 class RenderScene;
 class Window;
-class InputManager;
-class UIRenderer;
 class PostProcessRenderer;
 class AudioListenerSyncSystem;
 class GameplayHudPresenter;
-
-struct HeldItemPreviewMotion;
-struct BlockTargetRenderData;
-struct BlockBreakRenderData;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -35,17 +33,25 @@ public:
                            float deltaTime,
                            ecs::GameplayRegistry& reg);
 
-    /// Render a full frame (scene, precipitation, held item, UI).
+    /// Render a full frame (scene, precipitation, UI).
     void renderFrame(GameSession& session,
                      RenderResourceHub& renderer,
                      RenderScene& renderScene,
                      GameStateMachine& stateMachine,
                      PostProcessRenderer& postProcess,
                      GameplayHudPresenter* hudPresenter,
-                     InputManager& input,
-                     UIRenderer& uiRenderer,
                      Window& window,
                      float frameTime);
+
+#ifdef MECRAFT_DEBUG
+    /// Set debug profiler stats for dashboard rendering.
+    void setDebugProfilerStats(const Dashboard::FrameProfilerStats* stats) { m_debugProfilerStats = stats; }
+#endif
+
+private:
+#ifdef MECRAFT_DEBUG
+    const Dashboard::FrameProfilerStats* m_debugProfilerStats = nullptr;
+#endif
 };
 
 #endif // MECRAFT_GAME_FRAME_ORCHESTRATOR_H

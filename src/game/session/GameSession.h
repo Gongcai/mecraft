@@ -28,6 +28,9 @@ public:
     /// Initialize the session with config and external dependencies.
     void init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool);
 
+    /// Initialize world (seed, spawn).
+    void initWorld(int seed);
+
     /// Shutdown and release all session resources.
     void shutdown();
 

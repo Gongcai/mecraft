@@ -124,16 +124,6 @@ private:
     void initRenderers();
     void initECS();
 
-    /// Render precipitation particles (rain/snow) after opaque geometry.
-    void renderPrecipitation(const Camera& camera, float cameraRainVisibility, float frameTime);
-
-    /// Render held item (first/third person) with shadow data.
-    void renderHeldItem(const Inventory& inventory, const HeldItemPreviewMotion& motion);
-
-    /// Render UI overlay (player stats, dashboard, state machine).
-    void renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
-                  const HeldItemPreviewMotion& motion, const Camera& camera);
-
     bool m_initialized = false;
 };
 

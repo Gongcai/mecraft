@@ -27,3 +27,27 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
     m_uiRenderer.render(m_window, *snap.inventory, playerStats, motion, m_input.snapshot());
     stateMachine.render();
 }
+
+#ifdef MECRAFT_DEBUG
+#include "../../ecs/GameplayRegistry.h"
+#include "../../world/World.h"
+#include "../../renderer/core/RenderResourceHub.h"
+#include "../../renderer/core/RenderScene.h"
+#include "../../renderer/renderers/PostProcessRenderer.h"
+#include "../../ui/Dashboard.h"
+
+void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
+                                            World& world,
+                                            const Camera& camera,
+                                            RenderResourceHub& renderer,
+                                            RenderScene& renderScene,
+                                            PostProcessRenderer& postProcess,
+                                            const Dashboard::FrameProfilerStats& profilerStats) {
+    if (!m_dashboard) {
+        return;
+    }
+    Camera mutableCamera = camera;
+    m_dashboard->render(reg, world, mutableCamera, renderer, renderScene,
+                        postProcess, m_uiRenderer, profilerStats);
+}
+#endif

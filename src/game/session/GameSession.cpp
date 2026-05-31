@@ -25,13 +25,17 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
     m_cameraController = std::make_unique<CameraController>();
     m_presentationBuilder = std::make_unique<GameplayPresentationBuilder>();
 
-    // Initialize world
+    // Configure world (actual init deferred to initWorld() called by Game)
     m_world->setRenderDistance(config.renderDistance);
     m_world->setThreadPool(threadPool);
 
     // Create particle and rain systems (actual init happens in Game::initRenderers)
     m_particleSystem = std::make_unique<ParticleSystem>();
     m_rainRenderer = std::make_unique<RainRenderer>();
+}
+
+void GameSession::initWorld(int seed) {
+    m_world->init(seed);
 }
 
 void GameSession::shutdown() {
