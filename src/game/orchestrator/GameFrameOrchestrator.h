@@ -32,7 +32,7 @@ public:
     /// Update audio listener position/orientation from player state.
     void syncAudioListener(AudioListenerSyncSystem& audioSync,
                            float deltaTime,
-                           ecs::GameplayRegistry& reg);
+                           GameSession& session);
 
     /// Render a full frame (scene, precipitation, UI).
     void renderFrame(GameSession& session,

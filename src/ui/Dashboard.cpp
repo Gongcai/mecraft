@@ -19,15 +19,21 @@
 #include <cmath>
 #include <cstdint>
 
-Dashboard::Dashboard() {
+Dashboard::Dashboard() : m_initialized(false) {
     // Setup Dear ImGui context
-
 }
 
 Dashboard::~Dashboard() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    shutdown();
+}
+
+void Dashboard::shutdown() {
+    if (m_initialized) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        m_initialized = false;
+    }
 }
 
 void Dashboard::init(const Window &window) {
@@ -41,6 +47,7 @@ void Dashboard::init(const Window &window) {
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(window.getHandle(), true);          // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
     ImGui_ImplOpenGL3_Init();
+    m_initialized = true;
 }
 
 void Dashboard::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer) {

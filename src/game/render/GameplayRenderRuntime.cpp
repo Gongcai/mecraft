@@ -12,6 +12,9 @@
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
 
+#include <algorithm>
+#include <cstddef>
+
 #ifdef MECRAFT_DEBUG
 #include "../../engine/platform/Window.h"
 #include "../debug/DebugFrameProfiler.h"
@@ -104,10 +107,14 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
 void GameplayRenderRuntime::shutdown() {
     // Reverse order of initialization
+#ifdef MECRAFT_DEBUG
+    m_impl->dashboard.shutdown();
+#endif
     m_impl->postProcessRenderer.shutdown();
     m_impl->humanoidRenderer.shutdown();
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->dropRenderer.shutdown();
+    m_impl->scene.shutdown();
     m_impl->resourceHub.shutdown();
 }
 

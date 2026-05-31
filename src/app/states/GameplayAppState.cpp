@@ -1,5 +1,6 @@
 #include "GameplayAppState.h"
 #include "MainMenuAppState.h"
+#include "game/Game.h"
 
 GameplayAppState::GameplayAppState(AppStateDependencies deps) 
     : m_deps(deps) {
@@ -12,19 +13,20 @@ GameplayAppState::~GameplayAppState() {
 }
 
 void GameplayAppState::onEnter() {
-    GameInitParams params;
-    params.window = &m_deps.window;
-    params.input = &m_deps.input;
-    params.actionMap = &m_deps.actionMap;
-    params.contextManager = &m_deps.contextManager;
-    params.resourceMgr = &m_deps.resourceMgr;
-    params.audioEngine = &m_deps.audioEngine;
-    params.bgmSystem = &m_deps.bgmSystem;
-    params.uiRenderer = &m_deps.uiRenderer;
-    params.localeManager = &m_deps.localeManager;
-    params.seed = 1234;
+    GameSessionConfig config{1234, 16};
+    GameSessionDependencies deps{
+        m_deps.window,
+        m_deps.input,
+        m_deps.actionMap,
+        m_deps.contextManager,
+        m_deps.resourceMgr,
+        m_deps.audioEngine,
+        m_deps.bgmSystem,
+        m_deps.uiRenderer,
+        m_deps.localeManager
+    };
 
-    m_game = std::make_unique<Game>(params);
+    m_game = std::make_unique<Game>(config, deps);
     m_game->init();
 
     m_deps.input.captureMouse(true);
@@ -41,7 +43,7 @@ void GameplayAppState::onExit() {
 void GameplayAppState::update(double frameTime, double& accumulator) {
     constexpr double kFixedStep = 1.0 / 60.0;
     while (accumulator >= kFixedStep) {
-        m_game->runFixedUpdate(kFixedStep, accumulator);
+        m_game->fixedUpdate(kFixedStep, accumulator);
         if (m_game->isQuitToMenuRequested()) {
             m_game->clearQuitToMenuRequest();
             m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
@@ -49,7 +51,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
             return;
         }
     }
-    m_game->syncAudioListener(static_cast<float>(frameTime));
+    m_game->updateFrame(static_cast<float>(frameTime));
 
     // Check if the pause menu requested quit-to-menu
     if (m_game->isQuitToMenuRequested()) {

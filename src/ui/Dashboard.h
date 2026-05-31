@@ -53,6 +53,7 @@ public:
     Dashboard();
     ~Dashboard();
     void init(const Window& window);
+    void shutdown();
     void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer);
     void render(ecs::GameplayRegistry& registry,
                 World &world,
@@ -76,6 +77,7 @@ private:
 
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
     float m_fontScale = 1.5f; // Global ImGui font scale
+    bool m_initialized = false;
 };
 
 #endif // NDEBUG

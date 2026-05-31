@@ -73,8 +73,8 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 
 void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync,
                                                 float deltaTime,
-                                                ecs::GameplayRegistry& reg) {
-    audioSync.update(deltaTime, reg);
+                                                GameSession& session) {
+    audioSync.update(deltaTime, session.gameplayScene().registry());
 }
 
 void GameFrameOrchestrator::renderFrame(GameSession& session,

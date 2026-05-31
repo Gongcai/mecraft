@@ -3,8 +3,9 @@
 
 #include "IAppState.h"
 #include "AppStateDependencies.h"
-#include "game/Game.h"
 #include <memory>
+
+class Game;
 
 class GameplayAppState : public IAppState {
 public:
