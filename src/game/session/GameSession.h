@@ -2,6 +2,7 @@
 #define MECRAFT_GAME_SESSION_H
 
 #include "GameSessionConfig.h"
+#include "GameSessionDependencies.h"
 #include <memory>
 
 // Forward declarations
@@ -17,6 +18,8 @@ class CraftingSystem;
 class CameraController;
 class GameplayPresentationBuilder;
 
+class Inventory;  // Forward declaration for getPlayerInventory()
+
 /// Aggregates gameplay session objects: World, ECS, physics, crafting, particles, etc.
 /// Extracted from Game to reduce its responsibilities and coupling.
 /// Lifetime: one gameplay session (from world load to return to menu).
@@ -30,6 +33,14 @@ public:
 
     /// Initialize world (seed, spawn).
     void initWorld(int seed);
+
+    /// Initialize ECS: bind services, create player entity, spawn test mob.
+    /// @param ext External service pointers not owned by GameSession
+    void initECS(struct ExternalEcsServices& ext);
+
+    /// Get the local player's inventory from ECS.
+    /// @throws std::runtime_error if inventory is not initialized
+    [[nodiscard]] Inventory& getPlayerInventory();
 
     /// Shutdown and release all session resources.
     void shutdown();

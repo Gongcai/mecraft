@@ -2,8 +2,8 @@
 // Created by Caiwe on 2026/3/21.
 //
 #include "Game.h"
-#include "Paths.h"
 #include "states/GameplayState.h"
+#include "session/GameSessionDependencies.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
 #include "../audio/AudioListener.h"
@@ -134,68 +134,22 @@ void Game::initRenderers() {
 // initAudio removed
 
 void Game::initECS() {
-    auto& svc = m_session.gameplayScene().services();
-    svc.world              = &m_session.world();
-    svc.audioEngine        = &m_audioEngine;
-    svc.inputContextManager = &m_contextManager;
-    svc.resourceMgr        = &m_resourceMgr;
-    svc.dropSystem         = &m_session.dropSystem();
-    svc.particleSystem     = &m_session.particleSystem();
-    svc.uiRenderer         = &m_uiRenderer;
-    svc.physicsSystem      = &m_session.physicsSystem();
-    svc.cameraController   = &m_session.cameraController();
-
-    // UIRenderer is initialized in GameManager
-    m_session.craftingSystem().loadRecipes(RECIPES_CONFIG_PATH);
-    m_uiRenderer.setCraftingSystem(&m_session.craftingSystem());
-
-    auto& reg = m_session.gameplayScene().registry();
-    m_session.dropSystem().bindRegistry(reg);
-    m_session.dropSystem().bindServices(svc);
-    m_session.particleSystem().bindRegistry(reg);
-
-    constexpr float kSpawnHeightOffset = 2.0f;
-
-    const glm::vec3 spawnPos(0.0f,
-        static_cast<float>(m_session.world().getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f);
-
-    m_session.gameplayScene().initLocalPlayer(spawnPos);
-
-    ecs::PlayerQuery query(reg);
-    auto steveRoot = ecs::SteveModelFactory::createSteve(reg, query.getPosition());
-    reg.emplace<ecs::SkinTypeComponent>(steveRoot, ecs::SkinTypeComponent::Type::Player);
-    auto playerView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
-    for (auto e : playerView) {
-        auto& playerTransform = reg.get<ecs::TransformComponent>(e);
-        auto& steveAnim = reg.get<ecs::SteveAnimationStateComponent>(steveRoot);
-        steveAnim.lastPosition = playerTransform.position;
-    }
-
-#ifdef MECRAFT_DEBUG
-    constexpr float kTestMobOffsetX = 5.0f;
-    glm::vec3 playerPos = query.getPosition();
-    ecs::MobModelFactory::createZombie(reg, glm::vec3(playerPos.x + kTestMobOffsetX, playerPos.y, playerPos.z));
-#endif
+    // G4: Delegate ECS initialization to GameSession
+    ExternalEcsServices ext;
+    ext.audioEngine = &m_audioEngine;
+    ext.inputContextManager = &m_contextManager;
+    ext.resourceMgr = &m_resourceMgr;
+    ext.uiRenderer = &m_uiRenderer;
+    ext.localeManager = &m_localeManager;
+    m_session.initECS(ext);
 }
 
 // clampFrameTime removed
 
 StateDependencies Game::makeStateDependencies() {
-    // Get inventory from ECS
-    auto& reg = m_session.gameplayScene().registry();
-    Inventory* inventory = nullptr;
-    auto view = reg.view<ecs::LocalPlayerTag, ecs::InventoryDataComponent>();
-    for (auto e : view) {
-        inventory = &view.get<ecs::InventoryDataComponent>(e).inventory;
-        break;
-    }
-    if (inventory == nullptr) {
-        throw std::runtime_error("Local player inventory is not initialized.");
-    }
-
     return {
         m_stateMachine,
-        *inventory,
+        m_session.getPlayerInventory(),
         m_contextManager,
         m_input,
         m_uiRenderer,
