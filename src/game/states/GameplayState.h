@@ -4,6 +4,9 @@
 #include "../modes/GameplayModeRules.h"
 #include "StateDependencies.h"
 
+/// G6: GameplayState uses a subset of StateDependencies.
+/// GameplayStateContext documents the actual dependencies used.
+/// Full StateDependencies is kept for child state creation compatibility.
 class GameplayState : public IGameState {
 public:
     explicit GameplayState(StateDependencies deps,
