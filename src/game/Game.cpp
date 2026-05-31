@@ -2,6 +2,7 @@
 // Created by Caiwe on 2026/3/21.
 //
 #include "Game.h"
+#include "states/GameStateMachine.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
 #include "../ecs/GameplayScene.h"
@@ -32,13 +33,7 @@
 #include "debug/DebugFrameProfiler.h"
 #endif
 
-#ifdef MECRAFT_DEBUG
-struct Game::DebugRuntime {
-    Dashboard dashboard;
-    DebugFrameProfiler profiler;
-    Dashboard::FrameProfilerStats dashboardProfilerStats;
-};
-#endif
+// DebugRuntime struct has been migrated to GameplayRenderRuntime
 
 Game::Game(const GameInitParams& params)
     : m_config{params.seed, 16, glm::vec3(5.0f, 0.0f, 0.0f)},
@@ -93,19 +88,16 @@ void Game::init() {
     initWorld();
     m_renderRuntime->init(m_resourceMgr, m_session, m_uiRenderer);
     m_session.initECS(m_deps);
+    m_session.initStateMachine(m_deps);
 
     // G3: Initialize audio sync and HUD presenter
     m_audioSyncSystem = std::make_unique<AudioListenerSyncSystem>(m_bgmSystem, m_audioEngine);
     m_hudPresenter = std::make_unique<GameplayHudPresenter>(m_window, m_uiRenderer, m_input);
 
-    m_stateMachine.pushState(m_session.createInitialGameplayState(m_stateMachine, m_deps, m_lastSubmittedCommand));
-
 #ifdef MECRAFT_DEBUG
-    m_debug = std::make_unique<DebugRuntime>();
-    m_debug->dashboard.init(m_window);
-    m_debug->dashboard.setFirstPersonHeldItemRenderer(&m_renderRuntime->firstPersonHeldItemRenderer());
-    // Inject Dashboard into presenter (Game owns, presenter renders)
-    m_hudPresenter->setDashboard(&m_debug->dashboard);
+    m_renderRuntime->initDebug(m_window);
+    // Inject Dashboard into presenter (renderRuntime owns, presenter renders)
+    m_hudPresenter->setDashboard(m_renderRuntime->dashboard());
 #endif
 }
 
@@ -117,34 +109,7 @@ void Game::initWorld() {
 
 
 void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
-#ifdef MECRAFT_DEBUG
-    const auto inputStart = std::chrono::steady_clock::now();
-#endif
-    m_input.update();
-    const InputSnapshot& inputSnapshot = m_input.snapshot();
-#ifdef MECRAFT_DEBUG
-    const auto inputEnd = std::chrono::steady_clock::now();
-    const auto stateStart = std::chrono::steady_clock::now();
-#endif
-
-    // G5: Delegate to orchestrator
-    m_frameOrchestrator->runFixedUpdate(m_session, m_stateMachine, fixedStep, accumulator);
-
-    m_stateMachine.update(static_cast<float>(fixedStep), inputSnapshot);
-#ifdef MECRAFT_DEBUG
-    const auto stateEnd = std::chrono::steady_clock::now();
-#endif
-
-#ifdef MECRAFT_DEBUG
-    if (m_debug) {
-        m_debug->profiler.recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
-        m_debug->profiler.recordFixedState(std::chrono::duration<double, std::milli>(stateEnd - stateStart).count());
-        m_debug->profiler.recordFixedParticle(0.0);
-        m_debug->profiler.recordFixedDrop(0.0);
-        m_debug->profiler.recordFixedWorld(0.0);  // World update is now inside orchestrator
-        m_debug->profiler.incrementFixedStep();
-    }
-#endif
+    m_frameOrchestrator->runFixedUpdate(m_session, m_input, m_renderRuntime.get(), fixedStep, accumulator);
 }
 
 void Game::syncAudioListener(const float deltaTime) {
@@ -164,58 +129,14 @@ void Game::renderFrame(const float frameTime) {
     }
 
 #ifdef MECRAFT_DEBUG
-    // G7: Publish debug profiler data and pass to orchestrator for dashboard
-    publishDebugFrameProfiler(frameTime);
-    m_frameOrchestrator->setDebugProfilerStats(m_debug ? &m_debug->dashboardProfilerStats : nullptr);
+    m_renderRuntime->publishDebugStats(frameTime);
 #endif
 
     // G5: Delegate frame rendering to orchestrator
     m_frameOrchestrator->renderFrame(m_session, *m_renderRuntime,
-                                     m_stateMachine,
                                      m_hudPresenter.get(),
                                      m_window, frameTime);
 }
-
-#ifdef MECRAFT_DEBUG
-void Game::publishDebugFrameProfiler(const double frameTime) {
-    if (!m_debug) {
-        return;
-    }
-    // Delegate timing accumulation, smoothing, and history to DebugFrameProfiler
-    m_debug->profiler.publish(frameTime);
-
-    const auto& timing = m_debug->profiler.timing();
-    const auto& history = m_debug->profiler.history();
-
-    auto& stats = m_debug->dashboardProfilerStats;
-    stats.frameMs = frameTime * 1000.0;
-    stats.fixedUpdateMs = timing.fixedUpdateMs;
-    stats.fixedInputMs = timing.fixedInputMs;
-    stats.fixedStateUpdateMs = timing.fixedStateUpdateMs;
-    stats.fixedParticleUpdateMs = timing.fixedParticleUpdateMs;
-    stats.fixedDropUpdateMs = timing.fixedDropUpdateMs;
-    stats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
-    stats.audioMs = timing.audioMs;
-    stats.renderMs = timing.renderMs;
-    stats.fixedHistoryCount = history.count;
-
-    // Copy history ring buffer entries in chronological order for the dashboard
-    const size_t srcSize = DebugFrameProfiler::kHistorySamples;
-    const auto& h = history;
-    auto copyHistory = [&h, srcSize](const float* src, float* dst, size_t dstSize) {
-        std::fill(dst, dst + dstSize, 0.0f);
-        for (size_t i = 0; i < h.count; ++i) {
-            dst[i] = src[(h.writeIndex + srcSize - h.count + i) % srcSize];
-        }
-    };
-    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-}
-#endif
 
 void Game::shutdown() {
     if (!m_initialized) {
@@ -223,8 +144,13 @@ void Game::shutdown() {
     }
     m_renderRuntime->shutdown();
     m_session.shutdown();
-#ifdef MECRAFT_DEBUG
-    m_debug.reset();
-#endif
     m_initialized = false;
+}
+
+bool Game::isQuitToMenuRequested() const {
+    return m_session.stateMachine().isQuitToMenuRequested();
+}
+
+void Game::clearQuitToMenuRequest() {
+    m_session.stateMachine().clearQuitToMenuRequest();
 }

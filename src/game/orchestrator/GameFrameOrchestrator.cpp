@@ -1,6 +1,11 @@
 #include "GameFrameOrchestrator.h"
 #include "../session/GameSession.h"
 #include "../states/GameStateMachine.h"
+#include "../../engine/input/InputManager.h"
+#ifdef MECRAFT_DEBUG
+#include <chrono>
+#include "../debug/DebugFrameProfiler.h"
+#endif
 #include "../presentation/GameplayPresentationBuilder.h"
 #include "../presentation/GameplayPresentationSnapshot.h"
 #include "../../renderer/core/RenderResourceHub.h"
@@ -18,9 +23,20 @@
 #include "../camera/CameraController.h"
 
 bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
-                                            GameStateMachine& stateMachine,
+                                            InputManager& input,
+                                            GameplayRenderRuntime* renderRuntime,
                                             double fixedStep,
                                             double& accumulator) {
+#ifdef MECRAFT_DEBUG
+    const auto inputStart = std::chrono::steady_clock::now();
+#endif
+    input.update();
+    const InputSnapshot& inputSnapshot = input.snapshot();
+#ifdef MECRAFT_DEBUG
+    const auto inputEnd = std::chrono::steady_clock::now();
+    const auto stateStart = std::chrono::steady_clock::now();
+#endif
+
     accumulator -= fixedStep;
 
     // ECS pre-state stage: sample input and build intents before states consume them.
@@ -35,12 +51,24 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
         ++ticksThisFrame;
     }
 
-    // Note: InputManager::update() and StateMachine::update() are called by Game before this
-    // because they depend on Game-specific input snapshot.
-
     session.updateWorldAroundLocalPlayer();
 
-    return stateMachine.isQuitToMenuRequested();
+    session.stateMachine().update(static_cast<float>(fixedStep), inputSnapshot);
+#ifdef MECRAFT_DEBUG
+    const auto stateEnd = std::chrono::steady_clock::now();
+    if (renderRuntime) {
+        if (auto* profiler = renderRuntime->profiler()) {
+            profiler->recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
+            profiler->recordFixedState(std::chrono::duration<double, std::milli>(stateEnd - stateStart).count());
+            profiler->recordFixedParticle(0.0);
+            profiler->recordFixedDrop(0.0);
+            profiler->recordFixedWorld(0.0);
+            profiler->incrementFixedStep();
+        }
+    }
+#endif
+
+    return session.stateMachine().isQuitToMenuRequested();
 }
 
 void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync,
@@ -51,7 +79,6 @@ void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync
 
 void GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameplayRenderRuntime& renderRuntime,
-                                         GameStateMachine& stateMachine,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
                                          float frameTime) {
@@ -115,12 +142,12 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
-        hudPresenter->render(snap, stateMachine);
+        hudPresenter->render(snap, session.stateMachine());
 #ifdef MECRAFT_DEBUG
         // G7: Render debug dashboard (Dashboard is injected into presenter by Game)
-        if (m_debugProfilerStats) {
+        if (renderRuntime.dashboardProfilerStats()) {
             hudPresenter->renderDashboard(reg, session.world(), snap.renderCamera,
-                                          renderer, renderScene, postProcess, *m_debugProfilerStats);
+                                          renderer, renderScene, postProcess, *renderRuntime.dashboardProfilerStats());
         }
 #endif
     }

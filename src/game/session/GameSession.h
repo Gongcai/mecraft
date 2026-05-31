@@ -40,10 +40,11 @@ public:
     /// @param deps External services not owned by GameSession
     void initECS(const GameSessionDependencies& deps);
 
+    /// Initialize the state machine and push the initial gameplay state.
+    void initStateMachine(const GameSessionDependencies& deps);
+
     /// Create the initial gameplay state using session-owned gameplay services.
-    [[nodiscard]] std::unique_ptr<IGameState> createInitialGameplayState(GameStateMachine& stateMachine,
-                                                                         const GameSessionDependencies& deps,
-                                                                         std::string& lastSubmittedCommand);
+    [[nodiscard]] std::unique_ptr<IGameState> createInitialGameplayState(const GameSessionDependencies& deps);
 
     /// Update world streaming and simulation center from the local player position.
     void updateWorldAroundLocalPlayer();
@@ -67,6 +68,10 @@ public:
     [[nodiscard]] CraftingSystem& craftingSystem() { return *m_craftingSystem; }
     [[nodiscard]] CameraController& cameraController() { return *m_cameraController; }
     [[nodiscard]] GameplayPresentationBuilder& presentationBuilder() { return *m_presentationBuilder; }
+    [[nodiscard]] GameStateMachine& stateMachine();
+    [[nodiscard]] const GameStateMachine& stateMachine() const;
+    [[nodiscard]] std::string& lastSubmittedCommand() { return m_lastSubmittedCommand; }
+    [[nodiscard]] const std::string& lastSubmittedCommand() const { return m_lastSubmittedCommand; }
 
 private:
     // Core world and physics (created in init())
@@ -89,6 +94,10 @@ private:
 
     // Presentation
     std::unique_ptr<GameplayPresentationBuilder> m_presentationBuilder;
+
+    // State machine
+    std::unique_ptr<GameStateMachine> m_stateMachine;
+    std::string m_lastSubmittedCommand;
 };
 
 #endif // MECRAFT_GAME_SESSION_H

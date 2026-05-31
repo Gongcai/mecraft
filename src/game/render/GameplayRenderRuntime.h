@@ -12,6 +12,12 @@ class FirstPersonHeldItemRenderer;
 class PostProcessRenderer;
 class ThreadPool;
 
+#ifdef MECRAFT_DEBUG
+#include "../../ui/Dashboard.h"
+class DebugFrameProfiler;
+class Window;
+#endif
+
 /// Owns all render-time objects for a gameplay session.
 /// Extracted from Game's internal RenderRuntime struct and initRenderers().
 ///
@@ -41,6 +47,14 @@ public:
     [[nodiscard]] RenderScene& renderScene();
     [[nodiscard]] FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer();
     [[nodiscard]] PostProcessRenderer& postProcessRenderer();
+
+#ifdef MECRAFT_DEBUG
+    void initDebug(Window& window);
+    void publishDebugStats(double frameTime);
+    [[nodiscard]] Dashboard* dashboard();
+    [[nodiscard]] DebugFrameProfiler* profiler();
+    [[nodiscard]] Dashboard::FrameProfilerStats* dashboardProfilerStats();
+#endif
 
 private:
     struct Impl;

@@ -12,6 +12,11 @@
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
 
+#ifdef MECRAFT_DEBUG
+#include "../../engine/platform/Window.h"
+#include "../debug/DebugFrameProfiler.h"
+#endif
+
 #include <glad/glad.h>
 
 // --------------------------------------------------------------------------
@@ -25,6 +30,12 @@ struct GameplayRenderRuntime::Impl {
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
     HumanoidRenderer humanoidRenderer;
     PostProcessRenderer postProcessRenderer;
+
+#ifdef MECRAFT_DEBUG
+    Dashboard dashboard;
+    DebugFrameProfiler profiler;
+    Dashboard::FrameProfilerStats dashboardProfilerStats;
+#endif
 };
 
 // --------------------------------------------------------------------------
@@ -123,3 +134,57 @@ FirstPersonHeldItemRenderer& GameplayRenderRuntime::firstPersonHeldItemRenderer(
 PostProcessRenderer& GameplayRenderRuntime::postProcessRenderer() {
     return m_impl->postProcessRenderer;
 }
+
+#ifdef MECRAFT_DEBUG
+void GameplayRenderRuntime::initDebug(Window& window) {
+    m_impl->dashboard.init(window);
+    m_impl->dashboard.setFirstPersonHeldItemRenderer(&m_impl->firstPersonHeldItemRenderer);
+}
+
+void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
+    m_impl->profiler.publish(frameTime);
+
+    const auto& timing = m_impl->profiler.timing();
+    const auto& history = m_impl->profiler.history();
+
+    auto& stats = m_impl->dashboardProfilerStats;
+    stats.frameMs = frameTime * 1000.0;
+    stats.fixedUpdateMs = timing.fixedUpdateMs;
+    stats.fixedInputMs = timing.fixedInputMs;
+    stats.fixedStateUpdateMs = timing.fixedStateUpdateMs;
+    stats.fixedParticleUpdateMs = timing.fixedParticleUpdateMs;
+    stats.fixedDropUpdateMs = timing.fixedDropUpdateMs;
+    stats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
+    stats.audioMs = timing.audioMs;
+    stats.renderMs = timing.renderMs;
+    stats.fixedHistoryCount = history.count;
+
+    // Copy history ring buffer entries in chronological order for the dashboard
+    const size_t srcSize = DebugFrameProfiler::kHistorySamples;
+    const auto& h = history;
+    auto copyHistory = [&h, srcSize](const float* src, float* dst, size_t dstSize) {
+        std::fill(dst, dst + dstSize, 0.0f);
+        for (size_t i = 0; i < h.count; ++i) {
+            dst[i] = src[(h.writeIndex + srcSize - h.count + i) % srcSize];
+        }
+    };
+    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+}
+
+Dashboard* GameplayRenderRuntime::dashboard() {
+    return &m_impl->dashboard;
+}
+
+DebugFrameProfiler* GameplayRenderRuntime::profiler() {
+    return &m_impl->profiler;
+}
+
+Dashboard::FrameProfilerStats* GameplayRenderRuntime::dashboardProfilerStats() {
+    return &m_impl->dashboardProfilerStats;
+}
+#endif

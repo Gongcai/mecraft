@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "states/GameStateMachine.h"
 #include "session/GameSessionConfig.h"
 #include "session/GameSession.h"
 
@@ -47,8 +46,8 @@ public:
     void syncAudioListener(float deltaTime);
     void renderFrame(float frameTime);
 
-    [[nodiscard]] bool isQuitToMenuRequested() const { return m_stateMachine.isQuitToMenuRequested(); }
-    void clearQuitToMenuRequest() { m_stateMachine.clearQuitToMenuRequest(); }
+    [[nodiscard]] bool isQuitToMenuRequested() const;
+    void clearQuitToMenuRequest();
 
 private:
     static constexpr double TICK_RATE = 1.0 / 60.0;
@@ -81,15 +80,6 @@ private:
 
     // G5: Frame orchestrator
     std::unique_ptr<GameFrameOrchestrator> m_frameOrchestrator;
-
-    std::string m_lastSubmittedCommand;
-#ifdef MECRAFT_DEBUG
-    struct DebugRuntime;
-    std::unique_ptr<DebugRuntime> m_debug;
-    void publishDebugFrameProfiler(double frameTime);
-#endif
-
-    GameStateMachine m_stateMachine;
 
     void initWorld();
 

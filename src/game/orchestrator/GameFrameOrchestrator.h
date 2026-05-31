@@ -8,7 +8,7 @@
 #endif
 
 class GameSession;
-class GameStateMachine;
+class InputManager;
 class GameplayRenderRuntime;
 class Window;
 class AudioListenerSyncSystem;
@@ -24,7 +24,8 @@ public:
     /// Run a fixed timestep update (physics, ECS, world, state machine).
     /// @return true if quit-to-menu was requested
     bool runFixedUpdate(GameSession& session,
-                        GameStateMachine& stateMachine,
+                        InputManager& input,
+                        GameplayRenderRuntime* renderRuntime,
                         double fixedStep,
                         double& accumulator);
 
@@ -36,21 +37,12 @@ public:
     /// Render a full frame (scene, precipitation, UI).
     void renderFrame(GameSession& session,
                      GameplayRenderRuntime& renderRuntime,
-                     GameStateMachine& stateMachine,
                      GameplayHudPresenter* hudPresenter,
                      Window& window,
                      float frameTime);
 
-#ifdef MECRAFT_DEBUG
-    /// Set debug profiler stats for dashboard rendering.
-    void setDebugProfilerStats(const Dashboard::FrameProfilerStats* stats) { m_debugProfilerStats = stats; }
-#endif
-
 private:
     uint32_t m_lastHeldItemSwingSequence = 0;
-#ifdef MECRAFT_DEBUG
-    const Dashboard::FrameProfilerStats* m_debugProfilerStats = nullptr;
-#endif
 };
 
 #endif // MECRAFT_GAME_FRAME_ORCHESTRATOR_H

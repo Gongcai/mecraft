@@ -89,16 +89,19 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
 #endif
 }
 
-std::unique_ptr<IGameState> GameSession::createInitialGameplayState(GameStateMachine& stateMachine,
-                                                                    const GameSessionDependencies& deps,
-                                                                    std::string& lastSubmittedCommand) {
+void GameSession::initStateMachine(const GameSessionDependencies& deps) {
+    m_stateMachine = std::make_unique<GameStateMachine>();
+    m_stateMachine->pushState(createInitialGameplayState(deps));
+}
+
+std::unique_ptr<IGameState> GameSession::createInitialGameplayState(const GameSessionDependencies& deps) {
     StateDependencies stateDeps{
-        stateMachine,
+        *m_stateMachine,
         getPlayerInventory(),
         deps.contextManager,
         deps.input,
         deps.uiRenderer,
-        lastSubmittedCommand,
+        m_lastSubmittedCommand,
         physicsSystem(),
         world(),
         deps.audioEngine,
@@ -108,6 +111,14 @@ std::unique_ptr<IGameState> GameSession::createInitialGameplayState(GameStateMac
         deps.localeManager
     };
     return std::make_unique<GameplayState>(stateDeps);
+}
+
+GameStateMachine& GameSession::stateMachine() {
+    return *m_stateMachine;
+}
+
+const GameStateMachine& GameSession::stateMachine() const {
+    return *m_stateMachine;
 }
 
 void GameSession::updateWorldAroundLocalPlayer() {
@@ -125,6 +136,7 @@ Inventory& GameSession::getPlayerInventory() {
 }
 
 void GameSession::shutdown() {
+    m_stateMachine.reset();
     // Cleanup in reverse order of initialization
     m_presentationBuilder.reset();
     m_cameraController.reset();
