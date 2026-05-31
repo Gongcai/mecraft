@@ -26,6 +26,7 @@
 #include "states/GameStateMachine.h"
 #ifdef MECRAFT_DEBUG
 #include "../ui/Dashboard.h"
+#include "debug/DebugFrameProfiler.h"
 #endif
 #include "../ui/core/UIRenderer.h"
 #include "../audio/AudioEngine.h"
@@ -111,6 +112,9 @@ private:
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG
     Dashboard      m_dashboard;
+    DebugFrameProfiler m_debugProfiler;  // G7: Debug frame profiler
+    Dashboard::FrameProfilerStats m_dashboardProfilerStats;
+    void publishDebugFrameProfiler(double frameTime);
 #endif
 
 
@@ -131,42 +135,6 @@ private:
                   const HeldItemPreviewMotion& motion, const Camera& camera);
 
     bool m_initialized = false;
-
-#ifdef MECRAFT_DEBUG
-    struct FrameProfilerDebug {
-        double fixedUpdateMs = 0.0;
-        double fixedInputMs = 0.0;
-        double fixedStateUpdateMs = 0.0;
-        double fixedParticleUpdateMs = 0.0;
-        double fixedDropUpdateMs = 0.0;
-        double fixedWorldUpdateMs = 0.0;
-        double audioMs = 0.0;
-        double renderMs = 0.0;
-
-        double fixedInputAccumMs = 0.0;
-        double fixedStateAccumMs = 0.0;
-        double fixedParticleAccumMs = 0.0;
-        double fixedDropAccumMs = 0.0;
-        double fixedWorldAccumMs = 0.0;
-        size_t fixedStepCount = 0;
-
-        size_t historyCount = 0;
-        size_t historyWriteIndex = 0;
-        std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples> fixedUpdateHistory{};
-        std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples> fixedInputHistory{};
-        std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples> fixedStateHistory{};
-        std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples> fixedParticleHistory{};
-        std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples> fixedDropHistory{};
-        std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples> fixedWorldHistory{};
-
-        double publishAccumulator = 0.0;
-        double publishInterval = 0.25;
-    };
-
-    FrameProfilerDebug m_frameProfilerDebug{};
-    Dashboard::FrameProfilerStats m_dashboardProfilerStats{};
-    void publishDebugFrameProfiler(double frameTime);
-#endif
 };
 
 

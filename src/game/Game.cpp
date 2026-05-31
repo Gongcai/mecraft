@@ -229,12 +229,12 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 #endif
 
 #ifdef MECRAFT_DEBUG
-    m_frameProfilerDebug.fixedInputAccumMs += std::chrono::duration<double, std::milli>(inputEnd - inputStart).count();
-    m_frameProfilerDebug.fixedStateAccumMs += std::chrono::duration<double, std::milli>(stateEnd - stateStart).count();
-    m_frameProfilerDebug.fixedParticleAccumMs += 0.0;
-    m_frameProfilerDebug.fixedDropAccumMs += 0.0;
-    m_frameProfilerDebug.fixedWorldAccumMs += 0.0;  // World update is now inside orchestrator
-    ++m_frameProfilerDebug.fixedStepCount;
+    m_debugProfiler.recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
+    m_debugProfiler.recordFixedState(std::chrono::duration<double, std::milli>(stateEnd - stateStart).count());
+    m_debugProfiler.recordFixedParticle(0.0);
+    m_debugProfiler.recordFixedDrop(0.0);
+    m_debugProfiler.recordFixedWorld(0.0);  // World update is now inside orchestrator
+    m_debugProfiler.incrementFixedStep();
 #endif
 }
 
@@ -348,106 +348,38 @@ void Game::renderUI(ecs::GameplayRegistry& reg, const Inventory& inventory,
 
 #ifdef MECRAFT_DEBUG
 void Game::publishDebugFrameProfiler(const double frameTime) {
-    const auto pushHistory = [](std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples>& history,
-                                const size_t index,
-                                const double valueMs) {
-        history[index] = static_cast<float>(valueMs);
-    };
-    const auto copyHistory = [](const std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples>& source,
-                                const size_t writeIndex,
-                                const size_t count,
-                                std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples>& destination) {
-        destination.fill(0.0f);
-        const size_t historySize = source.size();
-        for (size_t i = 0; i < count; ++i) {
-            const size_t sourceIndex = (writeIndex + historySize - count + i) % historySize;
-            destination[i] = source[sourceIndex];
-        }
-    };
-    const auto smooth = [](const double previous, const double current) {
-        constexpr double kAlpha = 0.15;
-        return previous + (current - previous) * kAlpha;
-    };
+    // Delegate timing accumulation, smoothing, and history to DebugFrameProfiler
+    m_debugProfiler.publish(frameTime);
 
-    if (m_frameProfilerDebug.fixedStepCount > 0) {
-        const double invStepCount = 1.0 / static_cast<double>(m_frameProfilerDebug.fixedStepCount);
-        const double inputAvgMs = m_frameProfilerDebug.fixedInputAccumMs * invStepCount;
-        const double stateAvgMs = m_frameProfilerDebug.fixedStateAccumMs * invStepCount;
-        const double particleAvgMs = m_frameProfilerDebug.fixedParticleAccumMs * invStepCount;
-        const double dropAvgMs = m_frameProfilerDebug.fixedDropAccumMs * invStepCount;
-        const double worldAvgMs = m_frameProfilerDebug.fixedWorldAccumMs * invStepCount;
-        const double totalAvgMs = inputAvgMs + stateAvgMs + particleAvgMs + dropAvgMs + worldAvgMs;
-
-        m_frameProfilerDebug.fixedInputMs = smooth(m_frameProfilerDebug.fixedInputMs, inputAvgMs);
-        m_frameProfilerDebug.fixedStateUpdateMs = smooth(m_frameProfilerDebug.fixedStateUpdateMs, stateAvgMs);
-        m_frameProfilerDebug.fixedParticleUpdateMs = smooth(m_frameProfilerDebug.fixedParticleUpdateMs, particleAvgMs);
-        m_frameProfilerDebug.fixedDropUpdateMs = smooth(m_frameProfilerDebug.fixedDropUpdateMs, dropAvgMs);
-        m_frameProfilerDebug.fixedWorldUpdateMs = smooth(m_frameProfilerDebug.fixedWorldUpdateMs, worldAvgMs);
-        m_frameProfilerDebug.fixedUpdateMs = smooth(m_frameProfilerDebug.fixedUpdateMs, totalAvgMs);
-
-        const size_t writeIndex = m_frameProfilerDebug.historyWriteIndex;
-        pushHistory(m_frameProfilerDebug.fixedUpdateHistory, writeIndex, totalAvgMs);
-        pushHistory(m_frameProfilerDebug.fixedInputHistory, writeIndex, inputAvgMs);
-        pushHistory(m_frameProfilerDebug.fixedStateHistory, writeIndex, stateAvgMs);
-        pushHistory(m_frameProfilerDebug.fixedParticleHistory, writeIndex, particleAvgMs);
-        pushHistory(m_frameProfilerDebug.fixedDropHistory, writeIndex, dropAvgMs);
-        pushHistory(m_frameProfilerDebug.fixedWorldHistory, writeIndex, worldAvgMs);
-        m_frameProfilerDebug.historyWriteIndex = (writeIndex + 1) % m_frameProfilerDebug.fixedUpdateHistory.size();
-        if (m_frameProfilerDebug.historyCount < m_frameProfilerDebug.fixedUpdateHistory.size()) {
-            ++m_frameProfilerDebug.historyCount;
-        }
-
-        m_frameProfilerDebug.fixedInputAccumMs = 0.0;
-        m_frameProfilerDebug.fixedStateAccumMs = 0.0;
-        m_frameProfilerDebug.fixedParticleAccumMs = 0.0;
-        m_frameProfilerDebug.fixedDropAccumMs = 0.0;
-        m_frameProfilerDebug.fixedWorldAccumMs = 0.0;
-        m_frameProfilerDebug.fixedStepCount = 0;
-    }
-
-    m_frameProfilerDebug.audioMs = smooth(m_frameProfilerDebug.audioMs, m_dashboardProfilerStats.audioMs);
-    m_frameProfilerDebug.renderMs = smooth(m_frameProfilerDebug.renderMs, m_dashboardProfilerStats.renderMs);
-
-    m_frameProfilerDebug.publishAccumulator += frameTime;
-    if (m_frameProfilerDebug.publishAccumulator < m_frameProfilerDebug.publishInterval) {
-        return;
-    }
-    m_frameProfilerDebug.publishAccumulator -= m_frameProfilerDebug.publishInterval;
+    const auto& timing = m_debugProfiler.timing();
+    const auto& history = m_debugProfiler.history();
 
     m_dashboardProfilerStats.frameMs = frameTime * 1000.0;
-    m_dashboardProfilerStats.fixedUpdateMs = m_frameProfilerDebug.fixedUpdateMs;
-    m_dashboardProfilerStats.fixedInputMs = m_frameProfilerDebug.fixedInputMs;
-    m_dashboardProfilerStats.fixedStateUpdateMs = m_frameProfilerDebug.fixedStateUpdateMs;
-    m_dashboardProfilerStats.fixedParticleUpdateMs = m_frameProfilerDebug.fixedParticleUpdateMs;
-    m_dashboardProfilerStats.fixedDropUpdateMs = m_frameProfilerDebug.fixedDropUpdateMs;
-    m_dashboardProfilerStats.fixedWorldUpdateMs = m_frameProfilerDebug.fixedWorldUpdateMs;
-    m_dashboardProfilerStats.audioMs = m_frameProfilerDebug.audioMs;
-    m_dashboardProfilerStats.renderMs = m_frameProfilerDebug.renderMs;
-    m_dashboardProfilerStats.fixedHistoryCount = m_frameProfilerDebug.historyCount;
-    copyHistory(m_frameProfilerDebug.fixedUpdateHistory,
-                m_frameProfilerDebug.historyWriteIndex,
-                m_frameProfilerDebug.historyCount,
-                m_dashboardProfilerStats.fixedUpdateHistory);
-    copyHistory(m_frameProfilerDebug.fixedInputHistory,
-                m_frameProfilerDebug.historyWriteIndex,
-                m_frameProfilerDebug.historyCount,
-                m_dashboardProfilerStats.fixedInputHistory);
-    copyHistory(m_frameProfilerDebug.fixedStateHistory,
-                m_frameProfilerDebug.historyWriteIndex,
-                m_frameProfilerDebug.historyCount,
-                m_dashboardProfilerStats.fixedStateHistory);
-    copyHistory(m_frameProfilerDebug.fixedParticleHistory,
-                m_frameProfilerDebug.historyWriteIndex,
-                m_frameProfilerDebug.historyCount,
-                m_dashboardProfilerStats.fixedParticleHistory);
-    copyHistory(m_frameProfilerDebug.fixedDropHistory,
-                m_frameProfilerDebug.historyWriteIndex,
-                m_frameProfilerDebug.historyCount,
-                m_dashboardProfilerStats.fixedDropHistory);
-    copyHistory(m_frameProfilerDebug.fixedWorldHistory,
-                m_frameProfilerDebug.historyWriteIndex,
-                m_frameProfilerDebug.historyCount,
-                m_dashboardProfilerStats.fixedWorldHistory);
+    m_dashboardProfilerStats.fixedUpdateMs = timing.fixedUpdateMs;
+    m_dashboardProfilerStats.fixedInputMs = timing.fixedInputMs;
+    m_dashboardProfilerStats.fixedStateUpdateMs = timing.fixedStateUpdateMs;
+    m_dashboardProfilerStats.fixedParticleUpdateMs = timing.fixedParticleUpdateMs;
+    m_dashboardProfilerStats.fixedDropUpdateMs = timing.fixedDropUpdateMs;
+    m_dashboardProfilerStats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
+    m_dashboardProfilerStats.audioMs = timing.audioMs;
+    m_dashboardProfilerStats.renderMs = timing.renderMs;
+    m_dashboardProfilerStats.fixedHistoryCount = history.count;
+
+    // Copy history ring buffer entries in chronological order for the dashboard
+    const size_t historySize = DebugFrameProfiler::kHistorySamples;
+    const auto copyHistory = [&](const std::array<float, DebugFrameProfiler::kHistorySamples>& src,
+                                 std::array<float, Dashboard::FrameProfilerStats::kFixedHistorySamples>& dst) {
+        dst.fill(0.0f);
+        for (size_t i = 0; i < history.count; ++i) {
+            dst[i] = src[(history.writeIndex + historySize - history.count + i) % historySize];
+        }
+    };
+    copyHistory(history.fixedUpdateHistory, m_dashboardProfilerStats.fixedUpdateHistory);
+    copyHistory(history.fixedInputHistory, m_dashboardProfilerStats.fixedInputHistory);
+    copyHistory(history.fixedStateHistory, m_dashboardProfilerStats.fixedStateHistory);
+    copyHistory(history.fixedParticleHistory, m_dashboardProfilerStats.fixedParticleHistory);
+    copyHistory(history.fixedDropHistory, m_dashboardProfilerStats.fixedDropHistory);
+    copyHistory(history.fixedWorldHistory, m_dashboardProfilerStats.fixedWorldHistory);
 }
 #endif
 

@@ -74,6 +74,7 @@ set(SRC_GAME
         src/game/audio/AudioListenerSyncSystem.cpp
         src/game/session/GameSession.cpp
         src/game/orchestrator/GameFrameOrchestrator.cpp
+        src/game/debug/DebugFrameProfiler.cpp
 )
 
 # [核心基础]
