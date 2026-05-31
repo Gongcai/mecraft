@@ -12,9 +12,9 @@
 #include "../../ui/widgets/KeyboardInputBox.h"
 #include "../../ui/core/UIRenderer.h"
 
-/// G6: CommandState uses CommandStateContext — only command-relevant dependencies.
-/// Creates child states (CreativeModeState, GameplayState) via StateDependencies
-/// which is stored internally for backward compatibility.
+/// G6: CommandState uses StateDependencies (kept for child state creation).
+/// CommandStateContext documents actual dependencies; full StateDependencies
+/// is needed because CommandState creates CreativeModeState/GameplayState.
 class CommandState : public IGameState {
 public:
     explicit CommandState(StateDependencies deps)
