@@ -2,16 +2,8 @@
 // Created by Caiwe on 2026/3/21.
 //
 #include "Game.h"
-#include "states/GameplayState.h"
-#include "session/GameSessionDependencies.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
-#include "../audio/AudioListener.h"
-#include "../ecs/entity/SteveModelFactory.h"
-#include "../ecs/entity/MobModelFactory.h"
-#include "../ecs/components/Components.h"
-#include "../ecs/util/PlayerQuery.h"
-#include "../ecs/util/GameplayRuntimeContext.h"
 #include "../ecs/GameplayScene.h"
 #include "../world/World.h"
 #include "../physics/PhysicsSystem.h"
@@ -19,8 +11,18 @@
 #include "../particle/ParticleSystem.h"
 #include "../particle/RainRenderer.h"
 #include "../crafting/CraftingSystem.h"
+#include "../renderer/core/RenderResourceHub.h"
+#include "../renderer/core/RenderScene.h"
+#include "../renderer/renderers/DropRenderer.h"
+#include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
+#include "../renderer/renderers/HumanoidRenderer.h"
+#include "../renderer/renderers/PostProcessRenderer.h"
+#include "audio/AudioListenerSyncSystem.h"
 #include "camera/CameraController.h"
+#include "orchestrator/GameFrameOrchestrator.h"
+#include "presentation/GameplayHudPresenter.h"
 #include "presentation/GameplayPresentationBuilder.h"
+#include "../ui/core/UIRenderer.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -31,7 +33,26 @@
 
 #ifdef MECRAFT_DEBUG
 #include <chrono>
+#include "../ui/Dashboard.h"
+#include "debug/DebugFrameProfiler.h"
 #endif
+
+#ifdef MECRAFT_DEBUG
+struct Game::DebugRuntime {
+    Dashboard dashboard;
+    DebugFrameProfiler profiler;
+    Dashboard::FrameProfilerStats dashboardProfilerStats;
+};
+#endif
+
+struct Game::RenderRuntime {
+    RenderResourceHub resourceHub;
+    RenderScene scene;
+    DropRenderer dropRenderer;
+    FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
+    HumanoidRenderer humanoidRenderer;
+    PostProcessRenderer postProcessRenderer;
+};
 
 Game::Game(const GameInitParams& params)
     : m_config{params.seed, 16, glm::vec3(5.0f, 0.0f, 0.0f)},
@@ -47,7 +68,11 @@ Game::Game(const GameInitParams& params)
       m_audioEngine(*params.audioEngine),
       m_bgmSystem(*params.bgmSystem),
       m_uiRenderer(*params.uiRenderer),
-      m_localeManager(*params.localeManager) {
+      m_localeManager(*params.localeManager),
+      m_render(std::make_unique<RenderRuntime>()),
+      m_hudPresenter(nullptr),
+      m_audioSyncSystem(nullptr),
+      m_frameOrchestrator(std::make_unique<GameFrameOrchestrator>()) {
 }
 
 Game::Game(GameSessionConfig config, GameSessionDependencies deps)
@@ -64,30 +89,37 @@ Game::Game(GameSessionConfig config, GameSessionDependencies deps)
       m_audioEngine(m_deps.audioEngine),
       m_bgmSystem(m_deps.bgmSystem),
       m_uiRenderer(m_deps.uiRenderer),
-      m_localeManager(m_deps.localeManager) {
+      m_localeManager(m_deps.localeManager),
+      m_render(std::make_unique<RenderRuntime>()),
+      m_hudPresenter(nullptr),
+      m_audioSyncSystem(nullptr),
+      m_frameOrchestrator(std::make_unique<GameFrameOrchestrator>()) {
 }
+
+Game::~Game() = default;
 
 void Game::init() {
     if (m_initialized) {
         return;
     }
     m_initialized = true;
-    m_session.init(m_config, m_resourceMgr, m_renderer.getThreadPool());
+    m_session.init(m_config, m_resourceMgr, m_render->resourceHub.getThreadPool());
     initWorld();
     initRenderers();
-    initECS();
+    m_session.initECS(m_deps);
 
     // G3: Initialize audio sync and HUD presenter
     m_audioSyncSystem = std::make_unique<AudioListenerSyncSystem>(m_bgmSystem, m_audioEngine);
     m_hudPresenter = std::make_unique<GameplayHudPresenter>(m_window, m_uiRenderer, m_input);
 
-    m_stateMachine.pushState(std::make_unique<GameplayState>(makeStateDependencies()));
+    m_stateMachine.pushState(m_session.createInitialGameplayState(m_stateMachine, m_deps, m_lastSubmittedCommand));
 
 #ifdef MECRAFT_DEBUG
-    m_dashboard.init(m_window);
-    m_dashboard.setFirstPersonHeldItemRenderer(&m_firstPersonHeldItemRenderer);
+    m_debug = std::make_unique<DebugRuntime>();
+    m_debug->dashboard.init(m_window);
+    m_debug->dashboard.setFirstPersonHeldItemRenderer(&m_render->firstPersonHeldItemRenderer);
     // Inject Dashboard into presenter (Game owns, presenter renders)
-    m_hudPresenter->setDashboard(&m_dashboard);
+    m_hudPresenter->setDashboard(&m_debug->dashboard);
 #endif
 }
 
@@ -99,71 +131,44 @@ void Game::initWorld() {
 }
 
 void Game::initRenderers() {
-    m_renderer.init(m_resourceMgr);
+    auto& renderer = m_render->resourceHub;
+    auto& renderScene = m_render->scene;
+    auto& dropRenderer = m_render->dropRenderer;
+    auto& firstPersonHeldItemRenderer = m_render->firstPersonHeldItemRenderer;
+    auto& humanoidRenderer = m_render->humanoidRenderer;
+    auto& postProcessRenderer = m_render->postProcessRenderer;
+
+    renderer.init(m_resourceMgr);
 
     // Initialize RenderScene and connect to Renderer
-    m_renderScene.init(m_resourceMgr);
-    m_renderScene.initFromRenderer(&m_renderer);
+    renderScene.init(m_resourceMgr);
+    renderScene.initFromRenderer(&renderer);
 
     // Enable fog via RenderSettings
-    RenderSettings settings = m_renderScene.getSettings();
+    RenderSettings settings = renderScene.getSettings();
     settings.fog.enabled = true;
-    m_renderScene.setSettings(settings);
+    renderScene.setSettings(settings);
 
-    m_dropRenderer.init(m_resourceMgr);
-    m_firstPersonHeldItemRenderer.init(m_resourceMgr);
-    m_humanoidRenderer.init(m_resourceMgr);
-    m_renderer.setHumanoidRenderer(&m_humanoidRenderer);
-    m_renderer.setDropRenderer(&m_dropRenderer);
-    m_renderer.setDropSystem(&m_session.dropSystem());
-    m_renderer.setGameplayRegistry(&m_session.gameplayScene().registry());
-    m_renderer.setParticleSystem(&m_session.particleSystem());
-    m_renderScene.setHumanoidRenderer(&m_humanoidRenderer);
-    m_renderScene.setDropRenderer(&m_dropRenderer);
-    m_renderScene.setDropSystem(&m_session.dropSystem());
-    m_renderScene.setGameplayRegistry(&m_session.gameplayScene().registry());
-    m_renderScene.setParticleSystem(&m_session.particleSystem());
-    m_uiRenderer.setHumanoidRenderer(&m_humanoidRenderer);
-    m_postProcessRenderer.init(m_resourceMgr);
+    dropRenderer.init(m_resourceMgr);
+    firstPersonHeldItemRenderer.init(m_resourceMgr);
+    humanoidRenderer.init(m_resourceMgr);
+    renderer.setHumanoidRenderer(&humanoidRenderer);
+    renderer.setDropRenderer(&dropRenderer);
+    renderer.setDropSystem(&m_session.dropSystem());
+    renderer.setGameplayRegistry(&m_session.gameplayScene().registry());
+    renderer.setParticleSystem(&m_session.particleSystem());
+    renderScene.setHumanoidRenderer(&humanoidRenderer);
+    renderScene.setDropRenderer(&dropRenderer);
+    renderScene.setDropSystem(&m_session.dropSystem());
+    renderScene.setGameplayRegistry(&m_session.gameplayScene().registry());
+    renderScene.setParticleSystem(&m_session.particleSystem());
+    m_uiRenderer.setHumanoidRenderer(&humanoidRenderer);
+    postProcessRenderer.init(m_resourceMgr);
     m_session.particleSystem().init(m_resourceMgr);
     m_session.rainRenderer().init(m_resourceMgr);
 
     glEnable(GL_DEPTH_TEST);
 }
-
-// initAudio removed
-
-void Game::initECS() {
-    // G4: Delegate ECS initialization to GameSession
-    ExternalEcsServices ext;
-    ext.audioEngine = &m_audioEngine;
-    ext.inputContextManager = &m_contextManager;
-    ext.resourceMgr = &m_resourceMgr;
-    ext.uiRenderer = &m_uiRenderer;
-    ext.localeManager = &m_localeManager;
-    m_session.initECS(ext);
-}
-
-// clampFrameTime removed
-
-StateDependencies Game::makeStateDependencies() {
-    return {
-        m_stateMachine,
-        m_session.getPlayerInventory(),
-        m_contextManager,
-        m_input,
-        m_uiRenderer,
-        m_lastSubmittedCommand,
-        m_session.physicsSystem(),
-        m_session.world(),
-        m_audioEngine,
-        m_session.particleSystem(),
-        m_session.dropSystem(),
-        m_session.gameplayScene().registry(),
-        m_localeManager
-    };
-}
-
 
 void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 #ifdef MECRAFT_DEBUG
@@ -177,7 +182,7 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 #endif
 
     // G5: Delegate to orchestrator
-    m_frameOrchestrator.runFixedUpdate(m_session, m_stateMachine, fixedStep, accumulator);
+    m_frameOrchestrator->runFixedUpdate(m_session, m_stateMachine, fixedStep, accumulator);
 
     m_stateMachine.update(static_cast<float>(fixedStep), inputSnapshot);
 #ifdef MECRAFT_DEBUG
@@ -185,29 +190,25 @@ void Game::runFixedUpdate(const double fixedStep, double& accumulator) {
 #endif
 
 #ifdef MECRAFT_DEBUG
-    m_debugProfiler.recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
-    m_debugProfiler.recordFixedState(std::chrono::duration<double, std::milli>(stateEnd - stateStart).count());
-    m_debugProfiler.recordFixedParticle(0.0);
-    m_debugProfiler.recordFixedDrop(0.0);
-    m_debugProfiler.recordFixedWorld(0.0);  // World update is now inside orchestrator
-    m_debugProfiler.incrementFixedStep();
+    if (m_debug) {
+        m_debug->profiler.recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
+        m_debug->profiler.recordFixedState(std::chrono::duration<double, std::milli>(stateEnd - stateStart).count());
+        m_debug->profiler.recordFixedParticle(0.0);
+        m_debug->profiler.recordFixedDrop(0.0);
+        m_debug->profiler.recordFixedWorld(0.0);  // World update is now inside orchestrator
+        m_debug->profiler.incrementFixedStep();
+    }
 #endif
 }
 
 void Game::syncAudioListener(const float deltaTime) {
     // G5: Delegate to orchestrator
     if (m_audioSyncSystem) {
-        m_frameOrchestrator.syncAudioListener(*m_audioSyncSystem, deltaTime, m_session.gameplayScene().registry());
+        m_frameOrchestrator->syncAudioListener(*m_audioSyncSystem, deltaTime, m_session.gameplayScene().registry());
     } else {
         // Fallback during early init before audioSyncSystem is created
-        m_bgmSystem.update(deltaTime);
-        m_audioEngine.update(deltaTime);
-        ecs::PlayerQuery query(m_session.gameplayScene().registry());
-        AudioListener::setPosition(query.getEyePosition());
-        AudioListener::setOrientation(
-            query.getCameraFront(),
-            query.getCameraUp()
-        );
+        AudioListenerSyncSystem fallback(m_bgmSystem, m_audioEngine);
+        m_frameOrchestrator->syncAudioListener(fallback, deltaTime, m_session.gameplayScene().registry());
     }
 }
 
@@ -219,33 +220,37 @@ void Game::renderFrame(const float frameTime) {
 #ifdef MECRAFT_DEBUG
     // G7: Publish debug profiler data and pass to orchestrator for dashboard
     publishDebugFrameProfiler(frameTime);
-    m_frameOrchestrator.setDebugProfilerStats(&m_dashboardProfilerStats);
+    m_frameOrchestrator->setDebugProfilerStats(m_debug ? &m_debug->dashboardProfilerStats : nullptr);
 #endif
 
     // G5: Delegate frame rendering to orchestrator
-    m_frameOrchestrator.renderFrame(m_session, m_renderer, m_renderScene, m_stateMachine,
-                                    m_postProcessRenderer, m_hudPresenter.get(),
-                                    m_window, frameTime);
+    m_frameOrchestrator->renderFrame(m_session, m_render->resourceHub, m_render->scene, m_stateMachine,
+                                     m_render->postProcessRenderer, m_hudPresenter.get(),
+                                     m_window, frameTime);
 }
 
 #ifdef MECRAFT_DEBUG
 void Game::publishDebugFrameProfiler(const double frameTime) {
+    if (!m_debug) {
+        return;
+    }
     // Delegate timing accumulation, smoothing, and history to DebugFrameProfiler
-    m_debugProfiler.publish(frameTime);
+    m_debug->profiler.publish(frameTime);
 
-    const auto& timing = m_debugProfiler.timing();
-    const auto& history = m_debugProfiler.history();
+    const auto& timing = m_debug->profiler.timing();
+    const auto& history = m_debug->profiler.history();
 
-    m_dashboardProfilerStats.frameMs = frameTime * 1000.0;
-    m_dashboardProfilerStats.fixedUpdateMs = timing.fixedUpdateMs;
-    m_dashboardProfilerStats.fixedInputMs = timing.fixedInputMs;
-    m_dashboardProfilerStats.fixedStateUpdateMs = timing.fixedStateUpdateMs;
-    m_dashboardProfilerStats.fixedParticleUpdateMs = timing.fixedParticleUpdateMs;
-    m_dashboardProfilerStats.fixedDropUpdateMs = timing.fixedDropUpdateMs;
-    m_dashboardProfilerStats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
-    m_dashboardProfilerStats.audioMs = timing.audioMs;
-    m_dashboardProfilerStats.renderMs = timing.renderMs;
-    m_dashboardProfilerStats.fixedHistoryCount = history.count;
+    auto& stats = m_debug->dashboardProfilerStats;
+    stats.frameMs = frameTime * 1000.0;
+    stats.fixedUpdateMs = timing.fixedUpdateMs;
+    stats.fixedInputMs = timing.fixedInputMs;
+    stats.fixedStateUpdateMs = timing.fixedStateUpdateMs;
+    stats.fixedParticleUpdateMs = timing.fixedParticleUpdateMs;
+    stats.fixedDropUpdateMs = timing.fixedDropUpdateMs;
+    stats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
+    stats.audioMs = timing.audioMs;
+    stats.renderMs = timing.renderMs;
+    stats.fixedHistoryCount = history.count;
 
     // Copy history ring buffer entries in chronological order for the dashboard
     const size_t srcSize = DebugFrameProfiler::kHistorySamples;
@@ -256,12 +261,12 @@ void Game::publishDebugFrameProfiler(const double frameTime) {
             dst[i] = src[(h.writeIndex + srcSize - h.count + i) % srcSize];
         }
     };
-    copyHistory(history.fixedUpdateHistory.data(), m_dashboardProfilerStats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedInputHistory.data(), m_dashboardProfilerStats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedStateHistory.data(), m_dashboardProfilerStats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedParticleHistory.data(), m_dashboardProfilerStats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedDropHistory.data(), m_dashboardProfilerStats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedWorldHistory.data(), m_dashboardProfilerStats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
 }
 #endif
 
@@ -269,11 +274,14 @@ void Game::shutdown() {
     if (!m_initialized) {
         return;
     }
-    m_postProcessRenderer.shutdown();
-    m_humanoidRenderer.shutdown();
-    m_firstPersonHeldItemRenderer.shutdown();
-    m_dropRenderer.shutdown();
-    m_renderer.shutdown();
+    m_render->postProcessRenderer.shutdown();
+    m_render->humanoidRenderer.shutdown();
+    m_render->firstPersonHeldItemRenderer.shutdown();
+    m_render->dropRenderer.shutdown();
+    m_render->resourceHub.shutdown();
     m_session.shutdown();
+#ifdef MECRAFT_DEBUG
+    m_debug.reset();
+#endif
     m_initialized = false;
 }

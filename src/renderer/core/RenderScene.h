@@ -34,6 +34,8 @@ class ChunkMeshingService;
 class ThreadPool;
 class ForwardPipeline;
 class DeferredPipeline;
+class PostProcessRenderer;
+class RainRenderer;
 
 struct BlockTargetRenderData;
 struct BlockBreakRenderData;
@@ -71,6 +73,19 @@ struct SharedRenderResources {
     ecs::GameplayRegistry* gameplayRegistry = nullptr;
 };
 
+/// High-level render request for one gameplay frame.
+struct RenderGameplayFrameRequest {
+    const World& world;
+    const Camera& camera;
+    Window& window;
+    const BlockTargetRenderData& target;
+    const BlockBreakRenderData& blockBreak;
+    RainRenderer& rainRenderer;
+    PostProcessRenderer& postProcess;
+    float frameTime = 0.0f;
+    float screenRollRadians = 0.0f;
+};
+
 /// Entry point for all rendering
 /// Orchestrates pipeline selection, frame context building, and post-process
 class RenderScene {
@@ -85,6 +100,9 @@ public:
     /// Main render entry point (called from Game)
     void renderFrame(const World& world, const Camera& camera, const Window& window,
                      const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak);
+
+    /// Render a complete gameplay frame, including scene, precipitation, and post-process setup.
+    void renderGameplayFrame(const RenderGameplayFrameRequest& request);
 
     // Pipeline management
     void setPipelineMode(PipelineMode mode);

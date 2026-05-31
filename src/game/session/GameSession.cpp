@@ -13,6 +13,8 @@
 #include "../../crafting/CraftingSystem.h"
 #include "../camera/CameraController.h"
 #include "../presentation/GameplayPresentationBuilder.h"
+#include "../states/GameStateMachine.h"
+#include "../states/GameplayState.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../Paths.h"
 
@@ -44,23 +46,21 @@ void GameSession::initWorld(int seed) {
     m_world->init(seed);
 }
 
-void GameSession::initECS(ExternalEcsServices& ext) {
+void GameSession::initECS(const GameSessionDependencies& deps) {
     auto& svc = m_gameplayScene->services();
     svc.world              = m_world.get();
-    svc.audioEngine        = ext.audioEngine;
-    svc.inputContextManager = ext.inputContextManager;
-    svc.resourceMgr        = ext.resourceMgr;
+    svc.audioEngine        = &deps.audioEngine;
+    svc.inputContextManager = &deps.contextManager;
+    svc.resourceMgr        = &deps.resourceMgr;
     svc.dropSystem         = m_dropSystem.get();
     svc.particleSystem     = m_particleSystem.get();
-    svc.uiRenderer         = ext.uiRenderer;
+    svc.uiRenderer         = &deps.uiRenderer;
     svc.physicsSystem      = m_physicsSystem.get();
     svc.cameraController   = m_cameraController.get();
 
     // Load recipes
     m_craftingSystem->loadRecipes(RECIPES_CONFIG_PATH);
-    if (ext.uiRenderer) {
-        ext.uiRenderer->setCraftingSystem(m_craftingSystem.get());
-    }
+    deps.uiRenderer.setCraftingSystem(m_craftingSystem.get());
 
     auto& reg = m_gameplayScene->registry();
     m_dropSystem->bindRegistry(reg);
@@ -87,6 +87,32 @@ void GameSession::initECS(ExternalEcsServices& ext) {
     glm::vec3 playerPos = query.getPosition();
     ecs::MobModelFactory::createZombie(reg, glm::vec3(playerPos.x + kTestMobOffsetX, playerPos.y, playerPos.z));
 #endif
+}
+
+std::unique_ptr<IGameState> GameSession::createInitialGameplayState(GameStateMachine& stateMachine,
+                                                                    const GameSessionDependencies& deps,
+                                                                    std::string& lastSubmittedCommand) {
+    StateDependencies stateDeps{
+        stateMachine,
+        getPlayerInventory(),
+        deps.contextManager,
+        deps.input,
+        deps.uiRenderer,
+        lastSubmittedCommand,
+        physicsSystem(),
+        world(),
+        deps.audioEngine,
+        particleSystem(),
+        dropSystem(),
+        gameplayScene().registry(),
+        deps.localeManager
+    };
+    return std::make_unique<GameplayState>(stateDeps);
+}
+
+void GameSession::updateWorldAroundLocalPlayer() {
+    ecs::PlayerQuery query(m_gameplayScene->registry());
+    m_world->update(query.getPosition());
 }
 
 Inventory& GameSession::getPlayerInventory() {

@@ -5,14 +5,18 @@
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
+#include "../renderers/PostProcessRenderer.h"
 #include <glad/glad.h>
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
 
+#include <algorithm>
 #include <cstdio>
 #include "engine/platform/Window.h"
+#include "../../particle/RainRenderer.h"
 #include "../../world/World.h"
 #include "../../world/block/Block.h"
+#include "../../world/WeatherSystem.h"
 #include "engine/platform/Time.h"
 #include "../renderers/GameplaySkyRenderer.h"
 
@@ -147,6 +151,68 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
     // R5: Render block interaction overlays (outline + break overlay)
     const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
     m_overlayRenderer.render(world, viewProj, target, blockBreak);
+}
+
+void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
+    // Activate the pipeline when shared resources become available after target initialization.
+    if (!isNewPipelineActive() && isNewPipelineReady()) {
+        setNewPipelineActive(true);
+    }
+
+    const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
+    if (!skipPostProcess) {
+        request.postProcess.beginScene(request.window);
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0,
+                   std::max(1, request.window.getWidth()),
+                   std::max(1, request.window.getHeight()));
+    }
+
+    const bool lightDebugActive = isLightDebugActive();
+    float cameraRainVisibility = 1.0f;
+
+    renderFrame(request.world, request.camera, request.window, request.target, request.blockBreak);
+
+    if (!lightDebugActive) {
+        cameraRainVisibility = computeCameraRainVisibility(request.world, request.camera.getPosition());
+        if (m_settings.weather.rainLinesEnabled) {
+            const auto& weather = request.world.getWeatherSystem().getDerived();
+            const glm::vec3 camPos = request.camera.getPosition();
+            auto projMat = request.camera.getProjectionMatrix(request.window.getAspectRatio());
+            auto viewMat = request.camera.getViewMatrix();
+            const float alphaScale = m_settings.weather.rainAlphaScale;
+            const bool forwardVanillaActive = isNewPipelineActive() &&
+                                              getPipelineMode() == PipelineMode::Forward;
+            const GLuint depthTex = forwardVanillaActive ? 0 : m_lastFrameOutput.gbufferDepthTex;
+            const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
+            const glm::vec2 precipitationScreenSize(
+                static_cast<float>(std::max(1, request.window.getWidth())),
+                static_cast<float>(std::max(1, request.window.getHeight())));
+
+            if (weather.rainStrength > 0.01f) {
+                request.rainRenderer.render(projMat, viewMat, camPos,
+                                            weather.rainStrength, cameraRainVisibility,
+                                            alphaScale, depthTex,
+                                            precipitationScreenSize, request.frameTime,
+                                            hardwareDepthTest);
+            }
+            if (weather.snowStrength > 0.01f) {
+                request.rainRenderer.renderSnow(projMat, viewMat, camPos,
+                                                weather.snowStrength, cameraRainVisibility,
+                                                alphaScale * 0.6f, depthTex,
+                                                precipitationScreenSize, request.frameTime,
+                                                hardwareDepthTest);
+            }
+        }
+    }
+
+    if (!skipPostProcess) {
+        PostProcessEffects effects = buildPostProcessEffects(
+            request.world, request.camera, request.window,
+            cameraRainVisibility, request.screenRollRadians);
+        request.postProcess.setEffects(effects);
+    }
 }
 
 void RenderScene::setPipelineMode(PipelineMode mode) {

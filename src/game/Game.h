@@ -4,39 +4,16 @@
 
 #ifndef MECRAFT_GAME_H
 #define MECRAFT_GAME_H
-#include <array>
-#include <cstddef>
-#include <iostream>
 #include <memory>
+#include <string>
 
-#include "../engine/camera/Camera.h"
-#include "../engine/input/InputManager.h"
-#include "../engine/platform/Window.h"
-#include "../engine/platform/Time.h"
-#include "orchestrator/GameFrameOrchestrator.h"
-
-#include "../renderer/core/RenderResourceHub.h"
-#include "../renderer/core/RenderScene.h"
-#include "../renderer/renderers/DropRenderer.h"
-#include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
-#include "../renderer/renderers/PostProcessRenderer.h"
-#include "../renderer/renderers/HumanoidRenderer.h"
-#include "../engine/input/InputContextManager.h"
-#include "../player/ActionMap.h"
 #include "states/GameStateMachine.h"
-#ifdef MECRAFT_DEBUG
-#include "../ui/Dashboard.h"
-#include "debug/DebugFrameProfiler.h"
-#endif
-#include "../ui/core/UIRenderer.h"
-#include "../audio/AudioEngine.h"
-#include "../audio/BgmSystem.h"
-#include "states/StateDependencies.h"
-#include "../locale/LocaleManager.h"
 #include "session/GameSessionConfig.h"
 #include "session/GameSession.h"
-#include "presentation/GameplayHudPresenter.h"
-#include "audio/AudioListenerSyncSystem.h"
+
+class GameplayHudPresenter;
+class AudioListenerSyncSystem;
+class GameFrameOrchestrator;
 
 /// Legacy init params (kept for backward compatibility with GameplayAppState).
 struct GameInitParams {
@@ -60,6 +37,7 @@ public:
 
     /// New constructor using structured config and dependencies.
     Game(GameSessionConfig config, GameSessionDependencies deps);
+    ~Game();
 
     void init();
     void shutdown();
@@ -95,34 +73,25 @@ private:
 
     // Renderers and state (session-level but currently owned by Game)
     GameStateMachine m_stateMachine;
-    RenderResourceHub      m_renderer;
-    RenderScene   m_renderScene;
-    DropRenderer  m_dropRenderer;
-    FirstPersonHeldItemRenderer m_firstPersonHeldItemRenderer;
-    HumanoidRenderer  m_humanoidRenderer;
-    PostProcessRenderer m_postProcessRenderer;
+    struct RenderRuntime;
+    std::unique_ptr<RenderRuntime> m_render;
 
     // G3: Audio and HUD systems
     std::unique_ptr<GameplayHudPresenter> m_hudPresenter;
     std::unique_ptr<AudioListenerSyncSystem> m_audioSyncSystem;
 
     // G5: Frame orchestrator
-    GameFrameOrchestrator m_frameOrchestrator;
+    std::unique_ptr<GameFrameOrchestrator> m_frameOrchestrator;
 
     std::string m_lastSubmittedCommand;
 #ifdef MECRAFT_DEBUG
-    Dashboard      m_dashboard;
-    DebugFrameProfiler m_debugProfiler;  // G7: Debug frame profiler
-    Dashboard::FrameProfilerStats m_dashboardProfilerStats;
+    struct DebugRuntime;
+    std::unique_ptr<DebugRuntime> m_debug;
     void publishDebugFrameProfiler(double frameTime);
 #endif
 
-
-    [[nodiscard]] StateDependencies makeStateDependencies();
-
     void initWorld();
     void initRenderers();
-    void initECS();
 
     bool m_initialized = false;
 };

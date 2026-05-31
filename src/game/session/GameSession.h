@@ -2,8 +2,8 @@
 #define MECRAFT_GAME_SESSION_H
 
 #include "GameSessionConfig.h"
-#include "GameSessionDependencies.h"
 #include <memory>
+#include <string>
 
 // Forward declarations
 class World;
@@ -17,6 +17,8 @@ class RainRenderer;
 class CraftingSystem;
 class CameraController;
 class GameplayPresentationBuilder;
+class GameStateMachine;
+class IGameState;
 
 class Inventory;  // Forward declaration for getPlayerInventory()
 
@@ -35,8 +37,16 @@ public:
     void initWorld(int seed);
 
     /// Initialize ECS: bind services, create player entity, spawn test mob.
-    /// @param ext External service pointers not owned by GameSession
-    void initECS(struct ExternalEcsServices& ext);
+    /// @param deps External services not owned by GameSession
+    void initECS(const GameSessionDependencies& deps);
+
+    /// Create the initial gameplay state using session-owned gameplay services.
+    [[nodiscard]] std::unique_ptr<IGameState> createInitialGameplayState(GameStateMachine& stateMachine,
+                                                                         const GameSessionDependencies& deps,
+                                                                         std::string& lastSubmittedCommand);
+
+    /// Update world streaming and simulation center from the local player position.
+    void updateWorldAroundLocalPlayer();
 
     /// Get the local player's inventory from ECS.
     /// @throws std::runtime_error if inventory is not initialized
