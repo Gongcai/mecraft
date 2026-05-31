@@ -5,17 +5,18 @@
 #include <glm/vec3.hpp>
 
 #include "InventorySlotTypes.h"
-#include "../states/StateDependencies.h"
+#include "InventoryStateContext.h"
 #include "../../player/Inventory.h"
 #include "../../item/Item.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../ecs/util/PlayerQuery.h"
+#include "../../world/DropSystem.h"
 
 class CraftingGridControl;
 
 class InventoryDragController {
 public:
-    explicit InventoryDragController(StateDependencies& deps)
+    explicit InventoryDragController(InventoryStateContext& deps)
         : m_deps(deps) {}
 
     void setCraftingGrid(CraftingGridControl* grid) { m_craftGrid = grid; }
@@ -282,7 +283,7 @@ private:
         m_deps.dropSystem.spawnItemDrop(itemId, blockPos, count);
     }
 
-    StateDependencies& m_deps;
+    InventoryStateContext& m_deps;
     CraftingGridControl* m_craftGrid = nullptr;
     int m_lastSecondaryPlaceSlot = -1;
     bool m_primaryDragging = false;

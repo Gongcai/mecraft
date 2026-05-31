@@ -68,6 +68,7 @@ set(SRC_GAME
         src/game/camera/CameraController.cpp
         src/game/states/GameStateMachine.cpp
         src/game/states/GameplayState.cpp
+        src/game/states/GameplayStateEcsBridge.cpp
         src/game/states/CommandState.cpp
         src/game/states/StateDependencies.cpp
         src/game/presentation/GameplayPresentationBuilder.cpp

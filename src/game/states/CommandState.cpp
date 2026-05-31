@@ -1,12 +1,6 @@
 #include "CommandState.h"
-#include "GameplayState.h"
 #include <sstream>
-#include "../modes/CreativeModeState.h"
 #include "../../world/World.h"
-#include "../../world/DropSystem.h"
-#include "../../particle/ParticleSystem.h"
-#include "../../audio/AudioEngine.h"
-#include "../../physics/PhysicsSystem.h"
 #include "../../ecs/util/PlayerQuery.h"
 #include "../../ecs/entity/MobModelFactory.h"
 #include "../../ecs/GameplayRegistry.h"
@@ -31,7 +25,7 @@ bool CommandState::executeCommand(const std::string& command) {
             switchToSurvivalMode();
             return true;
         } else {
-            m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_gamemode"));
+            m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("usage_gamemode"));
             return false;
         }
     }
@@ -42,20 +36,20 @@ bool CommandState::executeCommand(const std::string& command) {
             std::string valueStr;
             iss >> valueStr;
             if (valueStr.empty()) {
-                m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
+                m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("usage_time_set"));
                 return false;
             }
             char* endPtr = nullptr;
             const float value = std::strtof(valueStr.c_str(), &endPtr);
             if (endPtr == valueStr.c_str() || value < 0.0f || value > 1200.0f) {
-                m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
+                m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("usage_time_set"));
                 return false;
             }
-            m_deps.world.getDayNightSystem().setTimeOfDay(value);
-            m_deps.uiRenderer.appendCommandLine(m_deps.localeManager.tr("time_set_to") + std::to_string(static_cast<int>(value)));
+            m_ctx.world.getDayNightSystem().setTimeOfDay(value);
+            m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("time_set_to") + std::to_string(static_cast<int>(value)));
             return false;
         } else {
-            m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("usage_time_set"));
+            m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("usage_time_set"));
             return false;
         }
     }
@@ -63,25 +57,29 @@ bool CommandState::executeCommand(const std::string& command) {
         std::string mobType;
         iss >> mobType;
         if (mobType == "zombie") {
-            ecs::PlayerQuery query(m_deps.ecsRegistry);
+            ecs::PlayerQuery query(m_ctx.ecsRegistry);
             glm::vec3 playerPos = query.getPosition();
-            ecs::MobModelFactory::createZombie(m_deps.ecsRegistry, playerPos);
-            m_deps.uiRenderer.appendCommandLine(m_deps.localeManager.tr("spawned_zombie"));
+            ecs::MobModelFactory::createZombie(m_ctx.ecsRegistry, playerPos);
+            m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("spawned_zombie"));
             return false;
         }
-        m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("unknown_mob") + mobType);
+        m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("unknown_mob") + mobType);
         return false;
     }
-    m_deps.uiRenderer.appendWarningLine(m_deps.localeManager.tr("unknown_command") + primary);
+    m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("unknown_command") + primary);
     return false;
 }
 
 void CommandState::switchToCreativeMode() {
-    m_deps.fsm.changeState(std::make_unique<CreativeModeState>(m_deps));
-    m_deps.uiRenderer.appendSuccessLine(m_deps.localeManager.tr("switched_creative"));
+    if (m_makeCreativeModeState) {
+        m_ctx.fsm.changeState(m_makeCreativeModeState());
+    }
+    m_ctx.uiRenderer.appendSuccessLine(m_ctx.localeManager.tr("switched_creative"));
 }
 
 void CommandState::switchToSurvivalMode() {
-    m_deps.fsm.changeState(std::make_unique<GameplayState>(m_deps));
-    m_deps.uiRenderer.appendSuccessLine(m_deps.localeManager.tr("switched_survival"));
+    if (m_makeSurvivalModeState) {
+        m_ctx.fsm.changeState(m_makeSurvivalModeState());
+    }
+    m_ctx.uiRenderer.appendSuccessLine(m_ctx.localeManager.tr("switched_survival"));
 }

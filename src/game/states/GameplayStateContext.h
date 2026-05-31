@@ -6,6 +6,7 @@ class InputContextManager;
 class InputManager;
 class UIRenderer;
 class Inventory;
+class LocaleManager;
 
 namespace ecs {
 class GameplayRegistry;
@@ -19,6 +20,7 @@ struct GameplayStateContext {
     UIRenderer& uiRenderer;
     ecs::GameplayRegistry& ecsRegistry;
     Inventory& inventory;
+    const LocaleManager& localeManager;
 };
 
 #endif // MECRAFT_GAMEPLAY_STATE_CONTEXT_H

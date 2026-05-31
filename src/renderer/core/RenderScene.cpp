@@ -212,6 +212,15 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             request.world, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians);
         request.postProcess.setEffects(effects);
+        if (lightDebugActive) {
+            request.postProcess.blitSceneToBackbuffer(request.window);
+        } else {
+            request.postProcess.endSceneAndComposite(
+                request.window,
+                request.frameTime,
+                m_lastFrameOutput.gbufferDepthTex,
+                m_lastFrameOutput.weatherMaskTex);
+        }
     }
 }
 

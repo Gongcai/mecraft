@@ -5,12 +5,13 @@
 #include "GameStateMachine.h"
 #include "engine//input/InputContextManager.h"
 #include "CommandState.h"
+#include "GameplayStateEcsBridge.h"
 #include "../inventory/CreativeInventoryState.h"
 #include "../inventory/InventoryState.h"
+#include "../modes/CreativeModeState.h"
 #include "UIState.h"
 #include "UIStateContext.h"
 #include "../../ecs/GameplayRegistry.h"
-#include "../../ecs/components/Components.h"
 #include "../../ecs/util/GameplayRuntimeContext.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIRenderer.h"
@@ -18,31 +19,73 @@
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
                              const GameplayMode gameplayMode)
-    : m_deps(deps),
+    : GameplayState(
+          GameplayStateContext{
+              deps.fsm,
+              deps.context,
+              deps.input,
+              deps.uiRenderer,
+              deps.ecsRegistry,
+              deps.inventory,
+              deps.localeManager
+          },
+          InventoryStateContext{
+              deps.fsm,
+              deps.inventory,
+              deps.context,
+              deps.input,
+              deps.uiRenderer,
+              deps.dropSystem,
+              deps.ecsRegistry
+          },
+          CommandStateContext{
+              deps.fsm,
+              deps.context,
+              deps.input,
+              deps.uiRenderer,
+              deps.lastSubmittedCommand,
+              deps.world,
+              deps.ecsRegistry,
+              deps.localeManager
+          },
+          [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<CreativeModeState>(deps); },
+          [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<GameplayState>(deps); },
+          modeRules,
+          gameplayMode) {}
+
+GameplayState::GameplayState(GameplayStateContext gameplayCtx,
+                             InventoryStateContext inventoryCtx,
+                             CommandStateContext commandCtx,
+                             StateFactory makeCreativeModeState,
+                             StateFactory makeSurvivalModeState,
+                             const IGameplayModeRules& modeRules,
+                             const GameplayMode gameplayMode)
+    : m_ctx(gameplayCtx),
+      m_inventoryCtx(inventoryCtx),
+      m_commandCtx(commandCtx),
+      m_makeCreativeModeState(std::move(makeCreativeModeState)),
+      m_makeSurvivalModeState(std::move(makeSurvivalModeState)),
       m_modeRules(modeRules),
       m_gameplayMode(gameplayMode) {}
 
 void GameplayState::onEnter()
 {
-    if (m_deps.context.getCurrentContext() != InputContextType::Gameplay) {
-         m_deps.context.switchContext(InputContextType::Gameplay);
+    if (m_ctx.context.getCurrentContext() != InputContextType::Gameplay) {
+         m_ctx.context.switchContext(InputContextType::Gameplay);
     }
-    m_deps.input.captureMouse(true);
-    m_deps.uiRenderer.setInventoryPanelVisible(false);
-    m_deps.uiRenderer.setCreativeInventoryVisible(false);
-    m_deps.input.clearUIDragItem();
+    m_ctx.input.captureMouse(true);
+    m_ctx.uiRenderer.setInventoryPanelVisible(false);
+    m_ctx.uiRenderer.setCreativeInventoryVisible(false);
+    m_ctx.input.clearUIDragItem();
 
-    if (!m_deps.ecsRegistry.ctxHas<ecs::GameplayRuntimeContext>()) {
-        m_deps.ecsRegistry.ctxSet<ecs::GameplayRuntimeContext>();
+    if (!m_ctx.ecsRegistry.ctxHas<ecs::GameplayRuntimeContext>()) {
+        m_ctx.ecsRegistry.ctxSet<ecs::GameplayRuntimeContext>();
     }
-    auto& runtime = m_deps.ecsRegistry.ctxGet<ecs::GameplayRuntimeContext>();
+    auto& runtime = m_ctx.ecsRegistry.ctxGet<ecs::GameplayRuntimeContext>();
     runtime.modeRules = &m_modeRules;
     runtime.gameplayMode = m_gameplayMode;
 
-    auto view = m_deps.ecsRegistry.view<ecs::LocalPlayerTag, ecs::InventoryComponent>();
-    for (auto e : view) {
-        view.get<ecs::InventoryComponent>(e).selectedHotbarSlot = m_deps.inventory.getSelectedSlot();
-    }
+    GameplayStateEcsBridge::syncSelectedHotbarSlot(m_ctx.ecsRegistry, m_ctx.inventory);
 }
 
 void GameplayState::update(float dt, const InputSnapshot& snapshot)
@@ -66,36 +109,39 @@ void GameplayState::update(float dt, const InputSnapshot& snapshot)
 
 bool GameplayState::handleInventoryTransition()
 {
-    if (!m_deps.context.isActionTriggered(Action::Inventory)) {
+    if (!m_ctx.context.isActionTriggered(Action::Inventory)) {
         return false;
     }
     if (m_gameplayMode == GameplayMode::Creative) {
-        m_deps.fsm.pushState(std::make_unique<CreativeInventoryState>(m_deps));
+        m_ctx.fsm.pushState(std::make_unique<CreativeInventoryState>(m_inventoryCtx));
         return true;
     }
-    m_deps.fsm.pushState(std::make_unique<InventoryState>(m_deps, m_gameplayMode));
+    m_ctx.fsm.pushState(std::make_unique<InventoryState>(m_inventoryCtx, m_gameplayMode));
     return true;
 }
 
 bool GameplayState::handleMenuTransition()
 {
-    if (!m_deps.context.isActionTriggered(Action::Menu)) {
+    if (!m_ctx.context.isActionTriggered(Action::Menu)) {
         return false;
     }
 
     // G6: Create UIState with narrow UIStateContext
-    UIStateContext uiCtx{m_deps.fsm, m_deps.context, m_deps.input, m_deps.uiRenderer, m_deps.localeManager};
-    m_deps.fsm.pushState(std::make_unique<UIState>(uiCtx));
+    UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager};
+    m_ctx.fsm.pushState(std::make_unique<UIState>(uiCtx));
     return true;
 }
 
 bool GameplayState::handleCommandTransition()
 {
-    if (!m_deps.context.isActionTriggered(Action::OpenCommand)) {
+    if (!m_ctx.context.isActionTriggered(Action::OpenCommand)) {
         return false;
     }
 
-    m_deps.fsm.pushState(std::make_unique<CommandState>(m_deps));
+    m_ctx.fsm.pushState(std::make_unique<CommandState>(
+        m_commandCtx,
+        m_makeCreativeModeState,
+        m_makeSurvivalModeState));
     return true;
 }
 
@@ -106,21 +152,6 @@ void GameplayState::driveLegacyGameplayBridge(float dt)
 
 void GameplayState::resetBlockBreakSession()
 {
-    auto view = m_deps.ecsRegistry.view<ecs::LocalPlayerTag>();
-    for (auto e : view) {
-        if (m_deps.ecsRegistry.has<ecs::BlockBreakComponent>(e)) {
-            auto& blockBreak = m_deps.ecsRegistry.get<ecs::BlockBreakComponent>(e);
-            blockBreak.active = false;
-            blockBreak.blockPos = glm::ivec3{};
-            blockBreak.progress01 = 0.0f;
-        }
-        if (m_deps.ecsRegistry.has<ecs::BlockInteractionRuntimeComponent>(e)) {
-            auto& runtime = m_deps.ecsRegistry.get<ecs::BlockInteractionRuntimeComponent>(e);
-            runtime.breakActive = false;
-            runtime.breakBlockPos = glm::ivec3{};
-            runtime.breakElapsedMs = 0.0f;
-            runtime.breakRequiredMs = 0.0f;
-        }
-    }
-    m_deps.uiRenderer.setHeldItemPreviewActionAnimationActive(false);
+    GameplayStateEcsBridge::resetBlockBreakSession(m_ctx.ecsRegistry);
+    m_ctx.uiRenderer.setHeldItemPreviewActionAnimationActive(false);
 }

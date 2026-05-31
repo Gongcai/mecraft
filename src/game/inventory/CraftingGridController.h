@@ -4,18 +4,19 @@
 #include <glm/vec3.hpp>
 
 #include "InventorySlotTypes.h"
-#include "../states/StateDependencies.h"
+#include "InventoryStateContext.h"
 #include "../../ecs/util/PlayerQuery.h"
 #include "../../player/Inventory.h"
 #include "../../item/Item.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../ui/inventory/CraftingGridControl.h"
+#include "../../world/DropSystem.h"
 
 class InventoryDragController;
 
 class CraftingGridController {
 public:
-    CraftingGridController(StateDependencies& deps, InventoryDragController& dragCtrl)
+    CraftingGridController(InventoryStateContext& deps, InventoryDragController& dragCtrl)
         : m_deps(deps), m_dragCtrl(dragCtrl) {}
 
     // Handle click on a crafting grid slot (0-3 = grid, 4 = result).
@@ -114,6 +115,6 @@ private:
         m_deps.dropSystem.spawnItemDrop(itemId, blockPos, count);
     }
 
-    StateDependencies& m_deps;
+    InventoryStateContext& m_deps;
     InventoryDragController& m_dragCtrl;
 };

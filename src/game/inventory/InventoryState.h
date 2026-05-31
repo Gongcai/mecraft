@@ -5,7 +5,7 @@
 #include "../states/GameStateMachine.h"
 #include "engine/input/InputContextManager.h"
 #include "../modes/GameplayModeRules.h"
-#include "../states/StateDependencies.h"
+#include "InventoryStateContext.h"
 #include "InventoryDragController.h"
 #include "CraftingGridController.h"
 #include "../../player/Inventory.h"
@@ -16,7 +16,7 @@
 
 class InventoryState final : public IGameState {
 public:
-    InventoryState(StateDependencies deps,
+    InventoryState(InventoryStateContext deps,
                    GameplayMode /*gameplayMode*/)
         : m_deps(deps),
           m_dragCtrl(m_deps),
@@ -140,7 +140,7 @@ public:
     }
 
 private:
-    StateDependencies m_deps;
+    InventoryStateContext m_deps;
     InventoryDragController m_dragCtrl;
     CraftingGridController m_craftCtrl;
 };

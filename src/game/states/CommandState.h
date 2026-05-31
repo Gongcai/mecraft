@@ -1,43 +1,48 @@
 #ifndef MECRAFT_COMMANDSTATE_H
 #define MECRAFT_COMMANDSTATE_H
 
+#include <functional>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include <cstdlib>
 
 #include "IGameState.h"
 #include "GameStateMachine.h"
-#include "StateDependencies.h"
+#include "CommandStateContext.h"
 #include "engine/input/InputContextManager.h"
 #include "../../ui/widgets/KeyboardInputBox.h"
 #include "../../ui/core/UIRenderer.h"
 
-/// G6: CommandState uses StateDependencies (kept for child state creation).
-/// CommandStateContext documents actual dependencies; full StateDependencies
-/// is needed because CommandState creates CreativeModeState/GameplayState.
+/// Handles command input and execution using command-specific dependencies.
 class CommandState : public IGameState {
 public:
-    explicit CommandState(StateDependencies deps)
-        : m_deps(deps),
+    using StateFactory = std::function<std::unique_ptr<IGameState>()>;
+
+    CommandState(CommandStateContext ctx, StateFactory makeCreativeModeState, StateFactory makeSurvivalModeState)
+        : m_ctx(ctx),
+          m_makeCreativeModeState(std::move(makeCreativeModeState)),
+          m_makeSurvivalModeState(std::move(makeSurvivalModeState)),
           m_inputBox(128) {
     }
 
     void onEnter() override {
-        m_deps.context.pushContext(InputContextType::UI);
-        m_deps.input.captureMouse(false);
+        m_ctx.context.pushContext(InputContextType::UI);
+        m_ctx.input.captureMouse(false);
         m_inputBox.open("/");
     }
 
     void onExit() override {
-        m_deps.context.popContext();
-        if (m_deps.context.getCurrentContext() == InputContextType::Gameplay) {
-            m_deps.input.captureMouse(true);
+        m_ctx.context.popContext();
+        if (m_ctx.context.getCurrentContext() == InputContextType::Gameplay) {
+            m_ctx.input.captureMouse(true);
         }
     }
 
     void update(float dt, const InputSnapshot& snapshot) override {
         const std::string textBeforeUpdate = m_inputBox.getText();
-        m_inputBox.update(snapshot, dt, &m_deps.context);
+        m_inputBox.update(snapshot, dt, &m_ctx.context);
 
         bool appliedHistoryNavigation = false;
         if (m_inputBox.consumeHistoryPrev()) {
@@ -51,11 +56,11 @@ public:
         std::string submitted;
         if (m_inputBox.consumeSubmit(&submitted)) {
             commitCommandToHistory(submitted);
-            m_deps.lastSubmittedCommand = submitted;
-            m_deps.uiRenderer.appendCommandLine(submitted);
+            m_ctx.lastSubmittedCommand = submitted;
+            m_ctx.uiRenderer.appendCommandLine(submitted);
             const bool handledTransition = executeCommand(submitted);
             if (!handledTransition) {
-                m_deps.fsm.popState();
+                m_ctx.fsm.popState();
             }
             return;
         }
@@ -66,7 +71,7 @@ public:
         }
 
         if (m_inputBox.consumeCancel()) {
-            m_deps.fsm.popState();
+            m_ctx.fsm.popState();
             return;
         }
     }
@@ -75,7 +80,7 @@ public:
         if (!m_inputBox.isOpen()) {
             return;
         }
-        m_deps.uiRenderer.renderCommandInputBox(m_inputBox.getText());
+        m_ctx.uiRenderer.renderCommandInputBox(m_inputBox.getText());
     }
 
 private:
@@ -142,7 +147,9 @@ private:
         return s_history;
     }
 
-    StateDependencies m_deps;  // Full deps needed for child state creation
+    CommandStateContext m_ctx;
+    StateFactory m_makeCreativeModeState;
+    StateFactory m_makeSurvivalModeState;
     KeyboardInputBox m_inputBox;
     std::string m_historyDraft;
     int m_historyCursor = -1;

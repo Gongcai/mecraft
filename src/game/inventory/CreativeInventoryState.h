@@ -4,7 +4,7 @@
 #include "../states/GameStateMachine.h"
 #include "engine//input/InputContextManager.h"
 #include "InventoryDragController.h"
-#include "../states/StateDependencies.h"
+#include "InventoryStateContext.h"
 #include "../../item/Item.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIInputAdapter.h"
@@ -12,7 +12,7 @@
 
 class CreativeInventoryState final : public IGameState {
 public:
-    explicit CreativeInventoryState(StateDependencies deps)
+    explicit CreativeInventoryState(InventoryStateContext deps)
         : m_deps(deps),
           m_dragCtrl(m_deps) {
         m_dragCtrl.setCraftingGrid(&deps.uiRenderer.getCraftingGrid());
@@ -165,6 +165,6 @@ private:
         m_deps.inventory.swapSlots(hoveredSlot, hotbarIndex);
     }
 
-    StateDependencies m_deps;
+    InventoryStateContext m_deps;
     InventoryDragController m_dragCtrl;
 };
