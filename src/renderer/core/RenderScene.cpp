@@ -6,6 +6,7 @@
 #include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/PostProcessRenderer.h"
+#include "../renderers/FirstPersonHeldItemRenderer.h"
 #include <glad/glad.h>
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
@@ -205,6 +206,20 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                 hardwareDepthTest);
             }
         }
+    }
+
+    if (request.renderFirstPersonHeldItem &&
+        request.firstPersonHeldItemRenderer != nullptr &&
+        request.firstPersonInventory != nullptr &&
+        request.firstPersonHeldItemMotion != nullptr) {
+        request.firstPersonHeldItemRenderer->setForwardMode(getPipelineMode() == PipelineMode::Forward);
+        request.firstPersonHeldItemRenderer->setShadowData(
+            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
+        request.firstPersonHeldItemRenderer->render(
+            request.window,
+            *request.firstPersonInventory,
+            *request.firstPersonHeldItemMotion,
+            static_cast<float>(Time::getGameTime()));
     }
 
     if (!skipPostProcess) {

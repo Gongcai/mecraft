@@ -9,7 +9,6 @@
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../world/World.h"
-#include "../../../ui/core/UIRenderer.h"
 
 namespace ecs {
 
@@ -26,7 +25,6 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
 }
 
 void resetBreakSession(BlockBreakComponent& blockBreak,
-                       UIRenderer& uiRenderer,
                        BlockInteractionRuntimeComponent& runtime) {
     runtime.breakActive = false;
     runtime.breakElapsedMs = 0.0f;
@@ -35,15 +33,13 @@ void resetBreakSession(BlockBreakComponent& blockBreak,
     blockBreak.active = false;
     blockBreak.blockPos = glm::ivec3{};
     blockBreak.progress01 = 0.0f;
-    uiRenderer.setHeldItemPreviewActionAnimationActive(false);
 }
 
 } // namespace
 
 void BlockBreakSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world || !ctx.services.uiRenderer) return;
+    if (!ctx.services.world) return;
     auto& world = *ctx.services.world;
-    auto& uiRenderer = *ctx.services.uiRenderer;
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
@@ -67,18 +63,16 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             std::max(0.0f, runtime.creativeBreakCooldownRemaining - dt);
 
         if (!intent.wantsBreak || !target.hasTarget) {
-            resetBreakSession(blockBreak, uiRenderer, runtime);
+            resetBreakSession(blockBreak, runtime);
             continue;
         }
 
         const glm::ivec3 hitBlock = target.targetBlock;
         const BlockID targetBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
         if (targetBlock == 0 || !BlockRegistry::get(targetBlock).isSelectable) {
-            resetBreakSession(blockBreak, uiRenderer, runtime);
+            resetBreakSession(blockBreak, runtime);
             continue;
         }
-
-        uiRenderer.setHeldItemPreviewActionAnimationActive(true);
 
         if (!modeRules.shouldReportBreakProgress()) {
             // Creative instant break
@@ -90,7 +84,8 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
-            resetBreakSession(blockBreak, uiRenderer, runtime);
+            ++runtime.heldItemSwingSequence;
+            resetBreakSession(blockBreak, runtime);
             continue;
         }
 
@@ -115,7 +110,8 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             dropBus.push({brokenBlock, hitBlock});
-            resetBreakSession(blockBreak, uiRenderer, runtime);
+            ++runtime.heldItemSwingSequence;
+            resetBreakSession(blockBreak, runtime);
         }
     }
 }

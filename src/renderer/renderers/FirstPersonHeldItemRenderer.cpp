@@ -25,7 +25,6 @@
 #include "../../Paths.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../ui/core/UIRenderContext.h"
 #include "../../world/chunk/SubChunk.h"
 
 namespace {
@@ -529,7 +528,7 @@ void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
 
 void FirstPersonHeldItemRenderer::render(const Window& window,
                                          const Inventory& inventory,
-                                         const HeldItemPreviewMotion& motion,
+                                         const FirstPersonHeldItemMotion& motion,
                                          const float timeSeconds) {
     if (!m_initialized || m_resourceMgr == nullptr || m_steveShader == nullptr) {
         return;
@@ -598,10 +597,10 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
     const renderer::gl::ScopedStateSnapshot stateGuard;
     glViewport(0, 0, window.getWidth(), window.getHeight());
     glDepthMask(GL_TRUE);
-    glClearDepth(1.0);
-    glClear(GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
+    // View-model geometry is not in world space; keep it in front while still writing scene depth.
+    glDepthFunc(GL_ALWAYS);
+    glDepthRange(0.0, 0.08);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_CULL_FACE);
@@ -640,8 +639,6 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
         drawArm(viewProj, armModel);
 
         glBindVertexArray(0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, 0);
         return;
     }
 
@@ -675,17 +672,6 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
     drawItem(m_visibleItemId, view, viewProj, itemModel);
 
     glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,

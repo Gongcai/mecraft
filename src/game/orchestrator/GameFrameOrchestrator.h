@@ -1,6 +1,8 @@
 #ifndef MECRAFT_GAME_FRAME_ORCHESTRATOR_H
 #define MECRAFT_GAME_FRAME_ORCHESTRATOR_H
 
+#include <cstdint>
+
 #ifdef MECRAFT_DEBUG
 #include "../../ui/Dashboard.h"
 #endif
@@ -11,6 +13,7 @@ class RenderResourceHub;
 class RenderScene;
 class Window;
 class PostProcessRenderer;
+class FirstPersonHeldItemRenderer;
 class AudioListenerSyncSystem;
 class GameplayHudPresenter;
 
@@ -37,6 +40,7 @@ public:
     void renderFrame(GameSession& session,
                      RenderResourceHub& renderer,
                      RenderScene& renderScene,
+                     FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer,
                      GameStateMachine& stateMachine,
                      PostProcessRenderer& postProcess,
                      GameplayHudPresenter* hudPresenter,
@@ -49,6 +53,7 @@ public:
 #endif
 
 private:
+    uint32_t m_lastHeldItemSwingSequence = 0;
 #ifdef MECRAFT_DEBUG
     const Dashboard::FrameProfilerStats* m_debugProfilerStats = nullptr;
 #endif

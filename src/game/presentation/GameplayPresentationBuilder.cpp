@@ -88,6 +88,14 @@ GameplayPresentationSnapshot GameplayPresentationBuilder::build(
     snap.heldItemMotion.bobPhaseOffset = playerQuery.getEyeBobPhaseOffset();
     snap.heldItemMotion.cameraYawDegrees = playerQuery.getCameraYaw();
     snap.heldItemMotion.cameraPitchDegrees = playerQuery.getCameraPitch();
+    {
+        auto runtimeView = registry.view<ecs::LocalPlayerTag, ecs::BlockInteractionRuntimeComponent>();
+        for (auto e : runtimeView) {
+            snap.heldItemSwingSequence =
+                runtimeView.get<ecs::BlockInteractionRuntimeComponent>(e).heldItemSwingSequence;
+            break;
+        }
+    }
 
     // Inventory reference
     snap.inventory = &playerQuery.getInventory();

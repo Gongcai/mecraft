@@ -9,7 +9,6 @@
 #include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
-#include "../../../ui/core/UIRenderer.h"
 #include "../../../item/Item.h"
 
 namespace ecs {
@@ -64,9 +63,8 @@ BlockID resolvePlacementState(const BlockID blockId,
 } // namespace
 
 void BlockPlaceSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world || !ctx.services.uiRenderer) return;
+    if (!ctx.services.world) return;
     auto& world = *ctx.services.world;
-    auto& uiRenderer = *ctx.services.uiRenderer;
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
@@ -143,7 +141,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
         audioBus.push(
             {gameplay_state_detail::getRandomName("put", 5), glm::vec3(placeBlock), true, 1.0f});
-        uiRenderer.triggerHeldItemPreviewActionAnimation();
+        ++runtime.heldItemSwingSequence;
     }
 }
 

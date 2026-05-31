@@ -153,5 +153,4 @@ void GameplayState::driveLegacyGameplayBridge(float dt)
 void GameplayState::resetBlockBreakSession()
 {
     GameplayStateEcsBridge::resetBlockBreakSession(m_ctx.ecsRegistry);
-    m_ctx.uiRenderer.setHeldItemPreviewActionAnimationActive(false);
 }

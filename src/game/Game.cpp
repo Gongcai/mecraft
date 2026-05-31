@@ -224,8 +224,10 @@ void Game::renderFrame(const float frameTime) {
 #endif
 
     // G5: Delegate frame rendering to orchestrator
-    m_frameOrchestrator->renderFrame(m_session, m_render->resourceHub, m_render->scene, m_stateMachine,
-                                     m_render->postProcessRenderer, m_hudPresenter.get(),
+    m_frameOrchestrator->renderFrame(m_session, m_render->resourceHub, m_render->scene,
+                                     m_render->firstPersonHeldItemRenderer, m_stateMachine,
+                                     m_render->postProcessRenderer,
+                                     m_hudPresenter.get(),
                                      m_window, frameTime);
 }
 

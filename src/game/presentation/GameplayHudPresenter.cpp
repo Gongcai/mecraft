@@ -15,16 +15,7 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
     playerStats.maxFood = snap.playerStats.maxFood;
     playerStats.showSurvivalStats = snap.playerStats.showSurvivalStats;
 
-    // Convert snapshot held item motion to UI format
-    HeldItemPreviewMotion motion;
-    motion.moving = snap.heldItemMotion.moving;
-    motion.sprinting = snap.heldItemMotion.sprinting;
-    motion.bobFrequency = snap.heldItemMotion.bobFrequency;
-    motion.bobPhaseOffset = snap.heldItemMotion.bobPhaseOffset;
-    motion.cameraYawDegrees = snap.heldItemMotion.cameraYawDegrees;
-    motion.cameraPitchDegrees = snap.heldItemMotion.cameraPitchDegrees;
-
-    m_uiRenderer.render(m_window, *snap.inventory, playerStats, motion, m_input.snapshot());
+    m_uiRenderer.render(m_window, *snap.inventory, playerStats, m_input.snapshot());
     stateMachine.render();
 }
 

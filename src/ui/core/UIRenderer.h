@@ -10,7 +10,6 @@
 #include "../hud/ConsoleOverlay.h"
 #include "../inventory/CreativeInventoryPanelControl.h"
 #include "../hud/CrosshairControl.h"
-#include "../inventory/HeldItemPreviewControl.h"
 #include "../hud/HotbarControl.h"
 #include "../hud/HudControl.h"
 #include "../inventory/InventoryPanelControl.h"
@@ -44,7 +43,6 @@ public:
     void render(const Window& window,
                 const Inventory& inventory,
                 const PlayerStatsData& playerStats,
-                const HeldItemPreviewMotion& heldItemMotion,
                 const InputSnapshot& inputSnapshot);
     void renderCommandInputBox(const std::string& text);
     void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
@@ -130,25 +128,15 @@ public:
     void setInventoryCountTextScale(float scale);
     [[nodiscard]] float getInventoryCountTextScale() const;
 
-    void setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout);
-    [[nodiscard]] const HeldItemPreviewLayout& getHeldItemPreviewLayout() const;
-    void triggerHeldItemPreviewActionAnimation();
-    void setHeldItemPreviewActionAnimationActive(bool active);
-    [[nodiscard]] bool consumeHeldItemPreviewSwingTrigger();
-    [[nodiscard]] bool isHeldItemPreviewActionAnimationActive() const;
-
 private:
     [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,
                                                         const Inventory& inventory,
                                                         const PlayerStatsData& playerStats,
-                                                        const HeldItemPreviewMotion& heldItemMotion,
                                                         const InputSnapshot& inputSnapshot) const;
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     void renderControls(const UIRenderContext& context) const;
 
     CrosshairControl m_crosshair;
-    HeldItemPreviewControl m_heldItemPreview;
-
     HotbarControl m_hotbar;
     HudControl m_hud;
     InventoryPanelControl m_inventoryPanel;
@@ -164,8 +152,6 @@ private:
     const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
     bool m_commandInputRequested = false;
-    bool m_heldItemPreviewSwingTriggered = false;
-    bool m_heldItemPreviewActionAnimationActive = false;
 
     std::size_t m_consoleMaxLines = 64;
 };

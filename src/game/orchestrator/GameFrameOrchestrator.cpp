@@ -5,6 +5,7 @@
 #include "../presentation/GameplayPresentationSnapshot.h"
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
+#include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/PostProcessRenderer.h"
 #include "../presentation/GameplayHudPresenter.h"
 #include "../audio/AudioListenerSyncSystem.h"
@@ -50,6 +51,7 @@ void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync
 void GameFrameOrchestrator::renderFrame(GameSession& session,
                                          RenderResourceHub& renderer,
                                          RenderScene& renderScene,
+                                         FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer,
                                          GameStateMachine& stateMachine,
                                          PostProcessRenderer& postProcess,
                                          GameplayHudPresenter* hudPresenter,
@@ -73,6 +75,23 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     breakData.progress01 = snap.blockBreak.progress01;
     breakData.blockPos = snap.blockBreak.blockPos;
 
+    FirstPersonHeldItemMotion firstPersonMotion;
+    firstPersonMotion.moving = snap.heldItemMotion.moving;
+    firstPersonMotion.sprinting = snap.heldItemMotion.sprinting;
+    firstPersonMotion.bobFrequency = snap.heldItemMotion.bobFrequency;
+    firstPersonMotion.bobPhaseOffset = snap.heldItemMotion.bobPhaseOffset;
+    firstPersonMotion.cameraYawDegrees = snap.heldItemMotion.cameraYawDegrees;
+    firstPersonMotion.cameraPitchDegrees = snap.heldItemMotion.cameraPitchDegrees;
+    if (snap.blockBreak.active) {
+        firstPersonHeldItemRenderer.setContinuousSwing(true);
+    } else {
+        firstPersonHeldItemRenderer.setContinuousSwing(false);
+        if (snap.heldItemSwingSequence != m_lastHeldItemSwingSequence) {
+            firstPersonHeldItemRenderer.triggerSwing();
+        }
+    }
+    m_lastHeldItemSwingSequence = snap.heldItemSwingSequence;
+
     RenderGameplayFrameRequest renderRequest{
         session.world(),
         snap.renderCamera,
@@ -82,7 +101,11 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
         session.rainRenderer(),
         postProcess,
         frameTime,
-        snap.fallRollRadians
+        snap.fallRollRadians,
+        &firstPersonHeldItemRenderer,
+        snap.inventory,
+        &firstPersonMotion,
+        snap.inventory != nullptr && !snap.renderLocalPlayerModel
     };
     renderScene.renderGameplayFrame(renderRequest);
 

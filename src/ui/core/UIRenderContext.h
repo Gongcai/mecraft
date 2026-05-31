@@ -39,12 +39,3 @@ struct UIRenderContext {
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
 };
-
-struct HeldItemPreviewMotion {
-    bool moving = false;
-    bool sprinting = false;
-    float bobFrequency = 6.0f;
-    float bobPhaseOffset = 0.0f;
-    float cameraYawDegrees = -90.0f;
-    float cameraPitchDegrees = 0.0f;
-};

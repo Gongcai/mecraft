@@ -27,8 +27,6 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_crosshair.init(resourceMgr);
     m_text.init(resourceMgr);
 
-    m_heldItemPreview.init(resourceMgr);
-    m_heldItemPreview.visible = false;
     m_hotbar.init(resourceMgr);
     m_hotbar.visible = true;
     m_hud.init(resourceMgr);
@@ -70,13 +68,10 @@ void UIRenderer::shutdown()
     m_inventoryPanel.shutdown();
     m_hud.shutdown();
     m_hotbar.shutdown();
-    m_heldItemPreview.shutdown();
     m_commandInputRequested = false;
     m_lastSceneContext = {};
     m_resourceMgr = nullptr;
     m_humanoidRenderer = nullptr;
-    m_heldItemPreviewSwingTriggered = false;
-    m_heldItemPreviewActionAnimationActive = false;
 }
 
 void UIRenderer::setCrosshairSize(float size)
@@ -168,40 +163,6 @@ void UIRenderer::setInventoryCountTextScale(float scale)
 float UIRenderer::getInventoryCountTextScale() const
 {
     return m_inventoryPanel.itemGrid().getRenderParams().countTextScale;
-}
-
-void UIRenderer::setHeldItemPreviewLayout(const HeldItemPreviewLayout& layout)
-{
-    m_heldItemPreview.setLayout(layout);
-}
-
-const HeldItemPreviewLayout& UIRenderer::getHeldItemPreviewLayout() const
-{
-    return m_heldItemPreview.getLayout();
-}
-
-void UIRenderer::triggerHeldItemPreviewActionAnimation()
-{
-    m_heldItemPreviewSwingTriggered = true;
-    m_heldItemPreview.triggerActionAnimation();
-}
-
-void UIRenderer::setHeldItemPreviewActionAnimationActive(const bool active)
-{
-    m_heldItemPreviewActionAnimationActive = active;
-    m_heldItemPreview.setActionAnimationActive(active);
-}
-
-bool UIRenderer::consumeHeldItemPreviewSwingTrigger()
-{
-    const bool triggered = m_heldItemPreviewSwingTriggered;
-    m_heldItemPreviewSwingTriggered = false;
-    return triggered;
-}
-
-bool UIRenderer::isHeldItemPreviewActionAnimationActive() const
-{
-    return m_heldItemPreviewActionAnimationActive;
 }
 
 void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs)
@@ -448,14 +409,13 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
 void UIRenderer::render(const Window& window,
                         const Inventory& inventory,
                         const PlayerStatsData& playerStats,
-                        const HeldItemPreviewMotion& heldItemMotion,
                         const InputSnapshot& inputSnapshot)
 {
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);
-    const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, heldItemMotion, inputSnapshot);
+    const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);
     m_lastSceneContext = context;
     m_crosshair.render(context);
     renderControls(context);
@@ -465,7 +425,6 @@ void UIRenderer::render(const Window& window,
 UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
                                                   const Inventory& inventory,
                                                   const PlayerStatsData& playerStats,
-                                                  const HeldItemPreviewMotion& heldItemMotion,
                                                   const InputSnapshot& inputSnapshot) const
 {
     UIRenderContext context;

@@ -224,7 +224,6 @@ set(SRC_UI
         src/ui/inventory/CraftingGridControl.cpp
         src/ui/inventory/InventoryPanelControl.cpp
         src/ui/inventory/CreativeInventoryPanelControl.cpp
-        src/ui/inventory/HeldItemPreviewControl.cpp
 
         # Screens
         src/ui/screens/MainMenuScreen.cpp

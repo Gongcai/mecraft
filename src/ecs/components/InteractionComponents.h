@@ -1,6 +1,8 @@
 #ifndef MECRAFT_ECS_INTERACTION_COMPONENTS_H
 #define MECRAFT_ECS_INTERACTION_COMPONENTS_H
 
+#include <cstdint>
+
 #include <glm/glm.hpp>
 
 #include "../../player/Inventory.h"
@@ -35,6 +37,7 @@ struct BlockInteractionRuntimeComponent {
     glm::ivec3 breakBlockPos{};
     float breakElapsedMs = 0.0f;
     float breakRequiredMs = 0.0f;
+    uint32_t heldItemSwingSequence = 0;
 };
 
 } // namespace ecs

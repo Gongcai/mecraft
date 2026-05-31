@@ -15,7 +15,15 @@ class Inventory;
 class ResourceMgr;
 class Shader;
 class Window;
-struct HeldItemPreviewMotion;
+
+struct FirstPersonHeldItemMotion {
+    bool moving = false;
+    bool sprinting = false;
+    float bobFrequency = 6.0f;
+    float bobPhaseOffset = 0.0f;
+    float cameraYawDegrees = -90.0f;
+    float cameraPitchDegrees = 0.0f;
+};
 
 class FirstPersonHeldItemRenderer {
 public:
@@ -127,7 +135,7 @@ public:
 
     void render(const Window& window,
                 const Inventory& inventory,
-                const HeldItemPreviewMotion& motion,
+                const FirstPersonHeldItemMotion& motion,
                 float timeSeconds);
 
 private:

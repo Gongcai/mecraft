@@ -2,6 +2,7 @@
 #define MECRAFT_GAMEPLAY_PRESENTATION_SNAPSHOT_H
 
 #include "../../engine/camera/Camera.h"
+#include <cstdint>
 #include <glm/glm.hpp>
 
 class Inventory;
@@ -60,6 +61,7 @@ struct GameplayPresentationSnapshot {
 
     // Held item motion
     SnapHeldItemMotion heldItemMotion;
+    uint32_t heldItemSwingSequence = 0;
 
     // Player stats (for HUD)
     SnapPlayerStats playerStats;

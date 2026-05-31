@@ -36,9 +36,12 @@ class ForwardPipeline;
 class DeferredPipeline;
 class PostProcessRenderer;
 class RainRenderer;
+class FirstPersonHeldItemRenderer;
+class Inventory;
 
 struct BlockTargetRenderData;
 struct BlockBreakRenderData;
+struct FirstPersonHeldItemMotion;
 
 namespace ecs { class GameplayRegistry; }
 namespace shadow { class ShadowRenderer; }
@@ -84,6 +87,10 @@ struct RenderGameplayFrameRequest {
     PostProcessRenderer& postProcess;
     float frameTime = 0.0f;
     float screenRollRadians = 0.0f;
+    FirstPersonHeldItemRenderer* firstPersonHeldItemRenderer = nullptr;
+    const Inventory* firstPersonInventory = nullptr;
+    const FirstPersonHeldItemMotion* firstPersonHeldItemMotion = nullptr;
+    bool renderFirstPersonHeldItem = false;
 };
 
 /// Entry point for all rendering
