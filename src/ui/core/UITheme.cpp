@@ -140,5 +140,59 @@ bool UITheme::loadFromFile(const std::string& path) {
     textScaleLarge    = readFloat(j, "textScaleLarge",    textScaleLarge);
     textScaleTitle    = readFloat(j, "textScaleTitle",    textScaleTitle);
 
+    // TextInput
+    inputBackground   = readColor(j, "inputBackground",   inputBackground);
+    inputBorder       = readColor(j, "inputBorder",       inputBorder);
+    inputBorderFocused = readColor(j, "inputBorderFocused", inputBorderFocused);
+    inputText         = readColor(j, "inputText",         inputText);
+    inputPlaceholder  = readColor(j, "inputPlaceholder",  inputPlaceholder);
+    inputSelection    = readColor(j, "inputSelection",    inputSelection);
+    inputCursor       = readColor(j, "inputCursor",       inputCursor);
+
+    // Toggle
+    toggleTrackOff    = readColor(j, "toggleTrackOff",    toggleTrackOff);
+    toggleTrackOn     = readColor(j, "toggleTrackOn",     toggleTrackOn);
+    toggleKnob        = readColor(j, "toggleKnob",        toggleKnob);
+    toggleKnobHover   = readColor(j, "toggleKnobHover",   toggleKnobHover);
+    toggleWidth       = readFloat(j, "toggleWidth",       toggleWidth);
+    toggleHeight      = readFloat(j, "toggleHeight",      toggleHeight);
+
+    // RadioButton
+    radioOuter        = readColor(j, "radioOuter",        radioOuter);
+    radioOuterHover   = readColor(j, "radioOuterHover",   radioOuterHover);
+    radioInner        = readColor(j, "radioInner",        radioInner);
+    radioSize         = readFloat(j, "radioSize",         radioSize);
+
+    // ProgressBar
+    progressTrack     = readColor(j, "progressTrack",     progressTrack);
+    progressFill      = readColor(j, "progressFill",      progressFill);
+    progressText      = readColor(j, "progressText",      progressText);
+
+    // TabControl
+    tabHeader         = readColor(j, "tabHeader",         tabHeader);
+    tabHeaderActive   = readColor(j, "tabHeaderActive",   tabHeaderActive);
+    tabHeaderHover    = readColor(j, "tabHeaderHover",    tabHeaderHover);
+    tabIndicator      = readColor(j, "tabIndicator",      tabIndicator);
+    tabContent        = readColor(j, "tabContent",        tabContent);
+    tabHeaderHeight   = readFloat(j, "tabHeaderHeight",   tabHeaderHeight);
+
+    // ContextMenu
+    contextMenuBackground = readColor(j, "contextMenuBackground", contextMenuBackground);
+    contextMenuBorder     = readColor(j, "contextMenuBorder",     contextMenuBorder);
+    contextMenuItemHover  = readColor(j, "contextMenuItemHover",  contextMenuItemHover);
+    contextMenuSeparator  = readColor(j, "contextMenuSeparator",  contextMenuSeparator);
+    contextMenuItemHeight = readFloat(j, "contextMenuItemHeight", contextMenuItemHeight);
+    contextMenuWidth      = readFloat(j, "contextMenuWidth",      contextMenuWidth);
+
+    // Toast
+    toastBackground   = readColor(j, "toastBackground",   toastBackground);
+    toastText         = readColor(j, "toastText",         toastText);
+    toastInfo         = readColor(j, "toastInfo",         toastInfo);
+    toastSuccess      = readColor(j, "toastSuccess",      toastSuccess);
+    toastWarning      = readColor(j, "toastWarning",      toastWarning);
+    toastError        = readColor(j, "toastError",        toastError);
+    toastWidth        = readFloat(j, "toastWidth",        toastWidth);
+    toastHeight       = readFloat(j, "toastHeight",       toastHeight);
+
     return true;
 }

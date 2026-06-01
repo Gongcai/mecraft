@@ -1,0 +1,257 @@
+#include "UITabControl.h"
+
+#include <glad/glad.h>
+#include <algorithm>
+#include <glm/vec2.hpp>
+#include <glm/vec4.hpp>
+
+#include "../core/UIRenderUtils.h"
+#include "../core/UITheme.h"
+#include "../font/TextRenderer.h"
+#include "../../resource/ResourceMgr.h"
+
+namespace {
+constexpr float kIndicatorHeight = 3.0f;
+} // namespace
+
+// Simple transparent panel used as a content container for each tab.
+class TabContentPanel : public UIWidget {
+protected:
+    void renderSelf(const UIRenderContext& ctx) const override {
+        (void)ctx;
+        // Transparent panel — renders children only.
+    }
+};
+
+UITabControl::UITabControl() {
+    interactive = true;
+    focusable = false;
+    width = 400.0f;
+    height = 300.0f;
+}
+
+UITabControl::~UITabControl() {
+    shutdown();
+}
+
+void UITabControl::init(ResourceMgr& resourceMgr) {
+    m_shader = resourceMgr.getShader("ui_color");
+    // Mesh for: header bg rects (6 verts per tab) + indicator rect (6 verts) + content bg (6 verts).
+    // We'll buffer-sub-data dynamically, so allocate generously.
+    constexpr int maxTabs = 32;
+    constexpr int totalFloats = (maxTabs * 6 + 6 + 6) * 2;
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(totalFloats * sizeof(float)),
+                 nullptr, GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
+    glBindVertexArray(0);
+
+    // Init content panels.
+    for (auto& tab : m_tabs) {
+        if (tab.contentPanel) tab.contentPanel->init(resourceMgr);
+    }
+
+    UIWidget::init(resourceMgr);
+}
+
+void UITabControl::shutdown() {
+    for (auto& tab : m_tabs) {
+        if (tab.contentPanel) tab.contentPanel->shutdown();
+    }
+    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
+    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
+    m_shader = nullptr;
+    UIWidget::shutdown();
+}
+
+int UITabControl::addTab(const std::string& title) {
+    Tab tab;
+    tab.title = title;
+    tab.contentPanel = std::make_unique<TabContentPanel>();
+    const int index = static_cast<int>(m_tabs.size());
+    m_tabs.push_back(std::move(tab));
+    return index;
+}
+
+UIWidget* UITabControl::getContentPanel(int index) {
+    if (index < 0 || index >= static_cast<int>(m_tabs.size())) return nullptr;
+    return m_tabs[index].contentPanel.get();
+}
+
+void UITabControl::setActiveTab(int index) {
+    if (index < 0 || index >= static_cast<int>(m_tabs.size())) return;
+    if (m_activeIndex == index) return;
+    m_activeIndex = index;
+    if (onTabChanged) onTabChanged(m_activeIndex);
+}
+
+int UITabControl::hitTestHeader(float px, float py, const UIRenderContext& ctx) const {
+    if (m_tabs.empty()) return -1;
+    const float flippedY = static_cast<float>(ctx.screenHeight) - py;
+    const float ax = getAbsoluteX(ctx);
+    const float ay = getAbsoluteY(ctx);
+    const float aw = width * scaleX;
+    const float headerH = ctx.theme ? ctx.theme->tabHeaderHeight : 36.0f;
+
+    // Header area is at the top of the widget.
+    if (flippedY < ay + (height * scaleY - headerH) || flippedY >= ay + height * scaleY) return -1;
+    if (px < ax || px >= ax + aw) return -1;
+
+    const float tabW = aw / static_cast<float>(m_tabs.size());
+    const float localX = px - ax;
+    const int idx = static_cast<int>(localX / tabW);
+    if (idx >= 0 && idx < static_cast<int>(m_tabs.size())) return idx;
+    return -1;
+}
+
+void UITabControl::renderSelf(const UIRenderContext& ctx) const {
+    // Tab headers are rendered in renderSelf.
+    // Content is rendered in render() override.
+    if (!m_shader || m_tabs.empty()) return;
+
+    const UIRenderUtils::GLStateGuard guard;
+
+    const Color hdrCol     = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabHeader       : m_headerColor;
+    const Color hdrActCol  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabHeaderActive : m_headerActiveColor;
+    const Color hdrHovCol  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabHeaderHover  : m_headerHoverColor;
+    const Color indCol     = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabIndicator    : m_indicatorColor;
+    const Color txtCol     = ctx.theme ? ctx.theme->textPrimary : Color{1.0f, 1.0f, 1.0f, 1.0f};
+    const float headerH    = (ctx.theme && !m_hasLocalColors) ? ctx.theme->tabHeaderHeight : 36.0f;
+
+    const float ax = getAbsoluteX(ctx);
+    const float ay = getAbsoluteY(ctx);
+    const float aw = width * scaleX;
+    const float ah = height * scaleY;
+    const float tabW = aw / static_cast<float>(m_tabs.size());
+
+    // Header Y is at the top of the widget (higher Y in OpenGL coords).
+    const float headerTopY = ay + ah;
+    const float headerBottomY = ay + ah - headerH;
+
+    // Build header vertices.
+    std::vector<float> verts;
+    verts.reserve((m_tabs.size() * 6 + 6) * 2);
+    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+        const float x0 = ax + static_cast<float>(i) * tabW;
+        const float x1 = x0 + tabW;
+        UIRenderUtils::pushColorQuad(verts, x0, headerBottomY, x1, headerTopY);
+    }
+    // Indicator rect (below active header).
+    const float indX0 = ax + static_cast<float>(m_activeIndex) * tabW;
+    const float indX1 = indX0 + tabW;
+    UIRenderUtils::pushColorQuad(verts, indX0, headerBottomY - kIndicatorHeight,
+                                 indX1, headerBottomY);
+
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0,
+                    static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
+
+    m_shader->use();
+    m_shader->setVec2("uScreenSize",
+                      glm::vec2(static_cast<float>(ctx.screenWidth),
+                                static_cast<float>(ctx.screenHeight)));
+
+    // Draw headers.
+    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+        Color col;
+        if (i == m_activeIndex) col = hdrActCol;
+        else if (i == m_hoveredTab) col = hdrHovCol;
+        else col = hdrCol;
+        m_shader->setVec4("uColor", glm::vec4(col[0], col[1], col[2], col[3] * alpha));
+        glDrawArrays(GL_TRIANGLES, i * 6, 6);
+    }
+
+    // Draw indicator.
+    m_shader->setVec4("uColor", glm::vec4(indCol[0], indCol[1], indCol[2], indCol[3] * alpha));
+    glDrawArrays(GL_TRIANGLES, static_cast<GLint>(m_tabs.size() * 6), 6);
+
+    glBindVertexArray(0);
+
+    // Render header text.
+    if (ctx.textRenderer) {
+        const float textScale = 1.0f;
+        for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+            const auto m = ctx.textRenderer->measureText(m_tabs[i].title, textScale);
+            const float x0 = ax + static_cast<float>(i) * tabW;
+            const float textX = x0 + (tabW - m.width) * 0.5f;
+            const float textY = headerBottomY + (headerH - m.height) * 0.5f;
+            ctx.textRenderer->render(m_tabs[i].title, textX, textY, textScale,
+                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
+                                     static_cast<float>(ctx.screenWidth),
+                                     static_cast<float>(ctx.screenHeight));
+        }
+    }
+}
+
+void UITabControl::render(const UIRenderContext& ctx) const {
+    if (!visible) return;
+
+    // Render the tab headers (renderSelf).
+    renderSelf(ctx);
+
+    // Render the active tab's content panel below the header.
+    if (m_activeIndex >= 0 && m_activeIndex < static_cast<int>(m_tabs.size())) {
+        auto& panel = m_tabs[m_activeIndex].contentPanel;
+        if (panel) {
+            const float headerH = (ctx.theme && !m_hasLocalColors) ? ctx.theme->tabHeaderHeight : 36.0f;
+            // headerH is in scaled pixels; convert to local widget space.
+            const float headerHLocal = headerH / (scaleY > 0.0f ? scaleY : 1.0f);
+            panel->anchor = Anchor::BottomLeft;
+            panel->x = 0;
+            panel->y = 0;
+            panel->width = width;
+            panel->height = height - headerHLocal;
+            panel->render(ctx);
+        }
+    }
+
+    // Render own children (if any) on top.
+    for (const auto& child : getChildren()) {
+        child->render(ctx);
+    }
+}
+
+UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
+    if (!visible || !interactive) return UIEventResult::Ignored;
+
+    // Forward to active tab content first.
+    if (m_activeIndex >= 0 && m_activeIndex < static_cast<int>(m_tabs.size())) {
+        auto& panel = m_tabs[m_activeIndex].contentPanel;
+        if (panel) {
+            const UIEventResult contentResult = panel->onInput(event, ctx);
+            if (contentResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+        }
+    }
+
+    // Forward to own children.
+    const UIEventResult childResult = UIWidget::onInput(event, ctx);
+    if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+
+    switch (event.type) {
+    case UIInputEventType::PointerMove: {
+        const int idx = hitTestHeader(event.x, event.y, ctx);
+        m_hoveredTab = idx;
+        return (idx >= 0) ? UIEventResult::Handled : UIEventResult::Ignored;
+    }
+
+    case UIInputEventType::PointerDown:
+        if (event.button == UIPointerButton::Primary) {
+            const int idx = hitTestHeader(event.x, event.y, ctx);
+            if (idx >= 0) {
+                setActiveTab(idx);
+                return UIEventResult::Consumed;
+            }
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    return childResult;
+}

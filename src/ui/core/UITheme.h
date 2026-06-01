@@ -96,4 +96,58 @@ struct UITheme {
     float textScaleMedium      = 2.0f;
     float textScaleLarge       = 4.0f;
     float textScaleTitle       = 6.0f;
+
+    // --- TextInput ---
+    Color inputBackground      {0.15f, 0.15f, 0.15f, 0.9f};
+    Color inputBorder          {0.40f, 0.40f, 0.40f, 0.7f};
+    Color inputBorderFocused   {0.2f, 0.8f, 1.0f, 1.0f};
+    Color inputText            {1.0f, 1.0f, 1.0f, 1.0f};
+    Color inputPlaceholder     {0.5f, 0.5f, 0.5f, 0.8f};
+    Color inputSelection       {0.2f, 0.5f, 0.9f, 0.4f};
+    Color inputCursor          {1.0f, 1.0f, 1.0f, 0.9f};
+
+    // --- Toggle ---
+    Color toggleTrackOff       {0.25f, 0.25f, 0.25f, 0.9f};
+    Color toggleTrackOn        {0.2f, 0.7f, 0.4f, 1.0f};
+    Color toggleKnob           {0.9f, 0.9f, 0.9f, 1.0f};
+    Color toggleKnobHover      {1.0f, 1.0f, 1.0f, 1.0f};
+    float toggleWidth          = 44.0f;
+    float toggleHeight         = 22.0f;
+
+    // --- RadioButton ---
+    Color radioOuter           {0.35f, 0.35f, 0.35f, 0.9f};
+    Color radioOuterHover      {0.5f, 0.5f, 0.5f, 1.0f};
+    Color radioInner           {0.2f, 0.8f, 1.0f, 1.0f};
+    float radioSize            = 18.0f;
+
+    // --- ProgressBar ---
+    Color progressTrack        {0.2f, 0.2f, 0.2f, 0.9f};
+    Color progressFill         {0.2f, 0.8f, 1.0f, 1.0f};
+    Color progressText         {1.0f, 1.0f, 1.0f, 1.0f};
+
+    // --- TabControl ---
+    Color tabHeader            {0.20f, 0.20f, 0.20f, 0.9f};
+    Color tabHeaderActive      {0.28f, 0.28f, 0.28f, 1.0f};
+    Color tabHeaderHover       {0.25f, 0.25f, 0.25f, 1.0f};
+    Color tabIndicator         {0.2f, 0.8f, 1.0f, 1.0f};
+    Color tabContent           {0.18f, 0.18f, 0.18f, 0.85f};
+    float tabHeaderHeight      = 36.0f;
+
+    // --- ContextMenu ---
+    Color contextMenuBackground{0.16f, 0.16f, 0.16f, 0.95f};
+    Color contextMenuBorder    {0.35f, 0.35f, 0.35f, 0.7f};
+    Color contextMenuItemHover {0.25f, 0.25f, 0.25f, 1.0f};
+    Color contextMenuSeparator {0.30f, 0.30f, 0.30f, 0.5f};
+    float contextMenuItemHeight = 28.0f;
+    float contextMenuWidth     = 180.0f;
+
+    // --- Toast ---
+    Color toastBackground      {0.15f, 0.15f, 0.15f, 0.92f};
+    Color toastText            {1.0f, 1.0f, 1.0f, 1.0f};
+    Color toastInfo            {0.2f, 0.8f, 1.0f, 1.0f};
+    Color toastSuccess         {0.3f, 0.7f, 0.3f, 1.0f};
+    Color toastWarning         {0.9f, 0.7f, 0.2f, 1.0f};
+    Color toastError           {0.7f, 0.3f, 0.3f, 1.0f};
+    float toastWidth           = 300.0f;
+    float toastHeight          = 40.0f;
 };

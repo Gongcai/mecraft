@@ -210,6 +210,15 @@ set(SRC_UI
         src/ui/widgets/UIScrollArea.cpp
         src/ui/widgets/KeyboardInputBox.cpp
         src/ui/widgets/ConsoleDisplayBox.cpp
+        src/ui/widgets/UIProgressBar.cpp
+        src/ui/widgets/UIToggle.cpp
+        src/ui/widgets/UIRadioButton.cpp
+        src/ui/widgets/UITextInput.cpp
+        src/ui/widgets/UINumericSpinner.cpp
+        src/ui/widgets/UITabControl.cpp
+        src/ui/widgets/UIModal.cpp
+        src/ui/widgets/UIContextMenu.cpp
+        src/ui/widgets/UIToast.cpp
 
         # HUD & Overlays
         src/ui/hud/CrosshairControl.cpp
