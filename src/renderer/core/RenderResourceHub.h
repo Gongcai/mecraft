@@ -151,32 +151,12 @@ public:
     void setSettings(const RenderSettings& settings);
     void setEyeInWater(bool inWater) { m_eyeInWater = inWater; }
     [[nodiscard]] const RenderSettings& getSettings() const;
-    [[nodiscard]] GameplaySkyRenderer::SkyIlluminanceData getSkyIlluminanceData() const { return m_currentFrameData.skyIlluminance; }
-    [[nodiscard]] GameplaySkyRenderer::SkyColors getSkyColors() const { return m_currentFrameData.skyColors; }
-    [[nodiscard]] glm::vec3 getFogColor() const { return m_currentFrameData.fogColor; }
-    // R8: isDeferredDebugViewActive/isDeferredFrameActive removed — use RenderScene
     void setRenderLocalPlayerModel(bool visible) { m_renderLocalPlayerModel = visible; }
-    void setHumanoidRenderer(HumanoidRenderer* hr) {
-        m_humanoidRenderer = hr;
-        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
-            m_deferredPipeline->shadowPass()->setHumanoidRenderer(hr);
-    }
-    void setDropRenderer(DropRenderer* dr) {
-        m_dropRenderer = dr;
-        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
-            m_deferredPipeline->shadowPass()->setDropRenderer(dr);
-    }
+    void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
+    void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
     void setParticleSystem(ParticleSystem* ps) { m_particleSystem = ps; }
-    void setDropSystem(DropSystem* ds) {
-        m_dropSystem = ds;
-        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
-            m_deferredPipeline->shadowPass()->setDropSystem(ds);
-    }
-    void setGameplayRegistry(ecs::GameplayRegistry* reg) {
-        m_gameplayRegistry = reg;
-        if (m_deferredPipeline && m_deferredPipeline->shadowPass())
-            m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
-    }
+    void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
+    void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
     // R8: renderDeferredDebugOverlay/isHybridDeferredReady removed — use RenderScene/DeferredPipeline
     // Shadow data for held item renderer — returns cascade matrices, textures, and settings.
     struct HeldItemShadowData {
@@ -253,67 +233,11 @@ private:
     static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUNT;
     using ShadowCascadeData = shadow::ShadowRenderer::Cascade;
 
-    struct RenderFrameData {
-        glm::mat4 view = glm::mat4(1.0f);
-        glm::mat4 projection = glm::mat4(1.0f);
-        glm::mat4 viewProj = glm::mat4(1.0f);
-        glm::mat4 jitteredViewProj = glm::mat4(1.0f);
-        glm::mat4 jitteredInvViewProj = glm::mat4(1.0f);
-        glm::mat4 invViewProj = glm::mat4(1.0f);
-        glm::vec3 cameraPos = glm::vec3(0.0f);
-        GameplaySkyRenderer::SkyColors skyColors{};
-        GameplaySkyRenderer::SkyIlluminanceData skyIlluminance{};
-        float skyIntensity = 1.0f;
-        float animationTime = 0.0f;
-        float shaderTime = 0.0f;
-        bool fogEnabled = true;
-        FogMode fogMode = FogMode::Linear;
-        glm::vec3 fogColor = glm::vec3(0.67f, 0.84f, 1.0f);
-        float fogStart = 0.0f;
-        float fogEnd = 1.0f;
-        float fogDensity = 0.01f;
-        float weatherWetness = 0.0f;
-        float weatherStorm = 0.0f;
-        float aerialReduction = 0.55f;
-        float lightningFlash = 0.0f;
-        // Derived weather values — semantic separation for downstream consumers.
-        float surfaceWetness = 0.0f;   // terrain/surface effects only
-        float skyWetness = 0.0f;       // sky/post/direct rain occlusion
-        float fogWetness = 0.0f;       // aerial/volumetric haze weighting
-        float cloudWetness = 0.0f;     // cloud coverage/weather shaping
-        float precipitation = 0.0f;    // combined rain+snow intensity
-        float rainStrength = 0.0f;     // rain particles
-        float thunderStrength = 0.0f;  // lightning frequency
-        AtmosphereSettings atmosphere{};
-        VolumetricSettings volumetric{};
-        CloudSettings cloud{};
-        bool moonShadowActive = false;
-        bool eyeInWater = false;
-        float nearPlane = 0.1f;
-        float farPlane = 500.0f;
-        // Temporal foundation
-        uint64_t frameIndex = 0;
-        glm::vec2 jitter = glm::vec2(0.0f);
-        glm::vec2 previousJitter = glm::vec2(0.0f);
-        glm::mat4 previousView = glm::mat4(1.0f);
-        glm::mat4 previousProjection = glm::mat4(1.0f);
-        glm::mat4 previousViewProj = glm::mat4(1.0f);
-        glm::mat4 previousJitteredViewProj = glm::mat4(1.0f);
-        glm::mat4 previousInvViewProj = glm::mat4(1.0f);
-        float deltaTime = 0.0f;
-    };
-
     void recordMeshingHistory();
-    void drainMeshingResults(const World& world);
-    void beginFrame(const Camera& camera, const Window &window);
-    // R8: Legacy rendering methods removed — use DeferredPipeline/ForwardPipeline
-    [[nodiscard]] RenderFrameData buildRenderFrameData(const World& world) const;
-    void executeSkyCapturePass(const World& world);
     void drawFullscreen(Shader& shader) const;
     glm::vec3 currentShadowLightDirection(const World& world, bool* moonShadowActive = nullptr) const;
     void captureCurrentFramebuffer();
     void restoreCapturedFramebufferViewport(const Window& window);
-    void submitMeshingJobs(const World& world);
     void collectAndDrawOpaqueChunks(const World& world,
                                             std::vector<ChunkRenderEntry>& cutoutEntries,
                                             std::vector<ChunkRenderEntry>& transparentEntries,
@@ -346,7 +270,6 @@ private:
     //TODO: 传入 World 和 UI 数据进行渲染
     //void renderWorld(const World& world, const Camera& camera);
     //void renderUI(const UI& ui);
-    void endFrame(const Window &window);
 
     int drawCallCount = 0;
 
@@ -367,13 +290,6 @@ private:
     Shader* m_entityGBufferShader = nullptr;
     Shader* m_entityShadowShader = nullptr;
 
-    // Shaders fully owned by pass classes — removed from Renderer (Phase 10f):
-    // m_waterCompositeShader, m_deferredLightingShader, m_sceneCompositeShader,
-    // m_ssaoShader, m_velocityShader, m_volumetricFogShader, m_volumetricTemporalShader,
-    // m_volumetricCompositeShader, m_reflectionShader, m_cloudShader, m_bloomExtractShader,
-    // m_bloomBlurShader, m_temporalResolveShader, m_reflectionFilterShader,
-    // m_reflectionTemporalShader, m_ssaoFilterShader, m_ssaoTemporalShader,
-    // m_ssaoUpsampleShader, m_motionBlurShader, m_dofShader
     ResourceMgr* m_resourceMgr = nullptr;
 
     // R5: Overlay renderer — injected from RenderScene, null = use legacy members
@@ -400,15 +316,9 @@ private:
     DropSystem* m_dropSystem = nullptr;  // injected from Game
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // injected from Game
     DeferredRenderTargets m_deferredTargets;
-    std::unique_ptr<DeferredPipeline> m_deferredPipeline;
     RenderSettings m_settings;
     bool m_eyeInWater = false;
     int m_heldBlockLightValue = 0;
-    RenderFrameData m_currentFrameData{};
-    bool m_currentFrameDataValid = false;
-    uint64_t m_frameCounter = 0;
-    RenderFrameData m_previousFrameData{};
-    bool m_hasPreviousFrameData = false;
     GLint m_capturedFramebuffer = 0;
     GLint m_capturedViewport[4] = {0, 0, 0, 0};
     shadow::ShadowRenderer m_shadowRenderer;

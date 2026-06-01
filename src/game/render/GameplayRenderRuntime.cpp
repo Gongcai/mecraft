@@ -4,7 +4,6 @@
 #include "../../renderer/renderers/DropRenderer.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
-#include "../../renderer/renderers/PostProcessRenderer.h"
 #include "../session/GameSession.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../ecs/GameplayScene.h"
@@ -32,7 +31,6 @@ struct GameplayRenderRuntime::Impl {
     DropRenderer dropRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
     HumanoidRenderer humanoidRenderer;
-    PostProcessRenderer postProcessRenderer;
 
 #ifdef MECRAFT_DEBUG
     Dashboard dashboard;
@@ -59,14 +57,26 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& dropRenderer = m_impl->dropRenderer;
     auto& firstPersonHeldItemRenderer = m_impl->firstPersonHeldItemRenderer;
     auto& humanoidRenderer = m_impl->humanoidRenderer;
-    auto& postProcessRenderer = m_impl->postProcessRenderer;
 
     // Core GPU infrastructure
     renderer.init(resourceMgr);
 
     // Initialize RenderScene and connect to RenderResourceHub
     renderScene.init(resourceMgr);
-    renderScene.initFromRenderer(&renderer);
+    renderScene.setupResources(
+        renderer.getThreadPool(),
+        &renderer.getTerrainRenderer(),
+        &renderer.getWorldRenderBuffer(),
+        &renderer.getDeferredRenderTargets(),
+        &renderer.getGameplaySkyRenderer(),
+        &renderer.getShadowRenderer(),
+        renderer.getSettings()
+    );
+
+    // Inject RenderScene services into RenderResourceHub
+    renderer.setTerrainStreamingService(&renderScene.getTerrainStreamingService());
+    renderer.setOverlayRenderer(&renderScene.getOverlayRenderer());
+    renderer.setDebugService(&renderScene.debugService());
 
     // Enable fog via RenderSettings
     RenderSettings settings = renderScene.getSettings();
@@ -95,9 +105,6 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     // UI needs humanoid renderer for inventory preview
     uiRenderer.setHumanoidRenderer(&humanoidRenderer);
 
-    // Post-processing
-    postProcessRenderer.init(resourceMgr);
-
     // Particle and rain systems (owned by session, init requires ResourceMgr)
     session.particleSystem().init(resourceMgr);
     session.rainRenderer().init(resourceMgr);
@@ -110,7 +117,6 @@ void GameplayRenderRuntime::shutdown() {
 #ifdef MECRAFT_DEBUG
     m_impl->dashboard.shutdown();
 #endif
-    m_impl->postProcessRenderer.shutdown();
     m_impl->humanoidRenderer.shutdown();
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->dropRenderer.shutdown();
@@ -136,10 +142,6 @@ RenderScene& GameplayRenderRuntime::renderScene() {
 
 FirstPersonHeldItemRenderer& GameplayRenderRuntime::firstPersonHeldItemRenderer() {
     return m_impl->firstPersonHeldItemRenderer;
-}
-
-PostProcessRenderer& GameplayRenderRuntime::postProcessRenderer() {
-    return m_impl->postProcessRenderer;
 }
 
 #ifdef MECRAFT_DEBUG

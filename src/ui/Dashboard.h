@@ -22,9 +22,9 @@
 #include "../world/World.h"
 #include "../renderer/core/RenderResourceHub.h"
 #include "../renderer/core/RenderScene.h"
-#include "../renderer/renderers/PostProcessRenderer.h"
+#include "../renderer/passes/PostProcessPass.h"
 class FirstPersonHeldItemRenderer;
-class PostProcessRenderer;
+class PostProcessPass;
 class UIRenderer;
 class Dashboard {
 public:
@@ -60,14 +60,14 @@ public:
                 Camera &camera,
                 RenderResourceHub &render,
                 RenderScene& renderScene,
-                PostProcessRenderer& postProcess,
+                PostProcessPass& postProcess,
                 UIRenderer& uiRenderer,
                 const FrameProfilerStats& profilerStats);
 private:
     void showPlayerStats(ecs::GameplayRegistry& registry);
     void showWorldStats(World& world, ecs::GameplayRegistry& registry);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats);
+    void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);

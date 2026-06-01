@@ -9,7 +9,6 @@ class UIRenderer;
 class RenderResourceHub;
 class RenderScene;
 class FirstPersonHeldItemRenderer;
-class PostProcessRenderer;
 class ThreadPool;
 
 #ifdef MECRAFT_DEBUG
@@ -46,7 +45,6 @@ public:
     [[nodiscard]] RenderResourceHub& resourceHub();
     [[nodiscard]] RenderScene& renderScene();
     [[nodiscard]] FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer();
-    [[nodiscard]] PostProcessRenderer& postProcessRenderer();
 
 #ifdef MECRAFT_DEBUG
     void initDebug(Window& window);

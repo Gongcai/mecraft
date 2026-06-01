@@ -34,7 +34,6 @@ class ChunkMeshingService;
 class ThreadPool;
 class ForwardPipeline;
 class DeferredPipeline;
-class PostProcessRenderer;
 class RainRenderer;
 class FirstPersonHeldItemRenderer;
 class Inventory;
@@ -84,7 +83,6 @@ struct RenderGameplayFrameRequest {
     const BlockTargetRenderData& target;
     const BlockBreakRenderData& blockBreak;
     RainRenderer& rainRenderer;
-    PostProcessRenderer& postProcess;
     float frameTime = 0.0f;
     float screenRollRadians = 0.0f;
     FirstPersonHeldItemRenderer* firstPersonHeldItemRenderer = nullptr;
@@ -134,10 +132,10 @@ public:
 
     // R7: Legacy bridge methods removed — use renderFrame() instead
 
-    // Query methods (now use FrameOutput directly)
-    bool isDeferredFrameActive() const;
-    GLuint gbufDepthTexture() const;
-    GLuint weatherMaskTexture() const;
+    // Query methods (now retrieve from active context)
+    [[nodiscard]] SkyColorsData getSkyColors() const { return m_currentContext.skyColors; }
+    [[nodiscard]] SkyIlluminanceData getSkyIlluminanceData() const { return m_currentContext.skyIlluminance; }
+    [[nodiscard]] glm::vec3 getFogColor() const { return m_currentContext.fog.color; }
 
     // Debug query helpers
     bool isLightDebugActive() const;
@@ -164,8 +162,22 @@ public:
     RenderDebugService& debugService() { return m_debugService; }
     const RenderDebugService& debugService() const { return m_debugService; }
 
-    // R8: Initialize shared resources from Renderer (terrain, sky, overlay, debug, etc.)
-    void initFromRenderer(RenderResourceHub* renderer);
+    // Owned services accessors
+    TerrainStreamingService& getTerrainStreamingService() { return m_terrainStreamingService; }
+    const TerrainStreamingService& getTerrainStreamingService() const { return m_terrainStreamingService; }
+
+    BlockInteractionOverlayRenderer& getOverlayRenderer() { return m_overlayRenderer; }
+    const BlockInteractionOverlayRenderer& getOverlayRenderer() const { return m_overlayRenderer; }
+
+    // Initialize shared resources without depending on legacy renderer
+    void setupResources(
+        ThreadPool* threadPool,
+        TerrainRenderer* terrain,
+        WorldRenderBuffer* worldRenderBuffer,
+        DeferredRenderTargets* deferredTargets,
+        GameplaySkyRenderer* sky,
+        shadow::ShadowRenderer* shadowRenderer,
+        const RenderSettings& initialSettings);
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().
@@ -219,9 +231,6 @@ private:
     uint64_t m_frameCounter = 0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;
-
-    // Renderer reference (for shared resource initialization)
-    RenderResourceHub* m_sourceRenderer = nullptr;
 
     // Pipeline implementations (Phase 9)
     std::unique_ptr<ForwardPipeline> m_forwardPipeline;

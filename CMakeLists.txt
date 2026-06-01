@@ -156,7 +156,6 @@ set(SRC_RENDERER
         src/renderer/renderers/FirstPersonHeldItemRenderer.cpp
         src/renderer/renderers/GameplaySkyRenderer.cpp
         src/renderer/renderers/HumanoidRenderer.cpp
-        src/renderer/renderers/PostProcessRenderer.cpp
         src/renderer/renderers/SkyboxRenderer.cpp
 
         # Mesh system

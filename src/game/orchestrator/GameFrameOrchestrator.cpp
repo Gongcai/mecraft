@@ -11,7 +11,7 @@
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
-#include "../../renderer/renderers/PostProcessRenderer.h"
+#include "../../renderer/passes/PostProcessPass.h"
 #include "../render/GameplayRenderRuntime.h"
 #include "../presentation/GameplayHudPresenter.h"
 #include "../audio/AudioListenerSyncSystem.h"
@@ -85,7 +85,7 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     // Obtain renderer references from the aggregate
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
-    auto& postProcess = renderRuntime.postProcessRenderer();
+    auto& postProcess = renderScene.postProcessPass();
     auto& renderer = renderRuntime.resourceHub();
 
     // Build presentation snapshot from ECS (single point of ECS access)
@@ -130,7 +130,6 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
         targetData,
         breakData,
         session.rainRenderer(),
-        postProcess,
         frameTime,
         snap.fallRollRadians,
         &firstPersonHeldItemRenderer,

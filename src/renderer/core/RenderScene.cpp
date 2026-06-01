@@ -5,7 +5,6 @@
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../renderers/PostProcessRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
 #include <glad/glad.h>
 #include "engine/camera/Camera.h"
@@ -162,7 +161,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
     if (!skipPostProcess) {
-        request.postProcess.beginScene(request.window);
+        m_postProcessPass.beginScene(request.window);
     } else {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0,
@@ -184,7 +183,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             auto viewMat = request.camera.getViewMatrix();
             const float alphaScale = m_settings.weather.rainAlphaScale;
             const bool forwardVanillaActive = isNewPipelineActive() &&
-                                              getPipelineMode() == PipelineMode::Forward;
+                                               getPipelineMode() == PipelineMode::Forward;
             const GLuint depthTex = forwardVanillaActive ? 0 : m_lastFrameOutput.gbufferDepthTex;
             const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
             const glm::vec2 precipitationScreenSize(
@@ -193,10 +192,10 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
             if (weather.rainStrength > 0.01f) {
                 request.rainRenderer.render(projMat, viewMat, camPos,
-                                            weather.rainStrength, cameraRainVisibility,
-                                            alphaScale, depthTex,
-                                            precipitationScreenSize, request.frameTime,
-                                            hardwareDepthTest);
+                                             weather.rainStrength, cameraRainVisibility,
+                                             alphaScale, depthTex,
+                                             precipitationScreenSize, request.frameTime,
+                                             hardwareDepthTest);
             }
             if (weather.snowStrength > 0.01f) {
                 request.rainRenderer.renderSnow(projMat, viewMat, camPos,
@@ -226,11 +225,11 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         PostProcessEffects effects = buildPostProcessEffects(
             request.world, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians);
-        request.postProcess.setEffects(effects);
+        m_postProcessPass.setEffects(effects);
         if (lightDebugActive) {
-            request.postProcess.blitSceneToBackbuffer(request.window);
+            m_postProcessPass.blitSceneToBackbuffer(request.window);
         } else {
-            request.postProcess.endSceneAndComposite(
+            m_postProcessPass.endSceneAndComposite(
                 request.window,
                 request.frameTime,
                 m_lastFrameOutput.gbufferDepthTex,
@@ -268,13 +267,6 @@ void RenderScene::setPipelineMode(PipelineMode mode) {
             m_newPipelineActive = false;
         }
     }
-
-    // Sync pipeline mode to legacy renderer
-    if (m_sourceRenderer) {
-        auto settings = m_sourceRenderer->getSettings();
-        settings.pipelineMode = mode;
-        m_sourceRenderer->setSettings(settings);
-    }
 }
 
 PipelineMode RenderScene::getPipelineMode() const {
@@ -302,11 +294,6 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     }
 
     m_settings = settings;
-
-    // Sync to legacy renderer
-    if (m_sourceRenderer) {
-        m_sourceRenderer->setSettings(settings);
-    }
 }
 
 const RenderSettings& RenderScene::getSettings() const {
@@ -319,9 +306,6 @@ void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setHumanoidRenderer(hr);
     }
-    if (m_sourceRenderer) {
-        m_sourceRenderer->setHumanoidRenderer(hr);
-    }
 }
 
 void RenderScene::setDropRenderer(DropRenderer* dr) {
@@ -330,17 +314,11 @@ void RenderScene::setDropRenderer(DropRenderer* dr) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setDropRenderer(dr);
     }
-    if (m_sourceRenderer) {
-        m_sourceRenderer->setDropRenderer(dr);
-    }
 }
 
 void RenderScene::setParticleSystem(ParticleSystem* ps) {
     m_particleSystem = ps;
     m_shared.particleSystem = ps;
-    if (m_sourceRenderer) {
-        m_sourceRenderer->setParticleSystem(ps);
-    }
 }
 
 void RenderScene::setDropSystem(DropSystem* ds) {
@@ -348,9 +326,6 @@ void RenderScene::setDropSystem(DropSystem* ds) {
     m_shared.dropSystem = ds;
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setDropSystem(ds);
-    }
-    if (m_sourceRenderer) {
-        m_sourceRenderer->setDropSystem(ds);
     }
 }
 
@@ -360,83 +335,55 @@ void RenderScene::setGameplayRegistry(ecs::GameplayRegistry* reg) {
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
     }
-    if (m_sourceRenderer) {
-        m_sourceRenderer->setGameplayRegistry(reg);
-    }
 }
 
 const FrameOutput& RenderScene::getLastFrameOutput() const {
     return m_lastFrameOutput;
 }
 
-void RenderScene::initFromRenderer(RenderResourceHub* renderer) {
-    m_sourceRenderer = renderer;
+void RenderScene::setupResources(
+    ThreadPool* threadPool,
+    TerrainRenderer* terrain,
+    WorldRenderBuffer* worldRenderBuffer,
+    DeferredRenderTargets* deferredTargets,
+    GameplaySkyRenderer* sky,
+    shadow::ShadowRenderer* shadowRenderer,
+    const RenderSettings& initialSettings) {
 
-    // Phase 9/10: Populate shared resources from legacy renderer
-    if (renderer) {
-        m_settings = renderer->getSettings();
-        settings_mapper::syncFogToRenderSettings(renderer->getFogSettings(), m_settings.fog);
-        m_activePipeline = (m_settings.pipelineMode == PipelineMode::Deferred)
-            ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
-            : static_cast<RenderPipeline*>(m_forwardPipeline.get());
+    m_settings = initialSettings;
+    m_activePipeline = (m_settings.pipelineMode == PipelineMode::Deferred)
+        ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
+        : static_cast<RenderPipeline*>(m_forwardPipeline.get());
 
-        // Phase R4: Initialize terrain streaming service with thread pool from Renderer
-        m_terrainStreamingService.init(renderer->getThreadPool());
-        renderer->setTerrainStreamingService(&m_terrainStreamingService);
+    m_terrainStreamingService.init(threadPool);
+    m_shared.overlayRenderer = &m_overlayRenderer;
 
-        // Phase R5: Inject overlay renderer
-        renderer->setOverlayRenderer(&m_overlayRenderer);
-        m_shared.overlayRenderer = &m_overlayRenderer;
-
-        // Phase R6: Inject debug service
-        renderer->setDebugService(&m_debugService);
-
-        m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
-        m_shared.terrainStreaming = &m_terrainStreamingService;
-        m_shared.terrain = &renderer->getTerrainRenderer();
-        m_shared.worldRenderBuffer = &renderer->getWorldRenderBuffer();
-        m_shared.meshingService = &m_terrainStreamingService.meshingService();
-        m_shared.deferredTargets = &renderer->getDeferredRenderTargets();
-        m_shared.sky = &renderer->getGameplaySkyRenderer();
-        m_shared.shadowRenderer = &renderer->getShadowRenderer();
-        m_shared.threadPool = renderer->getThreadPool();
-        // Note: commonTargets will be added when CommonFrameTargets is fully integrated
-    }
+    m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
+    m_shared.terrainStreaming = &m_terrainStreamingService;
+    m_shared.terrain = terrain;
+    m_shared.worldRenderBuffer = worldRenderBuffer;
+    m_shared.meshingService = &m_terrainStreamingService.meshingService();
+    m_shared.deferredTargets = deferredTargets;
+    m_shared.sky = sky;
+    m_shared.shadowRenderer = shadowRenderer;
+    m_shared.threadPool = threadPool;
 }
-
-// R7: syncFrameOutputFromLegacyRenderer() removed — new pipeline generates FrameOutput directly
 
 void RenderScene::setEyeInWater(bool inWater) {
     m_eyeInWater = inWater;
-    if (m_sourceRenderer) m_sourceRenderer->setEyeInWater(inWater);
 }
 
 void RenderScene::setRenderLocalPlayerModel(bool visible) {
     m_renderLocalPlayerModel = visible;
-    if (m_sourceRenderer) m_sourceRenderer->setRenderLocalPlayerModel(visible);
 }
 
 void RenderScene::setHeldBlockLightValue(int value) {
     if (m_deferredPipeline) {
         m_deferredPipeline->setHeldBlockLightValue(value);
     }
-    if (m_sourceRenderer) m_sourceRenderer->setHeldBlockLightValue(value);
 }
 
 // R7: Legacy bridge methods removed — use renderFrame() instead
-
-// R8: These methods now use FrameOutput directly (legacy fallback removed)
-bool RenderScene::isDeferredFrameActive() const {
-    return m_lastFrameOutput.hasDeferredInputs;
-}
-
-GLuint RenderScene::gbufDepthTexture() const {
-    return m_lastFrameOutput.gbufferDepthTex;
-}
-
-GLuint RenderScene::weatherMaskTexture() const {
-    return m_lastFrameOutput.weatherMaskTex;
-}
 
 bool RenderScene::isLightDebugActive() const {
     return m_settings.debug.deferredLightDebugMode > 0 || m_settings.debug.reflectionDebugMode > 0;

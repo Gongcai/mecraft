@@ -59,7 +59,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
                        Camera &camera,
                        RenderResourceHub &render,
                        RenderScene& renderScene,
-                       PostProcessRenderer& postProcess,
+                       PostProcessPass& postProcess,
                        UIRenderer& uiRenderer,
                        const FrameProfilerStats& profilerStats) {
     // (Your code calls glfwPollEvents())
@@ -200,7 +200,7 @@ void Dashboard::showCameraStats( Camera &camera) {
     }
 }
 
-void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessRenderer& postProcess, const FrameProfilerStats& profilerStats) {
+void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, const FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
@@ -643,15 +643,15 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                 ImGui::Text("Manual Exposure: %.2f (1/exposure=%.4f)", settings.postProcess.exposure, resolvedExposure);
             }
             // SkyCapture metadata
-            auto skyLux = render.getSkyIlluminanceData();
+            auto skyLux = renderScene.getSkyIlluminanceData();
             ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "SkyCapture Metadata (LUT units)");
             ImGui::Text("Direct: (%.6f, %.6f, %.6f)", skyLux.directIlluminance.r, skyLux.directIlluminance.g, skyLux.directIlluminance.b);
             ImGui::Text("Sky:   (%.6f, %.6f, %.6f)", skyLux.skyIlluminance.r, skyLux.skyIlluminance.g, skyLux.skyIlluminance.b);
             ImGui::Text("Sun:   (%.6f, %.6f, %.6f)", skyLux.sunIlluminance.r, skyLux.sunIlluminance.g, skyLux.sunIlluminance.b);
             ImGui::Text("Moon:  (%.6f, %.6f, %.6f)", skyLux.moonIlluminance.r, skyLux.moonIlluminance.g, skyLux.moonIlluminance.b);
             // Lighting input diagnostic — compare CPU art colors vs SkyCapture metadata
-            auto skyColors = render.getSkyColors();
-            auto fogColor = render.getFogColor();
+            auto skyColors = renderScene.getSkyColors();
+            auto fogColor = renderScene.getFogColor();
             ImGui::TextColored(ImVec4(0.9f, 0.75f, 0.4f, 1.0f), "Lighting Input Diagnostic");
             ImGui::Text("SunLightColor(CPU): (%.2f, %.2f, %.2f)", skyColors.sunLightColor.r, skyColors.sunLightColor.g, skyColors.sunLightColor.b);
             ImGui::Text("SkyAmbientColor(CPU): (%.2f, %.2f, %.2f)", skyColors.skyAmbientColor.r, skyColors.skyAmbientColor.g, skyColors.skyAmbientColor.b);

@@ -16,7 +16,7 @@ namespace ecs { class GameplayRegistry; }
 class World;
 class RenderResourceHub;
 class RenderScene;
-class PostProcessRenderer;
+class PostProcessPass;
 
 /// Renders gameplay HUD, state machine overlays, and debug dashboard.
 /// Extracted from Game::renderUI() to decouple UI presentation from Game.
@@ -38,7 +38,7 @@ public:
                          const Camera& camera,
                          RenderResourceHub& renderer,
                          RenderScene& renderScene,
-                         PostProcessRenderer& postProcess,
+                         PostProcessPass& postProcess,
                          const Dashboard::FrameProfilerStats& profilerStats);
 #endif
 

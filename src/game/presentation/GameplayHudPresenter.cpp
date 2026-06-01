@@ -24,7 +24,7 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
 #include "../../world/World.h"
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
-#include "../../renderer/renderers/PostProcessRenderer.h"
+#include "../../renderer/passes/PostProcessPass.h"
 #include "../../ui/Dashboard.h"
 
 void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
@@ -32,7 +32,7 @@ void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
                                             const Camera& camera,
                                             RenderResourceHub& renderer,
                                             RenderScene& renderScene,
-                                            PostProcessRenderer& postProcess,
+                                            PostProcessPass& postProcess,
                                             const Dashboard::FrameProfilerStats& profilerStats) {
     if (!m_dashboard) {
         return;

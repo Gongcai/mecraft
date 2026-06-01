@@ -99,10 +99,6 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr) {
     m_entityShadowShader = resourceMgr.getShader("entity_shadow");
     m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
 
-    // Phase 9a: DeferredPipeline owns all extracted passes
-    m_deferredPipeline = std::make_unique<DeferredPipeline>();
-    m_deferredPipeline->init(resourceMgr, &m_shadowRenderer);
-
     //m_uiShader = resourceMgr.getShader("ui");
     // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
     m_worldRenderBuffer.init();
@@ -120,11 +116,6 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr) {
 #ifdef MECRAFT_DEBUG
     m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
 #endif
-    // Phase 7b: Inject ShadowPass dependencies
-    if (m_deferredPipeline->shadowPass()) {
-        m_deferredPipeline->shadowPass()->setTerrainRenderer(&m_terrainRenderer);
-        m_deferredPipeline->shadowPass()->setWorldRenderBuffer(&m_worldRenderBuffer);
-    }
     // Phase 5c: Inject WaterCompositePass dependencies
     m_deferredTargets.init();
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
@@ -170,7 +161,6 @@ void RenderResourceHub::shutdown() {
     }
 #endif
     m_mdiMeshAllocations.clear();
-    if (m_deferredPipeline) { m_deferredPipeline->shutdown(); m_deferredPipeline.reset(); }
     m_gameplaySkyRenderer.shutdown();
     m_deferredTargets.shutdown();
     // Only shutdown legacy terrain cache if service is not injected
@@ -576,210 +566,6 @@ size_t RenderResourceHub::getMeshingHistoryCount() const {
 }
 #endif
 
-void RenderResourceHub::beginFrame(const Camera &camera, const Window &window) {
-    ++m_frameCounter;
-    // Use service's cache if available, otherwise use legacy cache
-    if (m_terrainStreamingService) {
-        m_terrainStreamingService->beginFrame();
-    } else {
-        m_terrainCache.beginFrame();
-    }
-    glClearColor(m_fogSettings.color.r, m_fogSettings.color.g, m_fogSettings.color.b, 1.0f);
-    glDepthMask(GL_TRUE);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    m_projection = camera.getProjectionMatrix(window.getAspectRatio());
-    m_view = camera.getViewMatrix();
-    m_cameraPos = camera.getPosition();
-    m_nearPlane = camera.getNear();
-    m_farPlane = camera.getFar();
-    m_currentFrameDataValid = false;
-    m_waterRenderedBeforeTemporal = false;
-    m_deferredHistoryUpdatedThisFrame = false;
-     drawCallCount = 0;
-    m_terrainRenderer.resetDebugCounters();
-
-#ifdef MECRAFT_DEBUG
-    m_meshingSubmittedThisFrame = 0;
-    m_meshingCompletedThisFrame = 0;
-    m_meshingStaleDroppedThisFrame = 0;
-    m_meshingBuildMsThisFrame = 0.0;
-    m_regionTestsThisFrame = 0;
-    m_regionPassedThisFrame = 0;
-    m_columnTestsThisFrame = 0;
-    m_columnPassedThisFrame = 0;
-    m_chunkTestsThisFrame = 0;
-    m_chunkPassedThisFrame = 0;
-    m_chunkCulledThisFrame = 0;
-    m_chunkCulledByPlaneThisFrame.fill(0);
-    m_cutoutCandidatesThisFrame = 0;
-    m_cutoutSkippedByDistanceThisFrame = 0;
-    m_mdiSubChunkTestsThisFrame = 0;
-    m_mdiSubChunksCulledThisFrame = 0;
-    beginGpuTimerFrame();
-#endif
-    m_meshUploadVerticesThisFrame = 0;
-    m_meshUploadBytesThisFrame = 0;
-    m_meshUploadDeferredCount = 0;
-    m_worldBufferExpandCountThisFrame = 0;
-    m_worldBufferUploadMsThisFrame = 0.0;
-}
-
-RenderResourceHub::RenderFrameData RenderResourceHub::buildRenderFrameData(const World& world) const {
-    RenderFrameData frame;
-    frame.view = m_view;
-    frame.projection = m_projection;
-    frame.viewProj = m_projection * m_view;
-    frame.invViewProj = glm::inverse(frame.viewProj);
-    frame.cameraPos = m_cameraPos;
-    frame.nearPlane = m_nearPlane;
-    frame.farPlane = m_farPlane;
-
-    // Temporal foundation
-    frame.frameIndex = m_frameCounter;
-    frame.deltaTime = static_cast<float>(Time::deltaTime);
-
-    // DerivativeMain shaders.properties:
-    // frameX = frac(frameCounter / 1.3247179572 + 0.5) * 2.0 - 1.0
-    // frameY = frac(frameCounter / 1.7548776662 + 0.5) * 2.0 - 1.0
-    // taaOffset = vec2(frameX / viewWidth, frameY / viewHeight)
-    {
-        const float invW = 1.0f / static_cast<float>(std::max(1, m_deferredTargets.width()));
-        const float invH = 1.0f / static_cast<float>(std::max(1, m_deferredTargets.height()));
-        const float frameCounter = static_cast<float>(m_frameCounter);
-        const float frameX = glm::fract(frameCounter / 1.3247179572f + 0.5f) * 2.0f - 1.0f;
-        const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
-        frame.jitter.x = frameX * invW;
-        frame.jitter.y = frameY * invH;
-        if (m_settings.taa.freezeJitter) {
-            frame.jitter = glm::vec2(0.0f);
-        }
-    }
-
-    // DerivativeMain-style TAA jitter: bake sub-pixel offset into projection
-    // so GBuffer vertices are shifted each frame. This is equivalent to
-    // gl_Position.xy += taaOffset * gl_Position.w in the vertex shader.
-    {
-        glm::mat4 jitteredProj = m_projection;
-        for (int column = 0; column < 4; ++column) {
-            jitteredProj[column][0] += frame.jitter.x * m_projection[column][3];
-            jitteredProj[column][1] += frame.jitter.y * m_projection[column][3];
-        }
-        frame.jitteredViewProj = jitteredProj * m_view;
-        frame.jitteredInvViewProj = glm::inverse(frame.jitteredViewProj);
-    }
-
-    if (m_hasPreviousFrameData) {
-        frame.previousJitter = m_previousFrameData.jitter;
-        frame.previousView = m_previousFrameData.view;
-        frame.previousProjection = m_previousFrameData.projection;
-        frame.previousViewProj = m_previousFrameData.viewProj;
-        frame.previousJitteredViewProj = m_previousFrameData.jitteredViewProj;
-        frame.previousInvViewProj = m_previousFrameData.invViewProj;
-    } else {
-        frame.previousJitter = frame.jitter;
-        frame.previousView = frame.view;
-        frame.previousProjection = frame.projection;
-        frame.previousViewProj = frame.viewProj;
-        frame.previousJitteredViewProj = frame.jitteredViewProj;
-        frame.previousInvViewProj = frame.invViewProj;
-    }
-    // Weather state now comes from World::WeatherSystem (single source of truth).
-    // Dashboard writes to WeatherSystem; Renderer reads from it.
-    const WeatherState& weather = world.getWeatherSystem().getRenderState();
-    const WeatherDerived& weatherDerived = world.getWeatherSystem().getDerived();
-    frame.weatherWetness = weather.wetness;
-    frame.weatherStorm = weather.storm;
-    frame.aerialReduction = weather.aerialReduction;
-    frame.lightningFlash = weatherDerived.lightningFlash;
-    frame.surfaceWetness = weatherDerived.surfaceWetness;
-    frame.skyWetness = weatherDerived.skyWetness;
-    frame.fogWetness = weatherDerived.fogWetness;
-    frame.cloudWetness = weatherDerived.cloudWetness;
-    frame.precipitation = weatherDerived.precipitation;
-    frame.rainStrength = weatherDerived.rainStrength;
-    frame.thunderStrength = weatherDerived.thunderStrength;
-
-    frame.skyColors = m_gameplaySkyRenderer.computeSkyColors(world.getDayNightSystem());
-    frame.skyIlluminance = m_gameplaySkyRenderer.computeSkyIlluminance(
-        frame.skyColors,
-        frame.weatherWetness,
-        frame.weatherStorm);
-    frame.skyIntensity = world.getDayNightSystem().getSkyIntensity();
-    const double gameTime = Time::getGameTime();
-    const double visualTime = Time::getRawTime();
-    frame.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
-    frame.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
-
-    frame.fogEnabled = m_fogSettings.enabled;
-    frame.fogMode = m_fogSettings.mode;
-    frame.fogColor = m_fogSettings.color;
-    frame.fogStart = m_fogSettings.startDistance;
-    frame.fogEnd = m_fogSettings.endDistance;
-    frame.fogDensity = m_fogSettings.density;
-    if (m_fogSettings.autoDistanceByRenderDistance) {
-        const float chunkSize = static_cast<float>(Chunk::SIZE_X);
-        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
-        // Circular loading: boundary at renderDistance chunks (Euclidean) from player.
-        // fogEnd = where fog becomes fully opaque, should be before the chunk boundary
-        // so that edge geometry is fully hidden.
-        frame.fogEnd = std::max(0.0f, (renderDistanceChunks + m_fogSettings.autoEndOffsetChunks) * chunkSize);
-        frame.fogStart = std::max(0.0f, frame.fogEnd - m_fogSettings.autoFadeWidthChunks * chunkSize);
-    }
-    frame.fogEnd = std::max(frame.fogEnd, frame.fogStart + 0.1f);
-    frame.atmosphere.aerialStrength = m_settings.postProcess.aerialStrength;
-    frame.atmosphere.horizonScatterStrength = m_settings.postProcess.horizonScatterStrength;
-    frame.atmosphere.sunWarmth = m_settings.postProcess.sunWarmth;
-    frame.atmosphere.skyCoolness = m_settings.postProcess.skyCoolness;
-    frame.atmosphere.weatherWetness = frame.weatherWetness;
-    frame.atmosphere.weatherStorm = frame.weatherStorm;
-    frame.atmosphere.aerialReduction = frame.aerialReduction;
-    frame.atmosphere.lightningFlash = frame.lightningFlash;
-    frame.atmosphere.surfaceWetness = frame.surfaceWetness;
-    frame.atmosphere.skyWetness = frame.skyWetness;
-    frame.atmosphere.fogWetness = frame.fogWetness;
-    frame.atmosphere.cloudWetness = frame.cloudWetness;
-    frame.atmosphere.precipitation = frame.precipitation;
-    // DerivativeMain default: mix(1.0, 0.03, skyWetness). Exposed for energy tuning.
-    // slider < 0: auto mode (shader computes from skyWetness + procedural cloud shadow)
-    // slider >= 0: manual override (shader bypasses all cloud shadow, returns slider value)
-    frame.atmosphere.directWeatherOcclusionOverride = (m_settings.weather.directWeatherOcclusion >= 0.0f) ? 1 : 0;
-    frame.atmosphere.directWeatherOcclusion = std::clamp(m_settings.weather.directWeatherOcclusion, 0.0f, 1.0f);
-    frame.volumetric.lightEnabled = m_settings.volumetric.lightEnabled;
-    frame.volumetric.uwLightEnabled = m_settings.volumetric.uwLightEnabled;
-    frame.volumetric.fogEnabled = m_settings.volumetric.fogEnabled;
-    frame.volumetric.fogStrength = m_settings.volumetric.fogStrength;
-    frame.volumetric.underwaterLightStrength = m_settings.volumetric.underwaterLightStrength;
-    frame.volumetric.fogCenterHeight = m_settings.volumetric.fogCenterHeight;
-    frame.volumetric.fogHeightSpread = m_settings.volumetric.fogHeightSpread;
-    frame.volumetric.fogNoiseScale = m_settings.volumetric.fogNoiseScale;
-    frame.volumetric.fogLightStrength = m_settings.volumetric.fogLightStrength;
-    frame.volumetric.fogDensityScale = m_settings.volumetric.fogDensityScale;
-    frame.volumetric.fogSamples = std::clamp(m_settings.volumetric.fogSamples, 2, 50);
-    frame.cloud.shadowsEnabled = m_settings.cloud.shadowsEnabled;
-    frame.cloud.shadowStrength = m_settings.cloud.shadowStrength;
-    frame.cloud.shadowScale = m_settings.cloud.shadowScale;
-    frame.cloud.shadowSpeed = m_settings.cloud.shadowSpeed;
-    frame.cloud.timeScale = m_settings.cloud.timeScale;
-    // DerivativeMain VolumetricClouds.glsl:24: coverage = 1.0 (clear) to 1.2 (rain).
-    // Shader uses uCloudCoverage directly — no additional weather amplification.
-    const float cloudWetForCoverage = std::clamp(frame.weatherWetness + frame.weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);
-    frame.cloud.coverage = std::clamp(1.0f + cloudWetForCoverage * 0.2f, 0.0f, 1.5f);
-    frame.cloud.density = 0.85f + frame.weatherWetness * 0.35f + frame.weatherStorm * 0.55f;
-    // DerivativeMain VolumetricClouds.glsl:53-68: wetness-based altitude/thickness interpolation
-    float cloudWet = std::clamp(frame.cloudWetness, 0.0f, 1.0f);
-    frame.cloud.height = 1000.0f + cloudWet * (800.0f - 1000.0f);    // clear 1000 → rain 800
-    frame.cloud.thickness = 1400.0f + cloudWet * (3000.0f - 1400.0f); // clear 1400 → rain 3000
-    // Storm altitude/thickness/density corrections are applied in shaders via
-    // uCloudDynamicWeather.z to avoid double-application across render paths.
-    frame.moonShadowActive = frame.skyColors.moonVisibility > frame.skyColors.sunVisibility;
-    frame.eyeInWater = m_eyeInWater;
-    return frame;
-}
-
-void RenderResourceHub::executeSkyCapturePass(const World& /*world*/) {
-    // Phase 7a: Delegated to SkyCapturePass::execute()
-}
-
 void RenderResourceHub::drawFullscreen(Shader& shader) const {
     shader.use();
     glBindVertexArray(m_deferredTargets.fullscreenVao());
@@ -805,16 +591,6 @@ void RenderResourceHub::restoreCapturedFramebufferViewport(const Window& window)
     const int width = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : fallbackWidth;
     const int height = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : fallbackHeight;
     m_deferredTargets.bindDefaultLike(m_capturedFramebuffer, width, height);
-}
-
-void RenderResourceHub::submitMeshingJobs(const World& world) {
-    if (m_terrainStreamingService) {
-        m_terrainStreamingService->submitMeshingJobs(world, m_cameraPos);
-        return;
-    }
-    m_terrainCache.submitMeshingJobs(world, m_cameraPos);
-    m_meshingInFlight = m_terrainCache.meshingInFlight();
-    syncTerrainCacheFrameStats();
 }
 
 void RenderResourceHub::collectAndDrawOpaqueChunks(const World& world,
@@ -1345,55 +1121,6 @@ void RenderResourceHub::drawTransparentChunks(const std::vector<ChunkRenderEntry
 // This is the Mecraft CSM equivalent of DerivativeMain shadowtex0 + shadowcolor0/1.
 void RenderResourceHub::executeTransparentShadowChunks(const std::vector<ChunkRenderEntry>& /*transparentEntries*/) {
     // Phase 7b: Delegated to ShadowPass (inline in execute())
-}
-
-void RenderResourceHub::endFrame(const Window &window) {
-    (void)window;
-    if (m_currentFrameDataValid) {
-        m_previousFrameData = m_currentFrameData;
-        m_hasPreviousFrameData = true;
-    }
-    recordMeshingHistory();
-    m_currentFrameDataValid = false;
-    m_deferredFrameActive = false;
-    m_waterRenderedBeforeTemporal = false;
-}
-
-void RenderResourceHub::recordMeshingHistory() {
-#ifdef MECRAFT_DEBUG
-    if (m_terrainStreamingService) {
-        m_terrainStreamingService->endFrame();
-        return;
-    }
-    if (m_meshingHistoryCount < MESHING_HISTORY_SIZE) {
-        m_meshingSubmittedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingSubmittedThisFrame);
-        m_meshingCompletedHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingCompletedThisFrame);
-        m_meshingInFlightHistory[m_meshingHistoryCount] = static_cast<float>(m_meshingInFlight.size());
-        ++m_meshingHistoryCount;
-        return;
-    }
-
-    for (size_t i = 1; i < MESHING_HISTORY_SIZE; ++i) {
-        m_meshingSubmittedHistory[i - 1] = m_meshingSubmittedHistory[i];
-        m_meshingCompletedHistory[i - 1] = m_meshingCompletedHistory[i];
-        m_meshingInFlightHistory[i - 1] = m_meshingInFlightHistory[i];
-    }
-
-    m_meshingSubmittedHistory[MESHING_HISTORY_SIZE - 1] = static_cast<float>(m_meshingSubmittedThisFrame);
-    m_meshingCompletedHistory[MESHING_HISTORY_SIZE - 1] = static_cast<float>(m_meshingCompletedThisFrame);
-    m_meshingInFlightHistory[MESHING_HISTORY_SIZE - 1] = static_cast<float>(m_meshingInFlight.size());
-#endif
-}
-
-void RenderResourceHub::drainMeshingResults(const World& world) {
-    if (m_terrainStreamingService) {
-        m_terrainStreamingService->drainMeshingResults(world);
-        return;
-    }
-    m_terrainCache.drainMeshingResults(world);
-    m_meshingInFlight = m_terrainCache.meshingInFlight();
-    m_mdiMeshAllocations = m_terrainCache.mdiMeshAllocations();
-    syncTerrainCacheFrameStats();
 }
 
 #ifdef MECRAFT_DEBUG
