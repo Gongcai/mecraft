@@ -35,6 +35,8 @@ uniform float uFogDensity;
 uniform int uDebugLightMode;
 uniform float uSkyIntensity;
 uniform float uAnimationTime;
+uniform float uHeldSunlight;
+uniform float uHeldBlockLight;
 
 const float aoLevels[4] = float[](0.72, 0.82, 0.91, 1.0);
 
@@ -113,7 +115,10 @@ void main() {
     vec3 normal = decodeFaceNormal(vNormal);
     vec3 lightDir = normalize(vec3(0.3, 1.0, 0.5));
     float diffuse = max(dot(normal, lightDir), 0.0);
-    float light = 0.78 + diffuse * 0.22;
+    float skyLight = uHeldSunlight * clamp(uSkyIntensity, 0.0, 1.0);
+    float localLight = max(skyLight, uHeldBlockLight);
+    float ambient = mix(0.10, 0.78, localLight);
+    float light = ambient + diffuse * skyLight * (1.0 - ambient);
     vec3 finalColor = texColor.rgb * light;
 
     if (uFogEnabled != 0) {

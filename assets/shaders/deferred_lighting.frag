@@ -619,12 +619,12 @@ void main() {
     float LdotH = max((LdotV + 1.0) * halfwayNorm, 0.0);
 
     float ssaoRaw = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
+    // Thin alpha-tested vegetation produces noisy SSAO/contact-shadow edges, but
+    // it still needs CSM visibility or grass/flowers glow inside tree shadows.
     float ssao = isThinPlantReceiver ? 1.0 : ssaoRaw;
     float shadowSssDepth = 0.0;
     float shadowSssWeight = 0.0;
-    vec3 shadowColored = isThinPlantReceiver
-        ? vec3(1.0)
-        : shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth, shadowSssWeight);
+    vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth, shadowSssWeight);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? dot(shadowColored, vec3(0.333)) : 1.0;

@@ -101,6 +101,7 @@ public:
 
     void triggerSwing();
     void setContinuousSwing(bool active);
+    void setEnvironmentLight(float sunlight, float blockLight);
 
     // Shadow data from Renderer — must be set before render() each frame.
     struct ShadowData {
@@ -189,6 +190,8 @@ private:
     float m_swingElapsed = 0.0f;
     Config m_config;
     ShadowData m_shadowData{};
+    float m_environmentSunlight = 1.0f;
+    float m_environmentBlockLight = 0.0f;
     bool m_initialized = false;
 };
 

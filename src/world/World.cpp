@@ -239,6 +239,22 @@ BlockID World::getBlock(int x, int y, int z) const {
     return 0;
 }
 
+uint8_t World::getPackedLight(const int x, const int y, const int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) return 0;
+
+    const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
+
+    const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it == m_chunks.end()) {
+        return 0;
+    }
+
+    const int localX = x - chunkX * Chunk::SIZE_X;
+    const int localZ = z - chunkZ * Chunk::SIZE_Z;
+    return it->second->getPackedLight(localX, y, localZ);
+}
+
 StateID World::getBlockState(const int x, const int y, const int z) const {
     return getBlock(x, y, z);
 }

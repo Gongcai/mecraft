@@ -10,16 +10,16 @@ void TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* wo
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
     if (!m_meshingSubmitBudgetOverridden) {
         const int workerCount = std::max(1, threadPool->numWorkers());
-        m_meshingSubmitBudget = std::max(2, workerCount / 2);
-        m_meshingMaxInFlight = std::max(4, workerCount);
+        m_meshingSubmitBudget = std::max(4, workerCount);
+        m_meshingMaxInFlight = std::max(16, workerCount * 2);
 #ifndef MECRAFT_DEBUG
-        m_meshingSubmitTimeBudgetMs = 0.5;
-        m_meshingDrainBudget = 2;
-        m_meshingDrainTimeBudgetMs = 0.75;
+        m_meshingSubmitTimeBudgetMs = 1.25;
+        m_meshingDrainBudget = 8;
+        m_meshingDrainTimeBudgetMs = 2.0;
 #else
-        m_meshingSubmitTimeBudgetMs = 0.25;
-        m_meshingDrainBudget = 1;
-        m_meshingDrainTimeBudgetMs = 0.35;
+        m_meshingSubmitTimeBudgetMs = 0.75;
+        m_meshingDrainBudget = 4;
+        m_meshingDrainTimeBudgetMs = 1.25;
 #endif
     }
     m_terrainCache.setMeshingBudgets(m_meshingSubmitBudget,

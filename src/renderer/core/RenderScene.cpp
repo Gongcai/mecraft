@@ -62,6 +62,16 @@ SkyIlluminanceData toSkyIlluminanceData(const GameplaySkyRenderer::SkyIlluminanc
     dst.cloudDynamicWeather = src.cloudDynamicWeather;
     return dst;
 }
+
+glm::vec2 sampleHeldItemLight(const World& world, const glm::vec3& cameraPosition) {
+    const int x = static_cast<int>(std::floor(cameraPosition.x));
+    const int y = static_cast<int>(std::floor(cameraPosition.y));
+    const int z = static_cast<int>(std::floor(cameraPosition.z));
+    const uint8_t packed = world.getPackedLight(x, y, z);
+    const float sunlight = static_cast<float>((packed >> 4) & 0x0F) / 15.0f;
+    const float blockLight = static_cast<float>(packed & 0x0F) / 15.0f;
+    return glm::vec2(sunlight, blockLight);
+}
 } // anonymous namespace
 
 RenderScene::RenderScene() = default;
@@ -223,6 +233,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setForwardMode(getPipelineMode() == PipelineMode::Forward);
         request.firstPersonHeldItemRenderer->setShadowData(
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
+        const glm::vec2 heldLight = sampleHeldItemLight(request.world, request.camera.getPosition());
+        request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->render(
             frameRenderSize.x,
             frameRenderSize.y,

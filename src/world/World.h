@@ -27,6 +27,7 @@ public:
     void update(const glm::vec3& playerPos);
 
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
+    [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
     [[nodiscard]] StateID getBlockState(int x, int y, int z) const;
     [[nodiscard]] StateID getFluidState(int x, int y, int z) const;
     [[nodiscard]] FluidCellView getCombinedCell(int x, int y, int z) const;

@@ -151,6 +151,10 @@ void main() {
         // checker in shadow space. PCF/PCSS averages that into dirty gray
         // blotches, so leaves cast a coarse solid shadow in the CSM depth
         // pass while keeping their visual alpha in the G-buffer pass.
+        if (isCrossVegetation) {
+            discard;
+        }
+
         bool solidFoliageCaster = (vMaterialKind == MATERIAL_LEAVES);
         if (!solidFoliageCaster && texColor.a < 0.1) {
             discard;

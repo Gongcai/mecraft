@@ -12,6 +12,9 @@ in vec3 vWorldPos;
 
 uniform sampler2D uTexture;
 uniform float uAmbientStrength;
+uniform float uSkyIntensity;
+uniform float uHeldSunlight;
+uniform float uHeldBlockLight;
 
 out vec4 FragColor;
 
@@ -29,8 +32,10 @@ void main() {
     vec3 lightDir = normalize(uSunDirection);
     float ndotl = max(dot(normal, lightDir), 0.0);
     float shadow = sampleHeldItemShadow(vWorldPos, normal);
-    float ambient = uAmbientStrength;
-    float light = ambient + ndotl * shadow * (1.0 - ambient);
+    float skyLight = uHeldSunlight * clamp(uSkyIntensity, 0.0, 1.0);
+    float localLight = max(skyLight, uHeldBlockLight);
+    float ambient = mix(0.08, uAmbientStrength, localLight);
+    float light = ambient + ndotl * shadow * skyLight * (1.0 - ambient);
 
     FragColor = vec4(srgbToLinear(texColor.rgb) * light, texColor.a);
 }

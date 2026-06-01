@@ -39,6 +39,8 @@ uniform int uDebugLightMode;
 uniform float uSkyIntensity;
 uniform float uAnimationTime;
 uniform float uAmbientStrength;
+uniform float uHeldSunlight;
+uniform float uHeldBlockLight;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -121,7 +123,7 @@ void main() {
     int aoHigh = min(aoLow + 1, 3);
     float aoFactor = mix(aoLevels[aoLow], aoLevels[aoHigh], fract(aoIdx));
 
-    vec2 lightmapUV = vec2(vBlockLight, 1.0 - vSunlight);
+    vec2 lightmapUV = vec2(uHeldBlockLight, 1.0 - uHeldSunlight);
     vec3 dayLight = srgbToLinear(texture(uLightmapDay, lightmapUV).rgb);
     vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
     vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
@@ -130,7 +132,7 @@ void main() {
     vec3 faceNormal = decodeFaceNormal(vNormal);
     float shadow = sampleHeldItemShadow(vWorldPos, faceNormal);
     // Modulate sunlight contribution by shadow; blocklight is unaffected.
-    float sunFraction = clamp(uSkyIntensity, 0.0, 1.0);
+    float sunFraction = clamp(uHeldSunlight * uSkyIntensity, 0.0, 1.0);
     float shadowDarken = mix(1.0, shadow, sunFraction);
     lightColor *= shadowDarken;
 

@@ -9,6 +9,9 @@ in vec3 vWorldPos;
 in vec3 vNormal;
 
 uniform sampler2D uAtlas;
+uniform float uSkyIntensity;
+uniform float uHeldSunlight;
+uniform float uHeldBlockLight;
 
 out vec4 FragColor;
 
@@ -18,5 +21,8 @@ void main() {
         discard;
     }
 
-    FragColor = vec4(texColor.rgb * vShade, texColor.a);
+    float skyLight = uHeldSunlight * clamp(uSkyIntensity, 0.0, 1.0);
+    float localLight = max(skyLight, uHeldBlockLight);
+    float light = mix(0.08, 1.0, localLight);
+    FragColor = vec4(texColor.rgb * vShade * light, texColor.a);
 }

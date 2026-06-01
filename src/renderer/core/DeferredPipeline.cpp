@@ -15,6 +15,8 @@
 
 #include <glad/glad.h>
 
+#include <algorithm>
+
 namespace {
 class ScopedGpuTimer {
 public:
@@ -296,6 +298,13 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         renderWaterCompositePass(ctx, true);
     }
 
+    // Generic transparent terrain (glass, stained glass) before temporal resolve.
+    {
+        renderer::debug::ScopedDebugGroup passGroup("Transparent.Generic");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Transparent);
+        renderGenericTransparentPass(ctx);
+    }
+
     // Particles
     {
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Transparent);
@@ -542,6 +551,144 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
     }
+}
+
+void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer ||
+        !m_shared->terrain || !m_resourceMgr || !m_transparentPassPlan.hasGeneric()) {
+        return;
+    }
+
+    Shader* shader = m_resourceMgr->getShader("transparent_composite");
+    if (shader == nullptr) {
+        shader = m_resourceMgr->getShader("forward_basic_terrain");
+    }
+    if (shader == nullptr) {
+        return;
+    }
+
+    auto& targets = *m_shared->deferredTargets;
+    auto& terrain = *m_shared->terrain;
+    auto& worldBuffer = *m_shared->worldRenderBuffer;
+
+    targets.copySceneCompositeToTransparentComposite();
+    targets.copyDepthToTransparentComposite();
+    targets.bindTransparentComposite();
+
+    TerrainFrameData tfd;
+    tfd.view = ctx.camera.view;
+    tfd.viewProj = m_currentSettings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    tfd.cameraPos = ctx.camera.position;
+    tfd.animationTime = ctx.animationTime;
+    tfd.shaderTime = ctx.shaderTime;
+    tfd.surfaceWetness = ctx.weather.surfaceWetness;
+    tfd.fog.enabled = ctx.fog.enabled;
+    tfd.fog.mode = ctx.fog.mode;
+    tfd.fog.color = ctx.fog.color;
+    tfd.fog.start = ctx.fog.startDistance;
+    tfd.fog.end = ctx.fog.endDistance;
+    tfd.fog.density = ctx.fog.density;
+    tfd.skyLighting.cameraPos = ctx.camera.position;
+    tfd.skyLighting.sunDirection = ctx.skyColors.sunDirection;
+    tfd.skyLighting.moonDirection = ctx.skyColors.moonDirection;
+    tfd.skyLighting.sunLightColor = ctx.skyColors.sunLightColor;
+    tfd.skyLighting.moonLightColor = ctx.skyColors.moonLightColor;
+    tfd.skyLighting.skyAmbientColor = ctx.skyColors.skyAmbientColor;
+    tfd.skyLighting.shadowTintColor = ctx.skyColors.shadowTintColor;
+    tfd.skyLighting.horizonScatterColor = ctx.skyColors.horizonScatterColor;
+    tfd.skyLighting.skyIntensity = ctx.skyIntensity;
+    tfd.skyLighting.moonVisibility = ctx.skyColors.moonVisibility;
+    tfd.skyLighting.directIlluminance = ctx.skyIlluminance.directIlluminance;
+    tfd.skyLighting.skyIlluminance = ctx.skyIlluminance.skyIlluminance;
+    tfd.skyLighting.sunIlluminance = ctx.skyIlluminance.sunIlluminance;
+    tfd.skyLighting.moonIlluminance = ctx.skyIlluminance.moonIlluminance;
+    tfd.skyLighting.cloudDynamicWeather = ctx.skyIlluminance.cloudDynamicWeather;
+    tfd.atmosphere.aerialStrength = ctx.atmosphere.aerialStrength;
+    tfd.atmosphere.horizonScatterStrength = ctx.atmosphere.horizonScatterStrength;
+    tfd.atmosphere.sunWarmth = ctx.atmosphere.sunWarmth;
+    tfd.atmosphere.skyCoolness = ctx.atmosphere.skyCoolness;
+    tfd.atmosphere.weatherWetness = ctx.weather.wetness;
+    tfd.atmosphere.weatherStorm = ctx.weather.storm;
+    tfd.atmosphere.aerialReduction = ctx.weather.aerialReduction;
+    tfd.atmosphere.lightningFlash = ctx.weather.lightningFlash;
+    tfd.atmosphere.surfaceWetness = ctx.weather.surfaceWetness;
+    tfd.atmosphere.skyWetness = ctx.weather.skyWetness;
+    tfd.atmosphere.fogWetness = ctx.weather.fogWetness;
+    tfd.atmosphere.cloudWetness = ctx.weather.cloudWetness;
+    tfd.atmosphere.precipitation = ctx.weather.precipitation;
+    tfd.atmosphere.directWeatherOcclusion = ctx.atmosphere.directWeatherOcclusion;
+    tfd.atmosphere.directWeatherOcclusionOverride = ctx.atmosphere.directWeatherOcclusionOverride;
+
+    TerrainRenderSettings trs;
+    trs.rainWetSurfacesEnabled = m_currentSettings.weather.wetSurfacesEnabled;
+    trs.rainSurfaceRipplesEnabled = m_currentSettings.weather.surfaceRipplesEnabled;
+    trs.aerialPerspectiveEnabled = m_currentSettings.postProcess.aerialPerspectiveEnabled;
+    trs.volumetricLightEnabled = m_currentSettings.volumetric.lightEnabled;
+    trs.volumetricFogEnabled = m_currentSettings.volumetric.fogEnabled;
+    trs.volumetricFogStrength = m_currentSettings.volumetric.fogStrength;
+    trs.directSunStrength = m_currentSettings.postProcess.directSunStrength;
+    trs.skyAmbientStrength = m_currentSettings.postProcess.skyAmbientStrength;
+    trs.weatherSkylightScale = m_currentSettings.weather.skylightScale;
+    trs.minimumAmbient = m_currentSettings.postProcess.minimumAmbient;
+    trs.blockLightStrength = m_currentSettings.postProcess.blockLightStrength;
+    trs.fakeBounceStrength = m_currentSettings.postProcess.fakeBounceStrength;
+    trs.albedoDesaturation = m_currentSettings.postProcess.albedoDesaturation;
+    trs.shadowDesaturation = m_currentSettings.postProcess.shadowDesaturation;
+
+    const TextureArray& texArray = m_resourceMgr->getTextureArray();
+    const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
+    terrain.bindChunkRenderState(tfd, texArray, *shader,
+                                  true, 0, ctx.eyeInWater, m_heldBlockLightValue,
+                                  targets, m_resourceMgr, volFogShadersReady, trs);
+    shader->setInt("uCompositeInputsEnabled", 1);
+    shader->setInt("uDepthSofteningEnabled", 1);
+    shader->setInt("uForceBaseLod", 1);
+
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, targets.sceneCompositeTexture());
+
+    std::vector<const DrawBatchEntry*> genericEntries;
+    genericEntries.reserve(m_transparentBatch.size());
+    for (const DrawBatchEntry& entry : m_transparentBatch) {
+        if (entry.kind == TransparentBatchKind::Generic) {
+            genericEntries.push_back(&entry);
+        }
+    }
+    std::sort(genericEntries.begin(), genericEntries.end(),
+              [](const DrawBatchEntry* a, const DrawBatchEntry* b) {
+                  return a->distanceSq > b->distanceSq;
+              });
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);
+
+    worldBuffer.beginFrame();
+    for (const DrawBatchEntry* entry : genericEntries) {
+        worldBuffer.addTransparent(entry->range);
+    }
+    worldBuffer.flushTransparent();
+
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    shader->setInt("uForceBaseLod", 0);
+
+    targets.copyTransparentCompositeToSceneComposite();
+    targets.copyTransparentCompositeToSceneResolved();
+
+    glBindVertexArray(0);
+    for (int i = 14; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : (i == 14 ? GL_TEXTURE_3D : GL_TEXTURE_2D), 0);
+    }
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {

@@ -448,6 +448,11 @@ void FirstPersonHeldItemRenderer::setContinuousSwing(const bool active) {
     }
 }
 
+void FirstPersonHeldItemRenderer::setEnvironmentLight(const float sunlight, const float blockLight) {
+    m_environmentSunlight = std::clamp(sunlight, 0.0f, 1.0f);
+    m_environmentBlockLight = std::clamp(blockLight, 0.0f, 1.0f);
+}
+
 void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
     m_shadowData = data;
 }
@@ -689,6 +694,8 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     m_steveShader->setMat4("viewProj", viewProj);
     m_steveShader->setMat4("model", model);
     m_steveShader->setInt("uTexture", 0);
+    m_steveShader->setFloat("uHeldSunlight", m_environmentSunlight);
+    m_steveShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
     bindShadowUniforms(*m_steveShader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
@@ -750,6 +757,8 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         m_blockShader->setInt("uFogEnabled", 0);
         m_blockShader->setInt("uDebugLightMode", 0);
         m_blockShader->setFloat("uSkyIntensity", 1.0f);
+        m_blockShader->setFloat("uHeldSunlight", m_environmentSunlight);
+        m_blockShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
         m_blockShader->setFloat("uAnimationTime", 0.0f);
         m_blockShader->setInt("uLightmapDay", 1);
         m_blockShader->setInt("uLightmapNight", 2);
@@ -798,6 +807,8 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     m_itemShader->setMat4("model", model);
     m_itemShader->setMat4("viewProj", viewProj);
     m_itemShader->setInt("uAtlas", 0);
+    m_itemShader->setFloat("uHeldSunlight", m_environmentSunlight);
+    m_itemShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
     bindShadowUniforms(*m_itemShader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
