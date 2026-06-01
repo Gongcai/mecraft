@@ -212,6 +212,7 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     shader.setMat4("view", frame.view);
     shader.setMat4("viewProj", frame.viewProj);
     shader.setInt("uUseModel", 0);
+    shader.setInt("uVertexFormat", 1);
     shader.setInt("texArray", 0);
     shader.setInt("uLightmapDay", 1);
     shader.setInt("uLightmapNight", 2);
@@ -289,6 +290,7 @@ void TerrainRenderer::bindBasicForwardState(const TerrainFrameData& frame, const
     shader.setMat4("view", frame.view);
     shader.setMat4("viewProj", frame.viewProj);
     shader.setInt("uUseModel", 0);
+    shader.setInt("uVertexFormat", 1);
 
     // Texture unit assignments: texArray, lightmap day/night, biome colormap
     shader.setInt("texArray", 0);

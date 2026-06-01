@@ -1,8 +1,11 @@
 #include "TerrainStreamingService.h"
 #include "../../world/World.h"
 
-void TerrainStreamingService::init(ThreadPool* threadPool) {
+void TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer) {
     m_terrainCache.init();
+    if (worldRenderBuffer != nullptr) {
+        m_terrainCache.setWorldRenderBuffer(worldRenderBuffer);
+    }
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
     if (!m_meshingSubmitBudgetOverridden) {

@@ -586,6 +586,11 @@ void TerrainRenderCache::drainMeshingResults(const World& world) {
             mesh.cutoutDistanceRange = gpu.cutoutDistance;
             mesh.transparentRange = gpu.transparent;
             mesh.waterRange = gpu.water;
+            mesh.opaqueRange.metadataIndex = gpu.metadataIndex;
+            mesh.cutoutRange.metadataIndex = gpu.metadataIndex;
+            mesh.cutoutDistanceRange.metadataIndex = gpu.metadataIndex;
+            mesh.transparentRange.metadataIndex = gpu.metadataIndex;
+            mesh.waterRange.metadataIndex = gpu.metadataIndex;
             mesh.vertexCount = gpu.opaque.vertexCount;
             mesh.cutoutVertexCount = gpu.cutout.vertexCount;
             mesh.cutoutDistanceVertexCount = gpu.cutoutDistance.vertexCount;
@@ -626,7 +631,8 @@ void TerrainRenderCache::drainMeshingResults(const World& world) {
         }
 
         m_meshUploadVerticesThisFrame += currentVertices;
-        m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) * sizeof(BlockVertex);
+        m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) *
+            (m_useMultiDrawIndirect ? sizeof(PackedBlockVertex) : sizeof(BlockVertex));
 
         if (overBudget) {
             break;  // Allow one over-budget upload, then stop

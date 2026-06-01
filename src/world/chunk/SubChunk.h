@@ -2,6 +2,7 @@
 #define MECRAFT_SUBCHUNK_H
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -18,6 +19,7 @@ struct GpuMeshRange {
     uint32_t firstVertex = 0;
     uint32_t vertexCount = 0;
     uint64_t generation = 0;
+    uint32_t metadataIndex = 0xFFFFFFFFu;
 };
 
 // Logical handle for a sub-chunk mesh in the global GPU buffer pool.
@@ -27,6 +29,7 @@ struct WorldGpuMesh {
     GpuMeshRange cutoutDistance;
     GpuMeshRange transparent;
     GpuMeshRange water;
+    uint32_t metadataIndex = 0xFFFFFFFFu;
     bool hasBounds = false;
     glm::vec3 boundsMin{};
     glm::vec3 boundsMax{};
@@ -49,6 +52,13 @@ struct BlockVertex {
     uint8_t animationFps;
     uint8_t animated;
     uint16_t tintPacked;
+};
+
+struct PackedBlockVertex {
+    uint32_t posPacked;
+    uint32_t uvPacked;
+    uint32_t lightAoLayer;
+    uint32_t tintAnim;
 };
 
 namespace BlockTintKinds {
@@ -135,6 +145,7 @@ inline BlockVertex makeBlockVertex(float x,
 }
 
 static_assert(sizeof(BlockVertex) <= 32, "BlockVertex should stay bandwidth-friendly");
+static_assert(sizeof(PackedBlockVertex) == 16, "PackedBlockVertex must stay 16 bytes");
 
 struct SubChunkMesh {
     GLuint vao = 0;
@@ -235,6 +246,7 @@ public:
     [[nodiscard]] const SubChunkMesh& getMesh() const;
     [[nodiscard]] SubChunkMesh& getMesh();
     void setMesh(const SubChunkMesh& mesh);
+    [[nodiscard]] std::size_t estimatedMemoryBytes() const;
 
     // 6-direction neighbor pointers: [0]=+X, [1]=-X, [2]=+Y, [3]=-Y, [4]=+Z, [5]=-Z
     SubChunk* neighbors[6] = {};

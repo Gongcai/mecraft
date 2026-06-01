@@ -26,7 +26,7 @@ public:
 
     bool allocate(uint32_t vertexCount, GpuMeshRange& outRange);
     void free(const GpuMeshRange& range);
-    void upload(const GpuMeshRange& range, const std::vector<BlockVertex>& vertices);
+    void upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices);
 
     GLuint vbo() const { return m_vbo; }
     uint64_t generation() const { return m_generationCounter; }
@@ -70,6 +70,10 @@ private:
 
 class WorldRenderBuffer {
 public:
+    struct SubChunkDrawMetadata {
+        glm::vec4 originAndFlags = glm::vec4(0.0f);
+    };
+
     struct FrameStatsSnapshot {
         int glSubmitCount = 0;
         size_t opaqueCommands = 0;
@@ -90,6 +94,7 @@ public:
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
     static constexpr size_t kCommandMergeThreshold = 4096;  // Skip merge sort when commands exceed this
+    static constexpr GLuint kTerrainMetadataBinding = 0;
 
     WorldRenderBuffer();
     ~WorldRenderBuffer();
@@ -143,6 +148,9 @@ public:
     float opaqueFragmentationRatio() const { return m_opaquePool.fragmentationRatio(); }
     float cutoutFragmentationRatio() const { return m_cutoutPool.fragmentationRatio(); }
     float transparentFragmentationRatio() const { return m_transparentPool.fragmentationRatio(); }
+    size_t metadataSlotCount() const { return m_subChunkMetadata.size(); }
+    size_t metadataFreeSlotCount() const { return m_freeSubChunkMetadataIndices.size(); }
+    size_t metadataBytes() const { return m_subChunkMetadata.size() * sizeof(SubChunkDrawMetadata); }
     uint64_t opaqueVertexCount() const { return m_opaqueVertexCount; }
     uint64_t cutoutVertexCount() const { return m_cutoutVertexCount; }
     uint64_t transparentVertexCount() const { return m_transparentVertexCount; }
@@ -158,6 +166,8 @@ public:
 
 private:
     static void setupVertexLayout();
+    uint32_t uploadSubChunkMetadata(const glm::vec3& origin);
+    void bindMetadataBuffer() const;
 
     VertexPoolAllocator m_opaquePool;
     VertexPoolAllocator m_cutoutPool;
@@ -174,6 +184,7 @@ private:
     GLuint m_cutoutIndirectBuf = 0;
     GLuint m_transparentIndirectBuf = 0;
     GLuint m_waterIndirectBuf = 0;
+    GLuint m_subChunkMetadataBuffer = 0;
 
     size_t m_opaqueIndirectCapacity = 0;
     size_t m_cutoutIndirectCapacity = 0;
@@ -184,6 +195,8 @@ private:
     std::vector<DrawArraysIndirectCommand> m_cutoutCommands;
     std::vector<DrawArraysIndirectCommand> m_transparentCommands;
     std::vector<DrawArraysIndirectCommand> m_waterCommands;
+    std::vector<SubChunkDrawMetadata> m_subChunkMetadata;
+    std::vector<uint32_t> m_freeSubChunkMetadataIndices;
 
     int m_glSubmitCount = 0;
     size_t m_opaqueLogicalCommandCount = 0;

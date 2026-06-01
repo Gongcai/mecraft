@@ -280,17 +280,64 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         }
 
         RenderWorkStats renderWork = render.getRenderWorkStats();
-        const double vertexBytes = static_cast<double>(renderWork.blockVertexBytes);
-        const auto toMiB = [&](const uint64_t vertices) {
-            return static_cast<double>(vertices) * vertexBytes / (1024.0 * 1024.0);
+        const auto bytesToMiB = [](const uint64_t bytes) {
+            return static_cast<double>(bytes) / (1024.0 * 1024.0);
         };
-        const auto toPoolMiB = [&](const size_t vertices) {
-            return static_cast<double>(vertices) * vertexBytes / (1024.0 * 1024.0);
+        const auto poolUsePercent = [](const size_t usedBytes, const size_t capacityBytes) {
+            return capacityBytes > 0 ? static_cast<double>(usedBytes) * 100.0 / static_cast<double>(capacityBytes) : 0.0;
         };
+
+        size_t activeSubChunks = 0;
+        size_t chunkStorageBytes = 0;
+        for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
+            (void)chunkKey;
+            if (!chunk) {
+                continue;
+            }
+            for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                const SubChunk* subChunk = chunk->getSubChunk(scy);
+                if (!subChunk) {
+                    continue;
+                }
+                ++activeSubChunks;
+                chunkStorageBytes += subChunk->estimatedMemoryBytes();
+            }
+        }
+
+        const int visibleMdiSubChunks = std::max(0, renderWork.mdiSubChunkTests - renderWork.mdiSubChunksCulled);
+        const char* terrainVertexFormat = render.isMultiDrawIndirectEnabled() ? "PackedBlockVertex" : "BlockVertex";
 
         ImGui::Separator();
         ImGui::Text("Render Work");
-        ImGui::Text("BlockVertex: %llu bytes", static_cast<unsigned long long>(renderWork.blockVertexBytes));
+        ImGui::Text("Active Chunks/SubChunks: %llu / %llu",
+                    static_cast<unsigned long long>(world.getActiveChunks().size()),
+                    static_cast<unsigned long long>(activeSubChunks));
+        ImGui::Text("Chunk CPU Storage (approx): %.2f MiB",
+                    bytesToMiB(static_cast<uint64_t>(chunkStorageBytes)));
+        ImGui::Text("Terrain Vertex: %llu bytes (%s)",
+                    static_cast<unsigned long long>(renderWork.blockVertexBytes),
+                    terrainVertexFormat);
+        ImGui::Text("Terrain GPU Pool: %.2f / %.2f MiB (%.1f%%)",
+                    bytesToMiB(static_cast<uint64_t>(renderWork.terrainPoolUsedBytes)),
+                    bytesToMiB(static_cast<uint64_t>(renderWork.terrainPoolCapacityBytes)),
+                    poolUsePercent(renderWork.terrainPoolUsedBytes, renderWork.terrainPoolCapacityBytes));
+        ImGui::Text("Pool Used O/C/T: %.2f / %.2f / %.2f MiB",
+                    bytesToMiB(static_cast<uint64_t>(renderWork.opaquePoolUsedBytes)),
+                    bytesToMiB(static_cast<uint64_t>(renderWork.cutoutPoolUsedBytes)),
+                    bytesToMiB(static_cast<uint64_t>(renderWork.transparentPoolUsedBytes)));
+        ImGui::Text("Pool Capacity O/C/T: %.2f / %.2f / %.2f MiB",
+                    bytesToMiB(static_cast<uint64_t>(renderWork.opaquePoolCapacityBytes)),
+                    bytesToMiB(static_cast<uint64_t>(renderWork.cutoutPoolCapacityBytes)),
+                    bytesToMiB(static_cast<uint64_t>(renderWork.transparentPoolCapacityBytes)));
+        ImGui::Text("Terrain Metadata: %.3f MiB, %llu slots (%llu free)",
+                    bytesToMiB(static_cast<uint64_t>(renderWork.terrainMetadataBytes)),
+                    static_cast<unsigned long long>(renderWork.terrainMetadataSlots),
+                    static_cast<unsigned long long>(renderWork.terrainMetadataFreeSlots));
+        ImGui::Text("Frame Vertex Read: %.2f MiB (O/C/T %.2f / %.2f / %.2f)",
+                    bytesToMiB(renderWork.terrainVertexReadBytes),
+                    bytesToMiB(renderWork.opaqueVertexReadBytes),
+                    bytesToMiB(renderWork.cutoutVertexReadBytes),
+                    bytesToMiB(renderWork.transparentVertexReadBytes));
         ImGui::Text("MDI Commands O/C/T: %llu / %llu / %llu",
                     static_cast<unsigned long long>(renderWork.opaqueCommands),
                     static_cast<unsigned long long>(renderWork.cutoutCommands),
@@ -309,18 +356,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Transparent Vertices Generic/Water: %llu / %llu",
                     static_cast<unsigned long long>(renderWork.transparentGenericVertices),
                     static_cast<unsigned long long>(renderWork.transparentWaterVertices));
-        ImGui::Text("Vertex Read O/C/T: %.2f / %.2f / %.2f MiB",
-                    toMiB(renderWork.opaqueVertices),
-                    toMiB(renderWork.cutoutVertices),
-                    toMiB(renderWork.transparentVertices));
-        ImGui::Text("Pool Used O/C/T: %.2f / %.2f / %.2f MiB",
-                    toPoolMiB(renderWork.opaquePoolUsedVertices),
-                    toPoolMiB(renderWork.cutoutPoolUsedVertices),
-                    toPoolMiB(renderWork.transparentPoolUsedVertices));
-        ImGui::Text("Pool Capacity O/C/T: %.2f / %.2f / %.2f MiB",
-                    toPoolMiB(renderWork.opaquePoolCapacityVertices),
-                    toPoolMiB(renderWork.cutoutPoolCapacityVertices),
-                    toPoolMiB(renderWork.transparentPoolCapacityVertices));
+        ImGui::Text("Pool Vertices O/C/T: %llu / %llu / %llu",
+                    static_cast<unsigned long long>(renderWork.opaquePoolUsedVertices),
+                    static_cast<unsigned long long>(renderWork.cutoutPoolUsedVertices),
+                    static_cast<unsigned long long>(renderWork.transparentPoolUsedVertices));
         ImGui::Text("Pool Fragmentation O/C/T: %.1f%% / %.1f%% / %.1f%%",
                     renderWork.opaquePoolFragmentation * 100.0f,
                     renderWork.cutoutPoolFragmentation * 100.0f,
@@ -347,6 +386,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("MDI SubChunk Culled: %d / %d",
                     renderWork.mdiSubChunksCulled,
                     renderWork.mdiSubChunkTests);
+        ImGui::Text("MDI SubChunk Visible: %d", visibleMdiSubChunks);
 
         ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
         bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();

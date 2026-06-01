@@ -4,8 +4,74 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
+#include <limits>
 
 namespace {
+constexpr uint32_t kInvalidMetadataIndex = 0xFFFFFFFFu;
+constexpr float kPackedPositionScale = 128.0f;
+constexpr float kPackedUvScale = 1024.0f;
+
+uint32_t packFixedUv16(const float value) {
+    const float clamped = std::clamp(value, -32768.0f / kPackedUvScale, 32767.0f / kPackedUvScale);
+    const int quantized = static_cast<int>(std::lround(clamped * kPackedUvScale));
+    return static_cast<uint32_t>(static_cast<uint16_t>(static_cast<int16_t>(quantized)));
+}
+
+uint32_t packSignedNormal(const int8_t normal) {
+    if (normal == -1) {
+        return 6u;
+    }
+    if (normal == -2) {
+        return 7u;
+    }
+    return static_cast<uint32_t>(std::clamp<int>(normal, 0, 5));
+}
+
+uint32_t packLocalCoord12(const float value) {
+    const int quantized = static_cast<int>(std::lround(value * kPackedPositionScale));
+    return static_cast<uint32_t>(std::clamp(quantized, 0, 4095));
+}
+
+std::vector<PackedBlockVertex> packBlockVertices(const std::vector<BlockVertex>& vertices) {
+    std::vector<PackedBlockVertex> packed;
+    packed.reserve(vertices.size());
+    for (const BlockVertex& v : vertices) {
+        const uint32_t x = packLocalCoord12(v.x);
+        const uint32_t y = packLocalCoord12(v.y);
+        const uint32_t z = packLocalCoord12(v.z);
+
+        PackedBlockVertex out{};
+        out.posPacked =
+            ((x & 0x0FFFu) << 20u) |
+            ((y & 0x0FFFu) << 8u) |
+            ((z >> 4u) & 0xFFu);
+        out.uvPacked = (packFixedUv16(v.u) << 16u) | packFixedUv16(v.v);
+        out.lightAoLayer =
+            ((z & 0x0Fu) << 28u) |
+            (packSignedNormal(v.normal) << 25u) |
+            ((static_cast<uint32_t>(v.sunlight) & 0xFFu) << 17u) |
+            ((static_cast<uint32_t>(v.blockLight) & 0xFFu) << 9u) |
+            ((static_cast<uint32_t>(v.ao) & 0x03u) << 7u) |
+            (static_cast<uint32_t>(v.layer) & 0x7Fu);
+        out.tintAnim =
+            ((static_cast<uint32_t>(v.animationFrameCount) & 0xFFu) << 24u) |
+            ((static_cast<uint32_t>(v.animationFps) & 0x7Fu) << 17u) |
+            ((static_cast<uint32_t>(v.animated) & 0x01u) << 16u) |
+            (static_cast<uint32_t>(v.tintPacked) & 0xFFFFu);
+        packed.push_back(out);
+    }
+    return packed;
+}
+
+void subtractOrigin(std::vector<BlockVertex>& vertices, const glm::vec3& origin) {
+    for (BlockVertex& v : vertices) {
+        v.x -= origin.x;
+        v.y -= origin.y;
+        v.z -= origin.z;
+    }
+}
+
 void mergeAdjacentCommands(std::vector<DrawArraysIndirectCommand>& commands) {
     if (commands.size() < 2) {
         return;
@@ -62,7 +128,7 @@ VertexPoolAllocator::~VertexPoolAllocator() {
 void VertexPoolAllocator::init(const size_t initialCapacityVertices) {
     shutdown();
 
-    const size_t bytes = initialCapacityVertices * sizeof(BlockVertex);
+    const size_t bytes = initialCapacityVertices * sizeof(PackedBlockVertex);
     glCreateBuffers(1, &m_vbo);
     glNamedBufferStorage(m_vbo, static_cast<GLsizeiptr>(bytes), nullptr, GL_DYNAMIC_STORAGE_BIT);
 
@@ -228,11 +294,11 @@ void VertexPoolAllocator::free(const GpuMeshRange& range) {
     coalesceAt(node);
 }
 
-void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<BlockVertex>& vertices) {
+void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices) {
     if (vertices.empty()) return;
-    const size_t bytes = vertices.size() * sizeof(BlockVertex);
+    const size_t bytes = vertices.size() * sizeof(PackedBlockVertex);
     glNamedBufferSubData(m_vbo,
-                         static_cast<GLintptr>(range.firstVertex) * sizeof(BlockVertex),
+                         static_cast<GLintptr>(range.firstVertex) * sizeof(PackedBlockVertex),
                          static_cast<GLsizeiptr>(bytes),
                          vertices.data());
     m_uploadedBytesThisFrame += bytes;
@@ -245,13 +311,13 @@ void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
     GLuint newVbo = 0;
     glCreateBuffers(1, &newVbo);
     glNamedBufferStorage(newVbo,
-                         static_cast<GLsizeiptr>(newCapacityVertices * sizeof(BlockVertex)),
+                         static_cast<GLsizeiptr>(newCapacityVertices * sizeof(PackedBlockVertex)),
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
 
     if (m_vbo != 0 && m_capacityVertices > 0) {
         glCopyNamedBufferSubData(m_vbo, newVbo, 0, 0,
-                                 static_cast<GLsizeiptr>(m_capacityVertices * sizeof(BlockVertex)));
+                                 static_cast<GLsizeiptr>(m_capacityVertices * sizeof(PackedBlockVertex)));
         glDeleteBuffers(1, &m_vbo);
     }
 
@@ -303,38 +369,21 @@ WorldRenderBuffer::~WorldRenderBuffer() {
 }
 
 void WorldRenderBuffer::setupVertexLayout() {
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, x)));
+    for (GLuint attrib = 0; attrib <= 10; ++attrib) {
+        glDisableVertexAttribArray(attrib);
+    }
 
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
+    glEnableVertexAttribArray(11);
+    glVertexAttribIPointer(11, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, posPacked)));
 
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
+    glEnableVertexAttribArray(12);
+    glVertexAttribIPointer(12, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, uvPacked)));
 
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
+    glEnableVertexAttribArray(13);
+    glVertexAttribIPointer(13, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, lightAoLayer)));
 
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
-
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
-
-    glEnableVertexAttribArray(7);
-    glVertexAttribPointer(7, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
-
-    glEnableVertexAttribArray(8);
-    glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
-
-    glEnableVertexAttribArray(9);
-    glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
-
-    glEnableVertexAttribArray(10);
-    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
+    glEnableVertexAttribArray(14);
+    glVertexAttribIPointer(14, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, tintAnim)));
 }
 
 void WorldRenderBuffer::init() {
@@ -392,6 +441,8 @@ void WorldRenderBuffer::init() {
                          static_cast<GLsizeiptr>(m_waterIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
+    glCreateBuffers(1, &m_subChunkMetadataBuffer);
+    m_subChunkMetadata.reserve(kInitialIndirectCapacity);
 
     // Label GL objects for RenderDoc / KHR_debug inspection
     renderer::debug::labelVertexArray(m_opaqueVao, "WorldRenderBuffer.OpaqueVAO");
@@ -404,6 +455,7 @@ void WorldRenderBuffer::init() {
     renderer::debug::labelBuffer(m_cutoutIndirectBuf, "WorldRenderBuffer.CutoutIndirect");
     renderer::debug::labelBuffer(m_transparentIndirectBuf, "WorldRenderBuffer.TransparentIndirect");
     renderer::debug::labelBuffer(m_waterIndirectBuf, "WorldRenderBuffer.WaterIndirectBuffer");
+    renderer::debug::labelBuffer(m_subChunkMetadataBuffer, "WorldRenderBuffer.SubChunkMetadata");
 
     m_opaqueCommands.reserve(kInitialIndirectCapacity);
     m_cutoutCommands.reserve(kInitialIndirectCapacity);
@@ -427,6 +479,9 @@ void WorldRenderBuffer::shutdown() {
     if (m_cutoutIndirectBuf != 0) { glDeleteBuffers(1, &m_cutoutIndirectBuf); m_cutoutIndirectBuf = 0; }
     if (m_transparentIndirectBuf != 0) { glDeleteBuffers(1, &m_transparentIndirectBuf); m_transparentIndirectBuf = 0; }
     if (m_waterIndirectBuf != 0) { glDeleteBuffers(1, &m_waterIndirectBuf); m_waterIndirectBuf = 0; }
+    if (m_subChunkMetadataBuffer != 0) { glDeleteBuffers(1, &m_subChunkMetadataBuffer); m_subChunkMetadataBuffer = 0; }
+    m_subChunkMetadata.clear();
+    m_freeSubChunkMetadataIndices.clear();
 
     m_opaqueIndirectCapacity = 0;
     m_cutoutIndirectCapacity = 0;
@@ -443,19 +498,52 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
     const bool hasBounds, const glm::vec3& boundsMin, const glm::vec3& boundsMax)
 {
     WorldGpuMesh result;
+    if (opaque.empty() && cutout.empty() && cutoutDistance.empty() && transparent.empty() && water.empty()) {
+        result.hasBounds = hasBounds;
+        result.boundsMin = boundsMin;
+        result.boundsMax = boundsMax;
+        return result;
+    }
+
+    glm::vec3 origin(0.0f);
+    if (hasBounds) {
+        origin = glm::floor(boundsMin);
+    } else {
+        bool originSet = false;
+        auto consumeOrigin = [&](const std::vector<BlockVertex>& vertices) {
+            if (!vertices.empty() && !originSet) {
+                origin = glm::floor(glm::vec3(vertices.front().x, vertices.front().y, vertices.front().z));
+                originSet = true;
+            }
+        };
+        consumeOrigin(opaque);
+        consumeOrigin(cutout);
+        consumeOrigin(cutoutDistance);
+        consumeOrigin(transparent);
+        consumeOrigin(water);
+    }
+    result.metadataIndex = uploadSubChunkMetadata(origin);
+
+    auto makePacked = [&](const std::vector<BlockVertex>& vertices) {
+        std::vector<BlockVertex> local = vertices;
+        subtractOrigin(local, origin);
+        return packBlockVertices(local);
+    };
 
     if (!opaque.empty()) {
         if (!m_opaquePool.allocate(static_cast<uint32_t>(opaque.size()), result.opaque)) {
             return {};
         }
-        m_opaquePool.upload(result.opaque, opaque);
+        result.opaque.metadataIndex = result.metadataIndex;
+        m_opaquePool.upload(result.opaque, makePacked(opaque));
     }
     if (!cutout.empty()) {
         if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutout.size()), result.cutout)) {
             m_opaquePool.free(result.opaque);
             return {};
         }
-        m_cutoutPool.upload(result.cutout, cutout);
+        result.cutout.metadataIndex = result.metadataIndex;
+        m_cutoutPool.upload(result.cutout, makePacked(cutout));
     }
     if (!cutoutDistance.empty()) {
         if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutoutDistance.size()), result.cutoutDistance)) {
@@ -463,7 +551,8 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
             m_cutoutPool.free(result.cutout);
             return {};
         }
-        m_cutoutPool.upload(result.cutoutDistance, cutoutDistance);
+        result.cutoutDistance.metadataIndex = result.metadataIndex;
+        m_cutoutPool.upload(result.cutoutDistance, makePacked(cutoutDistance));
     }
     if (!transparent.empty()) {
         if (!m_transparentPool.allocate(static_cast<uint32_t>(transparent.size()), result.transparent)) {
@@ -472,7 +561,8 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
             m_cutoutPool.free(result.cutoutDistance);
             return {};
         }
-        m_transparentPool.upload(result.transparent, transparent);
+        result.transparent.metadataIndex = result.metadataIndex;
+        m_transparentPool.upload(result.transparent, makePacked(transparent));
     }
     if (!water.empty()) {
         if (!m_transparentPool.allocate(static_cast<uint32_t>(water.size()), result.water)) {
@@ -482,7 +572,8 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
             m_transparentPool.free(result.transparent);
             return {};
         }
-        m_transparentPool.upload(result.water, water);
+        result.water.metadataIndex = result.metadataIndex;
+        m_transparentPool.upload(result.water, makePacked(water));
     }
 
     result.hasBounds = hasBounds;
@@ -492,11 +583,37 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
 }
 
 void WorldRenderBuffer::free(const WorldGpuMesh& mesh) {
+    if (mesh.metadataIndex != kInvalidMetadataIndex) {
+        m_freeSubChunkMetadataIndices.push_back(mesh.metadataIndex);
+    }
     m_opaquePool.free(mesh.opaque);
     m_cutoutPool.free(mesh.cutout);
     m_cutoutPool.free(mesh.cutoutDistance);
     m_transparentPool.free(mesh.transparent);
     m_transparentPool.free(mesh.water);
+}
+
+uint32_t WorldRenderBuffer::uploadSubChunkMetadata(const glm::vec3& origin) {
+    if (m_subChunkMetadata.size() >= static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
+        return kInvalidMetadataIndex;
+    }
+
+    uint32_t index = kInvalidMetadataIndex;
+    if (!m_freeSubChunkMetadataIndices.empty()) {
+        index = m_freeSubChunkMetadataIndices.back();
+        m_freeSubChunkMetadataIndices.pop_back();
+        m_subChunkMetadata[index] = SubChunkDrawMetadata{glm::vec4(origin, 0.0f)};
+    } else {
+        index = static_cast<uint32_t>(m_subChunkMetadata.size());
+        m_subChunkMetadata.push_back(SubChunkDrawMetadata{glm::vec4(origin, 0.0f)});
+    }
+    const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_subChunkMetadata.size() * sizeof(SubChunkDrawMetadata));
+    glNamedBufferData(m_subChunkMetadataBuffer, bytes, m_subChunkMetadata.data(), GL_DYNAMIC_DRAW);
+    return index;
+}
+
+void WorldRenderBuffer::bindMetadataBuffer() const {
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, kTerrainMetadataBinding, m_subChunkMetadataBuffer);
 }
 
 void WorldRenderBuffer::beginFrame() {
@@ -548,21 +665,21 @@ void WorldRenderBuffer::mergeSceneWaterFrameStats() {
 
 void WorldRenderBuffer::addOpaque(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
-    m_opaqueCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_opaqueCommands.push_back({range.vertexCount, 1, range.firstVertex, range.metadataIndex});
     ++m_opaqueLogicalCommandCount;
     m_opaqueVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::addCutout(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
-    m_cutoutCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_cutoutCommands.push_back({range.vertexCount, 1, range.firstVertex, range.metadataIndex});
     ++m_cutoutLogicalCommandCount;
     m_cutoutVertexCount += range.vertexCount;
 }
 
 void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
-    m_transparentCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_transparentCommands.push_back({range.vertexCount, 1, range.firstVertex, range.metadataIndex});
     ++m_transparentLogicalCommandCount;
     m_transparentVertexCount += range.vertexCount;
 }
@@ -571,7 +688,7 @@ void WorldRenderBuffer::addWater(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     // Water uses the transparent pool VAO/VBO, but has its own command list
     // so it can be flushed independently for the water composite pass.
-    m_waterCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});
+    m_waterCommands.push_back({range.vertexCount, 1, range.firstVertex, range.metadataIndex});
     m_waterVertexCount += range.vertexCount;
 }
 
@@ -594,6 +711,7 @@ void WorldRenderBuffer::flushWater() {
                          static_cast<GLsizeiptr>(m_waterCommands.size() * sizeof(DrawArraysIndirectCommand)),
                          m_waterCommands.data());
 
+    bindMetadataBuffer();
     glBindVertexArray(m_transparentVao);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_waterIndirectBuf);
     glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr,
@@ -680,6 +798,7 @@ void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& comman
                          commands.data());
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuf);
 
+    bindMetadataBuffer();
     ensureVaoVertexBuffer(vao, vbo, cachedVbo);
     glBindVertexArray(vao);
     glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, static_cast<GLsizei>(commands.size()), 0);

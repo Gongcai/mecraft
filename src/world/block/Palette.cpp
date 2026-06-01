@@ -4,6 +4,14 @@
 #include <cmath>
 #include <unordered_set>
 
+namespace {
+template <typename Map>
+size_t estimateUnorderedMapBytes(const Map& map) {
+    return map.bucket_count() * sizeof(void*) +
+           map.size() * (sizeof(typename Map::value_type) + sizeof(void*) * 2);
+}
+} // namespace
+
 uint16_t Palette::getOrCreateIndex(const RuntimeId runtimeId) {
     const auto it = m_idToIndex.find(runtimeId);
     if (it != m_idToIndex.end()) {
@@ -34,6 +42,11 @@ uint8_t Palette::bitsPerEntry() const {
 
     const double bits = std::ceil(std::log2(static_cast<double>(m_indexToId.size())));
     return static_cast<uint8_t>(std::clamp(bits, 1.0, 16.0));
+}
+
+size_t Palette::dynamicMemoryBytes() const {
+    return m_indexToId.capacity() * sizeof(RuntimeId) +
+           estimateUnorderedMapBytes(m_idToIndex);
 }
 
 std::vector<uint16_t> Palette::compact(const std::vector<RuntimeId>& usedIds) {

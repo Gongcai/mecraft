@@ -364,7 +364,7 @@ void RenderScene::setupResources(
         ? static_cast<RenderPipeline*>(m_deferredPipeline.get())
         : static_cast<RenderPipeline*>(m_forwardPipeline.get());
 
-    m_terrainStreamingService.init(threadPool);
+    m_terrainStreamingService.init(threadPool, worldRenderBuffer);
     m_shared.overlayRenderer = &m_overlayRenderer;
 
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();

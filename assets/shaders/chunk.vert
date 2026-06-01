@@ -13,6 +13,7 @@ uniform float uWindTime;
 uniform float uWindStrength;
 uniform float uWindSpeed;
 uniform float uWindSpatialFreq;
+uniform int uVertexFormat;
 
 out vec2 vUV;
 out float vLayer;

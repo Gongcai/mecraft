@@ -24,6 +24,7 @@ public:
     [[nodiscard]] size_t size() const { return m_count; }
     [[nodiscard]] uint8_t bitsPerEntry() const { return m_bitsPerEntry; }
     [[nodiscard]] size_t dataByteSize() const { return m_data.size() * sizeof(uint64_t); }
+    [[nodiscard]] size_t allocatedByteSize() const { return m_data.capacity() * sizeof(uint64_t); }
 
 private:
     size_t m_count = 0;

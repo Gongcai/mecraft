@@ -9,6 +9,7 @@
 
 class World;
 class ThreadPool;
+class WorldRenderBuffer;
 
 /// Centralized terrain mesh streaming orchestrator.
 /// Owns TerrainRenderCache and ChunkMeshingService, manages meshing budgets,
@@ -23,7 +24,7 @@ class ThreadPool;
 ///   6. endFrame()
 class TerrainStreamingService {
 public:
-    void init(ThreadPool* threadPool);
+    void init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer = nullptr);
     void shutdown();
 
     /// Reset per-frame counters. Call at start of frame.

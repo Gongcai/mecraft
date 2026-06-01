@@ -736,6 +736,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         m_blockShader->use();
         m_blockShader->setMat4("model", model);
         m_blockShader->setInt("uUseModel", 1);
+        m_blockShader->setInt("uVertexFormat", 0);
         m_blockShader->setMat4("view", view);
         m_blockShader->setMat4("viewProj", viewProj);
         m_blockShader->setFloat("uWindTime", 0.0f);
@@ -780,6 +781,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
             glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
         }
         m_blockShader->setInt("uUseModel", 0);
+        m_blockShader->setInt("uVertexFormat", 1);
         return;
     }
 
@@ -974,6 +976,9 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
     glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
     glEnableVertexAttribArray(10);
     glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
+    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
+        glDisableVertexAttribArray(attrib);
+    }
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     return mesh;

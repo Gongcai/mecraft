@@ -292,7 +292,7 @@ GpuFrameStats RenderResourceHub::getGpuFrameStats() const {
 RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     RenderWorkStats stats;
     const auto& sceneStats = m_worldRenderBuffer.sceneFrameStats();
-    stats.blockVertexBytes = sizeof(BlockVertex);
+    stats.blockVertexBytes = m_useMultiDrawIndirect ? sizeof(PackedBlockVertex) : sizeof(BlockVertex);
     stats.opaqueCommands = sceneStats.opaqueCommands;
     stats.cutoutCommands = sceneStats.cutoutCommands;
     stats.transparentCommands = sceneStats.transparentCommands + sceneStats.waterCommands;
@@ -308,6 +308,17 @@ RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     stats.opaquePoolUsedVertices = m_worldRenderBuffer.opaqueUsedVertices();
     stats.cutoutPoolUsedVertices = m_worldRenderBuffer.cutoutUsedVertices();
     stats.transparentPoolUsedVertices = m_worldRenderBuffer.transparentUsedVertices();
+    stats.opaquePoolUsedBytes = stats.opaquePoolUsedVertices * stats.blockVertexBytes;
+    stats.cutoutPoolUsedBytes = stats.cutoutPoolUsedVertices * stats.blockVertexBytes;
+    stats.transparentPoolUsedBytes = stats.transparentPoolUsedVertices * stats.blockVertexBytes;
+    stats.opaquePoolCapacityBytes = stats.opaquePoolCapacityVertices * stats.blockVertexBytes;
+    stats.cutoutPoolCapacityBytes = stats.cutoutPoolCapacityVertices * stats.blockVertexBytes;
+    stats.transparentPoolCapacityBytes = stats.transparentPoolCapacityVertices * stats.blockVertexBytes;
+    stats.terrainPoolUsedBytes = stats.opaquePoolUsedBytes + stats.cutoutPoolUsedBytes + stats.transparentPoolUsedBytes;
+    stats.terrainPoolCapacityBytes = stats.opaquePoolCapacityBytes + stats.cutoutPoolCapacityBytes + stats.transparentPoolCapacityBytes;
+    stats.terrainMetadataBytes = m_worldRenderBuffer.metadataBytes();
+    stats.terrainMetadataSlots = m_worldRenderBuffer.metadataSlotCount();
+    stats.terrainMetadataFreeSlots = m_worldRenderBuffer.metadataFreeSlotCount();
     stats.opaquePoolFragmentation = m_worldRenderBuffer.opaqueFragmentationRatio();
     stats.cutoutPoolFragmentation = m_worldRenderBuffer.cutoutFragmentationRatio();
     stats.transparentPoolFragmentation = m_worldRenderBuffer.transparentFragmentationRatio();
@@ -316,6 +327,10 @@ RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     stats.transparentVertices = sceneStats.transparentVertices + sceneStats.waterVertices;
     stats.transparentGenericVertices = transparentPassPlan.genericVertices;
     stats.transparentWaterVertices = transparentPassPlan.waterVertices;
+    stats.opaqueVertexReadBytes = stats.opaqueVertices * stats.blockVertexBytes;
+    stats.cutoutVertexReadBytes = stats.cutoutVertices * stats.blockVertexBytes;
+    stats.transparentVertexReadBytes = stats.transparentVertices * stats.blockVertexBytes;
+    stats.terrainVertexReadBytes = stats.opaqueVertexReadBytes + stats.cutoutVertexReadBytes + stats.transparentVertexReadBytes;
     stats.cutoutCandidates = m_terrainRenderer.cutoutCandidatesThisFrame();
     stats.cutoutSkippedByDistance = m_terrainRenderer.cutoutSkippedByDistanceThisFrame();
     stats.mdiSubChunkTests = m_terrainRenderer.mdiSubChunkTestsThisFrame();

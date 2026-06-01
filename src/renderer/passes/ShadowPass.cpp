@@ -191,6 +191,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
 
     m_shadowDepthShader->use();
     m_shadowDepthShader->setInt("uUseModel", 0);
+    m_shadowDepthShader->setInt("uVertexFormat", 1);
     m_shadowDepthShader->setInt("uForceBaseLod", 1);
     m_shadowDepthShader->setInt("texArray", 0);
     m_shadowDepthShader->setFloat("uAnimationTime", ctx.animationTime);

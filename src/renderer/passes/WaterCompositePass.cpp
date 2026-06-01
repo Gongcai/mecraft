@@ -89,6 +89,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         useJitteredWater ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj);
     m_waterCompositeShader->setMat4("model", glm::mat4(1.0f));
     m_waterCompositeShader->setInt("uUseModel", 0);
+    m_waterCompositeShader->setInt("uVertexFormat", 1);
     m_waterCompositeShader->setInt("texArray", 0);
     m_waterCompositeShader->setInt("uOpaqueDepthTex", 5);
     m_waterCompositeShader->setInt("uSkyCaptureTex", 6);

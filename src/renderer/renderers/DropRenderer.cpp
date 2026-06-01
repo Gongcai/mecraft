@@ -544,6 +544,9 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
 
     glEnableVertexAttribArray(10);
     glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
+    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
+        glDisableVertexAttribArray(attrib);
+    }
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -579,6 +582,7 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
         m_gbufferShader->setMat4("viewProj", jitteredViewProj);
         blockModelLoc = m_gbufferShader->getUniformLocation("model");
         blockPrevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
+        m_gbufferShader->setInt("uVertexFormat", 0);
         m_gbufferShader->setInt("texArray", 0);
         m_gbufferShader->setInt("uForceBaseLod", 0);
         m_gbufferShader->setInt("uGrassColormap", 3);
@@ -695,6 +699,7 @@ void DropRenderer::renderToShadowMap(const World& world, const DropSystem& dropS
     if (canRenderBlocks) {
         m_shadowShader->use();
         m_shadowShader->setInt("uUseModel", 1);
+        m_shadowShader->setInt("uVertexFormat", 0);
         m_shadowShader->setInt("uForceBaseLod", 1);
         m_shadowShader->setInt("texArray", 0);
         m_shadowShader->setInt("uGrassColormap", 2);
@@ -778,6 +783,7 @@ void DropRenderer::renderToShadowMap(const World& world, const DropSystem& dropS
     if (canRenderBlocks) {
         m_shadowShader->use();
         m_shadowShader->setInt("uUseModel", 0);
+        m_shadowShader->setInt("uVertexFormat", 1);
     }
 }
 

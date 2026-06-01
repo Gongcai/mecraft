@@ -18,6 +18,12 @@ BlockID normalizeStoredState(const BlockID id) {
     }
     return id;
 }
+
+template <typename Map>
+std::size_t estimateUnorderedMapBytes(const Map& map) {
+    return map.bucket_count() * sizeof(void*) +
+           map.size() * (sizeof(typename Map::value_type) + sizeof(void*) * 2);
+}
 } // namespace
 
 SubChunk::SubChunk()
@@ -390,6 +396,16 @@ void SubChunk::setMesh(const SubChunkMesh& mesh) {
     m_dirty = false;
 }
 
+std::size_t SubChunk::estimatedMemoryBytes() const {
+    return sizeof(SubChunk) +
+           m_blockData.allocatedByteSize() +
+           m_fluidData.allocatedByteSize() +
+           m_palette.dynamicMemoryBytes() +
+           m_fluidPalette.dynamicMemoryBytes() +
+           estimateUnorderedMapBytes(m_blockCounts) +
+           estimateUnorderedMapBytes(m_fluidCounts);
+}
+
 // --- SubChunkMesh upload/destroy ---
 
 namespace {
@@ -426,6 +442,10 @@ void setupSubChunkVertexLayout() {
 
     glEnableVertexAttribArray(10);
     glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
+
+    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
+        glDisableVertexAttribArray(attrib);
+    }
 }
 } // namespace
 
