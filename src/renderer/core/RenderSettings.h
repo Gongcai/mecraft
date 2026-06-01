@@ -66,6 +66,7 @@ struct VolumetricSettings {
 /// Cloud settings
 struct CloudSettings {
     bool shadowsEnabled = true;
+    int updateInterval = 2; // 1=every frame, 2=half rate, 3=third rate
     float shadowStrength = 0.0f;
     float shadowScale = 0.0045f;
     float shadowSpeed = 0.018f;

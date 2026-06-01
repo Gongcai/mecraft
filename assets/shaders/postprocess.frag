@@ -970,16 +970,6 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
     return color;
 }
 
-// DerivativeMain Grade.glsl order: Exposure -> Vignette -> Tonemap
-vec3 resolveGradedColor(vec2 sampleUv, vec2 screenUv) {
-    vec3 color = resolveHdrColor(sampleUv, screenUv);
-    color = applyExposure(color);
-    if (uShaderpackGradingEnabled) {
-        color = applyVignette(color, sampleUv);
-    }
-    return applyTonemap(color);
-}
-
 vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
     float strength = saturate(uSharpenStrength);
     if (strength <= 0.0001) {
@@ -987,30 +977,26 @@ vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
     }
 
     vec2 texel = 1.0 / vec2(textureSize(uSceneTex, 0));
-    vec2 uv00 = clamp(sampleUv + texel * vec2(-1.0, -1.0), vec2(0.0), vec2(1.0));
     vec2 uv10 = clamp(sampleUv + texel * vec2( 0.0, -1.0), vec2(0.0), vec2(1.0));
-    vec2 uv20 = clamp(sampleUv + texel * vec2( 1.0, -1.0), vec2(0.0), vec2(1.0));
     vec2 uv01 = clamp(sampleUv + texel * vec2(-1.0,  0.0), vec2(0.0), vec2(1.0));
     vec2 uv21 = clamp(sampleUv + texel * vec2( 1.0,  0.0), vec2(0.0), vec2(1.0));
-    vec2 uv02 = clamp(sampleUv + texel * vec2(-1.0,  1.0), vec2(0.0), vec2(1.0));
     vec2 uv12 = clamp(sampleUv + texel * vec2( 0.0,  1.0), vec2(0.0), vec2(1.0));
-    vec2 uv22 = clamp(sampleUv + texel * vec2( 1.0,  1.0), vec2(0.0), vec2(1.0));
 
-    vec3 a = resolveGradedColor(uv00, uv00);
-    vec3 b = resolveGradedColor(uv10, uv10);
-    vec3 c = resolveGradedColor(uv20, uv20);
-    vec3 d = resolveGradedColor(uv01, uv01);
-    vec3 e = center;
-    vec3 f = resolveGradedColor(uv21, uv21);
-    vec3 g = resolveGradedColor(uv02, uv02);
-    vec3 h = resolveGradedColor(uv12, uv12);
-    vec3 i = resolveGradedColor(uv22, uv22);
+    vec3 centerHdr = texture(uSceneTex, sampleUv).rgb;
+    vec3 northHdr = texture(uSceneTex, uv10).rgb;
+    vec3 westHdr = texture(uSceneTex, uv01).rgb;
+    vec3 eastHdr = texture(uSceneTex, uv21).rgb;
+    vec3 southHdr = texture(uSceneTex, uv12).rgb;
 
-    vec3 minColor = min(a, min(b, min(c, min(d, min(e, min(f, min(g, min(h, i))))))));
-    vec3 maxColor = max(a, max(b, max(c, max(d, max(e, max(f, max(g, max(h, i))))))));
-    vec3 sharpeningAmount = sqrt(max(vec3(0.0), min(vec3(1.0) - maxColor, minColor) / max(maxColor, vec3(1e-5))));
-    vec3 w = sharpeningAmount * mix(-0.125, -0.2, strength);
-    return clamp(((b + d + f + h) * w + e) / (4.0 * w + vec3(1.0)), 0.0, 1.0);
+    vec3 minHdr = min(centerHdr, min(northHdr, min(westHdr, min(eastHdr, southHdr))));
+    vec3 maxHdr = max(centerHdr, max(northHdr, max(westHdr, max(eastHdr, southHdr))));
+    vec3 laplace = centerHdr * 4.0 - northHdr - westHdr - eastHdr - southHdr;
+    vec3 sharpenedHdr = clamp(centerHdr + laplace * (0.08 * strength), minHdr, maxHdr);
+
+    float centerLuma = max(dot(centerHdr, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
+    float sharpenedLuma = max(dot(sharpenedHdr, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
+    float lumaRatio = clamp(sharpenedLuma / centerLuma, 0.75, 1.35);
+    return clamp(center * lumaRatio, 0.0, 1.0);
 }
 
 void main() {

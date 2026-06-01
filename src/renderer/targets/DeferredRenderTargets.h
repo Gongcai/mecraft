@@ -57,6 +57,7 @@ public:
     void copyReflectionToHistory() const;
     void copyReflectionToTemporalScratch() const;
     void copyCloudToHistory() const;
+    void copyHistoryCloudToCloud() const;
     void copyVolumetricToHistory() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
     void blitSceneCompositeTo(GLint framebuffer, int width, int height) const;

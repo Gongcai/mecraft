@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <cmath>
 
 void CloudPass::init(ResourceMgr& resourceMgr) {
     m_cloudShader = resourceMgr.getShader("cloud_target");
@@ -14,11 +15,42 @@ void CloudPass::init(ResourceMgr& resourceMgr) {
 void CloudPass::shutdown() {
     m_cloudShader = nullptr;
     m_noiseTexture = 0;
+    m_hasRenderedClouds = false;
 }
 
-void CloudPass::execute(const FrameContext& ctx, const RenderSettings& /*settings*/,
+void CloudPass::invalidateHistory() {
+    m_hasRenderedClouds = false;
+}
+
+bool CloudPass::shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings) {
+    const int updateInterval = std::clamp(settings.cloud.updateInterval, 1, 8);
+    if (!m_hasRenderedClouds || !ctx.hasPreviousFrame || updateInterval <= 1) {
+        return true;
+    }
+
+    const float weatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.lightningFlash * 4.0f;
+    const bool weatherChanged = std::abs(weatherSignal - m_lastWeatherSignal) > 0.025f;
+    const glm::vec3 cameraDelta = ctx.camera.position - m_lastCameraPos;
+    const bool movedFar = glm::dot(cameraDelta, cameraDelta) > 36.0f;
+    if (weatherChanged || movedFar) {
+        return true;
+    }
+
+    return (ctx.frameIndex % static_cast<uint64_t>(updateInterval)) == 0;
+}
+
+void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                          DeferredRenderTargets& targets) {
     if (m_cloudShader == nullptr) return;
+
+    if (!shouldRenderClouds(ctx, settings)) {
+        targets.copyHistoryCloudToCloud();
+        return;
+    }
+
+    m_lastCameraPos = ctx.camera.position;
+    m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.lightningFlash * 4.0f;
+    m_hasRenderedClouds = true;
 
     targets.bindCloud();
     glDisable(GL_DEPTH_TEST);

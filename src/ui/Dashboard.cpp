@@ -857,6 +857,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.shadow.pcssShadowsEnabled = false;
             settings.shadow.contactShadowsEnabled = false;
             settings.cloud.shadowsEnabled = false;
+            settings.cloud.updateInterval = 2;
             settings.cloud.timeScale = 0.35f;
             settings.postProcess.directSunStrength = 1.0f;
             settings.postProcess.skyAmbientStrength = 0.55f;
@@ -908,6 +909,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.shadow.contactShadowsEnabled = false;
             settings.shadow.pcssStrength = 0.72f;
             settings.cloud.shadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
+            settings.cloud.updateInterval = 2;
             settings.postProcess.directSunStrength = 1.36f;
             settings.postProcess.skyAmbientStrength = 0.36f;
             settings.postProcess.minimumAmbient = 0.055f;
@@ -962,6 +964,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.shadow.contactShadowsEnabled = false;
             settings.shadow.pcssStrength = 0.82f;
             settings.cloud.shadowsEnabled = false;  // DerivativeMain CLOUDS_SHADOW default off
+            settings.cloud.updateInterval = 2;
             settings.postProcess.directSunStrength = 1.58f;
             settings.postProcess.skyAmbientStrength = 0.28f;
             settings.postProcess.minimumAmbient = 0.04f;
@@ -1018,6 +1021,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Strength", &settings.cloud.shadowStrength, 0.0f, 0.8f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Shadow Scale", &settings.cloud.shadowScale, 0.001f, 0.02f, "%.4f");
         pipelineChanged |= ImGui::SliderFloat("Cloud Time Scale", &settings.cloud.timeScale, 0.05f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("Cloud Update Frames", &settings.cloud.updateInterval, 1, 4);
         ImGui::TextDisabled("DerivativeMain CLOUDS_SPEED adapter. Legacy Cloud Shadow Speed is ignored by the DM cloud path.");
         pipelineChanged |= ImGui::SliderFloat("Post Sun Ray Strength", &settings.postProcess.sunRayStrength, 0.0f, 0.6f, "%.2f");
         ImGui::TextDisabled("VFog Strength 1.00 matches DerivativeMain VOLUMETRIC_FOG_DENSITY baseline");

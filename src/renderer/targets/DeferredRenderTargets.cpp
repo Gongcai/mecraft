@@ -959,6 +959,20 @@ void DeferredRenderTargets::copyCloudToHistory() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
 }
 
+void DeferredRenderTargets::copyHistoryCloudToCloud() const {
+    if (!m_ready) {
+        return;
+    }
+    const int halfWidth = std::max(1, m_width / 2);
+    const int halfHeight = std::max(1, m_height / 2);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_historyCloudFbo[1 - m_currentHistoryIndex]);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_cloudFbo);
+    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
+                      0, 0, halfWidth, halfHeight,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_cloudFbo);
+}
+
 void DeferredRenderTargets::copyVolumetricToHistory() const {
     if (!m_ready) {
         return;

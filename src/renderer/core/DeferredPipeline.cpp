@@ -130,6 +130,9 @@ void DeferredPipeline::shutdown() {
 void DeferredPipeline::invalidateHistory() {
     m_hasPreviousFrameData = false;
     m_deferredHistoryUpdatedThisFrame = false;
+    if (m_cloudPass) {
+        m_cloudPass->invalidateHistory();
+    }
 }
 
 FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
@@ -161,6 +164,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // After resize/rebuild, invalidate temporal history
     if (targets.consumeRebuiltFlag()) {
         m_hasPreviousFrameData = false;
+        if (m_cloudPass) {
+            m_cloudPass->invalidateHistory();
+        }
     }
 
     // Clear auxiliary targets

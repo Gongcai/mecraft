@@ -106,12 +106,16 @@ private:
     static constexpr int kBloomMipCount = 7;
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
+    static constexpr int kExposureReadbackRing = 3;
 
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();
+    bool ensureExposureReadbackBuffers();
+    void destroyExposureReadbackBuffers();
     void initFullscreenTriangle();
     void destroyFullscreenTriangle();
     float updateAutoExposure(float frameTime);
+    void updateExposureFromSample(float weightedLogLum, float weightSum, float frameTime);
 
     /// Apply bloom extraction and blur passes.
     /// @return true if bloom was applied
@@ -142,6 +146,10 @@ private:
     GLuint m_exposureTex[kExposureMipCount] = {};
     glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
     int m_exposureMipCount = 0;
+    GLuint m_exposureReadbackPbos[kExposureReadbackRing] = {};
+    GLsync m_exposureReadbackFences[kExposureReadbackRing] = {};
+    bool m_exposureReadbackIssued[kExposureReadbackRing] = {};
+    int m_exposureReadbackWriteIndex = 0;
 
     GLuint m_fullscreenVao = 0;
 

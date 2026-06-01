@@ -25,6 +25,7 @@ void PostProcessPass::init(ResourceMgr& resourceMgr) {
 
 void PostProcessPass::shutdown() {
     destroyRenderTargets();
+    destroyExposureReadbackBuffers();
     destroyFullscreenTriangle();
     m_postProcessShader = nullptr;
     m_bloomExtractShader = nullptr;
@@ -259,9 +260,10 @@ void PostProcessPass::blitSceneToBackbuffer(const Window& window) {
 float PostProcessPass::updateAutoExposure(const float frameTime) {
     const float manualExposure = 0.8f / std::max(m_effects.exposure, 0.0001f);
     if (!m_effects.autoExposureEnabled || m_exposureDownsampleShader == nullptr ||
-        m_exposureMipCount <= 0 || m_sceneColorTex == 0 || m_fullscreenVao == 0) {
+        m_exposureMipCount <= 0 || m_sceneColorTex == 0 || m_fullscreenVao == 0 ||
+        !ensureExposureReadbackBuffers()) {
         m_autoExposureInitialized = false;
-        m_adaptedExposure = 1.0f;
+        m_adaptedExposure = manualExposure;
         return manualExposure;
     }
 
@@ -300,18 +302,65 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         }
     }
 
-    float exposureData[2] = {0.0f, 0.0f};
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_exposureFbos[finalMip]);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glReadPixels(0, 0, 1, 1, GL_RG, GL_FLOAT, exposureData);
+    const int readIndex = (m_exposureReadbackWriteIndex + 1) % kExposureReadbackRing;
+    if (m_exposureReadbackIssued[readIndex] && m_exposureReadbackFences[readIndex] != nullptr) {
+        const GLenum waitResult = glClientWaitSync(m_exposureReadbackFences[readIndex], 0, 0);
+        if (waitResult == GL_ALREADY_SIGNALED || waitResult == GL_CONDITION_SATISFIED) {
+            glDeleteSync(m_exposureReadbackFences[readIndex]);
+            m_exposureReadbackFences[readIndex] = nullptr;
+
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, m_exposureReadbackPbos[readIndex]);
+            const auto* exposureData = static_cast<const float*>(
+                glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, sizeof(float) * 2, GL_MAP_READ_BIT));
+            if (exposureData != nullptr) {
+                updateExposureFromSample(exposureData[0], exposureData[1], frameTime);
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            m_exposureReadbackIssued[readIndex] = false;
+        }
+    }
+
+    const int writeIndex = m_exposureReadbackWriteIndex;
+    bool writeSlotFree = !m_exposureReadbackIssued[writeIndex];
+    if (m_exposureReadbackIssued[writeIndex] && m_exposureReadbackFences[writeIndex] != nullptr) {
+        const GLenum waitResult = glClientWaitSync(m_exposureReadbackFences[writeIndex], 0, 0);
+        if (waitResult == GL_ALREADY_SIGNALED || waitResult == GL_CONDITION_SATISFIED) {
+            glDeleteSync(m_exposureReadbackFences[writeIndex]);
+            m_exposureReadbackFences[writeIndex] = nullptr;
+            m_exposureReadbackIssued[writeIndex] = false;
+            writeSlotFree = true;
+        }
+    }
+
+    if (writeSlotFree) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_exposureFbos[finalMip]);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_exposureReadbackPbos[writeIndex]);
+        glReadPixels(0, 0, 1, 1, GL_RG, GL_FLOAT, nullptr);
+        if (m_exposureReadbackFences[writeIndex] != nullptr) {
+            glDeleteSync(m_exposureReadbackFences[writeIndex]);
+        }
+        m_exposureReadbackFences[writeIndex] = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        m_exposureReadbackIssued[writeIndex] = m_exposureReadbackFences[writeIndex] != nullptr;
+        m_exposureReadbackWriteIndex = (m_exposureReadbackWriteIndex + 1) % kExposureReadbackRing;
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindVertexArray(0);
 
-    const float weightedLogLum = exposureData[0];
-    const float weightSum = std::max(exposureData[1], 1e-4f);
-    const float averageLogLum = weightedLogLum / weightSum;
+    if (!m_autoExposureInitialized) {
+        m_adaptedExposure = manualExposure;
+    }
+    return m_adaptedExposure;
+}
+
+void PostProcessPass::updateExposureFromSample(const float weightedLogLum, const float weightSum,
+                                                const float frameTime) {
+    const float safeWeightSum = std::max(weightSum, 1e-4f);
+    const float averageLogLum = weightedLogLum / safeWeightSum;
     const float averageLum = std::exp(averageLogLum * 0.75f);
     m_lastAverageLum = averageLum;
 
@@ -332,8 +381,6 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         const float alpha = 1.0f - std::exp(-std::max(frameTime, 0.0f) * speed);
         m_adaptedExposure += (targetExposure - m_adaptedExposure) * std::clamp(alpha, 0.0f, 1.0f);
     }
-
-    return m_adaptedExposure;
 }
 
 bool PostProcessPass::renderBloom() {
@@ -582,6 +629,43 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     m_targetHeight = height;
     m_autoExposureInitialized = false;
     return true;
+}
+
+bool PostProcessPass::ensureExposureReadbackBuffers() {
+    if (m_exposureReadbackPbos[0] != 0) {
+        return true;
+    }
+
+    glGenBuffers(kExposureReadbackRing, m_exposureReadbackPbos);
+    for (int i = 0; i < kExposureReadbackRing; ++i) {
+        if (m_exposureReadbackPbos[i] == 0) {
+            destroyExposureReadbackBuffers();
+            return false;
+        }
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, m_exposureReadbackPbos[i]);
+        glBufferData(GL_PIXEL_PACK_BUFFER, sizeof(float) * 2, nullptr, GL_STREAM_READ);
+        m_exposureReadbackIssued[i] = false;
+        m_exposureReadbackFences[i] = nullptr;
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    m_exposureReadbackWriteIndex = 0;
+    return true;
+}
+
+void PostProcessPass::destroyExposureReadbackBuffers() {
+    for (int i = 0; i < kExposureReadbackRing; ++i) {
+        if (m_exposureReadbackFences[i] != nullptr) {
+            glDeleteSync(m_exposureReadbackFences[i]);
+            m_exposureReadbackFences[i] = nullptr;
+        }
+        m_exposureReadbackIssued[i] = false;
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    glDeleteBuffers(kExposureReadbackRing, m_exposureReadbackPbos);
+    for (GLuint& pbo : m_exposureReadbackPbos) {
+        pbo = 0;
+    }
+    m_exposureReadbackWriteIndex = 0;
 }
 
 void PostProcessPass::destroyRenderTargets() {

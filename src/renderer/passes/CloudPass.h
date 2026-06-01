@@ -19,10 +19,16 @@ public:
 
     void execute(const FrameContext& ctx, const RenderSettings& settings,
                  DeferredRenderTargets& targets);
+    void invalidateHistory();
 
 private:
+    [[nodiscard]] bool shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings);
+
     Shader* m_cloudShader = nullptr;
     GLuint m_noiseTexture = 0;
+    bool m_hasRenderedClouds = false;
+    glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
+    float m_lastWeatherSignal = 0.0f;
 };
 
 #endif // MECRAFT_CLOUD_PASS_H
