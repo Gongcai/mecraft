@@ -334,6 +334,7 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                           shadow::ShadowCasterCuller* shadowCuller,
                                                           AabbVisibilityFn extraAabbCuller,
                                                           void* extraAabbCullerUserData) {
+    resetDebugCounters();
     m_terrainCache->syncChunkRenderColumns(world);
     std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache->chunkRenderColumns();
     if (chunkRenderColumns.empty()) {

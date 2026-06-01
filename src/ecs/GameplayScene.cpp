@@ -34,6 +34,7 @@
 #include "../world/World.h"
 
 #ifdef MECRAFT_DEBUG
+#include <chrono>
 #include <iostream>
 #include <unordered_set>
 #include <unordered_map>
@@ -59,16 +60,16 @@ GameplayScene::GameplayScene() {
     addFixedUpdateSystem<BlockPlaceSystem>();
 
     // ── Item pipeline ──
-    addFixedUpdateSystem<ItemSpawnSystem>();
-    addFixedUpdateSystem<ItemPhysicsSystem>();
-    addFixedUpdateSystem<ItemMergeSystem>();
-    addFixedUpdateSystem<ItemPickupSystem>();
-    addFixedUpdateSystem<ItemLifetimeSystem>();
+    addFixedUpdateSystem<ItemSpawnSystem>(FixedUpdateDebugCategory::Drop);
+    addFixedUpdateSystem<ItemPhysicsSystem>(FixedUpdateDebugCategory::Drop);
+    addFixedUpdateSystem<ItemMergeSystem>(FixedUpdateDebugCategory::Drop);
+    addFixedUpdateSystem<ItemPickupSystem>(FixedUpdateDebugCategory::Drop);
+    addFixedUpdateSystem<ItemLifetimeSystem>(FixedUpdateDebugCategory::Drop);
 
     // ── Particle pipeline ──
-    addFixedUpdateSystem<ParticleSpawnSystem>();
-    addFixedUpdateSystem<ParticleSimulationSystem>();
-    addFixedUpdateSystem<ParticleCleanupSystem>();
+    addFixedUpdateSystem<ParticleSpawnSystem>(FixedUpdateDebugCategory::Particle);
+    addFixedUpdateSystem<ParticleSimulationSystem>(FixedUpdateDebugCategory::Particle);
+    addFixedUpdateSystem<ParticleCleanupSystem>(FixedUpdateDebugCategory::Particle);
 
     // ── Hunger depletion ──
     addFixedUpdateSystem<HungerDepletionSystem>();
@@ -161,6 +162,24 @@ void GameplayScene::runFixedUpdate(float dt) {
         system->update(ctx);
     }
 }
+
+#ifdef MECRAFT_DEBUG
+GameplayScene::FixedUpdateProfile GameplayScene::runFixedUpdateProfiled(float dt) {
+    FixedUpdateProfile profile;
+    SystemContext ctx{m_registry, m_services, dt, 0};
+    for (size_t i = 0; i < m_fixedUpdateSystems.size(); ++i) {
+        const auto start = std::chrono::steady_clock::now();
+        m_fixedUpdateSystems[i]->update(ctx);
+        const auto end = std::chrono::steady_clock::now();
+        const auto category = i < m_fixedUpdateDebugCategories.size()
+            ? m_fixedUpdateDebugCategories[i]
+            : FixedUpdateDebugCategory::State;
+        profile.categoryMs[static_cast<size_t>(category)] +=
+            std::chrono::duration<double, std::milli>(end - start).count();
+    }
+    return profile;
+}
+#endif
 
 void GameplayScene::runOneTick() {
     SystemContext ctx{m_registry, m_services, 0.0f, m_tickClock.tickIndex()};

@@ -2,6 +2,7 @@
 #include "RenderScene.h"
 #include "FrameOutput.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../debug/RenderDebugService.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
@@ -13,6 +14,32 @@
 #include "../../particle/ParticleSystem.h"
 
 #include <glad/glad.h>
+
+namespace {
+class ScopedGpuTimer {
+public:
+    ScopedGpuTimer(RenderDebugService* service, const GpuTimerPass pass)
+        : m_service(service), m_pass(pass) {
+        if (m_service != nullptr) {
+            m_started = m_service->beginGpuTimer(m_pass);
+        }
+    }
+
+    ~ScopedGpuTimer() {
+        if (m_service != nullptr && m_started) {
+            m_service->endGpuTimer(m_pass);
+        }
+    }
+
+    ScopedGpuTimer(const ScopedGpuTimer&) = delete;
+    ScopedGpuTimer& operator=(const ScopedGpuTimer&) = delete;
+
+private:
+    RenderDebugService* m_service = nullptr;
+    GpuTimerPass m_pass = GpuTimerPass::GBuffer;
+    bool m_started = false;
+};
+} // namespace
 
 void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
     m_resourceMgr = &resourceMgr;
@@ -153,6 +180,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // GBuffer terrain
     {
         renderer::debug::ScopedDebugGroup passGroup("GBuffer");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::GBuffer);
         renderGBufferTerrain(ctx, m_currentSettings);
 
         // Entity and drop GBuffer
@@ -176,6 +204,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     if (m_shadowPass && m_currentSettings.shadow.enabled && m_shadowPass->hasShaders() &&
         m_shared->shadowRenderer && ctx.world) {
         renderer::debug::ScopedDebugGroup passGroup("Shadow");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Shadow);
         const bool useMultiDrawIndirect = m_shared->terrain != nullptr
             ? m_shared->terrain->useMultiDrawIndirect()
             : true;
@@ -189,6 +218,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // SSAO pass
     if (m_ssaoPass) {
         renderer::debug::ScopedDebugGroup passGroup("SSAO");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Ssao);
         m_ssaoPass->execute(ctx, m_currentSettings, targets);
     }
 
@@ -200,6 +230,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Deferred lighting
     if (m_lightingPass) {
         renderer::debug::ScopedDebugGroup passGroup("DeferredLighting");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Lighting);
         m_lightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
         m_lightingPass->execute(ctx, m_currentSettings, targets);
     }
@@ -219,12 +250,14 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Reflection pass
     if (m_reflectionPass) {
         renderer::debug::ScopedDebugGroup passGroup("Reflection");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Reflection);
         m_reflectionPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Cloud pass
     if (m_cloudPass) {
         renderer::debug::ScopedDebugGroup passGroup("Cloud");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Cloud);
         m_cloudPass->execute(ctx, m_currentSettings, targets);
     }
 
@@ -252,12 +285,16 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     // Particles
-    renderParticlesToSceneResolved(ctx);
+    {
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Transparent);
+        renderParticlesToSceneResolved(ctx);
+    }
     targets.copySceneCompositeToSceneResolved();
 
     // Volumetric fog
     if (m_volumetricPass) {
         renderer::debug::ScopedDebugGroup passGroup("Volumetric");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Volumetric);
         m_volumetricPass->execute(ctx, m_currentSettings, targets, m_hasPreviousFrameData);
     }
 
@@ -485,6 +522,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
 
     // Render cutout chunks
     terrain.renderCutoutChunks(cutoutEntries, *gbufferShader);
+    worldBuffer.captureSceneFrameStats();
 
     // Unbind textures
     glBindVertexArray(0);
@@ -564,6 +602,7 @@ void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool pr
     const bool useMultiDrawIndirect = m_shared->terrain != nullptr
         ? m_shared->terrain->useMultiDrawIndirect()
         : true;
+    ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Water);
     const bool waterRenderedBeforeTemporal = m_waterCompositePass->execute(
         ctx, m_currentSettings, targets, *ctx.world,
         ctx.frameWidth, ctx.frameHeight,

@@ -70,6 +70,21 @@ private:
 
 class WorldRenderBuffer {
 public:
+    struct FrameStatsSnapshot {
+        int glSubmitCount = 0;
+        size_t opaqueCommands = 0;
+        size_t cutoutCommands = 0;
+        size_t transparentCommands = 0;
+        size_t waterCommands = 0;
+        size_t opaqueLogicalCommands = 0;
+        size_t cutoutLogicalCommands = 0;
+        size_t transparentLogicalCommands = 0;
+        uint64_t opaqueVertices = 0;
+        uint64_t cutoutVertices = 0;
+        uint64_t transparentVertices = 0;
+        uint64_t waterVertices = 0;
+    };
+
     static constexpr size_t kInitialPoolVertices = 1 << 21;   // ~2M vertices (~64MB), avoids early expand stalls
     static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
@@ -93,6 +108,8 @@ public:
     void free(const WorldGpuMesh& mesh);
 
     void beginFrame();
+    void captureSceneFrameStats();
+    void mergeSceneWaterFrameStats();
 
     void addOpaque(const GpuMeshRange& range);
     void addCutout(const GpuMeshRange& range);
@@ -108,6 +125,7 @@ public:
     void clearWaterCommands();
 
     GLuint transparentVao() const { return m_transparentVao; }
+    const FrameStatsSnapshot& sceneFrameStats() const { return m_sceneFrameStats; }
     int glSubmitCount() const { return m_glSubmitCount; }
     size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
     size_t cutoutCommandCount() const { return m_cutoutCommands.size(); }
@@ -175,8 +193,10 @@ private:
     uint64_t m_cutoutVertexCount = 0;
     uint64_t m_transparentVertexCount = 0;
     uint64_t m_waterVertexCount = 0;
+    FrameStatsSnapshot m_sceneFrameStats{};
 
     void ensureVaoVertexBuffer(GLuint vao, GLuint vbo, GLuint& cachedVbo);
+    FrameStatsSnapshot makeCurrentFrameStats() const;
     void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
                                 GLuint& buf, size_t& capacity, size_t needed);
     void flushPass(std::vector<DrawArraysIndirectCommand>& commands,

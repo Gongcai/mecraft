@@ -167,6 +167,7 @@ void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSetting
     // Flush MDI opaque + render cutout
     worldBuffer.flushOpaque();
     terrain.renderCutoutChunks(cutoutEntries, *terrainShader);
+    worldBuffer.captureSceneFrameStats();
 
     // Unbind textures (units 0-4)
     glBindVertexArray(0);

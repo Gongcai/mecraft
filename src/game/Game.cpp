@@ -8,6 +8,11 @@
 #include "orchestrator/GameFrameOrchestrator.h"
 #include "presentation/GameplayHudPresenter.h"
 
+#ifdef MECRAFT_DEBUG
+#include "debug/DebugFrameProfiler.h"
+#include <chrono>
+#endif
+
 // DebugRuntime struct has been migrated to GameplayRenderRuntime
 
 Game::Game(GameSessionConfig config, GameSessionDependencies deps)
@@ -49,6 +54,9 @@ void Game::fixedUpdate(const double fixedStep, double& accumulator) {
 
 void Game::updateFrame(const float deltaTime) {
     // G5: Delegate to orchestrator
+#ifdef MECRAFT_DEBUG
+    const auto audioStart = std::chrono::steady_clock::now();
+#endif
     if (m_audioSyncSystem) {
         m_frameOrchestrator->syncAudioListener(*m_audioSyncSystem, deltaTime, m_session);
     } else {
@@ -56,6 +64,14 @@ void Game::updateFrame(const float deltaTime) {
         AudioListenerSyncSystem fallback(m_deps.bgmSystem, m_deps.audioEngine);
         m_frameOrchestrator->syncAudioListener(fallback, deltaTime, m_session);
     }
+#ifdef MECRAFT_DEBUG
+    const auto audioEnd = std::chrono::steady_clock::now();
+    if (m_renderRuntime) {
+        if (auto* profiler = m_renderRuntime->profiler()) {
+            profiler->recordAudio(std::chrono::duration<double, std::milli>(audioEnd - audioStart).count());
+        }
+    }
+#endif
 }
 
 void Game::renderFrame(const float frameTime) {

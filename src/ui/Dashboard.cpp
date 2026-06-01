@@ -263,6 +263,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         } else if (!gpuStats.valid) {
             ImGui::Text("GPU Timers: waiting");
         } else {
+            const double gpuTotalMs = gpuStats.gbufferMs + gpuStats.shadowMs + gpuStats.ssaoMs +
+                                      gpuStats.lightingMs + gpuStats.transparentMs + gpuStats.volumetricMs +
+                                      gpuStats.reflectionMs + gpuStats.cloudMs + gpuStats.waterMs + gpuStats.postMs;
+            ImGui::Text("GPU Total (tracked): %.3f ms", gpuTotalMs);
             ImGui::Text("GPU GBuffer: %.3f ms", gpuStats.gbufferMs);
             ImGui::Text("GPU Shadow: %.3f ms", gpuStats.shadowMs);
             ImGui::Text("GPU SSAO: %.3f ms", gpuStats.ssaoMs);
@@ -321,6 +325,13 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     renderWork.opaquePoolFragmentation * 100.0f,
                     renderWork.cutoutPoolFragmentation * 100.0f,
                     renderWork.transparentPoolFragmentation * 100.0f);
+        ImGui::Text("Mesh Upload: %.2f MiB, %llu vertices, deferred %llu",
+                    static_cast<double>(renderWork.meshUploadBytesThisFrame) / (1024.0 * 1024.0),
+                    static_cast<unsigned long long>(renderWork.meshUploadVerticesThisFrame),
+                    static_cast<unsigned long long>(renderWork.meshUploadDeferredCount));
+        ImGui::Text("World Buffer Upload: %.3f ms, expands %llu",
+                    renderWork.worldBufferUploadMs,
+                    static_cast<unsigned long long>(renderWork.worldBufferExpandCount));
 
         bool cutoutDistanceLimit = render.isCutoutDistanceLimitEnabled();
         if (ImGui::Checkbox("Cutout Distance Limit", &cutoutDistanceLimit)) {

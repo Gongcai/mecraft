@@ -96,7 +96,7 @@ struct TerrainAtmosphereData {
 };
 
 /// Per-frame rendering data required by bindChunkRenderState.
-/// Decoupled from Renderer::RenderFrameData to avoid circular header dependency.
+/// Kept local to terrain rendering to avoid circular header dependencies.
 struct TerrainFrameData {
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 viewProj = glm::mat4(1.0f);

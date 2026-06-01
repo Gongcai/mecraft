@@ -23,6 +23,9 @@ void DebugFrameProfiler::publish(double frameTime) {
     m_timing.fixedParticleUpdateMs = avg(m_timing.fixedParticleAccumMs);
     m_timing.fixedDropUpdateMs = avg(m_timing.fixedDropAccumMs);
     m_timing.fixedWorldUpdateMs = avg(m_timing.fixedWorldAccumMs);
+    const double frames = static_cast<double>(m_timing.frameSampleCount);
+    m_timing.audioMs = frames > 0.0 ? m_timing.audioAccumMs / frames : 0.0;
+    m_timing.renderMs = frames > 0.0 ? m_timing.renderAccumMs / frames : 0.0;
 
     // Push to history ring buffers
     const size_t idx = m_history.writeIndex;
@@ -47,7 +50,10 @@ void DebugFrameProfiler::resetAccumulators() {
     m_timing.fixedParticleAccumMs = 0.0;
     m_timing.fixedDropAccumMs = 0.0;
     m_timing.fixedWorldAccumMs = 0.0;
+    m_timing.audioAccumMs = 0.0;
+    m_timing.renderAccumMs = 0.0;
     m_timing.fixedStepCount = 0;
+    m_timing.frameSampleCount = 0;
 }
 
 #endif // MECRAFT_DEBUG

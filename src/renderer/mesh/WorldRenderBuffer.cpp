@@ -517,6 +517,35 @@ void WorldRenderBuffer::beginFrame() {
     m_transparentPool.beginFrame();
 }
 
+WorldRenderBuffer::FrameStatsSnapshot WorldRenderBuffer::makeCurrentFrameStats() const {
+    FrameStatsSnapshot stats;
+    stats.glSubmitCount = m_glSubmitCount;
+    stats.opaqueCommands = m_opaqueCommands.size();
+    stats.cutoutCommands = m_cutoutCommands.size();
+    stats.transparentCommands = m_transparentCommands.size();
+    stats.waterCommands = m_waterCommands.size();
+    stats.opaqueLogicalCommands = m_opaqueLogicalCommandCount;
+    stats.cutoutLogicalCommands = m_cutoutLogicalCommandCount;
+    stats.transparentLogicalCommands = m_transparentLogicalCommandCount;
+    stats.opaqueVertices = m_opaqueVertexCount;
+    stats.cutoutVertices = m_cutoutVertexCount;
+    stats.transparentVertices = m_transparentVertexCount;
+    stats.waterVertices = m_waterVertexCount;
+    return stats;
+}
+
+void WorldRenderBuffer::captureSceneFrameStats() {
+    m_sceneFrameStats = makeCurrentFrameStats();
+}
+
+void WorldRenderBuffer::mergeSceneWaterFrameStats() {
+    // Water is rendered after shadow passes have reused the command lists, so
+    // only merge the water counters into the preserved main-scene snapshot.
+    m_sceneFrameStats.glSubmitCount += m_glSubmitCount;
+    m_sceneFrameStats.waterCommands = m_waterCommands.size();
+    m_sceneFrameStats.waterVertices = m_waterVertexCount;
+}
+
 void WorldRenderBuffer::addOpaque(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
     m_opaqueCommands.push_back({range.vertexCount, 1, range.firstVertex, 0});

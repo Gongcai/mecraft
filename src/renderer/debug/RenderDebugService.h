@@ -3,6 +3,7 @@
 
 #include <glad/glad.h>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 /// GPU timer pass identifiers for profiling different rendering stages.
@@ -108,7 +109,7 @@ public:
     void beginFrame();
 
     /// Begin timing a specific GPU pass.
-    void beginGpuTimer(GpuTimerPass pass);
+    [[nodiscard]] bool beginGpuTimer(GpuTimerPass pass);
 
     /// End timing a specific GPU pass.
     void endGpuTimer(GpuTimerPass pass);

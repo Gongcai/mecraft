@@ -10,6 +10,7 @@
 class World;
 class Camera;
 class Window;
+class RenderDebugService;
 struct SharedRenderResources;
 
 /// Camera data for current and previous frame (for temporal effects)
@@ -194,6 +195,9 @@ struct FrameContext {
 
     // Pointer to original Window for legacy renderer adapters used by forward vanilla.
     const Window* windowPtr = nullptr;
+
+    // Debug service for frame-scoped GPU timers and render statistics.
+    RenderDebugService* debugService = nullptr;
 
     // Whether first-person camera should hide the local player model.
     bool renderLocalPlayerModel = false;

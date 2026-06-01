@@ -22,6 +22,10 @@
 #include "../../renderer/overlays/BlockInteractionOverlayRenderer.h"
 #include "../camera/CameraController.h"
 
+#ifdef MECRAFT_DEBUG
+#include <algorithm>
+#endif
+
 bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
                                             InputManager& input,
                                             GameplayRenderRuntime* renderRuntime,
@@ -34,14 +38,22 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
     const InputSnapshot& inputSnapshot = input.snapshot();
 #ifdef MECRAFT_DEBUG
     const auto inputEnd = std::chrono::steady_clock::now();
-    const auto stateStart = std::chrono::steady_clock::now();
 #endif
 
     accumulator -= fixedStep;
 
     // ECS pre-state stage: sample input and build intents before states consume them.
+#ifdef MECRAFT_DEBUG
+    const auto fixedSystemsStart = std::chrono::steady_clock::now();
+    const auto fixedProfile = session.gameplayScene().runFixedUpdateProfiled(static_cast<float>(fixedStep));
+    const auto fixedSystemsEnd = std::chrono::steady_clock::now();
+#else
     session.gameplayScene().runFixedUpdate(static_cast<float>(fixedStep));
+#endif
 
+#ifdef MECRAFT_DEBUG
+    const auto tickStart = std::chrono::steady_clock::now();
+#endif
     session.gameplayScene().tickClock().advance(fixedStep);
     uint32_t ticksThisFrame = 0;
     while (session.gameplayScene().tickClock().shouldTick()
@@ -50,19 +62,34 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
         session.gameplayScene().tickClock().consumeTick();
         ++ticksThisFrame;
     }
+#ifdef MECRAFT_DEBUG
+    const auto tickEnd = std::chrono::steady_clock::now();
+    const auto worldStart = std::chrono::steady_clock::now();
+#endif
 
     session.updateWorldAroundLocalPlayer();
+#ifdef MECRAFT_DEBUG
+    const auto worldEnd = std::chrono::steady_clock::now();
+#endif
 
+#ifdef MECRAFT_DEBUG
+    const auto stateMachineStart = std::chrono::steady_clock::now();
+#endif
     session.stateMachine().update(static_cast<float>(fixedStep), inputSnapshot);
 #ifdef MECRAFT_DEBUG
     const auto stateEnd = std::chrono::steady_clock::now();
     if (renderRuntime) {
         if (auto* profiler = renderRuntime->profiler()) {
             profiler->recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
-            profiler->recordFixedState(std::chrono::duration<double, std::milli>(stateEnd - stateStart).count());
-            profiler->recordFixedParticle(0.0);
-            profiler->recordFixedDrop(0.0);
-            profiler->recordFixedWorld(0.0);
+            const double fixedSystemMs = std::chrono::duration<double, std::milli>(fixedSystemsEnd - fixedSystemsStart).count();
+            const double categorizedMs = fixedProfile.stateMs() + fixedProfile.dropMs() + fixedProfile.particleMs();
+            const double uncategorizedMs = std::max(0.0, fixedSystemMs - categorizedMs);
+            const double tickMs = std::chrono::duration<double, std::milli>(tickEnd - tickStart).count();
+            const double stateMachineMs = std::chrono::duration<double, std::milli>(stateEnd - stateMachineStart).count();
+            profiler->recordFixedState(fixedProfile.stateMs() + uncategorizedMs + stateMachineMs);
+            profiler->recordFixedParticle(fixedProfile.particleMs());
+            profiler->recordFixedDrop(fixedProfile.dropMs());
+            profiler->recordFixedWorld(tickMs + std::chrono::duration<double, std::milli>(worldEnd - worldStart).count());
             profiler->incrementFixedStep();
         }
     }
@@ -87,6 +114,10 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
     auto& postProcess = renderScene.postProcessPass();
     auto& renderer = renderRuntime.resourceHub();
+
+#ifdef MECRAFT_DEBUG
+    const auto renderStart = std::chrono::steady_clock::now();
+#endif
 
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
@@ -151,4 +182,11 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 #endif
     }
     window.swapBuffers();
+
+#ifdef MECRAFT_DEBUG
+    const auto renderEnd = std::chrono::steady_clock::now();
+    if (auto* profiler = renderRuntime.profiler()) {
+        profiler->recordRender(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
+    }
+#endif
 }

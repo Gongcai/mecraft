@@ -187,6 +187,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
                 worldRenderBuffer.addWater(entry->range);
             }
             worldRenderBuffer.flushWater();
+            worldRenderBuffer.mergeSceneWaterFrameStats();
             drawCallCount = static_cast<int>(waterEntries.size());
         }
     } else {

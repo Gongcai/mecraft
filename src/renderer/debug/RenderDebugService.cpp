@@ -114,15 +114,19 @@ void RenderDebugService::beginFrame() {
     m_gpuTimerIssued[m_gpuTimerWriteIndex].fill(false);
 }
 
-void RenderDebugService::beginGpuTimer(const GpuTimerPass pass) {
+bool RenderDebugService::beginGpuTimer(const GpuTimerPass pass) {
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame || m_gpuTimerActive) {
-        return;
+        return false;
     }
 
     const size_t passIndex = static_cast<size_t>(pass);
+    if (m_gpuTimerIssued[m_gpuTimerWriteIndex][passIndex]) {
+        return false;
+    }
     glBeginQuery(GL_TIME_ELAPSED, m_gpuTimerQueries[m_gpuTimerWriteIndex][passIndex]);
     m_gpuTimerActive = true;
     m_activeGpuTimerPass = pass;
+    return true;
 }
 
 void RenderDebugService::endGpuTimer(const GpuTimerPass pass) {

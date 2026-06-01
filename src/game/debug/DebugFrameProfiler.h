@@ -28,7 +28,10 @@ public:
         double fixedParticleAccumMs = 0.0;
         double fixedDropAccumMs = 0.0;
         double fixedWorldAccumMs = 0.0;
+        double audioAccumMs = 0.0;
+        double renderAccumMs = 0.0;
         size_t fixedStepCount = 0;
+        size_t frameSampleCount = 0;
     };
 
     struct HistoryData {
@@ -48,6 +51,11 @@ public:
     void recordFixedParticle(double ms) { m_timing.fixedParticleAccumMs += ms; }
     void recordFixedDrop(double ms) { m_timing.fixedDropAccumMs += ms; }
     void recordFixedWorld(double ms) { m_timing.fixedWorldAccumMs += ms; }
+    void recordAudio(double ms) { m_timing.audioAccumMs += ms; }
+    void recordRender(double ms) {
+        m_timing.renderAccumMs += ms;
+        ++m_timing.frameSampleCount;
+    }
 
     /// Increment the fixed step counter.
     void incrementFixedStep() { ++m_timing.fixedStepCount; }

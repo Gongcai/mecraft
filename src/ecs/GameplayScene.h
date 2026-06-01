@@ -4,7 +4,11 @@
 #include <memory>
 #include <vector>
 #include <typeinfo>
+#include <cstddef>
 #include <cstdint>
+#ifdef MECRAFT_DEBUG
+#include <array>
+#endif
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include "GameplayRegistry.h"
@@ -16,6 +20,23 @@ namespace ecs {
 
 class GameplayScene {
 public:
+    enum class FixedUpdateDebugCategory : size_t {
+        State = 0,
+        Drop = 1,
+        Particle = 2,
+        Count = 3
+    };
+
+#ifdef MECRAFT_DEBUG
+    struct FixedUpdateProfile {
+        std::array<double, static_cast<size_t>(FixedUpdateDebugCategory::Count)> categoryMs{};
+
+        [[nodiscard]] double stateMs() const { return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::State)]; }
+        [[nodiscard]] double dropMs() const { return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::Drop)]; }
+        [[nodiscard]] double particleMs() const { return categoryMs[static_cast<size_t>(FixedUpdateDebugCategory::Particle)]; }
+    };
+#endif
+
     GameplayScene();
 
     GameplayRegistry& registry() { return m_registry; }
@@ -32,6 +53,11 @@ public:
 
     /// Drive the 60 Hz fixed-step systems.
     void runFixedUpdate(float dt);
+
+#ifdef MECRAFT_DEBUG
+    /// Drive the 60 Hz fixed-step systems and collect debug timing by system category.
+    [[nodiscard]] FixedUpdateProfile runFixedUpdateProfiled(float dt);
+#endif
 
     /// Drive one 20 TPS tick.
     void runOneTick();
@@ -55,6 +81,7 @@ private:
         std::vector<uint32_t> written;
     };
     std::vector<SystemDepInfo> m_systemDeps;
+    std::vector<FixedUpdateDebugCategory> m_fixedUpdateDebugCategories;
     void validateSystemOrder();
 
     template <typename Tuple, std::size_t... Is>
@@ -78,10 +105,13 @@ private:
 #endif
 
     template <typename TSystem>
-    void addFixedUpdateSystem() {
+    void addFixedUpdateSystem(FixedUpdateDebugCategory category = FixedUpdateDebugCategory::State) {
         m_fixedUpdateSystems.push_back(std::make_unique<TSystem>());
 #ifdef MECRAFT_DEBUG
+        m_fixedUpdateDebugCategories.push_back(category);
         registerSystemDep<TSystem>();
+#else
+        (void)category;
 #endif
     }
 

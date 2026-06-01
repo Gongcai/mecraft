@@ -88,13 +88,6 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     firstPersonHeldItemRenderer.init(resourceMgr);
     humanoidRenderer.init(resourceMgr);
 
-    // Cross-wire renderers into RenderResourceHub
-    renderer.setHumanoidRenderer(&humanoidRenderer);
-    renderer.setDropRenderer(&dropRenderer);
-    renderer.setDropSystem(&session.dropSystem());
-    renderer.setGameplayRegistry(&session.gameplayScene().registry());
-    renderer.setParticleSystem(&session.particleSystem());
-
     // Cross-wire renderers into RenderScene
     renderScene.setHumanoidRenderer(&humanoidRenderer);
     renderScene.setDropRenderer(&dropRenderer);

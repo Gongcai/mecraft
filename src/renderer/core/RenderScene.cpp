@@ -74,7 +74,7 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     m_shared.resources = &resourceMgr;
 
     // Phase R4: Initialize terrain streaming service
-    // Note: Thread pool initialization is deferred until initFromRenderer() is called
+    // Note: Thread pool initialization is deferred until setupResources() is called
 
     // Phase R5: Initialize overlay renderer
     m_overlayRenderer.init(resourceMgr);
@@ -94,7 +94,7 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     }
 
     // Note: Pipeline init is deferred until shared resources are fully populated
-    // (terrain, targets, sky). This happens when initFromRenderer() is called
+    // (terrain, targets, sky). This happens when setupResources() is called
     // and the Renderer exposes its resources.
 }
 
@@ -126,6 +126,9 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
     if (!prepareFrameResources(window)) {
         return;
     }
+
+    m_debugService.beginFrame();
+    m_terrainStreamingService.beginFrame();
 
     // Build frame context
     m_currentContext = buildFrameContext(world, camera, window);
@@ -222,6 +225,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     if (!skipPostProcess) {
+        const bool postTimerStarted = m_debugService.beginGpuTimer(GpuTimerPass::Post);
         PostProcessEffects effects = buildPostProcessEffects(
             request.world, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians);
@@ -235,7 +239,12 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 m_lastFrameOutput.gbufferDepthTex,
                 m_lastFrameOutput.weatherMaskTex);
         }
+        if (postTimerStarted) {
+            m_debugService.endGpuTimer(GpuTimerPass::Post);
+        }
     }
+
+    m_terrainStreamingService.endFrame();
 }
 
 void RenderScene::setPipelineMode(PipelineMode mode) {
@@ -545,6 +554,7 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.camera.fovDegrees = camera.getFOV();
     ctx.cameraPtr = &camera;
     ctx.windowPtr = &window;
+    ctx.debugService = &m_debugService;
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
     // Screen dimensions
