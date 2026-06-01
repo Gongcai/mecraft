@@ -59,6 +59,7 @@ public:
     void copyCloudToHistory() const;
     void copyHistoryCloudToCloud() const;
     void copyVolumetricToHistory() const;
+    void copyHistoryVolumetricToHalfRes() const;
     void blitSceneLightingTo(GLint framebuffer, int width, int height) const;
     void blitSceneCompositeTo(GLint framebuffer, int width, int height) const;
     void blitSceneResolvedTo(GLint framebuffer, int width, int height) const;

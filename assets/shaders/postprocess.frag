@@ -15,6 +15,7 @@ uniform sampler2D uBloomMip6;
 uniform sampler2D uNoiseTex;
 
 uniform bool uBloomEnabled;
+uniform int uBloomMipCount;
 uniform float uBloomStrength;
 uniform float uExposure;
 uniform bool uSunRaysEnabled;
@@ -834,15 +835,16 @@ vec3 textureBicubic3(sampler2D tex, vec2 coord) {
 }
 
 vec3 sampleBloomMip(int mip, vec2 uv) {
-    // DerivativeMain Grade.glsl DualBlurUpSample: bicubic sampling per mip.
+    // Bloom mips are already blurred; hardware bilinear avoids 4 texture taps
+    // per mip during the full-res composite.
     // Mecraft adaptation: each mip is a separate texture, no atlas tile offset.
-    if (mip == 0) return textureBicubic3(uBloomMip0, uv);
-    if (mip == 1) return textureBicubic3(uBloomMip1, uv);
-    if (mip == 2) return textureBicubic3(uBloomMip2, uv);
-    if (mip == 3) return textureBicubic3(uBloomMip3, uv);
-    if (mip == 4) return textureBicubic3(uBloomMip4, uv);
-    if (mip == 5) return textureBicubic3(uBloomMip5, uv);
-    return textureBicubic3(uBloomMip6, uv);
+    if (mip == 0) return texture(uBloomMip0, uv).rgb;
+    if (mip == 1) return texture(uBloomMip1, uv).rgb;
+    if (mip == 2) return texture(uBloomMip2, uv).rgb;
+    if (mip == 3) return texture(uBloomMip3, uv).rgb;
+    if (mip == 4) return texture(uBloomMip4, uv).rgb;
+    if (mip == 5) return texture(uBloomMip5, uv).rgb;
+    return texture(uBloomMip6, uv).rgb;
 }
 
 void CalculateBloomFog(vec2 uv, out vec3 bloomData, out vec3 fogBloom) {
@@ -851,26 +853,60 @@ void CalculateBloomFog(vec2 uv, out vec3 bloomData, out vec3 fogBloom) {
     vec3 sampleTile = sampleBloomMip(0, uv);
     bloomData = sampleTile;
     fogBloom = sampleTile;
+    if (uBloomMipCount <= 1) {
+        fogBloom += bloomData;
+        return;
+    }
 
     sampleTile = sampleBloomMip(1, uv);
     bloomData += sampleTile * 0.83333333;
     fogBloom += sampleTile * 1.5;
+    if (uBloomMipCount <= 2) {
+        bloomData *= 0.42666150;
+        fogBloom *= 0.39473684;
+        fogBloom += bloomData;
+        return;
+    }
 
     sampleTile = sampleBloomMip(2, uv);
     bloomData += sampleTile * 0.69444444;
     fogBloom += sampleTile * 2.25;
+    if (uBloomMipCount <= 3) {
+        bloomData *= 0.39560440;
+        fogBloom *= 0.21052632;
+        fogBloom += bloomData;
+        return;
+    }
 
     sampleTile = sampleBloomMip(3, uv);
     bloomData += sampleTile * 0.57870370;
     fogBloom += sampleTile * 3.375;
+    if (uBloomMipCount <= 4) {
+        bloomData *= 0.32253979;
+        fogBloom *= 0.12345679;
+        fogBloom += bloomData;
+        return;
+    }
 
     sampleTile = sampleBloomMip(4, uv);
     bloomData += sampleTile * 0.48225309;
     fogBloom += sampleTile * 5.0625;
+    if (uBloomMipCount <= 5) {
+        bloomData *= 0.27809341;
+        fogBloom *= 0.07692308;
+        fogBloom += bloomData;
+        return;
+    }
 
     sampleTile = sampleBloomMip(5, uv);
     bloomData += sampleTile * 0.40187757;
     fogBloom += sampleTile * 7.59375;
+    if (uBloomMipCount <= 6) {
+        bloomData *= 0.24905660;
+        fogBloom *= 0.04854369;
+        fogBloom += bloomData;
+        return;
+    }
 
     sampleTile = sampleBloomMip(6, uv);
     bloomData += sampleTile * 0.33489798;

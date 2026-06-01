@@ -987,6 +987,24 @@ void DeferredRenderTargets::copyVolumetricToHistory() const {
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyVolumetricFbo[m_currentHistoryIndex]);
 }
 
+void DeferredRenderTargets::copyHistoryVolumetricToHalfRes() const {
+    if (!m_ready) {
+        return;
+    }
+    const int halfWidth = std::max(1, m_width / 2);
+    const int halfHeight = std::max(1, m_height / 2);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_historyVolumetricFbo[1 - m_currentHistoryIndex]);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_halfResFbo);
+    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
+                      0, 0, halfWidth, halfHeight,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyVolumetricFbo[m_currentHistoryIndex]);
+    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
+                      0, 0, halfWidth, halfHeight,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_halfResFbo);
+}
+
 void DeferredRenderTargets::copySsaoTemporalToHistory() {
     if (!m_ready) {
         return;

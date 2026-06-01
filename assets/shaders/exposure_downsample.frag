@@ -22,7 +22,10 @@ float centerWeight(vec2 uv) {
 vec2 readExposureSample(ivec2 texel) {
     ivec2 clampedTexel = clamp(texel, ivec2(0), ivec2(uSourceSize) - ivec2(1));
     if (uSourceIsScene) {
-        vec3 color = texelFetch(uInputTex, clampedTexel, uSourceLod).rgb;
+        ivec2 sceneSize = textureSize(uInputTex, 0);
+        int stride = 1 << clamp(uSourceLod, 0, 12);
+        ivec2 sceneTexel = clamp(clampedTexel * stride + ivec2(stride / 2), ivec2(0), sceneSize - ivec2(1));
+        vec3 color = texelFetch(uInputTex, sceneTexel, 0).rgb;
         float lum = max(luminance709(color), 1e-6);
         float weight = centerWeight((vec2(clampedTexel) + 0.5) / max(uSourceSize, vec2(1.0)));
         return vec2(max(log(lum), -18.0) * weight, weight);

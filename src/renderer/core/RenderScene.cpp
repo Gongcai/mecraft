@@ -472,6 +472,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, cons
     effects.bloomEnabled = m_settings.postProcess.bloomEnabled;
     effects.bloomThreshold = m_settings.postProcess.bloomThreshold;
     effects.bloomStrength = m_settings.postProcess.bloomStrength;
+    effects.bloomMipCount = m_settings.postProcess.bloomMipCount;
     effects.autoExposureEnabled = m_settings.postProcess.autoExposureEnabled;
     effects.autoExposureMin = m_settings.postProcess.autoExposureMin;
     effects.autoExposureMax = m_settings.postProcess.autoExposureMax;

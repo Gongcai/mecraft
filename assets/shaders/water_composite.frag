@@ -72,7 +72,7 @@ out vec4 FragColor;
 
 const float rPI = 1.0 / 3.14159265359;
 const float kTwoPi = 6.28318530718;
-const int kWaterSsrSteps = 16;
+const int kWaterSsrSteps = 8;
 const bool kWaterRealSkyReflection = false;
 
 vec3 srgbToLinear(vec3 color) {
@@ -233,7 +233,7 @@ vec2 GetWaterParallaxCoord(vec3 worldPos, vec3 tangentViewDir) {
     vec3 samplePos = vec3(worldPos.xz - worldPos.y, 1.0) + stepSize;
     float sampleHeight = WaterHeight(samplePos.xy);
 
-    for (uint i = 0u; sampleHeight < samplePos.z && i < 60u; ++i) {
+    for (uint i = 0u; sampleHeight < samplePos.z && i < 24u; ++i) {
         samplePos += stepSize;
         sampleHeight = WaterHeight(samplePos.xy);
     }

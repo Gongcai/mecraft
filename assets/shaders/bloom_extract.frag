@@ -21,7 +21,7 @@ vec3 DualBlurDownSample(vec2 uv, int lod) {
         for (int x = -BLUR_SAMPLES; x <= BLUR_SAMPLES; ++x) {
             float weight = clamp(1.0 - length(vec2(x, y)) * 0.25, 0.0, 1.0);
             weight *= weight;
-            bloom += textureLod(uSceneTex, uv + vec2(x, y) * texelOffset, float(lod)).rgb * weight;
+            bloom += texture(uSceneTex, uv + vec2(x, y) * texelOffset).rgb * weight;
             sumWeight += weight;
         }
     }

@@ -43,6 +43,7 @@ void PostProcessPass::setEffects(const PostProcessEffects& effects) {
     m_effects.underwaterStrength = std::clamp(m_effects.underwaterStrength, 0.0f, 1.0f);
     m_effects.bloomThreshold = std::clamp(m_effects.bloomThreshold, 0.0f, 4.0f);
     m_effects.bloomStrength = std::clamp(m_effects.bloomStrength, 0.0f, 20.0f);
+    m_effects.bloomMipCount = std::clamp(m_effects.bloomMipCount, 1, kBloomMipCount);
     m_effects.autoExposureMin = std::clamp(m_effects.autoExposureMin, 0.001f, 64.0f);
     m_effects.autoExposureMax = std::clamp(m_effects.autoExposureMax, m_effects.autoExposureMin, 64.0f);
     m_effects.autoExposureSpeed = std::clamp(m_effects.autoExposureSpeed, 0.05f, 12.0f);
@@ -95,6 +96,7 @@ void PostProcessPass::execute(const FrameContext& ctx, const RenderSettings& set
     PostProcessEffects effects{};
     effects.bloomEnabled = settings.postProcess.bloomEnabled;
     effects.bloomStrength = settings.postProcess.bloomStrength;
+    effects.bloomMipCount = settings.postProcess.bloomMipCount;
     effects.autoExposureEnabled = settings.postProcess.autoExposureEnabled;
     effects.autoExposureSpeed = settings.postProcess.autoExposureSpeed;
     effects.autoExposureBias = settings.postProcess.autoExposureBias;
@@ -140,18 +142,15 @@ void PostProcessPass::execute(const FrameContext& ctx, const RenderSettings& set
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
     const float resolvedExposure = updateAutoExposure(frameTime);
+    static_cast<void>(resolvedExposure);
 
-    const bool hasBloom = renderBloom();
+    const bool hasBloom = renderBloom(settings.postProcess.bloomMipCount);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width, height);
 
-    renderComposite(output.gbufferDepthTex, output.weatherMaskTex);
+    renderComposite(output.gbufferDepthTex, output.weatherMaskTex, hasBloom);
 
     // Restore scene capture state
     m_sceneCaptured = false;
@@ -202,20 +201,17 @@ void PostProcessPass::endSceneAndComposite(const Window& window, const float fra
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
     const float resolvedExposure = updateAutoExposure(frameTime);
+    static_cast<void>(resolvedExposure);
 
-    const bool hasBloom = renderBloom();
+    const bool hasBloom = renderBloom(m_effects.bloomMipCount);
 
     static_cast<void>(weatherMaskTex);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width, height);
 
-    renderComposite(gbufDepthTex, weatherMaskTex);
+    renderComposite(gbufDepthTex, weatherMaskTex, hasBloom);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -383,17 +379,19 @@ void PostProcessPass::updateExposureFromSample(const float weightedLogLum, const
     }
 }
 
-bool PostProcessPass::renderBloom() {
+bool PostProcessPass::renderBloom(const int maxMipCount) {
     bool hasBloom = false;
     if (m_effects.bloomEnabled && m_bloomExtractShader != nullptr && m_bloomBlurShader != nullptr &&
+        m_effects.bloomStrength > 0.001f &&
         m_bloomFbos[0][0] != 0 && m_bloomFbos[0][1] != 0 && m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0) {
+        const int mipCount = std::clamp(maxMipCount, 1, kBloomMipCount);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
 
         m_bloomExtractShader->use();
         m_bloomExtractShader->setInt("uSceneTex", 0);
         glBindVertexArray(m_fullscreenVao);
-        for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        for (int mip = 0; mip < mipCount; ++mip) {
             if (m_bloomFbos[mip][0] == 0) {
                 break;
             }
@@ -407,7 +405,7 @@ bool PostProcessPass::renderBloom() {
         m_bloomBlurShader->use();
         m_bloomBlurShader->setInt("uImage", 0);
         m_bloomBlurShader->setFloat("uWeight", 1.0f);
-        for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        for (int mip = 0; mip < mipCount; ++mip) {
             if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip][1] == 0) {
                 break;
             }
@@ -440,7 +438,7 @@ bool PostProcessPass::renderBloom() {
     return hasBloom;
 }
 
-void PostProcessPass::renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex) {
+void PostProcessPass::renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex, const bool bloomReady) {
     m_postProcessShader->use();
     m_postProcessShader->setInt("uSceneTex", 0);
     m_postProcessShader->setInt("uBloomTex", 1);
@@ -452,9 +450,10 @@ void PostProcessPass::renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex
     m_postProcessShader->setInt("uBloomMip5", 6);
     m_postProcessShader->setInt("uBloomMip6", 7);
     m_postProcessShader->setInt("uNoiseTex", 8);
-    const bool hasBloom = m_effects.bloomEnabled && m_bloomFbos[0][0] != 0;
+    const bool hasBloom = bloomReady && m_effects.bloomEnabled && m_effects.bloomStrength > 0.001f && m_bloomFbos[0][0] != 0;
     m_postProcessShader->setBool("uBloomEnabled", hasBloom);
     m_postProcessShader->setFloat("uBloomStrength", m_effects.bloomStrength);
+    m_postProcessShader->setInt("uBloomMipCount", std::clamp(m_effects.bloomMipCount, 1, kBloomMipCount));
     m_postProcessShader->setBool("uSunRaysEnabled", m_effects.sunRaysEnabled && hasBloom);
     m_postProcessShader->setVec2("uSunScreenPos", m_effects.sunScreenPos);
     m_postProcessShader->setFloat("uSunVisibility", m_effects.sunVisibility);
@@ -545,13 +544,10 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     glCreateFramebuffers(1, &m_sceneFbo);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &m_sceneColorTex);
-    const int sceneMipLevels = std::max(
-        1,
-        static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(width, height))))) + 1);
-    glTextureStorage2D(m_sceneColorTex, sceneMipLevels, GL_RGBA16F, width, height);
+    glTextureStorage2D(m_sceneColorTex, 1, GL_RGBA16F, width, height);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MAX_LEVEL, sceneMipLevels - 1);
+    glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MAX_LEVEL, 0);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_sceneFbo, GL_COLOR_ATTACHMENT0, m_sceneColorTex, 0);

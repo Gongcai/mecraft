@@ -36,8 +36,11 @@ public:
     /// @param hasPreviousFrame Whether temporal history is available
     void execute(const FrameContext& ctx, const RenderSettings& settings,
                  DeferredRenderTargets& targets, bool hasPreviousFrame);
+    void invalidateHistory();
 
 private:
+    [[nodiscard]] bool shouldRenderFog(const FrameContext& ctx, const RenderSettings& settings,
+                                       bool hasPreviousFrame) const;
     void renderFog(const FrameContext& ctx, const RenderSettings& settings,
                    DeferredRenderTargets& targets);
     void renderTemporal(const FrameContext& ctx, const RenderSettings& settings,
@@ -51,6 +54,9 @@ private:
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     GLuint m_noiseTexture = 0;
+    bool m_hasRenderedFog = false;
+    glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
+    float m_lastWeatherSignal = 0.0f;
 };
 
 #endif // MECRAFT_VOLUMETRIC_PASS_H

@@ -298,6 +298,11 @@ float sampleVolumetricShadowFiltered(VFogShadowData data) {
     if (!data.valid) return 1.0;
 
     float refZ = data.proj.z - data.bias;
+    if (uVolumetricQualityTier <= 1) {
+        float lit = sampleCsmDepthCompare(data.proj.xy, data.cascadeIndex, refZ);
+        return clamp(mix(1.0, lit, data.projectionFade * data.distanceFade), 0.0, 1.0);
+    }
+
     float lit = 0.0;
     // 3x3 PCF kernel (fixed, no dither — stable for volumetric fog)
     for (int y = -1; y <= 1; ++y) {

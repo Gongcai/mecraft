@@ -549,6 +549,7 @@ void main() {
     float materialEmission = surface.material.emission;
     float sss = surface.material.sss;
     int materialKind = materialKindId(surface.aux.materialKind);
+    bool isThinPlantReceiver = (materialKind == MATERIAL_GRASS_LIKE);
     TranslucentMask transMask = decodeTranslucentMask(surface.aux.materialKind);
 
     // DerivativeMain-style wet surface effects — shared implementation in weather_surface.glsl
@@ -617,10 +618,13 @@ void main() {
     float NdotH = max((NdotL + NdotV) * halfwayNorm, 0.0);
     float LdotH = max((LdotV + 1.0) * halfwayNorm, 0.0);
 
-    float ssao = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
+    float ssaoRaw = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
+    float ssao = isThinPlantReceiver ? 1.0 : ssaoRaw;
     float shadowSssDepth = 0.0;
     float shadowSssWeight = 0.0;
-    vec3 shadowColored = shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth, shadowSssWeight);
+    vec3 shadowColored = isThinPlantReceiver
+        ? vec3(1.0)
+        : shadowFactor(worldPos, normal, shadowLightDir, sss, shadowSssDepth, shadowSssWeight);
     float cloudShadow = cloudShadowFactor(worldPos, shadowLightDir, outdoorSkyMask);
     float sunShadow = (uShadowLightMode == 0) ? dot(shadowColored, vec3(0.333)) : 1.0;
     float moonShadow = (uShadowLightMode == 1) ? dot(shadowColored, vec3(0.333)) : 1.0;
@@ -693,8 +697,10 @@ void main() {
 
         if (maxOf(shadow) > 1e-6) {
             // DerivativeMain: shadow *= ScreenSpaceShadow (contact shadows)
-            dbgContactShadow = screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, shadowDither(), sss);
-            shadow *= dbgContactShadow;
+            if (!isThinPlantReceiver) {
+                dbgContactShadow = screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, shadowDither(), sss);
+                shadow *= dbgContactShadow;
+            }
 
             // DerivativeMain deferred5.fsh:289 — diffuse *= DiffuseHammon ONLY when shadow > 0
             diffuse *= DiffuseHammon(LdotV, NdotV, NdotL, NdotH, roughness, albedo);

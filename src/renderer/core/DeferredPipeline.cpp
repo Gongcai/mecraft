@@ -133,6 +133,9 @@ void DeferredPipeline::invalidateHistory() {
     if (m_cloudPass) {
         m_cloudPass->invalidateHistory();
     }
+    if (m_volumetricPass) {
+        m_volumetricPass->invalidateHistory();
+    }
 }
 
 FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
@@ -166,6 +169,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         m_hasPreviousFrameData = false;
         if (m_cloudPass) {
             m_cloudPass->invalidateHistory();
+        }
+        if (m_volumetricPass) {
+            m_volumetricPass->invalidateHistory();
         }
     }
 

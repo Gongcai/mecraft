@@ -103,7 +103,7 @@ struct VolumetricData {
     float fogDensityScale = 1.0f;
     float baseDensity = 1.0f;
     float maxDistance = 260.0f;
-    int fogSamples = 20;
+    int fogSamples = 8;
 };
 
 /// Cloud settings for current frame

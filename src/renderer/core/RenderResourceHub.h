@@ -96,7 +96,7 @@ public:
         float fogNoiseScale = 0.04f;     // noise sampling scale for structured fog
         float fogLightStrength = 0.2f;   // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH
         float fogDensityScale = 1.0f;    // user density multiplier (volFogDensity equivalent)
-        int fogSamples = 20;             // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
+        int fogSamples = 8;              // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count
     };
 
     struct CloudSettings {

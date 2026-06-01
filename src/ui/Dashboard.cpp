@@ -623,6 +623,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &settings.postProcess.bloomEnabled);
+        pipelineChanged |= ImGui::SliderInt("Bloom Mips", &settings.postProcess.bloomMipCount, 1, 7);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &settings.postProcess.bloomThreshold, 0.0f, 3.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Bloom Amount", &settings.postProcess.bloomStrength, 0.0f, 20.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Depth of Field", &settings.postProcess.dofEnabled);
@@ -649,6 +650,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("VFog Sky Ray March", &settings.volumetric.skyRayEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog TIME_FADE", &settings.volumetric.timeFadeEnabled);
         pipelineChanged |= ImGui::Checkbox("VFog Temporal Accumulation", &settings.volumetric.temporalEnabled);
+        pipelineChanged |= ImGui::SliderInt("VFog Update Frames", &settings.volumetric.updateInterval, 1, 4);
         pipelineChanged |= ImGui::SliderFloat("VFog Temporal Weight", &settings.volumetric.temporalWeight, 0.0f, 0.99f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("UW Volumetric Light", &settings.volumetric.uwLightEnabled);
         static constexpr const char* kVFogQualityTiers[] = {
@@ -872,8 +874,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.postProcess.horizonScatterStrength = 0.35f;
             settings.volumetric.fogStrength = 0.0f;
             settings.volumetric.fogDensityScale = 0.0f;
+            settings.volumetric.updateInterval = 1;
             settings.postProcess.bloomThreshold = 1.05f;
             settings.postProcess.bloomStrength = 0.10f;
+            settings.postProcess.bloomMipCount = 3;
             settings.postProcess.sunRaysEnabled = false;
             settings.postProcess.dofEnabled = false;
             settings.postProcess.autoExposureEnabled = false;
@@ -927,8 +931,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.postProcess.aerialStrength = 0.48f;
             settings.postProcess.horizonScatterStrength = 0.70f;
             settings.volumetric.fogStrength = 1.0f;
+            settings.volumetric.updateInterval = 1;
             settings.postProcess.bloomThreshold = 0.0f;
             settings.postProcess.bloomStrength = 1.0f;
+            settings.postProcess.bloomMipCount = 5;
             settings.postProcess.sunRaysEnabled = false;
             settings.postProcess.dofEnabled = false;
             settings.postProcess.autoExposureEnabled = true;
@@ -982,8 +988,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.postProcess.aerialStrength = 0.58f;
             settings.postProcess.horizonScatterStrength = 0.82f;
             settings.volumetric.fogStrength = 1.0f;
+            settings.volumetric.updateInterval = 1;
             settings.postProcess.bloomThreshold = 0.0f;
             settings.postProcess.bloomStrength = 1.0f;
+            settings.postProcess.bloomMipCount = 5;
             settings.postProcess.sunRaysEnabled = false;
             settings.postProcess.dofEnabled = false;
             settings.postProcess.autoExposureEnabled = true;

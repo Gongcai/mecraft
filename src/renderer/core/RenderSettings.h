@@ -34,7 +34,7 @@ struct SsaoSettings {
     float historyWeight = 0.85f;
     float radius = 0.6f;
     float strength = 0.75f;
-    int samples = 16;
+    int samples = 8;
 };
 
 /// Volumetric fog/light settings
@@ -46,7 +46,8 @@ struct VolumetricSettings {
     bool timeFadeEnabled = true;
     bool temporalEnabled = true;
     int qualityTier = 1; // 0=Low, 1=Medium, 2=High, 3=Ultra
-    int fogSamples = 20;
+    int fogSamples = 8;
+    int updateInterval = 1; // 1=every frame, 2=half rate, stationary camera only
     float temporalWeight = 0.90f;
     float shadowBiasScale = 1.0f;
     float fogStrength = 1.0f;
@@ -110,6 +111,7 @@ struct TaaSettings {
 struct PostProcessSettings {
     // Bloom
     bool bloomEnabled = true;
+    int bloomMipCount = 5;
     float bloomThreshold = 0.0f;
     float bloomStrength = 1.0f;
     bool bloomyFogEnabled = true;

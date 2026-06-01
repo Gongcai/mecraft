@@ -21,6 +21,7 @@ struct PostProcessEffects {
     float underwaterStrength = 0.68f;
     float screenRollRadians = 0.0f;
     bool bloomEnabled = true;
+    int bloomMipCount = 5;
     float bloomThreshold = 0.0f;
     float bloomStrength = 1.0f;
     bool autoExposureEnabled = true;
@@ -119,10 +120,10 @@ private:
 
     /// Apply bloom extraction and blur passes.
     /// @return true if bloom was applied
-    bool renderBloom();
+    bool renderBloom(int maxMipCount);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
-    void renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex);
+    void renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex, bool bloomReady);
 
     Shader* m_postProcessShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;

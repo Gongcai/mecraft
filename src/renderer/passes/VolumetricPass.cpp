@@ -6,6 +6,7 @@
 
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <cmath>
 
 void VolumetricPass::init(ResourceMgr& resourceMgr) {
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
@@ -22,15 +23,54 @@ void VolumetricPass::shutdown() {
     m_shadowRenderer = nullptr;
     m_resourceMgr = nullptr;
     m_noiseTexture = 0;
+    m_hasRenderedFog = false;
+}
+
+void VolumetricPass::invalidateHistory() {
+    m_hasRenderedFog = false;
+}
+
+bool VolumetricPass::shouldRenderFog(const FrameContext& ctx, const RenderSettings& settings,
+                                      const bool hasPreviousFrame) const {
+    const bool underwaterVolumetricActive = ctx.eyeInWater && settings.volumetric.uwLightEnabled;
+    if (underwaterVolumetricActive || !settings.volumetric.temporalEnabled || !hasPreviousFrame ||
+        !m_hasRenderedFog) {
+        return true;
+    }
+
+    const int updateInterval = std::clamp(settings.volumetric.updateInterval, 1, 8);
+    if (updateInterval <= 1) {
+        return true;
+    }
+
+    const glm::vec3 cameraDelta = ctx.camera.position - m_lastCameraPos;
+    const bool movedFar = glm::dot(cameraDelta, cameraDelta) > 4.0f;
+    const float weatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.fogWetness +
+                                ctx.weather.lightningFlash * 4.0f;
+    const bool weatherChanged = std::abs(weatherSignal - m_lastWeatherSignal) > 0.02f;
+    if (movedFar || weatherChanged) {
+        return true;
+    }
+
+    return (ctx.frameIndex % static_cast<uint64_t>(updateInterval)) == 0;
 }
 
 void VolumetricPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                               DeferredRenderTargets& targets, bool hasPreviousFrame) {
-    // Volumetric march (always runs when active)
-    renderFog(ctx, settings, targets);
+    const bool renderCurrentFog = shouldRenderFog(ctx, settings, hasPreviousFrame);
+    if (renderCurrentFog) {
+        renderFog(ctx, settings, targets);
+        m_lastCameraPos = ctx.camera.position;
+        m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.fogWetness +
+                              ctx.weather.lightningFlash * 4.0f;
+        m_hasRenderedFog = true;
+    } else {
+        targets.copyHistoryVolumetricToHalfRes();
+    }
 
     // Temporal resolve (optional)
-    if (settings.volumetric.temporalEnabled && hasPreviousFrame && m_volumetricTemporalShader != nullptr) {
+    if (renderCurrentFog && settings.volumetric.temporalEnabled && hasPreviousFrame &&
+        m_volumetricTemporalShader != nullptr) {
         renderTemporal(ctx, settings, targets);
     }
 
