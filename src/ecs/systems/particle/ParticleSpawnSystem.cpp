@@ -70,9 +70,9 @@ void ParticleSpawnSystem::update(SystemContext& ctx) {
 
         const BlockDef& blockDef = BlockRegistry::get(event.blockType);
         const int texIndices[] = {
-            blockDef.texTop, blockDef.texBottom,
-            blockDef.texLeft, blockDef.texRight,
-            blockDef.texFront, blockDef.texBack
+            blockDef.faceTop.firstLayer, blockDef.faceBottom.firstLayer,
+            blockDef.faceLeft.firstLayer, blockDef.faceRight.firstLayer,
+            blockDef.faceFront.firstLayer, blockDef.faceBack.firstLayer
         };
 
         for (int i = 0; i < kParticlesPerBreak; ++i) {

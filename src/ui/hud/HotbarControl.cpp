@@ -321,9 +321,9 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
                 continue;
             }
             const BlockDef& blockDef = BlockRegistry::get(renderBlock);
-            int tileIndex = blockDef.texFront;
+            int tileIndex = blockDef.faceFront.firstLayer;
             if (tileIndex < 0) {
-                tileIndex = blockDef.texTop;
+                tileIndex = blockDef.faceTop.firstLayer;
             }
             if (tileIndex < 0) {
                 continue;

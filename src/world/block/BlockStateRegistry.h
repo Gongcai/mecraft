@@ -18,18 +18,25 @@ struct PropertyKey {
 };
 
 struct StateTextureIndices {
-    int texTop = 0;
-    int texBottom = 0;
-    int texLeft = 0;
-    int texRight = 0;
-    int texFront = 0;
-    int texBack = 0;
-    AnimatedTextureRef worldTop;
-    AnimatedTextureRef worldBottom;
-    AnimatedTextureRef worldLeft;
-    AnimatedTextureRef worldRight;
-    AnimatedTextureRef worldFront;
-    AnimatedTextureRef worldBack;
+    AnimatedTextureRef faceTop;
+    AnimatedTextureRef faceBottom;
+    AnimatedTextureRef faceLeft;
+    AnimatedTextureRef faceRight;
+    AnimatedTextureRef faceFront;
+    AnimatedTextureRef faceBack;
+
+    // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)
+    [[nodiscard]] int getFaceLayer(int face) const {
+        switch (face) {
+            case 0: return faceTop.firstLayer;
+            case 1: return faceBottom.firstLayer;
+            case 2: return faceFront.firstLayer;
+            case 3: return faceBack.firstLayer;
+            case 4: return faceLeft.firstLayer;
+            case 5: return faceRight.firstLayer;
+            default: return faceTop.firstLayer;
+        }
+    }
 };
 
 struct BlockStateEntry {

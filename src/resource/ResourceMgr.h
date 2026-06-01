@@ -85,6 +85,10 @@ public:
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
     [[nodiscard]] TextureAnimationInfo getTextureAnimation(const std::string& name) const;
 
+    // Mapping from TextureArray layer index back to Atlas tile index.
+    // Used by UI icon generation (buildBlockIconAtlas) to convert face layers to atlas tiles.
+    [[nodiscard]] int arrayLayerToAtlasTile(int arrayLayer) const;
+
     // Lightmap textures (16x16, maps blockLight x skyLight -> RGB brightness)
     void loadLightmapTextures(const std::string& dayPath, const std::string& nightPath);
     [[nodiscard]] GLuint getLightmapDay() const;
@@ -141,6 +145,8 @@ private:
     std::unordered_map<std::string, int> m_hudIconIndices;
     std::unordered_map<std::string, int> m_textureArrayLayers;
     std::unordered_map<std::string, TextureAnimationInfo> m_declaredTextureAnimations;
+    // Mapping from TextureArray layer -> Atlas tile index. Built during buildTextureArray.
+    std::unordered_map<int, int> m_arrayLayerToAtlasTile;
     float m_atlasAnisotropy = 1.0f;
     float m_atlasMaxAnisotropy = 1.0f;
     std::unordered_map<std::string, GLuint> m_cubemaps;

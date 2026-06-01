@@ -57,15 +57,7 @@ struct FaceUvRect {
 };
 
 int getFaceTextureIndex(const BlockDef& def, const int face) {
-    switch (face) {
-        case 0: return def.texTop;
-        case 1: return def.texBottom;
-        case 2: return def.texFront;
-        case 3: return def.texBack;
-        case 4: return def.texLeft;
-        case 5: return def.texRight;
-        default: return 0;
-    }
+    return def.getFaceLayer(face);
 }
 
 bool isTorchShape(const BlockDef& def) {
@@ -852,8 +844,8 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
     vertices.reserve(36);
 
     if (def.renderShape == BlockRenderShape::Cross) {
-        int tileIndex = def.texTop;
-        if (tileIndex < 0) tileIndex = def.texFront;
+        int tileIndex = def.faceTop.firstLayer;
+        if (tileIndex < 0) tileIndex = def.faceFront.firstLayer;
         if (tileIndex < 0) tileIndex = 0;
 
         const float layer = static_cast<float>(tileIndex);
@@ -890,8 +882,8 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
         emitQuad(kCrossQuadA);
         emitQuad(kCrossQuadB);
     } else if (isTorchShape(def)) {
-        int tileIndex = def.texTop;
-        if (tileIndex < 0) tileIndex = def.texFront;
+        int tileIndex = def.faceTop.firstLayer;
+        if (tileIndex < 0) tileIndex = def.faceFront.firstLayer;
         if (tileIndex < 0) tileIndex = 0;
 
         const float layer = static_cast<float>(tileIndex);

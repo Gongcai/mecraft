@@ -484,13 +484,13 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
 
 const AnimatedTextureRef& getFaceTextureRef(const StateTextureIndices& textures, const int face) {
     switch (face) {
-        case FACE_TOP:    return textures.worldTop;
-        case FACE_BOTTOM: return textures.worldBottom;
-        case FACE_FRONT:  return textures.worldFront;
-        case FACE_BACK:   return textures.worldBack;
-        case FACE_LEFT:   return textures.worldLeft;
-        case FACE_RIGHT:  return textures.worldRight;
-        default:          return textures.worldTop;
+        case FACE_TOP:    return textures.faceTop;
+        case FACE_BOTTOM: return textures.faceBottom;
+        case FACE_FRONT:  return textures.faceFront;
+        case FACE_BACK:   return textures.faceBack;
+        case FACE_LEFT:   return textures.faceLeft;
+        case FACE_RIGHT:  return textures.faceRight;
+        default:          return textures.faceTop;
     }
 }
 
@@ -2136,7 +2136,7 @@ void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                           const SubChunkMeshingSnapshot& snapshot) {
     static_cast<void>(def);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    const float layer = static_cast<float>(textures.worldTop.firstLayer);
+    const float layer = static_cast<float>(textures.faceTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -2232,7 +2232,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                         const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = BlockRegistry::getFast(blockId);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    int tileIndex = textures.texTop;
+    int tileIndex = textures.faceTop.firstLayer;
     if (tileIndex < 0) tileIndex = 0;
     const float layer = static_cast<float>(tileIndex);
 
@@ -2373,7 +2373,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                        const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = BlockRegistry::getFast(blockId);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    const float layer = static_cast<float>(textures.worldTop.firstLayer);
+    const float layer = static_cast<float>(textures.faceTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);
@@ -2684,7 +2684,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                           const SubChunkMeshingSnapshot& snapshot) {
     const BlockDef& def = BlockRegistry::getFast(blockId);
     const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    const float layer = static_cast<float>(textures.worldTop.firstLayer);
+    const float layer = static_cast<float>(textures.faceTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
     uint8_t blockLevel = getResolvedBlockLightSC(snapshot, x, y, z);

@@ -38,23 +38,13 @@ AnimatedTextureRef makeStaticWorldTexture(const int layer) {
     return ref;
 }
 
-void setAllWorldFaces(BlockDef& def, const AnimatedTextureRef& ref) {
-    def.worldTop = ref;
-    def.worldBottom = ref;
-    def.worldLeft = ref;
-    def.worldRight = ref;
-    def.worldFront = ref;
-    def.worldBack = ref;
-}
-
-void setAllFaces(BlockDef& def, int tex) {
-    def.texTop = tex;
-    def.texBottom = tex;
-    def.texLeft = tex;
-    def.texRight = tex;
-    def.texFront = tex;
-    def.texBack = tex;
-    setAllWorldFaces(def, makeStaticWorldTexture(std::max(0, tex)));
+void setAllFaces(BlockDef& def, const AnimatedTextureRef& ref) {
+    def.faceTop = ref;
+    def.faceBottom = ref;
+    def.faceLeft = ref;
+    def.faceRight = ref;
+    def.faceFront = ref;
+    def.faceBack = ref;
 }
 
 BlockID resolveDefinitionBlockId(const BlockID id) {
@@ -362,7 +352,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].biomeTint = BiomeTintKind::None;
         s_blocks[i].lightLevel = 0;
         s_blocks[i].opacity = 15;
-        setAllFaces(s_blocks[i], 0);
+        setAllFaces(s_blocks[i], makeStaticWorldTexture(0));
         s_blockDropIds[i] = NamespacedId("minecraft", "air");
     }
 
@@ -372,7 +362,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     s_blocks[0].renderLayer = BlockRenderLayer::Transparent;
     s_blocks[0].isSelectable = false;
     s_blocks[0].opacity = 0;
-    setAllFaces(s_blocks[0], -1);
+    setAllFaces(s_blocks[0], makeStaticWorldTexture(0));
 
     // Build idLookup map
     s_idLookup.clear();
@@ -521,19 +511,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
             const auto& tex = blockJson["textures"];
 
-            auto resolveTexName = [&](const char* key) -> int {
-#ifdef MECRAFT_NO_TEXTURES
-                return 0;
-#else
-                if (!tex.contains(key) || !tex[key].is_string() || resourceMgr == nullptr) {
-                    return 0;
-                }
-                const std::string name = tex[key].get<std::string>();
-                return static_cast<int>(resourceMgr->getTexture(name));
-#endif
-            };
-
-            auto resolveWorldTexture = [&](const char* key) -> AnimatedTextureRef {
+            auto resolveTexture = [&](const char* key) -> AnimatedTextureRef {
 #ifdef MECRAFT_NO_TEXTURES
                 return makeStaticWorldTexture(0);
 #else
@@ -546,45 +524,32 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             };
 
             if (tex.contains("all")) {
-                const int idx = resolveTexName("all");
-                setAllFaces(def, idx);
-                setAllWorldFaces(def, resolveWorldTexture("all"));
+                setAllFaces(def, resolveTexture("all"));
             }
             if (tex.contains("top")) {
-                def.texTop = resolveTexName("top");
-                def.worldTop = resolveWorldTexture("top");
+                def.faceTop = resolveTexture("top");
             }
             if (tex.contains("bottom")) {
-                def.texBottom = resolveTexName("bottom");
-                def.worldBottom = resolveWorldTexture("bottom");
+                def.faceBottom = resolveTexture("bottom");
             }
             if (tex.contains("side")) {
-                const int idx = resolveTexName("side");
-                def.texLeft  = idx;
-                def.texRight = idx;
-                def.texFront = idx;
-                def.texBack  = idx;
-                const AnimatedTextureRef ref = resolveWorldTexture("side");
-                def.worldLeft = ref;
-                def.worldRight = ref;
-                def.worldFront = ref;
-                def.worldBack = ref;
+                const AnimatedTextureRef ref = resolveTexture("side");
+                def.faceLeft = ref;
+                def.faceRight = ref;
+                def.faceFront = ref;
+                def.faceBack = ref;
             }
             if (tex.contains("left")) {
-                def.texLeft = resolveTexName("left");
-                def.worldLeft = resolveWorldTexture("left");
+                def.faceLeft = resolveTexture("left");
             }
             if (tex.contains("right")) {
-                def.texRight = resolveTexName("right");
-                def.worldRight = resolveWorldTexture("right");
+                def.faceRight = resolveTexture("right");
             }
             if (tex.contains("front")) {
-                def.texFront = resolveTexName("front");
-                def.worldFront = resolveWorldTexture("front");
+                def.faceFront = resolveTexture("front");
             }
             if (tex.contains("back")) {
-                def.texBack = resolveTexName("back");
-                def.worldBack = resolveWorldTexture("back");
+                def.faceBack = resolveTexture("back");
             }
         }
 

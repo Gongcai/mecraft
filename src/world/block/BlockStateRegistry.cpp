@@ -41,18 +41,12 @@ AnimatedTextureRef chooseWaterAnimation(const BlockDef& def, const char* alias) 
 StateTextureIndices makeTexturesForBlock(const BlockID blockId) {
     const BlockDef& def = BlockRegistry::getFast(blockId);
     StateTextureIndices textures;
-    textures.texTop = def.texTop;
-    textures.texBottom = def.texBottom;
-    textures.texLeft = def.texLeft;
-    textures.texRight = def.texRight;
-    textures.texFront = def.texFront;
-    textures.texBack = def.texBack;
-    textures.worldTop = def.worldTop;
-    textures.worldBottom = def.worldBottom;
-    textures.worldLeft = def.worldLeft;
-    textures.worldRight = def.worldRight;
-    textures.worldFront = def.worldFront;
-    textures.worldBack = def.worldBack;
+    textures.faceTop = def.faceTop;
+    textures.faceBottom = def.faceBottom;
+    textures.faceLeft = def.faceLeft;
+    textures.faceRight = def.faceRight;
+    textures.faceFront = def.faceFront;
+    textures.faceBack = def.faceBack;
     return textures;
 }
 
@@ -68,62 +62,40 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
             continue;
         }
 
-        const int endTexture = textures.texTop;
-        int sideTexture = textures.texFront;
-        if (sideTexture == endTexture) {
-            sideTexture = textures.texLeft;
+        // Determine end (top/bottom) and side texture references.
+        // endRef = faceTop (the "end cap" of a log/column)
+        // sideRef prefers faceFront, falls back to faceLeft, then faceBottom
+        const AnimatedTextureRef endRef = def.faceTop;
+        AnimatedTextureRef sideRef = def.faceFront;
+        if (def.faceFront.firstLayer == endRef.firstLayer) {
+            sideRef = def.faceLeft;
         }
-        if (sideTexture == endTexture) {
-            sideTexture = textures.texBottom;
-        }
-        const AnimatedTextureRef endWorld = def.worldTop;
-        AnimatedTextureRef sideWorld = def.worldFront;
-        if (def.texFront == endTexture) {
-            sideWorld = def.worldLeft;
-        }
-        if (def.texFront == endTexture && def.texLeft == endTexture) {
-            sideWorld = def.worldBottom;
+        if (def.faceFront.firstLayer == endRef.firstLayer && def.faceLeft.firstLayer == endRef.firstLayer) {
+            sideRef = def.faceBottom;
         }
 
         if (value == "x") {
-            textures.texTop = sideTexture;
-            textures.texBottom = sideTexture;
-            textures.texFront = sideTexture;
-            textures.texBack = sideTexture;
-            textures.texLeft = endTexture;
-            textures.texRight = endTexture;
-            textures.worldTop = sideWorld;
-            textures.worldBottom = sideWorld;
-            textures.worldFront = sideWorld;
-            textures.worldBack = sideWorld;
-            textures.worldLeft = endWorld;
-            textures.worldRight = endWorld;
+            textures.faceTop = sideRef;
+            textures.faceBottom = sideRef;
+            textures.faceFront = sideRef;
+            textures.faceBack = sideRef;
+            textures.faceLeft = endRef;
+            textures.faceRight = endRef;
         } else if (value == "z") {
-            textures.texTop = sideTexture;
-            textures.texBottom = sideTexture;
-            textures.texLeft = sideTexture;
-            textures.texRight = sideTexture;
-            textures.texFront = endTexture;
-            textures.texBack = endTexture;
-            textures.worldTop = sideWorld;
-            textures.worldBottom = sideWorld;
-            textures.worldLeft = sideWorld;
-            textures.worldRight = sideWorld;
-            textures.worldFront = endWorld;
-            textures.worldBack = endWorld;
+            textures.faceTop = sideRef;
+            textures.faceBottom = sideRef;
+            textures.faceLeft = sideRef;
+            textures.faceRight = sideRef;
+            textures.faceFront = endRef;
+            textures.faceBack = endRef;
         } else {
-            textures.texTop = endTexture;
-            textures.texBottom = endTexture;
-            textures.texLeft = sideTexture;
-            textures.texRight = sideTexture;
-            textures.texFront = sideTexture;
-            textures.texBack = sideTexture;
-            textures.worldTop = def.worldTop;
-            textures.worldBottom = def.worldBottom;
-            textures.worldLeft = def.worldLeft;
-            textures.worldRight = def.worldRight;
-            textures.worldFront = def.worldFront;
-            textures.worldBack = def.worldBack;
+            // y-axis: keep original orientation
+            textures.faceTop = def.faceTop;
+            textures.faceBottom = def.faceBottom;
+            textures.faceLeft = def.faceLeft;
+            textures.faceRight = def.faceRight;
+            textures.faceFront = def.faceFront;
+            textures.faceBack = def.faceBack;
         }
         break;
     }
@@ -146,12 +118,12 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
 
         static_cast<void>(isSource);
         static_cast<void>(isFalling);
-        textures.worldTop = still;
-        textures.worldBottom = still;
-        textures.worldLeft = still;
-        textures.worldRight = still;
-        textures.worldFront = still;
-        textures.worldBack = still;
+        textures.faceTop = still;
+        textures.faceBottom = still;
+        textures.faceLeft = still;
+        textures.faceRight = still;
+        textures.faceFront = still;
+        textures.faceBack = still;
     }
 
     return textures;

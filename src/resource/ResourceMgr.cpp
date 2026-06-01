@@ -924,6 +924,21 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
     m_textureArray.textureID = textureID;
     m_textureArray.tileSize = tileSize;
     m_textureArray.layerCount = numLayers;
+
+    // Build the reverse mapping: TextureArray layer -> Atlas tile index.
+    // imageIndex in the loop corresponds to the Atlas tile index (same sorted file list).
+    // currentLayer is the TextureArray first layer for that image.
+    m_arrayLayerToAtlasTile.clear();
+    int mapLayer = 0;
+    for (size_t mapIdx = 0; mapIdx < imagePaths.size(); ++mapIdx) {
+        const int atlasTile = static_cast<int>(mapIdx);
+        const int layerCount = layersPerImage[mapIdx];
+        // Map all frames of this texture (including animated frames) back to the same atlas tile.
+        for (int f = 0; f < layerCount; ++f) {
+            m_arrayLayerToAtlasTile[mapLayer + f] = atlasTile;
+        }
+        mapLayer += layerCount;
+    }
 }
 
 const TextureArray& ResourceMgr::getTextureArray() const {
@@ -1001,6 +1016,17 @@ TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) c
     fallback.fps = 0.0f;
     fallback.isAnimated = false;
     return fallback;
+}
+
+int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
+    const auto it = m_arrayLayerToAtlasTile.find(arrayLayer);
+    if (it != m_arrayLayerToAtlasTile.end()) {
+        return it->second;
+    }
+#ifdef MECRAFT_DEBUG
+    std::cerr << "[ResourceMgr] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << ", falling back to 0\n";
+#endif
+    return 0;
 }
 
 namespace {
@@ -1225,9 +1251,9 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
 
         const BlockDef& def = BlockRegistry::get(blockId);
         if (def.renderShape == BlockRenderShape::Cross) {
-            int crossTex = def.texTop;
+            int crossTex = arrayLayerToAtlasTile(def.faceTop.firstLayer);
             if (crossTex < 0) {
-                crossTex = def.texFront;
+                crossTex = arrayLayerToAtlasTile(def.faceFront.firstLayer);
             }
             if (crossTex < 0) {
                 continue;
@@ -1250,18 +1276,18 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
             continue;
         }
 
-        int topTex = def.texTop;
-        int rightTex = def.texRight;
-        int leftTex = def.texFront;
+        int topTex = arrayLayerToAtlasTile(def.faceTop.firstLayer);
+        int rightTex = arrayLayerToAtlasTile(def.faceRight.firstLayer);
+        int leftTex = arrayLayerToAtlasTile(def.faceFront.firstLayer);
 
         if (topTex < 0) {
-            topTex = def.texFront;
+            topTex = arrayLayerToAtlasTile(def.faceFront.firstLayer);
         }
         if (rightTex < 0) {
-            rightTex = def.texFront;
+            rightTex = arrayLayerToAtlasTile(def.faceFront.firstLayer);
         }
         if (leftTex < 0) {
-            leftTex = def.texTop;
+            leftTex = arrayLayerToAtlasTile(def.faceTop.firstLayer);
         }
         if (topTex < 0 || rightTex < 0 || leftTex < 0) {
             continue;
