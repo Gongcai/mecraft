@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec2.hpp>
@@ -16,6 +17,14 @@
 #include "../../world/fluid/FluidState.h"
 #include "../../world/block/PropIndices.h"
 #include "../../world/World.h"
+
+#if defined(_MSC_VER)
+#define MECRAFT_FORCEINLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define MECRAFT_FORCEINLINE inline __attribute__((always_inline))
+#else
+#define MECRAFT_FORCEINLINE inline
+#endif
 
 namespace {
 std::atomic_bool g_debugDisableGreedyMeshing{false};
@@ -30,6 +39,8 @@ struct VertexLightData {
     uint8_t ao = 0;
     uint8_t sunLight = 0;
     uint8_t blockLight = 0;
+    uint16_t sunKey = 0;
+    uint16_t blockKey = 0;
     float sunNormalized = 0.0f;
     float blockNormalized = 0.0f;
 };
@@ -73,6 +84,37 @@ struct FaceCell {
     FaceMergeKey key{};
 };
 
+constexpr size_t kMaxGreedyPlaneSize = static_cast<size_t>(SubChunk::SIZE) * SubChunk::SIZE;
+
+struct MeshFaceInfo {
+    int tileIndex = 0;
+    float layer = 0.0f;
+    float animationFrameCount = 1.0f;
+    float animationFps = 0.0f;
+    float animated = 0.0f;
+    uint8_t uvQuarterTurns = 0;
+};
+
+enum class MeshCubeClass : uint8_t {
+    Air,
+    Opaque,
+    Transparent,
+    Water,
+    Cutout,
+    CutoutDistance,
+    Other
+};
+
+struct MeshBlockInfo {
+    const BlockDef* def = nullptr;
+    std::array<MeshFaceInfo, 6> faces{};
+    MeshCubeClass cubeClass = MeshCubeClass::Air;
+    bool isSolid = false;
+    bool isTransparent = false;
+};
+
+MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(BlockID id);
+
 constexpr int FACE_TOP = 0;
 constexpr int FACE_BOTTOM = 1;
 constexpr int FACE_FRONT = 2;
@@ -99,13 +141,13 @@ constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.
 constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 
 // Sub-chunk local index (16x16x16)
-std::size_t scToIndex(const int x, const int y, const int z) {
+MECRAFT_FORCEINLINE std::size_t scToIndex(const int x, const int y, const int z) {
     return static_cast<std::size_t>(x) +
            static_cast<std::size_t>(z) * SubChunk::SIZE +
            static_cast<std::size_t>(y) * SubChunk::SIZE * SubChunk::SIZE;
 }
 
-std::size_t haloToIndex(const int x, const int y, const int z) {
+MECRAFT_FORCEINLINE std::size_t haloToIndex(const int x, const int y, const int z) {
     return static_cast<std::size_t>(x + 1) +
            static_cast<std::size_t>(z + 1) * SC_HALO_SIZE +
            static_cast<std::size_t>(y + 1) * SC_HALO_SIZE * SC_HALO_SIZE;
@@ -191,7 +233,7 @@ uint8_t getNeighborBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, 
     return static_cast<uint8_t>(getNeighborAwareLightSC(snapshot, x, y, z) & 0x0F);
 }
 
-BlockID getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+MECRAFT_FORCEINLINE BlockID getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (x < -1 || x > SubChunk::SIZE ||
         y < -1 || y > SubChunk::SIZE ||
         z < -1 || z > SubChunk::SIZE) {
@@ -217,7 +259,7 @@ BlockID getResolvedFluidSC(const SubChunkMeshingSnapshot& snapshot, int x, int y
     return 0;
 }
 
-uint8_t getResolvedLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+MECRAFT_FORCEINLINE uint8_t getResolvedLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (x < -1 || x > SubChunk::SIZE ||
         y < -1 || y > SubChunk::SIZE ||
         z < -1 || z > SubChunk::SIZE) {
@@ -236,28 +278,43 @@ uint8_t getResolvedBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, 
 
 // ======================== AO / light computation ========================
 
-uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
+MECRAFT_FORCEINLINE uint8_t computeVertexAO(const bool side1, const bool side2, const bool corner) {
     if (side1 && side2) {
         return 0;
     }
     return static_cast<uint8_t>(3 - (static_cast<int>(side1) + static_cast<int>(side2) + static_cast<int>(corner)));
 }
 
-bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
+MECRAFT_FORCEINLINE bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     const BlockID id = getResolvedBlockSC(snapshot, x, y, z);
-    return BlockRegistry::getFast(id).isSolid;
+    return getMeshBlockInfo(id).isSolid;
 }
 
-float lightToNormalized(const uint8_t level) {
+MECRAFT_FORCEINLINE uint8_t getSafePackedLightForAO(const SubChunkMeshingSnapshot& snapshot,
+                                                    const int x,
+                                                    const int y,
+                                                    const int z,
+                                                    const bool isSolid,
+                                                    const uint8_t basePacked) {
+    if (isSolid) {
+        return basePacked;
+    }
+    if (y >= SubChunk::SIZE && snapshot.isTopSection) {
+        return 0xF0;
+    }
+    return getResolvedLightSC(snapshot, x, y, z);
+}
+
+MECRAFT_FORCEINLINE float lightToNormalized(const uint8_t level) {
     return static_cast<float>(level) / 15.0f;
 }
 
-float computeVertexNormalized(const uint8_t base,
-                              const uint8_t s1,
-                              const uint8_t s2,
-                              const uint8_t cn,
-                              const bool s1Solid,
-                              const bool s2Solid) {
+MECRAFT_FORCEINLINE float computeVertexNormalized(const uint8_t base,
+                                                  const uint8_t s1,
+                                                  const uint8_t s2,
+                                                  const uint8_t cn,
+                                                  const bool s1Solid,
+                                                  const bool s2Solid) {
     float avg = 0.0f;
     if (s1Solid && s2Solid) {
         avg = static_cast<float>(base + s1 + s2) / 3.0f;
@@ -265,6 +322,20 @@ float computeVertexNormalized(const uint8_t base,
         avg = static_cast<float>(base + s1 + s2 + cn) / 4.0f;
     }
     return avg / 15.0f;
+}
+
+MECRAFT_FORCEINLINE uint16_t computeVertexLightKey(const uint8_t base,
+                                                   const uint8_t s1,
+                                                   const uint8_t s2,
+                                                   const uint8_t cn,
+                                                   const bool s1Solid,
+                                                   const bool s2Solid) {
+    const int sum = s1Solid && s2Solid
+        ? static_cast<int>(base) + static_cast<int>(s1) + static_cast<int>(s2)
+        : static_cast<int>(base) + static_cast<int>(s1) + static_cast<int>(s2) + static_cast<int>(cn);
+    const int denominator = s1Solid && s2Solid ? 45 : 60;
+    return static_cast<uint16_t>((sum * static_cast<int>(kNormalizedQuantizationScale) + denominator / 2) /
+                                 denominator);
 }
 
 void computeTintMapPosition(const SubChunkMeshingSnapshot& snapshot,
@@ -333,45 +404,6 @@ bool isUnresolvablePosition(const SubChunkMeshingSnapshot& snapshot, int x, int 
     return false;
 }
 
-uint8_t safeSunLevel(const SubChunkMeshingSnapshot& snapshot,
-                     const int x,
-                     const int y,
-                     const int z,
-                     const bool isSolid,
-                     const uint8_t base) {
-    if (isSolid) {
-        // AO samples may point inside neighbouring opaque blocks. Those cells
-        // often carry zero skylight; using them for smooth lighting bakes an
-        // AO-shaped dark ring into the GBuffer light channel. Keep occlusion in
-        // the AO channel and reuse the visible face light for solid samples.
-        return base;
-    }
-    if (!isSolid) {
-        // Above the top of the world — full sky light
-        if (y >= SubChunk::SIZE && snapshot.isTopSection) {
-            return 15;
-        }
-    }
-    return getResolvedSunlightSC(snapshot, x, y, z);
-}
-
-uint8_t safeBlockLevel(const SubChunkMeshingSnapshot& snapshot,
-                       const int x,
-                       const int y,
-                       const int z,
-                       const bool isSolid,
-                       const uint8_t base) {
-    if (isSolid) {
-        return base;
-    }
-    if (!isSolid) {
-        if (y >= SubChunk::SIZE && snapshot.isTopSection) {
-            return 0;
-        }
-    }
-    return getResolvedBlockLightSC(snapshot, x, y, z);
-}
-
 std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
                                                      const int x,
                                                      const int y,
@@ -399,8 +431,9 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
     }
 
     std::array<VertexLightData, 4> data{};
-    const uint8_t baseSun = getResolvedSunlightSC(snapshot, bx, by, bz);
-    const uint8_t baseBlock = getResolvedBlockLightSC(snapshot, bx, by, bz);
+    const uint8_t basePacked = getResolvedLightSC(snapshot, bx, by, bz);
+    const uint8_t baseSun = static_cast<uint8_t>((basePacked >> 4) & 0x0F);
+    const uint8_t baseBlock = static_cast<uint8_t>(basePacked & 0x0F);
 
     for (int i = 0; i < 4; ++i) {
         const glm::vec3 corner = kFaceCorners[face][i];
@@ -421,12 +454,16 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
 
         data[i].ao = computeVertexAO(side1, side2, cornerSolid);
 
-        const uint8_t s1Sun = safeSunLevel(snapshot, s1[0], s1[1], s1[2], side1, baseSun);
-        const uint8_t s2Sun = safeSunLevel(snapshot, s2[0], s2[1], s2[2], side2, baseSun);
-        const uint8_t cnSun = safeSunLevel(snapshot, cn[0], cn[1], cn[2], cornerSolid, baseSun);
-        const uint8_t s1Block = safeBlockLevel(snapshot, s1[0], s1[1], s1[2], side1, baseBlock);
-        const uint8_t s2Block = safeBlockLevel(snapshot, s2[0], s2[1], s2[2], side2, baseBlock);
-        const uint8_t cnBlock = safeBlockLevel(snapshot, cn[0], cn[1], cn[2], cornerSolid, baseBlock);
+        const uint8_t s1Packed = getSafePackedLightForAO(snapshot, s1[0], s1[1], s1[2], side1, basePacked);
+        const uint8_t s2Packed = getSafePackedLightForAO(snapshot, s2[0], s2[1], s2[2], side2, basePacked);
+        const uint8_t cnPacked = getSafePackedLightForAO(snapshot, cn[0], cn[1], cn[2], cornerSolid, basePacked);
+
+        const uint8_t s1Sun = static_cast<uint8_t>((s1Packed >> 4) & 0x0F);
+        const uint8_t s2Sun = static_cast<uint8_t>((s2Packed >> 4) & 0x0F);
+        const uint8_t cnSun = static_cast<uint8_t>((cnPacked >> 4) & 0x0F);
+        const uint8_t s1Block = static_cast<uint8_t>(s1Packed & 0x0F);
+        const uint8_t s2Block = static_cast<uint8_t>(s2Packed & 0x0F);
+        const uint8_t cnBlock = static_cast<uint8_t>(cnPacked & 0x0F);
 
         if (side1 && side2) {
             data[i].sunLight = static_cast<uint8_t>((baseSun + s1Sun + s2Sun) / 3);
@@ -438,21 +475,11 @@ std::array<VertexLightData, 4> computeFaceVertexData(const SubChunkMeshingSnapsh
 
         data[i].sunNormalized = computeVertexNormalized(baseSun, s1Sun, s2Sun, cnSun, side1, side2);
         data[i].blockNormalized = computeVertexNormalized(baseBlock, s1Block, s2Block, cnBlock, side1, side2);
+        data[i].sunKey = computeVertexLightKey(baseSun, s1Sun, s2Sun, cnSun, side1, side2);
+        data[i].blockKey = computeVertexLightKey(baseBlock, s1Block, s2Block, cnBlock, side1, side2);
     }
 
     return data;
-}
-
-int getFaceTextureIndex(const StateTextureIndices& textures, const int face) {
-    switch (face) {
-        case FACE_TOP:    return textures.texTop;
-        case FACE_BOTTOM: return textures.texBottom;
-        case FACE_FRONT:  return textures.texFront;
-        case FACE_BACK:   return textures.texBack;
-        case FACE_LEFT:   return textures.texLeft;
-        case FACE_RIGHT:  return textures.texRight;
-        default:          return 0;
-    }
 }
 
 const AnimatedTextureRef& getFaceTextureRef(const StateTextureIndices& textures, const int face) {
@@ -502,29 +529,42 @@ uint8_t getFaceUvQuarterTurns(const BlockID blockId, const int face) {
     return 0;
 }
 
+MeshFaceInfo buildMeshFaceInfo(const BlockID blockId, const int face) {
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    const AnimatedTextureRef& faceTexture = getFaceTextureRef(textures, face);
+
+    MeshFaceInfo info;
+    info.tileIndex = std::max(0, faceTexture.firstLayer);
+    info.layer = static_cast<float>(faceTexture.firstLayer);
+    info.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
+    info.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
+    info.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
+    info.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
+    return info;
+}
+
 FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
                                    const BlockID blockId,
                                    const BlockDef& def,
+                                   const MeshBlockInfo& info,
                                    const int x,
                                    const int y,
                                    const int z,
                                    const int face) {
     FaceRenderData renderData;
-    static_cast<void>(def);
-    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
-    const AnimatedTextureRef& faceTexture = getFaceTextureRef(textures, face);
-    renderData.tileIndex = std::max(0, faceTexture.firstLayer);
-    renderData.layer = static_cast<float>(faceTexture.firstLayer);
-    renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
-    renderData.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
-    renderData.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
+    const MeshFaceInfo& faceInfo = info.faces[static_cast<size_t>(face)];
+    renderData.tileIndex = faceInfo.tileIndex;
+    renderData.layer = faceInfo.layer;
+    renderData.animationFrameCount = faceInfo.animationFrameCount;
+    renderData.animationFps = faceInfo.animationFps;
+    renderData.animated = faceInfo.animated;
     renderData.tintKind = blockTintKindFromBiomeTint(def.biomeTint);
     renderData.derivativeMaterialId = def.derivativeMaterialId;
     if (renderData.tintKind != BlockTintKinds::NONE) {
         computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
     }
     renderData.vertices = computeFaceVertexData(snapshot, x, y, z, face);
-    renderData.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
+    renderData.uvQuarterTurns = faceInfo.uvQuarterTurns;
 
     int metric02 = 0;
     int metric13 = 0;
@@ -542,9 +582,14 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     return renderData;
 }
 
-uint16_t quantizeNormalized(const float value) {
-    const float clamped = std::clamp(value, 0.0f, 1.0f);
-    return static_cast<uint16_t>(std::lround(clamped * kNormalizedQuantizationScale));
+FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
+                                   const BlockID blockId,
+                                   const BlockDef& def,
+                                   const int x,
+                                   const int y,
+                                   const int z,
+                                   const int face) {
+    return buildFaceRenderData(snapshot, blockId, def, getMeshBlockInfo(blockId), x, y, z, face);
 }
 
 uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
@@ -585,16 +630,15 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
     key.uvQuarterTurns = renderData.uvQuarterTurns;
     for (size_t i = 0; i < renderData.vertices.size(); ++i) {
         key.ao[i] = renderData.vertices[i].ao;
-        key.sun[i] = quantizeNormalized(renderData.vertices[i].sunNormalized);
-        key.block[i] = quantizeNormalized(renderData.vertices[i].blockNormalized);
+        key.sun[i] = renderData.vertices[i].sunKey;
+        key.block[i] = renderData.vertices[i].blockKey;
     }
     key.hash = computeMergeKeyHash(key);
     return key;
 }
 
-bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
-    return lhs.hash == rhs.hash &&
-           lhs.blockId == rhs.blockId &&
+MECRAFT_FORCEINLINE bool sameMergeKeyPayload(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
+    return lhs.blockId == rhs.blockId &&
            lhs.tileIndex == rhs.tileIndex &&
            lhs.flipDiagonal == rhs.flipDiagonal &&
            lhs.tintKind == rhs.tintKind &&
@@ -605,6 +649,118 @@ bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
            lhs.ao == rhs.ao &&
            lhs.sun == rhs.sun &&
            lhs.block == rhs.block;
+}
+
+MECRAFT_FORCEINLINE bool sameMergeKey(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
+    return lhs.hash == rhs.hash &&
+           sameMergeKeyPayload(lhs, rhs);
+}
+
+MECRAFT_FORCEINLINE bool samePlaneFaceCell(const FaceCell& lhs, const FaceCell& rhs) {
+    return rhs.valid &&
+           lhs.key.hash == rhs.key.hash &&
+           sameMergeKeyPayload(lhs.key, rhs.key);
+}
+
+std::array<MeshBlockInfo, 1u << 16u> g_meshBlockInfoCache{};
+std::once_flag g_meshBlockInfoCacheInitFlag;
+
+MeshBlockInfo buildMeshBlockInfo(const BlockID id) {
+    MeshBlockInfo info;
+    const BlockDef& def = BlockRegistry::getFast(id);
+    info.def = &def;
+    info.isSolid = def.isSolid;
+    info.isTransparent = def.isTransparent;
+    for (int face = 0; face < 6; ++face) {
+        info.faces[static_cast<size_t>(face)] = buildMeshFaceInfo(id, face);
+    }
+
+    if (id == BlockIds::AIR) {
+        info.cubeClass = MeshCubeClass::Air;
+    } else if (def.renderShape != BlockRenderShape::Cube) {
+        info.cubeClass = MeshCubeClass::Other;
+    } else if (def.renderLayer == BlockRenderLayer::Opaque) {
+        info.cubeClass = MeshCubeClass::Opaque;
+    } else if (def.renderLayer == BlockRenderLayer::Transparent) {
+        info.cubeClass = usesWaterRendering(def) ? MeshCubeClass::Water : MeshCubeClass::Transparent;
+    } else if (def.renderLayer == BlockRenderLayer::Cutout) {
+        info.cubeClass = def.cutoutDistanceCull ? MeshCubeClass::CutoutDistance : MeshCubeClass::Cutout;
+    } else {
+        info.cubeClass = MeshCubeClass::Other;
+    }
+    return info;
+}
+
+void ensureMeshBlockInfoCache() {
+    std::call_once(g_meshBlockInfoCacheInitFlag, []() {
+        const std::size_t count = std::min(g_meshBlockInfoCache.size(),
+                                           std::max(BlockRegistry::getBlockCount(),
+                                                    BlockStateRegistry::getStateCount()));
+        for (std::size_t i = 0; i < count; ++i) {
+            g_meshBlockInfoCache[i] = buildMeshBlockInfo(static_cast<BlockID>(i));
+        }
+    });
+}
+
+MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(const BlockID id) {
+    return g_meshBlockInfoCache[id];
+}
+
+struct SubChunkMeshClassPresence {
+    bool hasOpaqueCube = false;
+    bool hasTransparentCube = false;
+    bool hasWaterCube = false;
+    bool hasCutoutCube = false;
+    bool hasCutoutDistanceCube = false;
+    bool hasCustomBlock = false;
+    bool hasFluidLayer = false;
+    bool hasAnyWater = false;
+};
+
+SubChunkMeshClassPresence scanMeshClassPresence(const SubChunkMeshingSnapshot& snapshot) {
+    SubChunkMeshClassPresence presence;
+    for (std::size_t i = 0; i < SC_BLOCK_COUNT; ++i) {
+        const BlockID blockId = snapshot.blocks[i];
+        if (blockId != 0) {
+            switch (getMeshBlockInfo(blockId).cubeClass) {
+                case MeshCubeClass::Opaque:
+                    presence.hasOpaqueCube = true;
+                    break;
+                case MeshCubeClass::Transparent:
+                    presence.hasTransparentCube = true;
+                    break;
+                case MeshCubeClass::Water:
+                    presence.hasWaterCube = true;
+                    presence.hasAnyWater = true;
+                    break;
+                case MeshCubeClass::Cutout:
+                    presence.hasCutoutCube = true;
+                    break;
+                case MeshCubeClass::CutoutDistance:
+                    presence.hasCutoutDistanceCube = true;
+                    break;
+                case MeshCubeClass::Air:
+                case MeshCubeClass::Other:
+                    presence.hasCustomBlock = true;
+                    break;
+                default:
+                    break;
+            }
+
+            if (!presence.hasAnyWater && FluidState::isWater(blockId)) {
+                presence.hasAnyWater = true;
+            }
+        }
+
+        const BlockID fluidId = snapshot.fluidBlocks[i];
+        if (fluidId != 0) {
+            presence.hasFluidLayer = true;
+            if (FluidState::isWater(fluidId)) {
+                presence.hasAnyWater = true;
+            }
+        }
+    }
+    return presence;
 }
 
 bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
@@ -624,13 +780,13 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
         return true;
     }
 
-    const BlockDef& neighborDef = BlockRegistry::getFast(neighborId);
+    const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborId);
 
-    if (!neighborDef.isSolid) {
+    if (!neighborInfo.isSolid) {
         return true;
     }
 
-    if (neighborDef.isTransparent) {
+    if (neighborInfo.isTransparent) {
         if (!currentDef.isTransparent) {
             return true;
         }
@@ -638,6 +794,19 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
     }
 
     return false;
+}
+
+MECRAFT_FORCEINLINE bool shouldRenderOpaqueCubeFace(const SubChunkMeshingSnapshot& snapshot,
+                                                    const int nx,
+                                                    const int ny,
+                                                    const int nz) {
+    const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
+    if (neighborId == 0) {
+        return true;
+    }
+
+    const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborId);
+    return !neighborInfo.isSolid || neighborInfo.isTransparent;
 }
 
 // ======================== Snapshot capture helpers ========================
@@ -1312,8 +1481,9 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
     const AnimatedTextureRef* waterTexture = findNamedWaterTexture(def, flowing ? "flow" : "still");
 
     const glm::vec3 pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
     const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
-        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
         if (waterTexture != nullptr) {
             applyWaterTextureRef(renderData, *waterTexture);
         }
@@ -1403,36 +1573,6 @@ std::vector<BlockVertex>& cutoutTargetFor(ChunkMeshData& meshData, const BlockDe
     return def.cutoutDistanceCull ? meshData.cutoutDistanceVertices : meshData.cutoutVertices;
 }
 
-bool populateOpaqueFaceCell(const SubChunkMeshingSnapshot& snapshot,
-                            const int face,
-                            const int x,
-                            const int y,
-                            const int z,
-                            FaceCell& outCell) {
-    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-    if (blockId == 0) {
-        return false;
-    }
-
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isOpaqueCubeCandidate(def)) {
-        return false;
-    }
-
-    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
-        return false;
-    }
-
-    outCell.valid = true;
-    outCell.x = x;
-    outCell.y = y;
-    outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
-    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
-    return true;
-}
-
 bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapshot,
                                           const int face,
                                           const int x,
@@ -1445,13 +1585,12 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isTransparentCubeCandidate(def)) {
+    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    const MeshCubeClass expectedClass = waterTarget ? MeshCubeClass::Water : MeshCubeClass::Transparent;
+    if (info.cubeClass != expectedClass) {
         return false;
     }
-    if (usesWaterRendering(def) != waterTarget) {
-        return false;
-    }
+    const BlockDef& def = *info.def;
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
     if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
@@ -1462,7 +1601,7 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
     outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
     return true;
 }
@@ -1496,10 +1635,11 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isCutoutCubeCandidate(def) || def.cutoutDistanceCull) {
+    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    if (info.cubeClass != MeshCubeClass::Cutout) {
         return false;
     }
+    const BlockDef& def = *info.def;
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
     if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
@@ -1510,7 +1650,7 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
     outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
     return true;
 }
@@ -1526,10 +1666,11 @@ bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isCutoutCubeCandidate(def) || !def.cutoutDistanceCull) {
+    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    if (info.cubeClass != MeshCubeClass::CutoutDistance) {
         return false;
     }
+    const BlockDef& def = *info.def;
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
     if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
@@ -1540,9 +1681,83 @@ bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
     outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
     return true;
+}
+
+void emitGreedyPlaneRuns(ChunkMeshData& meshData,
+                         std::vector<BlockVertex>& targetVertices,
+                         const int face,
+                         const int width,
+                         const int height,
+                         const std::array<FaceCell, kMaxGreedyPlaneSize>& plane,
+                         std::array<uint8_t, kMaxGreedyPlaneSize>& consumed,
+                         uint32_t& faceCountAfterGreedy) {
+    const bool debugDisableGreedy = g_debugDisableGreedyMeshing.load(std::memory_order_relaxed);
+
+    for (int v = 0; v < height; ++v) {
+        for (int u = 0; u < width; ++u) {
+            const size_t startIndex = static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width);
+            if (consumed[startIndex] != 0 || !plane[startIndex].valid) {
+                continue;
+            }
+
+            const FaceCell& startCell = plane[startIndex];
+
+            int runWidth = 1;
+            while (u + runWidth < width) {
+                const size_t nextIndex = static_cast<size_t>(u + runWidth) + static_cast<size_t>(v) * static_cast<size_t>(width);
+                if (consumed[nextIndex] != 0 || !samePlaneFaceCell(startCell, plane[nextIndex])) {
+                    break;
+                }
+                ++runWidth;
+            }
+
+            int runHeight = 1;
+            bool canGrow = true;
+            while (v + runHeight < height && canGrow) {
+                for (int rowX = 0; rowX < runWidth; ++rowX) {
+                    const size_t candidateIndex = static_cast<size_t>(u + rowX) +
+                                                  static_cast<size_t>(v + runHeight) * static_cast<size_t>(width);
+                    if (consumed[candidateIndex] != 0 || !samePlaneFaceCell(startCell, plane[candidateIndex])) {
+                        canGrow = false;
+                        break;
+                    }
+                }
+                if (canGrow) {
+                    ++runHeight;
+                }
+            }
+
+            for (int dy = 0; dy < runHeight; ++dy) {
+                for (int dx = 0; dx < runWidth; ++dx) {
+                    consumed[static_cast<size_t>(u + dx) +
+                             static_cast<size_t>(v + dy) * static_cast<size_t>(width)] = 1;
+                }
+            }
+
+            if (debugDisableGreedy) {
+                for (int dy = 0; dy < runHeight; ++dy) {
+                    for (int dx = 0; dx < runWidth; ++dx) {
+                        const size_t cellIndex = static_cast<size_t>(u + dx) +
+                                                 static_cast<size_t>(v + dy) * static_cast<size_t>(width);
+                        const FaceCell& unitCell = plane[cellIndex];
+                        const glm::vec3 unitPos(unitCell.x, unitCell.y, unitCell.z);
+                        emitUnitFace(targetVertices,
+                                     unitPos,
+                                     face,
+                                     unitCell.renderData);
+                        expandBounds(meshData, unitPos, unitPos + glm::vec3(1.0f));
+                        ++faceCountAfterGreedy;
+                    }
+                }
+            } else {
+                emitGreedyFace(targetVertices, meshData, startCell, face, runWidth, runHeight);
+                ++faceCountAfterGreedy;
+            }
+        }
+    }
 }
 
 template <typename PopulateCellFn>
@@ -1552,10 +1767,8 @@ void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                           uint32_t& faceCountBeforeGreedy,
                           uint32_t& faceCountAfterGreedy,
                           PopulateCellFn&& populateCell) {
-    // Max plane size for sub-chunk: 16 * 16 = 256 FaceCells
-    constexpr size_t kMaxPlaneSize = static_cast<size_t>(SubChunk::SIZE) * SubChunk::SIZE;
-    std::vector<FaceCell> plane(kMaxPlaneSize);
-    std::vector<bool> consumed(kMaxPlaneSize, false);
+    std::array<FaceCell, kMaxGreedyPlaneSize> plane{};
+    std::array<uint8_t, kMaxGreedyPlaneSize> consumed{};
 
     auto buildPlane = [&](const int face, const int width, const int height, const int slices, auto&& mapper) {
         const size_t planeSize = static_cast<size_t>(width) * static_cast<size_t>(height);
@@ -1563,7 +1776,7 @@ void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
         for (int slice = 0; slice < slices; ++slice) {
             for (size_t i = 0; i < planeSize; ++i) {
                 plane[i].valid = false;
-                consumed[i] = false;
+                consumed[i] = 0;
             }
 
             for (int v = 0; v < height; ++v) {
@@ -1579,72 +1792,14 @@ void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 }
             }
 
-            for (int v = 0; v < height; ++v) {
-                for (int u = 0; u < width; ++u) {
-                    const size_t startIndex = static_cast<size_t>(u) + static_cast<size_t>(v) * static_cast<size_t>(width);
-                    if (consumed[startIndex] || !plane[startIndex].valid) {
-                        continue;
-                    }
-
-                    const uint64_t startHash = plane[startIndex].key.hash;
-
-                    int runWidth = 1;
-                    while (u + runWidth < width) {
-                        const size_t nextIndex = static_cast<size_t>(u + runWidth) + static_cast<size_t>(v) * static_cast<size_t>(width);
-                        if (consumed[nextIndex] || !plane[nextIndex].valid ||
-                            plane[nextIndex].key.hash != startHash ||
-                            !sameMergeKey(plane[startIndex].key, plane[nextIndex].key)) {
-                            break;
-                        }
-                        ++runWidth;
-                    }
-
-                    int runHeight = 1;
-                    bool canGrow = true;
-                    while (v + runHeight < height && canGrow) {
-                        for (int rowX = 0; rowX < runWidth; ++rowX) {
-                            const size_t candidateIndex = static_cast<size_t>(u + rowX) +
-                                                          static_cast<size_t>(v + runHeight) * static_cast<size_t>(width);
-                            if (consumed[candidateIndex] || !plane[candidateIndex].valid ||
-                                plane[candidateIndex].key.hash != startHash ||
-                                !sameMergeKey(plane[startIndex].key, plane[candidateIndex].key)) {
-                                canGrow = false;
-                                break;
-                            }
-                        }
-                        if (canGrow) {
-                            ++runHeight;
-                        }
-                    }
-
-                    for (int dy = 0; dy < runHeight; ++dy) {
-                        for (int dx = 0; dx < runWidth; ++dx) {
-                            consumed[static_cast<size_t>(u + dx) +
-                                     static_cast<size_t>(v + dy) * static_cast<size_t>(width)] = true;
-                        }
-                    }
-
-                    if (g_debugDisableGreedyMeshing.load(std::memory_order_relaxed)) {
-                        for (int dy = 0; dy < runHeight; ++dy) {
-                            for (int dx = 0; dx < runWidth; ++dx) {
-                                const size_t cellIndex = static_cast<size_t>(u + dx) +
-                                                         static_cast<size_t>(v + dy) * static_cast<size_t>(width);
-                                const FaceCell& unitCell = plane[cellIndex];
-                                const glm::vec3 unitPos(unitCell.x, unitCell.y, unitCell.z);
-                                emitUnitFace(targetVertices,
-                                             unitPos,
-                                             face,
-                                             unitCell.renderData);
-                                expandBounds(meshData, unitPos, unitPos + glm::vec3(1.0f));
-                                ++faceCountAfterGreedy;
-                            }
-                        }
-                    } else {
-                        emitGreedyFace(targetVertices, meshData, plane[startIndex], face, runWidth, runHeight);
-                        ++faceCountAfterGreedy;
-                    }
-                }
-            }
+            emitGreedyPlaneRuns(meshData,
+                                targetVertices,
+                                face,
+                                width,
+                                height,
+                                plane,
+                                consumed,
+                                faceCountAfterGreedy);
         }
     };
 
@@ -1676,43 +1831,135 @@ void buildCubeGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                });
 }
 
-void buildOpaqueGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
-    buildCubeGreedyFaces(snapshot,
-                         meshData,
-                         meshData.opaqueVertices,
-                         meshData.opaqueFaceCountBeforeGreedy,
-                         meshData.opaqueFaceCountAfterGreedy,
-                         populateOpaqueFaceCell);
+template <int Face, int NormalX, int NormalY, int NormalZ>
+void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot,
+                            ChunkMeshData& meshData,
+                            std::array<FaceCell, kMaxGreedyPlaneSize>& plane,
+                            std::array<uint8_t, kMaxGreedyPlaneSize>& consumed) {
+    constexpr int S = SubChunk::SIZE;
+    constexpr size_t planeSize = static_cast<size_t>(S) * S;
+
+    for (int slice = 0; slice < S; ++slice) {
+        for (size_t i = 0; i < planeSize; ++i) {
+            plane[i].valid = false;
+            consumed[i] = 0;
+        }
+
+        for (int v = 0; v < S; ++v) {
+            for (int u = 0; u < S; ++u) {
+                int x = 0;
+                int y = 0;
+                int z = 0;
+                if constexpr (Face == FACE_TOP || Face == FACE_BOTTOM) {
+                    x = u;
+                    y = slice;
+                    z = v;
+                } else if constexpr (Face == FACE_FRONT || Face == FACE_BACK) {
+                    x = u;
+                    y = v;
+                    z = slice;
+                } else {
+                    x = slice;
+                    y = v;
+                    z = u;
+                }
+
+                const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
+                if (blockId == 0) {
+                    continue;
+                }
+
+                const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+                if (info.cubeClass != MeshCubeClass::Opaque) {
+                    continue;
+                }
+
+                if (!shouldRenderOpaqueCubeFace(snapshot, x + NormalX, y + NormalY, z + NormalZ)) {
+                    continue;
+                }
+
+                FaceCell& cell = plane[static_cast<size_t>(u) + static_cast<size_t>(v) * S];
+                cell.valid = true;
+                cell.x = x;
+                cell.y = y;
+                cell.z = z;
+                cell.renderData = buildFaceRenderData(snapshot, blockId, *info.def, info, x, y, z, Face);
+                cell.key = buildFaceMergeKey(blockId, cell.renderData);
+                ++meshData.opaqueFaceCountBeforeGreedy;
+            }
+        }
+
+        emitGreedyPlaneRuns(meshData,
+                            meshData.opaqueVertices,
+                            Face,
+                            S,
+                            S,
+                            plane,
+                            consumed,
+                            meshData.opaqueFaceCountAfterGreedy);
+    }
 }
 
-void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
-    buildCubeGreedyFaces(snapshot,
-                         meshData,
-                         meshData.transparentVertices,
-                         meshData.transparentFaceCountBeforeGreedy,
-                         meshData.transparentFaceCountAfterGreedy,
-                         populateTransparentFaceCell);
-    buildCubeGreedyFaces(snapshot,
-                         meshData,
-                         meshData.waterVertices,
-                         meshData.transparentFaceCountBeforeGreedy,
-                         meshData.transparentFaceCountAfterGreedy,
-                         populateWaterMaterialFaceCell);
+void buildOpaqueGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
+                            ChunkMeshData& meshData,
+                            const SubChunkMeshClassPresence& presence) {
+    if (!presence.hasOpaqueCube) {
+        return;
+    }
+
+    std::array<FaceCell, kMaxGreedyPlaneSize> plane{};
+    std::array<uint8_t, kMaxGreedyPlaneSize> consumed{};
+
+    buildOpaqueGreedyPlane<FACE_TOP, 0, 1, 0>(snapshot, meshData, plane, consumed);
+    buildOpaqueGreedyPlane<FACE_BOTTOM, 0, -1, 0>(snapshot, meshData, plane, consumed);
+    buildOpaqueGreedyPlane<FACE_FRONT, 0, 0, 1>(snapshot, meshData, plane, consumed);
+    buildOpaqueGreedyPlane<FACE_BACK, 0, 0, -1>(snapshot, meshData, plane, consumed);
+    buildOpaqueGreedyPlane<FACE_LEFT, -1, 0, 0>(snapshot, meshData, plane, consumed);
+    buildOpaqueGreedyPlane<FACE_RIGHT, 1, 0, 0>(snapshot, meshData, plane, consumed);
 }
 
-void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
-    buildCubeGreedyFaces(snapshot,
-                         meshData,
-                         meshData.cutoutVertices,
-                         meshData.transparentFaceCountBeforeGreedy,
-                         meshData.transparentFaceCountAfterGreedy,
-                         populateCutoutFaceCell);
-    buildCubeGreedyFaces(snapshot,
-                         meshData,
-                         meshData.cutoutDistanceVertices,
-                         meshData.transparentFaceCountBeforeGreedy,
-                         meshData.transparentFaceCountAfterGreedy,
-                         populateCutoutDistanceFaceCell);
+void buildTransparentGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
+                                 ChunkMeshData& meshData,
+                                 const SubChunkMeshClassPresence& presence) {
+    if (presence.hasTransparentCube) {
+        buildCubeGreedyFaces(snapshot,
+                             meshData,
+                             meshData.transparentVertices,
+                             meshData.transparentFaceCountBeforeGreedy,
+                             meshData.transparentFaceCountAfterGreedy,
+                             populateTransparentFaceCell);
+    }
+
+    if (presence.hasWaterCube) {
+        buildCubeGreedyFaces(snapshot,
+                             meshData,
+                             meshData.waterVertices,
+                             meshData.transparentFaceCountBeforeGreedy,
+                             meshData.transparentFaceCountAfterGreedy,
+                             populateWaterMaterialFaceCell);
+    }
+}
+
+void buildCutoutGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
+                            ChunkMeshData& meshData,
+                            const SubChunkMeshClassPresence& presence) {
+    if (presence.hasCutoutCube) {
+        buildCubeGreedyFaces(snapshot,
+                             meshData,
+                             meshData.cutoutVertices,
+                             meshData.transparentFaceCountBeforeGreedy,
+                             meshData.transparentFaceCountAfterGreedy,
+                             populateCutoutFaceCell);
+    }
+
+    if (presence.hasCutoutDistanceCube) {
+        buildCubeGreedyFaces(snapshot,
+                             meshData,
+                             meshData.cutoutDistanceVertices,
+                             meshData.transparentFaceCountBeforeGreedy,
+                             meshData.transparentFaceCountAfterGreedy,
+                             populateCutoutDistanceFaceCell);
+    }
 }
 
 using WaterTopMask = std::array<bool, SC_BLOCK_COUNT>;
@@ -1798,7 +2045,7 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 cell.z = z;
                 cell.height = height;
                 cell.heightKey = heightKey;
-                cell.renderData = buildFaceRenderData(snapshot, blockId, *def, x, y, z, FACE_TOP);
+                cell.renderData = buildFaceRenderData(snapshot, blockId, *def, getMeshBlockInfo(blockId), x, y, z, FACE_TOP);
                 if (const AnimatedTextureRef* waterTexture = findNamedWaterTexture(*def, "still")) {
                     applyWaterTextureRef(cell.renderData, *waterTexture);
                 }
@@ -2722,6 +2969,8 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
 }
 
 ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot) {
+    ensureMeshBlockInfoCache();
+
     const auto startTime = std::chrono::steady_clock::now();
 
     ChunkMeshData meshData;
@@ -2730,60 +2979,68 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
     meshData.cutoutDistanceVertices.reserve(512);
     meshData.transparentVertices.reserve(1024);
 
-    buildOpaqueGreedyFaces(snapshot, meshData);
-    buildCutoutGreedyFaces(snapshot, meshData);
-    buildTransparentGreedyFaces(snapshot, meshData);
+    const SubChunkMeshClassPresence presence = scanMeshClassPresence(snapshot);
+
+    buildOpaqueGreedyFaces(snapshot, meshData, presence);
+    buildCutoutGreedyFaces(snapshot, meshData, presence);
+    buildTransparentGreedyFaces(snapshot, meshData, presence);
     WaterTopMask mergedWaterTopFaces{};
-    buildStillWaterTopGreedyFaces(snapshot, meshData, mergedWaterTopFaces);
+    if (presence.hasAnyWater) {
+        buildStillWaterTopGreedyFaces(snapshot, meshData, mergedWaterTopFaces);
+    } else {
+        mergedWaterTopFaces.fill(false);
+    }
 
-    // Non-cube blocks (cross shapes, etc.) and waterlogged fluid rendering
-    constexpr int S = SubChunk::SIZE;
-    for (int y = 0; y < S; ++y) {
-        for (int z = 0; z < S; ++z) {
-            for (int x = 0; x < S; ++x) {
-                const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-                const BlockID fluidId = snapshot.fluidBlocks[scToIndex(x, y, z)];
+    if (presence.hasCustomBlock || presence.hasFluidLayer) {
+        // Non-cube blocks (cross shapes, etc.) and waterlogged fluid rendering
+        constexpr int S = SubChunk::SIZE;
+        for (int y = 0; y < S; ++y) {
+            for (int z = 0; z < S; ++z) {
+                for (int x = 0; x < S; ++x) {
+                    const std::size_t index = scToIndex(x, y, z);
+                    const BlockID blockId = snapshot.blocks[index];
+                    const BlockID fluidId = snapshot.fluidBlocks[index];
 
-                // Render the block (if any)
-                if (blockId != 0) {
-                    const BlockDef& def = BlockRegistry::getFast(blockId);
+                    // Render the block (if any)
+                    if (blockId != 0) {
+                        const MeshBlockInfo& info = getMeshBlockInfo(blockId);
 
-                    if (!isOpaqueCubeCandidate(def) &&
-                        !isCutoutCubeCandidate(def) &&
-                        !isTransparentCubeCandidate(def)) {
-                        MeshBuilderFn builder = MeshBuilderRegistry::getBuilder(def.renderShapeTag);
-                        if (builder == nullptr) {
-                            builder = &ChunkMeshBuilders::buildUnitFaces;
+                        if (info.cubeClass == MeshCubeClass::Other) {
+                            const BlockDef& def = *info.def;
+                            MeshBuilderFn builder = MeshBuilderRegistry::getBuilder(def.renderShapeTag);
+                            if (builder == nullptr) {
+                                builder = &ChunkMeshBuilders::buildUnitFaces;
+                            }
+                            if (FluidState::isWater(blockId)) {
+                                buildWaterSkippingTop(meshData,
+                                                      snapshot,
+                                                      blockId,
+                                                      def,
+                                                      x,
+                                                      y,
+                                                      z,
+                                                      mergedWaterTopFaces[index]);
+                            } else {
+                                builder(meshData, snapshot, blockId, def, x, y, z);
+                            }
                         }
-                        if (FluidState::isWater(blockId)) {
+                    }
+
+                    // Render waterlogged fluid overlay
+                    if (fluidId != 0 && FluidState::decode(fluidId).kind != FluidKind::None) {
+                        // Render water for waterlogged blocks and tolerate fluid-only cells.
+                        // Pure water in the block layer is already handled by the water builder above.
+                        if (FluidState::decode(blockId).kind == FluidKind::None) {
+                            const BlockDef& fluidDef = *getMeshBlockInfo(fluidId).def;
                             buildWaterSkippingTop(meshData,
                                                   snapshot,
-                                                  blockId,
-                                                  def,
+                                                  fluidId,
+                                                  fluidDef,
                                                   x,
                                                   y,
                                                   z,
-                                                  mergedWaterTopFaces[scToIndex(x, y, z)]);
-                        } else {
-                            builder(meshData, snapshot, blockId, def, x, y, z);
+                                                  mergedWaterTopFaces[index]);
                         }
-                    }
-                }
-
-                // Render waterlogged fluid overlay
-                if (fluidId != 0 && FluidState::decode(fluidId).kind != FluidKind::None) {
-                    // Render water for waterlogged blocks and tolerate fluid-only cells.
-                    // Pure water in the block layer is already handled by the water builder above.
-                    if (FluidState::decode(blockId).kind == FluidKind::None) {
-                        const BlockDef& fluidDef = BlockRegistry::getFast(fluidId);
-                        buildWaterSkippingTop(meshData,
-                                              snapshot,
-                                              fluidId,
-                                              fluidDef,
-                                              x,
-                                              y,
-                                              z,
-                                              mergedWaterTopFaces[scToIndex(x, y, z)]);
                     }
                 }
             }

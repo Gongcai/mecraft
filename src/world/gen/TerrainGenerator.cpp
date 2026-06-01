@@ -17,6 +17,14 @@
 #define MECRAFT_HAS_SSE2 1
 #endif
 
+#if defined(_MSC_VER)
+#define MECRAFT_FORCEINLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define MECRAFT_FORCEINLINE inline __attribute__((always_inline))
+#else
+#define MECRAFT_FORCEINLINE inline
+#endif
+
 namespace {
 
 double saturate(double v) {
@@ -34,7 +42,7 @@ double smoothRange(double v, double lo, double hi) {
     return smoothStep(saturate((v - lo) / (hi - lo)));
 }
 
-uint32_t hash32(uint32_t x) {
+MECRAFT_FORCEINLINE uint32_t hash32(uint32_t x) {
     x ^= x >> 16;
     x *= 0x7feb352dU;
     x ^= x >> 15;
@@ -72,8 +80,9 @@ BlockID naturalWaterState() {
     return FluidState::makeWater(0, false);
 }
 
-double hashToUnit(uint32_t value) {
-    return static_cast<double>(value) / static_cast<double>(0xFFFFFFFFU);
+MECRAFT_FORCEINLINE double hashToUnit(uint32_t value) {
+    constexpr double kInvUint32Max = 1.0 / 4294967295.0;
+    return static_cast<double>(value) * kInvUint32Max;
 }
 
 uint32_t probabilityToCutoff(double probability) {

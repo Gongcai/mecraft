@@ -33,7 +33,7 @@ public:
     void onBlockChanged(int wx, int wy, int wz, BlockID oldId, BlockID newId);
 
     void submitJobs(const glm::vec3& cameraPos, int submitBudget);
-    void drainCompleted(World& world, int mergeBudget = 32);
+    void drainCompleted(World& world, int mergeBudget = 32, float timeBudgetMs = 1.0f);
 
     [[nodiscard]] LightFrameStats getFrameStats() const;
     [[nodiscard]] int countDirtyChunks() const;

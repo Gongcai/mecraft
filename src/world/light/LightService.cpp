@@ -397,7 +397,7 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
     }
 }
 
-void LightService::drainCompleted(World& world, const int mergeBudget) {
+void LightService::drainCompleted(World& world, const int mergeBudget, const float timeBudgetMs) {
     if (!m_running) {
         return;
     }
@@ -409,6 +409,12 @@ void LightService::drainCompleted(World& world, const int mergeBudget) {
     auto mergeStart = std::chrono::steady_clock::now();
     int merged = 0;
     while (merged < mergeBudget) {
+        const float elapsedMs = static_cast<float>(std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - mergeStart).count());
+        if (elapsedMs >= timeBudgetMs) {
+            break;
+        }
+
         CompletedTicket ticket;
         {
             std::lock_guard<std::mutex> lock(m_completedMutex);

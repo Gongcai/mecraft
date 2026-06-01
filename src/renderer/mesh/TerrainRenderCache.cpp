@@ -412,7 +412,14 @@ void TerrainRenderCache::submitMeshingJobs(const World& world, const glm::vec3& 
                       candidates.end(),
                       candidateLess);
 
+    const auto submitStartTime = std::chrono::steady_clock::now();
     for (int index = 0; index < submitCount; ++index) {
+        const double elapsedMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - submitStartTime).count();
+        if (elapsedMs >= static_cast<double>(m_meshingSubmitTimeBudgetMs)) {
+            break;
+        }
+
         MeshingCandidate& candidate = candidates[static_cast<size_t>(index)];
         if (candidate.chunk == nullptr) {
             continue;
@@ -474,7 +481,8 @@ void TerrainRenderCache::drainMeshingResults(const World& world) {
     // Phase 2: Process from deferred buffer respecting budgets.
     // Over-budget results stay in the buffer for the next frame.
     size_t processIdx = 0;
-    while (processIdx < m_deferredMeshResults.size()) {
+    while (processIdx < m_deferredMeshResults.size() &&
+           uploadedCount < m_meshingDrainBudget) {
         const double elapsedMs = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - drainStartTime).count();
         if (elapsedMs >= m_meshingDrainTimeBudgetMs) {

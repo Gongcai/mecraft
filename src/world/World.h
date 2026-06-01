@@ -96,7 +96,10 @@ private:
     std::mutex m_completedGenMutex;
     std::vector<std::shared_ptr<Chunk>> m_completedGenQueue;
 
-    static constexpr int kMaxGenerationInFlight = 4;
+    static constexpr int kMaxGenerationInFlight = 3;
+    static constexpr int kMaxChunkLoadSubmitsPerFrame = 2;
+    static constexpr int kMaxChunkLoadFinalizesPerFrame = 1;
+    static constexpr double kChunkLoadFinalizeTimeBudgetMs = 1.0;
 };
 
 #endif //MECRAFT_WORLD_H

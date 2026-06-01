@@ -1,6 +1,8 @@
 #include "World.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <iterator>
 #include "engine//platform/Time.h"
 #include "block/BlockSelection.h"
 #include "fluid/FluidRegistry.h"
@@ -149,10 +151,8 @@ void World::update(const glm::vec3& playerPos) {
         unloadChunk(cx, cz);
     }
 
-    // Submit chunk generation jobs to thread pool (async terrain generation).
-    constexpr int kMaxChunkLoadsPerFrame = 4;
     int submitted = 0;
-    while (!m_loadQueue.empty() && submitted < kMaxChunkLoadsPerFrame) {
+    while (!m_loadQueue.empty() && submitted < kMaxChunkLoadSubmitsPerFrame) {
         if (static_cast<int>(m_generationInFlight.size()) >= kMaxGenerationInFlight) {
             break;
         }
@@ -163,17 +163,41 @@ void World::update(const glm::vec3& playerPos) {
         submitted++;
     }
 
-    // Finalize completed generation results on the main thread.
+    // Finalize completed generation results on the main thread with a small
+    // frame budget. Neighbor linking and initial light queuing can dirty many
+    // chunks, so batching every completed generation result at once causes
+    // visible frame spikes while moving into new terrain.
     {
         std::vector<std::shared_ptr<Chunk>> completed;
         {
             std::lock_guard<std::mutex> lock(m_completedGenMutex);
             completed.swap(m_completedGenQueue);
         }
+        const auto finalizeStart = std::chrono::steady_clock::now();
+        std::vector<std::shared_ptr<Chunk>> deferred;
+        deferred.reserve(completed.size());
+
+        int finalized = 0;
         for (auto& chunk : completed) {
+            const double elapsedMs = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - finalizeStart).count();
+            if (finalized >= kMaxChunkLoadFinalizesPerFrame ||
+                elapsedMs >= kChunkLoadFinalizeTimeBudgetMs) {
+                deferred.push_back(std::move(chunk));
+                continue;
+            }
+
             const int64_t key = chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
             m_generationInFlight.erase(key);
             finalizeChunkLoad(std::move(chunk));
+            ++finalized;
+        }
+
+        if (!deferred.empty()) {
+            std::lock_guard<std::mutex> lock(m_completedGenMutex);
+            m_completedGenQueue.insert(m_completedGenQueue.begin(),
+                                       std::make_move_iterator(deferred.begin()),
+                                       std::make_move_iterator(deferred.end()));
         }
     }
 
@@ -182,20 +206,21 @@ void World::update(const glm::vec3& playerPos) {
         const int completedDepth = m_lightService->completedCount();
 
         // Scale submit budget with load, back off when the completed queue is deep.
-        int submitBudget = 8;
+        int submitBudget = 6;
         if (completedDepth > 48) {
             submitBudget = 0;                // backpressure: let drain catch up
         } else if (dirtyCount > 50) {
-            submitBudget = 16;               // many dirty chunks, increase throughput
+            submitBudget = 10;               // many dirty chunks, increase throughput
         } else if (dirtyCount < 5) {
-            submitBudget = 4;                // low load, conserve resources
+            submitBudget = 3;                // low load, conserve resources
         }
 
         // Drain more aggressively when results are piling up.
-        int mergeBudget = (completedDepth > 32) ? 64 : 32;
+        const int mergeBudget = (completedDepth > 32) ? 12 : 6;
+        const float mergeTimeBudgetMs = (completedDepth > 32) ? 1.5f : 0.75f;
 
         m_lightService->submitJobs(playerPos, submitBudget);
-        m_lightService->drainCompleted(*this, mergeBudget);
+        m_lightService->drainCompleted(*this, mergeBudget, mergeTimeBudgetMs);
     }
 }
 
