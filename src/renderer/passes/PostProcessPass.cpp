@@ -34,6 +34,7 @@ void PostProcessPass::shutdown() {
     m_blitShader = nullptr;
     m_noiseTexture = 0;
     m_sceneCaptured = false;
+    m_renderCompositeToTexture = false;
     m_targetWidth = 0;
     m_targetHeight = 0;
 }
@@ -162,10 +163,14 @@ void PostProcessPass::execute(const FrameContext& ctx, const RenderSettings& set
 // --- Legacy API ---
 
 void PostProcessPass::beginScene(const Window& window) {
+    beginScene(window.getWidth(), window.getHeight());
+}
+
+void PostProcessPass::beginScene(const int requestedWidth, const int requestedHeight) {
     m_sceneCaptured = false;
 
-    const int width = window.getWidth();
-    const int height = window.getHeight();
+    const int width = requestedWidth;
+    const int height = requestedHeight;
     if (m_postProcessShader == nullptr || width <= 0 || height <= 0) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, std::max(1, width), std::max(1, height));
@@ -208,13 +213,41 @@ void PostProcessPass::endSceneAndComposite(const Window& window, const float fra
 
     static_cast<void>(weatherMaskTex);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
+    bindBackbufferOutput(width, height);
 
     renderComposite(gbufDepthTex, weatherMaskTex, hasBloom);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+}
+
+GLuint PostProcessPass::endSceneAndCompositeToTexture(const Window& window, const float frameTime,
+                                                       GLuint gbufDepthTex,
+                                                       GLuint weatherMaskTex) {
+    static_cast<void>(window);
+    const int width = std::max(1, m_targetWidth);
+    const int height = std::max(1, m_targetHeight);
+
+    if (!m_sceneCaptured || m_postProcessShader == nullptr || m_fullscreenVao == 0 ||
+        !ensureCompositeTarget(width, height)) {
+        return 0;
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    const float resolvedExposure = updateAutoExposure(frameTime);
+    static_cast<void>(resolvedExposure);
+
+    const bool hasBloom = renderBloom(m_effects.bloomMipCount);
+
+    bindCompositeOutput(width, height);
+    renderComposite(gbufDepthTex, weatherMaskTex, hasBloom);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+    return m_compositeTex;
 }
 
 void PostProcessPass::blitSceneToBackbuffer(const Window& window) {
@@ -245,6 +278,38 @@ void PostProcessPass::blitSceneToBackbuffer(const Window& window) {
     glBindVertexArray(0);
 
     glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void PostProcessPass::blitTextureToBackbuffer(const GLuint texture, const Window& window) {
+    const int width = std::max(1, window.getWidth());
+    const int height = std::max(1, window.getHeight());
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, width, height);
+
+    if (texture == 0 || m_blitShader == nullptr || m_fullscreenVao == 0) {
+        return;
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_blitShader->use();
+    m_blitShader->setInt("uInputTex", 0);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glBindVertexArray(m_fullscreenVao);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glBindVertexArray(0);
+
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glDepthMask(GL_TRUE);
@@ -648,6 +713,58 @@ bool PostProcessPass::ensureExposureReadbackBuffers() {
     return true;
 }
 
+bool PostProcessPass::ensureCompositeTarget(const int width, const int height) {
+    const int targetWidth = std::max(1, width);
+    const int targetHeight = std::max(1, height);
+    if (m_compositeFbo != 0 && m_compositeTex != 0 &&
+        m_targetWidth == targetWidth && m_targetHeight == targetHeight) {
+        return true;
+    }
+    if (m_compositeTex != 0) {
+        glDeleteTextures(1, &m_compositeTex);
+        m_compositeTex = 0;
+    }
+    if (m_compositeFbo != 0) {
+        glDeleteFramebuffers(1, &m_compositeFbo);
+        m_compositeFbo = 0;
+    }
+
+    glCreateFramebuffers(1, &m_compositeFbo);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_compositeTex);
+    glTextureStorage2D(m_compositeTex, 1, GL_RGBA8, targetWidth, targetHeight);
+    glTextureParameteri(m_compositeTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(m_compositeTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(m_compositeTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_compositeTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(m_compositeFbo, GL_COLOR_ATTACHMENT0, m_compositeTex, 0);
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffers(m_compositeFbo, 1, &drawBuffer);
+    if (glCheckNamedFramebufferStatus(m_compositeFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        if (m_compositeTex != 0) {
+            glDeleteTextures(1, &m_compositeTex);
+            m_compositeTex = 0;
+        }
+        if (m_compositeFbo != 0) {
+            glDeleteFramebuffers(1, &m_compositeFbo);
+            m_compositeFbo = 0;
+        }
+        return false;
+    }
+    return true;
+}
+
+void PostProcessPass::bindCompositeOutput(const int width, const int height) {
+    m_renderCompositeToTexture = true;
+    glBindFramebuffer(GL_FRAMEBUFFER, m_compositeFbo);
+    glViewport(0, 0, std::max(1, width), std::max(1, height));
+}
+
+void PostProcessPass::bindBackbufferOutput(const int width, const int height) {
+    m_renderCompositeToTexture = false;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, std::max(1, width), std::max(1, height));
+}
+
 void PostProcessPass::destroyExposureReadbackBuffers() {
     for (int i = 0; i < kExposureReadbackRing; ++i) {
         if (m_exposureReadbackFences[i] != nullptr) {
@@ -665,6 +782,14 @@ void PostProcessPass::destroyExposureReadbackBuffers() {
 }
 
 void PostProcessPass::destroyRenderTargets() {
+    if (m_compositeTex != 0) {
+        glDeleteTextures(1, &m_compositeTex);
+        m_compositeTex = 0;
+    }
+    if (m_compositeFbo != 0) {
+        glDeleteFramebuffers(1, &m_compositeFbo);
+        m_compositeFbo = 0;
+    }
     if (m_sceneDepthTex != 0) {
         glDeleteTextures(1, &m_sceneDepthTex);
         m_sceneDepthTex = 0;

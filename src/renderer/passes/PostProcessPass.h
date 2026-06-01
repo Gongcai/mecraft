@@ -86,14 +86,23 @@ public:
     // --- Legacy API (backward compatible, will be removed in Phase 11) ---
     /// Start capturing world-space rendering into an off-screen scene target.
     void beginScene(const Window& window);
+    void beginScene(int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
     void endSceneAndComposite(const Window& window, float frameTime,
                               GLuint gbufDepthTex = 0,
                               GLuint weatherMaskTex = 0);
 
+    /// Composite captured scene into an internal LDR texture instead of the back buffer.
+    [[nodiscard]] GLuint endSceneAndCompositeToTexture(const Window& window, float frameTime,
+                                                       GLuint gbufDepthTex = 0,
+                                                       GLuint weatherMaskTex = 0);
+
     /// Blit captured scene directly to back buffer without any postprocessing.
     void blitSceneToBackbuffer(const Window& window);
+
+    /// Blit an already composited LDR texture to the back buffer.
+    void blitTextureToBackbuffer(GLuint texture, const Window& window);
 
     /// Set effects configuration (legacy path).
     void setEffects(const PostProcessEffects& effects);
@@ -102,6 +111,8 @@ public:
     [[nodiscard]] float getAdaptedExposure() const { return m_adaptedExposure; }
     [[nodiscard]] float getAverageLuminance() const { return m_lastAverageLum; }
     [[nodiscard]] float getTargetExposure() const { return m_lastTargetExposure; }
+    [[nodiscard]] int targetWidth() const { return m_targetWidth; }
+    [[nodiscard]] int targetHeight() const { return m_targetHeight; }
 
 private:
     static constexpr int kBloomMipCount = 7;
@@ -124,6 +135,9 @@ private:
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
     void renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex, bool bloomReady);
+    bool ensureCompositeTarget(int width, int height);
+    void bindCompositeOutput(int width, int height);
+    void bindBackbufferOutput(int width, int height);
 
     Shader* m_postProcessShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
@@ -136,6 +150,10 @@ private:
     GLuint m_sceneFbo = 0;
     GLuint m_sceneColorTex = 0;
     GLuint m_sceneDepthTex = 0;
+
+    GLuint m_compositeFbo = 0;
+    GLuint m_compositeTex = 0;
+    bool m_renderCompositeToTexture = false;
 
     // Bloom chain
     GLuint m_bloomFbos[kBloomMipCount][2] = {};

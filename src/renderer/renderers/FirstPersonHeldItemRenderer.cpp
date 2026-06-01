@@ -522,10 +522,18 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
                                          const Inventory& inventory,
                                          const FirstPersonHeldItemMotion& motion,
                                          const float timeSeconds) {
+    render(window.getWidth(), window.getHeight(), inventory, motion, timeSeconds);
+}
+
+void FirstPersonHeldItemRenderer::render(const int width,
+                                         const int height,
+                                         const Inventory& inventory,
+                                         const FirstPersonHeldItemMotion& motion,
+                                         const float timeSeconds) {
     if (!m_initialized || m_resourceMgr == nullptr || m_steveShader == nullptr) {
         return;
     }
-    if (window.getWidth() <= 0 || window.getHeight() <= 0) {
+    if (width <= 0 || height <= 0) {
         return;
     }
 
@@ -587,7 +595,7 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
     }
 
     const renderer::gl::ScopedStateSnapshot stateGuard;
-    glViewport(0, 0, window.getWidth(), window.getHeight());
+    glViewport(0, 0, width, height);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
     // View-model geometry is not in world space; keep it in front while still writing scene depth.
@@ -598,7 +606,7 @@ void FirstPersonHeldItemRenderer::render(const Window& window,
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
-    const float aspect = window.getAspectRatio();
+    const float aspect = static_cast<float>(width) / static_cast<float>(std::max(1, height));
     const glm::mat4 projection = glm::perspective(glm::radians(m_config.fovDegrees), aspect, 0.05f, 10.0f);
     const glm::mat4 view(1.0f);
     const glm::mat4 viewProj = projection * view;

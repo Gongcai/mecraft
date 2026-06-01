@@ -137,6 +137,11 @@ public:
                 const Inventory& inventory,
                 const FirstPersonHeldItemMotion& motion,
                 float timeSeconds);
+    void render(int width,
+                int height,
+                const Inventory& inventory,
+                const FirstPersonHeldItemMotion& motion,
+                float timeSeconds);
 
 private:
     struct Mesh {

@@ -6,6 +6,7 @@
 #include "FrameContext.h"
 #include "FrameOutput.h"
 #include "../passes/PostProcessPass.h"
+#include "../passes/Fsr1Pass.h"
 #include "../mesh/TerrainStreamingService.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
@@ -198,6 +199,7 @@ public:
 private:
     /// Build FrameContext from world state
     FrameContext buildFrameContext(const World& world, const Camera& camera, const Window& window);
+    glm::ivec2 internalRenderSize(const Window& window) const;
 
     /// Prepare active pipeline targets that FrameContext depends on.
     bool prepareFrameResources(const Window& window);
@@ -222,6 +224,7 @@ private:
 
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;
+    Fsr1Pass m_fsr1Pass;
 
     // Frame state
     FrameOutput m_lastFrameOutput;

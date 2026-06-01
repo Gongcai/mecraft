@@ -150,6 +150,7 @@ set(SRC_RENDERER
         src/renderer/passes/WaterCompositePass.cpp
         src/renderer/passes/DebugPass.cpp
         src/renderer/passes/PostProcessPass.cpp
+        src/renderer/passes/Fsr1Pass.cpp
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp

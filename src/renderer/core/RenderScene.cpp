@@ -11,6 +11,7 @@
 #include "../mesh/TerrainStreamingService.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include "engine/platform/Window.h"
 #include "../../particle/RainRenderer.h"
@@ -69,6 +70,7 @@ RenderScene::~RenderScene() = default;
 void RenderScene::init(ResourceMgr& resourceMgr) {
     // Phase 5: Initialize shared post-process pass
     m_postProcessPass.init(resourceMgr);
+    m_fsr1Pass.init(resourceMgr);
 
     // Phase 9: Populate shared resources
     m_shared.resources = &resourceMgr;
@@ -118,6 +120,7 @@ void RenderScene::shutdown() {
     m_debugService.shutdown();
 
     // Phase 5: Shutdown shared post-process pass
+    m_fsr1Pass.shutdown();
     m_postProcessPass.shutdown();
 }
 
@@ -163,13 +166,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
+    const glm::ivec2 frameRenderSize = skipPostProcess
+        ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
+        : internalRenderSize(request.window);
     if (!skipPostProcess) {
-        m_postProcessPass.beginScene(request.window);
+        m_postProcessPass.beginScene(frameRenderSize.x, frameRenderSize.y);
     } else {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0,
-                   std::max(1, request.window.getWidth()),
-                   std::max(1, request.window.getHeight()));
+        glViewport(0, 0, frameRenderSize.x, frameRenderSize.y);
     }
 
     const bool lightDebugActive = isLightDebugActive();
@@ -182,7 +186,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (m_settings.weather.rainLinesEnabled) {
             const auto& weather = request.world.getWeatherSystem().getDerived();
             const glm::vec3 camPos = request.camera.getPosition();
-            auto projMat = request.camera.getProjectionMatrix(request.window.getAspectRatio());
+            const float frameAspect = static_cast<float>(frameRenderSize.x) /
+                                      static_cast<float>(std::max(1, frameRenderSize.y));
+            auto projMat = request.camera.getProjectionMatrix(frameAspect);
             auto viewMat = request.camera.getViewMatrix();
             const float alphaScale = m_settings.weather.rainAlphaScale;
             const bool forwardVanillaActive = isNewPipelineActive() &&
@@ -190,8 +196,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             const GLuint depthTex = forwardVanillaActive ? 0 : m_lastFrameOutput.gbufferDepthTex;
             const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
             const glm::vec2 precipitationScreenSize(
-                static_cast<float>(std::max(1, request.window.getWidth())),
-                static_cast<float>(std::max(1, request.window.getHeight())));
+                static_cast<float>(frameRenderSize.x),
+                static_cast<float>(frameRenderSize.y));
 
             if (weather.rainStrength > 0.01f) {
                 request.rainRenderer.render(projMat, viewMat, camPos,
@@ -218,7 +224,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setShadowData(
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
         request.firstPersonHeldItemRenderer->render(
-            request.window,
+            frameRenderSize.x,
+            frameRenderSize.y,
             *request.firstPersonInventory,
             *request.firstPersonHeldItemMotion,
             static_cast<float>(Time::getGameTime()));
@@ -233,11 +240,42 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (lightDebugActive) {
             m_postProcessPass.blitSceneToBackbuffer(request.window);
         } else {
-            m_postProcessPass.endSceneAndComposite(
-                request.window,
-                request.frameTime,
-                m_lastFrameOutput.gbufferDepthTex,
-                m_lastFrameOutput.weatherMaskTex);
+            const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
+                                    m_settings.upscale.renderScale < 0.999f;
+            if (fsrEnabled) {
+                const GLuint postTex = m_postProcessPass.endSceneAndCompositeToTexture(
+                    request.window,
+                    request.frameTime,
+                    m_lastFrameOutput.gbufferDepthTex,
+                    m_lastFrameOutput.weatherMaskTex);
+                bool upscaled = false;
+                if (postTex != 0) {
+                    const int inputWidth = m_postProcessPass.targetWidth();
+                    const int inputHeight = m_postProcessPass.targetHeight();
+                    upscaled = m_fsr1Pass.execute(
+                        postTex,
+                        inputWidth,
+                        inputHeight,
+                        std::max(1, request.window.getWidth()),
+                        std::max(1, request.window.getHeight()),
+                        m_settings.upscale.sharpness);
+                }
+                if (!upscaled && postTex != 0) {
+                    m_postProcessPass.blitTextureToBackbuffer(postTex, request.window);
+                } else if (!upscaled) {
+                    m_postProcessPass.endSceneAndComposite(
+                        request.window,
+                        request.frameTime,
+                        m_lastFrameOutput.gbufferDepthTex,
+                        m_lastFrameOutput.weatherMaskTex);
+                }
+            } else {
+                m_postProcessPass.endSceneAndComposite(
+                    request.window,
+                    request.frameTime,
+                    m_lastFrameOutput.gbufferDepthTex,
+                    m_lastFrameOutput.weatherMaskTex);
+            }
         }
         if (postTimerStarted) {
             m_debugService.endGpuTimer(GpuTimerPass::Post);
@@ -302,7 +340,15 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         setPipelineMode(settings.pipelineMode);
     }
 
+    const bool upscaleChanged =
+        settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled ||
+        std::abs(settings.upscale.renderScale - m_settings.upscale.renderScale) > 0.0001f;
+
     m_settings = settings;
+
+    if (upscaleChanged) {
+        invalidateFrameHistory();
+    }
 }
 
 const RenderSettings& RenderScene::getSettings() const {
@@ -452,7 +498,8 @@ bool RenderScene::prepareFrameResources(const Window& window) {
         return false;
     }
 
-    const bool ready = targets.ensureSize(window.getWidth(), window.getHeight(), m_settings.shadow.resolution);
+    const glm::ivec2 internalSize = internalRenderSize(window);
+    const bool ready = targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
     glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
     glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
@@ -558,9 +605,10 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.debugService = &m_debugService;
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
-    // Screen dimensions
-    ctx.frameWidth = window.getWidth();
-    ctx.frameHeight = window.getHeight();
+    // Internal scene dimensions. UI and final presentation still use the real window size.
+    const glm::ivec2 internalSize = internalRenderSize(window);
+    ctx.frameWidth = internalSize.x;
+    ctx.frameHeight = internalSize.y;
 
     // Frame timing
     ctx.frameIndex = m_frameCounter++;
@@ -720,6 +768,18 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     m_hasPreviousContext = true;
 
     return ctx;
+}
+
+glm::ivec2 RenderScene::internalRenderSize(const Window& window) const {
+    const int displayWidth = std::max(1, window.getWidth());
+    const int displayHeight = std::max(1, window.getHeight());
+    if (!m_settings.upscale.fsr1Enabled || m_settings.upscale.renderScale >= 0.999f ||
+        m_settings.pipelineMode != PipelineMode::Deferred) {
+        return glm::ivec2(displayWidth, displayHeight);
+    }
+    const float scale = std::clamp(m_settings.upscale.renderScale, 0.5f, 1.0f);
+    return glm::ivec2(std::max(1, static_cast<int>(std::round(static_cast<float>(displayWidth) * scale))),
+                      std::max(1, static_cast<int>(std::round(static_cast<float>(displayHeight) * scale))));
 }
 
 void RenderScene::invalidateFrameHistory() {

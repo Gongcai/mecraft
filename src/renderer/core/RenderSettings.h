@@ -185,6 +185,13 @@ struct PostProcessSettings {
     float dofFocusDistance = 5.0f;
 };
 
+/// Spatial upscaling settings.
+struct UpscaleSettings {
+    bool fsr1Enabled = false;
+    float renderScale = 0.77f;
+    float sharpness = 0.2f;
+};
+
 /// Debug visualization settings
 struct DebugSettings {
     int viewMode = 0;
@@ -235,6 +242,7 @@ struct RenderSettings {
     TransparentSettings transparent;
     TaaSettings taa;
     PostProcessSettings postProcess;
+    UpscaleSettings upscale;
     DebugSettings debug;
     FogSettings fog;
     WeatherRenderSettings weather;

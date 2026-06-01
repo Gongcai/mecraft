@@ -622,6 +622,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
+        pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
+        pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.renderScale, 0.50f, 1.00f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.sharpness, 0.00f, 2.00f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &settings.postProcess.bloomEnabled);
         pipelineChanged |= ImGui::SliderInt("Bloom Mips", &settings.postProcess.bloomMipCount, 1, 7);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &settings.postProcess.bloomThreshold, 0.0f, 3.0f, "%.2f");
