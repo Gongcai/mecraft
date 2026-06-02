@@ -245,6 +245,11 @@ public:
                 }
             }
         }
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (SubChunk* subChunk = chunk->getSubChunk(scy)) {
+                subChunk->inferType();
+            }
+        }
 
         std::vector<uint8_t> packedLight(Chunk::BLOCK_COUNT);
         for (uint8_t& light : packedLight) {

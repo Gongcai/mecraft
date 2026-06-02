@@ -79,6 +79,10 @@ void GameServer::processClientMessages() {
         while (client.transport->tryReceive(packet)) {
             switch (packet.type) {
             case net::MessageType::ClientHello: {
+                client.receivedHello = true;
+                client.sentChunks.clear();
+                client.chunkSendLogCount = 0;
+                client.totalChunksSent = 0;
                 if (packet.inProcessPayload.has_value()) {
                     const auto& hello = std::any_cast<const net::ClientHello&>(packet.inProcessPayload);
                     std::printf("[Server] ClientHello client=%u protocol=%u\n",
@@ -114,6 +118,7 @@ void GameServer::processClientMessages() {
                 // Client is ready to receive world data; nothing special needed.
                 break;
             case net::MessageType::ClientViewConfig: {
+                client.receivedViewConfig = true;
                 if (packet.inProcessPayload.has_value()) {
                     const auto& config = std::any_cast<const net::ClientViewConfig&>(packet.inProcessPayload);
                     client.viewDistance = std::max(1, config.renderDistance);
@@ -135,6 +140,10 @@ void GameServer::sendNewChunksToClients() {
     const auto& activeChunks = m_world.getActiveChunks();
 
     for (auto& client : m_clients) {
+        if (!client.receivedHello) {
+            continue;
+        }
+
         // Build a temporary ticket manager for this client's view distance
         ChunkTicketManager clientTicketMgr;
         clientTicketMgr.setViewRadius(client.viewDistance);

@@ -306,7 +306,7 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
         glEnable(GL_SCISSOR_TEST);
         const float uiScale = ctx.uiScale > 0.0f ? ctx.uiScale : 1.0f;
         const int sx = viewport[0] + static_cast<int>(std::floor((ax + 2.0f) * uiScale));
-        const int sy = viewport[1] + static_cast<int>(std::floor((ctx.screenHeight - ay - ah + 2.0f) * uiScale));
+        const int sy = viewport[1] + static_cast<int>(std::floor((ay + 2.0f) * uiScale));
         const int sw = static_cast<int>(std::ceil((aw - 4.0f) * uiScale));
         const int sh = static_cast<int>(std::ceil((ah - 4.0f) * uiScale));
         glScissor(sx, sy, std::max(1, sw), std::max(1, sh));
@@ -355,7 +355,6 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
         if (event.button == UIPointerButton::Primary && inside) {
             requestFocus();
             // Position cursor at click location.
-            const float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
             const float localX = event.x - getAbsoluteX(ctx);
             const int charIdx = charIndexFromX(localX, ctx);
             const int byteOff = utf8ByteOffset(m_text, charIdx);

@@ -22,6 +22,8 @@ struct ConnectedClient {
     glm::vec3 lastPosition = glm::vec3(0.0f);
     uint32_t lastAckedInput = 0;
     int viewDistance = 16;  // Client's render distance
+    bool receivedHello = false;
+    bool receivedViewConfig = false;
     std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
     int chunkSendLogCount = 0;
     int totalChunksSent = 0;

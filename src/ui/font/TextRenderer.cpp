@@ -11,6 +11,92 @@
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
+namespace {
+class TextRenderStateGuard {
+public:
+    TextRenderStateGuard() {
+        m_depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
+        m_cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
+        m_blendEnabled = glIsEnabled(GL_BLEND);
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthMask);
+        glGetBooleanv(GL_COLOR_WRITEMASK, m_colorMask);
+        glGetIntegerv(GL_DEPTH_FUNC, &m_depthFunc);
+        glGetIntegerv(GL_BLEND_EQUATION_RGB, &m_blendEquationRgb);
+        glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &m_blendEquationAlpha);
+        glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrcRgb);
+        glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDstRgb);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &m_blendSrcAlpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &m_blendDstAlpha);
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &m_activeTexture);
+        glActiveTexture(GL_TEXTURE0);
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &m_texture2DUnit0);
+        glActiveTexture(static_cast<GLenum>(m_activeTexture));
+        glGetIntegerv(GL_CURRENT_PROGRAM, &m_program);
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &m_vertexArray);
+        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &m_arrayBuffer);
+
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glEnable(GL_BLEND);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    ~TextRenderStateGuard() {
+        restoreCapability(GL_DEPTH_TEST, m_depthTestEnabled);
+        glDepthMask(m_depthMask);
+        glDepthFunc(static_cast<GLenum>(m_depthFunc));
+        restoreCapability(GL_CULL_FACE, m_cullFaceEnabled);
+        restoreCapability(GL_BLEND, m_blendEnabled);
+        glBlendEquationSeparate(static_cast<GLenum>(m_blendEquationRgb),
+                                static_cast<GLenum>(m_blendEquationAlpha));
+        glBlendFuncSeparate(static_cast<GLenum>(m_blendSrcRgb),
+                            static_cast<GLenum>(m_blendDstRgb),
+                            static_cast<GLenum>(m_blendSrcAlpha),
+                            static_cast<GLenum>(m_blendDstAlpha));
+        glColorMask(m_colorMask[0], m_colorMask[1], m_colorMask[2], m_colorMask[3]);
+        glUseProgram(static_cast<GLuint>(m_program));
+        glBindVertexArray(static_cast<GLuint>(m_vertexArray));
+        glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(m_arrayBuffer));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(m_texture2DUnit0));
+        glActiveTexture(static_cast<GLenum>(m_activeTexture));
+    }
+
+    TextRenderStateGuard(const TextRenderStateGuard&) = delete;
+    TextRenderStateGuard& operator=(const TextRenderStateGuard&) = delete;
+
+private:
+    static void restoreCapability(GLenum capability, GLboolean enabled) {
+        if (enabled == GL_TRUE) {
+            glEnable(capability);
+        } else {
+            glDisable(capability);
+        }
+    }
+
+    GLboolean m_depthTestEnabled = GL_FALSE;
+    GLboolean m_cullFaceEnabled = GL_FALSE;
+    GLboolean m_blendEnabled = GL_FALSE;
+    GLboolean m_depthMask = GL_TRUE;
+    GLboolean m_colorMask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+    GLint m_depthFunc = GL_LESS;
+    GLint m_blendEquationRgb = GL_FUNC_ADD;
+    GLint m_blendEquationAlpha = GL_FUNC_ADD;
+    GLint m_blendSrcRgb = GL_SRC_ALPHA;
+    GLint m_blendDstRgb = GL_ONE_MINUS_SRC_ALPHA;
+    GLint m_blendSrcAlpha = GL_ONE;
+    GLint m_blendDstAlpha = GL_ONE_MINUS_SRC_ALPHA;
+    GLint m_activeTexture = GL_TEXTURE0;
+    GLint m_texture2DUnit0 = 0;
+    GLint m_program = 0;
+    GLint m_vertexArray = 0;
+    GLint m_arrayBuffer = 0;
+};
+} // namespace
+
 static uint32_t decodeUtf8(const char*& ptr, const char* end) {
     auto c = static_cast<unsigned char>(*ptr);
     if (c < 0x80) { ptr += 1; return c; }
@@ -208,23 +294,7 @@ void TextRenderer::render(const std::string& text,
 
     m_atlas.uploadPending();
 
-    const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-    GLboolean depthMaskWasEnabled = GL_TRUE;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskWasEnabled);
-    GLint blendSrcRgb = GL_ONE;
-    GLint blendDstRgb = GL_ZERO;
-    GLint blendSrcAlpha = GL_ONE;
-    GLint blendDstAlpha = GL_ZERO;
-    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrcRgb);
-    glGetIntegerv(GL_BLEND_DST_RGB, &blendDstRgb);
-    glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSrcAlpha);
-    glGetIntegerv(GL_BLEND_DST_ALPHA, &blendDstAlpha);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const TextRenderStateGuard stateGuard;
 
     m_textShader->use();
     m_textShader->setVec2("uScreenSize", glm::vec2(screenWidth, screenHeight));
@@ -241,18 +311,6 @@ void TextRenderer::render(const std::string& text,
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    if (blendWasEnabled) {
-        glBlendFuncSeparate(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha);
-    } else {
-        glDisable(GL_BLEND);
-    }
-    glDepthMask(depthMaskWasEnabled);
-    if (depthWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
 }
 
 void TextRenderer::beginBatch(float screenWidth, float screenHeight) const
@@ -291,23 +349,7 @@ void TextRenderer::endBatch() const
 
     m_atlas.uploadPending();
 
-    const GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-    const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-    GLboolean depthMaskWasEnabled = GL_TRUE;
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMaskWasEnabled);
-    GLint blendSrcRgb = GL_ONE;
-    GLint blendDstRgb = GL_ZERO;
-    GLint blendSrcAlpha = GL_ONE;
-    GLint blendDstAlpha = GL_ZERO;
-    glGetIntegerv(GL_BLEND_SRC_RGB, &blendSrcRgb);
-    glGetIntegerv(GL_BLEND_DST_RGB, &blendDstRgb);
-    glGetIntegerv(GL_BLEND_SRC_ALPHA, &blendSrcAlpha);
-    glGetIntegerv(GL_BLEND_DST_ALPHA, &blendDstAlpha);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    const TextRenderStateGuard stateGuard;
 
     m_textShader->use();
     m_textShader->setVec2("uScreenSize", glm::vec2(m_batchScreenWidth, m_batchScreenHeight));
@@ -324,18 +366,6 @@ void TextRenderer::endBatch() const
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    if (blendWasEnabled) {
-        glBlendFuncSeparate(blendSrcRgb, blendDstRgb, blendSrcAlpha, blendDstAlpha);
-    } else {
-        glDisable(GL_BLEND);
-    }
-    glDepthMask(depthMaskWasEnabled);
-    if (depthWasEnabled) {
-        glEnable(GL_DEPTH_TEST);
-    } else {
-        glDisable(GL_DEPTH_TEST);
-    }
 
     m_batchVertices.clear();
 }
