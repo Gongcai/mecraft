@@ -17,6 +17,9 @@
 #include "../states/GameplayState.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../Paths.h"
+#include "../../server/GameServer.h"
+#include "../../client/GameClient.h"
+#include "../../net/InProcessTransport.h"
 
 GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
@@ -24,31 +27,59 @@ GameSession::~GameSession() = default;
 void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool) {
     (void)resourceMgr;  // Resource-dependent init deferred to Game::initRenderers()
 
-    // Create core systems
-    m_world = std::make_unique<World>();
-    m_physicsSystem = std::make_unique<physics::PhysicsSystem>(m_world.get());
+    // Create server (owns the authoritative World)
+    m_server = std::make_unique<server::GameServer>();
+    m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+
+    // Create client and connect via in-process transport
+    m_client = std::make_unique<client::GameClient>();
+    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+    m_server->acceptClient(std::move(serverTransport), 1);
+    m_client->connect(std::move(clientTransport));
+
+    // Wire up ClientWorld with server's weather/day-night for in-process rendering
+    m_client->clientWorld().setDayNightSystem(&m_server->world().getDayNightSystem());
+    m_client->clientWorld().setWeatherSystem(&m_server->world().getWeatherSystem());
+    m_client->clientWorld().setRenderDistance(config.renderDistance);
+
+    // Create physics (references server's authoritative World)
+    m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_server->world());
     m_gameplayScene = std::make_unique<ecs::GameplayScene>();
     m_dropSystem = std::make_unique<DropSystem>();
     m_craftingSystem = std::make_unique<CraftingSystem>();
     m_cameraController = std::make_unique<CameraController>();
     m_presentationBuilder = std::make_unique<GameplayPresentationBuilder>();
 
-    // Configure world (actual init deferred to initWorld() called by Game)
-    m_world->setRenderDistance(config.renderDistance);
-    m_world->setThreadPool(threadPool);
-
     // Create particle and rain systems (actual init happens in Game::initRenderers)
     m_particleSystem = std::make_unique<ParticleSystem>();
     m_rainRenderer = std::make_unique<RainRenderer>();
 }
 
+World& GameSession::world() {
+    return m_server->world();
+}
+
+const World& GameSession::world() const {
+    return m_server->world();
+}
+
+const IWorldView& GameSession::worldView() const {
+    // For the initial milestone, always return the server's World for rendering.
+    // This ensures weather, day/night, and biome systems work correctly.
+    // When ClientWorld is fully self-sufficient (Phase 2+), this will switch
+    // to m_client->clientWorld() when spawn chunks are ready.
+    return m_server->world();
+}
+
 void GameSession::initWorld(int seed) {
-    m_world->init(seed);
+    // World initialization is now handled by GameServer::init() in init().
+    // This method is kept for API compatibility but is effectively a no-op.
+    (void)seed;
 }
 
 void GameSession::initECS(const GameSessionDependencies& deps) {
     auto& svc = m_gameplayScene->services();
-    svc.world              = m_world.get();
+    svc.world              = &m_server->world();
     svc.audioEngine        = &deps.audioEngine;
     svc.inputContextManager = &deps.contextManager;
     svc.resourceMgr        = &deps.resourceMgr;
@@ -67,9 +98,7 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     m_dropSystem->bindServices(svc);
     m_particleSystem->bindRegistry(reg);
 
-    constexpr float kSpawnHeightOffset = 2.0f;
-    const glm::vec3 spawnPos(0.0f,
-        static_cast<float>(m_world->getSurfaceY(0, 0) + kSpawnHeightOffset), 0.0f);
+    const glm::vec3 spawnPos = m_server->getSpawnPosition();
     m_gameplayScene->initLocalPlayer(spawnPos);
 
     ecs::PlayerQuery query(reg);
@@ -122,8 +151,13 @@ const GameStateMachine& GameSession::stateMachine() const {
 }
 
 void GameSession::updateWorldAroundLocalPlayer() {
-    ecs::PlayerQuery query(m_gameplayScene->registry());
-    m_world->update(query.getPosition());
+    // Server tick: load chunks, process client messages, send world state
+    // For Phase 1, use a fixed dt for server tick (will be decoupled in Phase 3)
+    constexpr float kServerTickDt = 1.0f / 20.0f;
+    m_server->tick(kServerTickDt);
+
+    // Client: receive messages from server (chunk data, snapshots)
+    m_client->receiveMessages();
 }
 
 Inventory& GameSession::getPlayerInventory() {
@@ -146,5 +180,6 @@ void GameSession::shutdown() {
     m_dropSystem.reset();
     m_gameplayScene.reset();
     m_physicsSystem.reset();
-    m_world.reset();
+    m_client.reset();
+    m_server.reset();
 }

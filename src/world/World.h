@@ -20,41 +20,43 @@
 #include "gen/TerrainGenerator.h"
 #include "../physics/PhysicsInfo.h"
 #include "../thread/ThreadPool.h"
+#include "IWorldView.h"
 
-class World {
+class World : public IWorldView {
 public:
     void init(uint32_t seed);
     void update(const glm::vec3& playerPos);
 
-    [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
-    [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
-    [[nodiscard]] StateID getBlockState(int x, int y, int z) const;
-    [[nodiscard]] StateID getFluidState(int x, int y, int z) const;
+    [[nodiscard]] BlockID getBlock(int x, int y, int z) const override;
+    [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;
+    [[nodiscard]] StateID getBlockState(int x, int y, int z) const override;
+    [[nodiscard]] StateID getFluidState(int x, int y, int z) const override;
     [[nodiscard]] FluidCellView getCombinedCell(int x, int y, int z) const;
     [[nodiscard]] BlockID sampleGeneratedBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
     void setBlockState(int x, int y, int z, StateID stateId);
     void setFluidState(int x, int y, int z, StateID stateId);
-    [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const;
+    [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const override;
 
     [[nodiscard]] RayHit raycast(const PhysicsInfo& ray, float maxDist) const;
     bool raycast(const PhysicsInfo& ray, float maxDist,
                  glm::ivec3& hitBlock, glm::ivec3& placeBlock) const;
 
-    [[nodiscard]] const auto& getActiveChunks() const { return m_chunks; }
-    [[nodiscard]] uint64_t getActiveChunkRevision() const { return m_activeChunkRevision; }
+    [[nodiscard]] const ChunkMap& getActiveChunks() const override { return m_chunks; }
+    [[nodiscard]] uint64_t getActiveChunkRevision() const override { return m_activeChunkRevision; }
     void setThreadPool(ThreadPool* pool);
     [[nodiscard]] LightFrameStats getLightFrameStats() const;
 
     [[nodiscard]] size_t getTotalVertexCount() const;
 
-    [[nodiscard]] int getRenderDistance() const { return m_renderDistance; }
+    [[nodiscard]] int getRenderDistance() const override { return m_renderDistance; }
     void setRenderDistance(int dist);
 
     [[nodiscard]] int getFlatSurfaceY() const { return m_flatSurfaceY; }
     [[nodiscard]] int getSurfaceY(int x, int z) const;
-    [[nodiscard]] TerrainBiome getBiome(int x, int z) const;
-    [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const;
+    [[nodiscard]] TerrainBiome getBiome(int x, int z) const override;
+    [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const override;
+    [[nodiscard]] const World* asWorld() const override { return this; }
     [[nodiscard]] static const char* biomeToString(TerrainBiome biome);
 
     static int64_t chunkKey(int cx, int cz);

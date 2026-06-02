@@ -294,12 +294,29 @@ set(SRC_AUDIO
         src/audio/AudioListener.cpp
 )
 
+# [网络层]
+set(SRC_NET
+        src/net/InProcessTransport.cpp
+)
+
+# [服务端]
+set(SRC_SERVER
+        src/server/GameServer.cpp
+)
+
+# [客户端]
+set(SRC_CLIENT
+        src/client/ClientWorld.cpp
+        src/client/GameClient.cpp
+)
+
 # 合并所有核心代码
 set(CORE_SOURCES
         ${SRC_APP} ${SRC_ENGINE} ${SRC_GAME} ${SRC_CORE}
         ${SRC_WORLD} ${SRC_RENDERER} ${SRC_UI}
         ${SRC_ECS} ${SRC_PLAYER} ${SRC_PHYSICS} ${SRC_PARTICLE}
         ${SRC_ITEM} ${SRC_CRAFTING} ${SRC_AUDIO}
+        ${SRC_NET} ${SRC_SERVER} ${SRC_CLIENT}
 )
 
 # ===========================================================================
@@ -337,6 +354,7 @@ endif()
 # ===========================================================================
 add_library(mecraft_third_party STATIC
         third_party/glad/glad.c
+        third_party/enet/enet_impl.cpp
         third_party/imgui/imgui.cpp
         third_party/imgui/imgui_demo.cpp
         third_party/imgui/imgui_draw.cpp
@@ -501,5 +519,10 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(light_cross_chunk_removal_test tests/light_cross_chunk_removal_test.cpp)
     add_mecraft_test(light_service_cross_chunk_block_test tests/light_service_cross_chunk_block_test.cpp)
     add_mecraft_test(light_service_scheduler_test tests/light_service_scheduler_test.cpp)
+
+    # Multiplayer / C/S architecture tests
+    add_mecraft_test(in_process_transport_test tests/in_process_transport_test.cpp)
+    add_mecraft_test(client_world_test tests/client_world_test.cpp)
+    add_mecraft_test(game_server_test tests/game_server_test.cpp)
 endif()
 

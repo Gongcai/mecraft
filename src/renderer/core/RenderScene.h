@@ -16,6 +16,7 @@
 // Forward declarations
 class RenderResourceHub;
 class ResourceMgr;
+class IWorldView;
 class World;
 class Camera;
 class Window;
@@ -78,7 +79,7 @@ struct SharedRenderResources {
 
 /// High-level render request for one gameplay frame.
 struct RenderGameplayFrameRequest {
-    const World& world;
+    const IWorldView& worldView;
     const Camera& camera;
     Window& window;
     const BlockTargetRenderData& target;

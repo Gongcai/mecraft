@@ -1,0 +1,125 @@
+#ifndef MECRAFT_NET_PROTOCOL_H
+#define MECRAFT_NET_PROTOCOL_H
+
+#include <cstdint>
+#include <memory>
+#include <vector>
+#include <any>
+#include <glm/glm.hpp>
+
+class Chunk;
+
+namespace net {
+
+using ClientId = uint32_t;
+using TickId = uint32_t;
+
+/// Network channel types, mapped to ENet channels in Phase 6.
+enum class PacketChannel : uint8_t {
+    ReliableControl = 0,  // Login, handshake, disconnect, config
+    ReliableWorld = 1,    // Chunk data, block updates, inventory
+    UnreliableState = 2,  // High-frequency entity snapshots, player input
+    ReliableChat = 3,     // Chat, commands, system messages
+};
+
+/// Message type discriminator for the protocol.
+enum class MessageType : uint8_t {
+    // Client -> Server
+    ClientHello,
+    ClientInput,
+    ClientReady,
+
+    // Server -> Client
+    ServerHello,
+    ChunkData,
+    ChunkUnload,
+    BlockUpdateBatch,
+    ServerSnapshot,
+
+    // Bidirectional
+    KeepAlive,
+};
+
+/// A protocol packet with channel, type, and payload.
+/// For in-process transport, inProcessPayload carries zero-copy data.
+/// For network transport (Phase 6), payload carries binary-encoded data.
+struct Packet {
+    PacketChannel channel = PacketChannel::ReliableControl;
+    MessageType type = MessageType::ClientHello;
+    std::vector<uint8_t> payload;
+    std::any inProcessPayload;  // Zero-copy for in-process transport
+};
+
+// ===========================================================================
+// Client -> Server messages
+// ===========================================================================
+
+/// Initial handshake from client to server.
+struct ClientHello {
+    uint32_t protocolVersion = 1;
+};
+
+/// Player input sampled at the client's fixed update rate.
+struct ClientInput {
+    uint32_t sequence = 0;
+    float dt = 0.0f;
+    glm::vec3 moveInput = glm::vec3(0.0f);
+    glm::vec2 lookDelta = glm::vec2(0.0f);
+    bool jump = false;
+    bool sneak = false;
+    bool sprint = false;
+    uint32_t actions = 0;  // Bitfield for break/place etc.
+};
+
+/// Client signals readiness to receive world data.
+struct ClientReady {};
+
+// ===========================================================================
+// Server -> Client messages
+// ===========================================================================
+
+/// Server response to ClientHello.
+struct ServerHello {
+    uint32_t protocolVersion = 1;
+    ClientId assignedId = 0;
+    glm::vec3 spawnPosition = glm::vec3(0.0f);
+};
+
+/// Chunk data sent from server to client.
+/// For in-process transport, chunk carries a shared_ptr directly.
+struct ChunkDataMessage {
+    int32_t chunkX = 0;
+    int32_t chunkZ = 0;
+    uint32_t revision = 0;
+    std::shared_ptr<Chunk> chunk;  // In-process zero-copy; null for network path
+};
+
+/// Notification that a chunk should be unloaded on the client.
+struct ChunkUnloadMessage {
+    int32_t chunkX = 0;
+    int32_t chunkZ = 0;
+};
+
+/// Batch of block updates.
+struct BlockUpdateEntry {
+    int32_t x = 0;
+    int32_t y = 0;
+    int32_t z = 0;
+    uint16_t blockId = 0;
+};
+
+struct BlockUpdateBatchMessage {
+    std::vector<BlockUpdateEntry> updates;
+};
+
+/// Authoritative world state snapshot from the server.
+struct ServerSnapshot {
+    TickId serverTick = 0;
+    uint32_t ackInputSequence = 0;
+    glm::vec3 authoritativePosition = glm::vec3(0.0f);
+    glm::vec3 authoritativeVelocity = glm::vec3(0.0f);
+};
+
+} // namespace net
+
+#endif // MECRAFT_NET_PROTOCOL_H

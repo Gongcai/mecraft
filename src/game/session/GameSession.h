@@ -2,6 +2,7 @@
 #define MECRAFT_GAME_SESSION_H
 
 #include "GameSessionConfig.h"
+#include "../../world/IWorldView.h"
 #include <memory>
 #include <string>
 
@@ -11,6 +12,8 @@ class ResourceMgr;
 class ThreadPool;
 namespace physics { class PhysicsSystem; }
 namespace ecs { class GameplayScene; }
+namespace server { class GameServer; }
+namespace client { class GameClient; }
 class DropSystem;
 class ParticleSystem;
 class RainRenderer;
@@ -57,8 +60,16 @@ public:
     void shutdown();
 
     // Accessors (valid only after init())
-    [[nodiscard]] World& world() { return *m_world; }
-    [[nodiscard]] const World& world() const { return *m_world; }
+    // world() returns the server's authoritative World for ECS/physics use.
+    [[nodiscard]] World& world();
+    [[nodiscard]] const World& world() const;
+    // worldView() returns the appropriate IWorldView for rendering.
+    [[nodiscard]] const IWorldView& worldView() const;
+    // C/S components
+    [[nodiscard]] server::GameServer& server() { return *m_server; }
+    [[nodiscard]] const server::GameServer& server() const { return *m_server; }
+    [[nodiscard]] client::GameClient& client() { return *m_client; }
+    [[nodiscard]] const client::GameClient& client() const { return *m_client; }
     [[nodiscard]] physics::PhysicsSystem& physicsSystem() { return *m_physicsSystem; }
     [[nodiscard]] ecs::GameplayScene& gameplayScene() { return *m_gameplayScene; }
     [[nodiscard]] const ecs::GameplayScene& gameplayScene() const { return *m_gameplayScene; }
@@ -74,8 +85,11 @@ public:
     [[nodiscard]] const std::string& lastSubmittedCommand() const { return m_lastSubmittedCommand; }
 
 private:
-    // Core world and physics (created in init())
-    std::unique_ptr<World> m_world;
+    // C/S architecture: server owns authoritative World, client owns ClientWorld
+    std::unique_ptr<server::GameServer> m_server;
+    std::unique_ptr<client::GameClient> m_client;
+
+    // Physics (references server's World)
     std::unique_ptr<physics::PhysicsSystem> m_physicsSystem;
 
     // ECS

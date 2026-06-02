@@ -16,6 +16,7 @@
 #include "engine/platform/Window.h"
 #include "../../particle/RainRenderer.h"
 #include "../../world/World.h"
+#include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/WeatherSystem.h"
 #include "engine/platform/Time.h"
@@ -175,6 +176,18 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         setNewPipelineActive(true);
     }
 
+    // Extract concrete World via IWorldView bridge.
+    // The renderer currently requires concrete World for weather, day/night, and biome systems.
+    // When ClientWorld becomes self-sufficient (Phase 2+), this null check will gate
+    // an alternative rendering path using IWorldView directly.
+    const World* world = request.worldView.asWorld();
+    if (!world) {
+        // ClientWorld path: concrete World not available.
+        // For now, skip rendering when asWorld() returns nullptr.
+        // This path will be completed when weather/day-night proxying is implemented.
+        return;
+    }
+
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
     const glm::ivec2 frameRenderSize = skipPostProcess
         ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
@@ -189,12 +202,12 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
-    renderFrame(request.world, request.camera, request.window, request.target, request.blockBreak);
+    renderFrame(*world, request.camera, request.window, request.target, request.blockBreak);
 
     if (!lightDebugActive) {
-        cameraRainVisibility = computeCameraRainVisibility(request.world, request.camera.getPosition());
+        cameraRainVisibility = computeCameraRainVisibility(*world, request.camera.getPosition());
         if (m_settings.weather.rainLinesEnabled) {
-            const auto& weather = request.world.getWeatherSystem().getDerived();
+            const auto& weather = world->getWeatherSystem().getDerived();
             const glm::vec3 camPos = request.camera.getPosition();
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
@@ -233,7 +246,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setForwardMode(getPipelineMode() == PipelineMode::Forward);
         request.firstPersonHeldItemRenderer->setShadowData(
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
-        const glm::vec2 heldLight = sampleHeldItemLight(request.world, request.camera.getPosition());
+        const glm::vec2 heldLight = sampleHeldItemLight(*world, request.camera.getPosition());
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->render(
             frameRenderSize.x,
@@ -246,7 +259,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     if (!skipPostProcess) {
         const bool postTimerStarted = m_debugService.beginGpuTimer(GpuTimerPass::Post);
         PostProcessEffects effects = buildPostProcessEffects(
-            request.world, request.camera, request.window,
+            *world, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians);
         m_postProcessPass.setEffects(effects);
         if (lightDebugActive) {

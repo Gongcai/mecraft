@@ -155,7 +155,7 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     m_lastHeldItemSwingSequence = snap.heldItemSwingSequence;
 
     RenderGameplayFrameRequest renderRequest{
-        session.world(),
+        session.worldView(),
         snap.renderCamera,
         window,
         targetData,
