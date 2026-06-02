@@ -23,6 +23,7 @@ private:
     AppStateDependencies m_deps;
     GameSessionConfig m_config;
     std::unique_ptr<Game> m_game;
+    bool m_enterFailed = false;
 };
 
 #endif // MECRAFT_GAMEPLAYAPPSTATE_H

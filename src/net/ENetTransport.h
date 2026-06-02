@@ -67,6 +67,9 @@ public:
     /// Get the remote address as a string.
     [[nodiscard]] std::string getRemoteAddress() const;
 
+    /// Get the local listening/bound port, or 0 if not available.
+    [[nodiscard]] uint16_t getLocalPort() const;
+
     /// Disconnect from the remote peer.
     void disconnect();
 

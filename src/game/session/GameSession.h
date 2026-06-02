@@ -83,6 +83,7 @@ public:
     [[nodiscard]] const GameStateMachine& stateMachine() const;
     [[nodiscard]] std::string& lastSubmittedCommand() { return m_lastSubmittedCommand; }
     [[nodiscard]] const std::string& lastSubmittedCommand() const { return m_lastSubmittedCommand; }
+    [[nodiscard]] bool isMultiplayer() const { return m_isMultiplayer; }
 
 private:
     // C/S architecture: server owns authoritative World, client owns ClientWorld

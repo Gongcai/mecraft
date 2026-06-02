@@ -81,7 +81,11 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
     // Dispatch to roots in reverse order (top-most first)
     for (auto it = m_roots.rbegin(); it != m_roots.rend(); ++it) {
         UIEventResult result = (*it)->onInput(event, m_currentContext);
-        if (result == UIEventResult::Consumed) return UIEventResult::Consumed;
+        if (result == UIEventResult::Consumed) {
+            applyPendingFocusRequests();
+            ensureFocusableSelection();
+            return UIEventResult::Consumed;
+        }
         if (result == UIEventResult::Handled) {
             aggregate = UIEventResult::Handled;
         }

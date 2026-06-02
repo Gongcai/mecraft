@@ -696,7 +696,7 @@ void World::submitChunkLoad(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
     if (m_chunks.find(key) != m_chunks.end()) return;
     if (m_generationInFlight.count(key)) return;
-    if (!m_threadPool) {
+    if (!m_threadPool || !m_threadPool->isRunning()) {
         // No thread pool — fall back to synchronous load
         loadChunk(cx, cz);
         return;

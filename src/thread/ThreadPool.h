@@ -47,6 +47,7 @@ public:
     int numWorkers() const;
     int pendingCount() const;
     int activeCount() const;
+    bool isRunning() const;
 
 private:
     void workerLoop();

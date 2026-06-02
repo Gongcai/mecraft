@@ -2,9 +2,11 @@
 #define MECRAFT_NET_PACKET_CODEC_H
 
 #include "Protocol.h"
+#include "../world/chunk/Chunk.h"
 #include <cstdint>
 #include <vector>
 #include <cstring>
+#include <utility>
 
 namespace net {
 
@@ -72,8 +74,25 @@ public:
         pushI32(buf, msg.chunkX);
         pushI32(buf, msg.chunkZ);
         pushU32(buf, msg.revision);
-        // Chunk block data serialization is deferred to a later optimization.
-        // For now, the ENet path will use the inProcessPayload for in-process mode.
+        pushU8(buf, msg.chunk ? 1 : 0);
+        if (!msg.chunk) {
+            return buf;
+        }
+        buf.reserve(buf.size() + Chunk::BLOCK_COUNT * 3);
+        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                    pushU16(buf, msg.chunk->getBlock(x, y, z));
+                }
+            }
+        }
+        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                    pushU8(buf, msg.chunk->getPackedLight(x, y, z));
+                }
+            }
+        }
         return buf;
     }
 
@@ -189,13 +208,57 @@ public:
     // =========================================================================
 
     static bool decodeServerHello(const uint8_t* data, size_t size, ServerHello& out) {
-        if (size < 12) return false;
+        if (size < 20) return false;
         size_t offset = 0;
         out.protocolVersion = readU32(data, offset);
         out.assignedId = readU32(data, offset);
         out.spawnPosition.x = readFloat(data, offset);
         out.spawnPosition.y = readFloat(data, offset);
         out.spawnPosition.z = readFloat(data, offset);
+        return true;
+    }
+
+    static bool decodeChunkData(const uint8_t* data, size_t size, ChunkDataMessage& out) {
+        constexpr size_t kHeaderBytes = 13;
+        constexpr size_t kBlockBytes = Chunk::BLOCK_COUNT * sizeof(uint16_t);
+        constexpr size_t kLightBytes = Chunk::BLOCK_COUNT;
+        if (size < kHeaderBytes) return false;
+
+        size_t offset = 0;
+        out.chunkX = readI32(data, offset);
+        out.chunkZ = readI32(data, offset);
+        out.revision = readU32(data, offset);
+        const bool hasChunkData = readU8(data, offset) != 0;
+        if (!hasChunkData) {
+            out.chunk.reset();
+            return true;
+        }
+        if (size < kHeaderBytes + kBlockBytes + kLightBytes) {
+            return false;
+        }
+
+        auto chunk = std::make_shared<Chunk>(out.chunkX, out.chunkZ);
+        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                    chunk->setBlockFast(x, y, z, readU16(data, offset));
+                }
+            }
+        }
+
+        std::vector<uint8_t> packedLight(Chunk::BLOCK_COUNT);
+        for (uint8_t& light : packedLight) {
+            light = readU8(data, offset);
+        }
+        chunk->replacePackedLight(packedLight.data(), packedLight.size());
+
+        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+            for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                chunk->recalcHeightMap(x, z);
+            }
+        }
+        chunk->markExistingSubChunksDirty();
+        out.chunk = std::move(chunk);
         return true;
     }
 

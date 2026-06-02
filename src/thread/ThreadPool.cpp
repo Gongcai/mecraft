@@ -89,6 +89,11 @@ int ThreadPool::activeCount() const {
     return m_activeCount.load(std::memory_order_acquire);
 }
 
+bool ThreadPool::isRunning() const {
+    return m_running.load(std::memory_order_acquire) &&
+           !m_stopping.load(std::memory_order_acquire);
+}
+
 void ThreadPool::workerLoop() {
     while (true) {
         // Phase 1: wait for work — only hold m_stateMutex for the CV predicate

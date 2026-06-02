@@ -9,6 +9,7 @@
 #include "src/server/GameServer.h"
 #include "src/net/ENetTransport.h"
 #include "src/thread/ThreadPool.h"
+#include "src/world/block/Block.h"
 #include <cstdio>
 #include <thread>
 #include <chrono>
@@ -51,6 +52,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    BlockRegistry::init(nullptr);
+
     // Create thread pool
     ThreadPool threadPool(4);
 
@@ -66,6 +69,7 @@ int main(int argc, char* argv[]) {
         net::ENetTransport::deinitialize();
         return 1;
     }
+    server.acceptClient(std::move(listenTransport), 1);
 
     std::printf("Server listening on port %d\n", port);
     std::printf("Press Ctrl+C to stop\n\n");
@@ -83,12 +87,6 @@ int main(int argc, char* argv[]) {
 
     while (g_running) {
         const auto tickStart = std::chrono::steady_clock::now();
-
-        // Poll for new connections
-        listenTransport->poll();
-
-        // Check for new client connections
-        // (In a real implementation, we'd track multiple peers)
 
         // Run server tick
         server.tick(kServerTickDt);
@@ -113,7 +111,6 @@ int main(int argc, char* argv[]) {
     std::printf("\nShutting down...\n");
 
     // Cleanup
-    listenTransport.reset();
     net::ENetTransport::deinitialize();
 
     std::printf("Server stopped.\n");

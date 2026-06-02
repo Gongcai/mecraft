@@ -21,6 +21,7 @@
 #include "../../client/GameClient.h"
 #include "../../net/InProcessTransport.h"
 #include "../../net/ENetTransport.h"
+#include <stdexcept>
 
 GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
@@ -39,16 +40,16 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
 
         // Create ENet transport and connect to remote server
         auto enetTransport = std::make_unique<net::ENetTransport>();
-        if (enetTransport->connect(config.serverAddress, config.serverPort)) {
-            // ENetTransport inherits ITransportEndpoint; transfer ownership
-            std::unique_ptr<net::ITransportEndpoint> base(std::move(enetTransport));
-            m_client->connect(std::move(base));
-            m_client->sendViewConfig(config.renderDistance);
+        if (!enetTransport->connect(config.serverAddress, config.serverPort)) {
+            throw std::runtime_error("Failed to connect to multiplayer server " +
+                                     config.serverAddress + ":" +
+                                     std::to_string(config.serverPort));
         }
+        // ENetTransport inherits ITransportEndpoint; transfer ownership
+        std::unique_ptr<net::ITransportEndpoint> base(std::move(enetTransport));
+        m_client->connect(std::move(base));
+        m_client->sendViewConfig(config.renderDistance);
 
-        // Wire up ClientWorld with server's weather/day-night (local fallback)
-        m_client->clientWorld().setDayNightSystem(&m_server->world().getDayNightSystem());
-        m_client->clientWorld().setWeatherSystem(&m_server->world().getWeatherSystem());
         m_client->clientWorld().setRenderDistance(config.renderDistance);
 
         m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_server->world());
@@ -91,6 +92,9 @@ const World& GameSession::world() const {
 }
 
 const IWorldView& GameSession::worldView() const {
+    if (m_isMultiplayer) {
+        return m_client->clientWorld();
+    }
     // When spawn chunks are ready, render from ClientWorld (C/S pipeline active).
     // Before that, render from the server's World directly (loading screen).
     if (m_client && m_client->areSpawnChunksReady()) {
@@ -181,10 +185,12 @@ const GameStateMachine& GameSession::stateMachine() const {
 }
 
 void GameSession::updateWorldAroundLocalPlayer() {
-    // Server tick: load chunks, process client messages, send world state
-    // For Phase 1, use a fixed dt for server tick (will be decoupled in Phase 3)
     constexpr float kServerTickDt = 1.0f / 20.0f;
-    m_server->tick(kServerTickDt);
+    if (!m_isMultiplayer) {
+        // Server tick: load chunks, process client messages, send world state
+        // For Phase 1, use a fixed dt for server tick (will be decoupled in Phase 3)
+        m_server->tick(kServerTickDt);
+    }
 
     // Client: receive messages from server (chunk data, snapshots)
     m_client->receiveMessages();

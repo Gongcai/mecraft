@@ -23,6 +23,8 @@ struct ConnectedClient {
     uint32_t lastAckedInput = 0;
     int viewDistance = 16;  // Client's render distance
     std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
+    int chunkSendLogCount = 0;
+    int totalChunksSent = 0;
 };
 
 /// Authoritative game server. Owns the World and runs the server tick loop.

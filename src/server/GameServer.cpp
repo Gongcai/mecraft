@@ -4,6 +4,7 @@
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
 #include <cmath>
+#include <cstdio>
 
 namespace server {
 
@@ -24,6 +25,13 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     constexpr float kSpawnHeightOffset = 2.0f;
     const int surfaceY = m_world.getSurfaceY(0, 0);
     m_spawnPosition = glm::vec3(0.0f, static_cast<float>(surfaceY + kSpawnHeightOffset), 0.0f);
+    std::printf("[Server] World initialized seed=%u renderDistance=%d spawn=(%.1f, %.1f, %.1f)\n",
+                seed,
+                renderDistance,
+                m_spawnPosition.x,
+                m_spawnPosition.y,
+                m_spawnPosition.z);
+    std::fflush(stdout);
 }
 
 void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id) {
@@ -31,6 +39,8 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     client.id = id;
     client.transport = std::move(transport);
     m_clients.push_back(std::move(client));
+    std::printf("[Server] Accepted transport slot for client %u\n", id);
+    std::fflush(stdout);
 }
 
 void GameServer::tick(float dt) {
@@ -69,6 +79,16 @@ void GameServer::processClientMessages() {
         while (client.transport->tryReceive(packet)) {
             switch (packet.type) {
             case net::MessageType::ClientHello: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& hello = std::any_cast<const net::ClientHello&>(packet.inProcessPayload);
+                    std::printf("[Server] ClientHello client=%u protocol=%u\n",
+                                client.id,
+                                hello.protocolVersion);
+                } else {
+                    std::printf("[Server] ClientHello client=%u without decoded payload\n", client.id);
+                }
+                std::fflush(stdout);
+
                 // Respond with ServerHello
                 net::Packet response;
                 response.channel = net::PacketChannel::ReliableControl;
@@ -97,6 +117,10 @@ void GameServer::processClientMessages() {
                 if (packet.inProcessPayload.has_value()) {
                     const auto& config = std::any_cast<const net::ClientViewConfig&>(packet.inProcessPayload);
                     client.viewDistance = std::max(1, config.renderDistance);
+                    std::printf("[Server] ClientViewConfig client=%u renderDistance=%d\n",
+                                client.id,
+                                client.viewDistance);
+                    std::fflush(stdout);
                 }
                 break;
             }
@@ -298,6 +322,18 @@ void GameServer::sendChunkDataToClient(ConnectedClient& client, int cx, int cz) 
     data.chunk = it->second;  // Zero-copy: share the Chunk pointer
     packet.inProcessPayload = std::move(data);
     client.transport->send(std::move(packet));
+
+    ++client.totalChunksSent;
+    if (client.chunkSendLogCount < 12 || client.totalChunksSent % 25 == 0) {
+        std::printf("[Server] Sent ChunkData client=%u chunk=(%d,%d) total=%d active=%zu\n",
+                    client.id,
+                    cx,
+                    cz,
+                    client.totalChunksSent,
+                    activeChunks.size());
+        std::fflush(stdout);
+        ++client.chunkSendLogCount;
+    }
 }
 
 void GameServer::checkSpawnChunksReady() {

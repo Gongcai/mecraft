@@ -1,5 +1,6 @@
 #include "GameClient.h"
 #include "../world/chunk/Chunk.h"
+#include <cstdio>
 
 namespace client {
 
@@ -8,6 +9,8 @@ GameClient::~GameClient() = default;
 
 void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
     m_transport = std::move(transport);
+    std::printf("[Client] Transport connected; sending hello\n");
+    std::fflush(stdout);
     sendHello();
 }
 
@@ -72,6 +75,12 @@ void GameClient::receiveMessages() {
                 const auto& hello = std::any_cast<const net::ServerHello&>(packet.inProcessPayload);
                 m_clientId = hello.assignedId;
                 m_authPosition = hello.spawnPosition;
+                std::printf("[Client] ServerHello id=%u spawn=(%.1f, %.1f, %.1f)\n",
+                            m_clientId,
+                            m_authPosition.x,
+                            m_authPosition.y,
+                            m_authPosition.z);
+                std::fflush(stdout);
             }
             break;
         }
@@ -144,9 +153,19 @@ void GameClient::handleChunkData(const net::ChunkDataMessage& data) {
     if (data.chunk) {
         m_clientWorld.addChunk(data.chunk);
         ++m_chunksReceived;
+        if (m_chunksReceived <= 12 || m_chunksReceived % 25 == 0) {
+            std::printf("[Client] Received ChunkData chunk=(%d,%d) count=%d loaded=%zu\n",
+                        data.chunkX,
+                        data.chunkZ,
+                        m_chunksReceived,
+                        m_clientWorld.loadedChunkCount());
+            std::fflush(stdout);
+        }
 
         if (!m_spawnChunksReady && m_chunksReceived >= kSpawnChunksThreshold) {
             m_spawnChunksReady = true;
+            std::printf("[Client] Spawn chunks ready after %d chunks\n", m_chunksReceived);
+            std::fflush(stdout);
         }
     }
 }

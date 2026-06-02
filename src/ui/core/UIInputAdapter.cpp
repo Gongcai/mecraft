@@ -55,6 +55,17 @@ UIInputEvent makeTextInputEvent(const InputSnapshot& snapshot, const std::uint32
     return event;
 }
 
+UIInputEvent makeKeyEvent(const InputSnapshot& snapshot,
+                          const UIInputEventType type,
+                          const int key) {
+    UIInputEvent event;
+    event.type = type;
+    event.x = snapshot.mousePosition.x;
+    event.y = snapshot.mousePosition.y;
+    event.key = key;
+    return event;
+}
+
 void routeCommand(UIRenderer& renderer,
                   const InputSnapshot& snapshot,
                   UIInputRouteResult& routeResult,
@@ -129,9 +140,26 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
         mergeResult(routeResult.aggregate, renderer.routeUIInput(makeScrollEvent(snapshot)));
     }
 
+    for (int key = 0; key <= GLFW_KEY_LAST; ++key) {
+        if (snapshot.isKeyJustPressed(key)) {
+            mergeResult(routeResult.aggregate,
+                        renderer.routeUIInput(makeKeyEvent(snapshot, UIInputEventType::KeyDown, key)));
+        }
+        if (snapshot.isKeyJustReleased(key)) {
+            mergeResult(routeResult.aggregate,
+                        renderer.routeUIInput(makeKeyEvent(snapshot, UIInputEventType::KeyUp, key)));
+        }
+    }
+    if (routeResult.aggregate == UIEventResult::Consumed) {
+        return routeResult;
+    }
+
     for (std::size_t i = 0; i < snapshot.typedCharCount; ++i) {
         mergeResult(routeResult.aggregate,
                     renderer.routeUIInput(makeTextInputEvent(snapshot, snapshot.typedChars[i])));
+    }
+    if (routeResult.aggregate == UIEventResult::Consumed) {
+        return routeResult;
     }
 
     if (context.isActionTriggered(Action::Up)) {

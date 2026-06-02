@@ -1,6 +1,8 @@
 #include "GameplayAppState.h"
 #include "MainMenuAppState.h"
 #include "game/Game.h"
+#include <exception>
+#include <iostream>
 
 GameplayAppState::GameplayAppState(AppStateDependencies deps, GameSessionConfig config)
     : m_deps(deps), m_config(config) {
@@ -25,8 +27,16 @@ void GameplayAppState::onEnter() {
         m_deps.localeManager
     };
 
-    m_game = std::make_unique<Game>(m_config, deps);
-    m_game->init();
+    try {
+        m_game = std::make_unique<Game>(m_config, deps);
+        m_game->init();
+    } catch (const std::exception& ex) {
+        std::cerr << "[GameplayAppState] Failed to enter gameplay: " << ex.what() << '\n';
+        m_game.reset();
+        m_enterFailed = true;
+        m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+        return;
+    }
 
     m_deps.input.captureMouse(true);
 }
@@ -40,6 +50,11 @@ void GameplayAppState::onExit() {
 }
 
 void GameplayAppState::update(double frameTime, double& accumulator) {
+    if (m_enterFailed || !m_game) {
+        accumulator = 0.0;
+        return;
+    }
+
     constexpr double kFixedStep = 1.0 / 60.0;
     while (accumulator >= kFixedStep) {
         m_game->fixedUpdate(kFixedStep, accumulator);

@@ -4,6 +4,7 @@
 #include "../engine/platform/Time.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
+#include "../net/ENetTransport.h"
 #include <iostream>
 #include <string>
 #include <GLFW/glfw3.h>
@@ -25,6 +26,9 @@ void GameManager::init(int width, int height, const char* title) {
     m_uiRenderer.init(m_resourceMgr);
     m_localeManager.loadSettings();
     m_uiRenderer.setLocaleManager(&m_localeManager);
+    if (!net::ENetTransport::initialize()) {
+        std::cerr << "Failed to initialize ENet; multiplayer connections will fail." << std::endl;
+    }
 
     m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
 }
@@ -135,4 +139,5 @@ void GameManager::shutdown() {
     m_uiRenderer.shutdown();
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
+    net::ENetTransport::deinitialize();
 }

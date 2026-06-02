@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
@@ -293,16 +294,22 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     // --- Render text ---
     if (ctx.textRenderer) {
         // Set up scissor to clip text within the input box.
+        const GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
         GLint prevScissor[4] = {};
-        glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
+        if (scissorWasEnabled) {
+            glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
+        }
+
+        GLint viewport[4] = {0, 0, ctx.screenWidth, ctx.screenHeight};
+        glGetIntegerv(GL_VIEWPORT, viewport);
+
         glEnable(GL_SCISSOR_TEST);
-        // Scissor is in actual pixel coords (not reference space).
         const float uiScale = ctx.uiScale > 0.0f ? ctx.uiScale : 1.0f;
-        const int sx = static_cast<int>((ax + 2.0f) * uiScale);
-        const int sy = static_cast<int>(((ctx.screenHeight - ay - ah) + 2.0f) * uiScale);
-        const int sw = static_cast<int>((aw - 4.0f) * uiScale);
-        const int sh = static_cast<int>((ah - 4.0f) * uiScale);
-        glScissor(sx, sy, std::max(0, sw), std::max(0, sh));
+        const int sx = viewport[0] + static_cast<int>(std::floor((ax + 2.0f) * uiScale));
+        const int sy = viewport[1] + static_cast<int>(std::floor((ctx.screenHeight - ay - ah + 2.0f) * uiScale));
+        const int sw = static_cast<int>(std::ceil((aw - 4.0f) * uiScale));
+        const int sh = static_cast<int>(std::ceil((ah - 4.0f) * uiScale));
+        glScissor(sx, sy, std::max(1, sw), std::max(1, sh));
 
         const float textScale = 1.0f;
         if (m_text.empty() && !m_placeholder.empty() && !isFocused()) {
@@ -324,9 +331,13 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
                                      static_cast<float>(ctx.screenHeight));
         }
 
-        glScissor(prevScissor[0], prevScissor[1],
-                  static_cast<GLsizei>(prevScissor[2]),
-                  static_cast<GLsizei>(prevScissor[3]));
+        if (scissorWasEnabled) {
+            glScissor(prevScissor[0], prevScissor[1],
+                      static_cast<GLsizei>(prevScissor[2]),
+                      static_cast<GLsizei>(prevScissor[3]));
+        } else {
+            glDisable(GL_SCISSOR_TEST);
+        }
     }
 }
 
@@ -364,8 +375,10 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
         // InputManager holds key states and the GLFW window is accessible
         // through the currently bound context. We check both left and right Ctrl.
         // This is a pragmatic approach since UIInputEvent doesn't carry modifiers.
-        const bool ctrl = glfwGetKey(glfwGetCurrentContext(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-                          glfwGetKey(glfwGetCurrentContext(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+        GLFWwindow* currentContext = glfwGetCurrentContext();
+        const bool ctrl = currentContext &&
+                          (glfwGetKey(currentContext, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                           glfwGetKey(currentContext, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
 
         if (key == GLFW_KEY_LEFT) {
             if (hasSelection() && !ctrl) {

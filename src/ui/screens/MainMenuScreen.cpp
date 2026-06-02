@@ -104,6 +104,9 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
             auto colonPos = addr.find(':');
             if (colonPos != std::string::npos) {
                 port = std::atoi(addr.substr(colonPos + 1).c_str());
+                if (port <= 0 || port > 65535) {
+                    port = 25565;
+                }
                 addr = addr.substr(0, colonPos);
             }
             onConnectClicked(addr, port);
