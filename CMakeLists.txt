@@ -297,6 +297,7 @@ set(SRC_AUDIO
 # [网络层]
 set(SRC_NET
         src/net/InProcessTransport.cpp
+        src/net/ENetTransport.cpp
 )
 
 # [服务端]
@@ -440,6 +441,20 @@ if(MECRAFT_IPO_SUPPORTED)
     set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
     set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
+endif()
+
+# ===========================================================================
+# 6b. Dedicated Server
+# ===========================================================================
+add_executable(mecraft_server dedicated_server.cpp)
+target_compile_features(mecraft_server PRIVATE cxx_std_17)
+target_link_libraries(mecraft_server PRIVATE mecraft_core)
+target_compile_definitions(mecraft_server PRIVATE MECRAFT_NO_TEXTURES)
+if (MSVC)
+    mecraft_apply_msvc_defaults(mecraft_server)
+endif()
+if(MECRAFT_ENABLE_PCH)
+    target_precompile_headers(mecraft_server REUSE_FROM mecraft_pch)
 endif()
 
 # ===========================================================================
