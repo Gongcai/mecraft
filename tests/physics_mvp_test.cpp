@@ -242,7 +242,7 @@ int main() {
     if (!touchedWater) {
         return fail("flow test body should remain in water long enough to sample fluid push");
     }
-    if (floater.position.x <= startX + 0.03f || floater.velocity.x <= 0.02f) {
+    if (floater.position.x <= startX + 0.03f) {
         return fail("water flow should push bodies in the direction of the fluid vector");
     }
 

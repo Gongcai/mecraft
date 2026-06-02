@@ -64,6 +64,16 @@ void GameClient::sendInput(float dt, const glm::vec3& moveInput,
     m_transport->send(std::move(packet));
 }
 
+void GameClient::sendBlockAction(const net::ClientBlockAction& action) {
+    if (!m_transport) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::ClientBlockAction;
+    packet.inProcessPayload = action;
+    m_transport->send(std::move(packet));
+}
+
 void GameClient::receiveMessages() {
     if (!m_transport) return;
 
@@ -75,6 +85,7 @@ void GameClient::receiveMessages() {
                 const auto& hello = std::any_cast<const net::ServerHello&>(packet.inProcessPayload);
                 m_clientId = hello.assignedId;
                 m_authPosition = hello.spawnPosition;
+                m_hasServerHello = true;
                 std::printf("[Client] ServerHello id=%u spawn=(%.1f, %.1f, %.1f)\n",
                             m_clientId,
                             m_authPosition.x,

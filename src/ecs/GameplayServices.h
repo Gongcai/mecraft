@@ -5,6 +5,8 @@
 
 // Forward declarations for non-ECS services
 class World;
+class IWorldView;
+namespace client { class GameClient; }
 class AudioEngine;
 class InputContextManager;
 class ResourceMgr;
@@ -60,6 +62,8 @@ struct GameplayServices {
     // Assign during init; access via the OptionalService API or raw get().
 
     OptionalService<World>                   world;
+    OptionalService<const IWorldView>        worldView;
+    OptionalService<client::GameClient>      gameClient;
     OptionalService<AudioEngine>             audioEngine;
     OptionalService<InputContextManager>     inputContextManager;
     OptionalService<ResourceMgr>             resourceMgr;

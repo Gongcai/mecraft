@@ -1,7 +1,7 @@
 #include "BlockTargetSystem.h"
 
 #include "../../components/Components.h"
-#include "../../../world/World.h"
+#include "../../../world/WorldRaycast.h"
 
 namespace ecs {
 
@@ -10,8 +10,8 @@ constexpr float kPickDistance = 6.0f;
 } // namespace
 
 void BlockTargetSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    auto& world = *ctx.services.world;
+    if (!ctx.services.worldView) return;
+    const auto& worldView = *ctx.services.worldView;
     auto& registry = ctx.registry;
 
     auto view = registry.view<LocalPlayerTag,
@@ -28,7 +28,7 @@ void BlockTargetSystem::update(SystemContext& ctx) {
             transform.position + glm::vec3(0.0f, transform.eyeHeight, 0.0f),
             camera.front
         };
-        const RayHit hit = world.raycast(pickRay, kPickDistance);
+        const RayHit hit = raycastWorldView(worldView, pickRay, kPickDistance);
         target.hasTarget = hit.hit;
         target.targetBlock = hit.hit ? hit.blockPos : glm::ivec3{};
         target.placeBlock = hit.hit ? hit.blockPos + hit.normal : glm::ivec3{};

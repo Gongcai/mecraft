@@ -1,6 +1,7 @@
 #include "GameFrameOrchestrator.h"
 #include "../session/GameSession.h"
 #include "../states/GameStateMachine.h"
+#include "../../client/GameClient.h"
 #include "../../engine/input/InputManager.h"
 #ifdef MECRAFT_DEBUG
 #include <chrono>
@@ -42,6 +43,23 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 
     accumulator -= fixedStep;
 
+    session.updateWorldAroundLocalPlayer();
+    if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
+#ifdef MECRAFT_DEBUG
+        if (renderRuntime) {
+            if (auto* profiler = renderRuntime->profiler()) {
+                profiler->recordFixedInput(std::chrono::duration<double, std::milli>(inputEnd - inputStart).count());
+                profiler->recordFixedState(0.0);
+                profiler->recordFixedParticle(0.0);
+                profiler->recordFixedDrop(0.0);
+                profiler->recordFixedWorld(0.0);
+                profiler->incrementFixedStep();
+            }
+        }
+#endif
+        return false;
+    }
+
     // ECS pre-state stage: sample input and build intents before states consume them.
 #ifdef MECRAFT_DEBUG
     const auto fixedSystemsStart = std::chrono::steady_clock::now();
@@ -67,7 +85,6 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
     const auto worldStart = std::chrono::steady_clock::now();
 #endif
 
-    session.updateWorldAroundLocalPlayer();
 #ifdef MECRAFT_DEBUG
     const auto worldEnd = std::chrono::steady_clock::now();
 #endif

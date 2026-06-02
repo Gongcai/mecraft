@@ -1,8 +1,18 @@
 #include "client/ClientWorld.h"
 #include "world/chunk/Chunk.h"
 #include "world/block/Block.h"
+#include "world/WorldRaycast.h"
+#include "physics/PhysicsInfo.h"
 #include <cassert>
 #include <cstdio>
+#include <cstdlib>
+
+static void require(bool condition, const char* message) {
+    if (!condition) {
+        std::fprintf(stderr, "[FAIL] %s\n", message);
+        std::exit(EXIT_FAILURE);
+    }
+}
 
 static void testInitialState() {
     client::ClientWorld cw;
@@ -114,7 +124,52 @@ static void testWeatherDayNightProxy() {
     std::printf("[PASS] testWeatherDayNightProxy\n");
 }
 
+static void testNeighborLinkingDirtiesExistingBorders() {
+    client::ClientWorld cw;
+    auto left = std::make_shared<Chunk>(0, 0);
+    auto right = std::make_shared<Chunk>(1, 0);
+
+    left->setBlock(15, 64, 0, BlockIds::STONE);
+    right->setBlock(0, 64, 0, BlockIds::STONE);
+    left->markMeshClean();
+    right->markMeshClean();
+
+    cw.addChunk(left);
+    require(!left->isSubChunkDirty(Chunk::toSubChunkIndex(64)), "left chunk should start clean");
+    cw.addChunk(right);
+
+    const int scy = Chunk::toSubChunkIndex(64);
+    require(left->neighbors[0] == right.get(), "left chunk should link +X neighbor");
+    require(right->neighbors[1] == left.get(), "right chunk should link -X neighbor");
+    require(left->getSubChunk(scy)->neighbors[0] == right->getSubChunk(scy), "left subchunk should link +X neighbor");
+    require(right->getSubChunk(scy)->neighbors[1] == left->getSubChunk(scy), "right subchunk should link -X neighbor");
+    require(left->isSubChunkDirty(scy), "left border subchunk should be dirtied");
+    require(right->isSubChunkDirty(scy), "right border subchunk should be dirtied");
+
+    cw.removeChunk(1, 0);
+    require(left->neighbors[0] == nullptr, "left chunk should unlink removed +X neighbor");
+    require(left->getSubChunk(scy)->neighbors[0] == nullptr, "left subchunk should unlink removed +X neighbor");
+    require(left->isSubChunkDirty(scy), "left border subchunk should be dirtied after unlink");
+    std::printf("[PASS] testNeighborLinkingDirtiesExistingBorders\n");
+}
+
+static void testClientWorldRaycastHitsBlocks() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    chunk->setBlock(3, 64, 0, BlockIds::STONE);
+    cw.addChunk(chunk);
+
+    const PhysicsInfo ray(glm::vec3(0.5f, 64.5f, 0.5f), glm::vec3(1.0f, 0.0f, 0.0f));
+    const RayHit hit = raycastWorldView(cw, ray, 8.0f);
+
+    require(hit.hit, "client world raycast should hit block");
+    require(hit.blockPos == glm::ivec3(3, 64, 0), "client world raycast should return block position");
+    std::printf("[PASS] testClientWorldRaycastHitsBlocks\n");
+}
+
 int main() {
+    BlockRegistry::init(nullptr);
+
     testInitialState();
     testAddChunk();
     testRemoveChunk();
@@ -124,6 +179,8 @@ int main() {
     testGetChunkCoords();
     testSetRenderDistance();
     testWeatherDayNightProxy();
+    testNeighborLinkingDirtiesExistingBorders();
+    testClientWorldRaycastHitsBlocks();
     std::printf("\nAll ClientWorld tests passed!\n");
     return 0;
 }

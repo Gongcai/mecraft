@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "PhysicsInfo.h"
+#include "../world/IWorldView.h"
 #include "../world/block/Block.h"
 #include "../world/fluid/FluidFlow.h"
 #include "../world/fluid/FluidState.h"
@@ -26,7 +27,7 @@ AABB makeBodyAABBAt(const PhysicsBody& body, const glm::vec3& position) {
     return AABB{center - body.halfExtents, center + body.halfExtents};
 }
 
-bool isSolidBlock(const World& world, const int x, const int y, const int z) {
+bool isSolidBlock(const IWorldView& world, const int x, const int y, const int z) {
     const BlockID id = world.getBlock(x, y, z);
     if (id == 0) {
         return false;
@@ -34,13 +35,13 @@ bool isSolidBlock(const World& world, const int x, const int y, const int z) {
     return BlockRegistry::get(id).isSolid;
 }
 
-bool isWaterBlock(const World& world, const int x, const int y, const int z) {
+bool isWaterBlock(const IWorldView& world, const int x, const int y, const int z) {
     // Check fluid layer first (waterlogged blocks), then block layer (pure water)
     const StateID fluidState = world.getFluidState(x, y, z);
     return FluidState::isWater(fluidState);
 }
 
-float waterTopY(const World& world, const int x, const int y, const int z) {
+float waterTopY(const IWorldView& world, const int x, const int y, const int z) {
     const StateID fluidState = world.getFluidState(x, y, z);
     if (!FluidState::isWater(fluidState)) {
         return static_cast<float>(y);
@@ -51,7 +52,7 @@ float waterTopY(const World& world, const int x, const int y, const int z) {
 
 float overlapLen(float aMin, float aMax, float bMin, float bMax);
 
-float queryWaterFillRatio(const PhysicsBody& body, const World& world) {
+float queryWaterFillRatio(const PhysicsBody& body, const IWorldView& world) {
     const AABB box = makeBodyAABBAt(body, body.position);
     const int minX = static_cast<int>(std::floor(box.min.x));
     const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
@@ -83,7 +84,10 @@ float queryWaterFillRatio(const PhysicsBody& body, const World& world) {
     return std::clamp(waterVolume / totalVolume, 0.0f, 1.0f);
 }
 
-glm::vec3 queryWaterFlowVector(const PhysicsBody& body, const World& world) {
+glm::vec3 queryWaterFlowVector(const PhysicsBody& body, const IWorldView& world, const World* concreteWorld) {
+    if (concreteWorld == nullptr) {
+        return glm::vec3(0.0f);
+    }
     const AABB box = makeBodyAABBAt(body, body.position);
     const int minX = static_cast<int>(std::floor(box.min.x));
     const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
@@ -108,7 +112,7 @@ glm::vec3 queryWaterFlowVector(const PhysicsBody& body, const World& world) {
                     continue;
                 }
 
-                weightedFlow += computeFluidFlowVector(world, glm::ivec3(x, y, z), FluidKind::Water) * overlap;
+                weightedFlow += computeFluidFlowVector(*concreteWorld, glm::ivec3(x, y, z), FluidKind::Water) * overlap;
                 weightSum += overlap;
             }
         }
@@ -124,7 +128,7 @@ float overlapLen(const float aMin, const float aMax, const float bMin, const flo
     return std::max(0.0f, std::min(aMax, bMax) - std::max(aMin, bMin));
 }
 
-bool overlapsSolid(const World& world, const AABB& box) {
+bool overlapsSolid(const IWorldView& world, const AABB& box) {
     const int minX = static_cast<int>(std::floor(box.min.x));
     const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
     const int minY = static_cast<int>(std::floor(box.min.y));
@@ -144,7 +148,7 @@ bool overlapsSolid(const World& world, const AABB& box) {
     return false;
 }
 
-bool queryEyesInWater(const PhysicsBody& body, const World& world) {
+bool queryEyesInWater(const PhysicsBody& body, const IWorldView& world) {
     const glm::vec3 eyePos = body.position + glm::vec3(0.0f, body.eyeOffsetY, 0.0f);
     const int blockX = static_cast<int>(std::floor(eyePos.x));
     const int blockY = static_cast<int>(std::floor(eyePos.y));
@@ -157,7 +161,7 @@ bool queryEyesInWater(const PhysicsBody& body, const World& world) {
     return localEyeY <= FluidState::surfaceHeight(fluidState) + 0.0001f;
 }
 
-bool hasGroundSupportAt(const PhysicsBody& body, const World& world, const glm::vec3& position) {
+bool hasGroundSupportAt(const PhysicsBody& body, const IWorldView& world, const glm::vec3& position) {
     const AABB box = makeBodyAABBAt(body, position);
     constexpr float kSupportProbeDepth = 0.08f;
     const int supportMinY = static_cast<int>(std::floor(box.min.y - kSupportProbeDepth));
@@ -281,13 +285,14 @@ void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning&
     body.velocity *= factor;
 }
 
-void applyFluidFlow(PhysicsBody& body, const World& world, const MoveIntent& intent,
-                    const PhysicsTuning& tuning, const float waterFillRatio, const float dt) {
+void applyFluidFlow(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent,
+                    const PhysicsTuning& tuning, const float waterFillRatio, const float dt,
+                    const World* concreteWorld) {
     if (intent.isFlying || !body.isInWater || waterFillRatio <= 0.0f) {
         return;
     }
 
-    const glm::vec3 flow = queryWaterFlowVector(body, world);
+    const glm::vec3 flow = queryWaterFlowVector(body, world, concreteWorld);
     if (glm::length(flow) <= 0.0001f) {
         return;
     }
@@ -298,7 +303,7 @@ void applyFluidFlow(PhysicsBody& body, const World& world, const MoveIntent& int
     body.velocity += flow * (tuning.waterFlowPush * pushScale * dt);
 }
 
-void moveAndCollideAxis(PhysicsBody& body, const World& world, const MoveIntent& intent, const float dt, const int axis) {
+void moveAndCollideAxis(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent, const float dt, const int axis) {
     const float delta = body.velocity[axis] * dt;
     if (std::abs(delta) <= 0.0f) {
         return;
@@ -347,7 +352,9 @@ void moveAndCollideAxis(PhysicsBody& body, const World& world, const MoveIntent&
 namespace physics {
 
 
-PhysicsSystem::PhysicsSystem(World* world) : m_world(world) {}
+PhysicsSystem::PhysicsSystem(const IWorldView* worldView)
+    : m_worldView(worldView),
+      m_concreteWorld(worldView ? worldView->asWorld() : nullptr) {}
 
 void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, const float dt) {
     updateBody(body, intent, dt, tuning);
@@ -355,7 +362,7 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
 
 void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, const float dt,
                                const PhysicsTuning& tuningOverride) {
-    if (dt <= 0.0f || m_world == nullptr) {
+    if (dt <= 0.0f || m_worldView == nullptr) {
         return;
     }
 
@@ -363,33 +370,33 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
 
     body.hitWall = false;
     body.landingImpactSpeed = 0.0f;
-    const float waterFillRatio = queryWaterFillRatio(body, *m_world);
+    const float waterFillRatio = queryWaterFillRatio(body, *m_worldView);
     body.isInWater = waterFillRatio > 0.2f;
     body.isFullySubmerged = waterFillRatio > 0.95f;
-    body.isEyesInWater = queryEyesInWater(body, *m_world);
+    body.isEyesInWater = queryEyesInWater(body, *m_worldView);
 
     applyHorizontalControl(body, intent, tuningOverride, wasGrounded, dt);
     applyVerticalForces(body, intent, tuningOverride, wasGrounded, dt);
     applyDrag(body, intent, tuningOverride, dt);
-    applyFluidFlow(body, *m_world, intent, tuningOverride, waterFillRatio, dt);
+    applyFluidFlow(body, *m_worldView, intent, tuningOverride, waterFillRatio, dt, m_concreteWorld);
 
     body.isGrounded = false;
-    moveAndCollideAxis(body, *m_world, intent, dt, 1); // Y
-    moveAndCollideAxis(body, *m_world, intent, dt, 0); // X
-    moveAndCollideAxis(body, *m_world, intent, dt, 2); // Z
+    moveAndCollideAxis(body, *m_worldView, intent, dt, 1); // Y
+    moveAndCollideAxis(body, *m_worldView, intent, dt, 0); // X
+    moveAndCollideAxis(body, *m_worldView, intent, dt, 2); // Z
 
     // Keep grounded state stable while resting on solid support to avoid
     // one-frame false negatives that can retrigger landing events.
     if (!intent.isFlying && !body.isGrounded && wasGrounded && body.velocity.y <= 0.0f &&
-        hasGroundSupportAt(body, *m_world, body.position)) {
+        hasGroundSupportAt(body, *m_worldView, body.position)) {
         body.isGrounded = true;
         body.velocity.y = 0.0f;
     }
 
-    const float postMoveWaterFillRatio = queryWaterFillRatio(body, *m_world);
+    const float postMoveWaterFillRatio = queryWaterFillRatio(body, *m_worldView);
     body.isInWater = postMoveWaterFillRatio > 0.2f;
     body.isFullySubmerged = postMoveWaterFillRatio > 0.95f;
-    body.isEyesInWater = queryEyesInWater(body, *m_world);
+    body.isEyesInWater = queryEyesInWater(body, *m_worldView);
 }
 
 

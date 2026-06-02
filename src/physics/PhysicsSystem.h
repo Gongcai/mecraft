@@ -3,13 +3,14 @@
 
 #include "PhysicsInfo.h"
 
+class IWorldView;
 class World;
 
 namespace physics {
 
 class PhysicsSystem {
 public:
-    PhysicsSystem(World* world);
+    PhysicsSystem(const IWorldView* worldView);
     ~PhysicsSystem() = default;
 
     // 提供给外部调用的主更新接口
@@ -18,10 +19,10 @@ public:
     PhysicsTuning tuning;
 
 private:
-    World* m_world;
+    const IWorldView* m_worldView;
+    const World* m_concreteWorld = nullptr;
 };
 
 } // namespace physics
 
 #endif // MECRAFT_PHYSICS_SYSTEM_H
-

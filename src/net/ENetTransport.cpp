@@ -173,6 +173,12 @@ void ENetTransport::send(Packet packet) {
                     std::any_cast<const ClientViewConfig&>(packet.inProcessPayload));
             break;
         }
+        case MessageType::ClientBlockAction: {
+            if (packet.inProcessPayload.has_value())
+                typedPayload = PacketCodec::encodeClientBlockAction(
+                    std::any_cast<const ClientBlockAction&>(packet.inProcessPayload));
+            break;
+        }
         case MessageType::ChunkData: {
             if (packet.inProcessPayload.has_value())
                 typedPayload = PacketCodec::encodeChunkData(
@@ -315,6 +321,13 @@ void ENetTransport::poll() {
                 case MessageType::ClientViewConfig: {
                     ClientViewConfig msg;
                     if (PacketCodec::decodeClientViewConfig(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
+                case MessageType::ClientBlockAction: {
+                    ClientBlockAction msg;
+                    if (PacketCodec::decodeClientBlockAction(packet.payload.data(), packet.payload.size(), msg)) {
                         packet.inProcessPayload = msg;
                     }
                     break;

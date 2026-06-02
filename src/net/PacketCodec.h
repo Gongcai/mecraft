@@ -141,6 +141,27 @@ public:
         return buf;
     }
 
+    /// Encode a ClientBlockAction message into payload bytes.
+    static std::vector<uint8_t> encodeClientBlockAction(const ClientBlockAction& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.sequence);
+        pushU8(buf, static_cast<uint8_t>(msg.action));
+        pushI32(buf, msg.targetBlock.x);
+        pushI32(buf, msg.targetBlock.y);
+        pushI32(buf, msg.targetBlock.z);
+        pushI32(buf, msg.placeBlock.x);
+        pushI32(buf, msg.placeBlock.y);
+        pushI32(buf, msg.placeBlock.z);
+        pushI32(buf, msg.hitNormal.x);
+        pushI32(buf, msg.hitNormal.y);
+        pushI32(buf, msg.hitNormal.z);
+        pushFloat(buf, msg.playerPosition.x);
+        pushFloat(buf, msg.playerPosition.y);
+        pushFloat(buf, msg.playerPosition.z);
+        pushU16(buf, msg.blockState);
+        return buf;
+    }
+
     /// Encode a BlockUpdateBatch message into payload bytes.
     static std::vector<uint8_t> encodeBlockUpdateBatch(const BlockUpdateBatchMessage& msg) {
         std::vector<uint8_t> buf;
@@ -309,6 +330,27 @@ public:
         if (size < 4) return false;
         size_t offset = 0;
         out.renderDistance = static_cast<int>(readI32(data, offset));
+        return true;
+    }
+
+    static bool decodeClientBlockAction(const uint8_t* data, size_t size, ClientBlockAction& out) {
+        if (size < 51) return false;
+        size_t offset = 0;
+        out.sequence = readU32(data, offset);
+        out.action = static_cast<ClientBlockActionType>(readU8(data, offset));
+        out.targetBlock.x = readI32(data, offset);
+        out.targetBlock.y = readI32(data, offset);
+        out.targetBlock.z = readI32(data, offset);
+        out.placeBlock.x = readI32(data, offset);
+        out.placeBlock.y = readI32(data, offset);
+        out.placeBlock.z = readI32(data, offset);
+        out.hitNormal.x = readI32(data, offset);
+        out.hitNormal.y = readI32(data, offset);
+        out.hitNormal.z = readI32(data, offset);
+        out.playerPosition.x = readFloat(data, offset);
+        out.playerPosition.y = readFloat(data, offset);
+        out.playerPosition.z = readFloat(data, offset);
+        out.blockState = readU16(data, offset);
         return true;
     }
 

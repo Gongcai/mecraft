@@ -8,6 +8,8 @@
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
+#include "../../../client/GameClient.h"
+#include "../../../world/IWorldView.h"
 #include "../../../world/World.h"
 
 namespace ecs {
@@ -38,8 +40,9 @@ void resetBreakSession(BlockBreakComponent& blockBreak,
 } // namespace
 
 void BlockBreakSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    auto& world = *ctx.services.world;
+    if (!ctx.services.worldView) return;
+    const auto& worldView = *ctx.services.worldView;
+    World* mutableWorld = ctx.services.world.get();
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
@@ -81,7 +84,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        const BlockID targetBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
+        const BlockID targetBlock = worldView.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
         if (targetBlock == 0 || !BlockRegistry::get(targetBlock).isSelectable) {
             resetBreakSession(blockBreak, runtime);
             continue;
@@ -90,9 +93,26 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         if (!modeRules.shouldReportBreakProgress()) {
             // Creative instant break
             if (runtime.creativeBreakCooldownRemaining > 0.0f) continue;
+            if (mutableWorld == nullptr) {
+                if (ctx.services.gameClient) {
+                    net::ClientBlockAction action;
+                    action.sequence = ++runtime.heldItemSwingSequence;
+                    action.action = net::ClientBlockActionType::Break;
+                    action.targetBlock = hitBlock;
+                    action.placeBlock = target.placeBlock;
+                    action.hitNormal = target.hitNormal;
+                    action.playerPosition = transform.position;
+                    ctx.services.gameClient->sendBlockAction(action);
+                } else {
+                    ++runtime.heldItemSwingSequence;
+                }
+                runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
+                resetBreakSession(blockBreak, runtime);
+                continue;
+            }
 
-            const BlockID brokenBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
-            world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
+            const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
+            mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
             audioBus.push(
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
@@ -117,8 +137,24 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         blockBreak.progress01 = std::clamp(runtime.breakElapsedMs / runtime.breakRequiredMs, 0.0f, 1.0f);
 
         if (runtime.breakElapsedMs >= runtime.breakRequiredMs) {
-            const BlockID brokenBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
-            world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
+            if (mutableWorld == nullptr) {
+                if (ctx.services.gameClient) {
+                    net::ClientBlockAction action;
+                    action.sequence = ++runtime.heldItemSwingSequence;
+                    action.action = net::ClientBlockActionType::Break;
+                    action.targetBlock = hitBlock;
+                    action.placeBlock = target.placeBlock;
+                    action.hitNormal = target.hitNormal;
+                    action.playerPosition = transform.position;
+                    ctx.services.gameClient->sendBlockAction(action);
+                } else {
+                    ++runtime.heldItemSwingSequence;
+                }
+                resetBreakSession(blockBreak, runtime);
+                continue;
+            }
+            const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
+            mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
             audioBus.push(
                 {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});

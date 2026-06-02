@@ -39,6 +39,7 @@ enum class MessageType : uint8_t {
     ClientInput,
     ClientReady,
     ClientViewConfig,
+    ClientBlockAction,
 
     // Server -> Client
     ServerHello,
@@ -92,6 +93,21 @@ struct ClientReady {};
 /// Client sends its view configuration to the server.
 struct ClientViewConfig {
     int renderDistance = 16;
+};
+
+enum class ClientBlockActionType : uint8_t {
+    Break = 0,
+    Place = 1,
+};
+
+struct ClientBlockAction {
+    uint32_t sequence = 0;
+    ClientBlockActionType action = ClientBlockActionType::Break;
+    glm::ivec3 targetBlock = glm::ivec3(0);
+    glm::ivec3 placeBlock = glm::ivec3(0);
+    glm::ivec3 hitNormal = glm::ivec3(0);
+    glm::vec3 playerPosition = glm::vec3(0.0f);
+    uint16_t blockState = 0;
 };
 
 // ===========================================================================

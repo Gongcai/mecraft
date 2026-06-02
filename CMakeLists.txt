@@ -107,6 +107,7 @@ set(SRC_WORLD
         src/world/fluid/FluidSystem.cpp
         src/world/block/BlockNeighborUpdateQueue.cpp
         src/world/gen/TerrainGenerator.cpp
+        src/world/WorldRaycast.cpp
         src/world/World.cpp
         src/world/DropSystem.cpp
         src/world/DayNightSystem.cpp

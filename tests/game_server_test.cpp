@@ -126,6 +126,47 @@ static void testInputRoundTrip() {
     std::printf("[PASS] testInputRoundTrip\n");
 }
 
+static void testClientBlockActionRoundTrip() {
+    ServerHarness harness;
+    client::GameClient client;
+
+    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverTransport), 1);
+    client.connect(std::move(clientTransport));
+
+    for (int i = 0; i < 20; ++i) {
+        harness.server.tick(1.0f / 20.0f);
+        client.receiveMessages();
+    }
+
+    const glm::ivec3 placeBlock(1, static_cast<int>(harness.server.getSpawnPosition().y), 1);
+    net::ClientBlockAction place;
+    place.sequence = 1;
+    place.action = net::ClientBlockActionType::Place;
+    place.placeBlock = placeBlock;
+    place.playerPosition = harness.server.getSpawnPosition();
+    place.blockState = BlockIds::STONE;
+    client.sendBlockAction(place);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::STONE);
+    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::STONE);
+
+    net::ClientBlockAction breakAction;
+    breakAction.sequence = 2;
+    breakAction.action = net::ClientBlockActionType::Break;
+    breakAction.targetBlock = placeBlock;
+    breakAction.playerPosition = harness.server.getSpawnPosition();
+    client.sendBlockAction(breakAction);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
+    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
+    std::printf("[PASS] testClientBlockActionRoundTrip\n");
+}
+
 static void testChunkDataDecodeMarksRenderableSubChunks() {
     auto source = std::make_shared<Chunk>(0, 0);
     for (int y = 48; y < 56; ++y) {
@@ -322,6 +363,7 @@ int main() {
     testServerTick();
     testChunkStreamingToClient();
     testInputRoundTrip();
+    testClientBlockActionRoundTrip();
     testChunkDataDecodeMarksRenderableSubChunks();
     testENetChunkStreamingToClient();
     testENetChunkStreamingAfterPreconnectTicks();

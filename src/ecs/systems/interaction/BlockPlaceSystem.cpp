@@ -6,6 +6,8 @@
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
+#include "../../../client/GameClient.h"
+#include "../../../world/IWorldView.h"
 #include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
@@ -63,8 +65,9 @@ BlockID resolvePlacementState(const BlockID blockId,
 } // namespace
 
 void BlockPlaceSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    auto& world = *ctx.services.world;
+    if (!ctx.services.worldView) return;
+    const auto& worldView = *ctx.services.worldView;
+    World* mutableWorld = ctx.services.world.get();
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
@@ -119,7 +122,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         request.wantsPlace = intent.wantsPlace;
         request.placeCooldownRemaining = runtime.placeCooldownRemaining;
         if (target.hasTarget) {
-            request.targetBlock = world.getBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+            request.targetBlock = worldView.getBlock(placeBlock.x, placeBlock.y, placeBlock.z);
             request.playerWouldOverlapPlaceBlock = wouldOverlapBlock(physicsBody.body, placeBlock);
         }
 
@@ -139,11 +142,28 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         if (placedState == BlockIds::AIR) {
             continue;
         }
+        if (mutableWorld == nullptr) {
+            if (ctx.services.gameClient) {
+                net::ClientBlockAction action;
+                action.sequence = ++runtime.heldItemSwingSequence;
+                action.action = net::ClientBlockActionType::Place;
+                action.targetBlock = target.targetBlock;
+                action.placeBlock = placeBlock;
+                action.hitNormal = target.hitNormal;
+                action.playerPosition = playerPos;
+                action.blockState = static_cast<uint16_t>(placedState);
+                ctx.services.gameClient->sendBlockAction(action);
+            } else {
+                ++runtime.heldItemSwingSequence;
+            }
+            runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
+            continue;
+        }
 
-        world.setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
+        mutableWorld->setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
         // Notify DropSystem of placement (transitional — will be internalized later)
         if (ctx.services.dropSystem) {
-            ctx.services.dropSystem->onBlockPlaced(placeBlock, world);
+            ctx.services.dropSystem->onBlockPlaced(placeBlock, *mutableWorld);
         }
         if (modeRules.shouldReportBreakProgress()) {
             static_cast<void>(inventory.consumeSelectedOne());

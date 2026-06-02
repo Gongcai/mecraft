@@ -22,6 +22,8 @@
 #include "../../net/InProcessTransport.h"
 #include "../../net/ENetTransport.h"
 #include <stdexcept>
+#include <thread>
+#include <chrono>
 
 GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
@@ -52,7 +54,13 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
 
         m_client->clientWorld().setRenderDistance(config.renderDistance);
 
-        m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_server->world());
+        for (int i = 0; i < 400 &&
+             (!m_client->hasServerHello() || !m_client->areSpawnChunksReady()); ++i) {
+            m_client->receiveMessages();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+
+        m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_client->clientWorld());
     } else {
         // Single-player mode: local server + in-process transport
         m_server = std::make_unique<server::GameServer>();
@@ -111,7 +119,9 @@ void GameSession::initWorld(int seed) {
 
 void GameSession::initECS(const GameSessionDependencies& deps) {
     auto& svc = m_gameplayScene->services();
-    svc.world              = &m_server->world();
+    svc.world              = m_isMultiplayer ? nullptr : &m_server->world();
+    svc.worldView          = &worldView();
+    svc.gameClient         = m_client.get();
     svc.audioEngine        = &deps.audioEngine;
     svc.inputContextManager = &deps.contextManager;
     svc.resourceMgr        = &deps.resourceMgr;
@@ -132,7 +142,9 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     m_dropSystem->bindServices(svc);
     m_particleSystem->bindRegistry(reg);
 
-    const glm::vec3 spawnPos = m_server->getSpawnPosition();
+    const glm::vec3 spawnPos = m_isMultiplayer
+        ? m_client->getAuthoritativePosition()
+        : m_server->getSpawnPosition();
     m_gameplayScene->initLocalPlayer(spawnPos);
 
     ecs::PlayerQuery query(reg);

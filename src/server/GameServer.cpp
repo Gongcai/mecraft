@@ -1,5 +1,6 @@
 #include "GameServer.h"
 #include "../world/World.h"
+#include "../world/block/Block.h"
 #include "../thread/ThreadPool.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
@@ -129,11 +130,67 @@ void GameServer::processClientMessages() {
                 }
                 break;
             }
+            case net::MessageType::ClientBlockAction: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& action = std::any_cast<const net::ClientBlockAction&>(packet.inProcessPayload);
+                    handleClientBlockAction(client, action);
+                }
+                break;
+            }
             default:
                 break;
             }
         }
     }
+}
+
+void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
+    constexpr float kMaxActionDistance = 6.5f;
+    const glm::ivec3 actionBlock = action.action == net::ClientBlockActionType::Place
+        ? action.placeBlock
+        : action.targetBlock;
+    const glm::vec3 blockCenter = glm::vec3(actionBlock) + glm::vec3(0.5f);
+    const glm::vec3 diff = action.playerPosition - blockCenter;
+    const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+    if (distSq > kMaxActionDistance * kMaxActionDistance) {
+        return;
+    }
+
+    client.lastPosition = action.playerPosition;
+
+    if (action.action == net::ClientBlockActionType::Break) {
+        const BlockID target = m_world.getBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
+        if (target == BlockIds::AIR || !BlockRegistry::get(target).isSelectable) {
+            return;
+        }
+        m_world.setBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z, BlockIds::AIR);
+        std::printf("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
+                    client.id,
+                    action.targetBlock.x,
+                    action.targetBlock.y,
+                    action.targetBlock.z);
+        std::fflush(stdout);
+        return;
+    }
+
+    if (action.blockState == BlockIds::AIR) {
+        return;
+    }
+    if (m_world.getBlock(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z) != BlockIds::AIR) {
+        return;
+    }
+
+    m_world.setBlock(action.placeBlock.x,
+                     action.placeBlock.y,
+                     action.placeBlock.z,
+                     static_cast<BlockID>(action.blockState));
+    std::printf("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%u\n",
+                client.id,
+                action.placeBlock.x,
+                action.placeBlock.y,
+                action.placeBlock.z,
+                static_cast<unsigned>(action.blockState));
+    std::fflush(stdout);
 }
 
 void GameServer::sendNewChunksToClients() {
@@ -152,16 +209,17 @@ void GameServer::sendNewChunksToClients() {
         const int playerChunkZ = static_cast<int>(std::floor(client.lastPosition.z / 16.0f));
         clientTicketMgr.updatePlayerPosition(playerChunkX, playerChunkZ);
 
-        // Send new chunks within the client's view distance (with budget)
-        constexpr int kMaxChunkSendsPerTick = 4;
+        // Send initial spawn chunks aggressively so the client can enable
+        // physics only after enough terrain is present.
+        const int maxChunkSendsPerTick = client.totalChunksSent < 25 ? 32 : 8;
         int sent = 0;
 
         // Get prioritized chunks to send
         const auto chunksToSend = clientTicketMgr.getChunksToLoad(
-            kMaxChunkSendsPerTick * 2, client.sentChunks);
+            maxChunkSendsPerTick * 2, client.sentChunks);
 
         for (const auto& pos : chunksToSend) {
-            if (sent >= kMaxChunkSendsPerTick) break;
+            if (sent >= maxChunkSendsPerTick) break;
 
             const int64_t key = ChunkTicketManager::chunkKey(pos.x, pos.y);
             auto it = activeChunks.find(key);

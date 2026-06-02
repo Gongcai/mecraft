@@ -3,6 +3,17 @@
 #include <cmath>
 
 namespace client {
+namespace {
+
+void markRenderableBorderDirty(Chunk& chunk) {
+    for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        if (chunk.getSubChunk(scy) != nullptr) {
+            chunk.markSubChunkDirty(scy);
+        }
+    }
+}
+
+} // namespace
 
 ClientWorld::ClientWorld() = default;
 ClientWorld::~ClientWorld() = default;
@@ -98,8 +109,30 @@ TerrainBiome ClientWorld::getBiome(int x, int z) const {
 
 void ClientWorld::addChunk(std::shared_ptr<Chunk> chunk) {
     if (!chunk) return;
+    const int cx = chunk->m_chunkX;
+    const int cz = chunk->m_chunkZ;
     const int64_t key = chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
     std::lock_guard lock(m_chunksMutex);
+
+    auto linkNeighbor = [&](const int dx, const int dz, const int selfDir, const int neighborDir) {
+        const int64_t neighborKey = chunkKey(cx + dx, cz + dz);
+        auto it = m_chunks.find(neighborKey);
+        if (it == m_chunks.end() || !it->second) {
+            return;
+        }
+        chunk->neighbors[selfDir] = it->second.get();
+        it->second->neighbors[neighborDir] = chunk.get();
+        chunk->linkExistingSubChunksWithNeighbor(selfDir);
+        it->second->linkExistingSubChunksWithNeighbor(neighborDir);
+        markRenderableBorderDirty(*chunk);
+        markRenderableBorderDirty(*it->second);
+    };
+
+    linkNeighbor(1, 0, 0, 1);
+    linkNeighbor(-1, 0, 1, 0);
+    linkNeighbor(0, 1, 2, 3);
+    linkNeighbor(0, -1, 3, 2);
+
     m_chunks[key] = std::move(chunk);
     ++m_activeChunkRevision;
 }
@@ -107,6 +140,19 @@ void ClientWorld::addChunk(std::shared_ptr<Chunk> chunk) {
 void ClientWorld::removeChunk(int cx, int cz) {
     const int64_t key = chunkKey(cx, cz);
     std::lock_guard lock(m_chunksMutex);
+    auto it = m_chunks.find(key);
+    if (it != m_chunks.end() && it->second) {
+        Chunk& chunk = *it->second;
+        for (int dir = 0; dir < 4; ++dir) {
+            if (Chunk* neighbor = chunk.neighbors[dir]) {
+                const int opposite = (dir == 0) ? 1 : (dir == 1) ? 0 : (dir == 2) ? 3 : 2;
+                chunk.unlinkExistingSubChunksFromNeighbor(dir);
+                neighbor->neighbors[opposite] = nullptr;
+                markRenderableBorderDirty(*neighbor);
+            }
+            chunk.neighbors[dir] = nullptr;
+        }
+    }
     if (m_chunks.erase(key) > 0) {
         ++m_activeChunkRevision;
     }
@@ -123,7 +169,18 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId) {
     if (it == m_chunks.end() || !it->second) return;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
-    it->second->setBlock(lx, y, lz, blockId);
+    Chunk& chunk = *it->second;
+    chunk.setBlock(lx, y, lz, blockId);
+    if (lx == 0 && chunk.neighbors[1]) {
+        chunk.neighbors[1]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+    } else if (lx == Chunk::SIZE_X - 1 && chunk.neighbors[0]) {
+        chunk.neighbors[0]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+    }
+    if (lz == 0 && chunk.neighbors[3]) {
+        chunk.neighbors[3]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+    } else if (lz == Chunk::SIZE_Z - 1 && chunk.neighbors[2]) {
+        chunk.neighbors[2]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+    }
 }
 
 void ClientWorld::setRenderDistance(int distance) {

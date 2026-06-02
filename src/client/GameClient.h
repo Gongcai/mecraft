@@ -35,6 +35,9 @@ public:
     void sendInput(float dt, const glm::vec3& moveInput,
                    const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint);
 
+    /// Send an authoritative block action request to the server.
+    void sendBlockAction(const net::ClientBlockAction& action);
+
     /// Process all pending messages from the server.
     void receiveMessages();
 
@@ -48,6 +51,7 @@ public:
 
     /// Check if the client has received initial spawn chunks from the server.
     [[nodiscard]] bool areSpawnChunksReady() const { return m_spawnChunksReady; }
+    [[nodiscard]] bool hasServerHello() const { return m_hasServerHello; }
 
     /// Get the latest authoritative position from the server.
     [[nodiscard]] glm::vec3 getAuthoritativePosition() const { return m_authPosition; }
@@ -70,6 +74,7 @@ private:
     net::ClientId m_clientId = 0;
     uint32_t m_inputSequence = 0;
     bool m_spawnChunksReady = false;
+    bool m_hasServerHello = false;
     int m_chunksReceived = 0;
     static constexpr int kSpawnChunksThreshold = 25;  // 5x5 area
 };

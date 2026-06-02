@@ -64,6 +64,7 @@ public:
 
 private:
     void processClientMessages();
+    void handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action);
     void sendNewChunksToClients();
     void sendSnapshotsToClients();
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
