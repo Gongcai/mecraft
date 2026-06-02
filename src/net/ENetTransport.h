@@ -2,10 +2,17 @@
 #define MECRAFT_NET_ENET_TRANSPORT_H
 
 #include "Transport.h"
-#include <enet/enet.h>
+#include <cstdint>
 #include <string>
 #include <queue>
 #include <mutex>
+
+// Forward-declare ENet types to avoid including <enet/enet.h> in the header.
+// This prevents Windows SDK's global `byte` typedef from conflicting with std::byte.
+struct _ENetHost;
+typedef _ENetHost ENetHost;
+struct _ENetPeer;
+typedef _ENetPeer ENetPeer;
 
 namespace net {
 
@@ -69,7 +76,7 @@ private:
 
     /// Map PacketChannel to ENet channel ID and flags.
     struct ChannelMapping {
-        enet_uint8 channelId;
+        uint8_t channelId;
         uint32_t flags;
     };
     static ChannelMapping mapChannel(PacketChannel channel);

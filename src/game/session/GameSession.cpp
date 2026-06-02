@@ -20,6 +20,7 @@
 #include "../../server/GameServer.h"
 #include "../../client/GameClient.h"
 #include "../../net/InProcessTransport.h"
+#include "../../net/ENetTransport.h"
 
 GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
@@ -27,24 +28,49 @@ GameSession::~GameSession() = default;
 void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool) {
     (void)resourceMgr;  // Resource-dependent init deferred to Game::initRenderers()
 
-    // Create server (owns the authoritative World)
-    m_server = std::make_unique<server::GameServer>();
-    m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+    m_isMultiplayer = config.isMultiplayer();
 
-    // Create client and connect via in-process transport
-    m_client = std::make_unique<client::GameClient>();
-    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
-    m_server->acceptClient(std::move(serverTransport), 1);
-    m_client->connect(std::move(clientTransport));
-    m_client->sendViewConfig(config.renderDistance);
+    if (m_isMultiplayer) {
+        // Multiplayer mode: connect to remote server via ENet
+        m_server = std::make_unique<server::GameServer>();
+        m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
 
-    // Wire up ClientWorld with server's weather/day-night for in-process rendering
-    m_client->clientWorld().setDayNightSystem(&m_server->world().getDayNightSystem());
-    m_client->clientWorld().setWeatherSystem(&m_server->world().getWeatherSystem());
-    m_client->clientWorld().setRenderDistance(config.renderDistance);
+        m_client = std::make_unique<client::GameClient>();
 
-    // Create physics (references server's authoritative World)
-    m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_server->world());
+        // Create ENet transport and connect to remote server
+        auto enetTransport = std::make_unique<net::ENetTransport>();
+        if (enetTransport->connect(config.serverAddress, config.serverPort)) {
+            // ENetTransport inherits ITransportEndpoint; transfer ownership
+            std::unique_ptr<net::ITransportEndpoint> base(std::move(enetTransport));
+            m_client->connect(std::move(base));
+            m_client->sendViewConfig(config.renderDistance);
+        }
+
+        // Wire up ClientWorld with server's weather/day-night (local fallback)
+        m_client->clientWorld().setDayNightSystem(&m_server->world().getDayNightSystem());
+        m_client->clientWorld().setWeatherSystem(&m_server->world().getWeatherSystem());
+        m_client->clientWorld().setRenderDistance(config.renderDistance);
+
+        m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_server->world());
+    } else {
+        // Single-player mode: local server + in-process transport
+        m_server = std::make_unique<server::GameServer>();
+        m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+
+        m_client = std::make_unique<client::GameClient>();
+        auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+        m_server->acceptClient(std::move(serverTransport), 1);
+        m_client->connect(std::move(clientTransport));
+        m_client->sendViewConfig(config.renderDistance);
+
+        // Wire up ClientWorld with server's weather/day-night for in-process rendering
+        m_client->clientWorld().setDayNightSystem(&m_server->world().getDayNightSystem());
+        m_client->clientWorld().setWeatherSystem(&m_server->world().getWeatherSystem());
+        m_client->clientWorld().setRenderDistance(config.renderDistance);
+
+        m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_server->world());
+    }
+
     m_gameplayScene = std::make_unique<ecs::GameplayScene>();
     m_dropSystem = std::make_unique<DropSystem>();
     m_craftingSystem = std::make_unique<CraftingSystem>();

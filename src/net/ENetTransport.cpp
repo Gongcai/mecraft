@@ -2,6 +2,8 @@
 #include "PacketCodec.h"
 #include <cstring>
 
+#include "enet/enet.h"
+
 namespace net {
 
 ENetTransport::ENetTransport() = default;

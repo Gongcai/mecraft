@@ -3,13 +3,15 @@
 
 #include "IAppState.h"
 #include "AppStateDependencies.h"
+#include "../../game/session/GameSessionConfig.h"
 #include <memory>
+#include <string>
 
 class Game;
 
 class GameplayAppState : public IAppState {
 public:
-    explicit GameplayAppState(AppStateDependencies deps);
+    explicit GameplayAppState(AppStateDependencies deps, GameSessionConfig config = {});
     ~GameplayAppState() override;
 
     void onEnter() override;
@@ -19,6 +21,7 @@ public:
 
 private:
     AppStateDependencies m_deps;
+    GameSessionConfig m_config;
     std::unique_ptr<Game> m_game;
 };
 

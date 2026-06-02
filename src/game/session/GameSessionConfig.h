@@ -2,6 +2,7 @@
 #define MECRAFT_GAME_SESSION_CONFIG_H
 
 #include <glm/glm.hpp>
+#include <string>
 
 class Window;
 class InputManager;
@@ -18,6 +19,11 @@ struct GameSessionConfig {
     int seed = 1234;
     int renderDistance = 16;
     glm::vec3 debugMobOffset = glm::vec3(5.0f, 0.0f, 0.0f);
+
+    /// Multiplayer settings. Empty serverAddress means single-player (local server).
+    std::string serverAddress;
+    uint16_t serverPort = 25565;
+    bool isMultiplayer() const { return !serverAddress.empty(); }
 };
 
 /// External service dependencies required by a gameplay session.

@@ -112,6 +112,7 @@ private:
     // State machine
     std::unique_ptr<GameStateMachine> m_stateMachine;
     std::string m_lastSubmittedCommand;
+    bool m_isMultiplayer = false;
 };
 
 #endif // MECRAFT_GAME_SESSION_H

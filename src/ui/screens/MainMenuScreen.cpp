@@ -3,6 +3,7 @@
 #include "../widgets/UIButton.h"
 #include "../widgets/UIImage.h"
 #include "../widgets/UIDropdown.h"
+#include "../widgets/UITextInput.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"
@@ -10,7 +11,11 @@
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     m_title = nullptr;
     m_startButton = nullptr;
+    m_multiplayerButton = nullptr;
     m_quitButton = nullptr;
+    m_connectButton = nullptr;
+    m_backButton = nullptr;
+    m_addressInput = nullptr;
     m_langDropdown = nullptr;
     m_langCodes.clear();
 
@@ -22,7 +27,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     title->anchorOffsetY = 80.0f;
     m_title = title.get();
 
-    // Start button
+    // Start button (single-player)
     auto startBtn = std::make_unique<UIButton>();
     startBtn->setText(getLocaleManager() ? getLocaleManager()->tr("start_game") : "START GAME");
     startBtn->setTextScale(2.0f);
@@ -37,6 +42,21 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     });
     m_startButton = startBtn.get();
 
+    // Multiplayer button
+    auto mpBtn = std::make_unique<UIButton>();
+    mpBtn->setText(getLocaleManager() ? getLocaleManager()->tr("multiplayer") : "MULTIPLAYER");
+    mpBtn->setTextScale(2.0f);
+    mpBtn->width = 280.0f;
+    mpBtn->height = 50.0f;
+    mpBtn->anchor = Anchor::Center;
+    mpBtn->anchorOffsetY = -80.0f;
+    mpBtn->setNormalColor({0.2f, 0.4f, 0.7f, 0.9f});
+    mpBtn->setHoverColor({0.3f, 0.5f, 0.9f, 1.0f});
+    mpBtn->setOnClick([this]() {
+        showMultiplayerPanel();
+    });
+    m_multiplayerButton = mpBtn.get();
+
     // Quit button
     auto quitBtn = std::make_unique<UIButton>();
     quitBtn->setText(getLocaleManager() ? getLocaleManager()->tr("quit") : "QUIT");
@@ -44,13 +64,68 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     quitBtn->width = 280.0f;
     quitBtn->height = 50.0f;
     quitBtn->anchor = Anchor::Center;
-    quitBtn->anchorOffsetY = -80.0f;
+    quitBtn->anchorOffsetY = -140.0f;
     quitBtn->setNormalColor({0.4f, 0.2f, 0.2f, 0.9f});
     quitBtn->setHoverColor({0.6f, 0.3f, 0.3f, 1.0f});
     quitBtn->setOnClick([this]() {
         if (onQuitClicked) onQuitClicked();
     });
     m_quitButton = quitBtn.get();
+
+    // --- Multiplayer panel (initially hidden) ---
+
+    // Server address input
+    auto addrInput = std::make_unique<UITextInput>();
+    addrInput->width = 280.0f;
+    addrInput->height = 40.0f;
+    addrInput->anchor = Anchor::Center;
+    addrInput->anchorOffsetY = -20.0f;
+    addrInput->setPlaceholder("127.0.0.1:25565");
+    addrInput->visible = false;
+    m_addressInput = addrInput.get();
+
+    // Connect button
+    auto connectBtn = std::make_unique<UIButton>();
+    connectBtn->setText("CONNECT");
+    connectBtn->setTextScale(2.0f);
+    connectBtn->width = 280.0f;
+    connectBtn->height = 50.0f;
+    connectBtn->anchor = Anchor::Center;
+    connectBtn->anchorOffsetY = -80.0f;
+    connectBtn->setNormalColor({0.2f, 0.6f, 0.2f, 0.9f});
+    connectBtn->setHoverColor({0.3f, 0.8f, 0.3f, 1.0f});
+    connectBtn->visible = false;
+    connectBtn->setOnClick([this]() {
+        if (m_addressInput && onConnectClicked) {
+            std::string addr = m_addressInput->getText();
+            if (addr.empty()) addr = "127.0.0.1";
+            // Parse host:port
+            int port = 25565;
+            auto colonPos = addr.find(':');
+            if (colonPos != std::string::npos) {
+                port = std::atoi(addr.substr(colonPos + 1).c_str());
+                addr = addr.substr(0, colonPos);
+            }
+            onConnectClicked(addr, port);
+        }
+    });
+    m_connectButton = connectBtn.get();
+
+    // Back button (return from multiplayer panel)
+    auto backBtn = std::make_unique<UIButton>();
+    backBtn->setText("BACK");
+    backBtn->setTextScale(2.0f);
+    backBtn->width = 280.0f;
+    backBtn->height = 50.0f;
+    backBtn->anchor = Anchor::Center;
+    backBtn->anchorOffsetY = -140.0f;
+    backBtn->setNormalColor({0.4f, 0.4f, 0.4f, 0.9f});
+    backBtn->setHoverColor({0.6f, 0.6f, 0.6f, 1.0f});
+    backBtn->visible = false;
+    backBtn->setOnClick([this]() {
+        hideMultiplayerPanel();
+    });
+    m_backButton = backBtn.get();
 
     // Language dropdown
     auto langDropdown = std::make_unique<UIDropdown>();
@@ -89,7 +164,11 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     // Add root widgets
     addRoot(std::move(title));
     addRoot(std::move(startBtn));
+    addRoot(std::move(mpBtn));
     addRoot(std::move(quitBtn));
+    addRoot(std::move(addrInput));
+    addRoot(std::move(connectBtn));
+    addRoot(std::move(backBtn));
     addRoot(std::move(langDropdown));
 
     // Register tweens
@@ -99,9 +178,31 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
 void MainMenuScreen::refreshTexts() {
     if (!getLocaleManager()) return;
-    // Title is an image, no text to refresh
     if (m_startButton) m_startButton->setText(getLocaleManager()->tr("start_game"));
+    if (m_multiplayerButton) m_multiplayerButton->setText(getLocaleManager()->tr("multiplayer"));
     if (m_quitButton) m_quitButton->setText(getLocaleManager()->tr("quit"));
+}
+
+void MainMenuScreen::showMultiplayerPanel() {
+    // Hide main menu buttons
+    if (m_startButton) m_startButton->visible = false;
+    if (m_multiplayerButton) m_multiplayerButton->visible = false;
+    if (m_quitButton) m_quitButton->visible = false;
+    // Show multiplayer panel
+    if (m_addressInput) m_addressInput->visible = true;
+    if (m_connectButton) m_connectButton->visible = true;
+    if (m_backButton) m_backButton->visible = true;
+}
+
+void MainMenuScreen::hideMultiplayerPanel() {
+    // Show main menu buttons
+    if (m_startButton) m_startButton->visible = true;
+    if (m_multiplayerButton) m_multiplayerButton->visible = true;
+    if (m_quitButton) m_quitButton->visible = true;
+    // Hide multiplayer panel
+    if (m_addressInput) m_addressInput->visible = false;
+    if (m_connectButton) m_connectButton->visible = false;
+    if (m_backButton) m_backButton->visible = false;
 }
 
 void MainMenuScreen::onSceneEnter() {

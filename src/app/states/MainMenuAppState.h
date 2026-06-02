@@ -5,6 +5,7 @@
 #include "AppStateMachine.h"
 #include "AppStateDependencies.h"
 #include "GameplayAppState.h"
+#include "../../game/session/GameSessionConfig.h"
 #include "../../ui/screens/MainMenuScreen.h"
 #include "../../ui/core/ScreenTransition.h"
 #include "../../ui/core/UIInputAdapter.h"
@@ -25,10 +26,23 @@ public:
         m_screen.init(m_deps.resourceMgr);
         m_skyboxRenderer.init(m_deps.resourceMgr);
         m_skyboxYaw = 0.0f;
+
+        // Single-player button
         m_screen.onStartClicked = [this]() {
+            m_pendingConfig = GameSessionConfig{1234, 16};
             m_transitioningToGame = true;
             m_transition.startFadeOut(0.5f);
         };
+
+        // Multiplayer connect button
+        m_screen.onConnectClicked = [this](const std::string& address, int port) {
+            m_pendingConfig = GameSessionConfig{1234, 16};
+            m_pendingConfig.serverAddress = address;
+            m_pendingConfig.serverPort = static_cast<uint16_t>(port);
+            m_transitioningToGame = true;
+            m_transition.startFadeOut(0.5f);
+        };
+
         m_screen.onQuitClicked = [this]() {
             glfwSetWindowShouldClose(m_deps.window.getHandle(), true);
         };
@@ -69,7 +83,8 @@ public:
         if (m_transitioningToGame) {
             m_transition.tick(static_cast<float>(frameTime));
             if (m_transition.isDone()) {
-                m_deps.appFsm.changeState(std::make_unique<GameplayAppState>(m_deps));
+                m_deps.appFsm.changeState(
+                    std::make_unique<GameplayAppState>(m_deps, m_pendingConfig));
                 accumulator = 0.0;
                 return;
             }
@@ -97,6 +112,7 @@ private:
     AppStateDependencies m_deps;
     MainMenuScreen m_screen;
     ScreenTransition m_transition;
+    GameSessionConfig m_pendingConfig;
     bool m_transitioningToGame = false;
     SkyboxRenderer m_skyboxRenderer;
     float m_skyboxYaw = 0.0f;

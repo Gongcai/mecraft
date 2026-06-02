@@ -11,10 +11,13 @@
 class UIImage;
 class UIButton;
 class UIDropdown;
+class UITextInput;
 
 class MainMenuScreen : public UIScene {
 public:
     std::function<void()> onStartClicked;
+    std::function<void()> onMultiplayerClicked;
+    std::function<void(const std::string& address, int port)> onConnectClicked;
     std::function<void()> onQuitClicked;
 
     void updateAnimations(float dt) override;
@@ -25,10 +28,16 @@ protected:
 
 private:
     void refreshTexts();
+    void showMultiplayerPanel();
+    void hideMultiplayerPanel();
 
     UIImage* m_title = nullptr;
     UIButton* m_startButton = nullptr;
+    UIButton* m_multiplayerButton = nullptr;
     UIButton* m_quitButton = nullptr;
+    UIButton* m_connectButton = nullptr;
+    UIButton* m_backButton = nullptr;
+    UITextInput* m_addressInput = nullptr;
     UIDropdown* m_langDropdown = nullptr;
 
     std::vector<std::string> m_langCodes;

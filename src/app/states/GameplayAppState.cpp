@@ -2,8 +2,8 @@
 #include "MainMenuAppState.h"
 #include "game/Game.h"
 
-GameplayAppState::GameplayAppState(AppStateDependencies deps) 
-    : m_deps(deps) {
+GameplayAppState::GameplayAppState(AppStateDependencies deps, GameSessionConfig config)
+    : m_deps(deps), m_config(config) {
 }
 
 GameplayAppState::~GameplayAppState() {
@@ -13,7 +13,6 @@ GameplayAppState::~GameplayAppState() {
 }
 
 void GameplayAppState::onEnter() {
-    GameSessionConfig config{1234, 16};
     GameSessionDependencies deps{
         m_deps.window,
         m_deps.input,
@@ -26,7 +25,7 @@ void GameplayAppState::onEnter() {
         m_deps.localeManager
     };
 
-    m_game = std::make_unique<Game>(config, deps);
+    m_game = std::make_unique<Game>(m_config, deps);
     m_game->init();
 
     m_deps.input.captureMouse(true);
