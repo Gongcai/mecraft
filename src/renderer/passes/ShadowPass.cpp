@@ -9,6 +9,7 @@
 #include "../core/Shader.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../world/IWorldView.h"
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
@@ -102,7 +103,7 @@ void ShadowPass::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-void ShadowPass::renderShadowEntities(const World& world, const glm::mat4& shadowViewProj) {
+void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj) {
     // Render humanoid/mob entities into the current shadow cascade layer.
     // Shadow FBO layer is already bound by the caller (execute).
     if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
@@ -119,13 +120,13 @@ void ShadowPass::renderShadowEntities(const World& world, const glm::mat4& shado
     m_entityShadowShader->use();
     m_entityShadowShader->setInt("uTexture", 0);
 
-    m_humanoidRenderer->renderToShadowMap(world, *m_gameplayRegistry,
+    m_humanoidRenderer->renderToShadowMap(worldView, *m_gameplayRegistry,
                                           shadowViewProj, HumanoidRenderer::kRenderAll);
 
     glBindVertexArray(0);
 }
 
-void ShadowPass::renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
+void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
                                     const glm::mat4& shadowView, const glm::mat4& shadowProjection,
                                     float animationTime, float shaderTime) {
     // Render dropped items/blocks into the current shadow cascade layer.
@@ -141,7 +142,7 @@ void ShadowPass::renderShadowDrops(const World& world, const glm::mat4& shadowVi
     // so they cast shadows from both sides.
     glDisable(GL_CULL_FACE);
 
-    m_dropRenderer->renderToShadowMap(world, *m_dropSystem, shadowViewProj,
+    m_dropRenderer->renderToShadowMap(worldView, *m_dropSystem, shadowViewProj,
                                        shadowView, shadowProjection, animationTime, shaderTime);
 
     glBindVertexArray(0);
@@ -149,7 +150,7 @@ void ShadowPass::renderShadowDrops(const World& world, const glm::mat4& shadowVi
 
 ShadowPass::ShadowPassOutput ShadowPass::execute(
     const FrameContext& ctx, const RenderSettings& settings,
-    DeferredRenderTargets& targets, const World& world,
+    DeferredRenderTargets& targets, const IWorldView& worldView,
     const std::vector<DrawBatchEntry>& preservedTransparentBatch,
     const TransparentPassPlan& preservedTransparentPlan,
     bool useMultiDrawIndirect) {
@@ -240,9 +241,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         // Collect geometry once per cascade
         m_worldRenderBuffer->beginFrame();
         std::vector<ChunkRenderEntry> cutoutEntries;
-        cutoutEntries.reserve(world.getActiveChunks().size() * 2);
+        cutoutEntries.reserve(worldView.getActiveChunks().size() * 2);
         std::vector<ChunkRenderEntry> transparentEntries;
-        transparentEntries.reserve(world.getActiveChunks().size() * 2);
+        transparentEntries.reserve(worldView.getActiveChunks().size() * 2);
         m_terrainRenderer->clearTransparentBatches();
 
         shadow::ShadowCasterCuller shadowCuller;
@@ -260,7 +261,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 std::max(1.0f, cascadeData.depthExtent),
             true
         };
-        m_terrainRenderer->renderOpaqueChunksAndCollectPasses(world, cutoutEntries, transparentEntries, false,
+        m_terrainRenderer->renderOpaqueChunksAndCollectPasses(worldView, cutoutEntries, transparentEntries, false,
                                                                 shadowDist, &shadowCuller,
                                                                 cascadeAabbVisible, &cascadeCuller);
         m_terrainRenderer->syncTransparentBatches();
@@ -294,9 +295,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             }
             m_terrainRenderer->renderCutoutChunks(cutoutEntries, *m_shadowDepthShader);
             // Entity shadow: render humanoid/mob depth into this cascade.
-            renderShadowEntities(world, cascadeData.viewProj);
+            renderShadowEntities(worldView, cascadeData.viewProj);
             // Drop shadow: render dropped items/blocks depth into this cascade.
-            renderShadowDrops(world, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
+            renderShadowDrops(worldView, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
                               ctx.animationTime, ctx.shaderTime);
             // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
             m_shadowDepthShader->use();

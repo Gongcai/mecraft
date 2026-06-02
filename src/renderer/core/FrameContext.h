@@ -7,9 +7,12 @@
 #include <cstdint>
 
 // Forward declarations to avoid heavy includes
+class IWorldView;
 class World;
 class Camera;
 class Window;
+class DayNightSystem;
+class WeatherSystem;
 class RenderDebugService;
 struct SharedRenderResources;
 
@@ -187,8 +190,12 @@ struct FrameContext {
     // Shared resources (non-owning pointer)
     SharedRenderResources* shared = nullptr;
 
-    // Pointer to original World (for passes that need world queries)
-    const World* world = nullptr;
+    // Pointer to world view (for passes that need block/chunk queries)
+    const IWorldView* worldView = nullptr;
+
+    // Non-owning pointers to environment systems (for passes that need weather/sky data)
+    const DayNightSystem* dayNightSystem = nullptr;
+    const WeatherSystem* weatherSystem = nullptr;
 
     // Pointer to original Camera (for renderers that need Camera object, e.g. GameplaySkyRenderer)
     const Camera* cameraPtr = nullptr;

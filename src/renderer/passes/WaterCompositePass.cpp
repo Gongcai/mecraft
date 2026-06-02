@@ -27,7 +27,7 @@ void WaterCompositePass::shutdown() {
 }
 
 bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                                   DeferredRenderTargets& targets, const World& world,
+                                   DeferredRenderTargets& targets, const IWorldView& worldView,
                                    int windowWidth, int windowHeight,
                                    bool deferredFrameActive, bool preTemporalResolve,
                                    GLint capturedFramebuffer, const GLint* capturedViewport,

@@ -13,6 +13,7 @@
 #include "engine/platform/Window.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../ecs/GameplayRegistry.h"
+#include "../../world/IWorldView.h"
 #include "../../ecs/components/Components.h"
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
@@ -740,7 +741,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     glActiveTexture(GL_TEXTURE0);
 }
 
-void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& gameplayReg,
+void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
                                      Shader& shader, int modelLoc, int viewProjLoc, int prevModelLoc,
                                      const glm::mat4& viewProj, RenderMode mode) {
     auto& reg = gameplayReg.registry();
@@ -770,7 +771,7 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
                 if (part.partType != ecs::StevePartType::Torso) continue;
                 auto& wt = reg.get<ecs::WorldTransformComponent>(child);
                 glm::vec3 entityPos = glm::vec3(wt.worldMatrix[3]);
-                glm::vec2 light = queryWorldLight(world, entityPos);
+                glm::vec2 light = queryWorldLight(worldView, entityPos);
                 shader.setFloat("uEntitySunlight", light.x);
                 shader.setFloat("uEntityBlockLight", light.y);
                 break;
@@ -842,7 +843,7 @@ void HumanoidRenderer::drawEntities(const World& world, ecs::GameplayRegistry& g
                 if (part.partType != ecs::StevePartType::Torso) continue;
                 auto& wt = reg.get<ecs::WorldTransformComponent>(child);
                 glm::vec3 entityPos = glm::vec3(wt.worldMatrix[3]);
-                glm::vec2 light = queryWorldLight(world, entityPos);
+                glm::vec2 light = queryWorldLight(worldView, entityPos);
                 shader.setFloat("uEntitySunlight", light.x);
                 shader.setFloat("uEntityBlockLight", light.y);
                 break;
@@ -944,7 +945,7 @@ void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
     drawEntities(gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
 }
 
-void HumanoidRenderer::renderToGBuffer(const World& world, ecs::GameplayRegistry& gameplayReg,
+void HumanoidRenderer::renderToGBuffer(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
                                         const glm::mat4& jitteredViewProj,
                                         RenderMode mode) {
     if (m_gbufferShader == nullptr || m_resourceMgr == nullptr) return;
@@ -953,10 +954,10 @@ void HumanoidRenderer::renderToGBuffer(const World& world, ecs::GameplayRegistry
     const int viewProjLoc = m_gbufferShader->getUniformLocation("viewProj");
     const int prevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
 
-    drawEntities(world, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
+    drawEntities(worldView, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 
-void HumanoidRenderer::renderToShadowMap(const World& world, ecs::GameplayRegistry& gameplayReg,
+void HumanoidRenderer::renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
                                           const glm::mat4& shadowViewProj,
                                           RenderMode mode) {
     if (m_shadowShader == nullptr || m_resourceMgr == nullptr) return;
@@ -964,21 +965,21 @@ void HumanoidRenderer::renderToShadowMap(const World& world, ecs::GameplayRegist
     const int modelLoc = m_shadowShader->getUniformLocation("model");
     const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
 
-    drawEntities(world, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
+    drawEntities(worldView, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
 }
 
-glm::vec2 HumanoidRenderer::queryWorldLight(const World& world, const glm::vec3& position) {
+glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
     const int bx = static_cast<int>(std::floor(position.x));
     const int by = static_cast<int>(std::floor(position.y));
     const int bz = static_cast<int>(std::floor(position.z));
 
-    if (!world.isChunkLoadedForBlock(bx, by, bz)) {
+    if (!worldView.isChunkLoadedForBlock(bx, by, bz)) {
         return {1.0f, 0.0f};
     }
 
-    const glm::ivec2 cc = world.getChunkCoords(bx, bz);
-    const auto& chunks = world.getActiveChunks();
-    const auto it = chunks.find(World::chunkKey(cc.x, cc.y));
+    const glm::ivec2 cc = worldView.getChunkCoords(bx, bz);
+    const auto& chunks = worldView.getActiveChunks();
+    const auto it = chunks.find(IWorldView::chunkKey(cc.x, cc.y));
     if (it == chunks.end()) {
         return {1.0f, 0.0f};
     }

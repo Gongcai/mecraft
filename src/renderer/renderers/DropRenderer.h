@@ -12,6 +12,7 @@
 #include "../../item/Item.h"
 
 class Camera;
+class IWorldView;
 class ResourceMgr;
 class Window;
 class World;
@@ -27,11 +28,11 @@ public:
 	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
 	// GBuffer path: renders drops into the deferred GBuffer (5 MRT).
 	// Caller must have already bound the GBuffer FBO with terrain+entity depth.
-	void renderToGBuffer(const World& world, const DropSystem& dropSystem,
+	void renderToGBuffer(const IWorldView& worldView, const DropSystem& dropSystem,
 	                     const glm::mat4& jitteredViewProj, float animationTime);
 	// Shadow path: renders drops into the CSM shadow map.
 	// Caller must have already bound the shadow FBO layer.
-	void renderToShadowMap(const World& world, const DropSystem& dropSystem,
+	void renderToShadowMap(const IWorldView& worldView, const DropSystem& dropSystem,
 	                        const glm::mat4& shadowViewProj,
 	                        const glm::mat4& shadowView, const glm::mat4& shadowProjection,
 	                        float animationTime, float shaderTime);
@@ -50,7 +51,7 @@ private:
 	static void destroyMesh(Mesh& mesh);
 	// Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
 	// Falls back to (1.0, 0.0) if chunk is not loaded.
-	static glm::vec2 queryWorldLight(const World& world, const glm::vec3& position);
+	static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
 
 	ResourceMgr* m_resourceMgr = nullptr;
 	Shader* m_shader = nullptr;

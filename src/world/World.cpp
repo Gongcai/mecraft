@@ -406,6 +406,13 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     }
 
     m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z));
+
+    // Notify block change callback for waterlogged fluid changes
+    // (pure fluid and block-replacement paths go through setBlockState, which already fires the callback)
+    if (m_blockChangeCallback) {
+        const BlockID currentBlockId = sc->getBlock(localX, localY, localZ);
+        m_blockChangeCallback(x, y, z, currentBlockId);
+    }
 }
 
 bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
@@ -499,6 +506,11 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     };
     for (const auto& off : kNeighborOffsets) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
+    }
+
+    // Notify block change callback (used by GameServer for BlockUpdateBatch)
+    if (m_blockChangeCallback) {
+        m_blockChangeCallback(x, y, z, targetState);
     }
 }
 

@@ -13,6 +13,7 @@
 #include <cstdint>
 
 class Chunk;
+class IWorldView;
 class World;
 class WorldRenderBuffer;
 
@@ -111,20 +112,20 @@ public:
                            int drainVertexBudget);
 
     // Chunk column cache
-    void syncChunkRenderColumns(const World& world);
+    void syncChunkRenderColumns(const IWorldView& worldView);
     void refreshChunkRenderColumnCache(ChunkRenderColumnCache& column);
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const { return m_chunkRenderColumns; }
     [[nodiscard]] std::vector<ChunkRenderColumnCache>& chunkRenderColumns() { return m_chunkRenderColumns; }
 
     // MDI allocation management
     void releaseMdiAllocation(const SubChunkGpuKey& key);
-    void releaseStaleMdiAllocations(const World& world);
+    void releaseStaleMdiAllocations(const IWorldView& worldView);
     [[nodiscard]] const std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash>& mdiMeshAllocations() const { return m_mdiMeshAllocations; }
     [[nodiscard]] std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash>& mdiMeshAllocations() { return m_mdiMeshAllocations; }
 
     // Meshing job management
-    void submitMeshingJobs(const World& world, const glm::vec3& cameraPos);
-    void drainMeshingResults(const World& world);
+    void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
+    void drainMeshingResults(const IWorldView& worldView);
     [[nodiscard]] const std::unordered_set<int64_t>& meshingInFlight() const { return m_meshingInFlight; }
 
     [[nodiscard]] int meshingSubmittedThisFrame() const { return m_meshingSubmittedThisFrame; }

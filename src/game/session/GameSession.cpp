@@ -64,10 +64,11 @@ const World& GameSession::world() const {
 }
 
 const IWorldView& GameSession::worldView() const {
-    // For the initial milestone, always return the server's World for rendering.
-    // This ensures weather, day/night, and biome systems work correctly.
-    // When ClientWorld is fully self-sufficient (Phase 2+), this will switch
-    // to m_client->clientWorld() when spawn chunks are ready.
+    // When spawn chunks are ready, render from ClientWorld (C/S pipeline active).
+    // Before that, render from the server's World directly (loading screen).
+    if (m_client && m_client->areSpawnChunksReady()) {
+        return m_client->clientWorld();
+    }
     return m_server->world();
 }
 

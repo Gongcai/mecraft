@@ -9,7 +9,7 @@
 #include "../../resource/ResourceMgr.h"
 #include "../../engine/camera/Camera.h"
 #include "../../engine/platform/Window.h"
-#include "../../world/World.h"
+#include "../../world/IWorldView.h"
 #include "../../world/DayNightSystem.h"
 #include "../../particle/ParticleSystem.h"
 
@@ -56,7 +56,7 @@ void ForwardPipeline::shutdown() {
 }
 
 FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_initialized || !ctx.world) {
+    if (!m_initialized || !ctx.worldView) {
         return {};
     }
 
@@ -99,9 +99,9 @@ void ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
 // ============================================================================
 
 void ForwardPipeline::renderSky(const FrameContext& ctx) {
-    if (!m_skyRenderer || !ctx.world || !ctx.cameraPtr) return;
+    if (!m_skyRenderer || !ctx.dayNightSystem || !ctx.cameraPtr) return;
 
-    const auto& dayNight = ctx.world->getDayNightSystem();
+    const auto& dayNight = *ctx.dayNightSystem;
     const float aspect = (ctx.frameHeight > 0)
         ? static_cast<float>(ctx.frameWidth) / static_cast<float>(ctx.frameHeight)
         : 1.0f;
@@ -122,8 +122,8 @@ void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSetting
 
     // Terrain cache maintenance
     if (m_terrainCache) {
-        m_terrainCache->releaseStaleMdiAllocations(*ctx.world);
-        m_terrainCache->drainMeshingResults(*ctx.world);
+        m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
+        m_terrainCache->drainMeshingResults(*ctx.worldView);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
@@ -150,13 +150,13 @@ void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSetting
 
     // Submit meshing jobs
     if (m_terrainCache) {
-        m_terrainCache->submitMeshingJobs(*ctx.world, ctx.camera.position);
+        m_terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
     // Render opaque + collect cutout/transparent entries
     std::vector<ChunkRenderEntry> cutoutEntries;
     std::vector<ChunkRenderEntry> transparentEntries;
-    terrain.renderOpaqueChunksAndCollectPasses(*ctx.world, cutoutEntries, transparentEntries, true);
+    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, cutoutEntries, transparentEntries, true);
     terrain.syncTransparentBatches();
 
     // Save transparent batch for transparent pass

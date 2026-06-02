@@ -9,6 +9,7 @@
 #include "../../ecs/components/Components.h"
 
 class Camera;
+class IWorldView;
 class Shader;
 class ResourceMgr;
 class Window;
@@ -34,7 +35,7 @@ public:
     void renderToGBuffer(ecs::GameplayRegistry& registry,
                          const glm::mat4& jitteredViewProj,
                          RenderMode mode = kRenderAll);
-    void renderToGBuffer(const World& world, ecs::GameplayRegistry& registry,
+    void renderToGBuffer(const IWorldView& worldView, ecs::GameplayRegistry& registry,
                          const glm::mat4& jitteredViewProj,
                          RenderMode mode = kRenderAll);
     // Shadow path: renders entities into the CSM shadow map.
@@ -42,7 +43,7 @@ public:
     void renderToShadowMap(ecs::GameplayRegistry& registry,
                            const glm::mat4& shadowViewProj,
                            RenderMode mode = kRenderAll);
-    void renderToShadowMap(const World& world, ecs::GameplayRegistry& registry,
+    void renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& registry,
                            const glm::mat4& shadowViewProj,
                            RenderMode mode = kRenderAll);
     void renderInventoryPreview(float x,
@@ -133,11 +134,11 @@ private:
                       int modelLoc, int viewProjLoc, int prevModelLoc,
                       const glm::mat4& viewProj, RenderMode mode);
     // Overload with world light query — sets uEntitySunlight/uEntityBlockLight per entity.
-    void drawEntities(const World& world, ecs::GameplayRegistry& gameplayReg, Shader& shader,
+    void drawEntities(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg, Shader& shader,
                       int modelLoc, int viewProjLoc, int prevModelLoc,
                       const glm::mat4& viewProj, RenderMode mode);
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
-    static glm::vec2 queryWorldLight(const World& world, const glm::vec3& position);
+    static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
 };
 
 #endif // MECRAFT_HUMANOID_RENDERER_H

@@ -13,6 +13,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class Shader;
+class IWorldView;
 class World;
 class HumanoidRenderer;
 class DropRenderer;
@@ -59,17 +60,17 @@ public:
         TransparentPassPlan transparentPlan;
     };
     ShadowPassOutput execute(const FrameContext& ctx, const RenderSettings& settings,
-                              DeferredRenderTargets& targets, const World& world,
+                              DeferredRenderTargets& targets, const IWorldView& worldView,
                               const std::vector<DrawBatchEntry>& preservedTransparentBatch,
                               const TransparentPassPlan& preservedTransparentPlan,
                               bool useMultiDrawIndirect);
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
-    void renderShadowEntities(const World& world, const glm::mat4& shadowViewProj);
+    void renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj);
 
     /// Render dropped items/blocks into the current shadow cascade layer.
-    void renderShadowDrops(const World& world, const glm::mat4& shadowViewProj,
+    void renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
                             const glm::mat4& shadowView, const glm::mat4& shadowProjection,
                             float animationTime, float shaderTime);
 

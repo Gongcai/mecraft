@@ -11,6 +11,7 @@
 #include "../../resource/ResourceMgr.h"
 #include "../../world/chunk/Chunk.h"
 
+class IWorldView;
 class World;
 
 // Per-sub-chunk snapshot constants
@@ -52,7 +53,7 @@ struct SubChunkMeshingSnapshot {
     int yBase = 0;
     int worldOffsetX = 0;
     int worldOffsetZ = 0;
-    const World* world = nullptr;
+    const IWorldView* worldView = nullptr;
     // Sub-chunk index within the column (0..15)
     int scy = 0;
     // Whether this is the topmost sub-chunk (for sky light at y=256)
@@ -94,12 +95,12 @@ public:
         const Chunk* neighborNegX,
         const Chunk* neighborPosZ,
         const Chunk* neighborNegZ,
-        const World* world = nullptr);
+        const IWorldView* worldView = nullptr);
 
     static SubChunkMeshingSnapshotPtr captureSubChunkSnapshot(
         const Chunk& chunk,
         int scy,
-        const World* world = nullptr);
+        const IWorldView* worldView = nullptr);
 
     // --- Per-sub-chunk mesh building ---
     static ChunkMeshData buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot);

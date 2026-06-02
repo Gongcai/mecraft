@@ -11,9 +11,9 @@
 #include "renderer/mesh/TerrainRenderCache.h"
 
 class DeferredRenderTargets;
+class IWorldView;
 class ResourceMgr;
 class Shader;
-class World;
 class Window;
 class TerrainRenderer;
 class WorldRenderBuffer;
@@ -49,7 +49,7 @@ public:
     /// @param transparentEntries Non-MDI path: transparent chunk entries for per-VAO draw
     /// @return true if water was rendered before temporal resolve (caller must set m_waterRenderedBeforeTemporal)
     bool execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, const World& world,
+                 DeferredRenderTargets& targets, const IWorldView& worldView,
                  int windowWidth, int windowHeight,
                  bool deferredFrameActive, bool preTemporalResolve,
                  GLint capturedFramebuffer, const GLint* capturedViewport,

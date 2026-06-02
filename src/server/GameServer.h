@@ -57,10 +57,12 @@ private:
     void sendNewChunksToClients();
     void sendSnapshotsToClients();
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
+    void sendBlockUpdatesToClients();
     void checkSpawnChunksReady();
 
     World m_world;
     std::vector<ConnectedClient> m_clients;
+    std::vector<net::BlockUpdateEntry> m_pendingBlockUpdates;
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;
     glm::vec3 m_spawnPosition = glm::vec3(0.0f);

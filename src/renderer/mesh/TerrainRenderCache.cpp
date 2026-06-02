@@ -1,7 +1,7 @@
 #include "TerrainRenderCache.h"
 #include "WorldRenderBuffer.h"
 #include "ChunkMesher.h"
-#include "../../world/World.h"
+#include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
 #include <algorithm>
@@ -125,15 +125,15 @@ void TerrainRenderCache::setMeshingBudgets(const int submitBudget,
 // Chunk column cache
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::syncChunkRenderColumns(const World& world) {
-    const uint64_t activeChunkRevision = world.getActiveChunkRevision();
+void TerrainRenderCache::syncChunkRenderColumns(const IWorldView& worldView) {
+    const uint64_t activeChunkRevision = worldView.getActiveChunkRevision();
     const int regionChunkSize = std::max(1, m_regionChunkSize);
     if (m_chunkRenderColumnsRevision == activeChunkRevision &&
         m_chunkRenderColumnsRegionSize == regionChunkSize) {
         return;
     }
 
-    const auto& activeChunks = world.getActiveChunks();
+    const auto& activeChunks = worldView.getActiveChunks();
     m_chunkRenderColumns.clear();
     m_chunkRenderColumns.reserve(activeChunks.size());
 
@@ -280,12 +280,12 @@ void TerrainRenderCache::releaseMdiAllocation(const SubChunkGpuKey& key) {
     m_mdiMeshAllocations.erase(it);
 }
 
-void TerrainRenderCache::releaseStaleMdiAllocations(const World& world) {
+void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView) {
     if (m_mdiMeshAllocations.empty()) {
         return;
     }
 
-    const auto& activeChunks = world.getActiveChunks();
+    const auto& activeChunks = worldView.getActiveChunks();
     for (auto it = m_mdiMeshAllocations.begin(); it != m_mdiMeshAllocations.end(); ) {
         const auto chunkIt = activeChunks.find(it->first.chunkKey);
         bool release = (chunkIt == activeChunks.end() || !chunkIt->second);
@@ -317,12 +317,12 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const World& world) {
 // Meshing job submission
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::submitMeshingJobs(const World& world, const glm::vec3& cameraPos) {
+void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos) {
     std::vector<MeshingCandidate> candidates;
-    const auto& activeChunks = world.getActiveChunks();
+    const auto& activeChunks = worldView.getActiveChunks();
 
     auto findSharedByCoords = [&](const int cx, const int cz) -> std::shared_ptr<Chunk> {
-        const int64_t key = World::chunkKey(cx, cz);
+        const int64_t key = IWorldView::chunkKey(cx, cz);
         auto it = activeChunks.find(key);
         return (it != activeChunks.end()) ? it->second : nullptr;
     };
@@ -436,7 +436,7 @@ void TerrainRenderCache::submitMeshingJobs(const World& world, const glm::vec3& 
             candidate.neighborNegX.get(),
             candidate.neighborPosZ.get(),
             candidate.neighborNegZ.get(),
-            &world);
+            &worldView);
         if (!job.snapshot) {
             continue;
         }
@@ -456,7 +456,7 @@ void TerrainRenderCache::submitMeshingJobs(const World& world, const glm::vec3& 
 // Meshing result drain
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::drainMeshingResults(const World& world) {
+void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
     // Phase 1: Drain all completed results from the service into the deferred buffer.
     // This avoids interleaving tryPopCompleted with budget checks, and lets us
     // process results in order with strict vertex/time budgets.
@@ -517,7 +517,7 @@ void TerrainRenderCache::drainMeshingResults(const World& world) {
         const int64_t flightKey = subChunkFlightKey(result.chunkKey, result.scy);
         m_meshingInFlight.erase(flightKey);
 
-        const auto& activeChunks = world.getActiveChunks();
+        const auto& activeChunks = worldView.getActiveChunks();
         const auto it = activeChunks.find(result.chunkKey);
         if (it == activeChunks.end() || !it->second) {
             continue;

@@ -16,6 +16,7 @@
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/fluid/FluidState.h"
 #include "../../world/block/PropIndices.h"
+#include "../../world/IWorldView.h"
 #include "../../world/World.h"
 
 #if defined(_MSC_VER)
@@ -348,8 +349,8 @@ void computeTintMapPosition(const SubChunkMeshingSnapshot& snapshot,
     double temperature = 0.70;
     double moisture = 0.65;
 
-    if (snapshot.world != nullptr) {
-        switch (snapshot.world->getBiome(worldX, worldZ)) {
+    if (snapshot.worldView != nullptr) {
+        switch (snapshot.worldView->getBiome(worldX, worldZ)) {
             case TerrainBiome::Arid:
                 temperature = 0.95;
                 moisture = 0.18;
@@ -909,8 +910,8 @@ BlockID sampleHaloBlock(const Chunk& chunk,
                         const Chunk* neighborNegX,
                         const Chunk* neighborPosZ,
                         const Chunk* neighborNegZ,
-                        const World* world) {
-    static_cast<void>(world);
+                        const IWorldView* worldView) {
+    static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
     if (xInRange && zInRange) {
@@ -937,8 +938,8 @@ BlockID sampleHaloFluid(const Chunk& chunk,
                         const Chunk* neighborNegX,
                         const Chunk* neighborPosZ,
                         const Chunk* neighborNegZ,
-                        const World* world) {
-    static_cast<void>(world);
+                        const IWorldView* worldView) {
+    static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
     if (xInRange && zInRange) {
@@ -965,8 +966,8 @@ uint8_t sampleHaloLight(const Chunk& chunk,
                         const Chunk* neighborNegX,
                         const Chunk* neighborPosZ,
                         const Chunk* neighborNegZ,
-                        const World* world) {
-    static_cast<void>(world);
+                        const IWorldView* worldView) {
+    static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
     if (xInRange && zInRange) {
@@ -994,7 +995,7 @@ void captureSubChunkHalo(const Chunk& chunk,
                          const Chunk* neighborNegX,
                          const Chunk* neighborPosZ,
                          const Chunk* neighborNegZ,
-                         const World* world) {
+                         const IWorldView* worldView) {
     const int yBase = scy * SubChunk::SIZE;
     for (int ly = -1; ly <= SubChunk::SIZE; ++ly) {
         const int worldY = yBase + ly;
@@ -1004,15 +1005,15 @@ void captureSubChunkHalo(const Chunk& chunk,
                 snapshot.haloBlocks[haloIdx] = sampleHaloBlock(chunk, lx, worldY, lz,
                                                                neighborPosX, neighborNegX,
                                                                neighborPosZ, neighborNegZ,
-                                                               world);
+                                                               worldView);
                 snapshot.haloFluidBlocks[haloIdx] = sampleHaloFluid(chunk, lx, worldY, lz,
                                                                     neighborPosX, neighborNegX,
                                                                     neighborPosZ, neighborNegZ,
-                                                                    world);
+                                                                    worldView);
                 snapshot.haloLightMap[haloIdx] = sampleHaloLight(chunk, lx, worldY, lz,
                                                                  neighborPosX, neighborNegX,
                                                                  neighborPosZ, neighborNegZ,
-                                                                 world);
+                                                                 worldView);
             }
         }
     }
@@ -1026,8 +1027,8 @@ void captureSubChunkBorders(const Chunk& chunk,
                             const Chunk* neighborNegX,
                             const Chunk* neighborPosZ,
                             const Chunk* neighborNegZ,
-                            const World* world) {
-    static_cast<void>(world);
+                            const IWorldView* worldView) {
+    static_cast<void>(worldView);
     const int yBase = scy * SubChunk::SIZE;
 
     // +Y border: query through Chunk so missing sky-only sub-chunks still expose implicit sunlight.
@@ -2910,13 +2911,13 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     const Chunk* neighborNegX,
     const Chunk* neighborPosZ,
     const Chunk* neighborNegZ,
-    const World* world) {
+    const IWorldView* worldView) {
     auto snapshot = std::make_shared<SubChunkMeshingSnapshot>();
     snapshot->scy = scy;
     snapshot->yBase = scy * SubChunk::SIZE;
     snapshot->isTopSection = (scy == Chunk::NUM_SUB_CHUNKS - 1);
     snapshot->isBottomSection = (scy == 0);
-    snapshot->world = world;
+    snapshot->worldView = worldView;
     const glm::ivec3 chunkOffset = chunk.getWorldOffset();
     snapshot->worldOffsetX = chunkOffset.x;
     snapshot->worldOffsetZ = chunkOffset.z;
@@ -2925,8 +2926,8 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     if (!sc) {
         // All-air sub-chunk — blocks and lightMap default to 0
         // Still capture borders for completeness
-        captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
-        captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+        captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
+        captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
         return snapshot;
     }
 
@@ -2952,8 +2953,8 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     }
 
     // Capture all 6-direction borders
-    captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
-    captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, world);
+    captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
+    captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
 
     return snapshot;
 }
@@ -2961,11 +2962,11 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
 SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     const Chunk& chunk,
     const int scy,
-    const World* world) {
+    const IWorldView* worldView) {
     return captureSubChunkSnapshot(chunk, scy,
                                    chunk.neighbors[0], chunk.neighbors[1],
                                    chunk.neighbors[2], chunk.neighbors[3],
-                                   world);
+                                   worldView);
 }
 
 ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot) {

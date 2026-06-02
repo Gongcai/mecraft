@@ -5,7 +5,7 @@
 #include "../gl/GlStateGuard.h"
 #include "../shadow/ShadowCasterCuller.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../../world/World.h"
+#include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../resource/ResourceMgr.h"
 #include <algorithm>
@@ -328,7 +328,7 @@ void TerrainRenderer::bindBasicForwardState(const TerrainFrameData& frame, const
 // Opaque chunk traversal with hierarchical frustum culling
 // ============================================================================
 
-void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
+void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& worldView,
                                                           std::vector<ChunkRenderEntry>& cutoutEntries,
                                                           std::vector<ChunkRenderEntry>& transparentEntries,
                                                           const bool frustumCull,
@@ -337,7 +337,7 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const World& world,
                                                           AabbVisibilityFn extraAabbCuller,
                                                           void* extraAabbCullerUserData) {
     resetDebugCounters();
-    m_terrainCache->syncChunkRenderColumns(world);
+    m_terrainCache->syncChunkRenderColumns(worldView);
     std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache->chunkRenderColumns();
     if (chunkRenderColumns.empty()) {
         return;

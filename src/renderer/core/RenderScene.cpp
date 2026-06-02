@@ -17,6 +17,8 @@
 #include "../../particle/RainRenderer.h"
 #include "../../world/World.h"
 #include "../../world/IWorldView.h"
+#include "../../world/DayNightSystem.h"
+#include "../../world/WeatherSystem.h"
 #include "../../world/block/Block.h"
 #include "../../world/WeatherSystem.h"
 #include "engine/platform/Time.h"
@@ -64,11 +66,11 @@ SkyIlluminanceData toSkyIlluminanceData(const GameplaySkyRenderer::SkyIlluminanc
     return dst;
 }
 
-glm::vec2 sampleHeldItemLight(const World& world, const glm::vec3& cameraPosition) {
+glm::vec2 sampleHeldItemLight(const IWorldView& worldView, const glm::vec3& cameraPosition) {
     const int x = static_cast<int>(std::floor(cameraPosition.x));
     const int y = static_cast<int>(std::floor(cameraPosition.y));
     const int z = static_cast<int>(std::floor(cameraPosition.z));
-    const uint8_t packed = world.getPackedLight(x, y, z);
+    const uint8_t packed = worldView.getPackedLight(x, y, z);
     const float sunlight = static_cast<float>((packed >> 4) & 0x0F) / 15.0f;
     const float blockLight = static_cast<float>(packed & 0x0F) / 15.0f;
     return glm::vec2(sunlight, blockLight);
@@ -135,8 +137,9 @@ void RenderScene::shutdown() {
     m_postProcessPass.shutdown();
 }
 
-void RenderScene::renderFrame(const World& world, const Camera& camera, const Window& window,
-                              const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak) {
+void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
+                              const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
+                              const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
     if (!prepareFrameResources(window)) {
         return;
     }
@@ -145,7 +148,7 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
     m_terrainStreamingService.beginFrame();
 
     // Build frame context
-    m_currentContext = buildFrameContext(world, camera, window);
+    m_currentContext = buildFrameContext(worldView, camera, window, dayNightSystem, weatherSystem);
 
     // Phase 9: Use active pipeline only if fully initialized and ready.
     // All shared resources must be populated AND pipeline must have been init'd.
@@ -167,25 +170,13 @@ void RenderScene::renderFrame(const World& world, const Camera& camera, const Wi
 
     // R5: Render block interaction overlays (outline + break overlay)
     const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
-    m_overlayRenderer.render(world, viewProj, target, blockBreak);
+    m_overlayRenderer.render(worldView, viewProj, target, blockBreak);
 }
 
 void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
     // Activate the pipeline when shared resources become available after target initialization.
     if (!isNewPipelineActive() && isNewPipelineReady()) {
         setNewPipelineActive(true);
-    }
-
-    // Extract concrete World via IWorldView bridge.
-    // The renderer currently requires concrete World for weather, day/night, and biome systems.
-    // When ClientWorld becomes self-sufficient (Phase 2+), this null check will gate
-    // an alternative rendering path using IWorldView directly.
-    const World* world = request.worldView.asWorld();
-    if (!world) {
-        // ClientWorld path: concrete World not available.
-        // For now, skip rendering when asWorld() returns nullptr.
-        // This path will be completed when weather/day-night proxying is implemented.
-        return;
     }
 
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
@@ -202,12 +193,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
-    renderFrame(*world, request.camera, request.window, request.target, request.blockBreak);
+    renderFrame(request.worldView, request.camera, request.window,
+                request.target, request.blockBreak,
+                request.dayNightSystem, request.weatherSystem);
 
     if (!lightDebugActive) {
-        cameraRainVisibility = computeCameraRainVisibility(*world, request.camera.getPosition());
+        cameraRainVisibility = computeCameraRainVisibility(request.worldView, request.camera.getPosition());
         if (m_settings.weather.rainLinesEnabled) {
-            const auto& weather = world->getWeatherSystem().getDerived();
+            const auto& weather = request.weatherSystem.getDerived();
             const glm::vec3 camPos = request.camera.getPosition();
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
@@ -246,7 +239,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setForwardMode(getPipelineMode() == PipelineMode::Forward);
         request.firstPersonHeldItemRenderer->setShadowData(
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
-        const glm::vec2 heldLight = sampleHeldItemLight(*world, request.camera.getPosition());
+        const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->render(
             frameRenderSize.x,
@@ -259,8 +252,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     if (!skipPostProcess) {
         const bool postTimerStarted = m_debugService.beginGpuTimer(GpuTimerPass::Post);
         PostProcessEffects effects = buildPostProcessEffects(
-            *world, request.camera, request.window,
-            cameraRainVisibility, request.screenRollRadians);
+            request.worldView, request.camera, request.window,
+            cameraRainVisibility, request.screenRollRadians,
+            request.dayNightSystem, request.weatherSystem);
         m_postProcessPass.setEffects(effects);
         if (lightDebugActive) {
             m_postProcessPass.blitSceneToBackbuffer(request.window);
@@ -531,9 +525,11 @@ bool RenderScene::prepareFrameResources(const Window& window) {
     return ready;
 }
 
-PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, const Camera& camera,
+PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
                                                          const Window& window, float cameraRainVisibility,
-                                                         float screenRollRadians) const {
+                                                         float screenRollRadians,
+                                                         const DayNightSystem& dayNightSystem,
+                                                         const WeatherSystem& weatherSystem) const {
     PostProcessEffects effects;
 
     // Basic state
@@ -550,7 +546,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, cons
     effects.autoExposureMax = m_settings.postProcess.autoExposureMax;
     effects.autoExposureSpeed = m_settings.postProcess.autoExposureSpeed;
     effects.autoExposureBias = m_settings.postProcess.autoExposureBias;
-    effects.autoExposureDayFactor = world.getDayNightSystem().getSkyIntensity();
+    effects.autoExposureDayFactor = dayNightSystem.getSkyIntensity();
     effects.sunRaysEnabled = m_settings.postProcess.sunRaysEnabled;
     effects.sunRayStrength = m_settings.postProcess.sunRayStrength;
     effects.shaderpackGradingEnabled = m_settings.postProcess.shaderpackGradingEnabled;
@@ -575,8 +571,8 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, cons
     effects.bloomyFogEnabled = m_settings.postProcess.bloomyFogEnabled;
 
     // Weather state
-    const WeatherState& weather = world.getWeatherSystem().getRenderState();
-    const WeatherDerived& derived = world.getWeatherSystem().getDerived();
+    const WeatherState& weather = weatherSystem.getRenderState();
+    const WeatherDerived& derived = weatherSystem.getDerived();
     effects.weatherWetness = weather.wetness;
     effects.weatherStorm = weather.storm;
     effects.snowStrength = derived.snowStrength;
@@ -590,7 +586,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, cons
 
     // Sun screen position calculation
     {
-        const float sunAngle = world.getDayNightSystem().getCelestialAngleRadians();
+        const float sunAngle = dayNightSystem.getCelestialAngleRadians();
         glm::vec3 sunDirection(0.25f, std::sin(sunAngle), -std::cos(sunAngle));
         if (glm::length(sunDirection) > 0.0001f) {
             sunDirection = glm::normalize(sunDirection);
@@ -613,7 +609,8 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const World& world, cons
     return effects;
 }
 
-FrameContext RenderScene::buildFrameContext(const World& world, const Camera& camera, const Window& window) {
+FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
+                                            const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
     FrameContext ctx;
 
     // Camera matrices
@@ -682,9 +679,9 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
         ctx.hasPreviousFrame = false;
     }
 
-    // Weather state from World::WeatherSystem
-    const WeatherState& weather = world.getWeatherSystem().getRenderState();
-    const WeatherDerived& weatherDerived = world.getWeatherSystem().getDerived();
+    // Weather state from WeatherSystem
+    const WeatherState& weather = weatherSystem.getRenderState();
+    const WeatherDerived& weatherDerived = weatherSystem.getDerived();
     ctx.weather.wetness = weather.wetness;
     ctx.weather.storm = weather.storm;
     ctx.weather.surfaceWetness = weatherDerived.surfaceWetness;
@@ -699,11 +696,11 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
 
     // Sky colors and illuminance
     if (m_shared.sky) {
-        auto skyColors = m_shared.sky->computeSkyColors(world.getDayNightSystem());
+        auto skyColors = m_shared.sky->computeSkyColors(dayNightSystem);
         ctx.skyColors = toSkyColorsData(skyColors);
         ctx.skyIlluminance = toSkyIlluminanceData(
             m_shared.sky->computeSkyIlluminance(skyColors, ctx.weather.wetness, ctx.weather.storm));
-        ctx.skyIntensity = world.getDayNightSystem().getSkyIntensity();
+        ctx.skyIntensity = dayNightSystem.getSkyIntensity();
     }
 
     // Fog settings
@@ -715,7 +712,7 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
     ctx.fog.density = m_settings.fog.density;
     if (m_settings.fog.autoDistanceByRenderDistance) {
         const float chunkSize = 16.0f; // Chunk::SIZE_X
-        const float renderDistanceChunks = static_cast<float>(std::max(1, world.getRenderDistance()));
+        const float renderDistanceChunks = static_cast<float>(std::max(1, worldView.getRenderDistance()));
         ctx.fog.endDistance = std::max(0.0f, (renderDistanceChunks + m_settings.fog.autoEndOffsetChunks) * chunkSize);
         ctx.fog.startDistance = std::max(0.0f, ctx.fog.endDistance - m_settings.fog.autoFadeWidthChunks * chunkSize);
     }
@@ -773,7 +770,7 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
             const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
             bool blocked = false;
             for (int y = startY; y < 256; ++y) {
-                BlockID above = world.getBlock(bx, y, bz);
+                BlockID above = worldView.getBlock(bx, y, bz);
                 if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
                     blocked = true;
                     break;
@@ -784,9 +781,11 @@ FrameContext RenderScene::buildFrameContext(const World& world, const Camera& ca
         ctx.cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
     }
 
-    // Shared resources and world pointer
+    // Shared resources and world/environment pointers
     ctx.shared = &m_shared;
-    ctx.world = &world;
+    ctx.worldView = &worldView;
+    ctx.dayNightSystem = &dayNightSystem;
+    ctx.weatherSystem = &weatherSystem;
 
     // Store current context as previous for next frame
     m_previousContext = ctx;
@@ -815,7 +814,7 @@ void RenderScene::invalidateFrameHistory() {
     m_lastFrameOutput = {};
 }
 
-float RenderScene::computeCameraRainVisibility(const World& world, const glm::vec3& cameraPos) const {
+float RenderScene::computeCameraRainVisibility(const IWorldView& worldView, const glm::vec3& cameraPos) const {
     constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
     constexpr int kRayCount = 5;
     int skyHits = 0;
@@ -825,7 +824,7 @@ float RenderScene::computeCameraRainVisibility(const World& world, const glm::ve
         const int bz = static_cast<int>(std::floor(cameraPos.z + kOffsets[r][1]));
         bool blocked = false;
         for (int y = startY; y < 256; ++y) {
-            BlockID above = world.getBlock(bx, y, bz);
+            BlockID above = worldView.getBlock(bx, y, bz);
             if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
                 blocked = true;
                 break;

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 
+class IWorldView;
 class World;
 class ThreadPool;
 class WorldRenderBuffer;
@@ -31,16 +32,16 @@ public:
     void beginFrame();
 
     /// Release GPU allocations for sub-chunks whose generation has changed.
-    void releaseStaleMdiAllocations(const World& world);
+    void releaseStaleMdiAllocations(const IWorldView& worldView);
 
     /// Release a specific MDI allocation by key.
     void releaseMdiAllocation(const SubChunkGpuKey& key);
 
     /// Drain completed meshing results and upload to GPU.
-    void drainMeshingResults(const World& world);
+    void drainMeshingResults(const IWorldView& worldView);
 
     /// Submit new meshing jobs for dirty sub-chunks near the camera.
-    void submitMeshingJobs(const World& world, const glm::vec3& cameraPos);
+    void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
 
     /// Record meshing history for debug display. Call at end of frame.
     void endFrame();

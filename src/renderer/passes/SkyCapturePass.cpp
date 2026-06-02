@@ -2,7 +2,6 @@
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../world/World.h"
 #include "../../world/DayNightSystem.h"
 #include "../../world/WeatherSystem.h"
 
@@ -16,30 +15,31 @@ void SkyCapturePass::shutdown() {
     // Nothing to release.
 }
 
-void SkyCapturePass::execute(const World& world, DeferredRenderTargets& targets,
+void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
+                              DeferredRenderTargets& targets,
                               GameplaySkyRenderer& skyRenderer, ResourceMgr* resourceMgr,
                               float cameraY, float shaderTime, const glm::vec3& cameraPos,
                               float cloudTimeScale) {
     const float cameraAltitude = cameraY;
     const GLuint atmosphereLut = targets.atmosphereLutTexture();
-    const int moonPhase = world.getDayNightSystem().getMoonPhaseIndex();
+    const int moonPhase = dayNightSystem.getMoonPhaseIndex();
 
     // DerivativeMain MoonFlux: phase factor ranges 0.2 (full moon) to 1.2 (new moon).
     constexpr float kNightBrightness = 0.0005f;
     const float moonPhaseFlux = (static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f) * kNightBrightness;
 
     // Weather state for SkyCapture modulation
-    const WeatherState& weather = world.getWeatherSystem().getRenderState();
+    const WeatherState& weather = weatherSystem.getRenderState();
     const float weatherWetness = weather.wetness;
     const float weatherStorm = weather.storm;
 
     auto illum = skyRenderer.computeSkyIlluminance(
-        skyRenderer.computeSkyColors(world.getDayNightSystem()),
+        skyRenderer.computeSkyColors(dayNightSystem),
         weatherWetness, weatherStorm);
 
     // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.
-    const int worldDay = world.getDayNightSystem().getElapsedDays();
-    const int worldTime = static_cast<int>(world.getDayNightSystem().getTimeOfDay() * 20.0f);
+    const int worldDay = dayNightSystem.getElapsedDays();
+    const int worldTime = static_cast<int>(dayNightSystem.getTimeOfDay() * 20.0f);
     illum.cloudDynamicWeather = GameplaySkyRenderer::computeCloudDynamicWeather(worldDay, worldTime);
 
     const float cloudWetness = std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f);
@@ -50,7 +50,7 @@ void SkyCapturePass::execute(const World& world, DeferredRenderTargets& targets,
     const GLuint noiseTexture = resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0;
 
     // Raw sky radiance (rows 0..257)
-    skyRenderer.renderSkyCapture(world.getDayNightSystem(),
+    skyRenderer.renderSkyCapture(dayNightSystem,
                                   targets.skyCaptureFramebuffer(),
                                   targets.skyCaptureWidth(),
                                   targets.skyCaptureHeight(),
@@ -58,7 +58,7 @@ void SkyCapturePass::execute(const World& world, DeferredRenderTargets& targets,
                                   weatherWetness, weatherStorm);
 
     // Cloudy sky radiance (rows 258..513)
-    skyRenderer.renderCloudySkyCapture(world.getDayNightSystem(),
+    skyRenderer.renderCloudySkyCapture(dayNightSystem,
                                         targets.skyCaptureFramebuffer(),
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),

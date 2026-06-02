@@ -11,7 +11,7 @@ class Shader;
 class HumanoidRenderer;
 class DropRenderer;
 class DropSystem;
-class World;
+class IWorldView;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -25,7 +25,7 @@ public:
 
     /// Execute entity GBuffer rendering.
     /// Prerequisites: GBuffer FBO already bound from terrain pass.
-    void executeEntities(const World& world, const FrameContext& ctx,
+    void executeEntities(const IWorldView& worldView, const FrameContext& ctx,
                          DeferredRenderTargets& targets,
                          HumanoidRenderer* humanoidRenderer,
                          ecs::GameplayRegistry* gameplayRegistry,
@@ -33,7 +33,7 @@ public:
 
     /// Execute drop GBuffer rendering.
     /// Prerequisites: GBuffer FBO bound, per-object velocity attached from entities.
-    void executeDrops(const World& world, const FrameContext& ctx,
+    void executeDrops(const IWorldView& worldView, const FrameContext& ctx,
                       DeferredRenderTargets& targets,
                       DropRenderer* dropRenderer, DropSystem* dropSystem);
 

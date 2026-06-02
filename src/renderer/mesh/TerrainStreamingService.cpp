@@ -1,5 +1,5 @@
 #include "TerrainStreamingService.h"
-#include "../../world/World.h"
+#include "../../world/IWorldView.h"
 
 void TerrainStreamingService::init(ThreadPool* threadPool, WorldRenderBuffer* worldRenderBuffer) {
     m_terrainCache.init();
@@ -40,21 +40,21 @@ void TerrainStreamingService::beginFrame() {
     m_terrainCache.beginFrame();
 }
 
-void TerrainStreamingService::releaseStaleMdiAllocations(const World& world) {
-    m_terrainCache.releaseStaleMdiAllocations(world);
+void TerrainStreamingService::releaseStaleMdiAllocations(const IWorldView& worldView) {
+    m_terrainCache.releaseStaleMdiAllocations(worldView);
 }
 
 void TerrainStreamingService::releaseMdiAllocation(const SubChunkGpuKey& key) {
     m_terrainCache.releaseMdiAllocation(key);
 }
 
-void TerrainStreamingService::drainMeshingResults(const World& world) {
-    m_terrainCache.drainMeshingResults(world);
+void TerrainStreamingService::drainMeshingResults(const IWorldView& worldView) {
+    m_terrainCache.drainMeshingResults(worldView);
     syncFrameStats();
 }
 
-void TerrainStreamingService::submitMeshingJobs(const World& world, const glm::vec3& cameraPos) {
-    m_terrainCache.submitMeshingJobs(world, cameraPos);
+void TerrainStreamingService::submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos) {
+    m_terrainCache.submitMeshingJobs(worldView, cameraPos);
     syncFrameStats();
 }
 

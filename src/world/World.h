@@ -2,6 +2,7 @@
 #define MECRAFT_WORLD_H
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -71,6 +72,11 @@ public:
     BlockNeighborUpdateQueue& neighborUpdateQueue() { return m_neighborUpdateQueue; }
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
 
+    /// Callback invoked after any block state change (setBlockState / setFluidState).
+    /// Used by GameServer to collect dirty blocks for BlockUpdateBatch messages.
+    using BlockChangeCallback = std::function<void(int x, int y, int z, BlockID newBlockId)>;
+    void setBlockChangeCallback(BlockChangeCallback callback) { m_blockChangeCallback = std::move(callback); }
+
 private:
     std::unordered_map<int64_t, std::shared_ptr<Chunk>> m_chunks;
 
@@ -81,6 +87,7 @@ private:
     WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
+    BlockChangeCallback m_blockChangeCallback;
 
     int m_renderDistance = 8;
     uint32_t m_seed = 0;

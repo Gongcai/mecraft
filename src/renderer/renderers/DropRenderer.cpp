@@ -12,7 +12,7 @@
 #include "engine/platform/Window.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/DropSystem.h"
-#include "../../world/World.h"
+#include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
 #include "../../item/Item.h"
@@ -539,7 +539,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     return mesh;
 }
 
-void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSystem,
+void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem& dropSystem,
                                     const glm::mat4& jitteredViewProj,
                                     float animationTime) {
     if (m_resourceMgr == nullptr) {
@@ -599,7 +599,7 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
         model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
 
         // Query world light at drop center position for deferred lighting.
-        const glm::vec2 light = queryWorldLight(world, drop.position);
+        const glm::vec2 light = queryWorldLight(worldView, drop.position);
 
         if (!preferBlockMesh && itemTileIndex >= 0 && canRenderItems) {
             Mesh* mesh = getOrCreateItemMesh(drop.itemId);
@@ -655,13 +655,13 @@ void DropRenderer::renderToGBuffer(const World& world, const DropSystem& dropSys
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void DropRenderer::renderToShadowMap(const World& world, const DropSystem& dropSystem,
+void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSystem& dropSystem,
                                       const glm::mat4& shadowViewProj,
                                       const glm::mat4& shadowView,
                                       const glm::mat4& shadowProjection,
                                       float animationTime,
                                       float shaderTime) {
-    (void)world; // Reserved for future shadow light query; shadow pass is depth-only currently.
+    (void)worldView; // Reserved for future shadow light query; shadow pass is depth-only currently.
     if (m_resourceMgr == nullptr) {
         return;
     }
@@ -772,18 +772,18 @@ void DropRenderer::renderToShadowMap(const World& world, const DropSystem& dropS
     }
 }
 
-glm::vec2 DropRenderer::queryWorldLight(const World& world, const glm::vec3& position) {
+glm::vec2 DropRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
     const int bx = static_cast<int>(std::floor(position.x));
     const int by = static_cast<int>(std::floor(position.y));
     const int bz = static_cast<int>(std::floor(position.z));
 
-    if (!world.isChunkLoadedForBlock(bx, by, bz)) {
+    if (!worldView.isChunkLoadedForBlock(bx, by, bz)) {
         return {1.0f, 0.0f};
     }
 
-    const glm::ivec2 cc = world.getChunkCoords(bx, bz);
-    const auto& chunks = world.getActiveChunks();
-    const auto it = chunks.find(World::chunkKey(cc.x, cc.y));
+    const glm::ivec2 cc = worldView.getChunkCoords(bx, bz);
+    const auto& chunks = worldView.getActiveChunks();
+    const auto it = chunks.find(IWorldView::chunkKey(cc.x, cc.y));
     if (it == chunks.end()) {
         return {1.0f, 0.0f};
     }

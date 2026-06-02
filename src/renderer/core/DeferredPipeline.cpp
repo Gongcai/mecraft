@@ -183,7 +183,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Sky capture
     if (m_skyCapturePass && m_shared->sky) {
         renderer::debug::ScopedDebugGroup passGroup("SkyCapture");
-        m_skyCapturePass->execute(*ctx.world, targets, *m_shared->sky,
+        m_skyCapturePass->execute(*ctx.dayNightSystem, *ctx.weatherSystem, targets, *m_shared->sky,
                                   m_resourceMgr, ctx.camera.position.y,
                                   ctx.shaderTime, ctx.camera.position,
                                   m_currentSettings.cloud.timeScale);
@@ -199,11 +199,11 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
         // Entity and drop GBuffer
         if (m_gbufferPass) {
-            m_gbufferPass->executeEntities(*ctx.world, ctx, targets,
+            m_gbufferPass->executeEntities(*ctx.worldView, ctx, targets,
                                            m_shared->humanoidRenderer,
                                            m_shared->gameplayRegistry,
                                            ctx.renderLocalPlayerModel);
-            m_gbufferPass->executeDrops(*ctx.world, ctx, targets,
+            m_gbufferPass->executeDrops(*ctx.worldView, ctx, targets,
                                         m_shared->dropRenderer, m_shared->dropSystem);
         }
     }
@@ -216,14 +216,14 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Shadow pass
     if (m_shadowPass && m_currentSettings.shadow.enabled && m_shadowPass->hasShaders() &&
-        m_shared->shadowRenderer && ctx.world) {
+        m_shared->shadowRenderer && ctx.worldView) {
         renderer::debug::ScopedDebugGroup passGroup("Shadow");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Shadow);
         const bool useMultiDrawIndirect = m_shared->terrain != nullptr
             ? m_shared->terrain->useMultiDrawIndirect()
             : true;
         auto shadowOutput = m_shadowPass->execute(
-            ctx, m_currentSettings, targets, *ctx.world,
+            ctx, m_currentSettings, targets, *ctx.worldView,
             m_transparentBatch, m_transparentPassPlan, useMultiDrawIndirect);
         m_transparentBatch = std::move(shadowOutput.transparentBatch);
         m_transparentPassPlan = shadowOutput.transparentPlan;
@@ -434,8 +434,8 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
 
     // Terrain cache operations
     if (m_shared->terrainCache) {
-        m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.world);
-        m_shared->terrainCache->drainMeshingResults(*ctx.world);
+        m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
+        m_shared->terrainCache->drainMeshingResults(*ctx.worldView);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
@@ -522,15 +522,15 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
 
     // Submit meshing jobs
     if (m_shared->terrainCache) {
-        m_shared->terrainCache->submitMeshingJobs(*ctx.world, ctx.camera.position);
+        m_shared->terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
     // Render opaque chunks and collect cutout/transparent entries
     std::vector<ChunkRenderEntry> cutoutEntries;
     std::vector<ChunkRenderEntry> transparentEntries;
-    cutoutEntries.reserve(ctx.world->getActiveChunks().size() * 2);
-    transparentEntries.reserve(ctx.world->getActiveChunks().size() * 2);
-    terrain.renderOpaqueChunksAndCollectPasses(*ctx.world, cutoutEntries, transparentEntries, true);
+    cutoutEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
+    transparentEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
+    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, cutoutEntries, transparentEntries, true);
     terrain.syncTransparentBatches();
 
     // Save transparent batch for water/transparent passes
@@ -747,7 +747,7 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
 }
 
 void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve) {
-    if (!m_waterCompositePass || !m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer || !ctx.world) {
+    if (!m_waterCompositePass || !m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer || !ctx.worldView) {
         return;
     }
 
@@ -763,7 +763,7 @@ void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool pr
         : true;
     ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Water);
     const bool waterRenderedBeforeTemporal = m_waterCompositePass->execute(
-        ctx, m_currentSettings, targets, *ctx.world,
+        ctx, m_currentSettings, targets, *ctx.worldView,
         ctx.frameWidth, ctx.frameHeight,
         m_deferredFrameActive, preTemporalResolve,
         m_capturedFramebuffer, m_capturedViewport,

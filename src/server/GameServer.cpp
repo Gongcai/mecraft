@@ -13,6 +13,11 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     m_world.setThreadPool(threadPool);
     m_world.init(seed);
 
+    // Register block change callback to collect dirty blocks for BlockUpdateBatch
+    m_world.setBlockChangeCallback([this](int x, int y, int z, BlockID newBlockId) {
+        m_pendingBlockUpdates.push_back({x, y, z, static_cast<uint16_t>(newBlockId)});
+    });
+
     // Compute spawn position from world surface
     constexpr float kSpawnHeightOffset = 2.0f;
     const int surfaceY = m_world.getSurfaceY(0, 0);
@@ -42,6 +47,9 @@ void GameServer::tick(float dt) {
 
     // Send authoritative snapshots to clients
     sendSnapshotsToClients();
+
+    // Send pending block updates to clients
+    sendBlockUpdatesToClients();
 
     // Check if spawn chunks are ready
     if (!m_spawnChunksReady) {
@@ -121,6 +129,27 @@ void GameServer::sendSnapshotsToClients() {
         packet.inProcessPayload = snapshot;
         client.transport->send(std::move(packet));
     }
+}
+
+void GameServer::sendBlockUpdatesToClients() {
+    if (m_pendingBlockUpdates.empty()) {
+        return;
+    }
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::BlockUpdateBatch;
+    net::BlockUpdateBatchMessage batch;
+    batch.updates = std::move(m_pendingBlockUpdates);
+    packet.inProcessPayload = std::move(batch);
+
+    for (auto& client : m_clients) {
+        // Send a copy to each client
+        net::Packet clientPacket = packet;
+        client.transport->send(std::move(clientPacket));
+    }
+
+    m_pendingBlockUpdates.clear();
 }
 
 void GameServer::sendChunkDataToClient(ConnectedClient& client, int cx, int cz) {

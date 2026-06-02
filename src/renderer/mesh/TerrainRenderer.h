@@ -11,6 +11,7 @@
 
 // Forward declarations for types used only as pointers/references in the public interface
 class Chunk;
+class IWorldView;
 class World;
 class Shader;
 class ResourceMgr;
@@ -151,7 +152,7 @@ public:
     /// In non-MDI mode, issues direct draw calls for opaque geometry.
     /// Collects cutout and transparent entries for later passes.
     void renderOpaqueChunksAndCollectPasses(
-        const World& world,
+        const IWorldView& worldView,
         std::vector<ChunkRenderEntry>& cutoutEntries,
         std::vector<ChunkRenderEntry>& transparentEntries,
         bool frustumCull = true,

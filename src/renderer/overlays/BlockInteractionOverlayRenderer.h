@@ -6,7 +6,7 @@
 
 class ResourceMgr;
 class Shader;
-class World;
+class IWorldView;
 
 /// Decoupled data transfer structs for block interaction rendering.
 struct BlockTargetRenderData {
@@ -32,7 +32,7 @@ public:
     /// @param viewProj Combined view-projection matrix
     /// @param target Block selection target data
     /// @param blockBreak Block break progress data
-    void render(const World& world,
+    void render(const IWorldView& worldView,
                 const glm::mat4& viewProj,
                 const BlockTargetRenderData& target,
                 const BlockBreakRenderData& blockBreak);
@@ -40,8 +40,8 @@ public:
 private:
     void initOutlineMesh();
     void initBreakOverlayMesh();
-    void renderBlockOutline(const World& world, const glm::mat4& viewProj, const BlockTargetRenderData& target);
-    void renderBlockBreakOverlay(const World& world, const glm::mat4& viewProj, const BlockBreakRenderData& blockBreak);
+    void renderBlockOutline(const IWorldView& worldView, const glm::mat4& viewProj, const BlockTargetRenderData& target);
+    void renderBlockBreakOverlay(const IWorldView& worldView, const glm::mat4& viewProj, const BlockBreakRenderData& blockBreak);
 
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;

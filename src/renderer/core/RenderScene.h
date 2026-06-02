@@ -19,6 +19,8 @@ class ResourceMgr;
 class IWorldView;
 class World;
 class Camera;
+class DayNightSystem;
+class WeatherSystem;
 class Window;
 class HumanoidRenderer;
 class DropRenderer;
@@ -82,6 +84,8 @@ struct RenderGameplayFrameRequest {
     const IWorldView& worldView;
     const Camera& camera;
     Window& window;
+    const DayNightSystem& dayNightSystem;
+    const WeatherSystem& weatherSystem;
     const BlockTargetRenderData& target;
     const BlockBreakRenderData& blockBreak;
     RainRenderer& rainRenderer;
@@ -105,8 +109,9 @@ public:
     void shutdown();
 
     /// Main render entry point (called from Game)
-    void renderFrame(const World& world, const Camera& camera, const Window& window,
-                     const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak);
+    void renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
+                     const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
+                     const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
 
     /// Render a complete gameplay frame, including scene, precipitation, and post-process setup.
     void renderGameplayFrame(const RenderGameplayFrameRequest& request);
@@ -183,9 +188,11 @@ public:
 
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().
-    PostProcessEffects buildPostProcessEffects(const World& world, const Camera& camera,
+    PostProcessEffects buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
                                                 const Window& window, float cameraRainVisibility,
-                                                float screenRollRadians) const;
+                                                float screenRollRadians,
+                                                const DayNightSystem& dayNightSystem,
+                                                const WeatherSystem& weatherSystem) const;
 
     /// Get held item shadow data from the last frame output.
     const FirstPersonShadowData& getHeldItemShadowData() const { return m_lastFrameOutput.heldItemShadow; }
@@ -195,11 +202,12 @@ public:
 
     /// Pre-compute camera rain visibility for a given camera position.
     /// Used by Game before rain rendering.
-    float computeCameraRainVisibility(const World& world, const glm::vec3& cameraPos) const;
+    float computeCameraRainVisibility(const IWorldView& worldView, const glm::vec3& cameraPos) const;
 
 private:
     /// Build FrameContext from world state
-    FrameContext buildFrameContext(const World& world, const Camera& camera, const Window& window);
+    FrameContext buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
+                                   const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
     glm::ivec2 internalRenderSize(const Window& window) const;
 
     /// Prepare active pipeline targets that FrameContext depends on.

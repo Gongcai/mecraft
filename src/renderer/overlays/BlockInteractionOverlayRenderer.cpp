@@ -1,8 +1,8 @@
 #include "BlockInteractionOverlayRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../world/World.h"
-#include "../../world/block/BlockSelection.h"
+#include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
+#include "../../world/block/BlockSelection.h"
 #include "../core/Shader.h"
 
 #include <array>
@@ -41,12 +41,12 @@ void BlockInteractionOverlayRenderer::shutdown() {
     }
 }
 
-void BlockInteractionOverlayRenderer::render(const World& world,
+void BlockInteractionOverlayRenderer::render(const IWorldView& worldView,
                                               const glm::mat4& viewProj,
                                               const BlockTargetRenderData& target,
                                               const BlockBreakRenderData& blockBreak) {
-    renderBlockBreakOverlay(world, viewProj, blockBreak);
-    renderBlockOutline(world, viewProj, target);
+    renderBlockBreakOverlay(worldView, viewProj, blockBreak);
+    renderBlockOutline(worldView, viewProj, target);
 }
 
 void BlockInteractionOverlayRenderer::initOutlineMesh() {
@@ -144,7 +144,7 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
     glBindVertexArray(0);
 }
 
-void BlockInteractionOverlayRenderer::renderBlockOutline(const World& world,
+void BlockInteractionOverlayRenderer::renderBlockOutline(const IWorldView& worldView,
                                                          const glm::mat4& viewProj,
                                                          const BlockTargetRenderData& target) {
     if (m_outlineShader == nullptr || m_outlineVao == 0 || !target.hasTarget) {
@@ -152,7 +152,7 @@ void BlockInteractionOverlayRenderer::renderBlockOutline(const World& world,
     }
 
     const glm::ivec3 targetBlock = target.targetBlock;
-    const StateID targetState = world.getBlockState(targetBlock.x, targetBlock.y, targetBlock.z);
+    const StateID targetState = worldView.getBlockState(targetBlock.x, targetBlock.y, targetBlock.z);
     const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
     const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
     const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
@@ -176,7 +176,7 @@ void BlockInteractionOverlayRenderer::renderBlockOutline(const World& world,
     glDepthMask(GL_TRUE);
 }
 
-void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const World& world,
+void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const IWorldView& worldView,
                                                                const glm::mat4& viewProj,
                                                                const BlockBreakRenderData& blockBreak) {
     if (m_breakOverlayShader == nullptr || m_breakOverlayVao == 0 || !blockBreak.active) {
@@ -189,10 +189,10 @@ void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const World& world
     }
 
     const glm::ivec3 target = blockBreak.blockPos;
-    const BlockID targetId = world.getBlock(target.x, target.y, target.z);
+    const BlockID targetId = worldView.getBlock(target.x, target.y, target.z);
     const BlockDef& targetDef = BlockRegistry::get(targetId);
     const bool useCrossOverlay = (targetDef.renderShape == BlockRenderShape::Cross);
-    const StateID targetState = world.getBlockState(target.x, target.y, target.z);
+    const StateID targetState = worldView.getBlockState(target.x, target.y, target.z);
     const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
     const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
     const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
