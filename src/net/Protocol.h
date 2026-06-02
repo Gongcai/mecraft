@@ -49,6 +49,7 @@ enum class MessageType : uint8_t {
     EntitySpawn,
     EntityDespawn,
     EntitySnapshot,
+    InventorySnapshot,
 
     // Bidirectional
     KeepAlive,
@@ -170,6 +171,18 @@ struct EntitySnapshotItem {
 struct EntitySnapshotMessage {
     TickId serverTick = 0;
     std::vector<EntitySnapshotItem> entities;
+};
+
+/// Inventory slot data for network sync.
+struct InventorySlotData {
+    uint16_t itemId = 0;
+    uint8_t stackCount = 0;
+};
+
+/// Server sends authoritative inventory state to client.
+struct InventorySnapshotMessage {
+    uint8_t selectedHotbarSlot = 0;
+    std::vector<InventorySlotData> slots;  // 36 slots (hotbar + main inventory)
 };
 
 } // namespace net

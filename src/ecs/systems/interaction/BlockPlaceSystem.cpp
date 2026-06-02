@@ -100,8 +100,18 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        // Decide if placement is allowed via mode rules
+        // Server-side distance validation: player must be within reach
         const glm::ivec3 placeBlock = target.placeBlock;
+        constexpr float kMaxPlaceDistance = 6.5f;
+        const glm::vec3 blockCenter = glm::vec3(placeBlock) + glm::vec3(0.5f);
+        const glm::vec3 playerPos = view.get<TransformComponent>(e).position;
+        const glm::vec3 diff = playerPos - blockCenter;
+        const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+        if (distSq > kMaxPlaceDistance * kMaxPlaceDistance) {
+            continue;
+        }
+
+        // Decide if placement is allowed via mode rules
 
         GameplayBlockActionRequest request;
         request.hasHit = target.hasTarget;

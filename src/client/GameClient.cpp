@@ -127,6 +127,13 @@ void GameClient::receiveMessages() {
             }
             break;
         }
+        case net::MessageType::InventorySnapshot: {
+            // Inventory snapshot received from server.
+            // For Phase 5, this is a placeholder — the client acknowledges but
+            // doesn't yet apply the inventory (ECS runs on the same registry in-process).
+            // In Phase 6 (real networking), this will update the client-side inventory display.
+            break;
+        }
         default:
             break;
         }

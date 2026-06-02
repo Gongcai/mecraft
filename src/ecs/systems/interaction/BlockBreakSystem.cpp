@@ -52,12 +52,14 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                               BlockActionIntentComponent,
                               BlockTargetComponent,
                               BlockBreakComponent,
-                              BlockInteractionRuntimeComponent>();
+                              BlockInteractionRuntimeComponent,
+                              TransformComponent>();
     for (auto e : view) {
         auto& runtime = view.get<BlockInteractionRuntimeComponent>(e);
         auto& blockBreak = view.get<BlockBreakComponent>(e);
         const auto& intent = view.get<BlockActionIntentComponent>(e);
         const auto& target = view.get<BlockTargetComponent>(e);
+        const auto& transform = view.get<TransformComponent>(e);
 
         runtime.creativeBreakCooldownRemaining =
             std::max(0.0f, runtime.creativeBreakCooldownRemaining - dt);
@@ -68,6 +70,17 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         }
 
         const glm::ivec3 hitBlock = target.targetBlock;
+
+        // Server-side distance validation: player must be within reach
+        constexpr float kMaxBreakDistance = 6.5f;
+        const glm::vec3 blockCenter = glm::vec3(hitBlock) + glm::vec3(0.5f);
+        const glm::vec3 diff = transform.position - blockCenter;
+        const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+        if (distSq > kMaxBreakDistance * kMaxBreakDistance) {
+            resetBreakSession(blockBreak, runtime);
+            continue;
+        }
+
         const BlockID targetBlock = world.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
         if (targetBlock == 0 || !BlockRegistry::get(targetBlock).isSelectable) {
             resetBreakSession(blockBreak, runtime);
