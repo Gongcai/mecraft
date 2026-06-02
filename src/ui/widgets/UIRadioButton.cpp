@@ -44,9 +44,6 @@ void UIRadioButtonGroup::init(ResourceMgr& resourceMgr) {
 }
 
 void UIRadioButtonGroup::shutdown() {
-    for (auto& opt : m_options) {
-        opt.labelWidget.shutdown();
-    }
     cleanupMesh();
     m_shader = nullptr;
     UIWidget::shutdown();

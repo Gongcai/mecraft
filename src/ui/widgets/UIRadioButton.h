@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <functional>
 #include <string>
 #include <vector>
@@ -9,7 +8,6 @@
 
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
-#include "UIText.h"
 
 class Shader;
 
@@ -47,7 +45,6 @@ protected:
 private:
     struct Option {
         std::string text;
-        UIText labelWidget;
         bool hovered = false;
         Tween<float> selectTween;
     };

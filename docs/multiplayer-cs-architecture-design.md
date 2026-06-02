@@ -10,7 +10,7 @@
 
 1. 先做最小 C/S 分离骨架。
 2. 再在 C/S 架构上做区块加载与流送优化。
-3. 最后替换传输层，支持真正局域网/公网联机。
+3. 最后使用 ENet 开源库实现真实 UDP 网络传输，支持真正局域网/公网联机。
 
 不建议现在先深度优化现有 `World::update(playerPos)` 加载逻辑，因为当前结构默认“本地客户端直接拥有世界真相”。联机后，区块生成、模拟、保存、权限校验都应该属于服务端；客户端只保存可见/可预测的世界副本，并负责渲染、输入采样、预测和插值。
 
@@ -39,8 +39,8 @@ Game process
 联机模式只替换为：
 
 ```text
-Game process A: GameClient + NetworkTransport
-Game process B: DedicatedServer + NetworkTransport
+Game process A: GameClient + ENetTransport
+Game process B: DedicatedServer + ENetTransport
 ```
 
 ---
@@ -118,6 +118,8 @@ src/
     Protocol.h
     Transport.h
     InProcessTransport.h
+    ENetTransport.h
+    ENetTransport.cpp
     PacketCodec.h
     NetTypes.h
 
@@ -252,11 +254,32 @@ public:
 - `InProcessTransport`：两个线程安全队列，client/server 同进程通信。
 - 可选 `LoopbackTransport`：本机 socket，用于早期真实编码/拆包测试。
 
-后续实现：
+真实网络实现：
 
-- `TcpTransport`：简单可靠，适合早期。
-- `UdpTransport`：配合可靠通道/序号/重传，适合动作游戏。
-- `SteamNetworkingTransport` 或 ENet：可作为成熟方案。
+- `ENetTransport`：基于 ENet 开源库实现 UDP 连接、通道、可靠包、分片、重传、连接状态与断线检测。
+- 不再自研底层 UDP 可靠层；业务层只维护协议版本、消息编码、快照序号、预测/插值和玩法语义。
+- `TcpTransport` 可作为临时调试方案，但不作为正式联机目标。
+- `SteamNetworkingTransport` 可作为后续平台集成方案，不影响当前 ENet 路线。
+
+ENet 适合当前阶段的原因：
+
+- 提供连接式 UDP peer 模型，比裸 UDP 更容易接入 C/S 架构。
+- 支持多个 channel，能对应控制消息、区块流送、实体快照、聊天等不同优先级。
+- 支持 reliable / unreliable 包，适合同时传输区块数据和高频实体状态。
+- 已处理 MTU、分片、确认、重传、超时等底层细节，降低自研网络层风险。
+
+建议封装边界：
+
+```cpp
+class ENetTransport final : public ITransportEndpoint {
+public:
+    void send(Packet packet) override;
+    bool tryReceive(Packet& out) override;
+    void poll();
+};
+```
+
+业务代码不得直接依赖 ENet 头文件；只允许 `net/ENetTransport.*` 和少量平台初始化代码包含 ENet。这样单机 `InProcessTransport`、测试 fake transport、后续平台 transport 都能共用同一套协议。
 
 ### 7.1 通道划分
 
@@ -270,6 +293,17 @@ public:
 | ReliableChat | reliable ordered | 聊天、命令、系统消息 |
 
 早期可以全部 reliable，但协议层先保留 channel 字段。
+
+ENet 通道映射建议：
+
+| 协议通道 | ENet channel | ENet 发送方式 |
+|---|---:|---|
+| ReliableControl | 0 | `ENET_PACKET_FLAG_RELIABLE` |
+| ReliableWorld | 1 | `ENET_PACKET_FLAG_RELIABLE` |
+| UnreliableState | 2 | unreliable，业务层用 tick/sequence 丢弃旧快照 |
+| ReliableChat | 3 | `ENET_PACKET_FLAG_RELIABLE` |
+
+注意：高频实体快照即使走 ENet unreliable，也仍需要在协议里带 `serverTick` 或 snapshot sequence，客户端只应用最新有效快照，过期包直接丢弃。
 
 ---
 
@@ -796,18 +830,22 @@ public:
 - 客户端不能直接改权威世界。
 - 本地预测失败可被服务端纠正。
 
-### Phase 6：真实网络传输
+### Phase 6：ENet 真实网络传输
 
-目标：从 in-process 替换为 socket。
+目标：从 in-process 替换为 ENet UDP transport。
 
-- 增加 packet codec。
-- 增加连接握手、版本校验。
-- 增加断线处理、超时、keepalive。
+- 引入 ENet 依赖，封装 `ENetTransport`。
+- 增加 packet codec，所有 ENet payload 都是协议消息二进制数据。
+- 增加连接握手、协议版本校验、registry version 校验。
+- 映射 ReliableControl / ReliableWorld / UnreliableState / ReliableChat 到 ENet channels。
+- 增加断线处理、超时、keepalive、连接失败原因。
 - 支持客户端连接 dedicated server。
+- 保留 `InProcessTransport`，单机仍默认使用 local server。
 
 完成标准：
 
-- 两个进程可以进入同一个世界。
+- 两个进程通过 ENet 可以进入同一个世界。
+- 人为增加延迟/丢包后，输入、区块、实体快照仍能维持可玩状态。
 - 单机仍使用 local server。
 
 ---
@@ -936,6 +974,9 @@ public:
 | 区块数据太大 | 首次加载慢 | section 化、palette、压缩 |
 | 预测纠正抖动 | 手感差 | 先平滑纠正，再引入输入重放 |
 | 服务端 tick 被生成阻塞 | 多人卡顿 | 保持异步生成与预算 |
+| ENet 依赖泄漏到业务层 | 后续测试和平台替换困难 | 只在 `ENetTransport` 封装层包含 ENet |
+| 不可靠快照乱序 | 实体回跳或应用旧状态 | 快照携带 tick/sequence，客户端丢弃旧包 |
+| 大 chunk 包阻塞状态包 | 移动和实体同步延迟 | 区块流送限预算，使用独立 ENet channel |
 
 ---
 
@@ -971,6 +1012,8 @@ public:
 5. 实现 `ChunkData` 的内存消息，不急着做二进制编码。
 6. 改单机启动流程为 `LocalServer + GameClient`。
 7. 再实现 `ChunkTicketManager` 和多半径加载策略。
+8. 引入 ENet 依赖并实现 `ENetTransport`，用同一套协议跑通双进程连接。
+9. 增加网络调试命令，覆盖 ENet RTT、packet loss、peer state、channel bytes。
 
 ---
 
@@ -979,6 +1022,6 @@ public:
 - 服务端拥有真相，客户端拥有体验。
 - 网络协议传输意图和快照，不传 C++ 对象指针。
 - 单机和联机走同一条 gameplay 逻辑。
-- 先 in-process，后 socket；先可读消息结构，后二进制压缩。
+- 先 in-process，后 ENet；先可读消息结构，后二进制压缩。
 - 先保证每个 phase 可运行，再追求完整优化。
 - 区块加载、模拟、渲染、卸载必须分层，不再共享一个半径。
