@@ -1,6 +1,7 @@
 #include "SteveSyncSystem.h"
 
 #include "../../components/Components.h"
+#include "../../components/NetworkComponents.h"
 #include "../../util/InputFrameState.h"
 #include "game/camera/CameraController.h"
 
@@ -33,6 +34,9 @@ void SteveSyncSystem::update(SystemContext& ctx) {
         auto& playerCam = reg.get<CameraStateComponent>(playerEntity);
 
         for (auto steveEntity : steveView) {
+            if (reg.all_of<EntityNetIdComponent>(steveEntity)) {
+                continue;
+            }
             auto& steveTransform = reg.get<TransformComponent>(steveEntity);
             steveTransform.position = playerTransform.position;
 

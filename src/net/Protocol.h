@@ -81,6 +81,10 @@ struct ClientInput {
     float dt = 0.0f;
     glm::vec3 moveInput = glm::vec3(0.0f);
     glm::vec2 lookDelta = glm::vec2(0.0f);
+    glm::vec3 playerPosition = glm::vec3(0.0f);
+    glm::vec3 playerVelocity = glm::vec3(0.0f);
+    float yaw = 0.0f;
+    float pitch = 0.0f;
     bool jump = false;
     bool sneak = false;
     bool sprint = false;
@@ -142,6 +146,8 @@ struct BlockUpdateEntry {
     int32_t y = 0;
     int32_t z = 0;
     uint16_t blockId = 0;
+    // 3x3x3 packed-light patch centered on x/y/z, XYZ nested loops.
+    std::vector<uint8_t> packedLightPatch;
 };
 
 struct BlockUpdateBatchMessage {
@@ -166,6 +172,8 @@ struct EntitySpawnMessage {
     EntityKind kind = EntityKind::Drop;
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 velocity = glm::vec3(0.0f);
+    float yaw = 0.0f;
+    float pitch = 0.0f;
     uint16_t itemId = 0;      // For drops
     uint16_t stackCount = 0;  // For drops
 };
@@ -181,6 +189,7 @@ struct EntitySnapshotItem {
     glm::vec3 position = glm::vec3(0.0f);
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f;
+    float pitch = 0.0f;
 };
 
 /// Batch of entity snapshots from the server.

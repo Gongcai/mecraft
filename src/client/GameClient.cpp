@@ -1,4 +1,5 @@
 #include "GameClient.h"
+#include "../ecs/GameplayRegistry.h"
 #include "../world/chunk/Chunk.h"
 #include <cstdio>
 
@@ -15,6 +16,10 @@ void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
 }
 
 void GameClient::initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr) {
+    m_entityStore.init(registry, resourceMgr);
+}
+
+void GameClient::initEntityStore(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr) {
     m_entityStore.init(registry, resourceMgr);
 }
 
@@ -45,6 +50,25 @@ void GameClient::sendViewConfig(int renderDistance) {
 void GameClient::sendInput(float dt, const glm::vec3& moveInput,
                            const glm::vec2& lookDelta,
                            bool jump, bool sneak, bool sprint) {
+    sendInput(dt,
+              moveInput,
+              lookDelta,
+              jump,
+              sneak,
+              sprint,
+              glm::vec3(0.0f),
+              glm::vec3(0.0f),
+              0.0f,
+              0.0f);
+}
+
+void GameClient::sendInput(float dt, const glm::vec3& moveInput,
+                           const glm::vec2& lookDelta,
+                           bool jump, bool sneak, bool sprint,
+                           const glm::vec3& playerPosition,
+                           const glm::vec3& playerVelocity,
+                           float yaw,
+                           float pitch) {
     if (!m_transport) return;
 
     ++m_inputSequence;
@@ -57,6 +81,10 @@ void GameClient::sendInput(float dt, const glm::vec3& moveInput,
     input.dt = dt;
     input.moveInput = moveInput;
     input.lookDelta = lookDelta;
+    input.playerPosition = playerPosition;
+    input.playerVelocity = playerVelocity;
+    input.yaw = yaw;
+    input.pitch = pitch;
     input.jump = jump;
     input.sneak = sneak;
     input.sprint = sprint;
@@ -92,6 +120,10 @@ void GameClient::receiveMessages() {
                             m_authPosition.y,
                             m_authPosition.z);
                 std::fflush(stdout);
+            } else {
+                std::printf("[Client] Received ServerHello without decoded payload bytes=%zu\n",
+                            packet.payload.size());
+                std::fflush(stdout);
             }
             break;
         }
@@ -114,7 +146,8 @@ void GameClient::receiveMessages() {
                 const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
                 for (const auto& update : batch.updates) {
                     m_clientWorld.applyBlockUpdate(update.x, update.y, update.z,
-                                                   static_cast<BlockID>(update.blockId));
+                                                   static_cast<BlockID>(update.blockId),
+                                                   update.packedLightPatch);
                 }
             }
             break;

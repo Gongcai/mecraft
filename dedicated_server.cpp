@@ -57,10 +57,6 @@ int main(int argc, char* argv[]) {
     // Create thread pool
     ThreadPool threadPool(4);
 
-    // Create and initialize server
-    server::GameServer server;
-    server.init(seed, &threadPool, renderDistance);
-
     // Create ENet transport for listening
     auto listenTransport = std::make_unique<net::ENetTransport>();
     std::printf("Attempting to listen on port %d...\n", port);
@@ -69,7 +65,12 @@ int main(int argc, char* argv[]) {
         net::ENetTransport::deinitialize();
         return 1;
     }
-    server.acceptClient(std::move(listenTransport), 1);
+
+    // Create and initialize server after the listener so peer endpoints are
+    // destroyed before the shared ENet host on shutdown.
+    server::GameServer server;
+    server.init(seed, &threadPool, renderDistance);
+    net::ClientId nextClientId = 1;
 
     std::printf("Server listening on port %d\n", port);
     std::printf("Press Ctrl+C to stop\n\n");
@@ -87,6 +88,10 @@ int main(int argc, char* argv[]) {
 
     while (g_running) {
         const auto tickStart = std::chrono::steady_clock::now();
+
+        while (auto endpoint = listenTransport->takeAcceptedEndpoint()) {
+            server.acceptClient(std::move(endpoint), nextClientId++);
+        }
 
         // Run server tick
         server.tick(kServerTickDt);

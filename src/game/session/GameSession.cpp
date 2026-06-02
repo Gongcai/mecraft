@@ -21,6 +21,7 @@
 #include "../../client/GameClient.h"
 #include "../../net/InProcessTransport.h"
 #include "../../net/ENetTransport.h"
+#include <cstdio>
 #include <stdexcept>
 #include <thread>
 #include <chrono>
@@ -35,8 +36,8 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
 
     if (m_isMultiplayer) {
         // Multiplayer mode: connect to remote server via ENet
-        m_server = std::make_unique<server::GameServer>();
-        m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+        m_fallbackWorld = std::make_unique<World>();
+        m_fallbackWorld->setRenderDistance(config.renderDistance);
 
         m_client = std::make_unique<client::GameClient>();
 
@@ -53,11 +54,43 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
         m_client->sendViewConfig(config.renderDistance);
 
         m_client->clientWorld().setRenderDistance(config.renderDistance);
+        m_client->clientWorld().setDayNightSystem(&m_fallbackDayNightSystem);
+        m_client->clientWorld().setWeatherSystem(&m_fallbackWeatherSystem);
 
-        for (int i = 0; i < 400 &&
+        bool loggedHandshakeWait = false;
+        bool loggedChunkWait = false;
+        for (int i = 0; i < 4000 &&
              (!m_client->hasServerHello() || !m_client->areSpawnChunksReady()); ++i) {
+            if (!m_client->hasServerHello() && i > 0 && i % 100 == 0) {
+                m_client->sendHello();
+                m_client->sendViewConfig(config.renderDistance);
+                if (!loggedHandshakeWait) {
+                    std::printf("[Client] Waiting for ServerHello; resending handshake to %s:%u\n",
+                                config.serverAddress.c_str(),
+                                static_cast<unsigned>(config.serverPort));
+                    std::fflush(stdout);
+                    loggedHandshakeWait = true;
+                }
+            } else if (m_client->hasServerHello() && !m_client->areSpawnChunksReady() && i > 0 && i % 200 == 0) {
+                m_client->sendViewConfig(config.renderDistance);
+                if (!loggedChunkWait) {
+                    std::printf("[Client] Waiting for spawn chunks; refreshing view config\n");
+                    std::fflush(stdout);
+                    loggedChunkWait = true;
+                }
+            }
             m_client->receiveMessages();
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        if (!m_client->hasServerHello()) {
+            throw std::runtime_error("Connected to multiplayer server but did not receive ServerHello from " +
+                                     config.serverAddress + ":" +
+                                     std::to_string(config.serverPort));
+        }
+        if (!m_client->areSpawnChunksReady()) {
+            std::printf("[Client] Entering gameplay while spawn chunks are still streaming; loaded=%zu\n",
+                        m_client->clientWorld().loadedChunkCount());
+            std::fflush(stdout);
         }
 
         m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_client->clientWorld());
@@ -92,11 +125,23 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
 }
 
 World& GameSession::world() {
-    return m_server->world();
+    if (m_server) {
+        return m_server->world();
+    }
+    if (m_fallbackWorld) {
+        return *m_fallbackWorld;
+    }
+    throw std::runtime_error("Session world is not initialized.");
 }
 
 const World& GameSession::world() const {
-    return m_server->world();
+    if (m_server) {
+        return m_server->world();
+    }
+    if (m_fallbackWorld) {
+        return *m_fallbackWorld;
+    }
+    throw std::runtime_error("Session world is not initialized.");
 }
 
 const IWorldView& GameSession::worldView() const {
@@ -111,6 +156,121 @@ const IWorldView& GameSession::worldView() const {
     return m_server->world();
 }
 
+const DayNightSystem& GameSession::dayNightSystem() const {
+    if (m_client) {
+        if (const DayNightSystem* dns = m_client->clientWorld().dayNightSystem()) {
+            return *dns;
+        }
+    }
+    if (m_server) {
+        return m_server->world().getDayNightSystem();
+    }
+    return m_fallbackDayNightSystem;
+}
+
+const WeatherSystem& GameSession::weatherSystem() const {
+    if (m_client) {
+        if (const WeatherSystem* weather = m_client->clientWorld().weatherSystem()) {
+            return *weather;
+        }
+    }
+    if (m_server) {
+        return m_server->world().getWeatherSystem();
+    }
+    return m_fallbackWeatherSystem;
+}
+
+server::GameServer& GameSession::server() {
+    if (!m_server) {
+        throw std::runtime_error("Server is not available in this session.");
+    }
+    return *m_server;
+}
+
+const server::GameServer& GameSession::server() const {
+    if (!m_server) {
+        throw std::runtime_error("Server is not available in this session.");
+    }
+    return *m_server;
+}
+
+client::GameClient& GameSession::client() {
+    if (!m_client) {
+        throw std::runtime_error("Client is not initialized.");
+    }
+    return *m_client;
+}
+
+const client::GameClient& GameSession::client() const {
+    if (!m_client) {
+        throw std::runtime_error("Client is not initialized.");
+    }
+    return *m_client;
+}
+
+physics::PhysicsSystem& GameSession::physicsSystem() {
+    if (!m_physicsSystem) {
+        throw std::runtime_error("Physics system is not initialized.");
+    }
+    return *m_physicsSystem;
+}
+
+ecs::GameplayScene& GameSession::gameplayScene() {
+    if (!m_gameplayScene) {
+        throw std::runtime_error("Gameplay scene is not initialized.");
+    }
+    return *m_gameplayScene;
+}
+
+const ecs::GameplayScene& GameSession::gameplayScene() const {
+    if (!m_gameplayScene) {
+        throw std::runtime_error("Gameplay scene is not initialized.");
+    }
+    return *m_gameplayScene;
+}
+
+DropSystem& GameSession::dropSystem() {
+    if (!m_dropSystem) {
+        throw std::runtime_error("Drop system is not initialized.");
+    }
+    return *m_dropSystem;
+}
+
+ParticleSystem& GameSession::particleSystem() {
+    if (!m_particleSystem) {
+        throw std::runtime_error("Particle system is not initialized.");
+    }
+    return *m_particleSystem;
+}
+
+RainRenderer& GameSession::rainRenderer() {
+    if (!m_rainRenderer) {
+        throw std::runtime_error("Rain renderer is not initialized.");
+    }
+    return *m_rainRenderer;
+}
+
+CraftingSystem& GameSession::craftingSystem() {
+    if (!m_craftingSystem) {
+        throw std::runtime_error("Crafting system is not initialized.");
+    }
+    return *m_craftingSystem;
+}
+
+CameraController& GameSession::cameraController() {
+    if (!m_cameraController) {
+        throw std::runtime_error("Camera controller is not initialized.");
+    }
+    return *m_cameraController;
+}
+
+GameplayPresentationBuilder& GameSession::presentationBuilder() {
+    if (!m_presentationBuilder) {
+        throw std::runtime_error("Presentation builder is not initialized.");
+    }
+    return *m_presentationBuilder;
+}
+
 void GameSession::initWorld(int seed) {
     // World initialization is now handled by GameServer::init() in init().
     // This method is kept for API compatibility but is effectively a no-op.
@@ -119,7 +279,7 @@ void GameSession::initWorld(int seed) {
 
 void GameSession::initECS(const GameSessionDependencies& deps) {
     auto& svc = m_gameplayScene->services();
-    svc.world              = m_isMultiplayer ? nullptr : &m_server->world();
+    svc.world              = m_isMultiplayer ? nullptr : &world();
     svc.worldView          = &worldView();
     svc.gameClient         = m_client.get();
     svc.audioEngine        = &deps.audioEngine;
@@ -136,8 +296,10 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     deps.uiRenderer.setCraftingSystem(m_craftingSystem.get());
 
     auto& reg = m_gameplayScene->registry();
-    m_server->setEcsRegistry(&reg.registry());
-    m_client->initEntityStore(reg.registry(), &deps.resourceMgr);
+    if (m_server) {
+        m_server->setEcsRegistry(&reg.registry());
+    }
+    m_client->initEntityStore(reg, &deps.resourceMgr);
     m_dropSystem->bindRegistry(reg);
     m_dropSystem->bindServices(svc);
     m_particleSystem->bindRegistry(reg);

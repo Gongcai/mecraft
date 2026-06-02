@@ -9,6 +9,7 @@
 #include <memory>
 
 class ResourceMgr;
+namespace ecs { class GameplayRegistry; }
 
 namespace client {
 
@@ -24,6 +25,7 @@ public:
 
     /// Initialize the entity store with the ECS registry.
     void initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr);
+    void initEntityStore(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr);
 
     /// Send a hello message to the server.
     void sendHello();
@@ -34,6 +36,12 @@ public:
     /// Sample input and send to server. Called at the client's fixed update rate.
     void sendInput(float dt, const glm::vec3& moveInput,
                    const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint);
+    void sendInput(float dt, const glm::vec3& moveInput,
+                   const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint,
+                   const glm::vec3& playerPosition,
+                   const glm::vec3& playerVelocity,
+                   float yaw,
+                   float pitch);
 
     /// Send an authoritative block action request to the server.
     void sendBlockAction(const net::ClientBlockAction& action);

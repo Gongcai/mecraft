@@ -7,6 +7,7 @@
 #include <vector>
 #include <cstring>
 #include <utility>
+#include <array>
 
 namespace net {
 
@@ -78,20 +79,43 @@ public:
         if (!msg.chunk) {
             return buf;
         }
-        buf.reserve(buf.size() + Chunk::BLOCK_COUNT * 3);
-        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-                for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    pushU16(buf, msg.chunk->getBlock(x, y, z));
+        pushU8(buf, kChunkEncodingRleSubChunks);
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            const SubChunk* subChunk = msg.chunk->getSubChunk(scy);
+            bool hasExplicitLight = false;
+            const int yBase = scy * SubChunk::SIZE;
+            for (int ly = 0; ly < SubChunk::SIZE && !hasExplicitLight; ++ly) {
+                const int y = yBase + ly;
+                for (int z = 0; z < Chunk::SIZE_Z && !hasExplicitLight; ++z) {
+                    for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                        if (msg.chunk->getPackedLight(x, y, z) != implicitPackedLight(*msg.chunk, x, y, z)) {
+                            hasExplicitLight = true;
+                            break;
+                        }
+                    }
                 }
             }
-        }
-        for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-            for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-                for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    pushU8(buf, msg.chunk->getPackedLight(x, y, z));
+
+            pushU8(buf, (subChunk || hasExplicitLight) ? 1 : 0);
+            if (!subChunk && !hasExplicitLight) {
+                continue;
+            }
+
+            std::array<BlockID, SubChunk::BLOCK_COUNT> blocks{};
+            std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
+            std::size_t index = 0;
+            for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+                const int y = yBase + ly;
+                for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                    for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                        blocks[index] = msg.chunk->getBlock(x, y, z);
+                        lights[index] = msg.chunk->getPackedLight(x, y, z);
+                        ++index;
+                    }
                 }
             }
+            encodeRleU16(buf, blocks.data(), blocks.size());
+            encodeRleU8(buf, lights.data(), lights.size());
         }
         return buf;
     }
@@ -120,6 +144,14 @@ public:
         pushFloat(buf, msg.moveInput.z);
         pushFloat(buf, msg.lookDelta.x);
         pushFloat(buf, msg.lookDelta.y);
+        pushFloat(buf, msg.playerPosition.x);
+        pushFloat(buf, msg.playerPosition.y);
+        pushFloat(buf, msg.playerPosition.z);
+        pushFloat(buf, msg.playerVelocity.x);
+        pushFloat(buf, msg.playerVelocity.y);
+        pushFloat(buf, msg.playerVelocity.z);
+        pushFloat(buf, msg.yaw);
+        pushFloat(buf, msg.pitch);
         pushU8(buf, msg.jump ? 1 : 0);
         pushU8(buf, msg.sneak ? 1 : 0);
         pushU8(buf, msg.sprint ? 1 : 0);
@@ -171,6 +203,8 @@ public:
             pushI32(buf, u.y);
             pushI32(buf, u.z);
             pushU16(buf, u.blockId);
+            pushU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
+            buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
         }
         return buf;
     }
@@ -194,6 +228,8 @@ public:
         pushFloat(buf, msg.velocity.x);
         pushFloat(buf, msg.velocity.y);
         pushFloat(buf, msg.velocity.z);
+        pushFloat(buf, msg.yaw);
+        pushFloat(buf, msg.pitch);
         pushU16(buf, msg.itemId);
         pushU16(buf, msg.stackCount);
         return buf;
@@ -220,6 +256,7 @@ public:
             pushFloat(buf, e.velocity.y);
             pushFloat(buf, e.velocity.z);
             pushFloat(buf, e.yaw);
+            pushFloat(buf, e.pitch);
         }
         return buf;
     }
@@ -254,11 +291,73 @@ public:
             out.chunk.reset();
             return true;
         }
+        if (offset < size) {
+            const uint8_t encoding = readU8(data, offset);
+            if (encoding == kChunkEncodingRleSubChunks) {
+                auto chunk = std::make_shared<Chunk>(out.chunkX, out.chunkZ);
+                std::vector<uint8_t> packedLight(Chunk::BLOCK_COUNT);
+                for (int y = 0; y < Chunk::SIZE_Y; ++y) {
+                    for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                        for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                            packedLight[Chunk::toIndex(x, y, z)] = implicitPackedLight(*chunk, x, y, z);
+                        }
+                    }
+                }
+
+                for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                    if (offset >= size) {
+                        return false;
+                    }
+                    const bool hasSubChunk = readU8(data, offset) != 0;
+                    if (!hasSubChunk) {
+                        continue;
+                    }
+
+                    std::array<BlockID, SubChunk::BLOCK_COUNT> blocks{};
+                    std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
+                    if (!decodeRleU16(data, size, offset, blocks.data(), blocks.size()) ||
+                        !decodeRleU8(data, size, offset, lights.data(), lights.size())) {
+                        return false;
+                    }
+
+                    std::size_t index = 0;
+                    const int yBase = scy * SubChunk::SIZE;
+                    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+                        const int y = yBase + ly;
+                        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                            for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                                if (blocks[index] != BlockIds::AIR) {
+                                    chunk->setBlockFast(x, y, z, blocks[index]);
+                                }
+                                packedLight[Chunk::toIndex(x, y, z)] = lights[index];
+                                ++index;
+                            }
+                        }
+                    }
+                }
+
+                for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                    if (SubChunk* subChunk = chunk->getSubChunk(scy)) {
+                        subChunk->inferType();
+                    }
+                }
+                chunk->replacePackedLight(packedLight.data(), packedLight.size());
+                for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                    for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                        chunk->recalcHeightMap(x, z);
+                    }
+                }
+                chunk->markExistingSubChunksDirty();
+                out.chunk = std::move(chunk);
+                return true;
+            }
+        }
         if (size < kHeaderBytes + kBlockBytes + kLightBytes) {
             return false;
         }
 
         auto chunk = std::make_shared<Chunk>(out.chunkX, out.chunkZ);
+        offset = kHeaderBytes;
         for (int y = 0; y < Chunk::SIZE_Y; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                 for (int x = 0; x < Chunk::SIZE_X; ++x) {
@@ -312,6 +411,16 @@ public:
         out.moveInput.z = readFloat(data, offset);
         out.lookDelta.x = readFloat(data, offset);
         out.lookDelta.y = readFloat(data, offset);
+        if (size >= 59) {
+            out.playerPosition.x = readFloat(data, offset);
+            out.playerPosition.y = readFloat(data, offset);
+            out.playerPosition.z = readFloat(data, offset);
+            out.playerVelocity.x = readFloat(data, offset);
+            out.playerVelocity.y = readFloat(data, offset);
+            out.playerVelocity.z = readFloat(data, offset);
+            out.yaw = readFloat(data, offset);
+            out.pitch = readFloat(data, offset);
+        }
         out.jump = readU8(data, offset) != 0;
         out.sneak = readU8(data, offset) != 0;
         out.sprint = readU8(data, offset) != 0;
@@ -358,13 +467,21 @@ public:
         if (size < 4) return false;
         size_t offset = 0;
         const uint32_t count = readU32(data, offset);
-        if (size < 4 + count * 14) return false;
+        const bool hasLightPatches = size > 4 + static_cast<size_t>(count) * 14;
         out.updates.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
+            if (offset + 14 > size) return false;
             out.updates[i].x = readI32(data, offset);
             out.updates[i].y = readI32(data, offset);
             out.updates[i].z = readI32(data, offset);
             out.updates[i].blockId = readU16(data, offset);
+            if (hasLightPatches) {
+                if (offset + 4 > size) return false;
+                const uint32_t lightCount = readU32(data, offset);
+                if (offset + lightCount > size) return false;
+                out.updates[i].packedLightPatch.assign(data + offset, data + offset + lightCount);
+                offset += lightCount;
+            }
         }
         return true;
     }
@@ -378,7 +495,9 @@ public:
     }
 
     static bool decodeEntitySpawn(const uint8_t* data, size_t size, EntitySpawnMessage& out) {
-        if (size < 30) return false;
+        constexpr size_t kOldSpawnBytes = 33;
+        constexpr size_t kSpawnBytes = 41;
+        if (size < kOldSpawnBytes) return false;
         size_t offset = 0;
         out.netId = readU32(data, offset);
         out.kind = static_cast<EntityKind>(readU8(data, offset));
@@ -388,6 +507,10 @@ public:
         out.velocity.x = readFloat(data, offset);
         out.velocity.y = readFloat(data, offset);
         out.velocity.z = readFloat(data, offset);
+        if (size >= kSpawnBytes) {
+            out.yaw = readFloat(data, offset);
+            out.pitch = readFloat(data, offset);
+        }
         out.itemId = readU16(data, offset);
         out.stackCount = readU16(data, offset);
         return true;
@@ -405,7 +528,16 @@ public:
         size_t offset = 0;
         out.serverTick = readU32(data, offset);
         const uint32_t count = readU32(data, offset);
-        if (size < 8 + count * 28) return false;
+        constexpr size_t kOldItemBytes = 28;
+        constexpr size_t kItemBytes = 32;
+        const size_t remaining = size - 8;
+        size_t itemBytes = kItemBytes;
+        if (remaining < count * kItemBytes) {
+            if (remaining < count * kOldItemBytes) {
+                return false;
+            }
+            itemBytes = kOldItemBytes;
+        }
         out.entities.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
             out.entities[i].netId = readU32(data, offset);
@@ -416,12 +548,82 @@ public:
             out.entities[i].velocity.y = readFloat(data, offset);
             out.entities[i].velocity.z = readFloat(data, offset);
             out.entities[i].yaw = readFloat(data, offset);
+            if (itemBytes >= kItemBytes) {
+                out.entities[i].pitch = readFloat(data, offset);
+            }
         }
         return true;
     }
 
 private:
     static constexpr size_t kHeaderSize = 6;  // channel(1) + type(1) + payload_size(4)
+    static constexpr uint8_t kChunkEncodingRleSubChunks = 1;
+
+    static uint8_t implicitPackedLight(const Chunk& chunk, const int x, const int y, const int z) {
+        return static_cast<uint8_t>((y >= chunk.getHeightMap(x, z) ? 15 : 0) << 4);
+    }
+
+    static void encodeRleU16(std::vector<uint8_t>& buf, const uint16_t* values, const size_t count) {
+        size_t i = 0;
+        while (i < count) {
+            const uint16_t value = values[i];
+            uint16_t run = 1;
+            while (i + run < count && run < 0xFFFFu && values[i + run] == value) {
+                ++run;
+            }
+            pushU16(buf, run);
+            pushU16(buf, value);
+            i += run;
+        }
+        pushU16(buf, 0);
+    }
+
+    static void encodeRleU8(std::vector<uint8_t>& buf, const uint8_t* values, const size_t count) {
+        size_t i = 0;
+        while (i < count) {
+            const uint8_t value = values[i];
+            uint16_t run = 1;
+            while (i + run < count && run < 0xFFFFu && values[i + run] == value) {
+                ++run;
+            }
+            pushU16(buf, run);
+            pushU8(buf, value);
+            i += run;
+        }
+        pushU16(buf, 0);
+    }
+
+    static bool decodeRleU16(const uint8_t* data, const size_t size, size_t& offset, uint16_t* out, const size_t count) {
+        size_t written = 0;
+        while (offset + 2 <= size) {
+            const uint16_t run = readU16(data, offset);
+            if (run == 0) {
+                return written == count;
+            }
+            if (offset + 2 > size || written + run > count) return false;
+            const uint16_t value = readU16(data, offset);
+            for (uint16_t i = 0; i < run; ++i) {
+                out[written++] = value;
+            }
+        }
+        return false;
+    }
+
+    static bool decodeRleU8(const uint8_t* data, const size_t size, size_t& offset, uint8_t* out, const size_t count) {
+        size_t written = 0;
+        while (offset + 2 <= size) {
+            const uint16_t run = readU16(data, offset);
+            if (run == 0) {
+                return written == count;
+            }
+            if (offset + 1 > size || written + run > count) return false;
+            const uint8_t value = readU8(data, offset);
+            for (uint16_t i = 0; i < run; ++i) {
+                out[written++] = value;
+            }
+        }
+        return false;
+    }
 
     static void pushU8(std::vector<uint8_t>& buf, uint8_t v) { buf.push_back(v); }
     static void pushU16(std::vector<uint8_t>& buf, uint16_t v) {

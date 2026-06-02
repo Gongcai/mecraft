@@ -541,6 +541,7 @@ if(MECRAFT_BUILD_TESTS)
     # Multiplayer / C/S architecture tests
     add_mecraft_test(in_process_transport_test tests/in_process_transport_test.cpp)
     add_mecraft_test(client_world_test tests/client_world_test.cpp)
+    add_mecraft_test(client_entity_store_test tests/client_entity_store_test.cpp)
     add_mecraft_test(game_server_test tests/game_server_test.cpp)
     add_mecraft_test(chunk_ticket_manager_test tests/chunk_ticket_manager_test.cpp)
 endif()

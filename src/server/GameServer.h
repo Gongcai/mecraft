@@ -20,10 +20,16 @@ struct ConnectedClient {
     net::ClientId id = 0;
     std::unique_ptr<net::ITransportEndpoint> transport;
     glm::vec3 lastPosition = glm::vec3(0.0f);
+    glm::vec3 lastVelocity = glm::vec3(0.0f);
+    float lastYaw = 0.0f;
+    float lastPitch = 0.0f;
     uint32_t lastAckedInput = 0;
+    net::TickId helloTick = 0;
     int viewDistance = 16;  // Client's render distance
     bool receivedHello = false;
     bool receivedViewConfig = false;
+    net::EntityNetId playerNetId = 0;
+    std::unordered_set<net::EntityNetId> spawnedPlayerNetIds;
     std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
     int chunkSendLogCount = 0;
     int totalChunksSent = 0;
@@ -71,6 +77,8 @@ private:
     void sendBlockUpdatesToClients();
     void syncEntitiesToClients();
     void checkSpawnChunksReady();
+    [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, BlockID blockId) const;
+    void syncPlayersToClients();
 
     World m_world;
     std::vector<ConnectedClient> m_clients;

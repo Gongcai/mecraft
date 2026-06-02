@@ -18,6 +18,7 @@
 #include "../audio/AudioListenerSyncSystem.h"
 #include "../../engine/platform/Window.h"
 #include "../../ecs/GameplayScene.h"
+#include "../../ecs/components/Components.h"
 #include "../../world/World.h"
 #include "../../player/Inventory.h"
 #include "../../renderer/overlays/BlockInteractionOverlayRenderer.h"
@@ -26,6 +27,42 @@
 #ifdef MECRAFT_DEBUG
 #include <algorithm>
 #endif
+
+namespace {
+
+void sendMultiplayerInput(GameSession& session, const float fixedStep) {
+    if (!session.isMultiplayer() || !session.client().areSpawnChunksReady()) {
+        return;
+    }
+
+    auto& reg = session.gameplayScene().registry().registry();
+    auto view = reg.view<ecs::LocalPlayerTag,
+                         ecs::MoveIntentComponent,
+                         ecs::LookIntentComponent,
+                         ecs::TransformComponent,
+                         ecs::PhysicsBodyComponent,
+                         ecs::CameraStateComponent>();
+    for (auto entity : view) {
+        const auto& move = view.get<ecs::MoveIntentComponent>(entity);
+        const auto& look = view.get<ecs::LookIntentComponent>(entity);
+        const auto& transform = view.get<ecs::TransformComponent>(entity);
+        const auto& physics = view.get<ecs::PhysicsBodyComponent>(entity);
+        const auto& camera = view.get<ecs::CameraStateComponent>(entity);
+        session.client().sendInput(fixedStep,
+                                   glm::vec3(move.move.x, 0.0f, move.move.y),
+                                   glm::vec2(look.deltaX, look.deltaY),
+                                   move.wantsJump,
+                                   move.wantsCrouch,
+                                   move.wantsSprint,
+                                   transform.position,
+                                   physics.body.velocity,
+                                   camera.yaw,
+                                   camera.pitch);
+        return;
+    }
+}
+
+} // namespace
 
 bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
                                             InputManager& input,
@@ -68,6 +105,7 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 #else
     session.gameplayScene().runFixedUpdate(static_cast<float>(fixedStep));
 #endif
+    sendMultiplayerInput(session, static_cast<float>(fixedStep));
 
 #ifdef MECRAFT_DEBUG
     const auto tickStart = std::chrono::steady_clock::now();
@@ -126,6 +164,12 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
                                          float frameTime) {
+    if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
+        session.client().receiveMessages();
+        window.swapBuffers();
+        return;
+    }
+
     // Obtain renderer references from the aggregate
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
@@ -175,8 +219,8 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
         session.worldView(),
         snap.renderCamera,
         window,
-        session.world().getDayNightSystem(),
-        session.world().getWeatherSystem(),
+        session.dayNightSystem(),
+        session.weatherSystem(),
         targetData,
         breakData,
         session.rainRenderer(),

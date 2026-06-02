@@ -168,6 +168,7 @@ static void testClientWorldRaycastHitsBlocks() {
 }
 
 int main() {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     BlockRegistry::init(nullptr);
 
     testInitialState();

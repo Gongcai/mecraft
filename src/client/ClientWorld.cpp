@@ -19,13 +19,13 @@ ClientWorld::ClientWorld() = default;
 ClientWorld::~ClientWorld() = default;
 
 const ClientWorld::ChunkMap& ClientWorld::getActiveChunks() const {
-    // In the in-process model, the server tick completes before rendering,
-    // so no concurrent modification occurs during iteration.
-    // For Phase 6 (real networking), double-buffering or snapshot copies will be needed.
-    return m_chunks;
+    std::lock_guard lock(m_chunksMutex);
+    m_activeChunksSnapshot = m_chunks;
+    return m_activeChunksSnapshot;
 }
 
 uint64_t ClientWorld::getActiveChunkRevision() const {
+    std::lock_guard lock(m_chunksMutex);
     return m_activeChunkRevision;
 }
 
@@ -114,6 +114,20 @@ void ClientWorld::addChunk(std::shared_ptr<Chunk> chunk) {
     const int64_t key = chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
     std::lock_guard lock(m_chunksMutex);
 
+    auto existingIt = m_chunks.find(key);
+    if (existingIt != m_chunks.end() && existingIt->second) {
+        Chunk& existing = *existingIt->second;
+        for (int dir = 0; dir < 4; ++dir) {
+            if (Chunk* neighbor = existing.neighbors[dir]) {
+                const int opposite = (dir == 0) ? 1 : (dir == 1) ? 0 : (dir == 2) ? 3 : 2;
+                existing.unlinkExistingSubChunksFromNeighbor(dir);
+                neighbor->neighbors[opposite] = nullptr;
+                markRenderableBorderDirty(*neighbor);
+            }
+            existing.neighbors[dir] = nullptr;
+        }
+    }
+
     auto linkNeighbor = [&](const int dx, const int dz, const int selfDir, const int neighborDir) {
         const int64_t neighborKey = chunkKey(cx + dx, cz + dz);
         auto it = m_chunks.find(neighborKey);
@@ -159,6 +173,11 @@ void ClientWorld::removeChunk(int cx, int cz) {
 }
 
 void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId) {
+    static const std::vector<uint8_t> kNoLightPatch;
+    applyBlockUpdate(x, y, z, blockId, kNoLightPatch);
+}
+
+void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId, const std::vector<uint8_t>& packedLightPatch) {
     if (y < 0 || y >= 256) return;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -181,9 +200,42 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId) {
     } else if (lz == Chunk::SIZE_Z - 1 && chunk.neighbors[2]) {
         chunk.neighbors[2]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
     }
+
+    if (!packedLightPatch.empty()) {
+        constexpr int kPatchRadius = 1;
+        constexpr int kPatchSide = kPatchRadius * 2 + 1;
+        if (packedLightPatch.size() == static_cast<size_t>(kPatchSide * kPatchSide * kPatchSide)) {
+            size_t index = 0;
+            for (int dy = -kPatchRadius; dy <= kPatchRadius; ++dy) {
+                for (int dz = -kPatchRadius; dz <= kPatchRadius; ++dz) {
+                    for (int dx = -kPatchRadius; dx <= kPatchRadius; ++dx) {
+                        const int wx = x + dx;
+                        const int wy = y + dy;
+                        const int wz = z + dz;
+                        const uint8_t packed = packedLightPatch[index++];
+                        if (wy < 0 || wy >= Chunk::SIZE_Y) {
+                            continue;
+                        }
+                        const int pcx = static_cast<int>(std::floor(static_cast<float>(wx) / 16.0f));
+                        const int pcz = static_cast<int>(std::floor(static_cast<float>(wz) / 16.0f));
+                        auto pit = m_chunks.find(chunkKey(pcx, pcz));
+                        if (pit == m_chunks.end() || !pit->second) {
+                            continue;
+                        }
+                        const int plx = wx - pcx * Chunk::SIZE_X;
+                        const int plz = wz - pcz * Chunk::SIZE_Z;
+                        pit->second->setSunlight(plx, wy, plz, static_cast<uint8_t>((packed >> 4) & 0x0F));
+                        pit->second->setBlockLight(plx, wy, plz, static_cast<uint8_t>(packed & 0x0F));
+                        pit->second->markSubChunkDirty(Chunk::toSubChunkIndex(wy));
+                    }
+                }
+            }
+        }
+    }
 }
 
 void ClientWorld::setRenderDistance(int distance) {
+    std::lock_guard lock(m_chunksMutex);
     m_renderDistance = distance;
 }
 

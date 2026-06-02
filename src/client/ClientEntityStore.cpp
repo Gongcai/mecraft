@@ -1,7 +1,10 @@
 #include "ClientEntityStore.h"
 #include "../ecs/components/Components.h"
+#include "../ecs/GameplayRegistry.h"
+#include "../ecs/entity/SteveModelFactory.h"
 #include "../item/Item.h"
 #include "../resource/ResourceMgr.h"
+#include <algorithm>
 
 namespace client {
 
@@ -10,10 +13,31 @@ ClientEntityStore::~ClientEntityStore() = default;
 
 void ClientEntityStore::init(entt::registry& registry, ResourceMgr* resourceMgr) {
     m_registry = &registry;
+    m_gameplayRegistry = nullptr;
     m_resourceMgr = resourceMgr;
+    flushPendingMessages();
+}
+
+void ClientEntityStore::init(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr) {
+    m_registry = &registry.registry();
+    m_gameplayRegistry = &registry;
+    m_resourceMgr = resourceMgr;
+    flushPendingMessages();
 }
 
 void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
+    if (!m_registry) {
+        const auto alreadyPending = std::any_of(m_pendingSpawns.begin(),
+                                                m_pendingSpawns.end(),
+                                                [&msg](const net::EntitySpawnMessage& pending) {
+                                                    return pending.netId == msg.netId;
+                                                });
+        if (!alreadyPending) {
+            m_pendingSpawns.push_back(msg);
+        }
+        return;
+    }
+
     if (!m_registry || hasEntity(msg.netId)) {
         return;  // Already tracked or not initialized
     }
@@ -32,6 +56,17 @@ void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
 }
 
 void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
+    if (!m_registry) {
+        m_pendingSpawns.erase(std::remove_if(m_pendingSpawns.begin(),
+                                             m_pendingSpawns.end(),
+                                             [&msg](const net::EntitySpawnMessage& pending) {
+                                                 return pending.netId == msg.netId;
+                                             }),
+                              m_pendingSpawns.end());
+        m_pendingDespawns.push_back(msg);
+        return;
+    }
+
     auto it = m_netIdToEntity.find(msg.netId);
     if (it == m_netIdToEntity.end()) {
         return;
@@ -54,6 +89,12 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
 }
 
 void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
+    if (!m_registry) {
+        m_pendingSnapshots.clear();
+        m_pendingSnapshots.push_back(msg);
+        return;
+    }
+
     for (const auto& item : msg.entities) {
         auto it = m_netIdToEntity.find(item.netId);
         if (it == m_netIdToEntity.end()) {
@@ -82,11 +123,40 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
         if (spin) {
             spin->yawRadians = item.yaw;
         }
+
+        auto* camera = m_registry->try_get<ecs::CameraStateComponent>(it->second);
+        if (camera) {
+            camera->yaw = item.yaw;
+            camera->pitch = item.pitch;
+        }
     }
 }
 
 bool ClientEntityStore::hasEntity(net::EntityNetId netId) const {
     return m_netIdToEntity.count(netId) > 0;
+}
+
+void ClientEntityStore::flushPendingMessages() {
+    if (!m_registry) {
+        return;
+    }
+
+    auto pendingSpawns = std::move(m_pendingSpawns);
+    auto pendingSnapshots = std::move(m_pendingSnapshots);
+    auto pendingDespawns = std::move(m_pendingDespawns);
+    m_pendingSpawns.clear();
+    m_pendingSnapshots.clear();
+    m_pendingDespawns.clear();
+
+    for (const auto& msg : pendingSpawns) {
+        handleSpawn(msg);
+    }
+    for (const auto& msg : pendingSnapshots) {
+        handleSnapshot(msg);
+    }
+    for (const auto& msg : pendingDespawns) {
+        handleDespawn(msg);
+    }
 }
 
 void ClientEntityStore::createDropEntity(const net::EntitySpawnMessage& msg) {
@@ -106,16 +176,22 @@ void ClientEntityStore::createDropEntity(const net::EntitySpawnMessage& msg) {
 }
 
 void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {
-    auto entity = m_registry->create();
+    entt::entity entity = entt::null;
+    if (m_gameplayRegistry) {
+        entity = ecs::SteveModelFactory::createSteve(*m_gameplayRegistry, msg.position);
+        m_registry->emplace<ecs::SkinTypeComponent>(entity, ecs::SkinTypeComponent::Type::Player);
+        if (auto* camera = m_registry->try_get<ecs::CameraStateComponent>(entity)) {
+            camera->yaw = msg.yaw;
+            camera->pitch = msg.pitch;
+        }
+    } else {
+        entity = m_registry->create();
+        m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 1.62f);
+    }
 
-    // Minimal components for a remote player (visual-only, no physics/AI)
-    m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 1.62f);
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
-
-    // TODO: Create Steve model hierarchy when GameplayRegistry is available
-    // For now, remote players are represented as position-only entities.
 
     m_netIdToEntity[msg.netId] = entity;
 }

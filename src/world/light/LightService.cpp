@@ -148,7 +148,7 @@ void LightService::shutdown() {
 }
 
 void LightService::onChunkLoaded(const std::shared_ptr<Chunk>& chunk) {
-    if (!m_running || !chunk) {
+    if (!m_running || m_pool == nullptr || !chunk) {
         return;
     }
 
@@ -218,7 +218,7 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
 
 void LightService::onBlockChanged(const int wx, const int wy, const int wz,
                                   const BlockID oldId, const BlockID newId) {
-    if (!m_running) {
+    if (!m_running || m_pool == nullptr) {
         return;
     }
 

@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 namespace client {
 
@@ -43,6 +44,7 @@ public:
 
     /// Apply a block update from the server.
     void applyBlockUpdate(int x, int y, int z, BlockID blockId);
+    void applyBlockUpdate(int x, int y, int z, BlockID blockId, const std::vector<uint8_t>& packedLightPatch);
 
     /// Set the render distance.
     void setRenderDistance(int distance);
@@ -62,6 +64,7 @@ public:
 
 private:
     ChunkMap m_chunks;
+    mutable ChunkMap m_activeChunksSnapshot;
     mutable std::mutex m_chunksMutex;
     uint64_t m_activeChunkRevision = 1;
     int m_renderDistance = 16;

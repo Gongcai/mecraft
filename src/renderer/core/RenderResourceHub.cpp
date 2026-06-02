@@ -125,9 +125,9 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr) {
         m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);
         m_meshingMaxInFlight = std::max(4, workerCount * 2);
 #ifndef MECRAFT_DEBUG
-        m_meshingSubmitTimeBudgetMs = 1.0;
-        m_meshingDrainBudget = std::max(2, workerCount);
-        m_meshingDrainTimeBudgetMs = 1.25;
+        m_meshingSubmitTimeBudgetMs = 2.0;
+        m_meshingDrainBudget = std::max(4, workerCount * 2);
+        m_meshingDrainTimeBudgetMs = 2.5;
 #else
         m_meshingSubmitTimeBudgetMs = 0.5;
         m_meshingDrainBudget = 1;

@@ -3,13 +3,42 @@
 #include <iostream>
 #include <stdexcept>
 
+namespace {
+
+void glfwErrorCallback(int error, const char* description) {
+    std::cerr << "GLFW error " << error << ": "
+              << (description != nullptr ? description : "unknown") << "\n";
+}
+
+} // namespace
+
 bool Window::init(int width, int height, const char *title) {
-    glfwInit();
+    glfwSetErrorCallback(glfwErrorCallback);
+    if (!glfwInit()) {
+        const char* description = nullptr;
+        const int error = glfwGetError(&description);
+        std::cerr << "Failed to initialize GLFW";
+        if (error != GLFW_NO_ERROR) {
+            std::cerr << " (" << error << ": "
+                      << (description != nullptr ? description : "unknown") << ")";
+        }
+        std::cerr << "\n";
+        return false;
+    }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     m_window = glfwCreateWindow(width, height, title, NULL, NULL);
     if (m_window == NULL) {
+        const char* description = nullptr;
+        const int error = glfwGetError(&description);
+        std::cerr << "Failed to create GLFW window";
+        if (error != GLFW_NO_ERROR) {
+            std::cerr << " (" << error << ": "
+                      << (description != nullptr ? description : "unknown") << ")";
+        }
+        std::cerr << "\n";
+        std::cerr << "Mecraft requires a GPU/driver with OpenGL 4.5 core profile support.\n";
         glfwTerminate();
         return false;
     }

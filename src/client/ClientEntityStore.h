@@ -3,10 +3,12 @@
 
 #include "../net/Protocol.h"
 #include "../ecs/components/NetworkComponents.h"
+#include <vector>
 #include <unordered_map>
 #include <entt/entt.hpp>
 
 class ResourceMgr;
+namespace ecs { class GameplayRegistry; }
 
 namespace client {
 
@@ -21,6 +23,7 @@ public:
 
     /// Initialize with the ECS registry and resource manager.
     void init(entt::registry& registry, ResourceMgr* resourceMgr);
+    void init(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr);
 
     /// Handle an EntitySpawn message from the server.
     void handleSpawn(const net::EntitySpawnMessage& msg);
@@ -38,15 +41,21 @@ public:
     [[nodiscard]] bool hasEntity(net::EntityNetId netId) const;
 
 private:
+    void flushPendingMessages();
     void createDropEntity(const net::EntitySpawnMessage& msg);
     void createPlayerEntity(const net::EntitySpawnMessage& msg);
     void createMobEntity(const net::EntitySpawnMessage& msg);
 
     entt::registry* m_registry = nullptr;
+    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 
     /// Mapping from network ID to local entity handle.
     std::unordered_map<net::EntityNetId, entt::entity> m_netIdToEntity;
+
+    std::vector<net::EntitySpawnMessage> m_pendingSpawns;
+    std::vector<net::EntityDespawnMessage> m_pendingDespawns;
+    std::vector<net::EntitySnapshotMessage> m_pendingSnapshots;
 };
 
 } // namespace client

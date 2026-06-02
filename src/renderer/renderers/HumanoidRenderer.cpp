@@ -15,6 +15,7 @@
 #include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
 #include "../../ecs/components/Components.h"
+#include "../../ecs/components/NetworkComponents.h"
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
 
@@ -32,6 +33,13 @@ constexpr glm::vec3 kFaceNormals[] = {
     {-1, 0, 0},  // left
     {1, 0, 0}    // right
 };
+
+bool shouldRenderSteveRoot(const entt::registry& reg,
+                           entt::entity steveRoot,
+                           HumanoidRenderer::RenderMode mode) {
+    return mode == HumanoidRenderer::kRenderAll
+        || reg.all_of<ecs::EntityNetIdComponent>(steveRoot);
+}
 
 } // anonymous namespace
 
@@ -616,13 +624,14 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     glCullFace(GL_BACK);
 
     // ── Render Steve (player) entities ──
-    if (mode == kRenderAll) {
     const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
     if (steveTex != 0) {
         glBindTexture(GL_TEXTURE_2D, steveTex);
 
         auto steveView = reg.view<ecs::SteveTag, ecs::ChildrenComponent>();
         for (auto steveRoot : steveView) {
+            if (!shouldRenderSteveRoot(reg, steveRoot, mode)) continue;
+
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(steveRoot);
 
             // Torso
@@ -673,7 +682,6 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
             }
         }
     }
-    } // kRenderAll
 
     // ── Render Mob entities ──
     const GLuint zombieTex = m_resourceMgr->getGuiTexture("zombie");
@@ -755,13 +763,14 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
     glCullFace(GL_BACK);
 
     // ── Render Steve (player) entities ──
-    if (mode == kRenderAll) {
     const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
     if (steveTex != 0) {
         glBindTexture(GL_TEXTURE_2D, steveTex);
 
         auto steveView = reg.view<ecs::SteveTag, ecs::ChildrenComponent>();
         for (auto steveRoot : steveView) {
+            if (!shouldRenderSteveRoot(reg, steveRoot, mode)) continue;
+
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(steveRoot);
 
             // Query world light at torso position for this entity.
@@ -825,7 +834,6 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
             }
         }
     }
-    } // kRenderAll
 
     // ── Render Mob entities ──
     const GLuint zombieTex = m_resourceMgr->getGuiTexture("zombie");

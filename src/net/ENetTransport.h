@@ -6,6 +6,8 @@
 #include <string>
 #include <queue>
 #include <mutex>
+#include <memory>
+#include <unordered_map>
 
 // Forward-declare ENet types to avoid including <enet/enet.h> in the header.
 // This prevents Windows SDK's global `byte` typedef from conflicting with std::byte.
@@ -50,6 +52,11 @@ public:
     /// @return The accepted peer, or nullptr if no pending connection
     ENetPeer* acceptConnection();
 
+    /// Take a transport endpoint for the next accepted server peer.
+    /// The listener keeps owning the ENetHost; the returned endpoint sends only
+    /// to its peer and receives only packets from that peer.
+    std::unique_ptr<ITransportEndpoint> takeAcceptedEndpoint();
+
     // ITransportEndpoint interface
     void send(Packet packet) override;
     bool tryReceive(Packet& out) override;
@@ -74,6 +81,10 @@ public:
     void disconnect();
 
 private:
+    struct PeerState;
+
+    explicit ENetTransport(ENetHost* sharedHost, std::shared_ptr<PeerState> peerState);
+
     /// Send a packet to a specific peer.
     void sendToPeer(ENetPeer* peer, Packet packet);
 
@@ -83,10 +94,15 @@ private:
         uint32_t flags;
     };
     static ChannelMapping mapChannel(PacketChannel channel);
+    static void encodeTypedPayload(Packet& packet);
 
     ENetHost* m_host = nullptr;
     ENetPeer* m_peer = nullptr;  // Client: connected peer. Server: not used.
+    std::shared_ptr<PeerState> m_peerState;
+    std::unordered_map<ENetPeer*, std::shared_ptr<PeerState>> m_peerStates;
+    std::queue<std::shared_ptr<PeerState>> m_pendingAccepted;
     bool m_isServer = false;
+    bool m_ownsHost = true;
 
     std::queue<Packet> m_receiveQueue;
     std::mutex m_receiveMutex;

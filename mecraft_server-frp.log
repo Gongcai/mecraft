@@ -1,0 +1,7 @@
+=== Mecraft Dedicated Server ===
+Port: 25565
+Seed: 1234
+Render Distance: 8
+Attempting to listen on port 25565...
+[ENet] Listening on port 25565 maxClients=32 channels=4
+[Server] World initialized seed=1234 renderDistance=8 spawn=(0.0, 55.0, 0.0)

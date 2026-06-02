@@ -55,21 +55,32 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
         return;
     }
 
-    constexpr double kFixedStep = 1.0 / 60.0;
-    while (accumulator >= kFixedStep) {
-        m_game->fixedUpdate(kFixedStep, accumulator);
+    try {
+        constexpr double kFixedStep = 1.0 / 60.0;
+        while (accumulator >= kFixedStep) {
+            m_game->fixedUpdate(kFixedStep, accumulator);
+            if (m_game->isQuitToMenuRequested()) {
+                m_game->clearQuitToMenuRequest();
+                m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+                accumulator = 0.0;
+                return;
+            }
+        }
+        m_game->updateFrame(static_cast<float>(frameTime));
+
+        // Check if the pause menu requested quit-to-menu
         if (m_game->isQuitToMenuRequested()) {
             m_game->clearQuitToMenuRequest();
             m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
             accumulator = 0.0;
-            return;
         }
-    }
-    m_game->updateFrame(static_cast<float>(frameTime));
-
-    // Check if the pause menu requested quit-to-menu
-    if (m_game->isQuitToMenuRequested()) {
-        m_game->clearQuitToMenuRequest();
+    } catch (const std::exception& ex) {
+        std::cerr << "[GameplayAppState] Gameplay update failed: " << ex.what() << '\n';
+        if (m_game) {
+            m_game->shutdown();
+            m_game.reset();
+        }
+        m_enterFailed = true;
         m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
         accumulator = 0.0;
     }
@@ -77,6 +88,14 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 
 void GameplayAppState::render(double frameTime) {
     if (m_game) {
-        m_game->renderFrame(static_cast<float>(frameTime));
+        try {
+            m_game->renderFrame(static_cast<float>(frameTime));
+        } catch (const std::exception& ex) {
+            std::cerr << "[GameplayAppState] Gameplay render failed: " << ex.what() << '\n';
+            m_game->shutdown();
+            m_game.reset();
+            m_enterFailed = true;
+            m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+        }
     }
 }

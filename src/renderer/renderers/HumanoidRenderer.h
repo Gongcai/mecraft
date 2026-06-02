@@ -22,8 +22,8 @@ class GameplayRegistry;
 class HumanoidRenderer {
 public:
     enum RenderMode : uint8_t {
-        kRenderAll,       // render both Steve (player) and mob entities
-        kRenderMobsOnly   // render only mob entities (first-person view)
+        kRenderAll,       // render local Steve, remote Steve, and mob entities
+        kRenderMobsOnly   // hide only the local Steve model (first-person view)
     };
 
     void init(ResourceMgr& resourceMgr);

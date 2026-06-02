@@ -3,6 +3,8 @@
 
 #include "GameSessionConfig.h"
 #include "../../world/IWorldView.h"
+#include "../../world/DayNightSystem.h"
+#include "../../world/WeatherSystem.h"
 #include <memory>
 #include <string>
 
@@ -65,20 +67,22 @@ public:
     [[nodiscard]] const World& world() const;
     // worldView() returns the appropriate IWorldView for rendering.
     [[nodiscard]] const IWorldView& worldView() const;
+    [[nodiscard]] const DayNightSystem& dayNightSystem() const;
+    [[nodiscard]] const WeatherSystem& weatherSystem() const;
     // C/S components
-    [[nodiscard]] server::GameServer& server() { return *m_server; }
-    [[nodiscard]] const server::GameServer& server() const { return *m_server; }
-    [[nodiscard]] client::GameClient& client() { return *m_client; }
-    [[nodiscard]] const client::GameClient& client() const { return *m_client; }
-    [[nodiscard]] physics::PhysicsSystem& physicsSystem() { return *m_physicsSystem; }
-    [[nodiscard]] ecs::GameplayScene& gameplayScene() { return *m_gameplayScene; }
-    [[nodiscard]] const ecs::GameplayScene& gameplayScene() const { return *m_gameplayScene; }
-    [[nodiscard]] DropSystem& dropSystem() { return *m_dropSystem; }
-    [[nodiscard]] ParticleSystem& particleSystem() { return *m_particleSystem; }
-    [[nodiscard]] RainRenderer& rainRenderer() { return *m_rainRenderer; }
-    [[nodiscard]] CraftingSystem& craftingSystem() { return *m_craftingSystem; }
-    [[nodiscard]] CameraController& cameraController() { return *m_cameraController; }
-    [[nodiscard]] GameplayPresentationBuilder& presentationBuilder() { return *m_presentationBuilder; }
+    [[nodiscard]] server::GameServer& server();
+    [[nodiscard]] const server::GameServer& server() const;
+    [[nodiscard]] client::GameClient& client();
+    [[nodiscard]] const client::GameClient& client() const;
+    [[nodiscard]] physics::PhysicsSystem& physicsSystem();
+    [[nodiscard]] ecs::GameplayScene& gameplayScene();
+    [[nodiscard]] const ecs::GameplayScene& gameplayScene() const;
+    [[nodiscard]] DropSystem& dropSystem();
+    [[nodiscard]] ParticleSystem& particleSystem();
+    [[nodiscard]] RainRenderer& rainRenderer();
+    [[nodiscard]] CraftingSystem& craftingSystem();
+    [[nodiscard]] CameraController& cameraController();
+    [[nodiscard]] GameplayPresentationBuilder& presentationBuilder();
     [[nodiscard]] GameStateMachine& stateMachine();
     [[nodiscard]] const GameStateMachine& stateMachine() const;
     [[nodiscard]] std::string& lastSubmittedCommand() { return m_lastSubmittedCommand; }
@@ -89,6 +93,9 @@ private:
     // C/S architecture: server owns authoritative World, client owns ClientWorld
     std::unique_ptr<server::GameServer> m_server;
     std::unique_ptr<client::GameClient> m_client;
+    std::unique_ptr<World> m_fallbackWorld;
+    DayNightSystem m_fallbackDayNightSystem;
+    WeatherSystem m_fallbackWeatherSystem;
 
     // Physics (references server's World)
     std::unique_ptr<physics::PhysicsSystem> m_physicsSystem;
