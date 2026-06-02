@@ -11,6 +11,16 @@ class Chunk;
 
 namespace net {
 
+/// Entity network ID type (must match ecs::EntityNetId).
+using EntityNetId = uint32_t;
+
+/// Entity kind for spawn messages.
+enum class EntityKind : uint8_t {
+    Drop = 0,
+    Player = 1,
+    Mob = 2,
+};
+
 using ClientId = uint32_t;
 using TickId = uint32_t;
 
@@ -36,6 +46,9 @@ enum class MessageType : uint8_t {
     ChunkUnload,
     BlockUpdateBatch,
     ServerSnapshot,
+    EntitySpawn,
+    EntityDespawn,
+    EntitySnapshot,
 
     // Bidirectional
     KeepAlive,
@@ -124,6 +137,39 @@ struct ServerSnapshot {
     uint32_t ackInputSequence = 0;
     glm::vec3 authoritativePosition = glm::vec3(0.0f);
     glm::vec3 authoritativeVelocity = glm::vec3(0.0f);
+};
+
+// ===========================================================================
+// Entity synchronization messages
+// ===========================================================================
+
+/// Server tells client to create a new entity.
+struct EntitySpawnMessage {
+    EntityNetId netId = 0;
+    EntityKind kind = EntityKind::Drop;
+    glm::vec3 position = glm::vec3(0.0f);
+    glm::vec3 velocity = glm::vec3(0.0f);
+    uint16_t itemId = 0;      // For drops
+    uint16_t stackCount = 0;  // For drops
+};
+
+/// Server tells client to destroy an entity.
+struct EntityDespawnMessage {
+    EntityNetId netId = 0;
+};
+
+/// A single entity's snapshot data.
+struct EntitySnapshotItem {
+    EntityNetId netId = 0;
+    glm::vec3 position = glm::vec3(0.0f);
+    glm::vec3 velocity = glm::vec3(0.0f);
+    float yaw = 0.0f;
+};
+
+/// Batch of entity snapshots from the server.
+struct EntitySnapshotMessage {
+    TickId serverTick = 0;
+    std::vector<EntitySnapshotItem> entities;
 };
 
 } // namespace net

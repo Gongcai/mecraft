@@ -309,6 +309,7 @@ set(SRC_SERVER
 set(SRC_CLIENT
         src/client/ClientWorld.cpp
         src/client/GameClient.cpp
+        src/client/ClientEntityStore.cpp
 )
 
 # 合并所有核心代码

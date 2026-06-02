@@ -6,6 +6,7 @@
 #include <glm/gtc/constants.hpp>
 
 #include "../../components/Components.h"
+#include "../../components/NetworkComponents.h"
 #include "../../util/DropRuntimeState.h"
 #include "../../util/DropSpawnEventBuffer.h"
 
@@ -40,6 +41,10 @@ void ensureDropComponents(entt::registry& registry, const entt::entity e) {
     }
     if (!registry.all_of<GroundedStateComponent>(e)) {
         registry.emplace<GroundedStateComponent>(e);
+    }
+    // Mark for network synchronization (EntityNetId assigned by GameServer)
+    if (!registry.all_of<NetworkSyncTag>(e)) {
+        registry.emplace<NetworkSyncTag>(e);
     }
 }
 

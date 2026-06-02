@@ -4,7 +4,11 @@
 #include "../net/Transport.h"
 #include "../net/Protocol.h"
 #include "ClientWorld.h"
+#include "ClientEntityStore.h"
+#include <entt/entt.hpp>
 #include <memory>
+
+class ResourceMgr;
 
 namespace client {
 
@@ -17,6 +21,9 @@ public:
 
     /// Connect to a server via the given transport endpoint.
     void connect(std::unique_ptr<net::ITransportEndpoint> transport);
+
+    /// Initialize the entity store with the ECS registry.
+    void initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr);
 
     /// Send a hello message to the server.
     void sendHello();
@@ -34,6 +41,10 @@ public:
     /// Access the client-side world.
     [[nodiscard]] ClientWorld& clientWorld() { return m_clientWorld; }
     [[nodiscard]] const ClientWorld& clientWorld() const { return m_clientWorld; }
+
+    /// Access the client-side entity store.
+    [[nodiscard]] ClientEntityStore& entityStore() { return m_entityStore; }
+    [[nodiscard]] const ClientEntityStore& entityStore() const { return m_entityStore; }
 
     /// Check if the client has received initial spawn chunks from the server.
     [[nodiscard]] bool areSpawnChunksReady() const { return m_spawnChunksReady; }
@@ -53,6 +64,7 @@ private:
 
     std::unique_ptr<net::ITransportEndpoint> m_transport;
     ClientWorld m_clientWorld;
+    ClientEntityStore m_entityStore;
     net::ServerSnapshot m_lastSnapshot;
     glm::vec3 m_authPosition = glm::vec3(0.0f);
     net::ClientId m_clientId = 0;

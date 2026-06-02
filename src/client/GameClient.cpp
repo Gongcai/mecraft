@@ -11,6 +11,10 @@ void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
     sendHello();
 }
 
+void GameClient::initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr) {
+    m_entityStore.init(registry, resourceMgr);
+}
+
 void GameClient::sendHello() {
     if (!m_transport) return;
 
@@ -99,6 +103,27 @@ void GameClient::receiveMessages() {
             if (packet.inProcessPayload.has_value()) {
                 const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
                 handleServerSnapshot(snapshot);
+            }
+            break;
+        }
+        case net::MessageType::EntitySpawn: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                m_entityStore.handleSpawn(msg);
+            }
+            break;
+        }
+        case net::MessageType::EntityDespawn: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
+                m_entityStore.handleDespawn(msg);
+            }
+            break;
+        }
+        case net::MessageType::EntitySnapshot: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::EntitySnapshotMessage&>(packet.inProcessPayload);
+                m_entityStore.handleSnapshot(msg);
             }
             break;
         }

@@ -4,10 +4,12 @@
 #include "../net/Transport.h"
 #include "../net/Protocol.h"
 #include "../world/World.h"
+#include "../ecs/components/NetworkComponents.h"
+#include <entt/entt.hpp>
 #include <memory>
 #include <vector>
 #include <unordered_set>
-#include <mutex>
+#include <unordered_map>
 
 class ThreadPool;
 
@@ -36,6 +38,10 @@ public:
     /// Accept a new client connection.
     void acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id);
 
+    /// Set the ECS registry for entity synchronization.
+    /// Must be called after ECS is initialized.
+    void setEcsRegistry(entt::registry* registry) { m_ecsRegistry = registry; }
+
     /// Run one server tick. Called from the game loop at the server tick rate.
     void tick(float dt);
 
@@ -58,11 +64,18 @@ private:
     void sendSnapshotsToClients();
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
+    void syncEntitiesToClients();
     void checkSpawnChunksReady();
 
     World m_world;
     std::vector<ConnectedClient> m_clients;
     std::vector<net::BlockUpdateEntry> m_pendingBlockUpdates;
+
+    // Entity sync state
+    ecs::EntityNetId m_nextNetId = 1;
+    std::unordered_map<ecs::EntityNetId, entt::entity> m_syncedEntities;
+    entt::registry* m_ecsRegistry = nullptr;  // Non-owning pointer to ECS registry
+
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;
     glm::vec3 m_spawnPosition = glm::vec3(0.0f);

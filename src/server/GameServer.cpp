@@ -1,6 +1,8 @@
 #include "GameServer.h"
 #include "../world/World.h"
 #include "../thread/ThreadPool.h"
+#include "../ecs/components/Components.h"
+#include "../ecs/components/NetworkComponents.h"
 #include <cmath>
 
 namespace server {
@@ -46,6 +48,9 @@ void GameServer::tick(float dt) {
 
     // Send authoritative snapshots to clients
     sendSnapshotsToClients();
+
+    // Sync entities (spawn/despawn/snapshot)
+    syncEntitiesToClients();
 
     // Send pending block updates to clients
     sendBlockUpdatesToClients();
@@ -196,6 +201,83 @@ void GameServer::sendBlockUpdatesToClients() {
     }
 
     m_pendingBlockUpdates.clear();
+}
+
+void GameServer::syncEntitiesToClients() {
+    if (!m_ecsRegistry || m_clients.empty()) {
+        return;
+    }
+
+    auto& reg = *m_ecsRegistry;
+
+    // 1. Detect new entities with NetworkSyncTag that don't have EntityNetId yet
+    auto newSyncView = reg.view<ecs::NetworkSyncTag>(entt::exclude<ecs::EntityNetIdComponent>);
+    for (auto entity : newSyncView) {
+        reg.emplace<ecs::EntityNetIdComponent>(entity, m_nextNetId);
+        m_syncedEntities[m_nextNetId] = entity;
+        ++m_nextNetId;
+    }
+
+    // 2. Detect despawned entities (entities in m_syncedEntities that are no longer valid)
+    std::vector<ecs::EntityNetId> toDespawn;
+    for (const auto& [netId, entity] : m_syncedEntities) {
+        if (!reg.valid(entity)) {
+            toDespawn.push_back(netId);
+        }
+    }
+
+    // Send despawn messages and clean up tracking
+    for (const ecs::EntityNetId netId : toDespawn) {
+        for (auto& client : m_clients) {
+            net::Packet packet;
+            packet.channel = net::PacketChannel::ReliableWorld;
+            packet.type = net::MessageType::EntityDespawn;
+            net::EntityDespawnMessage msg;
+            msg.netId = netId;
+            packet.inProcessPayload = msg;
+            client.transport->send(std::move(packet));
+        }
+        m_syncedEntities.erase(netId);
+    }
+
+    // 3. Build and send entity snapshots (batch of all synced entities)
+    net::EntitySnapshotMessage snapshot;
+    snapshot.serverTick = m_currentTick;
+
+    for (const auto& [netId, entity] : m_syncedEntities) {
+        if (!reg.valid(entity)) continue;
+
+        auto* transform = reg.try_get<ecs::TransformComponent>(entity);
+        if (!transform) continue;
+
+        net::EntitySnapshotItem item;
+        item.netId = netId;
+        item.position = transform->position;
+
+        auto* velocity = reg.try_get<ecs::VelocityComponent>(entity);
+        if (velocity) {
+            item.velocity = velocity->velocity;
+        }
+
+        auto* spin = reg.try_get<ecs::SpinVisualComponent>(entity);
+        if (spin) {
+            item.yaw = spin->yawRadians;
+        }
+
+        snapshot.entities.push_back(item);
+    }
+
+    if (!snapshot.entities.empty()) {
+        net::Packet packet;
+        packet.channel = net::PacketChannel::UnreliableState;
+        packet.type = net::MessageType::EntitySnapshot;
+        packet.inProcessPayload = std::move(snapshot);
+
+        for (auto& client : m_clients) {
+            net::Packet clientPacket = packet;
+            client.transport->send(std::move(clientPacket));
+        }
+    }
 }
 
 void GameServer::sendChunkDataToClient(ConnectedClient& client, int cx, int cz) {

@@ -96,6 +96,8 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     deps.uiRenderer.setCraftingSystem(m_craftingSystem.get());
 
     auto& reg = m_gameplayScene->registry();
+    m_server->setEcsRegistry(&reg.registry());
+    m_client->initEntityStore(reg.registry(), &deps.resourceMgr);
     m_dropSystem->bindRegistry(reg);
     m_dropSystem->bindServices(svc);
     m_particleSystem->bindRegistry(reg);
