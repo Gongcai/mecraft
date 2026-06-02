@@ -23,6 +23,18 @@ void GameClient::sendHello() {
     m_transport->send(std::move(packet));
 }
 
+void GameClient::sendViewConfig(int renderDistance) {
+    if (!m_transport) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableControl;
+    packet.type = net::MessageType::ClientViewConfig;
+    net::ClientViewConfig config;
+    config.renderDistance = renderDistance;
+    packet.inProcessPayload = config;
+    m_transport->send(std::move(packet));
+}
+
 void GameClient::sendInput(float dt, const glm::vec3& moveInput,
                            const glm::vec2& lookDelta,
                            bool jump, bool sneak, bool sprint) {

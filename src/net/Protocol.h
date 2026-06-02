@@ -28,6 +28,7 @@ enum class MessageType : uint8_t {
     ClientHello,
     ClientInput,
     ClientReady,
+    ClientViewConfig,
 
     // Server -> Client
     ServerHello,
@@ -73,6 +74,11 @@ struct ClientInput {
 
 /// Client signals readiness to receive world data.
 struct ClientReady {};
+
+/// Client sends its view configuration to the server.
+struct ClientViewConfig {
+    int renderDistance = 16;
+};
 
 // ===========================================================================
 // Server -> Client messages

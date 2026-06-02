@@ -36,6 +36,7 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
     auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
     m_server->acceptClient(std::move(serverTransport), 1);
     m_client->connect(std::move(clientTransport));
+    m_client->sendViewConfig(config.renderDistance);
 
     // Wire up ClientWorld with server's weather/day-night for in-process rendering
     m_client->clientWorld().setDayNightSystem(&m_server->world().getDayNightSystem());

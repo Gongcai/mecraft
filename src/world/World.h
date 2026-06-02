@@ -14,6 +14,7 @@
 #include "block/BlockNeighborUpdateQueue.h"
 #include "chunk/Chunk.h"
 #include "DayNightSystem.h"
+#include "../server/ChunkTicketManager.h"
 #include "fluid/FluidState.h"
 #include "fluid/FluidSystem.h"
 #include "WeatherSystem.h"
@@ -72,6 +73,13 @@ public:
     BlockNeighborUpdateQueue& neighborUpdateQueue() { return m_neighborUpdateQueue; }
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
 
+    /// Access the chunk ticket manager (for GameServer per-client management).
+    ChunkTicketManager& ticketManager() { return m_ticketManager; }
+    const ChunkTicketManager& ticketManager() const { return m_ticketManager; }
+
+    /// Set simulation distance (entity/fluid/random tick radius).
+    void setSimulationDistance(int distance);
+
     /// Callback invoked after any block state change (setBlockState / setFluidState).
     /// Used by GameServer to collect dirty blocks for BlockUpdateBatch messages.
     using BlockChangeCallback = std::function<void(int x, int y, int z, BlockID newBlockId)>;
@@ -88,6 +96,7 @@ private:
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
+    ChunkTicketManager m_ticketManager;
 
     int m_renderDistance = 8;
     uint32_t m_seed = 0;

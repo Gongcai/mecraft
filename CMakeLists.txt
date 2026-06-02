@@ -302,6 +302,7 @@ set(SRC_NET
 # [服务端]
 set(SRC_SERVER
         src/server/GameServer.cpp
+        src/server/ChunkTicketManager.cpp
 )
 
 # [客户端]
@@ -524,5 +525,6 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(in_process_transport_test tests/in_process_transport_test.cpp)
     add_mecraft_test(client_world_test tests/client_world_test.cpp)
     add_mecraft_test(game_server_test tests/game_server_test.cpp)
+    add_mecraft_test(chunk_ticket_manager_test tests/chunk_ticket_manager_test.cpp)
 endif()
 

@@ -19,8 +19,8 @@ struct ConnectedClient {
     std::unique_ptr<net::ITransportEndpoint> transport;
     glm::vec3 lastPosition = glm::vec3(0.0f);
     uint32_t lastAckedInput = 0;
-    uint64_t lastSentChunkRevision = 0;
-    std::unordered_set<int64_t> sentChunks;
+    int viewDistance = 16;  // Client's render distance
+    std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
 };
 
 /// Authoritative game server. Owns the World and runs the server tick loop.

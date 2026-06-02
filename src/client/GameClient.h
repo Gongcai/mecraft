@@ -21,6 +21,9 @@ public:
     /// Send a hello message to the server.
     void sendHello();
 
+    /// Send the client's view configuration (render distance) to the server.
+    void sendViewConfig(int renderDistance);
+
     /// Sample input and send to server. Called at the client's fixed update rate.
     void sendInput(float dt, const glm::vec3& moveInput,
                    const glm::vec2& lookDelta, bool jump, bool sneak, bool sprint);

@@ -28,7 +28,6 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     ConnectedClient client;
     client.id = id;
     client.transport = std::move(transport);
-    client.lastSentChunkRevision = 0;
     m_clients.push_back(std::move(client));
 }
 
@@ -89,6 +88,13 @@ void GameServer::processClientMessages() {
             case net::MessageType::ClientReady:
                 // Client is ready to receive world data; nothing special needed.
                 break;
+            case net::MessageType::ClientViewConfig: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& config = std::any_cast<const net::ClientViewConfig&>(packet.inProcessPayload);
+                    client.viewDistance = std::max(1, config.renderDistance);
+                }
+                break;
+            }
             default:
                 break;
             }
@@ -98,21 +104,61 @@ void GameServer::processClientMessages() {
 
 void GameServer::sendNewChunksToClients() {
     const auto& activeChunks = m_world.getActiveChunks();
-    const uint64_t currentRevision = m_world.getActiveChunkRevision();
 
     for (auto& client : m_clients) {
-        if (client.lastSentChunkRevision == currentRevision) {
-            continue;  // No new chunks since last send
-        }
+        // Build a temporary ticket manager for this client's view distance
+        ChunkTicketManager clientTicketMgr;
+        clientTicketMgr.setViewRadius(client.viewDistance);
+        clientTicketMgr.setSimulationRadius(m_world.ticketManager().simulationRadius());
+        const int playerChunkX = static_cast<int>(std::floor(client.lastPosition.x / 16.0f));
+        const int playerChunkZ = static_cast<int>(std::floor(client.lastPosition.z / 16.0f));
+        clientTicketMgr.updatePlayerPosition(playerChunkX, playerChunkZ);
 
-        for (const auto& [key, chunk] : activeChunks) {
-            if (chunk && client.sentChunks.find(key) == client.sentChunks.end()) {
-                sendChunkDataToClient(client, chunk->m_chunkX, chunk->m_chunkZ);
+        // Send new chunks within the client's view distance (with budget)
+        constexpr int kMaxChunkSendsPerTick = 4;
+        int sent = 0;
+
+        // Get prioritized chunks to send
+        const auto chunksToSend = clientTicketMgr.getChunksToLoad(
+            kMaxChunkSendsPerTick * 2, client.sentChunks);
+
+        for (const auto& pos : chunksToSend) {
+            if (sent >= kMaxChunkSendsPerTick) break;
+
+            const int64_t key = ChunkTicketManager::chunkKey(pos.x, pos.y);
+            auto it = activeChunks.find(key);
+            if (it != activeChunks.end() && it->second) {
+                sendChunkDataToClient(client, pos.x, pos.y);
                 client.sentChunks.insert(key);
+                ++sent;
             }
         }
 
-        client.lastSentChunkRevision = currentRevision;
+        // Unload chunks outside the client's unload radius
+        std::vector<int64_t> toUnload;
+        for (const int64_t key : client.sentChunks) {
+            const int cx = static_cast<int>(key >> 32);
+            const int cz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
+            if (clientTicketMgr.shouldUnload(cx, cz)) {
+                toUnload.push_back(key);
+            }
+        }
+
+        for (const int64_t key : toUnload) {
+            const int cx = static_cast<int>(key >> 32);
+            const int cz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
+
+            net::Packet packet;
+            packet.channel = net::PacketChannel::ReliableWorld;
+            packet.type = net::MessageType::ChunkUnload;
+            net::ChunkUnloadMessage unloadMsg;
+            unloadMsg.chunkX = cx;
+            unloadMsg.chunkZ = cz;
+            packet.inProcessPayload = unloadMsg;
+            client.transport->send(std::move(packet));
+
+            client.sentChunks.erase(key);
+        }
     }
 }
 

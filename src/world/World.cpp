@@ -122,6 +122,9 @@ void World::init(uint32_t seed) {
     }
     m_fluidSystem.reset();
     m_neighborUpdateQueue.clear();
+    m_ticketManager.reset();
+    m_ticketManager.setViewRadius(m_renderDistance);
+    m_ticketManager.setSimulationRadius(8);
     ++m_activeChunkRevision;
     m_lightService = std::make_unique<LightService>(*this);
     m_lightService->start(m_threadPool);
@@ -135,32 +138,50 @@ void World::update(const glm::vec3& playerPos) {
     const int playerChunkX = worldToChunkCoord(static_cast<int>(std::floor(playerPos.x)), Chunk::SIZE_X);
     const int playerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(playerPos.z)), Chunk::SIZE_Z);
 
-    updateLoadQueue(playerChunkX, playerChunkZ);
+    // Update ticket manager with player position
+    m_ticketManager.updatePlayerPosition(playerChunkX, playerChunkZ);
 
+    // Unload chunks outside unload radius (with hysteresis)
     std::vector<int64_t> toUnload;
     for (const auto& pair : m_chunks) {
-        int cx = static_cast<int>(pair.first >> 32);
-        int cz = static_cast<int>(pair.first & 0xFFFFFFFF);
-        if (!isWithinChunkRenderDistance(cx, cz, playerChunkX, playerChunkZ, m_renderDistance)) {
+        const int cx = static_cast<int>(pair.first >> 32);
+        const int cz = static_cast<int>(static_cast<int32_t>(pair.first & 0xFFFFFFFF));
+        if (m_ticketManager.shouldUnload(cx, cz)) {
             toUnload.push_back(pair.first);
         }
     }
-    for (int64_t key : toUnload) {
+    for (const int64_t key : toUnload) {
         const int cx = static_cast<int>(key >> 32);
-        const int cz = static_cast<int>(key & 0xFFFFFFFF);
+        const int cz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
         unloadChunk(cx, cz);
     }
 
+    // Get chunks to load from ticket manager (sorted by distance)
+    // Build set of already loaded + in-flight chunks
+    std::unordered_set<int64_t> loadedKeys;
+    for (const auto& pair : m_chunks) {
+        loadedKeys.insert(pair.first);
+    }
+    for (const int64_t key : m_generationInFlight) {
+        loadedKeys.insert(key);
+    }
+
+    const auto chunksToLoad = m_ticketManager.getChunksToLoad(
+        kMaxChunkLoadSubmitsPerFrame * 4,  // Look ahead a bit for prioritization
+        loadedKeys);
+
+    // Submit chunk generation jobs from the prioritized list
     int submitted = 0;
-    while (!m_loadQueue.empty() && submitted < kMaxChunkLoadSubmitsPerFrame) {
+    for (const auto& pos : chunksToLoad) {
+        if (submitted >= kMaxChunkLoadSubmitsPerFrame) {
+            break;
+        }
         if (static_cast<int>(m_generationInFlight.size()) >= kMaxGenerationInFlight) {
             break;
         }
 
-        auto pos = m_loadQueue.back();
-        m_loadQueue.pop_back();
         submitChunkLoad(pos.x, pos.y);
-        submitted++;
+        ++submitted;
     }
 
     // Finalize completed generation results on the main thread with a small
@@ -616,6 +637,11 @@ bool World::raycast(const PhysicsInfo& ray, const float maxDist, glm::ivec3& hit
 
 void World::setRenderDistance(int dist) {
     m_renderDistance = std::max(1, dist);
+    m_ticketManager.setViewRadius(m_renderDistance);
+}
+
+void World::setSimulationDistance(int distance) {
+    m_ticketManager.setSimulationRadius(std::max(1, distance));
 }
 
 int World::getSurfaceY(int x, int z) const {
