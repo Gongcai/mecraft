@@ -8,6 +8,7 @@
 namespace net {
 struct ENetTransport::PeerState {
     ENetPeer* peer = nullptr;
+    bool connected = true;
     std::queue<Packet> receiveQueue;
     std::mutex receiveMutex;
 };
@@ -149,7 +150,10 @@ void ENetTransport::send(Packet packet) {
 
     encodeTypedPayload(packet);
 
-    if (m_peerState && m_peerState->peer) {
+    if (m_peerState) {
+        if (!m_peerState->connected || !m_peerState->peer) {
+            return;
+        }
         sendToPeer(m_peerState->peer, std::move(packet));
         enet_host_flush(m_host);
         return;
@@ -205,6 +209,20 @@ bool ENetTransport::tryReceive(Packet& out) {
     out = std::move(m_receiveQueue.front());
     m_receiveQueue.pop();
     return true;
+}
+
+bool ENetTransport::isConnected() const {
+    if (m_peerState) {
+        return m_peerState->connected && m_peerState->peer != nullptr;
+    }
+    return m_peer != nullptr || m_isServer;
+}
+
+bool ENetTransport::hasActiveRemote() const {
+    if (m_peerState) {
+        return m_peerState->connected && m_peerState->peer != nullptr;
+    }
+    return m_peer != nullptr;
 }
 
 void ENetTransport::poll() {
@@ -355,6 +373,10 @@ void ENetTransport::poll() {
                 std::fflush(stdout);
                 m_peer = nullptr;
             }
+            if (const auto peerIt = m_peerStates.find(event.peer); peerIt != m_peerStates.end()) {
+                peerIt->second->connected = false;
+                peerIt->second->peer = nullptr;
+            }
             m_peerStates.erase(event.peer);
             break;
 
@@ -363,6 +385,10 @@ void ENetTransport::poll() {
                 std::printf("[ENet] Peer disconnect timeout\n");
                 std::fflush(stdout);
                 m_peer = nullptr;
+            }
+            if (const auto peerIt = m_peerStates.find(event.peer); peerIt != m_peerStates.end()) {
+                peerIt->second->connected = false;
+                peerIt->second->peer = nullptr;
             }
             m_peerStates.erase(event.peer);
             break;
@@ -394,6 +420,24 @@ uint16_t ENetTransport::getLocalPort() const {
 }
 
 void ENetTransport::disconnect() {
+    if (m_peerState) {
+        ENetPeer* peer = m_peerState->peer;
+        m_peerState->connected = false;
+        m_peerState->peer = nullptr;
+        m_peer = nullptr;
+        if (peer) {
+            enet_peer_disconnect(peer, 0);
+            ENetEvent event;
+            while (enet_host_service(m_host, &event, 3000) > 0) {
+                if (event.type == ENET_EVENT_TYPE_DISCONNECT) {
+                    break;
+                }
+            }
+            enet_peer_reset(peer);
+        }
+        return;
+    }
+
     if (m_peer) {
         enet_peer_disconnect(m_peer, 0);
         // Flush pending disconnect

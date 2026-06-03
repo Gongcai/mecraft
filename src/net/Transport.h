@@ -18,6 +18,14 @@ public:
     /// @param out Filled with the received packet if available.
     /// @return true if a packet was received, false if the queue is empty.
     virtual bool tryReceive(Packet& out) = 0;
+
+    /// Whether the endpoint is still usable. Stateless/local transports may
+    /// always return true; network transports should return false after close.
+    [[nodiscard]] virtual bool isConnected() const { return true; }
+
+    /// Whether there is currently a remote peer attached to this endpoint.
+    /// Listener-style transports can remain usable while this is false.
+    [[nodiscard]] virtual bool hasActiveRemote() const { return isConnected(); }
 };
 
 } // namespace net

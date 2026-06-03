@@ -66,7 +66,8 @@ public:
     void poll();
 
     /// Check if connected to a remote peer.
-    [[nodiscard]] bool isConnected() const { return m_peer != nullptr; }
+    [[nodiscard]] bool isConnected() const override;
+    [[nodiscard]] bool hasActiveRemote() const override;
 
     /// Get the RTT to the connected peer in milliseconds.
     [[nodiscard]] uint32_t getRtt() const;

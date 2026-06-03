@@ -12,7 +12,36 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <queue>
 #include <thread>
+
+class ManualTransport final : public net::ITransportEndpoint {
+public:
+    void send(net::Packet packet) override {
+        sent.push(std::move(packet));
+    }
+
+    bool tryReceive(net::Packet& out) override {
+        if (inbox.empty()) {
+            return false;
+        }
+        out = std::move(inbox.front());
+        inbox.pop();
+        return true;
+    }
+
+    [[nodiscard]] bool isConnected() const override { return connected; }
+    [[nodiscard]] bool hasActiveRemote() const override { return activeRemote; }
+
+    void pushIncoming(net::Packet packet) {
+        inbox.push(std::move(packet));
+    }
+
+    std::queue<net::Packet> inbox;
+    std::queue<net::Packet> sent;
+    bool connected = true;
+    bool activeRemote = true;
+};
 
 struct ServerHarness {
     explicit ServerHarness(int renderDistance = 8) {
@@ -202,6 +231,61 @@ static void testServerTickBreaksUnsupportedPlant() {
 
     assert(harness.server.world().getBlock(base.x, base.y + 1, base.z) == BlockIds::AIR);
     std::printf("[PASS] testServerTickBreaksUnsupportedPlant\n");
+}
+
+static void testDisconnectedPlayerDespawnsForOtherClients() {
+    ServerHarness harness;
+
+    auto clientA = std::make_unique<ManualTransport>();
+    auto clientB = std::make_unique<ManualTransport>();
+    ManualTransport* clientAPtr = clientA.get();
+    ManualTransport* clientBPtr = clientB.get();
+
+    net::Packet helloA;
+    helloA.type = net::MessageType::ClientHello;
+    helloA.inProcessPayload = net::ClientHello{};
+    clientAPtr->pushIncoming(std::move(helloA));
+
+    net::Packet helloB;
+    helloB.type = net::MessageType::ClientHello;
+    helloB.inProcessPayload = net::ClientHello{};
+    clientBPtr->pushIncoming(std::move(helloB));
+
+    harness.server.acceptClient(std::move(clientA), 1);
+    harness.server.acceptClient(std::move(clientB), 2);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientAPtr->sent.empty()) {
+        clientAPtr->sent.pop();
+    }
+
+    clientBPtr->activeRemote = false;
+    clientBPtr->connected = false;
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawDespawn = false;
+    bool sawDisconnectedPlayerSnapshot = false;
+    while (!clientAPtr->sent.empty()) {
+        net::Packet packet = std::move(clientAPtr->sent.front());
+        clientAPtr->sent.pop();
+        if (packet.type == net::MessageType::EntityDespawn && packet.inProcessPayload.has_value()) {
+            const auto& msg = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
+            if (msg.netId == (0x80000000u | 2u)) {
+                sawDespawn = true;
+            }
+        }
+        if (packet.type == net::MessageType::EntitySnapshot && packet.inProcessPayload.has_value()) {
+            const auto& msg = std::any_cast<const net::EntitySnapshotMessage&>(packet.inProcessPayload);
+            for (const auto& item : msg.entities) {
+                if (item.netId == (0x80000000u | 2u)) {
+                    sawDisconnectedPlayerSnapshot = true;
+                }
+            }
+        }
+    }
+
+    assert(sawDespawn);
+    assert(!sawDisconnectedPlayerSnapshot);
+    std::printf("[PASS] testDisconnectedPlayerDespawnsForOtherClients\n");
 }
 
 static void testChunkDataDecodeMarksRenderableSubChunks() {
@@ -431,6 +515,7 @@ int main() {
     testInputRoundTrip();
     testClientBlockActionRoundTrip();
     testServerTickBreaksUnsupportedPlant();
+    testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();
     testBlockUpdateCodecKeepsVariableLightPatch();
     testENetChunkStreamingToClient();

@@ -87,6 +87,7 @@ public:
 
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
     bool replacePackedLight(const uint8_t* data, size_t size, uint32_t* outDirtySubChunkMask = nullptr);
+    bool replacePackedLightSection(int scy, const uint8_t* data, size_t size);
 
     [[nodiscard]] uint64_t getLightRevision() const { return m_lightRevision; }
     uint64_t bumpLightRevision() { return ++m_lightRevision; }

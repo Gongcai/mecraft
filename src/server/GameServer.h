@@ -70,6 +70,8 @@ public:
 
 private:
     void processClientMessages();
+    void cleanupDisconnectedClients();
+    void broadcastPlayerDespawn(net::EntityNetId playerNetId, net::ClientId exceptClientId = 0);
     void handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action);
     void tickWorldSystems();
     void sendNewChunksToClients();

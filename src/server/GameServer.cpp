@@ -7,6 +7,7 @@
 #include "../ecs/components/NetworkComponents.h"
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 
 namespace server {
 namespace {
@@ -69,6 +70,7 @@ void GameServer::tick(float dt) {
     // Process incoming client messages first so block edits and player poses
     // participate in this tick's world/light update before snapshots are sent.
     processClientMessages();
+    cleanupDisconnectedClients();
     tickWorldSystems();
 
     glm::vec3 loadCenter = m_spawnPosition;
@@ -179,6 +181,75 @@ void GameServer::processClientMessages() {
     }
 }
 
+void GameServer::broadcastPlayerDespawn(const net::EntityNetId playerNetId, const net::ClientId exceptClientId) {
+    if (playerNetId == 0) {
+        return;
+    }
+
+    for (auto& client : m_clients) {
+        client.spawnedPlayerNetIds.erase(playerNetId);
+    }
+
+    for (auto& client : m_clients) {
+        if (client.id == exceptClientId || !client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
+
+        net::Packet packet;
+        packet.channel = net::PacketChannel::ReliableWorld;
+        packet.type = net::MessageType::EntityDespawn;
+        net::EntityDespawnMessage msg;
+        msg.netId = playerNetId;
+        packet.inProcessPayload = msg;
+        client.transport->send(std::move(packet));
+    }
+}
+
+void GameServer::cleanupDisconnectedClients() {
+    for (auto& client : m_clients) {
+        if (!client.transport || client.transport->isConnected()) {
+            continue;
+        }
+
+        if (client.receivedHello) {
+            std::printf("[Server] Removing disconnected client %u netId=%u\n",
+                        client.id,
+                        client.playerNetId);
+            std::fflush(stdout);
+            broadcastPlayerDespawn(client.playerNetId, client.id);
+        }
+        client.receivedHello = false;
+    }
+
+    m_clients.erase(std::remove_if(m_clients.begin(), m_clients.end(), [](const ConnectedClient& client) {
+        return !client.transport || !client.transport->isConnected();
+    }), m_clients.end());
+
+    for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || client.transport->hasActiveRemote()) {
+            continue;
+        }
+
+        std::printf("[Server] Client %u lost remote peer netId=%u\n",
+                    client.id,
+                    client.playerNetId);
+        std::fflush(stdout);
+        broadcastPlayerDespawn(client.playerNetId, client.id);
+        client.receivedHello = false;
+        client.receivedViewConfig = false;
+        client.lastAckedInput = 0;
+        client.helloTick = 0;
+        client.sentChunks.clear();
+        client.spawnedPlayerNetIds.clear();
+        client.chunkSendLogCount = 0;
+        client.totalChunksSent = 0;
+        client.lastPosition = m_spawnPosition;
+        client.lastVelocity = glm::vec3(0.0f);
+        client.lastYaw = 0.0f;
+        client.lastPitch = 0.0f;
+    }
+}
+
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
     constexpr float kMaxActionDistance = 6.5f;
     const glm::ivec3 actionBlock = action.action == net::ClientBlockActionType::Place
@@ -230,7 +301,8 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
 
 void GameServer::sendNewChunksToClients() {
     for (auto& client : m_clients) {
-        if (!client.receivedHello || client.helloTick == m_currentTick) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote() ||
+            client.helloTick == m_currentTick) {
             continue;
         }
 
@@ -295,6 +367,9 @@ void GameServer::sendNewChunksToClients() {
 
 void GameServer::sendSnapshotsToClients() {
     for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
         net::Packet packet;
         packet.channel = net::PacketChannel::UnreliableState;
         packet.type = net::MessageType::ServerSnapshot;
@@ -321,6 +396,9 @@ void GameServer::sendBlockUpdatesToClients() {
     packet.inProcessPayload = std::move(batch);
 
     for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
         // Send a copy to each client
         net::Packet clientPacket = packet;
         client.transport->send(std::move(clientPacket));
@@ -399,12 +477,12 @@ void GameServer::syncPlayersToClients() {
     }
 
     for (auto& receiver : m_clients) {
-        if (!receiver.receivedHello || !receiver.transport) {
+        if (!receiver.receivedHello || !receiver.transport || !receiver.transport->hasActiveRemote()) {
             continue;
         }
 
         for (auto& other : m_clients) {
-            if (other.id == receiver.id || !other.receivedHello) {
+            if (other.id == receiver.id || !other.receivedHello || !other.transport || !other.transport->hasActiveRemote()) {
                 continue;
             }
 
@@ -433,7 +511,7 @@ void GameServer::syncPlayersToClients() {
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = m_currentTick;
     for (const auto& client : m_clients) {
-        if (!client.receivedHello) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
             continue;
         }
         net::EntitySnapshotItem item;
@@ -449,7 +527,7 @@ void GameServer::syncPlayersToClients() {
     }
 
     for (auto& receiver : m_clients) {
-        if (!receiver.receivedHello || !receiver.transport) {
+        if (!receiver.receivedHello || !receiver.transport || !receiver.transport->hasActiveRemote()) {
             continue;
         }
         net::EntitySnapshotMessage filtered;
@@ -496,6 +574,9 @@ void GameServer::syncEntitiesToClients() {
     // Send despawn messages and clean up tracking
     for (const ecs::EntityNetId netId : toDespawn) {
         for (auto& client : m_clients) {
+            if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+                continue;
+            }
             net::Packet packet;
             packet.channel = net::PacketChannel::ReliableWorld;
             packet.type = net::MessageType::EntityDespawn;
@@ -541,6 +622,9 @@ void GameServer::syncEntitiesToClients() {
         packet.inProcessPayload = std::move(snapshot);
 
         for (auto& client : m_clients) {
+            if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+                continue;
+            }
             net::Packet clientPacket = packet;
             client.transport->send(std::move(clientPacket));
         }

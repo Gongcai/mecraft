@@ -250,7 +250,6 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
                 dirtyMask |= (1u << scy);
             }
         }
-        tryRecycleSubChunk(scy);
     }
 
     if (outDirtySubChunkMask) {
@@ -275,6 +274,52 @@ bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t*
             if ((meshDirtyMask & (1u << scy)) != 0u) {
                 markSubChunkDirty(scy);
             }
+        }
+    }
+
+    return true;
+}
+
+bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const size_t size) {
+    if (data == nullptr || size != SubChunk::BLOCK_COUNT ||
+        scy < 0 || scy >= NUM_SUB_CHUNKS) {
+        return false;
+    }
+
+    bool changed = false;
+    SubChunk* sc = getSubChunk(scy);
+    const int yBase = scy * SubChunk::SIZE;
+    size_t index = 0;
+    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+        const int y = yBase + ly;
+        for (int z = 0; z < SIZE_Z; ++z) {
+            for (int x = 0; x < SIZE_X; ++x) {
+                const uint8_t packed = data[index++];
+                const uint8_t currentPacked = sc
+                    ? sc->m_lightMap[SubChunk::toIndex(x, ly, z)]
+                    : getImplicitPackedLight(x, y, z);
+
+                if (currentPacked == packed) {
+                    continue;
+                }
+
+                if (!sc) {
+                    sc = getOrCreateSubChunk(scy);
+                }
+                sc->m_lightMap[SubChunk::toIndex(x, ly, z)] = packed;
+                changed = true;
+            }
+        }
+    }
+
+    if (changed) {
+        ++m_lightRevision;
+        markSubChunkDirty(scy);
+        if (scy > 0) {
+            markSubChunkDirty(scy - 1);
+        }
+        if (scy + 1 < NUM_SUB_CHUNKS) {
+            markSubChunkDirty(scy + 1);
         }
     }
 

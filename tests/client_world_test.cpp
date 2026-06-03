@@ -206,6 +206,8 @@ static void testApplyBlockUpdateAcceptsLightSection() {
     cw.applyBlockUpdate(0, 64, 0, 0xFFFFu, sectionLight);
 
     require(cw.getPackedLight(4, 68, 4) == 0x0B, "client should apply subchunk light section updates");
+    require(chunk->getLightRevision() > 0, "subchunk light section updates should bump light revision");
+    require(chunk->isSubChunkDirty(Chunk::toSubChunkIndex(68)), "subchunk light section updates should dirty terrain mesh");
     std::printf("[PASS] testApplyBlockUpdateAcceptsLightSection\n");
 }
 
