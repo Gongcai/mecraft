@@ -12,6 +12,7 @@ class UIRenderer;
 class World;
 class AudioEngine;
 class ParticleSystem;
+namespace client { class GameClient; }
 
 namespace physics {
 class PhysicsSystem;
@@ -39,6 +40,8 @@ struct StateDependencies {
     DropSystem& dropSystem;
     ecs::GameplayRegistry& ecsRegistry;
     const LocaleManager& localeManager;
+    client::GameClient& gameClient;
+    bool isMultiplayer;
 
 };
 

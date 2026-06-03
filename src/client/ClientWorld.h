@@ -57,10 +57,12 @@ public:
     // when operating in-process. In Phase 6 (real networking), these will be
     // replaced by data received from the server.
 
-    void setDayNightSystem(const DayNightSystem* dns) { m_dayNightSystem = dns; }
-    void setWeatherSystem(const WeatherSystem* ws) { m_weatherSystem = ws; }
+    void setDayNightSystem(DayNightSystem* dns) { m_dayNightSystem = dns; }
+    void setWeatherSystem(WeatherSystem* ws) { m_weatherSystem = ws; }
     [[nodiscard]] const DayNightSystem* dayNightSystem() const { return m_dayNightSystem; }
     [[nodiscard]] const WeatherSystem* weatherSystem() const { return m_weatherSystem; }
+    [[nodiscard]] DayNightSystem* mutableDayNightSystem() { return m_dayNightSystem; }
+    [[nodiscard]] WeatherSystem* mutableWeatherSystem() { return m_weatherSystem; }
 
 private:
     ChunkMap m_chunks;
@@ -70,8 +72,8 @@ private:
     int m_renderDistance = 16;
 
     // Non-owning pointers to server systems (in-process mode only)
-    const DayNightSystem* m_dayNightSystem = nullptr;
-    const WeatherSystem* m_weatherSystem = nullptr;
+    DayNightSystem* m_dayNightSystem = nullptr;
+    WeatherSystem* m_weatherSystem = nullptr;
 };
 
 } // namespace client

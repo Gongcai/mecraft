@@ -9,6 +9,7 @@ class InputManager;
 class UIRenderer;
 class World;
 class LocaleManager;
+namespace client { class GameClient; }
 
 namespace ecs {
 class GameplayRegistry;
@@ -24,6 +25,8 @@ struct CommandStateContext {
     World& world;
     ecs::GameplayRegistry& ecsRegistry;
     const LocaleManager& localeManager;
+    client::GameClient& gameClient;
+    bool isMultiplayer = false;
 };
 
 #endif // MECRAFT_COMMAND_STATE_CONTEXT_H

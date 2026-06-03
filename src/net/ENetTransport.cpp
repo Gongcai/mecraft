@@ -18,7 +18,14 @@ const char* messageTypeName(MessageType type) {
     switch (type) {
     case MessageType::ClientHello: return "ClientHello";
     case MessageType::ClientViewConfig: return "ClientViewConfig";
+    case MessageType::ClientChatMessage: return "ClientChatMessage";
+    case MessageType::ClientCommandRequest: return "ClientCommandRequest";
     case MessageType::ServerHello: return "ServerHello";
+    case MessageType::ServerChatMessage: return "ServerChatMessage";
+    case MessageType::ServerSystemMessage: return "ServerSystemMessage";
+    case MessageType::CommandResult: return "CommandResult";
+    case MessageType::WorldStateSnapshot: return "WorldStateSnapshot";
+    case MessageType::PlayerModeUpdate: return "PlayerModeUpdate";
     case MessageType::ChunkData: return "ChunkData";
     case MessageType::ServerSnapshot: return "ServerSnapshot";
     case MessageType::ClientInput: return "ClientInput";
@@ -337,6 +344,55 @@ void ENetTransport::poll() {
                     }
                     break;
                 }
+                case MessageType::ClientChatMessage: {
+                    ClientChatMessage msg;
+                    if (PacketCodec::decodeClientChatMessage(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::ClientCommandRequest: {
+                    ClientCommandRequest msg;
+                    if (PacketCodec::decodeClientCommandRequest(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::ServerChatMessage: {
+                    ServerChatMessage msg;
+                    if (PacketCodec::decodeServerChatMessage(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::ServerSystemMessage: {
+                    ServerSystemMessage msg;
+                    if (PacketCodec::decodeServerSystemMessage(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::CommandResult: {
+                    CommandResultMessage msg;
+                    if (PacketCodec::decodeCommandResult(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::WorldStateSnapshot: {
+                    WorldStateSnapshotMessage msg;
+                    if (PacketCodec::decodeWorldStateSnapshot(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
+                case MessageType::PlayerModeUpdate: {
+                    PlayerModeUpdateMessage msg;
+                    if (PacketCodec::decodePlayerModeUpdate(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
                 default:
                     break;
                 }
@@ -526,9 +582,37 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
         typedPayload = PacketCodec::encodeClientBlockAction(
             std::any_cast<const ClientBlockAction&>(packet.inProcessPayload));
         break;
+    case MessageType::ClientChatMessage:
+        typedPayload = PacketCodec::encodeClientChatMessage(
+            std::any_cast<const ClientChatMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::ClientCommandRequest:
+        typedPayload = PacketCodec::encodeClientCommandRequest(
+            std::any_cast<const ClientCommandRequest&>(packet.inProcessPayload));
+        break;
     case MessageType::ChunkData:
         typedPayload = PacketCodec::encodeChunkData(
             std::any_cast<const ChunkDataMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::ServerChatMessage:
+        typedPayload = PacketCodec::encodeServerChatMessage(
+            std::any_cast<const ServerChatMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::ServerSystemMessage:
+        typedPayload = PacketCodec::encodeServerSystemMessage(
+            std::any_cast<const ServerSystemMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::CommandResult:
+        typedPayload = PacketCodec::encodeCommandResult(
+            std::any_cast<const CommandResultMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::WorldStateSnapshot:
+        typedPayload = PacketCodec::encodeWorldStateSnapshot(
+            std::any_cast<const WorldStateSnapshotMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::PlayerModeUpdate:
+        typedPayload = PacketCodec::encodePlayerModeUpdate(
+            std::any_cast<const PlayerModeUpdateMessage&>(packet.inProcessPayload));
         break;
     default:
         break;

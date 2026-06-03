@@ -7,6 +7,7 @@
 #include "../ecs/components/NetworkComponents.h"
 #include <entt/entt.hpp>
 #include <memory>
+#include <string>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
@@ -28,6 +29,8 @@ struct ConnectedClient {
     int viewDistance = 16;  // Client's render distance
     bool receivedHello = false;
     bool receivedViewConfig = false;
+    bool isAdmin = false;
+    net::NetworkGameplayMode gameplayMode = net::NetworkGameplayMode::Survival;
     net::EntityNetId playerNetId = 0;
     std::unordered_set<net::EntityNetId> spawnedPlayerNetIds;
     std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
@@ -71,8 +74,17 @@ public:
 private:
     void processClientMessages();
     void cleanupDisconnectedClients();
+    [[nodiscard]] ConnectedClient* findClient(net::ClientId id);
     void broadcastPlayerDespawn(net::EntityNetId playerNetId, net::ClientId exceptClientId = 0);
     void handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action);
+    void handleClientChatMessage(ConnectedClient& client, const net::ClientChatMessage& message);
+    void handleClientCommandRequest(ConnectedClient& client, const net::ClientCommandRequest& request);
+    void executeServerCommand(ConnectedClient& client, const net::ClientCommandRequest& request);
+    void sendCommandResult(ConnectedClient& client, uint32_t sequence, bool success, const std::string& message);
+    void sendSystemMessage(ConnectedClient& client, const std::string& message, net::ChatMessageKind kind);
+    void broadcastSystemMessage(const std::string& message, net::ChatMessageKind kind);
+    void broadcastWorldState();
+    void broadcastPlayerMode(net::ClientId clientId, net::NetworkGameplayMode mode);
     void tickWorldSystems();
     void sendNewChunksToClients();
     void sendSnapshotsToClients();

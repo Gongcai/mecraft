@@ -1,6 +1,7 @@
 #include "GameClient.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../world/chunk/Chunk.h"
+#include "../world/WeatherSystem.h"
 #include <cstdio>
 
 namespace client {
@@ -102,6 +103,31 @@ void GameClient::sendBlockAction(const net::ClientBlockAction& action) {
     m_transport->send(std::move(packet));
 }
 
+void GameClient::sendChatMessage(const std::string& message) {
+    if (!m_transport || message.empty()) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableChat;
+    packet.type = net::MessageType::ClientChatMessage;
+    net::ClientChatMessage chat;
+    chat.message = message;
+    packet.inProcessPayload = std::move(chat);
+    m_transport->send(std::move(packet));
+}
+
+void GameClient::sendCommandRequest(const std::string& command) {
+    if (!m_transport || command.empty()) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableChat;
+    packet.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest request;
+    request.sequence = ++m_commandSequence;
+    request.command = command;
+    packet.inProcessPayload = std::move(request);
+    m_transport->send(std::move(packet));
+}
+
 void GameClient::receiveMessages() {
     if (!m_transport) return;
 
@@ -187,6 +213,41 @@ void GameClient::receiveMessages() {
             // In Phase 6 (real networking), this will update the client-side inventory display.
             break;
         }
+        case net::MessageType::ServerChatMessage: {
+            if (packet.inProcessPayload.has_value() && m_chatMessageCallback) {
+                const auto& msg = std::any_cast<const net::ServerChatMessage&>(packet.inProcessPayload);
+                m_chatMessageCallback(msg);
+            }
+            break;
+        }
+        case net::MessageType::ServerSystemMessage: {
+            if (packet.inProcessPayload.has_value() && m_systemMessageCallback) {
+                const auto& msg = std::any_cast<const net::ServerSystemMessage&>(packet.inProcessPayload);
+                m_systemMessageCallback(msg);
+            }
+            break;
+        }
+        case net::MessageType::CommandResult: {
+            if (packet.inProcessPayload.has_value() && m_commandResultCallback) {
+                const auto& msg = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+                m_commandResultCallback(msg);
+            }
+            break;
+        }
+        case net::MessageType::WorldStateSnapshot: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::WorldStateSnapshotMessage&>(packet.inProcessPayload);
+                handleWorldStateSnapshot(msg);
+            }
+            break;
+        }
+        case net::MessageType::PlayerModeUpdate: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::PlayerModeUpdateMessage&>(packet.inProcessPayload);
+                handlePlayerModeUpdate(msg);
+            }
+            break;
+        }
         default:
             break;
         }
@@ -217,6 +278,37 @@ void GameClient::handleChunkData(const net::ChunkDataMessage& data) {
 void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
     m_lastSnapshot = snapshot;
     m_authPosition = snapshot.authoritativePosition;
+}
+
+void GameClient::handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& snapshot) {
+    if (DayNightSystem* dns = m_clientWorld.mutableDayNightSystem()) {
+        dns->setTimeOfDay(snapshot.timeOfDay);
+    }
+    if (WeatherSystem* weather = m_clientWorld.mutableWeatherSystem()) {
+        WeatherType type = WeatherType::Clear;
+        switch (snapshot.weather) {
+        case net::NetworkWeatherType::Rain:
+            type = WeatherType::Rain;
+            break;
+        case net::NetworkWeatherType::Storm:
+            type = WeatherType::Storm;
+            break;
+        case net::NetworkWeatherType::Snow:
+            type = WeatherType::Snow;
+            break;
+        case net::NetworkWeatherType::Clear:
+        default:
+            type = WeatherType::Clear;
+            break;
+        }
+        weather->setDebugWeatherPresetInstant(type);
+    }
+}
+
+void GameClient::handlePlayerModeUpdate(const net::PlayerModeUpdateMessage& update) {
+    if (update.clientId == m_clientId && m_localModeCallback) {
+        m_localModeCallback(update.mode);
+    }
 }
 
 } // namespace client

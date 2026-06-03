@@ -14,6 +14,7 @@
 #include "engine/input/InputContextManager.h"
 #include "../../ui/widgets/KeyboardInputBox.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../client/GameClient.h"
 
 /// Handles command input and execution using command-specific dependencies.
 class CommandState : public IGameState {
@@ -57,11 +58,13 @@ public:
         if (m_inputBox.consumeSubmit(&submitted)) {
             commitCommandToHistory(submitted);
             m_ctx.lastSubmittedCommand = submitted;
-            m_ctx.uiRenderer.appendCommandLine(submitted);
-            const bool handledTransition = executeCommand(submitted);
-            if (!handledTransition) {
-                m_ctx.fsm.popState();
+            if (!submitted.empty() && submitted[0] == '/') {
+                m_ctx.uiRenderer.appendCommandLine(submitted);
+                m_ctx.gameClient.sendCommandRequest(submitted);
+            } else if (!submitted.empty()) {
+                m_ctx.gameClient.sendChatMessage(submitted);
             }
+            m_ctx.fsm.popState();
             return;
         }
 

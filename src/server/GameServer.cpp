@@ -1,5 +1,6 @@
 #include "GameServer.h"
 #include "../world/World.h"
+#include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
 #include "../thread/ThreadPool.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
@@ -7,12 +8,88 @@
 #include "../ecs/components/NetworkComponents.h"
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <algorithm>
+#include <sstream>
+#include <string>
 
 namespace server {
 namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
+
+std::string playerName(const net::ClientId id) {
+    return "Player" + std::to_string(id);
+}
+
+std::string trimCommand(std::string command) {
+    while (!command.empty() && (command.front() == ' ' || command.front() == '\t')) {
+        command.erase(command.begin());
+    }
+    while (!command.empty() && (command.back() == ' ' || command.back() == '\t' ||
+                                command.back() == '\r' || command.back() == '\n')) {
+        command.pop_back();
+    }
+    return command;
+}
+
+net::NetworkWeatherType toNetworkWeather(const WeatherType type) {
+    switch (type) {
+    case WeatherType::Rain: return net::NetworkWeatherType::Rain;
+    case WeatherType::Storm: return net::NetworkWeatherType::Storm;
+    case WeatherType::Snow: return net::NetworkWeatherType::Snow;
+    case WeatherType::Clear:
+    default:
+        return net::NetworkWeatherType::Clear;
+    }
+}
+
+bool parseWeatherType(const std::string& value, WeatherType& out) {
+    if (value == "clear") {
+        out = WeatherType::Clear;
+        return true;
+    }
+    if (value == "rain") {
+        out = WeatherType::Rain;
+        return true;
+    }
+    if (value == "storm" || value == "thunder") {
+        out = WeatherType::Storm;
+        return true;
+    }
+    if (value == "snow") {
+        out = WeatherType::Snow;
+        return true;
+    }
+    return false;
+}
+
+bool parseGameplayMode(const std::string& value, net::NetworkGameplayMode& out) {
+    if (value == "creative" || value == "1" || value == "c") {
+        out = net::NetworkGameplayMode::Creative;
+        return true;
+    }
+    if (value == "survival" || value == "0" || value == "s") {
+        out = net::NetworkGameplayMode::Survival;
+        return true;
+    }
+    return false;
+}
+
+const char* modeName(const net::NetworkGameplayMode mode) {
+    return mode == net::NetworkGameplayMode::Creative ? "creative" : "survival";
+}
+
+const char* weatherName(const WeatherType type) {
+    switch (type) {
+    case WeatherType::Rain: return "rain";
+    case WeatherType::Storm: return "storm";
+    case WeatherType::Snow: return "snow";
+    case WeatherType::Clear:
+    default:
+        return "clear";
+    }
+}
 }
 
 GameServer::GameServer() = default;
@@ -59,8 +136,9 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     client.transport = std::move(transport);
     client.lastPosition = m_spawnPosition;
     client.playerNetId = kPlayerNetIdBase | id;
+    client.isAdmin = id == 1;
     m_clients.push_back(std::move(client));
-    std::printf("[Server] Accepted transport slot for client %u\n", id);
+    std::printf("[Server] Accepted transport slot for client %u admin=%d\n", id, id == 1 ? 1 : 0);
     std::fflush(stdout);
 }
 
@@ -139,6 +217,12 @@ void GameServer::processClientMessages() {
                 hello.spawnPosition = m_spawnPosition;
                 response.inProcessPayload = hello;
                 client.transport->send(std::move(response));
+                sendSystemMessage(client,
+                                  "Connected as " + playerName(client.id) +
+                                      (client.isAdmin ? " (admin)" : ""),
+                                  net::ChatMessageKind::Success);
+                broadcastWorldState();
+                broadcastPlayerMode(client.id, client.gameplayMode);
                 break;
             }
             case net::MessageType::ClientInput: {
@@ -171,6 +255,20 @@ void GameServer::processClientMessages() {
                 if (packet.inProcessPayload.has_value()) {
                     const auto& action = std::any_cast<const net::ClientBlockAction&>(packet.inProcessPayload);
                     handleClientBlockAction(client, action);
+                }
+                break;
+            }
+            case net::MessageType::ClientChatMessage: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& message = std::any_cast<const net::ClientChatMessage&>(packet.inProcessPayload);
+                    handleClientChatMessage(client, message);
+                }
+                break;
+            }
+            case net::MessageType::ClientCommandRequest: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& request = std::any_cast<const net::ClientCommandRequest&>(packet.inProcessPayload);
+                    handleClientCommandRequest(client, request);
                 }
                 break;
             }
@@ -247,6 +345,243 @@ void GameServer::cleanupDisconnectedClients() {
         client.lastVelocity = glm::vec3(0.0f);
         client.lastYaw = 0.0f;
         client.lastPitch = 0.0f;
+    }
+}
+
+ConnectedClient* GameServer::findClient(const net::ClientId id) {
+    for (auto& client : m_clients) {
+        if (client.id == id) {
+            return &client;
+        }
+    }
+    return nullptr;
+}
+
+void GameServer::handleClientChatMessage(ConnectedClient& client, const net::ClientChatMessage& message) {
+    std::string text = trimCommand(message.message);
+    if (text.empty()) {
+        return;
+    }
+    if (text.size() > 240) {
+        text.resize(240);
+    }
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableChat;
+    packet.type = net::MessageType::ServerChatMessage;
+    net::ServerChatMessage out;
+    out.senderId = client.id;
+    out.senderName = playerName(client.id);
+    out.message = text;
+    packet.inProcessPayload = std::move(out);
+
+    for (auto& receiver : m_clients) {
+        if (!receiver.receivedHello || !receiver.transport || !receiver.transport->hasActiveRemote()) {
+            continue;
+        }
+        net::Packet copy = packet;
+        receiver.transport->send(std::move(copy));
+    }
+}
+
+void GameServer::handleClientCommandRequest(ConnectedClient& client, const net::ClientCommandRequest& request) {
+    executeServerCommand(client, request);
+}
+
+void GameServer::executeServerCommand(ConnectedClient& client, const net::ClientCommandRequest& request) {
+    std::string command = trimCommand(request.command);
+    if (!command.empty() && command.front() == '/') {
+        command.erase(command.begin());
+    }
+    std::istringstream iss(command);
+    std::string primary;
+    iss >> primary;
+
+    if (primary.empty()) {
+        sendCommandResult(client, request.sequence, false, "Empty command.");
+        return;
+    }
+
+    if (primary == "help") {
+        sendCommandResult(client,
+                          request.sequence,
+                          true,
+                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>");
+        return;
+    }
+
+    if (primary == "list") {
+        std::string list = "Online players:";
+        for (const auto& online : m_clients) {
+            if (online.receivedHello && online.transport && online.transport->hasActiveRemote()) {
+                list += " " + playerName(online.id) + "(" + std::to_string(online.id) + ")";
+            }
+        }
+        sendCommandResult(client, request.sequence, true, list);
+        return;
+    }
+
+    if (!client.isAdmin) {
+        sendCommandResult(client, request.sequence, false, "You do not have permission to use this command.");
+        return;
+    }
+
+    if (primary == "gamemode") {
+        std::string modeStr;
+        iss >> modeStr;
+        net::NetworkGameplayMode mode = net::NetworkGameplayMode::Survival;
+        if (!parseGameplayMode(modeStr, mode)) {
+            sendCommandResult(client, request.sequence, false, "Usage: /gamemode <survival|creative> [clientId]");
+            return;
+        }
+
+        net::ClientId targetId = client.id;
+        std::string idStr;
+        iss >> idStr;
+        if (!idStr.empty()) {
+            char* endPtr = nullptr;
+            const unsigned long parsed = std::strtoul(idStr.c_str(), &endPtr, 10);
+            if (endPtr == idStr.c_str() || *endPtr != '\0') {
+                sendCommandResult(client, request.sequence, false, "Invalid client id.");
+                return;
+            }
+            targetId = static_cast<net::ClientId>(parsed);
+        }
+
+        ConnectedClient* target = findClient(targetId);
+        if (!target || !target->receivedHello) {
+            sendCommandResult(client, request.sequence, false, "Target client is not online.");
+            return;
+        }
+
+        target->gameplayMode = mode;
+        broadcastPlayerMode(target->id, mode);
+        const std::string message = "Set " + playerName(target->id) + " to " + modeName(mode) + " mode.";
+        sendCommandResult(client, request.sequence, true, message);
+        broadcastSystemMessage(message, net::ChatMessageKind::Success);
+        return;
+    }
+
+    if (primary == "time") {
+        std::string secondary;
+        iss >> secondary;
+        if (secondary != "set") {
+            sendCommandResult(client, request.sequence, false, "Usage: /time set <0..1200>");
+            return;
+        }
+        std::string valueStr;
+        iss >> valueStr;
+        char* endPtr = nullptr;
+        const float value = std::strtof(valueStr.c_str(), &endPtr);
+        if (valueStr.empty() || endPtr == valueStr.c_str() || *endPtr != '\0' || value < 0.0f || value > 1200.0f) {
+            sendCommandResult(client, request.sequence, false, "Usage: /time set <0..1200>");
+            return;
+        }
+
+        m_world.getDayNightSystem().setTimeOfDay(value);
+        broadcastWorldState();
+        const std::string message = "Time set to " + std::to_string(static_cast<int>(value)) + ".";
+        sendCommandResult(client, request.sequence, true, message);
+        broadcastSystemMessage(message, net::ChatMessageKind::Success);
+        return;
+    }
+
+    if (primary == "weather") {
+        std::string value;
+        iss >> value;
+        WeatherType weather = WeatherType::Clear;
+        if (!parseWeatherType(value, weather)) {
+            sendCommandResult(client, request.sequence, false, "Usage: /weather <clear|rain|storm|snow>");
+            return;
+        }
+
+        m_world.getWeatherSystem().setDebugWeatherPresetInstant(weather);
+        broadcastWorldState();
+        const std::string message = std::string("Weather set to ") + weatherName(weather) + ".";
+        sendCommandResult(client, request.sequence, true, message);
+        broadcastSystemMessage(message, net::ChatMessageKind::Success);
+        return;
+    }
+
+    sendCommandResult(client, request.sequence, false, "Unknown command: " + primary);
+}
+
+void GameServer::sendCommandResult(ConnectedClient& client,
+                                   const uint32_t sequence,
+                                   const bool success,
+                                   const std::string& message) {
+    if (!client.transport || !client.transport->hasActiveRemote()) {
+        return;
+    }
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableChat;
+    packet.type = net::MessageType::CommandResult;
+    net::CommandResultMessage result;
+    result.sequence = sequence;
+    result.success = success;
+    result.message = message;
+    packet.inProcessPayload = std::move(result);
+    client.transport->send(std::move(packet));
+}
+
+void GameServer::sendSystemMessage(ConnectedClient& client,
+                                   const std::string& message,
+                                   const net::ChatMessageKind kind) {
+    if (!client.transport || !client.transport->hasActiveRemote()) {
+        return;
+    }
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableChat;
+    packet.type = net::MessageType::ServerSystemMessage;
+    net::ServerSystemMessage system;
+    system.kind = kind;
+    system.message = message;
+    packet.inProcessPayload = std::move(system);
+    client.transport->send(std::move(packet));
+}
+
+void GameServer::broadcastSystemMessage(const std::string& message, const net::ChatMessageKind kind) {
+    for (auto& client : m_clients) {
+        if (!client.receivedHello) {
+            continue;
+        }
+        sendSystemMessage(client, message, kind);
+    }
+}
+
+void GameServer::broadcastWorldState() {
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::WorldStateSnapshot;
+    net::WorldStateSnapshotMessage snapshot;
+    snapshot.timeOfDay = m_world.getDayNightSystem().getTimeOfDay();
+    snapshot.weather = toNetworkWeather(m_world.getWeatherSystem().getTargetState().type);
+    packet.inProcessPayload = snapshot;
+
+    for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
+        net::Packet copy = packet;
+        client.transport->send(std::move(copy));
+    }
+}
+
+void GameServer::broadcastPlayerMode(const net::ClientId clientId, const net::NetworkGameplayMode mode) {
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::PlayerModeUpdate;
+    net::PlayerModeUpdateMessage update;
+    update.clientId = clientId;
+    update.mode = mode;
+    packet.inProcessPayload = update;
+
+    for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
+        net::Packet copy = packet;
+        client.transport->send(std::move(copy));
     }
 }
 

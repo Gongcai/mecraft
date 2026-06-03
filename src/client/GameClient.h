@@ -6,7 +6,9 @@
 #include "ClientWorld.h"
 #include "ClientEntityStore.h"
 #include <entt/entt.hpp>
+#include <functional>
 #include <memory>
+#include <string>
 
 class ResourceMgr;
 namespace ecs { class GameplayRegistry; }
@@ -45,9 +47,21 @@ public:
 
     /// Send an authoritative block action request to the server.
     void sendBlockAction(const net::ClientBlockAction& action);
+    void sendChatMessage(const std::string& message);
+    void sendCommandRequest(const std::string& command);
 
     /// Process all pending messages from the server.
     void receiveMessages();
+
+    using SystemMessageCallback = std::function<void(const net::ServerSystemMessage&)>;
+    using ChatMessageCallback = std::function<void(const net::ServerChatMessage&)>;
+    using CommandResultCallback = std::function<void(const net::CommandResultMessage&)>;
+    using LocalModeCallback = std::function<void(net::NetworkGameplayMode)>;
+
+    void setSystemMessageCallback(SystemMessageCallback callback) { m_systemMessageCallback = std::move(callback); }
+    void setChatMessageCallback(ChatMessageCallback callback) { m_chatMessageCallback = std::move(callback); }
+    void setCommandResultCallback(CommandResultCallback callback) { m_commandResultCallback = std::move(callback); }
+    void setLocalModeCallback(LocalModeCallback callback) { m_localModeCallback = std::move(callback); }
 
     /// Access the client-side world.
     [[nodiscard]] ClientWorld& clientWorld() { return m_clientWorld; }
@@ -73,6 +87,8 @@ public:
 private:
     void handleChunkData(const net::ChunkDataMessage& data);
     void handleServerSnapshot(const net::ServerSnapshot& snapshot);
+    void handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& snapshot);
+    void handlePlayerModeUpdate(const net::PlayerModeUpdateMessage& update);
 
     std::unique_ptr<net::ITransportEndpoint> m_transport;
     ClientWorld m_clientWorld;
@@ -81,10 +97,15 @@ private:
     glm::vec3 m_authPosition = glm::vec3(0.0f);
     net::ClientId m_clientId = 0;
     uint32_t m_inputSequence = 0;
+    uint32_t m_commandSequence = 0;
     bool m_spawnChunksReady = false;
     bool m_hasServerHello = false;
     int m_chunksReceived = 0;
     static constexpr int kSpawnChunksThreshold = 25;  // 5x5 area
+    SystemMessageCallback m_systemMessageCallback;
+    ChatMessageCallback m_chatMessageCallback;
+    CommandResultCallback m_commandResultCallback;
+    LocalModeCallback m_localModeCallback;
 };
 
 } // namespace client

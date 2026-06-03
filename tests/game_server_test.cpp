@@ -4,6 +4,8 @@
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
 #include "world/World.h"
+#include "world/DayNightSystem.h"
+#include "world/WeatherSystem.h"
 #include "world/block/Block.h"
 #include "renderer/mesh/ChunkMesher.h"
 #include "thread/ThreadPool.h"
@@ -201,6 +203,125 @@ static void testClientBlockActionRoundTrip() {
     assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
     assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
     std::printf("[PASS] testClientBlockActionRoundTrip\n");
+}
+
+static void testChatBroadcastRoundTrip() {
+    ServerHarness harness;
+    client::GameClient clientA;
+    client::GameClient clientB;
+
+    auto [clientATransport, serverATransport] = net::InProcessTransport::createPair();
+    auto [clientBTransport, serverBTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverATransport), 1);
+    harness.server.acceptClient(std::move(serverBTransport), 2);
+    clientA.connect(std::move(clientATransport));
+    clientB.connect(std::move(clientBTransport));
+
+    harness.server.tick(1.0f / 20.0f);
+    clientA.receiveMessages();
+    clientB.receiveMessages();
+
+    bool sawChat = false;
+    clientB.setChatMessageCallback([&](const net::ServerChatMessage& msg) {
+        sawChat = msg.senderId == 1 && msg.senderName == "Player1" && msg.message == "hello world";
+    });
+
+    clientA.sendChatMessage("hello world");
+    harness.server.tick(1.0f / 20.0f);
+    clientB.receiveMessages();
+
+    assert(sawChat);
+    std::printf("[PASS] testChatBroadcastRoundTrip\n");
+}
+
+static void testAdminCommandUpdatesWorldState() {
+    ServerHarness harness;
+    client::GameClient client;
+
+    DayNightSystem dayNight;
+    WeatherSystem weather;
+
+    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverTransport), 1);
+    client.connect(std::move(clientTransport));
+    client.clientWorld().setDayNightSystem(&dayNight);
+    client.clientWorld().setWeatherSystem(&weather);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+
+    bool sawTimeResult = false;
+    client.setCommandResultCallback([&](const net::CommandResultMessage& result) {
+        if (result.success && result.message.find("Time set to 600") != std::string::npos) {
+            sawTimeResult = true;
+        }
+    });
+
+    client.sendCommandRequest("/time set 600");
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+
+    assert(sawTimeResult);
+    assert(static_cast<int>(harness.server.world().getDayNightSystem().getTimeOfDay()) == 600);
+    assert(static_cast<int>(dayNight.getTimeOfDay()) == 600);
+
+    client.sendCommandRequest("/weather storm");
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+    assert(harness.server.world().getWeatherSystem().getTargetState().type == WeatherType::Storm);
+    assert(weather.getTargetState().type == WeatherType::Storm);
+    std::printf("[PASS] testAdminCommandUpdatesWorldState\n");
+}
+
+static void testNonAdminCommandDenied() {
+    ServerHarness harness;
+    client::GameClient clientA;
+    client::GameClient clientB;
+
+    auto [clientATransport, serverATransport] = net::InProcessTransport::createPair();
+    auto [clientBTransport, serverBTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverATransport), 1);
+    harness.server.acceptClient(std::move(serverBTransport), 2);
+    clientA.connect(std::move(clientATransport));
+    clientB.connect(std::move(clientBTransport));
+
+    harness.server.tick(1.0f / 20.0f);
+    clientA.receiveMessages();
+    clientB.receiveMessages();
+
+    bool denied = false;
+    clientB.setCommandResultCallback([&](const net::CommandResultMessage& result) {
+        denied = !result.success && result.message.find("permission") != std::string::npos;
+    });
+
+    clientB.sendCommandRequest("/weather rain");
+    harness.server.tick(1.0f / 20.0f);
+    clientB.receiveMessages();
+
+    assert(denied);
+    assert(harness.server.world().getWeatherSystem().getTargetState().type == WeatherType::Clear);
+    std::printf("[PASS] testNonAdminCommandDenied\n");
+}
+
+static void testChatCommandCodecRoundTrip() {
+    net::ClientCommandRequest request;
+    request.sequence = 42;
+    request.command = "/weather rain";
+    const auto encodedRequest = net::PacketCodec::encodeClientCommandRequest(request);
+    net::ClientCommandRequest decodedRequest;
+    assert(net::PacketCodec::decodeClientCommandRequest(encodedRequest.data(), encodedRequest.size(), decodedRequest));
+    assert(decodedRequest.sequence == request.sequence);
+    assert(decodedRequest.command == request.command);
+
+    net::ServerSystemMessage system;
+    system.kind = net::ChatMessageKind::Success;
+    system.message = "done";
+    const auto encodedSystem = net::PacketCodec::encodeServerSystemMessage(system);
+    net::ServerSystemMessage decodedSystem;
+    assert(net::PacketCodec::decodeServerSystemMessage(encodedSystem.data(), encodedSystem.size(), decodedSystem));
+    assert(decodedSystem.kind == system.kind);
+    assert(decodedSystem.message == system.message);
+    std::printf("[PASS] testChatCommandCodecRoundTrip\n");
 }
 
 static void testServerTickBreaksUnsupportedPlant() {
@@ -435,6 +556,8 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
 
     assert(sawTorchBlockUpdate);
     assert(sawTorchLightPatch);
+    server.world().setThreadPool(nullptr);
+    threadPool.shutdown();
     std::printf("[PASS] testServerEmitsLightPatchAfterTorchPlacement\n");
 }
 
@@ -578,6 +701,10 @@ int main() {
     testChunkStreamingToClient();
     testInputRoundTrip();
     testClientBlockActionRoundTrip();
+    testChatBroadcastRoundTrip();
+    testAdminCommandUpdatesWorldState();
+    testNonAdminCommandDenied();
+    testChatCommandCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
     testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();

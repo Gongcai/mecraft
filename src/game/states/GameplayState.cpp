@@ -46,7 +46,9 @@ GameplayState::GameplayState(StateDependencies deps,
               deps.lastSubmittedCommand,
               deps.world,
               deps.ecsRegistry,
-              deps.localeManager
+              deps.localeManager,
+              deps.gameClient,
+              deps.isMultiplayer
           },
           [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<CreativeModeState>(deps); },
           [deps]() -> std::unique_ptr<IGameState> { return std::make_unique<GameplayState>(deps); },

@@ -15,7 +15,9 @@
 #include "../presentation/GameplayPresentationBuilder.h"
 #include "../states/GameStateMachine.h"
 #include "../states/GameplayState.h"
+#include "../modes/CreativeModeState.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../ui/widgets/ConsoleDisplayBox.h"
 #include "../../Paths.h"
 #include "../../server/GameServer.h"
 #include "../../client/GameClient.h"
@@ -300,6 +302,24 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
         m_server->setEcsRegistry(&reg.registry());
     }
     m_client->initEntityStore(reg, &deps.resourceMgr);
+    m_client->setChatMessageCallback([&uiRenderer = deps.uiRenderer](const net::ServerChatMessage& message) {
+        uiRenderer.appendOutputLine("<" + message.senderName + "> " + message.message,
+                                    ConsoleDisplayBox::MessageType::Normal);
+    });
+    m_client->setSystemMessageCallback([&uiRenderer = deps.uiRenderer](const net::ServerSystemMessage& message) {
+        ConsoleDisplayBox::MessageType type = ConsoleDisplayBox::MessageType::Normal;
+        if (message.kind == net::ChatMessageKind::Warning) {
+            type = ConsoleDisplayBox::MessageType::Warning;
+        } else if (message.kind == net::ChatMessageKind::Success) {
+            type = ConsoleDisplayBox::MessageType::Success;
+        }
+        uiRenderer.appendOutputLine(message.message, type);
+    });
+    m_client->setCommandResultCallback([&uiRenderer = deps.uiRenderer](const net::CommandResultMessage& result) {
+        uiRenderer.appendOutputLine(result.message,
+                                    result.success ? ConsoleDisplayBox::MessageType::Success
+                                                   : ConsoleDisplayBox::MessageType::Warning);
+    });
     m_dropSystem->bindRegistry(reg);
     m_dropSystem->bindServices(svc);
     m_particleSystem->bindRegistry(reg);
@@ -329,6 +349,35 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
 void GameSession::initStateMachine(const GameSessionDependencies& deps) {
     m_stateMachine = std::make_unique<GameStateMachine>();
     m_stateMachine->pushState(createInitialGameplayState(deps));
+    m_client->setLocalModeCallback([this, deps](const net::NetworkGameplayMode mode) {
+        if (!m_stateMachine) {
+            return;
+        }
+        if (mode == net::NetworkGameplayMode::Creative) {
+            StateDependencies stateDeps{
+                *m_stateMachine,
+                getPlayerInventory(),
+                deps.contextManager,
+                deps.input,
+                deps.uiRenderer,
+                m_lastSubmittedCommand,
+                physicsSystem(),
+                world(),
+                deps.audioEngine,
+                particleSystem(),
+                dropSystem(),
+                gameplayScene().registry(),
+                deps.localeManager,
+                client(),
+                m_isMultiplayer
+            };
+            m_stateMachine->changeState(std::make_unique<CreativeModeState>(stateDeps));
+            deps.uiRenderer.appendSuccessLine("Switched to creative mode.");
+            return;
+        }
+        m_stateMachine->changeState(createInitialGameplayState(deps));
+        deps.uiRenderer.appendSuccessLine("Switched to survival mode.");
+    });
 }
 
 std::unique_ptr<IGameState> GameSession::createInitialGameplayState(const GameSessionDependencies& deps) {
@@ -345,7 +394,9 @@ std::unique_ptr<IGameState> GameSession::createInitialGameplayState(const GameSe
         particleSystem(),
         dropSystem(),
         gameplayScene().registry(),
-        deps.localeManager
+        deps.localeManager,
+        client(),
+        m_isMultiplayer
     };
     return std::make_unique<GameplayState>(stateDeps);
 }

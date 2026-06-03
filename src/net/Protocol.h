@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 #include <any>
 #include <glm/glm.hpp>
@@ -40,6 +41,8 @@ enum class MessageType : uint8_t {
     ClientReady,
     ClientViewConfig,
     ClientBlockAction,
+    ClientChatMessage,
+    ClientCommandRequest,
 
     // Server -> Client
     ServerHello,
@@ -51,6 +54,11 @@ enum class MessageType : uint8_t {
     EntityDespawn,
     EntitySnapshot,
     InventorySnapshot,
+    ServerChatMessage,
+    ServerSystemMessage,
+    CommandResult,
+    WorldStateSnapshot,
+    PlayerModeUpdate,
 
     // Bidirectional
     KeepAlive,
@@ -112,6 +120,17 @@ struct ClientBlockAction {
     glm::ivec3 hitNormal = glm::ivec3(0);
     glm::vec3 playerPosition = glm::vec3(0.0f);
     uint16_t blockState = 0;
+};
+
+/// Chat text submitted by a client. Slash commands use ClientCommandRequest.
+struct ClientChatMessage {
+    std::string message;
+};
+
+/// Command submitted by a client. Includes the leading slash for display/history.
+struct ClientCommandRequest {
+    uint32_t sequence = 0;
+    std::string command;
 };
 
 // ===========================================================================
@@ -212,6 +231,51 @@ struct InventorySlotData {
 struct InventorySnapshotMessage {
     uint8_t selectedHotbarSlot = 0;
     std::vector<InventorySlotData> slots;  // 36 slots (hotbar + main inventory)
+};
+
+enum class ChatMessageKind : uint8_t {
+    Normal = 0,
+    Warning = 1,
+    Success = 2,
+};
+
+struct ServerChatMessage {
+    ClientId senderId = 0;
+    std::string senderName;
+    std::string message;
+};
+
+struct ServerSystemMessage {
+    ChatMessageKind kind = ChatMessageKind::Normal;
+    std::string message;
+};
+
+struct CommandResultMessage {
+    uint32_t sequence = 0;
+    bool success = false;
+    std::string message;
+};
+
+enum class NetworkGameplayMode : uint8_t {
+    Survival = 0,
+    Creative = 1,
+};
+
+struct PlayerModeUpdateMessage {
+    ClientId clientId = 0;
+    NetworkGameplayMode mode = NetworkGameplayMode::Survival;
+};
+
+enum class NetworkWeatherType : uint8_t {
+    Clear = 0,
+    Rain = 1,
+    Storm = 2,
+    Snow = 3,
+};
+
+struct WorldStateSnapshotMessage {
+    float timeOfDay = 0.0f;
+    NetworkWeatherType weather = NetworkWeatherType::Clear;
 };
 
 } // namespace net

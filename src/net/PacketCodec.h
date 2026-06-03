@@ -194,6 +194,19 @@ public:
         return buf;
     }
 
+    static std::vector<uint8_t> encodeClientChatMessage(const ClientChatMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushString(buf, msg.message);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeClientCommandRequest(const ClientCommandRequest& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.sequence);
+        pushString(buf, msg.command);
+        return buf;
+    }
+
     /// Encode a BlockUpdateBatch message into payload bytes.
     static std::vector<uint8_t> encodeBlockUpdateBatch(const BlockUpdateBatchMessage& msg) {
         std::vector<uint8_t> buf;
@@ -258,6 +271,43 @@ public:
             pushFloat(buf, e.yaw);
             pushFloat(buf, e.pitch);
         }
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeServerChatMessage(const ServerChatMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.senderId);
+        pushString(buf, msg.senderName);
+        pushString(buf, msg.message);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeServerSystemMessage(const ServerSystemMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU8(buf, static_cast<uint8_t>(msg.kind));
+        pushString(buf, msg.message);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeCommandResult(const CommandResultMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.sequence);
+        pushU8(buf, msg.success ? 1 : 0);
+        pushString(buf, msg.message);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeWorldStateSnapshot(const WorldStateSnapshotMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushFloat(buf, msg.timeOfDay);
+        pushU8(buf, static_cast<uint8_t>(msg.weather));
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodePlayerModeUpdate(const PlayerModeUpdateMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.clientId);
+        pushU8(buf, static_cast<uint8_t>(msg.mode));
         return buf;
     }
 
@@ -463,6 +513,18 @@ public:
         return true;
     }
 
+    static bool decodeClientChatMessage(const uint8_t* data, size_t size, ClientChatMessage& out) {
+        size_t offset = 0;
+        return readString(data, size, offset, out.message);
+    }
+
+    static bool decodeClientCommandRequest(const uint8_t* data, size_t size, ClientCommandRequest& out) {
+        if (size < 4) return false;
+        size_t offset = 0;
+        out.sequence = readU32(data, offset);
+        return readString(data, size, offset, out.command);
+    }
+
     static bool decodeBlockUpdateBatch(const uint8_t* data, size_t size, BlockUpdateBatchMessage& out) {
         if (size < 4) return false;
         size_t offset = 0;
@@ -555,6 +617,45 @@ public:
         return true;
     }
 
+    static bool decodeServerChatMessage(const uint8_t* data, size_t size, ServerChatMessage& out) {
+        if (size < 4) return false;
+        size_t offset = 0;
+        out.senderId = readU32(data, offset);
+        return readString(data, size, offset, out.senderName) &&
+               readString(data, size, offset, out.message);
+    }
+
+    static bool decodeServerSystemMessage(const uint8_t* data, size_t size, ServerSystemMessage& out) {
+        if (size < 1) return false;
+        size_t offset = 0;
+        out.kind = static_cast<ChatMessageKind>(readU8(data, offset));
+        return readString(data, size, offset, out.message);
+    }
+
+    static bool decodeCommandResult(const uint8_t* data, size_t size, CommandResultMessage& out) {
+        if (size < 5) return false;
+        size_t offset = 0;
+        out.sequence = readU32(data, offset);
+        out.success = readU8(data, offset) != 0;
+        return readString(data, size, offset, out.message);
+    }
+
+    static bool decodeWorldStateSnapshot(const uint8_t* data, size_t size, WorldStateSnapshotMessage& out) {
+        if (size < 5) return false;
+        size_t offset = 0;
+        out.timeOfDay = readFloat(data, offset);
+        out.weather = static_cast<NetworkWeatherType>(readU8(data, offset));
+        return true;
+    }
+
+    static bool decodePlayerModeUpdate(const uint8_t* data, size_t size, PlayerModeUpdateMessage& out) {
+        if (size < 5) return false;
+        size_t offset = 0;
+        out.clientId = readU32(data, offset);
+        out.mode = static_cast<NetworkGameplayMode>(readU8(data, offset));
+        return true;
+    }
+
 private:
     static constexpr size_t kHeaderSize = 6;  // channel(1) + type(1) + payload_size(4)
     static constexpr uint8_t kChunkEncodingRleSubChunks = 1;
@@ -644,6 +745,10 @@ private:
         std::memcpy(&raw, &v, sizeof(float));
         pushU32(buf, raw);
     }
+    static void pushString(std::vector<uint8_t>& buf, const std::string& value) {
+        pushU32(buf, static_cast<uint32_t>(value.size()));
+        buf.insert(buf.end(), value.begin(), value.end());
+    }
 
     static uint8_t readU8(const uint8_t* data, size_t& offset) {
         return data[offset++];
@@ -670,6 +775,14 @@ private:
         float v;
         std::memcpy(&v, &raw, sizeof(float));
         return v;
+    }
+    static bool readString(const uint8_t* data, size_t size, size_t& offset, std::string& out) {
+        if (offset + 4 > size) return false;
+        const uint32_t length = readU32(data, offset);
+        if (offset + length > size) return false;
+        out.assign(reinterpret_cast<const char*>(data + offset), length);
+        offset += length;
+        return true;
     }
 };
 
