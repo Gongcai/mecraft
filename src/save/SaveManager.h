@@ -8,7 +8,7 @@
 // Lifecycle:
 //   1. Constructed with a save root path.
 //   2. setThreadPool() called before any async operations.
-//   3. loadLevelMeta() called on init to restore seed.
+//   3. loadLevelMeta() called on init to restore seed, time, weather.
 //   4. tryLoadChunk() called during chunk load (sync or async).
 //   5. submitSaveChunk() called when dirty chunks are unloaded or on flush.
 //   6. flushPendingSaves() called during shutdown to ensure all data is written.
@@ -22,11 +22,29 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <string>
 
 class Chunk;
 class ThreadPool;
 
 namespace save {
+
+struct PlayerData;
+
+/// World-level metadata persisted in level.json.
+struct LevelMeta {
+    uint32_t seed = 0;
+    float spawnX = 0.0f;
+    float spawnY = 68.0f;
+    float spawnZ = 0.0f;
+    float timeOfDay = 300.0f;
+    double totalGameTime = 300.0;
+    int elapsedDays = 0;
+    std::string weatherType = "clear";
+    float weatherWetness = 0.0f;
+    float weatherStorm = 0.0f;
+    float weatherAerialReduction = 0.55f;
+};
 
 class SaveManager {
 public:
@@ -40,11 +58,11 @@ public:
     // --- Level metadata ---
 
     /// Load level.json. Returns true if file exists and was read successfully.
-    /// On success, outSeed is populated. On failure (new world), outSeed is unchanged.
-    bool loadLevelMeta(uint32_t& outSeed);
+    /// On success, outMeta is populated. On failure (new world), outMeta is unchanged.
+    bool loadLevelMeta(LevelMeta& outMeta);
 
-    /// Save level.json with the given seed. Uses atomic write (tmp + rename).
-    void saveLevelMeta(uint32_t seed);
+    /// Save level.json with the given metadata. Uses atomic write (tmp + rename).
+    void saveLevelMeta(const LevelMeta& meta);
 
     // --- Chunk I/O ---
 
@@ -66,6 +84,12 @@ public:
 
     /// Check if a chunk file exists on disk.
     [[nodiscard]] bool chunkFileExists(int cx, int cz) const;
+
+    /// Save local player data to disk.
+    void saveLocalPlayer(const PlayerData& data);
+
+    /// Load local player data from disk. Returns false if file doesn't exist.
+    bool loadLocalPlayer(PlayerData& out);
 
     /// Access the paths helper.
     [[nodiscard]] const SavePaths& paths() const { return m_paths; }

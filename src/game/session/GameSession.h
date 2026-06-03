@@ -5,6 +5,7 @@
 #include "../../world/IWorldView.h"
 #include "../../world/DayNightSystem.h"
 #include "../../world/WeatherSystem.h"
+#include "../../save/PlayerSerializer.h"
 #include <memory>
 #include <string>
 
@@ -60,6 +61,12 @@ public:
 
     /// Shutdown and release all session resources.
     void shutdown();
+
+    /// Save local player state to disk (called during shutdown).
+    void saveLocalPlayer();
+
+    /// Load saved local player state and apply to ECS entity (called after initECS).
+    void loadLocalPlayer();
 
     // Accessors (valid only after init())
     // world() returns the server's authoritative World for ECS/physics use.

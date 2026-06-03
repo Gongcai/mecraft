@@ -5,6 +5,7 @@
 #include "../net/Protocol.h"
 #include "../world/World.h"
 #include "../ecs/components/NetworkComponents.h"
+#include "../save/SaveManager.h"
 #include <entt/entt.hpp>
 #include <filesystem>
 #include <memory>
@@ -12,8 +13,6 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
-
-namespace save { class SaveManager; }
 
 class ThreadPool;
 
@@ -73,6 +72,9 @@ public:
     [[nodiscard]] World& world() { return m_world; }
     [[nodiscard]] const World& world() const { return m_world; }
 
+    /// Access the save manager (null if saving is disabled).
+    [[nodiscard]] save::SaveManager* saveManager() { return m_saveManager.get(); }
+
     /// Check if spawn chunks are ready.
     [[nodiscard]] bool areSpawnChunksReady() const { return m_spawnChunksReady; }
 
@@ -122,6 +124,26 @@ private:
     bool m_spawnChunksReady = false;
     bool m_shutdownDone = false;
     glm::vec3 m_spawnPosition = glm::vec3(0.0f);
+
+    // Loaded metadata for deferred restore
+    save::LevelMeta m_loadedMeta;
+    bool m_hasLoadedMeta = false;
+
+    // Weather type string conversion helpers
+    static WeatherType weatherTypeFromString(const std::string& str) {
+        if (str == "rain") return WeatherType::Rain;
+        if (str == "storm") return WeatherType::Storm;
+        if (str == "snow") return WeatherType::Snow;
+        return WeatherType::Clear;
+    }
+    static const char* weatherTypeToString(WeatherType type) {
+        switch (type) {
+            case WeatherType::Rain: return "rain";
+            case WeatherType::Storm: return "storm";
+            case WeatherType::Snow: return "snow";
+            default: return "clear";
+        }
+    }
 };
 
 } // namespace server

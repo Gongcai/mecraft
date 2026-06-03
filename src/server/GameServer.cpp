@@ -143,12 +143,17 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
         m_saveManager->paths().ensureDirectories();
 
         // Try to load existing level metadata
-        uint32_t loadedSeed = seed;
-        if (m_saveManager->loadLevelMeta(loadedSeed)) {
-            seed = loadedSeed;
+        save::LevelMeta meta;
+        meta.seed = seed;
+        if (m_saveManager->loadLevelMeta(meta)) {
+            seed = meta.seed;
+            // Restore time and weather after world init
+            m_loadedMeta = meta;
+            m_hasLoadedMeta = true;
             std::printf("[Server] Loaded existing world (seed=%u)\n", seed);
         } else {
-            m_saveManager->saveLevelMeta(seed);
+            meta.seed = seed;
+            m_saveManager->saveLevelMeta(meta);
             std::printf("[Server] Created new world (seed=%u)\n", seed);
         }
 
@@ -157,6 +162,14 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
 
     // Delegate to the base init for world setup
     init(seed, threadPool, renderDistance);
+
+    // Restore time and weather from loaded metadata
+    if (m_hasLoadedMeta) {
+        m_world.getDayNightSystem().setTimeOfDay(m_loadedMeta.timeOfDay);
+        m_world.getWeatherSystem().setDebugWeatherPresetInstant(
+            weatherTypeFromString(m_loadedMeta.weatherType));
+        m_spawnPosition = glm::vec3(m_loadedMeta.spawnX, m_loadedMeta.spawnY, m_loadedMeta.spawnZ);
+    }
 }
 
 void GameServer::shutdown() {
@@ -166,9 +179,24 @@ void GameServer::shutdown() {
     // Flush all pending chunk saves
     m_world.flushSaves();
 
-    // Save level metadata
+    // Save level metadata with current state
     if (m_saveManager) {
-        m_saveManager->saveLevelMeta(m_world.getSeed());
+        save::LevelMeta meta;
+        meta.seed = m_world.getSeed();
+        meta.spawnX = m_spawnPosition.x;
+        meta.spawnY = m_spawnPosition.y;
+        meta.spawnZ = m_spawnPosition.z;
+        meta.timeOfDay = m_world.getDayNightSystem().getTimeOfDay();
+        meta.totalGameTime = m_world.getDayNightSystem().getTotalGameTime();
+        meta.elapsedDays = m_world.getDayNightSystem().getElapsedDays();
+
+        const auto& weather = m_world.getWeatherSystem().getTargetState();
+        meta.weatherType = weatherTypeToString(weather.type);
+        meta.weatherWetness = weather.wetness;
+        meta.weatherStorm = weather.storm;
+        meta.weatherAerialReduction = weather.aerialReduction;
+
+        m_saveManager->saveLevelMeta(meta);
     }
 }
 

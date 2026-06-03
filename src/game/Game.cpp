@@ -35,6 +35,7 @@ void Game::init() {
     m_session.initWorld(m_config.seed);
     m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer);
     m_session.initECS(m_deps);
+    m_session.loadLocalPlayer();  // Restore saved player state after ECS init
     m_session.initStateMachine(m_deps);
 
     // G3: Initialize audio sync and HUD presenter

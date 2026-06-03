@@ -36,6 +36,9 @@ public:
     /// Players directory: <root>/players/
     [[nodiscard]] std::filesystem::path playersDir() const;
 
+    /// Local player file: <root>/players/local.json
+    [[nodiscard]] std::filesystem::path localPlayerPath() const;
+
     /// Ensure the directory structure exists (creates dirs if needed).
     void ensureDirectories() const;
 

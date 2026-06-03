@@ -1,4 +1,5 @@
 #include "SaveManager.h"
+#include "PlayerSerializer.h"
 #include "../thread/ThreadPool.h"
 #include "../world/chunk/Chunk.h"
 
@@ -20,7 +21,7 @@ SaveManager::~SaveManager() {
 // Level metadata
 // ---------------------------------------------------------------------------
 
-bool SaveManager::loadLevelMeta(uint32_t& outSeed) {
+bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
     const auto path = m_paths.levelPath();
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
@@ -43,7 +44,30 @@ bool SaveManager::loadLevelMeta(uint32_t& outSeed) {
             return false;
         }
 
-        outSeed = j["seed"].get<uint32_t>();
+        outMeta.seed = j["seed"].get<uint32_t>();
+
+        // Spawn position (optional, defaults preserved)
+        if (j.contains("spawn") && j["spawn"].is_array() && j["spawn"].size() >= 3) {
+            outMeta.spawnX = j["spawn"][0].get<float>();
+            outMeta.spawnY = j["spawn"][1].get<float>();
+            outMeta.spawnZ = j["spawn"][2].get<float>();
+        }
+
+        // Time (optional)
+        if (j.contains("time") && j["time"].is_object()) {
+            outMeta.timeOfDay = j["time"].value("timeOfDay", 300.0f);
+            outMeta.totalGameTime = j["time"].value("totalGameTime", 300.0);
+            outMeta.elapsedDays = j["time"].value("elapsedDays", 0);
+        }
+
+        // Weather (optional)
+        if (j.contains("weather") && j["weather"].is_object()) {
+            outMeta.weatherType = j["weather"].value("type", "clear");
+            outMeta.weatherWetness = j["weather"].value("wetness", 0.0f);
+            outMeta.weatherStorm = j["weather"].value("storm", 0.0f);
+            outMeta.weatherAerialReduction = j["weather"].value("aerialReduction", 0.55f);
+        }
+
         return true;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "[Save] Failed to parse level.json: %s\n", e.what());
@@ -51,11 +75,23 @@ bool SaveManager::loadLevelMeta(uint32_t& outSeed) {
     }
 }
 
-void SaveManager::saveLevelMeta(uint32_t seed) {
+void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     nlohmann::json j;
     j["format"] = "mecraft.level";
     j["version"] = 1;
-    j["seed"] = seed;
+    j["seed"] = meta.seed;
+    j["spawn"] = {meta.spawnX, meta.spawnY, meta.spawnZ};
+    j["time"] = {
+        {"timeOfDay", meta.timeOfDay},
+        {"totalGameTime", meta.totalGameTime},
+        {"elapsedDays", meta.elapsedDays}
+    };
+    j["weather"] = {
+        {"type", meta.weatherType},
+        {"wetness", meta.weatherWetness},
+        {"storm", meta.weatherStorm},
+        {"aerialReduction", meta.weatherAerialReduction}
+    };
 
     const auto path = m_paths.levelPath();
     const auto tmpPath = path.string() + ".tmp";
@@ -161,6 +197,18 @@ void SaveManager::flushPendingSaves() {
 
 bool SaveManager::chunkFileExists(int cx, int cz) const {
     return m_paths.chunkFileExists(cx, cz);
+}
+
+// ---------------------------------------------------------------------------
+// Player save/load
+// ---------------------------------------------------------------------------
+
+void SaveManager::saveLocalPlayer(const PlayerData& data) {
+    PlayerSerializer::saveToFile(m_paths.localPlayerPath().string(), data);
+}
+
+bool SaveManager::loadLocalPlayer(PlayerData& out) {
+    return PlayerSerializer::loadFromFile(m_paths.localPlayerPath().string(), out);
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,11 @@
 #include "../../ecs/entity/SteveModelFactory.h"
 #include "../../ecs/entity/MobModelFactory.h"
 #include "../../ecs/components/Components.h"
+#include "../../ecs/components/PhysicsComponents.h"
+#include "../../ecs/components/CameraComponents.h"
+#include "../../ecs/components/PlayerStateComponents.h"
+#include "../../ecs/components/InputComponents.h"
+#include "../../ecs/components/TagComponents.h"
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
@@ -22,6 +27,8 @@
 #include "../../server/GameServer.h"
 #include "../../client/GameClient.h"
 #include "../../save/SavePaths.h"
+#include "../../save/SaveManager.h"
+#include "../../item/Item.h"
 #include "../../net/InProcessTransport.h"
 #include "../../net/ENetTransport.h"
 #include <cstdio>
@@ -444,6 +451,11 @@ Inventory& GameSession::getPlayerInventory() {
 }
 
 void GameSession::shutdown() {
+    // Save player state before destroying ECS
+    if (!m_isMultiplayer && m_server) {
+        saveLocalPlayer();
+    }
+
     m_stateMachine.reset();
     // Cleanup in reverse order of initialization
     m_presentationBuilder.reset();
@@ -456,4 +468,171 @@ void GameSession::shutdown() {
     m_physicsSystem.reset();
     m_client.reset();
     m_server.reset();
+}
+
+void GameSession::saveLocalPlayer() {
+    if (!m_server || !m_gameplayScene) return;
+
+    auto* sm = m_server->saveManager();
+    if (!sm) return;
+
+    auto& ecsReg = m_gameplayScene->registry().registry();
+    auto view = ecsReg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
+    for (auto e : view) {
+        save::PlayerData data;
+
+        // Position
+        auto& transform = ecsReg.get<ecs::TransformComponent>(e);
+        data.posX = transform.position.x;
+        data.posY = transform.position.y;
+        data.posZ = transform.position.z;
+
+        // Velocity (from PhysicsBodyComponent)
+        if (ecsReg.all_of<ecs::PhysicsBodyComponent>(e)) {
+            auto& body = ecsReg.get<ecs::PhysicsBodyComponent>(e);
+            data.velX = body.body.velocity.x;
+            data.velY = body.body.velocity.y;
+            data.velZ = body.body.velocity.z;
+        }
+
+        // Camera (yaw, pitch)
+        if (ecsReg.all_of<ecs::CameraStateComponent>(e)) {
+            auto& cam = ecsReg.get<ecs::CameraStateComponent>(e);
+            data.yaw = cam.yaw;
+            data.pitch = cam.pitch;
+        }
+
+        // Health
+        if (ecsReg.all_of<ecs::HealthComponent>(e)) {
+            auto& h = ecsReg.get<ecs::HealthComponent>(e);
+            data.health = h.current;
+            data.healthMax = h.max;
+        }
+
+        // Armor
+        if (ecsReg.all_of<ecs::ArmorComponent>(e)) {
+            auto& a = ecsReg.get<ecs::ArmorComponent>(e);
+            data.armor = a.current;
+            data.armorMax = a.max;
+        }
+
+        // Food
+        if (ecsReg.all_of<ecs::FoodComponent>(e)) {
+            auto& f = ecsReg.get<ecs::FoodComponent>(e);
+            data.food = f.current;
+            data.foodMax = f.max;
+            data.saturation = f.saturation;
+        }
+
+        // Flight
+        if (ecsReg.all_of<ecs::FlightStateComponent>(e)) {
+            auto& fs = ecsReg.get<ecs::FlightStateComponent>(e);
+            data.isFlying = fs.isFlying;
+        }
+
+        // Inventory
+        if (ecsReg.all_of<ecs::InventoryComponent>(e)) {
+            auto& inv = ecsReg.get<ecs::InventoryComponent>(e);
+            data.selectedSlot = inv.selectedHotbarSlot;
+        }
+
+        if (ecsReg.all_of<ecs::InventoryDataComponent>(e)) {
+            auto& invData = ecsReg.get<ecs::InventoryDataComponent>(e);
+            const Inventory& inv = invData.inventory;
+            data.inventory.resize(Inventory::INVENTORY_SIZE);
+            for (int i = 0; i < Inventory::INVENTORY_SIZE; ++i) {
+                ItemStack stack = inv.getSlotStack(i);
+                if (stack.itemId != 0 && stack.count > 0) {
+                    data.inventory[i].item = ItemRegistry::getNamespacedId(stack.itemId).full();
+                    data.inventory[i].count = stack.count;
+                    data.inventory[i].durability = stack.durability;
+                }
+            }
+        }
+
+        sm->saveLocalPlayer(data);
+        return;
+    }
+}
+
+void GameSession::loadLocalPlayer() {
+    if (!m_server || !m_gameplayScene) return;
+
+    auto* sm = m_server->saveManager();
+    if (!sm) return;
+
+    save::PlayerData data;
+    if (!sm->loadLocalPlayer(data)) return;
+
+    auto& ecsReg = m_gameplayScene->registry().registry();
+    auto view = ecsReg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
+    for (auto e : view) {
+        // Position
+        auto& transform = ecsReg.get<ecs::TransformComponent>(e);
+        transform.position = glm::vec3(data.posX, data.posY, data.posZ);
+
+        // Also update physics body position
+        if (ecsReg.all_of<ecs::PhysicsBodyComponent>(e)) {
+            auto& body = ecsReg.get<ecs::PhysicsBodyComponent>(e);
+            body.body.position = transform.position;
+            body.body.velocity = glm::vec3(data.velX, data.velY, data.velZ);
+        }
+
+        // Camera
+        if (ecsReg.all_of<ecs::CameraStateComponent>(e)) {
+            auto& cam = ecsReg.get<ecs::CameraStateComponent>(e);
+            cam.yaw = data.yaw;
+            cam.pitch = data.pitch;
+        }
+
+        // Health
+        if (ecsReg.all_of<ecs::HealthComponent>(e)) {
+            auto& h = ecsReg.get<ecs::HealthComponent>(e);
+            h.current = data.health;
+            h.max = data.healthMax;
+        }
+
+        // Armor
+        if (ecsReg.all_of<ecs::ArmorComponent>(e)) {
+            auto& a = ecsReg.get<ecs::ArmorComponent>(e);
+            a.current = data.armor;
+            a.max = data.armorMax;
+        }
+
+        // Food
+        if (ecsReg.all_of<ecs::FoodComponent>(e)) {
+            auto& f = ecsReg.get<ecs::FoodComponent>(e);
+            f.current = data.food;
+            f.max = data.foodMax;
+            f.saturation = data.saturation;
+        }
+
+        // Flight
+        if (ecsReg.all_of<ecs::FlightStateComponent>(e)) {
+            auto& fs = ecsReg.get<ecs::FlightStateComponent>(e);
+            fs.isFlying = data.isFlying;
+        }
+
+        // Inventory
+        if (ecsReg.all_of<ecs::InventoryComponent>(e)) {
+            auto& inv = ecsReg.get<ecs::InventoryComponent>(e);
+            inv.selectedHotbarSlot = data.selectedSlot;
+        }
+
+        if (ecsReg.all_of<ecs::InventoryDataComponent>(e)) {
+            auto& invData = ecsReg.get<ecs::InventoryDataComponent>(e);
+            Inventory& inv = invData.inventory;
+            for (size_t i = 0; i < data.inventory.size() && i < Inventory::INVENTORY_SIZE; ++i) {
+                const auto& slot = data.inventory[i];
+                if (!slot.item.empty() && slot.count > 0) {
+                    ItemID itemId = ItemRegistry::getId(NamespacedId(slot.item));
+                    inv.setSlotItem(static_cast<int>(i), itemId, slot.count);
+                }
+            }
+        }
+
+        std::printf("[Save] Loaded local player: pos=(%.1f, %.1f, %.1f)\n",
+                     data.posX, data.posY, data.posZ);
+        return;
+    }
 }

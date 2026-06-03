@@ -1,11 +1,13 @@
-// Unit tests for the save system: ChunkSerializer round-trip, SavePaths, SaveManager.
+// Unit tests for the save system: ChunkSerializer round-trip, SavePaths, SaveManager, PlayerSerializer.
 
 #include "save/ChunkSerializer.h"
 #include "save/SavePaths.h"
 #include "save/SaveManager.h"
 #include "save/SaveFormat.h"
+#include "save/PlayerSerializer.h"
 #include "world/chunk/Chunk.h"
 #include "world/block/Block.h"
+#include "item/Item.h"
 
 #include <cassert>
 #include <cstdio>
@@ -259,13 +261,30 @@ static void testSaveManagerLevelMeta() {
     save::SaveManager mgr(testRoot);
     mgr.paths().ensureDirectories();
 
-    // Save level meta
-    mgr.saveLevelMeta(42);
+    // Save level meta with full data
+    save::LevelMeta meta;
+    meta.seed = 42;
+    meta.spawnX = 1.0f;
+    meta.spawnY = 68.0f;
+    meta.spawnZ = 2.0f;
+    meta.timeOfDay = 600.0f;
+    meta.totalGameTime = 12000.0;
+    meta.elapsedDays = 1;
+    meta.weatherType = "rain";
+    meta.weatherWetness = 0.5f;
+    meta.weatherStorm = 0.0f;
+    mgr.saveLevelMeta(meta);
 
     // Load it back
-    uint32_t seed = 0;
-    assert(mgr.loadLevelMeta(seed));
-    assert(seed == 42);
+    save::LevelMeta loaded;
+    assert(mgr.loadLevelMeta(loaded));
+    assert(loaded.seed == 42);
+    assert(loaded.spawnX == 1.0f);
+    assert(loaded.spawnY == 68.0f);
+    assert(loaded.timeOfDay == 600.0f);
+    assert(loaded.elapsedDays == 1);
+    assert(loaded.weatherType == "rain");
+    assert(loaded.weatherWetness == 0.5f);
 
     // Cleanup
     std::filesystem::remove_all(testRoot);
@@ -321,12 +340,107 @@ static void testSaveManagerNonexistentChunk() {
 }
 
 // ---------------------------------------------------------------------------
+// PlayerSerializer tests
+// ---------------------------------------------------------------------------
+
+static void testPlayerSerializerRoundTrip() {
+    save::PlayerData data;
+    data.posX = 10.5f;
+    data.posY = 65.0f;
+    data.posZ = -3.2f;
+    data.velX = 1.0f;
+    data.velY = 0.0f;
+    data.velZ = -0.5f;
+    data.yaw = 45.0f;
+    data.pitch = -15.0f;
+    data.health = 15;
+    data.healthMax = 20;
+    data.armor = 5;
+    data.armorMax = 20;
+    data.food = 18;
+    data.foodMax = 20;
+    data.saturation = 3;
+    data.isFlying = true;
+    data.selectedSlot = 3;
+
+    // Add some inventory items
+    data.inventory.resize(36);
+    data.inventory[0].item = "minecraft:stone";
+    data.inventory[0].count = 64;
+    data.inventory[5].item = "minecraft:iron_pickaxe";
+    data.inventory[5].count = 1;
+    data.inventory[5].durability = 100;
+
+    // Serialize
+    nlohmann::json j = save::PlayerSerializer::serialize(data);
+
+    // Deserialize
+    save::PlayerData loaded;
+    assert(save::PlayerSerializer::deserialize(j, loaded));
+
+    // Verify
+    assert(loaded.posX == data.posX);
+    assert(loaded.posY == data.posY);
+    assert(loaded.posZ == data.posZ);
+    assert(loaded.yaw == data.yaw);
+    assert(loaded.pitch == data.pitch);
+    assert(loaded.health == 15);
+    assert(loaded.armor == 5);
+    assert(loaded.food == 18);
+    assert(loaded.saturation == 3);
+    assert(loaded.isFlying == true);
+    assert(loaded.selectedSlot == 3);
+    assert(loaded.inventory.size() >= 6);
+    assert(loaded.inventory[0].item == "minecraft:stone");
+    assert(loaded.inventory[0].count == 64);
+    assert(loaded.inventory[5].item == "minecraft:iron_pickaxe");
+    assert(loaded.inventory[5].durability == 100);
+
+    std::printf("[PASS] testPlayerSerializerRoundTrip\n");
+}
+
+static void testPlayerSerializerFileRoundTrip() {
+    const std::string testFile = "test_player_save.json";
+
+    save::PlayerData data;
+    data.posX = 100.0f;
+    data.posY = 64.0f;
+    data.posZ = 200.0f;
+    data.health = 20;
+    data.food = 20;
+
+    // Save to file
+    save::PlayerSerializer::saveToFile(testFile, data);
+
+    // Load from file
+    save::PlayerData loaded;
+    assert(save::PlayerSerializer::loadFromFile(testFile, loaded));
+    assert(loaded.posX == 100.0f);
+    assert(loaded.posY == 64.0f);
+    assert(loaded.posZ == 200.0f);
+    assert(loaded.health == 20);
+
+    // Cleanup
+    std::filesystem::remove(testFile);
+    std::filesystem::remove(testFile + ".tmp");
+    std::filesystem::remove(testFile + ".bak");
+    std::printf("[PASS] testPlayerSerializerFileRoundTrip\n");
+}
+
+static void testPlayerSerializerNonexistentFile() {
+    save::PlayerData loaded;
+    assert(!save::PlayerSerializer::loadFromFile("nonexistent_player.json", loaded));
+    std::printf("[PASS] testPlayerSerializerNonexistentFile\n");
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     BlockRegistry::init(nullptr);
+    ItemRegistry::init();
 
     // ChunkSerializer tests
     testEmptyChunkRoundTrip();
@@ -346,6 +460,11 @@ int main() {
     testSaveManagerLevelMeta();
     testSaveManagerChunkRoundTrip();
     testSaveManagerNonexistentChunk();
+
+    // PlayerSerializer tests
+    testPlayerSerializerRoundTrip();
+    testPlayerSerializerFileRoundTrip();
+    testPlayerSerializerNonexistentFile();
 
     std::printf("\nAll save system tests passed!\n");
     return 0;

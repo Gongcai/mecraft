@@ -336,6 +336,7 @@ set(SRC_SAVE
         src/save/SavePaths.cpp
         src/save/ChunkSerializer.cpp
         src/save/SaveManager.cpp
+        src/save/PlayerSerializer.cpp
 )
 
 # 合并所有核心代码
