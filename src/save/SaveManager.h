@@ -91,6 +91,12 @@ public:
     /// Load local player data from disk. Returns false if file doesn't exist.
     bool loadLocalPlayer(PlayerData& out);
 
+    /// Save player data by client ID (for multiplayer).
+    void savePlayer(uint32_t clientId, const PlayerData& data);
+
+    /// Load player data by client ID. Returns false if file doesn't exist.
+    bool loadPlayer(uint32_t clientId, PlayerData& out);
+
     /// Access the paths helper.
     [[nodiscard]] const SavePaths& paths() const { return m_paths; }
 

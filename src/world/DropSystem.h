@@ -49,6 +49,9 @@ public:
 
     [[nodiscard]] const std::vector<DropEntity>& getDrops() const;
 
+    /// Restore drops from saved data (used by save system on world load).
+    void restoreDrops(const std::vector<DropEntity>& drops);
+
 private:
     ecs::GameplayRegistry*      m_registry = nullptr;
     ecs::GameplayServices*     m_services = nullptr;

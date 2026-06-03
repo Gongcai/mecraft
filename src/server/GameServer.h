@@ -129,6 +129,13 @@ private:
     save::LevelMeta m_loadedMeta;
     bool m_hasLoadedMeta = false;
 
+    // Autosave timer
+    float m_autosaveTimer = 0.0f;
+    static constexpr float AUTOSAVE_INTERVAL_SECONDS = 300.0f; // 5 minutes
+
+    // Helper to save current level metadata
+    void saveLevelMeta();
+
     // Weather type string conversion helpers
     static WeatherType weatherTypeFromString(const std::string& str) {
         if (str == "rain") return WeatherType::Rain;

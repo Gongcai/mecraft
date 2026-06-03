@@ -168,3 +168,24 @@ const std::vector<DropEntity>& DropSystem::getDrops() const {
     m_dropCache = snapshotDrops(*m_registry);
     return m_dropCache;
 }
+
+void DropSystem::restoreDrops(const std::vector<DropEntity>& drops) {
+    if (m_registry == nullptr) {
+        return;
+    }
+
+    auto& raw = m_registry->registry();
+    for (const auto& drop : drops) {
+        const entt::entity e = raw.create();
+        raw.emplace<ecs::DropItemTag>(e);
+        raw.emplace<ecs::TransformComponent>(e, drop.position);
+        raw.emplace<ecs::VelocityComponent>(e, drop.velocity);
+        raw.emplace<ecs::PhysicsBodyComponent>(e, ecs::PhysicsBodyComponent{
+            {drop.position, drop.velocity, drop.halfExtents, glm::vec3(0.0f), 0.0f}
+        });
+        raw.emplace<ecs::ItemComponent>(e, drop.itemId, drop.stackCount);
+        raw.emplace<ecs::LifetimeComponent>(e, drop.ageSeconds, drop.lifeTimeSeconds);
+        raw.emplace<ecs::SpinVisualComponent>(e, drop.yawRadians, drop.spinSpeedRadians);
+        raw.emplace<ecs::GroundedStateComponent>(e, ecs::GroundedStateComponent{drop.grounded});
+    }
+}

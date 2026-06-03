@@ -211,6 +211,16 @@ bool SaveManager::loadLocalPlayer(PlayerData& out) {
     return PlayerSerializer::loadFromFile(m_paths.localPlayerPath().string(), out);
 }
 
+void SaveManager::savePlayer(uint32_t clientId, const PlayerData& data) {
+    PlayerSerializer::saveToFile(
+        (m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), data);
+}
+
+bool SaveManager::loadPlayer(uint32_t clientId, PlayerData& out) {
+    return PlayerSerializer::loadFromFile(
+        (m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), out);
+}
+
 // ---------------------------------------------------------------------------
 // Atomic file write
 // ---------------------------------------------------------------------------

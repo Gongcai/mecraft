@@ -200,6 +200,27 @@ void GameServer::shutdown() {
     }
 }
 
+void GameServer::saveLevelMeta() {
+    if (!m_saveManager) return;
+
+    save::LevelMeta meta;
+    meta.seed = m_world.getSeed();
+    meta.spawnX = m_spawnPosition.x;
+    meta.spawnY = m_spawnPosition.y;
+    meta.spawnZ = m_spawnPosition.z;
+    meta.timeOfDay = m_world.getDayNightSystem().getTimeOfDay();
+    meta.totalGameTime = m_world.getDayNightSystem().getTotalGameTime();
+    meta.elapsedDays = m_world.getDayNightSystem().getElapsedDays();
+
+    const auto& weather = m_world.getWeatherSystem().getTargetState();
+    meta.weatherType = weatherTypeToString(weather.type);
+    meta.weatherWetness = weather.wetness;
+    meta.weatherStorm = weather.storm;
+    meta.weatherAerialReduction = weather.aerialReduction;
+
+    m_saveManager->saveLevelMeta(meta);
+}
+
 void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id) {
     ConnectedClient client;
     client.id = id;
@@ -220,6 +241,16 @@ void GameServer::tick(float dt) {
     processClientMessages();
     cleanupDisconnectedClients();
     tickWorldSystems();
+
+    // Periodic autosave
+    if (m_saveManager) {
+        m_autosaveTimer += dt;
+        if (m_autosaveTimer >= AUTOSAVE_INTERVAL_SECONDS) {
+            m_autosaveTimer = 0.0f;
+            m_world.flushSaves();
+            saveLevelMeta();
+        }
+    }
 
     glm::vec3 loadCenter = m_spawnPosition;
     for (const auto& client : m_clients) {
