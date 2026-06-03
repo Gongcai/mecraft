@@ -186,6 +186,24 @@ static void testClientBlockActionRoundTrip() {
     std::printf("[PASS] testClientBlockActionRoundTrip\n");
 }
 
+static void testServerTickBreaksUnsupportedPlant() {
+    ServerHarness harness;
+
+    for (int i = 0; i < 40; ++i) {
+        harness.server.tick(1.0f / 20.0f);
+    }
+
+    const glm::ivec3 base(0, static_cast<int>(harness.server.getSpawnPosition().y), 0);
+    harness.server.world().setBlock(base.x, base.y, base.z, BlockIds::DIRT);
+    harness.server.world().setBlock(base.x, base.y + 1, base.z, BlockIds::TALL_GRASS);
+    harness.server.world().setBlock(base.x, base.y, base.z, BlockIds::AIR);
+
+    harness.server.tick(1.0f / 20.0f);
+
+    assert(harness.server.world().getBlock(base.x, base.y + 1, base.z) == BlockIds::AIR);
+    std::printf("[PASS] testServerTickBreaksUnsupportedPlant\n");
+}
+
 static void testChunkDataDecodeMarksRenderableSubChunks() {
     auto source = std::make_shared<Chunk>(0, 0);
     for (int y = 48; y < 56; ++y) {
@@ -412,6 +430,7 @@ int main() {
     testChunkStreamingToClient();
     testInputRoundTrip();
     testClientBlockActionRoundTrip();
+    testServerTickBreaksUnsupportedPlant();
     testChunkDataDecodeMarksRenderableSubChunks();
     testBlockUpdateCodecKeepsVariableLightPatch();
     testENetChunkStreamingToClient();

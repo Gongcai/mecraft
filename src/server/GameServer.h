@@ -69,34 +69,23 @@ public:
     [[nodiscard]] net::TickId currentTick() const { return m_currentTick; }
 
 private:
-    struct PendingRelightUpdate {
-        int x = 0;
-        int y = 0;
-        int z = 0;
-        BlockID blockId = 0;
-        int64_t chunkKey = 0;
-        uint64_t lightRevision = 0;
-        int ticksWaited = 0;
-    };
-
     void processClientMessages();
     void handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action);
+    void tickWorldSystems();
     void sendNewChunksToClients();
     void sendSnapshotsToClients();
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
-    void sendRelightUpdatesToClients();
     void syncEntitiesToClients();
     void checkSpawnChunksReady();
     [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, BlockID blockId, int lightPatchRadius) const;
     [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, BlockID blockId) const;
-    [[nodiscard]] net::BlockUpdateEntry makeChunkLightUpdateEntry(int64_t chunkKey) const;
+    [[nodiscard]] net::BlockUpdateEntry makeSubChunkLightUpdateEntry(int64_t chunkKey, int scy) const;
     void syncPlayersToClients();
 
     World m_world;
     std::vector<ConnectedClient> m_clients;
     std::vector<net::BlockUpdateEntry> m_pendingBlockUpdates;
-    std::vector<PendingRelightUpdate> m_pendingRelightUpdates;
 
     // Entity sync state
     ecs::EntityNetId m_nextNetId = 1;

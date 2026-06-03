@@ -3,6 +3,7 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -34,6 +35,9 @@ public:
 
     void submitJobs(const glm::vec3& cameraPos, int submitBudget);
     void drainCompleted(World& world, int mergeBudget = 32, float timeBudgetMs = 1.0f);
+
+    using LightChangeCallback = std::function<void(int64_t chunkKey, uint32_t dirtySubChunkMask)>;
+    void setLightChangeCallback(LightChangeCallback callback) { m_lightChangeCallback = std::move(callback); }
 
     [[nodiscard]] LightFrameStats getFrameStats() const;
     [[nodiscard]] int countDirtyChunks() const;
@@ -85,6 +89,7 @@ private:
     std::unordered_map<int64_t, CachedBaseLight> m_baseLightCaches;
     std::unordered_set<int64_t> m_frameBlockChangedChunks;
     std::queue<CompletedTicket> m_completed;
+    LightChangeCallback m_lightChangeCallback;
     mutable std::mutex m_stateMutex;
     mutable std::mutex m_completedMutex;
     std::atomic<int> m_completedCount{0};

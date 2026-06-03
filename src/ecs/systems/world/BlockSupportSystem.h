@@ -2,6 +2,9 @@
 #define MECRAFT_ECS_BLOCK_SUPPORT_SYSTEM_H
 
 #include "../../ISystem.h"
+#include <cstddef>
+
+class World;
 
 namespace ecs {
 
@@ -11,6 +14,11 @@ namespace ecs {
 class BlockSupportSystem : public ISystem {
 public:
     void update(SystemContext& ctx) override;
+
+    /// Validate and break unsupported blocks from a world neighbor-update queue.
+    /// This server-safe path mutates only the authoritative World; ECS-only
+    /// drops, particles, and audio are intentionally emitted by update().
+    static size_t processWorldQueue(World& world, size_t budget = 1024);
 };
 
 } // namespace ecs

@@ -223,6 +223,24 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId, const s
     if (!packedLightPatch.empty()) {
         if (packedLightPatch.size() == Chunk::BLOCK_COUNT) {
             chunk.replacePackedLight(packedLightPatch.data(), packedLightPatch.size());
+        } else if (packedLightPatch.size() == SubChunk::BLOCK_COUNT) {
+            const int sectionY = Chunk::toSubChunkIndex(y) * SubChunk::SIZE;
+            size_t index = 0;
+            for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+                const int wy = sectionY + ly;
+                if (wy < 0 || wy >= Chunk::SIZE_Y) {
+                    index += static_cast<size_t>(SubChunk::SIZE * SubChunk::SIZE);
+                    continue;
+                }
+                for (int zLocal = 0; zLocal < SubChunk::SIZE; ++zLocal) {
+                    for (int xLocal = 0; xLocal < SubChunk::SIZE; ++xLocal) {
+                        const uint8_t packed = packedLightPatch[index++];
+                        chunk.setSunlight(xLocal, wy, zLocal, static_cast<uint8_t>((packed >> 4) & 0x0F));
+                        chunk.setBlockLight(xLocal, wy, zLocal, static_cast<uint8_t>(packed & 0x0F));
+                    }
+                }
+            }
+            chunk.markSubChunkDirty(Chunk::toSubChunkIndex(y));
         } else if (const int patchSide = inferOddCubeSide(packedLightPatch.size()); patchSide > 0) {
             const int patchRadius = patchSide / 2;
             size_t index = 0;

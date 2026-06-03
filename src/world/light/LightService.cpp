@@ -476,9 +476,13 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
 
             const uint32_t haloMeshDirtyMask = state.inFlightHaloMeshDirtyMask;
             if (!ticket.result.selfDelta.packedLight.empty()) {
+                uint32_t appliedDirtyMask = 0;
                 chunkIt->second->replacePackedLight(ticket.result.selfDelta.packedLight.data(),
                                                     ticket.result.selfDelta.packedLight.size(),
-                                                    nullptr);
+                                                    &appliedDirtyMask);
+                if (appliedDirtyMask != 0u && m_lightChangeCallback) {
+                    m_lightChangeCallback(ticket.result.selfDelta.chunkKey, appliedDirtyMask);
+                }
                 if (haloMeshDirtyMask != 0u) {
                     markSubChunksDirtyByMask(*chunkIt->second, haloMeshDirtyMask);
                 }

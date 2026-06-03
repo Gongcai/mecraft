@@ -85,6 +85,10 @@ public:
     using BlockChangeCallback = std::function<void(int x, int y, int z, BlockID newBlockId)>;
     void setBlockChangeCallback(BlockChangeCallback callback) { m_blockChangeCallback = std::move(callback); }
 
+    /// Callback invoked after async lighting has merged changed sub-chunks.
+    using LightChangeCallback = LightService::LightChangeCallback;
+    void setLightChangeCallback(LightChangeCallback callback);
+
 private:
     std::unordered_map<int64_t, std::shared_ptr<Chunk>> m_chunks;
 
@@ -96,6 +100,7 @@ private:
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
+    LightChangeCallback m_lightChangeCallback;
     ChunkTicketManager m_ticketManager;
 
     int m_renderDistance = 8;

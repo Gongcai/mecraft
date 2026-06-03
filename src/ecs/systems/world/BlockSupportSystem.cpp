@@ -117,4 +117,23 @@ void BlockSupportSystem::update(SystemContext& ctx) {
     }
 }
 
+size_t BlockSupportSystem::processWorldQueue(World& world, const size_t budget) {
+    auto& updateQueue = world.neighborUpdateQueue();
+    if (updateQueue.size() == 0 || budget == 0) {
+        return 0;
+    }
+
+    std::vector<glm::ivec3> positions;
+    positions.reserve(budget);
+    const size_t drained = updateQueue.drain(positions, budget);
+
+    for (const glm::ivec3& pos : positions) {
+        if (!canSurvive(world, pos)) {
+            world.setBlock(pos.x, pos.y, pos.z, 0);
+        }
+    }
+
+    return drained;
+}
+
 } // namespace ecs

@@ -128,6 +128,7 @@ void World::init(uint32_t seed) {
     m_ticketManager.setSimulationRadius(8);
     ++m_activeChunkRevision;
     m_lightService = std::make_unique<LightService>(*this);
+    m_lightService->setLightChangeCallback(m_lightChangeCallback);
     m_lightService->start(m_threadPool);
     m_dayNightSystem.setTimeOfDay(300.0f); // Default to mid-day
 }
@@ -540,7 +541,15 @@ void World::setThreadPool(ThreadPool* pool) {
     m_threadPool = pool;
     if (m_lightService) {
         m_lightService->shutdown();
+        m_lightService->setLightChangeCallback(m_lightChangeCallback);
         m_lightService->start(m_threadPool);
+    }
+}
+
+void World::setLightChangeCallback(LightChangeCallback callback) {
+    m_lightChangeCallback = std::move(callback);
+    if (m_lightService) {
+        m_lightService->setLightChangeCallback(m_lightChangeCallback);
     }
 }
 

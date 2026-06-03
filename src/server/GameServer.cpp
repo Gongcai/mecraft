@@ -2,6 +2,7 @@
 #include "../world/World.h"
 #include "../world/block/Block.h"
 #include "../thread/ThreadPool.h"
+#include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
 #include <cmath>
@@ -11,18 +12,6 @@ namespace server {
 namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
-constexpr int kMinRelightWaitTicks = 1;
-constexpr int kMaxRelightWaitTicks = 8;
-
-void addChunkAndHorizontalNeighbors(const int64_t chunkKey, std::unordered_set<int64_t>& out) {
-    const int cx = static_cast<int>(chunkKey >> 32);
-    const int cz = static_cast<int>(static_cast<int32_t>(chunkKey & 0xFFFFFFFF));
-    out.insert(chunkKey);
-    out.insert(World::chunkKey(cx + 1, cz));
-    out.insert(World::chunkKey(cx - 1, cz));
-    out.insert(World::chunkKey(cx, cz + 1));
-    out.insert(World::chunkKey(cx, cz - 1));
-}
 }
 
 GameServer::GameServer() = default;
@@ -36,23 +25,18 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     // Register block change callback to collect dirty blocks for BlockUpdateBatch
     m_world.setBlockChangeCallback([this](int x, int y, int z, BlockID newBlockId) {
         m_pendingBlockUpdates.push_back(makeBlockOnlyUpdateEntry(x, y, z, newBlockId));
+    });
 
-        const glm::ivec2 chunkCoords = m_world.getChunkCoords(x, z);
-        const int64_t key = World::chunkKey(chunkCoords.x, chunkCoords.y);
-        uint64_t lightRevision = 0;
-        const auto it = m_world.getActiveChunks().find(key);
-        if (it != m_world.getActiveChunks().end() && it->second) {
-            lightRevision = it->second->getLightRevision();
+    m_world.setLightChangeCallback([this](int64_t chunkKey, uint32_t dirtySubChunkMask) {
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if ((dirtySubChunkMask & (1u << scy)) == 0u) {
+                continue;
+            }
+            net::BlockUpdateEntry entry = makeSubChunkLightUpdateEntry(chunkKey, scy);
+            if (!entry.packedLightPatch.empty()) {
+                m_pendingBlockUpdates.push_back(std::move(entry));
+            }
         }
-        m_pendingRelightUpdates.push_back(PendingRelightUpdate{
-            x,
-            y,
-            z,
-            newBlockId,
-            key,
-            lightRevision,
-            0
-        });
     });
 
     // Compute spawn position from world surface
@@ -85,6 +69,7 @@ void GameServer::tick(float dt) {
     // Process incoming client messages first so block edits and player poses
     // participate in this tick's world/light update before snapshots are sent.
     processClientMessages();
+    tickWorldSystems();
 
     glm::vec3 loadCenter = m_spawnPosition;
     for (const auto& client : m_clients) {
@@ -107,7 +92,6 @@ void GameServer::tick(float dt) {
 
     // Send pending block updates to clients
     sendBlockUpdatesToClients();
-    sendRelightUpdatesToClients();
 
     // Check if spawn chunks are ready
     if (!m_spawnChunksReady) {
@@ -115,6 +99,11 @@ void GameServer::tick(float dt) {
     }
 
     ++m_currentTick;
+}
+
+void GameServer::tickWorldSystems() {
+    m_world.fluidSystem().processScheduledBlockTicks(m_currentTick, 4096);
+    ecs::BlockSupportSystem::processWorldQueue(m_world, 1024);
 }
 
 void GameServer::processClientMessages() {
@@ -340,71 +329,6 @@ void GameServer::sendBlockUpdatesToClients() {
     m_pendingBlockUpdates.clear();
 }
 
-void GameServer::sendRelightUpdatesToClients() {
-    if (m_pendingRelightUpdates.empty()) {
-        return;
-    }
-
-    const LightFrameStats lightStats = m_world.getLightFrameStats();
-    const bool lightGloballyIdle =
-        lightStats.dirty == 0 &&
-        lightStats.queued == 0 &&
-        lightStats.inFlight == 0 &&
-        lightStats.pendingCompleted == 0;
-
-    net::BlockUpdateBatchMessage batch;
-    std::vector<PendingRelightUpdate> deferred;
-    std::unordered_set<int64_t> chunksToSync;
-    deferred.reserve(m_pendingRelightUpdates.size());
-
-    for (PendingRelightUpdate& pending : m_pendingRelightUpdates) {
-        ++pending.ticksWaited;
-
-        bool targetChunkSettled = false;
-        const auto chunkIt = m_world.getActiveChunks().find(pending.chunkKey);
-        if (chunkIt != m_world.getActiveChunks().end() && chunkIt->second) {
-            const Chunk& chunk = *chunkIt->second;
-            targetChunkSettled =
-                !chunk.isLightQueued() &&
-                !chunk.isLightInFlight() &&
-                chunk.getLightRevision() > pending.lightRevision;
-        }
-
-        const bool shouldSend =
-            (pending.ticksWaited >= kMinRelightWaitTicks && lightGloballyIdle) ||
-            (pending.ticksWaited >= kMaxRelightWaitTicks && targetChunkSettled) ||
-            (pending.ticksWaited >= kMaxRelightWaitTicks * 2);
-
-        if (!shouldSend) {
-            deferred.push_back(pending);
-            continue;
-        }
-
-        addChunkAndHorizontalNeighbors(pending.chunkKey, chunksToSync);
-    }
-
-    m_pendingRelightUpdates = std::move(deferred);
-    for (const int64_t chunkKey : chunksToSync) {
-        net::BlockUpdateEntry entry = makeChunkLightUpdateEntry(chunkKey);
-        if (!entry.packedLightPatch.empty()) {
-            batch.updates.push_back(std::move(entry));
-        }
-    }
-    if (batch.updates.empty()) {
-        return;
-    }
-
-    net::Packet packet;
-    packet.channel = net::PacketChannel::ReliableWorld;
-    packet.type = net::MessageType::BlockUpdateBatch;
-    packet.inProcessPayload = std::move(batch);
-
-    for (auto& client : m_clients) {
-        net::Packet clientPacket = packet;
-        client.transport->send(std::move(clientPacket));
-    }
-}
-
 net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const int y, const int z, const BlockID blockId) const {
     net::BlockUpdateEntry entry;
     entry.x = x;
@@ -414,23 +338,27 @@ net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const in
     return entry;
 }
 
-net::BlockUpdateEntry GameServer::makeChunkLightUpdateEntry(const int64_t chunkKey) const {
+net::BlockUpdateEntry GameServer::makeSubChunkLightUpdateEntry(const int64_t chunkKey, const int scy) const {
     net::BlockUpdateEntry entry;
     const auto chunkIt = m_world.getActiveChunks().find(chunkKey);
-    if (chunkIt == m_world.getActiveChunks().end() || !chunkIt->second) {
+    if (scy < 0 || scy >= Chunk::NUM_SUB_CHUNKS ||
+        chunkIt == m_world.getActiveChunks().end() || !chunkIt->second) {
         return entry;
     }
 
     const Chunk& chunk = *chunkIt->second;
     entry.x = chunk.m_chunkX * Chunk::SIZE_X;
-    entry.y = 0;
+    entry.y = scy * SubChunk::SIZE;
     entry.z = chunk.m_chunkZ * Chunk::SIZE_Z;
     entry.blockId = kLightOnlyBlockUpdate;
-    entry.packedLightPatch.resize(Chunk::BLOCK_COUNT);
-    for (int yPos = 0; yPos < Chunk::SIZE_Y; ++yPos) {
+    entry.packedLightPatch.resize(SubChunk::BLOCK_COUNT);
+    size_t index = 0;
+    const int yBase = scy * SubChunk::SIZE;
+    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+        const int yPos = yBase + ly;
         for (int zPos = 0; zPos < Chunk::SIZE_Z; ++zPos) {
             for (int xPos = 0; xPos < Chunk::SIZE_X; ++xPos) {
-                entry.packedLightPatch[Chunk::toIndex(xPos, yPos, zPos)] =
+                entry.packedLightPatch[index++] =
                     chunk.getPackedLight(xPos, yPos, zPos);
             }
         }
@@ -450,7 +378,8 @@ net::BlockUpdateEntry GameServer::makeBlockUpdateEntry(const int x,
     entry.blockId = static_cast<uint16_t>(blockId);
     if (lightPatchRadius < 0) {
         const glm::ivec2 chunkCoords = m_world.getChunkCoords(x, z);
-        return makeChunkLightUpdateEntry(World::chunkKey(chunkCoords.x, chunkCoords.y));
+        return makeSubChunkLightUpdateEntry(World::chunkKey(chunkCoords.x, chunkCoords.y),
+                                            Chunk::toSubChunkIndex(y));
     }
     const int patchSide = lightPatchRadius * 2 + 1;
     entry.packedLightPatch.reserve(static_cast<size_t>(patchSide * patchSide * patchSide));

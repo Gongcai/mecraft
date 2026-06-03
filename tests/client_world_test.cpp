@@ -191,6 +191,24 @@ static void testApplyBlockUpdateAcceptsVariableLightPatch() {
     std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
 }
 
+static void testApplyBlockUpdateAcceptsLightSection() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    cw.addChunk(chunk);
+
+    std::vector<uint8_t> sectionLight(SubChunk::BLOCK_COUNT, 0);
+    const int localIndex =
+        4 +
+        4 * SubChunk::SIZE +
+        4 * SubChunk::SIZE * SubChunk::SIZE;
+    sectionLight[localIndex] = 0x0B;
+
+    cw.applyBlockUpdate(0, 64, 0, 0xFFFFu, sectionLight);
+
+    require(cw.getPackedLight(4, 68, 4) == 0x0B, "client should apply subchunk light section updates");
+    std::printf("[PASS] testApplyBlockUpdateAcceptsLightSection\n");
+}
+
 static void testApplyBlockUpdateAcceptsFullChunkLightSnapshot() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
@@ -238,6 +256,7 @@ int main() {
     testNeighborLinkingDirtiesExistingBorders();
     testClientWorldRaycastHitsBlocks();
     testApplyBlockUpdateAcceptsVariableLightPatch();
+    testApplyBlockUpdateAcceptsLightSection();
     testApplyBlockUpdateAcceptsFullChunkLightSnapshot();
     testApplyBlockUpdateCanBeLightOnly();
     std::printf("\nAll ClientWorld tests passed!\n");
