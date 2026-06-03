@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
 
     // Create thread pool
     ThreadPool threadPool(4);
+    threadPool.start();
 
     // Create ENet transport for listening
     auto listenTransport = std::make_unique<net::ENetTransport>();

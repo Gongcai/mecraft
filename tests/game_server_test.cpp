@@ -163,36 +163,24 @@ static void testClientBlockActionRoundTrip() {
     harness.server.acceptClient(std::move(serverTransport), 1);
     client.connect(std::move(clientTransport));
 
-    for (int i = 0; i < 20; ++i) {
+    const glm::vec3 spawn = harness.server.getSpawnPosition();
+    const glm::ivec3 placeBlock(0, Chunk::SIZE_Y - 8, 0);
+    for (int tick = 0;
+         tick < 240 && !harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+         ++tick) {
         harness.server.tick(1.0f / 20.0f);
         client.receiveMessages();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+    assert(harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
+    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
 
-    glm::ivec3 placeBlock(1, static_cast<int>(harness.server.getSpawnPosition().y), 1);
-    bool foundAir = false;
-    const glm::vec3 spawn = harness.server.getSpawnPosition();
-    const int spawnY = static_cast<int>(spawn.y);
-    for (int y = spawnY - 2; y <= spawnY + 6 && !foundAir; ++y) {
-        for (int z = -5; z <= 5 && !foundAir; ++z) {
-            for (int x = -5; x <= 5 && !foundAir; ++x) {
-                const glm::vec3 center = glm::vec3(x, y, z) + glm::vec3(0.5f);
-                const glm::vec3 diff = spawn - center;
-                const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-                if (distSq <= 5.5f * 5.5f &&
-                    harness.server.world().isChunkLoadedForBlock(x, y, z) &&
-                    harness.server.world().getBlock(x, y, z) == BlockIds::AIR) {
-                    placeBlock = glm::ivec3(x, y, z);
-                    foundAir = true;
-                }
-            }
-        }
-    }
-    assert(foundAir);
+    const glm::vec3 actionPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
     net::ClientBlockAction place;
     place.sequence = 1;
     place.action = net::ClientBlockActionType::Place;
     place.placeBlock = placeBlock;
-    place.playerPosition = harness.server.getSpawnPosition();
+    place.playerPosition = actionPosition;
     place.blockState = BlockIds::STONE;
     client.sendBlockAction(place);
 
@@ -205,7 +193,7 @@ static void testClientBlockActionRoundTrip() {
     breakAction.sequence = 2;
     breakAction.action = net::ClientBlockActionType::Break;
     breakAction.targetBlock = placeBlock;
-    breakAction.playerPosition = harness.server.getSpawnPosition();
+    breakAction.playerPosition = actionPosition;
     client.sendBlockAction(breakAction);
 
     harness.server.tick(1.0f / 20.0f);
@@ -375,6 +363,81 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     std::printf("[PASS] testBlockUpdateCodecKeepsVariableLightPatch\n");
 }
 
+static void testServerEmitsLightPatchAfterTorchPlacement() {
+    ThreadPool threadPool(2);
+    threadPool.start();
+
+    server::GameServer server;
+    server.init(1234, &threadPool, 2);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    server.acceptClient(std::move(clientTransport), 1);
+    const glm::vec3 spawn = server.getSpawnPosition();
+    const glm::ivec3 placeBlock(0, Chunk::SIZE_Y - 8, 0);
+    for (int tick = 0;
+         tick < 240 && !server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+         ++tick) {
+        server.tick(1.0f / 20.0f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    assert(server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
+    assert(server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
+
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet actionPacket;
+    actionPacket.type = net::MessageType::ClientBlockAction;
+    net::ClientBlockAction action;
+    action.sequence = 1;
+    action.action = net::ClientBlockActionType::Place;
+    action.placeBlock = placeBlock;
+    action.playerPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
+    action.blockState = BlockIds::TORCH;
+    actionPacket.inProcessPayload = action;
+    clientPtr->pushIncoming(std::move(actionPacket));
+
+    bool sawTorchBlockUpdate = false;
+    bool sawTorchLightPatch = false;
+    for (int i = 0; i < 160 && !sawTorchLightPatch; ++i) {
+        server.tick(1.0f / 20.0f);
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type != net::MessageType::BlockUpdateBatch || !packet.inProcessPayload.has_value()) {
+                continue;
+            }
+            const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
+            for (const auto& update : batch.updates) {
+                if (update.x == placeBlock.x &&
+                    update.y == placeBlock.y &&
+                    update.z == placeBlock.z &&
+                    update.blockId == BlockIds::TORCH) {
+                    sawTorchBlockUpdate = true;
+                }
+                for (const uint8_t packed : update.packedLightPatch) {
+                    if ((packed & 0x0F) >= 12) {
+                        sawTorchLightPatch = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    assert(sawTorchBlockUpdate);
+    assert(sawTorchLightPatch);
+    std::printf("[PASS] testServerEmitsLightPatchAfterTorchPlacement\n");
+}
+
 static void testENetChunkStreamingToClient() {
     if (!net::ENetTransport::initialize()) {
         std::fprintf(stderr, "[FAIL] ENet initialize failed\n");
@@ -505,6 +568,7 @@ static void testENetChunkStreamingAfterPreconnectTicks() {
 }
 
 int main() {
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     BlockRegistry::init(nullptr);
 
     testServerInit();
@@ -518,6 +582,7 @@ int main() {
     testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();
     testBlockUpdateCodecKeepsVariableLightPatch();
+    testServerEmitsLightPatchAfterTorchPlacement();
     testENetChunkStreamingToClient();
     testENetChunkStreamingAfterPreconnectTicks();
     std::printf("\nAll GameServer integration tests passed!\n");
