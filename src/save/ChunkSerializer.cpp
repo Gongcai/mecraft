@@ -191,10 +191,11 @@ bool deserializeLayer(
     cursor += packedDataSize;
 
     // Apply blocks to subchunk
+    // SubChunk::toIndex(x, y, z) = x + z * SIZE + y * SIZE * SIZE
     for (size_t i = 0; i < SubChunk::BLOCK_COUNT; ++i) {
         const size_t lx = i % SubChunk::SIZE;
-        const size_t ly = (i / SubChunk::SIZE) % SubChunk::SIZE;
-        const size_t lz = i / (SubChunk::SIZE * SubChunk::SIZE);
+        const size_t lz = (i / SubChunk::SIZE) % SubChunk::SIZE;
+        const size_t ly = i / (SubChunk::SIZE * SubChunk::SIZE);
 
         uint32_t paletteIndex = 0;
         if (bpe > 0 && packedDataSize > 0) {
