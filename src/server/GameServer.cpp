@@ -3,6 +3,7 @@
 #include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
 #include "../thread/ThreadPool.h"
+#include "../save/SaveManager.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
@@ -93,7 +94,10 @@ const char* weatherName(const WeatherType type) {
 }
 
 GameServer::GameServer() = default;
-GameServer::~GameServer() = default;
+
+GameServer::~GameServer() {
+    shutdown();
+}
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance) {
     m_world.setRenderDistance(renderDistance);
@@ -128,6 +132,44 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
                 m_spawnPosition.y,
                 m_spawnPosition.z);
     std::fflush(stdout);
+}
+
+void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
+                      std::filesystem::path savePath) {
+    // Create save manager if path is provided
+    if (!savePath.empty()) {
+        m_saveManager = std::make_unique<save::SaveManager>(std::move(savePath));
+        m_saveManager->setThreadPool(threadPool);
+        m_saveManager->paths().ensureDirectories();
+
+        // Try to load existing level metadata
+        uint32_t loadedSeed = seed;
+        if (m_saveManager->loadLevelMeta(loadedSeed)) {
+            seed = loadedSeed;
+            std::printf("[Server] Loaded existing world (seed=%u)\n", seed);
+        } else {
+            m_saveManager->saveLevelMeta(seed);
+            std::printf("[Server] Created new world (seed=%u)\n", seed);
+        }
+
+        m_world.setSaveManager(m_saveManager.get());
+    }
+
+    // Delegate to the base init for world setup
+    init(seed, threadPool, renderDistance);
+}
+
+void GameServer::shutdown() {
+    if (m_shutdownDone) return;
+    m_shutdownDone = true;
+
+    // Flush all pending chunk saves
+    m_world.flushSaves();
+
+    // Save level metadata
+    if (m_saveManager) {
+        m_saveManager->saveLevelMeta(m_world.getSeed());
+    }
 }
 
 void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id) {

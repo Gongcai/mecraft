@@ -2,6 +2,7 @@
 #define MECRAFT_GAME_SESSION_CONFIG_H
 
 #include <glm/glm.hpp>
+#include <filesystem>
 #include <string>
 
 class Window;
@@ -24,6 +25,11 @@ struct GameSessionConfig {
     std::string serverAddress;
     uint16_t serverPort = 25565;
     bool isMultiplayer() const { return !serverAddress.empty(); }
+
+    /// Save system settings.
+    std::string worldName;              // Empty = no save (ephemeral world)
+    std::filesystem::path saveRoot;     // Root directory for all saves (e.g. "saves/")
+    bool enableSaving = true;
 };
 
 /// External service dependencies required by a gameplay session.

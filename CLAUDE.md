@@ -1,7 +1,7 @@
 # WARNING
 - 当前环境在控制台中编译困难且缓慢，如果你需要编译构建代码，请通知我，由我通过ide编译，将结果反馈给你。 
 # 文档
-参考D:\project\mecraft\docs\multiplayer-cs-architecture-design.md进行开发
+参考save-system-design.md进行开发
 # 语言使用
 - 代码注释必须使用英文，且必须清晰描述函数目的、参数意义、返回值含义、算法思路等关键信息。禁止使用中文注释或不规范的缩写。
 - 给用户的汇报和文档必须使用中文。

@@ -12,6 +12,7 @@
 #include "../../renderer/renderers/SkyboxRenderer.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <filesystem>
 
 class MainMenuAppState : public IAppState {
 public:
@@ -30,6 +31,8 @@ public:
         // Single-player button
         m_screen.onStartClicked = [this]() {
             m_pendingConfig = GameSessionConfig{1234, 16};
+            m_pendingConfig.worldName = "New World";
+            m_pendingConfig.saveRoot = "saves";
             m_transitioningToGame = true;
             m_transition.startFadeOut(0.5f);
         };

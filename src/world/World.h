@@ -24,10 +24,14 @@
 #include "../thread/ThreadPool.h"
 #include "IWorldView.h"
 
+namespace save { class SaveManager; }
+
 class World : public IWorldView {
 public:
     void init(uint32_t seed);
     void update(const glm::vec3& playerPos);
+
+    [[nodiscard]] uint32_t getSeed() const { return m_seed; }
 
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const override;
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;
@@ -85,6 +89,18 @@ public:
     using BlockChangeCallback = std::function<void(int x, int y, int z, BlockID newBlockId)>;
     void setBlockChangeCallback(BlockChangeCallback callback) { m_blockChangeCallback = std::move(callback); }
 
+    // --- Save system integration ---
+
+    /// Bind a SaveManager for chunk persistence. Null to disable.
+    void setSaveManager(save::SaveManager* saveManager);
+
+    /// Mark a chunk as needing to be saved (dirty for persistence).
+    void markChunkSaveDirty(int cx, int cz);
+
+    /// Flush all dirty chunks to disk and wait for completion.
+    /// Called during shutdown before destroying the world.
+    void flushSaves();
+
     /// Callback invoked after async lighting has merged changed sub-chunks.
     using LightChangeCallback = LightService::LightChangeCallback;
     void setLightChangeCallback(LightChangeCallback callback);
@@ -102,6 +118,10 @@ private:
     BlockChangeCallback m_blockChangeCallback;
     LightChangeCallback m_lightChangeCallback;
     ChunkTicketManager m_ticketManager;
+
+    // Save system
+    save::SaveManager* m_saveManager = nullptr;
+    std::unordered_set<int64_t> m_dirtySaveChunks;
 
     int m_renderDistance = 8;
     uint32_t m_seed = 0;

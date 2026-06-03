@@ -1,5 +1,6 @@
 #include "World.h"
 #include "WorldRaycast.h"
+#include "../save/SaveManager.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -436,6 +437,9 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
         const BlockID currentBlockId = sc->getBlock(localX, localY, localZ);
         m_blockChangeCallback(x, y, z, currentBlockId);
     }
+
+    // Mark chunk dirty for persistence
+    markChunkSaveDirty(chunkX, chunkZ);
 }
 
 bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
@@ -535,6 +539,9 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     if (m_blockChangeCallback) {
         m_blockChangeCallback(x, y, z, targetState);
     }
+
+    // Mark chunk dirty for persistence
+    markChunkSaveDirty(chunkX, chunkZ);
 }
 
 void World::setThreadPool(ThreadPool* pool) {
@@ -551,6 +558,36 @@ void World::setLightChangeCallback(LightChangeCallback callback) {
     if (m_lightService) {
         m_lightService->setLightChangeCallback(m_lightChangeCallback);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Save system integration
+// ---------------------------------------------------------------------------
+
+void World::setSaveManager(save::SaveManager* saveManager) {
+    m_saveManager = saveManager;
+}
+
+void World::markChunkSaveDirty(int cx, int cz) {
+    m_dirtySaveChunks.insert(chunkKey(cx, cz));
+}
+
+void World::flushSaves() {
+    if (!m_saveManager) return;
+
+    // Submit all remaining dirty chunks for saving
+    for (int64_t key : m_dirtySaveChunks) {
+        int cx = static_cast<int>(key >> 32);
+        int cz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
+        auto it = m_chunks.find(key);
+        if (it != m_chunks.end()) {
+            m_saveManager->submitSaveChunk(cx, cz, *it->second);
+        }
+    }
+    m_dirtySaveChunks.clear();
+
+    // Wait for all pending saves to complete
+    m_saveManager->flushPendingSaves();
 }
 
 LightFrameStats World::getLightFrameStats() const {
@@ -644,16 +681,34 @@ void World::submitChunkLoad(int cx, int cz) {
 
     m_generationInFlight.insert(key);
 
+    // Try loading from disk first, fall back to terrain generation.
+    // Both paths push to m_completedGenQueue which is consumed by finalizeChunkLoad().
     auto chunk = std::make_shared<Chunk>(cx, cz);
     TerrainGenerator* terrainGen = &m_terrainGen;
+    save::SaveManager* sm = m_saveManager;
 
-    m_threadPool->submit([chunk, terrainGen, this]() {
-        terrainGen->generateChunk(*chunk);
-        chunk->seedInitialLightMap();
+    m_threadPool->submit([chunk, terrainGen, sm, this]() {
+        bool loadedFromDisk = false;
 
-        {
-            std::lock_guard<std::mutex> lock(m_completedGenMutex);
-            m_completedGenQueue.push_back(chunk);
+        if (sm && sm->chunkFileExists(chunk->m_chunkX, chunk->m_chunkZ)) {
+            auto loaded = sm->tryLoadChunk(chunk->m_chunkX, chunk->m_chunkZ);
+            if (loaded) {
+                loaded->seedInitialLightMap();
+                {
+                    std::lock_guard<std::mutex> lock(m_completedGenMutex);
+                    m_completedGenQueue.push_back(std::move(loaded));
+                }
+                loadedFromDisk = true;
+            }
+        }
+
+        if (!loadedFromDisk) {
+            terrainGen->generateChunk(*chunk);
+            chunk->seedInitialLightMap();
+            {
+                std::lock_guard<std::mutex> lock(m_completedGenMutex);
+                m_completedGenQueue.push_back(chunk);
+            }
         }
     }, 0);
 }
@@ -709,9 +764,15 @@ void World::loadChunk(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
     if (m_chunks.find(key) != m_chunks.end()) return;
 
-    auto chunk = std::make_shared<Chunk>(cx, cz);
-
-    m_terrainGen.generateChunk(*chunk);
+    // Try loading from disk first, fall back to terrain generation
+    std::shared_ptr<Chunk> chunk;
+    if (m_saveManager && m_saveManager->chunkFileExists(cx, cz)) {
+        chunk = m_saveManager->tryLoadChunk(cx, cz);
+    }
+    if (!chunk) {
+        chunk = std::make_shared<Chunk>(cx, cz);
+        m_terrainGen.generateChunk(*chunk);
+    }
     chunk->seedInitialLightMap();
 
     m_chunks[key] = std::move(chunk);
@@ -751,8 +812,15 @@ void World::loadChunk(int cx, int cz) {
 }
 
 void World::unloadChunk(int cx, int cz) {
-    auto it = m_chunks.find(chunkKey(cx, cz));
+    int64_t key = chunkKey(cx, cz);
+    auto it = m_chunks.find(key);
     if (it == m_chunks.end()) return;
+
+    // Save dirty chunk to disk before unloading
+    if (m_saveManager && m_dirtySaveChunks.count(key)) {
+        m_saveManager->submitSaveChunk(cx, cz, *it->second);
+        m_dirtySaveChunks.erase(key);
+    }
 
     if (m_lightService) {
         m_lightService->onChunkUnloaded(it->first);

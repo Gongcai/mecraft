@@ -26,6 +26,10 @@ public:
     [[nodiscard]] size_t dataByteSize() const { return m_data.size() * sizeof(uint64_t); }
     [[nodiscard]] size_t allocatedByteSize() const { return m_data.capacity() * sizeof(uint64_t); }
 
+    // Direct access to raw 64-bit words for serialization.
+    [[nodiscard]] const uint64_t* rawData() const { return m_data.data(); }
+    [[nodiscard]] size_t rawDataWords() const { return m_data.size(); }
+
 private:
     size_t m_count = 0;
     uint8_t m_bitsPerEntry = 0;

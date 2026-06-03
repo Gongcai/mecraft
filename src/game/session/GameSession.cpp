@@ -21,6 +21,7 @@
 #include "../../Paths.h"
 #include "../../server/GameServer.h"
 #include "../../client/GameClient.h"
+#include "../../save/SavePaths.h"
 #include "../../net/InProcessTransport.h"
 #include "../../net/ENetTransport.h"
 #include <cstdio>
@@ -99,7 +100,19 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
     } else {
         // Single-player mode: local server + in-process transport
         m_server = std::make_unique<server::GameServer>();
-        m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+
+        // Build save path if saving is enabled
+        std::filesystem::path worldSavePath;
+        if (config.enableSaving && !config.worldName.empty()) {
+            worldSavePath = config.saveRoot / save::SavePaths::sanitizeWorldName(config.worldName);
+        }
+
+        if (!worldSavePath.empty()) {
+            m_server->init(static_cast<uint32_t>(config.seed), threadPool,
+                           config.renderDistance, std::move(worldSavePath));
+        } else {
+            m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+        }
 
         m_client = std::make_unique<client::GameClient>();
         auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();

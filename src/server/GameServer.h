@@ -6,11 +6,14 @@
 #include "../world/World.h"
 #include "../ecs/components/NetworkComponents.h"
 #include <entt/entt.hpp>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+
+namespace save { class SaveManager; }
 
 class ThreadPool;
 
@@ -47,6 +50,14 @@ public:
 
     /// Initialize the server world with a seed.
     void init(uint32_t seed, ThreadPool* threadPool, int renderDistance);
+
+    /// Initialize with save support. If savePath is non-empty, chunks will be
+    /// persisted to disk and restored on subsequent sessions.
+    void init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
+              std::filesystem::path savePath);
+
+    /// Explicit shutdown: flush pending saves before destruction.
+    void shutdown();
 
     /// Accept a new client connection.
     void acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id);
@@ -98,6 +109,7 @@ private:
     void syncPlayersToClients();
 
     World m_world;
+    std::unique_ptr<save::SaveManager> m_saveManager;
     std::vector<ConnectedClient> m_clients;
     std::vector<net::BlockUpdateEntry> m_pendingBlockUpdates;
 
@@ -108,6 +120,7 @@ private:
 
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;
+    bool m_shutdownDone = false;
     glm::vec3 m_spawnPosition = glm::vec3(0.0f);
 };
 

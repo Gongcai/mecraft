@@ -93,8 +93,12 @@ void Game::shutdown() {
     if (!m_initialized) {
         return;
     }
-    m_renderRuntime->shutdown();
+    // Session must shut down before render runtime because the session's
+    // GameServer flushes pending saves via the thread pool owned by
+    // RenderResourceHub.  Shutting down the render runtime first would
+    // destroy the thread pool and deadlock flushPendingSaves().
     m_session.shutdown();
+    m_renderRuntime->shutdown();
     m_initialized = false;
 }
 

@@ -331,6 +331,13 @@ set(SRC_CLIENT
         src/client/ClientEntityStore.cpp
 )
 
+# [存档系统]
+set(SRC_SAVE
+        src/save/SavePaths.cpp
+        src/save/ChunkSerializer.cpp
+        src/save/SaveManager.cpp
+)
+
 # 合并所有核心代码
 set(CORE_SOURCES
         ${SRC_APP} ${SRC_ENGINE} ${SRC_GAME} ${SRC_CORE}
@@ -338,6 +345,7 @@ set(CORE_SOURCES
         ${SRC_ECS} ${SRC_PLAYER} ${SRC_PHYSICS} ${SRC_PARTICLE}
         ${SRC_ITEM} ${SRC_CRAFTING} ${SRC_AUDIO}
         ${SRC_NET} ${SRC_SERVER} ${SRC_CLIENT}
+        ${SRC_SAVE}
 )
 
 # ===========================================================================
@@ -563,6 +571,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(client_entity_store_test tests/client_entity_store_test.cpp)
     add_mecraft_test(game_server_test tests/game_server_test.cpp)
     add_mecraft_test(chunk_ticket_manager_test tests/chunk_ticket_manager_test.cpp)
+    add_mecraft_test(chunk_save_serializer_test tests/chunk_save_serializer_test.cpp)
 endif()
 
 # ===========================================================================

@@ -224,6 +224,13 @@ public:
 
     void optimizePalette();
 
+    // Direct palette and packed data access for serialization.
+    // These expose read-only references to the internal storage.
+    [[nodiscard]] const Palette& blockPalette() const { return m_palette; }
+    [[nodiscard]] const BitPackedArray& blockData() const { return m_blockData; }
+    [[nodiscard]] const Palette& fluidPalette() const { return m_fluidPalette; }
+    [[nodiscard]] const BitPackedArray& fluidData() const { return m_fluidData; }
+
     [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
     [[nodiscard]] bool isDirty() const { return m_dirty; }
