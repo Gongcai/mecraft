@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(mecraft LANGUAGES C CXX)
+project(mecraft VERSION 0.1.0 LANGUAGES C CXX)
 
 # ===========================================================================
 # 全局设置
@@ -9,8 +9,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(MECRAFT_ENABLE_IPO "Enable IPO/LTO for optimized configurations" ON)
 option(MECRAFT_ENABLE_PCH "Enable precompiled headers" ON)
 option(MECRAFT_BUILD_TESTS "Build Mecraft tests" ON)
-set(MECRAFT_ASSETS_DIR "${PROJECT_SOURCE_DIR}/assets" CACHE PATH "Absolute path to Mecraft runtime assets")
-file(TO_CMAKE_PATH "${MECRAFT_ASSETS_DIR}" MECRAFT_ASSETS_DIR_COMPILE)
+option(MECRAFT_USE_SOURCE_ASSETS "Use the source-tree assets directory directly instead of packaged assets" OFF)
+
+if(MECRAFT_USE_SOURCE_ASSETS)
+    set(MECRAFT_RUNTIME_ASSETS_DIR "${PROJECT_SOURCE_DIR}/assets")
+else()
+    set(MECRAFT_RUNTIME_ASSETS_DIR "assets")
+endif()
+file(TO_CMAKE_PATH "${MECRAFT_RUNTIME_ASSETS_DIR}" MECRAFT_ASSETS_DIR_COMPILE)
 
 # 检查链接期优化支持
 include(CheckIPOSupported)
@@ -31,6 +37,17 @@ function(mecraft_apply_project_warnings TARGET_NAME)
         target_compile_options(${TARGET_NAME} PRIVATE /W4 /WX-)
     else()
         target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wextra -pedantic)
+    endif()
+endfunction()
+
+function(mecraft_copy_runtime_assets TARGET_NAME)
+    if(NOT MECRAFT_USE_SOURCE_ASSETS)
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                        "${PROJECT_SOURCE_DIR}/assets"
+                        "$<TARGET_FILE_DIR:${TARGET_NAME}>/assets"
+                COMMENT "Copying runtime assets for ${TARGET_NAME}"
+        )
     endif()
 endfunction()
 
@@ -435,6 +452,7 @@ endif()
 add_executable(mecraft main.cpp)
 target_compile_features(mecraft PRIVATE cxx_std_17)
 target_link_libraries(mecraft PRIVATE mecraft_core)
+mecraft_copy_runtime_assets(mecraft)
 if (MSVC)
     mecraft_apply_msvc_defaults(mecraft)
 endif()
@@ -451,6 +469,7 @@ add_executable(mecraft_server dedicated_server.cpp)
 target_compile_features(mecraft_server PRIVATE cxx_std_17)
 target_link_libraries(mecraft_server PRIVATE mecraft_core)
 target_compile_definitions(mecraft_server PRIVATE MECRAFT_NO_TEXTURES)
+mecraft_copy_runtime_assets(mecraft_server)
 if (MSVC)
     mecraft_apply_msvc_defaults(mecraft_server)
 endif()
@@ -545,4 +564,54 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(game_server_test tests/game_server_test.cpp)
     add_mecraft_test(chunk_ticket_manager_test tests/chunk_ticket_manager_test.cpp)
 endif()
+
+# ===========================================================================
+# 8. Install / package
+# ===========================================================================
+include(GNUInstallDirs)
+
+if(WIN32)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/run_mecraft.bat" CONTENT
+"@echo off\r\ncd /d \"%~dp0\"\r\nstart \"\" \"%~dp0mecraft.exe\"\r\n")
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/run_mecraft_server.bat" CONTENT
+"@echo off\r\ncd /d \"%~dp0\"\r\nmecraft_server.exe %*\r\npause\r\n")
+
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
+    set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+    include(InstallRequiredSystemLibraries)
+endif()
+
+install(TARGETS mecraft mecraft_server
+        RUNTIME DESTINATION "."
+)
+
+install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/"
+        DESTINATION "assets"
+)
+
+if(WIN32)
+    install(CODE [[
+        file(GLOB _mecraft_runtime_dlls
+                LIST_DIRECTORIES FALSE
+                "$<TARGET_FILE_DIR:mecraft>/*.dll"
+                "$<TARGET_FILE_DIR:mecraft_server>/*.dll"
+        )
+        if(_mecraft_runtime_dlls)
+            file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}" TYPE FILE FILES ${_mecraft_runtime_dlls})
+        endif()
+    ]])
+    install(FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/run_mecraft.bat"
+            "${CMAKE_CURRENT_BINARY_DIR}/run_mecraft_server.bat"
+            DESTINATION "."
+    )
+endif()
+
+set(CPACK_PACKAGE_NAME "mecraft")
+set(CPACK_PACKAGE_VENDOR "Mecraft")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+include(CPack)
 

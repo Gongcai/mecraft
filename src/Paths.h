@@ -1,7 +1,7 @@
 #pragma once
 
-// CMake builds inject an absolute assets directory. The platform fallbacks are
-// kept for ad-hoc compiles that do not provide MECRAFT_ASSETS_DIR.
+// CMake builds inject the runtime assets directory. Packaged builds use the
+// assets folder next to the executable; local dev can opt into source assets.
 #ifdef MECRAFT_ASSETS_DIR
     #define ASSETS_DIR MECRAFT_ASSETS_DIR
 #elif defined(__linux__)

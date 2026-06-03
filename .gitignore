@@ -12,3 +12,6 @@
 /DerivativeMain/
 /Iris-26.1/
 /legacyshaders/
+/cmake-build-package/
+/cmake-build-package-ninja/
+/cmake-build-package-release/
