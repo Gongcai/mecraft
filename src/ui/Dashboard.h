@@ -10,6 +10,7 @@
 
 #include <array>
 #include <cstddef>
+#include <functional>
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_impl_glfw.h"
 #include "../third_party/imgui/imgui_impl_opengl3.h"
@@ -62,10 +63,13 @@ public:
                 RenderScene& renderScene,
                 PostProcessPass& postProcess,
                 UIRenderer& uiRenderer,
-                const FrameProfilerStats& profilerStats);
+                const FrameProfilerStats& profilerStats,
+                const std::function<void(int)>& renderDistanceSetter = {});
 private:
     void showPlayerStats(ecs::GameplayRegistry& registry);
-    void showWorldStats(World& world, ecs::GameplayRegistry& registry);
+    void showWorldStats(World& world,
+                        ecs::GameplayRegistry& registry,
+                        const std::function<void(int)>& renderDistanceSetter);
     void showCameraStats( Camera& camera);
     void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, const FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);

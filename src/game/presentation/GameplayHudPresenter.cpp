@@ -28,17 +28,18 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
 #include "../../ui/Dashboard.h"
 
 void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
-                                            World& world,
-                                            const Camera& camera,
-                                            RenderResourceHub& renderer,
-                                            RenderScene& renderScene,
-                                            PostProcessPass& postProcess,
-                                            const Dashboard::FrameProfilerStats& profilerStats) {
+                                             World& world,
+                                             const Camera& camera,
+                                             RenderResourceHub& renderer,
+                                             RenderScene& renderScene,
+                                             PostProcessPass& postProcess,
+                                             const Dashboard::FrameProfilerStats& profilerStats,
+                                             const std::function<void(int)>& renderDistanceSetter) {
     if (!m_dashboard) {
         return;
     }
     Camera mutableCamera = camera;
     m_dashboard->render(reg, world, mutableCamera, renderer, renderScene,
-                        postProcess, m_uiRenderer, profilerStats);
+                        postProcess, m_uiRenderer, profilerStats, renderDistanceSetter);
 }
 #endif

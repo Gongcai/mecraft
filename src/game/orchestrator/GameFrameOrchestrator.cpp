@@ -30,8 +30,8 @@
 
 namespace {
 
-void sendMultiplayerInput(GameSession& session, const float fixedStep) {
-    if (!session.isMultiplayer() || !session.client().areSpawnChunksReady()) {
+void sendClientInput(GameSession& session, const float fixedStep) {
+    if (!session.client().areSpawnChunksReady()) {
         return;
     }
 
@@ -105,7 +105,7 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 #else
     session.gameplayScene().runFixedUpdate(static_cast<float>(fixedStep));
 #endif
-    sendMultiplayerInput(session, static_cast<float>(fixedStep));
+    sendClientInput(session, static_cast<float>(fixedStep));
 
 #ifdef MECRAFT_DEBUG
     const auto tickStart = std::chrono::steady_clock::now();
@@ -239,8 +239,19 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 #ifdef MECRAFT_DEBUG
         // G7: Render debug dashboard (Dashboard is injected into presenter by Game)
         if (renderRuntime.dashboardProfilerStats()) {
-            hudPresenter->renderDashboard(reg, session.world(), snap.renderCamera,
-                                          renderer, renderScene, postProcess, *renderRuntime.dashboardProfilerStats());
+            hudPresenter->renderDashboard(
+                reg,
+                session.world(),
+                snap.renderCamera,
+                renderer,
+                renderScene,
+                postProcess,
+                *renderRuntime.dashboardProfilerStats(),
+                [&session](const int distance) {
+                    session.world().setRenderDistance(distance);
+                    session.client().clientWorld().setRenderDistance(distance);
+                    session.client().sendViewConfig(distance);
+                });
         }
 #endif
     }

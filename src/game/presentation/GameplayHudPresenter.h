@@ -2,6 +2,7 @@
 #define MECRAFT_GAMEPLAY_HUD_PRESENTER_H
 
 #include "GameplayPresentationSnapshot.h"
+#include <functional>
 #ifdef MECRAFT_DEBUG
 #include "../../ui/Dashboard.h"
 #endif
@@ -39,7 +40,8 @@ public:
                          RenderResourceHub& renderer,
                          RenderScene& renderScene,
                          PostProcessPass& postProcess,
-                         const Dashboard::FrameProfilerStats& profilerStats);
+                         const Dashboard::FrameProfilerStats& profilerStats,
+                         const std::function<void(int)>& renderDistanceSetter);
 #endif
 
 private:

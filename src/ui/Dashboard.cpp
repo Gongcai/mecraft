@@ -61,7 +61,8 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
                        RenderScene& renderScene,
                        PostProcessPass& postProcess,
                        UIRenderer& uiRenderer,
-                       const FrameProfilerStats& profilerStats) {
+                       const FrameProfilerStats& profilerStats,
+                       const std::function<void(int)>& renderDistanceSetter) {
     // (Your code calls glfwPollEvents())
     // ...
     // Start the Dear ImGui frame
@@ -74,7 +75,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
         ImGui::SliderFloat("Font Scale", &m_fontScale, 0.8f, 3.0f, "%.1f");
         showPlayerStats(registry);
         showCameraStats(camera);
-        showWorldStats(world, registry);
+        showWorldStats(world, registry, renderDistanceSetter);
         showPerformanceStats(world, render, renderScene, postProcess, profilerStats);
         showCrosshairSettings(uiRenderer);
         showHotbarSettings(uiRenderer);
@@ -159,7 +160,9 @@ void Dashboard::showPlayerStats(ecs::GameplayRegistry &registry) {
     }
 }
 
-void Dashboard::showWorldStats(World& world, ecs::GameplayRegistry& registry) {
+void Dashboard::showWorldStats(World& world,
+                               ecs::GameplayRegistry& registry,
+                               const std::function<void(int)>& renderDistanceSetter) {
     if (ImGui::CollapsingHeader("World Stats")) {
         ecs::PlayerQuery query(registry);
         const glm::vec3 position = query.getPosition();
@@ -173,11 +176,18 @@ void Dashboard::showWorldStats(World& world, ecs::GameplayRegistry& registry) {
         ImGui::Text("Total Vertices: %zu", world.getTotalVertexCount());
         ImGui::Text("Current Chunk: (%d, %d)", chunkCoords.x, chunkCoords.y);
         ImGui::Text("Current Biome: %s", World::biomeToString(biome));
+        const auto setRenderDistance = [&](const int distance) {
+            if (renderDistanceSetter) {
+                renderDistanceSetter(distance);
+            } else {
+                world.setRenderDistance(distance);
+            }
+        };
         if (ImGui::Button("Increase Render Distance")) {
-            world.setRenderDistance(world.getRenderDistance() + 1);
+            setRenderDistance(world.getRenderDistance() + 1);
         }ImGui::SameLine();
         if (ImGui::Button("Decrease Render Distance")) {
-            world.setRenderDistance(world.getRenderDistance() - 1);
+            setRenderDistance(world.getRenderDistance() - 1);
         }
     }
 }
