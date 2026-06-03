@@ -139,7 +139,26 @@ static void testClientBlockActionRoundTrip() {
         client.receiveMessages();
     }
 
-    const glm::ivec3 placeBlock(1, static_cast<int>(harness.server.getSpawnPosition().y), 1);
+    glm::ivec3 placeBlock(1, static_cast<int>(harness.server.getSpawnPosition().y), 1);
+    bool foundAir = false;
+    const glm::vec3 spawn = harness.server.getSpawnPosition();
+    const int spawnY = static_cast<int>(spawn.y);
+    for (int y = spawnY - 2; y <= spawnY + 6 && !foundAir; ++y) {
+        for (int z = -5; z <= 5 && !foundAir; ++z) {
+            for (int x = -5; x <= 5 && !foundAir; ++x) {
+                const glm::vec3 center = glm::vec3(x, y, z) + glm::vec3(0.5f);
+                const glm::vec3 diff = spawn - center;
+                const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+                if (distSq <= 5.5f * 5.5f &&
+                    harness.server.world().isChunkLoadedForBlock(x, y, z) &&
+                    harness.server.world().getBlock(x, y, z) == BlockIds::AIR) {
+                    placeBlock = glm::ivec3(x, y, z);
+                    foundAir = true;
+                }
+            }
+        }
+    }
+    assert(foundAir);
     net::ClientBlockAction place;
     place.sequence = 1;
     place.action = net::ClientBlockActionType::Place;
@@ -223,6 +242,35 @@ static void testChunkDataDecodeMarksRenderableSubChunks() {
     }
 
     std::printf("[PASS] testChunkDataDecodeMarksRenderableSubChunks\n");
+}
+
+static void testBlockUpdateCodecKeepsVariableLightPatch() {
+    net::BlockUpdateBatchMessage message;
+    net::BlockUpdateEntry entry;
+    entry.x = 1;
+    entry.y = 64;
+    entry.z = -2;
+    entry.blockId = BlockIds::TORCH;
+    entry.packedLightPatch.resize(5 * 5 * 5);
+    for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
+        entry.packedLightPatch[i] = static_cast<uint8_t>(i & 0x0F);
+    }
+    message.updates.push_back(entry);
+
+    const std::vector<uint8_t> encoded = net::PacketCodec::encodeBlockUpdateBatch(message);
+    net::BlockUpdateBatchMessage decoded;
+    if (!net::PacketCodec::decodeBlockUpdateBatch(encoded.data(), encoded.size(), decoded)) {
+        std::fprintf(stderr, "[FAIL] BlockUpdateBatch decode failed\n");
+        std::abort();
+    }
+    if (decoded.updates.size() != 1 ||
+        decoded.updates[0].packedLightPatch.size() != entry.packedLightPatch.size() ||
+        decoded.updates[0].packedLightPatch[124] != entry.packedLightPatch[124]) {
+        std::fprintf(stderr, "[FAIL] BlockUpdateBatch variable light patch was not preserved\n");
+        std::abort();
+    }
+
+    std::printf("[PASS] testBlockUpdateCodecKeepsVariableLightPatch\n");
 }
 
 static void testENetChunkStreamingToClient() {
@@ -365,6 +413,7 @@ int main() {
     testInputRoundTrip();
     testClientBlockActionRoundTrip();
     testChunkDataDecodeMarksRenderableSubChunks();
+    testBlockUpdateCodecKeepsVariableLightPatch();
     testENetChunkStreamingToClient();
     testENetChunkStreamingAfterPreconnectTicks();
     std::printf("\nAll GameServer integration tests passed!\n");

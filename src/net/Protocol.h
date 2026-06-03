@@ -145,8 +145,11 @@ struct BlockUpdateEntry {
     int32_t x = 0;
     int32_t y = 0;
     int32_t z = 0;
+    // 0xFFFF means this entry only carries light data and must not edit a block.
     uint16_t blockId = 0;
-    // 3x3x3 packed-light patch centered on x/y/z, XYZ nested loops.
+    // Optional light payload. Odd-sized cubic patches are centered on x/y/z
+    // and written in dy, dz, dx nested-loop order. A Chunk::BLOCK_COUNT-sized
+    // payload is a full packed-light snapshot for the chunk containing x/y/z.
     std::vector<uint8_t> packedLightPatch;
 };
 

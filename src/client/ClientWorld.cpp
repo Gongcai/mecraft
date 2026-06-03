@@ -1,9 +1,11 @@
 #include "ClientWorld.h"
 #include "../world/block/Block.h"
+#include <cstddef>
 #include <cmath>
 
 namespace client {
 namespace {
+constexpr BlockID kLightOnlyBlockUpdate = 0xFFFFu;
 
 void markRenderableBorderDirty(Chunk& chunk) {
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
@@ -11,6 +13,20 @@ void markRenderableBorderDirty(Chunk& chunk) {
             chunk.markSubChunkDirty(scy);
         }
     }
+}
+
+int inferOddCubeSide(const std::size_t valueCount) {
+    for (int side = 1; side <= Chunk::SIZE_Y; side += 2) {
+        const std::size_t sideSize = static_cast<std::size_t>(side);
+        const std::size_t cubeSize = sideSize * sideSize * sideSize;
+        if (cubeSize == valueCount) {
+            return side;
+        }
+        if (cubeSize > valueCount) {
+            break;
+        }
+    }
+    return 0;
 }
 
 } // namespace
@@ -189,26 +205,30 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId, const s
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     Chunk& chunk = *it->second;
-    chunk.setBlock(lx, y, lz, blockId);
-    if (lx == 0 && chunk.neighbors[1]) {
-        chunk.neighbors[1]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-    } else if (lx == Chunk::SIZE_X - 1 && chunk.neighbors[0]) {
-        chunk.neighbors[0]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-    }
-    if (lz == 0 && chunk.neighbors[3]) {
-        chunk.neighbors[3]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
-    } else if (lz == Chunk::SIZE_Z - 1 && chunk.neighbors[2]) {
-        chunk.neighbors[2]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+    if (blockId != kLightOnlyBlockUpdate) {
+        chunk.setBlock(lx, y, lz, blockId);
+        chunk.recalcHeightMap(lx, lz);
+        if (lx == 0 && chunk.neighbors[1]) {
+            chunk.neighbors[1]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+        } else if (lx == Chunk::SIZE_X - 1 && chunk.neighbors[0]) {
+            chunk.neighbors[0]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+        }
+        if (lz == 0 && chunk.neighbors[3]) {
+            chunk.neighbors[3]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+        } else if (lz == Chunk::SIZE_Z - 1 && chunk.neighbors[2]) {
+            chunk.neighbors[2]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
+        }
     }
 
     if (!packedLightPatch.empty()) {
-        constexpr int kPatchRadius = 1;
-        constexpr int kPatchSide = kPatchRadius * 2 + 1;
-        if (packedLightPatch.size() == static_cast<size_t>(kPatchSide * kPatchSide * kPatchSide)) {
+        if (packedLightPatch.size() == Chunk::BLOCK_COUNT) {
+            chunk.replacePackedLight(packedLightPatch.data(), packedLightPatch.size());
+        } else if (const int patchSide = inferOddCubeSide(packedLightPatch.size()); patchSide > 0) {
+            const int patchRadius = patchSide / 2;
             size_t index = 0;
-            for (int dy = -kPatchRadius; dy <= kPatchRadius; ++dy) {
-                for (int dz = -kPatchRadius; dz <= kPatchRadius; ++dz) {
-                    for (int dx = -kPatchRadius; dx <= kPatchRadius; ++dx) {
+            for (int dy = -patchRadius; dy <= patchRadius; ++dy) {
+                for (int dz = -patchRadius; dz <= patchRadius; ++dz) {
+                    for (int dx = -patchRadius; dx <= patchRadius; ++dx) {
                         const int wx = x + dx;
                         const int wy = y + dy;
                         const int wz = z + dz;

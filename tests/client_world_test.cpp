@@ -167,6 +167,61 @@ static void testClientWorldRaycastHitsBlocks() {
     std::printf("[PASS] testClientWorldRaycastHitsBlocks\n");
 }
 
+static void testApplyBlockUpdateAcceptsVariableLightPatch() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    cw.addChunk(chunk);
+
+    constexpr int patchSide = 5;
+    constexpr int patchRadius = patchSide / 2;
+    std::vector<uint8_t> lightPatch;
+    lightPatch.reserve(patchSide * patchSide * patchSide);
+    for (int dy = -patchRadius; dy <= patchRadius; ++dy) {
+        for (int dz = -patchRadius; dz <= patchRadius; ++dz) {
+            for (int dx = -patchRadius; dx <= patchRadius; ++dx) {
+                lightPatch.push_back(static_cast<uint8_t>((dx == 2 && dy == 0 && dz == 0) ? 0x0C : 0));
+            }
+        }
+    }
+
+    cw.applyBlockUpdate(4, 64, 4, BlockIds::TORCH, lightPatch);
+
+    require(cw.getBlock(4, 64, 4) == BlockIds::TORCH, "block update should still apply the block state");
+    require(cw.getPackedLight(6, 64, 4) == 0x0C, "client should apply larger odd-cube light patches");
+    std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
+}
+
+static void testApplyBlockUpdateAcceptsFullChunkLightSnapshot() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    cw.addChunk(chunk);
+
+    std::vector<uint8_t> fullLight(Chunk::BLOCK_COUNT, 0);
+    fullLight[Chunk::toIndex(15, 127, 15)] = 0xF0;
+
+    cw.applyBlockUpdate(4, 64, 4, BlockIds::STONE, fullLight);
+
+    require(cw.getBlock(4, 64, 4) == BlockIds::STONE, "full light snapshot update should still apply the block state");
+    require(cw.getPackedLight(15, 127, 15) == 0xF0, "client should apply full chunk light snapshots");
+    std::printf("[PASS] testApplyBlockUpdateAcceptsFullChunkLightSnapshot\n");
+}
+
+static void testApplyBlockUpdateCanBeLightOnly() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    chunk->setBlock(4, 64, 4, BlockIds::STONE);
+    cw.addChunk(chunk);
+
+    std::vector<uint8_t> fullLight(Chunk::BLOCK_COUNT, 0);
+    fullLight[Chunk::toIndex(4, 64, 4)] = 0x0A;
+
+    cw.applyBlockUpdate(0, 0, 0, 0xFFFFu, fullLight);
+
+    require(cw.getBlock(4, 64, 4) == BlockIds::STONE, "light-only updates should not edit blocks");
+    require(cw.getPackedLight(4, 64, 4) == 0x0A, "light-only updates should apply packed light");
+    std::printf("[PASS] testApplyBlockUpdateCanBeLightOnly\n");
+}
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     BlockRegistry::init(nullptr);
@@ -182,6 +237,9 @@ int main() {
     testWeatherDayNightProxy();
     testNeighborLinkingDirtiesExistingBorders();
     testClientWorldRaycastHitsBlocks();
+    testApplyBlockUpdateAcceptsVariableLightPatch();
+    testApplyBlockUpdateAcceptsFullChunkLightSnapshot();
+    testApplyBlockUpdateCanBeLightOnly();
     std::printf("\nAll ClientWorld tests passed!\n");
     return 0;
 }
