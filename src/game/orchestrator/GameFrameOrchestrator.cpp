@@ -233,6 +233,12 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     };
     renderScene.renderGameplayFrame(renderRequest);
 
+    // Invoke pre-UI callback (e.g., screenshot capture) after 3D scene, before UI
+    if (m_preUiCallback) {
+        m_preUiCallback();
+        m_preUiCallback = nullptr; // One-shot
+    }
+
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
         hudPresenter->render(snap, session.stateMachine());

@@ -31,6 +31,9 @@ public:
     [[nodiscard]] bool isQuitToMenuRequested() const;
     void clearQuitToMenuRequest();
 
+    /// Capture a screenshot of the current framebuffer for save thumbnail.
+    void captureExitScreenshot();
+
 private:
     // G1: Structured config and dependencies
     GameSessionConfig m_config;
@@ -50,9 +53,7 @@ private:
     std::unique_ptr<GameFrameOrchestrator> m_frameOrchestrator;
 
     bool m_initialized = false;
-
-    /// Capture a screenshot of the current framebuffer for save thumbnail.
-    void captureExitScreenshot();
+    bool m_captureScreenshotOnNextFrame = false;
 };
 
 #endif //MECRAFT_GAME_H

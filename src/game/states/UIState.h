@@ -5,6 +5,8 @@
 #include "UIStateContext.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../ui/screens/PauseMenuScreen.h"
+#include "engine/input/InputContextManager.h"
+#include "ui/core/UIRenderer.h"
 
 /// G6: UIState uses UIStateContext — only UI-relevant dependencies.
 /// Does not create child states, so narrow context is safe.

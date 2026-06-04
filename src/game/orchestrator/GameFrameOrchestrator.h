@@ -2,6 +2,7 @@
 #define MECRAFT_GAME_FRAME_ORCHESTRATOR_H
 
 #include <cstdint>
+#include <functional>
 
 #ifdef MECRAFT_DEBUG
 #include "../../ui/Dashboard.h"
@@ -41,8 +42,13 @@ public:
                      Window& window,
                      float frameTime);
 
+    /// Set a callback to be invoked after 3D scene render but before UI overlay.
+    /// Used for screenshot capture.
+    void setPreUiCallback(std::function<void()> callback) { m_preUiCallback = std::move(callback); }
+
 private:
     uint32_t m_lastHeldItemSwingSequence = 0;
+    std::function<void()> m_preUiCallback;
 };
 
 #endif // MECRAFT_GAME_FRAME_ORCHESTRATOR_H

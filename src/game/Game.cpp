@@ -87,6 +87,12 @@ void Game::renderFrame(const float frameTime) {
     m_renderRuntime->publishDebugStats(frameTime);
 #endif
 
+    // Set screenshot capture callback if requested (captures before UI overlay)
+    if (m_captureScreenshotOnNextFrame) {
+        m_captureScreenshotOnNextFrame = false;
+        m_frameOrchestrator->setPreUiCallback([this]() { captureExitScreenshot(); });
+    }
+
     // G5: Delegate frame rendering to orchestrator
     m_frameOrchestrator->renderFrame(m_session, *m_renderRuntime,
                                      m_hudPresenter.get(),
@@ -98,8 +104,11 @@ void Game::shutdown() {
         return;
     }
 
-    // Capture screenshot while OpenGL context is still active
-    captureExitScreenshot();
+    // Capture screenshot during next frame's render (before UI overlay)
+    m_captureScreenshotOnNextFrame = true;
+
+    // Render one more frame to capture the screenshot
+    renderFrame(0.0f);
 
     // Session must shut down before render runtime because the session's
     // GameServer flushes pending saves via the thread pool owned by
