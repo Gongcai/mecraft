@@ -152,8 +152,13 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             m_hasLoadedMeta = true;
             std::printf("[Server] Loaded existing world (seed=%u)\n", seed);
         } else {
+            // New world - set creation timestamp
             meta.seed = seed;
+            meta.createdUtc = save::SaveManager::currentUtcTimestamp();
+            meta.lastSavedUtc = meta.createdUtc;
+            meta.displayName = "New World";
             m_saveManager->saveLevelMeta(meta);
+            m_loadedMeta = meta;
             std::printf("[Server] Created new world (seed=%u)\n", seed);
         }
 
@@ -217,6 +222,12 @@ void GameServer::saveLevelMeta() {
     meta.weatherWetness = weather.wetness;
     meta.weatherStorm = weather.storm;
     meta.weatherAerialReduction = weather.aerialReduction;
+
+    // Preserve timestamps from loaded meta, update lastSavedUtc
+    meta.createdUtc = m_loadedMeta.createdUtc;
+    meta.lastSavedUtc = save::SaveManager::currentUtcTimestamp();
+    meta.screenshotPath = "thumb.png";
+    meta.displayName = m_loadedMeta.displayName;
 
     m_saveManager->saveLevelMeta(meta);
 }

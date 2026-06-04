@@ -36,6 +36,10 @@ std::filesystem::path SavePaths::localPlayerPath() const {
     return playersDir() / "local.json";
 }
 
+std::filesystem::path SavePaths::screenshotPath() const {
+    return m_root / "thumb.png";
+}
+
 void SavePaths::ensureDirectories() const {
     std::filesystem::create_directories(chunksDir());
     std::filesystem::create_directories(playersDir());

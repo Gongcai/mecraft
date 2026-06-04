@@ -101,7 +101,7 @@ static void testMultipleSubchunksRoundTrip() {
     for (int y = 112; y < 128; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::GRASS_BLOCK);
+                original->setBlockFast(x, y, z, BlockIds::GRASS);
             }
         }
     }
@@ -118,7 +118,7 @@ static void testMultipleSubchunksRoundTrip() {
         assert(loaded->getBlock(5, y, 5) == BlockIds::STONE);
     }
     for (int y = 112; y < 128; ++y) {
-        assert(loaded->getBlock(5, y, 5) == BlockIds::GRASS_BLOCK);
+        assert(loaded->getBlock(5, y, 5) == BlockIds::GRASS);
     }
 
     // Verify air between subchunks
@@ -133,7 +133,7 @@ static void testNegativeCoordinatesRoundTrip() {
     for (int y = 64; y < 80; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::COBBLESTONE);
+                original->setBlockFast(x, y, z, BlockIds::STONE);
             }
         }
     }
@@ -145,7 +145,7 @@ static void testNegativeCoordinatesRoundTrip() {
     assert(loaded->m_chunkZ == 5);
 
     for (int y = 64; y < 80; ++y) {
-        assert(loaded->getBlock(8, y, 8) == BlockIds::COBBLESTONE);
+        assert(loaded->getBlock(8, y, 8) == BlockIds::STONE);
     }
     std::printf("[PASS] testNegativeCoordinatesRoundTrip\n");
 }
@@ -157,8 +157,8 @@ static void testMixedBlocksInSubchunk() {
     for (int x = 0; x < Chunk::SIZE_X; ++x) {
         original->setBlockFast(x, 64, 0, BlockIds::STONE);
         original->setBlockFast(x, 65, 0, BlockIds::DIRT);
-        original->setBlockFast(x, 66, 0, BlockIds::GRASS_BLOCK);
-        original->setBlockFast(x, 67, 0, BlockIds::COBBLESTONE);
+        original->setBlockFast(x, 66, 0, BlockIds::GRASS);
+        original->setBlockFast(x, 67, 0, BlockIds::STONE);
         original->setBlockFast(x, 68, 0, BlockIds::OAK_PLANKS);
     }
 
@@ -169,8 +169,8 @@ static void testMixedBlocksInSubchunk() {
     for (int x = 0; x < Chunk::SIZE_X; ++x) {
         assert(loaded->getBlock(x, 64, 0) == BlockIds::STONE);
         assert(loaded->getBlock(x, 65, 0) == BlockIds::DIRT);
-        assert(loaded->getBlock(x, 66, 0) == BlockIds::GRASS_BLOCK);
-        assert(loaded->getBlock(x, 67, 0) == BlockIds::COBBLESTONE);
+        assert(loaded->getBlock(x, 66, 0) == BlockIds::GRASS);
+        assert(loaded->getBlock(x, 67, 0) == BlockIds::STONE);
         assert(loaded->getBlock(x, 68, 0) == BlockIds::OAK_PLANKS);
     }
     std::printf("[PASS] testMixedBlocksInSubchunk\n");
@@ -302,7 +302,7 @@ static void testSaveManagerChunkRoundTrip() {
         for (int y = 64; y < 80; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                 for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    chunk->setBlockFast(x, y, z, BlockIds::OAK_LOG);
+                    chunk->setBlockFast(x, y, z, BlockIds::WOOD);
                 }
             }
         }
@@ -318,7 +318,7 @@ static void testSaveManagerChunkRoundTrip() {
     assert(loaded->m_chunkZ == -2);
 
     for (int y = 64; y < 80; ++y) {
-        assert(loaded->getBlock(8, y, 8) == BlockIds::OAK_LOG);
+        assert(loaded->getBlock(8, y, 8) == BlockIds::WOOD);
     }
 
     // Cleanup

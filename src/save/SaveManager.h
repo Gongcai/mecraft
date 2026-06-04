@@ -17,23 +17,27 @@
 #include "ChunkSerializer.h"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 class Chunk;
 class ThreadPool;
 
 namespace save {
 
+class RegionFile;
 struct PlayerData;
 
 /// World-level metadata persisted in level.json.
 struct LevelMeta {
     uint32_t seed = 0;
+    std::string displayName;          // User-visible save name (may differ from folder name)
     float spawnX = 0.0f;
     float spawnY = 68.0f;
     float spawnZ = 0.0f;
@@ -44,6 +48,9 @@ struct LevelMeta {
     float weatherWetness = 0.0f;
     float weatherStorm = 0.0f;
     float weatherAerialReduction = 0.55f;
+    std::string createdUtc;           // ISO 8601 UTC timestamp
+    std::string lastSavedUtc;         // ISO 8601 UTC timestamp
+    std::string screenshotPath;       // Relative path to thumbnail PNG (e.g. "thumb.png")
 };
 
 class SaveManager {
@@ -100,12 +107,23 @@ public:
     /// Access the paths helper.
     [[nodiscard]] const SavePaths& paths() const { return m_paths; }
 
+    /// Get current UTC time as ISO 8601 string.
+    [[nodiscard]] static std::string currentUtcTimestamp();
+
+    /// Save a screenshot PNG to the save directory.
+    /// The image data should be raw RGB pixels (width * height * 3 bytes), bottom-to-top row order.
+    void saveScreenshot(const uint8_t* rgbData, int width, int height);
+
 private:
     /// Write a chunk file atomically: write .tmp, flush, rename old to .bak, rename .tmp to final.
     void writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t>& fileData);
 
     SavePaths m_paths;
     ThreadPool* m_threadPool = nullptr;
+
+    // Region file cache (opened on demand, keyed by "rx,rz")
+    mutable std::unordered_map<int64_t, std::unique_ptr<RegionFile>> m_regionCache;
+    RegionFile* getOrCreateRegion(int cx, int cz) const;
 
     // Pending save tracking
     std::mutex m_saveMutex;

@@ -197,6 +197,7 @@ set(SRC_RENDERER
 
         # Utility
         src/renderer/stb_image.cpp
+        src/renderer/stb_image_write.cpp
 )
 
 set(SRC_UI
@@ -337,6 +338,7 @@ set(SRC_SAVE
         src/save/ChunkSerializer.cpp
         src/save/SaveManager.cpp
         src/save/PlayerSerializer.cpp
+        src/save/RegionFile.cpp
 )
 
 # 合并所有核心代码

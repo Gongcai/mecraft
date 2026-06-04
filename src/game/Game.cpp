@@ -7,6 +7,9 @@
 #include "audio/AudioListenerSyncSystem.h"
 #include "orchestrator/GameFrameOrchestrator.h"
 #include "presentation/GameplayHudPresenter.h"
+#include "server/GameServer.h"
+#include "save/SaveManager.h"
+#include <glad/glad.h>
 
 #ifdef MECRAFT_DEBUG
 #include "debug/DebugFrameProfiler.h"
@@ -94,6 +97,10 @@ void Game::shutdown() {
     if (!m_initialized) {
         return;
     }
+
+    // Capture screenshot while OpenGL context is still active
+    captureExitScreenshot();
+
     // Session must shut down before render runtime because the session's
     // GameServer flushes pending saves via the thread pool owned by
     // RenderResourceHub.  Shutting down the render runtime first would
@@ -105,6 +112,43 @@ void Game::shutdown() {
 
 bool Game::isQuitToMenuRequested() const {
     return m_session.stateMachine().isQuitToMenuRequested();
+}
+
+void Game::captureExitScreenshot() {
+    // Only capture in single-player mode with saving enabled
+    if (m_config.isMultiplayer() || m_config.worldName.empty()) return;
+
+    auto* server = &m_session.server();
+    auto* sm = server->saveManager();
+    if (!sm) return;
+
+    // Read framebuffer dimensions from viewport
+    GLint viewport[4];
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    const int w = viewport[2];
+    const int h = viewport[3];
+    if (w <= 0 || h <= 0) return;
+
+    // Downscale to thumbnail size for reasonable file size
+    constexpr int THUMB_W = 640;
+    constexpr int THUMB_H = 360;
+    const int readW = std::min(w, THUMB_W * 2);
+    const int readH = std::min(h, THUMB_H * 2);
+
+    // Read pixels from framebuffer (bottom-to-top, RGB)
+    std::vector<uint8_t> pixels(readW * readH * 3);
+    glReadPixels(0, 0, readW, readH, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+    // Flip vertically (OpenGL origin is bottom-left)
+    std::vector<uint8_t> flipped(readW * readH * 3);
+    for (int y = 0; y < readH; ++y) {
+        std::memcpy(flipped.data() + y * readW * 3,
+                    pixels.data() + (readH - 1 - y) * readW * 3,
+                    readW * 3);
+    }
+
+    sm->saveScreenshot(flipped.data(), readW, readH);
+    std::printf("[Save] Captured exit screenshot (%dx%d)\n", readW, readH);
 }
 
 void Game::clearQuitToMenuRequest() {

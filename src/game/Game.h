@@ -50,6 +50,9 @@ private:
     std::unique_ptr<GameFrameOrchestrator> m_frameOrchestrator;
 
     bool m_initialized = false;
+
+    /// Capture a screenshot of the current framebuffer for save thumbnail.
+    void captureExitScreenshot();
 };
 
 #endif //MECRAFT_GAME_H

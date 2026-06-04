@@ -1,9 +1,11 @@
 #include "SaveManager.h"
 #include "PlayerSerializer.h"
+#include "RegionFile.h"
 #include "../thread/ThreadPool.h"
 #include "../world/chunk/Chunk.h"
 
 #include <nlohmann/json.hpp>
+#include <stb/stb_image_write.h>
 #include <fstream>
 #include <cstdio>
 
@@ -68,6 +70,12 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
             outMeta.weatherAerialReduction = j["weather"].value("aerialReduction", 0.55f);
         }
 
+        // Extended metadata (optional)
+        outMeta.displayName = j.value("displayName", "");
+        outMeta.createdUtc = j.value("createdUtc", "");
+        outMeta.lastSavedUtc = j.value("lastSavedUtc", "");
+        outMeta.screenshotPath = j.value("screenshotPath", "");
+
         return true;
     } catch (const std::exception& e) {
         std::fprintf(stderr, "[Save] Failed to parse level.json: %s\n", e.what());
@@ -80,6 +88,7 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     j["format"] = "mecraft.level";
     j["version"] = 1;
     j["seed"] = meta.seed;
+    j["displayName"] = meta.displayName;
     j["spawn"] = {meta.spawnX, meta.spawnY, meta.spawnZ};
     j["time"] = {
         {"timeOfDay", meta.timeOfDay},
@@ -92,6 +101,9 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
         {"storm", meta.weatherStorm},
         {"aerialReduction", meta.weatherAerialReduction}
     };
+    j["createdUtc"] = meta.createdUtc;
+    j["lastSavedUtc"] = meta.lastSavedUtc;
+    j["screenshotPath"] = meta.screenshotPath;
 
     const auto path = m_paths.levelPath();
     const auto tmpPath = path.string() + ".tmp";
@@ -129,20 +141,41 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
 // Chunk I/O
 // ---------------------------------------------------------------------------
 
-std::shared_ptr<Chunk> SaveManager::tryLoadChunk(int cx, int cz) {
-    const auto path = m_paths.chunkPath(cx, cz);
+RegionFile* SaveManager::getOrCreateRegion(int cx, int cz) const {
+    const int rx = RegionFile::toRegionCoord(cx);
+    const int rz = RegionFile::toRegionCoord(cz);
+    const int64_t key = (static_cast<int64_t>(rx) << 32) | (static_cast<int64_t>(rz) & 0xFFFFFFFF);
 
+    auto it = m_regionCache.find(key);
+    if (it != m_regionCache.end()) {
+        return it->second.get();
+    }
+
+    const auto path = RegionFile::regionPath(m_paths.chunksDir(), rx, rz);
+    auto rf = RegionFile::open(path, rx, rz);
+    if (!rf) return nullptr;
+
+    RegionFile* ptr = rf.get();
+    m_regionCache[key] = std::move(rf);
+    return ptr;
+}
+
+std::shared_ptr<Chunk> SaveManager::tryLoadChunk(int cx, int cz) {
+    // Try region file first
+    RegionFile* region = getOrCreateRegion(cx, cz);
+    if (region && region->hasChunk(cx, cz)) {
+        return region->readChunk(cx, cz);
+    }
+
+    // Fall back to legacy single-file format
+    const auto path = m_paths.chunkPath(cx, cz);
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
         return nullptr;
     }
 
-    // Read file into memory
     std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        std::fprintf(stderr, "[Save] Failed to open chunk file %s\n", path.string().c_str());
-        return nullptr;
-    }
+    if (!file.is_open()) return nullptr;
 
     const auto fileSize = file.tellg();
     if (fileSize <= 0) return nullptr;
@@ -150,35 +183,36 @@ std::shared_ptr<Chunk> SaveManager::tryLoadChunk(int cx, int cz) {
 
     std::vector<uint8_t> data(static_cast<size_t>(fileSize));
     file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(fileSize));
-    if (!file) {
-        std::fprintf(stderr, "[Save] Failed to read chunk file %s\n", path.string().c_str());
-        return nullptr;
-    }
+    if (!file) return nullptr;
 
-    // Deserialize
-    auto chunk = ChunkSerializer::deserializeFile(data.data(), data.size());
-    if (!chunk) {
-        std::fprintf(stderr, "[Save] Failed to deserialize chunk (%d, %d)\n", cx, cz);
-    }
-    return chunk;
+    return ChunkSerializer::deserializeFile(data.data(), data.size());
 }
 
 void SaveManager::submitSaveChunk(int cx, int cz, const Chunk& chunk) {
-    if (!m_threadPool) {
-        // No thread pool — write synchronously
-        std::vector<uint8_t> fileData = ChunkSerializer::serializeFile(chunk);
-        writeChunkFileAtomic(cx, cz, fileData);
-        return;
-    }
-
     // Serialize snapshot on calling thread (reads chunk data, no mutation)
     auto fileData = std::make_shared<std::vector<uint8_t>>(
         ChunkSerializer::serializeFile(chunk));
 
+    if (!m_threadPool) {
+        // No thread pool — write synchronously
+        RegionFile* region = getOrCreateRegion(cx, cz);
+        if (region) {
+            region->writeChunk(cx, cz, chunk);
+        } else {
+            writeChunkFileAtomic(cx, cz, *fileData);
+        }
+        return;
+    }
+
     m_pendingSaveCount.fetch_add(1, std::memory_order_relaxed);
 
     m_threadPool->submit([this, cx, cz, fileData]() {
-        writeChunkFileAtomic(cx, cz, *fileData);
+        RegionFile* region = getOrCreateRegion(cx, cz);
+        if (region) {
+            region->writeChunkRaw(cx, cz, *fileData);
+        } else {
+            writeChunkFileAtomic(cx, cz, *fileData);
+        }
         m_pendingSaveCount.fetch_sub(1, std::memory_order_release);
         m_saveCv.notify_all();
     }, 0);
@@ -196,6 +230,23 @@ void SaveManager::flushPendingSaves() {
 }
 
 bool SaveManager::chunkFileExists(int cx, int cz) const {
+    // Check region file cache
+    const int rx = RegionFile::toRegionCoord(cx);
+    const int rz = RegionFile::toRegionCoord(cz);
+    const int64_t key = (static_cast<int64_t>(rx) << 32) | (static_cast<int64_t>(rz) & 0xFFFFFFFF);
+    auto it = m_regionCache.find(key);
+    if (it != m_regionCache.end() && it->second && it->second->hasChunk(cx, cz)) {
+        return true;
+    }
+
+    // Check region file on disk
+    const auto regionPath = RegionFile::regionPath(m_paths.chunksDir(), rx, rz);
+    std::error_code ec;
+    if (std::filesystem::exists(regionPath, ec)) {
+        return true; // Conservative: assume chunk might be in region
+    }
+
+    // Fall back to legacy single-file check
     return m_paths.chunkFileExists(cx, cz);
 }
 
@@ -219,6 +270,56 @@ void SaveManager::savePlayer(uint32_t clientId, const PlayerData& data) {
 bool SaveManager::loadPlayer(uint32_t clientId, PlayerData& out) {
     return PlayerSerializer::loadFromFile(
         (m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), out);
+}
+
+// ---------------------------------------------------------------------------
+// Timestamp and screenshot
+// ---------------------------------------------------------------------------
+
+std::string SaveManager::currentUtcTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto time = std::chrono::system_clock::to_time_t(now);
+    struct tm utc{};
+#ifdef _WIN32
+    gmtime_s(&utc, &time);
+#else
+    gmtime_r(&time, &utc);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                  utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+                  utc.tm_hour, utc.tm_min, utc.tm_sec);
+    return buf;
+}
+
+void SaveManager::saveScreenshot(const uint8_t* rgbData, int width, int height) {
+    const auto path = m_paths.screenshotPath();
+    const auto tmpPath = path.string() + ".tmp";
+
+    // Convert RGB to RGBA (alpha = 255)
+    const int pixelCount = width * height;
+    std::vector<uint8_t> rgba(pixelCount * 4);
+    for (int i = 0; i < pixelCount; ++i) {
+        rgba[i * 4 + 0] = rgbData[i * 3 + 0]; // R
+        rgba[i * 4 + 1] = rgbData[i * 3 + 1]; // G
+        rgba[i * 4 + 2] = rgbData[i * 3 + 2]; // B
+        rgba[i * 4 + 3] = 255;                 // A
+    }
+
+    // Write PNG using stb_image_write
+    const int stride = width * 4;
+    const int result = stbi_write_png(tmpPath.c_str(), width, height, 4, rgba.data(), stride);
+    if (result == 0) {
+        std::fprintf(stderr, "[Save] Failed to write screenshot PNG\n");
+        return;
+    }
+
+    // Atomic rename
+    std::error_code ec;
+    std::filesystem::rename(tmpPath, path, ec);
+    if (ec) {
+        std::fprintf(stderr, "[Save] Failed to rename screenshot: %s\n", ec.message().c_str());
+    }
 }
 
 // ---------------------------------------------------------------------------

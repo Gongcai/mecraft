@@ -39,6 +39,9 @@ public:
     /// Local player file: <root>/players/local.json
     [[nodiscard]] std::filesystem::path localPlayerPath() const;
 
+    /// Screenshot thumbnail: <root>/thumb.png
+    [[nodiscard]] std::filesystem::path screenshotPath() const;
+
     /// Ensure the directory structure exists (creates dirs if needed).
     void ensureDirectories() const;
 

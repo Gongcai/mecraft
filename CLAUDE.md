@@ -1,5 +1,22 @@
 # WARNING
-- 当前环境在控制台中编译困难且缓慢，如果你需要编译构建代码，请通知我，由我通过ide编译，将结果反馈给你。 
+- 
+- 如需自行编译，需先注入 MSVC 环境再执行 cmake：
+  ```powershell
+  # 注入 MSVC 2025 x64 环境
+  $vsPath = "C:\Program Files\Microsoft Visual Studio\18\Community"
+  $devShellDll = "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+  if (Test-Path $devShellDll) {
+      Import-Module $devShellDll
+      Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -Arch amd64 -HostArch amd64
+  }
+# 参考指令
+  # 编译主程序
+  & "D:\JetBrain\CLion\bin\cmake\win\x64\bin\cmake.exe" --build "D:\project\mecraft\cmake-build-release" --target mecraft -j 18
+  # 编译测试
+  & "D:\JetBrain\CLion\bin\cmake\win\x64\bin\cmake.exe" --build "D:\project\mecraft\cmake-build-release" --target chunk_save_serializer_test -j 18
+  # 运行测试
+  cd d:/project/mecraft/cmake-build-release && ./chunk_save_serializer_test.exe
+  ```
 # 文档
 参考save-system-design.md进行开发
 # 语言使用
