@@ -14,7 +14,15 @@
     "time_set_to": "Time set to ",
     "spawned_zombie": "Spawned zombie",
     "unknown_mob": "Unknown mob: ",
-    "unknown_command": "Unknown command: "
+    "unknown_command": "Unknown command: ",
+    "select_world": "Select World",
+    "create_new_world": "Create New World",
+    "back": "Back",
+    "no_saves": "No saves found. Create a new world!",
+    "enter_seed": "Enter seed (leave empty for random):",
+    "seed_placeholder": "Enter seed...",
+    "start_new_game": "Start New Game",
+    "multiplayer": "Multiplayer"
   },
   "blocks": {
     "air": "Air",

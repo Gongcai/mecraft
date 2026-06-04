@@ -13,13 +13,22 @@ UIPanel::UIPanel() = default;
 UIPanel::~UIPanel() { shutdown(); }
 
 void UIPanel::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
-    initMesh();
+    // Create GPU resources only once per instance to prevent VAO/VBO leaks
+    // when init() is called multiple times (e.g. scene re-entry).
+    if (!m_gpuInitialized) {
+        m_shader = resourceMgr.getShader("ui_color");
+        initMesh();
+        m_gpuInitialized = true;
+    }
+    // Always recurse into children — dynamically added children (e.g. save
+    // list entries) need their own init() after being attached to the panel.
+    UIWidget::init(resourceMgr);
 }
 
 void UIPanel::shutdown() {
     cleanupMesh();
     m_shader = nullptr;
+    m_gpuInitialized = false;
 }
 
 void UIPanel::initMesh() {

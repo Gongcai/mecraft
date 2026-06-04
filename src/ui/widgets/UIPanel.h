@@ -43,4 +43,8 @@ private:
     float m_borderWidth = 0.0f;
     bool m_hasLocalBgColor = false;
     bool m_hasLocalBorderColor = false;
+
+    // Guard against double GPU resource creation when init() is called
+    // more than once on the same instance (e.g. scene re-init).
+    bool m_gpuInitialized = false;
 };

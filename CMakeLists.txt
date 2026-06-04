@@ -66,6 +66,7 @@ set(SRC_APP
         src/app/GameManager.cpp
         src/app/states/AppStateMachine.cpp
         src/app/states/GameplayAppState.cpp
+        src/app/states/MainMenuAppState.cpp
 )
 
 # [引擎层]
@@ -257,6 +258,8 @@ set(SRC_UI
         # Screens
         src/ui/screens/MainMenuScreen.cpp
         src/ui/screens/PauseMenuScreen.cpp
+        src/ui/screens/SaveListScreen.cpp
+        src/ui/screens/CreateWorldScreen.cpp
 )
 
 # [实体与游戏系统]
