@@ -109,11 +109,12 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
 
     renderSelf(ctx);
 
-    // Render children with Y offset applied
+    // Render children with Y offset applied. Content is laid out in bottom-left
+    // widget coordinates; increasing the scroll offset moves content upward.
     for (const auto& child : getChildren()) {
-        const_cast<UIWidget*>(child.get())->anchorOffsetY -= m_scrollOffset;
-        child->render(ctx);
         const_cast<UIWidget*>(child.get())->anchorOffsetY += m_scrollOffset;
+        child->render(ctx);
+        const_cast<UIWidget*>(child.get())->anchorOffsetY -= m_scrollOffset;
     }
 
     // Restore scissor
@@ -277,11 +278,14 @@ UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderCon
         m_thumbHovered = hitTestScrollbarThumb(event.x, event.y, ctx);
     }
 
-    // Forward input to children with adjusted hit test
-    // Children have their anchorOffsetY shifted by -m_scrollOffset during render,
-    // so the hit test in UIWidget::onInput already accounts for the visual offset.
-    // We just need to forward normally.
+    // Forward input to children with the same visual offset used during render.
+    for (auto& child : const_cast<std::vector<std::unique_ptr<UIWidget>>&>(getChildren())) {
+        child->anchorOffsetY += m_scrollOffset;
+    }
     UIEventResult result = UIWidget::onInput(event, ctx);
+    for (auto& child : const_cast<std::vector<std::unique_ptr<UIWidget>>&>(getChildren())) {
+        child->anchorOffsetY -= m_scrollOffset;
+    }
 
     // If pointer is inside scroll area but not on any child, still consume scroll
     if (result == UIEventResult::Ignored && inside && event.type == UIInputEventType::Scroll) {

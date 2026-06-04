@@ -123,6 +123,7 @@ void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
     auto stack = std::make_unique<UIStackLayout>();
     stack->setDirection(StackDirection::Vertical);
     stack->setSpacing(kEntrySpacing);
+    stack->anchor = Anchor::BottomLeft;
     stack->width = scrollArea->width - 20.0f;
     m_saveListStack = stack.get();
 
@@ -223,8 +224,6 @@ void SaveListScreen::refreshSaveList() {
 
                 SaveEntry save;
                 save.folderName     = entry.path().filename().string();
-                save.screenshotPath = (entry.path() / "thumb.png").string();
-
                 // Read metadata via temporary SaveManager (read-only)
                 save::SaveManager sm(entry.path());
                 save::LevelMeta meta;
@@ -235,8 +234,14 @@ void SaveListScreen::refreshSaveList() {
                     save.lastPlayedUtc = meta.lastSavedUtc;
                     save.createdUtc    = meta.createdUtc;
                     save.seed          = meta.seed;
+                    if (!meta.screenshotPath.empty()) {
+                        save.screenshotPath = (entry.path() / meta.screenshotPath).string();
+                    }
                 } else {
                     save.displayName = save.folderName;
+                }
+                if (save.screenshotPath.empty()) {
+                    save.screenshotPath = (entry.path() / "thumb.png").string();
                 }
 
                 m_saves.push_back(std::move(save));
@@ -263,21 +268,38 @@ void SaveListScreen::rebuildList() {
         return;
     }
 
+    m_saveListStack->clearChildren();
+
     if (m_saves.empty()) {
         if (m_emptyText) m_emptyText->visible = true;
         m_scrollArea->setContentHeight(0.0f);
+        m_scrollArea->setScrollOffset(0.0f);
         return;
     }
 
     if (m_emptyText) m_emptyText->visible = false;
 
     const float entryWidth = m_saveListStack->width;
+    const float contentHeight =
+        static_cast<float>(m_saves.size()) * kEntryHeight +
+        static_cast<float>(m_saves.size() - 1) * kEntrySpacing;
 
-    for (const auto& save : m_saves) {
+    m_saveListStack->width = entryWidth;
+    m_saveListStack->height = contentHeight;
+    m_saveListStack->x = 0.0f;
+    m_saveListStack->y = m_scrollArea->height - contentHeight;
+
+    for (std::size_t i = 0; i < m_saves.size(); ++i) {
+        const auto& save = m_saves[i];
+
         // -- Entry panel (clickable) --
         auto panel = std::make_unique<ClickablePanel>();
         panel->width  = entryWidth;
         panel->height = kEntryHeight;
+        panel->anchor = Anchor::BottomLeft;
+        panel->x = 0.0f;
+        panel->y = contentHeight - kEntryHeight -
+                   static_cast<float>(i) * (kEntryHeight + kEntrySpacing);
         panel->setBackgroundColor({0.22f, 0.22f, 0.26f, 0.92f});
         panel->setBorderColor({0.40f, 0.40f, 0.45f, 0.7f});
         panel->setBorderWidth(1.0f);
@@ -297,23 +319,22 @@ void SaveListScreen::rebuildList() {
                 thumb->loadTexture(*m_resMgr,
                                    "thumb_" + save.folderName,
                                    save.screenshotPath);
-                float tw = thumb->width  > 0 ? thumb->width  : kThumbSize;
-                float th = thumb->height > 0 ? thumb->height : kThumbSize;
-                // Override dimensions to the target slot size
-                thumb->width  = kThumbSize;
-                thumb->height = kThumbSize;
-                // Uniform scale: fit the larger dimension to the slot
-                float s = kThumbSize / std::max(tw, th);
+                const float tw = thumb->width  > 0.0f ? thumb->width  : kThumbSize;
+                const float th = thumb->height > 0.0f ? thumb->height : kThumbSize;
+                const float s = kThumbSize / std::max(tw, th);
                 thumb->scaleX = s;
                 thumb->scaleY = s;
+                thumb->x = 8.0f + (kThumbSize - tw * s) * 0.5f;
+                thumb->y = (kEntryHeight - th * s) * 0.5f;
             } else {
                 thumb->width  = kThumbSize;
                 thumb->height = kThumbSize;
                 thumb->setSolidColor({0.35f, 0.55f, 0.35f, 1.0f});
+                thumb->x = 8.0f;
+                thumb->y = (kEntryHeight - kThumbSize) * 0.5f;
             }
         }
-        thumb->x = 8.0f;
-        thumb->y = (kEntryHeight - kThumbSize) * 0.5f;
+        thumb->anchor = Anchor::BottomLeft;
         panel->addChild(std::move(thumb));
 
         // -- Display name (Y = bottom of text in OpenGL coords) --
@@ -321,8 +342,9 @@ void SaveListScreen::rebuildList() {
         nameText->setText(save.displayName);
         nameText->setTextScale(1.6f);
         nameText->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+        nameText->anchor = Anchor::BottomLeft;
         nameText->x = kThumbSize + 24.0f;
-        nameText->y = kEntryHeight - 30.0f;
+        nameText->y = 46.0f;
         nameText->width  = entryWidth - kThumbSize - 36.0f;
         nameText->height = 24.0f;
         panel->addChild(std::move(nameText));
@@ -338,8 +360,9 @@ void SaveListScreen::rebuildList() {
         }
         infoText->setTextScale(1.1f);
         infoText->setTextColor({0.65f, 0.65f, 0.65f, 1.0f});
+        infoText->anchor = Anchor::BottomLeft;
         infoText->x = kThumbSize + 24.0f;
-        infoText->y = kEntryHeight - 56.0f;
+        infoText->y = 22.0f;
         infoText->width  = entryWidth - kThumbSize - 36.0f;
         infoText->height = 18.0f;
         panel->addChild(std::move(infoText));
@@ -358,14 +381,6 @@ void SaveListScreen::rebuildList() {
         m_saveListStack->addChild(std::move(panel));
     }
 
-    // Lay out entries vertically
-    m_saveListStack->layout();
-
-    // Tell the scroll area how tall the content is
-    float totalH = 0.0f;
-    for (const auto& child : m_saveListStack->getChildren()) {
-        totalH += child->height + kEntrySpacing;
-    }
-    m_scrollArea->setContentHeight(totalH);
+    m_scrollArea->setContentHeight(contentHeight);
     m_scrollArea->setScrollOffset(0.0f);
 }

@@ -31,6 +31,13 @@ public:
         m_children.push_back(std::move(child));
     }
 
+    void clearChildren() {
+        for (auto& child : m_children) {
+            child->shutdown();
+        }
+        m_children.clear();
+    }
+
     [[nodiscard]] UIWidget* getParent() const { return m_parent; }
     [[nodiscard]] const std::vector<std::unique_ptr<UIWidget>>& getChildren() const { return m_children; }
 
