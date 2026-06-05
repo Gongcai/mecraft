@@ -70,12 +70,16 @@ IMGUI_IMPL_API float    ImGui_ImplGlfw_GetContentScaleForMonitor(GLFWmonitor* mo
 #ifdef MECRAFT_DEBUG
 struct ImGui_ImplGlfw_DebugPollStats
 {
+    static constexpr int kWndProcMessageSlots = 5;
+
     double callbackMs = 0.0;
     double cursorPosCallbackMs = 0.0;
     double cursorPosBackendMs = 0.0;
     double wndProcMs = 0.0;
     double wndProcSlowestMs = 0.0;
     unsigned int wndProcSlowestMsg = 0;
+    double wndProcMessageMs[kWndProcMessageSlots] = {};
+    unsigned int wndProcMessageCount[kWndProcMessageSlots] = {};
     int callbackCount = 0;
     int cursorPosCallbackCount = 0;
     int wndProcCount = 0;

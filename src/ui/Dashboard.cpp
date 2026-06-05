@@ -78,6 +78,17 @@ const char* debugWin32MessageName(unsigned msg) {
         default: return "unknown";
     }
 }
+
+const char* debugWndProcBucketName(int slot) {
+    switch (slot) {
+        case 0: return "WM_SETCURSOR";
+        case 1: return "WM_MOUSEMOVE";
+        case 2: return "WM_NCHITTEST";
+        case 3: return "WM_INPUT";
+        case 4: return "WndProc Other";
+        default: return "WndProc ?";
+    }
+}
 }
 
 Dashboard::Dashboard() : m_initialized(false) {
@@ -288,6 +299,13 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                 ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "Max: %u", maxVal);
             }
         };
+        static double maxWndProcMessageMs[ImGui_ImplGlfw_DebugPollStats::kWndProcMessageSlots] = {};
+        static unsigned maxWndProcMessageCount[ImGui_ImplGlfw_DebugPollStats::kWndProcMessageSlots] = {};
+        const ImGui_ImplGlfw_DebugPollStats imguiPollStats = ImGui_ImplGlfw_GetDebugPollStats();
+        for (int slot = 0; slot < ImGui_ImplGlfw_DebugPollStats::kWndProcMessageSlots; ++slot) {
+            maxWndProcMessageMs[slot] = std::max(maxWndProcMessageMs[slot], imguiPollStats.wndProcMessageMs[slot]);
+            maxWndProcMessageCount[slot] = std::max(maxWndProcMessageCount[slot], imguiPollStats.wndProcMessageCount[slot]);
+        }
 
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
@@ -316,6 +334,19 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         showMax("  - Poll Other / GLFW",
                 std::max(0.0, profilerStats.pollEventsMs - profilerStats.pollImguiWndProcMs),
                 std::max(0.0, profilerStats.maxPollEventsMs - profilerStats.maxPollImguiWndProcMs));
+        for (int slot = 0; slot < ImGui_ImplGlfw_DebugPollStats::kWndProcMessageSlots; ++slot) {
+            ImGui::Text("    - %s: %.3f ms / %u",
+                        debugWndProcBucketName(slot),
+                        imguiPollStats.wndProcMessageMs[slot],
+                        imguiPollStats.wndProcMessageCount[slot]);
+            if (maxWndProcMessageMs[slot] > 0.0 || maxWndProcMessageCount[slot] > 0U) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f),
+                                   "Max: %.3f ms / %u",
+                                   maxWndProcMessageMs[slot],
+                                   maxWndProcMessageCount[slot]);
+            }
+        }
         showMaxCount("  - Event Count", profilerStats.pollEventCount, profilerStats.maxPollEventCount);
         showMaxCount("    - Key", profilerStats.pollKeyEventCount, profilerStats.maxPollKeyEventCount);
         showMaxCount("    - Mouse Button", profilerStats.pollMouseButtonEventCount, profilerStats.maxPollMouseButtonEventCount);
@@ -369,6 +400,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             profilerStats.maxPollImguiWndProcSlowestMs = 0.0;
             profilerStats.maxPollImguiWndProcSlowestMsg = 0;
             profilerStats.maxPollImguiWndProcCount = 0;
+            for (int slot = 0; slot < ImGui_ImplGlfw_DebugPollStats::kWndProcMessageSlots; ++slot) {
+                maxWndProcMessageMs[slot] = 0.0;
+                maxWndProcMessageCount[slot] = 0;
+            }
             profilerStats.maxPollEventCount = 0;
             profilerStats.maxPollKeyEventCount = 0;
             profilerStats.maxPollMouseButtonEventCount = 0;

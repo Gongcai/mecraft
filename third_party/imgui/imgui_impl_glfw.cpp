@@ -195,6 +195,19 @@ static void ImGui_ImplGlfw_DebugRecordCallback(const std::chrono::steady_clock::
     ++g_ImGui_ImplGlfw_DebugPollStats.callbackCount;
 }
 
+static int ImGui_ImplGlfw_DebugWndProcMessageSlot(UINT msg)
+{
+    switch (msg)
+    {
+    case WM_SETCURSOR: return 0;
+    case WM_MOUSEMOVE:
+    case WM_NCMOUSEMOVE: return 1;
+    case WM_NCHITTEST: return 2;
+    case WM_INPUT: return 3;
+    default: return 4;
+    }
+}
+
 void ImGui_ImplGlfw_ResetDebugPollStats()
 {
     g_ImGui_ImplGlfw_DebugPollStats = {};
@@ -702,6 +715,9 @@ static LRESULT CALLBACK ImGui_ImplGlfw_WndProc(HWND hWnd, UINT msg, WPARAM wPara
 #ifdef MECRAFT_DEBUG
     const double debug_elapsed_ms = ImGui_ImplGlfw_DebugElapsedMs(debug_start);
     g_ImGui_ImplGlfw_DebugPollStats.wndProcMs += debug_elapsed_ms;
+    const int debug_message_slot = ImGui_ImplGlfw_DebugWndProcMessageSlot(msg);
+    g_ImGui_ImplGlfw_DebugPollStats.wndProcMessageMs[debug_message_slot] += debug_elapsed_ms;
+    ++g_ImGui_ImplGlfw_DebugPollStats.wndProcMessageCount[debug_message_slot];
     if (debug_elapsed_ms > g_ImGui_ImplGlfw_DebugPollStats.wndProcSlowestMs)
     {
         g_ImGui_ImplGlfw_DebugPollStats.wndProcSlowestMs = debug_elapsed_ms;
