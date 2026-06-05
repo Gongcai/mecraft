@@ -30,26 +30,66 @@ Game::Game(GameSessionConfig config, GameSessionDependencies deps)
 Game::~Game() = default;
 
 void Game::init() {
-    if (m_initialized) {
+    beginLoading();
+    while (!isLoadingComplete()) {
+        updateLoading(1.0f / 60.0f);
+    }
+}
+
+void Game::beginLoading() {
+    if (m_loadPhase != LoadPhase::NotStarted) {
         return;
     }
     m_initialized = true;
-    m_session.init(m_config, m_deps.resourceMgr, &m_deps.threadPool);
-    m_session.initWorld(m_config.seed);
-    m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer, m_deps.threadPool);
-    m_session.initECS(m_deps);
-    m_session.loadLocalPlayer();  // Restore saved player state after ECS init
-    m_session.initStateMachine(m_deps);
+    m_loadPhase = LoadPhase::Session;
+}
 
-    // G3: Initialize audio sync and HUD presenter
-    m_audioSyncSystem = std::make_unique<AudioListenerSyncSystem>(m_deps.bgmSystem, m_deps.audioEngine);
-    m_hudPresenter = std::make_unique<GameplayHudPresenter>(m_deps.window, m_deps.uiRenderer, m_deps.input);
+void Game::updateLoading(const float deltaTime) {
+    if (m_loadPhase == LoadPhase::NotStarted) {
+        beginLoading();
+    }
+
+    switch (m_loadPhase) {
+    case LoadPhase::Session:
+        m_session.init(m_config, m_deps.resourceMgr, &m_deps.threadPool);
+        m_session.initWorld(m_config.seed);
+        m_loadPhase = LoadPhase::RenderRuntime;
+        break;
+    case LoadPhase::RenderRuntime:
+        m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer, m_deps.threadPool);
+        m_loadPhase = LoadPhase::Ecs;
+        break;
+    case LoadPhase::Ecs:
+        m_session.initECS(m_deps);
+        m_session.loadLocalPlayer();  // Restore saved player state before preloading chunks.
+        m_session.initStateMachine(m_deps);
+
+        m_audioSyncSystem = std::make_unique<AudioListenerSyncSystem>(m_deps.bgmSystem, m_deps.audioEngine);
+        m_hudPresenter = std::make_unique<GameplayHudPresenter>(m_deps.window, m_deps.uiRenderer, m_deps.input);
 
 #ifdef MECRAFT_DEBUG
-    m_renderRuntime->initDebug(m_deps.window);
-    // Inject Dashboard into presenter (renderRuntime owns, presenter renders)
-    m_hudPresenter->setDashboard(m_renderRuntime->dashboard());
+        m_renderRuntime->initDebug(m_deps.window);
+        m_hudPresenter->setDashboard(m_renderRuntime->dashboard());
 #endif
+        m_loadPhase = LoadPhase::InitialChunks;
+        break;
+    case LoadPhase::InitialChunks: {
+        constexpr int kMaxPumpsPerFrame = 4;
+        constexpr float kInitialLoadTickDt = 1.0f / 20.0f;
+        const int pumpCount = deltaTime > 0.03f ? 1 : kMaxPumpsPerFrame;
+        for (int i = 0; i < pumpCount && !m_session.isInitialChunkLoadComplete(); ++i) {
+            m_session.pumpInitialChunkLoad(kInitialLoadTickDt);
+        }
+        if (m_session.isInitialChunkLoadComplete()) {
+            m_loadPhase = LoadPhase::Complete;
+        }
+        break;
+    }
+    case LoadPhase::Complete:
+    case LoadPhase::Failed:
+    case LoadPhase::NotStarted:
+        break;
+    }
 }
 
 void Game::fixedUpdate(const double fixedStep, double& accumulator) {
@@ -104,21 +144,71 @@ void Game::shutdown() {
         return;
     }
 
-    // Capture screenshot during next frame's render (before UI overlay)
-    m_captureScreenshotOnNextFrame = true;
+    if (m_loadPhase == LoadPhase::Complete) {
+        // Capture screenshot during next frame's render (before UI overlay)
+        m_captureScreenshotOnNextFrame = true;
 
-    // Render one more frame to capture the screenshot
-    renderFrame(0.0f);
+        // Render one more frame to capture the screenshot
+        renderFrame(0.0f);
+    }
 
     // Session must shut down before the app-owned thread pool is stopped
     // because GameServer flushes pending saves through that pool.
     m_session.shutdown();
     m_renderRuntime->shutdown();
     m_initialized = false;
+    m_loadPhase = LoadPhase::NotStarted;
 }
 
 bool Game::isQuitToMenuRequested() const {
     return m_session.stateMachine().isQuitToMenuRequested();
+}
+
+Game::LoadProgress Game::getLoadProgress() const {
+    LoadProgress progress{};
+    progress.phase = m_loadPhase;
+
+    switch (m_loadPhase) {
+    case LoadPhase::NotStarted:
+        progress.progress = 0.0f;
+        progress.label = "Preparing";
+        break;
+    case LoadPhase::Session:
+        progress.progress = 0.08f;
+        progress.label = "Loading world";
+        break;
+    case LoadPhase::RenderRuntime:
+        progress.progress = 0.22f;
+        progress.label = "Initializing renderer";
+        break;
+    case LoadPhase::Ecs:
+        progress.progress = 0.38f;
+        progress.label = "Restoring player";
+        break;
+    case LoadPhase::InitialChunks: {
+        const auto chunkProgress = m_session.getInitialLoadProgress();
+        progress.loadedChunks = chunkProgress.clientLoaded;
+        progress.targetChunks = chunkProgress.target;
+        progress.inFlightChunks = chunkProgress.inFlight;
+        const float chunkRatio = chunkProgress.target > 0
+            ? static_cast<float>(chunkProgress.clientLoaded) / static_cast<float>(chunkProgress.target)
+            : 0.0f;
+        progress.progress = 0.45f + std::clamp(chunkRatio, 0.0f, 1.0f) * 0.55f;
+        progress.label = "Loading chunks";
+        progress.complete = chunkProgress.complete;
+        break;
+    }
+    case LoadPhase::Complete:
+        progress.progress = 1.0f;
+        progress.label = "Ready";
+        progress.complete = true;
+        break;
+    case LoadPhase::Failed:
+        progress.progress = 1.0f;
+        progress.label = "Loading failed";
+        break;
+    }
+    return progress;
 }
 
 void Game::captureExitScreenshot() {

@@ -222,7 +222,7 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
         m_transition.tick(static_cast<float>(frameTime));
         if (m_transition.isDone()) {
             m_deps.appFsm.changeState(
-                std::make_unique<GameplayAppState>(m_deps, m_pendingConfig));
+                std::make_unique<LoadingAppState>(m_deps, m_pendingConfig));
             accumulator = 0.0;
             return;
         }

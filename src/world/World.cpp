@@ -135,6 +135,35 @@ void World::init(uint32_t seed) {
 }
 
 void World::update(const glm::vec3& playerPos) {
+    updateStreaming(playerPos,
+                    kMaxChunkLoadSubmitsPerFrame,
+                    kMaxGenerationInFlight,
+                    kMaxChunkLoadFinalizesPerFrame,
+                    kChunkLoadFinalizeTimeBudgetMs,
+                    -1,
+                    -1,
+                    -1.0f);
+}
+
+void World::updateForInitialLoad(const glm::vec3& playerPos) {
+    updateStreaming(playerPos,
+                    24,
+                    std::max(8, m_threadPool ? m_threadPool->numWorkers() * 2 : 8),
+                    12,
+                    8.0,
+                    24,
+                    24,
+                    4.0f);
+}
+
+void World::updateStreaming(const glm::vec3& playerPos,
+                            const int submitBudget,
+                            const int maxGenerationInFlight,
+                            const int finalizeBudget,
+                            const double finalizeTimeBudgetMs,
+                            const int lightSubmitBudgetOverride,
+                            const int lightMergeBudgetOverride,
+                            const float lightMergeTimeBudgetMsOverride) {
     m_dayNightSystem.update(static_cast<float>(Time::deltaTime));
     m_weatherSystem.update(static_cast<float>(Time::deltaTime));
 
@@ -170,16 +199,16 @@ void World::update(const glm::vec3& playerPos) {
     }
 
     const auto chunksToLoad = m_ticketManager.getChunksToLoad(
-        kMaxChunkLoadSubmitsPerFrame * 4,  // Look ahead a bit for prioritization
+        submitBudget * 4,  // Look ahead a bit for prioritization
         loadedKeys);
 
     // Submit chunk generation jobs from the prioritized list
     int submitted = 0;
     for (const auto& pos : chunksToLoad) {
-        if (submitted >= kMaxChunkLoadSubmitsPerFrame) {
+        if (submitted >= submitBudget) {
             break;
         }
-        if (static_cast<int>(m_generationInFlight.size()) >= kMaxGenerationInFlight) {
+        if (static_cast<int>(m_generationInFlight.size()) >= maxGenerationInFlight) {
             break;
         }
 
@@ -205,8 +234,8 @@ void World::update(const glm::vec3& playerPos) {
         for (auto& chunk : completed) {
             const double elapsedMs = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - finalizeStart).count();
-            if (finalized >= kMaxChunkLoadFinalizesPerFrame ||
-                elapsedMs >= kChunkLoadFinalizeTimeBudgetMs) {
+            if (finalized >= finalizeBudget ||
+                elapsedMs >= finalizeTimeBudgetMs) {
                 deferred.push_back(std::move(chunk));
                 continue;
             }
@@ -230,20 +259,30 @@ void World::update(const glm::vec3& playerPos) {
         const int completedDepth = m_lightService->completedCount();
 
         // Scale submit budget with load, back off when the completed queue is deep.
-        int submitBudget = 6;
+        int lightSubmitBudget = 6;
         if (completedDepth > 48) {
-            submitBudget = 0;                // backpressure: let drain catch up
+            lightSubmitBudget = 0;           // backpressure: let drain catch up
         } else if (dirtyCount > 50) {
-            submitBudget = 10;               // many dirty chunks, increase throughput
+            lightSubmitBudget = 10;          // many dirty chunks, increase throughput
         } else if (dirtyCount < 5) {
-            submitBudget = 3;                // low load, conserve resources
+            lightSubmitBudget = 3;           // low load, conserve resources
         }
 
         // Drain more aggressively when results are piling up.
-        const int mergeBudget = (completedDepth > 32) ? 12 : 6;
-        const float mergeTimeBudgetMs = (completedDepth > 32) ? 1.5f : 0.75f;
+        int mergeBudget = (completedDepth > 32) ? 12 : 6;
+        float mergeTimeBudgetMs = (completedDepth > 32) ? 1.5f : 0.75f;
 
-        m_lightService->submitJobs(playerPos, submitBudget);
+        if (lightSubmitBudgetOverride >= 0) {
+            lightSubmitBudget = lightSubmitBudgetOverride;
+        }
+        if (lightMergeBudgetOverride >= 0) {
+            mergeBudget = lightMergeBudgetOverride;
+        }
+        if (lightMergeTimeBudgetMsOverride >= 0.0f) {
+            mergeTimeBudgetMs = lightMergeTimeBudgetMsOverride;
+        }
+
+        m_lightService->submitJobs(playerPos, lightSubmitBudget);
         m_lightService->drainCompleted(*this, mergeBudget, mergeTimeBudgetMs);
     }
 }
@@ -648,6 +687,32 @@ glm::ivec2 World::getChunkCoords(int worldX, int worldZ) const {
         worldToChunkCoord(worldX, Chunk::SIZE_X),
         worldToChunkCoord(worldZ, Chunk::SIZE_Z)
     };
+}
+
+World::ChunkLoadProgress World::getChunkLoadProgress(const glm::vec3& center) const {
+    const int centerChunkX = worldToChunkCoord(static_cast<int>(std::floor(center.x)), Chunk::SIZE_X);
+    const int centerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(center.z)), Chunk::SIZE_Z);
+
+    ChunkLoadProgress progress{};
+    for (int dx = -m_renderDistance; dx <= m_renderDistance; ++dx) {
+        for (int dz = -m_renderDistance; dz <= m_renderDistance; ++dz) {
+            if (dx * dx + dz * dz > m_renderDistance * m_renderDistance) {
+                continue;
+            }
+
+            ++progress.target;
+            const int cx = centerChunkX + dx;
+            const int cz = centerChunkZ + dz;
+            const int64_t key = chunkKey(cx, cz);
+            if (m_chunks.find(key) != m_chunks.end()) {
+                ++progress.loaded;
+            }
+            if (m_generationInFlight.count(key) > 0) {
+                ++progress.inFlight;
+            }
+        }
+    }
+    return progress;
 }
 
 const char* World::biomeToString(TerrainBiome biome) {

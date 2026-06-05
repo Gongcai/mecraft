@@ -4,7 +4,7 @@
 #include "IAppState.h"
 #include "AppStateMachine.h"
 #include "AppStateDependencies.h"
-#include "GameplayAppState.h"
+#include "LoadingAppState.h"
 #include "../../game/session/GameSessionConfig.h"
 #include "../../ui/screens/MainMenuScreen.h"
 #include "../../ui/screens/SaveListScreen.h"

@@ -8,6 +8,10 @@ GameplayAppState::GameplayAppState(AppStateDependencies deps, GameSessionConfig 
     : m_deps(deps), m_config(config) {
 }
 
+GameplayAppState::GameplayAppState(AppStateDependencies deps, std::unique_ptr<Game> game)
+    : m_deps(deps), m_game(std::move(game)) {
+}
+
 GameplayAppState::~GameplayAppState() {
     if (m_game) {
         m_game->shutdown();
@@ -15,6 +19,11 @@ GameplayAppState::~GameplayAppState() {
 }
 
 void GameplayAppState::onEnter() {
+    if (m_game && m_game->isInitialized()) {
+        m_deps.input.captureMouse(true);
+        return;
+    }
+
     GameSessionDependencies deps{
         m_deps.window,
         m_deps.input,

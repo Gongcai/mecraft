@@ -66,6 +66,7 @@ set(SRC_APP
         src/app/GameManager.cpp
         src/app/states/AppStateMachine.cpp
         src/app/states/GameplayAppState.cpp
+        src/app/states/LoadingAppState.cpp
         src/app/states/MainMenuAppState.cpp
 )
 
@@ -260,6 +261,7 @@ set(SRC_UI
         src/ui/screens/PauseMenuScreen.cpp
         src/ui/screens/SaveListScreen.cpp
         src/ui/screens/CreateWorldScreen.cpp
+        src/ui/screens/LoadingScreen.cpp
 )
 
 # [实体与游戏系统]
@@ -629,4 +631,3 @@ set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${PROJECT_VERSION}-${CMAKE_SY
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
 include(CPack)
-

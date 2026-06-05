@@ -28,8 +28,15 @@ namespace save { class SaveManager; }
 
 class World : public IWorldView {
 public:
+    struct ChunkLoadProgress {
+        int loaded = 0;
+        int target = 0;
+        int inFlight = 0;
+    };
+
     void init(uint32_t seed);
     void update(const glm::vec3& playerPos);
+    void updateForInitialLoad(const glm::vec3& playerPos);
 
     [[nodiscard]] uint32_t getSeed() const { return m_seed; }
 
@@ -62,6 +69,7 @@ public:
     [[nodiscard]] int getSurfaceY(int x, int z) const;
     [[nodiscard]] TerrainBiome getBiome(int x, int z) const override;
     [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const override;
+    [[nodiscard]] ChunkLoadProgress getChunkLoadProgress(const glm::vec3& center) const;
     [[nodiscard]] const World* asWorld() const override { return this; }
     [[nodiscard]] static const char* biomeToString(TerrainBiome biome);
 
@@ -132,6 +140,14 @@ private:
     void unloadChunk(int cx, int cz);
     void submitChunkLoad(int cx, int cz);
     void finalizeChunkLoad(std::shared_ptr<Chunk> chunk);
+    void updateStreaming(const glm::vec3& playerPos,
+                         int submitBudget,
+                         int maxGenerationInFlight,
+                         int finalizeBudget,
+                         double finalizeTimeBudgetMs,
+                         int lightSubmitBudget,
+                         int lightMergeBudget,
+                         float lightMergeTimeBudgetMs);
 
     std::vector<glm::ivec2> m_loadQueue;
     void updateLoadQueue(int playerChunkX, int playerChunkZ);

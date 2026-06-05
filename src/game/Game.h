@@ -17,11 +17,33 @@ class GameplayRenderRuntime;
 
 class Game {
 public:
+    enum class LoadPhase {
+        NotStarted,
+        Session,
+        RenderRuntime,
+        Ecs,
+        InitialChunks,
+        Complete,
+        Failed
+    };
+
+    struct LoadProgress {
+        LoadPhase phase = LoadPhase::NotStarted;
+        float progress = 0.0f;
+        std::string label;
+        int loadedChunks = 0;
+        int targetChunks = 0;
+        int inFlightChunks = 0;
+        bool complete = false;
+    };
+
     /// Constructor using structured config and dependencies.
     Game(GameSessionConfig config, GameSessionDependencies deps);
     ~Game();
 
     void init();
+    void beginLoading();
+    void updateLoading(float deltaTime);
     void shutdown();
 
     void fixedUpdate(double fixedStep, double& accumulator);
@@ -29,6 +51,9 @@ public:
     void renderFrame(float frameTime);
 
     [[nodiscard]] bool isQuitToMenuRequested() const;
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+    [[nodiscard]] bool isLoadingComplete() const { return m_loadPhase == LoadPhase::Complete; }
+    [[nodiscard]] LoadProgress getLoadProgress() const;
     void clearQuitToMenuRequest();
 
     /// Capture a screenshot of the current framebuffer for save thumbnail.
@@ -54,6 +79,7 @@ private:
 
     bool m_initialized = false;
     bool m_captureScreenshotOnNextFrame = false;
+    LoadPhase m_loadPhase = LoadPhase::NotStarted;
 };
 
 #endif //MECRAFT_GAME_H

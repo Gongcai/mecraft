@@ -33,6 +33,14 @@ class Inventory;  // Forward declaration for getPlayerInventory()
 /// Lifetime: one gameplay session (from world load to return to menu).
 class GameSession {
 public:
+    struct InitialLoadProgress {
+        int serverLoaded = 0;
+        int clientLoaded = 0;
+        int target = 0;
+        int inFlight = 0;
+        bool complete = false;
+    };
+
     GameSession();
     ~GameSession();
 
@@ -54,6 +62,10 @@ public:
 
     /// Update world streaming and simulation center from the local player position.
     void updateWorldAroundLocalPlayer();
+    void pumpInitialChunkLoad(float dt);
+    [[nodiscard]] InitialLoadProgress getInitialLoadProgress() const;
+    [[nodiscard]] bool isInitialChunkLoadComplete() const;
+    [[nodiscard]] glm::vec3 getLocalPlayerPosition() const;
 
     /// Get the local player's inventory from ECS.
     /// @throws std::runtime_error if inventory is not initialized

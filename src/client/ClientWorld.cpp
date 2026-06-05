@@ -268,4 +268,26 @@ size_t ClientWorld::loadedChunkCount() const {
     return m_chunks.size();
 }
 
+ClientWorld::ChunkLoadProgress ClientWorld::getChunkLoadProgress(const glm::vec3& center) const {
+    const int centerChunkX = static_cast<int>(std::floor(center.x / static_cast<float>(Chunk::SIZE_X)));
+    const int centerChunkZ = static_cast<int>(std::floor(center.z / static_cast<float>(Chunk::SIZE_Z)));
+
+    ChunkLoadProgress progress{};
+    std::lock_guard lock(m_chunksMutex);
+    for (int dx = -m_renderDistance; dx <= m_renderDistance; ++dx) {
+        for (int dz = -m_renderDistance; dz <= m_renderDistance; ++dz) {
+            if (dx * dx + dz * dz > m_renderDistance * m_renderDistance) {
+                continue;
+            }
+
+            ++progress.target;
+            const int64_t key = chunkKey(centerChunkX + dx, centerChunkZ + dz);
+            if (m_chunks.find(key) != m_chunks.end()) {
+                ++progress.loaded;
+            }
+        }
+    }
+    return progress;
+}
+
 } // namespace client

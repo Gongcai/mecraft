@@ -16,6 +16,11 @@ namespace client {
 /// and provides a read-only IWorldView for the renderer and gameplay queries.
 class ClientWorld : public IWorldView {
 public:
+    struct ChunkLoadProgress {
+        int loaded = 0;
+        int target = 0;
+    };
+
     ClientWorld();
     ~ClientWorld();
 
@@ -51,6 +56,7 @@ public:
 
     /// Get the number of loaded chunks.
     [[nodiscard]] size_t loadedChunkCount() const;
+    [[nodiscard]] ChunkLoadProgress getChunkLoadProgress(const glm::vec3& center) const;
 
     // --- Weather / DayNight proxy (in-process mode) ---
     // These non-owning pointers let the renderer access server-side systems

@@ -441,6 +441,77 @@ void GameSession::updateWorldAroundLocalPlayer() {
     m_client->receiveMessages();
 }
 
+void GameSession::pumpInitialChunkLoad(const float dt) {
+    const glm::vec3 loadCenter = getLocalPlayerPosition();
+    if (!m_isMultiplayer && m_server) {
+        m_server->setClientLoadCenter(loadCenter);
+        m_server->tickInitialLoading(dt, loadCenter);
+        m_client->receiveMessages();
+        return;
+    }
+
+    if (m_client) {
+        m_client->receiveMessages();
+    }
+}
+
+GameSession::InitialLoadProgress GameSession::getInitialLoadProgress() const {
+    InitialLoadProgress progress{};
+    const glm::vec3 loadCenter = getLocalPlayerPosition();
+
+    if (!m_isMultiplayer && m_server) {
+        const auto serverProgress = m_server->getWorldLoadProgress(loadCenter);
+        const auto clientProgress = m_client->clientWorld().getChunkLoadProgress(loadCenter);
+        progress.serverLoaded = serverProgress.loaded;
+        progress.clientLoaded = clientProgress.loaded;
+        progress.target = std::max(serverProgress.target, clientProgress.target);
+        progress.inFlight = serverProgress.inFlight;
+        progress.complete = progress.target > 0 &&
+                            progress.serverLoaded >= progress.target &&
+                            progress.clientLoaded >= progress.target;
+        return progress;
+    }
+
+    if (m_client) {
+        const auto clientProgress = m_client->clientWorld().getChunkLoadProgress(loadCenter);
+        progress.clientLoaded = clientProgress.loaded;
+        progress.serverLoaded = clientProgress.loaded;
+        progress.target = clientProgress.target;
+        progress.complete = progress.target > 0 && progress.clientLoaded >= progress.target;
+    }
+    return progress;
+}
+
+bool GameSession::isInitialChunkLoadComplete() const {
+    return getInitialLoadProgress().complete;
+}
+
+glm::vec3 GameSession::getLocalPlayerPosition() const {
+    if (!m_gameplayScene) {
+        if (m_client) {
+            return m_client->getAuthoritativePosition();
+        }
+        if (m_server) {
+            return m_server->getSpawnPosition();
+        }
+        return glm::vec3(0.0f);
+    }
+
+    auto& reg = m_gameplayScene->registry().registry();
+    auto view = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
+    for (auto e : view) {
+        return view.get<ecs::TransformComponent>(e).position;
+    }
+
+    if (m_client) {
+        return m_client->getAuthoritativePosition();
+    }
+    if (m_server) {
+        return m_server->getSpawnPosition();
+    }
+    return glm::vec3(0.0f);
+}
+
 Inventory& GameSession::getPlayerInventory() {
     auto& reg = m_gameplayScene->registry();
     auto view = reg.view<ecs::LocalPlayerTag, ecs::InventoryDataComponent>();

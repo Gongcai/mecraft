@@ -293,6 +293,33 @@ void GameServer::tick(float dt) {
     ++m_currentTick;
 }
 
+void GameServer::tickInitialLoading(const float dt, const glm::vec3& loadCenter) {
+    processClientMessages();
+    cleanupDisconnectedClients();
+    tickWorldSystems();
+
+    m_world.updateForInitialLoad(loadCenter);
+    sendNewChunksToClients();
+    sendSnapshotsToClients();
+    sendBlockUpdatesToClients();
+
+    if (!m_spawnChunksReady) {
+        checkSpawnChunksReady();
+    }
+
+    ++m_currentTick;
+}
+
+void GameServer::setClientLoadCenter(const glm::vec3& loadCenter) {
+    for (auto& client : m_clients) {
+        client.lastPosition = loadCenter;
+    }
+}
+
+World::ChunkLoadProgress GameServer::getWorldLoadProgress(const glm::vec3& loadCenter) const {
+    return m_world.getChunkLoadProgress(loadCenter);
+}
+
 void GameServer::tickWorldSystems() {
     m_world.fluidSystem().processScheduledBlockTicks(m_currentTick, 4096);
     ecs::BlockSupportSystem::processWorldQueue(m_world, 1024);
