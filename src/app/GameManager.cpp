@@ -8,6 +8,9 @@
 #include <iostream>
 #include <string>
 #include <GLFW/glfw3.h>
+#ifdef MECRAFT_DEBUG
+#include <chrono>
+#endif
 
 GameManager::GameManager() 
     : m_contextManager(m_actionMap, m_input) {
@@ -123,14 +126,40 @@ double GameManager::clampFrameTime(const double dt) {
 void GameManager::run() {
     double accumulator = 0.0;
     while (!m_window.shouldClose()) {
+#ifdef MECRAFT_DEBUG
+        m_input.resetDebugEventStats();
+        const auto pollStart = std::chrono::steady_clock::now();
+#endif
         m_window.pollEvents();
+#ifdef MECRAFT_DEBUG
+        const auto pollEnd = std::chrono::steady_clock::now();
+        const auto& pollEventStats = m_input.debugEventStats();
+        m_appStateMachine.recordPollEvents(std::chrono::duration<double, std::milli>(pollEnd - pollStart).count(),
+                                           pollEventStats.keyEvents,
+                                           pollEventStats.mouseButtonEvents,
+                                           pollEventStats.cursorPosEvents,
+                                           pollEventStats.scrollEvents,
+                                           pollEventStats.charEvents);
+#endif
         Time::update();
 
         const double frameTime = clampFrameTime(Time::deltaTime);
         accumulator += frameTime;
 
+#ifdef MECRAFT_DEBUG
+        const auto updateStart = std::chrono::steady_clock::now();
+#endif
         m_appStateMachine.update(frameTime, accumulator);
+#ifdef MECRAFT_DEBUG
+        const auto updateEnd = std::chrono::steady_clock::now();
+        m_appStateMachine.recordAppUpdateDispatch(std::chrono::duration<double, std::milli>(updateEnd - updateStart).count());
+        const auto renderStart = std::chrono::steady_clock::now();
+#endif
         m_appStateMachine.render(frameTime);
+#ifdef MECRAFT_DEBUG
+        const auto renderEnd = std::chrono::steady_clock::now();
+        m_appStateMachine.recordAppRenderDispatch(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
+#endif
     }
 }
 

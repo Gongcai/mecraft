@@ -84,3 +84,28 @@ void AppStateMachine::render(double frameTime) {
         applyPendingOps();
     }
 }
+
+#ifdef MECRAFT_DEBUG
+void AppStateMachine::recordPollEvents(double ms,
+                                       unsigned keyEvents,
+                                       unsigned mouseButtonEvents,
+                                       unsigned cursorPosEvents,
+                                       unsigned scrollEvents,
+                                       unsigned charEvents) {
+    if (!m_states.empty()) {
+        m_states.back()->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents);
+    }
+}
+
+void AppStateMachine::recordAppUpdateDispatch(double ms) {
+    if (!m_states.empty()) {
+        m_states.back()->recordAppUpdateDispatch(ms);
+    }
+}
+
+void AppStateMachine::recordAppRenderDispatch(double ms) {
+    if (!m_states.empty()) {
+        m_states.back()->recordAppRenderDispatch(ms);
+    }
+}
+#endif

@@ -16,6 +16,17 @@ public:
     void update(double frameTime, double& accumulator);
     void render(double frameTime);
 
+#ifdef MECRAFT_DEBUG
+    void recordPollEvents(double ms,
+                          unsigned keyEvents,
+                          unsigned mouseButtonEvents,
+                          unsigned cursorPosEvents,
+                          unsigned scrollEvents,
+                          unsigned charEvents);
+    void recordAppUpdateDispatch(double ms);
+    void recordAppRenderDispatch(double ms);
+#endif
+
     [[nodiscard]] bool isEmpty() const { return m_states.empty(); }
 
 private:

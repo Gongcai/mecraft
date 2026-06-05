@@ -3,6 +3,26 @@
 #ifdef MECRAFT_DEBUG
 
 void DebugFrameProfiler::publish(double frameTime) {
+    m_timing.currentFixedInputMs = m_timing.frameFixedInputAccumMs;
+    m_timing.currentFixedStateUpdateMs = m_timing.frameFixedStateAccumMs;
+    m_timing.currentFixedParticleUpdateMs = m_timing.frameFixedParticleAccumMs;
+    m_timing.currentFixedDropUpdateMs = m_timing.frameFixedDropAccumMs;
+    m_timing.currentFixedWorldUpdateMs = m_timing.frameFixedWorldAccumMs;
+    m_timing.currentFixedUpdateMs = m_timing.currentFixedInputMs + m_timing.currentFixedStateUpdateMs +
+                                     m_timing.currentFixedParticleUpdateMs + m_timing.currentFixedDropUpdateMs +
+                                     m_timing.currentFixedWorldUpdateMs;
+    m_timing.currentAudioMs = m_timing.frameAudioAccumMs;
+    m_timing.currentRenderMs = m_timing.frameRenderAccumMs;
+    m_timing.currentPollEventsMs = m_timing.framePollEventsAccumMs;
+    m_timing.currentAppUpdateDispatchMs = m_timing.frameAppUpdateDispatchAccumMs;
+    m_timing.currentAppRenderDispatchMs = m_timing.frameAppRenderDispatchAccumMs;
+    m_timing.currentRenderSnapshotMs = m_timing.frameRenderSnapshotAccumMs;
+    m_timing.currentRenderSceneMs = m_timing.frameRenderSceneAccumMs;
+    m_timing.currentRenderUiMs = m_timing.frameRenderUiAccumMs;
+    m_timing.currentRenderDashboardMs = m_timing.frameRenderDashboardAccumMs;
+    m_timing.currentSwapBuffersMs = m_timing.frameSwapBuffersAccumMs;
+    m_timing.currentPollEventCounts = m_timing.framePollEventCounts;
+
     m_frameHistoryAccumulator += frameTime;
     if (frameTime > 0.0 && m_frameHistoryAccumulator >= m_frameHistoryInterval) {
         m_frameHistoryAccumulator -= m_frameHistoryInterval;
@@ -16,6 +36,7 @@ void DebugFrameProfiler::publish(double frameTime) {
 
     m_publishAccumulator += frameTime;
     if (m_publishAccumulator < m_publishInterval) {
+        resetFrameAccumulators();
         return;
     }
     m_publishAccumulator -= m_publishInterval;
@@ -54,6 +75,7 @@ void DebugFrameProfiler::publish(double frameTime) {
     }
 
     resetAccumulators();
+    resetFrameAccumulators();
 }
 
 void DebugFrameProfiler::resetAccumulators() {
@@ -64,8 +86,30 @@ void DebugFrameProfiler::resetAccumulators() {
     m_timing.fixedWorldAccumMs = 0.0;
     m_timing.audioAccumMs = 0.0;
     m_timing.renderAccumMs = 0.0;
+    m_timing.pollEventsAccumMs = 0.0;
+    m_timing.appUpdateDispatchAccumMs = 0.0;
+    m_timing.appRenderDispatchAccumMs = 0.0;
     m_timing.fixedStepCount = 0;
     m_timing.frameSampleCount = 0;
+}
+
+void DebugFrameProfiler::resetFrameAccumulators() {
+    m_timing.frameFixedInputAccumMs = 0.0;
+    m_timing.frameFixedStateAccumMs = 0.0;
+    m_timing.frameFixedParticleAccumMs = 0.0;
+    m_timing.frameFixedDropAccumMs = 0.0;
+    m_timing.frameFixedWorldAccumMs = 0.0;
+    m_timing.frameAudioAccumMs = 0.0;
+    m_timing.frameRenderAccumMs = 0.0;
+    m_timing.framePollEventsAccumMs = 0.0;
+    m_timing.frameAppUpdateDispatchAccumMs = 0.0;
+    m_timing.frameAppRenderDispatchAccumMs = 0.0;
+    m_timing.frameRenderSnapshotAccumMs = 0.0;
+    m_timing.frameRenderSceneAccumMs = 0.0;
+    m_timing.frameRenderUiAccumMs = 0.0;
+    m_timing.frameRenderDashboardAccumMs = 0.0;
+    m_timing.frameSwapBuffersAccumMs = 0.0;
+    m_timing.framePollEventCounts = {};
 }
 
 #endif // MECRAFT_DEBUG

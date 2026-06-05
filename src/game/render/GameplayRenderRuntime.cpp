@@ -148,14 +148,32 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
 
     auto& stats = m_impl->dashboardProfilerStats;
     stats.frameMs = frameTime * 1000.0;
-    stats.fixedUpdateMs = timing.fixedUpdateMs;
-    stats.fixedInputMs = timing.fixedInputMs;
-    stats.fixedStateUpdateMs = timing.fixedStateUpdateMs;
-    stats.fixedParticleUpdateMs = timing.fixedParticleUpdateMs;
-    stats.fixedDropUpdateMs = timing.fixedDropUpdateMs;
-    stats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
-    stats.audioMs = timing.audioMs;
-    stats.renderMs = timing.renderMs;
+    stats.fixedUpdateMs = timing.currentFixedUpdateMs;
+    stats.fixedInputMs = timing.currentFixedInputMs;
+    stats.fixedStateUpdateMs = timing.currentFixedStateUpdateMs;
+    stats.fixedParticleUpdateMs = timing.currentFixedParticleUpdateMs;
+    stats.fixedDropUpdateMs = timing.currentFixedDropUpdateMs;
+    stats.fixedWorldUpdateMs = timing.currentFixedWorldUpdateMs;
+    stats.audioMs = timing.currentAudioMs;
+    stats.renderMs = timing.currentRenderMs;
+    stats.pollEventsMs = timing.currentPollEventsMs;
+    stats.appUpdateDispatchMs = timing.currentAppUpdateDispatchMs;
+    stats.appRenderDispatchMs = timing.currentAppRenderDispatchMs;
+    stats.renderSnapshotMs = timing.currentRenderSnapshotMs;
+    stats.renderSceneMs = timing.currentRenderSceneMs;
+    stats.renderUiMs = timing.currentRenderUiMs;
+    stats.renderDashboardMs = timing.currentRenderDashboardMs;
+    stats.swapBuffersMs = timing.currentSwapBuffersMs;
+    stats.renderOtherMs = std::max(0.0, stats.renderMs - stats.renderSnapshotMs - stats.renderSceneMs -
+                                            stats.renderUiMs - stats.renderDashboardMs - stats.swapBuffersMs);
+    stats.untrackedMs = std::max(0.0, stats.frameMs - stats.pollEventsMs -
+                                          stats.appUpdateDispatchMs - stats.appRenderDispatchMs);
+    stats.pollEventCount = timing.currentPollEventCounts.total();
+    stats.pollKeyEventCount = timing.currentPollEventCounts.keyEvents;
+    stats.pollMouseButtonEventCount = timing.currentPollEventCounts.mouseButtonEvents;
+    stats.pollCursorPosEventCount = timing.currentPollEventCounts.cursorPosEvents;
+    stats.pollScrollEventCount = timing.currentPollEventCounts.scrollEvents;
+    stats.pollCharEventCount = timing.currentPollEventCounts.charEvents;
 
     // Snapshot max-frame-time: when current frame is the worst, record all timings
     if (stats.frameMs > stats.maxFrameMs) {
@@ -168,6 +186,22 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
         stats.maxFixedWorldUpdateMs = stats.fixedWorldUpdateMs;
         stats.maxAudioMs = stats.audioMs;
         stats.maxRenderMs = stats.renderMs;
+        stats.maxPollEventsMs = stats.pollEventsMs;
+        stats.maxAppUpdateDispatchMs = stats.appUpdateDispatchMs;
+        stats.maxAppRenderDispatchMs = stats.appRenderDispatchMs;
+        stats.maxRenderSnapshotMs = stats.renderSnapshotMs;
+        stats.maxRenderSceneMs = stats.renderSceneMs;
+        stats.maxRenderUiMs = stats.renderUiMs;
+        stats.maxRenderDashboardMs = stats.renderDashboardMs;
+        stats.maxSwapBuffersMs = stats.swapBuffersMs;
+        stats.maxRenderOtherMs = stats.renderOtherMs;
+        stats.maxUntrackedMs = stats.untrackedMs;
+        stats.maxPollEventCount = stats.pollEventCount;
+        stats.maxPollKeyEventCount = stats.pollKeyEventCount;
+        stats.maxPollMouseButtonEventCount = stats.pollMouseButtonEventCount;
+        stats.maxPollCursorPosEventCount = stats.pollCursorPosEventCount;
+        stats.maxPollScrollEventCount = stats.pollScrollEventCount;
+        stats.maxPollCharEventCount = stats.pollCharEventCount;
     }
     stats.frameHistoryCount = history.frameCount;
     stats.fixedHistoryCount = history.count;

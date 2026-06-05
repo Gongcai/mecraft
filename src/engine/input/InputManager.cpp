@@ -218,6 +218,9 @@ void InputManager::keyCallback(GLFWwindow* w, int key, int /*scancode*/, int act
     if (self == nullptr || key < 0 || key > GLFW_KEY_LAST) {
         return;
     }
+#ifdef MECRAFT_DEBUG
+    ++self->m_debugEventStats.keyEvents;
+#endif
 
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         self->m_keys[key] = true;
@@ -231,6 +234,9 @@ void InputManager::mouseButtonCallback(GLFWwindow* w, int button, int action, in
     if (self == nullptr || button < 0 || button > GLFW_MOUSE_BUTTON_LAST) {
         return;
     }
+#ifdef MECRAFT_DEBUG
+    ++self->m_debugEventStats.mouseButtonEvents;
+#endif
 
     if (action == GLFW_PRESS) {
         self->m_mouseButtons[button] = true;
@@ -244,6 +250,9 @@ void InputManager::cursorPosCallback(GLFWwindow* w, double xpos, double ypos) {
     if (self == nullptr) {
         return;
     }
+#ifdef MECRAFT_DEBUG
+    ++self->m_debugEventStats.cursorPosEvents;
+#endif
     if (self->m_firstMouse) {
         self->m_lastMouseX = xpos;
         self->m_lastMouseY = ypos;
@@ -265,12 +274,21 @@ void InputManager::scrollCallback(GLFWwindow* w, double /*xoffset*/, double yoff
     if (self == nullptr) {
         return;
     }
+#ifdef MECRAFT_DEBUG
+    ++self->m_debugEventStats.scrollEvents;
+#endif
     self->m_accumScrollY += yoffset;
 }
 
 void InputManager::charCallback(GLFWwindow* w, unsigned int codepoint) {
     auto* self = fromWindow(w);
-    if (self == nullptr || self->m_typedCharCount >= InputSnapshot::kMaxTypedCharsPerFrame) {
+    if (self == nullptr) {
+        return;
+    }
+#ifdef MECRAFT_DEBUG
+    ++self->m_debugEventStats.charEvents;
+#endif
+    if (self->m_typedCharCount >= InputSnapshot::kMaxTypedCharsPerFrame) {
         return;
     }
 

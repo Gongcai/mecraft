@@ -220,10 +220,26 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                 ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "Max: %.3f ms", maxVal);
             }
         };
+        const auto showMaxCount = [](const char* label, unsigned current, unsigned maxVal) {
+            ImGui::Text("%s: %u", label, current);
+            if (maxVal > 0U) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "Max: %u", maxVal);
+            }
+        };
 
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
         showMax("Loop Frame (clamped)", profilerStats.frameMs, profilerStats.maxFrameMs);
+        showMax("Poll Events", profilerStats.pollEventsMs, profilerStats.maxPollEventsMs);
+        showMaxCount("  - Event Count", profilerStats.pollEventCount, profilerStats.maxPollEventCount);
+        showMaxCount("    - Key", profilerStats.pollKeyEventCount, profilerStats.maxPollKeyEventCount);
+        showMaxCount("    - Mouse Button", profilerStats.pollMouseButtonEventCount, profilerStats.maxPollMouseButtonEventCount);
+        showMaxCount("    - Cursor Pos", profilerStats.pollCursorPosEventCount, profilerStats.maxPollCursorPosEventCount);
+        showMaxCount("    - Scroll", profilerStats.pollScrollEventCount, profilerStats.maxPollScrollEventCount);
+        showMaxCount("    - Char", profilerStats.pollCharEventCount, profilerStats.maxPollCharEventCount);
+        showMax("App Update Dispatch", profilerStats.appUpdateDispatchMs, profilerStats.maxAppUpdateDispatchMs);
+        showMax("App Render Dispatch", profilerStats.appRenderDispatchMs, profilerStats.maxAppRenderDispatchMs);
         showMax("Fixed Update", profilerStats.fixedUpdateMs, profilerStats.maxFixedUpdateMs);
         showMax("  - Input Update", profilerStats.fixedInputMs, profilerStats.maxFixedInputMs);
         showMax("  - State Update", profilerStats.fixedStateUpdateMs, profilerStats.maxFixedStateUpdateMs);
@@ -232,6 +248,13 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         showMax("  - World Update", profilerStats.fixedWorldUpdateMs, profilerStats.maxFixedWorldUpdateMs);
         showMax("Audio Sync", profilerStats.audioMs, profilerStats.maxAudioMs);
         showMax("Render Submit", profilerStats.renderMs, profilerStats.maxRenderMs);
+        showMax("  - Snapshot", profilerStats.renderSnapshotMs, profilerStats.maxRenderSnapshotMs);
+        showMax("  - Scene", profilerStats.renderSceneMs, profilerStats.maxRenderSceneMs);
+        showMax("  - UI", profilerStats.renderUiMs, profilerStats.maxRenderUiMs);
+        showMax("  - Dashboard", profilerStats.renderDashboardMs, profilerStats.maxRenderDashboardMs);
+        showMax("  - Swap Buffers", profilerStats.swapBuffersMs, profilerStats.maxSwapBuffersMs);
+        showMax("  - Other Render", profilerStats.renderOtherMs, profilerStats.maxRenderOtherMs);
+        showMax("Untracked / Wait", profilerStats.untrackedMs, profilerStats.maxUntrackedMs);
 
         if (profilerStats.maxFrameMs > 0.0 && ImGui::Button("Reset Max Frame Time")) {
             profilerStats.maxFrameMs = 0.0;
@@ -243,6 +266,22 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             profilerStats.maxFixedWorldUpdateMs = 0.0;
             profilerStats.maxAudioMs = 0.0;
             profilerStats.maxRenderMs = 0.0;
+            profilerStats.maxPollEventsMs = 0.0;
+            profilerStats.maxAppUpdateDispatchMs = 0.0;
+            profilerStats.maxAppRenderDispatchMs = 0.0;
+            profilerStats.maxRenderSnapshotMs = 0.0;
+            profilerStats.maxRenderSceneMs = 0.0;
+            profilerStats.maxRenderUiMs = 0.0;
+            profilerStats.maxRenderDashboardMs = 0.0;
+            profilerStats.maxSwapBuffersMs = 0.0;
+            profilerStats.maxRenderOtherMs = 0.0;
+            profilerStats.maxUntrackedMs = 0.0;
+            profilerStats.maxPollEventCount = 0;
+            profilerStats.maxPollKeyEventCount = 0;
+            profilerStats.maxPollMouseButtonEventCount = 0;
+            profilerStats.maxPollCursorPosEventCount = 0;
+            profilerStats.maxPollScrollEventCount = 0;
+            profilerStats.maxPollCharEventCount = 0;
         }
 
         auto historyMax = [](const float* history, const size_t count, const float fallbackMax) {

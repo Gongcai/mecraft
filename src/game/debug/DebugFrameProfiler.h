@@ -14,6 +14,18 @@ public:
     static constexpr size_t kHistorySamples = 120;
 
     struct TimingData {
+        struct PollEventCounts {
+            unsigned keyEvents = 0;
+            unsigned mouseButtonEvents = 0;
+            unsigned cursorPosEvents = 0;
+            unsigned scrollEvents = 0;
+            unsigned charEvents = 0;
+
+            [[nodiscard]] unsigned total() const {
+                return keyEvents + mouseButtonEvents + cursorPosEvents + scrollEvents + charEvents;
+            }
+        };
+
         double fixedUpdateMs = 0.0;
         double fixedInputMs = 0.0;
         double fixedStateUpdateMs = 0.0;
@@ -23,6 +35,24 @@ public:
         double audioMs = 0.0;
         double renderMs = 0.0;
 
+        double currentFixedUpdateMs = 0.0;
+        double currentFixedInputMs = 0.0;
+        double currentFixedStateUpdateMs = 0.0;
+        double currentFixedParticleUpdateMs = 0.0;
+        double currentFixedDropUpdateMs = 0.0;
+        double currentFixedWorldUpdateMs = 0.0;
+        double currentAudioMs = 0.0;
+        double currentRenderMs = 0.0;
+        double currentPollEventsMs = 0.0;
+        double currentAppUpdateDispatchMs = 0.0;
+        double currentAppRenderDispatchMs = 0.0;
+        double currentRenderSnapshotMs = 0.0;
+        double currentRenderSceneMs = 0.0;
+        double currentRenderUiMs = 0.0;
+        double currentRenderDashboardMs = 0.0;
+        double currentSwapBuffersMs = 0.0;
+        PollEventCounts currentPollEventCounts{};
+
         double fixedInputAccumMs = 0.0;
         double fixedStateAccumMs = 0.0;
         double fixedParticleAccumMs = 0.0;
@@ -30,8 +60,28 @@ public:
         double fixedWorldAccumMs = 0.0;
         double audioAccumMs = 0.0;
         double renderAccumMs = 0.0;
+        double pollEventsAccumMs = 0.0;
+        double appUpdateDispatchAccumMs = 0.0;
+        double appRenderDispatchAccumMs = 0.0;
         size_t fixedStepCount = 0;
         size_t frameSampleCount = 0;
+
+        double frameFixedInputAccumMs = 0.0;
+        double frameFixedStateAccumMs = 0.0;
+        double frameFixedParticleAccumMs = 0.0;
+        double frameFixedDropAccumMs = 0.0;
+        double frameFixedWorldAccumMs = 0.0;
+        double frameAudioAccumMs = 0.0;
+        double frameRenderAccumMs = 0.0;
+        double framePollEventsAccumMs = 0.0;
+        double frameAppUpdateDispatchAccumMs = 0.0;
+        double frameAppRenderDispatchAccumMs = 0.0;
+        double frameRenderSnapshotAccumMs = 0.0;
+        double frameRenderSceneAccumMs = 0.0;
+        double frameRenderUiAccumMs = 0.0;
+        double frameRenderDashboardAccumMs = 0.0;
+        double frameSwapBuffersAccumMs = 0.0;
+        PollEventCounts framePollEventCounts{};
     };
 
     struct HistoryData {
@@ -50,16 +100,62 @@ public:
     };
 
     /// Record timing for a fixed update sub-stage.
-    void recordFixedInput(double ms) { m_timing.fixedInputAccumMs += ms; }
-    void recordFixedState(double ms) { m_timing.fixedStateAccumMs += ms; }
-    void recordFixedParticle(double ms) { m_timing.fixedParticleAccumMs += ms; }
-    void recordFixedDrop(double ms) { m_timing.fixedDropAccumMs += ms; }
-    void recordFixedWorld(double ms) { m_timing.fixedWorldAccumMs += ms; }
-    void recordAudio(double ms) { m_timing.audioAccumMs += ms; }
+    void recordFixedInput(double ms) {
+        m_timing.fixedInputAccumMs += ms;
+        m_timing.frameFixedInputAccumMs += ms;
+    }
+    void recordFixedState(double ms) {
+        m_timing.fixedStateAccumMs += ms;
+        m_timing.frameFixedStateAccumMs += ms;
+    }
+    void recordFixedParticle(double ms) {
+        m_timing.fixedParticleAccumMs += ms;
+        m_timing.frameFixedParticleAccumMs += ms;
+    }
+    void recordFixedDrop(double ms) {
+        m_timing.fixedDropAccumMs += ms;
+        m_timing.frameFixedDropAccumMs += ms;
+    }
+    void recordFixedWorld(double ms) {
+        m_timing.fixedWorldAccumMs += ms;
+        m_timing.frameFixedWorldAccumMs += ms;
+    }
+    void recordAudio(double ms) {
+        m_timing.audioAccumMs += ms;
+        m_timing.frameAudioAccumMs += ms;
+    }
     void recordRender(double ms) {
         m_timing.renderAccumMs += ms;
+        m_timing.frameRenderAccumMs += ms;
         ++m_timing.frameSampleCount;
     }
+    void recordPollEvents(double ms,
+                          unsigned keyEvents,
+                          unsigned mouseButtonEvents,
+                          unsigned cursorPosEvents,
+                          unsigned scrollEvents,
+                          unsigned charEvents) {
+        m_timing.pollEventsAccumMs += ms;
+        m_timing.framePollEventsAccumMs += ms;
+        m_timing.framePollEventCounts.keyEvents += keyEvents;
+        m_timing.framePollEventCounts.mouseButtonEvents += mouseButtonEvents;
+        m_timing.framePollEventCounts.cursorPosEvents += cursorPosEvents;
+        m_timing.framePollEventCounts.scrollEvents += scrollEvents;
+        m_timing.framePollEventCounts.charEvents += charEvents;
+    }
+    void recordAppUpdateDispatch(double ms) {
+        m_timing.appUpdateDispatchAccumMs += ms;
+        m_timing.frameAppUpdateDispatchAccumMs += ms;
+    }
+    void recordAppRenderDispatch(double ms) {
+        m_timing.appRenderDispatchAccumMs += ms;
+        m_timing.frameAppRenderDispatchAccumMs += ms;
+    }
+    void recordRenderSnapshot(double ms) { m_timing.frameRenderSnapshotAccumMs += ms; }
+    void recordRenderScene(double ms) { m_timing.frameRenderSceneAccumMs += ms; }
+    void recordRenderUi(double ms) { m_timing.frameRenderUiAccumMs += ms; }
+    void recordRenderDashboard(double ms) { m_timing.frameRenderDashboardAccumMs += ms; }
+    void recordSwapBuffers(double ms) { m_timing.frameSwapBuffersAccumMs += ms; }
 
     /// Increment the fixed step counter.
     void incrementFixedStep() { ++m_timing.fixedStepCount; }
@@ -70,6 +166,7 @@ public:
 
     /// Reset per-frame accumulators (called after publish).
     void resetAccumulators();
+    void resetFrameAccumulators();
 
     // Accessors
     [[nodiscard]] const TimingData& timing() const { return m_timing; }

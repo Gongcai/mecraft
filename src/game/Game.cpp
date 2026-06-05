@@ -119,14 +119,47 @@ void Game::updateFrame(const float deltaTime) {
 #endif
 }
 
+#ifdef MECRAFT_DEBUG
+void Game::publishDebugStats(const float frameTime) {
+    if (m_renderRuntime) {
+        m_renderRuntime->publishDebugStats(frameTime);
+    }
+}
+
+void Game::recordPollEvents(double ms,
+                            unsigned keyEvents,
+                            unsigned mouseButtonEvents,
+                            unsigned cursorPosEvents,
+                            unsigned scrollEvents,
+                            unsigned charEvents) {
+    if (m_renderRuntime) {
+        if (auto* profiler = m_renderRuntime->profiler()) {
+            profiler->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents);
+        }
+    }
+}
+
+void Game::recordAppUpdateDispatch(double ms) {
+    if (m_renderRuntime) {
+        if (auto* profiler = m_renderRuntime->profiler()) {
+            profiler->recordAppUpdateDispatch(ms);
+        }
+    }
+}
+
+void Game::recordAppRenderDispatch(double ms) {
+    if (m_renderRuntime) {
+        if (auto* profiler = m_renderRuntime->profiler()) {
+            profiler->recordAppRenderDispatch(ms);
+        }
+    }
+}
+#endif
+
 void Game::renderFrame(const float frameTime) {
     if (!m_initialized) {
         return;
     }
-
-#ifdef MECRAFT_DEBUG
-    m_renderRuntime->publishDebugStats(frameTime);
-#endif
 
     // Set screenshot capture callback if requested (captures before UI overlay)
     if (m_captureScreenshotOnNextFrame) {

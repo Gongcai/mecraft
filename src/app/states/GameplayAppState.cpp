@@ -66,6 +66,9 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
     }
 
     try {
+#ifdef MECRAFT_DEBUG
+        m_game->publishDebugStats(static_cast<float>(frameTime));
+#endif
         constexpr double kFixedStep = 1.0 / 60.0;
         while (accumulator >= kFixedStep) {
             m_game->fixedUpdate(kFixedStep, accumulator);
@@ -109,3 +112,28 @@ void GameplayAppState::render(double frameTime) {
         }
     }
 }
+
+#ifdef MECRAFT_DEBUG
+void GameplayAppState::recordPollEvents(double ms,
+                                        unsigned keyEvents,
+                                        unsigned mouseButtonEvents,
+                                        unsigned cursorPosEvents,
+                                        unsigned scrollEvents,
+                                        unsigned charEvents) {
+    if (m_game) {
+        m_game->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents);
+    }
+}
+
+void GameplayAppState::recordAppUpdateDispatch(double ms) {
+    if (m_game) {
+        m_game->recordAppUpdateDispatch(ms);
+    }
+}
+
+void GameplayAppState::recordAppRenderDispatch(double ms) {
+    if (m_game) {
+        m_game->recordAppRenderDispatch(ms);
+    }
+}
+#endif

@@ -19,6 +19,16 @@ public:
     void onExit() override;
     void update(double frameTime, double& accumulator) override;
     void render(double frameTime) override;
+#ifdef MECRAFT_DEBUG
+    void recordPollEvents(double ms,
+                          unsigned keyEvents,
+                          unsigned mouseButtonEvents,
+                          unsigned cursorPosEvents,
+                          unsigned scrollEvents,
+                          unsigned charEvents) override;
+    void recordAppUpdateDispatch(double ms) override;
+    void recordAppRenderDispatch(double ms) override;
+#endif
 
 private:
     AppStateDependencies m_deps;

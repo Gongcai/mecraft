@@ -41,6 +41,22 @@ public:
         double fixedWorldUpdateMs = 0.0;
         double audioMs = 0.0;
         double renderMs = 0.0;
+        double pollEventsMs = 0.0;
+        double appUpdateDispatchMs = 0.0;
+        double appRenderDispatchMs = 0.0;
+        double renderSnapshotMs = 0.0;
+        double renderSceneMs = 0.0;
+        double renderUiMs = 0.0;
+        double renderDashboardMs = 0.0;
+        double swapBuffersMs = 0.0;
+        double renderOtherMs = 0.0;
+        double untrackedMs = 0.0;
+        unsigned pollEventCount = 0;
+        unsigned pollKeyEventCount = 0;
+        unsigned pollMouseButtonEventCount = 0;
+        unsigned pollCursorPosEventCount = 0;
+        unsigned pollScrollEventCount = 0;
+        unsigned pollCharEventCount = 0;
 
         // Max-frame-time snapshot: records all timings from the worst frame
         double maxFrameMs = 0.0;
@@ -52,6 +68,22 @@ public:
         double maxFixedWorldUpdateMs = 0.0;
         double maxAudioMs = 0.0;
         double maxRenderMs = 0.0;
+        double maxPollEventsMs = 0.0;
+        double maxAppUpdateDispatchMs = 0.0;
+        double maxAppRenderDispatchMs = 0.0;
+        double maxRenderSnapshotMs = 0.0;
+        double maxRenderSceneMs = 0.0;
+        double maxRenderUiMs = 0.0;
+        double maxRenderDashboardMs = 0.0;
+        double maxSwapBuffersMs = 0.0;
+        double maxRenderOtherMs = 0.0;
+        double maxUntrackedMs = 0.0;
+        unsigned maxPollEventCount = 0;
+        unsigned maxPollKeyEventCount = 0;
+        unsigned maxPollMouseButtonEventCount = 0;
+        unsigned maxPollCursorPosEventCount = 0;
+        unsigned maxPollScrollEventCount = 0;
+        unsigned maxPollCharEventCount = 0;
 
         size_t frameHistoryCount = 0;
         size_t fixedHistoryCount = 0;

@@ -49,6 +49,17 @@ public:
     void fixedUpdate(double fixedStep, double& accumulator);
     void updateFrame(float deltaTime);
     void renderFrame(float frameTime);
+#ifdef MECRAFT_DEBUG
+    void publishDebugStats(float frameTime);
+    void recordPollEvents(double ms,
+                          unsigned keyEvents,
+                          unsigned mouseButtonEvents,
+                          unsigned cursorPosEvents,
+                          unsigned scrollEvents,
+                          unsigned charEvents);
+    void recordAppUpdateDispatch(double ms);
+    void recordAppRenderDispatch(double ms);
+#endif
 
     [[nodiscard]] bool isQuitToMenuRequested() const;
     [[nodiscard]] bool isInitialized() const { return m_initialized; }

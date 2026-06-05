@@ -183,6 +183,9 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
     const auto snap = session.presentationBuilder().build(reg, session.cameraController());
+#ifdef MECRAFT_DEBUG
+    const auto snapshotEnd = std::chrono::steady_clock::now();
+#endif
 
     // Apply snapshot state to RenderScene
     renderScene.setRenderLocalPlayerModel(snap.renderLocalPlayerModel);
@@ -232,6 +235,11 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
         snap.inventory != nullptr && !snap.renderLocalPlayerModel
     };
     renderScene.renderGameplayFrame(renderRequest);
+#ifdef MECRAFT_DEBUG
+    const auto sceneEnd = std::chrono::steady_clock::now();
+    auto uiEnd = sceneEnd;
+    auto dashboardEnd = sceneEnd;
+#endif
 
     // Invoke pre-UI callback (e.g., screenshot capture) after 3D scene, before UI
     if (m_preUiCallback) {
@@ -242,6 +250,9 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
         hudPresenter->render(snap, session.stateMachine());
+#ifdef MECRAFT_DEBUG
+        uiEnd = std::chrono::steady_clock::now();
+#endif
 #ifdef MECRAFT_DEBUG
         // G7: Render debug dashboard (Dashboard is injected into presenter by Game)
         if (renderRuntime.dashboardProfilerStats()) {
@@ -259,13 +270,22 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
                     session.client().sendViewConfig(distance);
                 });
         }
+        dashboardEnd = std::chrono::steady_clock::now();
 #endif
     }
+#ifdef MECRAFT_DEBUG
+    const auto preSwapEnd = std::chrono::steady_clock::now();
+#endif
     window.swapBuffers();
 
 #ifdef MECRAFT_DEBUG
     const auto renderEnd = std::chrono::steady_clock::now();
     if (auto* profiler = renderRuntime.profiler()) {
+        profiler->recordRenderSnapshot(std::chrono::duration<double, std::milli>(snapshotEnd - renderStart).count());
+        profiler->recordRenderScene(std::chrono::duration<double, std::milli>(sceneEnd - snapshotEnd).count());
+        profiler->recordRenderUi(std::chrono::duration<double, std::milli>(uiEnd - sceneEnd).count());
+        profiler->recordRenderDashboard(std::chrono::duration<double, std::milli>(dashboardEnd - uiEnd).count());
+        profiler->recordSwapBuffers(std::chrono::duration<double, std::milli>(renderEnd - preSwapEnd).count());
         profiler->recordRender(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
     }
 #endif

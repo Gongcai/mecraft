@@ -56,6 +56,20 @@ struct InputSnapshot {
 
 class InputManager {
 public:
+#ifdef MECRAFT_DEBUG
+    struct DebugEventStats {
+        uint32_t keyEvents = 0;
+        uint32_t mouseButtonEvents = 0;
+        uint32_t cursorPosEvents = 0;
+        uint32_t scrollEvents = 0;
+        uint32_t charEvents = 0;
+
+        [[nodiscard]] uint32_t total() const {
+            return keyEvents + mouseButtonEvents + cursorPosEvents + scrollEvents + charEvents;
+        }
+    };
+#endif
+
     // 传入 Window 句柄以注册 GLFW 回调
     void init(GLFWwindow* windowHandle);
 
@@ -71,6 +85,11 @@ public:
     void beginUIDragItem(int itemId, int count, int sourceSlot);
     void clearUIDragItem();
     [[nodiscard]] const InputSnapshot::UIDragPayload& getUIDragItem() const;
+
+#ifdef MECRAFT_DEBUG
+    void resetDebugEventStats() { m_debugEventStats = {}; }
+    [[nodiscard]] const DebugEventStats& debugEventStats() const { return m_debugEventStats; }
+#endif
 private:
     GLFWwindow* m_handle = nullptr;
 
@@ -109,6 +128,9 @@ private:
 
     InputSnapshot m_snapshot{};
     InputSnapshot::UIDragPayload m_draggedItem{};
+#ifdef MECRAFT_DEBUG
+    DebugEventStats m_debugEventStats{};
+#endif
 
     static InputManager* fromWindow(GLFWwindow* w);
 
