@@ -34,9 +34,9 @@ void Game::init() {
         return;
     }
     m_initialized = true;
-    m_session.init(m_config, m_deps.resourceMgr, m_renderRuntime->getThreadPool());
+    m_session.init(m_config, m_deps.resourceMgr, &m_deps.threadPool);
     m_session.initWorld(m_config.seed);
-    m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer);
+    m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer, m_deps.threadPool);
     m_session.initECS(m_deps);
     m_session.loadLocalPlayer();  // Restore saved player state after ECS init
     m_session.initStateMachine(m_deps);
@@ -110,10 +110,8 @@ void Game::shutdown() {
     // Render one more frame to capture the screenshot
     renderFrame(0.0f);
 
-    // Session must shut down before render runtime because the session's
-    // GameServer flushes pending saves via the thread pool owned by
-    // RenderResourceHub.  Shutting down the render runtime first would
-    // destroy the thread pool and deadlock flushPendingSaves().
+    // Session must shut down before the app-owned thread pool is stopped
+    // because GameServer flushes pending saves through that pool.
     m_session.shutdown();
     m_renderRuntime->shutdown();
     m_initialized = false;

@@ -19,6 +19,7 @@ void GameManager::init(int width, int height, const char* title) {
     if (!initWindow(width, height, title)) {
         return;
     }
+    m_threadPool.start();
     initResources();
     
     m_audioEngine.init();
@@ -109,7 +110,8 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
         m_audioEngine,
         m_bgmSystem,
         m_uiRenderer,
-        m_localeManager
+        m_localeManager,
+        m_threadPool
     };
 }
 
@@ -140,4 +142,5 @@ void GameManager::shutdown() {
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
     net::ENetTransport::deinitialize();
+    m_threadPool.shutdown();
 }

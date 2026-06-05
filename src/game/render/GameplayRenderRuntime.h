@@ -33,13 +33,10 @@ public:
     GameplayRenderRuntime& operator=(const GameplayRenderRuntime&) = delete;
 
     /// Initialize all renderers and connect to session systems.
-    void init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer);
+    void init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer, ThreadPool& threadPool);
 
     /// Shutdown all renderers in reverse order of initialization.
     void shutdown();
-
-    /// Get the thread pool from RenderResourceHub (available before init()).
-    [[nodiscard]] ThreadPool* getThreadPool();
 
     // Accessors (valid after init())
     [[nodiscard]] RenderResourceHub& resourceHub();

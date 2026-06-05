@@ -16,6 +16,7 @@
 #include "states/AppStateMachine.h"
 #include "states/AppStateDependencies.h"
 #include "../locale/LocaleManager.h"
+#include "../thread/ThreadPool.h"
 
 class GameManager {
 public:
@@ -43,6 +44,7 @@ private:
     BgmSystem m_bgmSystem;
     UIRenderer m_uiRenderer;
     LocaleManager m_localeManager;
+    ThreadPool m_threadPool;
 
     AppStateMachine m_appStateMachine;
 };

@@ -24,7 +24,8 @@ void GameplayAppState::onEnter() {
         m_deps.audioEngine,
         m_deps.bgmSystem,
         m_deps.uiRenderer,
-        m_deps.localeManager
+        m_deps.localeManager,
+        m_deps.threadPool
     };
 
     try {

@@ -51,7 +51,8 @@ GameplayRenderRuntime::~GameplayRenderRuntime() = default;
 
 void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   GameSession& session,
-                                  UIRenderer& uiRenderer) {
+                                  UIRenderer& uiRenderer,
+                                  ThreadPool& threadPool) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& dropRenderer = m_impl->dropRenderer;
@@ -59,12 +60,12 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
     // Core GPU infrastructure
-    renderer.init(resourceMgr);
+    renderer.init(resourceMgr, threadPool);
 
     // Initialize RenderScene and connect to RenderResourceHub
     renderScene.init(resourceMgr);
     renderScene.setupResources(
-        renderer.getThreadPool(),
+        &threadPool,
         &renderer.getTerrainRenderer(),
         &renderer.getWorldRenderBuffer(),
         &renderer.getDeferredRenderTargets(),
@@ -120,10 +121,6 @@ void GameplayRenderRuntime::shutdown() {
 // --------------------------------------------------------------------------
 // Accessors
 // --------------------------------------------------------------------------
-
-ThreadPool* GameplayRenderRuntime::getThreadPool() {
-    return m_impl->resourceHub.getThreadPool();
-}
 
 RenderResourceHub& GameplayRenderRuntime::resourceHub() {
     return m_impl->resourceHub;

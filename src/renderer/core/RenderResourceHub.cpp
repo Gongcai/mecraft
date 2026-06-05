@@ -86,7 +86,7 @@ RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-void RenderResourceHub::init(ResourceMgr &resourceMgr) {
+void RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool) {
     m_resourceMgr = &resourceMgr;
     m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
     m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
@@ -119,9 +119,8 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr) {
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
     m_gameplaySkyRenderer.init(resourceMgr);
-    m_threadPool.start();
     if (!m_meshingSubmitBudgetOverridden) {
-        const int workerCount = std::max(1, m_threadPool.numWorkers());
+        const int workerCount = std::max(1, threadPool.numWorkers());
         m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);
         m_meshingMaxInFlight = std::max(4, workerCount * 2);
 #ifndef MECRAFT_DEBUG
@@ -140,7 +139,7 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr) {
                                      m_meshingDrainBudget,
                                      static_cast<float>(m_meshingDrainTimeBudgetMs),
                                      m_meshingDrainVertexBudget);
-    m_meshingService.start(&m_threadPool);
+    m_meshingService.start(&threadPool);
 }
 
 void RenderResourceHub::shutdown() {
@@ -151,7 +150,6 @@ void RenderResourceHub::shutdown() {
     m_terrainCache.shutdown();
     m_meshingService.shutdown();
     m_worldRenderBuffer.shutdown();
-    m_threadPool.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
     m_chunkShader = nullptr;

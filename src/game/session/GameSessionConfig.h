@@ -14,6 +14,7 @@ class AudioEngine;
 class BgmSystem;
 class UIRenderer;
 class LocaleManager;
+class ThreadPool;
 
 /// Configuration for a gameplay session (seed, render distance, etc.)
 struct GameSessionConfig {
@@ -44,6 +45,7 @@ struct GameSessionDependencies {
     BgmSystem& bgmSystem;
     UIRenderer& uiRenderer;
     LocaleManager& localeManager;
+    ThreadPool& threadPool;
 };
 
 #endif // MECRAFT_GAME_SESSION_CONFIG_H

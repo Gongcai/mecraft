@@ -127,7 +127,7 @@ public:
 #endif
 
     ~RenderResourceHub();
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, ThreadPool& threadPool);
     void shutdown();
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
@@ -159,8 +159,6 @@ public:
         int shadowsEnabled = 1;
         float skyIntensity = 1.0f;
     };
-    [[nodiscard]] ThreadPool* getThreadPool() { return &m_threadPool; }
-
     // Shared resource accessors (for RenderScene integration)
     [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
     [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
@@ -228,7 +226,6 @@ private:
     BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;
     RenderDebugService* m_debugService = nullptr;
 
-    ThreadPool m_threadPool;
     ChunkMeshingService m_meshingService;
     TerrainStreamingService* m_terrainStreamingService = nullptr;
     GameplaySkyRenderer m_gameplaySkyRenderer;

@@ -12,6 +12,7 @@
 #include "../../locale/LocaleManager.h"
 
 class AppStateMachine;
+class ThreadPool;
 
 struct AppStateDependencies {
     AppStateMachine& appFsm;
@@ -24,6 +25,7 @@ struct AppStateDependencies {
     BgmSystem& bgmSystem;
     UIRenderer& uiRenderer;
     LocaleManager& localeManager;
+    ThreadPool& threadPool;
 };
 
 #endif //MECRAFT_APPSTATEDEPENDENCIES_H
