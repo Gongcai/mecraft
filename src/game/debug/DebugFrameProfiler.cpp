@@ -3,6 +3,17 @@
 #ifdef MECRAFT_DEBUG
 
 void DebugFrameProfiler::publish(double frameTime) {
+    m_frameHistoryAccumulator += frameTime;
+    if (frameTime > 0.0 && m_frameHistoryAccumulator >= m_frameHistoryInterval) {
+        m_frameHistoryAccumulator -= m_frameHistoryInterval;
+        const size_t frameIdx = m_history.frameWriteIndex;
+        m_history.fpsHistory[frameIdx] = static_cast<float>(1.0 / frameTime);
+        m_history.frameWriteIndex = (frameIdx + 1) % kHistorySamples;
+        if (m_history.frameCount < kHistorySamples) {
+            ++m_history.frameCount;
+        }
+    }
+
     m_publishAccumulator += frameTime;
     if (m_publishAccumulator < m_publishInterval) {
         return;
@@ -35,6 +46,7 @@ void DebugFrameProfiler::publish(double frameTime) {
     m_history.fixedParticleHistory[idx] = static_cast<float>(m_timing.fixedParticleUpdateMs);
     m_history.fixedDropHistory[idx] = static_cast<float>(m_timing.fixedDropUpdateMs);
     m_history.fixedWorldHistory[idx] = static_cast<float>(m_timing.fixedWorldUpdateMs);
+    m_history.renderHistory[idx] = static_cast<float>(m_timing.renderMs);
 
     m_history.writeIndex = (idx + 1) % kHistorySamples;
     if (m_history.count < kHistorySamples) {

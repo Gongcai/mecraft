@@ -156,23 +156,33 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
     stats.audioMs = timing.audioMs;
     stats.renderMs = timing.renderMs;
+    stats.frameHistoryCount = history.frameCount;
     stats.fixedHistoryCount = history.count;
 
     // Copy history ring buffer entries in chronological order for the dashboard
     const size_t srcSize = DebugFrameProfiler::kHistorySamples;
-    const auto& h = history;
-    auto copyHistory = [&h, srcSize](const float* src, float* dst, size_t dstSize) {
+    auto copyHistory = [srcSize](const float* src, float* dst, size_t dstSize, size_t count, size_t writeIndex) {
         std::fill(dst, dst + dstSize, 0.0f);
-        for (size_t i = 0; i < h.count; ++i) {
-            dst[i] = src[(h.writeIndex + srcSize - h.count + i) % srcSize];
+        for (size_t i = 0; i < count && i < dstSize; ++i) {
+            dst[i] = src[(writeIndex + srcSize - count + i) % srcSize];
         }
     };
-    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
-    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples);
+    copyHistory(history.fpsHistory.data(), stats.fpsHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.frameCount, history.frameWriteIndex);
+    copyHistory(history.renderHistory.data(), stats.renderHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
+    copyHistory(history.fixedUpdateHistory.data(), stats.fixedUpdateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
+    copyHistory(history.fixedInputHistory.data(), stats.fixedInputHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
+    copyHistory(history.fixedStateHistory.data(), stats.fixedStateHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
+    copyHistory(history.fixedParticleHistory.data(), stats.fixedParticleHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
+    copyHistory(history.fixedDropHistory.data(), stats.fixedDropHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
+    copyHistory(history.fixedWorldHistory.data(), stats.fixedWorldHistory.data(), Dashboard::FrameProfilerStats::kFixedHistorySamples,
+                history.count, history.writeIndex);
 }
 
 Dashboard* GameplayRenderRuntime::dashboard() {

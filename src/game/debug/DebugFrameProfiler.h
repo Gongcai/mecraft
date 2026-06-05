@@ -37,6 +37,10 @@ public:
     struct HistoryData {
         size_t count = 0;
         size_t writeIndex = 0;
+        size_t frameCount = 0;
+        size_t frameWriteIndex = 0;
+        std::array<float, kHistorySamples> fpsHistory{};
+        std::array<float, kHistorySamples> renderHistory{};
         std::array<float, kHistorySamples> fixedUpdateHistory{};
         std::array<float, kHistorySamples> fixedInputHistory{};
         std::array<float, kHistorySamples> fixedStateHistory{};
@@ -74,6 +78,8 @@ public:
 private:
     TimingData m_timing{};
     HistoryData m_history{};
+    double m_frameHistoryAccumulator = 0.0;
+    double m_frameHistoryInterval = 0.2;
     double m_publishAccumulator = 0.0;
     double m_publishInterval = 0.25;
 };

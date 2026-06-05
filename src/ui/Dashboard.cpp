@@ -224,37 +224,59 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Audio Sync: %.3f ms", profilerStats.audioMs);
         ImGui::Text("Render Submit: %.3f ms", profilerStats.renderMs);
 
-        if (profilerStats.fixedHistoryCount > 1) {
-            auto historyMax = [&](const std::array<float, FrameProfilerStats::kFixedHistorySamples>& history) {
-                float maxValue = 0.0f;
-                for (size_t i = 0; i < profilerStats.fixedHistoryCount; ++i) {
-                    if (history[i] > maxValue) {
-                        maxValue = history[i];
-                    }
+        auto historyMax = [](const float* history, const size_t count, const float fallbackMax) {
+            float maxValue = 0.0f;
+            for (size_t i = 0; i < count; ++i) {
+                if (history[i] > maxValue) {
+                    maxValue = history[i];
                 }
-                return std::max(maxValue * 1.1f, 0.1f);
-            };
+            }
+            return std::max(maxValue * 1.1f, fallbackMax);
+        };
 
+        if (profilerStats.frameHistoryCount > 1) {
+            ImGui::Separator();
+            ImGui::Text("Frame History");
+            ImGui::PlotLines("FPS", profilerStats.fpsHistory.data(),
+                             static_cast<int>(profilerStats.frameHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.fpsHistory.data(), profilerStats.frameHistoryCount, 1.0f),
+                             ImVec2(0.0f, 65.0f));
+        }
+
+        if (profilerStats.fixedHistoryCount > 1) {
+            ImGui::PlotLines("Render Submit", profilerStats.renderHistory.data(),
+                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(profilerStats.renderHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 55.0f));
+        }
+
+        if (profilerStats.fixedHistoryCount > 1) {
             ImGui::Separator();
             ImGui::Text("Fixed Update History (ms/step)");
             ImGui::PlotLines("Fixed Total", profilerStats.fixedUpdateHistory.data(),
                              static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedUpdateHistory), ImVec2(0.0f, 65.0f));
+                             0.0f, historyMax(profilerStats.fixedUpdateHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 65.0f));
             ImGui::PlotLines("Input", profilerStats.fixedInputHistory.data(),
                              static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedInputHistory), ImVec2(0.0f, 55.0f));
+                             0.0f, historyMax(profilerStats.fixedInputHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 55.0f));
             ImGui::PlotLines("State", profilerStats.fixedStateHistory.data(),
                              static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedStateHistory), ImVec2(0.0f, 55.0f));
+                             0.0f, historyMax(profilerStats.fixedStateHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 55.0f));
             ImGui::PlotLines("Particle", profilerStats.fixedParticleHistory.data(),
                              static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedParticleHistory), ImVec2(0.0f, 55.0f));
+                             0.0f, historyMax(profilerStats.fixedParticleHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 55.0f));
             ImGui::PlotLines("Drop", profilerStats.fixedDropHistory.data(),
                              static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedDropHistory), ImVec2(0.0f, 55.0f));
+                             0.0f, historyMax(profilerStats.fixedDropHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 55.0f));
             ImGui::PlotLines("World", profilerStats.fixedWorldHistory.data(),
                              static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedWorldHistory), ImVec2(0.0f, 55.0f));
+                             0.0f, historyMax(profilerStats.fixedWorldHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+                             ImVec2(0.0f, 55.0f));
         }
 
         if (render.isMultiDrawIndirectEnabled()) {

@@ -42,7 +42,10 @@ public:
         double audioMs = 0.0;
         double renderMs = 0.0;
 
+        size_t frameHistoryCount = 0;
         size_t fixedHistoryCount = 0;
+        std::array<float, kFixedHistorySamples> fpsHistory{};
+        std::array<float, kFixedHistorySamples> renderHistory{};
         std::array<float, kFixedHistorySamples> fixedUpdateHistory{};
         std::array<float, kFixedHistorySamples> fixedInputHistory{};
         std::array<float, kFixedHistorySamples> fixedStateHistory{};
