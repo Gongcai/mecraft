@@ -156,6 +156,19 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.fixedWorldUpdateMs = timing.fixedWorldUpdateMs;
     stats.audioMs = timing.audioMs;
     stats.renderMs = timing.renderMs;
+
+    // Snapshot max-frame-time: when current frame is the worst, record all timings
+    if (stats.frameMs > stats.maxFrameMs) {
+        stats.maxFrameMs = stats.frameMs;
+        stats.maxFixedUpdateMs = stats.fixedUpdateMs;
+        stats.maxFixedInputMs = stats.fixedInputMs;
+        stats.maxFixedStateUpdateMs = stats.fixedStateUpdateMs;
+        stats.maxFixedParticleUpdateMs = stats.fixedParticleUpdateMs;
+        stats.maxFixedDropUpdateMs = stats.fixedDropUpdateMs;
+        stats.maxFixedWorldUpdateMs = stats.fixedWorldUpdateMs;
+        stats.maxAudioMs = stats.audioMs;
+        stats.maxRenderMs = stats.renderMs;
+    }
     stats.frameHistoryCount = history.frameCount;
     stats.fixedHistoryCount = history.count;
 

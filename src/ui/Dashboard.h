@@ -42,6 +42,17 @@ public:
         double audioMs = 0.0;
         double renderMs = 0.0;
 
+        // Max-frame-time snapshot: records all timings from the worst frame
+        double maxFrameMs = 0.0;
+        double maxFixedUpdateMs = 0.0;
+        double maxFixedInputMs = 0.0;
+        double maxFixedStateUpdateMs = 0.0;
+        double maxFixedParticleUpdateMs = 0.0;
+        double maxFixedDropUpdateMs = 0.0;
+        double maxFixedWorldUpdateMs = 0.0;
+        double maxAudioMs = 0.0;
+        double maxRenderMs = 0.0;
+
         size_t frameHistoryCount = 0;
         size_t fixedHistoryCount = 0;
         std::array<float, kFixedHistorySamples> fpsHistory{};
@@ -66,7 +77,7 @@ public:
                 RenderScene& renderScene,
                 PostProcessPass& postProcess,
                 UIRenderer& uiRenderer,
-                const FrameProfilerStats& profilerStats,
+                FrameProfilerStats& profilerStats,
                 const std::function<void(int)>& renderDistanceSetter = {});
 private:
     void showPlayerStats(ecs::GameplayRegistry& registry);
@@ -74,7 +85,7 @@ private:
                         ecs::GameplayRegistry& registry,
                         const std::function<void(int)>& renderDistanceSetter);
     void showCameraStats( Camera& camera);
-    void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, const FrameProfilerStats& profilerStats);
+    void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, FrameProfilerStats& profilerStats);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);

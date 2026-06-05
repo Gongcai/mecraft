@@ -33,7 +33,7 @@ void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
                                              RenderResourceHub& renderer,
                                              RenderScene& renderScene,
                                              PostProcessPass& postProcess,
-                                             const Dashboard::FrameProfilerStats& profilerStats,
+                                             Dashboard::FrameProfilerStats& profilerStats,
                                              const std::function<void(int)>& renderDistanceSetter) {
     if (!m_dashboard) {
         return;

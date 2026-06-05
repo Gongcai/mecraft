@@ -61,7 +61,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
                        RenderScene& renderScene,
                        PostProcessPass& postProcess,
                        UIRenderer& uiRenderer,
-                       const FrameProfilerStats& profilerStats,
+                       FrameProfilerStats& profilerStats,
                        const std::function<void(int)>& renderDistanceSetter) {
     // (Your code calls glfwPollEvents())
     // ...
@@ -210,19 +210,40 @@ void Dashboard::showCameraStats( Camera &camera) {
     }
 }
 
-void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, const FrameProfilerStats& profilerStats) {
+void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
+        // Helper: append max value in orange on the same line
+        const auto showMax = [](const char* label, double current, double maxVal) {
+            ImGui::Text("%s: %.3f ms", label, current);
+            if (maxVal > 0.0) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f), "Max: %.3f ms", maxVal);
+            }
+        };
+
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
-        ImGui::Text("Loop Frame (clamped): %.3f ms", profilerStats.frameMs);
-        ImGui::Text("Fixed Update: %.3f ms", profilerStats.fixedUpdateMs);
-        ImGui::Text("  - Input Update: %.3f ms", profilerStats.fixedInputMs);
-        ImGui::Text("  - State Update: %.3f ms", profilerStats.fixedStateUpdateMs);
-        ImGui::Text("  - Particle Update: %.3f ms", profilerStats.fixedParticleUpdateMs);
-        ImGui::Text("  - Drop Update: %.3f ms", profilerStats.fixedDropUpdateMs);
-        ImGui::Text("  - World Update: %.3f ms", profilerStats.fixedWorldUpdateMs);
-        ImGui::Text("Audio Sync: %.3f ms", profilerStats.audioMs);
-        ImGui::Text("Render Submit: %.3f ms", profilerStats.renderMs);
+        showMax("Loop Frame (clamped)", profilerStats.frameMs, profilerStats.maxFrameMs);
+        showMax("Fixed Update", profilerStats.fixedUpdateMs, profilerStats.maxFixedUpdateMs);
+        showMax("  - Input Update", profilerStats.fixedInputMs, profilerStats.maxFixedInputMs);
+        showMax("  - State Update", profilerStats.fixedStateUpdateMs, profilerStats.maxFixedStateUpdateMs);
+        showMax("  - Particle Update", profilerStats.fixedParticleUpdateMs, profilerStats.maxFixedParticleUpdateMs);
+        showMax("  - Drop Update", profilerStats.fixedDropUpdateMs, profilerStats.maxFixedDropUpdateMs);
+        showMax("  - World Update", profilerStats.fixedWorldUpdateMs, profilerStats.maxFixedWorldUpdateMs);
+        showMax("Audio Sync", profilerStats.audioMs, profilerStats.maxAudioMs);
+        showMax("Render Submit", profilerStats.renderMs, profilerStats.maxRenderMs);
+
+        if (profilerStats.maxFrameMs > 0.0 && ImGui::Button("Reset Max Frame Time")) {
+            profilerStats.maxFrameMs = 0.0;
+            profilerStats.maxFixedUpdateMs = 0.0;
+            profilerStats.maxFixedInputMs = 0.0;
+            profilerStats.maxFixedStateUpdateMs = 0.0;
+            profilerStats.maxFixedParticleUpdateMs = 0.0;
+            profilerStats.maxFixedDropUpdateMs = 0.0;
+            profilerStats.maxFixedWorldUpdateMs = 0.0;
+            profilerStats.maxAudioMs = 0.0;
+            profilerStats.maxRenderMs = 0.0;
+        }
 
         auto historyMax = [](const float* history, const size_t count, const float fallbackMax) {
             float maxValue = 0.0f;

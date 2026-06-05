@@ -40,7 +40,7 @@ public:
                          RenderResourceHub& renderer,
                          RenderScene& renderScene,
                          PostProcessPass& postProcess,
-                         const Dashboard::FrameProfilerStats& profilerStats,
+                         Dashboard::FrameProfilerStats& profilerStats,
                          const std::function<void(int)>& renderDistanceSetter);
 #endif
 
