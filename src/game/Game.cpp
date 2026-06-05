@@ -80,7 +80,8 @@ void Game::updateLoading(const float deltaTime) {
         for (int i = 0; i < pumpCount && !m_session.isInitialChunkLoadComplete(); ++i) {
             m_session.pumpInitialChunkLoad(kInitialLoadTickDt);
         }
-        if (m_session.isInitialChunkLoadComplete()) {
+        if (m_session.isInitialChunkLoadComplete() &&
+            m_session.stabilizeLocalPlayerAfterInitialLoad()) {
             m_loadPhase = LoadPhase::Complete;
         }
         break;

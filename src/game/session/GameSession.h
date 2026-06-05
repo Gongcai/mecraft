@@ -66,6 +66,7 @@ public:
     [[nodiscard]] InitialLoadProgress getInitialLoadProgress() const;
     [[nodiscard]] bool isInitialChunkLoadComplete() const;
     [[nodiscard]] glm::vec3 getLocalPlayerPosition() const;
+    [[nodiscard]] bool stabilizeLocalPlayerAfterInitialLoad();
 
     /// Get the local player's inventory from ECS.
     /// @throws std::runtime_error if inventory is not initialized

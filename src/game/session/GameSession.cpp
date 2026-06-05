@@ -31,10 +31,154 @@
 #include "../../item/Item.h"
 #include "../../net/InProcessTransport.h"
 #include "../../net/ENetTransport.h"
+#include "../../world/block/Block.h"
+#include "../../world/chunk/Chunk.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <stdexcept>
 #include <thread>
 #include <chrono>
+
+namespace {
+
+constexpr float kPlacementContactEpsilon = 0.001f;
+
+struct PlayerPlacementBox {
+    glm::vec3 min{};
+    glm::vec3 max{};
+};
+
+PlayerPlacementBox makePlayerPlacementBox(const PhysicsBody& body, const glm::vec3& position) {
+    const glm::vec3 center = position + body.colliderOffset;
+    return {center - body.halfExtents, center + body.halfExtents};
+}
+
+bool isPlacementSolid(const World& world, const int x, const int y, const int z) {
+    if (!world.isChunkLoadedForBlock(x, y, z)) {
+        return true;
+    }
+    const BlockID id = world.getBlock(x, y, z);
+    return id != BlockIds::AIR && BlockRegistry::getFast(id).isSolid;
+}
+
+bool arePlacementChunksLoaded(const World& world, const PlayerPlacementBox& box) {
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kPlacementContactEpsilon));
+    const int minY = std::clamp(static_cast<int>(std::floor(box.min.y)), 0, Chunk::SIZE_Y - 1);
+    const int maxY = std::clamp(static_cast<int>(std::floor(box.max.y - kPlacementContactEpsilon)), 0, Chunk::SIZE_Y - 1);
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kPlacementContactEpsilon));
+
+    for (int x = minX; x <= maxX; ++x) {
+        for (int z = minZ; z <= maxZ; ++z) {
+            if (!world.isChunkLoadedForBlock(x, minY, z) || !world.isChunkLoadedForBlock(x, maxY, z)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool placementOverlapsSolid(const World& world, const PhysicsBody& body, const glm::vec3& position) {
+    const PlayerPlacementBox box = makePlayerPlacementBox(body, position);
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kPlacementContactEpsilon));
+    const int minY = static_cast<int>(std::floor(box.min.y));
+    const int maxY = static_cast<int>(std::floor(box.max.y - kPlacementContactEpsilon));
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kPlacementContactEpsilon));
+
+    if (minY < 0 || maxY >= Chunk::SIZE_Y) {
+        return true;
+    }
+
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                if (isPlacementSolid(world, x, y, z)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool placementHasGroundSupport(const World& world, const PhysicsBody& body, const glm::vec3& position) {
+    const PlayerPlacementBox box = makePlayerPlacementBox(body, position);
+    constexpr float kSupportProbeDepth = 0.08f;
+    constexpr float kProbeInset = 0.02f;
+    const int supportMinY = static_cast<int>(std::floor(box.min.y - kSupportProbeDepth));
+    const int supportMaxY = static_cast<int>(std::floor(box.min.y - kPlacementContactEpsilon));
+
+    const float minX = box.min.x + kProbeInset;
+    const float maxX = box.max.x - kProbeInset;
+    const float minZ = box.min.z + kProbeInset;
+    const float maxZ = box.max.z - kProbeInset;
+    const float centerX = (minX + maxX) * 0.5f;
+    const float centerZ = (minZ + maxZ) * 0.5f;
+
+    const std::array<glm::vec2, 5> probes = {
+        glm::vec2(centerX, centerZ),
+        glm::vec2(minX, minZ),
+        glm::vec2(minX, maxZ),
+        glm::vec2(maxX, minZ),
+        glm::vec2(maxX, maxZ),
+    };
+
+    for (const glm::vec2& probe : probes) {
+        const int bx = static_cast<int>(std::floor(probe.x));
+        const int bz = static_cast<int>(std::floor(probe.y));
+        for (int by = supportMinY; by <= supportMaxY; ++by) {
+            if (by < 0 || by >= Chunk::SIZE_Y) {
+                continue;
+            }
+            if (isPlacementSolid(world, bx, by, bz)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool isPlacementStable(const World& world, const PhysicsBody& body, const glm::vec3& position, const bool isFlying) {
+    const PlayerPlacementBox box = makePlayerPlacementBox(body, position);
+    if (!arePlacementChunksLoaded(world, box)) {
+        return false;
+    }
+    if (placementOverlapsSolid(world, body, position)) {
+        return false;
+    }
+    return isFlying || placementHasGroundSupport(world, body, position);
+}
+
+bool isPlacementClearInLoadedTerrain(const World& world, const PhysicsBody& body, const glm::vec3& position) {
+    const PlayerPlacementBox box = makePlayerPlacementBox(body, position);
+    return arePlacementChunksLoaded(world, box) && !placementOverlapsSolid(world, body, position);
+}
+
+glm::vec3 findSafeTerrainPlacement(const World& world, const PhysicsBody& body, const glm::vec3& preferredPosition) {
+    const int centerX = static_cast<int>(std::floor(preferredPosition.x));
+    const int centerZ = static_cast<int>(std::floor(preferredPosition.z));
+    const int surfaceY = world.getSurfaceY(centerX, centerZ);
+    glm::vec3 candidate(preferredPosition.x, static_cast<float>(surfaceY + 1), preferredPosition.z);
+
+    constexpr int kMaxLiftSteps = Chunk::SIZE_Y;
+    for (int step = 0; step < kMaxLiftSteps; ++step) {
+        if (isPlacementStable(world, body, candidate, false)) {
+            return candidate;
+        }
+        candidate.y += 1.0f;
+    }
+
+    return glm::vec3(preferredPosition.x,
+                     static_cast<float>(std::min(surfaceY + 2, Chunk::SIZE_Y - 2)),
+                     preferredPosition.z);
+}
+
+} // namespace
 
 GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
@@ -510,6 +654,64 @@ glm::vec3 GameSession::getLocalPlayerPosition() const {
         return m_server->getSpawnPosition();
     }
     return glm::vec3(0.0f);
+}
+
+bool GameSession::stabilizeLocalPlayerAfterInitialLoad() {
+    if (m_isMultiplayer || !m_server || !m_gameplayScene) {
+        return true;
+    }
+
+    auto& ecsReg = m_gameplayScene->registry().registry();
+    auto view = ecsReg.view<ecs::LocalPlayerTag, ecs::TransformComponent, ecs::PhysicsBodyComponent>();
+    for (auto e : view) {
+        auto& transform = view.get<ecs::TransformComponent>(e);
+        auto& physicsBody = view.get<ecs::PhysicsBodyComponent>(e);
+        const auto* flight = ecsReg.try_get<ecs::FlightStateComponent>(e);
+        const bool isFlying = flight != nullptr && flight->isFlying;
+
+        if (!arePlacementChunksLoaded(m_server->world(), makePlayerPlacementBox(physicsBody.body, transform.position))) {
+            return false;
+        }
+
+        glm::vec3 stablePosition = transform.position;
+        bool repositioned = false;
+        if (!isPlacementClearInLoadedTerrain(m_server->world(), physicsBody.body, stablePosition)) {
+            stablePosition = findSafeTerrainPlacement(m_server->world(), physicsBody.body, stablePosition);
+            repositioned = true;
+        }
+
+        transform.position = stablePosition;
+        physicsBody.body.position = stablePosition;
+        physicsBody.body.velocity.y = 0.0f;
+        physicsBody.body.isGrounded = !isFlying && placementHasGroundSupport(m_server->world(), physicsBody.body, stablePosition);
+        physicsBody.body.landingImpactSpeed = 0.0f;
+
+        if (repositioned) {
+            physicsBody.body.velocity.x = 0.0f;
+            physicsBody.body.velocity.z = 0.0f;
+        }
+        if (auto* velocity = ecsReg.try_get<ecs::VelocityComponent>(e)) {
+            velocity->velocity = physicsBody.body.velocity;
+        }
+        if (auto* grounded = ecsReg.try_get<ecs::GroundedStateComponent>(e)) {
+            grounded->grounded = physicsBody.body.isGrounded;
+        }
+        if (auto* landing = ecsReg.try_get<ecs::LandingStateComponent>(e)) {
+            landing->justLanded = false;
+            landing->impactSpeed = 0.0f;
+        }
+
+        m_server->setClientLoadCenter(stablePosition);
+        std::printf("[Save] Stabilized local player after initial load: pos=(%.2f, %.2f, %.2f)%s\n",
+                    stablePosition.x,
+                    stablePosition.y,
+                    stablePosition.z,
+                    repositioned ? " adjusted" : "");
+        std::fflush(stdout);
+        return true;
+    }
+
+    return true;
 }
 
 Inventory& GameSession::getPlayerInventory() {
