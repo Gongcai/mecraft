@@ -153,6 +153,9 @@
 #include <unistd.h>             // for usleep()
 #endif
 #include <stdio.h>              // for snprintf()
+#ifdef MECRAFT_DEBUG
+#include <chrono>
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -177,6 +180,31 @@
 #define GLFW_HAS_GETKEYNAME             (GLFW_VERSION_COMBINED >= 3200) // 3.2+ glfwGetKeyName()
 #define GLFW_HAS_GETERROR               (GLFW_VERSION_COMBINED >= 3300) // 3.3+ glfwGetError()
 #define GLFW_HAS_GETPLATFORM            (GLFW_VERSION_COMBINED >= 3400) // 3.4+ glfwGetPlatform()
+
+#ifdef MECRAFT_DEBUG
+static ImGui_ImplGlfw_DebugPollStats g_ImGui_ImplGlfw_DebugPollStats;
+
+static double ImGui_ImplGlfw_DebugElapsedMs(const std::chrono::steady_clock::time_point& start)
+{
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+}
+
+static void ImGui_ImplGlfw_DebugRecordCallback(const std::chrono::steady_clock::time_point& start)
+{
+    g_ImGui_ImplGlfw_DebugPollStats.callbackMs += ImGui_ImplGlfw_DebugElapsedMs(start);
+    ++g_ImGui_ImplGlfw_DebugPollStats.callbackCount;
+}
+
+void ImGui_ImplGlfw_ResetDebugPollStats()
+{
+    g_ImGui_ImplGlfw_DebugPollStats = {};
+}
+
+ImGui_ImplGlfw_DebugPollStats ImGui_ImplGlfw_GetDebugPollStats()
+{
+    return g_ImGui_ImplGlfw_DebugPollStats;
+}
+#endif
 
 // Map GLFWWindow* to ImGuiContext*.
 // - Would be simpler if we could use glfwSetWindowUserPointer()/glfwGetWindowUserPointer(), but this is a single and shared resource.
@@ -418,6 +446,9 @@ static bool ImGui_ImplGlfw_ShouldChainCallback(ImGui_ImplGlfw_Data* bd, GLFWwind
 
 void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackMousebutton != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackMousebutton(window, button, action, mods);
@@ -426,21 +457,33 @@ void ImGui_ImplGlfw_MouseButtonCallback(GLFWwindow* window, int button, int acti
     ImGui_ImplGlfw_UpdateKeyModifiers(io, window);
     if (button >= 0 && button < ImGuiMouseButton_COUNT)
         io.AddMouseButtonEvent(button, action == GLFW_PRESS);
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
 }
 
 void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackScroll != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackScroll(window, xoffset, yoffset);
 
 #ifdef EMSCRIPTEN_USE_EMBEDDED_GLFW3
     // Ignore GLFW events: will be processed in ImGui_ImplEmscripten_WheelCallback().
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
     return;
 #endif
 
     ImGuiIO& io = ImGui::GetIO(bd->Context);
     io.AddMouseWheelEvent((float)xoffset, (float)yoffset);
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
 }
 
 // FIXME: should this be baked into ImGui_ImplGlfw_KeyToImGuiKey()? then what about the values passed to io.SetKeyEventNativeData()?
@@ -479,12 +522,20 @@ static int ImGui_ImplGlfw_TranslateUntranslatedKey(int key, int scancode)
 
 void ImGui_ImplGlfw_KeyCallback(GLFWwindow* window, int keycode, int scancode, int action, int mods)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackKey != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackKey(window, keycode, scancode, action, mods);
 
     if (action != GLFW_PRESS && action != GLFW_RELEASE)
+    {
+#ifdef MECRAFT_DEBUG
+        ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
         return;
+    }
 
     ImGuiIO& io = ImGui::GetIO(bd->Context);
     ImGui_ImplGlfw_UpdateKeyModifiers(io, window);
@@ -494,33 +545,67 @@ void ImGui_ImplGlfw_KeyCallback(GLFWwindow* window, int keycode, int scancode, i
     ImGuiKey imgui_key = ImGui_ImplGlfw_KeyToImGuiKey(keycode, scancode);
     io.AddKeyEvent(imgui_key, (action == GLFW_PRESS));
     io.SetKeyEventNativeData(imgui_key, keycode, scancode); // To support legacy indexing (<1.87 user code)
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
 }
 
 void ImGui_ImplGlfw_WindowFocusCallback(GLFWwindow* window, int focused)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackWindowFocus != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackWindowFocus(window, focused);
 
     ImGuiIO& io = ImGui::GetIO(bd->Context);
     io.AddFocusEvent(focused != 0);
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
 }
 
 void ImGui_ImplGlfw_CursorPosCallback(GLFWwindow* window, double x, double y)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+    double debug_prev_user_ms = 0.0;
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackCursorPos != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
+    {
+#ifdef MECRAFT_DEBUG
+        const auto debug_prev_user_start = std::chrono::steady_clock::now();
+#endif
         bd->PrevUserCallbackCursorPos(window, x, y);
+#ifdef MECRAFT_DEBUG
+        debug_prev_user_ms = ImGui_ImplGlfw_DebugElapsedMs(debug_prev_user_start);
+#endif
+    }
 
     ImGuiIO& io = ImGui::GetIO(bd->Context);
     io.AddMousePosEvent((float)x, (float)y);
     bd->LastValidMousePos = ImVec2((float)x, (float)y);
+#ifdef MECRAFT_DEBUG
+    const double debug_total_ms = ImGui_ImplGlfw_DebugElapsedMs(debug_start);
+    g_ImGui_ImplGlfw_DebugPollStats.callbackMs += debug_total_ms;
+    ++g_ImGui_ImplGlfw_DebugPollStats.callbackCount;
+    g_ImGui_ImplGlfw_DebugPollStats.cursorPosCallbackMs += debug_total_ms;
+    g_ImGui_ImplGlfw_DebugPollStats.cursorPosBackendMs += debug_total_ms > debug_prev_user_ms
+        ? debug_total_ms - debug_prev_user_ms
+        : 0.0;
+    ++g_ImGui_ImplGlfw_DebugPollStats.cursorPosCallbackCount;
+#endif
 }
 
 // Workaround: X11 seems to send spurious Leave/Enter events which would make us lose our position,
 // so we back it up and restore on Leave/Enter (see https://github.com/ocornut/imgui/issues/4984)
 void ImGui_ImplGlfw_CursorEnterCallback(GLFWwindow* window, int entered)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackCursorEnter != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackCursorEnter(window, entered);
@@ -537,16 +622,25 @@ void ImGui_ImplGlfw_CursorEnterCallback(GLFWwindow* window, int entered)
         bd->MouseWindow = nullptr;
         io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
     }
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
 }
 
 void ImGui_ImplGlfw_CharCallback(GLFWwindow* window, unsigned int c)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
     if (bd->PrevUserCallbackChar != nullptr && ImGui_ImplGlfw_ShouldChainCallback(bd, window))
         bd->PrevUserCallbackChar(window, c);
 
     ImGuiIO& io = ImGui::GetIO(bd->Context);
     io.AddInputCharacter(c);
+#ifdef MECRAFT_DEBUG
+    ImGui_ImplGlfw_DebugRecordCallback(debug_start);
+#endif
 }
 
 void ImGui_ImplGlfw_MonitorCallback(GLFWmonitor*, int)
@@ -587,6 +681,9 @@ static ImGuiMouseSource GetMouseSourceFromMessageExtraInfo()
 }
 static LRESULT CALLBACK ImGui_ImplGlfw_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+#ifdef MECRAFT_DEBUG
+    const auto debug_start = std::chrono::steady_clock::now();
+#endif
     ImGui_ImplGlfw_Data* bd = (ImGui_ImplGlfw_Data*)::GetPropA(hWnd, "IMGUI_BACKEND_DATA");
     ImGuiIO& io = ImGui::GetIO(bd->Context);
 
@@ -601,7 +698,18 @@ static LRESULT CALLBACK ImGui_ImplGlfw_WndProc(HWND hWnd, UINT msg, WPARAM wPara
         break;
     default: break;
     }
-    return ::CallWindowProcW(bd->PrevWndProc, hWnd, msg, wParam, lParam);
+    LRESULT result = ::CallWindowProcW(bd->PrevWndProc, hWnd, msg, wParam, lParam);
+#ifdef MECRAFT_DEBUG
+    const double debug_elapsed_ms = ImGui_ImplGlfw_DebugElapsedMs(debug_start);
+    g_ImGui_ImplGlfw_DebugPollStats.wndProcMs += debug_elapsed_ms;
+    if (debug_elapsed_ms > g_ImGui_ImplGlfw_DebugPollStats.wndProcSlowestMs)
+    {
+        g_ImGui_ImplGlfw_DebugPollStats.wndProcSlowestMs = debug_elapsed_ms;
+        g_ImGui_ImplGlfw_DebugPollStats.wndProcSlowestMsg = msg;
+    }
+    ++g_ImGui_ImplGlfw_DebugPollStats.wndProcCount;
+#endif
+    return result;
 }
 #endif
 

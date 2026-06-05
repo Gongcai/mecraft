@@ -17,13 +17,31 @@ public:
                                   unsigned mouseButtonEvents,
                                   unsigned cursorPosEvents,
                                   unsigned scrollEvents,
-                                  unsigned charEvents) {
+                                  unsigned charEvents,
+                                  double inputCallbackMs,
+                                  double cursorPosCallbackMs,
+                                  double imguiCallbackMs,
+                                  double imguiCursorPosCallbackMs,
+                                  double imguiCursorPosBackendMs,
+                                  double imguiWndProcMs,
+                                  double imguiWndProcSlowestMs,
+                                  unsigned imguiWndProcSlowestMsg,
+                                  unsigned imguiWndProcCount) {
         (void)ms;
         (void)keyEvents;
         (void)mouseButtonEvents;
         (void)cursorPosEvents;
         (void)scrollEvents;
         (void)charEvents;
+        (void)inputCallbackMs;
+        (void)cursorPosCallbackMs;
+        (void)imguiCallbackMs;
+        (void)imguiCursorPosCallbackMs;
+        (void)imguiCursorPosBackendMs;
+        (void)imguiWndProcMs;
+        (void)imguiWndProcSlowestMs;
+        (void)imguiWndProcSlowestMsg;
+        (void)imguiWndProcCount;
     }
     virtual void recordAppUpdateDispatch(double ms) { (void)ms; }
     virtual void recordAppRenderDispatch(double ms) { (void)ms; }

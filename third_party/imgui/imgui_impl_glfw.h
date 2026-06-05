@@ -67,5 +67,22 @@ IMGUI_IMPL_API void     ImGui_ImplGlfw_Sleep(int milliseconds);
 IMGUI_IMPL_API float    ImGui_ImplGlfw_GetContentScaleForWindow(GLFWwindow* window);
 IMGUI_IMPL_API float    ImGui_ImplGlfw_GetContentScaleForMonitor(GLFWmonitor* monitor);
 
+#ifdef MECRAFT_DEBUG
+struct ImGui_ImplGlfw_DebugPollStats
+{
+    double callbackMs = 0.0;
+    double cursorPosCallbackMs = 0.0;
+    double cursorPosBackendMs = 0.0;
+    double wndProcMs = 0.0;
+    double wndProcSlowestMs = 0.0;
+    unsigned int wndProcSlowestMsg = 0;
+    int callbackCount = 0;
+    int cursorPosCallbackCount = 0;
+    int wndProcCount = 0;
+};
+IMGUI_IMPL_API void ImGui_ImplGlfw_ResetDebugPollStats();
+IMGUI_IMPL_API ImGui_ImplGlfw_DebugPollStats ImGui_ImplGlfw_GetDebugPollStats();
+#endif
+
 
 #endif // #ifndef IMGUI_DISABLE

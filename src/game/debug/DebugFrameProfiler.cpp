@@ -21,6 +21,15 @@ void DebugFrameProfiler::publish(double frameTime) {
     m_timing.currentRenderUiMs = m_timing.frameRenderUiAccumMs;
     m_timing.currentRenderDashboardMs = m_timing.frameRenderDashboardAccumMs;
     m_timing.currentSwapBuffersMs = m_timing.frameSwapBuffersAccumMs;
+    m_timing.currentPollInputCallbackMs = m_timing.framePollInputCallbackAccumMs;
+    m_timing.currentPollCursorPosCallbackMs = m_timing.framePollCursorPosCallbackAccumMs;
+    m_timing.currentPollImguiCallbackMs = m_timing.framePollImguiCallbackAccumMs;
+    m_timing.currentPollImguiCursorPosCallbackMs = m_timing.framePollImguiCursorPosCallbackAccumMs;
+    m_timing.currentPollImguiCursorPosBackendMs = m_timing.framePollImguiCursorPosBackendAccumMs;
+    m_timing.currentPollImguiWndProcMs = m_timing.framePollImguiWndProcAccumMs;
+    m_timing.currentPollImguiWndProcSlowestMs = m_timing.framePollImguiWndProcSlowestMs;
+    m_timing.currentPollImguiWndProcSlowestMsg = m_timing.framePollImguiWndProcSlowestMsg;
+    m_timing.currentPollImguiWndProcCount = m_timing.framePollImguiWndProcCount;
     m_timing.currentPollEventCounts = m_timing.framePollEventCounts;
 
     m_frameHistoryAccumulator += frameTime;
@@ -109,6 +118,15 @@ void DebugFrameProfiler::resetFrameAccumulators() {
     m_timing.frameRenderUiAccumMs = 0.0;
     m_timing.frameRenderDashboardAccumMs = 0.0;
     m_timing.frameSwapBuffersAccumMs = 0.0;
+    m_timing.framePollInputCallbackAccumMs = 0.0;
+    m_timing.framePollCursorPosCallbackAccumMs = 0.0;
+    m_timing.framePollImguiCallbackAccumMs = 0.0;
+    m_timing.framePollImguiCursorPosCallbackAccumMs = 0.0;
+    m_timing.framePollImguiCursorPosBackendAccumMs = 0.0;
+    m_timing.framePollImguiWndProcAccumMs = 0.0;
+    m_timing.framePollImguiWndProcSlowestMs = 0.0;
+    m_timing.framePollImguiWndProcSlowestMsg = 0;
+    m_timing.framePollImguiWndProcCount = 0;
     m_timing.framePollEventCounts = {};
 }
 

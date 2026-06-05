@@ -4,6 +4,16 @@
 
 #include "InputManager.h"
 
+#ifdef MECRAFT_DEBUG
+#include <chrono>
+
+namespace {
+double debugElapsedMs(const std::chrono::steady_clock::time_point& start) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+}
+}
+#endif
+
 bool InputSnapshot::isKeyHeld(int key) const {
     return key >= 0 && key <= GLFW_KEY_LAST && keys[key];
 }
@@ -219,6 +229,7 @@ void InputManager::keyCallback(GLFWwindow* w, int key, int /*scancode*/, int act
         return;
     }
 #ifdef MECRAFT_DEBUG
+    const auto debugStart = std::chrono::steady_clock::now();
     ++self->m_debugEventStats.keyEvents;
 #endif
 
@@ -227,6 +238,9 @@ void InputManager::keyCallback(GLFWwindow* w, int key, int /*scancode*/, int act
     } else if (action == GLFW_RELEASE) {
         self->m_keys[key] = false;
     }
+#ifdef MECRAFT_DEBUG
+    self->m_debugEventStats.keyCallbackMs += debugElapsedMs(debugStart);
+#endif
 }
 
 void InputManager::mouseButtonCallback(GLFWwindow* w, int button, int action, int /*mods*/) {
@@ -235,6 +249,7 @@ void InputManager::mouseButtonCallback(GLFWwindow* w, int button, int action, in
         return;
     }
 #ifdef MECRAFT_DEBUG
+    const auto debugStart = std::chrono::steady_clock::now();
     ++self->m_debugEventStats.mouseButtonEvents;
 #endif
 
@@ -243,6 +258,9 @@ void InputManager::mouseButtonCallback(GLFWwindow* w, int button, int action, in
     } else if (action == GLFW_RELEASE) {
         self->m_mouseButtons[button] = false;
     }
+#ifdef MECRAFT_DEBUG
+    self->m_debugEventStats.mouseButtonCallbackMs += debugElapsedMs(debugStart);
+#endif
 }
 
 void InputManager::cursorPosCallback(GLFWwindow* w, double xpos, double ypos) {
@@ -251,6 +269,7 @@ void InputManager::cursorPosCallback(GLFWwindow* w, double xpos, double ypos) {
         return;
     }
 #ifdef MECRAFT_DEBUG
+    const auto debugStart = std::chrono::steady_clock::now();
     ++self->m_debugEventStats.cursorPosEvents;
 #endif
     if (self->m_firstMouse) {
@@ -267,6 +286,9 @@ void InputManager::cursorPosCallback(GLFWwindow* w, double xpos, double ypos) {
     self->m_lastMouseY = ypos;
     self->m_mouseX = xpos;
     self->m_mouseY = ypos;
+#ifdef MECRAFT_DEBUG
+    self->m_debugEventStats.cursorPosCallbackMs += debugElapsedMs(debugStart);
+#endif
 }
 
 void InputManager::scrollCallback(GLFWwindow* w, double /*xoffset*/, double yoffset) {
@@ -275,9 +297,13 @@ void InputManager::scrollCallback(GLFWwindow* w, double /*xoffset*/, double yoff
         return;
     }
 #ifdef MECRAFT_DEBUG
+    const auto debugStart = std::chrono::steady_clock::now();
     ++self->m_debugEventStats.scrollEvents;
 #endif
     self->m_accumScrollY += yoffset;
+#ifdef MECRAFT_DEBUG
+    self->m_debugEventStats.scrollCallbackMs += debugElapsedMs(debugStart);
+#endif
 }
 
 void InputManager::charCallback(GLFWwindow* w, unsigned int codepoint) {
@@ -286,12 +312,19 @@ void InputManager::charCallback(GLFWwindow* w, unsigned int codepoint) {
         return;
     }
 #ifdef MECRAFT_DEBUG
+    const auto debugStart = std::chrono::steady_clock::now();
     ++self->m_debugEventStats.charEvents;
 #endif
     if (self->m_typedCharCount >= InputSnapshot::kMaxTypedCharsPerFrame) {
+#ifdef MECRAFT_DEBUG
+        self->m_debugEventStats.charCallbackMs += debugElapsedMs(debugStart);
+#endif
         return;
     }
 
     self->m_typedChars[self->m_typedCharCount++] = codepoint;
+#ifdef MECRAFT_DEBUG
+    self->m_debugEventStats.charCallbackMs += debugElapsedMs(debugStart);
+#endif
 }
 

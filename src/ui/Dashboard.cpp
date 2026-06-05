@@ -19,6 +19,67 @@
 #include <cmath>
 #include <cstdint>
 
+namespace {
+const char* debugWin32MessageName(unsigned msg) {
+    switch (msg) {
+        case 0x000F: return "WM_PAINT";
+        case 0x0014: return "WM_ERASEBKGND";
+        case 0x0020: return "WM_SETCURSOR";
+        case 0x0021: return "WM_MOUSEACTIVATE";
+        case 0x0024: return "WM_GETMINMAXINFO";
+        case 0x0046: return "WM_WINDOWPOSCHANGING";
+        case 0x0047: return "WM_WINDOWPOSCHANGED";
+        case 0x0083: return "WM_NCCALCSIZE";
+        case 0x0084: return "WM_NCHITTEST";
+        case 0x0085: return "WM_NCPAINT";
+        case 0x0086: return "WM_NCACTIVATE";
+        case 0x00A0: return "WM_NCMOUSEMOVE";
+        case 0x00A1: return "WM_NCLBUTTONDOWN";
+        case 0x00A2: return "WM_NCLBUTTONUP";
+        case 0x00A3: return "WM_NCLBUTTONDBLCLK";
+        case 0x00A4: return "WM_NCRBUTTONDOWN";
+        case 0x00A5: return "WM_NCRBUTTONUP";
+        case 0x00A6: return "WM_NCRBUTTONDBLCLK";
+        case 0x00A7: return "WM_NCMBUTTONDOWN";
+        case 0x00A8: return "WM_NCMBUTTONUP";
+        case 0x00A9: return "WM_NCMBUTTONDBLCLK";
+        case 0x00FF: return "WM_INPUT";
+        case 0x0100: return "WM_KEYDOWN";
+        case 0x0101: return "WM_KEYUP";
+        case 0x0102: return "WM_CHAR";
+        case 0x0104: return "WM_SYSKEYDOWN";
+        case 0x0105: return "WM_SYSKEYUP";
+        case 0x0200: return "WM_MOUSEMOVE";
+        case 0x0201: return "WM_LBUTTONDOWN";
+        case 0x0202: return "WM_LBUTTONUP";
+        case 0x0203: return "WM_LBUTTONDBLCLK";
+        case 0x0204: return "WM_RBUTTONDOWN";
+        case 0x0205: return "WM_RBUTTONUP";
+        case 0x0206: return "WM_RBUTTONDBLCLK";
+        case 0x0207: return "WM_MBUTTONDOWN";
+        case 0x0208: return "WM_MBUTTONUP";
+        case 0x0209: return "WM_MBUTTONDBLCLK";
+        case 0x020A: return "WM_MOUSEWHEEL";
+        case 0x020B: return "WM_XBUTTONDOWN";
+        case 0x020C: return "WM_XBUTTONUP";
+        case 0x020D: return "WM_XBUTTONDBLCLK";
+        case 0x020E: return "WM_MOUSEHWHEEL";
+        case 0x0231: return "WM_ENTERSIZEMOVE";
+        case 0x0232: return "WM_EXITSIZEMOVE";
+        case 0x02A1: return "WM_MOUSEHOVER";
+        case 0x02A3: return "WM_MOUSELEAVE";
+        case 0x02A0: return "WM_NCMOUSEHOVER";
+        case 0x02A2: return "WM_NCMOUSELEAVE";
+        case 0x031E: return "WM_DWMCOMPOSITIONCHANGED";
+        case 0x031F: return "WM_DWMNCRENDERINGCHANGED";
+        case 0x0320: return "WM_DWMCOLORIZATIONCOLORCHANGED";
+        case 0x0321: return "WM_DWMWINDOWMAXIMIZEDCHANGE";
+        case 0x02E0: return "WM_DPICHANGED";
+        default: return "unknown";
+    }
+}
+}
+
 Dashboard::Dashboard() : m_initialized(false) {
     // Setup Dear ImGui context
 }
@@ -232,6 +293,29 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
         showMax("Loop Frame (clamped)", profilerStats.frameMs, profilerStats.maxFrameMs);
         showMax("Poll Events", profilerStats.pollEventsMs, profilerStats.maxPollEventsMs);
+        showMax("  - Input Callback", profilerStats.pollInputCallbackMs, profilerStats.maxPollInputCallbackMs);
+        showMax("  - Cursor Callback", profilerStats.pollCursorPosCallbackMs, profilerStats.maxPollCursorPosCallbackMs);
+        showMax("  - ImGui Callback", profilerStats.pollImguiCallbackMs, profilerStats.maxPollImguiCallbackMs);
+        showMax("  - ImGui Cursor Callback", profilerStats.pollImguiCursorPosCallbackMs, profilerStats.maxPollImguiCursorPosCallbackMs);
+        showMax("  - ImGui Cursor Backend", profilerStats.pollImguiCursorPosBackendMs, profilerStats.maxPollImguiCursorPosBackendMs);
+        showMax("  - ImGui WndProc", profilerStats.pollImguiWndProcMs, profilerStats.maxPollImguiWndProcMs);
+        showMax("    - WndProc Slowest", profilerStats.pollImguiWndProcSlowestMs, profilerStats.maxPollImguiWndProcSlowestMs);
+        showMaxCount("    - WndProc Count", profilerStats.pollImguiWndProcCount, profilerStats.maxPollImguiWndProcCount);
+        if (profilerStats.pollImguiWndProcSlowestMsg != 0 || profilerStats.maxPollImguiWndProcSlowestMsg != 0) {
+            ImGui::Text("    - WndProc Slowest Msg: 0x%04X (%s)",
+                        profilerStats.pollImguiWndProcSlowestMsg,
+                        debugWin32MessageName(profilerStats.pollImguiWndProcSlowestMsg));
+            if (profilerStats.maxPollImguiWndProcSlowestMsg != 0) {
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.3f, 1.0f),
+                                   "Max: 0x%04X (%s)",
+                                   profilerStats.maxPollImguiWndProcSlowestMsg,
+                                   debugWin32MessageName(profilerStats.maxPollImguiWndProcSlowestMsg));
+            }
+        }
+        showMax("  - Poll Other / GLFW",
+                std::max(0.0, profilerStats.pollEventsMs - profilerStats.pollImguiWndProcMs),
+                std::max(0.0, profilerStats.maxPollEventsMs - profilerStats.maxPollImguiWndProcMs));
         showMaxCount("  - Event Count", profilerStats.pollEventCount, profilerStats.maxPollEventCount);
         showMaxCount("    - Key", profilerStats.pollKeyEventCount, profilerStats.maxPollKeyEventCount);
         showMaxCount("    - Mouse Button", profilerStats.pollMouseButtonEventCount, profilerStats.maxPollMouseButtonEventCount);
@@ -276,6 +360,15 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             profilerStats.maxSwapBuffersMs = 0.0;
             profilerStats.maxRenderOtherMs = 0.0;
             profilerStats.maxUntrackedMs = 0.0;
+            profilerStats.maxPollInputCallbackMs = 0.0;
+            profilerStats.maxPollCursorPosCallbackMs = 0.0;
+            profilerStats.maxPollImguiCallbackMs = 0.0;
+            profilerStats.maxPollImguiCursorPosCallbackMs = 0.0;
+            profilerStats.maxPollImguiCursorPosBackendMs = 0.0;
+            profilerStats.maxPollImguiWndProcMs = 0.0;
+            profilerStats.maxPollImguiWndProcSlowestMs = 0.0;
+            profilerStats.maxPollImguiWndProcSlowestMsg = 0;
+            profilerStats.maxPollImguiWndProcCount = 0;
             profilerStats.maxPollEventCount = 0;
             profilerStats.maxPollKeyEventCount = 0;
             profilerStats.maxPollMouseButtonEventCount = 0;

@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 #ifdef MECRAFT_DEBUG
 #include <chrono>
+#include "../../third_party/imgui/imgui_impl_glfw.h"
 #endif
 
 GameManager::GameManager() 
@@ -128,18 +129,29 @@ void GameManager::run() {
     while (!m_window.shouldClose()) {
 #ifdef MECRAFT_DEBUG
         m_input.resetDebugEventStats();
+        ImGui_ImplGlfw_ResetDebugPollStats();
         const auto pollStart = std::chrono::steady_clock::now();
 #endif
         m_window.pollEvents();
 #ifdef MECRAFT_DEBUG
         const auto pollEnd = std::chrono::steady_clock::now();
         const auto& pollEventStats = m_input.debugEventStats();
+        const auto imguiPollStats = ImGui_ImplGlfw_GetDebugPollStats();
         m_appStateMachine.recordPollEvents(std::chrono::duration<double, std::milli>(pollEnd - pollStart).count(),
                                            pollEventStats.keyEvents,
                                            pollEventStats.mouseButtonEvents,
                                            pollEventStats.cursorPosEvents,
                                            pollEventStats.scrollEvents,
-                                           pollEventStats.charEvents);
+                                           pollEventStats.charEvents,
+                                           pollEventStats.callbackMs(),
+                                           pollEventStats.cursorPosCallbackMs,
+                                           imguiPollStats.callbackMs,
+                                           imguiPollStats.cursorPosCallbackMs,
+                                           imguiPollStats.cursorPosBackendMs,
+                                           imguiPollStats.wndProcMs,
+                                           imguiPollStats.wndProcSlowestMs,
+                                           imguiPollStats.wndProcSlowestMsg,
+                                           static_cast<unsigned>(imguiPollStats.wndProcCount));
 #endif
         Time::update();
 

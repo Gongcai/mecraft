@@ -56,7 +56,16 @@ public:
                           unsigned mouseButtonEvents,
                           unsigned cursorPosEvents,
                           unsigned scrollEvents,
-                          unsigned charEvents);
+                          unsigned charEvents,
+                          double inputCallbackMs,
+                          double cursorPosCallbackMs,
+                          double imguiCallbackMs,
+                          double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs,
+                          double imguiWndProcMs,
+                          double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg,
+                          unsigned imguiWndProcCount);
     void recordAppUpdateDispatch(double ms);
     void recordAppRenderDispatch(double ms);
 #endif

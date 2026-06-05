@@ -51,6 +51,15 @@ public:
         double currentRenderUiMs = 0.0;
         double currentRenderDashboardMs = 0.0;
         double currentSwapBuffersMs = 0.0;
+        double currentPollInputCallbackMs = 0.0;
+        double currentPollCursorPosCallbackMs = 0.0;
+        double currentPollImguiCallbackMs = 0.0;
+        double currentPollImguiCursorPosCallbackMs = 0.0;
+        double currentPollImguiCursorPosBackendMs = 0.0;
+        double currentPollImguiWndProcMs = 0.0;
+        double currentPollImguiWndProcSlowestMs = 0.0;
+        unsigned currentPollImguiWndProcSlowestMsg = 0;
+        unsigned currentPollImguiWndProcCount = 0;
         PollEventCounts currentPollEventCounts{};
 
         double fixedInputAccumMs = 0.0;
@@ -81,6 +90,15 @@ public:
         double frameRenderUiAccumMs = 0.0;
         double frameRenderDashboardAccumMs = 0.0;
         double frameSwapBuffersAccumMs = 0.0;
+        double framePollInputCallbackAccumMs = 0.0;
+        double framePollCursorPosCallbackAccumMs = 0.0;
+        double framePollImguiCallbackAccumMs = 0.0;
+        double framePollImguiCursorPosCallbackAccumMs = 0.0;
+        double framePollImguiCursorPosBackendAccumMs = 0.0;
+        double framePollImguiWndProcAccumMs = 0.0;
+        double framePollImguiWndProcSlowestMs = 0.0;
+        unsigned framePollImguiWndProcSlowestMsg = 0;
+        unsigned framePollImguiWndProcCount = 0;
         PollEventCounts framePollEventCounts{};
     };
 
@@ -134,9 +152,29 @@ public:
                           unsigned mouseButtonEvents,
                           unsigned cursorPosEvents,
                           unsigned scrollEvents,
-                          unsigned charEvents) {
+                          unsigned charEvents,
+                          double inputCallbackMs,
+                          double cursorPosCallbackMs,
+                          double imguiCallbackMs,
+                          double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs,
+                          double imguiWndProcMs,
+                          double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg,
+                          unsigned imguiWndProcCount) {
         m_timing.pollEventsAccumMs += ms;
         m_timing.framePollEventsAccumMs += ms;
+        m_timing.framePollInputCallbackAccumMs += inputCallbackMs;
+        m_timing.framePollCursorPosCallbackAccumMs += cursorPosCallbackMs;
+        m_timing.framePollImguiCallbackAccumMs += imguiCallbackMs;
+        m_timing.framePollImguiCursorPosCallbackAccumMs += imguiCursorPosCallbackMs;
+        m_timing.framePollImguiCursorPosBackendAccumMs += imguiCursorPosBackendMs;
+        m_timing.framePollImguiWndProcAccumMs += imguiWndProcMs;
+        m_timing.framePollImguiWndProcCount += imguiWndProcCount;
+        if (imguiWndProcSlowestMs > m_timing.framePollImguiWndProcSlowestMs) {
+            m_timing.framePollImguiWndProcSlowestMs = imguiWndProcSlowestMs;
+            m_timing.framePollImguiWndProcSlowestMsg = imguiWndProcSlowestMsg;
+        }
         m_timing.framePollEventCounts.keyEvents += keyEvents;
         m_timing.framePollEventCounts.mouseButtonEvents += mouseButtonEvents;
         m_timing.framePollEventCounts.cursorPosEvents += cursorPosEvents;

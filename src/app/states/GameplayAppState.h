@@ -25,7 +25,16 @@ public:
                           unsigned mouseButtonEvents,
                           unsigned cursorPosEvents,
                           unsigned scrollEvents,
-                          unsigned charEvents) override;
+                          unsigned charEvents,
+                          double inputCallbackMs,
+                          double cursorPosCallbackMs,
+                          double imguiCallbackMs,
+                          double imguiCursorPosCallbackMs,
+                          double imguiCursorPosBackendMs,
+                          double imguiWndProcMs,
+                          double imguiWndProcSlowestMs,
+                          unsigned imguiWndProcSlowestMsg,
+                          unsigned imguiWndProcCount) override;
     void recordAppUpdateDispatch(double ms) override;
     void recordAppRenderDispatch(double ms) override;
 #endif

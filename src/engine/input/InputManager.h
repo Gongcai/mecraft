@@ -63,9 +63,18 @@ public:
         uint32_t cursorPosEvents = 0;
         uint32_t scrollEvents = 0;
         uint32_t charEvents = 0;
+        double keyCallbackMs = 0.0;
+        double mouseButtonCallbackMs = 0.0;
+        double cursorPosCallbackMs = 0.0;
+        double scrollCallbackMs = 0.0;
+        double charCallbackMs = 0.0;
 
         [[nodiscard]] uint32_t total() const {
             return keyEvents + mouseButtonEvents + cursorPosEvents + scrollEvents + charEvents;
+        }
+
+        [[nodiscard]] double callbackMs() const {
+            return keyCallbackMs + mouseButtonCallbackMs + cursorPosCallbackMs + scrollCallbackMs + charCallbackMs;
         }
     };
 #endif

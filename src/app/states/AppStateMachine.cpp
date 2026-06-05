@@ -91,9 +91,21 @@ void AppStateMachine::recordPollEvents(double ms,
                                        unsigned mouseButtonEvents,
                                        unsigned cursorPosEvents,
                                        unsigned scrollEvents,
-                                       unsigned charEvents) {
+                                       unsigned charEvents,
+                                       double inputCallbackMs,
+                                       double cursorPosCallbackMs,
+                                       double imguiCallbackMs,
+                                       double imguiCursorPosCallbackMs,
+                                       double imguiCursorPosBackendMs,
+                                       double imguiWndProcMs,
+                                       double imguiWndProcSlowestMs,
+                                       unsigned imguiWndProcSlowestMsg,
+                                       unsigned imguiWndProcCount) {
     if (!m_states.empty()) {
-        m_states.back()->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents);
+        m_states.back()->recordPollEvents(ms, keyEvents, mouseButtonEvents, cursorPosEvents, scrollEvents, charEvents,
+                                          inputCallbackMs, cursorPosCallbackMs, imguiCallbackMs,
+                                          imguiCursorPosCallbackMs, imguiCursorPosBackendMs, imguiWndProcMs,
+                                          imguiWndProcSlowestMs, imguiWndProcSlowestMsg, imguiWndProcCount);
     }
 }
 

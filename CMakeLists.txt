@@ -404,7 +404,10 @@ target_compile_features(mecraft_third_party PUBLIC cxx_std_17)
 set_target_properties(mecraft_third_party PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(mecraft_third_party SYSTEM PUBLIC third_party)
 target_link_libraries(mecraft_third_party PUBLIC glfw)
-target_compile_definitions(mecraft_third_party PUBLIC GLFW_INCLUDE_NONE)
+target_compile_definitions(mecraft_third_party PUBLIC
+        GLFW_INCLUDE_NONE
+        $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
+)
 if (MSVC)
     target_compile_options(mecraft_third_party PRIVATE /W0)
 else()

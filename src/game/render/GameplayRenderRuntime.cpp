@@ -168,6 +168,15 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
                                             stats.renderUiMs - stats.renderDashboardMs - stats.swapBuffersMs);
     stats.untrackedMs = std::max(0.0, stats.frameMs - stats.pollEventsMs -
                                           stats.appUpdateDispatchMs - stats.appRenderDispatchMs);
+    stats.pollInputCallbackMs = timing.currentPollInputCallbackMs;
+    stats.pollCursorPosCallbackMs = timing.currentPollCursorPosCallbackMs;
+    stats.pollImguiCallbackMs = timing.currentPollImguiCallbackMs;
+    stats.pollImguiCursorPosCallbackMs = timing.currentPollImguiCursorPosCallbackMs;
+    stats.pollImguiCursorPosBackendMs = timing.currentPollImguiCursorPosBackendMs;
+    stats.pollImguiWndProcMs = timing.currentPollImguiWndProcMs;
+    stats.pollImguiWndProcSlowestMs = timing.currentPollImguiWndProcSlowestMs;
+    stats.pollImguiWndProcSlowestMsg = timing.currentPollImguiWndProcSlowestMsg;
+    stats.pollImguiWndProcCount = timing.currentPollImguiWndProcCount;
     stats.pollEventCount = timing.currentPollEventCounts.total();
     stats.pollKeyEventCount = timing.currentPollEventCounts.keyEvents;
     stats.pollMouseButtonEventCount = timing.currentPollEventCounts.mouseButtonEvents;
@@ -196,6 +205,15 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
         stats.maxSwapBuffersMs = stats.swapBuffersMs;
         stats.maxRenderOtherMs = stats.renderOtherMs;
         stats.maxUntrackedMs = stats.untrackedMs;
+        stats.maxPollInputCallbackMs = stats.pollInputCallbackMs;
+        stats.maxPollCursorPosCallbackMs = stats.pollCursorPosCallbackMs;
+        stats.maxPollImguiCallbackMs = stats.pollImguiCallbackMs;
+        stats.maxPollImguiCursorPosCallbackMs = stats.pollImguiCursorPosCallbackMs;
+        stats.maxPollImguiCursorPosBackendMs = stats.pollImguiCursorPosBackendMs;
+        stats.maxPollImguiWndProcMs = stats.pollImguiWndProcMs;
+        stats.maxPollImguiWndProcSlowestMs = stats.pollImguiWndProcSlowestMs;
+        stats.maxPollImguiWndProcSlowestMsg = stats.pollImguiWndProcSlowestMsg;
+        stats.maxPollImguiWndProcCount = stats.pollImguiWndProcCount;
         stats.maxPollEventCount = stats.pollEventCount;
         stats.maxPollKeyEventCount = stats.pollKeyEventCount;
         stats.maxPollMouseButtonEventCount = stats.pollMouseButtonEventCount;
