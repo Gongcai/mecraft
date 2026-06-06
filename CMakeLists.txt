@@ -209,6 +209,7 @@ set(SRC_UI
         src/ui/core/UIRenderer.cpp
         src/ui/core/UIScene.cpp
         src/ui/core/ScreenTransition.cpp
+        src/ui/core/UIStyle.cpp
         src/ui/core/UITheme.cpp
         src/ui/core/UIThemePresets.cpp
 
@@ -558,6 +559,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(ui_focus_navigation_test tests/ui_focus_navigation_test.cpp)
     add_mecraft_test(ui_box_layout_test tests/ui_box_layout_test.cpp)
     add_mecraft_test(ui_text_input_modifiers_test tests/ui_text_input_modifiers_test.cpp)
+    add_mecraft_test(ui_style_resolver_test tests/ui_style_resolver_test.cpp)
     add_mecraft_test(player_intent_build_system_test tests/player_intent_build_system_test.cpp)
     add_mecraft_test(creative_flight_system_test tests/creative_flight_system_test.cpp)
     # add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)

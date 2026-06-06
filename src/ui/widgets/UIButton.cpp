@@ -17,7 +17,7 @@ void UIButton::init(ResourceMgr& resourceMgr) {
     m_background.setBorderColor({1.0f, 1.0f, 1.0f, 0.3f});
     m_background.anchor = Anchor::BottomLeft;
 
-    m_label.setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    m_label.clearLocalTextColor();
     m_label.anchor = Anchor::BottomLeft;
 
     // Initialize scale tween at 1.0
@@ -38,6 +38,15 @@ void UIButton::setTextColor(const std::array<float, 4>& c) {
     m_label.setTextColor(c);
 }
 
+void UIButton::setStyle(const UIComponentStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIButton::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UIButton::setTextScale(float scale) {
     m_label.setTextScale(scale);
 }
@@ -49,9 +58,8 @@ void UIButton::updateAnimations(float dt) {
 }
 
 void UIButton::renderSelf(const UIRenderContext& ctx) const {
-    const UITheme* theme = ctx.theme;
-    const bool useTheme = theme && !m_hasLocalColors;
     const bool highlighted = m_hovered || isFocused();
+    const UIResolvedStyle resolved = UIStyleResolver::resolve(resolveBaseStyle(ctx), currentStyleState());
 
     // Apply hover scale from center
     float cx = getAbsoluteX(ctx) + width * 0.5f;
@@ -68,15 +76,13 @@ void UIButton::renderSelf(const UIRenderContext& ctx) const {
     const_cast<UIPanel&>(m_background).anchorOffsetY = cy - hh;
     const_cast<UIPanel&>(m_background).width = hw * 2.0f;
     const_cast<UIPanel&>(m_background).height = hh * 2.0f;
-    auto bgColor = highlighted
-        ? (useTheme ? theme->buttonHover : m_hoverColor)
-        : m_hoverColorTween.value();
-    if (!highlighted && useTheme) {
-        bgColor = m_hoverColorTween.isRunning() ? m_hoverColorTween.value() : theme->buttonNormal;
-    }
+    const bool backgroundHasImmediateState = m_pressed || !interactive;
+    const auto bgColor = (!backgroundHasImmediateState && m_hoverColorTween.isRunning())
+        ? m_hoverColorTween.value()
+        : resolved.background;
     const_cast<UIPanel&>(m_background).setBackgroundColor(bgColor);
-    const_cast<UIPanel&>(m_background).setBorderColor(useTheme ? theme->buttonBorder : std::array<float, 4>{1,1,1,0.3f});
-    const_cast<UIPanel&>(m_background).setBorderWidth(useTheme ? theme->buttonBorderWidth : 2.0f);
+    const_cast<UIPanel&>(m_background).setBorderColor(resolved.border);
+    const_cast<UIPanel&>(m_background).setBorderWidth(resolved.borderWidth);
     const_cast<UIPanel&>(m_background).alpha = alpha;
     m_background.render(ctx);
 
@@ -85,11 +91,15 @@ void UIButton::renderSelf(const UIRenderContext& ctx) const {
     float th = ctx.textRenderer ? m_label.measureTextHeight(*ctx.textRenderer) : 0.0f;
     const_cast<UIText&>(m_label).anchorOffsetX = cx - tw * 0.5f;
     const_cast<UIText&>(m_label).anchorOffsetY = cy - th * 0.5f;
-    if (!m_label.hasLocalTextColor() && theme) {
-        const_cast<UIText&>(m_label).setTextColor(theme->textPrimary);
+    const bool textHadLocalColor = m_label.hasLocalTextColor();
+    if (!textHadLocalColor) {
+        const_cast<UIText&>(m_label).setTextColor(resolved.text);
     }
     const_cast<UIText&>(m_label).alpha = alpha;
     m_label.render(ctx);
+    if (!textHadLocalColor) {
+        const_cast<UIText&>(m_label).clearLocalTextColor();
+    }
 }
 
 UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
@@ -99,10 +109,7 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
     UIEventResult childResult = UIWidget::onInput(event, ctx);
     if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
 
-    const UITheme* theme = ctx.theme;
-    const bool useTheme = theme && !m_hasLocalColors;
-    const auto& normalCol = useTheme ? theme->buttonNormal : m_normalColor;
-    const auto& hoverCol = useTheme ? theme->buttonHover : m_hoverColor;
+    const UIComponentStyle baseStyle = resolveBaseStyle(ctx);
 
     bool inside = hitTest(event.x, event.y, ctx);
 
@@ -111,11 +118,17 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
             if (inside && !m_hovered) {
                 m_hovered = true;
                 m_hoverScaleTween.start(1.0f, m_hoverTargetScale, m_hoverDuration, EasingType::EaseOut);
-                m_hoverColorTween.start(normalCol, hoverCol, m_hoverDuration, EasingType::Linear);
+                m_hoverColorTween.start(baseStyle.backgroundNormal,
+                                        baseStyle.backgroundHover,
+                                        m_hoverDuration,
+                                        EasingType::Linear);
             } else if (!inside && m_hovered) {
                 m_hovered = false;
                 m_hoverScaleTween.start(m_hoverTargetScale, 1.0f, m_hoverDuration, EasingType::EaseOut);
-                m_hoverColorTween.start(hoverCol, normalCol, m_hoverDuration, EasingType::Linear);
+                m_hoverColorTween.start(baseStyle.backgroundHover,
+                                        baseStyle.backgroundNormal,
+                                        m_hoverDuration,
+                                        EasingType::Linear);
             }
             return inside ? UIEventResult::Handled : UIEventResult::Ignored;
         }
@@ -155,4 +168,41 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
 
 bool UIButton::isActivateCommand(const UIInputEvent& event) {
     return event.command == UICommand::Activate;
+}
+
+UIComponentStyle UIButton::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UIComponentStyle style = UIStyleResolver::buttonStyleFromTheme(ctx.theme);
+    if (m_hasLocalColors) {
+        style.backgroundNormal = m_normalColor;
+        style.backgroundHover = m_hoverColor;
+        style.backgroundPressed = m_pressedColor;
+        style.borderNormal = {1.0f, 1.0f, 1.0f, 0.3f};
+        style.borderHover = {1.0f, 1.0f, 1.0f, 0.3f};
+        style.borderPressed = {1.0f, 1.0f, 1.0f, 0.3f};
+        style.borderFocused = {1.0f, 1.0f, 1.0f, 0.45f};
+        style.borderWidth = 2.0f;
+    }
+    return style;
+}
+
+int UIButton::currentStyleState() const {
+    if (!interactive) {
+        return static_cast<int>(UIStyleState_Disabled);
+    }
+
+    int state = static_cast<int>(UIStyleState_Normal);
+    if (m_hovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    if (m_pressed) {
+        state |= static_cast<int>(UIStyleState_Pressed);
+    }
+    if (isFocused()) {
+        state |= static_cast<int>(UIStyleState_Focused);
+    }
+    return state;
 }
