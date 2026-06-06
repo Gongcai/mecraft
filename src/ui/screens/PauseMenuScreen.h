@@ -16,6 +16,7 @@ public:
     std::function<void()> onSettings;
     std::function<void()> onQuitToMenu;
 
+    void layout(const UIRenderContext& ctx) override;
     void updateAnimations(float dt) override;
 
 protected:

@@ -6,6 +6,8 @@
 #include "../layout/UIStackLayout.h"
 #include "../../locale/LocaleManager.h"
 
+#include <algorithm>
+
 void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     (void)resourceMgr;
 
@@ -92,6 +94,60 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     // Register tweens
     registerFloatTween(m_overlayAlpha);
     registerFloatTween(m_buttonSlideX);
+}
+
+void PauseMenuScreen::layout(const UIRenderContext& ctx) {
+    UIScene::layout(ctx);
+
+    const float screenW = static_cast<float>(std::max(1, ctx.screenWidth));
+    const float screenH = static_cast<float>(std::max(1, ctx.screenHeight));
+    const float sideMargin = std::clamp(screenW * 0.04f, 28.0f, 64.0f);
+    const float topMargin = std::clamp(screenH * 0.10f, 54.0f, 96.0f);
+    const float titleH = 56.0f;
+    const float titleGap = std::clamp(screenH * 0.07f, 44.0f, 72.0f);
+
+    if (m_overlay) {
+        m_overlay->anchor = Anchor::BottomLeft;
+        m_overlay->x = 0.0f;
+        m_overlay->y = 0.0f;
+        m_overlay->anchorOffsetX = 0.0f;
+        m_overlay->anchorOffsetY = 0.0f;
+        m_overlay->width = screenW;
+        m_overlay->height = screenH;
+    }
+
+    if (m_title) {
+        m_title->anchor = Anchor::TopCenter;
+        m_title->x = 0.0f;
+        m_title->y = 0.0f;
+        m_title->anchorOffsetX = 0.0f;
+        m_title->anchorOffsetY = -topMargin;
+        m_title->width = std::min(560.0f, std::max(240.0f, screenW - sideMargin * 2.0f));
+        m_title->height = titleH;
+    }
+
+    if (!m_buttonStack) {
+        return;
+    }
+
+    const float buttonW = std::clamp(screenW * 0.24f, 220.0f, 320.0f);
+    const float buttonH = 45.0f;
+    for (const auto& child : m_buttonStack->getChildren()) {
+        child->width = buttonW;
+        child->height = buttonH;
+    }
+    m_buttonStack->setSpacing(std::clamp(screenH * 0.017f, 10.0f, 16.0f));
+    m_buttonStack->layout();
+
+    const float titleBottom = screenH - topMargin - titleH;
+    const float stackTopLimit = titleBottom - titleGap;
+    const float stackCenterY = stackTopLimit - m_buttonStack->height * 0.5f;
+    const float minCenterY = std::max(m_buttonStack->height * 0.5f + 36.0f, screenH * 0.30f);
+    const float centerY = std::max(minCenterY, stackCenterY);
+
+    m_buttonStack->anchor = Anchor::BottomCenter;
+    m_buttonStack->anchorOffsetX = 0.0f;
+    m_buttonStack->anchorOffsetY = centerY - m_buttonStack->height * 0.5f;
 }
 
 void PauseMenuScreen::onSceneEnter() {

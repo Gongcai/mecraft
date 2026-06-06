@@ -21,6 +21,7 @@ public:
 
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
+    void layout(const UIRenderContext& context) override;
     void render(const UIRenderContext& context) const override;
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
     void setInputContext(const UIRenderContext& context);

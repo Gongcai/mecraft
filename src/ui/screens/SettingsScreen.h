@@ -23,6 +23,7 @@ public:
     void setWorld(World* world) { m_world = world; }
     void setRenderDistanceSetter(std::function<void(int)> setter) { m_renderDistanceSetter = std::move(setter); }
 
+    void layout(const UIRenderContext& ctx) override;
     void updateAnimations(float dt) override;
 
 protected:

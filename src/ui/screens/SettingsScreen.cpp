@@ -14,6 +14,7 @@
 #include "../../renderer/core/RenderScene.h"
 #include "../../world/World.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -36,6 +37,9 @@ static std::string formatSliderValue(float value, float step) {
     }
     return out.str();
 }
+
+class UIStackLayout;
+static void resizeSettingsStack(UIStackLayout* stack, float availableWidth);
 
 // ===========================================================================
 // buildUI
@@ -132,6 +136,100 @@ void SettingsScreen::onSceneExit() {
     m_contentSlideX.start(0.0f, 200.0f, kContentSlideDuration * 0.5f, EasingType::EaseIn);
 }
 
+void SettingsScreen::layout(const UIRenderContext& ctx) {
+    UIScene::layout(ctx);
+
+    const float screenW = static_cast<float>(std::max(1, ctx.screenWidth));
+    const float screenH = static_cast<float>(std::max(1, ctx.screenHeight));
+    const float sideMargin = std::clamp(screenW * 0.04f, 28.0f, 64.0f);
+    const float topMargin = std::clamp(screenH * 0.04f, 20.0f, 36.0f);
+    const float titleH = 40.0f;
+    const float titleGap = std::clamp(screenH * 0.035f, 18.0f, 32.0f);
+    const float bottomMargin = std::clamp(screenH * 0.03f, 18.0f, 30.0f);
+    const float backH = 40.0f;
+    const float backGap = std::clamp(screenH * 0.035f, 18.0f, 32.0f);
+    const float headerH = ctx.theme ? ctx.theme->tabHeaderHeight : 36.0f;
+
+    if (m_overlay) {
+        m_overlay->width = screenW;
+        m_overlay->height = screenH;
+        m_overlay->anchor = Anchor::BottomLeft;
+        m_overlay->x = 0.0f;
+        m_overlay->y = 0.0f;
+        m_overlay->anchorOffsetX = 0.0f;
+        m_overlay->anchorOffsetY = 0.0f;
+    }
+
+    if (m_title) {
+        m_title->width = std::min(520.0f, std::max(240.0f, screenW - sideMargin * 2.0f));
+        m_title->height = titleH;
+        m_title->anchor = Anchor::TopCenter;
+        m_title->anchorOffsetX = 0.0f;
+        m_title->anchorOffsetY = -topMargin;
+        m_title->x = 0.0f;
+        m_title->y = 0.0f;
+    }
+
+    if (m_backButton) {
+        m_backButton->width = std::min(260.0f, std::max(180.0f, screenW * 0.28f));
+        m_backButton->height = backH;
+        m_backButton->anchor = Anchor::BottomCenter;
+        m_backButton->anchorOffsetX = 0.0f;
+        m_backButton->anchorOffsetY = bottomMargin;
+        m_backButton->x = 0.0f;
+        m_backButton->y = 0.0f;
+    }
+
+    if (!m_tabControl) {
+        return;
+    }
+
+    const float tabsTop = screenH - topMargin - titleH - titleGap;
+    const float tabsBottom = bottomMargin + backH + backGap;
+    const float maxTabsW = std::min(960.0f, screenW - sideMargin * 2.0f);
+    const float tabsW = std::max(320.0f, maxTabsW);
+    const float tabsH = std::max(180.0f, tabsTop - tabsBottom);
+
+    m_tabControl->anchor = Anchor::BottomCenter;
+    m_tabControl->width = tabsW;
+    m_tabControl->height = tabsH;
+    m_tabControl->anchorOffsetX = 0.0f;
+    m_tabControl->anchorOffsetY = tabsBottom;
+
+    const float contentH = std::max(80.0f, tabsH - headerH);
+    for (int i = 0; i < m_tabControl->getTabCount(); ++i) {
+        UIWidget* contentPanel = m_tabControl->getContentPanel(i);
+        if (!contentPanel) {
+            continue;
+        }
+        contentPanel->width = tabsW;
+        contentPanel->height = contentH;
+        const auto& children = contentPanel->getChildren();
+        if (children.empty()) {
+            continue;
+        }
+        auto* scroll = dynamic_cast<UIScrollArea*>(children[0].get());
+        if (!scroll) {
+            continue;
+        }
+
+        scroll->width = tabsW;
+        scroll->height = contentH;
+        scroll->anchor = Anchor::BottomLeft;
+        scroll->x = 0.0f;
+        scroll->y = 0.0f;
+
+        const auto& scrollChildren = scroll->getChildren();
+        if (!scrollChildren.empty()) {
+            if (auto* stack = dynamic_cast<UIStackLayout*>(scrollChildren[0].get())) {
+                resizeSettingsStack(stack, std::max(1.0f, tabsW - 20.0f));
+                stack->y = scroll->height - stack->height;
+                scroll->setContentHeight(stack->height);
+            }
+        }
+    }
+}
+
 void SettingsScreen::updateAnimations(float dt) {
     UIScene::updateAnimations(dt);
 
@@ -183,6 +281,47 @@ static void finalizeScrollTab(UIWidget* contentPanel, UIStackLayout* stack) {
             scroll->setScrollOffset(0.0f);
         }
     }
+}
+
+static void resizeSettingsStack(UIStackLayout* stack, float availableWidth) {
+    if (!stack) {
+        return;
+    }
+
+    const float rowWidth = std::max(240.0f, availableWidth);
+    for (const auto& child : stack->getChildren()) {
+        if (auto* row = dynamic_cast<UIStackLayout*>(child.get())) {
+            if (row->getDirection() == StackDirection::Horizontal) {
+                auto& rowChildren = row->getChildren();
+                const bool hasValueText = rowChildren.size() >= 3;
+                const float spacing = row->getSpacing();
+                const float valueW = hasValueText ? 90.0f : 0.0f;
+                const float totalSpacing = spacing * static_cast<float>(rowChildren.size() > 0 ? rowChildren.size() - 1 : 0);
+                const float labelW = std::clamp(rowWidth * 0.34f, 150.0f, 220.0f);
+                const float controlW = std::max(140.0f, rowWidth - labelW - valueW - totalSpacing);
+
+                row->width = rowWidth;
+                row->height = 28.0f;
+                if (rowChildren.size() >= 1) {
+                    rowChildren[0]->width = labelW;
+                    rowChildren[0]->height = 28.0f;
+                }
+                if (rowChildren.size() >= 2) {
+                    rowChildren[1]->width = controlW;
+                    rowChildren[1]->height = 28.0f;
+                }
+                if (rowChildren.size() >= 3) {
+                    rowChildren[2]->width = valueW;
+                    rowChildren[2]->height = 28.0f;
+                }
+                row->layout();
+            }
+        } else {
+            child->width = rowWidth;
+        }
+    }
+    stack->width = rowWidth;
+    stack->layout();
 }
 
 // ===========================================================================

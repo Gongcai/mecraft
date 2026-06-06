@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "../core/UIWidget.h"
 
 enum class StackDirection {
@@ -16,6 +18,11 @@ public:
 
     void setSpacing(float spacing) { m_spacing = spacing; }
     [[nodiscard]] float getSpacing() const { return m_spacing; }
+
+    void layout(const UIRenderContext& ctx) override {
+        layout();
+        UIWidget::layout(ctx);
+    }
 
     // Recalculate child positions based on direction and spacing
     void layout() {

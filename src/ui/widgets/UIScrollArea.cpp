@@ -148,7 +148,7 @@ void UIScrollArea::renderSelf(const UIRenderContext& ctx) const {
 }
 
 void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
-    if (!m_shader || m_vao == 0) return;
+    if (!m_shader || m_vao == 0 || m_contentHeight <= 0.0f) return;
 
     const UITheme* theme = ctx.theme;
     float sbWidth = theme ? theme->scrollbarWidth : m_scrollbarWidth;
@@ -216,6 +216,10 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
 }
 
 bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderContext& ctx) const {
+    if (m_contentHeight <= 0.0f || maxScroll() <= 0.0f) {
+        return false;
+    }
+
     const UITheme* theme = ctx.theme;
     float sbWidth = theme ? theme->scrollbarWidth : m_scrollbarWidth;
 

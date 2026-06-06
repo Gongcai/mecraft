@@ -34,8 +34,15 @@ void UIScene::shutdown() {
     m_hasInputContext = false;
 }
 
+void UIScene::layout(const UIRenderContext& context) {
+    for (auto& root : m_roots) {
+        root->layout(context);
+    }
+}
+
 void UIScene::render(const UIRenderContext& context) const {
     const_cast<UIScene*>(this)->setInputContext(context);
+    const_cast<UIScene*>(this)->layout(context);
     const_cast<UIScene*>(this)->applyPendingFocusRequests();
     const_cast<UIScene*>(this)->ensureFocusableSelection();
 

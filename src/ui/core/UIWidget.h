@@ -135,6 +135,12 @@ public:
         }
     }
 
+    virtual void layout(const UIRenderContext& ctx) {
+        for (auto& child : m_children) {
+            child->layout(ctx);
+        }
+    }
+
     // Per-frame logic update (override in subclasses)
     virtual void onUpdate(float dt) { (void)dt; }
 

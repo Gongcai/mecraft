@@ -411,6 +411,8 @@ void UIRenderer::render(const Window& window,
                         const PlayerStatsData& playerStats,
                         const InputSnapshot& inputSnapshot)
 {
+    glViewport(0, 0, std::max(1, window.getWidth()), std::max(1, window.getHeight()));
+
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
@@ -428,8 +430,8 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
                                                   const InputSnapshot& inputSnapshot) const
 {
     UIRenderContext context;
-    const float actualW = static_cast<float>(window.getWidth());
-    const float actualH = static_cast<float>(window.getHeight());
+    const float actualW = static_cast<float>(std::max(1, window.getWidth()));
+    const float actualH = static_cast<float>(std::max(1, window.getHeight()));
     context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
@@ -456,8 +458,8 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     glGetIntegerv(GL_VIEWPORT, viewport);
 
     UIRenderContext context;
-    const float actualW = static_cast<float>(viewport[2]);
-    const float actualH = static_cast<float>(viewport[3]);
+    const float actualW = static_cast<float>(std::max(1, viewport[2]));
+    const float actualH = static_cast<float>(std::max(1, viewport[3]));
     context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
@@ -492,7 +494,24 @@ ResourceMgr* UIRenderer::getResourceMgr() const
 
 void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot)
 {
-    UIRenderContext context = makeContextFromViewport();
+    const int windowW = std::max(1, window.getWidth());
+    const int windowH = std::max(1, window.getHeight());
+    glViewport(0, 0, windowW, windowH);
+
+    UIRenderContext context;
+    const float actualW = static_cast<float>(windowW);
+    const float actualH = static_cast<float>(windowH);
+    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
+    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
+    context.timeSeconds = static_cast<float>(Time::getRawTime());
+    context.resourceMgr = m_resourceMgr;
+    context.humanoidRenderer = m_humanoidRenderer;
+    context.textRenderer = &m_text;
+    context.commandInputText = &m_commandInput.getText();
+    context.commandInputVisible = m_commandInput.visible;
+    context.theme = &m_theme;
+    context.localeManager = m_localeManager;
     context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
     context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
     m_lastSceneContext = context;
