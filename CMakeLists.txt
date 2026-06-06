@@ -259,6 +259,7 @@ set(SRC_UI
         # Screens
         src/ui/screens/MainMenuScreen.cpp
         src/ui/screens/PauseMenuScreen.cpp
+        src/ui/screens/SettingsScreen.cpp
         src/ui/screens/SaveListScreen.cpp
         src/ui/screens/CreateWorldScreen.cpp
         src/ui/screens/LoadingScreen.cpp

@@ -27,6 +27,7 @@ class GameStateMachine;
 class IGameState;
 
 class Inventory;  // Forward declaration for getPlayerInventory()
+class RenderScene;
 
 /// Aggregates gameplay session objects: World, ECS, physics, crafting, particles, etc.
 /// Extracted from Game to reduce its responsibilities and coupling.
@@ -109,6 +110,9 @@ public:
     [[nodiscard]] const std::string& lastSubmittedCommand() const { return m_lastSubmittedCommand; }
     [[nodiscard]] bool isMultiplayer() const { return m_isMultiplayer; }
 
+    /// Set the render scene for in-game settings access. Called after RenderRuntime init.
+    void setRenderScene(RenderScene* rs) { m_renderScene = rs; }
+
 private:
     // C/S architecture: server owns authoritative World, client owns ClientWorld
     std::unique_ptr<server::GameServer> m_server;
@@ -141,6 +145,9 @@ private:
     std::unique_ptr<GameStateMachine> m_stateMachine;
     std::string m_lastSubmittedCommand;
     bool m_isMultiplayer = false;
+
+    // Render settings access (non-owning, injected after RenderRuntime init)
+    RenderScene* m_renderScene = nullptr;
 };
 
 #endif // MECRAFT_GAME_SESSION_H

@@ -22,7 +22,15 @@
     "enter_seed": "Enter seed (leave empty for random):",
     "seed_placeholder": "Enter seed...",
     "start_new_game": "Start New Game",
-    "multiplayer": "Multiplayer"
+    "multiplayer": "Multiplayer",
+    "settings": "SETTINGS",
+    "tab_general": "General",
+    "tab_shadows": "Shadows",
+    "tab_lighting": "Lighting",
+    "tab_postprocess": "Post Process",
+    "tab_volumetric": "Volumetric",
+    "tab_upscale": "Upscale",
+    "setting_render_distance": "Render Distance"
   },
   "blocks": {
     "air": "Air",

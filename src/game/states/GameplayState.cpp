@@ -27,7 +27,9 @@ GameplayState::GameplayState(StateDependencies deps,
               deps.uiRenderer,
               deps.ecsRegistry,
               deps.inventory,
-              deps.localeManager
+              deps.localeManager,
+              deps.renderScene,
+              &deps.world
           },
           InventoryStateContext{
               deps.fsm,
@@ -129,7 +131,7 @@ bool GameplayState::handleMenuTransition()
     }
 
     // G6: Create UIState with narrow UIStateContext
-    UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager};
+    UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager, m_ctx.renderScene, m_ctx.world};
     m_ctx.fsm.pushState(std::make_unique<UIState>(uiCtx));
     return true;
 }

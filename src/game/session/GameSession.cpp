@@ -533,7 +533,8 @@ void GameSession::initStateMachine(const GameSessionDependencies& deps) {
                 gameplayScene().registry(),
                 deps.localeManager,
                 client(),
-                m_isMultiplayer
+                m_isMultiplayer,
+                m_renderScene
             };
             m_stateMachine->changeState(std::make_unique<CreativeModeState>(stateDeps));
             deps.uiRenderer.appendSuccessLine("Switched to creative mode.");
@@ -560,7 +561,8 @@ std::unique_ptr<IGameState> GameSession::createInitialGameplayState(const GameSe
         gameplayScene().registry(),
         deps.localeManager,
         client(),
-        m_isMultiplayer
+        m_isMultiplayer,
+        m_renderScene
     };
     return std::make_unique<GameplayState>(stateDeps);
 }

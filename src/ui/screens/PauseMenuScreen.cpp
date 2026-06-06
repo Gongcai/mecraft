@@ -51,6 +51,19 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     });
     m_resumeButton = resumeBtn.get();
 
+    // Settings button
+    auto settingsBtn = std::make_unique<UIButton>();
+    settingsBtn->setText(getLocaleManager() ? getLocaleManager()->tr("settings") : "SETTINGS");
+    settingsBtn->setTextScale(2.0f);
+    settingsBtn->width = 250.0f;
+    settingsBtn->height = 45.0f;
+    settingsBtn->setNormalColor({0.2f, 0.35f, 0.6f, 0.9f});
+    settingsBtn->setHoverColor({0.3f, 0.5f, 0.8f, 1.0f});
+    settingsBtn->setOnClick([this]() {
+        if (onSettings) onSettings();
+    });
+    m_settingsButton = settingsBtn.get();
+
     // Quit to menu button
     auto quitBtn = std::make_unique<UIButton>();
     quitBtn->setText(getLocaleManager() ? getLocaleManager()->tr("quit_to_menu") : "QUIT TO MENU");
@@ -66,6 +79,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Build stack
     stack->addChild(std::move(resumeBtn));
+    stack->addChild(std::move(settingsBtn));
     stack->addChild(std::move(quitBtn));
     stack->layout();
     m_buttonStack = stack.get();

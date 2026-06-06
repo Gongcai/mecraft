@@ -13,6 +13,7 @@ class UIStackLayout;
 class PauseMenuScreen : public UIScene {
 public:
     std::function<void()> onResume;
+    std::function<void()> onSettings;
     std::function<void()> onQuitToMenu;
 
     void updateAnimations(float dt) override;
@@ -26,6 +27,7 @@ private:
     UIPanel* m_overlay = nullptr;
     UIText* m_title = nullptr;
     UIButton* m_resumeButton = nullptr;
+    UIButton* m_settingsButton = nullptr;
     UIButton* m_quitButton = nullptr;
     UIStackLayout* m_buttonStack = nullptr;
 

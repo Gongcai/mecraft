@@ -22,7 +22,15 @@
     "enter_seed": "输入种子（留空则随机生成）：",
     "seed_placeholder": "请输入种子...",
     "start_new_game": "开始新游戏",
-    "multiplayer": "多人游戏"
+    "multiplayer": "多人游戏",
+    "settings": "设置",
+    "tab_general": "通用",
+    "tab_shadows": "阴影",
+    "tab_lighting": "光照",
+    "tab_postprocess": "后处理",
+    "tab_volumetric": "体积效果",
+    "tab_upscale": "升频",
+    "setting_render_distance": "渲染距离"
   },
   "blocks": {
     "air": "空气",

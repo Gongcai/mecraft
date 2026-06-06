@@ -7,6 +7,8 @@ class InputManager;
 class UIRenderer;
 class Inventory;
 class LocaleManager;
+class RenderScene;
+class World;
 
 namespace ecs {
 class GameplayRegistry;
@@ -21,6 +23,8 @@ struct GameplayStateContext {
     ecs::GameplayRegistry& ecsRegistry;
     Inventory& inventory;
     const LocaleManager& localeManager;
+    RenderScene* renderScene = nullptr;  ///< Optional; for in-game settings screen
+    World* world = nullptr;              ///< Optional; for render distance control
 };
 
 #endif // MECRAFT_GAMEPLAY_STATE_CONTEXT_H

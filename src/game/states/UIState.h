@@ -5,11 +5,12 @@
 #include "UIStateContext.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../ui/screens/PauseMenuScreen.h"
+#include "../../ui/screens/SettingsScreen.h"
 #include "engine/input/InputContextManager.h"
 #include "ui/core/UIRenderer.h"
 
 /// G6: UIState uses UIStateContext — only UI-relevant dependencies.
-/// Does not create child states, so narrow context is safe.
+/// Manages both the pause menu and the settings screen (sub-screen approach).
 class UIState : public IGameState {
 public:
     explicit UIState(UIStateContext ctx)
@@ -21,14 +22,30 @@ public:
 
         ResourceMgr* rm = m_ctx.uiRenderer.getResourceMgr();
         if (rm) {
+            // -- Pause menu --
             m_pauseScreen.setLocaleManager(&m_ctx.localeManager);
             m_pauseScreen.init(*rm);
             m_pauseScreen.onResume = [this]() {
                 m_ctx.fsm.popState();
             };
+            m_pauseScreen.onSettings = [this]() {
+                switchToSettings();
+            };
             m_pauseScreen.onQuitToMenu = [this]() {
                 m_quitToMenu = true;
             };
+
+            // -- Settings screen --
+            m_settingsScreen.setLocaleManager(&m_ctx.localeManager);
+            m_settingsScreen.setRenderScene(m_ctx.renderScene);
+            m_settingsScreen.setWorld(m_ctx.world);
+            m_settingsScreen.init(*rm);
+            m_settingsScreen.onBack = [this]() {
+                switchToPause();
+            };
+
+            // Start with pause menu
+            m_showingSettings = false;
             m_ctx.uiRenderer.setActiveScene(&m_pauseScreen);
             m_pauseScreen.enterScene();
         }
@@ -36,6 +53,7 @@ public:
 
     void onExit() override {
         m_ctx.uiRenderer.setActiveScene(nullptr);
+        m_settingsScreen.shutdown();
         m_pauseScreen.shutdown();
         m_ctx.context.popContext();
         if (m_ctx.context.getCurrentContext() == InputContextType::Gameplay) {
@@ -50,10 +68,21 @@ public:
         const bool cancel = m_ctx.context.isActionTriggered(Action::Cancel);
         const bool menu = m_ctx.context.isActionTriggered(Action::Menu);
 
-        m_pauseScreen.updateAnimations(dt);
+        // Update the currently visible screen's animations
+        if (m_showingSettings) {
+            m_settingsScreen.updateAnimations(dt);
+        } else {
+            m_pauseScreen.updateAnimations(dt);
+        }
 
         if ((menu || cancel) && uiRouteResult.aggregate != UIEventResult::Consumed) {
-            m_ctx.fsm.popState();
+            if (m_showingSettings) {
+                // Escape from settings → back to pause menu
+                switchToPause();
+            } else {
+                // Escape from pause → resume gameplay
+                m_ctx.fsm.popState();
+            }
             return;
         }
 
@@ -66,8 +95,24 @@ public:
     }
 
 private:
+    void switchToSettings() {
+        m_showingSettings = true;
+        m_pauseScreen.exitScene();
+        m_ctx.uiRenderer.setActiveScene(&m_settingsScreen);
+        m_settingsScreen.enterScene();
+    }
+
+    void switchToPause() {
+        m_showingSettings = false;
+        m_settingsScreen.exitScene();
+        m_ctx.uiRenderer.setActiveScene(&m_pauseScreen);
+        m_pauseScreen.enterScene();
+    }
+
     UIStateContext m_ctx;
     PauseMenuScreen m_pauseScreen;
+    SettingsScreen m_settingsScreen;
+    bool m_showingSettings = false;
     bool m_quitToMenu = false;
 };
 

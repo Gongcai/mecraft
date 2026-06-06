@@ -57,6 +57,7 @@ void Game::updateLoading(const float deltaTime) {
         break;
     case LoadPhase::RenderRuntime:
         m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer, m_deps.threadPool);
+        m_session.setRenderScene(&m_renderRuntime->renderScene());
         m_loadPhase = LoadPhase::Ecs;
         break;
     case LoadPhase::Ecs:
