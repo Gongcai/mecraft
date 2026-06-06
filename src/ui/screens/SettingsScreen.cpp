@@ -145,9 +145,9 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
     const float topMargin = std::clamp(screenH * 0.04f, 20.0f, 36.0f);
     const float titleH = 40.0f;
     const float titleGap = std::clamp(screenH * 0.035f, 18.0f, 32.0f);
-    const float bottomMargin = std::clamp(screenH * 0.03f, 18.0f, 30.0f);
-    const float backH = 40.0f;
-    const float backGap = std::clamp(screenH * 0.035f, 18.0f, 32.0f);
+    const float bottomMargin = std::clamp(screenH * 0.045f, 28.0f, 54.0f);
+    const float backH = std::clamp(screenH * 0.045f, 40.0f, 58.0f);
+    const float backGap = std::clamp(screenH * 0.055f, 42.0f, 76.0f);
     const float headerH = ctx.theme ? ctx.theme->tabHeaderHeight : 36.0f;
 
     if (m_overlay) {
@@ -171,7 +171,7 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
     }
 
     if (m_backButton) {
-        m_backButton->width = std::min(260.0f, std::max(180.0f, screenW * 0.28f));
+        m_backButton->width = std::clamp(screenW * 0.20f, 220.0f, 380.0f);
         m_backButton->height = backH;
         m_backButton->anchor = Anchor::BottomCenter;
         m_backButton->anchorOffsetX = 0.0f;
@@ -186,7 +186,7 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
 
     const float tabsTop = screenH - topMargin - titleH - titleGap;
     const float tabsBottom = bottomMargin + backH + backGap;
-    const float maxTabsW = std::min(960.0f, screenW - sideMargin * 2.0f);
+    const float maxTabsW = std::min(1410.0f, screenW - sideMargin * 2.0f);
     const float tabsW = std::max(320.0f, maxTabsW);
     const float tabsH = std::max(180.0f, tabsTop - tabsBottom);
 

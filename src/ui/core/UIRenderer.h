@@ -134,6 +134,7 @@ private:
                                                         const PlayerStatsData& playerStats,
                                                         const InputSnapshot& inputSnapshot) const;
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
+    [[nodiscard]] static float computeResponsiveUiScale(float actualW, float actualH);
     void renderControls(const UIRenderContext& context) const;
 
     CrosshairControl m_crosshair;

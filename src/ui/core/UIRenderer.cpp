@@ -274,7 +274,7 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
             glGetIntegerv(GL_VIEWPORT, viewport);
             const float vpW = static_cast<float>(std::max(1, viewport[2]));
             const float vpH = static_cast<float>(std::max(1, viewport[3]));
-            const float vpScale = std::min(vpW / kRefScreenWidth, vpH / kRefScreenHeight);
+            const float vpScale = computeResponsiveUiScale(vpW, vpH);
             m_lastSceneContext.uiScale = vpScale;
             m_lastSceneContext.screenWidth = static_cast<int>(std::round(vpW / vpScale));
             m_lastSceneContext.screenHeight = static_cast<int>(std::round(vpH / vpScale));
@@ -432,7 +432,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     UIRenderContext context;
     const float actualW = static_cast<float>(std::max(1, window.getWidth()));
     const float actualH = static_cast<float>(std::max(1, window.getHeight()));
-    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.uiScale = computeResponsiveUiScale(actualW, actualH);
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getGameTime());
@@ -452,6 +452,12 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     return context;
 }
 
+float UIRenderer::computeResponsiveUiScale(float actualW, float actualH)
+{
+    const float fitScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    return std::max(0.01f, std::min(1.0f, fitScale));
+}
+
 UIRenderContext UIRenderer::makeContextFromViewport() const
 {
     GLint viewport[4] = {0, 0, 0, 0};
@@ -460,7 +466,7 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     UIRenderContext context;
     const float actualW = static_cast<float>(std::max(1, viewport[2]));
     const float actualH = static_cast<float>(std::max(1, viewport[3]));
-    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.uiScale = computeResponsiveUiScale(actualW, actualH);
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
@@ -501,7 +507,7 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     UIRenderContext context;
     const float actualW = static_cast<float>(windowW);
     const float actualH = static_cast<float>(windowH);
-    context.uiScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
+    context.uiScale = computeResponsiveUiScale(actualW, actualH);
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
