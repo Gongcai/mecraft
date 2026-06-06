@@ -61,6 +61,48 @@ int main() {
         return fail("disabled state should override interactive states");
     }
 
+    UITheme theme;
+    theme.inputBackground = {0.11f, 0.12f, 0.13f, 0.9f};
+    theme.inputBorder = {0.21f, 0.22f, 0.23f, 0.7f};
+    theme.inputBorderFocused = {0.31f, 0.32f, 0.33f, 1.0f};
+    theme.inputText = {0.41f, 0.42f, 0.43f, 1.0f};
+    theme.inputPlaceholder = {0.51f, 0.52f, 0.53f, 0.8f};
+    theme.inputSelection = {0.61f, 0.62f, 0.63f, 0.4f};
+    theme.inputCursor = {0.71f, 0.72f, 0.73f, 0.9f};
+    theme.panelBackground = {0.81f, 0.82f, 0.83f, 0.85f};
+    theme.panelBorder = {0.91f, 0.92f, 0.93f, 0.7f};
+    theme.panelBorderWidth = 4.0f;
+
+    const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
+    const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
+    if (!colorEqual(panel.background, theme.panelBackground) ||
+        !colorEqual(panel.border, theme.panelBorder) ||
+        std::fabs(panel.borderWidth - 4.0f) > 0.001f) {
+        return fail("panel style should map background, border, and border width from theme");
+    }
+
+    const UITextInputStyle inputStyle = UIStyleResolver::textInputStyleFromTheme(&theme);
+    const UIResolvedTextInputStyle focusedInput =
+        UIStyleResolver::resolveTextInput(inputStyle, UIStyleState_Focused);
+    if (!colorEqual(focusedInput.frame.background, theme.inputBackground) ||
+        !colorEqual(focusedInput.frame.border, theme.inputBorderFocused) ||
+        !colorEqual(focusedInput.frame.text, theme.inputText) ||
+        !colorEqual(focusedInput.placeholder, theme.inputPlaceholder) ||
+        !colorEqual(focusedInput.selection, theme.inputSelection) ||
+        !colorEqual(focusedInput.cursor, theme.inputCursor) ||
+        std::fabs(focusedInput.frame.borderWidth - 4.0f) > 0.001f) {
+        return fail("text input style should map focused frame and auxiliary colors from theme");
+    }
+
+    const UIResolvedTextInputStyle disabledInput =
+        UIStyleResolver::resolveTextInput(inputStyle, UIStyleState_Disabled);
+    if (!colorEqual(disabledInput.frame.text, theme.textDisabled) ||
+        !colorEqual(disabledInput.placeholder, theme.textDisabled) ||
+        !(disabledInput.selection[3] < theme.inputSelection[3]) ||
+        !(disabledInput.cursor[3] < theme.inputCursor[3])) {
+        return fail("disabled text input should use disabled text and muted selection/cursor colors");
+    }
+
     std::cout << "[ui_style_resolver_test] PASS\n";
     return EXIT_SUCCESS;
 }

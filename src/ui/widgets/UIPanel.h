@@ -3,6 +3,7 @@
 #include <array>
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 
 class Shader;
@@ -33,6 +34,7 @@ private:
     void cleanupMesh();
     void rebuildMesh(float x0, float y0, float x1, float y1) const;
     void rebuildBorderMesh(float x0, float y0, float x1, float y1, float bw) const;
+    [[nodiscard]] UIComponentStyle resolveBaseStyle(const UIRenderContext& ctx) const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;

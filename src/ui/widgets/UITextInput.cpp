@@ -133,6 +133,15 @@ void UITextInput::selectAll() {
     m_cursorPos = m_selEnd;
 }
 
+void UITextInput::setStyle(const UITextInputStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UITextInput::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UITextInput::deleteSelection() {
     if (!hasSelection()) return;
     const int lo = std::min(m_selStart, m_selEnd);
@@ -215,15 +224,15 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
 
     const UIRenderUtils::GLStateGuard guard;
 
-    const Color bgCol    = (!m_hasLocalColors && ctx.theme) ? ctx.theme->inputBackground    : m_bgColor;
-    const Color brdCol   = (!m_hasLocalColors && ctx.theme) ?
-                           (isFocused() ? ctx.theme->inputBorderFocused : ctx.theme->inputBorder) :
-                           (isFocused() ? m_borderFocusedColor : m_borderColor);
-    const Color txtCol   = (!m_hasLocalColors && ctx.theme) ? ctx.theme->inputText          : m_textColor;
-    const Color phCol    = (!m_hasLocalColors && ctx.theme) ? ctx.theme->inputPlaceholder    : m_placeholderColor;
-    const Color selCol   = (!m_hasLocalColors && ctx.theme) ? ctx.theme->inputSelection     : m_selectionColor;
-    const Color curCol   = (!m_hasLocalColors && ctx.theme) ? ctx.theme->inputCursor        : m_cursorColor;
-    const float brdWidth = ctx.theme ? ctx.theme->panelBorderWidth : 1.0f;
+    const UIResolvedTextInputStyle resolved =
+        UIStyleResolver::resolveTextInput(resolveBaseStyle(ctx), currentStyleState());
+    const Color bgCol = resolved.frame.background;
+    const Color brdCol = resolved.frame.border;
+    const Color txtCol = resolved.frame.text;
+    const Color phCol = resolved.placeholder;
+    const Color selCol = resolved.selection;
+    const Color curCol = resolved.cursor;
+    const float brdWidth = resolved.frame.borderWidth;
 
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
@@ -488,4 +497,44 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
     }
 
     return UIEventResult::Ignored;
+}
+
+UITextInputStyle UITextInput::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UITextInputStyle style = UIStyleResolver::textInputStyleFromTheme(ctx.theme);
+    if (m_hasLocalColors) {
+        style.frame.backgroundNormal = m_bgColor;
+        style.frame.backgroundHover = m_bgColor;
+        style.frame.backgroundPressed = m_bgColor;
+        style.frame.backgroundDisabled = m_bgColor;
+        style.frame.borderNormal = m_borderColor;
+        style.frame.borderHover = m_borderColor;
+        style.frame.borderFocused = m_borderFocusedColor;
+        style.frame.borderPressed = m_borderFocusedColor;
+        style.frame.borderDisabled = m_borderColor;
+        style.frame.textNormal = m_textColor;
+        style.frame.textDisabled = m_textColor;
+        style.placeholder = m_placeholderColor;
+        style.selection = m_selectionColor;
+        style.cursor = m_cursorColor;
+    }
+    return style;
+}
+
+int UITextInput::currentStyleState() const {
+    if (!interactive) {
+        return static_cast<int>(UIStyleState_Disabled);
+    }
+
+    int state = static_cast<int>(UIStyleState_Normal);
+    if (m_hovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    if (isFocused()) {
+        state |= static_cast<int>(UIStyleState_Focused);
+    }
+    return state;
 }

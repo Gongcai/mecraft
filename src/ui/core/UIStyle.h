@@ -39,7 +39,24 @@ struct UIResolvedStyle {
     float borderWidth = 2.0f;
 };
 
+struct UITextInputStyle {
+    UIComponentStyle frame;
+    Color placeholder {0.5f, 0.5f, 0.5f, 0.8f};
+    Color selection   {0.2f, 0.5f, 0.9f, 0.4f};
+    Color cursor      {1.0f, 1.0f, 1.0f, 0.9f};
+};
+
+struct UIResolvedTextInputStyle {
+    UIResolvedStyle frame;
+    Color placeholder {0.5f, 0.5f, 0.5f, 0.8f};
+    Color selection   {0.2f, 0.5f, 0.9f, 0.4f};
+    Color cursor      {1.0f, 1.0f, 1.0f, 0.9f};
+};
+
 namespace UIStyleResolver {
+    [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UITextInputStyle textInputStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
+    [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
 }

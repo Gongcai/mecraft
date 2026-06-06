@@ -7,6 +7,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 
 class Shader;
@@ -41,6 +42,8 @@ public:
     void setPlaceholderColor(const Color& c) { m_placeholderColor = c; m_hasLocalColors = true; }
     void setSelectionColor(const Color& c)   { m_selectionColor = c; m_hasLocalColors = true; }
     void setCursorColor(const Color& c)      { m_cursorColor = c; m_hasLocalColors = true; }
+    void setStyle(const UITextInputStyle& style);
+    void clearLocalStyle();
 
     // Callbacks.
     std::function<void(const std::string&)> onTextChanged;
@@ -64,6 +67,8 @@ private:
 
     // Insert a UTF-8 string at the cursor position.
     void insertText(const std::string& text);
+    [[nodiscard]] UITextInputStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] int currentStyleState() const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -91,4 +96,6 @@ private:
     Color m_placeholderColor{0.5f, 0.5f, 0.5f, 0.8f};
     Color m_selectionColor{0.2f, 0.5f, 0.9f, 0.4f};
     Color m_cursorColor{1.0f, 1.0f, 1.0f, 0.9f};
+    bool m_hasLocalStyle = false;
+    UITextInputStyle m_localStyle;
 };
