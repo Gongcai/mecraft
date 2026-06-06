@@ -80,6 +80,15 @@ void UIRadioButtonGroup::setSelectedIndex(int index) {
     if (onSelectionChanged) onSelectionChanged(m_selectedIndex);
 }
 
+void UIRadioButtonGroup::setStyle(const UIRadioButtonStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIRadioButtonGroup::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UIRadioButtonGroup::updateAnimations(float dt) {
     for (auto& opt : m_options) {
         opt.selectTween.tick(dt);
@@ -108,7 +117,7 @@ int UIRadioButtonGroup::hitTestOption(float px, float py, const UIRenderContext&
     const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
-    const float radioSz = ctx.theme ? ctx.theme->radioSize : 18.0f;
+    const float radioSz = resolveStyle(ctx, false).radioSize;
     const float rowHeight = 24.0f;
 
     for (int i = 0; i < static_cast<int>(m_options.size()); ++i) {
@@ -134,11 +143,8 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
 
     const UIRenderUtils::GLStateGuard guard;
 
-    const Color outerCol = (!m_hasLocalColors && ctx.theme) ? ctx.theme->radioOuter : m_outerColor;
-    const Color outerHov = (!m_hasLocalColors && ctx.theme) ? ctx.theme->radioOuterHover : m_outerHoverColor;
-    const Color innerCol = (!m_hasLocalColors && ctx.theme) ? ctx.theme->radioInner : m_innerColor;
-    const Color txtCol   = (!m_hasLocalColors && ctx.theme) ? ctx.theme->textPrimary : m_textColor;
-    const float radioSz  = (ctx.theme && !m_hasLocalColors) ? ctx.theme->radioSize : 18.0f;
+    const UIResolvedRadioButtonStyle baseResolved = resolveStyle(ctx, false);
+    const float radioSz = baseResolved.radioSize;
     const float rowHeight = 24.0f;
 
     const float ax = getAbsoluteX(ctx);
@@ -154,6 +160,7 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
 
     for (int i = 0; i < static_cast<int>(m_options.size()); ++i) {
         const Option& opt = m_options[i];
+        const UIResolvedRadioButtonStyle resolved = resolveStyle(ctx, opt.hovered);
         const float rowY = ay + static_cast<float>(i) * (rowHeight + m_spacing);
         const float cy = rowY + rowHeight * 0.5f;
         const float cx = ax + radioSz * 0.5f;
@@ -172,12 +179,13 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
                         static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
 
         // Draw outer circle.
-        const Color oc = opt.hovered ? outerHov : outerCol;
+        const Color oc = resolved.outer;
         m_shader->setVec4("uColor", glm::vec4(oc[0], oc[1], oc[2], oc[3] * alpha));
         glDrawArrays(GL_TRIANGLES, 0, kCircleSegments * 3);
 
         // Draw inner circle.
         if (innerR > 0.5f) {
+            const Color innerCol = resolved.inner;
             m_shader->setVec4("uColor", glm::vec4(innerCol[0], innerCol[1], innerCol[2], innerCol[3] * alpha));
             glDrawArrays(GL_TRIANGLES, kCircleSegments * 3, kCircleSegments * 3);
         }
@@ -191,6 +199,8 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
         const float textX = ax + radioSz + 8.0f;
         for (int i = 0; i < static_cast<int>(m_options.size()); ++i) {
             const Option& opt = m_options[i];
+            const UIResolvedRadioButtonStyle resolved = resolveStyle(ctx, opt.hovered);
+            const Color txtCol = resolved.text;
             const float rowY = ay + static_cast<float>(i) * (rowHeight + m_spacing);
             const auto metrics = ctx.textRenderer->measureText(opt.text, textScale);
             const float textY = rowY + (rowHeight - metrics.height) * 0.5f;
@@ -232,4 +242,31 @@ UIEventResult UIRadioButtonGroup::onInput(const UIInputEvent& event, const UIRen
     }
 
     return UIEventResult::Ignored;
+}
+
+UIRadioButtonStyle UIRadioButtonGroup::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UIRadioButtonStyle style = UIStyleResolver::radioButtonStyleFromTheme(ctx.theme);
+    if (m_hasLocalColors || !ctx.theme) {
+        style.outerNormal = m_outerColor;
+        style.outerHover = m_outerHoverColor;
+        style.outerDisabled = m_outerColor;
+        style.innerNormal = m_innerColor;
+        style.innerDisabled = m_innerColor;
+        style.textNormal = m_textColor;
+        style.textDisabled = m_textColor;
+        style.radioSize = 18.0f;
+    }
+    return style;
+}
+
+UIResolvedRadioButtonStyle UIRadioButtonGroup::resolveStyle(const UIRenderContext& ctx, bool hovered) const {
+    int state = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+    if (hovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    return UIStyleResolver::resolveRadioButton(resolveBaseStyle(ctx), state);
 }

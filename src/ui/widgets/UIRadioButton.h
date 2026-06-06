@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -34,6 +35,8 @@ public:
     void setOuterHoverColor(const Color& c) { m_outerHoverColor = c; m_hasLocalColors = true; }
     void setInnerColor(const Color& c)      { m_innerColor = c; m_hasLocalColors = true; }
     void setTextColor(const Color& c)       { m_textColor = c; m_hasLocalColors = true; }
+    void setStyle(const UIRadioButtonStyle& style);
+    void clearLocalStyle();
 
     std::function<void(int)> onSelectionChanged;
 
@@ -52,6 +55,8 @@ private:
     void initMesh();
     void cleanupMesh();
     [[nodiscard]] int hitTestOption(float px, float py, const UIRenderContext& ctx) const;
+    [[nodiscard]] UIRadioButtonStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedRadioButtonStyle resolveStyle(const UIRenderContext& ctx, bool hovered) const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -62,8 +67,10 @@ private:
     float m_spacing = 6.0f;
 
     bool m_hasLocalColors = false;
+    bool m_hasLocalStyle = false;
     Color m_outerColor{0.35f, 0.35f, 0.35f, 0.9f};
     Color m_outerHoverColor{0.5f, 0.5f, 0.5f, 1.0f};
     Color m_innerColor{0.2f, 0.8f, 1.0f, 1.0f};
     Color m_textColor{1.0f, 1.0f, 1.0f, 1.0f};
+    UIRadioButtonStyle m_localStyle;
 };

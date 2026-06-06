@@ -92,6 +92,10 @@ int main() {
     theme.progressTrack = {0.15f, 0.25f, 0.35f, 0.9f};
     theme.progressFill = {0.45f, 0.55f, 0.65f, 1.0f};
     theme.progressText = {0.75f, 0.76f, 0.77f, 1.0f};
+    theme.radioOuter = {0.16f, 0.26f, 0.36f, 0.9f};
+    theme.radioOuterHover = {0.46f, 0.56f, 0.66f, 1.0f};
+    theme.radioInner = {0.76f, 0.77f, 0.78f, 1.0f};
+    theme.radioSize = 22.0f;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -187,6 +191,25 @@ int main() {
         !colorEqual(progressBar.fill, theme.progressFill) ||
         !colorEqual(progressBar.text, theme.progressText)) {
         return fail("progress bar style should map track, fill, and text colors from theme");
+    }
+
+    const UIRadioButtonStyle radioStyle = UIStyleResolver::radioButtonStyleFromTheme(&theme);
+    const UIResolvedRadioButtonStyle hoveredRadio =
+        UIStyleResolver::resolveRadioButton(radioStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredRadio.outer, theme.radioOuterHover) ||
+        !colorEqual(hoveredRadio.inner, theme.radioInner) ||
+        !colorEqual(hoveredRadio.text, theme.textPrimary) ||
+        std::fabs(hoveredRadio.radioSize - 22.0f) > 0.001f) {
+        return fail("radio button style should map hover outer, inner, text, and size");
+    }
+
+    const UIResolvedRadioButtonStyle disabledRadio =
+        UIStyleResolver::resolveRadioButton(radioStyle, UIStyleState_Disabled | UIStyleState_Hovered);
+    if (!colorEqual(disabledRadio.outer, theme.buttonDisabled) ||
+        !colorEqual(disabledRadio.inner, theme.textDisabled) ||
+        !colorEqual(disabledRadio.text, theme.textDisabled) ||
+        colorEqual(disabledRadio.outer, theme.radioOuterHover)) {
+        return fail("disabled radio button should override hover state");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

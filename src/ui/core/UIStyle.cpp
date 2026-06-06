@@ -159,6 +159,23 @@ UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme) {
+    UIRadioButtonStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.outerNormal = theme->radioOuter;
+    style.outerHover = theme->radioOuterHover;
+    style.outerDisabled = theme->buttonDisabled;
+    style.innerNormal = theme->radioInner;
+    style.innerDisabled = theme->textDisabled;
+    style.textNormal = theme->textPrimary;
+    style.textDisabled = theme->textDisabled;
+    style.radioSize = theme->radioSize;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -212,6 +229,23 @@ UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style) {
     resolved.track = style.track;
     resolved.fill = style.fill;
     resolved.text = style.text;
+    return resolved;
+}
+
+UIResolvedRadioButtonStyle resolveRadioButton(const UIRadioButtonStyle& style, int state) {
+    UIResolvedRadioButtonStyle resolved;
+    resolved.radioSize = style.radioSize;
+
+    if (hasStyleState(state, UIStyleState_Disabled)) {
+        resolved.outer = style.outerDisabled;
+        resolved.inner = style.innerDisabled;
+        resolved.text = style.textDisabled;
+        return resolved;
+    }
+
+    resolved.outer = hasStyleState(state, UIStyleState_Hovered) ? style.outerHover : style.outerNormal;
+    resolved.inner = style.innerNormal;
+    resolved.text = style.textNormal;
     return resolved;
 }
 

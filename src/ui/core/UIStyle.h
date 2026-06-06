@@ -129,6 +129,24 @@ struct UIResolvedProgressBarStyle {
     Color text  {1.0f, 1.0f, 1.0f, 1.0f};
 };
 
+struct UIRadioButtonStyle {
+    Color outerNormal   {0.35f, 0.35f, 0.35f, 0.9f};
+    Color outerHover    {0.5f, 0.5f, 0.5f, 1.0f};
+    Color outerDisabled {0.22f, 0.22f, 0.22f, 0.5f};
+    Color innerNormal   {0.2f, 0.8f, 1.0f, 1.0f};
+    Color innerDisabled {0.45f, 0.45f, 0.45f, 1.0f};
+    Color textNormal    {1.0f, 1.0f, 1.0f, 1.0f};
+    Color textDisabled  {0.45f, 0.45f, 0.45f, 1.0f};
+    float radioSize = 18.0f;
+};
+
+struct UIResolvedRadioButtonStyle {
+    Color outer {0.35f, 0.35f, 0.35f, 0.9f};
+    Color inner {0.2f, 0.8f, 1.0f, 1.0f};
+    Color text  {1.0f, 1.0f, 1.0f, 1.0f};
+    float radioSize = 18.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -137,10 +155,12 @@ namespace UIStyleResolver {
     [[nodiscard]] UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UISliderStyle sliderStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
     [[nodiscard]] UIResolvedCheckboxStyle resolveCheckbox(const UICheckboxStyle& style, int state);
     [[nodiscard]] UIResolvedSliderStyle resolveSlider(const UISliderStyle& style, int state);
     [[nodiscard]] UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style);
+    [[nodiscard]] UIResolvedRadioButtonStyle resolveRadioButton(const UIRadioButtonStyle& style, int state);
 }
