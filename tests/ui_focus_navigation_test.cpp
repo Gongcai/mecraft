@@ -12,6 +12,14 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
+int failFocus(const char* message, UIEventResult result, bool firstFocused, bool secondFocused) {
+    std::cerr << "[ui_focus_navigation_test] FAIL: " << message
+              << " result=" << static_cast<int>(result)
+              << " firstFocused=" << firstFocused
+              << " secondFocused=" << secondFocused << '\n';
+    return EXIT_FAILURE;
+}
+
 class TestScene final : public UIScene {};
 
 UIInputEvent command(float x, float y, UICommand command) {
@@ -62,8 +70,12 @@ int main() {
         return fail("first focusable widget should receive initial focus");
     }
 
-    if (scene.onInput(command(0.0f, 0.0f, UICommand::NavigateDown), context) != UIEventResult::Handled) {
-        return fail("navigate down should move focus and be handled");
+    const UIEventResult navigateDownResult = scene.onInput(command(0.0f, 0.0f, UICommand::NavigateDown), context);
+    if (navigateDownResult != UIEventResult::Handled) {
+        return failFocus("navigate down should move focus and be handled",
+                         navigateDownResult,
+                         firstPtr->isFocused(),
+                         secondPtr->isFocused());
     }
     if (!secondPtr->isFocused()) {
         return fail("navigate down should move focus to next widget");

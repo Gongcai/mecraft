@@ -122,6 +122,7 @@ UIEventResult UIButton::onInput(const UIInputEvent& event, const UIRenderContext
         case UIInputEventType::PointerDown: {
             if (event.button == UIPointerButton::Primary && inside) {
                 m_pressed = true;
+                requestFocus();
                 return UIEventResult::Handled;
             }
             break;

@@ -370,14 +370,7 @@ UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderCont
         if (!isFocused()) break;
 
         const int key = event.key;
-        // Detect Ctrl via GLFW key state. Note: this works because the
-        // InputManager holds key states and the GLFW window is accessible
-        // through the currently bound context. We check both left and right Ctrl.
-        // This is a pragmatic approach since UIInputEvent doesn't carry modifiers.
-        GLFWwindow* currentContext = glfwGetCurrentContext();
-        const bool ctrl = currentContext &&
-                          (glfwGetKey(currentContext, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-                           glfwGetKey(currentContext, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS);
+        const bool ctrl = hasInputModifier(event.modifiers, UIInputModifier::Control);
 
         if (key == GLFW_KEY_LEFT) {
             if (hasSelection() && !ctrl) {

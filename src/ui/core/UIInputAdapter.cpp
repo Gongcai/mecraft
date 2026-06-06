@@ -9,6 +9,23 @@
 
 namespace {
 
+int currentModifiers(const InputSnapshot& snapshot) {
+    int modifiers = 0;
+    if (snapshot.isKeyHeld(GLFW_KEY_LEFT_SHIFT) || snapshot.isKeyHeld(GLFW_KEY_RIGHT_SHIFT)) {
+        modifiers |= uiInputModifierMask(UIInputModifier::Shift);
+    }
+    if (snapshot.isKeyHeld(GLFW_KEY_LEFT_CONTROL) || snapshot.isKeyHeld(GLFW_KEY_RIGHT_CONTROL)) {
+        modifiers |= uiInputModifierMask(UIInputModifier::Control);
+    }
+    if (snapshot.isKeyHeld(GLFW_KEY_LEFT_ALT) || snapshot.isKeyHeld(GLFW_KEY_RIGHT_ALT)) {
+        modifiers |= uiInputModifierMask(UIInputModifier::Alt);
+    }
+    if (snapshot.isKeyHeld(GLFW_KEY_LEFT_SUPER) || snapshot.isKeyHeld(GLFW_KEY_RIGHT_SUPER)) {
+        modifiers |= uiInputModifierMask(UIInputModifier::Super);
+    }
+    return modifiers;
+}
+
 void mergeResult(UIEventResult& aggregate, const UIEventResult result) {
     if (result == UIEventResult::Consumed) {
         aggregate = UIEventResult::Consumed;
@@ -25,6 +42,7 @@ UIInputEvent makePointerEvent(const UIInputEventType type,
     event.x = snapshot.mousePosition.x;
     event.y = snapshot.mousePosition.y;
     event.button = button;
+    event.modifiers = currentModifiers(snapshot);
     return event;
 }
 
@@ -33,6 +51,7 @@ UIInputEvent makeCommandEvent(const InputSnapshot& snapshot, const UICommand com
     event.type = UIInputEventType::Command;
     event.x = snapshot.mousePosition.x;
     event.y = snapshot.mousePosition.y;
+    event.modifiers = currentModifiers(snapshot);
     event.command = command;
     return event;
 }
@@ -42,6 +61,7 @@ UIInputEvent makeScrollEvent(const InputSnapshot& snapshot) {
     event.type = UIInputEventType::Scroll;
     event.x = snapshot.mousePosition.x;
     event.y = snapshot.mousePosition.y;
+    event.modifiers = currentModifiers(snapshot);
     event.scrollY = static_cast<float>(snapshot.scrollDelta);
     return event;
 }
@@ -51,6 +71,7 @@ UIInputEvent makeTextInputEvent(const InputSnapshot& snapshot, const std::uint32
     event.type = UIInputEventType::TextInput;
     event.x = snapshot.mousePosition.x;
     event.y = snapshot.mousePosition.y;
+    event.modifiers = currentModifiers(snapshot);
     event.codepoint = codepoint;
     return event;
 }
@@ -63,6 +84,7 @@ UIInputEvent makeKeyEvent(const InputSnapshot& snapshot,
     event.x = snapshot.mousePosition.x;
     event.y = snapshot.mousePosition.y;
     event.key = key;
+    event.modifiers = currentModifiers(snapshot);
     return event;
 }
 

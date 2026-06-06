@@ -69,6 +69,35 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
         m_lastPointerY = event.y;
     }
 
+    if (event.type == UIInputEventType::Command &&
+        (event.command == UICommand::NavigateUp ||
+         event.command == UICommand::NavigateDown ||
+         event.command == UICommand::NavigateLeft ||
+         event.command == UICommand::NavigateRight)) {
+        if (m_focusedWidget) {
+            const UIEventResult focusedResult = m_focusedWidget->onInput(event, m_currentContext);
+            if (focusedResult == UIEventResult::Consumed) {
+                applyPendingFocusRequests();
+                ensureFocusableSelection();
+                return UIEventResult::Consumed;
+            }
+        }
+
+        std::vector<UIWidget*> focusable;
+        focusable.reserve(16);
+        collectAllFocusable(focusable);
+
+        m_focusEngaged = true;
+        if (event.command == UICommand::NavigateUp || event.command == UICommand::NavigateLeft) {
+            moveFocusPrev(&focusable);
+        } else {
+            moveFocusNext(&focusable);
+        }
+        applyPendingFocusRequests();
+        ensureFocusableSelection(&focusable);
+        return UIEventResult::Handled;
+    }
+
     // Focused widget gets priority for keyboard, command, text, and scroll events
     UIEventResult aggregate = UIEventResult::Ignored;
     if (m_focusedWidget &&
@@ -101,28 +130,6 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
         }
     }
 
-    // Navigation commands move focus only if nothing else handled the event
-    if (event.type == UIInputEventType::Command && aggregate == UIEventResult::Ignored) {
-        std::vector<UIWidget*> focusable;
-        focusable.reserve(16);
-        collectAllFocusable(focusable);
-
-        if (event.command == UICommand::NavigateUp || event.command == UICommand::NavigateLeft) {
-            m_focusEngaged = true;
-            moveFocusPrev(&focusable);
-            applyPendingFocusRequests();
-            ensureFocusableSelection(&focusable);
-            return UIEventResult::Handled;
-        }
-        if (event.command == UICommand::NavigateDown || event.command == UICommand::NavigateRight) {
-            m_focusEngaged = true;
-            moveFocusNext(&focusable);
-            applyPendingFocusRequests();
-            ensureFocusableSelection(&focusable);
-            return UIEventResult::Handled;
-        }
-    }
-
     applyPendingFocusRequests();
     ensureFocusableSelection();
     return aggregate;
@@ -135,7 +142,7 @@ void UIScene::setInputContext(const UIRenderContext& context) {
 
 void UIScene::enterScene() {
     m_phase = Phase::Entering;
-    m_focusEngaged = false;
+    m_focusEngaged = true;
     m_lastPointerX = -1.0f;
     m_lastPointerY = -1.0f;
     onSceneEnter();
