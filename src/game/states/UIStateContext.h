@@ -3,6 +3,8 @@
 
 #include "GameStateMachine.h"
 
+#include <functional>
+
 class InputContextManager;
 class InputManager;
 class UIRenderer;
@@ -19,6 +21,7 @@ struct UIStateContext {
     const LocaleManager& localeManager;
     RenderScene* renderScene = nullptr;  ///< Optional; for settings screen
     World* world = nullptr;              ///< Optional; for render distance control
+    std::function<void(int)> renderDistanceSetter;
 };
 
 #endif // MECRAFT_UI_STATE_CONTEXT_H

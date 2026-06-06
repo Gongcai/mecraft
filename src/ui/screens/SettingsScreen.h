@@ -21,6 +21,7 @@ public:
 
     void setRenderScene(RenderScene* rs) { m_renderScene = rs; }
     void setWorld(World* world) { m_world = world; }
+    void setRenderDistanceSetter(std::function<void(int)> setter) { m_renderDistanceSetter = std::move(setter); }
 
     void updateAnimations(float dt) override;
 
@@ -57,6 +58,7 @@ private:
 
     RenderScene* m_renderScene = nullptr;
     World* m_world = nullptr;
+    std::function<void(int)> m_renderDistanceSetter;
 
     UIPanel* m_overlay = nullptr;
     UIText* m_title = nullptr;

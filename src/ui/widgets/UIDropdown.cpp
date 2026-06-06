@@ -105,12 +105,19 @@ void UIDropdown::renderSelf(const UIRenderContext& ctx) const {
 
     renderCollapsed(ctx);
 
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void UIDropdown::renderOverlay(const UIRenderContext& ctx) const {
+    if (!visible) return;
+
     if (m_expanded || m_expandTween.isRunning()) {
+        const UIRenderUtils::GLStateGuard glState;
         renderExpanded(ctx);
     }
 
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    UIWidget::renderOverlay(ctx);
 }
 
 void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {

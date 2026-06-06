@@ -39,6 +39,7 @@ public:
             m_settingsScreen.setLocaleManager(&m_ctx.localeManager);
             m_settingsScreen.setRenderScene(m_ctx.renderScene);
             m_settingsScreen.setWorld(m_ctx.world);
+            m_settingsScreen.setRenderDistanceSetter(m_ctx.renderDistanceSetter);
             m_settingsScreen.init(*rm);
             m_settingsScreen.onBack = [this]() {
                 switchToPause();

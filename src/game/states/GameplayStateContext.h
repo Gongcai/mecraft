@@ -1,6 +1,8 @@
 #ifndef MECRAFT_GAMEPLAY_STATE_CONTEXT_H
 #define MECRAFT_GAMEPLAY_STATE_CONTEXT_H
 
+#include <functional>
+
 class GameStateMachine;
 class InputContextManager;
 class InputManager;
@@ -25,6 +27,7 @@ struct GameplayStateContext {
     const LocaleManager& localeManager;
     RenderScene* renderScene = nullptr;  ///< Optional; for in-game settings screen
     World* world = nullptr;              ///< Optional; for render distance control
+    std::function<void(int)> renderDistanceSetter;
 };
 
 #endif // MECRAFT_GAMEPLAY_STATE_CONTEXT_H

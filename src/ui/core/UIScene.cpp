@@ -42,6 +42,9 @@ void UIScene::render(const UIRenderContext& context) const {
     for (const auto& root : m_roots) {
         root->render(context);
     }
+    for (const auto& root : m_roots) {
+        root->renderOverlay(context);
+    }
 }
 
 UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/) {

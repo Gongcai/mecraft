@@ -28,6 +28,7 @@ public:
     void setOnSelectionChanged(std::function<void(int, const std::string&)> callback);
 
     void updateAnimations(float dt) override;
+    void renderOverlay(const UIRenderContext& ctx) const override;
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;

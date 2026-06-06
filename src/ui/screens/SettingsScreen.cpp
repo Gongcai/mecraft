@@ -14,11 +14,27 @@
 #include "../../renderer/core/RenderScene.h"
 #include "../../world/World.h"
 
+#include <cmath>
+#include <iomanip>
+#include <sstream>
+
 // ---------------------------------------------------------------------------
 // Helper: get locale string with fallback
 // ---------------------------------------------------------------------------
 static std::string loc(const LocaleManager* lm, const char* key, const char* fallback) {
     return lm ? std::string(lm->tr(key)) : fallback;
+}
+
+static std::string formatSliderValue(float value, float step) {
+    std::ostringstream out;
+    if (step >= 1.0f) {
+        out << static_cast<int>(std::round(value));
+    } else if (step >= 0.01f) {
+        out << std::fixed << std::setprecision(2) << value;
+    } else {
+        out << std::fixed << std::setprecision(4) << value;
+    }
+    return out.str();
 }
 
 // ===========================================================================
@@ -219,12 +235,29 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     slider->setRange(minVal, maxVal);
     slider->setStep(step);
     slider->setValue(currentVal);
-    slider->width = 400.0f;
+    slider->width = 300.0f;
     slider->height = 28.0f;
-    slider->setOnValueChanged(std::move(onValueChanged));
+
+    auto valueText = std::make_unique<UIText>();
+    valueText->setText(formatSliderValue(currentVal, step));
+    valueText->setTextScale(1.1f);
+    valueText->setTextColor({0.85f, 0.85f, 0.85f, 1.0f});
+    valueText->width = 90.0f;
+    valueText->height = 28.0f;
+    UIText* valueTextPtr = valueText.get();
+
+    slider->setOnValueChanged([valueTextPtr, step, onValueChanged = std::move(onValueChanged)](float v) mutable {
+        if (valueTextPtr) {
+            valueTextPtr->setText(formatSliderValue(v, step));
+        }
+        if (onValueChanged) {
+            onValueChanged(v);
+        }
+    });
 
     row->addChild(std::move(lbl));
     row->addChild(std::move(slider));
+    row->addChild(std::move(valueText));
     row->layout();
 
     parent->addChild(std::move(row));
@@ -281,7 +314,12 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                      loc(getLocaleManager(), "setting_render_distance", "Render Distance"),
                      2.0f, 32.0f, static_cast<float>(rd), 1.0f,
                      [this](float val) {
-                         if (m_world) m_world->setRenderDistance(static_cast<int>(val));
+                         const int distance = static_cast<int>(std::round(val));
+                         if (m_renderDistanceSetter) {
+                             m_renderDistanceSetter(distance);
+                         } else if (m_world) {
+                             m_world->setRenderDistance(distance);
+                         }
                      });
     }
 
@@ -315,6 +353,11 @@ void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resour
     addToggle(stack, resourceMgr, "Contact Shadows", s.shadow.contactShadowsEnabled,
               [this](bool v) {
                   auto s = m_renderScene->getSettings(); s.shadow.contactShadowsEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "Cloud Shadows", s.cloud.shadowsEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.cloud.shadowsEnabled = v;
                   m_renderScene->setSettings(s);
               });
 
@@ -364,6 +407,24 @@ void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resour
                  0.0f, 0.6f, s.shadow.contactShadowStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings(); s.shadow.contactShadowStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Cloud Shadow Strength",
+                 0.0f, 0.8f, s.cloud.shadowStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.shadowStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Cloud Shadow Scale",
+                 0.001f, 0.02f, s.cloud.shadowScale, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.shadowScale = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Cloud Shadow Speed",
+                 0.0f, 0.08f, s.cloud.shadowSpeed, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.shadowSpeed = v;
                      m_renderScene->setSettings(s);
                  });
 

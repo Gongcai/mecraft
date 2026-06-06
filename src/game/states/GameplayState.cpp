@@ -13,8 +13,10 @@
 #include "UIStateContext.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/util/GameplayRuntimeContext.h"
+#include "../../client/GameClient.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../world/World.h"
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -29,7 +31,12 @@ GameplayState::GameplayState(StateDependencies deps,
               deps.inventory,
               deps.localeManager,
               deps.renderScene,
-              &deps.world
+              &deps.world,
+              [&world = deps.world, &client = deps.gameClient](const int distance) {
+                  world.setRenderDistance(distance);
+                  client.clientWorld().setRenderDistance(distance);
+                  client.sendViewConfig(distance);
+              }
           },
           InventoryStateContext{
               deps.fsm,
@@ -131,7 +138,8 @@ bool GameplayState::handleMenuTransition()
     }
 
     // G6: Create UIState with narrow UIStateContext
-    UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager, m_ctx.renderScene, m_ctx.world};
+    UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager,
+                         m_ctx.renderScene, m_ctx.world, m_ctx.renderDistanceSetter};
     m_ctx.fsm.pushState(std::make_unique<UIState>(uiCtx));
     return true;
 }

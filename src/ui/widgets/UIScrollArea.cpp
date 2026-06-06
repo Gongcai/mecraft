@@ -21,9 +21,11 @@ UIScrollArea::~UIScrollArea() { shutdown(); }
 void UIScrollArea::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("ui_color");
     initMesh();
+    UIWidget::init(resourceMgr);
 }
 
 void UIScrollArea::shutdown() {
+    UIWidget::shutdown();
     cleanupMesh();
     m_shader = nullptr;
 }
@@ -127,6 +129,16 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
     // Render scrollbar outside scissor (on top)
     if (m_scrollbarVisible && maxScroll() > 0.0f) {
         renderScrollbar(ctx);
+    }
+}
+
+void UIScrollArea::renderOverlay(const UIRenderContext& ctx) const {
+    if (!visible) return;
+
+    for (const auto& child : getChildren()) {
+        const_cast<UIWidget*>(child.get())->anchorOffsetY += m_scrollOffset;
+        child->renderOverlay(ctx);
+        const_cast<UIWidget*>(child.get())->anchorOffsetY -= m_scrollOffset;
     }
 }
 

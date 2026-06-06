@@ -159,6 +159,13 @@ public:
         }
     }
 
+    virtual void renderOverlay(const UIRenderContext& ctx) const {
+        if (!visible) return;
+        for (const auto& child : m_children) {
+            child->renderOverlay(ctx);
+        }
+    }
+
     // Input
     virtual UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
         if (!visible) return UIEventResult::Ignored;
