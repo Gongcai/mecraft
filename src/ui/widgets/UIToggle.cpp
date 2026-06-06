@@ -38,6 +38,7 @@ void UIToggle::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("ui_color");
     initMesh();
     m_knobTween.start(m_checked ? 1.0f : 0.0f, m_checked ? 1.0f : 0.0f, 0.15f, EasingType::EaseOut);
+    m_label.anchor = Anchor::BottomLeft;
     m_label.init(resourceMgr);
     UIWidget::init(resourceMgr);
 }
@@ -162,8 +163,12 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
 
     // Render label to the right.
     const float labelGap = 8.0f;
-    m_label.x = x + toggleW + labelGap;
-    m_label.y = y + (toggleH - m_label.height) * 0.5f;
+    const Color textCol = ctx.theme ? ctx.theme->textPrimary : Color{1.0f, 1.0f, 1.0f, 1.0f};
+    const float th = ctx.textRenderer ? m_label.measureTextHeight(*ctx.textRenderer) : 0.0f;
+    const_cast<UIText&>(m_label).anchorOffsetX = ax + toggleW + labelGap;
+    const_cast<UIText&>(m_label).anchorOffsetY = ay + (toggleH - th) * 0.5f;
+    const_cast<UIText&>(m_label).setTextColor(textCol);
+    const_cast<UIText&>(m_label).alpha = alpha;
     m_label.render(ctx);
 }
 

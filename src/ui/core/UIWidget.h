@@ -85,7 +85,10 @@ public:
     }
 
     void collectFocusableWidgets(std::vector<UIWidget*>& out) {
-        if (visible && focusable) {
+        if (!visible) {
+            return;
+        }
+        if (focusable) {
             out.push_back(this);
         }
         for (auto& child : m_children) {

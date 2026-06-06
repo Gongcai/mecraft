@@ -50,7 +50,7 @@ protected:
 private:
     struct Tab {
         std::string title;
-        std::unique_ptr<UIWidget> contentPanel;
+        UIWidget* contentPanel = nullptr;
     };
 
     [[nodiscard]] int hitTestHeader(float px, float py, const UIRenderContext& ctx) const;

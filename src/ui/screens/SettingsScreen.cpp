@@ -162,7 +162,9 @@ static void finalizeScrollTab(UIWidget* contentPanel, UIStackLayout* stack) {
     auto& children = contentPanel->getChildren();
     if (!children.empty()) {
         if (auto* scroll = dynamic_cast<UIScrollArea*>(children[0].get())) {
+            stack->y = scroll->height - stack->height;
             scroll->setContentHeight(stack->height);
+            scroll->setScrollOffset(0.0f);
         }
     }
 }

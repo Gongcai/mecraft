@@ -50,18 +50,10 @@ void UITabControl::init(ResourceMgr& resourceMgr) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
 
-    // Init content panels.
-    for (auto& tab : m_tabs) {
-        if (tab.contentPanel) tab.contentPanel->init(resourceMgr);
-    }
-
     UIWidget::init(resourceMgr);
 }
 
 void UITabControl::shutdown() {
-    for (auto& tab : m_tabs) {
-        if (tab.contentPanel) tab.contentPanel->shutdown();
-    }
     if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
     if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
     m_shader = nullptr;
@@ -69,23 +61,33 @@ void UITabControl::shutdown() {
 }
 
 int UITabControl::addTab(const std::string& title) {
+    auto panel = std::make_unique<TabContentPanel>();
+    panel->visible = static_cast<int>(m_tabs.size()) == m_activeIndex;
+
     Tab tab;
     tab.title = title;
-    tab.contentPanel = std::make_unique<TabContentPanel>();
+    tab.contentPanel = panel.get();
     const int index = static_cast<int>(m_tabs.size());
+
+    addChild(std::move(panel));
     m_tabs.push_back(std::move(tab));
     return index;
 }
 
 UIWidget* UITabControl::getContentPanel(int index) {
     if (index < 0 || index >= static_cast<int>(m_tabs.size())) return nullptr;
-    return m_tabs[index].contentPanel.get();
+    return m_tabs[index].contentPanel;
 }
 
 void UITabControl::setActiveTab(int index) {
     if (index < 0 || index >= static_cast<int>(m_tabs.size())) return;
     if (m_activeIndex == index) return;
     m_activeIndex = index;
+    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+        if (m_tabs[i].contentPanel) {
+            m_tabs[i].contentPanel->visible = (i == m_activeIndex);
+        }
+    }
     if (onTabChanged) onTabChanged(m_activeIndex);
 }
 
@@ -210,14 +212,14 @@ void UITabControl::render(const UIRenderContext& ctx) const {
         }
     }
 
-    // Render own children (if any) on top.
-    for (const auto& child : getChildren()) {
-        child->render(ctx);
-    }
+    // Content panels are owned as children for layout/focus purposes, but the
+    // active panel is rendered manually above so inactive tabs stay hidden.
 }
 
 UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
     if (!visible || !interactive) return UIEventResult::Ignored;
+
+    UIEventResult aggregate = UIEventResult::Ignored;
 
     // Forward to active tab content first.
     if (m_activeIndex >= 0 && m_activeIndex < static_cast<int>(m_tabs.size())) {
@@ -225,12 +227,9 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
         if (panel) {
             const UIEventResult contentResult = panel->onInput(event, ctx);
             if (contentResult == UIEventResult::Consumed) return UIEventResult::Consumed;
+            if (contentResult == UIEventResult::Handled) aggregate = UIEventResult::Handled;
         }
     }
-
-    // Forward to own children.
-    const UIEventResult childResult = UIWidget::onInput(event, ctx);
-    if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
 
     switch (event.type) {
     case UIInputEventType::PointerMove: {
@@ -253,5 +252,5 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
         break;
     }
 
-    return childResult;
+    return aggregate;
 }
