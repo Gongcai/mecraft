@@ -8,6 +8,16 @@
 
 #include "TerrainRenderCache.h"
 #include "WorldDrawBatch.h"
+#include "../../world/chunk/SubChunk.h"
+
+struct CascadeAabbCuller {
+    glm::mat4 viewProj = glm::mat4(1.0f);
+    float xyPaddingNdc = 0.0f;
+    float zPaddingNdc = 0.0f;
+    bool useZCulling = true;
+    mutable int visibleCount = 0;
+    mutable int culledCount = 0;
+};
 
 // Forward declarations for types used only as pointers/references in the public interface
 class Chunk;
@@ -170,6 +180,20 @@ public:
     void clearTransparentBatches();
     [[nodiscard]] const std::vector<DrawBatchEntry>& transparentBatches() const;
     [[nodiscard]] const TransparentPassPlan& transparentPassPlan() const;
+
+    /// Collect chunks/ranges for all 4 shadow cascades in a single scene traversal.
+    void collectShadowChunks(
+        const IWorldView& worldView,
+        const glm::vec3& cameraPos,
+        float maxShadowDistance,
+        shadow::ShadowCasterCuller* shadowCuller,
+        const std::array<CascadeAabbCuller, 4>& cascadeCullers,
+        std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
+        std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
+        std::array<std::vector<ChunkRenderEntry>, 4>& outOpaqueEntries,
+        std::array<std::vector<ChunkRenderEntry>, 4>& outCutoutEntries,
+        std::array<std::vector<ChunkRenderEntry>, 4>& outTransparentEntries
+    );
 
     // --- Accessors ---
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const;

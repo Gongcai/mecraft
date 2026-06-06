@@ -567,22 +567,26 @@ void DeferredRenderTargets::bindShadowMap() {
     glDrawBuffers(2, drawBuffers);
 }
 
-void DeferredRenderTargets::bindCsmShadowLayer(const int cascadeIndex) {
+void DeferredRenderTargets::bindCsmShadowLayer(const int cascadeIndex, int cascadeResolution) {
     const int layer = std::clamp(cascadeIndex, 0, kShadowCascadeCount - 1);
     glNamedFramebufferTextureLayer(m_csmShadowFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepth, 0, layer);
     glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowFbo);
-    glViewport(0, 0, m_shadowResolution, m_shadowResolution);
+    int res = (cascadeResolution > 0) ? cascadeResolution :
+              ((cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution);
+    glViewport(0, 0, res, res);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
 }
 
-void DeferredRenderTargets::bindCsmShadowTransparentLayer(const int cascadeIndex) {
+void DeferredRenderTargets::bindCsmShadowTransparentLayer(const int cascadeIndex, int cascadeResolution) {
     const int layer = std::clamp(cascadeIndex, 0, kShadowCascadeCount - 1);
     glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepthAll, 0, layer);
     glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT0, m_csmShadowColor0, 0, layer);
     glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT1, m_csmShadowColor1, 0, layer);
     glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowTransparentFbo);
-    glViewport(0, 0, m_shadowResolution, m_shadowResolution);
+    int res = (cascadeResolution > 0) ? cascadeResolution :
+              ((cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution);
+    glViewport(0, 0, res, res);
     const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
     glDrawBuffers(2, drawBuffers);
 }

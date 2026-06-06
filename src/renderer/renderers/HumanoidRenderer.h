@@ -45,6 +45,7 @@ public:
                            RenderMode mode = kRenderAll);
     void renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& registry,
                            const glm::mat4& shadowViewProj,
+                           const glm::vec3& cameraPos, float splitNear, float splitFar,
                            RenderMode mode = kRenderAll);
     void renderInventoryPreview(float x,
                                 float y,
@@ -136,7 +137,10 @@ private:
     // Overload with world light query — sets uEntitySunlight/uEntityBlockLight per entity.
     void drawEntities(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg, Shader& shader,
                       int modelLoc, int viewProjLoc, int prevModelLoc,
-                      const glm::mat4& viewProj, RenderMode mode);
+                      const glm::mat4& viewProj, RenderMode mode,
+                      const glm::vec3& cameraPos = glm::vec3(0.0f),
+                      float splitNear = 0.0f,
+                      float splitFar = FLT_MAX);
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
 };

@@ -14,8 +14,8 @@ public:
 
     void bindGBuffer();
     void bindShadowMap();
-    void bindCsmShadowLayer(int cascadeIndex);
-    void bindCsmShadowTransparentLayer(int cascadeIndex);
+    void bindCsmShadowLayer(int cascadeIndex, int cascadeResolution = 0);
+    void bindCsmShadowTransparentLayer(int cascadeIndex, int cascadeResolution = 0);
     void bindShadowColor();
     void bindSsao();
     void bindSsaoFiltered();

@@ -67,7 +67,8 @@ public:
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
-    void renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj);
+    void renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
+                              const glm::vec3& cameraPos, float splitNear, float splitFar);
 
     /// Render dropped items/blocks into the current shadow cascade layer.
     void renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,

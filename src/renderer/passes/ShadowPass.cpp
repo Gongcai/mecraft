@@ -43,14 +43,6 @@ GameplaySkyRenderer::SkyColors toLegacySkyColors(const SkyColorsData& src) {
     return dst;
 }
 
-struct CascadeAabbCuller {
-    glm::mat4 viewProj = glm::mat4(1.0f);
-    float xyPaddingNdc = 0.0f;
-    float zPaddingNdc = 0.0f;
-    bool useZCulling = true;
-    int visibleCount = 0;
-    int culledCount = 0;
-};
 
 bool cascadeAabbVisible(const glm::vec3& boundsMin,
                         const glm::vec3& boundsMax,
@@ -105,7 +97,8 @@ void ShadowPass::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj) {
+void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
+                                      const glm::vec3& cameraPos, float splitNear, float splitFar) {
     // Render humanoid/mob entities into the current shadow cascade layer.
     // Shadow FBO layer is already bound by the caller (execute).
     if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
@@ -123,7 +116,8 @@ void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::ma
     m_entityShadowShader->setInt("uTexture", 0);
 
     m_humanoidRenderer->renderToShadowMap(worldView, *m_gameplayRegistry,
-                                          shadowViewProj, HumanoidRenderer::kRenderAll);
+                                          shadowViewProj, cameraPos, splitNear, splitFar,
+                                          HumanoidRenderer::kRenderAll);
 
     glBindVertexArray(0);
 }
@@ -229,6 +223,52 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         debugService->beginShadowFrame(SHADOW_CASCADE_COUNT, targets.shadowResolution());
     std::array<ShadowCascadeStats, SHADOW_CASCADE_COUNT> cascadeStats{};
 
+    // Single-pass traversal over terrain chunks and binning into cascades
+    std::array<CascadeAabbCuller, 4> cascadeCullers{};
+    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
+        const float cascadePaddingWorld = std::max(16.0f, cascadeData.texelWorldSize * 16.0f);
+        cascadeCullers[cascade] = CascadeAabbCuller{
+            cascadeData.viewProj,
+            cascadePaddingWorld / std::max(1.0f, cascadeData.radius),
+            std::max(64.0f, cascadeData.texelWorldSize * 64.0f) /
+                std::max(1.0f, cascadeData.depthExtent),
+            true,
+            0,
+            0
+        };
+    }
+
+    shadow::ShadowCasterCuller shadowCuller;
+    shadowCuller.setup(shadowDist, 1.0f, ctx.camera.position);
+    shadowCuller.resetCounters();
+
+    std::array<std::vector<GpuMeshRange>, 4> cascadeOpaqueRanges{};
+    std::array<std::vector<GpuMeshRange>, 4> cascadeCutoutRanges{};
+    std::array<std::vector<ChunkRenderEntry>, 4> cascadeOpaqueEntries{};
+    std::array<std::vector<ChunkRenderEntry>, 4> cascadeCutoutEntries{};
+    std::array<std::vector<ChunkRenderEntry>, 4> cascadeTransparentEntries{};
+
+    m_terrainRenderer->clearTransparentBatches();
+    m_terrainRenderer->collectShadowChunks(
+        worldView,
+        ctx.camera.position,
+        shadowDist,
+        &shadowCuller,
+        cascadeCullers,
+        cascadeOpaqueRanges,
+        cascadeCutoutRanges,
+        cascadeOpaqueEntries,
+        cascadeCutoutEntries,
+        cascadeTransparentEntries
+    );
+    m_terrainRenderer->syncTransparentBatches();
+
+    visibleTotal = shadowCuller.getVisibleCount();
+    culledTotal = shadowCuller.getCulledCount();
+    maxCasterDistance = shadowCuller.getMaxCasterDistance();
+    cullingMode = shadowCuller.getCullingMode();
+
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         char cascadeLabel[32];
         std::snprintf(cascadeLabel, sizeof(cascadeLabel), "Shadow.CSM.Cascade%d", cascade);
@@ -244,55 +284,32 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
 
-        // Collect geometry once per cascade
         m_worldRenderBuffer->beginFrame();
-        std::vector<ChunkRenderEntry> cutoutEntries;
-        cutoutEntries.reserve(worldView.getActiveChunks().size() * 2);
-        std::vector<ChunkRenderEntry> transparentEntries;
-        transparentEntries.reserve(worldView.getActiveChunks().size() * 2);
-        m_terrainRenderer->clearTransparentBatches();
+        for (const auto& range : cascadeOpaqueRanges[cascade]) {
+            m_worldRenderBuffer->addOpaque(range);
+        }
+        for (const auto& range : cascadeCutoutRanges[cascade]) {
+            m_worldRenderBuffer->addCutout(range);
+        }
 
-        shadow::ShadowCasterCuller shadowCuller;
-        shadowCuller.setup(shadowDist, 1.0f, ctx.camera.position);
-        shadowCuller.resetCounters();
-        const float cascadePaddingWorld = std::max(16.0f, cascadeData.texelWorldSize * 16.0f);
-        // Conservative cascade culling: clip against the cascade's light-space
-        // orthographic box with padding. The same box is used by the GPU shadow
-        // projection, so this mainly avoids submitting geometry that would be
-        // clipped before rasterization.
-        CascadeAabbCuller cascadeCuller{
-            cascadeData.viewProj,
-            cascadePaddingWorld / std::max(1.0f, cascadeData.radius),
-            std::max(64.0f, cascadeData.texelWorldSize * 64.0f) /
-                std::max(1.0f, cascadeData.depthExtent),
-            true
-        };
-        m_terrainRenderer->renderOpaqueChunksAndCollectPasses(worldView, cutoutEntries, transparentEntries, false,
-                                                                shadowDist, &shadowCuller,
-                                                                cascadeAabbVisible, &cascadeCuller);
-        m_terrainRenderer->syncTransparentBatches();
         char cullerLabel[128];
         std::snprintf(cullerLabel, sizeof(cullerLabel),
                       "Shadow.Cascade%d.Culler boxVisible=%d boxCulled=%d zCull=%d distanceVisible=%d distanceCulled=%d",
                       cascade,
-                      cascadeCuller.visibleCount,
-                      cascadeCuller.culledCount,
-                      cascadeCuller.useZCulling ? 1 : 0,
+                      cascadeCullers[cascade].visibleCount,
+                      cascadeCullers[cascade].culledCount,
+                      cascadeCullers[cascade].useZCulling ? 1 : 0,
                       shadowCuller.getVisibleCount(),
                       shadowCuller.getCulledCount());
         renderer::debug::insertEvent(cullerLabel);
-        visibleTotal += shadowCuller.getVisibleCount();
-        culledTotal += shadowCuller.getCulledCount();
-        maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
-        cullingMode = shadowCuller.getCullingMode();
 
         ShadowCascadeStats stats;
-        stats.boxVisible = cascadeCuller.visibleCount;
-        stats.boxCulled = cascadeCuller.culledCount;
+        stats.boxVisible = cascadeCullers[cascade].visibleCount;
+        stats.boxCulled = cascadeCullers[cascade].culledCount;
         stats.distanceVisible = shadowCuller.getVisibleCount();
         stats.distanceCulled = shadowCuller.getCulledCount();
-        stats.cutoutEntries = static_cast<int>(cutoutEntries.size());
-        stats.transparentEntries = static_cast<int>(transparentEntries.size());
+        stats.cutoutEntries = static_cast<int>(cascadeCutoutEntries[cascade].size());
+        stats.transparentEntries = static_cast<int>(cascadeTransparentEntries[cascade].size());
         stats.opaqueCommands = m_worldRenderBuffer->opaqueCommandCount();
         stats.cutoutCommands = m_worldRenderBuffer->cutoutCommandCount();
         stats.opaqueVertices = m_worldRenderBuffer->opaqueVertexCount();
@@ -308,7 +325,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             if (shadowStatsActive) {
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::Start);
             }
-            targets.bindCsmShadowLayer(cascade);
+            const int cascadeRes = (cascade >= 2) ? settings.shadow.resolution / 2
+                                                   : settings.shadow.resolution;
+            targets.bindCsmShadowLayer(cascade, cascadeRes);
             glClear(GL_DEPTH_BUFFER_BIT);
             m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
             m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
@@ -317,10 +336,22 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             m_shadowDepthShader->setInt("uShadowPassMode", 0);
             if (useMultiDrawIndirect) {
                 m_worldRenderBuffer->flushOpaque();
+            } else {
+                GLuint lastVao = 0;
+                for (const auto& entry : cascadeOpaqueEntries[cascade]) {
+                    if (entry.chunk == nullptr) continue;
+                    const SubChunkMesh& mesh = entry.chunk->getColumnMesh();
+                    if (mesh.vertexCount == 0) continue;
+                    if (lastVao != mesh.vao) {
+                        glBindVertexArray(mesh.vao);
+                        lastVao = mesh.vao;
+                    }
+                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
+                }
             }
-            m_terrainRenderer->renderCutoutChunks(cutoutEntries, *m_shadowDepthShader);
-            // Entity shadow: render humanoid/mob depth into this cascade.
-            renderShadowEntities(worldView, cascadeData.viewProj);
+            m_terrainRenderer->renderCutoutChunks(cascadeCutoutEntries[cascade], *m_shadowDepthShader);
+            // Entity shadow: render humanoid/mob depth into this cascade with distance/split culling.
+            renderShadowEntities(worldView, cascadeData.viewProj, ctx.camera.position, cascadeData.splitNear, cascadeData.splitFar);
             // Drop shadow: render dropped items/blocks depth into this cascade.
             renderShadowDrops(worldView, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
                               ctx.animationTime, ctx.shaderTime);
@@ -362,6 +393,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             glDisable(GL_CULL_FACE);
 
             // Render transparent shadow chunks — same logic as Renderer::renderTransparentShadowChunks
+            m_shadowDepthShader->use();
             m_shadowDepthShader->setInt("uForceBaseLod", 1);
             if (useMultiDrawIndirect) {
                 m_worldRenderBuffer->beginFrame();
@@ -376,7 +408,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             } else {
                 uint64_t transparentVertices = 0;
                 size_t transparentCommands = 0;
-                for (const ChunkRenderEntry& entry : transparentEntries) {
+                for (const ChunkRenderEntry& entry : cascadeTransparentEntries[cascade]) {
                     if (entry.chunk == nullptr) continue;
                     const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
                     if (!sc) continue;
@@ -390,6 +422,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 stats.transparentCommands = transparentCommands;
                 stats.transparentVertices = transparentVertices;
             }
+            m_shadowDepthShader->use();
             m_shadowDepthShader->setInt("uForceBaseLod", 0);
             stats.transparentRendered = true;
         }
@@ -407,6 +440,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         debugService->endShadowFrame();
     }
 
+#ifndef NDEBUG
     static int frameCounter = 0;
     if (++frameCounter % 120 == 0) {
         printf("[shadow:csm] cascades=%d submitted=%d culled=%d maxDist=%.1f mode=%s halfPlane=%.1f\n",
@@ -433,16 +467,19 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                    static_cast<unsigned long long>(stats.transparentVertices));
         }
     }
+#endif
 
     // Transitional compatibility for historical debug modes that still inspect
     // the legacy single-map projection: expose cascade 0 there.
-    glCopyImageSubData(targets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
-                       0, 0, 0, 0,
-                       targets.shadowDepthTexture(), GL_TEXTURE_2D,
-                       0, 0, 0, 0,
-                       targets.shadowResolution(),
-                       targets.shadowResolution(),
-                       1);
+    if (settings.debug.deferredLightDebugMode > 0 || settings.debug.lightDebugMode > 0) {
+        glCopyImageSubData(targets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
+                           0, 0, 0, 0,
+                           targets.shadowDepthTexture(), GL_TEXTURE_2D,
+                           0, 0, 0, 0,
+                           targets.shadowResolution(),
+                           targets.shadowResolution(),
+                           1);
+    }
 
     m_worldRenderBuffer->beginFrame();
     glBindVertexArray(0);

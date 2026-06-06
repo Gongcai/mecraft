@@ -86,12 +86,33 @@ void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive,
     shader.setFloat("uShadowNormalOffset", bias.normalOffset);
     shader.setInt("uShadowLightMode", moonShadowActive ? 1 : 0);
     shader.setInt("uCsmCascadeCount", CASCADE_COUNT);
+    static const std::string prefix_viewProj[] = {
+        "uCsmCascades[0].viewProj", "uCsmCascades[1].viewProj",
+        "uCsmCascades[2].viewProj", "uCsmCascades[3].viewProj"
+    };
+    static const std::string prefix_splitNear[] = {
+        "uCsmCascades[0].splitNear", "uCsmCascades[1].splitNear",
+        "uCsmCascades[2].splitNear", "uCsmCascades[3].splitNear"
+    };
+    static const std::string prefix_splitFar[] = {
+        "uCsmCascades[0].splitFar", "uCsmCascades[1].splitFar",
+        "uCsmCascades[2].splitFar", "uCsmCascades[3].splitFar"
+    };
+    static const std::string prefix_texelWorldSize[] = {
+        "uCsmCascades[0].texelWorldSize", "uCsmCascades[1].texelWorldSize",
+        "uCsmCascades[2].texelWorldSize", "uCsmCascades[3].texelWorldSize"
+    };
+    static const std::string prefix_resolutionScale[] = {
+        "uCsmCascades[0].resolutionScale", "uCsmCascades[1].resolutionScale",
+        "uCsmCascades[2].resolutionScale", "uCsmCascades[3].resolutionScale"
+    };
+
     for (int i = 0; i < CASCADE_COUNT; ++i) {
-        const std::string prefix = "uCsmCascades[" + std::to_string(i) + "]";
-        shader.setMat4(prefix + ".viewProj", m_cascades[i].viewProj);
-        shader.setFloat(prefix + ".splitNear", m_cascades[i].splitNear);
-        shader.setFloat(prefix + ".splitFar", m_cascades[i].splitFar);
-        shader.setFloat(prefix + ".texelWorldSize", m_cascades[i].texelWorldSize);
+        shader.setMat4(prefix_viewProj[i], m_cascades[i].viewProj);
+        shader.setFloat(prefix_splitNear[i], m_cascades[i].splitNear);
+        shader.setFloat(prefix_splitFar[i], m_cascades[i].splitFar);
+        shader.setFloat(prefix_texelWorldSize[i], m_cascades[i].texelWorldSize);
+        shader.setFloat(prefix_resolutionScale[i], (i >= 2) ? 0.5f : 1.0f);
     }
 }
 

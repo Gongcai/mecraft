@@ -751,7 +751,8 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
 void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
                                      Shader& shader, int modelLoc, int viewProjLoc, int prevModelLoc,
-                                     const glm::mat4& viewProj, RenderMode mode) {
+                                     const glm::mat4& viewProj, RenderMode mode,
+                                     const glm::vec3& cameraPos, float splitNear, float splitFar) {
     auto& reg = gameplayReg.registry();
 
     shader.use();
@@ -774,16 +775,27 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(steveRoot);
 
             // Query world light at torso position for this entity.
+            glm::vec3 entityPos(0.0f);
+            bool foundTorso = false;
             for (auto child : rootChildren.children) {
                 if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
                 auto& part = reg.get<ecs::StevePartComponent>(child);
                 if (part.partType != ecs::StevePartType::Torso) continue;
                 auto& wt = reg.get<ecs::WorldTransformComponent>(child);
-                glm::vec3 entityPos = glm::vec3(wt.worldMatrix[3]);
+                entityPos = glm::vec3(wt.worldMatrix[3]);
                 glm::vec2 light = queryWorldLight(worldView, entityPos);
                 shader.setFloat("uEntitySunlight", light.x);
                 shader.setFloat("uEntityBlockLight", light.y);
+                foundTorso = true;
                 break;
+            }
+
+            // Cascade Culling: skip rendering if entity is outside this cascade's bounds (plus a small buffer)
+            if (foundTorso && splitFar < FLT_MAX - 1.0f) {
+                float dist = glm::length(entityPos - cameraPos);
+                if (dist < splitNear - 4.0f || dist > splitFar + 4.0f) {
+                    continue;
+                }
             }
 
             // Torso
@@ -845,16 +857,27 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
             // Query world light at torso position for this entity.
+            glm::vec3 entityPos(0.0f);
+            bool foundTorso = false;
             for (auto child : rootChildren.children) {
                 if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
                 auto& part = reg.get<ecs::StevePartComponent>(child);
                 if (part.partType != ecs::StevePartType::Torso) continue;
                 auto& wt = reg.get<ecs::WorldTransformComponent>(child);
-                glm::vec3 entityPos = glm::vec3(wt.worldMatrix[3]);
+                entityPos = glm::vec3(wt.worldMatrix[3]);
                 glm::vec2 light = queryWorldLight(worldView, entityPos);
                 shader.setFloat("uEntitySunlight", light.x);
                 shader.setFloat("uEntityBlockLight", light.y);
+                foundTorso = true;
                 break;
+            }
+
+            // Cascade Culling: skip rendering if entity is outside this cascade's bounds (plus a small buffer)
+            if (foundTorso && splitFar < FLT_MAX - 1.0f) {
+                float dist = glm::length(entityPos - cameraPos);
+                if (dist < splitNear - 4.0f || dist > splitFar + 4.0f) {
+                    continue;
+                }
             }
 
             // Torso
@@ -967,13 +990,14 @@ void HumanoidRenderer::renderToGBuffer(const IWorldView& worldView, ecs::Gamepla
 
 void HumanoidRenderer::renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
                                           const glm::mat4& shadowViewProj,
+                                          const glm::vec3& cameraPos, float splitNear, float splitFar,
                                           RenderMode mode) {
     if (m_shadowShader == nullptr || m_resourceMgr == nullptr) return;
 
     const int modelLoc = m_shadowShader->getUniformLocation("model");
     const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
 
-    drawEntities(worldView, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
+    drawEntities(worldView, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode, cameraPos, splitNear, splitFar);
 }
 
 glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {

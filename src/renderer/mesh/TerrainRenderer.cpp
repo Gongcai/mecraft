@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <cfloat>
 
 void TerrainRenderer::init(ResourceMgr& /*resourceMgr*/) {
     // No owned resources to initialize; dependencies are injected via setters.
@@ -626,6 +627,251 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& world
 #endif
 
                     transparentEntries.push_back({column.chunk, scy, false});
+                }
+            }
+        }
+
+        regionBegin = regionEnd;
+    }
+}
+
+void TerrainRenderer::collectShadowChunks(
+    const IWorldView& worldView,
+    const glm::vec3& cameraPos,
+    float maxShadowDistance,
+    shadow::ShadowCasterCuller* shadowCuller,
+    const std::array<CascadeAabbCuller, 4>& cascadeCullers,
+    std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
+    std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
+    std::array<std::vector<ChunkRenderEntry>, 4>& outOpaqueEntries,
+    std::array<std::vector<ChunkRenderEntry>, 4>& outCutoutEntries,
+    std::array<std::vector<ChunkRenderEntry>, 4>& outTransparentEntries
+) {
+    resetDebugCounters();
+    m_terrainCache->syncChunkRenderColumns(worldView);
+    std::vector<ChunkRenderColumnCache>& chunkRenderColumns = m_terrainCache->chunkRenderColumns();
+    if (chunkRenderColumns.empty()) {
+        return;
+    }
+
+    const bool distanceCull = maxShadowDistance > 0.0f || shadowCuller != nullptr;
+    const float maxCameraDistanceSq = maxShadowDistance * maxShadowDistance;
+
+    auto boundsWithinCameraDistance = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
+        if (!distanceCull) {
+            return true;
+        }
+        if (shadowCuller) {
+            const bool visible = shadowCuller->isAabbVisible(boundsMin, boundsMax);
+            if (visible) {
+                const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
+                const float dist = glm::length(center - cameraPos);
+                shadowCuller->recordVisible(dist);
+            } else {
+                shadowCuller->recordCulled();
+            }
+            return visible;
+        }
+        const float clampedX = std::clamp(cameraPos.x, boundsMin.x, boundsMax.x);
+        const float clampedZ = std::clamp(cameraPos.z, boundsMin.z, boundsMax.z);
+        const float dx = clampedX - cameraPos.x;
+        const float dz = clampedZ - cameraPos.z;
+        return dx * dx + dz * dz <= maxCameraDistanceSq;
+    };
+
+    auto isAabbVisibleInCascade = [](const glm::vec3& boundsMin, const glm::vec3& boundsMax, const CascadeAabbCuller& culler) {
+        glm::vec3 minNdc(FLT_MAX);
+        glm::vec3 maxNdc(-FLT_MAX);
+        for (int corner = 0; corner < 8; ++corner) {
+            const glm::vec3 p(
+                (corner & 1) != 0 ? boundsMax.x : boundsMin.x,
+                (corner & 2) != 0 ? boundsMax.y : boundsMin.y,
+                (corner & 4) != 0 ? boundsMax.z : boundsMin.z);
+            const glm::vec4 clip = culler.viewProj * glm::vec4(p, 1.0f);
+            const float invW = std::abs(clip.w) > 1.0e-6f ? 1.0f / clip.w : 1.0f;
+            const glm::vec3 ndc(clip.x * invW, clip.y * invW, clip.z * invW);
+            minNdc = glm::min(minNdc, ndc);
+            maxNdc = glm::max(maxNdc, ndc);
+        }
+
+        const float xyPad = culler.xyPaddingNdc;
+        const float zPad = culler.zPaddingNdc;
+        bool visible = !(maxNdc.x < -1.0f - xyPad || minNdc.x > 1.0f + xyPad ||
+                         maxNdc.y < -1.0f - xyPad || minNdc.y > 1.0f + xyPad);
+        if (visible && culler.useZCulling) {
+            visible = !(maxNdc.z < -1.0f - zPad || minNdc.z > 1.0f + zPad);
+        }
+        return visible;
+    };
+
+    size_t regionBegin = 0;
+    while (regionBegin < chunkRenderColumns.size()) {
+        size_t regionEnd = regionBegin + 1;
+        const ChunkRenderColumnCache& regionFirst = chunkRenderColumns[regionBegin];
+        while (regionEnd < chunkRenderColumns.size()) {
+            const ChunkRenderColumnCache& candidate = chunkRenderColumns[regionEnd];
+            if (candidate.regionX != regionFirst.regionX || candidate.regionZ != regionFirst.regionZ) {
+                break;
+            }
+            ++regionEnd;
+        }
+
+        bool regionHasBounds = false;
+        glm::vec3 regionMin(0.0f);
+        glm::vec3 regionMax(0.0f);
+        for (size_t i = regionBegin; i < regionEnd; ++i) {
+            ChunkRenderColumnCache& column = chunkRenderColumns[i];
+            m_terrainCache->refreshChunkRenderColumnCache(column);
+            if (!column.columnHasBounds) {
+                continue;
+            }
+            expandBounds(regionMin, regionMax, regionHasBounds, column.columnBoundsMin, column.columnBoundsMax);
+        }
+
+        if (!regionHasBounds) {
+            regionBegin = regionEnd;
+            continue;
+        }
+
+        if (!boundsWithinCameraDistance(regionMin, regionMax)) {
+            regionBegin = regionEnd;
+            continue;
+        }
+        // Region must be visible in the outermost cascade (cascade 3) to be visible in any cascade
+        if (!isAabbVisibleInCascade(regionMin, regionMax, cascadeCullers[3])) {
+            regionBegin = regionEnd;
+            continue;
+        }
+
+        for (size_t i = regionBegin; i < regionEnd; ++i) {
+            ChunkRenderColumnCache& column = chunkRenderColumns[i];
+            if (column.chunk == nullptr || !column.columnHasBounds) {
+                continue;
+            }
+
+            if (!boundsWithinCameraDistance(column.columnBoundsMin, column.columnBoundsMax)) {
+                continue;
+            }
+            if (!isAabbVisibleInCascade(column.columnBoundsMin, column.columnBoundsMax, cascadeCullers[3])) {
+                continue;
+            }
+
+            if (m_useMultiDrawIndirect) {
+                const glm::ivec3 offset = column.chunk->getWorldOffset();
+                const float cutoutLimitBlocks = m_cutoutRenderDistanceChunks * static_cast<float>(Chunk::SIZE_X);
+                const float cutoutLimitSq = cutoutLimitBlocks * cutoutLimitBlocks;
+                for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+                    const SubChunk* sc = column.chunk->getSubChunk(scy);
+                    if (!sc) continue;
+                    const SubChunkMesh& mesh = sc->getMesh();
+                    if (!mesh.inGlobalPool) continue;
+                    if (mesh.opaqueRange.vertexCount == 0 &&
+                        mesh.cutoutRange.vertexCount == 0 &&
+                        mesh.cutoutDistanceRange.vertexCount == 0 &&
+                        mesh.transparentRange.vertexCount == 0 &&
+                        mesh.waterRange.vertexCount == 0) {
+                        continue;
+                    }
+
+                    const int yBase = scy * SubChunk::SIZE;
+                    const glm::vec3 fallbackMin(
+                        static_cast<float>(offset.x),
+                        static_cast<float>(offset.y + yBase),
+                        static_cast<float>(offset.z));
+                    const glm::vec3 fallbackMax(
+                        static_cast<float>(offset.x + Chunk::SIZE_X),
+                        static_cast<float>(offset.y + yBase + SubChunk::SIZE),
+                        static_cast<float>(offset.z + Chunk::SIZE_Z));
+                    const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : fallbackMin;
+                    const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
+                    if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
+                        continue;
+                    }
+                    if (!isAabbVisibleInCascade(boundsMin, boundsMax, cascadeCullers[3])) {
+                        continue;
+                    }
+
+                    // Test and bin to cascades
+                    for (int c = 0; c < 4; ++c) {
+                        if (isAabbVisibleInCascade(boundsMin, boundsMax, cascadeCullers[c])) {
+                            cascadeCullers[c].visibleCount++;
+                            if (mesh.opaqueRange.vertexCount > 0) {
+                                outOpaqueRanges[c].push_back(mesh.opaqueRange);
+                            }
+                            if (mesh.cutoutRange.vertexCount > 0) {
+                                outCutoutRanges[c].push_back(mesh.cutoutRange);
+                            }
+                            if (mesh.cutoutDistanceRange.vertexCount > 0) {
+                                const glm::vec3 sectionCenter(
+                                    static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                                    static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
+                                    static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                                const glm::vec2 toCameraXZ(sectionCenter.x - cameraPos.x,
+                                                           sectionCenter.z - cameraPos.z);
+                                const float distanceSq = glm::dot(toCameraXZ, toCameraXZ);
+                                if (!m_cutoutDistanceLimitEnabled || distanceSq <= cutoutLimitSq) {
+                                    outCutoutRanges[c].push_back(mesh.cutoutDistanceRange);
+                                }
+                            }
+                            if (c == 0) {
+                                // Transparent shadow ranges only needed for cascade 0
+                                if (mesh.transparentRange.vertexCount > 0) {
+                                    const glm::vec3 sectionCenter(
+                                        static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                                        static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
+                                        static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                                    const glm::vec3 toCamera = sectionCenter - cameraPos;
+                                    m_terrainCache->addTransparentBatch(mesh.transparentRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Generic);
+                                }
+                                if (mesh.waterRange.vertexCount > 0) {
+                                    const glm::vec3 sectionCenter(
+                                        static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
+                                        static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
+                                        static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
+                                    const glm::vec3 toCamera = sectionCenter - cameraPos;
+                                    m_terrainCache->addTransparentBatch(mesh.waterRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Water);
+                                }
+                            }
+                        } else {
+                            cascadeCullers[c].culledCount++;
+                        }
+                    }
+                }
+            } else {
+                // Non-MDI path
+                if (column.aggregatedPresent) {
+                    if (isAabbVisibleInCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers[3])) {
+                        for (int c = 0; c < 4; ++c) {
+                            if (isAabbVisibleInCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers[c])) {
+                                cascadeCullers[c].visibleCount++;
+                                const SubChunkMesh& mesh = column.chunk->getColumnMesh();
+                                if (column.aggregatedHasOpaque && mesh.vertexCount > 0) {
+                                    outOpaqueEntries[c].push_back({column.chunk, -1, true});
+                                }
+                                if (column.aggregatedHasCutout && (mesh.cutoutVertexCount > 0 || mesh.cutoutDistanceVertexCount > 0)) {
+                                    outCutoutEntries[c].push_back({column.chunk, -1, true});
+                                }
+                            } else {
+                                cascadeCullers[c].culledCount++;
+                            }
+                        }
+                    }
+                }
+
+                for (int transparentIndex = 0; transparentIndex < column.transparentCount; ++transparentIndex) {
+                    const int scy = column.transparentScys[transparentIndex];
+                    const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
+
+                    if (isAabbVisibleInCascade(transparent.boundsMin, transparent.boundsMax, cascadeCullers[3])) {
+                        for (int c = 0; c < 4; ++c) {
+                            if (isAabbVisibleInCascade(transparent.boundsMin, transparent.boundsMax, cascadeCullers[c])) {
+                                cascadeCullers[c].visibleCount++;
+                                outTransparentEntries[c].push_back({column.chunk, scy, false});
+                            } else {
+                                cascadeCullers[c].culledCount++;
+                            }
+                        }
+                    }
                 }
             }
         }

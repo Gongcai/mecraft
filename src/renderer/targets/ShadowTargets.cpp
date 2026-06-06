@@ -28,7 +28,7 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
 
     // CSM shadow depth array
     glGenFramebuffers(1, &m_csmShadowFbo);
-    m_csmShadowDepth = createTexture2DArray(GL_DEPTH_COMPONENT32F,
+    m_csmShadowDepth = createTexture2DArray(GL_DEPTH_COMPONENT24,
                                             m_shadowResolution, m_shadowResolution,
                                             CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
@@ -36,7 +36,7 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     // Comparison view for sampler2DArrayShadow
     glGenTextures(1, &m_csmShadowDepthComparison);
     glTextureView(m_csmShadowDepthComparison, GL_TEXTURE_2D_ARRAY,
-                  m_csmShadowDepth, GL_DEPTH_COMPONENT32F, 0, 1, 0, CASCADE_COUNT);
+                  m_csmShadowDepth, GL_DEPTH_COMPONENT24, 0, 1, 0, CASCADE_COUNT);
     glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
     glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -58,14 +58,14 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
 
     // CSM transparent shadow
     glGenFramebuffers(1, &m_csmShadowTransparentFbo);
-    m_csmShadowDepthAll = createTexture2DArray(GL_DEPTH_COMPONENT32F,
+    m_csmShadowDepthAll = createTexture2DArray(GL_DEPTH_COMPONENT24,
                                                m_shadowResolution, m_shadowResolution,
                                                CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowDepthAll, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
     glGenTextures(1, &m_csmShadowDepthAllComparison);
     glTextureView(m_csmShadowDepthAllComparison, GL_TEXTURE_2D_ARRAY,
-                  m_csmShadowDepthAll, GL_DEPTH_COMPONENT32F, 0, 1, 0, CASCADE_COUNT);
+                  m_csmShadowDepthAll, GL_DEPTH_COMPONENT24, 0, 1, 0, CASCADE_COUNT);
     glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
     glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     glTextureParameteri(m_csmShadowDepthAllComparison, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -115,7 +115,8 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
 void ShadowTargets::bindCsmShadowLayer(int cascadeIndex) {
     glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowFbo);
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_csmShadowDepth, 0, cascadeIndex);
-    glViewport(0, 0, m_shadowResolution, m_shadowResolution);
+    int res = (cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution;
+    glViewport(0, 0, res, res);
 }
 
 void ShadowTargets::bindCsmShadowTransparentLayer(int cascadeIndex) {
@@ -123,7 +124,8 @@ void ShadowTargets::bindCsmShadowTransparentLayer(int cascadeIndex) {
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_csmShadowDepthAll, 0, cascadeIndex);
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, m_csmShadowColor0, 0, cascadeIndex);
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, m_csmShadowColor1, 0, cascadeIndex);
-    glViewport(0, 0, m_shadowResolution, m_shadowResolution);
+    int res = (cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution;
+    glViewport(0, 0, res, res);
 }
 
 GLuint ShadowTargets::createTexture2DArray(GLenum internalFormat, int width, int height,

@@ -18,6 +18,7 @@ struct CsmCascade {
     float splitNear;
     float splitFar;
     float texelWorldSize;
+    float resolutionScale;
 };
 
 uniform int uCsmCascadeCount;
@@ -54,37 +55,21 @@ int selectCsmCascade(float viewDistance) {
     return cascadeIndex;
 }
 
-// Cascade selection with transition blend factor.
-// Returns: primary cascade index.
-// Sets blendNext = 1.0 when sampling from the next cascade should be blended in.
-// Sets nextCascade = the next cascade index (or -1 if none).
-void selectCsmCascadeBlended(float viewDistance, out int cascadeIndex,
-                             out int nextCascade, out float blendNext) {
-    cascadeIndex = max(uCsmCascadeCount - 1, 0);
+// Dithered cascade selection: no double-sampling, relies on TAA to clean up.
+int selectCsmCascadeDithered(float viewDistance, float dither) {
+    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
     for (int i = 0; i < MECRAFT_CSM_CASCADE_COUNT; ++i) {
         if (i >= uCsmCascadeCount) break;
-        if (viewDistance <= uCsmCascades[i].splitFar) {
+        float splitFar = uCsmCascades[i].splitFar;
+        float splitNear = uCsmCascades[i].splitNear;
+        float transitionWidth = (splitFar - splitNear) * 0.08;
+        float threshold = splitFar - transitionWidth * dither;
+        if (viewDistance <= threshold) {
             cascadeIndex = i;
             break;
         }
     }
-
-    nextCascade = -1;
-    blendNext = 0.0;
-
-    if (cascadeIndex < uCsmCascadeCount - 1) {
-        float splitFar = uCsmCascades[cascadeIndex].splitFar;
-        float splitNear = uCsmCascades[cascadeIndex].splitNear;
-        float cascadeRange = max(splitFar - splitNear, 1.0);
-        // Transition zone: last 20% of each cascade's range (wider to hide texel size differences)
-        float transitionZone = cascadeRange * 0.20;
-        float distFromEnd = splitFar - viewDistance;
-        if (distFromEnd < transitionZone) {
-            nextCascade = cascadeIndex + 1;
-            blendNext = 1.0 - distFromEnd / transitionZone;
-            blendNext = smoothstep(0.0, 1.0, blendNext);
-        }
-    }
+    return cascadeIndex;
 }
 
 vec3 csmProjectWorld(vec3 worldPos, int cascadeIndex) {
@@ -115,36 +100,43 @@ float csmDepthBias(float ndotl,
 
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
 float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
-    return texture(uCsmShadowMap, vec4(uv, float(cascadeIndex), refZ));
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowMap, vec4(uv * scale, float(cascadeIndex), refZ));
 }
 
 // Transparent shadow sampling (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
 #ifndef MECRAFT_SHADOW_OPAQUE_ONLY
 float sampleCsmDepthAllCompare(vec2 uv, int cascadeIndex, float refZ) {
-    return texture(uCsmShadowDepthAll, vec4(uv, float(cascadeIndex), refZ));
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowDepthAll, vec4(uv * scale, float(cascadeIndex), refZ));
 }
 
 float sampleCsmDepthAllRaw(vec2 uv, int cascadeIndex) {
-    return texture(uCsmShadowDepthAllRaw, vec3(uv, float(cascadeIndex))).r;
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowDepthAllRaw, vec3(uv * scale, float(cascadeIndex))).r;
 }
 
 float sampleCsmDepthRaw(vec2 uv, int cascadeIndex) {
-    return texture(uCsmShadowDepthRaw, vec3(uv, float(cascadeIndex))).r;
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowDepthRaw, vec3(uv * scale, float(cascadeIndex))).r;
 }
 
 vec4 sampleCsmShadowColor0(vec2 uv, int cascadeIndex) {
-    return texture(uCsmShadowColor0, vec3(uv, float(cascadeIndex)));
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowColor0, vec3(uv * scale, float(cascadeIndex)));
 }
 
 vec4 sampleCsmShadowColor1(vec2 uv, int cascadeIndex) {
-    return texture(uCsmShadowColor1, vec3(uv, float(cascadeIndex)));
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowColor1, vec3(uv * scale, float(cascadeIndex)));
 }
 #endif
 
 ivec2 sampleCsmTexelCoord(vec2 uv, int cascadeIndex, sampler2DArray shadowTex) {
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
     ivec3 size = textureSize(shadowTex, 0);
     ivec2 dims = ivec2(max(size.x, 1), max(size.y, 1));
-    return clamp(ivec2(floor(uv * vec2(dims))), ivec2(0), dims - ivec2(1));
+    return clamp(ivec2(floor(uv * scale * vec2(dims))), ivec2(0), dims - ivec2(1));
 }
 
 float sampleCsmDepthRawTexel(vec2 uv, int cascadeIndex) {
@@ -210,7 +202,8 @@ float cascadePcfRadius(int cascadeIndex, float baseSoftness) {
 // ---- PCSS (Percentage Closer Soft Shadows) ----
 
 float sampleCsmRawDepth(vec2 uv, int cascadeIndex) {
-    return texture(uCsmShadowDepthRaw, vec3(uv, float(cascadeIndex))).r;
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    return texture(uCsmShadowDepthRaw, vec3(uv * scale, float(cascadeIndex))).r;
 }
 
 // Blocker search: find average depth of blockers in a neighborhood.
@@ -323,7 +316,8 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
     }
 
     ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
-    vec2 texelUv = 1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1));
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    vec2 texelUv = (1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1))) / scale;
     float projectionFade = csmProjectionFade(proj, texelUv);
     if (projectionFade <= 0.001) {
         return -1.0;
@@ -338,19 +332,37 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
     if (uSoftShadowsEnabled == 0) {
         lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
     } else if (uPcssShadowsEnabled != 0 && cascadeIndex == 0) {
-        // PCSS for near cascade. Keep the sun angular scale conservative so
-        // contact shadows remain crisp and only separated casters get soft.
-        float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
-        float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
-        float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
-        float lightAngularScale = 0.010 + strength * 0.028;
-        float searchRadius = 1.75 + strength * 2.75;
-        lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
-                            texelWorld, depthExtent, lightAngularScale, searchRadius,
-                            outBlockerDepth);
+        // PCSS early-out: if center sample is fully lit, skip expensive blocker search.
+        float centerLit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
+        if (centerLit > 0.999) {
+            outBlockerDepth = 0.0;
+            lit = 1.0;
+        } else {
+            // PCSS for near cascade. Keep the sun angular scale conservative so
+            // contact shadows remain crisp and only separated casters get soft.
+            float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
+            float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
+            float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
+            float lightAngularScale = 0.010 + strength * 0.028;
+            float searchRadius = 1.75 + strength * 2.75;
+            lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
+                                texelWorld, depthExtent, lightAngularScale, searchRadius,
+                                outBlockerDepth);
+        }
     } else {
-        lit = sampleCsmPcfPoisson(proj.xy, cascadeIndex, refZ, texelUv,
-                                  cascadePcfRadius(cascadeIndex, uShadowSoftness));
+        if (cascadeIndex >= 2) {
+            // Far cascades: 4-tap PCF (texels already coarse, 12-tap is wasted)
+            float r = cascadePcfRadius(cascadeIndex, uShadowSoftness) * 0.7;
+            float angle = csmKernelAngle(proj.xy, cascadeIndex, texelUv);
+            lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
+            lit += sampleCsmDepthCompare(proj.xy + csmRotateOffset(vec2(-0.7, 0.0), angle) * texelUv * r, cascadeIndex, refZ);
+            lit += sampleCsmDepthCompare(proj.xy + csmRotateOffset(vec2(0.7, 0.0), angle) * texelUv * r, cascadeIndex, refZ);
+            lit += sampleCsmDepthCompare(proj.xy + csmRotateOffset(vec2(0.0, 0.7), angle) * texelUv * r, cascadeIndex, refZ);
+            lit *= 0.25;
+        } else {
+            lit = sampleCsmPcfPoisson(proj.xy, cascadeIndex, refZ, texelUv,
+                                      cascadePcfRadius(cascadeIndex, uShadowSoftness));
+        }
     }
     return clamp(lit, 0.0, 1.0);
 }
@@ -379,10 +391,9 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return result;
     }
 
-    // Select cascade with transition blend at split boundaries.
-    int cascadeIndex, nextCascade;
-    float blendNext;
-    selectCsmCascadeBlended(viewDistance, cascadeIndex, nextCascade, blendNext);
+    // Select cascade with dithered selection.
+    float dither = fract(dot(floor(gl_FragCoord.xy), vec2(0.754877669, 0.569840296)));
+    int cascadeIndex = selectCsmCascadeDithered(viewDistance, dither);
     result.cascadeIndex = cascadeIndex;
 
     // Sample primary cascade.
@@ -396,25 +407,6 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
 
     float lit = litPrimary;
     float projectionFade = primaryFade;
-
-    // Blend with next cascade at split boundary.
-    if (nextCascade >= 0 && blendNext > 0.001) {
-        float nextFade, nextBlocker;
-        float litNext = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance, nextCascade, nextFade, nextBlocker);
-        if (litNext >= 0.0) {
-            lit = mix(litPrimary, litNext, blendNext);
-            projectionFade = mix(primaryFade, nextFade, blendNext);
-            result.blockerDepth = mix(primaryBlocker, nextBlocker, blendNext);
-            float nextSssWeight = (nextCascade == 0 && nextBlocker < -1.0e-5) ? 1.0 : 0.0;
-            result.sssWeight = mix(result.sssWeight, nextSssWeight, blendNext);
-        } else {
-            // Cascade 0 is the only cascade that produces PCSS blocker depth.
-            // Fade SSS out through the transition window even when the next
-            // cascade sample is rejected, otherwise foliage can glow only at
-            // the split distance.
-            result.sssWeight *= oneMinus(blendNext);
-        }
-    }
 
     // Distance fade for the last cascade.
     if (cascadeIndex == uCsmCascadeCount - 1) {
