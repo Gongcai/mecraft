@@ -435,7 +435,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.uiScale = computeResponsiveUiScale(actualW, actualH);
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
-    context.timeSeconds = static_cast<float>(Time::getGameTime());
+    context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
     context.humanoidRenderer = m_humanoidRenderer;
     context.inventory = &inventory;

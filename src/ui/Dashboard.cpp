@@ -641,13 +641,13 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     renderWork.mdiSubChunkTests);
         ImGui::Text("MDI SubChunk Visible: %d", visibleMdiSubChunks);
 
-        ImGui::Text("Game Time Speed: %.2f",Time::getTimeSpeed());
+        ImGui::Text("Simulation Speed: %.2f", Time::getTimeSpeed());
         bool chunkCullingDebugEnabled = render.isChunkCullingDebugEnabled();
         if (ImGui::Checkbox("Chunk Culling Debug", &chunkCullingDebugEnabled)) {
             render.setChunkCullingDebugEnabled(chunkCullingDebugEnabled);
         }
         static float timeSpeed = Time::getTimeSpeed();
-        if (ImGui::SliderFloat("Game Time Speed", &timeSpeed, 0.0f, 10.0f)) {
+        if (ImGui::SliderFloat("Simulation Speed", &timeSpeed, 0.0f, 10.0f)) {
             Time::setTimeSpeed(timeSpeed);
         }
         int submitBudget = render.getMeshingSubmitBudget();

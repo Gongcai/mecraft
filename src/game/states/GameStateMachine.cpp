@@ -86,3 +86,6 @@ void GameStateMachine::render() {
     }
 }
 
+bool GameStateMachine::pausesSimulation() const {
+    return !m_states.empty() && m_states.back()->pausesSimulation();
+}

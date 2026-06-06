@@ -95,6 +95,8 @@ public:
         }
     }
 
+    bool pausesSimulation() const override { return true; }
+
 private:
     void switchToSettings() {
         m_showingSettings = true;

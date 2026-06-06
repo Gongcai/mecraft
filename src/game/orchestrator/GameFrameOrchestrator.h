@@ -48,6 +48,7 @@ public:
 
 private:
     uint32_t m_lastHeldItemSwingSequence = 0;
+    double m_serverAccumulator = 0.0;
     std::function<void()> m_preUiCallback;
 };
 

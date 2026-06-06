@@ -134,8 +134,9 @@ void World::init(uint32_t seed) {
     m_dayNightSystem.setTimeOfDay(300.0f); // Default to mid-day
 }
 
-void World::update(const glm::vec3& playerPos) {
+void World::update(const glm::vec3& playerPos, const float dt) {
     updateStreaming(playerPos,
+                    dt,
                     kMaxChunkLoadSubmitsPerFrame,
                     kMaxGenerationInFlight,
                     kMaxChunkLoadFinalizesPerFrame,
@@ -145,8 +146,9 @@ void World::update(const glm::vec3& playerPos) {
                     -1.0f);
 }
 
-void World::updateForInitialLoad(const glm::vec3& playerPos) {
+void World::updateForInitialLoad(const glm::vec3& playerPos, const float dt) {
     updateStreaming(playerPos,
+                    dt,
                     24,
                     std::max(8, m_threadPool ? m_threadPool->numWorkers() * 2 : 8),
                     12,
@@ -157,6 +159,7 @@ void World::updateForInitialLoad(const glm::vec3& playerPos) {
 }
 
 void World::updateStreaming(const glm::vec3& playerPos,
+                            const float dt,
                             const int submitBudget,
                             const int maxGenerationInFlight,
                             const int finalizeBudget,
@@ -164,8 +167,8 @@ void World::updateStreaming(const glm::vec3& playerPos,
                             const int lightSubmitBudgetOverride,
                             const int lightMergeBudgetOverride,
                             const float lightMergeTimeBudgetMsOverride) {
-    m_dayNightSystem.update(static_cast<float>(Time::deltaTime));
-    m_weatherSystem.update(static_cast<float>(Time::deltaTime));
+    m_dayNightSystem.update(dt);
+    m_weatherSystem.update(dt);
 
     const int playerChunkX = worldToChunkCoord(static_cast<int>(std::floor(playerPos.x)), Chunk::SIZE_X);
     const int playerChunkZ = worldToChunkCoord(static_cast<int>(std::floor(playerPos.z)), Chunk::SIZE_Z);

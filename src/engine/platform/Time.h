@@ -4,8 +4,6 @@
 
 #ifndef MECRAFT_TIME_H
 #define MECRAFT_TIME_H
-#include <iostream>
-#include <ostream>
 #include <GLFW/glfw3.h>
 
 
@@ -23,7 +21,7 @@ public:
         timeSpeed = 1.0;
     }
     static void setTimeSpeed(double speed) {
-        timeSpeed = speed;
+        timeSpeed = speed < 0.0 ? 0.0 : speed;
     }
     static double getTimeSpeed() {
         return timeSpeed;
@@ -37,6 +35,14 @@ public:
     static double getRawDeltaTime() {
         return rawDeltaTime;
     }
+    static void advanceGameTime(double dt) {
+        if (dt <= 0.0) {
+            deltaTime = 0.0;
+            return;
+        }
+        deltaTime = dt;
+        currentGameTime += deltaTime;
+    }
     static void update() {
         const double now = getRawTime();
         double rawDelta = now - lastRawTime;
@@ -44,9 +50,7 @@ public:
 
         if (rawDelta <= 0) rawDelta = 0.0;
         rawDeltaTime = rawDelta;
-        deltaTime = rawDelta * timeSpeed;
-        currentGameTime += deltaTime;
-
+        deltaTime = 0.0;
     }
 private:
     static double timeSpeed;

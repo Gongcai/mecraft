@@ -35,8 +35,8 @@ public:
     };
 
     void init(uint32_t seed);
-    void update(const glm::vec3& playerPos);
-    void updateForInitialLoad(const glm::vec3& playerPos);
+    void update(const glm::vec3& playerPos, float dt);
+    void updateForInitialLoad(const glm::vec3& playerPos, float dt);
 
     [[nodiscard]] uint32_t getSeed() const { return m_seed; }
 
@@ -141,6 +141,7 @@ private:
     void submitChunkLoad(int cx, int cz);
     void finalizeChunkLoad(std::shared_ptr<Chunk> chunk);
     void updateStreaming(const glm::vec3& playerPos,
+                         float dt,
                          int submitBudget,
                          int maxGenerationInFlight,
                          int finalizeBudget,

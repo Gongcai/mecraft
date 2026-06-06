@@ -19,6 +19,9 @@ public:
     // Called every frame to update state logic
     virtual void update(float dt, const InputSnapshot& snapshot) = 0;
 
+    // Whether this state should stop gameplay simulation while it is active.
+    virtual bool pausesSimulation() const { return false; }
+
     // Optional: render hook if needed
     virtual void render() {}
 };

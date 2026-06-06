@@ -575,16 +575,20 @@ const GameStateMachine& GameSession::stateMachine() const {
     return *m_stateMachine;
 }
 
-void GameSession::updateWorldAroundLocalPlayer() {
-    constexpr float kServerTickDt = 1.0f / 20.0f;
+void GameSession::updateWorldAroundLocalPlayer(const float dt) {
     if (!m_isMultiplayer) {
         // Server tick: load chunks, process client messages, send world state
-        // For Phase 1, use a fixed dt for server tick (will be decoupled in Phase 3)
-        m_server->tick(kServerTickDt);
+        m_server->tick(dt);
     }
 
     // Client: receive messages from server (chunk data, snapshots)
     m_client->receiveMessages();
+}
+
+void GameSession::receiveWorldMessages() {
+    if (m_client) {
+        m_client->receiveMessages();
+    }
 }
 
 void GameSession::pumpInitialChunkLoad(const float dt) {

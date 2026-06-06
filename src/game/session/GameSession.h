@@ -62,7 +62,8 @@ public:
     [[nodiscard]] std::unique_ptr<IGameState> createInitialGameplayState(const GameSessionDependencies& deps);
 
     /// Update world streaming and simulation center from the local player position.
-    void updateWorldAroundLocalPlayer();
+    void updateWorldAroundLocalPlayer(float dt);
+    void receiveWorldMessages();
     void pumpInitialChunkLoad(float dt);
     [[nodiscard]] InitialLoadProgress getInitialLoadProgress() const;
     [[nodiscard]] bool isInitialChunkLoadComplete() const;

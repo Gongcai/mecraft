@@ -270,7 +270,7 @@ void GameServer::tick(float dt) {
             break;
         }
     }
-    m_world.update(loadCenter);
+    m_world.update(loadCenter, dt);
 
     // Send new chunks to clients
     sendNewChunksToClients();
@@ -298,7 +298,7 @@ void GameServer::tickInitialLoading(const float dt, const glm::vec3& loadCenter)
     cleanupDisconnectedClients();
     tickWorldSystems();
 
-    m_world.updateForInitialLoad(loadCenter);
+    m_world.updateForInitialLoad(loadCenter, dt);
     sendNewChunksToClients();
     sendSnapshotsToClients();
     sendBlockUpdatesToClients();

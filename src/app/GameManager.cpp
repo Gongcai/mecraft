@@ -155,7 +155,7 @@ void GameManager::run() {
 #endif
         Time::update();
 
-        const double frameTime = clampFrameTime(Time::deltaTime);
+        const double frameTime = clampFrameTime(Time::getRawDeltaTime());
         accumulator += frameTime;
 
 #ifdef MECRAFT_DEBUG

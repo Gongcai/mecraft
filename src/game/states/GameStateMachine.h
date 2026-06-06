@@ -25,6 +25,7 @@ public:
     void render();
 
     [[nodiscard]] bool isEmpty() const { return m_states.empty(); }
+    [[nodiscard]] bool pausesSimulation() const;
 
     // Quit-to-menu signaling
     void requestQuitToMenu() { m_quitToMenuRequested = true; }
