@@ -498,6 +498,39 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Text("GPU Water: %.3f ms", gpuStats.waterMs);
             ImGui::Text("GPU Post: %.3f ms", gpuStats.postMs);
         }
+        ShadowFrameStats shadowStats = render.getShadowFrameStats();
+        if (shadowStats.supported && shadowStats.valid) {
+            ImGui::Text("CSM GPU: %.3f ms  res=%d  submitted=%d  culled=%d  maxDist=%.1f",
+                        shadowStats.gpuTotalMs,
+                        shadowStats.shadowResolution,
+                        shadowStats.submitted,
+                        shadowStats.culled,
+                        shadowStats.maxCasterDistance);
+            for (int cascade = 0; cascade < shadowStats.cascadeCount; ++cascade) {
+                const ShadowCascadeStats& s = shadowStats.cascades[static_cast<size_t>(cascade)];
+                ImGui::Text("  C%d: %.3f ms (opaque %.3f / trans %.3f) split %.1f-%.1f texel %.4f radius %.1f",
+                            cascade,
+                            s.gpuTotalMs,
+                            s.gpuOpaqueMs,
+                            s.gpuTransparentMs,
+                            s.splitNear,
+                            s.splitFar,
+                            s.texelWorldSize,
+                            s.radius);
+                ImGui::Text("      box %d/%d  dist %d/%d  entries c/t %d/%d  cmds o/c/t %zu/%zu/%zu",
+                            s.boxVisible,
+                            s.boxCulled,
+                            s.distanceVisible,
+                            s.distanceCulled,
+                            s.cutoutEntries,
+                            s.transparentEntries,
+                            s.opaqueCommands,
+                            s.cutoutCommands,
+                            s.transparentCommands);
+            }
+        } else if (gpuStats.supported && gpuTimerEnabled) {
+            ImGui::Text("CSM GPU: waiting");
+        }
 
         RenderWorkStats renderWork = render.getRenderWorkStats();
         const auto bytesToMiB = [](const uint64_t bytes) {

@@ -176,6 +176,7 @@ public:
     [[nodiscard]] MeshingFrameStats getMeshingFrameStats() const;
     [[nodiscard]] CullingFrameStats getCullingFrameStats() const;
     [[nodiscard]] GpuFrameStats getGpuFrameStats() const;
+    [[nodiscard]] ShadowFrameStats getShadowFrameStats() const;
     [[nodiscard]] RenderWorkStats getRenderWorkStats() const;
     void setGpuTimerEnabled(bool enabled);
     [[nodiscard]] bool isGpuTimerEnabled() const;

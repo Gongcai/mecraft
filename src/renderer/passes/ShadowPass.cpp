@@ -1,5 +1,6 @@
 #include "ShadowPass.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../shadow/ShadowMatrices.h"
@@ -20,6 +21,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
@@ -222,6 +224,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // 2. Colored shadows (stained glass tint)
     // Always runs for cascade 0 to support colored shadow tinting.
     const bool needTransparentShadow = true;
+    RenderDebugService* debugService = ctx.debugService;
+    const bool shadowStatsActive = debugService != nullptr &&
+        debugService->beginShadowFrame(SHADOW_CASCADE_COUNT, targets.shadowResolution());
+    std::array<ShadowCascadeStats, SHADOW_CASCADE_COUNT> cascadeStats{};
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         char cascadeLabel[32];
@@ -280,9 +286,28 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         maxCasterDistance = std::max(maxCasterDistance, shadowCuller.getMaxCasterDistance());
         cullingMode = shadowCuller.getCullingMode();
 
+        ShadowCascadeStats stats;
+        stats.boxVisible = cascadeCuller.visibleCount;
+        stats.boxCulled = cascadeCuller.culledCount;
+        stats.distanceVisible = shadowCuller.getVisibleCount();
+        stats.distanceCulled = shadowCuller.getCulledCount();
+        stats.cutoutEntries = static_cast<int>(cutoutEntries.size());
+        stats.transparentEntries = static_cast<int>(transparentEntries.size());
+        stats.opaqueCommands = m_worldRenderBuffer->opaqueCommandCount();
+        stats.cutoutCommands = m_worldRenderBuffer->cutoutCommandCount();
+        stats.opaqueVertices = m_worldRenderBuffer->opaqueVertexCount();
+        stats.cutoutVertices = m_worldRenderBuffer->cutoutVertexCount();
+        stats.splitNear = cascadeData.splitNear;
+        stats.splitFar = cascadeData.splitFar;
+        stats.radius = cascadeData.radius;
+        stats.texelWorldSize = cascadeData.texelWorldSize;
+
         // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
         {
             renderer::debug::ScopedDebugGroup opaqueGroup("Opaque");
+            if (shadowStatsActive) {
+                debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::Start);
+            }
             targets.bindCsmShadowLayer(cascade);
             glClear(GL_DEPTH_BUFFER_BIT);
             m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
@@ -301,6 +326,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                               ctx.animationTime, ctx.shaderTime);
             // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
             m_shadowDepthShader->use();
+            if (shadowStatsActive) {
+                debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::OpaqueEnd);
+            }
         }
 
         // Pass 2: Transparent/all — only cascade 0.
@@ -342,8 +370,12 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     // Shadow pass needs all transparent (including water) in one list
                     m_worldRenderBuffer->addTransparent(entry.range);
                 }
+                stats.transparentCommands = m_worldRenderBuffer->transparentCommandCount();
+                stats.transparentVertices = m_worldRenderBuffer->transparentVertexCount();
                 m_worldRenderBuffer->flushTransparent();
             } else {
+                uint64_t transparentVertices = 0;
+                size_t transparentCommands = 0;
                 for (const ChunkRenderEntry& entry : transparentEntries) {
                     if (entry.chunk == nullptr) continue;
                     const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
@@ -352,16 +384,54 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     if (mesh.transparentVertexCount == 0) continue;
                     glBindVertexArray(mesh.transparentVao);
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
+                    transparentVertices += mesh.transparentVertexCount;
+                    ++transparentCommands;
                 }
+                stats.transparentCommands = transparentCommands;
+                stats.transparentVertices = transparentVertices;
             }
             m_shadowDepthShader->setInt("uForceBaseLod", 0);
+            stats.transparentRendered = true;
         }
+        if (shadowStatsActive) {
+            debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::End);
+        }
+        cascadeStats[static_cast<size_t>(cascade)] = stats;
+        if (shadowStatsActive) {
+            debugService->recordShadowCascadeStats(cascade, stats);
+        }
+    }
+
+    if (shadowStatsActive) {
+        debugService->recordShadowFrameTotals(visibleTotal, culledTotal, maxCasterDistance);
+        debugService->endShadowFrame();
     }
 
     static int frameCounter = 0;
     if (++frameCounter % 120 == 0) {
         printf("[shadow:csm] cascades=%d submitted=%d culled=%d maxDist=%.1f mode=%s halfPlane=%.1f\n",
                SHADOW_CASCADE_COUNT, visibleTotal, culledTotal, maxCasterDistance, cullingMode, shadowDist);
+        for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+            const ShadowCascadeStats& stats = cascadeStats[static_cast<size_t>(cascade)];
+            printf("[shadow:csm:c%d] split=%.1f-%.1f texel=%.4f radius=%.1f box=%d/%d dist=%d/%d entries(cutout=%d trans=%d) cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
+                   cascade,
+                   stats.splitNear,
+                   stats.splitFar,
+                   stats.texelWorldSize,
+                   stats.radius,
+                   stats.boxVisible,
+                   stats.boxCulled,
+                   stats.distanceVisible,
+                   stats.distanceCulled,
+                   stats.cutoutEntries,
+                   stats.transparentEntries,
+                   stats.opaqueCommands,
+                   stats.cutoutCommands,
+                   stats.transparentCommands,
+                   static_cast<unsigned long long>(stats.opaqueVertices),
+                   static_cast<unsigned long long>(stats.cutoutVertices),
+                   static_cast<unsigned long long>(stats.transparentVertices));
+        }
     }
 
     // Transitional compatibility for historical debug modes that still inspect

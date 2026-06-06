@@ -287,6 +287,13 @@ GpuFrameStats RenderResourceHub::getGpuFrameStats() const {
     return {};
 }
 
+ShadowFrameStats RenderResourceHub::getShadowFrameStats() const {
+    if (m_debugService) {
+        return m_debugService->getShadowFrameStats();
+    }
+    return {};
+}
+
 RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     RenderWorkStats stats;
     const auto& sceneStats = m_worldRenderBuffer.sceneFrameStats();
