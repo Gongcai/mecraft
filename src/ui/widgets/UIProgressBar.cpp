@@ -45,6 +45,15 @@ void UIProgressBar::setLabel(const std::string& label) {
     m_label = label;
 }
 
+void UIProgressBar::setStyle(const UIProgressBarStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIProgressBar::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UIProgressBar::updateAnimations(float dt) {
     m_progressTween.tick(dt);
     UIWidget::updateAnimations(dt);
@@ -74,10 +83,10 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
 
     const UIRenderUtils::GLStateGuard guard;
 
-    // Resolve theme colors.
-    const Color trackCol = (!m_hasLocalColors && ctx.theme) ? ctx.theme->progressTrack : m_trackColor;
-    const Color fillCol  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->progressFill  : m_fillColor;
-    const Color textCol  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->progressText  : m_textColor;
+    const UIResolvedProgressBarStyle resolved = resolveStyle(ctx);
+    const Color trackCol = resolved.track;
+    const Color fillCol = resolved.fill;
+    const Color textCol = resolved.text;
 
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
@@ -141,4 +150,22 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
                                      static_cast<float>(ctx.screenHeight));
         }
     }
+}
+
+UIProgressBarStyle UIProgressBar::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UIProgressBarStyle style = UIStyleResolver::progressBarStyleFromTheme(ctx.theme);
+    if (m_hasLocalColors || !ctx.theme) {
+        style.track = m_trackColor;
+        style.fill = m_fillColor;
+        style.text = m_textColor;
+    }
+    return style;
+}
+
+UIResolvedProgressBarStyle UIProgressBar::resolveStyle(const UIRenderContext& ctx) const {
+    return UIStyleResolver::resolveProgressBar(resolveBaseStyle(ctx));
 }

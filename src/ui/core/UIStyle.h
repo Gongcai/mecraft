@@ -97,14 +97,50 @@ struct UIResolvedCheckboxStyle {
     float borderWidth = 1.0f;
 };
 
+struct UISliderStyle {
+    Color trackNormal   {0.25f, 0.25f, 0.25f, 1.0f};
+    Color trackDisabled {0.18f, 0.18f, 0.18f, 0.55f};
+    Color fillNormal    {0.3f, 0.6f, 1.0f, 1.0f};
+    Color fillDisabled  {0.30f, 0.30f, 0.30f, 0.55f};
+    Color handleNormal  {0.85f, 0.85f, 0.85f, 1.0f};
+    Color handleHover   {1.0f, 1.0f, 1.0f, 1.0f};
+    Color handleDisabled{0.55f, 0.55f, 0.55f, 0.8f};
+    float trackHeight = 4.0f;
+    float handleSize = 14.0f;
+};
+
+struct UIResolvedSliderStyle {
+    Color track  {0.25f, 0.25f, 0.25f, 1.0f};
+    Color fill   {0.3f, 0.6f, 1.0f, 1.0f};
+    Color handle {0.85f, 0.85f, 0.85f, 1.0f};
+    float trackHeight = 4.0f;
+    float handleSize = 14.0f;
+};
+
+struct UIProgressBarStyle {
+    Color track {0.2f, 0.2f, 0.2f, 0.9f};
+    Color fill  {0.2f, 0.8f, 1.0f, 1.0f};
+    Color text  {1.0f, 1.0f, 1.0f, 1.0f};
+};
+
+struct UIResolvedProgressBarStyle {
+    Color track {0.2f, 0.2f, 0.2f, 0.9f};
+    Color fill  {0.2f, 0.8f, 1.0f, 1.0f};
+    Color text  {1.0f, 1.0f, 1.0f, 1.0f};
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITextInputStyle textInputStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIToggleStyle toggleStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UISliderStyle sliderStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
     [[nodiscard]] UIResolvedCheckboxStyle resolveCheckbox(const UICheckboxStyle& style, int state);
+    [[nodiscard]] UIResolvedSliderStyle resolveSlider(const UISliderStyle& style, int state);
+    [[nodiscard]] UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style);
 }

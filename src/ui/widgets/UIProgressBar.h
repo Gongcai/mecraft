@@ -5,6 +5,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -35,6 +36,8 @@ public:
     void setTrackColor(const Color& c) { m_trackColor = c; m_hasLocalColors = true; }
     void setFillColor(const Color& c) { m_fillColor = c; m_hasLocalColors = true; }
     void setTextColor(const Color& c) { m_textColor = c; m_hasLocalColors = true; }
+    void setStyle(const UIProgressBarStyle& style);
+    void clearLocalStyle();
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;
@@ -43,6 +46,8 @@ protected:
 private:
     void initMesh();
     void cleanupMesh();
+    [[nodiscard]] UIProgressBarStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedProgressBarStyle resolveStyle(const UIRenderContext& ctx) const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -53,8 +58,10 @@ private:
     std::string m_label;
     bool m_showPercent = false;
     bool m_hasLocalColors = false;
+    bool m_hasLocalStyle = false;
 
     Color m_trackColor{0.2f, 0.2f, 0.2f, 0.9f};
     Color m_fillColor{0.2f, 0.8f, 1.0f, 1.0f};
     Color m_textColor{1.0f, 1.0f, 1.0f, 1.0f};
+    UIProgressBarStyle m_localStyle;
 };

@@ -83,6 +83,15 @@ int main() {
     theme.checkboxBoxBorder = {0.73f, 0.74f, 0.75f, 0.5f};
     theme.checkboxCheck = {0.83f, 0.84f, 0.85f, 1.0f};
     theme.checkboxSize = 26.0f;
+    theme.sliderTrack = {0.14f, 0.24f, 0.34f, 0.9f};
+    theme.sliderFill = {0.44f, 0.54f, 0.64f, 1.0f};
+    theme.sliderHandle = {0.74f, 0.75f, 0.76f, 1.0f};
+    theme.sliderHandleHover = {0.84f, 0.85f, 0.86f, 1.0f};
+    theme.sliderTrackHeight = 6.0f;
+    theme.sliderHandleSize = 18.0f;
+    theme.progressTrack = {0.15f, 0.25f, 0.35f, 0.9f};
+    theme.progressFill = {0.45f, 0.55f, 0.65f, 1.0f};
+    theme.progressText = {0.75f, 0.76f, 0.77f, 1.0f};
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -150,6 +159,34 @@ int main() {
     if (!colorEqual(disabledCheckbox.text, theme.textDisabled) ||
         colorEqual(disabledCheckbox.box, theme.checkboxBoxHover)) {
         return fail("disabled checkbox should override hover state");
+    }
+
+    const UISliderStyle sliderStyle = UIStyleResolver::sliderStyleFromTheme(&theme);
+    const UIResolvedSliderStyle hoveredSlider =
+        UIStyleResolver::resolveSlider(sliderStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredSlider.track, theme.sliderTrack) ||
+        !colorEqual(hoveredSlider.fill, theme.sliderFill) ||
+        !colorEqual(hoveredSlider.handle, theme.sliderHandleHover) ||
+        std::fabs(hoveredSlider.trackHeight - 6.0f) > 0.001f ||
+        std::fabs(hoveredSlider.handleSize - 18.0f) > 0.001f) {
+        return fail("slider style should map theme colors, hover handle, and dimensions");
+    }
+
+    const UIResolvedSliderStyle disabledSlider =
+        UIStyleResolver::resolveSlider(sliderStyle, UIStyleState_Disabled | UIStyleState_Hovered);
+    if (!colorEqual(disabledSlider.track, theme.buttonDisabled) ||
+        !colorEqual(disabledSlider.fill, theme.buttonBorder) ||
+        !colorEqual(disabledSlider.handle, theme.textDisabled) ||
+        colorEqual(disabledSlider.handle, theme.sliderHandleHover)) {
+        return fail("disabled slider should override hover state");
+    }
+
+    const UIProgressBarStyle progressBarStyle = UIStyleResolver::progressBarStyleFromTheme(&theme);
+    const UIResolvedProgressBarStyle progressBar = UIStyleResolver::resolveProgressBar(progressBarStyle);
+    if (!colorEqual(progressBar.track, theme.progressTrack) ||
+        !colorEqual(progressBar.fill, theme.progressFill) ||
+        !colorEqual(progressBar.text, theme.progressText)) {
+        return fail("progress bar style should map track, fill, and text colors from theme");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

@@ -129,6 +129,36 @@ UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UISliderStyle sliderStyleFromTheme(const UITheme* theme) {
+    UISliderStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.trackNormal = theme->sliderTrack;
+    style.trackDisabled = theme->buttonDisabled;
+    style.fillNormal = theme->sliderFill;
+    style.fillDisabled = theme->buttonBorder;
+    style.handleNormal = theme->sliderHandle;
+    style.handleHover = theme->sliderHandleHover;
+    style.handleDisabled = theme->textDisabled;
+    style.trackHeight = theme->sliderTrackHeight;
+    style.handleSize = theme->sliderHandleSize;
+    return style;
+}
+
+UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme) {
+    UIProgressBarStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.track = theme->progressTrack;
+    style.fill = theme->progressFill;
+    style.text = theme->progressText;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -156,6 +186,32 @@ UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     }
 
     resolved.text = style.textNormal;
+    return resolved;
+}
+
+UIResolvedSliderStyle resolveSlider(const UISliderStyle& style, int state) {
+    UIResolvedSliderStyle resolved;
+    resolved.trackHeight = style.trackHeight;
+    resolved.handleSize = style.handleSize;
+
+    if (hasStyleState(state, UIStyleState_Disabled)) {
+        resolved.track = style.trackDisabled;
+        resolved.fill = style.fillDisabled;
+        resolved.handle = style.handleDisabled;
+        return resolved;
+    }
+
+    resolved.track = style.trackNormal;
+    resolved.fill = style.fillNormal;
+    resolved.handle = hasStyleState(state, UIStyleState_Hovered) ? style.handleHover : style.handleNormal;
+    return resolved;
+}
+
+UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style) {
+    UIResolvedProgressBarStyle resolved;
+    resolved.track = style.track;
+    resolved.fill = style.fill;
+    resolved.text = style.text;
     return resolved;
 }
 

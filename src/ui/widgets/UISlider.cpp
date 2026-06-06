@@ -53,6 +53,15 @@ void UISlider::setOnValueChanged(std::function<void(float)> callback) {
     m_onValueChanged = std::move(callback);
 }
 
+void UISlider::setStyle(const UISliderStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UISlider::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UISlider::updateAnimations(float dt) {
     m_handleScaleTween.tick(dt);
     UIWidget::updateAnimations(dt);
@@ -68,15 +77,11 @@ float UISlider::normalizedToValue(float norm) const {
 }
 
 float UISlider::trackLeft(const UIRenderContext& ctx) const {
-    const UITheme* theme = ctx.theme;
-    float handleSize = theme ? theme->sliderHandleSize : 14.0f;
-    return getAbsoluteX(ctx) + handleSize * 0.5f;
+    return getAbsoluteX(ctx) + resolveStyle(ctx).handleSize * 0.5f;
 }
 
 float UISlider::trackRight(const UIRenderContext& ctx) const {
-    const UITheme* theme = ctx.theme;
-    float handleSize = theme ? theme->sliderHandleSize : 14.0f;
-    return getAbsoluteX(ctx) + width * scaleX - handleSize * 0.5f;
+    return getAbsoluteX(ctx) + width * scaleX - resolveStyle(ctx).handleSize * 0.5f;
 }
 
 float UISlider::handleScreenX(const UIRenderContext& ctx) const {
@@ -127,18 +132,14 @@ void UISlider::cleanupMesh() {
 void UISlider::renderSelf(const UIRenderContext& ctx) const {
     if (!m_shader || m_vao == 0) return;
 
-    const UITheme* theme = ctx.theme;
-    float trackH = theme ? theme->sliderTrackHeight : 4.0f;
-    float handleSize = theme ? theme->sliderHandleSize : 14.0f;
+    const UIResolvedSliderStyle resolved = resolveStyle(ctx);
+    float trackH = resolved.trackHeight;
+    float handleSize = resolved.handleSize;
+    const auto& trackCol = resolved.track;
+    const auto& fillCol = resolved.fill;
+    const auto& handleCol = resolved.handle;
 
-    const auto& trackCol = theme ? theme->sliderTrack : m_trackColor;
-    const auto& fillCol = theme ? theme->sliderFill : m_fillColor;
-    const auto& handleCol = (m_handleHovered && theme) ? theme->sliderHandleHover
-                            : (m_handleHovered ? m_handleHoverColor : (theme ? theme->sliderHandle : m_handleColor));
-
-    float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
-    float aw = width * scaleX;
     float ah = height * scaleY;
 
     float cy = ay + ah * 0.5f;
@@ -204,8 +205,7 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
     UIEventResult childResult = UIWidget::onInput(event, ctx);
     if (childResult == UIEventResult::Consumed) return UIEventResult::Consumed;
 
-    const UITheme* theme = ctx.theme;
-    float handleSize = theme ? theme->sliderHandleSize : 14.0f;
+    float handleSize = resolveStyle(ctx).handleSize;
     float hx = handleScreenX(ctx);
     float ay = getAbsoluteY(ctx);
     float ah = height * scaleY;
@@ -305,4 +305,38 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
     }
 
     return UIEventResult::Ignored;
+}
+
+UISliderStyle UISlider::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UISliderStyle style = UIStyleResolver::sliderStyleFromTheme(ctx.theme);
+    if (!ctx.theme) {
+        style.trackNormal = m_trackColor;
+        style.trackDisabled = m_trackColor;
+        style.fillNormal = m_fillColor;
+        style.fillDisabled = m_fillColor;
+        style.handleNormal = m_handleColor;
+        style.handleHover = m_handleHoverColor;
+        style.handleDisabled = m_handleColor;
+    }
+    return style;
+}
+
+UIResolvedSliderStyle UISlider::resolveStyle(const UIRenderContext& ctx) const {
+    return UIStyleResolver::resolveSlider(resolveBaseStyle(ctx), currentStyleState());
+}
+
+int UISlider::currentStyleState() const {
+    if (!interactive) {
+        return static_cast<int>(UIStyleState_Disabled);
+    }
+
+    int state = static_cast<int>(UIStyleState_Normal);
+    if (m_handleHovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    return state;
 }

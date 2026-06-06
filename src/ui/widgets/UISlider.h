@@ -5,6 +5,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -29,6 +30,8 @@ public:
     void setFillColor(const std::array<float, 4>& c) { m_fillColor = c; }
     void setHandleColor(const std::array<float, 4>& c) { m_handleColor = c; }
     void setHandleHoverColor(const std::array<float, 4>& c) { m_handleHoverColor = c; }
+    void setStyle(const UISliderStyle& style);
+    void clearLocalStyle();
 
     void updateAnimations(float dt) override;
 
@@ -47,6 +50,9 @@ private:
 
     void initMesh();
     void cleanupMesh();
+    [[nodiscard]] UISliderStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedSliderStyle resolveStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] int currentStyleState() const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -67,4 +73,6 @@ private:
     bool m_dragging = false;
     bool m_handleHovered = false;
     Tween<float> m_handleScaleTween;
+    bool m_hasLocalStyle = false;
+    UISliderStyle m_localStyle;
 };
