@@ -92,6 +92,43 @@ UITextInputStyle textInputStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIToggleStyle toggleStyleFromTheme(const UITheme* theme) {
+    UIToggleStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.trackOff = theme->toggleTrackOff;
+    style.trackOn = theme->toggleTrackOn;
+    style.trackDisabled = theme->buttonDisabled;
+    style.knobNormal = theme->toggleKnob;
+    style.knobHover = theme->toggleKnobHover;
+    style.knobDisabled = theme->textDisabled;
+    style.textNormal = theme->textPrimary;
+    style.textDisabled = theme->textDisabled;
+    style.width = theme->toggleWidth;
+    style.height = theme->toggleHeight;
+    return style;
+}
+
+UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme) {
+    UICheckboxStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.boxNormal = theme->checkboxBox;
+    style.boxHover = theme->checkboxBoxHover;
+    style.boxDisabled = theme->buttonDisabled;
+    style.borderNormal = theme->checkboxBoxBorder;
+    style.borderDisabled = theme->buttonBorder;
+    style.check = theme->checkboxCheck;
+    style.textNormal = theme->textPrimary;
+    style.textDisabled = theme->textDisabled;
+    style.boxSize = theme->checkboxSize;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -136,6 +173,46 @@ UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int sta
     resolved.placeholder = style.placeholder;
     resolved.selection = style.selection;
     resolved.cursor = style.cursor;
+    return resolved;
+}
+
+UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state) {
+    UIResolvedToggleStyle resolved;
+    resolved.width = style.width;
+    resolved.height = style.height;
+
+    if (hasStyleState(state, UIStyleState_Disabled)) {
+        resolved.trackOff = style.trackDisabled;
+        resolved.trackOn = style.trackDisabled;
+        resolved.knob = style.knobDisabled;
+        resolved.text = style.textDisabled;
+        return resolved;
+    }
+
+    resolved.trackOff = style.trackOff;
+    resolved.trackOn = style.trackOn;
+    resolved.knob = hasStyleState(state, UIStyleState_Hovered) ? style.knobHover : style.knobNormal;
+    resolved.text = style.textNormal;
+    return resolved;
+}
+
+UIResolvedCheckboxStyle resolveCheckbox(const UICheckboxStyle& style, int state) {
+    UIResolvedCheckboxStyle resolved;
+    resolved.boxSize = style.boxSize;
+    resolved.borderWidth = style.borderWidth;
+
+    if (hasStyleState(state, UIStyleState_Disabled)) {
+        resolved.box = style.boxDisabled;
+        resolved.border = style.borderDisabled;
+        resolved.check = style.textDisabled;
+        resolved.text = style.textDisabled;
+        return resolved;
+    }
+
+    resolved.box = hasStyleState(state, UIStyleState_Hovered) ? style.boxHover : style.boxNormal;
+    resolved.border = style.borderNormal;
+    resolved.check = style.check;
+    resolved.text = style.textNormal;
     return resolved;
 }
 

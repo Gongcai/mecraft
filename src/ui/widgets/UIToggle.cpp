@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include "../core/UIRenderUtils.h"
-#include "../core/UITheme.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glm/vec2.hpp>
@@ -60,6 +59,15 @@ void UIToggle::setLabel(const std::string& text) {
     m_label.setText(text);
 }
 
+void UIToggle::setStyle(const UIToggleStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIToggle::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UIToggle::updateAnimations(float dt) {
     m_knobTween.tick(dt);
     UIWidget::updateAnimations(dt);
@@ -105,13 +113,13 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
 
     const UIRenderUtils::GLStateGuard guard;
 
-    const Color trackOff = (!m_hasLocalColors && ctx.theme) ? ctx.theme->toggleTrackOff : m_trackOffColor;
-    const Color trackOn  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->toggleTrackOn  : m_trackOnColor;
-    const Color knobNorm = (!m_hasLocalColors && ctx.theme) ? ctx.theme->toggleKnob     : m_knobColor;
-    const Color knobHov  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->toggleKnobHover: m_knobHoverColor;
-
-    const float toggleW = (ctx.theme && !m_hasLocalColors) ? ctx.theme->toggleWidth  : width;
-    const float toggleH = (ctx.theme && !m_hasLocalColors) ? ctx.theme->toggleHeight : height;
+    const UIResolvedToggleStyle resolved =
+        UIStyleResolver::resolveToggle(resolveBaseStyle(ctx), currentStyleState());
+    const Color trackOff = resolved.trackOff;
+    const Color trackOn = resolved.trackOn;
+    const Color knobCol = resolved.knob;
+    const float toggleW = resolved.width;
+    const float toggleH = resolved.height;
 
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
@@ -129,8 +137,6 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
         trackOff[2] + (trackOn[2] - trackOff[2]) * t,
         trackOff[3] + (trackOn[3] - trackOff[3]) * t,
     };
-
-    const Color knobCol = m_hovered ? knobHov : knobNorm;
 
     // Build vertices.
     std::vector<float> verts;
@@ -163,7 +169,7 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
 
     // Render label to the right.
     const float labelGap = 8.0f;
-    const Color textCol = ctx.theme ? ctx.theme->textPrimary : Color{1.0f, 1.0f, 1.0f, 1.0f};
+    const Color textCol = resolved.text;
     const float th = ctx.textRenderer ? m_label.measureTextHeight(*ctx.textRenderer) : 0.0f;
     const_cast<UIText&>(m_label).anchorOffsetX = ax + toggleW + labelGap;
     const_cast<UIText&>(m_label).anchorOffsetY = ay + (toggleH - th) * 0.5f;
@@ -211,4 +217,35 @@ UIEventResult UIToggle::onInput(const UIInputEvent& event, const UIRenderContext
     }
 
     return childResult;
+}
+
+UIToggleStyle UIToggle::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UIToggleStyle style = UIStyleResolver::toggleStyleFromTheme(ctx.theme);
+    if (m_hasLocalColors || !ctx.theme) {
+        style.trackOff = m_trackOffColor;
+        style.trackOn = m_trackOnColor;
+        style.trackDisabled = m_trackOffColor;
+        style.knobNormal = m_knobColor;
+        style.knobHover = m_knobHoverColor;
+        style.knobDisabled = m_knobColor;
+        style.width = width;
+        style.height = height;
+    }
+    return style;
+}
+
+int UIToggle::currentStyleState() const {
+    if (!interactive) {
+        return static_cast<int>(UIStyleState_Disabled);
+    }
+
+    int state = static_cast<int>(UIStyleState_Normal);
+    if (m_hovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    return state;
 }

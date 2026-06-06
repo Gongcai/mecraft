@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 #include "UIText.h"
@@ -31,6 +32,8 @@ public:
     void setTrackOnColor(const Color& c)  { m_trackOnColor = c; m_hasLocalColors = true; }
     void setKnobColor(const Color& c)     { m_knobColor = c; m_hasLocalColors = true; }
     void setKnobHoverColor(const Color& c){ m_knobHoverColor = c; m_hasLocalColors = true; }
+    void setStyle(const UIToggleStyle& style);
+    void clearLocalStyle();
 
     std::function<void(bool)> onChanged;
 
@@ -44,6 +47,8 @@ private:
     void initMesh();
     void cleanupMesh();
     void toggle();
+    [[nodiscard]] UIToggleStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] int currentStyleState() const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -59,4 +64,6 @@ private:
     Color m_trackOnColor{0.2f, 0.7f, 0.4f, 1.0f};
     Color m_knobColor{0.9f, 0.9f, 0.9f, 1.0f};
     Color m_knobHoverColor{1.0f, 1.0f, 1.0f, 1.0f};
+    bool m_hasLocalStyle = false;
+    UIToggleStyle m_localStyle;
 };

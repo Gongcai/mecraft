@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "UIText.h"
 #include "../core/Tween.h"
@@ -25,6 +26,8 @@ public:
 
     void setLabel(const std::string& text);
     void setOnChanged(std::function<void(bool)> callback);
+    void setStyle(const UICheckboxStyle& style);
+    void clearLocalStyle();
 
     void updateAnimations(float dt) override;
 
@@ -35,6 +38,8 @@ protected:
 private:
     void initMesh();
     void cleanupMesh();
+    [[nodiscard]] UICheckboxStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] int currentStyleState() const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -48,6 +53,8 @@ private:
     std::array<float, 4> m_boxHoverColor{0.35f, 0.35f, 0.35f, 1.0f};
     std::array<float, 4> m_boxBorderColor{0.5f, 0.5f, 0.5f, 0.5f};
     std::array<float, 4> m_checkColor{0.3f, 0.8f, 0.4f, 1.0f};
+    bool m_hasLocalStyle = false;
+    UICheckboxStyle m_localStyle;
 
     std::function<void(bool)> m_onChanged;
     Tween<float> m_checkScaleTween;

@@ -49,6 +49,15 @@ void UICheckbox::setOnChanged(std::function<void(bool)> callback) {
     m_onChanged = std::move(callback);
 }
 
+void UICheckbox::setStyle(const UICheckboxStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UICheckbox::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UICheckbox::updateAnimations(float dt) {
     m_checkScaleTween.tick(dt);
     UIWidget::updateAnimations(dt);
@@ -81,14 +90,13 @@ void UICheckbox::cleanupMesh() {
 void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
     if (!m_shader || m_vao == 0) return;
 
-    const UITheme* theme = ctx.theme;
-    float boxSize = theme ? theme->checkboxSize : 20.0f;
-
-    const auto& boxCol = (m_hovered && theme) ? theme->checkboxBoxHover
-                         : (m_hovered ? m_boxHoverColor : (theme ? theme->checkboxBox : m_boxColor));
-    const auto& borderCol = theme ? theme->checkboxBoxBorder : m_boxBorderColor;
-    const auto& checkCol = theme ? theme->checkboxCheck : m_checkColor;
-    const auto& textCol = theme ? theme->textPrimary : m_label.getTextColor();
+    const UIResolvedCheckboxStyle resolved =
+        UIStyleResolver::resolveCheckbox(resolveBaseStyle(ctx), currentStyleState());
+    float boxSize = resolved.boxSize;
+    const auto& boxCol = resolved.box;
+    const auto& borderCol = resolved.border;
+    const auto& checkCol = resolved.check;
+    const auto& textCol = resolved.text;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -99,7 +107,7 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
     float by0 = cy - boxSize * 0.5f;
     float bx1 = ax + boxSize;
     float by1 = cy + boxSize * 0.5f;
-    float bw = 1.0f;
+    float bw = resolved.borderWidth;
 
     const UIRenderUtils::GLStateGuard glState;
     m_shader->use();
@@ -178,7 +186,6 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
 
     // Render label text to the right of the box
     float labelX = bx1 + 8.0f;
-    float tw = ctx.textRenderer ? m_label.measureTextWidth(*ctx.textRenderer) : 0.0f;
     float th = ctx.textRenderer ? m_label.measureTextHeight(*ctx.textRenderer) : 0.0f;
     const_cast<UIText&>(m_label).anchorOffsetX = labelX;
     const_cast<UIText&>(m_label).anchorOffsetY = cy - th * 0.5f;
@@ -235,4 +242,33 @@ UIEventResult UICheckbox::onInput(const UIInputEvent& event, const UIRenderConte
     }
 
     return UIEventResult::Ignored;
+}
+
+UICheckboxStyle UICheckbox::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UICheckboxStyle style = UIStyleResolver::checkboxStyleFromTheme(ctx.theme);
+    if (!ctx.theme) {
+        style.boxNormal = m_boxColor;
+        style.boxHover = m_boxHoverColor;
+        style.boxDisabled = m_boxColor;
+        style.borderNormal = m_boxBorderColor;
+        style.borderDisabled = m_boxBorderColor;
+        style.check = m_checkColor;
+    }
+    return style;
+}
+
+int UICheckbox::currentStyleState() const {
+    if (!interactive) {
+        return static_cast<int>(UIStyleState_Disabled);
+    }
+
+    int state = static_cast<int>(UIStyleState_Normal);
+    if (m_hovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    return state;
 }

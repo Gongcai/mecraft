@@ -53,10 +53,58 @@ struct UIResolvedTextInputStyle {
     Color cursor      {1.0f, 1.0f, 1.0f, 0.9f};
 };
 
+struct UIToggleStyle {
+    Color trackOff       {0.25f, 0.25f, 0.25f, 0.9f};
+    Color trackOn        {0.2f, 0.7f, 0.4f, 1.0f};
+    Color trackDisabled  {0.18f, 0.18f, 0.18f, 0.55f};
+    Color knobNormal     {0.9f, 0.9f, 0.9f, 1.0f};
+    Color knobHover      {1.0f, 1.0f, 1.0f, 1.0f};
+    Color knobDisabled   {0.55f, 0.55f, 0.55f, 0.8f};
+    Color textNormal     {1.0f, 1.0f, 1.0f, 1.0f};
+    Color textDisabled   {0.45f, 0.45f, 0.45f, 1.0f};
+    float width = 44.0f;
+    float height = 22.0f;
+};
+
+struct UIResolvedToggleStyle {
+    Color trackOff       {0.25f, 0.25f, 0.25f, 0.9f};
+    Color trackOn        {0.2f, 0.7f, 0.4f, 1.0f};
+    Color knob           {0.9f, 0.9f, 0.9f, 1.0f};
+    Color text           {1.0f, 1.0f, 1.0f, 1.0f};
+    float width = 44.0f;
+    float height = 22.0f;
+};
+
+struct UICheckboxStyle {
+    Color boxNormal      {0.25f, 0.25f, 0.25f, 0.9f};
+    Color boxHover       {0.35f, 0.35f, 0.35f, 1.0f};
+    Color boxDisabled    {0.18f, 0.18f, 0.18f, 0.55f};
+    Color borderNormal   {0.5f, 0.5f, 0.5f, 0.5f};
+    Color borderDisabled {0.35f, 0.35f, 0.35f, 0.3f};
+    Color check          {0.3f, 0.8f, 0.4f, 1.0f};
+    Color textNormal     {1.0f, 1.0f, 1.0f, 1.0f};
+    Color textDisabled   {0.45f, 0.45f, 0.45f, 1.0f};
+    float boxSize = 20.0f;
+    float borderWidth = 1.0f;
+};
+
+struct UIResolvedCheckboxStyle {
+    Color box    {0.25f, 0.25f, 0.25f, 0.9f};
+    Color border {0.5f, 0.5f, 0.5f, 0.5f};
+    Color check  {0.3f, 0.8f, 0.4f, 1.0f};
+    Color text   {1.0f, 1.0f, 1.0f, 1.0f};
+    float boxSize = 20.0f;
+    float borderWidth = 1.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITextInputStyle textInputStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIToggleStyle toggleStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
+    [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
+    [[nodiscard]] UIResolvedCheckboxStyle resolveCheckbox(const UICheckboxStyle& style, int state);
 }

@@ -72,6 +72,17 @@ int main() {
     theme.panelBackground = {0.81f, 0.82f, 0.83f, 0.85f};
     theme.panelBorder = {0.91f, 0.92f, 0.93f, 0.7f};
     theme.panelBorderWidth = 4.0f;
+    theme.toggleTrackOff = {0.12f, 0.22f, 0.32f, 0.9f};
+    theme.toggleTrackOn = {0.42f, 0.52f, 0.62f, 1.0f};
+    theme.toggleKnob = {0.72f, 0.73f, 0.74f, 1.0f};
+    theme.toggleKnobHover = {0.82f, 0.83f, 0.84f, 1.0f};
+    theme.toggleWidth = 48.0f;
+    theme.toggleHeight = 24.0f;
+    theme.checkboxBox = {0.13f, 0.23f, 0.33f, 0.9f};
+    theme.checkboxBoxHover = {0.43f, 0.53f, 0.63f, 1.0f};
+    theme.checkboxBoxBorder = {0.73f, 0.74f, 0.75f, 0.5f};
+    theme.checkboxCheck = {0.83f, 0.84f, 0.85f, 1.0f};
+    theme.checkboxSize = 26.0f;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -101,6 +112,44 @@ int main() {
         !(disabledInput.selection[3] < theme.inputSelection[3]) ||
         !(disabledInput.cursor[3] < theme.inputCursor[3])) {
         return fail("disabled text input should use disabled text and muted selection/cursor colors");
+    }
+
+    const UIToggleStyle toggleStyle = UIStyleResolver::toggleStyleFromTheme(&theme);
+    const UIResolvedToggleStyle hoveredToggle =
+        UIStyleResolver::resolveToggle(toggleStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredToggle.trackOff, theme.toggleTrackOff) ||
+        !colorEqual(hoveredToggle.trackOn, theme.toggleTrackOn) ||
+        !colorEqual(hoveredToggle.knob, theme.toggleKnobHover) ||
+        !colorEqual(hoveredToggle.text, theme.textPrimary) ||
+        std::fabs(hoveredToggle.width - 48.0f) > 0.001f ||
+        std::fabs(hoveredToggle.height - 24.0f) > 0.001f) {
+        return fail("toggle style should map theme colors, hover knob, and dimensions");
+    }
+
+    const UIResolvedToggleStyle disabledToggle =
+        UIStyleResolver::resolveToggle(toggleStyle, UIStyleState_Disabled | UIStyleState_Hovered);
+    if (!colorEqual(disabledToggle.text, theme.textDisabled) ||
+        colorEqual(disabledToggle.knob, theme.toggleKnobHover)) {
+        return fail("disabled toggle should override hover state");
+    }
+
+    const UICheckboxStyle checkboxStyle = UIStyleResolver::checkboxStyleFromTheme(&theme);
+    const UIResolvedCheckboxStyle hoveredCheckbox =
+        UIStyleResolver::resolveCheckbox(checkboxStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredCheckbox.box, theme.checkboxBoxHover) ||
+        !colorEqual(hoveredCheckbox.border, theme.checkboxBoxBorder) ||
+        !colorEqual(hoveredCheckbox.check, theme.checkboxCheck) ||
+        !colorEqual(hoveredCheckbox.text, theme.textPrimary) ||
+        std::fabs(hoveredCheckbox.boxSize - 26.0f) > 0.001f ||
+        std::fabs(hoveredCheckbox.borderWidth - 1.0f) > 0.001f) {
+        return fail("checkbox style should map hover box, border, check, text, and size");
+    }
+
+    const UIResolvedCheckboxStyle disabledCheckbox =
+        UIStyleResolver::resolveCheckbox(checkboxStyle, UIStyleState_Disabled | UIStyleState_Hovered);
+    if (!colorEqual(disabledCheckbox.text, theme.textDisabled) ||
+        colorEqual(disabledCheckbox.box, theme.checkboxBoxHover)) {
+        return fail("disabled checkbox should override hover state");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";
