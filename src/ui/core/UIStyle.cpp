@@ -278,6 +278,19 @@ UIToastStyle toastStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UITooltipStyle tooltipStyleFromTheme(const UITheme* theme) {
+    UITooltipStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.background = theme->tooltipBackground;
+    style.border = theme->tooltipBorder;
+    style.text = theme->textPrimary;
+    style.borderWidth = theme->tooltipBorderWidth;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -429,6 +442,24 @@ UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone) {
         resolved.accent = style.error;
         break;
     }
+    return resolved;
+}
+
+UIResolvedTooltipStyle resolveTooltip(const UITooltipStyle& style) {
+    UIResolvedTooltipStyle resolved;
+    resolved.background = style.background;
+    resolved.border = style.border;
+    resolved.text = style.text;
+    resolved.shadow = style.shadow;
+    resolved.borderWidth = style.borderWidth;
+    resolved.textScale = style.textScale;
+    resolved.paddingX = style.paddingX;
+    resolved.paddingY = style.paddingY;
+    resolved.offsetX = style.offsetX;
+    resolved.offsetY = style.offsetY;
+    resolved.margin = style.margin;
+    resolved.shadowOffsetX = style.shadowOffsetX;
+    resolved.shadowOffsetY = style.shadowOffsetY;
     return resolved;
 }
 

@@ -300,6 +300,38 @@ struct UIResolvedToastStyle {
     float textPadding = 10.0f;
 };
 
+struct UITooltipStyle {
+    Color background {0.15f, 0.15f, 0.15f, 0.92f};
+    Color border     {0.4f, 0.4f, 0.4f, 0.8f};
+    Color text       {1.0f, 1.0f, 1.0f, 1.0f};
+    Color shadow     {0.0f, 0.0f, 0.0f, 0.75f};
+    float borderWidth = 1.0f;
+    float textScale = 2.0f;
+    float paddingX = 10.0f;
+    float paddingY = 6.0f;
+    float offsetX = 12.0f;
+    float offsetY = 16.0f;
+    float margin = 4.0f;
+    float shadowOffsetX = 1.0f;
+    float shadowOffsetY = -1.0f;
+};
+
+struct UIResolvedTooltipStyle {
+    Color background {0.15f, 0.15f, 0.15f, 0.92f};
+    Color border     {0.4f, 0.4f, 0.4f, 0.8f};
+    Color text       {1.0f, 1.0f, 1.0f, 1.0f};
+    Color shadow     {0.0f, 0.0f, 0.0f, 0.75f};
+    float borderWidth = 1.0f;
+    float textScale = 2.0f;
+    float paddingX = 10.0f;
+    float paddingY = 6.0f;
+    float offsetX = 12.0f;
+    float offsetY = 16.0f;
+    float margin = 4.0f;
+    float shadowOffsetX = 1.0f;
+    float shadowOffsetY = -1.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -315,6 +347,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UITabControlStyle tabControlStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UINumericSpinnerStyle numericSpinnerStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIToastStyle toastStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UITooltipStyle tooltipStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -332,4 +365,5 @@ namespace UIStyleResolver {
         int plusState,
         int valueState);
     [[nodiscard]] UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone);
+    [[nodiscard]] UIResolvedTooltipStyle resolveTooltip(const UITooltipStyle& style);
 }

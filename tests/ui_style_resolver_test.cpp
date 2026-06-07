@@ -132,6 +132,9 @@ int main() {
     theme.toastError = {0.27f, 0.37f, 0.47f, 1.0f};
     theme.toastWidth = 340.0f;
     theme.toastHeight = 44.0f;
+    theme.tooltipBackground = {0.28f, 0.38f, 0.48f, 0.94f};
+    theme.tooltipBorder = {0.58f, 0.68f, 0.78f, 0.8f};
+    theme.tooltipBorderWidth = 3.0f;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -381,6 +384,24 @@ int main() {
     if (!colorEqual(errorToast.accent, theme.toastError) ||
         colorEqual(errorToast.accent, theme.toastWarning)) {
         return fail("toast tone should select the matching accent color");
+    }
+
+    const UITooltipStyle tooltipStyle = UIStyleResolver::tooltipStyleFromTheme(&theme);
+    const UIResolvedTooltipStyle tooltip = UIStyleResolver::resolveTooltip(tooltipStyle);
+    if (!colorEqual(tooltip.background, theme.tooltipBackground) ||
+        !colorEqual(tooltip.border, theme.tooltipBorder) ||
+        !colorEqual(tooltip.text, theme.textPrimary) ||
+        !colorEqual(tooltip.shadow, Color{0.0f, 0.0f, 0.0f, 0.75f}) ||
+        std::fabs(tooltip.borderWidth - 3.0f) > 0.001f ||
+        std::fabs(tooltip.textScale - 2.0f) > 0.001f ||
+        std::fabs(tooltip.paddingX - 10.0f) > 0.001f ||
+        std::fabs(tooltip.paddingY - 6.0f) > 0.001f ||
+        std::fabs(tooltip.offsetX - 12.0f) > 0.001f ||
+        std::fabs(tooltip.offsetY - 16.0f) > 0.001f ||
+        std::fabs(tooltip.margin - 4.0f) > 0.001f ||
+        std::fabs(tooltip.shadowOffsetX - 1.0f) > 0.001f ||
+        std::fabs(tooltip.shadowOffsetY + 1.0f) > 0.001f) {
+        return fail("tooltip style should map theme colors and preserve layout metrics");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

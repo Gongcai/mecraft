@@ -31,7 +31,7 @@ public:
     void setShadowEnabled(bool enabled) { m_shadowEnabled = enabled; }
     [[nodiscard]] bool isShadowEnabled() const { return m_shadowEnabled; }
     void setShadowColor(const std::array<float, 4>& c) { m_shadowColor = c; }
-    void setShadowOffset(float x, float y) { m_shadowOffsetX = x; m_shadowOffsetY = y; }
+    void setShadowOffset(float offsetX, float offsetY) { m_shadowOffsetX = offsetX; m_shadowOffsetY = offsetY; }
 
     void setAlignment(TextAlignment alignment) { m_alignment = alignment; }
     [[nodiscard]] TextAlignment getAlignment() const { return m_alignment; }

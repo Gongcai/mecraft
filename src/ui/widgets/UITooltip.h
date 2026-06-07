@@ -2,10 +2,10 @@
 
 #include <string>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "UIPanel.h"
 #include "UIText.h"
-#include "../core/UITheme.h"
 
 // A tooltip that follows the cursor and shows after a hover delay.
 // Composed of a UIPanel background and UIText label.
@@ -14,16 +14,17 @@ public:
     UITooltip() = default;
 
     void init(ResourceMgr& resourceMgr) override {
+        const UIResolvedTooltipStyle style = fallbackStyle();
         m_panel.init(resourceMgr);
         m_label.init(resourceMgr);
-        m_label.setTextScale(2.0f);
-        m_label.setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+        m_label.setTextScale(style.textScale);
+        m_label.setTextColor(style.text);
         m_label.setShadowEnabled(true);
-        m_label.setShadowColor({0.0f, 0.0f, 0.0f, 0.75f});
-        m_label.setShadowOffset(1.0f, -1.0f);
-        m_panel.setBackgroundColor({0.15f, 0.15f, 0.15f, 0.92f});
-        m_panel.setBorderColor({0.4f, 0.4f, 0.4f, 0.8f});
-        m_panel.setBorderWidth(1.0f);
+        m_label.setShadowColor(style.shadow);
+        m_label.setShadowOffset(style.shadowOffsetX, style.shadowOffsetY);
+        m_panel.setBackgroundColor(style.background);
+        m_panel.setBorderColor(style.border);
+        m_panel.setBorderWidth(style.borderWidth);
         visible = false;
     }
 
@@ -51,7 +52,7 @@ public:
             visible = true;
         }
         if (visible) {
-            updatePosition();
+            updatePosition(fallbackStyle());
         }
     }
 
@@ -66,58 +67,82 @@ public:
 
     void setHoverDelay(float seconds) { m_hoverDelay = seconds; }
     [[nodiscard]] float getHoverDelay() const { return m_hoverDelay; }
+    void setStyle(const UITooltipStyle& style) {
+        m_localStyle = style;
+        m_hasLocalStyle = true;
+        m_sizeDirty = true;
+    }
+    void clearLocalStyle() {
+        m_hasLocalStyle = false;
+        m_sizeDirty = true;
+    }
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override {
         if (!visible) return;
+        const UIResolvedTooltipStyle style = resolveStyle(ctx);
         if (m_sizeDirty && ctx.textRenderer) {
-            updateSize(*ctx.textRenderer);
+            updateSize(*ctx.textRenderer, style);
             m_sizeDirty = false;
-            updatePosition();
+            updatePosition(style);
         }
-        // Apply tooltip-specific theme colors before rendering sub-widgets
-        if (ctx.theme) {
-            const_cast<UIPanel&>(m_panel).setBackgroundColor(ctx.theme->tooltipBackground);
-            const_cast<UIPanel&>(m_panel).setBorderColor(ctx.theme->tooltipBorder);
-            const_cast<UIPanel&>(m_panel).setBorderWidth(ctx.theme->tooltipBorderWidth);
-            const_cast<UIText&>(m_label).setTextColor(ctx.theme->textPrimary);
-        }
+        applyResolvedStyle(style);
         m_panel.render(ctx);
         m_label.render(ctx);
     }
 
 private:
-    void updateSize(const TextRenderer& tr) const {
+    [[nodiscard]] UITooltipStyle resolveBaseStyle(const UIRenderContext& ctx) const {
+        if (m_hasLocalStyle) {
+            return m_localStyle;
+        }
+        return UIStyleResolver::tooltipStyleFromTheme(ctx.theme);
+    }
+
+    [[nodiscard]] UIResolvedTooltipStyle resolveStyle(const UIRenderContext& ctx) const {
+        return UIStyleResolver::resolveTooltip(resolveBaseStyle(ctx));
+    }
+
+    [[nodiscard]] UIResolvedTooltipStyle fallbackStyle() const {
+        return UIStyleResolver::resolveTooltip(m_hasLocalStyle ? m_localStyle : UITooltipStyle{});
+    }
+
+    void applyResolvedStyle(const UIResolvedTooltipStyle& style) const {
+        const_cast<UIPanel&>(m_panel).setBackgroundColor(style.background);
+        const_cast<UIPanel&>(m_panel).setBorderColor(style.border);
+        const_cast<UIPanel&>(m_panel).setBorderWidth(style.borderWidth);
+        const_cast<UIText&>(m_label).setTextColor(style.text);
+        const_cast<UIText&>(m_label).setTextScale(style.textScale);
+        const_cast<UIText&>(m_label).setShadowColor(style.shadow);
+        const_cast<UIText&>(m_label).setShadowOffset(style.shadowOffsetX, style.shadowOffsetY);
+    }
+
+    void updateSize(const TextRenderer& tr, const UIResolvedTooltipStyle& style) const {
+        const_cast<UIText&>(m_label).setTextScale(style.textScale);
         const float textW = m_label.measureTextWidth(tr);
         const float textH = m_label.measureTextHeight(tr);
-        constexpr float padX = 10.0f;
-        constexpr float padY = 6.0f;
-        width = textW + padX * 2.0f;
-        height = textH + padY * 2.0f;
+        width = textW + style.paddingX * 2.0f;
+        height = textH + style.paddingY * 2.0f;
         m_panel.width = width;
         m_panel.height = height;
-        m_label.x = padX;
-        m_label.y = padY;
+        m_label.x = style.paddingX;
+        m_label.y = style.paddingY;
         m_label.width = textW;
         m_label.height = textH;
     }
 
-    void updatePosition() const {
-        constexpr float offsetX = 12.0f;
-        constexpr float offsetY = 16.0f;
-        constexpr float margin = 4.0f;
+    void updatePosition(const UIResolvedTooltipStyle& style) const {
+        float wx = m_cursorX + style.offsetX;
+        float wy = (m_screenH - m_cursorY) - style.offsetY;
 
-        float wx = m_cursorX + offsetX;
-        float wy = (m_screenH - m_cursorY) - offsetY;
-
-        if (wx + width > m_screenW - margin) {
-            wx = m_cursorX - width - offsetX;
+        if (wx + width > m_screenW - style.margin) {
+            wx = m_cursorX - width - style.offsetX;
         }
-        if (wy < margin) {
-            wy = margin;
+        if (wy < style.margin) {
+            wy = style.margin;
         }
-        if (wy + height > m_screenH - margin) {
-            wy = m_screenH - margin - height;
+        if (wy + height > m_screenH - style.margin) {
+            wy = m_screenH - style.margin - height;
         }
 
         m_panel.anchor = Anchor::BottomLeft;
@@ -129,8 +154,8 @@ private:
         m_label.anchor = Anchor::BottomLeft;
         m_label.anchorOffsetX = 0;
         m_label.anchorOffsetY = 0;
-        m_label.x = wx + 10.0f;
-        m_label.y = wy + 6.0f;
+        m_label.x = wx + style.paddingX;
+        m_label.y = wy + style.paddingY;
     }
 
     mutable UIPanel m_panel;
@@ -146,4 +171,7 @@ private:
     mutable float m_cursorY = 0.0f;
     mutable float m_screenW = 0.0f;
     mutable float m_screenH = 0.0f;
+
+    bool m_hasLocalStyle = false;
+    UITooltipStyle m_localStyle;
 };
