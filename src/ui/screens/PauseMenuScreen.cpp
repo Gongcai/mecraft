@@ -13,7 +13,8 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Dark overlay covering the whole screen
     auto overlay = std::make_unique<UIPanel>();
-    overlay->setBackgroundColor({0.0f, 0.0f, 0.0f, 0.0f}); // alpha animated
+    overlay->setTone(UIPanelTone::Overlay);
+    overlay->alpha = 0.0f;
     overlay->anchor = Anchor::BottomLeft;
     overlay->x = 0.0f;
     overlay->y = 0.0f;
@@ -25,7 +26,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     auto title = std::make_unique<UIText>();
     title->setText(getLocaleManager() ? getLocaleManager()->tr("paused") : "PAUSED");
     title->setTextScale(4.0f);
-    title->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::Center;
     title->anchorOffsetY = 120.0f;
@@ -149,14 +150,14 @@ void PauseMenuScreen::layout(const UIRenderContext& ctx) {
 
 void PauseMenuScreen::onSceneEnter() {
     // Overlay fade in
-    m_overlayAlpha.start(0.0f, 0.6f, kOverlayFadeDuration, EasingType::EaseOut);
+    m_overlayAlpha.start(0.0f, 1.0f, kOverlayFadeDuration, EasingType::EaseOut);
 
     // Buttons slide in from the right
     m_buttonSlideX.start(200.0f, 0.0f, kButtonSlideDuration, EasingType::BackOut);
 }
 
 void PauseMenuScreen::onSceneExit() {
-    m_overlayAlpha.start(0.6f, 0.0f, kOverlayFadeDuration * 0.5f, EasingType::EaseIn);
+    m_overlayAlpha.start(1.0f, 0.0f, kOverlayFadeDuration * 0.5f, EasingType::EaseIn);
     m_buttonSlideX.start(0.0f, 200.0f, kButtonSlideDuration * 0.5f, EasingType::EaseIn);
 }
 
@@ -164,9 +165,7 @@ void PauseMenuScreen::updateAnimations(float dt) {
     UIScene::updateAnimations(dt);
 
     if (m_overlay) {
-        std::array<float, 4> bg = m_overlay->getBackgroundColor();
-        bg[3] = m_overlayAlpha.value();
-        m_overlay->setBackgroundColor(bg);
+        m_overlay->alpha = m_overlayAlpha.value();
     }
     if (m_buttonStack) {
         m_buttonStack->x = m_buttonSlideX.value();

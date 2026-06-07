@@ -19,7 +19,7 @@ void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
     auto title = std::make_unique<UIText>();
     title->setText("MECRAFT");
     title->setTextScale(3.0f);
-    title->setTextColor({0.95f, 0.96f, 0.92f, 1.0f});
+    title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::Center;
     title->anchorOffsetY = 96.0f;
@@ -31,7 +31,7 @@ void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
     auto status = std::make_unique<UIText>();
     status->setText("Loading world");
     status->setTextScale(1.35f);
-    status->setTextColor({0.82f, 0.86f, 0.84f, 1.0f});
+    status->setTone(UITextTone::OnOverlaySecondary);
     status->setAlignment(TextAlignment::Center);
     status->anchor = Anchor::Center;
     status->anchorOffsetY = 28.0f;
@@ -46,16 +46,14 @@ void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
     progress->anchor = Anchor::Center;
     progress->anchorOffsetY = -18.0f;
     progress->setShowPercent(true);
-    progress->setTrackColor({0.13f, 0.16f, 0.15f, 1.0f});
-    progress->setFillColor({0.44f, 0.72f, 0.42f, 1.0f});
-    progress->setTextColor({0.96f, 0.98f, 0.92f, 1.0f});
+    progress->setTone(UIProgressBarTone::Success);
     m_progressBar = progress.get();
     addRoot(std::move(progress));
 
     auto detail = std::make_unique<UIText>();
     detail->setText("");
     detail->setTextScale(1.0f);
-    detail->setTextColor({0.58f, 0.64f, 0.62f, 1.0f});
+    detail->setTone(UITextTone::OnOverlayMuted);
     detail->setAlignment(TextAlignment::Center);
     detail->anchor = Anchor::Center;
     detail->anchorOffsetY = -58.0f;

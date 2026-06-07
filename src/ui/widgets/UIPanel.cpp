@@ -30,6 +30,11 @@ void UIPanel::shutdown() {
     m_gpuInitialized = false;
 }
 
+void UIPanel::setTone(UIPanelTone tone) {
+    m_tone = tone;
+    clearLocalColors();
+}
+
 void UIPanel::initMesh() {
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
@@ -126,21 +131,24 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
 }
 
 UIComponentStyle UIPanel::resolveBaseStyle(const UIRenderContext& ctx) const {
-    UIComponentStyle style = UIStyleResolver::panelStyleFromTheme(ctx.theme);
+    UIComponentStyle style = UIStyleResolver::panelStyleFromTheme(ctx.theme, m_tone);
 
-    if (m_hasLocalBgColor || !ctx.theme) {
+    if (m_hasLocalBgColor) {
         style.backgroundNormal = m_bgColor;
         style.backgroundHover = m_bgColor;
         style.backgroundPressed = m_bgColor;
         style.backgroundDisabled = m_bgColor;
     }
 
-    if (m_hasLocalBorderColor || !ctx.theme) {
+    if (m_hasLocalBorderColor) {
         style.borderNormal = m_borderColor;
         style.borderHover = m_borderColor;
         style.borderFocused = m_borderColor;
         style.borderPressed = m_borderColor;
         style.borderDisabled = m_borderColor;
+    }
+
+    if (m_hasLocalBorderWidth) {
         style.borderWidth = m_borderWidth;
     } else {
         style.borderWidth = (m_borderWidth > 0.0f) ? style.borderWidth : 0.0f;

@@ -20,7 +20,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // -- Background overlay --
     auto bgPanel = std::make_unique<UIPanel>();
-    bgPanel->setBackgroundColor({0.0f, 0.0f, 0.0f, 0.75f});
+    bgPanel->setTone(UIPanelTone::Overlay);
     bgPanel->anchor = Anchor::BottomLeft;
     bgPanel->width  = 9999.0f;
     bgPanel->height = 9999.0f;
@@ -33,7 +33,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
                        ? getLocaleManager()->tr("create_new_world")
                        : "CREATE NEW WORLD");
     title->setTextScale(3.0f);
-    title->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor        = Anchor::TopCenter;
     title->anchorOffsetY = -60.0f;
@@ -48,7 +48,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
                            ? getLocaleManager()->tr("enter_seed")
                            : "Enter seed (leave empty for random):");
     seedLabel->setTextScale(1.4f);
-    seedLabel->setTextColor({0.8f, 0.8f, 0.8f, 1.0f});
+    seedLabel->setTone(UITextTone::OnOverlaySecondary);
     seedLabel->setAlignment(TextAlignment::Center);
     seedLabel->anchor        = Anchor::Center;
     seedLabel->anchorOffsetY = 60.0f;

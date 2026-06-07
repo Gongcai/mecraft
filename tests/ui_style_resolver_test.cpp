@@ -165,6 +165,14 @@ int main() {
         return fail("panel style should map background, border, and border width from theme");
     }
 
+    const UIComponentStyle overlayPanelStyle = UIStyleResolver::panelStyleFromTheme(&theme, UIPanelTone::Overlay);
+    const UIResolvedStyle overlayPanel = UIStyleResolver::resolve(overlayPanelStyle, UIStyleState_Normal);
+    if (!colorEqual(overlayPanel.background, theme.overlayDim) ||
+        overlayPanel.border[3] > 0.001f ||
+        std::fabs(overlayPanel.borderWidth) > 0.001f) {
+        return fail("overlay panel tone should map to overlay dim without a border");
+    }
+
     const UIComponentStyle defaultButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Default);
     if (!colorEqual(defaultButton.backgroundNormal, theme.buttonNormal) ||
         !colorEqual(defaultButton.backgroundHover, theme.buttonHover) ||
@@ -223,14 +231,20 @@ int main() {
     const UITextStyle secondaryTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Secondary);
     const UITextStyle mutedTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Muted);
     const UITextStyle accentTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Accent);
+    const UITextStyle overlayTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::OnOverlay);
+    const UITextStyle overlayMutedTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::OnOverlayMuted);
     const Color expectedMutedText{
         theme.textSecondary[0],
         theme.textSecondary[1],
         theme.textSecondary[2],
         theme.textSecondary[3] * 0.78f};
+    const Color expectedOverlayText{1.0f, 1.0f, 1.0f, 1.0f};
+    const Color expectedOverlayMutedText{0.58f, 0.64f, 0.62f, 1.0f};
     if (!colorEqual(secondaryTextStyle.text, theme.textSecondary) ||
         !colorEqual(mutedTextStyle.text, expectedMutedText) ||
-        !colorEqual(accentTextStyle.text, theme.textLink)) {
+        !colorEqual(accentTextStyle.text, theme.textLink) ||
+        !colorEqual(overlayTextStyle.text, expectedOverlayText) ||
+        !colorEqual(overlayMutedTextStyle.text, expectedOverlayMutedText)) {
         return fail("text tones should map to theme semantic text colors");
     }
 
@@ -322,6 +336,14 @@ int main() {
         std::fabs(progressBar.textHeightRatio - 0.6f) > 0.001f ||
         std::fabs(progressBar.fontPixelHeight - 40.0f) > 0.001f) {
         return fail("progress bar style should map colors and typography metrics from theme");
+    }
+
+    const UIProgressBarStyle successProgressBar =
+        UIStyleResolver::progressBarStyleFromTheme(&theme, UIProgressBarTone::Success);
+    if (!colorEqual(successProgressBar.track, theme.progressTrack) ||
+        !colorEqual(successProgressBar.fill, theme.accentSuccess) ||
+        !colorEqual(successProgressBar.text, theme.progressText)) {
+        return fail("success progress bar tone should preserve track/text and use success accent fill");
     }
 
     const UIRadioButtonStyle radioStyle = UIStyleResolver::radioButtonStyleFromTheme(&theme);

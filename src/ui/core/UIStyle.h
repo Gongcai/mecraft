@@ -18,6 +18,11 @@ enum class UIToastTone {
     Error,
 };
 
+enum class UIPanelTone {
+    Default,
+    Overlay,
+};
+
 enum class UIButtonTone {
     Default,
     Primary,
@@ -26,11 +31,19 @@ enum class UIButtonTone {
     Danger,
 };
 
+enum class UIProgressBarTone {
+    Default,
+    Success,
+};
+
 enum class UITextTone {
     Primary,
     Secondary,
     Muted,
     Accent,
+    OnOverlay,
+    OnOverlaySecondary,
+    OnOverlayMuted,
 };
 
 [[nodiscard]] inline constexpr bool hasStyleState(int state, UIStyleState flag) {
@@ -435,6 +448,7 @@ struct UIResolvedConsoleStyle {
 
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme, UIPanelTone tone);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme, UIButtonTone tone);
     [[nodiscard]] UITextInputStyle textInputStyleFromTheme(const UITheme* theme);
@@ -442,6 +456,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UISliderStyle sliderStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme, UIProgressBarTone tone);
     [[nodiscard]] UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIDropdownStyle dropdownStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIContextMenuStyle contextMenuStyleFromTheme(const UITheme* theme);

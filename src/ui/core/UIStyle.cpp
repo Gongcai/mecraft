@@ -71,6 +71,28 @@ UIComponentStyle panelStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIComponentStyle panelStyleFromTheme(const UITheme* theme, UIPanelTone tone) {
+    UIComponentStyle style = panelStyleFromTheme(theme);
+    if (tone == UIPanelTone::Default) {
+        return style;
+    }
+
+    if (tone == UIPanelTone::Overlay) {
+        const Color overlay = theme ? theme->overlayDim : Color{0.0f, 0.0f, 0.0f, 0.6f};
+        style.backgroundNormal = overlay;
+        style.backgroundHover = overlay;
+        style.backgroundPressed = overlay;
+        style.backgroundDisabled = overlay;
+        style.borderNormal = {0.0f, 0.0f, 0.0f, 0.0f};
+        style.borderHover = style.borderNormal;
+        style.borderFocused = style.borderNormal;
+        style.borderPressed = style.borderNormal;
+        style.borderDisabled = style.borderNormal;
+        style.borderWidth = 0.0f;
+    }
+    return style;
+}
+
 UIComponentStyle buttonStyleFromTheme(const UITheme* theme) {
     UIComponentStyle style;
     if (!theme) {
@@ -212,6 +234,14 @@ UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme) {
     style.fill = theme->progressFill;
     style.text = theme->progressText;
     style.fontPixelHeight = static_cast<float>(theme->fontPixelHeight);
+    return style;
+}
+
+UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme, UIProgressBarTone tone) {
+    UIProgressBarStyle style = progressBarStyleFromTheme(theme);
+    if (tone == UIProgressBarTone::Success) {
+        style.fill = theme ? theme->accentSuccess : Color{0.3f, 0.7f, 0.3f, 1.0f};
+    }
     return style;
 }
 
@@ -372,6 +402,15 @@ UITextStyle textStyleFromTheme(const UITheme* theme, UITextTone tone) {
         break;
     case UITextTone::Accent:
         style.text = theme ? theme->textLink : Color{0.3f, 0.7f, 1.0f, 1.0f};
+        break;
+    case UITextTone::OnOverlay:
+        style.text = {1.0f, 1.0f, 1.0f, 1.0f};
+        break;
+    case UITextTone::OnOverlaySecondary:
+        style.text = {0.84f, 0.86f, 0.84f, 1.0f};
+        break;
+    case UITextTone::OnOverlayMuted:
+        style.text = {0.58f, 0.64f, 0.62f, 1.0f};
         break;
     case UITextTone::Primary:
     default:

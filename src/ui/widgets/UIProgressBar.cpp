@@ -44,6 +44,12 @@ void UIProgressBar::setLabel(const std::string& label) {
     m_label = label;
 }
 
+void UIProgressBar::setTone(UIProgressBarTone tone) {
+    m_tone = tone;
+    m_hasLocalColors = false;
+    m_hasLocalStyle = false;
+}
+
 void UIProgressBar::setStyle(const UIProgressBarStyle& style) {
     m_localStyle = style;
     m_hasLocalStyle = true;
@@ -157,8 +163,8 @@ UIProgressBarStyle UIProgressBar::resolveBaseStyle(const UIRenderContext& ctx) c
         return m_localStyle;
     }
 
-    UIProgressBarStyle style = UIStyleResolver::progressBarStyleFromTheme(ctx.theme);
-    if (m_hasLocalColors || !ctx.theme) {
+    UIProgressBarStyle style = UIStyleResolver::progressBarStyleFromTheme(ctx.theme, m_tone);
+    if (m_hasLocalColors) {
         style.track = m_trackColor;
         style.fill = m_fillColor;
         style.text = m_textColor;

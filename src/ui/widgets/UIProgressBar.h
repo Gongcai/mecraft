@@ -36,6 +36,8 @@ public:
     void setTrackColor(const Color& c) { m_trackColor = c; m_hasLocalColors = true; }
     void setFillColor(const Color& c) { m_fillColor = c; m_hasLocalColors = true; }
     void setTextColor(const Color& c) { m_textColor = c; m_hasLocalColors = true; }
+    void clearLocalColors() { m_hasLocalColors = false; }
+    void setTone(UIProgressBarTone tone);
     void setStyle(const UIProgressBarStyle& style);
     void clearLocalStyle();
 
@@ -59,6 +61,7 @@ private:
     bool m_showPercent = false;
     bool m_hasLocalColors = false;
     bool m_hasLocalStyle = false;
+    UIProgressBarTone m_tone = UIProgressBarTone::Default;
 
     Color m_trackColor{0.2f, 0.2f, 0.2f, 0.9f};
     Color m_fillColor{0.2f, 0.8f, 1.0f, 1.0f};

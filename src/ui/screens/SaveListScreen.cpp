@@ -90,7 +90,7 @@ void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // -- Background overlay --
     auto bgPanel = std::make_unique<UIPanel>();
-    bgPanel->setBackgroundColor({0.0f, 0.0f, 0.0f, 0.75f});
+    bgPanel->setTone(UIPanelTone::Overlay);
     bgPanel->anchor    = Anchor::BottomLeft;
     bgPanel->width     = 9999.0f;
     bgPanel->height    = 9999.0f;
@@ -103,7 +103,7 @@ void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
                        ? getLocaleManager()->tr("select_world")
                        : "SELECT WORLD");
     title->setTextScale(3.0f);
-    title->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor        = Anchor::TopCenter;
     title->anchorOffsetY = -40.0f;
@@ -136,7 +136,7 @@ void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
                            ? getLocaleManager()->tr("no_saves")
                            : "No saves found. Create a new world!");
     emptyText->setTextScale(1.5f);
-    emptyText->setTextColor({0.6f, 0.6f, 0.6f, 1.0f});
+    emptyText->setTone(UITextTone::OnOverlayMuted);
     emptyText->setAlignment(TextAlignment::Center);
     emptyText->anchor        = Anchor::Center;
     emptyText->anchorOffsetY = 20.0f;
@@ -339,7 +339,7 @@ void SaveListScreen::rebuildList() {
         auto nameText = std::make_unique<UIText>();
         nameText->setText(save.displayName);
         nameText->setTextScale(1.6f);
-        nameText->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+        nameText->setTone(UITextTone::OnOverlay);
         nameText->anchor = Anchor::BottomLeft;
         nameText->x = kThumbSize + 24.0f;
         nameText->y = 46.0f;
@@ -357,7 +357,7 @@ void SaveListScreen::rebuildList() {
             infoText->setText(info);
         }
         infoText->setTextScale(1.1f);
-        infoText->setTextColor({0.65f, 0.65f, 0.65f, 1.0f});
+        infoText->setTone(UITextTone::OnOverlayMuted);
         infoText->anchor = Anchor::BottomLeft;
         infoText->x = kThumbSize + 24.0f;
         infoText->y = 22.0f;

@@ -50,7 +50,8 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // -- Dark overlay covering the whole screen --
     auto overlay = std::make_unique<UIPanel>();
-    overlay->setBackgroundColor({0.0f, 0.0f, 0.0f, 0.0f}); // alpha animated
+    overlay->setTone(UIPanelTone::Overlay);
+    overlay->alpha = 0.0f;
     overlay->anchor = Anchor::BottomLeft;
     overlay->x = 0.0f;
     overlay->y = 0.0f;
@@ -62,7 +63,7 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     auto title = std::make_unique<UIText>();
     title->setText(loc(getLocaleManager(), "settings", "SETTINGS"));
     title->setTextScale(3.0f);
-    title->setTextColor({1.0f, 1.0f, 1.0f, 1.0f});
+    title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::TopCenter;
     title->anchorOffsetY = -20.0f;
@@ -126,12 +127,12 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
 // ===========================================================================
 
 void SettingsScreen::onSceneEnter() {
-    m_overlayAlpha.start(0.0f, 0.6f, kOverlayFadeDuration, EasingType::EaseOut);
+    m_overlayAlpha.start(0.0f, 1.0f, kOverlayFadeDuration, EasingType::EaseOut);
     m_contentSlideX.start(200.0f, 0.0f, kContentSlideDuration, EasingType::BackOut);
 }
 
 void SettingsScreen::onSceneExit() {
-    m_overlayAlpha.start(0.6f, 0.0f, kOverlayFadeDuration * 0.5f, EasingType::EaseIn);
+    m_overlayAlpha.start(1.0f, 0.0f, kOverlayFadeDuration * 0.5f, EasingType::EaseIn);
     m_contentSlideX.start(0.0f, 200.0f, kContentSlideDuration * 0.5f, EasingType::EaseIn);
 }
 
@@ -233,9 +234,7 @@ void SettingsScreen::updateAnimations(float dt) {
     UIScene::updateAnimations(dt);
 
     if (m_overlay) {
-        std::array<float, 4> bg = m_overlay->getBackgroundColor();
-        bg[3] = m_overlayAlpha.value();
-        m_overlay->setBackgroundColor(bg);
+        m_overlay->alpha = m_overlayAlpha.value();
     }
     if (m_tabControl) {
         m_tabControl->x = m_contentSlideX.value();
