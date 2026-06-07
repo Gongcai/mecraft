@@ -5,7 +5,6 @@
 #include <cstdio>
 
 #include "../core/UIRenderUtils.h"
-#include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -140,7 +139,8 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
         }
 
         if (!overlayText.empty()) {
-            const float textScale = (ah * 0.6f) / static_cast<float>(ctx.theme ? ctx.theme->fontPixelHeight : 32);
+            const float fontPixelHeight = resolved.fontPixelHeight > 0.0f ? resolved.fontPixelHeight : 32.0f;
+            const float textScale = (ah * resolved.textHeightRatio) / fontPixelHeight;
             const auto metrics = ctx.textRenderer->measureText(overlayText, textScale);
             const float textX = ax + (aw - metrics.width) * 0.5f;
             const float textY = ay + (ah - metrics.height) * 0.5f;

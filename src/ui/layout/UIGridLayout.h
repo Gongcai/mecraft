@@ -21,6 +21,7 @@ public:
     // Recalculate child positions based on grid parameters.
     // Call after adding children or changing grid properties.
     void layout();
+    void layout(const UIRenderContext& ctx) override;
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override { (void)ctx; }

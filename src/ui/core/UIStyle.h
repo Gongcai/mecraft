@@ -129,12 +129,16 @@ struct UIProgressBarStyle {
     Color track {0.2f, 0.2f, 0.2f, 0.9f};
     Color fill  {0.2f, 0.8f, 1.0f, 1.0f};
     Color text  {1.0f, 1.0f, 1.0f, 1.0f};
+    float textHeightRatio = 0.6f;
+    float fontPixelHeight = 32.0f;
 };
 
 struct UIResolvedProgressBarStyle {
     Color track {0.2f, 0.2f, 0.2f, 0.9f};
     Color fill  {0.2f, 0.8f, 1.0f, 1.0f};
     Color text  {1.0f, 1.0f, 1.0f, 1.0f};
+    float textHeightRatio = 0.6f;
+    float fontPixelHeight = 32.0f;
 };
 
 struct UIRadioButtonStyle {

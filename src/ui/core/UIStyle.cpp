@@ -164,6 +164,7 @@ UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme) {
     style.track = theme->progressTrack;
     style.fill = theme->progressFill;
     style.text = theme->progressText;
+    style.fontPixelHeight = static_cast<float>(theme->fontPixelHeight);
     return style;
 }
 
@@ -568,6 +569,8 @@ UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style) {
     resolved.track = style.track;
     resolved.fill = style.fill;
     resolved.text = style.text;
+    resolved.textHeightRatio = style.textHeightRatio;
+    resolved.fontPixelHeight = style.fontPixelHeight;
     return resolved;
 }
 

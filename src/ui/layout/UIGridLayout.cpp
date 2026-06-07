@@ -1,5 +1,10 @@
 #include "UIGridLayout.h"
 
+void UIGridLayout::layout(const UIRenderContext& ctx) {
+    layout();
+    UIWidget::layout(ctx);
+}
+
 void UIGridLayout::layout() {
     const auto& children = getChildren();
     if (children.empty() || m_columns <= 0) return;

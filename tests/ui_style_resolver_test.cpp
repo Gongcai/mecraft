@@ -142,6 +142,7 @@ int main() {
     theme.consoleTextNormal = {0.59f, 0.69f, 0.79f, 1.0f};
     theme.consoleTextWarning = {0.89f, 0.70f, 0.60f, 1.0f};
     theme.consoleTextSuccess = {0.30f, 0.80f, 0.70f, 1.0f};
+    theme.fontPixelHeight = 40;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -249,8 +250,10 @@ int main() {
     const UIResolvedProgressBarStyle progressBar = UIStyleResolver::resolveProgressBar(progressBarStyle);
     if (!colorEqual(progressBar.track, theme.progressTrack) ||
         !colorEqual(progressBar.fill, theme.progressFill) ||
-        !colorEqual(progressBar.text, theme.progressText)) {
-        return fail("progress bar style should map track, fill, and text colors from theme");
+        !colorEqual(progressBar.text, theme.progressText) ||
+        std::fabs(progressBar.textHeightRatio - 0.6f) > 0.001f ||
+        std::fabs(progressBar.fontPixelHeight - 40.0f) > 0.001f) {
+        return fail("progress bar style should map colors and typography metrics from theme");
     }
 
     const UIRadioButtonStyle radioStyle = UIStyleResolver::radioButtonStyleFromTheme(&theme);
