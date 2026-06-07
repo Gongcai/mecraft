@@ -254,7 +254,7 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
 
     // Render header text.
     if (ctx.textRenderer) {
-        const float textScale = 1.0f;
+        const float textScale = 1.45f;
         for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
             const auto m = ctx.textRenderer->measureText(m_tabs[i].title, textScale);
             const float x0 = ax + static_cast<float>(i) * tabW;

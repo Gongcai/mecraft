@@ -103,7 +103,7 @@
     "tabHeaderHover":       [0.070, 0.112, 0.066, 0.86],
     "tabIndicator":         [0.610, 0.770, 0.535, 0.90],
     "tabContent":           [0.065, 0.078, 0.070, 0.64],
-    "tabHeaderHeight":      42.0,
+    "tabHeaderHeight":      54.0,
 
     "contextMenuBackground":[0.086, 0.098, 0.092, 0.92],
     "contextMenuBorder":    [0.560, 0.620, 0.515, 0.58],

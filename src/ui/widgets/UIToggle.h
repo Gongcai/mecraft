@@ -26,6 +26,7 @@ public:
     [[nodiscard]] bool isChecked() const { return m_checked; }
 
     void setLabel(const std::string& text);
+    void setLabelTextScale(float scale);
 
     // Local color overrides.
     void setTrackOffColor(const Color& c) { m_trackOffColor = c; m_hasLocalColors = true; }

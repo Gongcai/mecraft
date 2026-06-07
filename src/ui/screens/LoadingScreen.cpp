@@ -18,7 +18,7 @@ void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
 
     auto title = std::make_unique<UIText>();
     title->setText("MECRAFT");
-    title->setTextScale(3.0f);
+    title->setTextScale(3.4f);
     title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::Center;
@@ -30,35 +30,41 @@ void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
 
     auto status = std::make_unique<UIText>();
     status->setText("Loading world");
-    status->setTextScale(1.35f);
+    status->setTextScale(1.8f);
     status->setTone(UITextTone::OnOverlaySecondary);
     status->setAlignment(TextAlignment::Center);
     status->anchor = Anchor::Center;
-    status->anchorOffsetY = 28.0f;
+    status->anchorOffsetY = 34.0f;
     status->width = 520.0f;
-    status->height = 30.0f;
+    status->height = 36.0f;
     m_status = status.get();
     addRoot(std::move(status));
 
     auto progress = std::make_unique<UIProgressBar>();
     progress->width = 520.0f;
-    progress->height = 24.0f;
+    progress->height = 34.0f;
     progress->anchor = Anchor::Center;
     progress->anchorOffsetY = -18.0f;
     progress->setShowPercent(true);
     progress->setTone(UIProgressBarTone::Success);
+    UIProgressBarStyle progressStyle;
+    progressStyle.track = {0.150f, 0.165f, 0.155f, 0.95f};
+    progressStyle.fill = {0.600f, 0.760f, 0.535f, 0.96f};
+    progressStyle.text = {0.960f, 0.965f, 0.930f, 1.0f};
+    progressStyle.textHeightRatio = 1.00f;
+    progress->setStyle(progressStyle);
     m_progressBar = progress.get();
     addRoot(std::move(progress));
 
     auto detail = std::make_unique<UIText>();
     detail->setText("");
-    detail->setTextScale(1.0f);
+    detail->setTextScale(1.35f);
     detail->setTone(UITextTone::OnOverlayMuted);
     detail->setAlignment(TextAlignment::Center);
     detail->anchor = Anchor::Center;
-    detail->anchorOffsetY = -58.0f;
+    detail->anchorOffsetY = -66.0f;
     detail->width = 520.0f;
-    detail->height = 24.0f;
+    detail->height = 30.0f;
     m_detail = detail.get();
     addRoot(std::move(detail));
 }

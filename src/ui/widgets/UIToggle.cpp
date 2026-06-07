@@ -47,6 +47,10 @@ void UIToggle::setLabel(const std::string& text) {
     m_label.setText(text);
 }
 
+void UIToggle::setLabelTextScale(float scale) {
+    m_label.setTextScale(scale);
+}
+
 void UIToggle::setStyle(const UIToggleStyle& style) {
     m_localStyle = style;
     m_hasLocalStyle = true;

@@ -42,6 +42,13 @@ static std::string formatSliderValue(float value, float step) {
 class UIStackLayout;
 static void resizeSettingsStack(UIStackLayout* stack, float availableWidth);
 
+namespace {
+constexpr float kSettingsRowHeight = 48.0f;
+constexpr float kSettingsRowTextScale = 1.55f;
+constexpr float kSettingsValueTextScale = 1.40f;
+constexpr float kSettingsSectionTextScale = 1.70f;
+}
+
 // ===========================================================================
 // buildUI
 // ===========================================================================
@@ -258,7 +265,7 @@ static UIStackLayout* setupScrollableTab(UIWidget* contentPanel, ResourceMgr& /*
 
     auto stack = std::make_unique<UIStackLayout>();
     stack->setDirection(StackDirection::Vertical);
-    stack->setSpacing(8.0f);
+    stack->setSpacing(10.0f);
     stack->anchor = Anchor::BottomLeft;
     stack->x = 18.0f;
     stack->width = tabWidth - 48.0f;
@@ -297,24 +304,24 @@ static void resizeSettingsStack(UIStackLayout* stack, float availableWidth) {
                 auto& rowChildren = row->getChildren();
                 const bool hasValueText = rowChildren.size() >= 3;
                 const float spacing = row->getSpacing();
-                const float valueW = hasValueText ? 92.0f : 0.0f;
+                const float valueW = hasValueText ? 120.0f : 0.0f;
                 const float totalSpacing = spacing * static_cast<float>(rowChildren.size() > 0 ? rowChildren.size() - 1 : 0);
-                const float labelW = std::clamp(rowWidth * 0.30f, 160.0f, 240.0f);
+                const float labelW = std::clamp(rowWidth * 0.34f, 220.0f, 330.0f);
                 const float controlW = std::max(180.0f, rowWidth - labelW - valueW - totalSpacing);
 
                 row->width = rowWidth;
-                row->height = 34.0f;
+                row->height = kSettingsRowHeight;
                 if (rowChildren.size() >= 1) {
                     rowChildren[0]->width = labelW;
-                    rowChildren[0]->height = 34.0f;
+                    rowChildren[0]->height = kSettingsRowHeight;
                 }
                 if (rowChildren.size() >= 2) {
                     rowChildren[1]->width = controlW;
-                    rowChildren[1]->height = 34.0f;
+                    rowChildren[1]->height = kSettingsRowHeight;
                 }
                 if (rowChildren.size() >= 3) {
                     rowChildren[2]->width = valueW;
-                    rowChildren[2]->height = 34.0f;
+                    rowChildren[2]->height = kSettingsRowHeight;
                 }
                 row->layout();
             }
@@ -334,10 +341,10 @@ void SettingsScreen::addSectionHeader(UIWidget* parent, ResourceMgr& /*resourceM
                                        const std::string& text) {
     auto header = std::make_unique<UIText>();
     header->setText(text);
-    header->setTextScale(1.25f);
+    header->setTextScale(kSettingsSectionTextScale);
     header->setTone(UITextTone::Accent);
     header->width = 360.0f;
-    header->height = 32.0f;
+    header->height = 42.0f;
     parent->addChild(std::move(header));
 }
 
@@ -347,9 +354,10 @@ void SettingsScreen::addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
     (void)resourceMgr;
     auto toggle = std::make_unique<UIToggle>();
     toggle->setLabel(label);
+    toggle->setLabelTextScale(kSettingsRowTextScale);
     toggle->setChecked(checked);
     toggle->width = 520.0f;
-    toggle->height = 32.0f;
+    toggle->height = kSettingsRowHeight;
     toggle->onChanged = std::move(onChanged);
     parent->addChild(std::move(toggle));
 }
@@ -363,28 +371,28 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     row->setDirection(StackDirection::Horizontal);
     row->setSpacing(10.0f);
     row->width = 720.0f;
-    row->height = 34.0f;
+    row->height = kSettingsRowHeight;
 
     auto lbl = std::make_unique<UIText>();
     lbl->setText(label);
-    lbl->setTextScale(1.0f);
+    lbl->setTextScale(kSettingsRowTextScale);
     lbl->setTone(UITextTone::Secondary);
-    lbl->width = 220.0f;
-    lbl->height = 34.0f;
+    lbl->width = 280.0f;
+    lbl->height = kSettingsRowHeight;
 
     auto slider = std::make_unique<UISlider>();
     slider->setRange(minVal, maxVal);
     slider->setStep(step);
     slider->setValue(currentVal);
     slider->width = 390.0f;
-    slider->height = 34.0f;
+    slider->height = kSettingsRowHeight;
 
     auto valueText = std::make_unique<UIText>();
     valueText->setText(formatSliderValue(currentVal, step));
-    valueText->setTextScale(1.0f);
+    valueText->setTextScale(kSettingsValueTextScale);
     valueText->setTone(UITextTone::Secondary);
-    valueText->width = 92.0f;
-    valueText->height = 34.0f;
+    valueText->width = 120.0f;
+    valueText->height = kSettingsRowHeight;
     UIText* valueTextPtr = valueText.get();
 
     slider->setOnValueChanged([valueTextPtr, step, onValueChanged = std::move(onValueChanged)](float v) mutable {
@@ -414,20 +422,20 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
     row->setDirection(StackDirection::Horizontal);
     row->setSpacing(10.0f);
     row->width = 720.0f;
-    row->height = 34.0f;
+    row->height = kSettingsRowHeight;
 
     auto lbl = std::make_unique<UIText>();
     lbl->setText(label);
-    lbl->setTextScale(1.0f);
+    lbl->setTextScale(kSettingsRowTextScale);
     lbl->setTone(UITextTone::Secondary);
-    lbl->width = 220.0f;
-    lbl->height = 34.0f;
+    lbl->width = 280.0f;
+    lbl->height = kSettingsRowHeight;
 
     auto dropdown = std::make_unique<UIDropdown>();
     dropdown->setOptions(std::vector<std::string>(options));
     dropdown->setSelectedIndex(currentIndex);
     dropdown->width = 320.0f;
-    dropdown->height = 32.0f;
+    dropdown->height = kSettingsRowHeight;
     dropdown->setOnSelectionChanged(std::move(onSelectionChanged));
 
     row->addChild(std::move(lbl));
