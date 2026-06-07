@@ -67,6 +67,8 @@ int main() {
     theme.buttonDisabled = {0.08f, 0.09f, 0.10f, 0.5f};
     theme.buttonBorder = {0.30f, 0.40f, 0.50f, 0.4f};
     theme.buttonBorderWidth = 5.0f;
+    theme.textPrimary = {0.32f, 0.42f, 0.52f, 1.0f};
+    theme.textDisabled = {0.12f, 0.13f, 0.14f, 1.0f};
     theme.inputBackground = {0.11f, 0.12f, 0.13f, 0.9f};
     theme.inputBorder = {0.21f, 0.22f, 0.23f, 0.7f};
     theme.inputBorderFocused = {0.31f, 0.32f, 0.33f, 1.0f};
@@ -143,6 +145,20 @@ int main() {
         !colorEqual(panel.border, theme.panelBorder) ||
         std::fabs(panel.borderWidth - 4.0f) > 0.001f) {
         return fail("panel style should map background, border, and border width from theme");
+    }
+
+    UITextStyle textStyle = UIStyleResolver::textStyleFromTheme(&theme);
+    textStyle.shadow = {0.22f, 0.23f, 0.24f, 0.65f};
+    textStyle.textScale = 1.75f;
+    textStyle.shadowOffsetX = 2.0f;
+    textStyle.shadowOffsetY = -2.0f;
+    const UIResolvedTextStyle text = UIStyleResolver::resolveText(textStyle);
+    if (!colorEqual(text.text, theme.textPrimary) ||
+        !colorEqual(text.shadow, textStyle.shadow) ||
+        std::fabs(text.textScale - 1.75f) > 0.001f ||
+        std::fabs(text.shadowOffsetX - 2.0f) > 0.001f ||
+        std::fabs(text.shadowOffsetY + 2.0f) > 0.001f) {
+        return fail("text style should map theme text and preserve local metrics");
     }
 
     const UITextInputStyle inputStyle = UIStyleResolver::textInputStyleFromTheme(&theme);

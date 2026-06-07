@@ -1,7 +1,6 @@
 #include "UIText.h"
 
 #include "../font/TextRenderer.h"
-#include "../core/UITheme.h"
 
 float UIText::measureTextWidth(const TextRenderer& tr) const
 {
@@ -17,14 +16,14 @@ float UIText::measureTextHeight(const TextRenderer& tr) const
 void UIText::renderSelf(const UIRenderContext& ctx) const {
     if (m_text.empty() || !ctx.textRenderer) return;
 
-    const UITheme* theme = ctx.theme;
+    const UIResolvedTextStyle resolved = resolveStyle(ctx);
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
 
     // Apply text alignment
     if (m_alignment != TextAlignment::Left) {
-        const float tw = measureTextWidth(*ctx.textRenderer);
+        const float tw = ctx.textRenderer->measureText(m_text, resolved.textScale).width;
         if (m_alignment == TextAlignment::Center) {
             ax += (width * scaleX - tw) * 0.5f;
         } else if (m_alignment == TextAlignment::Right) {
@@ -32,22 +31,38 @@ void UIText::renderSelf(const UIRenderContext& ctx) const {
         }
     }
 
-    std::array<float, 4> col = (m_hasLocalTextColor || !theme) ? m_textColor : theme->textPrimary;
+    std::array<float, 4> col = resolved.text;
     col[3] *= alpha;
 
     if (m_shadowEnabled) {
-        std::array<float, 4> shadow = m_shadowColor;
+        std::array<float, 4> shadow = resolved.shadow;
         shadow[3] *= alpha;
         ctx.textRenderer->render(m_text,
-                                 ax + m_shadowOffsetX,
-                                 ay + m_shadowOffsetY,
-                                 m_textScale,
+                                 ax + resolved.shadowOffsetX,
+                                 ay + resolved.shadowOffsetY,
+                                 resolved.textScale,
                                  shadow,
                                  static_cast<float>(ctx.screenWidth),
                                  static_cast<float>(ctx.screenHeight));
     }
 
-    ctx.textRenderer->render(m_text, ax, ay, m_textScale, col,
+    ctx.textRenderer->render(m_text, ax, ay, resolved.textScale, col,
                              static_cast<float>(ctx.screenWidth),
                              static_cast<float>(ctx.screenHeight));
+}
+
+UITextStyle UIText::resolveBaseStyle(const UIRenderContext& ctx) const {
+    UITextStyle style = UIStyleResolver::textStyleFromTheme(ctx.theme);
+    style.textScale = m_textScale;
+    style.shadow = m_shadowColor;
+    style.shadowOffsetX = m_shadowOffsetX;
+    style.shadowOffsetY = m_shadowOffsetY;
+    if (m_hasLocalTextColor || !ctx.theme) {
+        style.text = m_textColor;
+    }
+    return style;
+}
+
+UIResolvedTextStyle UIText::resolveStyle(const UIRenderContext& ctx) const {
+    return UIStyleResolver::resolveText(resolveBaseStyle(ctx));
 }

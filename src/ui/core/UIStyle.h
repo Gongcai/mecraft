@@ -360,6 +360,22 @@ struct UIResolvedModalStyle {
     float titleTextScale = 2.0f;
 };
 
+struct UITextStyle {
+    Color text   {1.0f, 1.0f, 1.0f, 1.0f};
+    Color shadow {0.0f, 0.0f, 0.0f, 0.65f};
+    float textScale = 1.0f;
+    float shadowOffsetX = 1.0f;
+    float shadowOffsetY = -1.0f;
+};
+
+struct UIResolvedTextStyle {
+    Color text   {1.0f, 1.0f, 1.0f, 1.0f};
+    Color shadow {0.0f, 0.0f, 0.0f, 0.65f};
+    float textScale = 1.0f;
+    float shadowOffsetX = 1.0f;
+    float shadowOffsetY = -1.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -377,6 +393,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UIToastStyle toastStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITooltipStyle tooltipStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIModalStyle modalStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UITextStyle textStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -396,4 +413,5 @@ namespace UIStyleResolver {
     [[nodiscard]] UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone);
     [[nodiscard]] UIResolvedTooltipStyle resolveTooltip(const UITooltipStyle& style);
     [[nodiscard]] UIResolvedModalStyle resolveModal(const UIModalStyle& style);
+    [[nodiscard]] UIResolvedTextStyle resolveText(const UITextStyle& style);
 }

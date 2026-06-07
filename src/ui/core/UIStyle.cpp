@@ -303,6 +303,16 @@ UIModalStyle modalStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UITextStyle textStyleFromTheme(const UITheme* theme) {
+    UITextStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.text = theme->textPrimary;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -488,6 +498,16 @@ UIResolvedModalStyle resolveModal(const UIModalStyle& style) {
     resolved.buttonSpacing = style.buttonSpacing;
     resolved.padding = style.padding;
     resolved.titleTextScale = style.titleTextScale;
+    return resolved;
+}
+
+UIResolvedTextStyle resolveText(const UITextStyle& style) {
+    UIResolvedTextStyle resolved;
+    resolved.text = style.text;
+    resolved.shadow = style.shadow;
+    resolved.textScale = style.textScale;
+    resolved.shadowOffsetX = style.shadowOffsetX;
+    resolved.shadowOffsetY = style.shadowOffsetY;
     return resolved;
 }
 

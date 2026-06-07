@@ -3,6 +3,7 @@
 #include <array>
 #include <string>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 
 class TextRenderer;
@@ -44,6 +45,9 @@ protected:
     void renderSelf(const UIRenderContext& ctx) const override;
 
 private:
+    [[nodiscard]] UITextStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedTextStyle resolveStyle(const UIRenderContext& ctx) const;
+
     std::string m_text;
     float m_textScale = 1.0f;
     std::array<float, 4> m_textColor{1.0f, 1.0f, 1.0f, 1.0f};
