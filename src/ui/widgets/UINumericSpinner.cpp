@@ -10,14 +10,8 @@
 #include <glm/vec4.hpp>
 
 #include "../core/UIRenderUtils.h"
-#include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
-
-namespace {
-constexpr float kButtonWidth = 28.0f;
-constexpr float kGap = 2.0f;
-} // namespace
 
 UINumericSpinner::UINumericSpinner() {
     interactive = true;
@@ -53,6 +47,15 @@ void UINumericSpinner::setRange(float min, float max) {
     m_min = min;
     m_max = max;
     setValue(m_value);
+}
+
+void UINumericSpinner::setStyle(const UINumericSpinnerStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UINumericSpinner::clearLocalStyle() {
+    m_hasLocalStyle = false;
 }
 
 void UINumericSpinner::applyStep(float delta) {
@@ -95,12 +98,13 @@ int UINumericSpinner::hitTestZone(float px, float py, const UIRenderContext& ctx
     const float ay = getAbsoluteY(ctx);
     const float aw = width * scaleX;
     const float ah = height * scaleY;
+    const UIResolvedNumericSpinnerStyle resolved = resolveStyle(ctx);
 
     if (px < ax || px >= ax + aw || flippedY < ay || flippedY >= ay + ah) return -2;
 
     const float localX = px - ax;
-    if (localX < kButtonWidth) return -1;
-    if (localX >= aw - kButtonWidth) return 1;
+    if (localX < resolved.buttonWidth) return -1;
+    if (localX >= aw - resolved.buttonWidth) return 1;
     return 0;
 }
 
@@ -163,17 +167,7 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
     if (!m_shader) return;
 
     const UIRenderUtils::GLStateGuard guard;
-
-    const Color btnNormal = ctx.theme ? ctx.theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
-    const Color btnHover  = ctx.theme ? ctx.theme->buttonHover  : Color{0.42f, 0.42f, 0.42f, 1.0f};
-    const Color btnBorder = ctx.theme ? ctx.theme->buttonBorder : Color{0.5f, 0.5f, 0.5f, 0.4f};
-    const Color bgCol     = ctx.theme ? ctx.theme->inputBackground : Color{0.15f, 0.15f, 0.15f, 0.9f};
-    const Color brdCol    = ctx.theme ?
-                            (isFocused() ? ctx.theme->inputBorderFocused : ctx.theme->inputBorder) :
-                            Color{0.4f, 0.4f, 0.4f, 0.7f};
-    const Color txtCol    = ctx.theme ? ctx.theme->inputText   : Color{1.0f, 1.0f, 1.0f, 1.0f};
-    const Color curCol    = ctx.theme ? ctx.theme->inputCursor : Color{1.0f, 1.0f, 1.0f, 0.9f};
-    const float brdW      = ctx.theme ? ctx.theme->buttonBorderWidth : 2.0f;
+    const UIResolvedNumericSpinnerStyle resolved = resolveStyle(ctx);
 
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
@@ -181,20 +175,22 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
     const float ah = height * scaleY;
 
     const float minusX = ax;
-    const float valueX = ax + kButtonWidth + kGap;
-    const float plusX  = ax + aw - kButtonWidth;
-    const float valueW = aw - 2.0f * kButtonWidth - 2.0f * kGap;
+    const float valueX = ax + resolved.buttonWidth + resolved.gap;
+    const float plusX  = ax + aw - resolved.buttonWidth;
+    const float valueW = aw - 2.0f * resolved.buttonWidth - 2.0f * resolved.gap;
+    const float brdW = resolved.borderWidth;
 
     // Build vertex data for all three zones.
     std::vector<float> verts;
     verts.reserve(96 * 2);
     // Zone 0: minus button (offset 0)
-    UIRenderUtils::pushColorQuad(verts, minusX, ay, minusX + kButtonWidth, ay + ah);
+    UIRenderUtils::pushColorQuad(verts, minusX, ay, minusX + resolved.buttonWidth, ay + ah);
     // Zone 0 border (offset 6)
-    UIRenderUtils::pushColorQuad(verts, minusX, ay + ah - brdW, minusX + kButtonWidth, ay + ah);
-    UIRenderUtils::pushColorQuad(verts, minusX, ay, minusX + kButtonWidth, ay + brdW);
+    UIRenderUtils::pushColorQuad(verts, minusX, ay + ah - brdW, minusX + resolved.buttonWidth, ay + ah);
+    UIRenderUtils::pushColorQuad(verts, minusX, ay, minusX + resolved.buttonWidth, ay + brdW);
     UIRenderUtils::pushColorQuad(verts, minusX, ay, minusX + brdW, ay + ah);
-    UIRenderUtils::pushColorQuad(verts, minusX + kButtonWidth - brdW, ay, minusX + kButtonWidth, ay + ah);
+    UIRenderUtils::pushColorQuad(verts, minusX + resolved.buttonWidth - brdW, ay,
+                                 minusX + resolved.buttonWidth, ay + ah);
     // Zone 1: value area (offset 30)
     UIRenderUtils::pushColorQuad(verts, valueX, ay, valueX + valueW, ay + ah);
     UIRenderUtils::pushColorQuad(verts, valueX, ay + ah - brdW, valueX + valueW, ay + ah);
@@ -202,20 +198,21 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
     UIRenderUtils::pushColorQuad(verts, valueX, ay, valueX + brdW, ay + ah);
     UIRenderUtils::pushColorQuad(verts, valueX + valueW - brdW, ay, valueX + valueW, ay + ah);
     // Zone 2: plus button (offset 54)
-    UIRenderUtils::pushColorQuad(verts, plusX, ay, plusX + kButtonWidth, ay + ah);
-    UIRenderUtils::pushColorQuad(verts, plusX, ay + ah - brdW, plusX + kButtonWidth, ay + ah);
-    UIRenderUtils::pushColorQuad(verts, plusX, ay, plusX + kButtonWidth, ay + brdW);
+    UIRenderUtils::pushColorQuad(verts, plusX, ay, plusX + resolved.buttonWidth, ay + ah);
+    UIRenderUtils::pushColorQuad(verts, plusX, ay + ah - brdW, plusX + resolved.buttonWidth, ay + ah);
+    UIRenderUtils::pushColorQuad(verts, plusX, ay, plusX + resolved.buttonWidth, ay + brdW);
     UIRenderUtils::pushColorQuad(verts, plusX, ay, plusX + brdW, ay + ah);
-    UIRenderUtils::pushColorQuad(verts, plusX + kButtonWidth - brdW, ay, plusX + kButtonWidth, ay + ah);
+    UIRenderUtils::pushColorQuad(verts, plusX + resolved.buttonWidth - brdW, ay,
+                                 plusX + resolved.buttonWidth, ay + ah);
 
     // Cursor for editing mode (offset 78).
     if (m_editing && m_cursorVisible && isFocused()) {
-        const std::string displayText = m_editText.empty() ? " " : m_editText;
-        float cursorX = valueX + 6.0f;
+        float cursorX = valueX + resolved.textPadding;
         if (ctx.textRenderer && !m_editText.empty()) {
             cursorX += ctx.textRenderer->measureText(m_editText, 1.0f).width;
         }
-        UIRenderUtils::pushColorQuad(verts, cursorX, ay + 3.0f, cursorX + 1.5f, ay + ah - 3.0f);
+        UIRenderUtils::pushColorQuad(verts, cursorX, ay + resolved.cursorInset,
+                                     cursorX + resolved.cursorWidth, ay + ah - resolved.cursorInset);
     }
 
     glBindVertexArray(m_vao);
@@ -229,28 +226,33 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
                                 static_cast<float>(ctx.screenHeight)));
 
     // Minus button.
-    const Color minusCol = m_minusHovered ? btnHover : btnNormal;
-    m_shader->setVec4("uColor", glm::vec4(minusCol[0], minusCol[1], minusCol[2], minusCol[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(resolved.minusBackground[0], resolved.minusBackground[1],
+                                          resolved.minusBackground[2], resolved.minusBackground[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 0, 6);
-    m_shader->setVec4("uColor", glm::vec4(btnBorder[0], btnBorder[1], btnBorder[2], btnBorder[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(resolved.minusBorder[0], resolved.minusBorder[1],
+                                          resolved.minusBorder[2], resolved.minusBorder[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 6, 24);
 
     // Value area.
-    m_shader->setVec4("uColor", glm::vec4(bgCol[0], bgCol[1], bgCol[2], bgCol[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(resolved.valueBackground[0], resolved.valueBackground[1],
+                                          resolved.valueBackground[2], resolved.valueBackground[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 30, 6);
-    m_shader->setVec4("uColor", glm::vec4(brdCol[0], brdCol[1], brdCol[2], brdCol[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(resolved.valueBorder[0], resolved.valueBorder[1],
+                                          resolved.valueBorder[2], resolved.valueBorder[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 36, 24);
 
     // Plus button.
-    const Color plusCol = m_plusHovered ? btnHover : btnNormal;
-    m_shader->setVec4("uColor", glm::vec4(plusCol[0], plusCol[1], plusCol[2], plusCol[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(resolved.plusBackground[0], resolved.plusBackground[1],
+                                          resolved.plusBackground[2], resolved.plusBackground[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 54, 6);
-    m_shader->setVec4("uColor", glm::vec4(btnBorder[0], btnBorder[1], btnBorder[2], btnBorder[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(resolved.plusBorder[0], resolved.plusBorder[1],
+                                          resolved.plusBorder[2], resolved.plusBorder[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 60, 24);
 
     // Cursor.
     if (m_editing && m_cursorVisible && isFocused()) {
-        m_shader->setVec4("uColor", glm::vec4(curCol[0], curCol[1], curCol[2], curCol[3] * alpha));
+        m_shader->setVec4("uColor", glm::vec4(resolved.cursor[0], resolved.cursor[1],
+                                              resolved.cursor[2], resolved.cursor[3] * alpha));
         glDrawArrays(GL_TRIANGLES, 78, 6);
     }
 
@@ -264,10 +266,11 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
         {
             const auto m = ctx.textRenderer->measureText("-", textScale);
             ctx.textRenderer->render("-",
-                                     minusX + (kButtonWidth - m.width) * 0.5f,
+                                     minusX + (resolved.buttonWidth - m.width) * 0.5f,
                                      ay + (ah - m.height) * 0.5f,
                                      textScale,
-                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
+                                     {resolved.text[0], resolved.text[1], resolved.text[2],
+                                      resolved.text[3] * alpha},
                                      static_cast<float>(ctx.screenWidth),
                                      static_cast<float>(ctx.screenHeight));
         }
@@ -275,10 +278,11 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
         {
             const auto m = ctx.textRenderer->measureText("+", textScale);
             ctx.textRenderer->render("+",
-                                     plusX + (kButtonWidth - m.width) * 0.5f,
+                                     plusX + (resolved.buttonWidth - m.width) * 0.5f,
                                      ay + (ah - m.height) * 0.5f,
                                      textScale,
-                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
+                                     {resolved.text[0], resolved.text[1], resolved.text[2],
+                                      resolved.text[3] * alpha},
                                      static_cast<float>(ctx.screenWidth),
                                      static_cast<float>(ctx.screenHeight));
         }
@@ -297,10 +301,11 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
                       static_cast<int>((ah - 4.0f) * uiScale));
 
             ctx.textRenderer->render(valStr.empty() ? " " : valStr,
-                                     valueX + 6.0f,
+                                     valueX + resolved.textPadding,
                                      ay + (ah - m.height) * 0.5f,
                                      textScale,
-                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
+                                     {resolved.text[0], resolved.text[1], resolved.text[2],
+                                      resolved.text[3] * alpha},
                                      static_cast<float>(ctx.screenWidth),
                                      static_cast<float>(ctx.screenHeight));
 
@@ -438,4 +443,29 @@ UIEventResult UINumericSpinner::onInput(const UIInputEvent& event, const UIRende
     }
 
     return UIEventResult::Ignored;
+}
+
+UINumericSpinnerStyle UINumericSpinner::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+    return UIStyleResolver::numericSpinnerStyleFromTheme(ctx.theme);
+}
+
+UIResolvedNumericSpinnerStyle UINumericSpinner::resolveStyle(const UIRenderContext& ctx) const {
+    int minusState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+    int plusState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+    int valueState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+
+    if (m_minusHovered) {
+        minusState |= static_cast<int>(UIStyleState_Hovered);
+    }
+    if (m_plusHovered) {
+        plusState |= static_cast<int>(UIStyleState_Hovered);
+    }
+    if (isFocused()) {
+        valueState |= static_cast<int>(UIStyleState_Focused);
+    }
+
+    return UIStyleResolver::resolveNumericSpinner(resolveBaseStyle(ctx), minusState, plusState, valueState);
 }

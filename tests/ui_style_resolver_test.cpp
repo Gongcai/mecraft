@@ -62,6 +62,11 @@ int main() {
     }
 
     UITheme theme;
+    theme.buttonNormal = {0.10f, 0.20f, 0.30f, 0.92f};
+    theme.buttonHover = {0.20f, 0.30f, 0.40f, 1.0f};
+    theme.buttonDisabled = {0.08f, 0.09f, 0.10f, 0.5f};
+    theme.buttonBorder = {0.30f, 0.40f, 0.50f, 0.4f};
+    theme.buttonBorderWidth = 5.0f;
     theme.inputBackground = {0.11f, 0.12f, 0.13f, 0.9f};
     theme.inputBorder = {0.21f, 0.22f, 0.23f, 0.7f};
     theme.inputBorderFocused = {0.31f, 0.32f, 0.33f, 1.0f};
@@ -304,6 +309,42 @@ int main() {
         !colorEqual(disabledTab.text, theme.textDisabled) ||
         colorEqual(disabledTab.header, theme.tabHeaderActive)) {
         return fail("disabled tab should override selected state");
+    }
+
+    const UINumericSpinnerStyle spinnerStyle = UIStyleResolver::numericSpinnerStyleFromTheme(&theme);
+    const UIResolvedNumericSpinnerStyle focusedSpinner =
+        UIStyleResolver::resolveNumericSpinner(
+            spinnerStyle,
+            UIStyleState_Hovered,
+            UIStyleState_Normal,
+            UIStyleState_Focused);
+    if (!colorEqual(focusedSpinner.minusBackground, theme.buttonHover) ||
+        !colorEqual(focusedSpinner.minusBorder, theme.buttonBorder) ||
+        !colorEqual(focusedSpinner.plusBackground, theme.buttonNormal) ||
+        !colorEqual(focusedSpinner.valueBackground, theme.inputBackground) ||
+        !colorEqual(focusedSpinner.valueBorder, theme.inputBorderFocused) ||
+        !colorEqual(focusedSpinner.text, theme.inputText) ||
+        !colorEqual(focusedSpinner.cursor, theme.inputCursor) ||
+        std::fabs(focusedSpinner.buttonWidth - 28.0f) > 0.001f ||
+        std::fabs(focusedSpinner.gap - 2.0f) > 0.001f ||
+        std::fabs(focusedSpinner.borderWidth - 5.0f) > 0.001f ||
+        std::fabs(focusedSpinner.textPadding - 6.0f) > 0.001f ||
+        std::fabs(focusedSpinner.cursorWidth - 1.5f) > 0.001f ||
+        std::fabs(focusedSpinner.cursorInset - 3.0f) > 0.001f) {
+        return fail("numeric spinner should compose button/input colors and metrics");
+    }
+
+    const UIResolvedNumericSpinnerStyle disabledSpinner =
+        UIStyleResolver::resolveNumericSpinner(
+            spinnerStyle,
+            UIStyleState_Disabled | UIStyleState_Hovered,
+            UIStyleState_Disabled,
+            UIStyleState_Disabled | UIStyleState_Focused);
+    if (!colorEqual(disabledSpinner.minusBackground, theme.buttonDisabled) ||
+        !colorEqual(disabledSpinner.valueBorder, theme.buttonBorder) ||
+        !colorEqual(disabledSpinner.text, theme.textDisabled) ||
+        colorEqual(disabledSpinner.minusBackground, theme.buttonHover)) {
+        return fail("disabled numeric spinner zones should override interactive states");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

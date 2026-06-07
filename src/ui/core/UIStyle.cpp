@@ -242,6 +242,16 @@ UITabControlStyle tabControlStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UINumericSpinnerStyle numericSpinnerStyleFromTheme(const UITheme* theme) {
+    UINumericSpinnerStyle style;
+    style.button = buttonStyleFromTheme(theme);
+    style.value = textInputStyleFromTheme(theme);
+    if (theme) {
+        style.borderWidth = theme->buttonBorderWidth;
+    }
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -336,6 +346,33 @@ UIResolvedTabControlStyle resolveTabControl(const UITabControlStyle& style, int 
         resolved.header = style.headerNormal;
     }
     resolved.text = style.textNormal;
+    return resolved;
+}
+
+UIResolvedNumericSpinnerStyle resolveNumericSpinner(
+    const UINumericSpinnerStyle& style,
+    int minusState,
+    int plusState,
+    int valueState) {
+    UIResolvedNumericSpinnerStyle resolved;
+    const UIResolvedStyle minus = resolve(style.button, minusState);
+    const UIResolvedStyle plus = resolve(style.button, plusState);
+    const UIResolvedTextInputStyle value = resolveTextInput(style.value, valueState);
+
+    resolved.minusBackground = minus.background;
+    resolved.minusBorder = minus.border;
+    resolved.plusBackground = plus.background;
+    resolved.plusBorder = plus.border;
+    resolved.valueBackground = value.frame.background;
+    resolved.valueBorder = value.frame.border;
+    resolved.text = value.frame.text;
+    resolved.cursor = value.cursor;
+    resolved.buttonWidth = style.buttonWidth;
+    resolved.gap = style.gap;
+    resolved.borderWidth = style.borderWidth;
+    resolved.textPadding = style.textPadding;
+    resolved.cursorWidth = style.cursorWidth;
+    resolved.cursorInset = style.cursorInset;
     return resolved;
 }
 

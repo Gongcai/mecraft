@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 
 class Shader;
@@ -31,6 +32,9 @@ public:
     void setDecimals(int decimals) { m_decimals = decimals; }
     [[nodiscard]] int getDecimals() const { return m_decimals; }
 
+    void setStyle(const UINumericSpinnerStyle& style);
+    void clearLocalStyle();
+
     std::function<void(float)> onValueChanged;
 
 protected:
@@ -45,6 +49,8 @@ private:
     void commitEditText();
     [[nodiscard]] std::string formatValue() const;
     [[nodiscard]] int hitTestZone(float px, float py, const UIRenderContext& ctx) const;
+    [[nodiscard]] UINumericSpinnerStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedNumericSpinnerStyle resolveStyle(const UIRenderContext& ctx) const;
     // Returns: -1 = minus button, 0 = value area, 1 = plus button, -2 = outside.
 
     Shader* m_shader = nullptr;
@@ -71,4 +77,7 @@ private:
     bool m_backspaceActiveLastFrame = false;
     static constexpr float kBackspaceInitialDelay = 0.28f;
     static constexpr float kBackspaceRepeatInterval = 0.05f;
+
+    bool m_hasLocalStyle = false;
+    UINumericSpinnerStyle m_localStyle;
 };

@@ -234,6 +234,34 @@ struct UIResolvedTabControlStyle {
     float indicatorHeight = 3.0f;
 };
 
+struct UINumericSpinnerStyle {
+    UIComponentStyle button;
+    UITextInputStyle value;
+    float buttonWidth = 28.0f;
+    float gap = 2.0f;
+    float borderWidth = 2.0f;
+    float textPadding = 6.0f;
+    float cursorWidth = 1.5f;
+    float cursorInset = 3.0f;
+};
+
+struct UIResolvedNumericSpinnerStyle {
+    Color minusBackground {0.28f, 0.28f, 0.28f, 0.92f};
+    Color minusBorder     {0.50f, 0.50f, 0.50f, 0.4f};
+    Color plusBackground  {0.28f, 0.28f, 0.28f, 0.92f};
+    Color plusBorder      {0.50f, 0.50f, 0.50f, 0.4f};
+    Color valueBackground {0.15f, 0.15f, 0.15f, 0.9f};
+    Color valueBorder     {0.40f, 0.40f, 0.40f, 0.7f};
+    Color text            {1.0f, 1.0f, 1.0f, 1.0f};
+    Color cursor          {1.0f, 1.0f, 1.0f, 0.9f};
+    float buttonWidth = 28.0f;
+    float gap = 2.0f;
+    float borderWidth = 2.0f;
+    float textPadding = 6.0f;
+    float cursorWidth = 1.5f;
+    float cursorInset = 3.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -247,6 +275,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UIContextMenuStyle contextMenuStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIScrollAreaStyle scrollAreaStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITabControlStyle tabControlStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UINumericSpinnerStyle numericSpinnerStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -258,4 +287,9 @@ namespace UIStyleResolver {
     [[nodiscard]] UIResolvedContextMenuStyle resolveContextMenu(const UIContextMenuStyle& style);
     [[nodiscard]] UIResolvedScrollAreaStyle resolveScrollArea(const UIScrollAreaStyle& style, int state);
     [[nodiscard]] UIResolvedTabControlStyle resolveTabControl(const UITabControlStyle& style, int state);
+    [[nodiscard]] UIResolvedNumericSpinnerStyle resolveNumericSpinner(
+        const UINumericSpinnerStyle& style,
+        int minusState,
+        int plusState,
+        int valueState);
 }
