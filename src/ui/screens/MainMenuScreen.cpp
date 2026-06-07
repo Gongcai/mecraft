@@ -49,7 +49,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     mpBtn->height = 48.0f;
     mpBtn->anchor = Anchor::Center;
     mpBtn->anchorOffsetY = -80.0f;
-    mpBtn->setTone(UIButtonTone::Secondary);
+    mpBtn->setTone(UIButtonTone::Primary);
     mpBtn->setOnClick([this]() {
         showMultiplayerPanel();
     });
