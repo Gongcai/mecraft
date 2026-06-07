@@ -120,6 +120,14 @@ void UIDropdown::renderOverlay(const UIRenderContext& ctx) const {
     UIWidget::renderOverlay(ctx);
 }
 
+UIEventResult UIDropdown::onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) {
+    if (!visible || !interactive) return UIEventResult::Ignored;
+    if (!m_expanded) return UIWidget::onOverlayInput(event, ctx);
+
+    const UIEventResult result = onInput(event, ctx);
+    return result == UIEventResult::Ignored ? UIEventResult::Ignored : UIEventResult::Consumed;
+}
+
 void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
     const UITheme* theme = ctx.theme;
     const auto& bgCol = theme ? theme->dropdownBackground : m_bgColor;

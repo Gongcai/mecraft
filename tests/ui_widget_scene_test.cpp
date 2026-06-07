@@ -46,6 +46,26 @@ private:
     int m_callCount = 0;
 };
 
+class OverlayInterceptWidget final : public UIWidget {
+public:
+    UIEventResult onOverlayInput(const UIInputEvent&, const UIRenderContext&) override {
+        ++m_overlayCallCount;
+        return UIEventResult::Consumed;
+    }
+
+    UIEventResult onInput(const UIInputEvent&, const UIRenderContext&) override {
+        ++m_inputCallCount;
+        return UIEventResult::Ignored;
+    }
+
+    [[nodiscard]] int overlayCallCount() const { return m_overlayCallCount; }
+    [[nodiscard]] int inputCallCount() const { return m_inputCallCount; }
+
+private:
+    int m_overlayCallCount = 0;
+    int m_inputCallCount = 0;
+};
+
 class TestScene final : public UIScene {};
 
 } // namespace
@@ -142,6 +162,22 @@ int main() {
     }
     if (consumedRootPtr->callCount() != 1 || handledRootPtr->callCount() != 0) {
         return fail("UIScene should stop root dispatch after Consumed");
+    }
+
+    TestScene overlayScene;
+    auto overlayRoot = std::make_unique<OverlayInterceptWidget>();
+    auto normalTopRoot = std::make_unique<FixedResultWidget>(UIEventResult::Consumed);
+    OverlayInterceptWidget* overlayRootPtr = overlayRoot.get();
+    FixedResultWidget* normalTopRootPtr = normalTopRoot.get();
+    overlayScene.addRoot(std::move(overlayRoot));
+    overlayScene.addRoot(std::move(normalTopRoot));
+    overlayScene.setInputContext(context);
+    if (overlayScene.onInput({UIInputEventType::PointerDown, 0.0f, 0.0f, UIPointerButton::Primary}, context) != UIEventResult::Consumed) {
+        return fail("UIScene should let overlay input consume before normal roots");
+    }
+    if (overlayRootPtr->overlayCallCount() != 1 || overlayRootPtr->inputCallCount() != 0 ||
+        normalTopRootPtr->callCount() != 0) {
+        return fail("overlay input should prevent normal dispatch to visually lower controls");
     }
 
     std::cout << "[ui_widget_scene_test] PASS\n";

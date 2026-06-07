@@ -292,6 +292,21 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
         }
     }
 
+    // Floating widget overlays are rendered above normal controls, so route their input first.
+    for (auto it = m_widgetControls.rbegin(); it != m_widgetControls.rend(); ++it) {
+        UIWidget* widget = *it;
+        if (!widget || !widget->visible) {
+            continue;
+        }
+        const UIEventResult overlayResult = widget->onOverlayInput(refEvent, m_lastSceneContext);
+        if (overlayResult == UIEventResult::Consumed) {
+            return UIEventResult::Consumed;
+        }
+        if (overlayResult == UIEventResult::Handled) {
+            aggregate = UIEventResult::Handled;
+        }
+    }
+
     // Dispatch to UIWidget-based controls
     for (UIWidget* widget : m_widgetControls) {
         if (!widget || !widget->visible) {

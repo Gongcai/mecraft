@@ -69,6 +69,21 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
         m_lastPointerY = event.y;
     }
 
+    UIEventResult aggregate = UIEventResult::Ignored;
+
+    // Floating overlays are rendered above normal widgets, so they get first input priority too.
+    for (auto it = m_roots.rbegin(); it != m_roots.rend(); ++it) {
+        const UIEventResult overlayResult = (*it)->onOverlayInput(event, m_currentContext);
+        if (overlayResult == UIEventResult::Consumed) {
+            applyPendingFocusRequests();
+            ensureFocusableSelection();
+            return UIEventResult::Consumed;
+        }
+        if (overlayResult == UIEventResult::Handled) {
+            aggregate = UIEventResult::Handled;
+        }
+    }
+
     if (event.type == UIInputEventType::Command &&
         (event.command == UICommand::NavigateUp ||
          event.command == UICommand::NavigateDown ||
@@ -99,7 +114,6 @@ UIEventResult UIScene::onInput(const UIInputEvent& event, const UIRenderContext&
     }
 
     // Focused widget gets priority for keyboard, command, text, and scroll events
-    UIEventResult aggregate = UIEventResult::Ignored;
     if (m_focusedWidget &&
         (event.type == UIInputEventType::KeyDown ||
          event.type == UIInputEventType::KeyUp ||

@@ -29,6 +29,7 @@ public:
 
     void updateAnimations(float dt) override;
     void renderOverlay(const UIRenderContext& ctx) const override;
+    UIEventResult onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;

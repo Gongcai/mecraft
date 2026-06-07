@@ -172,6 +172,20 @@ public:
         }
     }
 
+    virtual UIEventResult onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) {
+        if (!visible) return UIEventResult::Ignored;
+        UIEventResult aggregate = UIEventResult::Ignored;
+        // Overlay input follows overlay draw order and gives floating panels first chance.
+        for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+            UIEventResult result = (*it)->onOverlayInput(event, ctx);
+            if (result == UIEventResult::Consumed) return UIEventResult::Consumed;
+            if (result == UIEventResult::Handled) {
+                aggregate = UIEventResult::Handled;
+            }
+        }
+        return aggregate;
+    }
+
     // Input
     virtual UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
         if (!visible) return UIEventResult::Ignored;
