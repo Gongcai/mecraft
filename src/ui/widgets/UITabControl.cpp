@@ -31,6 +31,7 @@ UITabControl::~UITabControl() {
 
 void UITabControl::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("ui_color");
+    m_glassShader = resourceMgr.getShader("ui_glass");
     // Mesh for: header bg rects (6 verts per tab) + indicator rect (6 verts) + content bg (6 verts).
     // We'll buffer-sub-data dynamically, so allocate generously.
     constexpr int maxTabs = 32;
@@ -52,6 +53,7 @@ void UITabControl::shutdown() {
     if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
     if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
     m_shader = nullptr;
+    m_glassShader = nullptr;
     UIWidget::shutdown();
 }
 
@@ -195,14 +197,40 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
     glBufferSubData(GL_ARRAY_BUFFER, 0,
                     static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
 
+    const bool useGlass = m_glassShader &&
+                          ctx.backdropBlurTexture != 0 &&
+                          ctx.backdropSourceWidth > 0 &&
+                          ctx.backdropSourceHeight > 0;
+
+    if (useGlass) {
+        const float tintStrength = std::clamp(contentCol[3] * 0.40f, 0.18f, 0.40f);
+        m_glassShader->use();
+        m_glassShader->setVec2("uScreenSize",
+                               glm::vec2(static_cast<float>(ctx.screenWidth),
+                                         static_cast<float>(ctx.screenHeight)));
+        m_glassShader->setVec2("uBackdropSize",
+                               glm::vec2(static_cast<float>(ctx.backdropSourceWidth),
+                                         static_cast<float>(ctx.backdropSourceHeight)));
+        m_glassShader->setVec4("uTint", glm::vec4(contentCol[0], contentCol[1], contentCol[2], tintStrength));
+        m_glassShader->setFloat("uOpacity", std::clamp(alpha * 0.94f, 0.0f, 1.0f));
+        m_glassShader->setFloat("uSaturation", 0.58f);
+        m_glassShader->setFloat("uDarken", 0.74f);
+        m_glassShader->setInt("uBackdrop", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
     m_shader->use();
     m_shader->setVec2("uScreenSize",
                       glm::vec2(static_cast<float>(ctx.screenWidth),
                                 static_cast<float>(ctx.screenHeight)));
 
     // Draw content background, then headers and the active indicator.
+    Color contentDraw = contentCol;
+    contentDraw[3] *= useGlass ? 0.34f : 1.0f;
     m_shader->setVec4("uColor",
-                      glm::vec4(contentCol[0], contentCol[1], contentCol[2], contentCol[3] * alpha));
+                      glm::vec4(contentDraw[0], contentDraw[1], contentDraw[2], contentDraw[3] * alpha));
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     const GLint headerVertexOffset = 6;

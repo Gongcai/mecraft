@@ -1,5 +1,7 @@
 #include "UIPanel.h"
 
+#include <algorithm>
+
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
@@ -16,6 +18,7 @@ void UIPanel::init(ResourceMgr& resourceMgr) {
     // when init() is called multiple times (e.g. scene re-entry).
     if (!m_gpuInitialized) {
         m_shader = resourceMgr.getShader("ui_color");
+        m_glassShader = resourceMgr.getShader("ui_glass");
         initMesh();
         m_gpuInitialized = true;
     }
@@ -27,6 +30,7 @@ void UIPanel::init(ResourceMgr& resourceMgr) {
 void UIPanel::shutdown() {
     cleanupMesh();
     m_shader = nullptr;
+    m_glassShader = nullptr;
     m_gpuInitialized = false;
 }
 
@@ -102,19 +106,49 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     float aw = width * scaleX;
     float ah = height * scaleY;
 
+    const UIResolvedStyle resolved = UIStyleResolver::resolve(resolveBaseStyle(ctx), UIStyleState_Normal);
+    const bool useGlass = m_glassShader &&
+                          ctx.backdropBlurTexture != 0 &&
+                          ctx.backdropSourceWidth > 0 &&
+                          ctx.backdropSourceHeight > 0 &&
+                          ctx.backdropBlurWidth > 0 &&
+                          ctx.backdropBlurHeight > 0 &&
+                          (m_tone == UIPanelTone::OverlaySurface ||
+                           (m_tone == UIPanelTone::Default && !m_hasLocalBgColor));
+
     const UIRenderUtils::GLStateGuard glState;
+
+    rebuildMesh(ax, ay, ax + aw, ay + ah);
+    glBindVertexArray(m_vao);
+
+    if (useGlass) {
+        std::array<float, 4> tint = resolved.background;
+        const float tintStrength = std::clamp(tint[3] * 0.42f, 0.18f, 0.42f);
+        const float opacity = std::clamp(alpha * 0.94f, 0.0f, 1.0f);
+
+        m_glassShader->use();
+        m_glassShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
+                                                         static_cast<float>(ctx.screenHeight)));
+        m_glassShader->setVec2("uBackdropSize", glm::vec2(static_cast<float>(ctx.backdropSourceWidth),
+                                                           static_cast<float>(ctx.backdropSourceHeight)));
+        m_glassShader->setVec4("uTint", glm::vec4(tint[0], tint[1], tint[2], tintStrength));
+        m_glassShader->setFloat("uOpacity", opacity);
+        m_glassShader->setFloat("uSaturation", 0.58f);
+        m_glassShader->setFloat("uDarken", 0.74f);
+        m_glassShader->setInt("uBackdrop", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
 
     m_shader->use();
     m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
                                                 static_cast<float>(ctx.screenHeight)));
 
-    // Render background
-    const UIResolvedStyle resolved = UIStyleResolver::resolve(resolveBaseStyle(ctx), UIStyleState_Normal);
+    // Render background tint.
     std::array<float, 4> bg = resolved.background;
-    bg[3] *= alpha;
+    bg[3] *= alpha * (useGlass ? 0.34f : 1.0f);
     m_shader->setVec4("uColor", glm::vec4(bg[0], bg[1], bg[2], bg[3]));
-    rebuildMesh(ax, ay, ax + aw, ay + ah);
-    glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // Render border if width > 0 (4 quads merged into single draw call)
@@ -124,7 +158,23 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
         bc[3] *= alpha;
         m_shader->setVec4("uColor", glm::vec4(bc[0], bc[1], bc[2], bc[3]));
         rebuildBorderMesh(ax, ay, ax + aw, ay + ah, borderW);
-        glDrawArrays(GL_TRIANGLES, 0, 24);
+        glDrawArrays(GL_TRIANGLES, 6, 24);
+    }
+
+    if (useGlass) {
+        const float lineW = std::max(1.0f, borderW);
+
+        const Color topHighlight {0.92f, 0.96f, 0.84f, 0.14f * alpha};
+        m_shader->setVec4("uColor", glm::vec4(topHighlight[0], topHighlight[1],
+                                              topHighlight[2], topHighlight[3]));
+        rebuildMesh(ax + lineW, ay + ah - lineW - 1.0f, ax + aw - lineW, ay + ah - lineW);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        const Color bottomShade {0.0f, 0.0f, 0.0f, 0.18f * alpha};
+        m_shader->setVec4("uColor", glm::vec4(bottomShade[0], bottomShade[1],
+                                              bottomShade[2], bottomShade[3]));
+        rebuildMesh(ax + lineW, ay + lineW, ax + aw - lineW, ay + lineW + 1.0f);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 
     glBindVertexArray(0);

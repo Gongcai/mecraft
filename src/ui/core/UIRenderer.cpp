@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include <glad/glad.h>
+#include <glm/vec2.hpp>
 
 #include "engine/platform/Time.h"
 #include "engine/input/InputManager.h"
@@ -12,6 +13,19 @@
 #include "UIRenderUtils.h"
 #include "UIScene.h"
 #include "UIThemePresets.h"
+
+namespace {
+constexpr int kBackdropBlurDownsample = 4;
+
+void configureLinearClampTexture() {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+}
+}
 
 UIRenderer::UIRenderer() = default;
 
@@ -70,6 +84,7 @@ void UIRenderer::shutdown()
     m_hotbar.shutdown();
     m_commandInputRequested = false;
     m_lastSceneContext = {};
+    destroyBackdropBlurTargets();
     m_resourceMgr = nullptr;
     m_humanoidRenderer = nullptr;
 }
@@ -538,6 +553,7 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     m_lastSceneContext = context;
 
     if (m_activeScene && m_activeScene->visible) {
+        prepareBackdropBlur(context);
         m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }
@@ -545,18 +561,213 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
 
 void UIRenderer::renderControls(const UIRenderContext& context) const
 {
+    UIRenderContext renderContext = context;
+    if (m_activeScene && m_activeScene->visible) {
+        prepareBackdropBlur(renderContext);
+    }
+
     const UIRenderUtils::UIScopeGuard uiScope;
 
     for (const UIWidget* widget : m_widgetControls) {
         if (!widget || !widget->visible) {
             continue;
         }
-        widget->render(context);
+        widget->render(renderContext);
     }
 
     // Render active scene on top of gameplay controls
     if (m_activeScene && m_activeScene->visible) {
-        m_activeScene->setInputContext(context);
-        m_activeScene->render(context);
+        m_activeScene->setInputContext(renderContext);
+        m_activeScene->render(renderContext);
     }
+}
+
+void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sourceHeight) const
+{
+    const int blurWidth = std::max(1, sourceWidth / kBackdropBlurDownsample);
+    const int blurHeight = std::max(1, sourceHeight / kBackdropBlurDownsample);
+    const bool sizeChanged = sourceWidth != m_backdropSourceWidth ||
+                             sourceHeight != m_backdropSourceHeight ||
+                             blurWidth != m_backdropBlurWidth ||
+                             blurHeight != m_backdropBlurHeight;
+
+    if (m_backdropFullscreenVao == 0) {
+        glGenVertexArrays(1, &m_backdropFullscreenVao);
+    }
+
+    if (m_backdropSourceTex == 0) {
+        glGenTextures(1, &m_backdropSourceTex);
+    }
+    glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
+    configureLinearClampTexture();
+    if (sizeChanged) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sourceWidth, sourceHeight, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        if (m_backdropBlurTex[i] == 0) {
+            glGenTextures(1, &m_backdropBlurTex[i]);
+        }
+        glBindTexture(GL_TEXTURE_2D, m_backdropBlurTex[i]);
+        configureLinearClampTexture();
+        if (sizeChanged) {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, blurWidth, blurHeight, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        }
+
+        if (m_backdropBlurFbo[i] == 0) {
+            glGenFramebuffers(1, &m_backdropBlurFbo[i]);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, m_backdropBlurFbo[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_backdropBlurTex[i], 0);
+        const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+        glDrawBuffers(1, &drawBuffer);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    m_backdropSourceWidth = sourceWidth;
+    m_backdropSourceHeight = sourceHeight;
+    m_backdropBlurWidth = blurWidth;
+    m_backdropBlurHeight = blurHeight;
+}
+
+void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
+{
+    context.backdropBlurTexture = 0;
+    context.backdropSourceWidth = 0;
+    context.backdropSourceHeight = 0;
+    context.backdropBlurWidth = 0;
+    context.backdropBlurHeight = 0;
+
+    if (!m_resourceMgr) {
+        return;
+    }
+
+    Shader* blurShader = m_resourceMgr->getShader("blur");
+    if (!blurShader) {
+        return;
+    }
+
+    GLint viewport[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    const int sourceWidth = std::max(1, viewport[2]);
+    const int sourceHeight = std::max(1, viewport[3]);
+
+    GLint prevReadFbo = 0;
+    GLint prevDrawFbo = 0;
+    GLint prevViewport[4] = {0, 0, 0, 0};
+    GLint prevProgram = 0;
+    GLint prevVao = 0;
+    GLint prevActiveTexture = GL_TEXTURE0;
+    GLint prevTexture0 = 0;
+    GLboolean prevDepthTest = GL_FALSE;
+    GLboolean prevBlend = GL_FALSE;
+    GLboolean prevDepthMask = GL_TRUE;
+
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFbo);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevDrawFbo);
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTexture);
+    glActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexture0);
+    prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
+    prevBlend = glIsEnabled(GL_BLEND);
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
+
+    auto restoreState = [&]() {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDrawFbo);
+        glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+        glUseProgram(static_cast<GLuint>(prevProgram));
+        glBindVertexArray(static_cast<GLuint>(prevVao));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTexture0));
+        glActiveTexture(static_cast<GLenum>(prevActiveTexture));
+        if (prevDepthTest) {
+            glEnable(GL_DEPTH_TEST);
+        } else {
+            glDisable(GL_DEPTH_TEST);
+        }
+        if (prevBlend) {
+            glEnable(GL_BLEND);
+        } else {
+            glDisable(GL_BLEND);
+        }
+        glDepthMask(prevDepthMask);
+    };
+
+    ensureBackdropBlurTargets(sourceWidth, sourceHeight);
+    if (m_backdropSourceTex == 0 || m_backdropBlurTex[0] == 0 || m_backdropBlurTex[1] == 0 ||
+        m_backdropBlurFbo[0] == 0 || m_backdropBlurFbo[1] == 0 || m_backdropFullscreenVao == 0) {
+        restoreState();
+        return;
+    }
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDrawFbo);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, viewport[0], viewport[1], sourceWidth, sourceHeight);
+
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glViewport(0, 0, m_backdropBlurWidth, m_backdropBlurHeight);
+    glBindVertexArray(m_backdropFullscreenVao);
+
+    blurShader->use();
+    blurShader->setInt("uTexture", 0);
+
+    auto blurPass = [&](const GLuint inputTexture, const GLuint outputFbo, const glm::vec2 direction) {
+        glBindFramebuffer(GL_FRAMEBUFFER, outputFbo);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, inputTexture);
+        blurShader->setVec2("uDirection", direction);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    };
+
+    blurPass(m_backdropSourceTex, m_backdropBlurFbo[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
+    blurPass(m_backdropBlurTex[0], m_backdropBlurFbo[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(m_backdropBlurTex[1], m_backdropBlurFbo[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
+    blurPass(m_backdropBlurTex[0], m_backdropBlurFbo[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+
+    restoreState();
+
+    context.backdropBlurTexture = m_backdropBlurTex[1];
+    context.backdropSourceWidth = sourceWidth;
+    context.backdropSourceHeight = sourceHeight;
+    context.backdropBlurWidth = m_backdropBlurWidth;
+    context.backdropBlurHeight = m_backdropBlurHeight;
+}
+
+void UIRenderer::destroyBackdropBlurTargets()
+{
+    if (m_backdropSourceTex != 0) {
+        glDeleteTextures(1, &m_backdropSourceTex);
+        m_backdropSourceTex = 0;
+    }
+    for (int i = 0; i < 2; ++i) {
+        if (m_backdropBlurTex[i] != 0) {
+            glDeleteTextures(1, &m_backdropBlurTex[i]);
+            m_backdropBlurTex[i] = 0;
+        }
+        if (m_backdropBlurFbo[i] != 0) {
+            glDeleteFramebuffers(1, &m_backdropBlurFbo[i]);
+            m_backdropBlurFbo[i] = 0;
+        }
+    }
+    if (m_backdropFullscreenVao != 0) {
+        glDeleteVertexArrays(1, &m_backdropFullscreenVao);
+        m_backdropFullscreenVao = 0;
+    }
+
+    m_backdropSourceWidth = 0;
+    m_backdropSourceHeight = 0;
+    m_backdropBlurWidth = 0;
+    m_backdropBlurHeight = 0;
 }

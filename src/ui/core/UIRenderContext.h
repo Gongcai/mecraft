@@ -38,4 +38,9 @@ struct UIRenderContext {
     int draggedItemId = 0;
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
+    unsigned int backdropBlurTexture = 0;
+    int backdropSourceWidth = 0;
+    int backdropSourceHeight = 0;
+    int backdropBlurWidth = 0;
+    int backdropBlurHeight = 0;
 };

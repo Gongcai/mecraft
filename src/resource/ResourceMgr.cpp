@@ -295,6 +295,7 @@ void ResourceMgr::init() {
     loadShader("item_gbuffer", SHADERS_DIR "/item_gbuffer.vert", SHADERS_DIR "/item_gbuffer.frag");
     loadShader("item_shadow", SHADERS_DIR "/item_shadow.vert", SHADERS_DIR "/item_shadow.frag");
     loadShader("ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag");
+    loadShader("ui_glass", SHADERS_DIR "/ui_glass.vert", SHADERS_DIR "/ui_glass.frag");
     loadShader("skybox", SHADERS_DIR "/skybox.vert", SHADERS_DIR "/skybox.frag");
     loadShader("gameplay_sky", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky.frag");
     loadShader("gameplay_sky_forward", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky_forward.frag");

@@ -39,6 +39,7 @@ private:
     [[nodiscard]] UIComponentStyle resolveBaseStyle(const UIRenderContext& ctx) const;
 
     Shader* m_shader = nullptr;
+    Shader* m_glassShader = nullptr;
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
 

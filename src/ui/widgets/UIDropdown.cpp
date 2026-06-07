@@ -40,6 +40,7 @@ UIDropdown::~UIDropdown() { shutdown(); }
 
 void UIDropdown::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("ui_color");
+    m_glassShader = resourceMgr.getShader("ui_glass");
     initMesh();
     m_expandTween.setImmediate(0.0f);
     m_hoverColorTween.setImmediate({0.30f, 0.30f, 0.30f, 1.0f});
@@ -48,6 +49,7 @@ void UIDropdown::init(ResourceMgr& resourceMgr) {
 void UIDropdown::shutdown() {
     cleanupMesh();
     m_shader = nullptr;
+    m_glassShader = nullptr;
 }
 
 void UIDropdown::setOptions(std::vector<std::string> options) {
@@ -275,12 +277,18 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     const Color accentCol = accentFromSelection(selectedCol);
     const Color textCol = resolved.text;
     const float itemHeight = resolved.itemHeight;
+    const bool useGlass = m_glassShader &&
+                          ctx.backdropBlurTexture != 0 &&
+                          ctx.backdropSourceWidth > 0 &&
+                          ctx.backdropSourceHeight > 0 &&
+                          ctx.backdropBlurWidth > 0 &&
+                          ctx.backdropBlurHeight > 0;
 
-    // Item base background: slightly brighter than panel bg
+    // A restrained per-row wash keeps the popup readable without flattening the glass.
     std::array<float, 4> itemBgCol = bgCol;
-    itemBgCol[0] = std::min(1.0f, itemBgCol[0] + 0.04f);
-    itemBgCol[1] = std::min(1.0f, itemBgCol[1] + 0.04f);
-    itemBgCol[2] = std::min(1.0f, itemBgCol[2] + 0.04f);
+    itemBgCol[0] = std::min(1.0f, itemBgCol[0] + 0.018f);
+    itemBgCol[1] = std::min(1.0f, itemBgCol[1] + 0.020f);
+    itemBgCol[2] = std::min(1.0f, itemBgCol[2] + 0.016f);
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -296,17 +304,42 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     }
 
     float expandAlpha = m_expandTween.isRunning() ? m_expandTween.value() : 1.0f;
+    float panelVerts[] = {
+        ax, panelY,  ax + aw, panelY,  ax + aw, panelY + panelH,
+        ax, panelY,  ax + aw, panelY + panelH,  ax, panelY + panelH,
+    };
+
+    glBufferSubData(GL_ARRAY_BUFFER, 33 * 2 * sizeof(float), sizeof(panelVerts), panelVerts);
+
+    if (useGlass) {
+        const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
+
+        m_glassShader->use();
+        m_glassShader->setVec2("uScreenSize",
+                               glm::vec2(static_cast<float>(ctx.screenWidth),
+                                         static_cast<float>(ctx.screenHeight)));
+        m_glassShader->setVec2("uBackdropSize",
+                               glm::vec2(static_cast<float>(ctx.backdropSourceWidth),
+                                         static_cast<float>(ctx.backdropSourceHeight)));
+        m_glassShader->setVec4("uTint", glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength));
+        m_glassShader->setFloat("uOpacity", std::clamp(alpha * expandAlpha * 0.96f, 0.0f, 1.0f));
+        m_glassShader->setFloat("uSaturation", 0.54f);
+        m_glassShader->setFloat("uDarken", 0.70f);
+        m_glassShader->setInt("uBackdrop", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glDrawArrays(GL_TRIANGLES, 33, 6);
+
+        m_shader->use();
+        m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
+                                                    static_cast<float>(ctx.screenHeight)));
+    }
 
     // Panel background
     {
         std::array<float, 4> c = bgCol;
-        c[3] *= alpha * expandAlpha;
+        c[3] *= alpha * expandAlpha * (useGlass ? 0.42f : 1.0f);
         m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float verts[] = {
-            ax, panelY,  ax + aw, panelY,  ax + aw, panelY + panelH,
-            ax, panelY,  ax + aw, panelY + panelH,  ax, panelY + panelH,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 33 * 2 * sizeof(float), sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 33, 6);
     }
 
@@ -350,7 +383,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         // 1. Per-item base background
         {
             std::array<float, 4> c = itemBgCol;
-            c[3] *= alpha * expandAlpha;
+            c[3] *= alpha * expandAlpha * (useGlass ? 0.24f : 0.48f);
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
                 ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
@@ -366,8 +399,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             c[3] *= alpha * expandAlpha;
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
-                ax, itemY,  ax + aw, itemY + itemHeight,  ax, itemY + itemHeight,
+                ax + 2.0f, itemY + 1.0f,  ax + aw - 2.0f, itemY + 1.0f,  ax + aw - 2.0f, itemY + itemHeight - 1.0f,
+                ax + 2.0f, itemY + 1.0f,  ax + aw - 2.0f, itemY + itemHeight - 1.0f,  ax + 2.0f, itemY + itemHeight - 1.0f,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemSelectedOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemSelectedOffset + i * 6, 6);
@@ -380,8 +413,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float barW = 2.0f;
             float verts[] = {
-                ax, itemY,  ax + barW, itemY,  ax + barW, itemY + itemHeight,
-                ax, itemY,  ax + barW, itemY + itemHeight,  ax, itemY + itemHeight,
+                ax + 2.0f, itemY + 3.0f,  ax + 2.0f + barW, itemY + 3.0f,  ax + 2.0f + barW, itemY + itemHeight - 3.0f,
+                ax + 2.0f, itemY + 3.0f,  ax + 2.0f + barW, itemY + itemHeight - 3.0f,  ax + 2.0f, itemY + itemHeight - 3.0f,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemBarOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemBarOffset + i * 6, 6);
@@ -390,11 +423,11 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         // 4. Hover highlight (on top of selected bg)
         if (isHovered) {
             std::array<float, 4> c = m_hoverColorTween.isRunning() ? m_hoverColorTween.value() : hoverCol;
-            c[3] *= alpha * expandAlpha;
+            c[3] *= alpha * expandAlpha * (useGlass ? 0.84f : 1.0f);
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
-                ax, itemY,  ax + aw, itemY + itemHeight,  ax, itemY + itemHeight,
+                ax + 3.0f, itemY + 1.0f,  ax + aw - 3.0f, itemY + 1.0f,  ax + aw - 3.0f, itemY + itemHeight - 1.0f,
+                ax + 3.0f, itemY + 1.0f,  ax + aw - 3.0f, itemY + itemHeight - 1.0f,  ax + 3.0f, itemY + itemHeight - 1.0f,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemHoverOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemHoverOffset + i * 6, 6);
@@ -403,11 +436,11 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         // 5. Separator line (not after last visible item)
         if (i < visibleCount - 1 && (scrollItems + i + 1) < static_cast<int>(m_options.size())) {
             std::array<float, 4> c = separatorCol;
-            c[3] *= alpha * expandAlpha;
+            c[3] *= alpha * expandAlpha * (useGlass ? 0.66f : 1.0f);
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax + 4.0f, itemY,  ax + aw - 4.0f, itemY,  ax + aw - 4.0f, itemY + 1.0f,
-                ax + 4.0f, itemY,  ax + aw - 4.0f, itemY + 1.0f,  ax + 4.0f, itemY + 1.0f,
+                ax + 8.0f, itemY,  ax + aw - 8.0f, itemY,  ax + aw - 8.0f, itemY + 1.0f,
+                ax + 8.0f, itemY,  ax + aw - 8.0f, itemY + 1.0f,  ax + 8.0f, itemY + 1.0f,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemSepOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemSepOffset + i * 6, 6);

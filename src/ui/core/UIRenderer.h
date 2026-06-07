@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <glad/glad.h>
+
 #include "../hud/CommandInputOverlay.h"
 #include "../widgets/ConsoleDisplayBox.h"
 #include "../hud/ConsoleOverlay.h"
@@ -136,6 +138,9 @@ private:
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     [[nodiscard]] static float computeResponsiveUiScale(float actualW, float actualH);
     void renderControls(const UIRenderContext& context) const;
+    void prepareBackdropBlur(UIRenderContext& context) const;
+    void ensureBackdropBlurTargets(int sourceWidth, int sourceHeight) const;
+    void destroyBackdropBlurTargets();
 
     CrosshairControl m_crosshair;
     HotbarControl m_hotbar;
@@ -155,4 +160,13 @@ private:
     bool m_commandInputRequested = false;
 
     std::size_t m_consoleMaxLines = 64;
+
+    mutable GLuint m_backdropSourceTex = 0;
+    mutable GLuint m_backdropBlurTex[2] = {0, 0};
+    mutable GLuint m_backdropBlurFbo[2] = {0, 0};
+    mutable GLuint m_backdropFullscreenVao = 0;
+    mutable int m_backdropSourceWidth = 0;
+    mutable int m_backdropSourceHeight = 0;
+    mutable int m_backdropBlurWidth = 0;
+    mutable int m_backdropBlurHeight = 0;
 };
