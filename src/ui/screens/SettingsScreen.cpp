@@ -104,8 +104,7 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     backBtn->height = 40.0f;
     backBtn->anchor = Anchor::BottomCenter;
     backBtn->anchorOffsetY = 40.0f;
-    backBtn->setNormalColor({0.4f, 0.4f, 0.4f, 0.9f});
-    backBtn->setHoverColor({0.6f, 0.6f, 0.6f, 1.0f});
+    backBtn->setTone(UIButtonTone::Secondary);
     backBtn->setOnClick([this]() {
         if (onBack) onBack();
     });
@@ -333,7 +332,7 @@ void SettingsScreen::addSectionHeader(UIWidget* parent, ResourceMgr& /*resourceM
     auto header = std::make_unique<UIText>();
     header->setText(text);
     header->setTextScale(1.4f);
-    header->setTextColor({0.5f, 0.8f, 1.0f, 1.0f});
+    header->setTone(UITextTone::Accent);
     header->width = 300.0f;
     header->height = 24.0f;
     parent->addChild(std::move(header));
@@ -366,7 +365,7 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     auto lbl = std::make_unique<UIText>();
     lbl->setText(label);
     lbl->setTextScale(1.1f);
-    lbl->setTextColor({0.85f, 0.85f, 0.85f, 1.0f});
+    lbl->setTone(UITextTone::Secondary);
     lbl->width = 220.0f;
     lbl->height = 28.0f;
 
@@ -380,7 +379,7 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     auto valueText = std::make_unique<UIText>();
     valueText->setText(formatSliderValue(currentVal, step));
     valueText->setTextScale(1.1f);
-    valueText->setTextColor({0.85f, 0.85f, 0.85f, 1.0f});
+    valueText->setTone(UITextTone::Secondary);
     valueText->width = 90.0f;
     valueText->height = 28.0f;
     UIText* valueTextPtr = valueText.get();
@@ -417,7 +416,7 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
     auto lbl = std::make_unique<UIText>();
     lbl->setText(label);
     lbl->setTextScale(1.1f);
-    lbl->setTextColor({0.85f, 0.85f, 0.85f, 1.0f});
+    lbl->setTone(UITextTone::Secondary);
     lbl->width = 220.0f;
     lbl->height = 28.0f;
 

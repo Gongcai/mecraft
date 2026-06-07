@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include "../core/UITheme.h"
-
 UIButton::UIButton() {
     interactive = true;
     focusable = true;
@@ -36,6 +34,12 @@ void UIButton::setText(const std::string& text) {
 
 void UIButton::setTextColor(const std::array<float, 4>& c) {
     m_label.setTextColor(c);
+}
+
+void UIButton::setTone(UIButtonTone tone) {
+    m_tone = tone;
+    m_hasLocalColors = false;
+    m_hasLocalStyle = false;
 }
 
 void UIButton::setStyle(const UIComponentStyle& style) {
@@ -175,7 +179,7 @@ UIComponentStyle UIButton::resolveBaseStyle(const UIRenderContext& ctx) const {
         return m_localStyle;
     }
 
-    UIComponentStyle style = UIStyleResolver::buttonStyleFromTheme(ctx.theme);
+    UIComponentStyle style = UIStyleResolver::buttonStyleFromTheme(ctx.theme, m_tone);
     if (m_hasLocalColors) {
         style.backgroundNormal = m_normalColor;
         style.backgroundHover = m_hoverColor;

@@ -80,8 +80,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     startBtn->height        = 50.0f;
     startBtn->anchor        = Anchor::Center;
     startBtn->anchorOffsetY = -50.0f;
-    startBtn->setNormalColor({0.2f, 0.6f, 0.2f, 0.9f});
-    startBtn->setHoverColor({0.3f, 0.8f, 0.3f, 1.0f});
+    startBtn->setTone(UIButtonTone::Success);
     startBtn->setOnClick([this]() {
         int seed = parseSeed(m_seedInput ? m_seedInput->getText() : "");
         if (onCreateWorld) onCreateWorld(seed);
@@ -99,8 +98,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     backBtn->height        = 44.0f;
     backBtn->anchor        = Anchor::Center;
     backBtn->anchorOffsetY = -120.0f;
-    backBtn->setNormalColor({0.4f, 0.4f, 0.4f, 0.9f});
-    backBtn->setHoverColor({0.6f, 0.6f, 0.6f, 1.0f});
+    backBtn->setTone(UIButtonTone::Secondary);
     backBtn->setOnClick([this]() {
         if (onBackClicked) onBackClicked();
     });

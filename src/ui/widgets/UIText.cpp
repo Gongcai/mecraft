@@ -13,6 +13,11 @@ float UIText::measureTextHeight(const TextRenderer& tr) const
     return tr.measureText(m_text, m_textScale).height;
 }
 
+void UIText::setTone(UITextTone tone) {
+    m_tone = tone;
+    m_hasLocalTextColor = false;
+}
+
 void UIText::renderSelf(const UIRenderContext& ctx) const {
     if (m_text.empty() || !ctx.textRenderer) return;
 
@@ -52,12 +57,12 @@ void UIText::renderSelf(const UIRenderContext& ctx) const {
 }
 
 UITextStyle UIText::resolveBaseStyle(const UIRenderContext& ctx) const {
-    UITextStyle style = UIStyleResolver::textStyleFromTheme(ctx.theme);
+    UITextStyle style = UIStyleResolver::textStyleFromTheme(ctx.theme, m_tone);
     style.textScale = m_textScale;
     style.shadow = m_shadowColor;
     style.shadowOffsetX = m_shadowOffsetX;
     style.shadowOffsetY = m_shadowOffsetY;
-    if (m_hasLocalTextColor || !ctx.theme) {
+    if (m_hasLocalTextColor) {
         style.text = m_textColor;
     }
     return style;

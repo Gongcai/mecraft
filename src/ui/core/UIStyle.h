@@ -18,6 +18,21 @@ enum class UIToastTone {
     Error,
 };
 
+enum class UIButtonTone {
+    Default,
+    Primary,
+    Secondary,
+    Success,
+    Danger,
+};
+
+enum class UITextTone {
+    Primary,
+    Secondary,
+    Muted,
+    Accent,
+};
+
 [[nodiscard]] inline constexpr bool hasStyleState(int state, UIStyleState flag) {
     return (state & static_cast<int>(flag)) != 0;
 }
@@ -421,6 +436,7 @@ struct UIResolvedConsoleStyle {
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme, UIButtonTone tone);
     [[nodiscard]] UITextInputStyle textInputStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIToggleStyle toggleStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UICheckboxStyle checkboxStyleFromTheme(const UITheme* theme);
@@ -436,6 +452,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UITooltipStyle tooltipStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIModalStyle modalStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITextStyle textStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UITextStyle textStyleFromTheme(const UITheme* theme, UITextTone tone);
     [[nodiscard]] UIConsoleStyle consoleStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);

@@ -35,8 +35,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     startBtn->height = 50.0f;
     startBtn->anchor = Anchor::Center;
     startBtn->anchorOffsetY = -20.0f;
-    startBtn->setNormalColor({0.2f, 0.6f, 0.2f, 0.9f});
-    startBtn->setHoverColor({0.3f, 0.8f, 0.3f, 1.0f});
+    startBtn->setTone(UIButtonTone::Success);
     startBtn->setOnClick([this]() {
         if (onStartClicked) onStartClicked();
     });
@@ -50,8 +49,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     mpBtn->height = 50.0f;
     mpBtn->anchor = Anchor::Center;
     mpBtn->anchorOffsetY = -80.0f;
-    mpBtn->setNormalColor({0.2f, 0.4f, 0.7f, 0.9f});
-    mpBtn->setHoverColor({0.3f, 0.5f, 0.9f, 1.0f});
+    mpBtn->setTone(UIButtonTone::Primary);
     mpBtn->setOnClick([this]() {
         showMultiplayerPanel();
     });
@@ -65,8 +63,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     quitBtn->height = 50.0f;
     quitBtn->anchor = Anchor::Center;
     quitBtn->anchorOffsetY = -140.0f;
-    quitBtn->setNormalColor({0.4f, 0.2f, 0.2f, 0.9f});
-    quitBtn->setHoverColor({0.6f, 0.3f, 0.3f, 1.0f});
+    quitBtn->setTone(UIButtonTone::Danger);
     quitBtn->setOnClick([this]() {
         if (onQuitClicked) onQuitClicked();
     });
@@ -92,8 +89,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     connectBtn->height = 50.0f;
     connectBtn->anchor = Anchor::Center;
     connectBtn->anchorOffsetY = -80.0f;
-    connectBtn->setNormalColor({0.2f, 0.6f, 0.2f, 0.9f});
-    connectBtn->setHoverColor({0.3f, 0.8f, 0.3f, 1.0f});
+    connectBtn->setTone(UIButtonTone::Success);
     connectBtn->visible = false;
     connectBtn->setOnClick([this]() {
         if (m_addressInput && onConnectClicked) {
@@ -122,8 +118,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     backBtn->height = 50.0f;
     backBtn->anchor = Anchor::Center;
     backBtn->anchorOffsetY = -140.0f;
-    backBtn->setNormalColor({0.4f, 0.4f, 0.4f, 0.9f});
-    backBtn->setHoverColor({0.6f, 0.6f, 0.6f, 1.0f});
+    backBtn->setTone(UIButtonTone::Secondary);
     backBtn->visible = false;
     backBtn->setOnClick([this]() {
         hideMultiplayerPanel();

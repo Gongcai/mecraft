@@ -157,8 +157,7 @@ void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
     createBtn->anchor        = Anchor::BottomCenter;
     createBtn->anchorOffsetX = 140.0f;
     createBtn->anchorOffsetY = 50.0f;
-    createBtn->setNormalColor({0.2f, 0.55f, 0.2f, 0.9f});
-    createBtn->setHoverColor({0.3f, 0.75f, 0.3f, 1.0f});
+    createBtn->setTone(UIButtonTone::Success);
     createBtn->setOnClick([this]() {
         if (onCreateNewClicked) onCreateNewClicked();
     });
@@ -176,8 +175,7 @@ void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
     backBtn->anchor        = Anchor::BottomCenter;
     backBtn->anchorOffsetX = -140.0f;
     backBtn->anchorOffsetY = 50.0f;
-    backBtn->setNormalColor({0.4f, 0.4f, 0.4f, 0.9f});
-    backBtn->setHoverColor({0.6f, 0.6f, 0.6f, 1.0f});
+    backBtn->setTone(UIButtonTone::Secondary);
     backBtn->setOnClick([this]() {
         if (onBackClicked) onBackClicked();
     });

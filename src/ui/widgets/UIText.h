@@ -28,6 +28,7 @@ public:
     [[nodiscard]] const std::array<float, 4>& getTextColor() const { return m_textColor; }
     void clearLocalTextColor() { m_hasLocalTextColor = false; }
     [[nodiscard]] bool hasLocalTextColor() const { return m_hasLocalTextColor; }
+    void setTone(UITextTone tone);
 
     void setShadowEnabled(bool enabled) { m_shadowEnabled = enabled; }
     [[nodiscard]] bool isShadowEnabled() const { return m_shadowEnabled; }
@@ -57,4 +58,5 @@ private:
     TextAlignment m_alignment = TextAlignment::Left;
     bool m_hasLocalTextColor = false;
     bool m_shadowEnabled = false;
+    UITextTone m_tone = UITextTone::Primary;
 };

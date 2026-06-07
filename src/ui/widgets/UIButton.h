@@ -26,6 +26,7 @@ public:
     void setPressedColor(const std::array<float, 4>& c) { m_pressedColor = c; m_hasLocalColors = true; }
     void setTextColor(const std::array<float, 4>& c);
     void clearLocalColors() { m_hasLocalColors = false; }
+    void setTone(UIButtonTone tone);
     void setStyle(const UIComponentStyle& style);
     void clearLocalStyle();
     void setTextScale(float scale);
@@ -60,6 +61,7 @@ private:
     bool m_pressed = false;
     bool m_hasLocalColors = false;
     bool m_hasLocalStyle = false;
+    UIButtonTone m_tone = UIButtonTone::Default;
     UIComponentStyle m_localStyle;
 
     [[nodiscard]] static bool isActivateCommand(const UIInputEvent& event);

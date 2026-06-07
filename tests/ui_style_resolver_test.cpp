@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -18,6 +19,14 @@ bool colorEqual(const Color& a, const Color& b) {
         }
     }
     return true;
+}
+
+Color scaledColor(const Color& color, float rgbScale, float alpha) {
+    return {
+        std::clamp(color[0] * rgbScale, 0.0f, 1.0f),
+        std::clamp(color[1] * rgbScale, 0.0f, 1.0f),
+        std::clamp(color[2] * rgbScale, 0.0f, 1.0f),
+        alpha};
 }
 
 } // namespace
@@ -68,7 +77,9 @@ int main() {
     theme.buttonBorder = {0.30f, 0.40f, 0.50f, 0.4f};
     theme.buttonBorderWidth = 5.0f;
     theme.textPrimary = {0.32f, 0.42f, 0.52f, 1.0f};
+    theme.textSecondary = {0.22f, 0.32f, 0.42f, 0.9f};
     theme.textDisabled = {0.12f, 0.13f, 0.14f, 1.0f};
+    theme.textLink = {0.11f, 0.51f, 0.91f, 1.0f};
     theme.inputBackground = {0.11f, 0.12f, 0.13f, 0.9f};
     theme.inputBorder = {0.21f, 0.22f, 0.23f, 0.7f};
     theme.inputBorderFocused = {0.31f, 0.32f, 0.33f, 1.0f};
@@ -110,6 +121,8 @@ int main() {
     theme.dropdownItemSelected = {0.48f, 0.58f, 0.68f, 0.35f};
     theme.dropdownSeparator = {0.78f, 0.79f, 0.80f, 0.4f};
     theme.accentPrimary = {0.19f, 0.29f, 0.39f, 1.0f};
+    theme.accentSuccess = {0.22f, 0.62f, 0.32f, 1.0f};
+    theme.accentDanger = {0.72f, 0.24f, 0.28f, 1.0f};
     theme.contextMenuBackground = {0.20f, 0.30f, 0.40f, 0.95f};
     theme.contextMenuBorder = {0.50f, 0.60f, 0.70f, 0.7f};
     theme.contextMenuItemHover = {0.21f, 0.31f, 0.41f, 1.0f};
@@ -152,6 +165,47 @@ int main() {
         return fail("panel style should map background, border, and border width from theme");
     }
 
+    const UIComponentStyle defaultButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Default);
+    if (!colorEqual(defaultButton.backgroundNormal, theme.buttonNormal) ||
+        !colorEqual(defaultButton.backgroundHover, theme.buttonHover) ||
+        !colorEqual(defaultButton.backgroundDisabled, theme.buttonDisabled) ||
+        std::fabs(defaultButton.borderWidth - 5.0f) > 0.001f) {
+        return fail("default button tone should preserve theme button colors and border width");
+    }
+
+    const UIComponentStyle secondaryButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Secondary);
+    if (!colorEqual(secondaryButton.backgroundNormal, defaultButton.backgroundNormal) ||
+        !colorEqual(secondaryButton.backgroundHover, defaultButton.backgroundHover) ||
+        !colorEqual(secondaryButton.backgroundPressed, defaultButton.backgroundPressed) ||
+        !colorEqual(secondaryButton.borderNormal, defaultButton.borderNormal)) {
+        return fail("secondary button tone should use neutral theme button colors");
+    }
+
+    const UIComponentStyle primaryButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Primary);
+    if (!colorEqual(primaryButton.backgroundNormal, scaledColor(theme.accentPrimary, 0.72f, 0.92f)) ||
+        !colorEqual(primaryButton.backgroundHover, theme.accentPrimary) ||
+        !colorEqual(primaryButton.borderHover, scaledColor(theme.accentPrimary, 1.2f, 0.60f)) ||
+        !colorEqual(primaryButton.textNormal, theme.textPrimary)) {
+        return fail("primary button tone should derive interactive colors from primary accent");
+    }
+
+    const UIComponentStyle successButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Success);
+    if (!colorEqual(successButton.backgroundNormal, scaledColor(theme.accentSuccess, 0.72f, 0.92f)) ||
+        !colorEqual(successButton.backgroundHover, theme.accentSuccess) ||
+        !colorEqual(successButton.backgroundPressed, scaledColor(theme.accentSuccess, 0.52f, 1.0f)) ||
+        !colorEqual(successButton.backgroundDisabled, theme.buttonDisabled) ||
+        !colorEqual(successButton.textNormal, theme.textPrimary) ||
+        std::fabs(successButton.borderWidth - 5.0f) > 0.001f) {
+        return fail("success button tone should derive interactive colors from success accent");
+    }
+
+    const UIComponentStyle dangerButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Danger);
+    if (!colorEqual(dangerButton.backgroundHover, theme.accentDanger) ||
+        !colorEqual(dangerButton.borderHover, scaledColor(theme.accentDanger, 1.2f, 0.60f)) ||
+        colorEqual(dangerButton.backgroundHover, theme.accentSuccess)) {
+        return fail("danger button tone should derive hover colors from danger accent");
+    }
+
     UITextStyle textStyle = UIStyleResolver::textStyleFromTheme(&theme);
     textStyle.shadow = {0.22f, 0.23f, 0.24f, 0.65f};
     textStyle.textScale = 1.75f;
@@ -164,6 +218,20 @@ int main() {
         std::fabs(text.shadowOffsetX - 2.0f) > 0.001f ||
         std::fabs(text.shadowOffsetY + 2.0f) > 0.001f) {
         return fail("text style should map theme text and preserve local metrics");
+    }
+
+    const UITextStyle secondaryTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Secondary);
+    const UITextStyle mutedTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Muted);
+    const UITextStyle accentTextStyle = UIStyleResolver::textStyleFromTheme(&theme, UITextTone::Accent);
+    const Color expectedMutedText{
+        theme.textSecondary[0],
+        theme.textSecondary[1],
+        theme.textSecondary[2],
+        theme.textSecondary[3] * 0.78f};
+    if (!colorEqual(secondaryTextStyle.text, theme.textSecondary) ||
+        !colorEqual(mutedTextStyle.text, expectedMutedText) ||
+        !colorEqual(accentTextStyle.text, theme.textLink)) {
+        return fail("text tones should map to theme semantic text colors");
     }
 
     const UITextInputStyle inputStyle = UIStyleResolver::textInputStyleFromTheme(&theme);

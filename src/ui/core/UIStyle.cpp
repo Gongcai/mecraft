@@ -1,9 +1,40 @@
 #include "UIStyle.h"
 
+#include <algorithm>
+
 namespace {
 
 Color toastBorderFromBackground(const Color& background) {
     return {background[0] * 1.3f, background[1] * 1.3f, background[2] * 1.3f, 0.5f};
+}
+
+Color scaledColor(const Color& color, float rgbScale, float alpha) {
+    return {
+        std::clamp(color[0] * rgbScale, 0.0f, 1.0f),
+        std::clamp(color[1] * rgbScale, 0.0f, 1.0f),
+        std::clamp(color[2] * rgbScale, 0.0f, 1.0f),
+        alpha};
+}
+
+Color scaledAlpha(Color color, float alphaScale) {
+    color[3] = std::clamp(color[3] * alphaScale, 0.0f, 1.0f);
+    return color;
+}
+
+Color accentForButtonTone(const UITheme* theme, UIButtonTone tone) {
+    switch (tone) {
+    case UIButtonTone::Primary:
+        return theme ? theme->accentPrimary : Color{0.2f, 0.8f, 1.0f, 1.0f};
+    case UIButtonTone::Secondary:
+        return theme ? theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
+    case UIButtonTone::Success:
+        return theme ? theme->accentSuccess : Color{0.3f, 0.7f, 0.3f, 1.0f};
+    case UIButtonTone::Danger:
+        return theme ? theme->accentDanger : Color{0.7f, 0.3f, 0.3f, 1.0f};
+    case UIButtonTone::Default:
+    default:
+        return theme ? theme->buttonNormal : Color{0.28f, 0.28f, 0.28f, 0.92f};
+    }
 }
 
 } // namespace
@@ -60,6 +91,22 @@ UIComponentStyle buttonStyleFromTheme(const UITheme* theme) {
     style.textNormal = theme->textPrimary;
     style.textDisabled = theme->textDisabled;
     style.borderWidth = theme->buttonBorderWidth;
+    return style;
+}
+
+UIComponentStyle buttonStyleFromTheme(const UITheme* theme, UIButtonTone tone) {
+    UIComponentStyle style = buttonStyleFromTheme(theme);
+    if (tone == UIButtonTone::Default || tone == UIButtonTone::Secondary) {
+        return style;
+    }
+
+    const Color accent = accentForButtonTone(theme, tone);
+    style.backgroundNormal = scaledColor(accent, 0.72f, 0.92f);
+    style.backgroundHover = scaledColor(accent, 1.0f, 1.0f);
+    style.backgroundPressed = scaledColor(accent, 0.52f, 1.0f);
+    style.borderNormal = scaledColor(accent, 1.05f, 0.45f);
+    style.borderHover = scaledColor(accent, 1.2f, 0.60f);
+    style.borderPressed = scaledColor(accent, 0.90f, 0.50f);
     return style;
 }
 
@@ -311,6 +358,25 @@ UITextStyle textStyleFromTheme(const UITheme* theme) {
     }
 
     style.text = theme->textPrimary;
+    return style;
+}
+
+UITextStyle textStyleFromTheme(const UITheme* theme, UITextTone tone) {
+    UITextStyle style = textStyleFromTheme(theme);
+    switch (tone) {
+    case UITextTone::Secondary:
+        style.text = theme ? theme->textSecondary : Color{0.7f, 0.7f, 0.7f, 1.0f};
+        break;
+    case UITextTone::Muted:
+        style.text = scaledAlpha(theme ? theme->textSecondary : Color{0.7f, 0.7f, 0.7f, 1.0f}, 0.78f);
+        break;
+    case UITextTone::Accent:
+        style.text = theme ? theme->textLink : Color{0.3f, 0.7f, 1.0f, 1.0f};
+        break;
+    case UITextTone::Primary:
+    default:
+        break;
+    }
     return style;
 }
 

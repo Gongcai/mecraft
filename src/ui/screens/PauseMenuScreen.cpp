@@ -46,8 +46,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     resumeBtn->setTextScale(2.0f);
     resumeBtn->width = 250.0f;
     resumeBtn->height = 45.0f;
-    resumeBtn->setNormalColor({0.2f, 0.4f, 0.2f, 0.9f});
-    resumeBtn->setHoverColor({0.3f, 0.6f, 0.3f, 1.0f});
+    resumeBtn->setTone(UIButtonTone::Success);
     resumeBtn->setOnClick([this]() {
         if (onResume) onResume();
     });
@@ -59,8 +58,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     settingsBtn->setTextScale(2.0f);
     settingsBtn->width = 250.0f;
     settingsBtn->height = 45.0f;
-    settingsBtn->setNormalColor({0.2f, 0.35f, 0.6f, 0.9f});
-    settingsBtn->setHoverColor({0.3f, 0.5f, 0.8f, 1.0f});
+    settingsBtn->setTone(UIButtonTone::Primary);
     settingsBtn->setOnClick([this]() {
         if (onSettings) onSettings();
     });
@@ -72,8 +70,7 @@ void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     quitBtn->setTextScale(2.0f);
     quitBtn->width = 250.0f;
     quitBtn->height = 45.0f;
-    quitBtn->setNormalColor({0.4f, 0.2f, 0.2f, 0.9f});
-    quitBtn->setHoverColor({0.6f, 0.3f, 0.3f, 1.0f});
+    quitBtn->setTone(UIButtonTone::Danger);
     quitBtn->setOnClick([this]() {
         if (onQuitToMenu) onQuitToMenu();
     });
