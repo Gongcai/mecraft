@@ -81,10 +81,10 @@ void MainMenuAppState::onEnter() {
     m_createWorldScreen.init(m_deps.resourceMgr);
 
     // "Start New Game" → create world and start
-    m_createWorldScreen.onCreateWorld = [this](int seed) {
+    m_createWorldScreen.onCreateWorld = [this](int seed, const std::string& displayName) {
         std::string worldName =
             CreateWorldScreen::generateWorldName(m_savesRoot);
-        startGameWithWorld(worldName, seed);
+        startGameWithWorld(worldName, seed, displayName.empty() ? worldName : displayName);
     };
 
     // "Back" → return to save list
@@ -162,9 +162,12 @@ void MainMenuAppState::switchToPage(Page page) {
 // Start game with a specific world
 // ---------------------------------------------------------------------------
 
-void MainMenuAppState::startGameWithWorld(const std::string& worldName, int seed) {
+void MainMenuAppState::startGameWithWorld(const std::string& worldName,
+                                          int seed,
+                                          const std::string& displayName) {
     m_pendingConfig = GameSessionConfig{seed, app::loadRenderDistance()};
     m_pendingConfig.worldName = worldName;
+    m_pendingConfig.worldDisplayName = displayName;
     m_pendingConfig.saveRoot  = m_savesRoot.string();
     m_transitioningToGame = true;
     m_transition.startFadeOut(0.5f);

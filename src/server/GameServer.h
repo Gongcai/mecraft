@@ -53,7 +53,7 @@ public:
     /// Initialize with save support. If savePath is non-empty, chunks will be
     /// persisted to disk and restored on subsequent sessions.
     void init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
-              std::filesystem::path savePath);
+              std::filesystem::path savePath, std::string displayName = {});
 
     /// Explicit shutdown: flush pending saves before destruction.
     void shutdown();

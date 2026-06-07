@@ -260,7 +260,8 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
 
         if (!worldSavePath.empty()) {
             m_server->init(static_cast<uint32_t>(config.seed), threadPool,
-                           config.renderDistance, std::move(worldSavePath));
+                           config.renderDistance, std::move(worldSavePath),
+                           config.worldDisplayName);
         } else {
             m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
         }

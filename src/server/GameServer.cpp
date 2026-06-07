@@ -135,9 +135,13 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
-                      std::filesystem::path savePath) {
+                      std::filesystem::path savePath, std::string displayName) {
     // Create save manager if path is provided
     if (!savePath.empty()) {
+        if (displayName.empty()) {
+            displayName = savePath.filename().string();
+        }
+
         m_saveManager = std::make_unique<save::SaveManager>(std::move(savePath));
         m_saveManager->setThreadPool(threadPool);
         m_saveManager->paths().ensureDirectories();
@@ -156,7 +160,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             meta.seed = seed;
             meta.createdUtc = save::SaveManager::currentUtcTimestamp();
             meta.lastSavedUtc = meta.createdUtc;
-            meta.displayName = "New World";
+            meta.displayName = displayName.empty() ? "New World" : displayName;
             m_saveManager->saveLevelMeta(meta);
             m_loadedMeta = meta;
             std::printf("[Server] Created new world (seed=%u)\n", seed);
@@ -186,22 +190,7 @@ void GameServer::shutdown() {
 
     // Save level metadata with current state
     if (m_saveManager) {
-        save::LevelMeta meta;
-        meta.seed = m_world.getSeed();
-        meta.spawnX = m_spawnPosition.x;
-        meta.spawnY = m_spawnPosition.y;
-        meta.spawnZ = m_spawnPosition.z;
-        meta.timeOfDay = m_world.getDayNightSystem().getTimeOfDay();
-        meta.totalGameTime = m_world.getDayNightSystem().getTotalGameTime();
-        meta.elapsedDays = m_world.getDayNightSystem().getElapsedDays();
-
-        const auto& weather = m_world.getWeatherSystem().getTargetState();
-        meta.weatherType = weatherTypeToString(weather.type);
-        meta.weatherWetness = weather.wetness;
-        meta.weatherStorm = weather.storm;
-        meta.weatherAerialReduction = weather.aerialReduction;
-
-        m_saveManager->saveLevelMeta(meta);
+        saveLevelMeta();
     }
 }
 
@@ -230,6 +219,7 @@ void GameServer::saveLevelMeta() {
     meta.displayName = m_loadedMeta.displayName;
 
     m_saveManager->saveLevelMeta(meta);
+    m_loadedMeta = meta;
 }
 
 void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id) {

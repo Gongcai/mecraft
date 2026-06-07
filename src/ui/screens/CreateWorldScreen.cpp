@@ -42,6 +42,34 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     m_title = title.get();
     addRoot(std::move(title));
 
+    // -- World name label --
+    auto nameLabel = std::make_unique<UIText>();
+    nameLabel->setText(getLocaleManager()
+                           ? getLocaleManager()->tr("world_name")
+                           : "World name:");
+    nameLabel->setTextScale(1.4f);
+    nameLabel->setTone(UITextTone::OnOverlaySecondary);
+    nameLabel->setAlignment(TextAlignment::Center);
+    nameLabel->anchor        = Anchor::Center;
+    nameLabel->anchorOffsetY = 110.0f;
+    nameLabel->width         = 400.0f;
+    nameLabel->height        = 24.0f;
+    m_nameLabel = nameLabel.get();
+    addRoot(std::move(nameLabel));
+
+    // -- World name input --
+    auto nameInput = std::make_unique<UITextInput>();
+    nameInput->width         = 350.0f;
+    nameInput->height        = 36.0f;
+    nameInput->anchor        = Anchor::Center;
+    nameInput->anchorOffsetY = 72.0f;
+    nameInput->setPlaceholder(getLocaleManager()
+                                  ? getLocaleManager()->tr("world_name_placeholder")
+                                  : "New World");
+    nameInput->setMaxLength(96);
+    m_nameInput = nameInput.get();
+    addRoot(std::move(nameInput));
+
     // -- Seed label --
     auto seedLabel = std::make_unique<UIText>();
     seedLabel->setText(getLocaleManager()
@@ -51,7 +79,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     seedLabel->setTone(UITextTone::OnOverlaySecondary);
     seedLabel->setAlignment(TextAlignment::Center);
     seedLabel->anchor        = Anchor::Center;
-    seedLabel->anchorOffsetY = 60.0f;
+    seedLabel->anchorOffsetY = 26.0f;
     seedLabel->width         = 400.0f;
     seedLabel->height        = 24.0f;
     m_seedLabel = seedLabel.get();
@@ -62,7 +90,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     seedInput->width         = 350.0f;
     seedInput->height        = 36.0f;
     seedInput->anchor        = Anchor::Center;
-    seedInput->anchorOffsetY = 20.0f;
+    seedInput->anchorOffsetY = -12.0f;
     seedInput->setPlaceholder(getLocaleManager()
                                   ? getLocaleManager()->tr("seed_placeholder")
                                   : "Enter seed...");
@@ -79,11 +107,12 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     startBtn->width         = 300.0f;
     startBtn->height        = 50.0f;
     startBtn->anchor        = Anchor::Center;
-    startBtn->anchorOffsetY = -50.0f;
+    startBtn->anchorOffsetY = -82.0f;
     startBtn->setTone(UIButtonTone::Success);
     startBtn->setOnClick([this]() {
         int seed = parseSeed(m_seedInput ? m_seedInput->getText() : "");
-        if (onCreateWorld) onCreateWorld(seed);
+        const std::string displayName = trimDisplayName(m_nameInput ? m_nameInput->getText() : "");
+        if (onCreateWorld) onCreateWorld(seed, displayName);
     });
     m_startButton = startBtn.get();
     addRoot(std::move(startBtn));
@@ -97,7 +126,7 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
     backBtn->width         = 180.0f;
     backBtn->height        = 44.0f;
     backBtn->anchor        = Anchor::Center;
-    backBtn->anchorOffsetY = -120.0f;
+    backBtn->anchorOffsetY = -152.0f;
     backBtn->setTone(UIButtonTone::Secondary);
     backBtn->setOnClick([this]() {
         if (onBackClicked) onBackClicked();
@@ -113,6 +142,11 @@ void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
 // ---------------------------------------------------------------------------
 
 void CreateWorldScreen::onSceneEnter() {
+    // Reset world name input
+    if (m_nameInput) {
+        m_nameInput->setText("");
+    }
+
     // Reset seed input
     if (m_seedInput) {
         m_seedInput->setText("");
@@ -149,6 +183,15 @@ int CreateWorldScreen::parseSeed(const std::string& text) {
 
     // Hash the string to produce a deterministic seed
     return static_cast<int>(std::hash<std::string>{}(text));
+}
+
+std::string CreateWorldScreen::trimDisplayName(const std::string& text) {
+    const auto start = text.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) {
+        return "";
+    }
+    const auto end = text.find_last_not_of(" \t\n\r");
+    return text.substr(start, end - start + 1);
 }
 
 // ---------------------------------------------------------------------------

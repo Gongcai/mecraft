@@ -19,6 +19,8 @@
     "create_new_world": "创建新世界",
     "back": "返回",
     "no_saves": "没有找到存档，创建一个新世界吧！",
+    "world_name": "世界名称：",
+    "world_name_placeholder": "新世界",
     "enter_seed": "输入种子（留空则随机生成）：",
     "seed_placeholder": "请输入种子...",
     "start_new_game": "开始新游戏",

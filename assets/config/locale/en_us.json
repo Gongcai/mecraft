@@ -19,6 +19,8 @@
     "create_new_world": "Create New World",
     "back": "Back",
     "no_saves": "No saves found. Create a new world!",
+    "world_name": "World name:",
+    "world_name_placeholder": "New World",
     "enter_seed": "Enter seed (leave empty for random):",
     "seed_placeholder": "Enter seed...",
     "start_new_game": "Start New Game",

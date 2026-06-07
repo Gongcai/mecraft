@@ -264,6 +264,7 @@ static void testSaveManagerLevelMeta() {
     // Save level meta with full data
     save::LevelMeta meta;
     meta.seed = 42;
+    meta.displayName = "Custom World";
     meta.spawnX = 1.0f;
     meta.spawnY = 68.0f;
     meta.spawnZ = 2.0f;
@@ -279,6 +280,7 @@ static void testSaveManagerLevelMeta() {
     save::LevelMeta loaded;
     assert(mgr.loadLevelMeta(loaded));
     assert(loaded.seed == 42);
+    assert(loaded.displayName == "Custom World");
     assert(loaded.spawnX == 1.0f);
     assert(loaded.spawnY == 68.0f);
     assert(loaded.timeOfDay == 600.0f);

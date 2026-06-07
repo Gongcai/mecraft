@@ -29,6 +29,7 @@ struct GameSessionConfig {
 
     /// Save system settings.
     std::string worldName;              // Empty = no save (ephemeral world)
+    std::string worldDisplayName;       // User-visible displayName stored in level.json for new worlds
     std::filesystem::path saveRoot;     // Root directory for all saves (e.g. "saves/")
     bool enableSaving = true;
 };
