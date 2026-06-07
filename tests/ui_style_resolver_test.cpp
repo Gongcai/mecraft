@@ -109,6 +109,16 @@ int main() {
     theme.contextMenuSeparator = {0.51f, 0.61f, 0.71f, 0.5f};
     theme.contextMenuWidth = 220.0f;
     theme.contextMenuItemHeight = 32.0f;
+    theme.scrollbarTrack = {0.22f, 0.32f, 0.42f, 0.6f};
+    theme.scrollbarThumb = {0.52f, 0.62f, 0.72f, 0.8f};
+    theme.scrollbarThumbHover = {0.82f, 0.83f, 0.84f, 0.9f};
+    theme.scrollbarWidth = 10.0f;
+    theme.tabHeader = {0.23f, 0.33f, 0.43f, 0.9f};
+    theme.tabHeaderActive = {0.53f, 0.63f, 0.73f, 1.0f};
+    theme.tabHeaderHover = {0.83f, 0.84f, 0.85f, 1.0f};
+    theme.tabIndicator = {0.24f, 0.34f, 0.44f, 1.0f};
+    theme.tabContent = {0.54f, 0.64f, 0.74f, 0.85f};
+    theme.tabHeaderHeight = 42.0f;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -252,6 +262,48 @@ int main() {
         std::fabs(contextMenu.separatorHeight - 6.0f) > 0.001f ||
         std::fabs(contextMenu.padding - 4.0f) > 0.001f) {
         return fail("context menu style should map theme colors and dimensions");
+    }
+
+    const UIScrollAreaStyle scrollAreaStyle = UIStyleResolver::scrollAreaStyleFromTheme(&theme);
+    const UIResolvedScrollAreaStyle hoveredScrollArea =
+        UIStyleResolver::resolveScrollArea(scrollAreaStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredScrollArea.track, theme.scrollbarTrack) ||
+        !colorEqual(hoveredScrollArea.thumb, theme.scrollbarThumbHover) ||
+        std::fabs(hoveredScrollArea.scrollbarWidth - 10.0f) > 0.001f) {
+        return fail("scroll area style should map track, hover thumb, and width");
+    }
+
+    const UIResolvedScrollAreaStyle disabledScrollArea =
+        UIStyleResolver::resolveScrollArea(scrollAreaStyle, UIStyleState_Disabled | UIStyleState_Hovered);
+    if (!colorEqual(disabledScrollArea.thumb, theme.textDisabled) ||
+        colorEqual(disabledScrollArea.thumb, theme.scrollbarThumbHover)) {
+        return fail("disabled scroll area should override hover state");
+    }
+
+    const UITabControlStyle tabControlStyle = UIStyleResolver::tabControlStyleFromTheme(&theme);
+    const UIResolvedTabControlStyle hoveredTab =
+        UIStyleResolver::resolveTabControl(tabControlStyle, UIStyleState_Hovered);
+    if (!colorEqual(hoveredTab.header, theme.tabHeaderHover) ||
+        !colorEqual(hoveredTab.indicator, theme.tabIndicator) ||
+        !colorEqual(hoveredTab.content, theme.tabContent) ||
+        !colorEqual(hoveredTab.text, theme.textPrimary) ||
+        std::fabs(hoveredTab.headerHeight - 42.0f) > 0.001f ||
+        std::fabs(hoveredTab.indicatorHeight - 3.0f) > 0.001f) {
+        return fail("tab control style should map hover, shared colors, and dimensions");
+    }
+
+    const UIResolvedTabControlStyle selectedTab =
+        UIStyleResolver::resolveTabControl(tabControlStyle, UIStyleState_Selected | UIStyleState_Hovered);
+    if (!colorEqual(selectedTab.header, theme.tabHeaderActive)) {
+        return fail("selected tab should override hover state");
+    }
+
+    const UIResolvedTabControlStyle disabledTab =
+        UIStyleResolver::resolveTabControl(tabControlStyle, UIStyleState_Disabled | UIStyleState_Selected);
+    if (!colorEqual(disabledTab.header, theme.buttonDisabled) ||
+        !colorEqual(disabledTab.text, theme.textDisabled) ||
+        colorEqual(disabledTab.header, theme.tabHeaderActive)) {
+        return fail("disabled tab should override selected state");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

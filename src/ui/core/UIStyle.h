@@ -8,6 +8,7 @@ enum UIStyleState {
     UIStyleState_Pressed  = 1 << 1,
     UIStyleState_Focused  = 1 << 2,
     UIStyleState_Disabled = 1 << 3,
+    UIStyleState_Selected = 1 << 4,
 };
 
 [[nodiscard]] inline constexpr bool hasStyleState(int state, UIStyleState flag) {
@@ -197,6 +198,42 @@ struct UIResolvedContextMenuStyle {
     float padding = 4.0f;
 };
 
+struct UIScrollAreaStyle {
+    Color track         {0.15f, 0.15f, 0.15f, 0.6f};
+    Color thumbNormal   {0.45f, 0.45f, 0.45f, 0.8f};
+    Color thumbHover    {0.60f, 0.60f, 0.60f, 0.9f};
+    Color thumbDisabled {0.35f, 0.35f, 0.35f, 0.5f};
+    float scrollbarWidth = 8.0f;
+};
+
+struct UIResolvedScrollAreaStyle {
+    Color track {0.15f, 0.15f, 0.15f, 0.6f};
+    Color thumb {0.45f, 0.45f, 0.45f, 0.8f};
+    float scrollbarWidth = 8.0f;
+};
+
+struct UITabControlStyle {
+    Color headerNormal   {0.20f, 0.20f, 0.20f, 0.9f};
+    Color headerActive   {0.28f, 0.28f, 0.28f, 1.0f};
+    Color headerHover    {0.25f, 0.25f, 0.25f, 1.0f};
+    Color headerDisabled {0.18f, 0.18f, 0.18f, 0.55f};
+    Color indicator      {0.2f, 0.8f, 1.0f, 1.0f};
+    Color content        {0.18f, 0.18f, 0.18f, 0.85f};
+    Color textNormal     {1.0f, 1.0f, 1.0f, 1.0f};
+    Color textDisabled   {0.45f, 0.45f, 0.45f, 1.0f};
+    float headerHeight = 36.0f;
+    float indicatorHeight = 3.0f;
+};
+
+struct UIResolvedTabControlStyle {
+    Color header    {0.20f, 0.20f, 0.20f, 0.9f};
+    Color indicator {0.2f, 0.8f, 1.0f, 1.0f};
+    Color content   {0.18f, 0.18f, 0.18f, 0.85f};
+    Color text      {1.0f, 1.0f, 1.0f, 1.0f};
+    float headerHeight = 36.0f;
+    float indicatorHeight = 3.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -208,6 +245,8 @@ namespace UIStyleResolver {
     [[nodiscard]] UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIDropdownStyle dropdownStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIContextMenuStyle contextMenuStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIScrollAreaStyle scrollAreaStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UITabControlStyle tabControlStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -217,4 +256,6 @@ namespace UIStyleResolver {
     [[nodiscard]] UIResolvedRadioButtonStyle resolveRadioButton(const UIRadioButtonStyle& style, int state);
     [[nodiscard]] UIResolvedDropdownStyle resolveDropdown(const UIDropdownStyle& style);
     [[nodiscard]] UIResolvedContextMenuStyle resolveContextMenu(const UIContextMenuStyle& style);
+    [[nodiscard]] UIResolvedScrollAreaStyle resolveScrollArea(const UIScrollAreaStyle& style, int state);
+    [[nodiscard]] UIResolvedTabControlStyle resolveTabControl(const UITabControlStyle& style, int state);
 }

@@ -6,13 +6,8 @@
 #include <glm/vec4.hpp>
 
 #include "../core/UIRenderUtils.h"
-#include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
-
-namespace {
-constexpr float kIndicatorHeight = 3.0f;
-} // namespace
 
 // Simple transparent panel used as a content container for each tab.
 class TabContentPanel : public UIWidget {
@@ -91,13 +86,54 @@ void UITabControl::setActiveTab(int index) {
     if (onTabChanged) onTabChanged(m_activeIndex);
 }
 
+void UITabControl::setHeaderColor(const Color& styleColor) {
+    m_headerColor = styleColor;
+    m_hasLocalColors = true;
+    m_hasLocalStyle = false;
+}
+
+void UITabControl::setHeaderActiveColor(const Color& styleColor) {
+    m_headerActiveColor = styleColor;
+    m_hasLocalColors = true;
+    m_hasLocalStyle = false;
+}
+
+void UITabControl::setHeaderHoverColor(const Color& styleColor) {
+    m_headerHoverColor = styleColor;
+    m_hasLocalColors = true;
+    m_hasLocalStyle = false;
+}
+
+void UITabControl::setIndicatorColor(const Color& styleColor) {
+    m_indicatorColor = styleColor;
+    m_hasLocalColors = true;
+    m_hasLocalStyle = false;
+}
+
+void UITabControl::setContentColor(const Color& styleColor) {
+    m_contentColor = styleColor;
+    m_hasLocalColors = true;
+    m_hasLocalStyle = false;
+}
+
+void UITabControl::setStyle(const UITabControlStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+    m_hasLocalColors = false;
+}
+
+void UITabControl::clearLocalStyle() {
+    m_hasLocalStyle = false;
+    m_hasLocalColors = false;
+}
+
 int UITabControl::hitTestHeader(float px, float py, const UIRenderContext& ctx) const {
     if (m_tabs.empty()) return -1;
     const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
     const float aw = width * scaleX;
-    const float headerH = ctx.theme ? ctx.theme->tabHeaderHeight : 36.0f;
+    const float headerH = resolveStyle(ctx, UIStyleState_Normal).headerHeight;
 
     // Header area is at the top of the widget.
     if (flippedY < ay + (height * scaleY - headerH) || flippedY >= ay + height * scaleY) return -1;
@@ -116,13 +152,14 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
     if (!m_shader || m_tabs.empty()) return;
 
     const UIRenderUtils::GLStateGuard guard;
-
-    const Color hdrCol     = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabHeader       : m_headerColor;
-    const Color hdrActCol  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabHeaderActive : m_headerActiveColor;
-    const Color hdrHovCol  = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabHeaderHover  : m_headerHoverColor;
-    const Color indCol     = (!m_hasLocalColors && ctx.theme) ? ctx.theme->tabIndicator    : m_indicatorColor;
-    const Color txtCol     = ctx.theme ? ctx.theme->textPrimary : Color{1.0f, 1.0f, 1.0f, 1.0f};
-    const float headerH    = (ctx.theme && !m_hasLocalColors) ? ctx.theme->tabHeaderHeight : 36.0f;
+    const UITabControlStyle baseStyle = resolveBaseStyle(ctx);
+    const UIResolvedTabControlStyle baseResolved =
+        UIStyleResolver::resolveTabControl(baseStyle, interactive ? UIStyleState_Normal : UIStyleState_Disabled);
+    const Color indCol = baseResolved.indicator;
+    const Color contentCol = baseResolved.content;
+    const Color txtCol = baseResolved.text;
+    const float headerH = baseResolved.headerHeight;
+    const float indicatorH = baseResolved.indicatorHeight;
 
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
@@ -136,7 +173,8 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
 
     // Build header vertices.
     std::vector<float> verts;
-    verts.reserve((m_tabs.size() * 6 + 6) * 2);
+    verts.reserve((m_tabs.size() * 6 + 12) * 2);
+    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + aw, headerBottomY);
     for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
         const float x0 = ax + static_cast<float>(i) * tabW;
         const float x1 = x0 + tabW;
@@ -145,7 +183,7 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
     // Indicator rect (below active header).
     const float indX0 = ax + static_cast<float>(m_activeIndex) * tabW;
     const float indX1 = indX0 + tabW;
-    UIRenderUtils::pushColorQuad(verts, indX0, headerBottomY - kIndicatorHeight,
+    UIRenderUtils::pushColorQuad(verts, indX0, headerBottomY - indicatorH,
                                  indX1, headerBottomY);
 
     glBindVertexArray(m_vao);
@@ -158,19 +196,27 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
                       glm::vec2(static_cast<float>(ctx.screenWidth),
                                 static_cast<float>(ctx.screenHeight)));
 
-    // Draw headers.
+    // Draw content background, then headers and the active indicator.
+    m_shader->setVec4("uColor",
+                      glm::vec4(contentCol[0], contentCol[1], contentCol[2], contentCol[3] * alpha));
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    const GLint headerVertexOffset = 6;
     for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
-        Color col;
-        if (i == m_activeIndex) col = hdrActCol;
-        else if (i == m_hoveredTab) col = hdrHovCol;
-        else col = hdrCol;
+        int tabState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+        if (i == m_activeIndex) {
+            tabState |= static_cast<int>(UIStyleState_Selected);
+        } else if (i == m_hoveredTab) {
+            tabState |= static_cast<int>(UIStyleState_Hovered);
+        }
+        const Color col = UIStyleResolver::resolveTabControl(baseStyle, tabState).header;
         m_shader->setVec4("uColor", glm::vec4(col[0], col[1], col[2], col[3] * alpha));
-        glDrawArrays(GL_TRIANGLES, i * 6, 6);
+        glDrawArrays(GL_TRIANGLES, headerVertexOffset + i * 6, 6);
     }
 
     // Draw indicator.
     m_shader->setVec4("uColor", glm::vec4(indCol[0], indCol[1], indCol[2], indCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, static_cast<GLint>(m_tabs.size() * 6), 6);
+    glDrawArrays(GL_TRIANGLES, headerVertexOffset + static_cast<GLint>(m_tabs.size() * 6), 6);
 
     glBindVertexArray(0);
 
@@ -200,7 +246,7 @@ void UITabControl::render(const UIRenderContext& ctx) const {
     if (m_activeIndex >= 0 && m_activeIndex < static_cast<int>(m_tabs.size())) {
         auto& panel = m_tabs[m_activeIndex].contentPanel;
         if (panel) {
-            const float headerH = (ctx.theme && !m_hasLocalColors) ? ctx.theme->tabHeaderHeight : 36.0f;
+            const float headerH = resolveStyle(ctx, UIStyleState_Normal).headerHeight;
             // headerH is in scaled pixels; convert to local widget space.
             const float headerHLocal = headerH / (scaleY > 0.0f ? scaleY : 1.0f);
             panel->anchor = Anchor::BottomLeft;
@@ -253,4 +299,30 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
     }
 
     return aggregate;
+}
+
+UITabControlStyle UITabControl::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    if (m_hasLocalColors) {
+        UITabControlStyle style;
+        style.headerNormal = m_headerColor;
+        style.headerActive = m_headerActiveColor;
+        style.headerHover = m_headerHoverColor;
+        style.indicator = m_indicatorColor;
+        style.content = m_contentColor;
+        if (ctx.theme) {
+            style.textNormal = ctx.theme->textPrimary;
+            style.textDisabled = ctx.theme->textDisabled;
+        }
+        return style;
+    }
+
+    return UIStyleResolver::tabControlStyleFromTheme(ctx.theme);
+}
+
+UIResolvedTabControlStyle UITabControl::resolveStyle(const UIRenderContext& ctx, int state) const {
+    return UIStyleResolver::resolveTabControl(resolveBaseStyle(ctx), state);
 }

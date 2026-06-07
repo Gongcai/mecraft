@@ -210,6 +210,38 @@ UIContextMenuStyle contextMenuStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIScrollAreaStyle scrollAreaStyleFromTheme(const UITheme* theme) {
+    UIScrollAreaStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.track = theme->scrollbarTrack;
+    style.thumbNormal = theme->scrollbarThumb;
+    style.thumbHover = theme->scrollbarThumbHover;
+    style.thumbDisabled = theme->textDisabled;
+    style.scrollbarWidth = theme->scrollbarWidth;
+    return style;
+}
+
+UITabControlStyle tabControlStyleFromTheme(const UITheme* theme) {
+    UITabControlStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.headerNormal = theme->tabHeader;
+    style.headerActive = theme->tabHeaderActive;
+    style.headerHover = theme->tabHeaderHover;
+    style.headerDisabled = theme->buttonDisabled;
+    style.indicator = theme->tabIndicator;
+    style.content = theme->tabContent;
+    style.textNormal = theme->textPrimary;
+    style.textDisabled = theme->textDisabled;
+    style.headerHeight = theme->tabHeaderHeight;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -266,6 +298,44 @@ UIResolvedContextMenuStyle resolveContextMenu(const UIContextMenuStyle& style) {
     resolved.itemHeight = style.itemHeight;
     resolved.separatorHeight = style.separatorHeight;
     resolved.padding = style.padding;
+    return resolved;
+}
+
+UIResolvedScrollAreaStyle resolveScrollArea(const UIScrollAreaStyle& style, int state) {
+    UIResolvedScrollAreaStyle resolved;
+    resolved.track = style.track;
+    resolved.scrollbarWidth = style.scrollbarWidth;
+
+    if (hasStyleState(state, UIStyleState_Disabled)) {
+        resolved.thumb = style.thumbDisabled;
+        return resolved;
+    }
+
+    resolved.thumb = hasStyleState(state, UIStyleState_Hovered) ? style.thumbHover : style.thumbNormal;
+    return resolved;
+}
+
+UIResolvedTabControlStyle resolveTabControl(const UITabControlStyle& style, int state) {
+    UIResolvedTabControlStyle resolved;
+    resolved.indicator = style.indicator;
+    resolved.content = style.content;
+    resolved.headerHeight = style.headerHeight;
+    resolved.indicatorHeight = style.indicatorHeight;
+
+    if (hasStyleState(state, UIStyleState_Disabled)) {
+        resolved.header = style.headerDisabled;
+        resolved.text = style.textDisabled;
+        return resolved;
+    }
+
+    if (hasStyleState(state, UIStyleState_Selected)) {
+        resolved.header = style.headerActive;
+    } else if (hasStyleState(state, UIStyleState_Hovered)) {
+        resolved.header = style.headerHover;
+    } else {
+        resolved.header = style.headerNormal;
+    }
+    resolved.text = style.textNormal;
     return resolved;
 }
 

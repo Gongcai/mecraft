@@ -8,6 +8,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 
 class Shader;
@@ -34,11 +35,13 @@ public:
     [[nodiscard]] int getTabCount() const { return static_cast<int>(m_tabs.size()); }
 
     // Local color overrides.
-    void setHeaderColor(const Color& c)       { m_headerColor = c; m_hasLocalColors = true; }
-    void setHeaderActiveColor(const Color& c) { m_headerActiveColor = c; m_hasLocalColors = true; }
-    void setHeaderHoverColor(const Color& c)  { m_headerHoverColor = c; m_hasLocalColors = true; }
-    void setIndicatorColor(const Color& c)    { m_indicatorColor = c; m_hasLocalColors = true; }
-    void setContentColor(const Color& c)      { m_contentColor = c; m_hasLocalColors = true; }
+    void setHeaderColor(const Color& styleColor);
+    void setHeaderActiveColor(const Color& styleColor);
+    void setHeaderHoverColor(const Color& styleColor);
+    void setIndicatorColor(const Color& styleColor);
+    void setContentColor(const Color& styleColor);
+    void setStyle(const UITabControlStyle& style);
+    void clearLocalStyle();
 
     std::function<void(int)> onTabChanged;
 
@@ -54,6 +57,8 @@ private:
     };
 
     [[nodiscard]] int hitTestHeader(float px, float py, const UIRenderContext& ctx) const;
+    [[nodiscard]] UITabControlStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedTabControlStyle resolveStyle(const UIRenderContext& ctx, int state) const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -64,9 +69,11 @@ private:
     int m_hoveredTab = -1;
 
     bool m_hasLocalColors = false;
+    bool m_hasLocalStyle = false;
     Color m_headerColor{0.20f, 0.20f, 0.20f, 0.9f};
     Color m_headerActiveColor{0.28f, 0.28f, 0.28f, 1.0f};
     Color m_headerHoverColor{0.25f, 0.25f, 0.25f, 1.0f};
     Color m_indicatorColor{0.2f, 0.8f, 1.0f, 1.0f};
     Color m_contentColor{0.18f, 0.18f, 0.18f, 0.85f};
+    UITabControlStyle m_localStyle;
 };

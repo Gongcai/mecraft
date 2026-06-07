@@ -30,8 +30,8 @@ void UIScrollArea::shutdown() {
     m_shader = nullptr;
 }
 
-void UIScrollArea::setContentHeight(float height) {
-    m_contentHeight = height;
+void UIScrollArea::setContentHeight(float contentHeight) {
+    m_contentHeight = contentHeight;
     m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxScroll());
 }
 
@@ -51,8 +51,17 @@ void UIScrollArea::scrollToBottom() {
     m_scrollOffset = maxScroll();
 }
 
-void UIScrollArea::setScrollbarVisible(bool visible) {
-    m_scrollbarVisible = visible;
+void UIScrollArea::setScrollbarVisible(bool scrollbarVisible) {
+    m_scrollbarVisible = scrollbarVisible;
+}
+
+void UIScrollArea::setStyle(const UIScrollAreaStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIScrollArea::clearLocalStyle() {
+    m_hasLocalStyle = false;
 }
 
 void UIScrollArea::updateAnimations(float dt) {
@@ -150,12 +159,10 @@ void UIScrollArea::renderSelf(const UIRenderContext& ctx) const {
 void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     if (!m_shader || m_vao == 0 || m_contentHeight <= 0.0f) return;
 
-    const UITheme* theme = ctx.theme;
-    float sbWidth = theme ? theme->scrollbarWidth : m_scrollbarWidth;
-    const auto& trackCol = theme ? theme->scrollbarTrack : m_scrollbarTrackColor;
-    const auto& thumbCol = m_thumbHovered
-        ? (theme ? theme->scrollbarThumbHover : m_scrollbarThumbHoverColor)
-        : (theme ? theme->scrollbarThumb : m_scrollbarThumbColor);
+    const UIResolvedScrollAreaStyle resolved = resolveStyle(ctx, m_thumbHovered);
+    float sbWidth = resolved.scrollbarWidth;
+    const Color trackCol = resolved.track;
+    const Color thumbCol = resolved.thumb;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -220,8 +227,7 @@ bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderConte
         return false;
     }
 
-    const UITheme* theme = ctx.theme;
-    float sbWidth = theme ? theme->scrollbarWidth : m_scrollbarWidth;
+    const float sbWidth = resolveStyle(ctx, false).scrollbarWidth;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -311,4 +317,28 @@ UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderCon
     }
 
     return result;
+}
+
+UIScrollAreaStyle UIScrollArea::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UIScrollAreaStyle style = UIStyleResolver::scrollAreaStyleFromTheme(ctx.theme);
+    if (!ctx.theme) {
+        style.track = m_scrollbarTrackColor;
+        style.thumbNormal = m_scrollbarThumbColor;
+        style.thumbHover = m_scrollbarThumbHoverColor;
+        style.thumbDisabled = m_scrollbarThumbColor;
+        style.scrollbarWidth = m_scrollbarWidth;
+    }
+    return style;
+}
+
+UIResolvedScrollAreaStyle UIScrollArea::resolveStyle(const UIRenderContext& ctx, bool thumbHovered) const {
+    int state = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+    if (thumbHovered) {
+        state |= static_cast<int>(UIStyleState_Hovered);
+    }
+    return UIStyleResolver::resolveScrollArea(resolveBaseStyle(ctx), state);
 }

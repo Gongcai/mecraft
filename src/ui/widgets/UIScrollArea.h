@@ -4,6 +4,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -17,13 +18,15 @@ public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
-    void setContentHeight(float height);
+    void setContentHeight(float contentHeight);
     [[nodiscard]] float getContentHeight() const;
     [[nodiscard]] float getScrollOffset() const;
     void setScrollOffset(float offset);
     void scrollToBottom();
 
-    void setScrollbarVisible(bool visible);
+    void setScrollbarVisible(bool scrollbarVisible);
+    void setStyle(const UIScrollAreaStyle& style);
+    void clearLocalStyle();
 
     void updateAnimations(float dt) override;
 
@@ -39,6 +42,8 @@ private:
     void renderScrollbar(const UIRenderContext& ctx) const;
     [[nodiscard]] float maxScroll() const;
     [[nodiscard]] bool hitTestScrollbarThumb(float px, float py, const UIRenderContext& ctx) const;
+    [[nodiscard]] UIScrollAreaStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedScrollAreaStyle resolveStyle(const UIRenderContext& ctx, bool thumbHovered) const;
 
     void initMesh();
     void cleanupMesh();
@@ -59,6 +64,8 @@ private:
     std::array<float, 4> m_scrollbarThumbColor{0.45f, 0.45f, 0.45f, 0.8f};
     std::array<float, 4> m_scrollbarThumbHoverColor{0.60f, 0.60f, 0.60f, 0.9f};
     float m_scrollbarWidth = 8.0f;
+    bool m_hasLocalStyle = false;
+    UIScrollAreaStyle m_localStyle;
 
     bool m_thumbHovered = false;
     Tween<float> m_scrollTween;
