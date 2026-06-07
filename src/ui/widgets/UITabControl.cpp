@@ -86,6 +86,10 @@ void UITabControl::setActiveTab(int index) {
     if (onTabChanged) onTabChanged(m_activeIndex);
 }
 
+float UITabControl::getHeaderHeight(const UIRenderContext& ctx) const {
+    return resolveStyle(ctx, UIStyleState_Normal).headerHeight;
+}
+
 void UITabControl::setHeaderColor(const Color& styleColor) {
     m_headerColor = styleColor;
     m_hasLocalColors = true;
@@ -307,16 +311,12 @@ UITabControlStyle UITabControl::resolveBaseStyle(const UIRenderContext& ctx) con
     }
 
     if (m_hasLocalColors) {
-        UITabControlStyle style;
+        UITabControlStyle style = UIStyleResolver::tabControlStyleFromTheme(ctx.theme);
         style.headerNormal = m_headerColor;
         style.headerActive = m_headerActiveColor;
         style.headerHover = m_headerHoverColor;
         style.indicator = m_indicatorColor;
         style.content = m_contentColor;
-        if (ctx.theme) {
-            style.textNormal = ctx.theme->textPrimary;
-            style.textDisabled = ctx.theme->textDisabled;
-        }
         return style;
     }
 

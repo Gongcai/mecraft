@@ -148,7 +148,6 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
     const float bottomMargin = std::clamp(screenH * 0.045f, 28.0f, 54.0f);
     const float backH = std::clamp(screenH * 0.045f, 40.0f, 58.0f);
     const float backGap = std::clamp(screenH * 0.055f, 42.0f, 76.0f);
-    const float headerH = ctx.theme ? ctx.theme->tabHeaderHeight : 36.0f;
 
     if (m_overlay) {
         m_overlay->width = screenW;
@@ -196,6 +195,7 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
     m_tabControl->anchorOffsetX = 0.0f;
     m_tabControl->anchorOffsetY = tabsBottom;
 
+    const float headerH = m_tabControl->getHeaderHeight(ctx);
     const float contentH = std::max(80.0f, tabsH - headerH);
     for (int i = 0; i < m_tabControl->getTabCount(); ++i) {
         UIWidget* contentPanel = m_tabControl->getContentPanel(i);

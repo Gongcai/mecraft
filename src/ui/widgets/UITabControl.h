@@ -33,6 +33,7 @@ public:
     void setActiveTab(int index);
     [[nodiscard]] int getActiveTab() const { return m_activeIndex; }
     [[nodiscard]] int getTabCount() const { return static_cast<int>(m_tabs.size()); }
+    [[nodiscard]] float getHeaderHeight(const UIRenderContext& ctx) const;
 
     // Local color overrides.
     void setHeaderColor(const Color& styleColor);
