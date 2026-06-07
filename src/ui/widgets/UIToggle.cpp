@@ -1,6 +1,7 @@
 #include "UIToggle.h"
 
 #include <glad/glad.h>
+#include <algorithm>
 #include <cmath>
 
 #include "../core/UIRenderUtils.h"
@@ -122,7 +123,8 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
     const float toggleH = resolved.height;
 
     const float ax = getAbsoluteX(ctx);
-    const float ay = getAbsoluteY(ctx);
+    const float widgetH = height * scaleY;
+    const float ay = getAbsoluteY(ctx) + std::max(0.0f, (widgetH - toggleH) * 0.5f);
 
     const float trackRadius = toggleH * 0.5f;
     const float knobRadius = toggleH * 0.38f;

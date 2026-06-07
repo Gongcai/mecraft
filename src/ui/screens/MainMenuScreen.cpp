@@ -31,8 +31,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     auto startBtn = std::make_unique<UIButton>();
     startBtn->setText(getLocaleManager() ? getLocaleManager()->tr("start_game") : "START GAME");
     startBtn->setTextScale(2.0f);
-    startBtn->width = 280.0f;
-    startBtn->height = 50.0f;
+    startBtn->width = 300.0f;
+    startBtn->height = 48.0f;
     startBtn->anchor = Anchor::Center;
     startBtn->anchorOffsetY = -20.0f;
     startBtn->setTone(UIButtonTone::Success);
@@ -45,11 +45,11 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     auto mpBtn = std::make_unique<UIButton>();
     mpBtn->setText(getLocaleManager() ? getLocaleManager()->tr("multiplayer") : "MULTIPLAYER");
     mpBtn->setTextScale(2.0f);
-    mpBtn->width = 280.0f;
-    mpBtn->height = 50.0f;
+    mpBtn->width = 300.0f;
+    mpBtn->height = 48.0f;
     mpBtn->anchor = Anchor::Center;
     mpBtn->anchorOffsetY = -80.0f;
-    mpBtn->setTone(UIButtonTone::Primary);
+    mpBtn->setTone(UIButtonTone::Secondary);
     mpBtn->setOnClick([this]() {
         showMultiplayerPanel();
     });
@@ -59,8 +59,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     auto quitBtn = std::make_unique<UIButton>();
     quitBtn->setText(getLocaleManager() ? getLocaleManager()->tr("quit") : "QUIT");
     quitBtn->setTextScale(2.0f);
-    quitBtn->width = 280.0f;
-    quitBtn->height = 50.0f;
+    quitBtn->width = 300.0f;
+    quitBtn->height = 48.0f;
     quitBtn->anchor = Anchor::Center;
     quitBtn->anchorOffsetY = -140.0f;
     quitBtn->setTone(UIButtonTone::Danger);
@@ -73,7 +73,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Server address input
     auto addrInput = std::make_unique<UITextInput>();
-    addrInput->width = 280.0f;
+    addrInput->width = 300.0f;
     addrInput->height = 40.0f;
     addrInput->anchor = Anchor::Center;
     addrInput->anchorOffsetY = -20.0f;
@@ -85,8 +85,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     auto connectBtn = std::make_unique<UIButton>();
     connectBtn->setText("CONNECT");
     connectBtn->setTextScale(2.0f);
-    connectBtn->width = 280.0f;
-    connectBtn->height = 50.0f;
+    connectBtn->width = 300.0f;
+    connectBtn->height = 48.0f;
     connectBtn->anchor = Anchor::Center;
     connectBtn->anchorOffsetY = -80.0f;
     connectBtn->setTone(UIButtonTone::Success);
@@ -114,8 +114,8 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     auto backBtn = std::make_unique<UIButton>();
     backBtn->setText("BACK");
     backBtn->setTextScale(2.0f);
-    backBtn->width = 280.0f;
-    backBtn->height = 50.0f;
+    backBtn->width = 300.0f;
+    backBtn->height = 48.0f;
     backBtn->anchor = Anchor::Center;
     backBtn->anchorOffsetY = -140.0f;
     backBtn->setTone(UIButtonTone::Secondary);

@@ -54,7 +54,7 @@ private:
 
     Tween<float> m_hoverScaleTween;
     Tween<std::array<float, 4>> m_hoverColorTween;
-    float m_hoverTargetScale = 1.08f;
+    float m_hoverTargetScale = 1.03f;
     float m_hoverDuration = 0.15f;
 
     bool m_hovered = false;

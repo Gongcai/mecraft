@@ -63,7 +63,7 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     // -- "SETTINGS" title --
     auto title = std::make_unique<UIText>();
     title->setText(loc(getLocaleManager(), "settings", "SETTINGS"));
-    title->setTextScale(3.0f);
+    title->setTextScale(2.6f);
     title->setTone(UITextTone::OnOverlay);
     title->setAlignment(TextAlignment::Center);
     title->anchor = Anchor::TopCenter;
@@ -76,8 +76,8 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     auto tabs = std::make_unique<UITabControl>();
     tabs->anchor = Anchor::Center;
     tabs->anchorOffsetY = -10.0f;
-    tabs->width = 700.0f;
-    tabs->height = 460.0f;
+    tabs->width = 780.0f;
+    tabs->height = 500.0f;
 
     const char* tabNames[] = {"tab_general", "tab_shadows", "tab_lighting",
                               "tab_postprocess", "tab_volumetric", "tab_upscale"};
@@ -101,9 +101,9 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     // -- Back button --
     auto backBtn = std::make_unique<UIButton>();
     backBtn->setText(loc(getLocaleManager(), "back", "BACK"));
-    backBtn->setTextScale(2.0f);
-    backBtn->width = 200.0f;
-    backBtn->height = 40.0f;
+    backBtn->setTextScale(1.8f);
+    backBtn->width = 220.0f;
+    backBtn->height = 42.0f;
     backBtn->anchor = Anchor::BottomCenter;
     backBtn->anchorOffsetY = 40.0f;
     backBtn->setTone(UIButtonTone::Secondary);
@@ -142,13 +142,13 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
 
     const float screenW = static_cast<float>(std::max(1, ctx.screenWidth));
     const float screenH = static_cast<float>(std::max(1, ctx.screenHeight));
-    const float sideMargin = std::clamp(screenW * 0.04f, 28.0f, 64.0f);
-    const float topMargin = std::clamp(screenH * 0.04f, 20.0f, 36.0f);
+    const float sideMargin = std::clamp(screenW * 0.055f, 36.0f, 96.0f);
+    const float topMargin = std::clamp(screenH * 0.045f, 24.0f, 42.0f);
     const float titleH = 40.0f;
-    const float titleGap = std::clamp(screenH * 0.035f, 18.0f, 32.0f);
-    const float bottomMargin = std::clamp(screenH * 0.045f, 28.0f, 54.0f);
+    const float titleGap = std::clamp(screenH * 0.030f, 16.0f, 28.0f);
+    const float bottomMargin = std::clamp(screenH * 0.045f, 30.0f, 54.0f);
     const float backH = std::clamp(screenH * 0.045f, 40.0f, 58.0f);
-    const float backGap = std::clamp(screenH * 0.055f, 42.0f, 76.0f);
+    const float backGap = std::clamp(screenH * 0.045f, 34.0f, 58.0f);
 
     if (m_overlay) {
         m_overlay->width = screenW;
@@ -186,7 +186,7 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
 
     const float tabsTop = screenH - topMargin - titleH - titleGap;
     const float tabsBottom = bottomMargin + backH + backGap;
-    const float maxTabsW = std::min(1410.0f, screenW - sideMargin * 2.0f);
+    const float maxTabsW = std::min(1120.0f, screenW - sideMargin * 2.0f);
     const float tabsW = std::max(320.0f, maxTabsW);
     const float tabsH = std::max(180.0f, tabsTop - tabsBottom);
 
@@ -223,7 +223,8 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
         const auto& scrollChildren = scroll->getChildren();
         if (!scrollChildren.empty()) {
             if (auto* stack = dynamic_cast<UIStackLayout*>(scrollChildren[0].get())) {
-                resizeSettingsStack(stack, std::max(1.0f, tabsW - 20.0f));
+                stack->x = 18.0f;
+                resizeSettingsStack(stack, std::max(1.0f, tabsW - 48.0f));
                 stack->y = scroll->height - stack->height;
                 scroll->setContentHeight(stack->height);
             }
@@ -257,9 +258,10 @@ static UIStackLayout* setupScrollableTab(UIWidget* contentPanel, ResourceMgr& /*
 
     auto stack = std::make_unique<UIStackLayout>();
     stack->setDirection(StackDirection::Vertical);
-    stack->setSpacing(4.0f);
+    stack->setSpacing(8.0f);
     stack->anchor = Anchor::BottomLeft;
-    stack->width = tabWidth - 20.0f;
+    stack->x = 18.0f;
+    stack->width = tabWidth - 48.0f;
 
     UIStackLayout* stackPtr = stack.get();
     scroll->addChild(std::move(stack));
@@ -275,6 +277,7 @@ static void finalizeScrollTab(UIWidget* contentPanel, UIStackLayout* stack) {
     auto& children = contentPanel->getChildren();
     if (!children.empty()) {
         if (auto* scroll = dynamic_cast<UIScrollArea*>(children[0].get())) {
+            stack->x = 18.0f;
             stack->y = scroll->height - stack->height;
             scroll->setContentHeight(stack->height);
             scroll->setScrollOffset(0.0f);
@@ -287,31 +290,31 @@ static void resizeSettingsStack(UIStackLayout* stack, float availableWidth) {
         return;
     }
 
-    const float rowWidth = std::max(240.0f, availableWidth);
+    const float rowWidth = std::max(260.0f, availableWidth);
     for (const auto& child : stack->getChildren()) {
         if (auto* row = dynamic_cast<UIStackLayout*>(child.get())) {
             if (row->getDirection() == StackDirection::Horizontal) {
                 auto& rowChildren = row->getChildren();
                 const bool hasValueText = rowChildren.size() >= 3;
                 const float spacing = row->getSpacing();
-                const float valueW = hasValueText ? 90.0f : 0.0f;
+                const float valueW = hasValueText ? 92.0f : 0.0f;
                 const float totalSpacing = spacing * static_cast<float>(rowChildren.size() > 0 ? rowChildren.size() - 1 : 0);
-                const float labelW = std::clamp(rowWidth * 0.34f, 150.0f, 220.0f);
-                const float controlW = std::max(140.0f, rowWidth - labelW - valueW - totalSpacing);
+                const float labelW = std::clamp(rowWidth * 0.30f, 160.0f, 240.0f);
+                const float controlW = std::max(180.0f, rowWidth - labelW - valueW - totalSpacing);
 
                 row->width = rowWidth;
-                row->height = 28.0f;
+                row->height = 34.0f;
                 if (rowChildren.size() >= 1) {
                     rowChildren[0]->width = labelW;
-                    rowChildren[0]->height = 28.0f;
+                    rowChildren[0]->height = 34.0f;
                 }
                 if (rowChildren.size() >= 2) {
                     rowChildren[1]->width = controlW;
-                    rowChildren[1]->height = 28.0f;
+                    rowChildren[1]->height = 34.0f;
                 }
                 if (rowChildren.size() >= 3) {
                     rowChildren[2]->width = valueW;
-                    rowChildren[2]->height = 28.0f;
+                    rowChildren[2]->height = 34.0f;
                 }
                 row->layout();
             }
@@ -331,10 +334,10 @@ void SettingsScreen::addSectionHeader(UIWidget* parent, ResourceMgr& /*resourceM
                                        const std::string& text) {
     auto header = std::make_unique<UIText>();
     header->setText(text);
-    header->setTextScale(1.4f);
+    header->setTextScale(1.25f);
     header->setTone(UITextTone::Accent);
-    header->width = 300.0f;
-    header->height = 24.0f;
+    header->width = 360.0f;
+    header->height = 32.0f;
     parent->addChild(std::move(header));
 }
 
@@ -345,8 +348,8 @@ void SettingsScreen::addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
     auto toggle = std::make_unique<UIToggle>();
     toggle->setLabel(label);
     toggle->setChecked(checked);
-    toggle->width = 400.0f;
-    toggle->height = 28.0f;
+    toggle->width = 520.0f;
+    toggle->height = 32.0f;
     toggle->onChanged = std::move(onChanged);
     parent->addChild(std::move(toggle));
 }
@@ -358,30 +361,30 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     (void)resourceMgr;
     auto row = std::make_unique<UIStackLayout>();
     row->setDirection(StackDirection::Horizontal);
-    row->setSpacing(8.0f);
-    row->width = 640.0f;
-    row->height = 28.0f;
+    row->setSpacing(10.0f);
+    row->width = 720.0f;
+    row->height = 34.0f;
 
     auto lbl = std::make_unique<UIText>();
     lbl->setText(label);
-    lbl->setTextScale(1.1f);
+    lbl->setTextScale(1.0f);
     lbl->setTone(UITextTone::Secondary);
     lbl->width = 220.0f;
-    lbl->height = 28.0f;
+    lbl->height = 34.0f;
 
     auto slider = std::make_unique<UISlider>();
     slider->setRange(minVal, maxVal);
     slider->setStep(step);
     slider->setValue(currentVal);
-    slider->width = 300.0f;
-    slider->height = 28.0f;
+    slider->width = 390.0f;
+    slider->height = 34.0f;
 
     auto valueText = std::make_unique<UIText>();
     valueText->setText(formatSliderValue(currentVal, step));
-    valueText->setTextScale(1.1f);
+    valueText->setTextScale(1.0f);
     valueText->setTone(UITextTone::Secondary);
-    valueText->width = 90.0f;
-    valueText->height = 28.0f;
+    valueText->width = 92.0f;
+    valueText->height = 34.0f;
     UIText* valueTextPtr = valueText.get();
 
     slider->setOnValueChanged([valueTextPtr, step, onValueChanged = std::move(onValueChanged)](float v) mutable {
@@ -409,22 +412,22 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
     (void)resourceMgr;
     auto row = std::make_unique<UIStackLayout>();
     row->setDirection(StackDirection::Horizontal);
-    row->setSpacing(8.0f);
-    row->width = 640.0f;
-    row->height = 28.0f;
+    row->setSpacing(10.0f);
+    row->width = 720.0f;
+    row->height = 34.0f;
 
     auto lbl = std::make_unique<UIText>();
     lbl->setText(label);
-    lbl->setTextScale(1.1f);
+    lbl->setTextScale(1.0f);
     lbl->setTone(UITextTone::Secondary);
     lbl->width = 220.0f;
-    lbl->height = 28.0f;
+    lbl->height = 34.0f;
 
     auto dropdown = std::make_unique<UIDropdown>();
     dropdown->setOptions(std::vector<std::string>(options));
     dropdown->setSelectedIndex(currentIndex);
-    dropdown->width = 250.0f;
-    dropdown->height = 28.0f;
+    dropdown->width = 320.0f;
+    dropdown->height = 32.0f;
     dropdown->setOnSelectionChanged(std::move(onSelectionChanged));
 
     row->addChild(std::move(lbl));
