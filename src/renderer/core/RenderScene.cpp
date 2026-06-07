@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <utility>
 #include "engine/platform/Window.h"
 #include "../../particle/RainRenderer.h"
 #include "../../world/World.h"
@@ -368,10 +369,18 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     if (upscaleChanged) {
         invalidateFrameHistory();
     }
+
+    if (m_settingsChangedCallback) {
+        m_settingsChangedCallback(m_settings);
+    }
 }
 
 const RenderSettings& RenderScene::getSettings() const {
     return m_settings;
+}
+
+void RenderScene::setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback) {
+    m_settingsChangedCallback = std::move(callback);
 }
 
 void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {

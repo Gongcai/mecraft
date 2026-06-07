@@ -12,6 +12,7 @@
 #include "../debug/RenderDebugService.h"
 
 #include <memory>
+#include <functional>
 
 // Forward declarations
 class RenderResourceHub;
@@ -124,6 +125,7 @@ public:
     // Settings
     void setSettings(const RenderSettings& settings);
     const RenderSettings& getSettings() const;
+    void setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback);
 
     // Sub-renderer injection (temporary until ECS-driven)
     void setHumanoidRenderer(HumanoidRenderer* hr);
@@ -218,6 +220,7 @@ private:
 
     // Configuration
     RenderSettings m_settings;
+    std::function<void(const RenderSettings&)> m_settingsChangedCallback;
 
     // Shared infrastructure
     SharedRenderResources m_shared;

@@ -9,7 +9,7 @@ class UIPanel;
 class UIText;
 class UIButton;
 class UITabControl;
-class RenderSettings;
+struct RenderSettings;
 class RenderScene;
 class World;
 

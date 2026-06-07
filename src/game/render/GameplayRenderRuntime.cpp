@@ -10,6 +10,7 @@
 #include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
+#include "../../app/AppSettings.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -64,6 +65,7 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
     // Initialize RenderScene and connect to RenderResourceHub
     renderScene.init(resourceMgr);
+    const RenderSettings initialSettings = app::loadRenderSettings(renderer.getSettings());
     renderScene.setupResources(
         &threadPool,
         &renderer.getTerrainRenderer(),
@@ -71,18 +73,16 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
         &renderer.getDeferredRenderTargets(),
         &renderer.getGameplaySkyRenderer(),
         &renderer.getShadowRenderer(),
-        renderer.getSettings()
+        initialSettings
     );
+    renderScene.setSettingsChangedCallback([](const RenderSettings& settings) {
+        app::saveRenderSettings(settings);
+    });
 
     // Inject RenderScene services into RenderResourceHub
     renderer.setTerrainStreamingService(&renderScene.getTerrainStreamingService());
     renderer.setOverlayRenderer(&renderScene.getOverlayRenderer());
     renderer.setDebugService(&renderScene.debugService());
-
-    // Enable fog via RenderSettings
-    RenderSettings settings = renderScene.getSettings();
-    settings.fog.enabled = true;
-    renderScene.setSettings(settings);
 
     // Entity renderers
     dropRenderer.init(resourceMgr);

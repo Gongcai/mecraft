@@ -13,6 +13,7 @@
 #include "../../renderer/core/RenderSettings.h"
 #include "../../renderer/core/RenderScene.h"
 #include "../../world/World.h"
+#include "../../app/AppSettings.h"
 
 #include <algorithm>
 #include <cmath>
@@ -457,6 +458,7 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                          } else if (m_world) {
                              m_world->setRenderDistance(distance);
                          }
+                         app::saveRenderDistance(distance);
                      });
     }
 

@@ -1,5 +1,6 @@
 #include "MainMenuAppState.h"
 
+#include "../AppSettings.h"
 #include "../../save/SaveManager.h"
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ void MainMenuAppState::onEnter() {
 
     // Multiplayer connect
     m_mainMenuScreen.onConnectClicked = [this](const std::string& address, int port) {
-        m_pendingConfig = GameSessionConfig{1234, 16};
+        m_pendingConfig = GameSessionConfig{1234, app::loadRenderDistance()};
         m_pendingConfig.serverAddress = address;
         m_pendingConfig.serverPort = static_cast<uint16_t>(port);
         m_transitioningToGame = true;
@@ -162,7 +163,7 @@ void MainMenuAppState::switchToPage(Page page) {
 // ---------------------------------------------------------------------------
 
 void MainMenuAppState::startGameWithWorld(const std::string& worldName, int seed) {
-    m_pendingConfig = GameSessionConfig{seed, 16};
+    m_pendingConfig = GameSessionConfig{seed, app::loadRenderDistance()};
     m_pendingConfig.worldName = worldName;
     m_pendingConfig.saveRoot  = m_savesRoot.string();
     m_transitioningToGame = true;

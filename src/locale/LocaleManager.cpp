@@ -81,9 +81,27 @@ void LocaleManager::loadSettings() {
 }
 
 void LocaleManager::saveSettings() const {
-    nlohmann::json j;
+    nlohmann::json j = nlohmann::json::object();
+    std::ifstream existing(SETTINGS_PATH);
+    if (existing.is_open()) {
+        try {
+            existing >> j;
+        } catch (...) {
+            j = nlohmann::json::object();
+        }
+    }
+    if (!j.is_object()) {
+        j = nlohmann::json::object();
+    }
     j["language"] = m_currentLang;
-    std::ofstream file(SETTINGS_PATH);
+
+    const std::filesystem::path path(SETTINGS_PATH);
+    std::error_code ec;
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path(), ec);
+    }
+
+    std::ofstream file(path);
     if (file.is_open()) {
         file << j.dump(2) << std::endl;
     }
