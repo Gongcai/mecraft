@@ -193,6 +193,23 @@ UIDropdownStyle dropdownStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIContextMenuStyle contextMenuStyleFromTheme(const UITheme* theme) {
+    UIContextMenuStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.background = theme->contextMenuBackground;
+    style.border = theme->contextMenuBorder;
+    style.itemHover = theme->contextMenuItemHover;
+    style.separator = theme->contextMenuSeparator;
+    style.text = theme->textPrimary;
+    style.width = theme->contextMenuWidth;
+    style.borderWidth = theme->panelBorderWidth;
+    style.itemHeight = theme->contextMenuItemHeight;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -234,6 +251,21 @@ UIResolvedDropdownStyle resolveDropdown(const UIDropdownStyle& style) {
     resolved.separator = style.separator;
     resolved.accent = style.accent;
     resolved.itemHeight = style.itemHeight;
+    return resolved;
+}
+
+UIResolvedContextMenuStyle resolveContextMenu(const UIContextMenuStyle& style) {
+    UIResolvedContextMenuStyle resolved;
+    resolved.background = style.background;
+    resolved.border = style.border;
+    resolved.itemHover = style.itemHover;
+    resolved.separator = style.separator;
+    resolved.text = style.text;
+    resolved.width = style.width;
+    resolved.borderWidth = style.borderWidth;
+    resolved.itemHeight = style.itemHeight;
+    resolved.separatorHeight = style.separatorHeight;
+    resolved.padding = style.padding;
     return resolved;
 }
 

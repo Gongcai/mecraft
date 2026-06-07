@@ -4,7 +4,6 @@
 #include <algorithm>
 
 #include "../core/UIRenderUtils.h"
-#include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -68,26 +67,32 @@ void UIContextMenu::addSeparator() {
     m_items.push_back(std::move(item));
 }
 
-void UIContextMenu::show(float x, float y) {
+void UIContextMenu::show(float menuX, float menuY) {
     m_menuVisible = true;
-    m_menuX = x;
-    m_menuY = y;
+    m_menuX = menuX;
+    m_menuY = menuY;
     m_hoveredItem = -1;
     m_scrollOffset = 0.0f;
     m_showTween.start(0.0f, 1.0f, 0.15f, EasingType::EaseOut);
 
-    // Calculate total menu height.
-    float totalH = kMenuPadding * 2.0f;
-    for (const auto& item : m_items) {
-        totalH += (item.type == ItemType::Separator) ? kSeparatorHeight : kItemHeight;
-    }
-    width = 180.0f;
-    height = totalH;
+    const UIResolvedContextMenuStyle resolved =
+        UIStyleResolver::resolveContextMenu(m_hasLocalStyle ? m_localStyle : UIContextMenuStyle{});
+    width = resolved.width;
+    height = menuHeight(resolved);
 }
 
 void UIContextMenu::hide() {
     m_menuVisible = false;
     m_showTween.start(m_showTween.value(), 0.0f, 0.1f, EasingType::EaseIn);
+}
+
+void UIContextMenu::setStyle(const UIContextMenuStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIContextMenu::clearLocalStyle() {
+    m_hasLocalStyle = false;
 }
 
 void UIContextMenu::updateAnimations(float dt) {
@@ -101,21 +106,23 @@ void UIContextMenu::cleanupMesh() {
 }
 
 int UIContextMenu::hitTestItem(float px, float py, const UIRenderContext& ctx) const {
+    const UIResolvedContextMenuStyle resolved = resolveStyle(ctx);
     const float flippedY = static_cast<float>(ctx.screenHeight) - py;
-    const float menuW = ctx.theme ? ctx.theme->contextMenuWidth : 180.0f;
+    const float menuW = resolved.width;
+    const float menuH = menuHeight(resolved);
 
     // Menu position: m_menuX is the left edge, m_menuY is the top edge (in screen coords, Y-down).
     // Convert to widget coords: the menu's bottom-left in widget space.
     const float menuLeft = m_menuX;
     const float menuTop_widget = static_cast<float>(ctx.screenHeight) - m_menuY; // Top in widget coords.
-    const float menuBottom_widget = menuTop_widget - height;
+    const float menuBottom_widget = menuTop_widget - menuH;
 
     if (px < menuLeft || px >= menuLeft + menuW) return -1;
     if (flippedY < menuBottom_widget || flippedY >= menuTop_widget) return -1;
 
-    float yOff = kMenuPadding;
+    float yOff = resolved.padding;
     for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-        const float itemH = (m_items[i].type == ItemType::Separator) ? kSeparatorHeight : kItemHeight;
+        const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
         // Check from top down.
         const float itemTop = menuTop_widget - yOff;
         const float itemBottom = itemTop - itemH;
@@ -129,6 +136,7 @@ int UIContextMenu::hitTestItem(float px, float py, const UIRenderContext& ctx) c
 
 void UIContextMenu::renderSelf(const UIRenderContext& ctx) const {
     // Context menu rendering is handled in render() override.
+    (void)ctx;
 }
 
 void UIContextMenu::render(const UIRenderContext& ctx) const {
@@ -137,19 +145,21 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
 
     const UIRenderUtils::GLStateGuard guard;
 
-    const Color bgCol  = ctx.theme ? ctx.theme->contextMenuBackground : Color{0.16f, 0.16f, 0.16f, 0.95f};
-    const Color brdCol = ctx.theme ? ctx.theme->contextMenuBorder     : Color{0.35f, 0.35f, 0.35f, 0.7f};
-    const Color hovCol = ctx.theme ? ctx.theme->contextMenuItemHover  : Color{0.25f, 0.25f, 0.25f, 1.0f};
-    const Color sepCol = ctx.theme ? ctx.theme->contextMenuSeparator  : Color{0.30f, 0.30f, 0.30f, 0.5f};
-    const Color txtCol = ctx.theme ? ctx.theme->textPrimary           : Color{1.0f, 1.0f, 1.0f, 1.0f};
-    const float menuW  = ctx.theme ? ctx.theme->contextMenuWidth : 180.0f;
-    const float brdW   = ctx.theme ? ctx.theme->panelBorderWidth : 1.0f;
+    const UIResolvedContextMenuStyle resolved = resolveStyle(ctx);
+    const Color bgCol = resolved.background;
+    const Color brdCol = resolved.border;
+    const Color hovCol = resolved.itemHover;
+    const Color sepCol = resolved.separator;
+    const Color txtCol = resolved.text;
+    const float menuW = resolved.width;
+    const float menuH = menuHeight(resolved);
+    const float brdW = resolved.borderWidth;
 
-    const float alpha = m_showTween.value();
+    const float menuAlpha = m_showTween.value();
     const float menuLeft = m_menuX;
     const float menuTop_screen = m_menuY;
     const float menuTop_widget = static_cast<float>(ctx.screenHeight) - menuTop_screen;
-    const float menuBottom_widget = menuTop_widget - height;
+    const float menuBottom_widget = menuTop_widget - menuH;
 
     // Build vertices.
     std::vector<float> verts;
@@ -166,11 +176,10 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
     UIRenderUtils::pushColorQuad(verts, menuLeft + menuW - brdW, menuBottom_widget,
                                  menuLeft + menuW, menuTop_widget);           // right
 
-    int nextVert = 30;
     // Item hover highlights and separator lines.
-    float yOff = kMenuPadding;
+    float yOff = resolved.padding;
     for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-        const float itemH = (m_items[i].type == ItemType::Separator) ? kSeparatorHeight : kItemHeight;
+        const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
         const float itemTop = menuTop_widget - yOff;
         const float itemBottom = itemTop - itemH;
 
@@ -196,24 +205,24 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
                                 static_cast<float>(ctx.screenHeight)));
 
     // Background.
-    m_shader->setVec4("uColor", glm::vec4(bgCol[0], bgCol[1], bgCol[2], bgCol[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(bgCol[0], bgCol[1], bgCol[2], bgCol[3] * menuAlpha));
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     // Border.
-    m_shader->setVec4("uColor", glm::vec4(brdCol[0], brdCol[1], brdCol[2], brdCol[3] * alpha));
+    m_shader->setVec4("uColor", glm::vec4(brdCol[0], brdCol[1], brdCol[2], brdCol[3] * menuAlpha));
     glDrawArrays(GL_TRIANGLES, 6, 24);
 
     // Item highlights and separators.
     int vertIdx = 30;
-    yOff = kMenuPadding;
+    yOff = resolved.padding;
     for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-        const float itemH = (m_items[i].type == ItemType::Separator) ? kSeparatorHeight : kItemHeight;
+        const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
         if (m_items[i].type == ItemType::Entry && i == m_hoveredItem) {
-            m_shader->setVec4("uColor", glm::vec4(hovCol[0], hovCol[1], hovCol[2], hovCol[3] * alpha));
+            m_shader->setVec4("uColor", glm::vec4(hovCol[0], hovCol[1], hovCol[2], hovCol[3] * menuAlpha));
             glDrawArrays(GL_TRIANGLES, vertIdx, 6);
             vertIdx += 6;
         } else if (m_items[i].type == ItemType::Separator) {
-            m_shader->setVec4("uColor", glm::vec4(sepCol[0], sepCol[1], sepCol[2], sepCol[3] * alpha));
+            m_shader->setVec4("uColor", glm::vec4(sepCol[0], sepCol[1], sepCol[2], sepCol[3] * menuAlpha));
             glDrawArrays(GL_TRIANGLES, vertIdx, 6);
             vertIdx += 6;
         }
@@ -225,15 +234,15 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
     // Render text.
     if (ctx.textRenderer) {
         const float textScale = 1.0f;
-        yOff = kMenuPadding;
+        yOff = resolved.padding;
         for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-            const float itemH = (m_items[i].type == ItemType::Separator) ? kSeparatorHeight : kItemHeight;
+            const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
             if (m_items[i].type == ItemType::Entry) {
                 const float textY = menuTop_widget - yOff - itemH * 0.5f -
                                     ctx.textRenderer->measureText(m_items[i].text, textScale).height * 0.5f;
                 ctx.textRenderer->render(m_items[i].text,
                                          menuLeft + 12.0f, textY, textScale,
-                                         {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
+                                         {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * menuAlpha},
                                          static_cast<float>(ctx.screenWidth),
                                          static_cast<float>(ctx.screenHeight));
             }
@@ -279,4 +288,23 @@ UIEventResult UIContextMenu::onInput(const UIInputEvent& event, const UIRenderCo
     }
 
     return UIEventResult::Ignored;
+}
+
+UIContextMenuStyle UIContextMenu::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+    return UIStyleResolver::contextMenuStyleFromTheme(ctx.theme);
+}
+
+UIResolvedContextMenuStyle UIContextMenu::resolveStyle(const UIRenderContext& ctx) const {
+    return UIStyleResolver::resolveContextMenu(resolveBaseStyle(ctx));
+}
+
+float UIContextMenu::menuHeight(const UIResolvedContextMenuStyle& style) const {
+    float totalH = style.padding * 2.0f;
+    for (const auto& item : m_items) {
+        totalH += (item.type == ItemType::Separator) ? style.separatorHeight : style.itemHeight;
+    }
+    return totalH;
 }

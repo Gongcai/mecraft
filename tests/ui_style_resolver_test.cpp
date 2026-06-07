@@ -103,6 +103,12 @@ int main() {
     theme.dropdownItemSelected = {0.48f, 0.58f, 0.68f, 0.35f};
     theme.dropdownSeparator = {0.78f, 0.79f, 0.80f, 0.4f};
     theme.accentPrimary = {0.19f, 0.29f, 0.39f, 1.0f};
+    theme.contextMenuBackground = {0.20f, 0.30f, 0.40f, 0.95f};
+    theme.contextMenuBorder = {0.50f, 0.60f, 0.70f, 0.7f};
+    theme.contextMenuItemHover = {0.21f, 0.31f, 0.41f, 1.0f};
+    theme.contextMenuSeparator = {0.51f, 0.61f, 0.71f, 0.5f};
+    theme.contextMenuWidth = 220.0f;
+    theme.contextMenuItemHeight = 32.0f;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -231,6 +237,21 @@ int main() {
         !colorEqual(dropdown.accent, theme.accentPrimary) ||
         std::fabs(dropdown.itemHeight - 28.0f) > 0.001f) {
         return fail("dropdown style should map theme colors and preserve default item height");
+    }
+
+    const UIContextMenuStyle contextMenuStyle = UIStyleResolver::contextMenuStyleFromTheme(&theme);
+    const UIResolvedContextMenuStyle contextMenu = UIStyleResolver::resolveContextMenu(contextMenuStyle);
+    if (!colorEqual(contextMenu.background, theme.contextMenuBackground) ||
+        !colorEqual(contextMenu.border, theme.contextMenuBorder) ||
+        !colorEqual(contextMenu.itemHover, theme.contextMenuItemHover) ||
+        !colorEqual(contextMenu.separator, theme.contextMenuSeparator) ||
+        !colorEqual(contextMenu.text, theme.textPrimary) ||
+        std::fabs(contextMenu.width - 220.0f) > 0.001f ||
+        std::fabs(contextMenu.borderWidth - 4.0f) > 0.001f ||
+        std::fabs(contextMenu.itemHeight - 32.0f) > 0.001f ||
+        std::fabs(contextMenu.separatorHeight - 6.0f) > 0.001f ||
+        std::fabs(contextMenu.padding - 4.0f) > 0.001f) {
+        return fail("context menu style should map theme colors and dimensions");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

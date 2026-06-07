@@ -7,6 +7,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -29,12 +30,14 @@ public:
     void addSeparator();
 
     // Show the menu at the given screen position (in reference coordinates).
-    void show(float x, float y);
+    void show(float menuX, float menuY);
 
     // Hide the menu.
     void hide();
 
     [[nodiscard]] bool isVisible() const { return m_menuVisible; }
+    void setStyle(const UIContextMenuStyle& style);
+    void clearLocalStyle();
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;
@@ -52,6 +55,9 @@ private:
     };
 
     [[nodiscard]] int hitTestItem(float px, float py, const UIRenderContext& ctx) const;
+    [[nodiscard]] UIContextMenuStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedContextMenuStyle resolveStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] float menuHeight(const UIResolvedContextMenuStyle& style) const;
     void cleanupMesh();
 
     Shader* m_shader = nullptr;
@@ -64,10 +70,8 @@ private:
     float m_menuX = 0.0f;
     float m_menuY = 0.0f;
     float m_scrollOffset = 0.0f;
+    bool m_hasLocalStyle = false;
+    UIContextMenuStyle m_localStyle;
 
     Tween<float> m_showTween;
-
-    static constexpr float kItemHeight = 28.0f;
-    static constexpr float kSeparatorHeight = 6.0f;
-    static constexpr float kMenuPadding = 4.0f;
 };

@@ -171,6 +171,32 @@ struct UIResolvedDropdownStyle {
     float itemHeight = 28.0f;
 };
 
+struct UIContextMenuStyle {
+    Color background {0.16f, 0.16f, 0.16f, 0.95f};
+    Color border     {0.35f, 0.35f, 0.35f, 0.7f};
+    Color itemHover  {0.25f, 0.25f, 0.25f, 1.0f};
+    Color separator  {0.30f, 0.30f, 0.30f, 0.5f};
+    Color text       {1.0f, 1.0f, 1.0f, 1.0f};
+    float width = 180.0f;
+    float borderWidth = 1.0f;
+    float itemHeight = 28.0f;
+    float separatorHeight = 6.0f;
+    float padding = 4.0f;
+};
+
+struct UIResolvedContextMenuStyle {
+    Color background {0.16f, 0.16f, 0.16f, 0.95f};
+    Color border     {0.35f, 0.35f, 0.35f, 0.7f};
+    Color itemHover  {0.25f, 0.25f, 0.25f, 1.0f};
+    Color separator  {0.30f, 0.30f, 0.30f, 0.5f};
+    Color text       {1.0f, 1.0f, 1.0f, 1.0f};
+    float width = 180.0f;
+    float borderWidth = 1.0f;
+    float itemHeight = 28.0f;
+    float separatorHeight = 6.0f;
+    float padding = 4.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -181,6 +207,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIDropdownStyle dropdownStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIContextMenuStyle contextMenuStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -189,4 +216,5 @@ namespace UIStyleResolver {
     [[nodiscard]] UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style);
     [[nodiscard]] UIResolvedRadioButtonStyle resolveRadioButton(const UIRadioButtonStyle& style, int state);
     [[nodiscard]] UIResolvedDropdownStyle resolveDropdown(const UIDropdownStyle& style);
+    [[nodiscard]] UIResolvedContextMenuStyle resolveContextMenu(const UIContextMenuStyle& style);
 }
