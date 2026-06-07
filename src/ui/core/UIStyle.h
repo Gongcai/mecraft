@@ -21,6 +21,8 @@ enum class UIToastTone {
 enum class UIPanelTone {
     Default,
     Overlay,
+    ScreenBackground,
+    OverlaySurface,
 };
 
 enum class UIButtonTone {

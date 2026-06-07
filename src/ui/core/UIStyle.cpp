@@ -78,17 +78,42 @@ UIComponentStyle panelStyleFromTheme(const UITheme* theme, UIPanelTone tone) {
     }
 
     if (tone == UIPanelTone::Overlay) {
-        const Color overlay = theme ? theme->overlayDim : Color{0.0f, 0.0f, 0.0f, 0.6f};
-        style.backgroundNormal = overlay;
-        style.backgroundHover = overlay;
-        style.backgroundPressed = overlay;
-        style.backgroundDisabled = overlay;
+        const Color background = theme ? theme->overlayDim : Color{0.0f, 0.0f, 0.0f, 0.6f};
+        style.backgroundNormal = background;
+        style.backgroundHover = background;
+        style.backgroundPressed = background;
+        style.backgroundDisabled = background;
         style.borderNormal = {0.0f, 0.0f, 0.0f, 0.0f};
         style.borderHover = style.borderNormal;
         style.borderFocused = style.borderNormal;
         style.borderPressed = style.borderNormal;
         style.borderDisabled = style.borderNormal;
         style.borderWidth = 0.0f;
+    } else if (tone == UIPanelTone::ScreenBackground) {
+        const Color background = theme ? theme->screenBackground : Color{0.03f, 0.04f, 0.05f, 1.0f};
+        style.backgroundNormal = background;
+        style.backgroundHover = background;
+        style.backgroundPressed = background;
+        style.backgroundDisabled = background;
+        style.borderNormal = {0.0f, 0.0f, 0.0f, 0.0f};
+        style.borderHover = style.borderNormal;
+        style.borderFocused = style.borderNormal;
+        style.borderPressed = style.borderNormal;
+        style.borderDisabled = style.borderNormal;
+        style.borderWidth = 0.0f;
+    } else if (tone == UIPanelTone::OverlaySurface) {
+        const Color background = theme ? theme->overlaySurface : Color{0.22f, 0.22f, 0.26f, 0.92f};
+        const Color border = theme ? theme->overlaySurfaceBorder : Color{0.40f, 0.40f, 0.45f, 0.7f};
+        style.backgroundNormal = background;
+        style.backgroundHover = background;
+        style.backgroundPressed = background;
+        style.backgroundDisabled = background;
+        style.borderNormal = border;
+        style.borderHover = border;
+        style.borderFocused = border;
+        style.borderPressed = border;
+        style.borderDisabled = border;
+        style.borderWidth = 1.0f;
     }
     return style;
 }

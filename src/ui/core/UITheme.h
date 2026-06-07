@@ -79,6 +79,9 @@ struct UITheme {
 
     // --- Overlay ---
     Color overlayDim           {0.0f, 0.0f, 0.0f, 0.6f};
+    Color screenBackground     {0.03f, 0.04f, 0.05f, 1.0f};
+    Color overlaySurface       {0.22f, 0.22f, 0.26f, 0.92f};
+    Color overlaySurfaceBorder {0.40f, 0.40f, 0.45f, 0.7f};
 
     // --- Accent / Brand ---
     Color accentPrimary        {0.2f, 0.8f, 1.0f, 1.0f};

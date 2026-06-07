@@ -150,7 +150,7 @@ UIComponentStyle UIPanel::resolveBaseStyle(const UIRenderContext& ctx) const {
 
     if (m_hasLocalBorderWidth) {
         style.borderWidth = m_borderWidth;
-    } else {
+    } else if (m_tone == UIPanelTone::Default) {
         style.borderWidth = (m_borderWidth > 0.0f) ? style.borderWidth : 0.0f;
     }
 

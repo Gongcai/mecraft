@@ -10,7 +10,7 @@ void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
     (void)resourceMgr;
 
     auto background = std::make_unique<UIPanel>();
-    background->setBackgroundColor({0.03f, 0.04f, 0.05f, 1.0f});
+    background->setTone(UIPanelTone::ScreenBackground);
     background->anchor = Anchor::BottomLeft;
     background->width = 9999.0f;
     background->height = 9999.0f;

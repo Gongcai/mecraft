@@ -151,6 +151,9 @@ int main() {
     theme.tooltipBorder = {0.58f, 0.68f, 0.78f, 0.8f};
     theme.tooltipBorderWidth = 3.0f;
     theme.overlayDim = {0.01f, 0.02f, 0.03f, 0.65f};
+    theme.screenBackground = {0.04f, 0.05f, 0.06f, 1.0f};
+    theme.overlaySurface = {0.24f, 0.25f, 0.29f, 0.93f};
+    theme.overlaySurfaceBorder = {0.44f, 0.45f, 0.49f, 0.72f};
     theme.consoleBox = {0.29f, 0.39f, 0.49f, 0.55f};
     theme.consoleTextNormal = {0.59f, 0.69f, 0.79f, 1.0f};
     theme.consoleTextWarning = {0.89f, 0.70f, 0.60f, 1.0f};
@@ -171,6 +174,26 @@ int main() {
         overlayPanel.border[3] > 0.001f ||
         std::fabs(overlayPanel.borderWidth) > 0.001f) {
         return fail("overlay panel tone should map to overlay dim without a border");
+    }
+
+    const UIComponentStyle screenBackgroundStyle =
+        UIStyleResolver::panelStyleFromTheme(&theme, UIPanelTone::ScreenBackground);
+    const UIResolvedStyle screenBackgroundPanel =
+        UIStyleResolver::resolve(screenBackgroundStyle, UIStyleState_Normal);
+    if (!colorEqual(screenBackgroundPanel.background, theme.screenBackground) ||
+        screenBackgroundPanel.border[3] > 0.001f ||
+        std::fabs(screenBackgroundPanel.borderWidth) > 0.001f) {
+        return fail("screen background panel tone should map to screen background without a border");
+    }
+
+    const UIComponentStyle overlaySurfaceStyle =
+        UIStyleResolver::panelStyleFromTheme(&theme, UIPanelTone::OverlaySurface);
+    const UIResolvedStyle overlaySurfacePanel =
+        UIStyleResolver::resolve(overlaySurfaceStyle, UIStyleState_Normal);
+    if (!colorEqual(overlaySurfacePanel.background, theme.overlaySurface) ||
+        !colorEqual(overlaySurfacePanel.border, theme.overlaySurfaceBorder) ||
+        std::fabs(overlaySurfacePanel.borderWidth - 1.0f) > 0.001f) {
+        return fail("overlay surface panel tone should map surface background, border, and width");
     }
 
     const UIComponentStyle defaultButton = UIStyleResolver::buttonStyleFromTheme(&theme, UIButtonTone::Default);

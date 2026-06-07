@@ -122,6 +122,9 @@ bool UITheme::loadFromFile(const std::string& path) {
 
     // Overlay
     overlayDim        = readColor(j, "overlayDim",        overlayDim);
+    screenBackground  = readColor(j, "screenBackground",  screenBackground);
+    overlaySurface    = readColor(j, "overlaySurface",    overlaySurface);
+    overlaySurfaceBorder = readColor(j, "overlaySurfaceBorder", overlaySurfaceBorder);
 
     // Accent
     accentPrimary     = readColor(j, "accentPrimary",     accentPrimary);

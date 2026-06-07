@@ -298,10 +298,7 @@ void SaveListScreen::rebuildList() {
         panel->x = 0.0f;
         panel->y = contentHeight - kEntryHeight -
                    static_cast<float>(i) * (kEntryHeight + kEntrySpacing);
-        panel->setBackgroundColor({0.22f, 0.22f, 0.26f, 0.92f});
-        panel->setBorderColor({0.40f, 0.40f, 0.45f, 0.7f});
-        panel->setBorderWidth(1.0f);
-        panel->setUseLocalColors(true);
+        panel->setTone(UIPanelTone::OverlaySurface);
 
         // -- Thumbnail --
         // Constrain the image to a kThumbSize x kThumbSize square.
