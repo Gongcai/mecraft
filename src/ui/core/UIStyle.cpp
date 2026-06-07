@@ -176,6 +176,23 @@ UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIDropdownStyle dropdownStyleFromTheme(const UITheme* theme) {
+    UIDropdownStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.background = theme->dropdownBackground;
+    style.border = theme->dropdownBorder;
+    style.text = theme->textPrimary;
+    style.arrow = theme->dropdownArrow;
+    style.itemHover = theme->dropdownItemHover;
+    style.itemSelected = theme->dropdownItemSelected;
+    style.separator = theme->dropdownSeparator;
+    style.accent = theme->accentPrimary;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -203,6 +220,20 @@ UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     }
 
     resolved.text = style.textNormal;
+    return resolved;
+}
+
+UIResolvedDropdownStyle resolveDropdown(const UIDropdownStyle& style) {
+    UIResolvedDropdownStyle resolved;
+    resolved.background = style.background;
+    resolved.border = style.border;
+    resolved.text = style.text;
+    resolved.arrow = style.arrow;
+    resolved.itemHover = style.itemHover;
+    resolved.itemSelected = style.itemSelected;
+    resolved.separator = style.separator;
+    resolved.accent = style.accent;
+    resolved.itemHeight = style.itemHeight;
     return resolved;
 }
 

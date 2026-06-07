@@ -96,6 +96,13 @@ int main() {
     theme.radioOuterHover = {0.46f, 0.56f, 0.66f, 1.0f};
     theme.radioInner = {0.76f, 0.77f, 0.78f, 1.0f};
     theme.radioSize = 22.0f;
+    theme.dropdownBackground = {0.17f, 0.27f, 0.37f, 0.95f};
+    theme.dropdownBorder = {0.47f, 0.57f, 0.67f, 0.7f};
+    theme.dropdownArrow = {0.77f, 0.78f, 0.79f, 1.0f};
+    theme.dropdownItemHover = {0.18f, 0.28f, 0.38f, 1.0f};
+    theme.dropdownItemSelected = {0.48f, 0.58f, 0.68f, 0.35f};
+    theme.dropdownSeparator = {0.78f, 0.79f, 0.80f, 0.4f};
+    theme.accentPrimary = {0.19f, 0.29f, 0.39f, 1.0f};
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -210,6 +217,20 @@ int main() {
         !colorEqual(disabledRadio.text, theme.textDisabled) ||
         colorEqual(disabledRadio.outer, theme.radioOuterHover)) {
         return fail("disabled radio button should override hover state");
+    }
+
+    const UIDropdownStyle dropdownStyle = UIStyleResolver::dropdownStyleFromTheme(&theme);
+    const UIResolvedDropdownStyle dropdown = UIStyleResolver::resolveDropdown(dropdownStyle);
+    if (!colorEqual(dropdown.background, theme.dropdownBackground) ||
+        !colorEqual(dropdown.border, theme.dropdownBorder) ||
+        !colorEqual(dropdown.text, theme.textPrimary) ||
+        !colorEqual(dropdown.arrow, theme.dropdownArrow) ||
+        !colorEqual(dropdown.itemHover, theme.dropdownItemHover) ||
+        !colorEqual(dropdown.itemSelected, theme.dropdownItemSelected) ||
+        !colorEqual(dropdown.separator, theme.dropdownSeparator) ||
+        !colorEqual(dropdown.accent, theme.accentPrimary) ||
+        std::fabs(dropdown.itemHeight - 28.0f) > 0.001f) {
+        return fail("dropdown style should map theme colors and preserve default item height");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

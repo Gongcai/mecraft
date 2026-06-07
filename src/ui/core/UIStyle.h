@@ -147,6 +147,30 @@ struct UIResolvedRadioButtonStyle {
     float radioSize = 18.0f;
 };
 
+struct UIDropdownStyle {
+    Color background   {0.22f, 0.22f, 0.22f, 0.95f};
+    Color border       {0.40f, 0.40f, 0.40f, 0.7f};
+    Color text         {1.0f, 1.0f, 1.0f, 1.0f};
+    Color arrow        {0.7f, 0.7f, 0.7f, 1.0f};
+    Color itemHover    {0.30f, 0.30f, 0.30f, 1.0f};
+    Color itemSelected {0.15f, 0.45f, 0.55f, 0.35f};
+    Color separator    {0.35f, 0.35f, 0.35f, 0.4f};
+    Color accent       {0.2f, 0.8f, 1.0f, 1.0f};
+    float itemHeight = 28.0f;
+};
+
+struct UIResolvedDropdownStyle {
+    Color background   {0.22f, 0.22f, 0.22f, 0.95f};
+    Color border       {0.40f, 0.40f, 0.40f, 0.7f};
+    Color text         {1.0f, 1.0f, 1.0f, 1.0f};
+    Color arrow        {0.7f, 0.7f, 0.7f, 1.0f};
+    Color itemHover    {0.30f, 0.30f, 0.30f, 1.0f};
+    Color itemSelected {0.15f, 0.45f, 0.55f, 0.35f};
+    Color separator    {0.35f, 0.35f, 0.35f, 0.4f};
+    Color accent       {0.2f, 0.8f, 1.0f, 1.0f};
+    float itemHeight = 28.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -156,6 +180,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UISliderStyle sliderStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIProgressBarStyle progressBarStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIRadioButtonStyle radioButtonStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIDropdownStyle dropdownStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -163,4 +188,5 @@ namespace UIStyleResolver {
     [[nodiscard]] UIResolvedSliderStyle resolveSlider(const UISliderStyle& style, int state);
     [[nodiscard]] UIResolvedProgressBarStyle resolveProgressBar(const UIProgressBarStyle& style);
     [[nodiscard]] UIResolvedRadioButtonStyle resolveRadioButton(const UIRadioButtonStyle& style, int state);
+    [[nodiscard]] UIResolvedDropdownStyle resolveDropdown(const UIDropdownStyle& style);
 }

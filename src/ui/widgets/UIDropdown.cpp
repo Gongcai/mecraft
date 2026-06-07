@@ -60,6 +60,15 @@ void UIDropdown::setOnSelectionChanged(std::function<void(int, const std::string
     m_onSelectionChanged = std::move(callback);
 }
 
+void UIDropdown::setStyle(const UIDropdownStyle& style) {
+    m_localStyle = style;
+    m_hasLocalStyle = true;
+}
+
+void UIDropdown::clearLocalStyle() {
+    m_hasLocalStyle = false;
+}
+
 void UIDropdown::updateAnimations(float dt) {
     m_expandTween.tick(dt);
     m_hoverColorTween.tick(dt);
@@ -129,11 +138,11 @@ UIEventResult UIDropdown::onOverlayInput(const UIInputEvent& event, const UIRend
 }
 
 void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
-    const UITheme* theme = ctx.theme;
-    const auto& bgCol = theme ? theme->dropdownBackground : m_bgColor;
-    const auto& borderCol = theme ? theme->dropdownBorder : m_borderColor;
-    const auto& textCol = theme ? theme->textPrimary : std::array<float, 4>{1, 1, 1, 1};
-    const auto& arrowCol = theme ? theme->dropdownArrow : m_arrowColor;
+    const UIResolvedDropdownStyle resolved = resolveStyle(ctx);
+    const Color bgCol = resolved.background;
+    const Color borderCol = resolved.border;
+    const Color textCol = resolved.text;
+    const Color arrowCol = resolved.arrow;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -217,14 +226,15 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    const UITheme* theme = ctx.theme;
-    const auto& bgCol = theme ? theme->dropdownBackground : m_bgColor;
-    const auto& borderCol = theme ? theme->dropdownBorder : m_borderColor;
-    const auto& hoverCol = theme ? theme->dropdownItemHover : m_itemHoverColor;
-    const auto& selectedCol = theme ? theme->dropdownItemSelected : std::array<float, 4>{0.15f, 0.45f, 0.55f, 0.35f};
-    const auto& separatorCol = theme ? theme->dropdownSeparator : std::array<float, 4>{0.35f, 0.35f, 0.35f, 0.4f};
-    const auto& accentCol = theme ? theme->accentPrimary : std::array<float, 4>{0.2f, 0.8f, 1.0f, 1.0f};
-    const auto& textCol = theme ? theme->textPrimary : std::array<float, 4>{1, 1, 1, 1};
+    const UIResolvedDropdownStyle resolved = resolveStyle(ctx);
+    const Color bgCol = resolved.background;
+    const Color borderCol = resolved.border;
+    const Color hoverCol = resolved.itemHover;
+    const Color selectedCol = resolved.itemSelected;
+    const Color separatorCol = resolved.separator;
+    const Color accentCol = resolved.accent;
+    const Color textCol = resolved.text;
+    const float itemHeight = resolved.itemHeight;
 
     // Item base background: slightly brighter than panel bg
     std::array<float, 4> itemBgCol = bgCol;
@@ -238,7 +248,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     float ah = height * scaleY;
 
     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
-    float panelH = visibleCount * m_itemHeight;
+    float panelH = visibleCount * itemHeight;
     float panelY = ay - panelH - 2.0f;
 
     if (panelY < 0.0f) {
@@ -284,7 +294,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     }
 
     // Option items
-    int scrollItems = static_cast<int>(m_scrollOffset / m_itemHeight);
+    int scrollItems = static_cast<int>(m_scrollOffset / itemHeight);
     constexpr int kItemBaseOffset = 63;   // per-item base bg
     constexpr int kItemSelectedOffset = 111; // per-item selected bg
     constexpr int kItemBarOffset = 159;   // per-item selected left bar
@@ -293,7 +303,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
 
     for (int i = 0; i < visibleCount && (scrollItems + i) < static_cast<int>(m_options.size()); ++i) {
         int optIdx = scrollItems + i;
-        float itemY = panelY + panelH - (i + 1) * m_itemHeight;
+        float itemY = panelY + panelH - (i + 1) * itemHeight;
         bool isSelected = (optIdx == m_selectedIndex);
         bool isHovered = (optIdx == m_hoveredOption);
 
@@ -303,8 +313,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             c[3] *= alpha * expandAlpha;
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + m_itemHeight,
-                ax, itemY,  ax + aw, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
+                ax, itemY,  ax + aw, itemY + itemHeight,  ax, itemY + itemHeight,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemBaseOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemBaseOffset + i * 6, 6);
@@ -316,8 +326,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             c[3] *= alpha * expandAlpha;
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + m_itemHeight,
-                ax, itemY,  ax + aw, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
+                ax, itemY,  ax + aw, itemY + itemHeight,  ax, itemY + itemHeight,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemSelectedOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemSelectedOffset + i * 6, 6);
@@ -330,8 +340,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float barW = 2.0f;
             float verts[] = {
-                ax, itemY,  ax + barW, itemY,  ax + barW, itemY + m_itemHeight,
-                ax, itemY,  ax + barW, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+                ax, itemY,  ax + barW, itemY,  ax + barW, itemY + itemHeight,
+                ax, itemY,  ax + barW, itemY + itemHeight,  ax, itemY + itemHeight,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemBarOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemBarOffset + i * 6, 6);
@@ -343,8 +353,8 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             c[3] *= alpha * expandAlpha;
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
             float verts[] = {
-                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + m_itemHeight,
-                ax, itemY,  ax + aw, itemY + m_itemHeight,  ax, itemY + m_itemHeight,
+                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
+                ax, itemY,  ax + aw, itemY + itemHeight,  ax, itemY + itemHeight,
             };
             glBufferSubData(GL_ARRAY_BUFFER, (kItemHoverOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
             glDrawArrays(GL_TRIANGLES, kItemHoverOffset + i * 6, 6);
@@ -368,7 +378,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     if (ctx.textRenderer) {
         for (int i = 0; i < visibleCount && (scrollItems + i) < static_cast<int>(m_options.size()); ++i) {
             int optIdx = scrollItems + i;
-            float itemY = panelY + panelH - (i + 1) * m_itemHeight;
+            float itemY = panelY + panelH - (i + 1) * itemHeight;
             bool isSelected = (optIdx == m_selectedIndex);
 
             std::array<float, 4> tc = textCol;
@@ -377,7 +387,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
                 tc = {accentCol[0], accentCol[1], accentCol[2], tc[3]};
             }
             float textX = isSelected ? ax + 10.0f : ax + 8.0f;
-            float textY = itemY + (m_itemHeight - ctx.textRenderer->measureText(m_options[optIdx], 2.0f).height) * 0.5f;
+            float textY = itemY + (itemHeight - ctx.textRenderer->measureText(m_options[optIdx], 2.0f).height) * 0.5f;
             ctx.textRenderer->render(m_options[optIdx], textX, textY, 2.0f, tc,
                                      static_cast<float>(ctx.screenWidth),
                                      static_cast<float>(ctx.screenHeight));
@@ -386,6 +396,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
 }
 
 int UIDropdown::hitTestOption(float px, float py, const UIRenderContext& ctx) const {
+    const float itemHeight = resolveStyle(ctx).itemHeight;
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
@@ -393,7 +404,7 @@ int UIDropdown::hitTestOption(float px, float py, const UIRenderContext& ctx) co
     float flippedY = static_cast<float>(ctx.screenHeight) - py;
 
     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
-    float panelH = visibleCount * m_itemHeight;
+    float panelH = visibleCount * itemHeight;
     float panelY = ay - panelH - 2.0f;
     if (panelY < 0.0f) {
         panelY = ay + ah + 2.0f;
@@ -403,9 +414,9 @@ int UIDropdown::hitTestOption(float px, float py, const UIRenderContext& ctx) co
         return -1;
     }
 
-    int scrollItems = static_cast<int>(m_scrollOffset / m_itemHeight);
+    int scrollItems = static_cast<int>(m_scrollOffset / itemHeight);
     float relY = flippedY - panelY;
-    int itemIdx = static_cast<int>((panelH - relY) / m_itemHeight) + scrollItems;
+    int itemIdx = static_cast<int>((panelH - relY) / itemHeight) + scrollItems;
     if (itemIdx >= 0 && itemIdx < static_cast<int>(m_options.size())) {
         return itemIdx;
     }
@@ -413,6 +424,7 @@ int UIDropdown::hitTestOption(float px, float py, const UIRenderContext& ctx) co
 }
 
 bool UIDropdown::hitTestExpandedPanel(float px, float py, const UIRenderContext& ctx) const {
+    const float itemHeight = resolveStyle(ctx).itemHeight;
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
@@ -420,7 +432,7 @@ bool UIDropdown::hitTestExpandedPanel(float px, float py, const UIRenderContext&
     float flippedY = static_cast<float>(ctx.screenHeight) - py;
 
     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
-    float panelH = visibleCount * m_itemHeight;
+    float panelH = visibleCount * itemHeight;
     float panelY = ay - panelH - 2.0f;
     if (panelY < 0.0f) {
         panelY = ay + ah + 2.0f;
@@ -444,7 +456,7 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
                 if (newHovered != m_hoveredOption) {
                     m_prevHoveredOption = m_hoveredOption;
                     m_hoveredOption = newHovered;
-                    const auto& hoverCol = ctx.theme ? ctx.theme->dropdownItemHover : m_itemHoverColor;
+                    const Color hoverCol = resolveStyle(ctx).itemHover;
                     if (m_hoveredOption >= 0) {
                         auto fromCol = (m_prevHoveredOption >= 0) ? hoverCol : std::array<float, 4>{hoverCol[0], hoverCol[1], hoverCol[2], 0.0f};
                         m_hoverColorTween.start(fromCol, hoverCol, 0.1f, EasingType::EaseOut);
@@ -474,9 +486,10 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
             }
             case UIInputEventType::Scroll: {
                 if (hitTestExpandedPanel(event.x, event.y, ctx) || insideCollapsed) {
+                    const float itemHeight = resolveStyle(ctx).itemHeight;
                     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
-                    float maxScroll = std::max(0.0f, static_cast<float>(m_options.size() - visibleCount) * m_itemHeight);
-                    m_scrollOffset = std::clamp(m_scrollOffset - static_cast<float>(event.scrollY) * m_itemHeight,
+                    float maxScroll = std::max(0.0f, static_cast<float>(m_options.size() - visibleCount) * itemHeight);
+                    m_scrollOffset = std::clamp(m_scrollOffset - static_cast<float>(event.scrollY) * itemHeight,
                                                 0.0f, maxScroll);
                     return UIEventResult::Handled;
                 }
@@ -540,4 +553,28 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
     }
 
     return UIEventResult::Ignored;
+}
+
+UIDropdownStyle UIDropdown::resolveBaseStyle(const UIRenderContext& ctx) const {
+    if (m_hasLocalStyle) {
+        return m_localStyle;
+    }
+
+    UIDropdownStyle style = UIStyleResolver::dropdownStyleFromTheme(ctx.theme);
+    style.itemHeight = m_itemHeight;
+    if (!ctx.theme) {
+        style.background = m_bgColor;
+        style.border = m_borderColor;
+        style.text = {1.0f, 1.0f, 1.0f, 1.0f};
+        style.arrow = m_arrowColor;
+        style.itemHover = m_itemHoverColor;
+        style.itemSelected = {0.15f, 0.45f, 0.55f, 0.35f};
+        style.separator = {0.35f, 0.35f, 0.35f, 0.4f};
+        style.accent = {0.2f, 0.8f, 1.0f, 1.0f};
+    }
+    return style;
+}
+
+UIResolvedDropdownStyle UIDropdown::resolveStyle(const UIRenderContext& ctx) const {
+    return UIStyleResolver::resolveDropdown(resolveBaseStyle(ctx));
 }

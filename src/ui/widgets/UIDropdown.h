@@ -7,6 +7,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -26,6 +27,8 @@ public:
     [[nodiscard]] const std::string& getSelectedText() const;
 
     void setOnSelectionChanged(std::function<void(int, const std::string&)> callback);
+    void setStyle(const UIDropdownStyle& style);
+    void clearLocalStyle();
 
     void updateAnimations(float dt) override;
     void renderOverlay(const UIRenderContext& ctx) const override;
@@ -40,6 +43,8 @@ private:
     void renderExpanded(const UIRenderContext& ctx) const;
     [[nodiscard]] int hitTestOption(float px, float py, const UIRenderContext& ctx) const;
     [[nodiscard]] bool hitTestExpandedPanel(float px, float py, const UIRenderContext& ctx) const;
+    [[nodiscard]] UIDropdownStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedDropdownStyle resolveStyle(const UIRenderContext& ctx) const;
 
     void initMesh();
     void cleanupMesh();
@@ -61,6 +66,8 @@ private:
 
     float m_itemHeight = 28.0f;
     int m_maxVisibleItems = 8;
+    bool m_hasLocalStyle = false;
+    UIDropdownStyle m_localStyle;
 
     std::function<void(int, const std::string&)> m_onSelectionChanged;
     Tween<float> m_expandTween;
