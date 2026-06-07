@@ -332,6 +332,34 @@ struct UIResolvedTooltipStyle {
     float shadowOffsetY = -1.0f;
 };
 
+struct UIModalStyle {
+    Color overlay {0.0f, 0.0f, 0.0f, 0.6f};
+    UIComponentStyle panel;
+    Color titleText {1.0f, 1.0f, 1.0f, 1.0f};
+    float panelWidth = 360.0f;
+    float panelMinHeight = 180.0f;
+    float titleHeight = 40.0f;
+    float buttonWidth = 100.0f;
+    float buttonHeight = 32.0f;
+    float buttonSpacing = 10.0f;
+    float padding = 16.0f;
+    float titleTextScale = 2.0f;
+};
+
+struct UIResolvedModalStyle {
+    Color overlay {0.0f, 0.0f, 0.0f, 0.6f};
+    UIResolvedStyle panel;
+    Color titleText {1.0f, 1.0f, 1.0f, 1.0f};
+    float panelWidth = 360.0f;
+    float panelMinHeight = 180.0f;
+    float titleHeight = 40.0f;
+    float buttonWidth = 100.0f;
+    float buttonHeight = 32.0f;
+    float buttonSpacing = 10.0f;
+    float padding = 16.0f;
+    float titleTextScale = 2.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -348,6 +376,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UINumericSpinnerStyle numericSpinnerStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIToastStyle toastStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITooltipStyle tooltipStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIModalStyle modalStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -366,4 +395,5 @@ namespace UIStyleResolver {
         int valueState);
     [[nodiscard]] UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone);
     [[nodiscard]] UIResolvedTooltipStyle resolveTooltip(const UITooltipStyle& style);
+    [[nodiscard]] UIResolvedModalStyle resolveModal(const UIModalStyle& style);
 }

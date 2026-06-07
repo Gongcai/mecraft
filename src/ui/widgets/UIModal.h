@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 #include "UIButton.h"
@@ -39,6 +40,8 @@ public:
 
     // If true, clicking the overlay background closes the modal.
     void setCloseOnOverlayClick(bool close) { m_closeOnOverlayClick = close; }
+    void setStyle(const UIModalStyle& style);
+    void clearLocalStyle();
 
     std::function<void()> onClose;
 
@@ -49,6 +52,9 @@ protected:
 
 private:
     void layoutButtons();
+    [[nodiscard]] UIModalStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedModalStyle resolveStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedModalStyle fallbackStyle() const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -64,6 +70,8 @@ private:
 
     Tween<float> m_overlayAlpha;
     Tween<float> m_panelScale;
+    bool m_hasLocalStyle = false;
+    UIModalStyle m_localStyle;
 
     static constexpr float kPanelWidth = 360.0f;
     static constexpr float kPanelMinHeight = 180.0f;

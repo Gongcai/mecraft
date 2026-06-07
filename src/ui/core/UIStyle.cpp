@@ -291,6 +291,18 @@ UITooltipStyle tooltipStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIModalStyle modalStyleFromTheme(const UITheme* theme) {
+    UIModalStyle style;
+    style.panel = panelStyleFromTheme(theme);
+    if (!theme) {
+        return style;
+    }
+
+    style.overlay = theme->overlayDim;
+    style.titleText = theme->textPrimary;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -460,6 +472,22 @@ UIResolvedTooltipStyle resolveTooltip(const UITooltipStyle& style) {
     resolved.margin = style.margin;
     resolved.shadowOffsetX = style.shadowOffsetX;
     resolved.shadowOffsetY = style.shadowOffsetY;
+    return resolved;
+}
+
+UIResolvedModalStyle resolveModal(const UIModalStyle& style) {
+    UIResolvedModalStyle resolved;
+    resolved.overlay = style.overlay;
+    resolved.panel = resolve(style.panel, UIStyleState_Normal);
+    resolved.titleText = style.titleText;
+    resolved.panelWidth = style.panelWidth;
+    resolved.panelMinHeight = style.panelMinHeight;
+    resolved.titleHeight = style.titleHeight;
+    resolved.buttonWidth = style.buttonWidth;
+    resolved.buttonHeight = style.buttonHeight;
+    resolved.buttonSpacing = style.buttonSpacing;
+    resolved.padding = style.padding;
+    resolved.titleTextScale = style.titleTextScale;
     return resolved;
 }
 

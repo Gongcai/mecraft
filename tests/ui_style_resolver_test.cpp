@@ -135,6 +135,7 @@ int main() {
     theme.tooltipBackground = {0.28f, 0.38f, 0.48f, 0.94f};
     theme.tooltipBorder = {0.58f, 0.68f, 0.78f, 0.8f};
     theme.tooltipBorderWidth = 3.0f;
+    theme.overlayDim = {0.01f, 0.02f, 0.03f, 0.65f};
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -402,6 +403,24 @@ int main() {
         std::fabs(tooltip.shadowOffsetX - 1.0f) > 0.001f ||
         std::fabs(tooltip.shadowOffsetY + 1.0f) > 0.001f) {
         return fail("tooltip style should map theme colors and preserve layout metrics");
+    }
+
+    const UIModalStyle modalStyle = UIStyleResolver::modalStyleFromTheme(&theme);
+    const UIResolvedModalStyle modal = UIStyleResolver::resolveModal(modalStyle);
+    if (!colorEqual(modal.overlay, theme.overlayDim) ||
+        !colorEqual(modal.panel.background, theme.panelBackground) ||
+        !colorEqual(modal.panel.border, theme.panelBorder) ||
+        !colorEqual(modal.titleText, theme.textPrimary) ||
+        std::fabs(modal.panel.borderWidth - 4.0f) > 0.001f ||
+        std::fabs(modal.panelWidth - 360.0f) > 0.001f ||
+        std::fabs(modal.panelMinHeight - 180.0f) > 0.001f ||
+        std::fabs(modal.titleHeight - 40.0f) > 0.001f ||
+        std::fabs(modal.buttonWidth - 100.0f) > 0.001f ||
+        std::fabs(modal.buttonHeight - 32.0f) > 0.001f ||
+        std::fabs(modal.buttonSpacing - 10.0f) > 0.001f ||
+        std::fabs(modal.padding - 16.0f) > 0.001f ||
+        std::fabs(modal.titleTextScale - 2.0f) > 0.001f) {
+        return fail("modal style should map overlay, panel, title, and layout metrics");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";
