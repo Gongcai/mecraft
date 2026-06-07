@@ -11,6 +11,34 @@
 #include "../../resource/ResourceMgr.h"
 #include "../core/UIRenderUtils.h"
 
+namespace {
+
+float scrollbarThumbHeight(float trackHeight, float contentHeight) {
+    if (trackHeight <= 0.0f || contentHeight <= 0.0f) {
+        return 0.0f;
+    }
+
+    const float viewRatio = std::clamp(trackHeight / contentHeight, 0.0f, 1.0f);
+    const float minThumbHeight = std::min(20.0f, trackHeight);
+    return std::clamp(viewRatio * trackHeight, minThumbHeight, trackHeight);
+}
+
+float scrollbarThumbY(float trackY,
+                      float trackHeight,
+                      float thumbHeight,
+                      float scrollOffset,
+                      float scrollMax) {
+    const float travel = std::max(0.0f, trackHeight - thumbHeight);
+    if (scrollMax <= 0.0f || travel <= 0.0f) {
+        return trackY + travel;
+    }
+
+    const float scrollRatio = std::clamp(scrollOffset / scrollMax, 0.0f, 1.0f);
+    return trackY + (1.0f - scrollRatio) * travel;
+}
+
+} // namespace
+
 UIScrollArea::UIScrollArea() {
     interactive = true;
     width = 300.0f;
@@ -179,15 +207,9 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     const float visualTrackX = trackX + (sbWidth - visualTrackW) * 0.5f;
     const float visualThumbX = trackX + (sbWidth - visualThumbW) * 0.5f;
 
-    // Thumb proportional sizing
-    float viewRatio = ah / m_contentHeight;
-    float thumbH = std::max(20.0f, viewRatio * trackH);
-    float scrollMax = maxScroll();
-    float thumbY = trackY;
-    if (scrollMax > 0.0f) {
-        float scrollRatio = m_scrollOffset / scrollMax;
-        thumbY = trackY + scrollRatio * (trackH - thumbH);
-    }
+    const float scrollMax = maxScroll();
+    const float thumbH = scrollbarThumbHeight(trackH, m_contentHeight);
+    const float thumbY = scrollbarThumbY(trackY, trackH, thumbH, m_scrollOffset, scrollMax);
 
     const UIRenderUtils::GLStateGuard glState;
     m_shader->use();
@@ -238,14 +260,9 @@ bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderConte
     float trackX = ax + aw - sbWidth;
     float trackY = ay;
 
-    float viewRatio = ah / m_contentHeight;
-    float thumbH = std::max(20.0f, viewRatio * ah);
-    float scrollMax = maxScroll();
-    float thumbY = trackY;
-    if (scrollMax > 0.0f) {
-        float scrollRatio = m_scrollOffset / scrollMax;
-        thumbY = trackY + scrollRatio * (ah - thumbH);
-    }
+    const float scrollMax = maxScroll();
+    const float thumbH = scrollbarThumbHeight(ah, m_contentHeight);
+    const float thumbY = scrollbarThumbY(trackY, ah, thumbH, m_scrollOffset, scrollMax);
 
     return px >= trackX && px <= trackX + sbWidth
         && flippedY >= thumbY && flippedY <= thumbY + thumbH;
@@ -260,13 +277,12 @@ UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderCon
     if (m_draggingScrollbar) {
         if (event.type == UIInputEventType::PointerMove) {
             float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
-            float delta = flippedY - m_dragStartY;
-            float ah = height * scaleY;
-            float viewRatio = ah / m_contentHeight;
-            float thumbH = std::max(20.0f, viewRatio * ah);
-            float scrollRange = ah - thumbH;
+            const float delta = flippedY - m_dragStartY;
+            const float ah = height * scaleY;
+            const float thumbH = scrollbarThumbHeight(ah, m_contentHeight);
+            const float scrollRange = ah - thumbH;
             if (scrollRange > 0.0f) {
-                float scrollDelta = (delta / scrollRange) * maxScroll();
+                const float scrollDelta = (-delta / scrollRange) * maxScroll();
                 m_scrollOffset = std::clamp(m_dragStartOffset + scrollDelta, 0.0f, maxScroll());
             }
             return UIEventResult::Consumed;
