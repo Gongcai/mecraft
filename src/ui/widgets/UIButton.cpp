@@ -199,14 +199,11 @@ int UIButton::currentStyleState() const {
     }
 
     int state = static_cast<int>(UIStyleState_Normal);
-    if (m_hovered) {
+    if (m_hovered || isFocused()) {
         state |= static_cast<int>(UIStyleState_Hovered);
     }
     if (m_pressed) {
         state |= static_cast<int>(UIStyleState_Pressed);
-    }
-    if (isFocused()) {
-        state |= static_cast<int>(UIStyleState_Focused);
     }
     return state;
 }

@@ -131,7 +131,7 @@ UIComponentStyle buttonStyleFromTheme(const UITheme* theme) {
 
     style.borderNormal = theme->buttonBorder;
     style.borderHover = theme->buttonBorder;
-    style.borderFocused = theme->inputBorderFocused;
+    style.borderFocused = theme->buttonBorder;
     style.borderPressed = theme->buttonBorder;
     style.borderDisabled = theme->buttonBorder;
 
@@ -148,12 +148,13 @@ UIComponentStyle buttonStyleFromTheme(const UITheme* theme, UIButtonTone tone) {
     }
 
     const Color accent = accentForButtonTone(theme, tone);
-    style.backgroundNormal = scaledColor(accent, 0.72f, 0.92f);
-    style.backgroundHover = scaledColor(accent, 1.0f, 1.0f);
-    style.backgroundPressed = scaledColor(accent, 0.52f, 1.0f);
-    style.borderNormal = scaledColor(accent, 1.05f, 0.45f);
-    style.borderHover = scaledColor(accent, 1.2f, 0.60f);
-    style.borderPressed = scaledColor(accent, 0.90f, 0.50f);
+    style.backgroundNormal = scaledColor(accent, 0.72f, 0.86f);
+    style.backgroundHover = scaledColor(accent, 0.48f, 0.98f);
+    style.backgroundPressed = scaledColor(accent, 0.36f, 1.0f);
+    style.borderNormal = scaledColor(accent, 1.00f, 0.36f);
+    style.borderHover = scaledColor(accent, 1.16f, 0.62f);
+    style.borderPressed = scaledColor(accent, 0.92f, 0.58f);
+    style.borderFocused = style.borderHover;
     return style;
 }
 
