@@ -19,11 +19,7 @@
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
 constexpr float kTwoPi = kPi * 2.0f;
-constexpr float kSunSize = 1.15f;
-constexpr float kMoonSize = 1.05f;
 constexpr float kHaloSize = 3.25f;
-constexpr float kBlackKeyThreshold = 0.035f;
-constexpr float kBlackKeySoftness = 0.22f;
 constexpr float kCloudHeight = 128.0f;
 constexpr int kCloudMaskSample = 8;
 constexpr float kCloudCellSize = 6.0f;
@@ -50,11 +46,6 @@ glm::vec3 safeNormalize(const glm::vec3& v, const glm::vec3& fallback) {
     }
     return v / len;
 }
-
-struct BodyVertex {
-    glm::vec3 position;
-    glm::vec2 uv;
-};
 
 struct HaloVertex {
     glm::vec3 position;
@@ -205,8 +196,6 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
-    m_sunTexture = resourceMgr.getGuiTexture("sun");
-    m_moonTexture = resourceMgr.getGuiTexture("moon_phases");
     initMeshes();
     initCloudMesh();
     ensureDummySkyCaptureTexture();
@@ -221,8 +210,6 @@ void GameplaySkyRenderer::shutdown() {
     m_shader = nullptr;
     m_deferredShader = nullptr;
     m_resourceMgr = nullptr;
-    m_sunTexture = 0;
-    m_moonTexture = 0;
 }
 
 void GameplaySkyRenderer::setForwardMode(bool forward) {
@@ -249,15 +236,6 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 
     renderSkyGradient(camera, aspect, m_lastColors, skyCaptureTexture);
     renderHalo(camera, aspect, dayNight, m_lastColors);
-
-    const float sunAngle = dayNight.getCelestialAngleRadians();
-    const float moonAngle = std::fmod(sunAngle + kPi, kTwoPi);
-    renderCelestialBody(camera, aspect, sunAngle, kSunSize, m_sunTexture, glm::vec2(0.0f), glm::vec2(1.0f), m_lastColors.sunVisibility);
-
-    const MoonPhaseUv moonUv = getMoonPhaseUvInternal(dayNight.getMoonPhaseIndex());
-    const float moonPhaseFactor = static_cast<float>(std::abs(dayNight.getMoonPhaseIndex() - 4)) * 0.25f + 0.2f;
-    const float moonDiscAlpha = 0.18f * moonPhaseFactor * m_lastColors.moonVisibility;
-    renderCelestialBody(camera, aspect, moonAngle, kMoonSize, m_moonTexture, moonUv.uvMin, moonUv.uvMax, moonDiscAlpha);
     renderClouds(camera, aspect, dayNight, m_lastColors);
 }
 
@@ -516,6 +494,8 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     const float progress = dayNight.getDayProgress01();
     const glm::vec3 sunDirection = directionFromAngle(dayNight.getCelestialAngleRadians());
     const glm::vec3 moonDirection = directionFromAngle(std::fmod(dayNight.getCelestialAngleRadians() + kPi, kTwoPi));
+    const int moonPhaseIndex = std::clamp(dayNight.getMoonPhaseIndex(), 0, 7);
+    const float moonPhaseAngle = (static_cast<float>(moonPhaseIndex) - 4.0f) * (kTwoPi / 8.0f);
     const float sunHeight = std::clamp(sunDirection.y, -0.25f, 1.0f);
     const float sunriseWindow = 1.0f - std::abs(progress - 0.0f) / 0.07f;
     const float sunriseWrapWindow = 1.0f - std::abs(progress - 1.0f) / 0.07f;
@@ -564,6 +544,7 @@ GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNi
     colors.halo = glm::vec4(colors.sunScatter, 0.30f * skyIntensity + 0.68f * warm);
     colors.sunVisibility = smoothstep(-0.08f, 0.18f, sunDirection.y) * skyIntensity;
     colors.moonVisibility = smoothstep(-0.08f, 0.18f, moonDirection.y) * (1.0f - skyIntensity);
+    colors.moonPhaseAngle = moonPhaseAngle;
     colors.dayFactor = skyIntensity;
     colors.nightFactor = 1.0f - skyIntensity;
     colors.horizonFactor = std::clamp(1.0f - std::abs(sunDirection.y), 0.0f, 1.0f);
@@ -706,30 +687,6 @@ void GameplaySkyRenderer::initMeshes() {
         glBindVertexArray(0);
     }
 
-    if (m_bodyVao == 0) {
-        constexpr std::array<BodyVertex, 6> bodyVertices = {{
-            {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{ 1.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
-            {{ 1.0f,  1.0f, 0.0f}, {1.0f, 1.0f}},
-            {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{ 1.0f,  1.0f, 0.0f}, {1.0f, 1.0f}},
-            {{-1.0f,  1.0f, 0.0f}, {0.0f, 1.0f}},
-        }};
-
-        glGenVertexArrays(1, &m_bodyVao);
-        glGenBuffers(1, &m_bodyVbo);
-        glBindVertexArray(m_bodyVao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_bodyVbo);
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(bodyVertices.size() * sizeof(BodyVertex)),
-                     bodyVertices.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BodyVertex), nullptr);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BodyVertex), reinterpret_cast<void*>(sizeof(glm::vec3)));
-        glBindVertexArray(0);
-        m_bodyVertexCount = static_cast<GLsizei>(bodyVertices.size());
-    }
-
     if (m_haloVao == 0) {
         constexpr int kSegments = 48;
         std::vector<HaloVertex> haloVertices;
@@ -777,10 +734,8 @@ void GameplaySkyRenderer::destroyMeshes() {
 
     deleteBuffer(m_skyVao, m_skyVbo);
     deleteBuffer(m_haloVao, m_haloVbo);
-    deleteBuffer(m_bodyVao, m_bodyVbo);
     deleteBuffer(m_cloudVao, m_cloudVbo);
     m_haloVertexCount = 0;
-    m_bodyVertexCount = 0;
     m_cloudVertexCount = 0;
     m_cloudMeshInfo = {};
 }
@@ -966,6 +921,7 @@ void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float as
     m_shader->setFloat("uSunGlare", colors.sunGlare);
     m_shader->setFloat("uSunVisibility", colors.sunVisibility);
     m_shader->setFloat("uMoonVisibility", colors.moonVisibility);
+    m_shader->setFloat("uMoonPhaseAngle", colors.moonPhaseAngle);
     m_shader->setFloat("uNightFactor", colors.nightFactor);
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
@@ -1078,58 +1034,6 @@ void GameplaySkyRenderer::renderHalo(const Camera& camera,
     glDisable(GL_BLEND);
 }
 
-void GameplaySkyRenderer::renderCelestialBody(const Camera& camera,
-                                              const float aspect,
-                                              const float angleRadians,
-                                              const float size,
-                                              const GLuint texture,
-                                              const glm::vec2& uvMin,
-                                              const glm::vec2& uvMax,
-                                              const float alpha) {
-    if (m_bodyVao == 0 || texture == 0 || alpha <= 0.001f) {
-        return;
-    }
-
-    const glm::vec3 direction = directionFromAngle(angleRadians);
-    if (direction.y < -0.18f) {
-        return;
-    }
-
-    const float fade = smoothstep(-0.18f, 0.02f, direction.y);
-    const glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-    glm::vec3 right = safeNormalize(glm::cross(direction, up), glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::vec3 localUp = safeNormalize(glm::cross(right, direction), up);
-
-    glm::mat4 model(1.0f);
-    model[0] = glm::vec4(right * size, 0.0f);
-    model[1] = glm::vec4(localUp * size, 0.0f);
-    model[2] = glm::vec4(direction, 0.0f);
-    model[3] = glm::vec4(direction * 16.0f, 1.0f);
-
-    m_shader->use();
-    m_shader->setInt("uMode", 1);
-    m_shader->setMat4("uView", buildSkyView(camera));
-    m_shader->setMat4("uProjection", glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f));
-    m_shader->setMat4("uModel", model);
-    m_shader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, alpha * fade));
-    m_shader->setVec2("uUvMin", uvMin);
-    m_shader->setVec2("uUvMax", uvMax);
-    m_shader->setFloat("uBlackKeyThreshold", kBlackKeyThreshold);
-    m_shader->setFloat("uBlackKeySoftness", kBlackKeySoftness);
-    m_shader->setInt("uTexture", 0);
-    bindDummySkyCaptureTexture(0);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glBindVertexArray(m_bodyVao);
-    glDrawArrays(GL_TRIANGLES, 0, m_bodyVertexCount);
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_BLEND);
-}
-
 glm::mat4 GameplaySkyRenderer::buildSkyView(const Camera& camera) const {
     return glm::mat4(glm::mat3(camera.getViewMatrix()));
 }
@@ -1137,12 +1041,4 @@ glm::mat4 GameplaySkyRenderer::buildSkyView(const Camera& camera) const {
 glm::vec3 GameplaySkyRenderer::directionFromAngle(const float angleRadians) const {
     return safeNormalize(glm::vec3(0.25f, std::sin(angleRadians), -std::cos(angleRadians)),
                          glm::vec3(0.0f, 1.0f, 0.0f));
-}
-
-GameplaySkyRenderer::MoonPhaseUv GameplaySkyRenderer::getMoonPhaseUvInternal(const int phaseIndex) const {
-    const auto pair = getMoonPhaseUv(phaseIndex);
-    MoonPhaseUv uv;
-    uv.uvMin = pair.first;
-    uv.uvMax = pair.second;
-    return uv;
 }

@@ -47,6 +47,7 @@ SkyColorsData toSkyColorsData(const GameplaySkyRenderer::SkyColors& src) {
     dst.sunGlare = src.sunGlare;
     dst.sunVisibility = src.sunVisibility;
     dst.moonVisibility = src.moonVisibility;
+    dst.moonPhaseAngle = src.moonPhaseAngle;
     dst.dayFactor = src.dayFactor;
     dst.nightFactor = src.nightFactor;
     dst.horizonFactor = src.horizonFactor;

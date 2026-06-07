@@ -42,6 +42,7 @@ public:
         float sunGlare = 0.0f;
         float sunVisibility = 1.0f;
         float moonVisibility = 0.0f;
+        float moonPhaseAngle = 0.0f;
         float dayFactor = 1.0f;
         float nightFactor = 0.0f;
         float horizonFactor = 0.0f;
@@ -82,11 +83,6 @@ public:
     [[nodiscard]] static std::pair<glm::vec2, glm::vec2> getMoonPhaseUv(int phaseIndex);
 
 private:
-    struct MoonPhaseUv {
-        glm::vec2 uvMin = glm::vec2(0.0f);
-        glm::vec2 uvMax = glm::vec2(1.0f);
-    };
-
     struct CloudMeshInfo {
         float tileWorldSize = 0.0f;
         bool valid = false;
@@ -100,35 +96,21 @@ private:
     void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, GLuint skyCaptureTexture);
     void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
     void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
-    void renderCelestialBody(const Camera& camera,
-                             float aspect,
-                             float angleRadians,
-                             float size,
-                             GLuint texture,
-                             const glm::vec2& uvMin,
-                             const glm::vec2& uvMax,
-                             float alpha);
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
     [[nodiscard]] glm::vec3 directionFromAngle(float angleRadians) const;
-    [[nodiscard]] MoonPhaseUv getMoonPhaseUvInternal(int phaseIndex) const;
 
     Shader* m_shader = nullptr;
     Shader* m_deferredShader = nullptr;  // Original deferred shader (gameplay_sky)
     ResourceMgr* m_resourceMgr = nullptr;
-    GLuint m_sunTexture = 0;
-    GLuint m_moonTexture = 0;
     GLuint m_dummySkyCaptureTexture = 0;
 
     GLuint m_skyVao = 0;
     GLuint m_skyVbo = 0;
     GLuint m_haloVao = 0;
     GLuint m_haloVbo = 0;
-    GLuint m_bodyVao = 0;
-    GLuint m_bodyVbo = 0;
     GLuint m_cloudVao = 0;
     GLuint m_cloudVbo = 0;
     GLsizei m_haloVertexCount = 0;
-    GLsizei m_bodyVertexCount = 0;
     GLsizei m_cloudVertexCount = 0;
     CloudMeshInfo m_cloudMeshInfo{};
 

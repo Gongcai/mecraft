@@ -93,8 +93,6 @@ void GameManager::initResources() {
     m_resourceMgr.loadGuiTexture("creative_scroller_disabled", std::string(CREATIVE_TABS_PATH) + "/scroller_disabled.png", true);
     m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("zombie", ZOMBIE_TEXTURE_PATH, true);
-    m_resourceMgr.loadGuiTexture("sun", SUN_TEXTURE_PATH, false);
-    m_resourceMgr.loadGuiTexture("moon_phases", MOON_TEXTURE_PATH, false);
 
     m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
 

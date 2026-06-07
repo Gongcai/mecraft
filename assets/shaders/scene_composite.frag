@@ -42,8 +42,10 @@ uniform float uWeatherWetness;
 uniform vec3 uCameraPos;
 uniform vec3 uSunDirection;
 uniform vec3 uMoonDirection;
+uniform float uSunVisibility;
 uniform float uSkyIntensity;
 uniform float uMoonVisibility;
+uniform float uMoonPhaseAngle;
 uniform float uSkyWetness;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;
@@ -54,6 +56,7 @@ uniform vec3 uWaterAbsorption;
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
 #include "fogs.glsl"
+#include "procedural_celestials.glsl"
 
 // DerivativeMain Fogs.glsl: uniform float blindness / darknessFactor
 // Mecraft: default 0 until status effect system is implemented.
@@ -107,6 +110,17 @@ void main() {
         // DerivativeMain composites live cloud data over raw colortex5 sky.
         // Using the cloudy atlas half here double-applies sky/cloud attenuation.
         vec3 sky = sampleSkyRadiance(uSkyCaptureTex, skyDir);
+        float solarLobeMask = proceduralSunAngularMask(skyDir, 0.018, 0.180);
+        float solarCoreMask = proceduralSunAngularMask(skyDir, 0.000, 0.070);
+        sky *= (1.0 - solarLobeMask * 0.94) * (1.0 - solarCoreMask * 0.92);
+        sky *= min(1.0, mix(18.0, 1.5, solarCoreMask) / max(luminance(sky), 1e-5));
+        sky += renderProceduralMoonDisk(skyDir);
+        sky += renderProceduralSunDisk(skyDir);
+        float cloudSolarMask = proceduralSunAngularMask(skyDir, 0.018, 0.155);
+        float cloudSolarCoreMask = proceduralSunAngularMask(skyDir, 0.000, 0.085);
+        cloud.rgb *= (1.0 - cloudSolarMask * 0.985) * (1.0 - cloudSolarCoreMask * 0.98);
+        cloud.rgb *= min(1.0, mix(10.0, 0.25, cloudSolarCoreMask) / max(luminance(cloud.rgb), 1e-5));
+        cloud.a = mix(cloud.a, 1.0, cloudSolarMask * 0.96);
         // Premultiplied alpha: sceneData = sceneData * cloudData.a + cloudData.rgb
         // Strength blends between unmodified sky and full premultiplied result,
         // so reducing strength doesn't break sky transmittance energy.

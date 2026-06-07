@@ -22,6 +22,7 @@ uniform float uHorizonHaze;
 uniform float uSunGlare;
 uniform float uSunVisibility;
 uniform float uMoonVisibility;
+uniform float uMoonPhaseAngle;
 uniform float uNightFactor;
 uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
@@ -33,6 +34,8 @@ uniform float uTime;
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
+
+#include "procedural_celestials.glsl"
 
 // Simple gradient sky for forward vanilla path
 vec3 evaluateSkyRadiance(vec3 dir) {
@@ -67,6 +70,8 @@ void main() {
         // Visible sky: forward vanilla uses gradient model only
         vec3 dir = normalize(vWorldDir);
         vec3 sky = evaluateSkyRadiance(dir);
+        sky += renderProceduralMoonDisk(dir);
+        sky += renderProceduralSunDisk(dir);
         FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;
     }

@@ -18,6 +18,7 @@ uniform float uHorizonHaze;
 uniform float uSunGlare;
 uniform float uSunVisibility;
 uniform float uMoonVisibility;
+uniform float uMoonPhaseAngle;
 uniform float uNightFactor;
 uniform float uBlackKeyThreshold;
 uniform float uBlackKeySoftness;
@@ -136,6 +137,8 @@ vec3 renderStars(vec3 worldDir, vec3 sunDir) {
 
     return maxLuminance * falloff * cov * cov * Blackbody(mix(0.0, 1.0, hash.y));
 }
+
+#include "procedural_celestials.glsl"
 
 vec3 evaluateSkyRadiance(vec3 dir) {
     float height = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
@@ -276,8 +279,6 @@ vec3 captureCloudySkybox(vec3 worldDir, vec3 skyRadiance, vec3 sunDir, vec3 moon
     cloudsData.a *= planarClouds.a;
 
     vec3 skyboxData = skyRadiance * cloudsData.a + cloudsData.rgb;
-    skyboxData += atmRenderSun(worldDir, sunDir) * transmittance * clamp(uSunVisibility, 0.0, 1.0);
-    skyboxData += atmRenderMoon(worldDir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
     return max(skyboxData, vec3(0.0));
 }
 
@@ -289,6 +290,9 @@ void main() {
         vec3 sky;
         if (uSkyCaptureEnabled != 0) {
             sky = sampleSkyRadiance(uSkyCaptureTex, dir);
+            float solarLobeMask = proceduralSunAngularMask(dir, 0.018, 0.180);
+            float solarCoreMask = proceduralSunAngularMask(dir, 0.000, 0.070);
+            sky *= (1.0 - solarLobeMask * 0.94) * (1.0 - solarCoreMask * 0.92);
         } else {
             // Forward fallback: evaluateSkyRadiance() is already in display-referred space,
             // no additional srgbToLinear needed (was applied in the old path).
@@ -299,6 +303,8 @@ void main() {
                    * clamp(uNightFactor, 0.0, 1.0)
                    * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
         sky += stars;
+        sky += renderProceduralMoonDisk(dir);
+        sky += renderProceduralSunDisk(dir);
         FragColor = vec4(max(sky, vec3(0.0)), 1.0);
         return;
     }
@@ -321,8 +327,7 @@ void main() {
         if (uCloudySkyCapture != 0) {
             sky = captureCloudySkybox(dir, sky, sunDir, moonDir, transmittance);
         } else if (uIncludeCelestialDisks != 0) {
-            sky += atmRenderSun(dir, sunDir) * transmittance * clamp(uSunVisibility, 0.0, 1.0);
-            sky += atmRenderMoon(dir, moonDir) * transmittance * clamp(uMoonVisibility, 0.0, 1.0) * max(uMoonPhaseFlux, 0.0);
+            // Visible disks are procedural in the final sky passes; SkyCapture keeps only radiance.
         }
 
         // DerivativeMain/lib/Atmosphere/Atmosphere.glsl:

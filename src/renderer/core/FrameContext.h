@@ -59,6 +59,7 @@ struct SkyColorsData {
     float sunGlare = 0.0f;
     float sunVisibility = 1.0f;
     float moonVisibility = 0.0f;
+    float moonPhaseAngle = 0.0f;
     float dayFactor = 1.0f;
     float nightFactor = 0.0f;
     float horizonFactor = 0.0f;

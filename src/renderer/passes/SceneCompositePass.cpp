@@ -66,8 +66,10 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     m_sceneCompositeShader->setVec3("uCameraPos", ctx.camera.position);
     m_sceneCompositeShader->setVec3("uSunDirection", ctx.skyColors.sunDirection);
     m_sceneCompositeShader->setVec3("uMoonDirection", ctx.skyColors.moonDirection);
+    m_sceneCompositeShader->setFloat("uSunVisibility", ctx.skyColors.sunVisibility);
     m_sceneCompositeShader->setFloat("uSkyIntensity", ctx.skyIntensity);
     m_sceneCompositeShader->setFloat("uMoonVisibility", ctx.skyColors.moonVisibility);
+    m_sceneCompositeShader->setFloat("uMoonPhaseAngle", ctx.skyColors.moonPhaseAngle);
     m_sceneCompositeShader->setFloat("uSkyWetness", ctx.weather.skyWetness);
 
     // Composite strengths
