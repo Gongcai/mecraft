@@ -11,6 +11,13 @@ enum UIStyleState {
     UIStyleState_Selected = 1 << 4,
 };
 
+enum class UIToastTone {
+    Info,
+    Success,
+    Warning,
+    Error,
+};
+
 [[nodiscard]] inline constexpr bool hasStyleState(int state, UIStyleState flag) {
     return (state & static_cast<int>(flag)) != 0;
 }
@@ -262,6 +269,37 @@ struct UIResolvedNumericSpinnerStyle {
     float cursorInset = 3.0f;
 };
 
+struct UIToastStyle {
+    Color background {0.15f, 0.15f, 0.15f, 0.92f};
+    Color border     {0.195f, 0.195f, 0.195f, 0.5f};
+    Color text       {1.0f, 1.0f, 1.0f, 1.0f};
+    Color info       {0.2f, 0.8f, 1.0f, 1.0f};
+    Color success    {0.3f, 0.7f, 0.3f, 1.0f};
+    Color warning    {0.9f, 0.7f, 0.2f, 1.0f};
+    Color error      {0.7f, 0.3f, 0.3f, 1.0f};
+    float width = 300.0f;
+    float height = 40.0f;
+    float spacing = 8.0f;
+    float bottomMargin = 60.0f;
+    float borderWidth = 1.0f;
+    float accentWidth = 3.0f;
+    float textPadding = 10.0f;
+};
+
+struct UIResolvedToastStyle {
+    Color background {0.15f, 0.15f, 0.15f, 0.92f};
+    Color border     {0.195f, 0.195f, 0.195f, 0.5f};
+    Color text       {1.0f, 1.0f, 1.0f, 1.0f};
+    Color accent     {0.2f, 0.8f, 1.0f, 1.0f};
+    float width = 300.0f;
+    float height = 40.0f;
+    float spacing = 8.0f;
+    float bottomMargin = 60.0f;
+    float borderWidth = 1.0f;
+    float accentWidth = 3.0f;
+    float textPadding = 10.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -276,6 +314,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UIScrollAreaStyle scrollAreaStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITabControlStyle tabControlStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UINumericSpinnerStyle numericSpinnerStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIToastStyle toastStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -292,4 +331,5 @@ namespace UIStyleResolver {
         int minusState,
         int plusState,
         int valueState);
+    [[nodiscard]] UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone);
 }

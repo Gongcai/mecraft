@@ -1,5 +1,13 @@
 #include "UIStyle.h"
 
+namespace {
+
+Color toastBorderFromBackground(const Color& background) {
+    return {background[0] * 1.3f, background[1] * 1.3f, background[2] * 1.3f, 0.5f};
+}
+
+} // namespace
+
 namespace UIStyleResolver {
 
 UIComponentStyle panelStyleFromTheme(const UITheme* theme) {
@@ -252,6 +260,24 @@ UINumericSpinnerStyle numericSpinnerStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIToastStyle toastStyleFromTheme(const UITheme* theme) {
+    UIToastStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.background = theme->toastBackground;
+    style.border = toastBorderFromBackground(theme->toastBackground);
+    style.text = theme->toastText;
+    style.info = theme->toastInfo;
+    style.success = theme->toastSuccess;
+    style.warning = theme->toastWarning;
+    style.error = theme->toastError;
+    style.width = theme->toastWidth;
+    style.height = theme->toastHeight;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -373,6 +399,36 @@ UIResolvedNumericSpinnerStyle resolveNumericSpinner(
     resolved.textPadding = style.textPadding;
     resolved.cursorWidth = style.cursorWidth;
     resolved.cursorInset = style.cursorInset;
+    return resolved;
+}
+
+UIResolvedToastStyle resolveToast(const UIToastStyle& style, UIToastTone tone) {
+    UIResolvedToastStyle resolved;
+    resolved.background = style.background;
+    resolved.border = style.border;
+    resolved.text = style.text;
+    resolved.width = style.width;
+    resolved.height = style.height;
+    resolved.spacing = style.spacing;
+    resolved.bottomMargin = style.bottomMargin;
+    resolved.borderWidth = style.borderWidth;
+    resolved.accentWidth = style.accentWidth;
+    resolved.textPadding = style.textPadding;
+
+    switch (tone) {
+    case UIToastTone::Info:
+        resolved.accent = style.info;
+        break;
+    case UIToastTone::Success:
+        resolved.accent = style.success;
+        break;
+    case UIToastTone::Warning:
+        resolved.accent = style.warning;
+        break;
+    case UIToastTone::Error:
+        resolved.accent = style.error;
+        break;
+    }
     return resolved;
 }
 

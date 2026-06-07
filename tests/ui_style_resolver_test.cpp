@@ -124,6 +124,14 @@ int main() {
     theme.tabIndicator = {0.24f, 0.34f, 0.44f, 1.0f};
     theme.tabContent = {0.54f, 0.64f, 0.74f, 0.85f};
     theme.tabHeaderHeight = 42.0f;
+    theme.toastBackground = {0.25f, 0.35f, 0.45f, 0.92f};
+    theme.toastText = {0.55f, 0.65f, 0.75f, 1.0f};
+    theme.toastInfo = {0.26f, 0.36f, 0.46f, 1.0f};
+    theme.toastSuccess = {0.56f, 0.66f, 0.76f, 1.0f};
+    theme.toastWarning = {0.86f, 0.87f, 0.88f, 1.0f};
+    theme.toastError = {0.27f, 0.37f, 0.47f, 1.0f};
+    theme.toastWidth = 340.0f;
+    theme.toastHeight = 44.0f;
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -345,6 +353,34 @@ int main() {
         !colorEqual(disabledSpinner.text, theme.textDisabled) ||
         colorEqual(disabledSpinner.minusBackground, theme.buttonHover)) {
         return fail("disabled numeric spinner zones should override interactive states");
+    }
+
+    const UIToastStyle toastStyle = UIStyleResolver::toastStyleFromTheme(&theme);
+    const UIResolvedToastStyle warningToast =
+        UIStyleResolver::resolveToast(toastStyle, UIToastTone::Warning);
+    const Color expectedToastBorder{
+        theme.toastBackground[0] * 1.3f,
+        theme.toastBackground[1] * 1.3f,
+        theme.toastBackground[2] * 1.3f,
+        0.5f};
+    if (!colorEqual(warningToast.background, theme.toastBackground) ||
+        !colorEqual(warningToast.border, expectedToastBorder) ||
+        !colorEqual(warningToast.text, theme.toastText) ||
+        !colorEqual(warningToast.accent, theme.toastWarning) ||
+        std::fabs(warningToast.width - 340.0f) > 0.001f ||
+        std::fabs(warningToast.height - 44.0f) > 0.001f ||
+        std::fabs(warningToast.spacing - 8.0f) > 0.001f ||
+        std::fabs(warningToast.bottomMargin - 60.0f) > 0.001f ||
+        std::fabs(warningToast.borderWidth - 1.0f) > 0.001f ||
+        std::fabs(warningToast.accentWidth - 3.0f) > 0.001f ||
+        std::fabs(warningToast.textPadding - 10.0f) > 0.001f) {
+        return fail("toast style should map theme colors, derived border, tone, and metrics");
+    }
+
+    const UIResolvedToastStyle errorToast = UIStyleResolver::resolveToast(toastStyle, UIToastTone::Error);
+    if (!colorEqual(errorToast.accent, theme.toastError) ||
+        colorEqual(errorToast.accent, theme.toastWarning)) {
+        return fail("toast tone should select the matching accent color");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

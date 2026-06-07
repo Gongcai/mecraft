@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 
+#include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
@@ -28,6 +29,8 @@ public:
 
     // Maximum number of simultaneously visible toasts.
     void setMaxVisible(int maxVisible) { m_maxVisible = maxVisible; }
+    void setStyle(const UIToastStyle& style);
+    void clearLocalStyle();
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;
@@ -44,7 +47,8 @@ private:
 
     void initMesh();
     void cleanupMesh();
-    [[nodiscard]] Color getToastColor(const UITheme* theme, Type type) const;
+    [[nodiscard]] UIToastStyle resolveBaseStyle(const UIRenderContext& ctx) const;
+    [[nodiscard]] UIResolvedToastStyle resolveStyle(const UIRenderContext& ctx, Type type) const;
 
     Shader* m_shader = nullptr;
     GLuint m_vao = 0;
@@ -52,4 +56,6 @@ private:
 
     std::vector<ToastEntry> m_toasts;
     int m_maxVisible = 5;
+    bool m_hasLocalStyle = false;
+    UIToastStyle m_localStyle;
 };
