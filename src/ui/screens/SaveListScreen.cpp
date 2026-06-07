@@ -29,6 +29,28 @@ public:
     void setOnClick(std::function<void()> cb) { m_onClick = std::move(cb); }
     bool isHovered() const { return m_hovered; }
 
+    void syncVisualState() {
+        const bool active = m_hovered || isFocused();
+        if (m_pressed) {
+            setBackgroundColor({0.050f, 0.076f, 0.050f, 0.78f});
+            setBorderColor({0.640f, 0.760f, 0.540f, 0.82f});
+            setBorderWidth(3.0f);
+        } else if (active) {
+            setBackgroundColor({0.070f, 0.108f, 0.066f, 0.74f});
+            setBorderColor({0.660f, 0.800f, 0.560f, 0.88f});
+            setBorderWidth(3.0f);
+        } else {
+            setBackgroundColor({0.078f, 0.094f, 0.086f, 0.58f});
+            setBorderColor({0.590f, 0.660f, 0.530f, 0.54f});
+            setBorderWidth(2.0f);
+        }
+    }
+
+    void setFocused(bool focused) override {
+        UIPanel::setFocused(focused);
+        syncVisualState();
+    }
+
     UIEventResult onInput(const UIInputEvent& event,
                           const UIRenderContext& ctx) override {
         if (!visible || !interactive) return UIEventResult::Ignored;
@@ -41,12 +63,17 @@ public:
 
         switch (event.type) {
         case UIInputEventType::PointerMove:
-            m_hovered = inside;
+            if (m_hovered != inside) {
+                m_hovered = inside;
+                syncVisualState();
+            }
             return inside ? UIEventResult::Handled : UIEventResult::Ignored;
 
         case UIInputEventType::PointerDown:
             if (event.button == UIPointerButton::Primary && inside) {
                 m_pressed = true;
+                requestFocus();
+                syncVisualState();
                 return UIEventResult::Handled;
             }
             break;
@@ -54,10 +81,14 @@ public:
         case UIInputEventType::PointerUp:
             if (event.button == UIPointerButton::Primary && m_pressed && inside) {
                 m_pressed = false;
+                syncVisualState();
                 if (m_onClick) m_onClick();
                 return UIEventResult::Consumed;
             }
-            m_pressed = false;
+            if (m_pressed) {
+                m_pressed = false;
+                syncVisualState();
+            }
             break;
 
         case UIInputEventType::Command:
@@ -299,6 +330,7 @@ void SaveListScreen::rebuildList() {
         panel->y = contentHeight - kEntryHeight -
                    static_cast<float>(i) * (kEntryHeight + kEntrySpacing);
         panel->setTone(UIPanelTone::OverlaySurface);
+        panel->syncVisualState();
 
         // -- Thumbnail --
         // Constrain the image to a kThumbSize x kThumbSize square.
