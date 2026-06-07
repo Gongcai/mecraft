@@ -138,6 +138,10 @@ int main() {
     theme.tooltipBorder = {0.58f, 0.68f, 0.78f, 0.8f};
     theme.tooltipBorderWidth = 3.0f;
     theme.overlayDim = {0.01f, 0.02f, 0.03f, 0.65f};
+    theme.consoleBox = {0.29f, 0.39f, 0.49f, 0.55f};
+    theme.consoleTextNormal = {0.59f, 0.69f, 0.79f, 1.0f};
+    theme.consoleTextWarning = {0.89f, 0.70f, 0.60f, 1.0f};
+    theme.consoleTextSuccess = {0.30f, 0.80f, 0.70f, 1.0f};
 
     const UIComponentStyle panelStyle = UIStyleResolver::panelStyleFromTheme(&theme);
     const UIResolvedStyle panel = UIStyleResolver::resolve(panelStyle, UIStyleState_Normal);
@@ -437,6 +441,39 @@ int main() {
         std::fabs(modal.padding - 16.0f) > 0.001f ||
         std::fabs(modal.titleTextScale - 2.0f) > 0.001f) {
         return fail("modal style should map overlay, panel, title, and layout metrics");
+    }
+
+    UIConsoleStyle consoleStyle = UIStyleResolver::consoleStyleFromTheme(&theme);
+    consoleStyle.x = 18;
+    consoleStyle.inputY = 22;
+    consoleStyle.inputBoxHeight = 36;
+    consoleStyle.inputToFirstBoxGap = 14;
+    consoleStyle.boxHeight = 38;
+    consoleStyle.boxGap = 3;
+    consoleStyle.horizontalMargin = 24;
+    consoleStyle.minBoxWidth = 320;
+    consoleStyle.textPaddingX = 12;
+    consoleStyle.textPaddingY = 5;
+    consoleStyle.boxWidthRatio = 0.72f;
+    consoleStyle.textScale = 1.75f;
+    const UIResolvedConsoleStyle console = UIStyleResolver::resolveConsole(consoleStyle);
+    if (!colorEqual(console.box, theme.consoleBox) ||
+        !colorEqual(console.textNormal, theme.consoleTextNormal) ||
+        !colorEqual(console.textWarning, theme.consoleTextWarning) ||
+        !colorEqual(console.textSuccess, theme.consoleTextSuccess) ||
+        console.x != 18 ||
+        console.inputY != 22 ||
+        console.inputBoxHeight != 36 ||
+        console.inputToFirstBoxGap != 14 ||
+        console.boxHeight != 38 ||
+        console.boxGap != 3 ||
+        console.horizontalMargin != 24 ||
+        console.minBoxWidth != 320 ||
+        console.textPaddingX != 12 ||
+        console.textPaddingY != 5 ||
+        std::fabs(console.boxWidthRatio - 0.72f) > 0.001f ||
+        std::fabs(console.textScale - 1.75f) > 0.001f) {
+        return fail("console style should map theme colors and preserve layout metrics");
     }
 
     std::cout << "[ui_style_resolver_test] PASS\n";

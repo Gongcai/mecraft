@@ -376,6 +376,44 @@ struct UIResolvedTextStyle {
     float shadowOffsetY = -1.0f;
 };
 
+struct UIConsoleStyle {
+    Color box         {0.0f, 0.0f, 0.0f, 0.55f};
+    Color textNormal  {0.95f, 0.95f, 0.95f, 1.0f};
+    Color textWarning {0.95f, 0.35f, 0.35f, 1.0f};
+    Color textSuccess {0.45f, 0.90f, 0.50f, 1.0f};
+    int x = 20;
+    int inputY = 20;
+    int inputBoxHeight = 34;
+    int inputToFirstBoxGap = 12;
+    int boxHeight = 34;
+    int boxGap = 0;
+    int horizontalMargin = 20;
+    int minBoxWidth = 300;
+    int textPaddingX = 10;
+    int textPaddingY = 4;
+    float boxWidthRatio = 0.68f;
+    float textScale = 2.0f;
+};
+
+struct UIResolvedConsoleStyle {
+    Color box         {0.0f, 0.0f, 0.0f, 0.55f};
+    Color textNormal  {0.95f, 0.95f, 0.95f, 1.0f};
+    Color textWarning {0.95f, 0.35f, 0.35f, 1.0f};
+    Color textSuccess {0.45f, 0.90f, 0.50f, 1.0f};
+    int x = 20;
+    int inputY = 20;
+    int inputBoxHeight = 34;
+    int inputToFirstBoxGap = 12;
+    int boxHeight = 34;
+    int boxGap = 0;
+    int horizontalMargin = 20;
+    int minBoxWidth = 300;
+    int textPaddingX = 10;
+    int textPaddingY = 4;
+    float boxWidthRatio = 0.68f;
+    float textScale = 2.0f;
+};
+
 namespace UIStyleResolver {
     [[nodiscard]] UIComponentStyle panelStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIComponentStyle buttonStyleFromTheme(const UITheme* theme);
@@ -394,6 +432,7 @@ namespace UIStyleResolver {
     [[nodiscard]] UITooltipStyle tooltipStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIModalStyle modalStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UITextStyle textStyleFromTheme(const UITheme* theme);
+    [[nodiscard]] UIConsoleStyle consoleStyleFromTheme(const UITheme* theme);
     [[nodiscard]] UIResolvedStyle resolve(const UIComponentStyle& style, int state);
     [[nodiscard]] UIResolvedTextInputStyle resolveTextInput(const UITextInputStyle& style, int state);
     [[nodiscard]] UIResolvedToggleStyle resolveToggle(const UIToggleStyle& style, int state);
@@ -414,4 +453,5 @@ namespace UIStyleResolver {
     [[nodiscard]] UIResolvedTooltipStyle resolveTooltip(const UITooltipStyle& style);
     [[nodiscard]] UIResolvedModalStyle resolveModal(const UIModalStyle& style);
     [[nodiscard]] UIResolvedTextStyle resolveText(const UITextStyle& style);
+    [[nodiscard]] UIResolvedConsoleStyle resolveConsole(const UIConsoleStyle& style);
 }

@@ -5,6 +5,7 @@
 
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
+#include "../core/UIStyle.h"
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -88,21 +89,21 @@ void ConsoleOverlay::renderSelf(const UIRenderContext& context) const
 
 void ConsoleOverlay::drawOverlayRect(int screenW,
                                      int screenH,
-                                     int x,
-                                     int y,
-                                     int w,
-                                     int h,
-                                     const std::array<float, 4>& color) const
+                                     int rectX,
+                                     int rectY,
+                                     int rectW,
+                                     int rectH,
+                                     const std::array<float, 4>& rectColor) const
 {
-    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0 || w <= 0 || h <= 0) {
+    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0 || rectW <= 0 || rectH <= 0) {
         return;
     }
 
     // Bottom-left origin (same as inventory/text/ui_color shaders)
-    const float x0 = static_cast<float>(x);
-    const float y0 = static_cast<float>(y);
-    const float x1 = static_cast<float>(x + w);
-    const float y1 = static_cast<float>(y + h);
+    const float x0 = static_cast<float>(rectX);
+    const float y0 = static_cast<float>(rectY);
+    const float x1 = static_cast<float>(rectX + rectW);
+    const float y1 = static_cast<float>(rectY + rectH);
 
     const float rectVerts[] = {
         x0, y0, 0.0f, 0.0f,
@@ -116,7 +117,7 @@ void ConsoleOverlay::drawOverlayRect(int screenW,
     m_crosshairShader->use();
     m_crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
     m_crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
-    m_crosshairShader->setVec4("uColor", glm::vec4(color[0], color[1], color[2], color[3]));
+    m_crosshairShader->setVec4("uColor", glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3]));
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -146,30 +147,47 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
     params.visibleBoxes = m_visibleBoxes;
     params.holdSeconds = m_holdSeconds;
     params.fadeEndSeconds = m_fadeEndSeconds;
-
-    if (theme) {
-        params.boxColor = theme->consoleBox;
-        params.normalTextColor = theme->consoleTextNormal;
-        params.warningTextColor = theme->consoleTextWarning;
-        params.successTextColor = theme->consoleTextSuccess;
-    }
+    const UIResolvedConsoleStyle style =
+        UIStyleResolver::resolveConsole(UIStyleResolver::consoleStyleFromTheme(theme));
+    params.x = style.x;
+    params.inputY = style.inputY;
+    params.inputBoxH = style.inputBoxHeight;
+    params.inputToFirstBoxGap = style.inputToFirstBoxGap;
+    params.boxH = style.boxHeight;
+    params.boxGap = style.boxGap;
+    params.horizontalMargin = style.horizontalMargin;
+    params.minBoxW = style.minBoxWidth;
+    params.boxWidthRatio = style.boxWidthRatio;
+    params.textPadX = style.textPaddingX;
+    params.textPadY = style.textPaddingY;
+    params.textScale = style.textScale;
+    params.boxColor = style.box;
+    params.normalTextColor = style.textNormal;
+    params.warningTextColor = style.textWarning;
+    params.successTextColor = style.textSuccess;
 
     m_display.setMaxLines(m_maxLines);
     m_display.render(
         nowSec,
         params,
-        [this, screenW, screenH](int x, int y, int w, int h, const std::array<float, 4>& color) {
+        [this, screenW, screenH](int rectX, int rectY, int rectW, int rectH, const std::array<float, 4>& rectColor) {
             const UIRenderUtils::GLStateGuard glState;
-            drawOverlayRect(screenW, screenH, x, y, w, h, color);
+            drawOverlayRect(screenW, screenH, rectX, rectY, rectW, rectH, rectColor);
         },
         [&textRenderer, screenW, screenH](const std::string& line,
-                                          float x,
-                                          float y,
+                                          float textX,
+                                          float textY,
                                           float scale,
-                                          const std::array<float, 4>& color,
+                                          const std::array<float, 4>& textColor,
                                           float,
                                           float) {
-            textRenderer.render(line, x, y, scale, color, static_cast<float>(screenW), static_cast<float>(screenH));
+            textRenderer.render(line,
+                                textX,
+                                textY,
+                                scale,
+                                textColor,
+                                static_cast<float>(screenW),
+                                static_cast<float>(screenH));
         },
         [&textRenderer](const std::string& text, float scale) -> ConsoleDisplayBox::TextMetricsResult {
             auto m = textRenderer.measureText(text, scale);

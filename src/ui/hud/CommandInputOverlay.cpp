@@ -9,6 +9,7 @@
 
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
+#include "../core/UIStyle.h"
 #include "engine/platform/Window.h"
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
@@ -101,17 +102,16 @@ CommandInputOverlay::ClipInfo CommandInputOverlay::computeClipInfo(const std::st
                                                                    int boxW,
                                                                    int boxH,
                                                                    float textScale,
+                                                                   int textPaddingX,
+                                                                   int textPaddingY,
                                                                    const TextRenderer& textRenderer)
 {
-    constexpr int kTextClipPadX = 10;
-    constexpr int kTextClipPadY = 4;
-
     ClipInfo info;
     info.glyphSize = 8.0f * textScale;
-    info.clipX = boxX + kTextClipPadX;
-    info.clipY = boxY + kTextClipPadY;
-    info.clipW = std::max(1, boxW - kTextClipPadX * 2);
-    info.clipH = std::max(1, boxH - kTextClipPadY * 2);
+    info.clipX = boxX + textPaddingX;
+    info.clipY = boxY + textPaddingY;
+    info.clipW = std::max(1, boxW - textPaddingX * 2);
+    info.clipH = std::max(1, boxH - textPaddingY * 2);
 
     const float clipContentW = static_cast<float>(info.clipW) - 4.0f;
 
@@ -155,21 +155,21 @@ CommandInputOverlay::CaretRect CommandInputOverlay::computeCaretRect(const ClipI
 
 void CommandInputOverlay::drawOverlayRect(int screenW,
                                           int screenH,
-                                          int x,
-                                          int y,
-                                          int w,
-                                          int h,
-                                          const std::array<float, 4>& color) const
+                                          int rectX,
+                                          int rectY,
+                                          int rectW,
+                                          int rectH,
+                                          const std::array<float, 4>& rectColor) const
 {
-    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0 || w <= 0 || h <= 0) {
+    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0 || rectW <= 0 || rectH <= 0) {
         return;
     }
 
     // Bottom-left origin (same as inventory/text/ui_color shaders)
-    const float x0 = static_cast<float>(x);
-    const float y0 = static_cast<float>(y);
-    const float x1 = static_cast<float>(x + w);
-    const float y1 = static_cast<float>(y + h);
+    const float x0 = static_cast<float>(rectX);
+    const float y0 = static_cast<float>(rectY);
+    const float x1 = static_cast<float>(rectX + rectW);
+    const float y1 = static_cast<float>(rectY + rectH);
 
     const float rectVerts[] = {
         x0, y0, 0.0f, 0.0f,
@@ -183,7 +183,7 @@ void CommandInputOverlay::drawOverlayRect(int screenW,
     m_crosshairShader->use();
     m_crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
     m_crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
-    m_crosshairShader->setVec4("uColor", glm::vec4(color[0], color[1], color[2], color[3]));
+    m_crosshairShader->setVec4("uColor", glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3]));
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -207,12 +207,24 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
         return;
     }
 
-    const int boxW = std::max(300, std::min(screenW - 40, static_cast<int>(std::round(static_cast<float>(screenW) * 0.68f))));
-    const int boxH = 34;
-    const int x = 20;
-    const int y = 20;
-    const float textScale = 2.0f;
-    const auto clipInfo = computeClipInfo(text, x, y, boxW, boxH, textScale, textRenderer);
+    const UIResolvedConsoleStyle style =
+        UIStyleResolver::resolveConsole(UIStyleResolver::consoleStyleFromTheme(theme));
+    const int boxW = std::max(style.minBoxWidth,
+                              std::min(screenW - style.horizontalMargin * 2,
+                                       static_cast<int>(std::round(static_cast<float>(screenW) * style.boxWidthRatio))));
+    const int boxH = style.inputBoxHeight;
+    const int boxX = style.x;
+    const int boxY = style.inputY;
+    const float textScale = style.textScale;
+    const auto clipInfo = computeClipInfo(text,
+                                          boxX,
+                                          boxY,
+                                          boxW,
+                                          boxH,
+                                          textScale,
+                                          style.textPaddingX,
+                                          style.textPaddingY,
+                                          textRenderer);
 
     GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
     GLint previousScissorBox[4] = {0, 0, screenW, screenH};
@@ -224,17 +236,14 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
     glEnable(GL_SCISSOR_TEST);
     glScissor(0, 0, screenW, screenH);
 
-    const auto& boxCol = theme ? theme->consoleBox : std::array<float, 4>{0.0f, 0.0f, 0.0f, 0.55f};
-    const auto& textCol = theme ? theme->consoleTextNormal : std::array<float, 4>{0.95f, 0.95f, 0.95f, 1.0f};
-
-    drawOverlayRect(screenW, screenH, x, y, boxW, boxH, boxCol);
+    drawOverlayRect(screenW, screenH, boxX, boxY, boxW, boxH, style.box);
 
     glScissor(clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
     textRenderer.render(clipInfo.visibleText,
                         clipInfo.textX,
                         clipInfo.textY,
                         textScale,
-                        textCol,
+                        style.textNormal,
                         static_cast<float>(screenW),
                         static_cast<float>(screenH));
 
@@ -242,7 +251,7 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
         const CaretRect caret = computeCaretRect(clipInfo, textRenderer, textScale);
         applyOverlayBlendState();
         glScissor(clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
-        drawOverlayRect(screenW, screenH, caret.x, caret.y, caret.w, caret.h, textCol);
+        drawOverlayRect(screenW, screenH, caret.x, caret.y, caret.w, caret.h, style.textNormal);
     }
 
     if (scissorWasEnabled) {

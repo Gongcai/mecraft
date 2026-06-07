@@ -313,6 +313,19 @@ UITextStyle textStyleFromTheme(const UITheme* theme) {
     return style;
 }
 
+UIConsoleStyle consoleStyleFromTheme(const UITheme* theme) {
+    UIConsoleStyle style;
+    if (!theme) {
+        return style;
+    }
+
+    style.box = theme->consoleBox;
+    style.textNormal = theme->consoleTextNormal;
+    style.textWarning = theme->consoleTextWarning;
+    style.textSuccess = theme->consoleTextSuccess;
+    return style;
+}
+
 UIResolvedStyle resolve(const UIComponentStyle& style, int state) {
     UIResolvedStyle resolved;
     resolved.borderWidth = style.borderWidth;
@@ -508,6 +521,27 @@ UIResolvedTextStyle resolveText(const UITextStyle& style) {
     resolved.textScale = style.textScale;
     resolved.shadowOffsetX = style.shadowOffsetX;
     resolved.shadowOffsetY = style.shadowOffsetY;
+    return resolved;
+}
+
+UIResolvedConsoleStyle resolveConsole(const UIConsoleStyle& style) {
+    UIResolvedConsoleStyle resolved;
+    resolved.box = style.box;
+    resolved.textNormal = style.textNormal;
+    resolved.textWarning = style.textWarning;
+    resolved.textSuccess = style.textSuccess;
+    resolved.x = style.x;
+    resolved.inputY = style.inputY;
+    resolved.inputBoxHeight = style.inputBoxHeight;
+    resolved.inputToFirstBoxGap = style.inputToFirstBoxGap;
+    resolved.boxHeight = style.boxHeight;
+    resolved.boxGap = style.boxGap;
+    resolved.horizontalMargin = style.horizontalMargin;
+    resolved.minBoxWidth = style.minBoxWidth;
+    resolved.textPaddingX = style.textPaddingX;
+    resolved.textPaddingY = style.textPaddingY;
+    resolved.boxWidthRatio = style.boxWidthRatio;
+    resolved.textScale = style.textScale;
     return resolved;
 }
 

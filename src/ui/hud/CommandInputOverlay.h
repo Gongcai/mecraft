@@ -6,11 +6,11 @@
 #include <glad/glad.h>
 
 #include "../core/UIWidget.h"
-#include "../core/UITheme.h"
 
 class ResourceMgr;
 class Shader;
 class TextRenderer;
+struct UITheme;
 
 class CommandInputOverlay : public UIWidget
 {
@@ -52,6 +52,8 @@ private:
                                     int boxW,
                                     int boxH,
                                     float textScale,
+                                    int textPaddingX,
+                                    int textPaddingY,
                                     const TextRenderer& textRenderer);
     static CaretRect computeCaretRect(const ClipInfo& info, const TextRenderer& textRenderer, float textScale);
     static bool isCaretVisible(double nowSec, float blinkPeriodMs);
@@ -59,11 +61,11 @@ private:
     void renderBox(const std::string& text, const TextRenderer& textRenderer, const UITheme* theme = nullptr) const;
     void drawOverlayRect(int screenW,
                          int screenH,
-                         int x,
-                         int y,
-                         int w,
-                         int h,
-                         const std::array<float, 4>& color) const;
+                         int rectX,
+                         int rectY,
+                         int rectW,
+                         int rectH,
+                         const std::array<float, 4>& rectColor) const;
 
     Shader* m_crosshairShader = nullptr;
     GLuint m_vao = 0;

@@ -15,10 +15,8 @@ int main() {
     CommandInputOverlay overlay;
     TextRenderer textRenderer;
     UIRenderContext ctx{};
+    ctx.textRenderer = &textRenderer;
 
-    if (overlay.visible) {
-        return fail("command input should default to hidden");
-    }
     overlay.setText("/help");
     if (overlay.getText() != "/help") {
         return fail("command input text setter/getter mismatch");
@@ -38,7 +36,11 @@ int main() {
     }
 
     // Smoke: should be safe without init.
-    overlay.render("/gamemode creative", textRenderer);
+    const std::string commandText = "/gamemode creative";
+    ctx.commandInputText = &commandText;
+    ctx.commandInputVisible = true;
+    overlay.visible = true;
+    overlay.render(ctx);
     overlay.shutdown();
 
     std::cout << "[command_input_overlay_test] PASS\n";

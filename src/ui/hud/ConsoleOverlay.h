@@ -8,11 +8,11 @@
 
 #include "../widgets/ConsoleDisplayBox.h"
 #include "../core/UIWidget.h"
-#include "../core/UITheme.h"
 
 class ResourceMgr;
 class Shader;
 class TextRenderer;
+struct UITheme;
 
 class ConsoleOverlay : public UIWidget
 {
@@ -36,11 +36,11 @@ private:
     void renderMessages(double nowSec, const TextRenderer& textRenderer, const UITheme* theme = nullptr) const;
     void drawOverlayRect(int screenW,
                          int screenH,
-                         int x,
-                         int y,
-                         int w,
-                         int h,
-                         const std::array<float, 4>& color) const;
+                         int rectX,
+                         int rectY,
+                         int rectW,
+                         int rectH,
+                         const std::array<float, 4>& rectColor) const;
 
     Shader* m_crosshairShader = nullptr;
     GLuint m_vao = 0;

@@ -15,6 +15,7 @@ int main() {
     ConsoleOverlay console;
     TextRenderer textRenderer;
     UIRenderContext ctx{};
+    ctx.textRenderer = &textRenderer;
 
     if (!console.visible) {
         return fail("console should default to visible");
@@ -38,7 +39,7 @@ int main() {
     }
 
     // Smoke: render with empty queue should no-op without init/context.
-    console.render(1.0, textRenderer);
+    console.render(ctx);
     console.shutdown();
 
     std::cout << "[console_overlay_test] PASS\n";
