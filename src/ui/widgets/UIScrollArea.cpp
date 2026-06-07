@@ -1,6 +1,7 @@
 #include "UIScrollArea.h"
 
 #include <algorithm>
+#include <vector>
 
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
@@ -78,8 +79,8 @@ void UIScrollArea::initMesh() {
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Track (6) + thumb (6) = 12 verts * 2 floats
-    glBufferData(GL_ARRAY_BUFFER, 12 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    constexpr int kMaxShapeVerts = 160;
+    glBufferData(GL_ARRAY_BUFFER, kMaxShapeVerts * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
@@ -159,7 +160,7 @@ void UIScrollArea::renderSelf(const UIRenderContext& ctx) const {
 void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     if (!m_shader || m_vao == 0 || m_contentHeight <= 0.0f) return;
 
-    const UIResolvedScrollAreaStyle resolved = resolveStyle(ctx, m_thumbHovered);
+    const UIResolvedScrollAreaStyle resolved = resolveStyle(ctx, m_thumbHovered || m_draggingScrollbar);
     float sbWidth = resolved.scrollbarWidth;
     const Color trackCol = resolved.track;
     const Color thumbCol = resolved.thumb;
@@ -173,6 +174,10 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     float trackX = ax + aw - sbWidth;
     float trackY = ay;
     float trackH = ah;
+    const float visualTrackW = std::max(3.0f, sbWidth * 0.48f);
+    const float visualThumbW = std::max(5.0f, sbWidth * 0.72f);
+    const float visualTrackX = trackX + (sbWidth - visualTrackW) * 0.5f;
+    const float visualThumbX = trackX + (sbWidth - visualThumbW) * 0.5f;
 
     // Thumb proportional sizing
     float viewRatio = ah / m_contentHeight;
@@ -192,31 +197,26 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // Track
-    {
-        std::array<float, 4> c = trackCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float verts[] = {
-            trackX, trackY,  trackX + sbWidth, trackY,  trackX + sbWidth, trackY + trackH,
-            trackX, trackY,  trackX + sbWidth, trackY + trackH,  trackX, trackY + trackH,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
+        if (verts.empty()) return;
+        shapeColor[3] *= alpha;
+        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                        verts.data());
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
+    };
 
-    // Thumb
-    {
-        std::array<float, 4> c = thumbCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float verts[] = {
-            trackX, thumbY,  trackX + sbWidth, thumbY,  trackX + sbWidth, thumbY + thumbH,
-            trackX, thumbY,  trackX + sbWidth, thumbY + thumbH,  trackX, thumbY + thumbH,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 6 * 2 * sizeof(float), sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 6, 6);
-    }
+    std::vector<float> verts;
+    verts.reserve(160);
+
+    verts.clear();
+    UIRenderUtils::pushCapsule(verts, visualTrackX, trackY, visualTrackX + visualTrackW, trackY + trackH);
+    drawShape(verts, trackCol);
+
+    verts.clear();
+    UIRenderUtils::pushCapsule(verts, visualThumbX, thumbY, visualThumbX + visualThumbW, thumbY + thumbH);
+    drawShape(verts, thumbCol);
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);

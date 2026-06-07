@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
@@ -110,8 +111,9 @@ void UISlider::initMesh() {
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Track (6) + Fill (6) + Handle (6) = 18 verts * 2 floats
-    glBufferData(GL_ARRAY_BUFFER, 18 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // Largest shape drawn per pass is a capsule or circle.
+    constexpr int kMaxShapeVerts = 160;
+    glBufferData(GL_ARRAY_BUFFER, kMaxShapeVerts * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
@@ -149,6 +151,7 @@ void UISlider::renderSelf(const UIRenderContext& ctx) const {
 
     float handleScale = m_handleScaleTween.value();
     float hs = handleSize * handleScale;
+    const bool active = m_dragging || m_handleHovered || isFocused();
 
     const UIRenderUtils::GLStateGuard glState;
     m_shader->use();
@@ -158,42 +161,38 @@ void UISlider::renderSelf(const UIRenderContext& ctx) const {
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // Track quad
-    std::array<float, 4> tc = trackCol;
-    tc[3] *= alpha;
-    m_shader->setVec4("uColor", glm::vec4(tc[0], tc[1], tc[2], tc[3]));
-    float trackVerts[] = {
-        tl, cy - trackH * 0.5f,  tr, cy - trackH * 0.5f,  tr, cy + trackH * 0.5f,
-        tl, cy - trackH * 0.5f,  tr, cy + trackH * 0.5f,  tl, cy + trackH * 0.5f,
+    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
+        if (verts.empty()) return;
+        shapeColor[3] *= alpha;
+        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                        verts.data());
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
     };
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(trackVerts), trackVerts);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    // Fill quad
-    if (hx > tl) {
-        std::array<float, 4> fc = fillCol;
-        fc[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(fc[0], fc[1], fc[2], fc[3]));
-        float fillVerts[] = {
-            tl, cy - trackH * 0.5f,  hx, cy - trackH * 0.5f,  hx, cy + trackH * 0.5f,
-            tl, cy - trackH * 0.5f,  hx, cy + trackH * 0.5f,  tl, cy + trackH * 0.5f,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 12 * sizeof(float), sizeof(fillVerts), fillVerts);
-        glDrawArrays(GL_TRIANGLES, 6, 6);
+    std::vector<float> verts;
+    verts.reserve(160);
+
+    verts.clear();
+    UIRenderUtils::pushCapsule(verts, tl, cy - trackH * 0.5f, tr, cy + trackH * 0.5f);
+    drawShape(verts, trackCol);
+
+    if (hx > tl + 0.5f) {
+        verts.clear();
+        UIRenderUtils::pushCapsule(verts, tl, cy - trackH * 0.5f, hx, cy + trackH * 0.5f);
+        drawShape(verts, fillCol);
     }
 
-    // Handle quad
-    {
-        std::array<float, 4> hc = handleCol;
-        hc[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(hc[0], hc[1], hc[2], hc[3]));
-        float handleVerts[] = {
-            hx - hs * 0.5f, cy - hs * 0.5f,  hx + hs * 0.5f, cy - hs * 0.5f,  hx + hs * 0.5f, cy + hs * 0.5f,
-            hx - hs * 0.5f, cy - hs * 0.5f,  hx + hs * 0.5f, cy + hs * 0.5f,  hx - hs * 0.5f, cy + hs * 0.5f,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 24 * sizeof(float), sizeof(handleVerts), handleVerts);
-        glDrawArrays(GL_TRIANGLES, 12, 6);
-    }
+    verts.clear();
+    Color ringCol = fillCol;
+    ringCol[3] = active ? 0.46f : 0.26f;
+    UIRenderUtils::pushCircle(verts, hx, cy, hs * 0.5f + (active ? 2.5f : 1.5f));
+    drawShape(verts, ringCol);
+
+    verts.clear();
+    UIRenderUtils::pushCircle(verts, hx, cy, hs * 0.5f);
+    drawShape(verts, handleCol);
 
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -226,23 +225,26 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
                 }
                 return UIEventResult::Consumed;
             }
-            // Check handle hover
+            bool insideWidget = hitTest(event.x, event.y, ctx);
             bool insideHandle = std::abs(event.x - hx) <= (handleSize * 0.5f + padding)
                                 && std::abs(flippedY - cy) <= (handleSize * 0.5f + padding);
-            if (insideHandle && !m_handleHovered) {
+            bool hovered = insideWidget || insideHandle;
+            if (hovered && !m_handleHovered) {
                 m_handleHovered = true;
-                m_handleScaleTween.start(1.0f, 1.2f, 0.1f, EasingType::EaseOut);
-            } else if (!insideHandle && m_handleHovered) {
+                m_handleScaleTween.start(m_handleScaleTween.value(), 1.12f, 0.1f, EasingType::EaseOut);
+            } else if (!hovered && m_handleHovered) {
                 m_handleHovered = false;
-                m_handleScaleTween.start(1.2f, 1.0f, 0.1f, EasingType::EaseOut);
+                m_handleScaleTween.start(m_handleScaleTween.value(), 1.0f, 0.1f, EasingType::EaseOut);
             }
-            return insideHandle ? UIEventResult::Handled : UIEventResult::Ignored;
+            return hovered ? UIEventResult::Handled : UIEventResult::Ignored;
         }
         case UIInputEventType::PointerDown: {
             if (event.button == UIPointerButton::Primary) {
                 bool insideWidget = hitTest(event.x, event.y, ctx);
                 if (insideWidget) {
                     m_dragging = true;
+                    m_handleHovered = true;
+                    m_handleScaleTween.start(m_handleScaleTween.value(), 1.16f, 0.08f, EasingType::EaseOut);
                     m_value = pointerToValue(event.x, ctx);
                     applyStep();
                     if (m_onValueChanged) m_onValueChanged(m_value);
@@ -254,6 +256,10 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
         case UIInputEventType::PointerUp: {
             if (event.button == UIPointerButton::Primary && m_dragging) {
                 m_dragging = false;
+                m_handleScaleTween.start(m_handleScaleTween.value(),
+                                         m_handleHovered ? 1.12f : 1.0f,
+                                         0.1f,
+                                         EasingType::EaseOut);
                 return UIEventResult::Consumed;
             }
             break;
@@ -335,7 +341,7 @@ int UISlider::currentStyleState() const {
     }
 
     int state = static_cast<int>(UIStyleState_Normal);
-    if (m_handleHovered) {
+    if (m_handleHovered || m_dragging || isFocused()) {
         state |= static_cast<int>(UIStyleState_Hovered);
     }
     return state;

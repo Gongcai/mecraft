@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <algorithm>
+#include <cmath>
 #include <vector>
 #include <glad/glad.h>
 
@@ -19,6 +21,79 @@ namespace UIRenderUtils
         buf.push_back(x0); buf.push_back(y0);
         buf.push_back(x1); buf.push_back(y1);
         buf.push_back(x0); buf.push_back(y1);
+    }
+
+    inline void pushCircle(std::vector<float>& buf,
+                           float cx, float cy, float radius,
+                           int segments = 16)
+    {
+        if (radius <= 0.0f || segments < 3) {
+            return;
+        }
+
+        constexpr float kTwoPi = 6.28318530718f;
+        for (int i = 0; i < segments; ++i) {
+            const float a0 = static_cast<float>(i) * kTwoPi / static_cast<float>(segments);
+            const float a1 = static_cast<float>(i + 1) * kTwoPi / static_cast<float>(segments);
+            buf.push_back(cx); buf.push_back(cy);
+            buf.push_back(cx + std::cos(a0) * radius); buf.push_back(cy + std::sin(a0) * radius);
+            buf.push_back(cx + std::cos(a1) * radius); buf.push_back(cy + std::sin(a1) * radius);
+        }
+    }
+
+    inline void pushArcFan(std::vector<float>& buf,
+                           float cx, float cy, float radius,
+                           float startAngle, float endAngle,
+                           int segments)
+    {
+        if (radius <= 0.0f || segments < 1) {
+            return;
+        }
+
+        const float step = (endAngle - startAngle) / static_cast<float>(segments);
+        for (int i = 0; i < segments; ++i) {
+            const float a0 = startAngle + static_cast<float>(i) * step;
+            const float a1 = startAngle + static_cast<float>(i + 1) * step;
+            buf.push_back(cx); buf.push_back(cy);
+            buf.push_back(cx + std::cos(a0) * radius); buf.push_back(cy + std::sin(a0) * radius);
+            buf.push_back(cx + std::cos(a1) * radius); buf.push_back(cy + std::sin(a1) * radius);
+        }
+    }
+
+    inline void pushCapsule(std::vector<float>& buf,
+                            float x0, float y0, float x1, float y1,
+                            int segments = 16)
+    {
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+
+        constexpr float kPi = 3.14159265359f;
+        const int halfSegments = std::max(4, segments / 2);
+        const float w = x1 - x0;
+        const float h = y1 - y0;
+
+        if (w >= h) {
+            const float r = h * 0.5f;
+            const float cy = (y0 + y1) * 0.5f;
+            const float leftCx = x0 + r;
+            const float rightCx = x1 - r;
+            if (rightCx > leftCx) {
+                pushColorQuad(buf, leftCx, y0, rightCx, y1);
+            }
+            pushArcFan(buf, leftCx, cy, r, kPi * 0.5f, kPi * 1.5f, halfSegments);
+            pushArcFan(buf, rightCx, cy, r, -kPi * 0.5f, kPi * 0.5f, halfSegments);
+        } else {
+            const float r = w * 0.5f;
+            const float cx = (x0 + x1) * 0.5f;
+            const float bottomCy = y0 + r;
+            const float topCy = y1 - r;
+            if (topCy > bottomCy) {
+                pushColorQuad(buf, x0, bottomCy, x1, topCy);
+            }
+            pushArcFan(buf, cx, bottomCy, r, kPi, kPi * 2.0f, halfSegments);
+            pushArcFan(buf, cx, topCy, r, 0.0f, kPi, halfSegments);
+        }
     }
 
     // Push 6 vertices (2 triangles) for a textured quad into a buffer.

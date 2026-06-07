@@ -11,6 +11,24 @@
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
 
+namespace {
+Color scaledColor(Color color, float rgbScale, float alphaScale) {
+    color[0] = std::clamp(color[0] * rgbScale, 0.0f, 1.0f);
+    color[1] = std::clamp(color[1] * rgbScale, 0.0f, 1.0f);
+    color[2] = std::clamp(color[2] * rgbScale, 0.0f, 1.0f);
+    color[3] = std::clamp(color[3] * alphaScale, 0.0f, 1.0f);
+    return color;
+}
+
+Color accentFromSelection(Color color) {
+    color[0] = std::clamp(color[0] * 1.35f + 0.08f, 0.0f, 1.0f);
+    color[1] = std::clamp(color[1] * 1.35f + 0.08f, 0.0f, 1.0f);
+    color[2] = std::clamp(color[2] * 1.35f + 0.08f, 0.0f, 1.0f);
+    color[3] = 0.88f;
+    return color;
+}
+} // namespace
+
 UIDropdown::UIDropdown() {
     interactive = true;
     focusable = true;
@@ -139,10 +157,16 @@ UIEventResult UIDropdown::onOverlayInput(const UIInputEvent& event, const UIRend
 
 void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
     const UIResolvedDropdownStyle resolved = resolveStyle(ctx);
-    const Color bgCol = resolved.background;
-    const Color borderCol = resolved.border;
+    Color bgCol = resolved.background;
+    Color borderCol = resolved.border;
     const Color textCol = resolved.text;
-    const Color arrowCol = resolved.arrow;
+    Color arrowCol = resolved.arrow;
+    const bool active = m_hoveredCollapsed || isFocused() || m_expanded;
+    if (active) {
+        bgCol = scaledColor(bgCol, 0.80f, 1.06f);
+        borderCol = scaledColor(borderCol, 1.14f, 1.18f);
+        arrowCol = scaledColor(arrowCol, 1.12f, 1.0f);
+    }
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -187,19 +211,35 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
 
     // Arrow indicator (downward triangle at right side)
     {
+        Color wellCol = scaledColor(bgCol, active ? 0.78f : 0.88f, 1.0f);
+        wellCol[3] = std::min(1.0f, wellCol[3] * 0.84f);
+        m_shader->setVec4("uColor", glm::vec4(wellCol[0], wellCol[1], wellCol[2], wellCol[3] * alpha));
+        const float wellX = ax + aw - 32.0f;
+        float wellVerts[] = {
+            wellX, ay + 1.0f,  ax + aw - 1.0f, ay + 1.0f,  ax + aw - 1.0f, ay + ah - 1.0f,
+            wellX, ay + 1.0f,  ax + aw - 1.0f, ay + ah - 1.0f,  wellX, ay + ah - 1.0f,
+        };
+        glBufferSubData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float), sizeof(wellVerts), wellVerts);
+        glDrawArrays(GL_TRIANGLES, 30, 6);
+
         std::array<float, 4> c = arrowCol;
         c[3] *= alpha;
         m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
         float arrowSize = 8.0f;
         float acx = ax + aw - 16.0f;
         float acy = ay + ah * 0.5f;
-        float verts[] = {
-            acx - arrowSize * 0.5f, acy + arrowSize * 0.3f,
-            acx + arrowSize * 0.5f, acy + arrowSize * 0.3f,
-            acx, acy - arrowSize * 0.3f,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float), sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 30, 3);
+        float verts[6];
+        if (m_expanded) {
+            verts[0] = acx - arrowSize * 0.5f; verts[1] = acy - arrowSize * 0.3f;
+            verts[2] = acx + arrowSize * 0.5f; verts[3] = acy - arrowSize * 0.3f;
+            verts[4] = acx;                    verts[5] = acy + arrowSize * 0.3f;
+        } else {
+            verts[0] = acx - arrowSize * 0.5f; verts[1] = acy + arrowSize * 0.3f;
+            verts[2] = acx + arrowSize * 0.5f; verts[3] = acy + arrowSize * 0.3f;
+            verts[4] = acx;                    verts[5] = acy - arrowSize * 0.3f;
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 36 * 2 * sizeof(float), sizeof(verts), verts);
+        glDrawArrays(GL_TRIANGLES, 36, 3);
     }
 
     // Selected text
@@ -209,7 +249,7 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
             std::array<float, 4> tc = textCol;
             tc[3] *= alpha;
             float textY = ay + (ah - ctx.textRenderer->measureText(text, 2.0f).height) * 0.5f;
-            ctx.textRenderer->render(text, ax + 8.0f, textY, 2.0f, tc,
+            ctx.textRenderer->render(text, ax + 10.0f, textY, 2.0f, tc,
                                      static_cast<float>(ctx.screenWidth),
                                      static_cast<float>(ctx.screenHeight));
         }
@@ -232,7 +272,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     const Color hoverCol = resolved.itemHover;
     const Color selectedCol = resolved.itemSelected;
     const Color separatorCol = resolved.separator;
-    const Color accentCol = resolved.accent;
+    const Color accentCol = accentFromSelection(selectedCol);
     const Color textCol = resolved.text;
     const float itemHeight = resolved.itemHeight;
 
@@ -384,7 +424,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             std::array<float, 4> tc = textCol;
             tc[3] *= alpha * expandAlpha;
             if (isSelected) {
-                tc = {accentCol[0], accentCol[1], accentCol[2], tc[3]};
+                tc = {textCol[0], textCol[1], textCol[2], tc[3]};
             }
             float textX = isSelected ? ax + 10.0f : ax + 8.0f;
             float textY = itemY + (itemHeight - ctx.textRenderer->measureText(m_options[optIdx], 2.0f).height) * 0.5f;
@@ -452,6 +492,7 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
     if (m_expanded) {
         switch (event.type) {
             case UIInputEventType::PointerMove: {
+                m_hoveredCollapsed = insideCollapsed;
                 int newHovered = hitTestOption(event.x, event.y, ctx);
                 if (newHovered != m_hoveredOption) {
                     m_prevHoveredOption = m_hoveredOption;
@@ -470,6 +511,7 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
                     if (optIdx >= 0) {
                         m_selectedIndex = optIdx;
                         m_expanded = false;
+                        m_hoveredCollapsed = false;
                         m_hoveredOption = -1;
                         m_scrollOffset = 0.0f;
                         if (m_onSelectionChanged) m_onSelectionChanged(m_selectedIndex, m_options[m_selectedIndex]);
@@ -477,6 +519,7 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
                     }
                     if (!insideCollapsed) {
                         m_expanded = false;
+                        m_hoveredCollapsed = false;
                         m_hoveredOption = -1;
                         m_scrollOffset = 0.0f;
                         return UIEventResult::Consumed;
@@ -498,6 +541,7 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
             case UIInputEventType::Command: {
                 if (event.command == UICommand::Cancel) {
                     m_expanded = false;
+                    m_hoveredCollapsed = false;
                     m_hoveredOption = -1;
                     m_scrollOffset = 0.0f;
                     return UIEventResult::Consumed;
@@ -514,6 +558,7 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
                 if (event.command == UICommand::Activate && m_hoveredOption >= 0) {
                     m_selectedIndex = m_hoveredOption;
                     m_expanded = false;
+                    m_hoveredCollapsed = false;
                     m_hoveredOption = -1;
                     m_scrollOffset = 0.0f;
                     if (m_onSelectionChanged) m_onSelectionChanged(m_selectedIndex, m_options[m_selectedIndex]);
@@ -530,11 +575,13 @@ UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderConte
     // Collapsed state
     switch (event.type) {
         case UIInputEventType::PointerMove: {
+            m_hoveredCollapsed = insideCollapsed;
             return insideCollapsed ? UIEventResult::Handled : UIEventResult::Ignored;
         }
         case UIInputEventType::PointerDown: {
             if (event.button == UIPointerButton::Primary && insideCollapsed) {
                 m_expanded = true;
+                m_hoveredCollapsed = true;
                 m_hoveredOption = m_selectedIndex;
                 return UIEventResult::Consumed;
             }

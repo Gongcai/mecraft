@@ -1,6 +1,7 @@
 #include "UIRadioButton.h"
 
 #include <glad/glad.h>
+#include <algorithm>
 #include <cmath>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
@@ -165,29 +166,33 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
         const float cy = rowY + rowHeight * 0.5f;
         const float cx = ax + radioSz * 0.5f;
         const float outerR = radioSz * 0.5f;
-        const float innerR = outerR * 0.55f * opt.selectTween.value();
+        const float innerR = outerR * 0.48f * opt.selectTween.value();
 
-        // Build outer circle.
-        std::vector<float> verts;
-        verts.reserve(kBufferFloats);
-        pushCircle(verts, cx, cy, outerR);
-        if (innerR > 0.5f) {
-            pushCircle(verts, cx, cy, innerR);
-        }
+        auto drawCircle = [&](float radius, Color circleColor) {
+            std::vector<float> verts;
+            verts.reserve(kBufferFloats);
+            pushCircle(verts, cx, cy, radius);
+            glBufferSubData(GL_ARRAY_BUFFER, 0,
+                            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                            verts.data());
+            m_shader->setVec4("uColor",
+                              glm::vec4(circleColor[0], circleColor[1], circleColor[2], circleColor[3] * alpha));
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
+        };
 
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
-
-        // Draw outer circle.
         const Color oc = resolved.outer;
-        m_shader->setVec4("uColor", glm::vec4(oc[0], oc[1], oc[2], oc[3] * alpha));
-        glDrawArrays(GL_TRIANGLES, 0, kCircleSegments * 3);
+        drawCircle(outerR, oc);
 
-        // Draw inner circle.
+        Color wellCol {
+            std::clamp(oc[0] * 0.34f, 0.0f, 1.0f),
+            std::clamp(oc[1] * 0.34f, 0.0f, 1.0f),
+            std::clamp(oc[2] * 0.34f, 0.0f, 1.0f),
+            opt.hovered ? 0.82f : 0.70f,
+        };
+        drawCircle(outerR * 0.66f, wellCol);
+
         if (innerR > 0.5f) {
-            const Color innerCol = resolved.inner;
-            m_shader->setVec4("uColor", glm::vec4(innerCol[0], innerCol[1], innerCol[2], innerCol[3] * alpha));
-            glDrawArrays(GL_TRIANGLES, kCircleSegments * 3, kCircleSegments * 3);
+            drawCircle(innerR, resolved.inner);
         }
     }
 

@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <algorithm>
 #include <cstdio>
+#include <vector>
 
 #include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
@@ -65,13 +66,12 @@ void UIProgressBar::updateAnimations(float dt) {
 }
 
 void UIProgressBar::initMesh() {
-    // Track (6 verts) + Fill (6 verts) = 12 verts * 2 floats
-    constexpr int floatCount = 12 * 2;
+    constexpr int kMaxShapeVerts = 160;
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(floatCount * sizeof(float)),
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kMaxShapeVerts * 2 * sizeof(float)),
                  nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
@@ -101,34 +101,35 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
     const float progressVal = std::clamp(m_progressTween.value(), 0.0f, 1.0f);
     const float fillWidth = aw * progressVal;
 
-    // Build vertex data for track and fill.
-    std::vector<float> verts;
-    verts.reserve(24);
-    // Track: full width
-    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + aw, ay + ah);
-    // Fill: progress width
-    if (fillWidth > 0.5f) {
-        UIRenderUtils::pushColorQuad(verts, ax, ay, ax + fillWidth, ay + ah);
-    }
-
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
 
     m_shader->use();
     m_shader->setVec2("uScreenSize",
                       glm::vec2(static_cast<float>(ctx.screenWidth),
                                 static_cast<float>(ctx.screenHeight)));
 
-    // Draw track.
-    m_shader->setVec4("uColor", glm::vec4(trackCol[0], trackCol[1], trackCol[2], trackCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
+        if (verts.empty()) return;
+        shapeColor[3] *= alpha;
+        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                        verts.data());
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
+    };
 
-    // Draw fill.
+    std::vector<float> verts;
+    verts.reserve(160);
+
+    verts.clear();
+    UIRenderUtils::pushCapsule(verts, ax, ay, ax + aw, ay + ah);
+    drawShape(verts, trackCol);
+
     if (fillWidth > 0.5f) {
-        m_shader->setVec4("uColor", glm::vec4(fillCol[0], fillCol[1], fillCol[2], fillCol[3] * alpha));
-        glDrawArrays(GL_TRIANGLES, 6, 6);
+        verts.clear();
+        UIRenderUtils::pushCapsule(verts, ax, ay, ax + fillWidth, ay + ah);
+        drawShape(verts, fillCol);
     }
 
     glBindVertexArray(0);

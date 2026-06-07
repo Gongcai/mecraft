@@ -1,6 +1,8 @@
 #include "UICheckbox.h"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
@@ -9,6 +11,27 @@
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../core/UIRenderUtils.h"
+
+namespace {
+void pushThickSegment(std::vector<float>& buf,
+                      float x0, float y0,
+                      float x1, float y1,
+                      float thickness) {
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float len = std::sqrt(dx * dx + dy * dy);
+    if (len <= 0.001f) return;
+
+    const float nx = -dy / len * thickness * 0.5f;
+    const float ny = dx / len * thickness * 0.5f;
+    buf.push_back(x0 + nx); buf.push_back(y0 + ny);
+    buf.push_back(x1 + nx); buf.push_back(y1 + ny);
+    buf.push_back(x1 - nx); buf.push_back(y1 - ny);
+    buf.push_back(x0 + nx); buf.push_back(y0 + ny);
+    buf.push_back(x1 - nx); buf.push_back(y1 - ny);
+    buf.push_back(x0 - nx); buf.push_back(y0 - ny);
+}
+} // namespace
 
 UICheckbox::UICheckbox() {
     interactive = true;
@@ -68,8 +91,8 @@ void UICheckbox::initMesh() {
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Box (6) + border (24) + check mark (6) = 36 verts * 2 floats
-    glBufferData(GL_ARRAY_BUFFER, 36 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    // Box (6) + border (24) + check mark strokes (12) = 42 verts * 2 floats
+    glBufferData(GL_ARRAY_BUFFER, 42 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
     glBindVertexArray(0);
@@ -156,28 +179,34 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
         glDrawArrays(GL_TRIANGLES, 6, 24);
     }
 
-    // Check mark (inner filled square, scaled)
+    // Check mark, scaled from the center.
     if (m_checked) {
         float scale = m_checkScaleTween.value();
         if (scale > 0.01f) {
-            float padding = boxSize * 0.2f;
-            float innerSize = (boxSize - padding * 2.0f) * scale;
             float icx = (bx0 + bx1) * 0.5f;
             float icy = (by0 + by1) * 0.5f;
-            float ix0 = icx - innerSize * 0.5f;
-            float iy0 = icy - innerSize * 0.5f;
-            float ix1 = icx + innerSize * 0.5f;
-            float iy1 = icy + innerSize * 0.5f;
+
+            auto sx = [&](float localX) { return icx + (localX - icx) * scale; };
+            auto sy = [&](float localY) { return icy + (localY - icy) * scale; };
+            const float x0 = bx0 + boxSize * 0.25f;
+            const float y0 = by0 + boxSize * 0.52f;
+            const float x1 = bx0 + boxSize * 0.42f;
+            const float y1 = by0 + boxSize * 0.34f;
+            const float x2 = bx0 + boxSize * 0.76f;
+            const float y2 = by0 + boxSize * 0.70f;
+            const float thickness = std::max(2.0f, boxSize * 0.14f) * scale;
 
             std::array<float, 4> c = checkCol;
             c[3] *= alpha;
             m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            float verts[] = {
-                ix0, iy0,  ix1, iy0,  ix1, iy1,
-                ix0, iy0,  ix1, iy1,  ix0, iy1,
-            };
-            glBufferSubData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, 30, 6);
+            std::vector<float> verts;
+            verts.reserve(24);
+            pushThickSegment(verts, sx(x0), sy(y0), sx(x1), sy(y1), thickness);
+            pushThickSegment(verts, sx(x1), sy(y1), sx(x2), sy(y2), thickness);
+            glBufferSubData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float),
+                            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                            verts.data());
+            glDrawArrays(GL_TRIANGLES, 30, static_cast<GLsizei>(verts.size() / 2));
         }
     }
 
@@ -267,7 +296,7 @@ int UICheckbox::currentStyleState() const {
     }
 
     int state = static_cast<int>(UIStyleState_Normal);
-    if (m_hovered) {
+    if (m_hovered || isFocused()) {
         state |= static_cast<int>(UIStyleState_Hovered);
     }
     return state;

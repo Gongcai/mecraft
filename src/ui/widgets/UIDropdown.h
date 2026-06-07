@@ -56,6 +56,7 @@ private:
     std::vector<std::string> m_options;
     int m_selectedIndex = -1;
     bool m_expanded = false;
+    bool m_hoveredCollapsed = false;
     int m_hoveredOption = -1;
     float m_scrollOffset = 0.0f;
 

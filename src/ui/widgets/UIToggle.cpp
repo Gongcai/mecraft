@@ -2,26 +2,13 @@
 
 #include <glad/glad.h>
 #include <algorithm>
-#include <cmath>
+#include <vector>
 
 #include "../core/UIRenderUtils.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
-
-namespace {
-// Generate vertices for a filled circle approximated by a triangle fan.
-void pushCircle(std::vector<float>& buf, float cx, float cy, float radius, int segments) {
-    for (int i = 0; i < segments; ++i) {
-        const float a0 = static_cast<float>(i) * 2.0f * 3.14159265f / static_cast<float>(segments);
-        const float a1 = static_cast<float>(i + 1) * 2.0f * 3.14159265f / static_cast<float>(segments);
-        buf.push_back(cx); buf.push_back(cy);
-        buf.push_back(cx + std::cos(a0) * radius); buf.push_back(cy + std::sin(a0) * radius);
-        buf.push_back(cx + std::cos(a1) * radius); buf.push_back(cy + std::sin(a1) * radius);
-    }
-}
-} // namespace
 
 UIToggle::UIToggle() {
     interactive = true;
@@ -85,19 +72,13 @@ void UIToggle::toggle() {
 }
 
 void UIToggle::initMesh() {
-    // Track rect (6 verts) + knob circle (12 segments * 3 verts * 2 floats = 72 floats)
-    // Total: 6*2 + 72 = 84 floats for track, same structure for knob = track(12) + knob(72)
-    // We'll use dynamic buffer sized for track + circle.
-    constexpr int circleSegments = 12;
-    constexpr int trackFloats = 6 * 2;
-    constexpr int knobFloats = circleSegments * 3 * 2;
-    constexpr int totalFloats = trackFloats + knobFloats;
+    constexpr int kMaxShapeVerts = 128;
 
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(totalFloats * sizeof(float)),
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kMaxShapeVerts * 2 * sizeof(float)),
                  nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
@@ -133,39 +114,53 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
     const float knobCy = ay + trackRadius;
 
     // Interpolate track color.
-    const Color trackCol = {
+    Color trackCol = {
         trackOff[0] + (trackOn[0] - trackOff[0]) * t,
         trackOff[1] + (trackOn[1] - trackOff[1]) * t,
         trackOff[2] + (trackOn[2] - trackOff[2]) * t,
         trackOff[3] + (trackOn[3] - trackOff[3]) * t,
     };
-
-    // Build vertices.
-    std::vector<float> verts;
-    verts.reserve(12 + 12 * 3 * 2);
-    // Track rectangle (rounded look via full rect; the circle ends give rounded appearance).
-    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + toggleW, ay + toggleH);
-    // Knob circle.
-    constexpr int circleSegments = 12;
-    pushCircle(verts, knobCx, knobCy, knobRadius, circleSegments);
+    const bool active = m_hovered || isFocused();
+    if (active) {
+        trackCol[0] = std::clamp(trackCol[0] * 0.82f, 0.0f, 1.0f);
+        trackCol[1] = std::clamp(trackCol[1] * 0.82f, 0.0f, 1.0f);
+        trackCol[2] = std::clamp(trackCol[2] * 0.82f, 0.0f, 1.0f);
+        trackCol[3] = std::clamp(trackCol[3] * 1.08f, 0.0f, 1.0f);
+    }
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
 
     m_shader->use();
     m_shader->setVec2("uScreenSize",
                       glm::vec2(static_cast<float>(ctx.screenWidth),
                                 static_cast<float>(ctx.screenHeight)));
 
-    // Draw track.
-    m_shader->setVec4("uColor", glm::vec4(trackCol[0], trackCol[1], trackCol[2], trackCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
+        if (verts.empty()) return;
+        shapeColor[3] *= alpha;
+        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
+                        verts.data());
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
+    };
 
-    // Draw knob.
-    m_shader->setVec4("uColor", glm::vec4(knobCol[0], knobCol[1], knobCol[2], knobCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, 6, circleSegments * 3);
+    std::vector<float> verts;
+    verts.reserve(128);
+
+    verts.clear();
+    UIRenderUtils::pushCapsule(verts, ax, ay, ax + toggleW, ay + toggleH);
+    drawShape(verts, trackCol);
+
+    verts.clear();
+    Color knobShadow {0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
+    UIRenderUtils::pushCircle(verts, knobCx, knobCy - 1.0f, knobRadius + 1.5f);
+    drawShape(verts, knobShadow);
+
+    verts.clear();
+    UIRenderUtils::pushCircle(verts, knobCx, knobCy, knobRadius);
+    drawShape(verts, knobCol);
 
     glBindVertexArray(0);
 
@@ -246,7 +241,7 @@ int UIToggle::currentStyleState() const {
     }
 
     int state = static_cast<int>(UIStyleState_Normal);
-    if (m_hovered) {
+    if (m_hovered || isFocused()) {
         state |= static_cast<int>(UIStyleState_Hovered);
     }
     return state;
