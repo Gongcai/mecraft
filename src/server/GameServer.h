@@ -29,6 +29,7 @@ struct ConnectedClient {
     float lastYaw = 0.0f;
     float lastPitch = 0.0f;
     uint32_t lastAckedInput = 0;
+    uint32_t pendingInputActions = 0;
     net::TickId helloTick = 0;
     int viewDistance = 16;  // Client's render distance
     bool receivedHello = false;

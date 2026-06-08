@@ -25,6 +25,11 @@ enum class EntityKind : uint8_t {
 using ClientId = uint32_t;
 using TickId = uint32_t;
 
+namespace ClientInputActions {
+constexpr uint32_t Attack = 1u << 0;
+constexpr uint32_t UseItem = 1u << 1;
+}
+
 /// Network channel types, mapped to ENet channels in Phase 6.
 enum class PacketChannel : uint8_t {
     ReliableControl = 0,  // Login, handshake, disconnect, config

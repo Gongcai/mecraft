@@ -9,6 +9,7 @@
 #include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/systems/combat/DamageSystem.h"
 #include "../ecs/systems/combat/DeathSystem.h"
+#include "../ecs/systems/combat/PlayerMeleeSystem.h"
 #include "../ecs/systems/item/ItemLifetimeSystem.h"
 #include "../ecs/systems/item/ItemMergeSystem.h"
 #include "../ecs/systems/item/ItemPhysicsSystem.h"
@@ -102,6 +103,28 @@ const char* weatherName(const WeatherType type) {
         return "clear";
     }
 }
+
+bool hasInputAction(const uint32_t actions, const uint32_t bit) {
+    return (actions & bit) != 0u;
+}
+
+void updateCameraStateFromClient(ecs::CameraStateComponent& camera,
+                                 const float yaw,
+                                 const float pitch) {
+    constexpr float kDegreesToRadians = 0.017453292519943295f;
+    camera.yaw = yaw;
+    camera.pitch = pitch;
+
+    const float yawRad = yaw * kDegreesToRadians;
+    const float pitchRad = pitch * kDegreesToRadians;
+    const glm::vec3 front(std::cos(yawRad) * std::cos(pitchRad),
+                          std::sin(pitchRad),
+                          std::sin(yawRad) * std::cos(pitchRad));
+    camera.front = glm::length(front) > 0.001f ? glm::normalize(front) : glm::vec3(1.0f, 0.0f, 0.0f);
+    const glm::vec3 right = glm::cross(camera.front, glm::vec3(0.0f, 1.0f, 0.0f));
+    camera.right = glm::length(right) > 0.001f ? glm::normalize(right) : glm::vec3(1.0f, 0.0f, 0.0f);
+    camera.up = glm::normalize(glm::cross(camera.right, camera.front));
+}
 }
 
 GameServer::GameServer() = default;
@@ -185,6 +208,11 @@ void GameServer::syncOwnedPlayerProxies() {
             client.ecsPlayerEntity = reg.create();
             reg.emplace<ecs::LocalPlayerTag>(client.ecsPlayerEntity);
             reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, client.lastPosition, 1.62f);
+            reg.emplace<ecs::CameraStateComponent>(client.ecsPlayerEntity);
+            reg.emplace<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
+            reg.emplace<ecs::BlockTargetComponent>(client.ecsPlayerEntity);
+            reg.emplace<ecs::BlockInteractionRuntimeComponent>(client.ecsPlayerEntity);
+            reg.emplace<ecs::MeleeAttackComponent>(client.ecsPlayerEntity);
             reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
             reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
             auto& velocity = reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
@@ -211,6 +239,29 @@ void GameServer::syncOwnedPlayerProxies() {
                 reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
             }
         }
+
+        if (!reg.all_of<ecs::CameraStateComponent>(client.ecsPlayerEntity)) {
+            reg.emplace<ecs::CameraStateComponent>(client.ecsPlayerEntity);
+        }
+        if (!reg.all_of<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity)) {
+            reg.emplace<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
+        }
+        if (!reg.all_of<ecs::BlockTargetComponent>(client.ecsPlayerEntity)) {
+            reg.emplace<ecs::BlockTargetComponent>(client.ecsPlayerEntity);
+        }
+        if (!reg.all_of<ecs::BlockInteractionRuntimeComponent>(client.ecsPlayerEntity)) {
+            reg.emplace<ecs::BlockInteractionRuntimeComponent>(client.ecsPlayerEntity);
+        }
+        if (!reg.all_of<ecs::MeleeAttackComponent>(client.ecsPlayerEntity)) {
+            reg.emplace<ecs::MeleeAttackComponent>(client.ecsPlayerEntity);
+        }
+
+        auto& camera = reg.get<ecs::CameraStateComponent>(client.ecsPlayerEntity);
+        updateCameraStateFromClient(camera, client.lastYaw, client.lastPitch);
+
+        auto& blockIntent = reg.get<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
+        blockIntent.wantsBreak = hasInputAction(client.pendingInputActions, net::ClientInputActions::Attack);
+        blockIntent.wantsPlace = hasInputAction(client.pendingInputActions, net::ClientInputActions::UseItem);
     }
 }
 
@@ -236,6 +287,8 @@ void GameServer::tickServerEcs(const float dt) {
     mobAI.update(ctx);
     ecs::CharacterPhysicsSystem characterPhysics;
     characterPhysics.update(ctx);
+    ecs::PlayerMeleeSystem playerMelee;
+    playerMelee.update(ctx);
     ecs::DamageSystem damage;
     damage.update(ctx);
     ecs::DeathSystem death;
@@ -246,6 +299,10 @@ void GameServer::tickServerEcs(const float dt) {
     itemMerge.update(ctx);
     ecs::ItemLifetimeSystem itemLifetime;
     itemLifetime.update(ctx);
+
+    for (auto& client : m_clients) {
+        client.pendingInputActions = 0;
+    }
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance) {
@@ -513,6 +570,7 @@ void GameServer::processClientMessages() {
                     client.lastVelocity = input.playerVelocity;
                     client.lastYaw = input.yaw;
                     client.lastPitch = input.pitch;
+                    client.pendingInputActions |= input.actions;
                 }
                 break;
             }
@@ -618,6 +676,7 @@ void GameServer::cleanupDisconnectedClients() {
         client.receivedHello = false;
         client.receivedViewConfig = false;
         client.lastAckedInput = 0;
+        client.pendingInputActions = 0;
         client.helloTick = 0;
         client.sentChunks.clear();
         client.spawnedPlayerNetIds.clear();

@@ -43,7 +43,8 @@ public:
                    const glm::vec3& playerPosition,
                    const glm::vec3& playerVelocity,
                    float yaw,
-                   float pitch);
+                   float pitch,
+                   uint32_t actions = 0);
 
     /// Send an authoritative block action request to the server.
     void sendBlockAction(const net::ClientBlockAction& action);

@@ -7,6 +7,7 @@
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
+#include "item/Item.h"
 #include "world/World.h"
 #include "world/DayNightSystem.h"
 #include "world/WeatherSystem.h"
@@ -62,6 +63,13 @@ static float horizontalDistanceSq(const glm::vec3& a, const glm::vec3& b) {
     const float dx = a.x - b.x;
     const float dz = a.z - b.z;
     return dx * dx + dz * dz;
+}
+
+static void require(const bool condition, const char* message) {
+    if (!condition) {
+        std::fprintf(stderr, "[FAIL] %s\n", message);
+        std::abort();
+    }
 }
 
 static void testServerInit() {
@@ -364,17 +372,18 @@ static void testSummonZombieSpawnsNetworkMob() {
         }
     }
 
-    assert(sawCommandResult);
-    assert(sawMobSpawn);
-    assert(spawnedNetId != 0);
+    require(sawCommandResult, "external registry summon should return a successful command result");
+    require(sawMobSpawn, "external registry summon should send a mob spawn");
+    require(spawnedNetId != 0, "external registry summon should assign a mob net id");
 
     auto view = registry.registry().view<ecs::MobTag,
                                         ecs::HealthComponent,
                                         ecs::NetworkSyncTag,
                                         ecs::EntityNetIdComponent>();
-    assert(view.begin() != view.end());
+    require(view.begin() != view.end(), "external registry summon should create a networked mob");
     const entt::entity zombie = *view.begin();
-    assert(registry.registry().get<ecs::EntityNetIdComponent>(zombie).netId == spawnedNetId);
+    require(registry.registry().get<ecs::EntityNetIdComponent>(zombie).netId == spawnedNetId,
+            "external registry mob net id should match spawn packet");
     std::printf("[PASS] testSummonZombieSpawnsNetworkMob\n");
 }
 
@@ -425,7 +434,7 @@ static void testSummonZombieUsesOwnedServerEcs() {
     }
 
     assert(sawCommandResult);
-    assert(sawMobSpawn);
+    require(sawMobSpawn, "owned ECS pursue test should receive mob spawn");
     std::printf("[PASS] testSummonZombieUsesOwnedServerEcs\n");
 }
 
@@ -505,10 +514,117 @@ static void testOwnedServerZombiePursuesPlayer() {
         }
     }
 
-    assert(sawMovingSnapshot);
-    assert(horizontalDistanceSq(latestZombiePosition, playerPosition) <
-           horizontalDistanceSq(initialZombiePosition, playerPosition));
+    require(sawMovingSnapshot, "owned ECS zombie should send moving snapshots");
+    require(horizontalDistanceSq(latestZombiePosition, playerPosition) <
+            horizontalDistanceSq(initialZombiePosition, playerPosition),
+            "owned ECS zombie should move closer to the player");
     std::printf("[PASS] testOwnedServerZombiePursuesPlayer\n");
+}
+
+static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet positionPacket;
+    positionPacket.type = net::MessageType::ClientInput;
+    net::ClientInput positionInput;
+    positionInput.sequence = 1;
+    positionInput.playerPosition = playerPosition;
+    positionInput.playerVelocity = glm::vec3(0.0f);
+    positionInput.yaw = 0.0f;
+    positionInput.pitch = 0.0f;
+    positionPacket.inProcessPayload = positionInput;
+    clientPtr->pushIncoming(std::move(positionPacket));
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 21;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    net::EntityNetId zombieNetId = 0;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                zombieNetId = spawn.netId;
+            }
+        }
+    }
+    require(zombieNetId != 0, "melee test should receive zombie net id");
+
+    bool sawZombieDespawn = false;
+    bool sawDropSpawn = false;
+    uint32_t inputSequence = 100;
+
+    auto drainEntityPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntityDespawn && packet.inProcessPayload.has_value()) {
+                const auto& despawn = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
+                sawZombieDespawn = sawZombieDespawn || despawn.netId == zombieNetId;
+            }
+            if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                sawDropSpawn = sawDropSpawn || spawn.kind == net::EntityKind::Drop;
+            }
+        }
+    };
+
+    auto pushInput = [&](const uint32_t actions) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = ++inputSequence;
+        input.playerPosition = playerPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = 0.0f;
+        input.actions = actions;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    for (int attempt = 0; attempt < 7 && !sawZombieDespawn; ++attempt) {
+        pushInput(net::ClientInputActions::Attack);
+        harness.server.tick(1.0f / 20.0f);
+        drainEntityPackets();
+
+        for (int cooldownTick = 0; cooldownTick < 10 && !sawZombieDespawn; ++cooldownTick) {
+            pushInput(0);
+            harness.server.tick(1.0f / 20.0f);
+            drainEntityPackets();
+        }
+    }
+
+    require(sawZombieDespawn, "server melee should despawn the killed zombie");
+    require(sawDropSpawn, "server melee zombie death should spawn a drop");
+    std::printf("[PASS] testOwnedServerPlayerMeleeKillsZombieAndDropsItem\n");
 }
 
 static void testPersistentZombieRestoresFromSave() {
@@ -545,17 +661,17 @@ static void testPersistentZombieRestoresFromSave() {
                                             ecs::MobAIComponent,
                                             ecs::PhysicsBodyComponent,
                                             ecs::NetworkSyncTag>();
-        assert(view.begin() != view.end());
+        require(view.begin() != view.end(), "persistent zombie restore should create a mob");
         const entt::entity zombie = *view.begin();
         const auto& transform = registry.registry().get<ecs::TransformComponent>(zombie);
         const auto& health = registry.registry().get<ecs::HealthComponent>(zombie);
         const auto& ai = registry.registry().get<ecs::MobAIComponent>(zombie);
         const auto& body = registry.registry().get<ecs::PhysicsBodyComponent>(zombie);
-        assert(transform.position.x == 4.0f);
-        assert(transform.position.z == -2.0f);
-        assert(health.current == 9);
-        assert(ai.yaw == 135.0f);
-        assert(body.body.velocity.z == -0.5f);
+        require(transform.position.x == 4.0f, "persistent zombie restore should keep X position");
+        require(transform.position.z == -2.0f, "persistent zombie restore should keep Z position");
+        require(health.current == 9, "persistent zombie restore should keep health");
+        require(ai.yaw == 135.0f, "persistent zombie restore should keep yaw");
+        require(body.body.velocity.z == -0.5f, "persistent zombie restore should keep velocity");
 
         server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
         server.shutdown();
@@ -603,7 +719,7 @@ static void testOwnedServerEcsRestoresPersistentZombie() {
                 sawMobSpawn = sawMobSpawn || spawn.kind == net::EntityKind::Mob;
             }
         }
-        assert(sawMobSpawn);
+        require(sawMobSpawn, "owned ECS save setup should spawn a mob");
 
         server.savePersistentEntities();
         server.shutdown();
@@ -631,7 +747,7 @@ static void testOwnedServerEcsRestoresPersistentZombie() {
                 sawMobSpawn = sawMobSpawn || (spawn.kind == net::EntityKind::Mob && spawn.netId != 0);
             }
         }
-        assert(sawMobSpawn);
+        require(sawMobSpawn, "owned ECS restore should send restored mob spawn");
         server.shutdown();
     }
 
@@ -1029,6 +1145,7 @@ static void testENetChunkStreamingAfterPreconnectTicks() {
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     BlockRegistry::init(nullptr);
+    ItemRegistry::init();
 
     testServerInit();
     testAcceptClient();
@@ -1043,6 +1160,7 @@ int main() {
     testSummonZombieSpawnsNetworkMob();
     testSummonZombieUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
+    testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
     testPersistentZombieRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();

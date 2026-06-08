@@ -20,6 +20,8 @@
 #include "../../engine/platform/Time.h"
 #include "../../ecs/GameplayScene.h"
 #include "../../ecs/components/Components.h"
+#include "../../ecs/util/InputFrameState.h"
+#include "../../net/Protocol.h"
 #include "../../world/World.h"
 #include "../../player/Inventory.h"
 #include "../../renderer/overlays/BlockInteractionOverlayRenderer.h"
@@ -34,7 +36,8 @@ void sendClientInput(GameSession& session, const float fixedStep) {
         return;
     }
 
-    auto& reg = session.gameplayScene().registry().registry();
+    auto& gameplayRegistry = session.gameplayScene().registry();
+    auto& reg = gameplayRegistry.registry();
     auto view = reg.view<ecs::LocalPlayerTag,
                          ecs::MoveIntentComponent,
                          ecs::LookIntentComponent,
@@ -47,6 +50,16 @@ void sendClientInput(GameSession& session, const float fixedStep) {
         const auto& transform = view.get<ecs::TransformComponent>(entity);
         const auto& physics = view.get<ecs::PhysicsBodyComponent>(entity);
         const auto& camera = view.get<ecs::CameraStateComponent>(entity);
+        uint32_t actions = 0;
+        if (gameplayRegistry.ctxHas<ecs::InputFrameState>()) {
+            const auto& frame = gameplayRegistry.ctxGet<ecs::InputFrameState>();
+            if (frame.gameplayContextActive && frame.attack) {
+                actions |= net::ClientInputActions::Attack;
+            }
+            if (frame.gameplayContextActive && frame.useItem) {
+                actions |= net::ClientInputActions::UseItem;
+            }
+        }
         session.client().sendInput(fixedStep,
                                    glm::vec3(move.move.x, 0.0f, move.move.y),
                                    glm::vec2(look.deltaX, look.deltaY),
@@ -56,7 +69,8 @@ void sendClientInput(GameSession& session, const float fixedStep) {
                                    transform.position,
                                    physics.body.velocity,
                                    camera.yaw,
-                                   camera.pitch);
+                                   camera.pitch,
+                                   actions);
         return;
     }
 }
