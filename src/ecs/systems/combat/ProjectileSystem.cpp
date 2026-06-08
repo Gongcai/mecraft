@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../../entity/EntityFactory.h"
+#include "../../components/NetworkComponents.h"
 #include "../../util/DamageEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../util/ParticleEventBuffer.h"
@@ -43,6 +44,29 @@ void emitProjectileImpactParticles(GameplayRegistry& registry,
         return;
     }
     ensureParticleEventBus(registry).push(makeImpactParticleEvent(position, blockType));
+}
+
+void queueProjectileDespawn(entt::registry& reg,
+                            const entt::entity projectile,
+                            std::vector<entt::entity>& destroyList) {
+    if (reg.all_of<EntityNetIdComponent>(projectile)) {
+        reg.emplace_or_replace<PendingNetworkDespawnTag>(projectile);
+        return;
+    }
+    destroyList.push_back(projectile);
+}
+
+void queueProjectileImpactDespawn(entt::registry& reg,
+                                  const entt::entity projectile,
+                                  const glm::vec3& position,
+                                  const BlockID particleBlock,
+                                  std::vector<entt::entity>& destroyList) {
+    if (reg.all_of<EntityNetIdComponent>(projectile)) {
+        reg.emplace_or_replace<EntityImpactComponent>(projectile, position, particleBlock);
+        reg.emplace_or_replace<PendingNetworkDespawnTag>(projectile);
+        return;
+    }
+    destroyList.push_back(projectile);
 }
 
 void mobBounds(entt::registry& registry,
@@ -216,7 +240,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
 
         lifetime.ageSeconds += dt;
         if (lifetime.ageSeconds >= lifetime.lifeTimeSeconds) {
-            destroyList.push_back(projectile);
+            queueProjectileDespawn(reg, projectile, destroyList);
             continue;
         }
 
@@ -235,7 +259,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
             BlockID hitBlock = 0;
             if (isSolidBlockAt(worldView, transform.position, hitBlock)) {
                 emitProjectileImpactParticles(registry, transform.position, hitBlock);
-                destroyList.push_back(projectile);
+                queueProjectileImpactDespawn(reg, projectile, transform.position, hitBlock, destroyList);
                 destroyed = true;
                 break;
             }
@@ -247,7 +271,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
                     ? projectileData.entityImpactParticleBlock
                     : defaultProjectileEntityImpactParticleBlock();
                 emitProjectileImpactParticles(registry, transform.position, impactBlock);
-                destroyList.push_back(projectile);
+                queueProjectileImpactDespawn(reg, projectile, transform.position, impactBlock, destroyList);
                 destroyed = true;
                 break;
             }

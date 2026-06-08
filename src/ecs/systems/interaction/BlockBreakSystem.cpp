@@ -113,8 +113,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
 
             const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
-            audioBus.push(
-                {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
+            audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
             ++runtime.heldItemSwingSequence;
@@ -155,8 +154,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             }
             const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
-            audioBus.push(
-                {gameplay_state_detail::getRandomName("put", 5), glm::vec3(hitBlock), true, 1.0f});
+            audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             dropBus.push({brokenBlock, hitBlock});
             ++runtime.heldItemSwingSequence;

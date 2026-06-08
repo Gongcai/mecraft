@@ -169,8 +169,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             static_cast<void>(inventory.consumeSelectedOne());
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
-        audioBus.push(
-            {gameplay_state_detail::getRandomName("put", 5), glm::vec3(placeBlock), true, 1.0f});
+        audioBus.push({"block.generic.place", glm::vec3(placeBlock), true, 1.0f});
         ++runtime.heldItemSwingSequence;
     }
 }

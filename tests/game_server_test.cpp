@@ -1263,6 +1263,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
     require(zombieNetId != 0, "apple projectile test should receive zombie net id");
 
     bool sawProjectileSpawn = false;
+    bool sawProjectileImpact = false;
     bool sawProjectileDespawn = false;
     bool sawAppleConsumed = false;
     bool sawZombieDespawn = false;
@@ -1286,6 +1287,13 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
                     sawProjectileDespawn ||
                     std::find(projectileNetIds.begin(), projectileNetIds.end(), despawn.netId) != projectileNetIds.end();
             }
+            if (packet.type == net::MessageType::EntityImpact && packet.inProcessPayload.has_value()) {
+                const auto& impact = std::any_cast<const net::EntityImpactMessage&>(packet.inProcessPayload);
+                sawProjectileImpact =
+                    sawProjectileImpact ||
+                    (impact.particleBlockId != 0 &&
+                     std::find(projectileNetIds.begin(), projectileNetIds.end(), impact.netId) != projectileNetIds.end());
+            }
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
                 const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
                 sawAppleConsumed = sawAppleConsumed ||
@@ -1307,6 +1315,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
     }
 
     require(sawProjectileSpawn, "using a selected apple should spawn a projectile entity");
+    require(sawProjectileImpact, "apple projectile impact should be broadcast before despawn");
     require(sawProjectileDespawn, "apple projectile should despawn after impact");
     require(sawAppleConsumed, "throwing an apple should consume it from authoritative inventory");
     require(sawZombieDespawn, "apple projectiles should damage and eventually kill the zombie");
@@ -1589,6 +1598,32 @@ static void testClientInputCodecCarriesSelectedHotbarSlot() {
     require(legacyDecoded.selectedHotbarSlot == 0,
             "legacy client input payload should default selected slot to zero");
     std::printf("[PASS] testClientInputCodecCarriesSelectedHotbarSlot\n");
+}
+
+static void testEntityImpactCodecRoundTrip() {
+    net::EntityImpactMessage impact;
+    impact.netId = 123;
+    impact.position = glm::vec3(1.25f, 64.5f, -3.75f);
+    impact.particleBlockId = static_cast<uint16_t>(BlockIds::STONE);
+
+    const auto encoded = net::PacketCodec::encodeEntityImpact(impact);
+    require(encoded.size() == 18, "entity impact codec should write net id, position, and particle block");
+
+    net::EntityImpactMessage decoded;
+    require(net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size(), decoded),
+            "entity impact codec should decode payload");
+    require(decoded.netId == impact.netId, "entity impact codec should keep net id");
+    require(decoded.position.x == impact.position.x &&
+            decoded.position.y == impact.position.y &&
+            decoded.position.z == impact.position.z,
+            "entity impact codec should keep impact position");
+    require(decoded.particleBlockId == impact.particleBlockId,
+            "entity impact codec should keep particle block id");
+
+    net::EntityImpactMessage truncated;
+    require(!net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size() - 1, truncated),
+            "entity impact codec should reject truncated payload");
+    std::printf("[PASS] testEntityImpactCodecRoundTrip\n");
 }
 
 static void testServerSnapshotCodecCarriesPlayerHealth() {
@@ -2065,6 +2100,7 @@ int main() {
     testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();
     testClientInputCodecCarriesSelectedHotbarSlot();
+    testEntityImpactCodecRoundTrip();
     testServerSnapshotCodecCarriesPlayerHealth();
     testInventorySnapshotCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();

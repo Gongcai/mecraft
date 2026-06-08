@@ -28,6 +28,7 @@ const char* messageTypeName(MessageType type) {
     case MessageType::WorldStateSnapshot: return "WorldStateSnapshot";
     case MessageType::PlayerModeUpdate: return "PlayerModeUpdate";
     case MessageType::InventorySnapshot: return "InventorySnapshot";
+    case MessageType::EntityImpact: return "EntityImpact";
     case MessageType::ChunkData: return "ChunkData";
     case MessageType::ServerSnapshot: return "ServerSnapshot";
     case MessageType::ClientInput: return "ClientInput";
@@ -325,6 +326,13 @@ void ENetTransport::poll() {
                     }
                     break;
                 }
+                case MessageType::EntityImpact: {
+                    EntityImpactMessage msg;
+                    if (PacketCodec::decodeEntityImpact(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
                 case MessageType::EntitySnapshot: {
                     EntitySnapshotMessage msg;
                     if (PacketCodec::decodeEntitySnapshot(packet.payload.data(), packet.payload.size(), msg)) {
@@ -585,6 +593,10 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
     case MessageType::EntityDespawn:
         typedPayload = PacketCodec::encodeEntityDespawn(
             std::any_cast<const EntityDespawnMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::EntityImpact:
+        typedPayload = PacketCodec::encodeEntityImpact(
+            std::any_cast<const EntityImpactMessage&>(packet.inProcessPayload));
         break;
     case MessageType::EntitySnapshot:
         typedPayload = PacketCodec::encodeEntitySnapshot(

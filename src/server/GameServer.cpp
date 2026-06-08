@@ -1693,11 +1693,21 @@ net::EntitySpawnMessage GameServer::makeEntitySpawnMessage(const ecs::EntityNetI
 }
 
 void GameServer::syncEntitiesToClients() {
-    if (!m_ecsRegistry || m_clients.empty()) {
+    if (!m_ecsRegistry) {
         return;
     }
 
     auto& reg = *m_ecsRegistry;
+
+    auto sendToConnectedClients = [this](const net::Packet& packet) {
+        for (auto& client : m_clients) {
+            if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+                continue;
+            }
+            net::Packet copy = packet;
+            client.transport->send(std::move(copy));
+        }
+    };
 
     // 1. Detect new entities with NetworkSyncTag that don't have EntityNetId yet
     auto newSyncView = reg.view<ecs::NetworkSyncTag>(entt::exclude<ecs::EntityNetIdComponent>);
@@ -1707,7 +1717,55 @@ void GameServer::syncEntitiesToClients() {
         ++m_nextNetId;
     }
 
-    // 2. Detect despawned entities (entities in m_syncedEntities that are no longer valid)
+    // 2. Send final impact/despawn events for entities intentionally retired by ECS systems.
+    std::vector<ecs::EntityNetId> pendingNetworkDespawns;
+    for (const auto& [netId, entity] : m_syncedEntities) {
+        if (reg.valid(entity) && reg.all_of<ecs::PendingNetworkDespawnTag>(entity)) {
+            pendingNetworkDespawns.push_back(netId);
+        }
+    }
+
+    for (const ecs::EntityNetId netId : pendingNetworkDespawns) {
+        auto syncedIt = m_syncedEntities.find(netId);
+        if (syncedIt == m_syncedEntities.end()) {
+            continue;
+        }
+
+        const entt::entity entity = syncedIt->second;
+        if (reg.valid(entity)) {
+            if (const auto* impact = reg.try_get<ecs::EntityImpactComponent>(entity);
+                impact != nullptr && impact->particleBlock != 0) {
+                net::Packet impactPacket;
+                impactPacket.channel = net::PacketChannel::ReliableWorld;
+                impactPacket.type = net::MessageType::EntityImpact;
+                net::EntityImpactMessage impactMsg;
+                impactMsg.netId = netId;
+                impactMsg.position = impact->position;
+                impactMsg.particleBlockId = static_cast<uint16_t>(impact->particleBlock);
+                impactPacket.inProcessPayload = impactMsg;
+                sendToConnectedClients(impactPacket);
+            }
+        }
+
+        for (auto& client : m_clients) {
+            client.spawnedEntityNetIds.erase(netId);
+        }
+
+        net::Packet despawnPacket;
+        despawnPacket.channel = net::PacketChannel::ReliableWorld;
+        despawnPacket.type = net::MessageType::EntityDespawn;
+        net::EntityDespawnMessage despawnMsg;
+        despawnMsg.netId = netId;
+        despawnPacket.inProcessPayload = despawnMsg;
+        sendToConnectedClients(despawnPacket);
+
+        if (reg.valid(entity)) {
+            reg.destroy(entity);
+        }
+        m_syncedEntities.erase(syncedIt);
+    }
+
+    // 3. Detect despawned entities (entities in m_syncedEntities that are no longer valid)
     std::vector<ecs::EntityNetId> toDespawn;
     for (const auto& [netId, entity] : m_syncedEntities) {
         if (!reg.valid(entity)) {
@@ -1735,7 +1793,7 @@ void GameServer::syncEntitiesToClients() {
         m_syncedEntities.erase(netId);
     }
 
-    // 3. Send spawn messages once per connected client.
+    // 4. Send spawn messages once per connected client.
     for (auto& client : m_clients) {
         if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
             continue;
@@ -1760,7 +1818,7 @@ void GameServer::syncEntitiesToClients() {
         }
     }
 
-    // 4. Build and send entity snapshots (batch of all synced entities)
+    // 5. Build and send entity snapshots (batch of all synced entities)
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = m_currentTick;
 

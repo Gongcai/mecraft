@@ -267,6 +267,17 @@ public:
         return buf;
     }
 
+    /// Encode an EntityImpact message into payload bytes.
+    static std::vector<uint8_t> encodeEntityImpact(const EntityImpactMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.netId);
+        pushFloat(buf, msg.position.x);
+        pushFloat(buf, msg.position.y);
+        pushFloat(buf, msg.position.z);
+        pushU16(buf, msg.particleBlockId);
+        return buf;
+    }
+
     /// Encode an EntitySnapshot message into payload bytes.
     static std::vector<uint8_t> encodeEntitySnapshot(const EntitySnapshotMessage& msg) {
         std::vector<uint8_t> buf;
@@ -638,6 +649,17 @@ public:
         if (size < 4) return false;
         size_t offset = 0;
         out.netId = readU32(data, offset);
+        return true;
+    }
+
+    static bool decodeEntityImpact(const uint8_t* data, size_t size, EntityImpactMessage& out) {
+        if (size < 18) return false;
+        size_t offset = 0;
+        out.netId = readU32(data, offset);
+        out.position.x = readFloat(data, offset);
+        out.position.y = readFloat(data, offset);
+        out.position.z = readFloat(data, offset);
+        out.particleBlockId = readU16(data, offset);
         return true;
     }
 

@@ -57,6 +57,7 @@ find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenAL CONFIG REQUIRED)
+find_package(Vorbis CONFIG REQUIRED COMPONENTS File)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
 
@@ -320,9 +321,12 @@ set(SRC_PARTICLE src/particle/ParticleSystem.cpp src/particle/RainRenderer.cpp)
 set(SRC_ITEM src/item/Item.cpp)
 set(SRC_CRAFTING src/crafting/CraftingSystem.cpp)
 set(SRC_AUDIO
+        src/audio/AudioCatalog.cpp
         src/audio/AudioEngine.cpp
         src/audio/BgmSystem.cpp
         src/audio/AudioClip.cpp
+        src/audio/AudioDecoders.cpp
+        src/audio/AudioFileDiscovery.cpp
         src/audio/AudioSource.cpp
         src/audio/AudioListener.cpp
 )
@@ -449,6 +453,7 @@ target_link_libraries(mecraft_core PUBLIC
         glm::glm
         nlohmann_json::nlohmann_json
         OpenAL::OpenAL
+        Vorbis::vorbisfile
         Freetype::Freetype
         EnTT::EnTT
 )
@@ -541,6 +546,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(terrain_tree_generation_test tests/terrain_tree_generation_test.cpp)
     add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
     add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
+    add_mecraft_test(audio_asset_decode_test tests/audio_asset_decode_test.cpp)
+    add_mecraft_test(audio_catalog_test tests/audio_catalog_test.cpp)
+    add_mecraft_test(audio_decoder_registry_test tests/audio_decoder_registry_test.cpp)
     add_mecraft_test(audio_test tests/audio_test.cpp)
     add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
     add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)

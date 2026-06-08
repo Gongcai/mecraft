@@ -5,6 +5,7 @@
 #include "../ecs/components/NetworkComponents.h"
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <entt/entt.hpp>
 
 class ResourceMgr;
@@ -30,6 +31,9 @@ public:
 
     /// Handle an EntityDespawn message from the server.
     void handleDespawn(const net::EntityDespawnMessage& msg);
+
+    /// Handle an EntityImpact message from the server.
+    void handleImpact(const net::EntityImpactMessage& msg);
 
     /// Handle an EntitySnapshot message from the server (batch position update).
     void handleSnapshot(const net::EntitySnapshotMessage& msg);
@@ -57,7 +61,9 @@ private:
 
     std::vector<net::EntitySpawnMessage> m_pendingSpawns;
     std::vector<net::EntityDespawnMessage> m_pendingDespawns;
+    std::vector<net::EntityImpactMessage> m_pendingImpacts;
     std::vector<net::EntitySnapshotMessage> m_pendingSnapshots;
+    std::unordered_set<net::EntityNetId> m_explicitImpactNetIds;
 };
 
 } // namespace client

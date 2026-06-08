@@ -4,17 +4,7 @@
 #include "AudioEngine.h"
 
 #include <algorithm>
-#include <cctype>
-#include <filesystem>
 #include <iostream>
-
-namespace fs = std::filesystem;
-
-namespace {
-std::string pathToUtf8(const fs::path& p) {
-    return p.u8string();
-}
-}
 
 void BgmSystem::init(AudioEngine& audioEngine) {
     m_audioEngine = &audioEngine;
@@ -61,35 +51,16 @@ void BgmSystem::setVolume(const float volume) {
 void BgmSystem::buildPlaylist() {
     m_playlist.clear();
 
-    const fs::path bgmDir = BGM_DIR;
-    if (!fs::exists(bgmDir)) {
-        std::cerr << "[Audio] BGM directory not found: " << bgmDir << std::endl;
+    if (!m_audioEngine->loadCatalog(BGM_CATALOG_PATH, BGM_DIR, "bgm", false)) {
+        std::cerr << "[Audio] Failed to load BGM catalog: " << BGM_CATALOG_PATH << std::endl;
         return;
     }
 
-    for (const auto& entry : fs::directory_iterator(bgmDir)) {
-        if (!entry.is_regular_file()) {
-            continue;
-        }
-
-        const fs::path path = entry.path();
-        std::string ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (ext != ".wav") {
-            continue;
-        }
-
-        const std::string clipName = "bgm/" + pathToUtf8(path.stem());
-        if (m_audioEngine->registerClipFromPath(clipName, pathToUtf8(path))) {
-            m_playlist.push_back(clipName);
-        }
-    }
-
+    m_playlist = m_audioEngine->getSoundNamesByGroup("bgm");
     std::sort(m_playlist.begin(), m_playlist.end());
 
 #ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from " << bgmDir << std::endl;
+    std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from catalog" << std::endl;
 #endif
 }
 
@@ -119,4 +90,3 @@ float BgmSystem::getRandomDelaySeconds() {
     std::uniform_real_distribution<float> dist(600.0f, 1200.0f);
     return dist(m_rng);
 }
-

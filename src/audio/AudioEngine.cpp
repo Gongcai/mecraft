@@ -3,20 +3,13 @@
 //
 
 #include "AudioEngine.h"
+#include "AudioFileDiscovery.h"
 #include "Paths.h"
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
-#include <algorithm>
-#include <cctype>
 
 namespace fs = std::filesystem;
-
-namespace {
-std::string pathToUtf8(const fs::path& p) {
-    // Avoid locale-dependent narrowing failures for Unicode file names on Windows.
-    return p.u8string();
-}
-}
 
 // OpenAL 扩展函数指针定义
 LPALCEVENTCALLBACKSOFT alcEventCallbackSOFT = nullptr;
@@ -72,8 +65,8 @@ void AudioEngine::init() {
     // 初始化设备切换扩展
     initDeviceSwitchExtension();
 
-    // 加载所有音频文件
-    getAllSounds();
+    // 加载音效 catalog；运行时音效名只来自 manifest。
+    loadDefaultCatalog();
 }
 
 void AudioEngine::update(const float deltaTime) {
@@ -125,48 +118,67 @@ void AudioEngine::shutdown() {
 }
 
 AudioClip* AudioEngine::loadClip(const std::string& name) {
-    // 检查是否已加载
-    auto it = m_clips.find(name);
-    if (it != m_clips.end()) {
-        return it->second.get();
-    }
-
-    // 尝试加载 WAV 文件
-    fs::path soundPath = fs::path(SOUNDS_DIR) / (name + ".wav");
-    if (!fs::exists(soundPath)) {
-        std::cerr << "[Audio] Sound file not found: " << soundPath << std::endl;
+    const audio::SoundEntry* entry = m_catalog.find(name);
+    if (entry == nullptr) {
+        std::cerr << "[Audio] Sound event not found in catalog: " << name << std::endl;
         return nullptr;
     }
-
-    auto clip = std::make_unique<AudioClip>(pathToUtf8(soundPath));
-    if (!clip->isValid()) {
-        return nullptr;
-    }
-
-    AudioClip* ptr = clip.get();
-    m_clips[name] = std::move(clip);
-    return ptr;
+    return loadClipVariant(name, 0);
 }
 
 AudioClip* AudioEngine::getClip(const std::string& name) {
-    auto it = m_clips.find(name);
+    const audio::SoundEntry* entry = m_catalog.find(name);
+    if (entry == nullptr || entry->variants.empty()) {
+        return nullptr;
+    }
+
+    const std::string cacheKey = audio::pathToUtf8(entry->variants[0].filePath.lexically_normal());
+    auto it = m_clips.find(cacheKey);
     if (it != m_clips.end()) {
         return it->second.get();
     }
     return nullptr;
 }
 
-AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 position, bool loop, float volume, bool spatial) {
-    AudioClip* clip = getClip(clipName);
-    if (!clip) {
-        // 尝试加载
+bool AudioEngine::loadCatalog(const std::string& catalogPath,
+                              const std::string& rootDirectory,
+                              const std::string& defaultGroup,
+                              const bool defaultPreload) {
+    const fs::path manifestPath = catalogPath;
+    const std::string catalogKey = audio::pathToUtf8(manifestPath.lexically_normal());
+    if (m_loadedCatalogs.find(catalogKey) != m_loadedCatalogs.end()) {
+        return true;
+    }
+
+    std::string error;
+    if (!m_catalog.loadFromFile(manifestPath, rootDirectory, defaultGroup, defaultPreload, error)) {
+        std::cerr << "[Audio] " << error << std::endl;
+        return false;
+    }
+
+    m_loadedCatalogs.insert(catalogKey);
+    preloadCatalogSounds();
 #ifdef MECRAFT_DEBUG
-        std::cout << "[Audio] Sound file not found in Cache: " << clipName << std::endl;
+    std::cout << "[Audio] Loaded audio catalog: " << catalogKey
+              << " (" << m_catalog.size() << " sound event(s))" << std::endl;
 #endif
-        clip = loadClip(clipName);
-        if (!clip) {
-            return nullptr;
-        }
+    return true;
+}
+
+std::vector<std::string> AudioEngine::getSoundNamesByGroup(const std::string& group) const {
+    return m_catalog.soundIdsByGroup(group);
+}
+
+AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 position, bool loop, float volume, bool spatial) {
+    const audio::SoundEntry* entry = m_catalog.find(clipName);
+    if (entry == nullptr) {
+        std::cerr << "[Audio] Sound event not found in catalog: " << clipName << std::endl;
+        return nullptr;
+    }
+
+    AudioClip* clip = loadClipVariant(clipName, chooseVariantIndex(*entry));
+    if (clip == nullptr) {
+        return nullptr;
     }
 
     AudioSource* source = acquireSource();
@@ -176,7 +188,7 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
 
     source->setClip(clip);
     source->setPosition(position);
-    source->setVolume(volume * m_masterVolume);
+    source->setVolume(volume * entry->volume * m_masterVolume);
     source->setLooping(loop);
     if (!spatial) {
         // 2D 音效：禁用衰减
@@ -185,24 +197,6 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     source->play();
 
     return source;
-}
-
-bool AudioEngine::registerClipFromPath(const std::string& name, const std::string& filePath) {
-    if (name.empty() || filePath.empty()) {
-        return false;
-    }
-
-    if (m_clips.find(name) != m_clips.end()) {
-        return true;
-    }
-
-    auto clip = std::make_unique<AudioClip>(filePath);
-    if (!clip->isValid()) {
-        return false;
-    }
-
-    m_clips[name] = std::move(clip);
-    return true;
 }
 
 void AudioEngine::playSound2D(const std::string& clipName, float volume) {
@@ -238,42 +232,79 @@ void AudioEngine::releaseSource(AudioSource* source) {
     }
 }
 
-void AudioEngine::getAllSounds() {
-    fs::path soundsDir = SOUNDS_DIR;
+void AudioEngine::loadDefaultCatalog() {
+    loadCatalog(SOUNDS_CATALOG_PATH, SOUNDS_DIR, "sfx", true);
+}
 
-    if (!fs::exists(soundsDir)) {
-        std::cerr << "[Audio] Sounds directory not found: " << soundsDir << std::endl;
-        return;
-    }
+void AudioEngine::preloadCatalogSounds() {
+    const size_t loadedBefore = m_clips.size();
+    for (const std::string& soundName : m_catalog.soundIds()) {
+        const audio::SoundEntry* entry = m_catalog.find(soundName);
+        if (entry == nullptr || !entry->preload) {
+            continue;
+        }
 
-    int loadedCount = 0;
-
-    // 遍历 sounds 目录下的所有 .wav 文件
-    for (const auto& entry : fs::directory_iterator(soundsDir)) {
-        if (entry.is_regular_file()) {
-            const fs::path& path = entry.path();
-            std::string ext = path.extension().string();
-
-            // 转换为小写比较
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-            if (ext == ".wav") {
-                // 提取文件名（不含扩展名）作为 clip 名称
-                std::string clipName = pathToUtf8(path.stem());
-
-                // 创建并加载 AudioClip
-                auto clip = std::make_unique<AudioClip>(pathToUtf8(path));
-                if (clip->isValid()) {
-                    m_clips[clipName] = std::move(clip);
-                    loadedCount++;
-                }
-            }
+        for (size_t i = 0; i < entry->variants.size(); ++i) {
+            loadClipVariant(soundName, i);
         }
     }
 
 #ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] Loaded " << loadedCount << " sound(s) from " << soundsDir << std::endl;
+    const size_t loadedCount = m_clips.size() - loadedBefore;
+    std::cout << "[Audio] Preloaded " << loadedCount << " audio clip variant(s)" << std::endl;
 #endif
+}
+
+AudioClip* AudioEngine::loadClipVariant(const std::string& soundName, const size_t variantIndex) {
+    const audio::SoundEntry* entry = m_catalog.find(soundName);
+    if (entry == nullptr) {
+        std::cerr << "[Audio] Sound event not found in catalog: " << soundName << std::endl;
+        return nullptr;
+    }
+    if (variantIndex >= entry->variants.size()) {
+        std::cerr << "[Audio] Sound event variant out of range: " << soundName << std::endl;
+        return nullptr;
+    }
+
+    const audio::SoundVariant& variant = entry->variants[variantIndex];
+    const std::string cacheKey = audio::pathToUtf8(variant.filePath.lexically_normal());
+    auto it = m_clips.find(cacheKey);
+    if (it != m_clips.end()) {
+        return it->second.get();
+    }
+
+    auto clip = std::make_unique<AudioClip>(audio::pathToUtf8(variant.filePath));
+    if (!clip->isValid()) {
+        return nullptr;
+    }
+
+    AudioClip* ptr = clip.get();
+    m_clips.emplace(cacheKey, std::move(clip));
+    return ptr;
+}
+
+size_t AudioEngine::chooseVariantIndex(const audio::SoundEntry& entry) {
+    if (entry.variants.size() <= 1) {
+        return 0;
+    }
+
+    float totalWeight = 0.0f;
+    for (const audio::SoundVariant& variant : entry.variants) {
+        totalWeight += std::max(0.0f, variant.weight);
+    }
+    if (totalWeight <= 0.0f) {
+        return 0;
+    }
+
+    std::uniform_real_distribution<float> dist(0.0f, totalWeight);
+    float cursor = dist(m_rng);
+    for (size_t i = 0; i < entry.variants.size(); ++i) {
+        cursor -= std::max(0.0f, entry.variants[i].weight);
+        if (cursor <= 0.0f) {
+            return i;
+        }
+    }
+    return entry.variants.size() - 1;
 }
 
 // BGM 调度已抽离到独立系统。

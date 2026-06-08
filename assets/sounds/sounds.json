@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "sounds": {
+    "placeholder": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "player.step.grass": {
+      "variants": [
+        { "file": "walk_grass1", "extension": ".wav" },
+        { "file": "walk_grass2", "extension": ".wav" },
+        { "file": "walk_grass3", "extension": ".wav" },
+        { "file": "walk_grass4", "extension": ".wav" },
+        { "file": "walk_grass5", "extension": ".wav" },
+        { "file": "walk_grass6", "extension": ".wav" }
+      ]
+    },
+    "player.land.small": {
+      "file": "fallsmall",
+      "extension": ".wav"
+    },
+    "player.land.big": {
+      "file": "fallbig",
+      "extension": ".wav"
+    },
+    "player.hurt.classic": {
+      "file": "classic-hurt",
+      "extension": ".wav"
+    },
+    "block.grass.break": {
+      "variants": [
+        { "file": "grass1", "extension": ".wav" },
+        { "file": "grass2", "extension": ".wav" },
+        { "file": "grass3", "extension": ".wav" },
+        { "file": "grass4", "extension": ".wav" }
+      ]
+    },
+    "block.generic.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.generic.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "item.apple.throw": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "item.apple.impact": {
+      "file": "foo",
+      "extension": ".ogg"
+    }
+  }
+}

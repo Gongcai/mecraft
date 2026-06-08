@@ -1,7 +1,5 @@
 #include "PlayerFootstepAudioSystem.h"
 
-#include <string>
-
 #include "../../util/AudioEventBuffer.h"
 #include "../../components/Components.h"
 #include "../../util/PlayerQuery.h"
@@ -29,9 +27,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
             const float stepInterval = query.isSprinting() ? 0.35f : 0.5f;
             footstep.timer -= dt;
             if (footstep.timer <= 0.0f) {
-                const std::string soundName = "walk_grass" + std::to_string(footstep.clipIndex + 1);
-                audioBus.push({soundName, glm::vec3(0.0f), false, 1.0f});
-                footstep.clipIndex = (footstep.clipIndex + 1) % 6;
+                audioBus.push({"player.step.grass", glm::vec3(0.0f), false, 1.0f});
                 footstep.timer = stepInterval;
             }
         }
@@ -46,7 +42,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
         }
 
         const bool isBigFall = impactSpeed >= kBigFallImpactSpeed;
-        const char* clipName = isBigFall ? "classic-hurt" : "fallsmall";
+        const char* clipName = isBigFall ? "player.hurt.classic" : "player.land.small";
         audioBus.push({clipName, query.getPosition(), true, 1.0f});
         if (isBigFall) {
             // Trigger classic hurt effect via ECS component

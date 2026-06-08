@@ -219,6 +219,13 @@ void GameClient::receiveMessages() {
             }
             break;
         }
+        case net::MessageType::EntityImpact: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::EntityImpactMessage&>(packet.inProcessPayload);
+                m_entityStore.handleImpact(msg);
+            }
+            break;
+        }
         case net::MessageType::EntitySnapshot: {
             if (packet.inProcessPayload.has_value()) {
                 const auto& msg = std::any_cast<const net::EntitySnapshotMessage&>(packet.inProcessPayload);

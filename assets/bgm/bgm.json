@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "sounds": {
+    "bgm.minecraft": {
+      "file": "C418 - Minecraft",
+      "extension": ".wav",
+      "group": "bgm",
+      "preload": false,
+      "volume": 1.0
+    }
+  }
+}

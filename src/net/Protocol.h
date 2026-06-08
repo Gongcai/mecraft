@@ -58,6 +58,7 @@ enum class MessageType : uint8_t {
     ServerSnapshot,
     EntitySpawn,
     EntityDespawn,
+    EntityImpact,
     EntitySnapshot,
     InventorySnapshot,
     ServerChatMessage,
@@ -222,6 +223,13 @@ struct EntitySpawnMessage {
 /// Server tells client to destroy an entity.
 struct EntityDespawnMessage {
     EntityNetId netId = 0;
+};
+
+/// Server tells client that an entity impacted something and should emit local effects.
+struct EntityImpactMessage {
+    EntityNetId netId = 0;
+    glm::vec3 position = glm::vec3(0.0f);
+    uint16_t particleBlockId = 0;
 };
 
 /// A single entity's snapshot data.

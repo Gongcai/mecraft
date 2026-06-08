@@ -112,7 +112,7 @@ void BlockSupportSystem::update(SystemContext& ctx) {
             world.setBlock(pos.x, pos.y, pos.z, 0);
             dropBus.push({blockId, pos});
             particleBus.push({pos, blockId});
-            audioBus.push({"put1", glm::vec3(pos), true, 1.0f});
+            audioBus.push({"block.generic.break", glm::vec3(pos), true, 1.0f});
         }
     }
 }

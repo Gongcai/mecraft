@@ -26,10 +26,7 @@ int main() {
     AudioEngine audio;
     audio.init();
 
-    AudioClip* walkClip = audio.getClip("walk_grass");
-    if (!walkClip) {
-        walkClip = audio.getClip("walk_grass1");
-    }
+    AudioClip* walkClip = audio.getClip("player.step.grass");
 
     if (!walkClip) {
         std::cout << "[audio_test] SKIP: No audio files found in assets/sounds/\n";

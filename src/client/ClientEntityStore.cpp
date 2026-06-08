@@ -95,11 +95,14 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
 
     auto it = m_netIdToEntity.find(msg.netId);
     if (it == m_netIdToEntity.end()) {
+        m_explicitImpactNetIds.erase(msg.netId);
         return;
     }
 
     if (m_registry->valid(it->second)) {
-        if (m_gameplayRegistry &&
+        const bool explicitImpactReceived = m_explicitImpactNetIds.erase(msg.netId) > 0;
+        if (!explicitImpactReceived &&
+            m_gameplayRegistry &&
             m_registry->all_of<ecs::ProjectileTag, ecs::TransformComponent>(it->second)) {
             const auto& transform = m_registry->get<ecs::TransformComponent>(it->second);
             BlockID particleBlock = ecs::defaultProjectileEntityImpactParticleBlock();
@@ -121,6 +124,21 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     }
 
     m_netIdToEntity.erase(it);
+}
+
+void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
+    if (!m_registry) {
+        m_pendingImpacts.push_back(msg);
+        return;
+    }
+
+    m_explicitImpactNetIds.insert(msg.netId);
+    if (!m_gameplayRegistry || msg.particleBlockId == 0) {
+        return;
+    }
+
+    ecs::ensureParticleEventBus(*m_gameplayRegistry)
+        .push(ecs::makeImpactParticleEvent(msg.position, static_cast<BlockID>(msg.particleBlockId)));
 }
 
 void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
@@ -197,9 +215,11 @@ void ClientEntityStore::flushPendingMessages() {
 
     auto pendingSpawns = std::move(m_pendingSpawns);
     auto pendingSnapshots = std::move(m_pendingSnapshots);
+    auto pendingImpacts = std::move(m_pendingImpacts);
     auto pendingDespawns = std::move(m_pendingDespawns);
     m_pendingSpawns.clear();
     m_pendingSnapshots.clear();
+    m_pendingImpacts.clear();
     m_pendingDespawns.clear();
 
     for (const auto& msg : pendingSpawns) {
@@ -207,6 +227,9 @@ void ClientEntityStore::flushPendingMessages() {
     }
     for (const auto& msg : pendingSnapshots) {
         handleSnapshot(msg);
+    }
+    for (const auto& msg : pendingImpacts) {
+        handleImpact(msg);
     }
     for (const auto& msg : pendingDespawns) {
         handleDespawn(msg);

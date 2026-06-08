@@ -2,6 +2,7 @@
 #define MECRAFT_ECS_PROJECTILE_COMPONENTS_H
 
 #include <entt/entity/entity.hpp>
+#include <glm/glm.hpp>
 
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
@@ -33,6 +34,16 @@ struct ProjectileComponent {
 struct ProjectileThrowerComponent {
     float cooldownRemaining = 0.0f;
     float cooldownSeconds = 0.55f;
+};
+
+struct EntityImpactComponent {
+    EntityImpactComponent() = default;
+    EntityImpactComponent(const glm::vec3& impactPosition, const BlockID impactParticleBlock)
+        : position(impactPosition),
+          particleBlock(impactParticleBlock) {}
+
+    glm::vec3 position{0.0f};
+    BlockID particleBlock = 0;
 };
 
 } // namespace ecs

@@ -23,7 +23,7 @@ public:
     [[nodiscard]] bool isValid() const { return m_valid; }
 
 private:
-    bool loadWAV(const std::string& filepath);
+    bool load(const std::string& filepath);
 
     ALuint m_buffer = 0;
     std::string m_name;

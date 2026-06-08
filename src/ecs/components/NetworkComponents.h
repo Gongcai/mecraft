@@ -25,6 +25,9 @@ struct EntityNetIdComponent {
 /// The server checks for this tag to decide which entities to track and sync.
 struct NetworkSyncTag {};
 
+/// Tag for synced entities that should despawn after the server has sent final events.
+struct PendingNetworkDespawnTag {};
+
 } // namespace ecs
 
 #endif // MECRAFT_NETWORK_COMPONENTS_H

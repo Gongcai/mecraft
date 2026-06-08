@@ -162,17 +162,29 @@ static void testProjectileSpawnCreatesAppleReplica() {
     require(raw.get<ecs::SpinVisualComponent>(projectile).yawRadians == 0.75f,
             "projectile snapshot yaw was not applied");
 
+    net::EntityImpactMessage impact;
+    impact.netId = 91;
+    impact.position = glm::vec3(2.25f, 66.5f, 3.0f);
+    impact.particleBlockId = static_cast<uint16_t>(appleDefinition.entityImpactParticleBlock);
+    store.handleImpact(impact);
+
+    require(registry.ctxHas<ecs::ParticleEventBus>(),
+            "projectile impact should queue an explicit impact particle event");
+    auto& particleBus = registry.ctxGet<ecs::ParticleEventBus>();
+    require(particleBus.size() == 1, "projectile impact should queue exactly one explicit impact event");
+    require(particleBus.peek().front().useWorldPos,
+            "projectile impact event should use server-provided world position");
+    require(particleBus.peek().front().blockType == appleDefinition.entityImpactParticleBlock,
+            "projectile impact event should use server-provided particle texture block");
+
     net::EntityDespawnMessage despawn;
     despawn.netId = 91;
     store.handleDespawn(despawn);
 
     require(!store.hasEntity(91), "projectile despawn should stop tracking net id");
-    require(registry.ctxHas<ecs::ParticleEventBus>(),
-            "projectile despawn should queue an impact particle event");
-    auto& particleBus = registry.ctxGet<ecs::ParticleEventBus>();
-    require(particleBus.size() == 1, "projectile despawn should queue exactly one impact event");
+    require(particleBus.size() == 1, "projectile despawn should not duplicate explicit impact particles");
     require(particleBus.peek().front().useWorldPos,
-            "projectile impact event should use last known world position");
+            "projectile impact event should retain server-provided world position");
     require(particleBus.peek().front().blockType != 0,
             "projectile impact event should have a particle texture block");
 
