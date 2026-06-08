@@ -20,7 +20,6 @@ void ItemPickupSystem::update(SystemContext& ctx) {
         const auto& transform = playerView.get<TransformComponent>(e);
         auto& inventoryData = playerView.get<InventoryDataComponent>(e);
         pickup(registry, transform.position, kDropCollectRadius, inventoryData.inventory);
-        break; // Only first local player
     }
 }
 

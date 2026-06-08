@@ -3,6 +3,7 @@
 #include "../ecs/components/Components.h"
 #include "../world/chunk/Chunk.h"
 #include "../world/WeatherSystem.h"
+#include <algorithm>
 #include <cstdio>
 
 namespace client {
@@ -224,10 +225,10 @@ void GameClient::receiveMessages() {
             break;
         }
         case net::MessageType::InventorySnapshot: {
-            // Inventory snapshot received from server.
-            // For Phase 5, this is a placeholder — the client acknowledges but
-            // doesn't yet apply the inventory (ECS runs on the same registry in-process).
-            // In Phase 6 (real networking), this will update the client-side inventory display.
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                handleInventorySnapshot(msg);
+            }
             break;
         }
         case net::MessageType::ServerChatMessage: {
@@ -324,6 +325,44 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
             if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(player)) {
                 hurt->classicHurtEffectPending = true;
             }
+        }
+        break;
+    }
+}
+
+void GameClient::handleInventorySnapshot(const net::InventorySnapshotMessage& snapshot) {
+    if (m_ecsRegistry == nullptr) {
+        return;
+    }
+
+    auto view = m_ecsRegistry->view<ecs::LocalPlayerTag>();
+    for (const entt::entity player : view) {
+        auto* inventoryState = m_ecsRegistry->try_get<ecs::InventoryComponent>(player);
+        if (inventoryState == nullptr) {
+            inventoryState = &m_ecsRegistry->emplace<ecs::InventoryComponent>(player);
+        }
+
+        const int selectedSlot = std::clamp(static_cast<int>(snapshot.selectedHotbarSlot),
+                                            0,
+                                            Inventory::HOTBAR_SIZE - 1);
+        inventoryState->selectedHotbarSlot = selectedSlot;
+
+        auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(player);
+        if (inventoryData == nullptr) {
+            inventoryData = &m_ecsRegistry->emplace<ecs::InventoryDataComponent>(player);
+        }
+        inventoryData->inventory.setSelectedSlot(selectedSlot);
+
+        for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
+            ItemStack stack{};
+            if (slot < static_cast<int>(snapshot.slots.size())) {
+                const net::InventorySlotData& remote = snapshot.slots[slot];
+                if (remote.itemId != 0 && remote.stackCount != 0) {
+                    stack.itemId = remote.itemId;
+                    stack.count = remote.stackCount;
+                }
+            }
+            inventoryData->inventory.setSlotStack(slot, stack);
         }
         break;
     }

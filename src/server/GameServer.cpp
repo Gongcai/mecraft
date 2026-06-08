@@ -11,6 +11,7 @@
 #include "../ecs/systems/combat/DeathSystem.h"
 #include "../ecs/systems/combat/PlayerMeleeSystem.h"
 #include "../ecs/systems/item/ItemSpawnSystem.h"
+#include "../ecs/systems/item/ItemPickupSystem.h"
 #include "../ecs/systems/item/ItemLifetimeSystem.h"
 #include "../ecs/systems/item/ItemMergeSystem.h"
 #include "../ecs/systems/item/ItemPhysicsSystem.h"
@@ -110,6 +111,19 @@ bool hasInputAction(const uint32_t actions, const uint32_t bit) {
     return (actions & bit) != 0u;
 }
 
+bool inventorySnapshotSlotsEqual(const std::vector<net::InventorySlotData>& a,
+                                 const std::vector<net::InventorySlotData>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (a[i].itemId != b[i].itemId || a[i].stackCount != b[i].stackCount) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void updateCameraStateFromClient(ecs::CameraStateComponent& camera,
                                  const float yaw,
                                  const float pitch) {
@@ -144,6 +158,8 @@ void GameServer::setEcsRegistry(entt::registry* registry) {
     m_syncedEntities.clear();
     for (auto& client : m_clients) {
         client.spawnedEntityNetIds.clear();
+        client.hasLastInventorySnapshot = false;
+        client.lastInventorySnapshotSlots.clear();
     }
 }
 
@@ -158,6 +174,8 @@ void GameServer::setEcsRegistry(ecs::GameplayRegistry* registry) {
     m_syncedEntities.clear();
     for (auto& client : m_clients) {
         client.spawnedEntityNetIds.clear();
+        client.hasLastInventorySnapshot = false;
+        client.lastInventorySnapshotSlots.clear();
     }
     if (registry != nullptr && m_entitiesRestorePending) {
         restorePersistentEntities();
@@ -192,6 +210,8 @@ void GameServer::destroyOwnedPlayerProxy(ConnectedClient& client) {
     client.awaitingRespawn = false;
     client.deathDropsSpawned = false;
     client.respawnSnapshotTicksRemaining = 0;
+    client.hasLastInventorySnapshot = false;
+    client.lastInventorySnapshotSlots.clear();
 }
 
 entt::entity GameServer::resolvePlayerEntity(const ConnectedClient& client) const {
@@ -207,6 +227,43 @@ entt::entity GameServer::resolvePlayerEntity(const ConnectedClient& client) cons
         return *playerView.begin();
     }
     return entt::null;
+}
+
+bool GameServer::buildInventorySnapshot(const ConnectedClient& client,
+                                        net::InventorySnapshotMessage& out) const {
+    if (m_ecsRegistry == nullptr) {
+        return false;
+    }
+
+    const entt::entity playerEntity = resolvePlayerEntity(client);
+    if (playerEntity == entt::null || !m_ecsRegistry->valid(playerEntity)) {
+        return false;
+    }
+
+    const auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(playerEntity);
+    if (inventoryData == nullptr) {
+        return false;
+    }
+
+    int selectedSlot = inventoryData->inventory.getSelectedSlot();
+    if (const auto* inventoryState = m_ecsRegistry->try_get<ecs::InventoryComponent>(playerEntity)) {
+        selectedSlot = inventoryState->selectedHotbarSlot;
+    }
+    out.selectedHotbarSlot = static_cast<uint8_t>(std::clamp(selectedSlot, 0, Inventory::HOTBAR_SIZE - 1));
+    out.slots.clear();
+    out.slots.reserve(Inventory::INVENTORY_SIZE);
+
+    for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
+        const ItemStack stack = inventoryData->inventory.getSlotStack(slot);
+        net::InventorySlotData slotData;
+        if (!stack.isEmpty()) {
+            slotData.itemId = static_cast<uint16_t>(std::clamp<uint32_t>(stack.itemId, 0u, 0xFFFFu));
+            slotData.stackCount = static_cast<uint8_t>(std::clamp<uint32_t>(stack.count, 0u, 0xFFu));
+        }
+        out.slots.push_back(slotData);
+    }
+
+    return true;
 }
 
 void GameServer::dropPlayerInventory(ConnectedClient& client) {
@@ -480,6 +537,8 @@ void GameServer::tickServerEcs(const float dt) {
     itemPhysics.update(ctx);
     ecs::ItemMergeSystem itemMerge;
     itemMerge.update(ctx);
+    ecs::ItemPickupSystem itemPickup;
+    itemPickup.update(ctx);
     ecs::ItemLifetimeSystem itemLifetime;
     itemLifetime.update(ctx);
 
@@ -661,6 +720,7 @@ void GameServer::tick(float dt) {
 
     // Send authoritative snapshots to clients
     sendSnapshotsToClients();
+    sendInventorySnapshotsToClients();
 
     // Sync entities (spawn/despawn/snapshot)
     syncEntitiesToClients();
@@ -685,6 +745,7 @@ void GameServer::tickInitialLoading(const float dt, const glm::vec3& loadCenter)
     m_world.updateForInitialLoad(loadCenter, dt);
     sendNewChunksToClients();
     sendSnapshotsToClients();
+    sendInventorySnapshotsToClients();
     sendBlockUpdatesToClients();
 
     if (!m_spawnChunksReady) {
@@ -875,6 +936,8 @@ void GameServer::cleanupDisconnectedClients() {
         client.pendingInputActions = 0;
         client.awaitingRespawn = false;
         client.deathDropsSpawned = false;
+        client.hasLastInventorySnapshot = false;
+        client.lastInventorySnapshotSlots.clear();
         client.helloTick = 0;
         client.sentChunks.clear();
         client.spawnedPlayerNetIds.clear();
@@ -1314,6 +1377,36 @@ void GameServer::sendSnapshotsToClients() {
                 }
             }
         }
+    }
+}
+
+void GameServer::sendInventorySnapshotsToClients() {
+    for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
+
+        net::InventorySnapshotMessage snapshot;
+        if (!buildInventorySnapshot(client, snapshot)) {
+            continue;
+        }
+
+        const bool changed = !client.hasLastInventorySnapshot ||
+                             client.lastInventorySnapshotSelected != snapshot.selectedHotbarSlot ||
+                             !inventorySnapshotSlotsEqual(client.lastInventorySnapshotSlots, snapshot.slots);
+        if (!changed) {
+            continue;
+        }
+
+        net::Packet packet;
+        packet.channel = net::PacketChannel::ReliableWorld;
+        packet.type = net::MessageType::InventorySnapshot;
+        packet.inProcessPayload = snapshot;
+        client.transport->send(std::move(packet));
+
+        client.hasLastInventorySnapshot = true;
+        client.lastInventorySnapshotSelected = snapshot.selectedHotbarSlot;
+        client.lastInventorySnapshotSlots = std::move(snapshot.slots);
     }
 }
 

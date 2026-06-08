@@ -38,6 +38,9 @@ struct ConnectedClient {
     bool awaitingRespawn = false;
     bool deathDropsSpawned = false;
     int respawnSnapshotTicksRemaining = 0;
+    bool hasLastInventorySnapshot = false;
+    uint8_t lastInventorySnapshotSelected = 0;
+    std::vector<net::InventorySlotData> lastInventorySnapshotSlots;
     net::NetworkGameplayMode gameplayMode = net::NetworkGameplayMode::Survival;
     net::EntityNetId playerNetId = 0;
     entt::entity ecsPlayerEntity = entt::null;
@@ -119,6 +122,7 @@ private:
     void tickWorldSystems();
     void sendNewChunksToClients();
     void sendSnapshotsToClients();
+    void sendInventorySnapshotsToClients();
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
     void syncEntitiesToClients();
@@ -130,6 +134,8 @@ private:
     void respawnPlayer(ConnectedClient& client);
     void dropPlayerInventory(ConnectedClient& client);
     [[nodiscard]] entt::entity resolvePlayerEntity(const ConnectedClient& client) const;
+    [[nodiscard]] bool buildInventorySnapshot(const ConnectedClient& client,
+                                              net::InventorySnapshotMessage& out) const;
     void destroyOwnedPlayerProxy(ConnectedClient& client);
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);

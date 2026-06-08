@@ -27,6 +27,7 @@ const char* messageTypeName(MessageType type) {
     case MessageType::CommandResult: return "CommandResult";
     case MessageType::WorldStateSnapshot: return "WorldStateSnapshot";
     case MessageType::PlayerModeUpdate: return "PlayerModeUpdate";
+    case MessageType::InventorySnapshot: return "InventorySnapshot";
     case MessageType::ChunkData: return "ChunkData";
     case MessageType::ServerSnapshot: return "ServerSnapshot";
     case MessageType::ClientInput: return "ClientInput";
@@ -401,6 +402,13 @@ void ENetTransport::poll() {
                     }
                     break;
                 }
+                case MessageType::InventorySnapshot: {
+                    InventorySnapshotMessage msg;
+                    if (PacketCodec::decodeInventorySnapshot(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
                 default:
                     break;
                 }
@@ -625,6 +633,10 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
     case MessageType::PlayerModeUpdate:
         typedPayload = PacketCodec::encodePlayerModeUpdate(
             std::any_cast<const PlayerModeUpdateMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::InventorySnapshot:
+        typedPayload = PacketCodec::encodeInventorySnapshot(
+            std::any_cast<const InventorySnapshotMessage&>(packet.inProcessPayload));
         break;
     default:
         break;

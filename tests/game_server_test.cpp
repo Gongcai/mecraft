@@ -275,6 +275,59 @@ static void testClientAppliesPlayerHealthSnapshot() {
     std::printf("[PASS] testClientAppliesPlayerHealthSnapshot\n");
 }
 
+static void testClientAppliesInventorySnapshot() {
+    client::GameClient client;
+    ecs::GameplayRegistry registry;
+    auto& raw = registry.registry();
+    const entt::entity player = raw.create();
+    raw.emplace<ecs::LocalPlayerTag>(player);
+    raw.emplace<ecs::InventoryComponent>(player);
+    auto& inventoryData = raw.emplace<ecs::InventoryDataComponent>(player);
+    inventoryData.inventory.initializeDefaultLoadout();
+    client.initEntityStore(registry, nullptr);
+
+    auto transport = std::make_unique<ManualTransport>();
+    ManualTransport* transportPtr = transport.get();
+    client.connect(std::move(transport));
+
+    net::Packet inventoryPacket;
+    inventoryPacket.type = net::MessageType::InventorySnapshot;
+    net::InventorySnapshotMessage snapshot;
+    snapshot.selectedHotbarSlot = 2;
+    snapshot.slots.resize(Inventory::INVENTORY_SIZE);
+    snapshot.slots[0].itemId = static_cast<uint16_t>(ItemIds::COAL);
+    snapshot.slots[0].stackCount = 7;
+    inventoryPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(inventoryPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::InventoryComponent>(player).selectedHotbarSlot == 2,
+            "client should apply authoritative selected hotbar slot");
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSelectedSlot() == 2,
+            "client inventory data should apply selected hotbar slot");
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).itemId == ItemIds::COAL,
+            "client should apply inventory snapshot item id");
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).count == 7,
+            "client should apply inventory snapshot stack count");
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(1).isEmpty(),
+            "client should clear slots omitted by authoritative snapshot content");
+
+    net::Packet clearPacket;
+    clearPacket.type = net::MessageType::InventorySnapshot;
+    net::InventorySnapshotMessage clearSnapshot;
+    clearSnapshot.selectedHotbarSlot = 0;
+    clearSnapshot.slots.resize(Inventory::INVENTORY_SIZE);
+    clearPacket.inProcessPayload = clearSnapshot;
+    transportPtr->pushIncoming(std::move(clearPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).isEmpty(),
+            "client should clear an item when authoritative snapshot slot is empty");
+    std::printf("[PASS] testClientAppliesInventorySnapshot\n");
+}
+
 static void testClientBlockActionRoundTrip() {
     ServerHarness harness;
     client::GameClient client;
@@ -752,11 +805,12 @@ static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
     bool sawDeadInputIgnored = false;
     bool sawUnexpectedAutoRespawn = false;
     bool sawDropSpawn = false;
+    bool sawClearedInventorySnapshot = false;
     uint32_t droppedStackTotal = 0;
     glm::vec3 respawnedPosition(0.0f);
 
     for (uint32_t i = 2; i < 320 &&
-         !(sawDeathSnapshot && sawDeadInputIgnored && sawDropSpawn); ++i) {
+         !(sawDeathSnapshot && sawDeadInputIgnored && sawDropSpawn && sawClearedInventorySnapshot); ++i) {
         const bool spoofThisTick = sawDeathSnapshot;
         pushInput(i, spoofThisTick ? spoofedDeadPosition : playerPosition);
         sentSpoofedDeadInput = sentSpoofedDeadInput || spoofThisTick;
@@ -766,6 +820,21 @@ static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
             net::Packet packet = std::move(clientPtr->sent.front());
             clientPtr->sent.pop();
             if (!packet.inProcessPayload.has_value()) {
+                continue;
+            }
+
+            if (packet.type == net::MessageType::InventorySnapshot) {
+                const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                bool hasItems = false;
+                for (const auto& slot : inventory.slots) {
+                    if (slot.itemId != 0 && slot.stackCount != 0) {
+                        hasItems = true;
+                        break;
+                    }
+                }
+                if (sawDeathSnapshot && !hasItems && inventory.slots.size() == Inventory::INVENTORY_SIZE) {
+                    sawClearedInventorySnapshot = true;
+                }
                 continue;
             }
 
@@ -805,6 +874,7 @@ static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
     require(sawDeadInputIgnored, "server should ignore dead player movement before respawn");
     require(sawDropSpawn, "player death should spawn dropped inventory items");
     require(droppedStackTotal > 0, "player death should drop non-empty item stacks");
+    require(sawClearedInventorySnapshot, "player death should sync an empty authoritative inventory");
     require(!sawUnexpectedAutoRespawn, "server should not auto-respawn before a respawn request");
 
     net::Packet respawnRequestPacket;
@@ -1154,6 +1224,36 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     require(!legacyHealthDecoded.playerRespawned, "legacy health payload should default respawn event off");
     require(!legacyHealthDecoded.playerDead, "legacy health payload should default dead state off");
     std::printf("[PASS] testServerSnapshotCodecCarriesPlayerHealth\n");
+}
+
+static void testInventorySnapshotCodecRoundTrip() {
+    net::InventorySnapshotMessage snapshot;
+    snapshot.selectedHotbarSlot = 4;
+    snapshot.slots.resize(3);
+    snapshot.slots[0].itemId = static_cast<uint16_t>(ItemIds::COAL);
+    snapshot.slots[0].stackCount = 12;
+    snapshot.slots[2].itemId = static_cast<uint16_t>(ItemIds::IRON_PICKAXE);
+    snapshot.slots[2].stackCount = 1;
+
+    const auto encoded = net::PacketCodec::encodeInventorySnapshot(snapshot);
+    require(encoded.size() == 14, "inventory snapshot codec should write selected slot, count, and slots");
+
+    net::InventorySnapshotMessage decoded;
+    require(net::PacketCodec::decodeInventorySnapshot(encoded.data(), encoded.size(), decoded),
+            "inventory snapshot codec should decode payload");
+    require(decoded.selectedHotbarSlot == 4, "inventory snapshot codec should keep selected slot");
+    require(decoded.slots.size() == 3, "inventory snapshot codec should keep slot count");
+    require(decoded.slots[0].itemId == ItemIds::COAL && decoded.slots[0].stackCount == 12,
+            "inventory snapshot codec should keep first slot");
+    require(decoded.slots[1].itemId == 0 && decoded.slots[1].stackCount == 0,
+            "inventory snapshot codec should keep empty slot");
+    require(decoded.slots[2].itemId == ItemIds::IRON_PICKAXE && decoded.slots[2].stackCount == 1,
+            "inventory snapshot codec should keep later slot");
+
+    net::InventorySnapshotMessage truncated;
+    require(!net::PacketCodec::decodeInventorySnapshot(encoded.data(), encoded.size() - 1, truncated),
+            "inventory snapshot codec should reject truncated slot payload");
+    std::printf("[PASS] testInventorySnapshotCodecRoundTrip\n");
 }
 
 static void testServerTickBreaksUnsupportedPlant() {
@@ -1534,6 +1634,7 @@ int main() {
     testChunkStreamingToClient();
     testInputRoundTrip();
     testClientAppliesPlayerHealthSnapshot();
+    testClientAppliesInventorySnapshot();
     testClientBlockActionRoundTrip();
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
@@ -1548,6 +1649,7 @@ int main() {
     testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();
     testServerSnapshotCodecCarriesPlayerHealth();
+    testInventorySnapshotCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
     testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();

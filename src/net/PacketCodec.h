@@ -322,6 +322,17 @@ public:
         return buf;
     }
 
+    static std::vector<uint8_t> encodeInventorySnapshot(const InventorySnapshotMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU8(buf, msg.selectedHotbarSlot);
+        pushU32(buf, static_cast<uint32_t>(msg.slots.size()));
+        for (const InventorySlotData& slot : msg.slots) {
+            pushU16(buf, slot.itemId);
+            pushU8(buf, slot.stackCount);
+        }
+        return buf;
+    }
+
     // =========================================================================
     // Typed message decoding helpers
     // =========================================================================
@@ -687,6 +698,22 @@ public:
         size_t offset = 0;
         out.clientId = readU32(data, offset);
         out.mode = static_cast<NetworkGameplayMode>(readU8(data, offset));
+        return true;
+    }
+
+    static bool decodeInventorySnapshot(const uint8_t* data, size_t size, InventorySnapshotMessage& out) {
+        if (size < 5) return false;
+        size_t offset = 0;
+        out.selectedHotbarSlot = readU8(data, offset);
+        const uint32_t count = readU32(data, offset);
+        if (offset + static_cast<size_t>(count) * 3 > size) {
+            return false;
+        }
+        out.slots.resize(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            out.slots[i].itemId = readU16(data, offset);
+            out.slots[i].stackCount = readU8(data, offset);
+        }
         return true;
     }
 

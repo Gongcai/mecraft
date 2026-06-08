@@ -92,6 +92,7 @@ public:
 private:
     void handleChunkData(const net::ChunkDataMessage& data);
     void handleServerSnapshot(const net::ServerSnapshot& snapshot);
+    void handleInventorySnapshot(const net::InventorySnapshotMessage& snapshot);
     void handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& snapshot);
     void handlePlayerModeUpdate(const net::PlayerModeUpdateMessage& update);
 
