@@ -17,6 +17,8 @@
 #include "../inventory/InventoryPanelControl.h"
 #include "../hud/Pickable.h"
 #include "../font/TextRenderer.h"
+#include "../widgets/UIPanel.h"
+#include "../widgets/UIText.h"
 #include "UIRenderContext.h"
 #include "UITheme.h"
 
@@ -137,7 +139,8 @@ private:
                                                         const InputSnapshot& inputSnapshot) const;
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     [[nodiscard]] static float computeResponsiveUiScale(float actualW, float actualH);
-    void renderControls(const UIRenderContext& context) const;
+    void renderControls(const UIRenderContext& context);
+    void renderDeathOverlay(const UIRenderContext& context);
     void prepareBackdropBlur(UIRenderContext& context) const;
     void ensureBackdropBlurTargets(int sourceWidth, int sourceHeight) const;
     void destroyBackdropBlurTargets();
@@ -145,6 +148,9 @@ private:
     CrosshairControl m_crosshair;
     HotbarControl m_hotbar;
     HudControl m_hud;
+    UIPanel m_deathBackdrop;
+    UIText m_deathTitle;
+    UIText m_deathPrompt;
     InventoryPanelControl m_inventoryPanel;
     CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;

@@ -20,6 +20,7 @@ const char* messageTypeName(MessageType type) {
     case MessageType::ClientViewConfig: return "ClientViewConfig";
     case MessageType::ClientChatMessage: return "ClientChatMessage";
     case MessageType::ClientCommandRequest: return "ClientCommandRequest";
+    case MessageType::ClientRespawnRequest: return "ClientRespawnRequest";
     case MessageType::ServerHello: return "ServerHello";
     case MessageType::ServerChatMessage: return "ServerChatMessage";
     case MessageType::ServerSystemMessage: return "ServerSystemMessage";
@@ -358,6 +359,13 @@ void ENetTransport::poll() {
                     }
                     break;
                 }
+                case MessageType::ClientRespawnRequest: {
+                    ClientRespawnRequest msg;
+                    if (PacketCodec::decodeClientRespawnRequest(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
                 case MessageType::ServerChatMessage: {
                     ServerChatMessage msg;
                     if (PacketCodec::decodeServerChatMessage(packet.payload.data(), packet.payload.size(), msg)) {
@@ -589,6 +597,10 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
     case MessageType::ClientCommandRequest:
         typedPayload = PacketCodec::encodeClientCommandRequest(
             std::any_cast<const ClientCommandRequest&>(packet.inProcessPayload));
+        break;
+    case MessageType::ClientRespawnRequest:
+        typedPayload = PacketCodec::encodeClientRespawnRequest(
+            std::any_cast<const ClientRespawnRequest&>(packet.inProcessPayload));
         break;
     case MessageType::ChunkData:
         typedPayload = PacketCodec::encodeChunkData(

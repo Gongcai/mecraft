@@ -18,6 +18,7 @@ struct PlayerStatsData {
     int food = 20;
     int maxFood = 20;
     bool showSurvivalStats = true;  // false in creative mode
+    bool isDead = false;
 };
 
 struct UIRenderContext {
@@ -29,6 +30,7 @@ struct UIRenderContext {
     HumanoidRenderer* humanoidRenderer = nullptr;
     const Inventory* inventory = nullptr;
     const PlayerStatsData* playerStats = nullptr;
+    bool playerDead = false;
     const TextRenderer* textRenderer = nullptr;
     const std::string* commandInputText = nullptr;
     bool commandInputVisible = false;

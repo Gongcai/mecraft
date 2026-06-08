@@ -50,6 +50,7 @@ public:
     void sendBlockAction(const net::ClientBlockAction& action);
     void sendChatMessage(const std::string& message);
     void sendCommandRequest(const std::string& command);
+    void sendRespawnRequest();
 
     /// Process all pending messages from the server.
     void receiveMessages();
@@ -81,6 +82,9 @@ public:
 
     /// Get the latest server snapshot.
     [[nodiscard]] const net::ServerSnapshot& lastSnapshot() const { return m_lastSnapshot; }
+    [[nodiscard]] bool isPlayerDead() const {
+        return m_lastSnapshot.playerDead || m_lastSnapshot.playerHealth == 0;
+    }
 
     /// Get the assigned client ID from the server.
     [[nodiscard]] net::ClientId getClientId() const { return m_clientId; }
@@ -100,6 +104,7 @@ private:
     net::ClientId m_clientId = 0;
     uint32_t m_inputSequence = 0;
     uint32_t m_commandSequence = 0;
+    uint32_t m_respawnSequence = 0;
     bool m_spawnChunksReady = false;
     bool m_hasServerHello = false;
     int m_chunksReceived = 0;

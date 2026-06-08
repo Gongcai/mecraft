@@ -67,6 +67,7 @@ enum class MessageType : uint8_t {
 
     // Bidirectional
     KeepAlive,
+    ClientRespawnRequest,
 };
 
 /// A protocol packet with channel, type, and payload.
@@ -138,6 +139,11 @@ struct ClientCommandRequest {
     std::string command;
 };
 
+/// Explicit request to respawn after the server has marked the player dead.
+struct ClientRespawnRequest {
+    uint32_t sequence = 0;
+};
+
 // ===========================================================================
 // Server -> Client messages
 // ===========================================================================
@@ -192,6 +198,7 @@ struct ServerSnapshot {
     uint16_t playerMaxHealth = 20;
     bool playerHurt = false;
     bool playerRespawned = false;
+    bool playerDead = false;
 };
 
 // ===========================================================================

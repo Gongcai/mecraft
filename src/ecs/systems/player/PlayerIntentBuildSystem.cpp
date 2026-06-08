@@ -30,6 +30,20 @@ void PlayerIntentBuildSystem::update(SystemContext& ctx) {
     }
 
     for (auto e : view) {
+        if (const auto* health = registry.registry().try_get<HealthComponent>(e);
+            health != nullptr && health->current <= 0) {
+            auto& move = view.get<MoveIntentComponent>(e);
+            auto& look = view.get<LookIntentComponent>(e);
+            auto& hotbar = view.get<HotbarIntentComponent>(e);
+            auto& block = view.get<BlockActionIntentComponent>(e);
+
+            move = {};
+            look = {};
+            hotbar = {};
+            block = {};
+            continue;
+        }
+
         const auto& camera = view.get<CameraStateComponent>(e);
         auto& move = view.get<MoveIntentComponent>(e);
         auto& look = view.get<LookIntentComponent>(e);

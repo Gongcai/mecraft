@@ -233,20 +233,37 @@ static void testClientAppliesPlayerHealthSnapshot() {
     require(raw.get<ecs::HealthComponent>(player).current == 10, "client should apply lowered server health");
     require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending,
             "client should infer hurt event from lowered health");
+    require(!client.isPlayerDead(), "client should not mark player dead while health remains above zero");
+
+    net::Packet deathPacket;
+    deathPacket.type = net::MessageType::ServerSnapshot;
+    snapshot.serverTick = 13;
+    snapshot.playerHealth = 0;
+    snapshot.playerDead = true;
+    snapshot.playerRespawned = false;
+    deathPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(deathPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::HealthComponent>(player).current == 0, "client should apply dead player health");
+    require(client.isPlayerDead(), "client should retain dead state from server snapshot");
 
     net::Packet respawnPacket;
     respawnPacket.type = net::MessageType::ServerSnapshot;
-    snapshot.serverTick = 13;
+    snapshot.serverTick = 14;
     snapshot.authoritativePosition = glm::vec3(2.0f, 64.0f, -3.0f);
     snapshot.authoritativeVelocity = glm::vec3(0.0f);
     snapshot.playerHealth = 20;
     snapshot.playerRespawned = true;
+    snapshot.playerDead = false;
     respawnPacket.inProcessPayload = snapshot;
     transportPtr->pushIncoming(std::move(respawnPacket));
 
     client.receiveMessages();
 
     require(raw.get<ecs::HealthComponent>(player).current == 20, "client should apply respawned health");
+    require(!client.isPlayerDead(), "client should clear dead state after respawn snapshot");
     require(raw.get<ecs::TransformComponent>(player).position == snapshot.authoritativePosition,
             "client should move local player to respawn position");
     require(raw.get<ecs::VelocityComponent>(player).velocity == snapshot.authoritativeVelocity,
@@ -678,7 +695,7 @@ static void testOwnedServerZombieAttackSyncsPlayerHealth() {
     std::printf("[PASS] testOwnedServerZombieAttackSyncsPlayerHealth\n");
 }
 
-static void testOwnedServerPlayerRespawnsAfterZombieKill() {
+static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
     ServerHarness harness;
     const glm::vec3 spawnPosition = harness.server.getSpawnPosition();
     const glm::vec3 playerPosition = spawnPosition + glm::vec3(0.0f, -1.0f, 0.0f);
@@ -730,15 +747,75 @@ static void testOwnedServerPlayerRespawnsAfterZombieKill() {
     }
 
     bool sawDeathSnapshot = false;
+    bool sawDeadState = false;
     bool sentSpoofedDeadInput = false;
     bool sawDeadInputIgnored = false;
-    bool sawRespawnSnapshot = false;
+    bool sawUnexpectedAutoRespawn = false;
+    bool sawDropSpawn = false;
+    uint32_t droppedStackTotal = 0;
     glm::vec3 respawnedPosition(0.0f);
 
-    for (uint32_t i = 2; i < 280 && !sawRespawnSnapshot; ++i) {
+    for (uint32_t i = 2; i < 320 &&
+         !(sawDeathSnapshot && sawDeadInputIgnored && sawDropSpawn); ++i) {
         const bool spoofThisTick = sawDeathSnapshot;
         pushInput(i, spoofThisTick ? spoofedDeadPosition : playerPosition);
         sentSpoofedDeadInput = sentSpoofedDeadInput || spoofThisTick;
+        harness.server.tick(1.0f / 20.0f);
+
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (!packet.inProcessPayload.has_value()) {
+                continue;
+            }
+
+            if (packet.type == net::MessageType::EntitySpawn) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                if (spawn.kind == net::EntityKind::Drop && spawn.stackCount > 0) {
+                    sawDropSpawn = true;
+                    droppedStackTotal += spawn.stackCount;
+                }
+                continue;
+            }
+
+            if (packet.type != net::MessageType::ServerSnapshot) {
+                continue;
+            }
+
+            const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
+            if (snapshot.playerDead) {
+                sawDeadState = true;
+                require(snapshot.playerHealth == 0, "dead snapshot should report zero health");
+            }
+            if (snapshot.playerHealth == 0) {
+                sawDeathSnapshot = true;
+                if (sentSpoofedDeadInput && distanceSq(snapshot.authoritativePosition, spoofedDeadPosition) > 1.0f) {
+                    sawDeadInputIgnored = true;
+                }
+            }
+
+            if (snapshot.playerRespawned) {
+                sawUnexpectedAutoRespawn = true;
+            }
+        }
+    }
+
+    require(sawDeathSnapshot, "zombie should be able to reduce player health to zero");
+    require(sawDeadState, "server should mark the player as dead in snapshots");
+    require(sawDeadInputIgnored, "server should ignore dead player movement before respawn");
+    require(sawDropSpawn, "player death should spawn dropped inventory items");
+    require(droppedStackTotal > 0, "player death should drop non-empty item stacks");
+    require(!sawUnexpectedAutoRespawn, "server should not auto-respawn before a respawn request");
+
+    net::Packet respawnRequestPacket;
+    respawnRequestPacket.type = net::MessageType::ClientRespawnRequest;
+    net::ClientRespawnRequest respawnRequest;
+    respawnRequest.sequence = 1;
+    respawnRequestPacket.inProcessPayload = respawnRequest;
+    clientPtr->pushIncoming(std::move(respawnRequestPacket));
+
+    bool sawRespawnSnapshot = false;
+    for (uint32_t i = 0; i < 20 && !sawRespawnSnapshot; ++i) {
         harness.server.tick(1.0f / 20.0f);
 
         while (!clientPtr->sent.empty()) {
@@ -749,30 +826,24 @@ static void testOwnedServerPlayerRespawnsAfterZombieKill() {
             }
 
             const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
-            if (snapshot.playerHealth == 0) {
-                sawDeathSnapshot = true;
-                if (sentSpoofedDeadInput && distanceSq(snapshot.authoritativePosition, spoofedDeadPosition) > 1.0f) {
-                    sawDeadInputIgnored = true;
-                }
+            if (!snapshot.playerRespawned) {
+                continue;
             }
 
-            if (snapshot.playerRespawned) {
-                sawRespawnSnapshot = true;
-                respawnedPosition = snapshot.authoritativePosition;
-                require(snapshot.playerHealth == snapshot.playerMaxHealth,
-                        "respawn snapshot should restore player health");
-                require(snapshot.authoritativeVelocity == glm::vec3(0.0f),
-                        "respawn snapshot should clear player velocity");
-            }
+            sawRespawnSnapshot = true;
+            respawnedPosition = snapshot.authoritativePosition;
+            require(!snapshot.playerDead, "respawn snapshot should clear dead state");
+            require(snapshot.playerHealth == snapshot.playerMaxHealth,
+                    "respawn snapshot should restore player health");
+            require(snapshot.authoritativeVelocity == glm::vec3(0.0f),
+                    "respawn snapshot should clear player velocity");
         }
     }
 
-    require(sawDeathSnapshot, "zombie should be able to reduce player health to zero");
-    require(sawDeadInputIgnored, "server should ignore dead player movement before respawn");
-    require(sawRespawnSnapshot, "server should send a player respawn snapshot");
+    require(sawRespawnSnapshot, "server should send a player respawn snapshot after request");
     require(distanceSq(respawnedPosition, spawnPosition) < 0.01f,
             "server should respawn player at world spawn");
-    std::printf("[PASS] testOwnedServerPlayerRespawnsAfterZombieKill\n");
+    std::printf("[PASS] testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest\n");
 }
 
 static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
@@ -1019,6 +1090,13 @@ static void testChatCommandCodecRoundTrip() {
     assert(decodedRequest.sequence == request.sequence);
     assert(decodedRequest.command == request.command);
 
+    net::ClientRespawnRequest respawnRequest;
+    respawnRequest.sequence = 7;
+    const auto encodedRespawn = net::PacketCodec::encodeClientRespawnRequest(respawnRequest);
+    net::ClientRespawnRequest decodedRespawn;
+    assert(net::PacketCodec::decodeClientRespawnRequest(encodedRespawn.data(), encodedRespawn.size(), decodedRespawn));
+    assert(decodedRespawn.sequence == respawnRequest.sequence);
+
     net::ServerSystemMessage system;
     system.kind = net::ChatMessageKind::Success;
     system.message = "done";
@@ -1040,13 +1118,15 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     snapshot.playerMaxHealth = 20;
     snapshot.playerHurt = true;
     snapshot.playerRespawned = true;
+    snapshot.playerDead = true;
 
     const auto encoded = net::PacketCodec::encodeServerSnapshot(snapshot);
-    require(encoded.size() == 38, "server snapshot codec should include health and respawn payload bytes");
+    require(encoded.size() == 39, "server snapshot codec should include health, respawn, and dead payload bytes");
     require(encoded[32] == 7 && encoded[33] == 0, "server snapshot codec should write player health after base payload");
     require(encoded[34] == 20 && encoded[35] == 0, "server snapshot codec should write max health after health");
     require(encoded[36] == 1, "server snapshot codec should write hurt flag after health values");
     require(encoded[37] == 1, "server snapshot codec should write respawn flag after hurt flag");
+    require(encoded[38] == 1, "server snapshot codec should write dead flag after respawn flag");
     net::ServerSnapshot decoded;
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), encoded.size(), decoded),
             "server snapshot codec should decode health payload");
@@ -1056,13 +1136,23 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     require(decoded.playerMaxHealth == 20, "server snapshot codec should keep max health");
     require(decoded.playerHurt, "server snapshot codec should keep hurt event");
     require(decoded.playerRespawned, "server snapshot codec should keep respawn event");
+    require(decoded.playerDead, "server snapshot codec should keep dead state");
 
     net::ServerSnapshot legacyDecoded;
-    require(net::PacketCodec::decodeServerSnapshot(encoded.data(), encoded.size() - 1, legacyDecoded),
-            "server snapshot codec should decode legacy health payload");
+    require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 38, legacyDecoded),
+            "server snapshot codec should decode legacy respawn payload");
     require(legacyDecoded.playerHealth == 7, "legacy health payload should keep player health");
     require(legacyDecoded.playerHurt, "legacy health payload should keep hurt event");
-    require(!legacyDecoded.playerRespawned, "legacy health payload should default respawn event off");
+    require(legacyDecoded.playerRespawned, "legacy respawn payload should keep respawn event");
+    require(!legacyDecoded.playerDead, "legacy respawn payload should default dead state off");
+
+    net::ServerSnapshot legacyHealthDecoded;
+    require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 37, legacyHealthDecoded),
+            "server snapshot codec should decode legacy health-only payload");
+    require(legacyHealthDecoded.playerHealth == 7, "legacy health payload should keep player health");
+    require(legacyHealthDecoded.playerHurt, "legacy health payload should keep hurt event");
+    require(!legacyHealthDecoded.playerRespawned, "legacy health payload should default respawn event off");
+    require(!legacyHealthDecoded.playerDead, "legacy health payload should default dead state off");
     std::printf("[PASS] testServerSnapshotCodecCarriesPlayerHealth\n");
 }
 
@@ -1452,7 +1542,7 @@ int main() {
     testSummonZombieUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
     testOwnedServerZombieAttackSyncsPlayerHealth();
-    testOwnedServerPlayerRespawnsAfterZombieKill();
+    testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
     testPersistentZombieRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();

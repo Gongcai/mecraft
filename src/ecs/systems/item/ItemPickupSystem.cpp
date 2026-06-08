@@ -13,6 +13,10 @@ void ItemPickupSystem::update(SystemContext& ctx) {
 
     auto playerView = registry.view<LocalPlayerTag, TransformComponent, InventoryDataComponent>();
     for (auto e : playerView) {
+        if (const auto* health = registry.registry().try_get<HealthComponent>(e);
+            health != nullptr && health->current <= 0) {
+            continue;
+        }
         const auto& transform = playerView.get<TransformComponent>(e);
         auto& inventoryData = playerView.get<InventoryDataComponent>(e);
         pickup(registry, transform.position, kDropCollectRadius, inventoryData.inventory);

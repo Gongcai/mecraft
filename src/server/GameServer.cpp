@@ -10,6 +10,7 @@
 #include "../ecs/systems/combat/DamageSystem.h"
 #include "../ecs/systems/combat/DeathSystem.h"
 #include "../ecs/systems/combat/PlayerMeleeSystem.h"
+#include "../ecs/systems/item/ItemSpawnSystem.h"
 #include "../ecs/systems/item/ItemLifetimeSystem.h"
 #include "../ecs/systems/item/ItemMergeSystem.h"
 #include "../ecs/systems/item/ItemPhysicsSystem.h"
@@ -30,7 +31,6 @@ namespace server {
 namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
-constexpr float kPlayerRespawnDelaySeconds = 2.0f;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 
 std::string playerName(const net::ClientId id) {
@@ -190,53 +190,115 @@ void GameServer::destroyOwnedPlayerProxy(ConnectedClient& client) {
     }
     client.ecsPlayerEntity = entt::null;
     client.awaitingRespawn = false;
-    client.respawnTimer = 0.0f;
+    client.deathDropsSpawned = false;
     client.respawnSnapshotTicksRemaining = 0;
 }
 
-void GameServer::respawnOwnedPlayer(ConnectedClient& client) {
-    if (!usingOwnedEcsRegistry() || m_ownedGameplayRegistry == nullptr ||
-        client.ecsPlayerEntity == entt::null) {
+entt::entity GameServer::resolvePlayerEntity(const ConnectedClient& client) const {
+    if (m_ecsRegistry == nullptr) {
+        return entt::null;
+    }
+    if (client.ecsPlayerEntity != entt::null && m_ecsRegistry->valid(client.ecsPlayerEntity)) {
+        return client.ecsPlayerEntity;
+    }
+
+    auto playerView = m_ecsRegistry->view<ecs::LocalPlayerTag, ecs::HealthComponent>();
+    if (playerView.begin() != playerView.end()) {
+        return *playerView.begin();
+    }
+    return entt::null;
+}
+
+void GameServer::dropPlayerInventory(ConnectedClient& client) {
+    if (client.deathDropsSpawned || m_gameplayRegistry == nullptr || m_ecsRegistry == nullptr) {
         return;
     }
 
-    auto& reg = m_ownedGameplayRegistry->registry();
-    if (!reg.valid(client.ecsPlayerEntity)) {
+    const entt::entity playerEntity = resolvePlayerEntity(client);
+    if (playerEntity == entt::null || !m_ecsRegistry->valid(playerEntity)) {
         return;
     }
 
+    auto& reg = *m_ecsRegistry;
+    auto* inventoryData = reg.try_get<ecs::InventoryDataComponent>(playerEntity);
+    if (inventoryData == nullptr) {
+        return;
+    }
+
+    glm::vec3 position = client.lastPosition;
+    if (const auto* transform = reg.try_get<ecs::TransformComponent>(playerEntity)) {
+        position = transform->position;
+    }
+
+    const glm::ivec3 dropBlockPos(static_cast<int>(std::floor(position.x)),
+                                  static_cast<int>(std::floor(position.y)),
+                                  static_cast<int>(std::floor(position.z)));
+
+    bool droppedAny = false;
+    for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
+        const ItemStack stack = inventoryData->inventory.getSlotStack(slot);
+        if (stack.isEmpty()) {
+            continue;
+        }
+        ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, stack.itemId, dropBlockPos, stack.count);
+        inventoryData->inventory.setSlotStack(slot, {});
+        droppedAny = true;
+    }
+
+    client.deathDropsSpawned = true;
+    if (droppedAny) {
+        sendSystemMessage(client, "Your items dropped at your death location.", net::ChatMessageKind::Warning);
+    }
+}
+
+void GameServer::respawnPlayer(ConnectedClient& client) {
+    if (m_ecsRegistry == nullptr) {
+        return;
+    }
+
+    const entt::entity playerEntity = resolvePlayerEntity(client);
+    if (playerEntity == entt::null || !m_ecsRegistry->valid(playerEntity)) {
+        return;
+    }
+
+    auto& reg = *m_ecsRegistry;
     client.awaitingRespawn = false;
-    client.respawnTimer = 0.0f;
+    client.deathDropsSpawned = false;
     client.respawnSnapshotTicksRemaining = kPlayerRespawnSnapshotRepeatTicks;
     client.lastPosition = m_spawnPosition;
     client.lastVelocity = glm::vec3(0.0f);
     client.pendingInputActions = 0;
 
-    if (auto* transform = reg.try_get<ecs::TransformComponent>(client.ecsPlayerEntity)) {
+    if (auto* transform = reg.try_get<ecs::TransformComponent>(playerEntity)) {
         transform->position = m_spawnPosition;
         transform->eyeHeight = 1.62f;
     } else {
-        reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, m_spawnPosition, 1.62f);
+        reg.emplace<ecs::TransformComponent>(playerEntity, m_spawnPosition, 1.62f);
     }
 
-    if (auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity)) {
+    if (auto* velocity = reg.try_get<ecs::VelocityComponent>(playerEntity)) {
         velocity->velocity = glm::vec3(0.0f);
     } else {
-        reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
+        reg.emplace<ecs::VelocityComponent>(playerEntity);
     }
 
-    auto* health = reg.try_get<ecs::HealthComponent>(client.ecsPlayerEntity);
+    if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(playerEntity)) {
+        physicsBody->body.position = m_spawnPosition;
+        physicsBody->body.velocity = glm::vec3(0.0f);
+    }
+
+    auto* health = reg.try_get<ecs::HealthComponent>(playerEntity);
     if (health == nullptr) {
-        health = &reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
+        health = &reg.emplace<ecs::HealthComponent>(playerEntity);
     }
     health->max = std::max(1, health->max);
     health->current = health->max;
 
-    if (auto* hurt = reg.try_get<ecs::HurtEffectComponent>(client.ecsPlayerEntity)) {
+    if (auto* hurt = reg.try_get<ecs::HurtEffectComponent>(playerEntity)) {
         hurt->classicHurtEffectPending = false;
     }
 
-    if (auto* blockIntent = reg.try_get<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity)) {
+    if (auto* blockIntent = reg.try_get<ecs::BlockActionIntentComponent>(playerEntity)) {
         blockIntent->wantsBreak = false;
         blockIntent->wantsPlace = false;
     }
@@ -244,21 +306,27 @@ void GameServer::respawnOwnedPlayer(ConnectedClient& client) {
     sendSystemMessage(client, "Respawned at world spawn.", net::ChatMessageKind::Success);
 }
 
-void GameServer::updateOwnedPlayerLifecycle(const float dt) {
-    if (!usingOwnedEcsRegistry() || m_ownedGameplayRegistry == nullptr) {
+void GameServer::updatePlayerLifecycle(const float dt) {
+    static_cast<void>(dt);
+    if (m_ecsRegistry == nullptr) {
         return;
     }
 
-    auto& reg = m_ownedGameplayRegistry->registry();
+    auto& reg = *m_ecsRegistry;
     for (auto& client : m_clients) {
         const bool active = client.receivedHello &&
                             client.transport &&
                             client.transport->hasActiveRemote();
-        if (!active || client.ecsPlayerEntity == entt::null || !reg.valid(client.ecsPlayerEntity)) {
+        if (!active) {
             continue;
         }
 
-        auto* health = reg.try_get<ecs::HealthComponent>(client.ecsPlayerEntity);
+        const entt::entity playerEntity = resolvePlayerEntity(client);
+        if (playerEntity == entt::null || !reg.valid(playerEntity)) {
+            continue;
+        }
+
+        auto* health = reg.try_get<ecs::HealthComponent>(playerEntity);
         if (health == nullptr) {
             continue;
         }
@@ -266,26 +334,29 @@ void GameServer::updateOwnedPlayerLifecycle(const float dt) {
         if (client.awaitingRespawn) {
             client.pendingInputActions = 0;
             client.lastVelocity = glm::vec3(0.0f);
-            if (auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity)) {
+            health->current = 0;
+            if (auto* velocity = reg.try_get<ecs::VelocityComponent>(playerEntity)) {
                 velocity->velocity = glm::vec3(0.0f);
             }
-
-            client.respawnTimer = std::max(0.0f, client.respawnTimer - dt);
-            if (client.respawnTimer <= 0.0f) {
-                respawnOwnedPlayer(client);
+            if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(playerEntity)) {
+                physicsBody->body.velocity = glm::vec3(0.0f);
             }
             continue;
         }
 
         if (health->current <= 0) {
             client.awaitingRespawn = true;
-            client.respawnTimer = kPlayerRespawnDelaySeconds;
+            health->current = 0;
             client.pendingInputActions = 0;
             client.lastVelocity = glm::vec3(0.0f);
-            if (auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity)) {
+            if (auto* velocity = reg.try_get<ecs::VelocityComponent>(playerEntity)) {
                 velocity->velocity = glm::vec3(0.0f);
             }
-            sendSystemMessage(client, "You died. Respawning...", net::ChatMessageKind::Warning);
+            if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(playerEntity)) {
+                physicsBody->body.velocity = glm::vec3(0.0f);
+            }
+            dropPlayerInventory(client);
+            sendSystemMessage(client, "You died. Press R to respawn.", net::ChatMessageKind::Warning);
         }
     }
 }
@@ -316,6 +387,9 @@ void GameServer::syncOwnedPlayerProxies() {
             reg.emplace<ecs::MeleeAttackComponent>(client.ecsPlayerEntity);
             reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
             reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
+            reg.emplace<ecs::InventoryComponent>(client.ecsPlayerEntity);
+            auto& inventoryData = reg.emplace<ecs::InventoryDataComponent>(client.ecsPlayerEntity);
+            inventoryData.inventory.initializeDefaultLoadout();
             auto& velocity = reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
             velocity.velocity = client.lastVelocity;
         } else {
@@ -356,6 +430,13 @@ void GameServer::syncOwnedPlayerProxies() {
         if (!reg.all_of<ecs::MeleeAttackComponent>(client.ecsPlayerEntity)) {
             reg.emplace<ecs::MeleeAttackComponent>(client.ecsPlayerEntity);
         }
+        if (!reg.all_of<ecs::InventoryComponent>(client.ecsPlayerEntity)) {
+            reg.emplace<ecs::InventoryComponent>(client.ecsPlayerEntity);
+        }
+        if (!reg.all_of<ecs::InventoryDataComponent>(client.ecsPlayerEntity)) {
+            auto& inventoryData = reg.emplace<ecs::InventoryDataComponent>(client.ecsPlayerEntity);
+            inventoryData.inventory.initializeDefaultLoadout();
+        }
 
         auto& camera = reg.get<ecs::CameraStateComponent>(client.ecsPlayerEntity);
         updateCameraStateFromClient(camera, client.lastYaw, client.lastPitch);
@@ -392,7 +473,7 @@ void GameServer::tickServerEcs(const float dt) {
     playerMelee.update(ctx);
     ecs::DamageSystem damage;
     damage.update(ctx);
-    updateOwnedPlayerLifecycle(dt);
+    updatePlayerLifecycle(dt);
     ecs::DeathSystem death;
     death.update(ctx);
     ecs::ItemPhysicsSystem itemPhysics;
@@ -571,6 +652,9 @@ void GameServer::tick(float dt) {
     }
     m_world.update(loadCenter, dt);
     tickServerEcs(dt);
+    if (!usingOwnedEcsRegistry()) {
+        updatePlayerLifecycle(dt);
+    }
 
     // Send new chunks to clients
     sendNewChunksToClients();
@@ -716,6 +800,12 @@ void GameServer::processClientMessages() {
                 }
                 break;
             }
+            case net::MessageType::ClientRespawnRequest: {
+                if (packet.inProcessPayload.has_value() && client.awaitingRespawn) {
+                    respawnPlayer(client);
+                }
+                break;
+            }
             default:
                 break;
             }
@@ -783,6 +873,8 @@ void GameServer::cleanupDisconnectedClients() {
         client.receivedViewConfig = false;
         client.lastAckedInput = 0;
         client.pendingInputActions = 0;
+        client.awaitingRespawn = false;
+        client.deathDropsSpawned = false;
         client.helloTick = 0;
         client.sentChunks.clear();
         client.spawnedPlayerNetIds.clear();
@@ -1190,18 +1282,9 @@ void GameServer::sendSnapshotsToClients() {
         snapshot.authoritativePosition = client.lastPosition;
         snapshot.authoritativeVelocity = client.lastVelocity;
         snapshot.playerRespawned = client.respawnSnapshotTicksRemaining > 0;
+        snapshot.playerDead = client.awaitingRespawn;
 
-        entt::entity playerEntity = entt::null;
-        if (m_ecsRegistry != nullptr) {
-            if (client.ecsPlayerEntity != entt::null && m_ecsRegistry->valid(client.ecsPlayerEntity)) {
-                playerEntity = client.ecsPlayerEntity;
-            } else {
-                auto playerView = m_ecsRegistry->view<ecs::LocalPlayerTag, ecs::HealthComponent>();
-                if (playerView.begin() != playerView.end()) {
-                    playerEntity = *playerView.begin();
-                }
-            }
-        }
+        const entt::entity playerEntity = resolvePlayerEntity(client);
 
         if (playerEntity != entt::null && m_ecsRegistry != nullptr && m_ecsRegistry->valid(playerEntity)) {
             if (const auto* health = m_ecsRegistry->try_get<ecs::HealthComponent>(playerEntity)) {

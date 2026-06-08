@@ -135,6 +135,7 @@ public:
         pushU16(buf, msg.playerMaxHealth);
         pushU8(buf, msg.playerHurt ? 1 : 0);
         pushU8(buf, msg.playerRespawned ? 1 : 0);
+        pushU8(buf, msg.playerDead ? 1 : 0);
         return buf;
     }
 
@@ -208,6 +209,12 @@ public:
         std::vector<uint8_t> buf;
         pushU32(buf, msg.sequence);
         pushString(buf, msg.command);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeClientRespawnRequest(const ClientRespawnRequest& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.sequence);
         return buf;
     }
 
@@ -456,12 +463,16 @@ public:
         out.playerMaxHealth = 20;
         out.playerHurt = false;
         out.playerRespawned = false;
+        out.playerDead = false;
         if (size >= offset + 5) {
             out.playerHealth = readU16(data, offset);
             out.playerMaxHealth = readU16(data, offset);
             out.playerHurt = readU8(data, offset) != 0;
             if (size >= offset + 1) {
                 out.playerRespawned = readU8(data, offset) != 0;
+            }
+            if (size >= offset + 1) {
+                out.playerDead = readU8(data, offset) != 0;
             }
         }
         return true;
@@ -539,6 +550,13 @@ public:
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         return readString(data, size, offset, out.command);
+    }
+
+    static bool decodeClientRespawnRequest(const uint8_t* data, size_t size, ClientRespawnRequest& out) {
+        if (size < 4) return false;
+        size_t offset = 0;
+        out.sequence = readU32(data, offset);
+        return true;
     }
 
     static bool decodeBlockUpdateBatch(const uint8_t* data, size_t size, BlockUpdateBatchMessage& out) {

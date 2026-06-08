@@ -14,6 +14,7 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
     playerStats.food = snap.playerStats.food;
     playerStats.maxFood = snap.playerStats.maxFood;
     playerStats.showSurvivalStats = snap.playerStats.showSurvivalStats;
+    playerStats.isDead = snap.playerStats.isDead;
 
     m_uiRenderer.render(m_window, *snap.inventory, playerStats, m_input.snapshot());
     stateMachine.render();

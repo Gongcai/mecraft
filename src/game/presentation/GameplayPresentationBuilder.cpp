@@ -107,11 +107,15 @@ GameplayPresentationSnapshot GameplayPresentationBuilder::build(
     snap.playerStats.maxArmor = playerQuery.getMaxArmor();
     snap.playerStats.food = playerQuery.getFood();
     snap.playerStats.maxFood = playerQuery.getMaxFood();
+    snap.playerStats.isDead = snap.playerStats.health <= 0;
 
     // Check gameplay mode for survival stats visibility
     if (reg.ctxHas<ecs::GameplayRuntimeContext>()) {
         snap.playerStats.showSurvivalStats =
             reg.ctxGet<ecs::GameplayRuntimeContext>().gameplayMode != GameplayMode::Creative;
+    }
+    if (!snap.playerStats.showSurvivalStats) {
+        snap.playerStats.isDead = false;
     }
 
     return snap;

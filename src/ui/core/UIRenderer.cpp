@@ -45,6 +45,22 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_hotbar.visible = true;
     m_hud.init(resourceMgr);
     m_hud.visible = true;
+    m_deathBackdrop.init(resourceMgr);
+    m_deathBackdrop.visible = true;
+    m_deathBackdrop.setUseLocalColors(true);
+    m_deathBackdrop.setBackgroundColor({0.34f, 0.02f, 0.02f, 0.64f});
+    m_deathBackdrop.setBorderWidth(0.0f);
+    m_deathTitle.init(resourceMgr);
+    m_deathTitle.setText("You died");
+    m_deathTitle.setTextScale(4.0f);
+    m_deathTitle.setTextColor({1.0f, 0.18f, 0.16f, 1.0f});
+    m_deathTitle.setShadowEnabled(true);
+    m_deathTitle.setShadowOffset(2.0f, -2.0f);
+    m_deathPrompt.init(resourceMgr);
+    m_deathPrompt.setText("Press R to respawn");
+    m_deathPrompt.setTextScale(1.6f);
+    m_deathPrompt.setTextColor({1.0f, 1.0f, 1.0f, 0.92f});
+    m_deathPrompt.setShadowEnabled(true);
     m_inventoryPanel.init(resourceMgr);
     m_inventoryPanel.visible = false;
     m_creativeInventoryPanel.init(resourceMgr);
@@ -80,6 +96,9 @@ void UIRenderer::shutdown()
     m_text.shutdown();
     m_creativeInventoryPanel.shutdown();
     m_inventoryPanel.shutdown();
+    m_deathPrompt.shutdown();
+    m_deathTitle.shutdown();
+    m_deathBackdrop.shutdown();
     m_hud.shutdown();
     m_hotbar.shutdown();
     m_commandInputRequested = false;
@@ -470,6 +489,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.humanoidRenderer = m_humanoidRenderer;
     context.inventory = &inventory;
     context.playerStats = &playerStats;
+    context.playerDead = playerStats.isDead;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.visible;
@@ -559,7 +579,7 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     }
 }
 
-void UIRenderer::renderControls(const UIRenderContext& context) const
+void UIRenderer::renderControls(const UIRenderContext& context)
 {
     UIRenderContext renderContext = context;
     if (m_activeScene && m_activeScene->visible) {
@@ -575,11 +595,46 @@ void UIRenderer::renderControls(const UIRenderContext& context) const
         widget->render(renderContext);
     }
 
+    if (renderContext.playerDead) {
+        renderDeathOverlay(renderContext);
+    }
+
     // Render active scene on top of gameplay controls
     if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(renderContext);
         m_activeScene->render(renderContext);
     }
+}
+
+void UIRenderer::renderDeathOverlay(const UIRenderContext& context)
+{
+    m_deathBackdrop.anchor = Anchor::BottomLeft;
+    m_deathBackdrop.anchorOffsetX = 0.0f;
+    m_deathBackdrop.anchorOffsetY = 0.0f;
+    m_deathBackdrop.width = static_cast<float>(context.screenWidth);
+    m_deathBackdrop.height = static_cast<float>(context.screenHeight);
+    m_deathBackdrop.render(context);
+
+    const float screenW = static_cast<float>(context.screenWidth);
+    const float screenH = static_cast<float>(context.screenHeight);
+
+    const float titleW = context.textRenderer ? m_deathTitle.measureTextWidth(*context.textRenderer) : 0.0f;
+    const float titleH = context.textRenderer ? m_deathTitle.measureTextHeight(*context.textRenderer) : 0.0f;
+    m_deathTitle.anchor = Anchor::BottomLeft;
+    m_deathTitle.anchorOffsetX = (screenW - titleW) * 0.5f;
+    m_deathTitle.anchorOffsetY = screenH * 0.5f + titleH * 0.4f;
+    m_deathTitle.width = titleW;
+    m_deathTitle.height = titleH;
+    m_deathTitle.render(context);
+
+    const float promptW = context.textRenderer ? m_deathPrompt.measureTextWidth(*context.textRenderer) : 0.0f;
+    const float promptH = context.textRenderer ? m_deathPrompt.measureTextHeight(*context.textRenderer) : 0.0f;
+    m_deathPrompt.anchor = Anchor::BottomLeft;
+    m_deathPrompt.anchorOffsetX = (screenW - promptW) * 0.5f;
+    m_deathPrompt.anchorOffsetY = screenH * 0.5f - promptH * 1.6f;
+    m_deathPrompt.width = promptW;
+    m_deathPrompt.height = promptH;
+    m_deathPrompt.render(context);
 }
 
 void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sourceHeight) const

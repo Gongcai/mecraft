@@ -38,6 +38,7 @@ void sendClientInput(GameSession& session, const float fixedStep) {
 
     auto& gameplayRegistry = session.gameplayScene().registry();
     auto& reg = gameplayRegistry.registry();
+    const bool playerDead = session.client().isPlayerDead();
     auto view = reg.view<ecs::LocalPlayerTag,
                          ecs::MoveIntentComponent,
                          ecs::LookIntentComponent,
@@ -51,7 +52,7 @@ void sendClientInput(GameSession& session, const float fixedStep) {
         const auto& physics = view.get<ecs::PhysicsBodyComponent>(entity);
         const auto& camera = view.get<ecs::CameraStateComponent>(entity);
         uint32_t actions = 0;
-        if (gameplayRegistry.ctxHas<ecs::InputFrameState>()) {
+        if (!playerDead && gameplayRegistry.ctxHas<ecs::InputFrameState>()) {
             const auto& frame = gameplayRegistry.ctxGet<ecs::InputFrameState>();
             if (frame.gameplayContextActive && frame.attack) {
                 actions |= net::ClientInputActions::Attack;
@@ -61,11 +62,11 @@ void sendClientInput(GameSession& session, const float fixedStep) {
             }
         }
         session.client().sendInput(fixedStep,
-                                   glm::vec3(move.move.x, 0.0f, move.move.y),
+                                   playerDead ? glm::vec3(0.0f) : glm::vec3(move.move.x, 0.0f, move.move.y),
                                    glm::vec2(look.deltaX, look.deltaY),
-                                   move.wantsJump,
-                                   move.wantsCrouch,
-                                   move.wantsSprint,
+                                   !playerDead && move.wantsJump,
+                                   !playerDead && move.wantsCrouch,
+                                   !playerDead && move.wantsSprint,
                                    transform.position,
                                    physics.body.velocity,
                                    camera.yaw,
@@ -96,6 +97,10 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 
     accumulator -= fixedStep;
     session.receiveWorldMessages();
+
+    if (session.client().isPlayerDead() && inputSnapshot.isKeyJustPressed(GLFW_KEY_R)) {
+        session.client().sendRespawnRequest();
+    }
 
 #ifdef MECRAFT_DEBUG
     const auto stateMachineStart = std::chrono::steady_clock::now();

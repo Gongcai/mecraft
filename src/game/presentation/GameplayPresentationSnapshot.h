@@ -39,6 +39,7 @@ struct SnapPlayerStats {
     int food = 20;
     int maxFood = 20;
     bool showSurvivalStats = true;
+    bool isDead = false;
 };
 
 /// Immutable snapshot of gameplay state needed for rendering, UI, and audio.

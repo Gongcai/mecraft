@@ -133,6 +133,18 @@ void GameClient::sendCommandRequest(const std::string& command) {
     m_transport->send(std::move(packet));
 }
 
+void GameClient::sendRespawnRequest() {
+    if (!m_transport) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableControl;
+    packet.type = net::MessageType::ClientRespawnRequest;
+    net::ClientRespawnRequest request;
+    request.sequence = ++m_respawnSequence;
+    packet.inProcessPayload = request;
+    m_transport->send(std::move(packet));
+}
+
 void GameClient::receiveMessages() {
     if (!m_transport) return;
 
