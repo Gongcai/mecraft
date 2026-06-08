@@ -131,6 +131,9 @@ public:
         pushFloat(buf, msg.authoritativeVelocity.x);
         pushFloat(buf, msg.authoritativeVelocity.y);
         pushFloat(buf, msg.authoritativeVelocity.z);
+        pushU16(buf, msg.playerHealth);
+        pushU16(buf, msg.playerMaxHealth);
+        pushU8(buf, msg.playerHurt ? 1 : 0);
         return buf;
     }
 
@@ -438,7 +441,7 @@ public:
     }
 
     static bool decodeServerSnapshot(const uint8_t* data, size_t size, ServerSnapshot& out) {
-        if (size < 28) return false;
+        if (size < 32) return false;
         size_t offset = 0;
         out.serverTick = readU32(data, offset);
         out.ackInputSequence = readU32(data, offset);
@@ -448,6 +451,14 @@ public:
         out.authoritativeVelocity.x = readFloat(data, offset);
         out.authoritativeVelocity.y = readFloat(data, offset);
         out.authoritativeVelocity.z = readFloat(data, offset);
+        out.playerHealth = 20;
+        out.playerMaxHealth = 20;
+        out.playerHurt = false;
+        if (size >= offset + 5) {
+            out.playerHealth = readU16(data, offset);
+            out.playerMaxHealth = readU16(data, offset);
+            out.playerHurt = readU8(data, offset) != 0;
+        }
         return true;
     }
 

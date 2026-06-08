@@ -1069,6 +1069,8 @@ void GameServer::sendNewChunksToClients() {
 }
 
 void GameServer::sendSnapshotsToClients() {
+    std::vector<entt::entity> hurtEventsSent;
+
     for (auto& client : m_clients) {
         if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
             continue;
@@ -1079,10 +1081,46 @@ void GameServer::sendSnapshotsToClients() {
         net::ServerSnapshot snapshot;
         snapshot.serverTick = m_currentTick;
         snapshot.ackInputSequence = client.lastAckedInput;
-        snapshot.authoritativePosition = m_spawnPosition;
-        snapshot.authoritativeVelocity = glm::vec3(0.0f);
+        snapshot.authoritativePosition = client.lastPosition;
+        snapshot.authoritativeVelocity = client.lastVelocity;
+
+        entt::entity playerEntity = entt::null;
+        if (m_ecsRegistry != nullptr) {
+            if (client.ecsPlayerEntity != entt::null && m_ecsRegistry->valid(client.ecsPlayerEntity)) {
+                playerEntity = client.ecsPlayerEntity;
+            } else {
+                auto playerView = m_ecsRegistry->view<ecs::LocalPlayerTag, ecs::HealthComponent>();
+                if (playerView.begin() != playerView.end()) {
+                    playerEntity = *playerView.begin();
+                }
+            }
+        }
+
+        if (playerEntity != entt::null && m_ecsRegistry != nullptr && m_ecsRegistry->valid(playerEntity)) {
+            if (const auto* health = m_ecsRegistry->try_get<ecs::HealthComponent>(playerEntity)) {
+                snapshot.playerHealth = static_cast<uint16_t>(std::clamp(health->current, 0, 65535));
+                snapshot.playerMaxHealth = static_cast<uint16_t>(std::clamp(health->max, 0, 65535));
+            }
+            if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(playerEntity)) {
+                snapshot.playerHurt = hurt->classicHurtEffectPending;
+                if (snapshot.playerHurt && usingOwnedEcsRegistry()) {
+                    hurtEventsSent.push_back(playerEntity);
+                }
+            }
+        }
+
         packet.inProcessPayload = snapshot;
         client.transport->send(std::move(packet));
+    }
+
+    if (m_ecsRegistry != nullptr) {
+        for (const entt::entity playerEntity : hurtEventsSent) {
+            if (m_ecsRegistry->valid(playerEntity)) {
+                if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(playerEntity)) {
+                    hurt->classicHurtEffectPending = false;
+                }
+            }
+        }
     }
 }
 

@@ -94,6 +94,7 @@ private:
     std::unique_ptr<net::ITransportEndpoint> m_transport;
     ClientWorld m_clientWorld;
     ClientEntityStore m_entityStore;
+    entt::registry* m_ecsRegistry = nullptr;
     net::ServerSnapshot m_lastSnapshot;
     glm::vec3 m_authPosition = glm::vec3(0.0f);
     net::ClientId m_clientId = 0;

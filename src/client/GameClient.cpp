@@ -1,5 +1,6 @@
 #include "GameClient.h"
 #include "../ecs/GameplayRegistry.h"
+#include "../ecs/components/Components.h"
 #include "../world/chunk/Chunk.h"
 #include "../world/WeatherSystem.h"
 #include <cstdio>
@@ -17,10 +18,12 @@ void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
 }
 
 void GameClient::initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr) {
+    m_ecsRegistry = &registry;
     m_entityStore.init(registry, resourceMgr);
 }
 
 void GameClient::initEntityStore(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr) {
+    m_ecsRegistry = &registry.registry();
     m_entityStore.init(registry, resourceMgr);
 }
 
@@ -280,6 +283,25 @@ void GameClient::handleChunkData(const net::ChunkDataMessage& data) {
 void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
     m_lastSnapshot = snapshot;
     m_authPosition = snapshot.authoritativePosition;
+
+    if (m_ecsRegistry == nullptr) {
+        return;
+    }
+
+    auto view = m_ecsRegistry->view<ecs::LocalPlayerTag, ecs::HealthComponent>();
+    for (const entt::entity player : view) {
+        auto& health = view.get<ecs::HealthComponent>(player);
+        const bool healthDropped = static_cast<int>(snapshot.playerHealth) < health.current;
+        health.current = static_cast<int>(snapshot.playerHealth);
+        health.max = static_cast<int>(snapshot.playerMaxHealth);
+
+        if (snapshot.playerHurt || healthDropped) {
+            if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(player)) {
+                hurt->classicHurtEffectPending = true;
+            }
+        }
+        break;
+    }
 }
 
 void GameClient::handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& snapshot) {

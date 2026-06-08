@@ -188,6 +188,9 @@ struct ServerSnapshot {
     uint32_t ackInputSequence = 0;
     glm::vec3 authoritativePosition = glm::vec3(0.0f);
     glm::vec3 authoritativeVelocity = glm::vec3(0.0f);
+    uint16_t playerHealth = 20;
+    uint16_t playerMaxHealth = 20;
+    bool playerHurt = false;
 };
 
 // ===========================================================================

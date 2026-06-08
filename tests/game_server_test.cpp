@@ -176,6 +176,56 @@ static void testInputRoundTrip() {
     std::printf("[PASS] testInputRoundTrip\n");
 }
 
+static void testClientAppliesPlayerHealthSnapshot() {
+    client::GameClient client;
+    ecs::GameplayRegistry registry;
+    auto& raw = registry.registry();
+    const entt::entity player = raw.create();
+    raw.emplace<ecs::LocalPlayerTag>(player);
+    raw.emplace<ecs::HealthComponent>(player);
+    raw.emplace<ecs::HurtEffectComponent>(player);
+    client.initEntityStore(registry, nullptr);
+
+    auto transport = std::make_unique<ManualTransport>();
+    ManualTransport* transportPtr = transport.get();
+    client.connect(std::move(transport));
+
+    net::Packet snapshotPacket;
+    snapshotPacket.type = net::MessageType::ServerSnapshot;
+    net::ServerSnapshot snapshot;
+    snapshot.serverTick = 11;
+    snapshot.ackInputSequence = 4;
+    snapshot.playerHealth = 13;
+    snapshot.playerMaxHealth = 20;
+    snapshot.playerHurt = true;
+    snapshotPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(snapshotPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::HealthComponent>(player).current == 13, "client should apply server player health");
+    require(raw.get<ecs::HealthComponent>(player).max == 20, "client should apply server max health");
+    require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending, "client should apply server hurt event");
+    require(client.lastSnapshot().playerHealth == 13, "client should retain health in last snapshot");
+
+    raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending = false;
+
+    net::Packet lowerHealthPacket;
+    lowerHealthPacket.type = net::MessageType::ServerSnapshot;
+    snapshot.serverTick = 12;
+    snapshot.playerHealth = 10;
+    snapshot.playerHurt = false;
+    lowerHealthPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(lowerHealthPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::HealthComponent>(player).current == 10, "client should apply lowered server health");
+    require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending,
+            "client should infer hurt event from lowered health");
+    std::printf("[PASS] testClientAppliesPlayerHealthSnapshot\n");
+}
+
 static void testClientBlockActionRoundTrip() {
     ServerHarness harness;
     client::GameClient client;
@@ -521,6 +571,81 @@ static void testOwnedServerZombiePursuesPlayer() {
     std::printf("[PASS] testOwnedServerZombiePursuesPlayer\n");
 }
 
+static void testOwnedServerZombieAttackSyncsPlayerHealth() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    auto pushInput = [&](const uint32_t sequence) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = sequence;
+        input.playerPosition = playerPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = 0.0f;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    pushInput(1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 22;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    bool sawDamagedSnapshot = false;
+    bool sawHurtEvent = false;
+    for (uint32_t i = 2; i < 90 && !sawDamagedSnapshot; ++i) {
+        pushInput(i);
+        harness.server.tick(1.0f / 20.0f);
+
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type != net::MessageType::ServerSnapshot || !packet.inProcessPayload.has_value()) {
+                continue;
+            }
+
+            const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
+            if (snapshot.playerHealth < snapshot.playerMaxHealth) {
+                sawDamagedSnapshot = true;
+                sawHurtEvent = snapshot.playerHurt;
+            }
+        }
+    }
+
+    require(sawDamagedSnapshot, "zombie attack should lower player health in server snapshot");
+    require(sawHurtEvent, "zombie attack should send a player hurt event");
+    std::printf("[PASS] testOwnedServerZombieAttackSyncsPlayerHealth\n");
+}
+
 static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
     ServerHarness harness;
     const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
@@ -774,6 +899,32 @@ static void testChatCommandCodecRoundTrip() {
     assert(decodedSystem.kind == system.kind);
     assert(decodedSystem.message == system.message);
     std::printf("[PASS] testChatCommandCodecRoundTrip\n");
+}
+
+static void testServerSnapshotCodecCarriesPlayerHealth() {
+    net::ServerSnapshot snapshot;
+    snapshot.serverTick = 17;
+    snapshot.ackInputSequence = 9;
+    snapshot.authoritativePosition = glm::vec3(1.0f, 2.0f, 3.0f);
+    snapshot.authoritativeVelocity = glm::vec3(0.25f, 0.0f, -0.5f);
+    snapshot.playerHealth = 7;
+    snapshot.playerMaxHealth = 20;
+    snapshot.playerHurt = true;
+
+    const auto encoded = net::PacketCodec::encodeServerSnapshot(snapshot);
+    require(encoded.size() == 37, "server snapshot codec should include health payload bytes");
+    require(encoded[32] == 7 && encoded[33] == 0, "server snapshot codec should write player health after base payload");
+    require(encoded[34] == 20 && encoded[35] == 0, "server snapshot codec should write max health after health");
+    require(encoded[36] == 1, "server snapshot codec should write hurt flag after health values");
+    net::ServerSnapshot decoded;
+    require(net::PacketCodec::decodeServerSnapshot(encoded.data(), encoded.size(), decoded),
+            "server snapshot codec should decode health payload");
+    require(decoded.serverTick == 17, "server snapshot codec should keep tick");
+    require(decoded.ackInputSequence == 9, "server snapshot codec should keep ack");
+    require(decoded.playerHealth == 7, "server snapshot codec should keep player health");
+    require(decoded.playerMaxHealth == 20, "server snapshot codec should keep max health");
+    require(decoded.playerHurt, "server snapshot codec should keep hurt event");
+    std::printf("[PASS] testServerSnapshotCodecCarriesPlayerHealth\n");
 }
 
 static void testServerTickBreaksUnsupportedPlant() {
@@ -1153,6 +1304,7 @@ int main() {
     testServerTick();
     testChunkStreamingToClient();
     testInputRoundTrip();
+    testClientAppliesPlayerHealthSnapshot();
     testClientBlockActionRoundTrip();
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
@@ -1160,10 +1312,12 @@ int main() {
     testSummonZombieSpawnsNetworkMob();
     testSummonZombieUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
+    testOwnedServerZombieAttackSyncsPlayerHealth();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
     testPersistentZombieRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();
+    testServerSnapshotCodecCarriesPlayerHealth();
     testServerTickBreaksUnsupportedPlant();
     testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();
