@@ -52,6 +52,7 @@
 #define LIGHTMAP_NIGHT_PATH   LIGHTMAP_DIR "/lightmap_night.png"
 #define WIDGETS_TEXTURE_PATH  GUI_TEXTURES_DIR "/widgets.png"
 #define INVENTORY_TEX_PATH    GUI_TEXTURES_DIR "/inventory.png"
+#define CHEST_GUI_TEX_PATH    GUI_TEXTURES_DIR "/generic_54.png"
 #define FONT_ASCII_PATH       FONT_TEXTURES_DIR "/ascii.png"
 #define TEST_TEXTURE_PATH     BLOCKS_TEXTURES_DIR "/test.png"
 #define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"

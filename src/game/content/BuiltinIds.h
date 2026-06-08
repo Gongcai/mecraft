@@ -29,6 +29,7 @@
     X(CRIMSON_PLANKS, "crimson_planks") \
     X(WARPED_PLANKS, "warped_planks") \
     X(BIRCH_LOG, "birch_log") \
+    X(CHEST, "chest") \
     X(TORCH, "torch") \
     X(BROWN_MUSHROOM, "brown_mushroom") \
     X(BLUE_WOOL, "blue_wool") \

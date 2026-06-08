@@ -35,6 +35,18 @@ int main() {
         return fail("blue_wool synthesized item should render and place its source block");
     }
 
+    const ItemID chestItem = ItemRegistry::fromBlock(BlockIds::CHEST);
+    if (chestItem == ItemIds::AIR) {
+        return fail("chest should synthesize a block-backed item");
+    }
+    if (ItemRegistry::findByName("chest") != chestItem) {
+        return fail("block name lookup should resolve chest item");
+    }
+    if (ItemRegistry::toPlaceBlock(chestItem) != BlockIds::CHEST ||
+        ItemRegistry::toRenderBlock(chestItem) != BlockIds::CHEST) {
+        return fail("chest item should render and place chest block");
+    }
+
     const ItemDef& coal = ItemRegistry::get(ItemIds::COAL);
     if (ItemRegistry::findByName("coal") != ItemIds::COAL) {
         return fail("item name lookup should resolve coal from items.json");
@@ -71,6 +83,9 @@ int main() {
     }
     if (BlockDropTable::getDropItem(BlockIds::DIRT) != ItemRegistry::fromBlock(BlockIds::DIRT)) {
         return fail("dirt should drop itself by default");
+    }
+    if (BlockDropTable::getDropItem(BlockIds::CHEST) != chestItem) {
+        return fail("chest should drop itself by default");
     }
     if (BlockDropTable::getDropItem(BlockIds::AIR) != ItemIds::AIR) {
         return fail("air should drop air (nothing)");

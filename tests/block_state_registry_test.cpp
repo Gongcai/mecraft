@@ -4,13 +4,13 @@
 #include <utility>
 #include <vector>
 
-#include "../src/world/Block.h"
+#include "../src/world/block/Block.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/fluid/FluidRegistry.h"
 #include "../src/world/fluid/FluidState.h"
 #include "../src/world/block/Placement.h"
-#include "../src/world/PropIndices.h"
-#include "../src/world/SubChunk.h"
+#include "../src/world/block/PropIndices.h"
+#include "../src/world/chunk/SubChunk.h"
 
 namespace {
 int fail(const char* message) {
@@ -79,12 +79,12 @@ int main() {
 
     const StateTextureIndices& birchLogDefaultTextures = BlockStateRegistry::getStateTextures(birchLogDefault);
     const StateTextureIndices& birchLogXTextures = BlockStateRegistry::getStateTextures(birchLogX);
-    if (birchLogXTextures.texLeft != birchLogDefaultTextures.texTop ||
-        birchLogXTextures.texRight != birchLogDefaultTextures.texTop) {
+    if (birchLogXTextures.faceLeft.firstLayer != birchLogDefaultTextures.faceTop.firstLayer ||
+        birchLogXTextures.faceRight.firstLayer != birchLogDefaultTextures.faceTop.firstLayer) {
         return fail("birch log x-axis state should rotate end-grain textures onto left/right faces");
     }
-    if (birchLogXTextures.texTop != birchLogDefaultTextures.texFront ||
-        birchLogXTextures.texBottom != birchLogDefaultTextures.texFront) {
+    if (birchLogXTextures.faceTop.firstLayer != birchLogDefaultTextures.faceFront.firstLayer ||
+        birchLogXTextures.faceBottom.firstLayer != birchLogDefaultTextures.faceFront.firstLayer) {
         return fail("birch log x-axis state should rotate bark textures onto top/bottom faces");
     }
 
@@ -135,6 +135,35 @@ int main() {
         return fail("axis_oriented placement should derive log axis from hit normal");
     }
 
+    const StateID chestDefault = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
+    if (chestDefault == BlockIds::CHEST) {
+        return fail("chest should expand into dedicated facing state ids");
+    }
+    if (BlockStateRegistry::getBlockId(chestDefault) != BlockIds::CHEST) {
+        return fail("expanded chest state should resolve back to chest block id");
+    }
+    if (BlockStateRegistry::getPropertyIndex(chestDefault, PropIndices::FACING) != PropIndices::FACING_SOUTH) {
+        return fail("chest default state should face south");
+    }
+
+    const BlockDef& chestDef = BlockRegistry::get(BlockIds::CHEST);
+    if (chestDef.placementStrategy != "horizontal_facing") {
+        return fail("chest should parse horizontal_facing placement strategy");
+    }
+
+    PlacementStrategyFn chestStrategy = PlacementStrategyRegistry::getStrategy(chestDef.placementStrategy);
+    if (chestStrategy == nullptr) {
+        return fail("chest placement strategy should be registered");
+    }
+
+    PlacementContext chestPlacement;
+    chestPlacement.blockId = BlockIds::CHEST;
+    chestPlacement.playerYaw = 180.0f;
+    const StateID chestPlacedNorth = chestStrategy(chestPlacement);
+    if (BlockStateRegistry::getPropertyIndex(chestPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
+        return fail("horizontal_facing placement should derive chest facing from player yaw");
+    }
+
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {
         return fail("state registry should contain expanded states beyond raw block ids");
     }
@@ -153,25 +182,25 @@ int main() {
     }
 
     const StateTextureIndices& waterDefaultTextures = BlockStateRegistry::getStateTextures(waterDefault);
-    if (!waterDefaultTextures.worldTop.isAnimated ||
-        waterDefaultTextures.worldTop.frameCount != 32 ||
-        waterDefaultTextures.worldTop.fps <= 0.0f) {
+    if (!waterDefaultTextures.faceTop.isAnimated ||
+        waterDefaultTextures.faceTop.frameCount != 32 ||
+        waterDefaultTextures.faceTop.fps <= 0.0f) {
         return fail("default water state should expose animated still top-face metadata");
     }
-    if (!waterDefaultTextures.worldBottom.isAnimated ||
-        waterDefaultTextures.worldBottom.frameCount != 32) {
+    if (!waterDefaultTextures.faceBottom.isAnimated ||
+        waterDefaultTextures.faceBottom.frameCount != 32) {
         return fail("default water state should expose animated still bottom-face metadata");
     }
-    if (!waterDefaultTextures.worldFront.isAnimated ||
-        waterDefaultTextures.worldFront.frameCount != 32 ||
-        waterDefaultTextures.worldFront.fps != waterDefaultTextures.worldTop.fps) {
+    if (!waterDefaultTextures.faceFront.isAnimated ||
+        waterDefaultTextures.faceFront.frameCount != 32 ||
+        waterDefaultTextures.faceFront.fps != waterDefaultTextures.faceTop.fps) {
         return fail("default water state sides should expose animated still metadata");
     }
 
     const StateTextureIndices& waterLevel3Textures = BlockStateRegistry::getStateTextures(waterLevel3);
-    if (!waterLevel3Textures.worldTop.isAnimated ||
-        waterLevel3Textures.worldTop.frameCount != 32 ||
-        waterLevel3Textures.worldTop.fps != waterDefaultTextures.worldTop.fps) {
+    if (!waterLevel3Textures.faceTop.isAnimated ||
+        waterLevel3Textures.faceTop.frameCount != 32 ||
+        waterLevel3Textures.faceTop.fps != waterDefaultTextures.faceTop.fps) {
         return fail("flowing water top face should stay on the still animation");
     }
 
@@ -181,12 +210,12 @@ int main() {
     }
 
     const StateTextureIndices& fallingWaterTextures = BlockStateRegistry::getStateTextures(fallingWater);
-    if (!fallingWaterTextures.worldTop.isAnimated ||
-        fallingWaterTextures.worldTop.fps != waterDefaultTextures.worldTop.fps) {
+    if (!fallingWaterTextures.faceTop.isAnimated ||
+        fallingWaterTextures.faceTop.fps != waterDefaultTextures.faceTop.fps) {
         return fail("falling water top face should stay on the still animation");
     }
-    if (!fallingWaterTextures.worldFront.isAnimated ||
-        fallingWaterTextures.worldFront.fps != waterDefaultTextures.worldFront.fps) {
+    if (!fallingWaterTextures.faceFront.isAnimated ||
+        fallingWaterTextures.faceFront.fps != waterDefaultTextures.faceFront.fps) {
         return fail("falling water side faces should stay on the still animation");
     }
 

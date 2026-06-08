@@ -6,17 +6,20 @@
 #include "engine//input/InputContextManager.h"
 #include "CommandState.h"
 #include "GameplayStateEcsBridge.h"
+#include "../inventory/ChestInventoryState.h"
 #include "../inventory/CreativeInventoryState.h"
 #include "../inventory/InventoryState.h"
 #include "../modes/CreativeModeState.h"
 #include "UIState.h"
 #include "UIStateContext.h"
 #include "../../ecs/GameplayRegistry.h"
+#include "../../ecs/components/Components.h"
 #include "../../ecs/util/GameplayRuntimeContext.h"
 #include "../../client/GameClient.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../world/World.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -86,6 +89,7 @@ void GameplayState::onEnter()
     }
     m_ctx.input.captureMouse(true);
     m_ctx.uiRenderer.setInventoryPanelVisible(false);
+    m_ctx.uiRenderer.setChestPanelVisible(false);
     m_ctx.uiRenderer.setCreativeInventoryVisible(false);
     m_ctx.input.clearUIDragItem();
 
@@ -102,6 +106,10 @@ void GameplayState::onEnter()
 void GameplayState::update(float dt, const InputSnapshot& snapshot)
 {
     static_cast<void>(snapshot);
+    if (handleChestInteraction(snapshot)) {
+        resetBlockBreakSession();
+        return;
+    }
     if (handleInventoryTransition()) {
         resetBlockBreakSession();
         return;
@@ -116,6 +124,40 @@ void GameplayState::update(float dt, const InputSnapshot& snapshot)
     }
 
     driveLegacyGameplayBridge(dt);
+}
+
+bool GameplayState::handleChestInteraction(const InputSnapshot& snapshot)
+{
+    if (!m_ctx.context.isActionTriggered(Action::UseItem) ||
+        !snapshot.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+        return false;
+    }
+    if (m_ctx.context.isActionHeld(Action::Crouch)) {
+        return false;
+    }
+
+    auto view = m_ctx.ecsRegistry.view<ecs::LocalPlayerTag,
+                                       ecs::BlockTargetComponent,
+                                       ecs::BlockInteractionRuntimeComponent>();
+    for (auto entity : view) {
+        const auto& target = view.get<ecs::BlockTargetComponent>(entity);
+        const auto& runtime = view.get<ecs::BlockInteractionRuntimeComponent>(entity);
+        if (!target.hasTarget) {
+            continue;
+        }
+        if (BlockStateRegistry::getBlockId(target.targetState) != BlockIds::CHEST) {
+            continue;
+        }
+        if (runtime.postPlaceInteractionSuppressSeconds > 0.0f &&
+            runtime.recentlyPlacedBlock == target.targetBlock) {
+            continue;
+        }
+
+        m_ctx.fsm.pushState(std::make_unique<ChestInventoryState>(m_inventoryCtx, target.targetBlock));
+        return true;
+    }
+
+    return false;
 }
 
 bool GameplayState::handleInventoryTransition()

@@ -287,6 +287,22 @@
       }
     },
     {
+      "id": "minecraft:chest",
+      "drop": "minecraft:chest",
+      "properties": {
+        "facing": ["north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "south"
+      },
+      "placementStrategy": "horizontal_facing",
+      "materialKind": "wood",
+      "timeToBreak": 2500,
+      "textures": {
+        "all": "oak_planks"
+      }
+    },
+    {
       "id": "minecraft:torch",
       "drop": "minecraft:torch",
       "properties": {

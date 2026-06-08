@@ -19,6 +19,7 @@ struct InventoryDataComponent {
 
 struct BlockTargetComponent {
     bool hasTarget = false;
+    BlockID targetState = 0;
     glm::ivec3 targetBlock{};
     glm::ivec3 placeBlock{};
     glm::ivec3 hitNormal{};
@@ -37,6 +38,8 @@ struct BlockInteractionRuntimeComponent {
     glm::ivec3 breakBlockPos{};
     float breakElapsedMs = 0.0f;
     float breakRequiredMs = 0.0f;
+    glm::ivec3 recentlyPlacedBlock{};
+    float postPlaceInteractionSuppressSeconds = 0.0f;
     uint32_t heldItemSwingSequence = 0;
 };
 

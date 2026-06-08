@@ -32,6 +32,7 @@ public:
     void update(float dt, const InputSnapshot& snapshot) override;
 
 private:
+    bool handleChestInteraction(const InputSnapshot& snapshot);
     bool handleInventoryTransition();
     bool handleMenuTransition();
     bool handleCommandTransition();

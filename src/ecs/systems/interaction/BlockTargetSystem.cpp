@@ -30,6 +30,9 @@ void BlockTargetSystem::update(SystemContext& ctx) {
         };
         const RayHit hit = raycastWorldView(worldView, pickRay, kPickDistance);
         target.hasTarget = hit.hit;
+        target.targetState = hit.hit
+            ? worldView.getBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
+            : 0;
         target.targetBlock = hit.hit ? hit.blockPos : glm::ivec3{};
         target.placeBlock = hit.hit ? hit.blockPos + hit.normal : glm::ivec3{};
         target.hitNormal = hit.hit ? hit.normal : glm::ivec3{};

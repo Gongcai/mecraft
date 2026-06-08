@@ -72,6 +72,7 @@ void GameManager::initResources() {
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
+    m_resourceMgr.loadGuiTexture("chest_generic_54", CHEST_GUI_TEX_PATH, true);
     m_resourceMgr.loadGuiTexture("creative_tab_inventory", CREATIVE_INVENTORY_PATH, true);
     m_resourceMgr.loadGuiTexture("creative_tab_items", CREATIVE_TAB_ITEMS_PATH, true);
     for (int i = 1; i <= 7; ++i) {

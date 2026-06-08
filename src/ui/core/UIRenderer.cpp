@@ -63,6 +63,8 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_deathPrompt.setShadowEnabled(true);
     m_inventoryPanel.init(resourceMgr);
     m_inventoryPanel.visible = false;
+    m_chestPanel.init(resourceMgr);
+    m_chestPanel.visible = false;
     m_creativeInventoryPanel.init(resourceMgr);
     m_creativeInventoryPanel.visible = false;
     m_commandInput.init(resourceMgr);
@@ -78,6 +80,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
         &m_commandInput,
         &m_hotbar,
         &m_inventoryPanel,
+        &m_chestPanel,
         &m_creativeInventoryPanel,
     };
 
@@ -95,6 +98,7 @@ void UIRenderer::shutdown()
     m_commandInput.shutdown();
     m_text.shutdown();
     m_creativeInventoryPanel.shutdown();
+    m_chestPanel.shutdown();
     m_inventoryPanel.shutdown();
     m_deathPrompt.shutdown();
     m_deathTitle.shutdown();
@@ -362,6 +366,7 @@ void UIRenderer::setInventoryPanelVisible(bool visible)
 {
     m_inventoryPanel.setVisible(visible);
     if (visible) {
+        m_chestPanel.setVisible(false);
         m_creativeInventoryPanel.setVisible(false);
     }
 }
@@ -392,11 +397,51 @@ int UIRenderer::getInventoryPanelHoveredSlot() const
     return m_inventoryPanel.itemGrid().getHoveredIndex();
 }
 
+void UIRenderer::setChestPanelVisible(const bool visible)
+{
+    m_chestPanel.setVisible(visible);
+    if (visible) {
+        m_inventoryPanel.setVisible(false);
+        m_creativeInventoryPanel.setVisible(false);
+    }
+}
+
+void UIRenderer::setChestPanelChestSource(const ChestInventory* chest)
+{
+    m_chestPanel.setChestSource(chest);
+}
+
+int UIRenderer::getChestPanelLastActivatedSlot() const
+{
+    return m_chestPanel.getChestLastActivatedSlot();
+}
+
+int UIRenderer::getChestPanelPlayerLastActivatedSlot() const
+{
+    return m_chestPanel.getPlayerLastActivatedSlot();
+}
+
+int UIRenderer::getChestPanelHoveredSlot() const
+{
+    return m_chestPanel.getChestHoveredSlot();
+}
+
+int UIRenderer::getChestPanelPlayerHoveredSlot() const
+{
+    return m_chestPanel.getPlayerHoveredSlot();
+}
+
+void UIRenderer::clearChestPanelActivations()
+{
+    m_chestPanel.clearActivations();
+}
+
 void UIRenderer::setCreativeInventoryVisible(const bool visible)
 {
     m_creativeInventoryPanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
+        m_chestPanel.setVisible(false);
     }
 }
 
@@ -464,6 +509,7 @@ void UIRenderer::render(const Window& window,
 
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
+    m_chestPanel.setPlayerInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);
     const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);

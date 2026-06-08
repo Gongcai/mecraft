@@ -14,6 +14,7 @@
 #include "../hud/CrosshairControl.h"
 #include "../hud/HotbarControl.h"
 #include "../hud/HudControl.h"
+#include "../inventory/ChestPanelControl.h"
 #include "../inventory/InventoryPanelControl.h"
 #include "../hud/Pickable.h"
 #include "../font/TextRenderer.h"
@@ -57,6 +58,14 @@ public:
     [[nodiscard]] const InventoryPanelLayout& getInventoryPanelLayout() const;
     [[nodiscard]] int getInventoryPanelLastActivatedSlot() const;
     [[nodiscard]] int getInventoryPanelHoveredSlot() const;
+
+    void setChestPanelVisible(bool visible);
+    void setChestPanelChestSource(const ChestInventory* chest);
+    [[nodiscard]] int getChestPanelLastActivatedSlot() const;
+    [[nodiscard]] int getChestPanelPlayerLastActivatedSlot() const;
+    [[nodiscard]] int getChestPanelHoveredSlot() const;
+    [[nodiscard]] int getChestPanelPlayerHoveredSlot() const;
+    void clearChestPanelActivations();
 
     void setCreativeInventoryVisible(bool visible);
     void setCreativeInventoryTab(CreativeInventoryTab tab);
@@ -152,6 +161,7 @@ private:
     UIText m_deathTitle;
     UIText m_deathPrompt;
     InventoryPanelControl m_inventoryPanel;
+    ChestPanelControl m_chestPanel;
     CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;

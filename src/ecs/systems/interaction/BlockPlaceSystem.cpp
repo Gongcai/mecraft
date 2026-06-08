@@ -42,6 +42,12 @@ bool wouldOverlapBlock(const PhysicsBody& body, const glm::ivec3& blockPos) {
            bodyMin.z < blockMax.z && bodyMax.z > blockMin.z;
 }
 
+void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime,
+                                const glm::ivec3& placedBlock) {
+    runtime.recentlyPlacedBlock = placedBlock;
+    runtime.postPlaceInteractionSuppressSeconds = 0.25f;
+}
+
 BlockID resolvePlacementState(const BlockID blockId,
                               const CameraStateComponent& camera,
                               const MoveIntentComponent& moveIntent,
@@ -95,6 +101,8 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         auto& inventoryData = view.get<InventoryDataComponent>(e);
 
         runtime.placeCooldownRemaining = std::max(0.0f, runtime.placeCooldownRemaining - dt);
+        runtime.postPlaceInteractionSuppressSeconds =
+            std::max(0.0f, runtime.postPlaceInteractionSuppressSeconds - dt);
 
         // Sync selected slot to inventory
         inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);
@@ -144,19 +152,20 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         }
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
-                net::ClientBlockAction action;
-                action.sequence = ++runtime.heldItemSwingSequence;
-                action.action = net::ClientBlockActionType::Place;
-                action.targetBlock = target.targetBlock;
-                action.placeBlock = placeBlock;
-                action.hitNormal = target.hitNormal;
-                action.playerPosition = playerPos;
-                action.blockState = static_cast<uint16_t>(placedState);
-                ctx.services.gameClient->sendBlockAction(action);
+                net::ClientBlockAction blockAction;
+                blockAction.sequence = ++runtime.heldItemSwingSequence;
+                blockAction.action = net::ClientBlockActionType::Place;
+                blockAction.targetBlock = target.targetBlock;
+                blockAction.placeBlock = placeBlock;
+                blockAction.hitNormal = target.hitNormal;
+                blockAction.playerPosition = playerPos;
+                blockAction.blockState = static_cast<uint16_t>(placedState);
+                ctx.services.gameClient->sendBlockAction(blockAction);
             } else {
                 ++runtime.heldItemSwingSequence;
             }
             runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
+            recordPostPlaceSuppression(runtime, placeBlock);
             continue;
         }
 
@@ -169,6 +178,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             static_cast<void>(inventory.consumeSelectedOne());
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
+        recordPostPlaceSuppression(runtime, placeBlock);
         audioBus.push({"block.generic.place", glm::vec3(placeBlock), true, 1.0f});
         ++runtime.heldItemSwingSequence;
     }
