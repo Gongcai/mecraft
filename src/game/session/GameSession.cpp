@@ -504,11 +504,9 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
         steveAnim.lastPosition = playerTransform.position;
     }
 
-#ifdef MECRAFT_DEBUG
-    constexpr float kTestMobOffsetX = 5.0f;
-    glm::vec3 playerPos = query.getPosition();
-    ecs::MobModelFactory::createZombie(reg, glm::vec3(playerPos.x + kTestMobOffsetX, playerPos.y, playerPos.z));
-#endif
+    if (m_server) {
+        m_server->restorePersistentEntities();
+    }
 }
 
 void GameSession::initStateMachine(const GameSessionDependencies& deps) {
@@ -733,7 +731,9 @@ Inventory& GameSession::getPlayerInventory() {
 void GameSession::shutdown() {
     // Save player state before destroying ECS
     if (!m_isMultiplayer && m_server) {
+        m_server->savePersistentEntities();
         saveLocalPlayer();
+        m_server->setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
     }
 
     m_stateMachine.reset();

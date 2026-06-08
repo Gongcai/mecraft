@@ -341,6 +341,39 @@ static void testSaveManagerNonexistentChunk() {
     std::printf("[PASS] testSaveManagerNonexistentChunk\n");
 }
 
+static void testSaveManagerPersistentEntitiesRoundTrip() {
+    const std::string testRoot = "test_save_manager_entities";
+    save::SaveManager mgr(testRoot);
+    mgr.paths().ensureDirectories();
+
+    save::PersistentEntityData zombie;
+    zombie.type = "minecraft:zombie";
+    zombie.posX = 3.5f;
+    zombie.posY = 64.0f;
+    zombie.posZ = -7.25f;
+    zombie.velX = 0.1f;
+    zombie.velY = -0.2f;
+    zombie.velZ = 0.3f;
+    zombie.yaw = 45.0f;
+    zombie.health = 12;
+    zombie.healthMax = 20;
+
+    mgr.savePersistentEntities({zombie});
+
+    std::vector<save::PersistentEntityData> loaded;
+    assert(mgr.loadPersistentEntities(loaded));
+    assert(loaded.size() == 1);
+    assert(loaded[0].type == "minecraft:zombie");
+    assert(loaded[0].posX == zombie.posX);
+    assert(loaded[0].posZ == zombie.posZ);
+    assert(loaded[0].velZ == zombie.velZ);
+    assert(loaded[0].yaw == zombie.yaw);
+    assert(loaded[0].health == zombie.health);
+
+    std::filesystem::remove_all(testRoot);
+    std::printf("[PASS] testSaveManagerPersistentEntitiesRoundTrip\n");
+}
+
 // ---------------------------------------------------------------------------
 // PlayerSerializer tests
 // ---------------------------------------------------------------------------
@@ -462,6 +495,7 @@ int main() {
     testSaveManagerLevelMeta();
     testSaveManagerChunkRoundTrip();
     testSaveManagerNonexistentChunk();
+    testSaveManagerPersistentEntitiesRoundTrip();
 
     // PlayerSerializer tests
     testPlayerSerializerRoundTrip();

@@ -12,6 +12,14 @@ std::filesystem::path SavePaths::chunksDir() const {
     return m_root / "chunks";
 }
 
+std::filesystem::path SavePaths::entitiesDir() const {
+    return m_root / "entities";
+}
+
+std::filesystem::path SavePaths::overworldEntitiesPath() const {
+    return entitiesDir() / "dimension_overworld.json";
+}
+
 std::filesystem::path SavePaths::chunkPath(int cx, int cz) const {
     return chunksDir() / ("c." + std::to_string(cx) + "." + std::to_string(cz) + ".mchk");
 }
@@ -42,6 +50,7 @@ std::filesystem::path SavePaths::screenshotPath() const {
 
 void SavePaths::ensureDirectories() const {
     std::filesystem::create_directories(chunksDir());
+    std::filesystem::create_directories(entitiesDir());
     std::filesystem::create_directories(playersDir());
 }
 

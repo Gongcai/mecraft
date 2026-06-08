@@ -3,6 +3,7 @@
 #include "ecs/GameplayRegistry.h"
 #include "ecs/components/Components.h"
 #include "ecs/components/NetworkComponents.h"
+#include "ecs/entity/MobModelFactory.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
@@ -17,6 +18,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <queue>
 #include <thread>
 
@@ -368,6 +370,60 @@ static void testSummonZombieSpawnsNetworkMob() {
     const entt::entity zombie = *view.begin();
     assert(registry.registry().get<ecs::EntityNetIdComponent>(zombie).netId == spawnedNetId);
     std::printf("[PASS] testSummonZombieSpawnsNetworkMob\n");
+}
+
+static void testPersistentZombieRestoresFromSave() {
+    const std::filesystem::path saveRoot = "test_server_entities_save";
+    std::filesystem::remove_all(saveRoot);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+        const entt::entity zombie = ecs::MobModelFactory::createZombie(registry, glm::vec3(4.0f, 65.0f, -2.0f));
+        registry.registry().get<ecs::HealthComponent>(zombie).current = 9;
+        registry.registry().get<ecs::MobAIComponent>(zombie).yaw = 135.0f;
+        registry.registry().get<ecs::PhysicsBodyComponent>(zombie).body.velocity = glm::vec3(0.25f, 0.0f, -0.5f);
+
+        server.savePersistentEntities();
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+        server.restorePersistentEntities();
+
+        auto view = registry.registry().view<ecs::MobTag,
+                                            ecs::TransformComponent,
+                                            ecs::HealthComponent,
+                                            ecs::MobAIComponent,
+                                            ecs::PhysicsBodyComponent,
+                                            ecs::NetworkSyncTag>();
+        assert(view.begin() != view.end());
+        const entt::entity zombie = *view.begin();
+        const auto& transform = registry.registry().get<ecs::TransformComponent>(zombie);
+        const auto& health = registry.registry().get<ecs::HealthComponent>(zombie);
+        const auto& ai = registry.registry().get<ecs::MobAIComponent>(zombie);
+        const auto& body = registry.registry().get<ecs::PhysicsBodyComponent>(zombie);
+        assert(transform.position.x == 4.0f);
+        assert(transform.position.z == -2.0f);
+        assert(health.current == 9);
+        assert(ai.yaw == 135.0f);
+        assert(body.body.velocity.z == -0.5f);
+
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testPersistentZombieRestoresFromSave\n");
 }
 
 static void testChatCommandCodecRoundTrip() {
@@ -772,6 +828,7 @@ int main() {
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();
     testSummonZombieSpawnsNetworkMob();
+    testPersistentZombieRestoresFromSave();
     testChatCommandCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
     testDisconnectedPlayerDespawnsForOtherClients();

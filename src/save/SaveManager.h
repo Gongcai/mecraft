@@ -25,6 +25,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class Chunk;
 class ThreadPool;
@@ -33,6 +34,20 @@ namespace save {
 
 class RegionFile;
 struct PlayerData;
+
+struct PersistentEntityData {
+    std::string type;
+    float posX = 0.0f;
+    float posY = 0.0f;
+    float posZ = 0.0f;
+    float velX = 0.0f;
+    float velY = 0.0f;
+    float velZ = 0.0f;
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+    int health = 20;
+    int healthMax = 20;
+};
 
 /// World-level metadata persisted in level.json.
 struct LevelMeta {
@@ -103,6 +118,12 @@ public:
 
     /// Load player data by client ID. Returns false if file doesn't exist.
     bool loadPlayer(uint32_t clientId, PlayerData& out);
+
+    /// Save persistent overworld entities such as mobs. Uses atomic write.
+    void savePersistentEntities(const std::vector<PersistentEntityData>& entities);
+
+    /// Load persistent overworld entities. Returns false if file doesn't exist.
+    bool loadPersistentEntities(std::vector<PersistentEntityData>& out);
 
     /// Access the paths helper.
     [[nodiscard]] const SavePaths& paths() const { return m_paths; }

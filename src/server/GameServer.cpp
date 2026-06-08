@@ -202,6 +202,7 @@ void GameServer::shutdown() {
 
     // Save level metadata with current state
     if (m_saveManager) {
+        savePersistentEntities();
         saveLevelMeta();
     }
 }
@@ -1048,6 +1049,88 @@ void GameServer::syncPlayersToClients() {
         packet.type = net::MessageType::EntitySnapshot;
         packet.inProcessPayload = std::move(filtered);
         receiver.transport->send(std::move(packet));
+    }
+}
+
+std::vector<save::PersistentEntityData> GameServer::snapshotPersistentEntities() const {
+    std::vector<save::PersistentEntityData> entities;
+    if (m_ecsRegistry == nullptr) {
+        return entities;
+    }
+
+    const entt::registry& reg = *m_ecsRegistry;
+    auto view = reg.view<ecs::MobTag, ecs::TransformComponent, ecs::HealthComponent>();
+    for (const entt::entity entity : view) {
+        const auto& health = view.get<ecs::HealthComponent>(entity);
+        if (health.current <= 0) {
+            continue;
+        }
+
+        save::PersistentEntityData data;
+        data.type = "minecraft:zombie";
+        const auto& transform = view.get<ecs::TransformComponent>(entity);
+        data.posX = transform.position.x;
+        data.posY = transform.position.y;
+        data.posZ = transform.position.z;
+        data.health = health.current;
+        data.healthMax = health.max;
+
+        if (const auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(entity)) {
+            data.velX = physicsBody->body.velocity.x;
+            data.velY = physicsBody->body.velocity.y;
+            data.velZ = physicsBody->body.velocity.z;
+        } else if (const auto* velocity = reg.try_get<ecs::VelocityComponent>(entity)) {
+            data.velX = velocity->velocity.x;
+            data.velY = velocity->velocity.y;
+            data.velZ = velocity->velocity.z;
+        }
+
+        if (const auto* mobAI = reg.try_get<ecs::MobAIComponent>(entity)) {
+            data.yaw = mobAI->yaw;
+        }
+
+        entities.push_back(data);
+    }
+
+    return entities;
+}
+
+void GameServer::savePersistentEntities() {
+    if (!m_saveManager || m_ecsRegistry == nullptr) {
+        return;
+    }
+    m_saveManager->savePersistentEntities(snapshotPersistentEntities());
+}
+
+void GameServer::restorePersistentEntities() {
+    if (!m_saveManager || m_gameplayRegistry == nullptr) {
+        return;
+    }
+
+    std::vector<save::PersistentEntityData> entities;
+    if (!m_saveManager->loadPersistentEntities(entities)) {
+        return;
+    }
+
+    for (const save::PersistentEntityData& data : entities) {
+        if (data.type != "minecraft:zombie" || data.health <= 0) {
+            continue;
+        }
+
+        const glm::vec3 position(data.posX, data.posY, data.posZ);
+        const entt::entity zombie = ecs::MobModelFactory::createZombie(*m_gameplayRegistry, position);
+        entt::registry& reg = m_gameplayRegistry->registry();
+
+        if (auto* health = reg.try_get<ecs::HealthComponent>(zombie)) {
+            health->current = data.health;
+            health->max = data.healthMax > 0 ? data.healthMax : health->max;
+        }
+        if (auto* ai = reg.try_get<ecs::MobAIComponent>(zombie)) {
+            ai->yaw = data.yaw;
+        }
+        if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(zombie)) {
+            physicsBody->body.velocity = glm::vec3(data.velX, data.velY, data.velZ);
+        }
     }
 }
 

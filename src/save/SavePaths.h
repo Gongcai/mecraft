@@ -21,6 +21,12 @@ public:
     /// Chunks directory: <root>/chunks/
     [[nodiscard]] std::filesystem::path chunksDir() const;
 
+    /// Entities directory: <root>/entities/
+    [[nodiscard]] std::filesystem::path entitiesDir() const;
+
+    /// Overworld persistent entity file: <root>/entities/dimension_overworld.json
+    [[nodiscard]] std::filesystem::path overworldEntitiesPath() const;
+
     /// Chunk file path: <root>/chunks/c.<cx>.<cz>.mchk
     [[nodiscard]] std::filesystem::path chunkPath(int cx, int cz) const;
 

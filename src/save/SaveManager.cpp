@@ -272,6 +272,117 @@ bool SaveManager::loadPlayer(uint32_t clientId, PlayerData& out) {
         (m_paths.playersDir() / (std::to_string(clientId) + ".json")).string(), out);
 }
 
+void SaveManager::savePersistentEntities(const std::vector<PersistentEntityData>& entities) {
+    nlohmann::json root;
+    root["version"] = 1;
+    root["entities"] = nlohmann::json::array();
+
+    for (const PersistentEntityData& entity : entities) {
+        if (entity.type.empty() || entity.health <= 0) {
+            continue;
+        }
+
+        nlohmann::json j;
+        j["type"] = entity.type;
+        j["position"] = {entity.posX, entity.posY, entity.posZ};
+        j["velocity"] = {entity.velX, entity.velY, entity.velZ};
+        j["yaw"] = entity.yaw;
+        j["pitch"] = entity.pitch;
+        j["health"] = {{"current", entity.health}, {"max", entity.healthMax}};
+        root["entities"].push_back(std::move(j));
+    }
+
+    const auto path = m_paths.overworldEntitiesPath();
+    const auto tmpPath = path.string() + ".tmp";
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+
+    {
+        std::ofstream file(tmpPath);
+        if (!file.is_open()) {
+            std::fprintf(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
+            return;
+        }
+        file << root.dump(2) << '\n';
+        file.flush();
+    }
+
+    const auto bakPath = path.string() + ".bak";
+    if (std::filesystem::exists(path, ec)) {
+        std::filesystem::rename(path, bakPath, ec);
+        ec.clear();
+    }
+    std::filesystem::rename(tmpPath, path, ec);
+    if (ec) {
+        std::fprintf(stderr, "[Save] Failed to rename entity file: %s\n", ec.message().c_str());
+    }
+}
+
+bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out) {
+    out.clear();
+    const auto path = m_paths.overworldEntitiesPath();
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        return false;
+    }
+
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    try {
+        nlohmann::json root;
+        file >> root;
+
+        const int version = root.value("version", 0);
+        if (version != 1 || !root.contains("entities") || !root["entities"].is_array()) {
+            std::fprintf(stderr, "[Save] Unsupported entity save file\n");
+            return false;
+        }
+
+        for (const auto& j : root["entities"]) {
+            if (!j.is_object()) {
+                continue;
+            }
+
+            PersistentEntityData entity;
+            entity.type = j.value("type", "");
+            if (entity.type.empty()) {
+                continue;
+            }
+
+            if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
+                entity.posX = j["position"][0].get<float>();
+                entity.posY = j["position"][1].get<float>();
+                entity.posZ = j["position"][2].get<float>();
+            }
+            if (j.contains("velocity") && j["velocity"].is_array() && j["velocity"].size() >= 3) {
+                entity.velX = j["velocity"][0].get<float>();
+                entity.velY = j["velocity"][1].get<float>();
+                entity.velZ = j["velocity"][2].get<float>();
+            }
+            entity.yaw = j.value("yaw", entity.yaw);
+            entity.pitch = j.value("pitch", entity.pitch);
+
+            if (j.contains("health") && j["health"].is_object()) {
+                entity.health = j["health"].value("current", entity.health);
+                entity.healthMax = j["health"].value("max", entity.healthMax);
+            }
+
+            if (entity.health > 0) {
+                out.push_back(entity);
+            }
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[Save] Failed to read entity file: %s\n", e.what());
+        out.clear();
+        return false;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Timestamp and screenshot
 // ---------------------------------------------------------------------------

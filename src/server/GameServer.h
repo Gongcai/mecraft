@@ -90,6 +90,12 @@ public:
     /// Get the current server tick count.
     [[nodiscard]] net::TickId currentTick() const { return m_currentTick; }
 
+    /// Persist currently tracked gameplay entities through SaveManager, if enabled.
+    void savePersistentEntities();
+
+    /// Restore persisted gameplay entities into the bound GameplayRegistry, if available.
+    void restorePersistentEntities();
+
 private:
     void processClientMessages();
     void cleanupDisconnectedClients();
@@ -112,6 +118,7 @@ private:
     void syncEntitiesToClients();
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);
+    [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
     void checkSpawnChunksReady();
     [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, BlockID blockId, int lightPatchRadius) const;
     [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, BlockID blockId) const;
