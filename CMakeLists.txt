@@ -282,6 +282,9 @@ set(SRC_ECS
         src/ecs/systems/player/FallDamageSystem.cpp
         src/ecs/systems/player/FallRollEffectSystem.cpp
         src/ecs/systems/player/HungerDepletionSystem.cpp
+        src/ecs/systems/combat/DamageSystem.cpp
+        src/ecs/systems/combat/DeathSystem.cpp
+        src/ecs/systems/combat/PlayerMeleeSystem.cpp
         src/ecs/systems/interaction/BlockTargetSystem.cpp
         src/ecs/systems/interaction/BlockBreakSystem.cpp
         src/ecs/systems/interaction/BlockPlaceSystem.cpp

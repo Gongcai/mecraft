@@ -4,6 +4,8 @@
 #include "../world/block/Block.h"
 #include "../thread/ThreadPool.h"
 #include "../save/SaveManager.h"
+#include "../ecs/GameplayRegistry.h"
+#include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
@@ -97,6 +99,16 @@ GameServer::GameServer() = default;
 
 GameServer::~GameServer() {
     shutdown();
+}
+
+void GameServer::setEcsRegistry(entt::registry* registry) {
+    m_ecsRegistry = registry;
+    m_gameplayRegistry = nullptr;
+}
+
+void GameServer::setEcsRegistry(ecs::GameplayRegistry* registry) {
+    m_gameplayRegistry = registry;
+    m_ecsRegistry = registry != nullptr ? &registry->registry() : nullptr;
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance) {
@@ -468,6 +480,7 @@ void GameServer::cleanupDisconnectedClients() {
         client.helloTick = 0;
         client.sentChunks.clear();
         client.spawnedPlayerNetIds.clear();
+        client.spawnedEntityNetIds.clear();
         client.chunkSendLogCount = 0;
         client.totalChunksSent = 0;
         client.lastPosition = m_spawnPosition;
@@ -535,7 +548,7 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         sendCommandResult(client,
                           request.sequence,
                           true,
-                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>");
+                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon zombie");
         return;
     }
 
@@ -627,6 +640,32 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         m_world.getWeatherSystem().setDebugWeatherPresetInstant(weather);
         broadcastWorldState();
         const std::string message = std::string("Weather set to ") + weatherName(weather) + ".";
+        sendCommandResult(client, request.sequence, true, message);
+        broadcastSystemMessage(message, net::ChatMessageKind::Success);
+        return;
+    }
+
+    if (primary == "summon") {
+        std::string entityType;
+        iss >> entityType;
+        if (entityType != "zombie") {
+            sendCommandResult(client, request.sequence, false, "Usage: /summon zombie");
+            return;
+        }
+
+        constexpr float kSummonDistance = 2.0f;
+        constexpr float kDegreesToRadians = 0.017453292519943295f;
+        const float yawRad = client.lastYaw * kDegreesToRadians;
+        const glm::vec3 forward(std::cos(yawRad), 0.0f, std::sin(yawRad));
+        const glm::vec3 basePosition = client.receivedHello ? client.lastPosition : m_spawnPosition;
+        const glm::vec3 spawnPosition = basePosition + forward * kSummonDistance;
+
+        if (!spawnZombieEntity(spawnPosition)) {
+            sendCommandResult(client, request.sequence, false, "No ECS registry is available for entity spawning.");
+            return;
+        }
+
+        const std::string message = "Summoned zombie.";
         sendCommandResult(client, request.sequence, true, message);
         broadcastSystemMessage(message, net::ChatMessageKind::Success);
         return;
@@ -1012,6 +1051,75 @@ void GameServer::syncPlayersToClients() {
     }
 }
 
+bool GameServer::spawnZombieEntity(const glm::vec3& position) {
+    if (m_gameplayRegistry != nullptr) {
+        ecs::MobModelFactory::createZombie(*m_gameplayRegistry, position);
+        return true;
+    }
+
+    if (m_ecsRegistry == nullptr) {
+        return false;
+    }
+
+    entt::registry& reg = *m_ecsRegistry;
+    const entt::entity zombie = reg.create();
+    reg.emplace<ecs::MobTag>(zombie);
+    reg.emplace<ecs::SkinTypeComponent>(zombie, ecs::SkinTypeComponent::Type::Mob);
+    reg.emplace<ecs::TransformComponent>(zombie, position, 1.62f);
+    reg.emplace<ecs::MobAIComponent>(zombie);
+    reg.emplace<ecs::MoveIntentComponent>(zombie);
+    reg.emplace<ecs::HealthComponent>(zombie, 20, 20);
+    reg.emplace<ecs::NetworkSyncTag>(zombie);
+    return true;
+}
+
+net::EntitySpawnMessage GameServer::makeEntitySpawnMessage(const ecs::EntityNetId netId,
+                                                           const entt::entity entity) const {
+    net::EntitySpawnMessage msg;
+    msg.netId = netId;
+
+    if (!m_ecsRegistry || !m_ecsRegistry->valid(entity)) {
+        msg.netId = 0;
+        return msg;
+    }
+
+    const entt::registry& reg = *m_ecsRegistry;
+    if (reg.all_of<ecs::DropItemTag, ecs::ItemComponent>(entity)) {
+        msg.kind = net::EntityKind::Drop;
+        const auto& item = reg.get<ecs::ItemComponent>(entity);
+        msg.itemId = static_cast<uint16_t>(item.itemId);
+        msg.stackCount = static_cast<uint16_t>(item.stackCount);
+    } else if (reg.all_of<ecs::MobTag>(entity)) {
+        msg.kind = net::EntityKind::Mob;
+    } else if (reg.all_of<ecs::SteveTag>(entity)) {
+        msg.kind = net::EntityKind::Player;
+    } else {
+        msg.netId = 0;
+        return msg;
+    }
+
+    if (const auto* transform = reg.try_get<ecs::TransformComponent>(entity)) {
+        msg.position = transform->position;
+    }
+    if (const auto* velocity = reg.try_get<ecs::VelocityComponent>(entity)) {
+        msg.velocity = velocity->velocity;
+    } else if (const auto* body = reg.try_get<ecs::PhysicsBodyComponent>(entity)) {
+        msg.velocity = body->body.velocity;
+    }
+    if (const auto* spin = reg.try_get<ecs::SpinVisualComponent>(entity)) {
+        msg.yaw = spin->yawRadians;
+    }
+    if (const auto* mobAI = reg.try_get<ecs::MobAIComponent>(entity)) {
+        msg.yaw = mobAI->yaw;
+    }
+    if (const auto* camera = reg.try_get<ecs::CameraStateComponent>(entity)) {
+        msg.yaw = camera->yaw;
+        msg.pitch = camera->pitch;
+    }
+
+    return msg;
+}
+
 void GameServer::syncEntitiesToClients() {
     if (!m_ecsRegistry || m_clients.empty()) {
         return;
@@ -1038,6 +1146,9 @@ void GameServer::syncEntitiesToClients() {
     // Send despawn messages and clean up tracking
     for (const ecs::EntityNetId netId : toDespawn) {
         for (auto& client : m_clients) {
+            client.spawnedEntityNetIds.erase(netId);
+        }
+        for (auto& client : m_clients) {
             if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
                 continue;
             }
@@ -1052,7 +1163,32 @@ void GameServer::syncEntitiesToClients() {
         m_syncedEntities.erase(netId);
     }
 
-    // 3. Build and send entity snapshots (batch of all synced entities)
+    // 3. Send spawn messages once per connected client.
+    for (auto& client : m_clients) {
+        if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+            continue;
+        }
+
+        for (const auto& [netId, entity] : m_syncedEntities) {
+            if (!reg.valid(entity) || client.spawnedEntityNetIds.count(netId) > 0) {
+                continue;
+            }
+
+            net::EntitySpawnMessage spawn = makeEntitySpawnMessage(netId, entity);
+            if (spawn.netId == 0) {
+                continue;
+            }
+
+            net::Packet packet;
+            packet.channel = net::PacketChannel::ReliableWorld;
+            packet.type = net::MessageType::EntitySpawn;
+            packet.inProcessPayload = std::move(spawn);
+            client.transport->send(std::move(packet));
+            client.spawnedEntityNetIds.insert(netId);
+        }
+    }
+
+    // 4. Build and send entity snapshots (batch of all synced entities)
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = m_currentTick;
 
@@ -1074,6 +1210,10 @@ void GameServer::syncEntitiesToClients() {
         auto* spin = reg.try_get<ecs::SpinVisualComponent>(entity);
         if (spin) {
             item.yaw = spin->yawRadians;
+        }
+        auto* mobAI = reg.try_get<ecs::MobAIComponent>(entity);
+        if (mobAI) {
+            item.yaw = mobAI->yaw;
         }
 
         snapshot.entities.push_back(item);

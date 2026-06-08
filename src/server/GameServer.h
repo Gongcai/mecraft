@@ -15,6 +15,7 @@
 #include <unordered_map>
 
 class ThreadPool;
+namespace ecs { class GameplayRegistry; }
 
 namespace server {
 
@@ -35,6 +36,7 @@ struct ConnectedClient {
     net::NetworkGameplayMode gameplayMode = net::NetworkGameplayMode::Survival;
     net::EntityNetId playerNetId = 0;
     std::unordered_set<net::EntityNetId> spawnedPlayerNetIds;
+    std::unordered_set<net::EntityNetId> spawnedEntityNetIds;
     std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
     int chunkSendLogCount = 0;
     int totalChunksSent = 0;
@@ -63,7 +65,8 @@ public:
 
     /// Set the ECS registry for entity synchronization.
     /// Must be called after ECS is initialized.
-    void setEcsRegistry(entt::registry* registry) { m_ecsRegistry = registry; }
+    void setEcsRegistry(entt::registry* registry);
+    void setEcsRegistry(ecs::GameplayRegistry* registry);
 
     /// Run one server tick. Called from the game loop at the server tick rate.
     void tick(float dt);
@@ -107,6 +110,8 @@ private:
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
     void syncEntitiesToClients();
+    [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
+    [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);
     void checkSpawnChunksReady();
     [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, BlockID blockId, int lightPatchRadius) const;
     [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, BlockID blockId) const;
@@ -122,6 +127,7 @@ private:
     ecs::EntityNetId m_nextNetId = 1;
     std::unordered_map<ecs::EntityNetId, entt::entity> m_syncedEntities;
     entt::registry* m_ecsRegistry = nullptr;  // Non-owning pointer to ECS registry
+    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // Non-owning pointer when model factories are available
 
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;

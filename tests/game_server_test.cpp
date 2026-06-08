@@ -1,5 +1,8 @@
 #include "server/GameServer.h"
 #include "client/GameClient.h"
+#include "ecs/GameplayRegistry.h"
+#include "ecs/components/Components.h"
+#include "ecs/components/NetworkComponents.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
@@ -301,6 +304,70 @@ static void testNonAdminCommandDenied() {
     assert(denied);
     assert(harness.server.world().getWeatherSystem().getTargetState().type == WeatherType::Clear);
     std::printf("[PASS] testNonAdminCommandDenied\n");
+}
+
+static void testSummonZombieSpawnsNetworkMob() {
+    ServerHarness harness;
+    ecs::GameplayRegistry registry;
+    harness.server.setEcsRegistry(&registry);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 8;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCommandResult = false;
+    bool sawMobSpawn = false;
+    net::EntityNetId spawnedNetId = 0;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 8 && result.success && result.message.find("Summoned zombie") != std::string::npos) {
+                sawCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob) {
+                sawMobSpawn = true;
+                spawnedNetId = spawn.netId;
+            }
+        }
+    }
+
+    assert(sawCommandResult);
+    assert(sawMobSpawn);
+    assert(spawnedNetId != 0);
+
+    auto view = registry.registry().view<ecs::MobTag,
+                                        ecs::HealthComponent,
+                                        ecs::NetworkSyncTag,
+                                        ecs::EntityNetIdComponent>();
+    assert(view.begin() != view.end());
+    const entt::entity zombie = *view.begin();
+    assert(registry.registry().get<ecs::EntityNetIdComponent>(zombie).netId == spawnedNetId);
+    std::printf("[PASS] testSummonZombieSpawnsNetworkMob\n");
 }
 
 static void testChatCommandCodecRoundTrip() {
@@ -704,6 +771,7 @@ int main() {
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();
+    testSummonZombieSpawnsNetworkMob();
     testChatCommandCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
     testDisconnectedPlayerDespawnsForOtherClients();

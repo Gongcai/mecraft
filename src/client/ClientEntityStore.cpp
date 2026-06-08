@@ -2,11 +2,27 @@
 #include "../ecs/components/Components.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/entity/SteveModelFactory.h"
+#include "../ecs/entity/MobModelFactory.h"
 #include "../item/Item.h"
 #include "../resource/ResourceMgr.h"
 #include <algorithm>
 
 namespace client {
+namespace {
+
+void collectEntityTree(entt::registry& registry, const entt::entity entity, std::vector<entt::entity>& out) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+    out.push_back(entity);
+    if (const auto* children = registry.try_get<ecs::ChildrenComponent>(entity)) {
+        for (const entt::entity child : children->children) {
+            collectEntityTree(registry, child, out);
+        }
+    }
+}
+
+} // namespace
 
 ClientEntityStore::ClientEntityStore() = default;
 ClientEntityStore::~ClientEntityStore() = default;
@@ -42,6 +58,11 @@ void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
         return;  // Already tracked or not initialized
     }
 
+    if (const entt::entity existing = findExistingEntity(msg.netId); existing != entt::null) {
+        m_netIdToEntity[msg.netId] = existing;
+        return;
+    }
+
     switch (msg.kind) {
     case net::EntityKind::Drop:
         createDropEntity(msg);
@@ -73,16 +94,13 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     }
 
     if (m_registry->valid(it->second)) {
-        // Destroy the entity and its children (if any)
-        auto* children = m_registry->try_get<ecs::ChildrenComponent>(it->second);
-        if (children) {
-            for (auto child : children->children) {
-                if (m_registry->valid(child)) {
-                    m_registry->destroy(child);
-                }
+        std::vector<entt::entity> toDestroy;
+        collectEntityTree(*m_registry, it->second, toDestroy);
+        for (const entt::entity entity : toDestroy) {
+            if (m_registry->valid(entity)) {
+                m_registry->destroy(entity);
             }
         }
-        m_registry->destroy(it->second);
     }
 
     m_netIdToEntity.erase(it);
@@ -129,11 +147,30 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
             camera->yaw = item.yaw;
             camera->pitch = item.pitch;
         }
+
+        auto* mobAI = m_registry->try_get<ecs::MobAIComponent>(it->second);
+        if (mobAI) {
+            mobAI->yaw = item.yaw;
+        }
     }
 }
 
 bool ClientEntityStore::hasEntity(net::EntityNetId netId) const {
     return m_netIdToEntity.count(netId) > 0;
+}
+
+entt::entity ClientEntityStore::findExistingEntity(const net::EntityNetId netId) const {
+    if (!m_registry) {
+        return entt::null;
+    }
+
+    auto view = m_registry->view<ecs::EntityNetIdComponent>();
+    for (const entt::entity entity : view) {
+        if (view.get<ecs::EntityNetIdComponent>(entity).netId == netId) {
+            return entity;
+        }
+    }
+    return entt::null;
 }
 
 void ClientEntityStore::flushPendingMessages() {
@@ -197,15 +234,20 @@ void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {
 }
 
 void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
-    auto entity = m_registry->create();
+    entt::entity entity = entt::null;
+    if (m_gameplayRegistry) {
+        entity = ecs::MobModelFactory::createZombieReplica(*m_gameplayRegistry, msg.position, msg.yaw);
+    } else {
+        entity = m_registry->create();
+        m_registry->emplace<ecs::MobTag>(entity);
+        m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 1.62f);
+        m_registry->emplace<ecs::MobAIComponent>(entity);
+        m_registry->get<ecs::MobAIComponent>(entity).yaw = msg.yaw;
+    }
 
-    // Minimal components for a remote mob (visual-only, no physics/AI)
-    m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 1.62f);
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
-
-    // TODO: Create mob model hierarchy when GameplayRegistry is available
 
     m_netIdToEntity[msg.netId] = entity;
 }

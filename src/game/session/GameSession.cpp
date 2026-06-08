@@ -464,7 +464,7 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
 
     auto& reg = m_gameplayScene->registry();
     if (m_server) {
-        m_server->setEcsRegistry(&reg.registry());
+        m_server->setEcsRegistry(&reg);
     }
     m_client->initEntityStore(reg, &deps.resourceMgr);
     m_client->setChatMessageCallback([&uiRenderer = deps.uiRenderer](const net::ServerChatMessage& message) {

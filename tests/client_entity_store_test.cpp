@@ -1,5 +1,6 @@
 #include "client/ClientEntityStore.h"
 #include "ecs/components/Components.h"
+#include "ecs/GameplayRegistry.h"
 
 #include <cassert>
 #include <cstdio>
@@ -50,8 +51,52 @@ static void testSpawnBeforeInitIsReplayed() {
     require(velocity.velocity.y == 0.5f, "snapshot velocity was not applied");
 }
 
+static void testMobSpawnCreatesZombieReplica() {
+    client::ClientEntityStore store;
+    ecs::GameplayRegistry registry;
+    store.init(registry, nullptr);
+
+    net::EntitySpawnMessage spawn;
+    spawn.netId = 77;
+    spawn.kind = net::EntityKind::Mob;
+    spawn.position = glm::vec3(2.0f, 64.0f, -3.0f);
+    spawn.velocity = glm::vec3(0.0f, 0.0f, 0.25f);
+    spawn.yaw = 35.0f;
+    store.handleSpawn(spawn);
+
+    require(store.remoteEntityCount() == 1, "mob spawn was not tracked");
+    require(store.hasEntity(77), "mob netId missing");
+
+    auto& raw = registry.registry();
+    auto view = raw.view<ecs::MobTag,
+                         ecs::ChildrenComponent,
+                         ecs::MobAIComponent,
+                         ecs::VelocityComponent,
+                         ecs::EntityNetIdComponent>();
+    require(view.begin() != view.end(), "mob replica components missing");
+    const entt::entity mob = *view.begin();
+    require(raw.get<ecs::ChildrenComponent>(mob).children.size() == 1, "mob replica did not create hierarchy");
+    require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
+    require(!raw.all_of<ecs::HealthComponent>(mob), "mob replica should not be client-authoritative health");
+
+    net::EntitySnapshotMessage snapshot;
+    snapshot.serverTick = 12;
+    net::EntitySnapshotItem item;
+    item.netId = 77;
+    item.position = glm::vec3(3.0f, 65.0f, -4.0f);
+    item.velocity = glm::vec3(0.0f, 0.0f, 0.5f);
+    item.yaw = 90.0f;
+    snapshot.entities.push_back(item);
+    store.handleSnapshot(snapshot);
+
+    require(raw.get<ecs::TransformComponent>(mob).position.x == 3.0f, "mob snapshot position was not applied");
+    require(raw.get<ecs::VelocityComponent>(mob).velocity.z == 0.5f, "mob snapshot velocity was not applied");
+    require(raw.get<ecs::MobAIComponent>(mob).yaw == 90.0f, "mob snapshot yaw was not applied");
+}
+
 int main() {
     testSpawnBeforeInitIsReplayed();
+    testMobSpawnCreatesZombieReplica();
     std::printf("All ClientEntityStore tests passed!\n");
     return 0;
 }

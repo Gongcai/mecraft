@@ -42,6 +42,7 @@ public:
 
 private:
     void flushPendingMessages();
+    [[nodiscard]] entt::entity findExistingEntity(net::EntityNetId netId) const;
     void createDropEntity(const net::EntitySpawnMessage& msg);
     void createPlayerEntity(const net::EntitySpawnMessage& msg);
     void createMobEntity(const net::EntitySpawnMessage& msg);

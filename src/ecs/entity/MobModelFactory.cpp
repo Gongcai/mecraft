@@ -1,11 +1,13 @@
 #include "MobModelFactory.h"
 #include "../components/Components.h"
+#include "../components/NetworkComponents.h"
 #include "../../physics/PhysicsInfo.h"
 
 namespace ecs {
 
 entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
-                                            const glm::vec3& worldPosition) {
+                                            const glm::vec3& worldPosition,
+                                            const bool gameplayControlled) {
     auto& reg = registry.registry();
 
     // Root entity: feet anchor
@@ -16,14 +18,25 @@ entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
     reg.emplace<SteveAnimationStateComponent>(root);
     reg.emplace<WorldTransformComponent>(root);
     reg.emplace<MobAIComponent>(root);
-    reg.emplace<MoveIntentComponent>(root);
-    reg.emplace<GroundedStateComponent>(root);
+    if (gameplayControlled) {
+        reg.emplace<MoveIntentComponent>(root);
+        reg.emplace<GroundedStateComponent>(root);
+        reg.emplace<HealthComponent>(root, 20, 20);
+        if (ItemIds::COAL != 0) {
+            reg.emplace<DropTableComponent>(root, ItemIds::COAL, 1u, 1u);
+        }
+        reg.emplace<NetworkSyncTag>(root);
+    }
     auto& rootChildren = reg.emplace<ChildrenComponent>(root);
 
     // Physics body for gravity and collision
-    auto& physBody = reg.emplace<PhysicsBodyComponent>(root);
-    physBody.body.position = worldPosition;
-    physBody.body.eyeOffsetY = 1.62f;
+    if (gameplayControlled) {
+        auto& physBody = reg.emplace<PhysicsBodyComponent>(root);
+        physBody.body.position = worldPosition;
+        physBody.body.halfExtents = glm::vec3(0.3f, 0.9f, 0.3f);
+        physBody.body.colliderOffset = glm::vec3(0.0f, 0.9f, 0.0f);
+        physBody.body.eyeOffsetY = 1.62f;
+    }
 
     // ── Torso ──
     auto torso = reg.create();
@@ -95,29 +108,38 @@ entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
     return root;
 }
 
+entt::entity MobModelFactory::createZombieReplica(GameplayRegistry& registry,
+                                                   const glm::vec3& worldPosition,
+                                                   const float yaw) {
+    const entt::entity root = createZombie(registry, worldPosition, false);
+    if (auto* ai = registry.try_get<MobAIComponent>(root)) {
+        ai->yaw = yaw;
+    }
+    return root;
+}
+
 void MobModelFactory::destroyMob(GameplayRegistry& registry, entt::entity mobRoot) {
     auto& reg = registry.registry();
-    if (!reg.all_of<ChildrenComponent>(mobRoot)) {
-        reg.destroy(mobRoot);
-        return;
-    }
-
     std::vector<entt::entity> toDestroy;
-    toDestroy.push_back(mobRoot);
 
-    auto& rootChildren = reg.get<ChildrenComponent>(mobRoot);
-    for (auto child : rootChildren.children) {
-        toDestroy.push_back(child);
-        if (reg.all_of<ChildrenComponent>(child)) {
-            auto& subChildren = reg.get<ChildrenComponent>(child);
-            for (auto sub : subChildren.children) {
-                toDestroy.push_back(sub);
+    auto collect = [&reg, &toDestroy](auto&& self, const entt::entity entity) -> void {
+        if (entity == entt::null || !reg.valid(entity)) {
+            return;
+        }
+        toDestroy.push_back(entity);
+        if (const auto* children = reg.try_get<ChildrenComponent>(entity)) {
+            for (const entt::entity child : children->children) {
+                self(self, child);
             }
         }
-    }
+    };
+
+    collect(collect, mobRoot);
 
     for (auto e : toDestroy) {
-        reg.destroy(e);
+        if (reg.valid(e)) {
+            reg.destroy(e);
+        }
     }
 }
 

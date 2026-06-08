@@ -22,6 +22,9 @@
 #include "systems/player/FallDamageSystem.h"
 #include "systems/player/FallRollEffectSystem.h"
 #include "systems/player/HungerDepletionSystem.h"
+#include "systems/combat/DamageSystem.h"
+#include "systems/combat/DeathSystem.h"
+#include "systems/combat/PlayerMeleeSystem.h"
 #include "systems/audio/PlayerFootstepAudioSystem.h"
 #include "systems/world/FluidTickSystem.h"
 #include "systems/world/BlockSupportSystem.h"
@@ -43,7 +46,7 @@
 namespace ecs {
 
 GameplayScene::GameplayScene() {
-    m_fixedUpdateSystems.reserve(32);
+    m_fixedUpdateSystems.reserve(40);
 
     // ── Fixed-update pipeline — execution order matches declaration order ──
     addFixedUpdateSystem<InputSamplingSystem>();
@@ -56,6 +59,9 @@ GameplayScene::GameplayScene() {
 
     // ── Block interaction pipeline ──
     addFixedUpdateSystem<BlockTargetSystem>();
+    addFixedUpdateSystem<PlayerMeleeSystem>();
+    addFixedUpdateSystem<DamageSystem>();
+    addFixedUpdateSystem<DeathSystem>();
     addFixedUpdateSystem<BlockBreakSystem>();
     addFixedUpdateSystem<BlockPlaceSystem>();
 
@@ -141,6 +147,7 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     m_registry.emplace<BlockTargetComponent>(m_localPlayer);
     m_registry.emplace<BlockBreakComponent>(m_localPlayer);
     m_registry.emplace<BlockInteractionRuntimeComponent>(m_localPlayer);
+    m_registry.emplace<MeleeAttackComponent>(m_localPlayer);
     m_registry.emplace<FlightStateComponent>(m_localPlayer);
     m_registry.emplace<FootstepStateComponent>(m_localPlayer);
     m_registry.emplace<LandingStateComponent>(m_localPlayer);

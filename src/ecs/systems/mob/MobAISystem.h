@@ -9,7 +9,7 @@ namespace ecs {
 class MobAISystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
-        std::tuple<MobTag, MobAIComponent>,
+        std::tuple<MobTag, MobAIComponent, TransformComponent>,
         std::tuple<MobAIComponent, MoveIntentComponent>
     >;
 

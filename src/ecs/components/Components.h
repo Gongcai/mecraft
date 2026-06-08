@@ -15,5 +15,6 @@
 #include "ParticleComponents.h"
 #include "AudioComponents.h"
 #include "SteveComponents.h"
+#include "CombatComponents.h"
 
 #endif // MECRAFT_ECS_COMPONENTS_H
