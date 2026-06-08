@@ -7,6 +7,7 @@ namespace ecs {
 
 struct LocalPlayerTag {};
 struct DropItemTag {};
+struct ProjectileTag {};
 struct ParticleTag {};
 struct SteveTag {};
 struct MobTag {};

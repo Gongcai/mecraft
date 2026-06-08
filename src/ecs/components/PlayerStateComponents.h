@@ -27,6 +27,10 @@ struct HealthComponent {
     int max = 20;
 };
 
+struct PlayerModeComponent {
+    bool creative = false;
+};
+
 struct ArmorComponent {
     int current = 0;    // 0-20
     int max = 20;

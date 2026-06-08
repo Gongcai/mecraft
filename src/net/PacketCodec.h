@@ -161,6 +161,7 @@ public:
         pushU8(buf, msg.sneak ? 1 : 0);
         pushU8(buf, msg.sprint ? 1 : 0);
         pushU32(buf, msg.actions);
+        pushU8(buf, msg.selectedHotbarSlot);
         return buf;
     }
 
@@ -490,7 +491,12 @@ public:
     }
 
     static bool decodeClientInput(const uint8_t* data, size_t size, ClientInput& out) {
-        if (size < 27) return false;
+        constexpr size_t kLegacyInputBytes = 35;              // input + actions, before position snapshots
+        constexpr size_t kModernInputBytes = 67;              // adds position, velocity, yaw, pitch
+        constexpr size_t kModernInputWithSelectedBytes = 68;  // appends selected hotbar slot
+        constexpr size_t kInputTailBytes = 7;                 // jump, sneak, sprint, actions
+        constexpr size_t kSelectedHotbarSlotOffset = 67;
+        if (size < kLegacyInputBytes) return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.dt = readFloat(data, offset);
@@ -499,7 +505,7 @@ public:
         out.moveInput.z = readFloat(data, offset);
         out.lookDelta.x = readFloat(data, offset);
         out.lookDelta.y = readFloat(data, offset);
-        if (size >= 59) {
+        if (size >= kModernInputBytes) {
             out.playerPosition.x = readFloat(data, offset);
             out.playerPosition.y = readFloat(data, offset);
             out.playerPosition.z = readFloat(data, offset);
@@ -509,10 +515,15 @@ public:
             out.yaw = readFloat(data, offset);
             out.pitch = readFloat(data, offset);
         }
+        if (size < offset + kInputTailBytes) return false;
         out.jump = readU8(data, offset) != 0;
         out.sneak = readU8(data, offset) != 0;
         out.sprint = readU8(data, offset) != 0;
         out.actions = readU32(data, offset);
+        out.selectedHotbarSlot = 0;
+        if (size >= kModernInputWithSelectedBytes) {
+            out.selectedHotbarSlot = data[kSelectedHotbarSlotOffset];
+        }
         return true;
     }
 

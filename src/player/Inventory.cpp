@@ -22,7 +22,7 @@ void Inventory::initializeDefaultLoadout() {
     setSlotItem(4, BlockIds::WOOD);
     setSlotItem(5, BlockIds::GLASS);
     setSlotItem(6, BlockIds::COAL_ORE);
-    setSlotItem(7, ItemIds::COAL, 16);
+    setSlotItem(7, ItemIds::APPLE, 16);
     setSlotItem(8, ItemIds::IRON_PICKAXE, 1);
     setSlotItem(13, BlockIds::TORCH, 64);
     setSlotItem(14, ItemRegistry::fromBlock(BlockIds::BLUE_WOOL), 64);
@@ -32,6 +32,7 @@ void Inventory::initializeDefaultLoadout() {
     setSlotItem(10, BlockIds::DIAMOND_ORE);
     setSlotItem(11, BlockIds::WATER);
     setSlotItem(12, BlockIds::BIRCH_LOG);
+    setSlotItem(16, ItemIds::COAL, 16);
 }
 
 void Inventory::setSelectedSlot(int slot) {

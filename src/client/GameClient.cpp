@@ -74,7 +74,8 @@ void GameClient::sendInput(float dt, const glm::vec3& moveInput,
                            const glm::vec3& playerVelocity,
                            float yaw,
                            float pitch,
-                           const uint32_t actions) {
+                           const uint32_t actions,
+                           const uint8_t selectedHotbarSlot) {
     if (!m_transport) return;
 
     ++m_inputSequence;
@@ -95,6 +96,7 @@ void GameClient::sendInput(float dt, const glm::vec3& moveInput,
     input.sneak = sneak;
     input.sprint = sprint;
     input.actions = actions;
+    input.selectedHotbarSlot = selectedHotbarSlot;
     packet.inProcessPayload = input;
     m_transport->send(std::move(packet));
 }

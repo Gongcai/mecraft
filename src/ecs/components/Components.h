@@ -12,6 +12,7 @@
 #include "InteractionComponents.h"
 #include "PlayerStateComponents.h"
 #include "DropComponents.h"
+#include "ProjectileComponents.h"
 #include "ParticleComponents.h"
 #include "AudioComponents.h"
 #include "SteveComponents.h"

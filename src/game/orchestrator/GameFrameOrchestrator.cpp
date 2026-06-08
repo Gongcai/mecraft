@@ -44,13 +44,15 @@ void sendClientInput(GameSession& session, const float fixedStep) {
                          ecs::LookIntentComponent,
                          ecs::TransformComponent,
                          ecs::PhysicsBodyComponent,
-                         ecs::CameraStateComponent>();
+                         ecs::CameraStateComponent,
+                         ecs::InventoryComponent>();
     for (auto entity : view) {
         const auto& move = view.get<ecs::MoveIntentComponent>(entity);
         const auto& look = view.get<ecs::LookIntentComponent>(entity);
         const auto& transform = view.get<ecs::TransformComponent>(entity);
         const auto& physics = view.get<ecs::PhysicsBodyComponent>(entity);
         const auto& camera = view.get<ecs::CameraStateComponent>(entity);
+        const auto& inventory = view.get<ecs::InventoryComponent>(entity);
         uint32_t actions = 0;
         if (!playerDead && gameplayRegistry.ctxHas<ecs::InputFrameState>()) {
             const auto& frame = gameplayRegistry.ctxGet<ecs::InputFrameState>();
@@ -71,7 +73,8 @@ void sendClientInput(GameSession& session, const float fixedStep) {
                                    physics.body.velocity,
                                    camera.yaw,
                                    camera.pitch,
-                                   actions);
+                                   actions,
+                                   static_cast<uint8_t>(std::clamp(inventory.selectedHotbarSlot, 0, 8)));
         return;
     }
 }

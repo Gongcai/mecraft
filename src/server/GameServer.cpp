@@ -11,6 +11,7 @@
 #include "../ecs/systems/combat/DamageSystem.h"
 #include "../ecs/systems/combat/DeathSystem.h"
 #include "../ecs/systems/combat/PlayerMeleeSystem.h"
+#include "../ecs/systems/combat/ProjectileSystem.h"
 #include "../ecs/systems/item/ItemSpawnSystem.h"
 #include "../ecs/systems/item/ItemPickupSystem.h"
 #include "../ecs/systems/item/ItemLifetimeSystem.h"
@@ -449,6 +450,14 @@ void GameServer::syncOwnedPlayerProxies() {
         auto& camera = reg.get<ecs::CameraStateComponent>(client.ecsPlayerEntity);
         updateCameraStateFromClient(camera, client.lastYaw, client.lastPitch);
 
+        auto& inventoryState = reg.get<ecs::InventoryComponent>(client.ecsPlayerEntity);
+        inventoryState.selectedHotbarSlot = std::clamp(static_cast<int>(client.selectedHotbarSlot),
+                                                       0,
+                                                       Inventory::HOTBAR_SIZE - 1);
+
+        auto& playerMode = reg.get<ecs::PlayerModeComponent>(client.ecsPlayerEntity);
+        playerMode.creative = client.gameplayMode == net::NetworkGameplayMode::Creative;
+
         auto& blockIntent = reg.get<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
         blockIntent.wantsBreak = hasInputAction(client.pendingInputActions, net::ClientInputActions::Attack);
         blockIntent.wantsPlace = hasInputAction(client.pendingInputActions, net::ClientInputActions::UseItem);
@@ -479,6 +488,8 @@ void GameServer::tickServerEcs(const float dt) {
     characterPhysics.update(ctx);
     ecs::PlayerMeleeSystem playerMelee;
     playerMelee.update(ctx);
+    ecs::ProjectileSystem projectileSystem;
+    projectileSystem.update(ctx);
     ecs::DamageSystem damage;
     damage.update(ctx);
     updatePlayerLifecycle(dt);
@@ -766,6 +777,8 @@ void GameServer::processClientMessages() {
                     client.lastAckedInput = input.sequence;
                     client.lastYaw = input.yaw;
                     client.lastPitch = input.pitch;
+                    client.selectedHotbarSlot = static_cast<uint8_t>(
+                        std::clamp(static_cast<int>(input.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1));
                     if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
                         client.lastPosition = input.playerPosition;
                         client.lastVelocity = input.playerVelocity;
@@ -899,6 +912,7 @@ void GameServer::cleanupDisconnectedClients() {
         client.lastVelocity = glm::vec3(0.0f);
         client.lastYaw = 0.0f;
         client.lastPitch = 0.0f;
+        client.selectedHotbarSlot = 0;
     }
 }
 
@@ -1642,6 +1656,11 @@ net::EntitySpawnMessage GameServer::makeEntitySpawnMessage(const ecs::EntityNetI
         const auto& item = reg.get<ecs::ItemComponent>(entity);
         msg.itemId = static_cast<uint16_t>(item.itemId);
         msg.stackCount = static_cast<uint16_t>(item.stackCount);
+    } else if (reg.all_of<ecs::ProjectileTag, ecs::ItemComponent>(entity)) {
+        msg.kind = net::EntityKind::Projectile;
+        const auto& item = reg.get<ecs::ItemComponent>(entity);
+        msg.itemId = static_cast<uint16_t>(item.itemId);
+        msg.stackCount = static_cast<uint16_t>(std::max<uint32_t>(1u, item.stackCount));
     } else if (reg.all_of<ecs::MobTag>(entity)) {
         msg.kind = net::EntityKind::Mob;
     } else if (reg.all_of<ecs::SteveTag>(entity)) {

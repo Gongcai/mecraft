@@ -28,6 +28,7 @@ struct ConnectedClient {
     glm::vec3 lastVelocity = glm::vec3(0.0f);
     float lastYaw = 0.0f;
     float lastPitch = 0.0f;
+    uint8_t selectedHotbarSlot = 0;
     uint32_t lastAckedInput = 0;
     uint32_t pendingInputActions = 0;
     net::TickId helloTick = 0;

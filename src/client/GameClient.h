@@ -44,7 +44,8 @@ public:
                    const glm::vec3& playerVelocity,
                    float yaw,
                    float pitch,
-                   uint32_t actions = 0);
+                   uint32_t actions = 0,
+                   uint8_t selectedHotbarSlot = 0);
 
     /// Send an authoritative block action request to the server.
     void sendBlockAction(const net::ClientBlockAction& action);

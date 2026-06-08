@@ -46,6 +46,17 @@ int main() {
         return fail("coal should provide iconTexture from items.json");
     }
 
+    const ItemDef& apple = ItemRegistry::get(ItemIds::APPLE);
+    if (ItemRegistry::findByName("apple") != ItemIds::APPLE) {
+        return fail("item name lookup should resolve apple from items.json");
+    }
+    if (apple.placeBlock != BlockIds::AIR || apple.renderBlock != BlockIds::AIR) {
+        return fail("apple should be a non-placeable pure item");
+    }
+    if (std::string(apple.iconTextureName) != "apple") {
+        return fail("apple should use the apple item texture");
+    }
+
     const ItemDef& ironPickaxe = ItemRegistry::get(ItemIds::IRON_PICKAXE);
     if (ItemRegistry::findByName("iron_pickaxe") != ItemIds::IRON_PICKAXE) {
         return fail("item name lookup should resolve iron_pickaxe from items.json");

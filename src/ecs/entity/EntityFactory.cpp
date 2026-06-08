@@ -3,6 +3,8 @@
 #include "MobModelFactory.h"
 #include "../components/Components.h"
 #include "../components/NetworkComponents.h"
+#include "../util/DropRuntimeState.h"
+#include "../util/ProjectileDefinitions.h"
 
 #include <utility>
 
@@ -56,7 +58,9 @@ void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry,
     ensureComponent<BlockTargetComponent>(reg, entity);
     ensureComponent<BlockInteractionRuntimeComponent>(reg, entity);
     ensureComponent<MeleeAttackComponent>(reg, entity);
+    ensureComponent<ProjectileThrowerComponent>(reg, entity);
     ensureComponent<HealthComponent>(reg, entity);
+    ensureComponent<PlayerModeComponent>(reg, entity);
     ensureComponent<HurtEffectComponent>(reg, entity);
     ensureComponent<InventoryComponent>(reg, entity);
 
@@ -80,6 +84,43 @@ entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::ve
     registry.emplace<HealthComponent>(zombie, 20, 20);
     registry.emplace<NetworkSyncTag>(zombie);
     return zombie;
+}
+
+entt::entity EntityFactory::createAppleProjectile(GameplayRegistry& registry,
+                                                  const entt::entity owner,
+                                                  const glm::vec3& position,
+                                                  const glm::vec3& velocity) {
+    return createProjectile(registry, owner, position, velocity, makeAppleProjectileDefinition());
+}
+
+entt::entity EntityFactory::createProjectile(GameplayRegistry& registry,
+                                             const entt::entity owner,
+                                             const glm::vec3& position,
+                                             const glm::vec3& velocity,
+                                             const ProjectileDefinition& definition) {
+    entt::registry& reg = registry.registry();
+    const entt::entity projectile = reg.create();
+
+    reg.emplace<ProjectileTag>(projectile);
+    reg.emplace<ProjectileComponent>(projectile,
+                                     owner,
+                                     definition.damage,
+                                     definition.hitRadius,
+                                     definition.gravity,
+                                     definition.entityImpactParticleBlock);
+    reg.emplace<TransformComponent>(projectile, position, 0.0f);
+    reg.emplace<VelocityComponent>(projectile, velocity);
+    reg.emplace<ItemComponent>(projectile, definition.itemId, 1u);
+    reg.emplace<BoundsComponent>(projectile, glm::vec3(definition.boundsHalfExtent));
+    reg.emplace<LifetimeComponent>(projectile, 0.0f, definition.lifetimeSeconds);
+    reg.emplace<SpinVisualComponent>(projectile, 0.0f, definition.spinSpeedRadians);
+    reg.emplace<GroundedStateComponent>(projectile);
+    reg.emplace<NetworkSyncTag>(projectile);
+
+    auto& state = ensureDropRuntimeState(registry);
+    reg.emplace<DropEntityIdComponent>(projectile, state.nextId++);
+
+    return projectile;
 }
 
 } // namespace ecs

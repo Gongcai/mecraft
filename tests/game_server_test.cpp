@@ -15,6 +15,7 @@
 #include "renderer/mesh/ChunkMesher.h"
 #include "thread/ThreadPool.h"
 #include <cassert>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -22,6 +23,7 @@
 #include <filesystem>
 #include <queue>
 #include <thread>
+#include <vector>
 
 class ManualTransport final : public net::ITransportEndpoint {
 public:
@@ -1185,6 +1187,226 @@ static void testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory() {
     std::printf("[PASS] testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory\n");
 }
 
+static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawInventoryBeforeThrow = false;
+    net::InventorySnapshotMessage inventoryBeforeThrow;
+    auto drainBeforeThrowPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                inventoryBeforeThrow =
+                    std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                sawInventoryBeforeThrow = true;
+            }
+        }
+    };
+    drainBeforeThrowPackets();
+
+    uint32_t inputSequence = 1;
+    auto pushInput = [&](const uint32_t actions) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = inputSequence++;
+        input.playerPosition = playerPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = -15.0f;
+        input.selectedHotbarSlot = 7;
+        input.actions = actions;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    pushInput(0);
+    harness.server.tick(1.0f / 20.0f);
+    drainBeforeThrowPackets();
+    require(sawInventoryBeforeThrow, "apple projectile test should receive initial inventory");
+    const uint32_t applesBeforeThrow = inventoryItemCount(inventoryBeforeThrow, ItemIds::APPLE);
+    require(applesBeforeThrow > 0, "default loadout should include throwable apples");
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 25;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+    harness.server.tick(1.0f / 20.0f);
+
+    net::EntityNetId zombieNetId = 0;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                zombieNetId = spawn.netId;
+            }
+        }
+    }
+    require(zombieNetId != 0, "apple projectile test should receive zombie net id");
+
+    bool sawProjectileSpawn = false;
+    bool sawProjectileDespawn = false;
+    bool sawAppleConsumed = false;
+    bool sawZombieDespawn = false;
+    std::vector<net::EntityNetId> projectileNetIds;
+
+    auto drainCombatPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                if (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemIds::APPLE && spawn.netId != 0) {
+                    sawProjectileSpawn = true;
+                    projectileNetIds.push_back(spawn.netId);
+                }
+            }
+            if (packet.type == net::MessageType::EntityDespawn && packet.inProcessPayload.has_value()) {
+                const auto& despawn = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
+                sawZombieDespawn = sawZombieDespawn || despawn.netId == zombieNetId;
+                sawProjectileDespawn =
+                    sawProjectileDespawn ||
+                    std::find(projectileNetIds.begin(), projectileNetIds.end(), despawn.netId) != projectileNetIds.end();
+            }
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                sawAppleConsumed = sawAppleConsumed ||
+                    inventoryItemCount(inventory, ItemIds::APPLE) < applesBeforeThrow;
+            }
+        }
+    };
+
+    for (int throwAttempt = 0; throwAttempt < 4 && !sawZombieDespawn; ++throwAttempt) {
+        pushInput(net::ClientInputActions::UseItem);
+        harness.server.tick(1.0f / 20.0f);
+        drainCombatPackets();
+
+        for (int cooldownTick = 0; cooldownTick < 14 && !sawZombieDespawn; ++cooldownTick) {
+            pushInput(0);
+            harness.server.tick(1.0f / 20.0f);
+            drainCombatPackets();
+        }
+    }
+
+    require(sawProjectileSpawn, "using a selected apple should spawn a projectile entity");
+    require(sawProjectileDespawn, "apple projectile should despawn after impact");
+    require(sawAppleConsumed, "throwing an apple should consume it from authoritative inventory");
+    require(sawZombieDespawn, "apple projectiles should damage and eventually kill the zombie");
+    std::printf("[PASS] testOwnedServerPlayerThrowsAppleProjectileDamagesZombie\n");
+}
+
+static void testCreativeAppleProjectileDoesNotConsumeInventory() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawInitialInventory = false;
+    net::InventorySnapshotMessage initialInventory;
+    auto drainInitialPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                initialInventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                sawInitialInventory = true;
+            }
+        }
+    };
+    drainInitialPackets();
+    require(sawInitialInventory, "creative projectile test should receive initial inventory");
+    const uint32_t applesBeforeThrow = inventoryItemCount(initialInventory, ItemIds::APPLE);
+    require(applesBeforeThrow > 0, "creative projectile test needs throwable apples");
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 41;
+    command.command = "/gamemode creative";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    uint32_t inputSequence = 1;
+    auto pushInput = [&](const uint32_t actions, const uint8_t selectedSlot) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = inputSequence++;
+        input.playerPosition = playerPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = -10.0f;
+        input.selectedHotbarSlot = selectedSlot;
+        input.actions = actions;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    bool sawProjectileSpawn = false;
+    bool sawInventoryAfterThrow = false;
+    net::InventorySnapshotMessage inventoryAfterThrow;
+    auto drainThrowPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                sawProjectileSpawn = sawProjectileSpawn ||
+                    (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemIds::APPLE);
+            }
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                inventoryAfterThrow = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                sawInventoryAfterThrow = true;
+            }
+        }
+    };
+
+    pushInput(net::ClientInputActions::UseItem, 7);
+    harness.server.tick(1.0f / 20.0f);
+    drainThrowPackets();
+
+    pushInput(0, 0);
+    harness.server.tick(1.0f / 20.0f);
+    drainThrowPackets();
+
+    require(sawProjectileSpawn, "creative apple use should still spawn a projectile");
+    require(sawInventoryAfterThrow, "slot change should sync inventory after creative throw");
+    require(inventoryItemCount(inventoryAfterThrow, ItemIds::APPLE) == applesBeforeThrow,
+            "creative apple projectile should not consume authoritative inventory");
+    std::printf("[PASS] testCreativeAppleProjectileDoesNotConsumeInventory\n");
+}
+
 static void testPersistentZombieRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -1339,6 +1561,34 @@ static void testChatCommandCodecRoundTrip() {
     assert(decodedSystem.kind == system.kind);
     assert(decodedSystem.message == system.message);
     std::printf("[PASS] testChatCommandCodecRoundTrip\n");
+}
+
+static void testClientInputCodecCarriesSelectedHotbarSlot() {
+    net::ClientInput input;
+    input.sequence = 44;
+    input.dt = 0.05f;
+    input.playerPosition = glm::vec3(1.0f, 2.0f, 3.0f);
+    input.playerVelocity = glm::vec3(0.0f, 1.0f, 0.0f);
+    input.yaw = 15.0f;
+    input.pitch = -10.0f;
+    input.actions = net::ClientInputActions::UseItem;
+    input.selectedHotbarSlot = 7;
+
+    const auto encoded = net::PacketCodec::encodeClientInput(input);
+    net::ClientInput decoded;
+    require(net::PacketCodec::decodeClientInput(encoded.data(), encoded.size(), decoded),
+            "client input codec should decode selected hotbar payload");
+    require(decoded.selectedHotbarSlot == 7,
+            "client input codec should keep selected hotbar slot");
+    require((decoded.actions & net::ClientInputActions::UseItem) != 0,
+            "client input codec should keep use item action");
+
+    net::ClientInput legacyDecoded;
+    require(net::PacketCodec::decodeClientInput(encoded.data(), encoded.size() - 1, legacyDecoded),
+            "client input codec should accept payloads without selected slot");
+    require(legacyDecoded.selectedHotbarSlot == 0,
+            "legacy client input payload should default selected slot to zero");
+    std::printf("[PASS] testClientInputCodecCarriesSelectedHotbarSlot\n");
 }
 
 static void testServerSnapshotCodecCarriesPlayerHealth() {
@@ -1809,9 +2059,12 @@ int main() {
     testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
     testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory();
+    testOwnedServerPlayerThrowsAppleProjectileDamagesZombie();
+    testCreativeAppleProjectileDoesNotConsumeInventory();
     testPersistentZombieRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();
+    testClientInputCodecCarriesSelectedHotbarSlot();
     testServerSnapshotCodecCarriesPlayerHealth();
     testInventorySnapshotCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();

@@ -16,6 +16,14 @@
       "renderBlock": "minecraft:coal_ore"
     },
     {
+      "id": "minecraft:apple",
+      "iconTexture": "apple",
+      "maxStack": 64,
+      "icon": "minecraft:apple",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
       "id": "minecraft:iron_pickaxe",
       "iconTexture": "iron_pickaxe",
       "maxStack": 1,

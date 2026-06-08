@@ -20,6 +20,7 @@ enum class EntityKind : uint8_t {
     Drop = 0,
     Player = 1,
     Mob = 2,
+    Projectile = 3,
 };
 
 using ClientId = uint32_t;
@@ -103,6 +104,7 @@ struct ClientInput {
     bool sneak = false;
     bool sprint = false;
     uint32_t actions = 0;  // Bitfield for break/place etc.
+    uint8_t selectedHotbarSlot = 0;
 };
 
 /// Client signals readiness to receive world data.
@@ -213,8 +215,8 @@ struct EntitySpawnMessage {
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f;
     float pitch = 0.0f;
-    uint16_t itemId = 0;      // For drops
-    uint16_t stackCount = 0;  // For drops
+    uint16_t itemId = 0;      // For drops/projectiles
+    uint16_t stackCount = 0;  // For drops/projectiles
 };
 
 /// Server tells client to destroy an entity.

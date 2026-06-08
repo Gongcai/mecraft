@@ -3,6 +3,8 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/entity/SteveModelFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
+#include "../ecs/util/ParticleEventBuffer.h"
+#include "../ecs/util/ProjectileDefinitions.h"
 #include "../item/Item.h"
 #include "../resource/ResourceMgr.h"
 #include <algorithm>
@@ -67,6 +69,9 @@ void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
     case net::EntityKind::Drop:
         createDropEntity(msg);
         break;
+    case net::EntityKind::Projectile:
+        createProjectileEntity(msg);
+        break;
     case net::EntityKind::Player:
         createPlayerEntity(msg);
         break;
@@ -94,6 +99,18 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     }
 
     if (m_registry->valid(it->second)) {
+        if (m_gameplayRegistry &&
+            m_registry->all_of<ecs::ProjectileTag, ecs::TransformComponent>(it->second)) {
+            const auto& transform = m_registry->get<ecs::TransformComponent>(it->second);
+            BlockID particleBlock = ecs::defaultProjectileEntityImpactParticleBlock();
+            if (const auto* projectile = m_registry->try_get<ecs::ProjectileComponent>(it->second);
+                projectile != nullptr && projectile->entityImpactParticleBlock != 0) {
+                particleBlock = projectile->entityImpactParticleBlock;
+            }
+            ecs::ensureParticleEventBus(*m_gameplayRegistry)
+                .push(ecs::makeImpactParticleEvent(transform.position, particleBlock));
+        }
+
         std::vector<entt::entity> toDestroy;
         collectEntityTree(*m_registry, it->second, toDestroy);
         for (const entt::entity entity : toDestroy) {
@@ -206,6 +223,33 @@ void ClientEntityStore::createDropEntity(const net::EntitySpawnMessage& msg) {
         static_cast<ItemID>(msg.itemId), msg.stackCount);
     m_registry->emplace<ecs::SpinVisualComponent>(entity, 0.0f, 3.0f);
     m_registry->emplace<ecs::DropItemTag>(entity);
+    m_registry->emplace<ecs::NetworkSyncTag>(entity);
+    m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
+
+    m_netIdToEntity[msg.netId] = entity;
+}
+
+void ClientEntityStore::createProjectileEntity(const net::EntitySpawnMessage& msg) {
+    auto entity = m_registry->create();
+    const uint32_t stackCount = std::max<uint32_t>(1u, msg.stackCount);
+    const auto definition = ecs::projectileDefinitionForItemOrDefault(static_cast<ItemID>(msg.itemId));
+
+    m_registry->emplace<ecs::ProjectileTag>(entity);
+    m_registry->emplace<ecs::ProjectileComponent>(entity,
+                                                  entt::null,
+                                                  definition.damage,
+                                                  definition.hitRadius,
+                                                  definition.gravity,
+                                                  definition.entityImpactParticleBlock);
+    m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 0.0f);
+    m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
+    m_registry->emplace<ecs::ItemComponent>(entity,
+        static_cast<ItemID>(msg.itemId), stackCount);
+    m_registry->emplace<ecs::SpinVisualComponent>(entity, msg.yaw, definition.spinSpeedRadians);
+    m_registry->emplace<ecs::BoundsComponent>(entity, glm::vec3(definition.boundsHalfExtent));
+    m_registry->emplace<ecs::LifetimeComponent>(entity, 0.0f, definition.lifetimeSeconds);
+    m_registry->emplace<ecs::GroundedStateComponent>(entity);
+    m_registry->emplace<ecs::DropEntityIdComponent>(entity, static_cast<std::size_t>(msg.netId));
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
 

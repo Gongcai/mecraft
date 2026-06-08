@@ -8,6 +8,8 @@
 
 namespace ecs {
 
+struct ProjectileDefinition;
+
 class EntityFactory {
 public:
     static entt::entity createServerPlayerProxy(GameplayRegistry& registry,
@@ -20,6 +22,15 @@ public:
 
     static entt::entity createZombie(GameplayRegistry& registry, const glm::vec3& position);
     static entt::entity createZombie(entt::registry& registry, const glm::vec3& position);
+    static entt::entity createProjectile(GameplayRegistry& registry,
+                                         entt::entity owner,
+                                         const glm::vec3& position,
+                                         const glm::vec3& velocity,
+                                         const ProjectileDefinition& definition);
+    static entt::entity createAppleProjectile(GameplayRegistry& registry,
+                                              entt::entity owner,
+                                              const glm::vec3& position,
+                                              const glm::vec3& velocity);
 };
 
 } // namespace ecs

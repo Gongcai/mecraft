@@ -37,4 +37,5 @@
 
 #define MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(X) \
     X(COAL, "coal") \
+    X(APPLE, "apple") \
     X(IRON_PICKAXE, "iron_pickaxe")

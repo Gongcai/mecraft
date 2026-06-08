@@ -25,6 +25,7 @@
 #include "systems/combat/DamageSystem.h"
 #include "systems/combat/DeathSystem.h"
 #include "systems/combat/PlayerMeleeSystem.h"
+#include "systems/combat/ProjectileSystem.h"
 #include "systems/audio/PlayerFootstepAudioSystem.h"
 #include "systems/world/FluidTickSystem.h"
 #include "systems/world/BlockSupportSystem.h"
@@ -60,6 +61,7 @@ GameplayScene::GameplayScene() {
     // ── Block interaction pipeline ──
     addFixedUpdateSystem<BlockTargetSystem>();
     addFixedUpdateSystem<PlayerMeleeSystem>();
+    addFixedUpdateSystem<ProjectileSystem>();
     addFixedUpdateSystem<DamageSystem>();
     addFixedUpdateSystem<DeathSystem>();
     addFixedUpdateSystem<BlockBreakSystem>();
@@ -148,6 +150,7 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     m_registry.emplace<BlockBreakComponent>(m_localPlayer);
     m_registry.emplace<BlockInteractionRuntimeComponent>(m_localPlayer);
     m_registry.emplace<MeleeAttackComponent>(m_localPlayer);
+    m_registry.emplace<ProjectileThrowerComponent>(m_localPlayer);
     m_registry.emplace<FlightStateComponent>(m_localPlayer);
     m_registry.emplace<FootstepStateComponent>(m_localPlayer);
     m_registry.emplace<LandingStateComponent>(m_localPlayer);

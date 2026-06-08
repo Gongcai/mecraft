@@ -4,6 +4,8 @@
 #include <glm/vec3.hpp>
 
 #include "../src/ecs/GameplayRegistry.h"
+#include "../src/ecs/GameplayServices.h"
+#include "../src/ecs/components/Components.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/block/PropIndices.h"
 #include "../src/world/DropSystem.h"
@@ -15,6 +17,17 @@ namespace {
 int fail(const char* message) {
     std::cerr << "[drop_system_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
+}
+
+uint32_t inventoryItemCount(const Inventory& inventory, const ItemID itemId) {
+    uint32_t total = 0;
+    for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
+        const ItemStack stack = inventory.getSlotStack(slot);
+        if (stack.itemId == itemId) {
+            total += stack.count;
+        }
+    }
+    return total;
 }
 }
 
@@ -28,7 +41,7 @@ int main() {
     world.setRenderDistance(1);
 
     for (int i = 0; i < 8; ++i) {
-        world.update(glm::vec3(0.0f));
+        world.update(glm::vec3(0.0f), 1.0f / 20.0f);
     }
 
     // Build a deterministic platform so the drop can land on a known height.
@@ -36,9 +49,13 @@ int main() {
     world.setBlock(0, 121, 0, BlockIds::AIR);
     world.setBlock(0, 122, 0, BlockIds::AIR);
 
+    ecs::GameplayServices services;
+    services.world = &world;
+
     ecs::GameplayRegistry dropRegistry;
     DropSystem dropSystem;
     dropSystem.bindRegistry(dropRegistry);
+    dropSystem.bindServices(services);
     dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
     dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
 
@@ -56,6 +73,12 @@ int main() {
 
     if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockIds::STONE)) {
         return fail("drop payload should preserve spawned item id from BlockDropTable");
+    }
+
+    auto dropView = dropRegistry.view<ecs::DropItemTag, ecs::TransformComponent, ecs::VelocityComponent>();
+    for (const entt::entity e : dropView) {
+        dropView.get<ecs::TransformComponent>(e).position = glm::vec3(0.5f, 122.42f, 0.5f);
+        dropView.get<ecs::VelocityComponent>(e).velocity = glm::vec3(0.0f);
     }
 
     // Test coal_ore drops coal item (not itself)
@@ -122,7 +145,7 @@ int main() {
     collectDropSystem.bindRegistry(collectDropRegistry);
     collectDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(6, 122, 6), 2);
     Inventory inventory;
-    const uint16_t coalBefore = inventory.getSlotStack(7).count;
+    const uint32_t coalBefore = inventoryItemCount(inventory, ItemIds::COAL);
     const uint32_t collected = collectDropSystem.collectNearbyDrops(glm::vec3(6.5f, 122.42f, 6.5f), 1.0f, inventory);
     if (collected != 2) {
         return fail("collectNearbyDrops should collect stacks within radius");
@@ -130,7 +153,7 @@ int main() {
     if (!collectDropSystem.getDrops().empty()) {
         return fail("collectNearbyDrops should remove fully collected drops");
     }
-    if (inventory.getSlotStack(7).count != static_cast<uint16_t>(coalBefore + 2)) {
+    if (inventoryItemCount(inventory, ItemIds::COAL) != coalBefore + 2) {
         return fail("collectNearbyDrops should add items into inventory stacks");
     }
 
