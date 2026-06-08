@@ -191,6 +191,7 @@ struct ServerSnapshot {
     uint16_t playerHealth = 20;
     uint16_t playerMaxHealth = 20;
     bool playerHurt = false;
+    bool playerRespawned = false;
 };
 
 // ===========================================================================

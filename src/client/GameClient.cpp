@@ -295,6 +295,19 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
         health.current = static_cast<int>(snapshot.playerHealth);
         health.max = static_cast<int>(snapshot.playerMaxHealth);
 
+        if (snapshot.playerRespawned) {
+            if (auto* transform = m_ecsRegistry->try_get<ecs::TransformComponent>(player)) {
+                transform->position = snapshot.authoritativePosition;
+            }
+            if (auto* velocity = m_ecsRegistry->try_get<ecs::VelocityComponent>(player)) {
+                velocity->velocity = snapshot.authoritativeVelocity;
+            }
+            if (auto* body = m_ecsRegistry->try_get<ecs::PhysicsBodyComponent>(player)) {
+                body->body.position = snapshot.authoritativePosition;
+                body->body.velocity = snapshot.authoritativeVelocity;
+            }
+        }
+
         if (snapshot.playerHurt || healthDropped) {
             if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(player)) {
                 hurt->classicHurtEffectPending = true;

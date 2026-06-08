@@ -35,6 +35,9 @@ struct ConnectedClient {
     bool receivedHello = false;
     bool receivedViewConfig = false;
     bool isAdmin = false;
+    bool awaitingRespawn = false;
+    float respawnTimer = 0.0f;
+    int respawnSnapshotTicksRemaining = 0;
     net::NetworkGameplayMode gameplayMode = net::NetworkGameplayMode::Survival;
     net::EntityNetId playerNetId = 0;
     entt::entity ecsPlayerEntity = entt::null;
@@ -123,6 +126,8 @@ private:
     [[nodiscard]] bool usingOwnedEcsRegistry() const;
     void tickServerEcs(float dt);
     void syncOwnedPlayerProxies();
+    void updateOwnedPlayerLifecycle(float dt);
+    void respawnOwnedPlayer(ConnectedClient& client);
     void destroyOwnedPlayerProxy(ConnectedClient& client);
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);

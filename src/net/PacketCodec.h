@@ -134,6 +134,7 @@ public:
         pushU16(buf, msg.playerHealth);
         pushU16(buf, msg.playerMaxHealth);
         pushU8(buf, msg.playerHurt ? 1 : 0);
+        pushU8(buf, msg.playerRespawned ? 1 : 0);
         return buf;
     }
 
@@ -454,10 +455,14 @@ public:
         out.playerHealth = 20;
         out.playerMaxHealth = 20;
         out.playerHurt = false;
+        out.playerRespawned = false;
         if (size >= offset + 5) {
             out.playerHealth = readU16(data, offset);
             out.playerMaxHealth = readU16(data, offset);
             out.playerHurt = readU8(data, offset) != 0;
+            if (size >= offset + 1) {
+                out.playerRespawned = readU8(data, offset) != 0;
+            }
         }
         return true;
     }

@@ -30,6 +30,8 @@ namespace server {
 namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
+constexpr float kPlayerRespawnDelaySeconds = 2.0f;
+constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 
 std::string playerName(const net::ClientId id) {
     return "Player" + std::to_string(id);
@@ -187,6 +189,105 @@ void GameServer::destroyOwnedPlayerProxy(ConnectedClient& client) {
         }
     }
     client.ecsPlayerEntity = entt::null;
+    client.awaitingRespawn = false;
+    client.respawnTimer = 0.0f;
+    client.respawnSnapshotTicksRemaining = 0;
+}
+
+void GameServer::respawnOwnedPlayer(ConnectedClient& client) {
+    if (!usingOwnedEcsRegistry() || m_ownedGameplayRegistry == nullptr ||
+        client.ecsPlayerEntity == entt::null) {
+        return;
+    }
+
+    auto& reg = m_ownedGameplayRegistry->registry();
+    if (!reg.valid(client.ecsPlayerEntity)) {
+        return;
+    }
+
+    client.awaitingRespawn = false;
+    client.respawnTimer = 0.0f;
+    client.respawnSnapshotTicksRemaining = kPlayerRespawnSnapshotRepeatTicks;
+    client.lastPosition = m_spawnPosition;
+    client.lastVelocity = glm::vec3(0.0f);
+    client.pendingInputActions = 0;
+
+    if (auto* transform = reg.try_get<ecs::TransformComponent>(client.ecsPlayerEntity)) {
+        transform->position = m_spawnPosition;
+        transform->eyeHeight = 1.62f;
+    } else {
+        reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, m_spawnPosition, 1.62f);
+    }
+
+    if (auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity)) {
+        velocity->velocity = glm::vec3(0.0f);
+    } else {
+        reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
+    }
+
+    auto* health = reg.try_get<ecs::HealthComponent>(client.ecsPlayerEntity);
+    if (health == nullptr) {
+        health = &reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
+    }
+    health->max = std::max(1, health->max);
+    health->current = health->max;
+
+    if (auto* hurt = reg.try_get<ecs::HurtEffectComponent>(client.ecsPlayerEntity)) {
+        hurt->classicHurtEffectPending = false;
+    }
+
+    if (auto* blockIntent = reg.try_get<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity)) {
+        blockIntent->wantsBreak = false;
+        blockIntent->wantsPlace = false;
+    }
+
+    sendSystemMessage(client, "Respawned at world spawn.", net::ChatMessageKind::Success);
+}
+
+void GameServer::updateOwnedPlayerLifecycle(const float dt) {
+    if (!usingOwnedEcsRegistry() || m_ownedGameplayRegistry == nullptr) {
+        return;
+    }
+
+    auto& reg = m_ownedGameplayRegistry->registry();
+    for (auto& client : m_clients) {
+        const bool active = client.receivedHello &&
+                            client.transport &&
+                            client.transport->hasActiveRemote();
+        if (!active || client.ecsPlayerEntity == entt::null || !reg.valid(client.ecsPlayerEntity)) {
+            continue;
+        }
+
+        auto* health = reg.try_get<ecs::HealthComponent>(client.ecsPlayerEntity);
+        if (health == nullptr) {
+            continue;
+        }
+
+        if (client.awaitingRespawn) {
+            client.pendingInputActions = 0;
+            client.lastVelocity = glm::vec3(0.0f);
+            if (auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity)) {
+                velocity->velocity = glm::vec3(0.0f);
+            }
+
+            client.respawnTimer = std::max(0.0f, client.respawnTimer - dt);
+            if (client.respawnTimer <= 0.0f) {
+                respawnOwnedPlayer(client);
+            }
+            continue;
+        }
+
+        if (health->current <= 0) {
+            client.awaitingRespawn = true;
+            client.respawnTimer = kPlayerRespawnDelaySeconds;
+            client.pendingInputActions = 0;
+            client.lastVelocity = glm::vec3(0.0f);
+            if (auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity)) {
+                velocity->velocity = glm::vec3(0.0f);
+            }
+            sendSystemMessage(client, "You died. Respawning...", net::ChatMessageKind::Warning);
+        }
+    }
 }
 
 void GameServer::syncOwnedPlayerProxies() {
@@ -291,6 +392,7 @@ void GameServer::tickServerEcs(const float dt) {
     playerMelee.update(ctx);
     ecs::DamageSystem damage;
     damage.update(ctx);
+    updateOwnedPlayerLifecycle(dt);
     ecs::DeathSystem death;
     death.update(ctx);
     ecs::ItemPhysicsSystem itemPhysics;
@@ -566,11 +668,13 @@ void GameServer::processClientMessages() {
                 if (packet.inProcessPayload.has_value()) {
                     const auto& input = std::any_cast<const net::ClientInput&>(packet.inProcessPayload);
                     client.lastAckedInput = input.sequence;
-                    client.lastPosition = input.playerPosition;
-                    client.lastVelocity = input.playerVelocity;
                     client.lastYaw = input.yaw;
                     client.lastPitch = input.pitch;
-                    client.pendingInputActions |= input.actions;
+                    if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
+                        client.lastPosition = input.playerPosition;
+                        client.lastVelocity = input.playerVelocity;
+                        client.pendingInputActions |= input.actions;
+                    }
                 }
                 break;
             }
@@ -592,7 +696,9 @@ void GameServer::processClientMessages() {
             case net::MessageType::ClientBlockAction: {
                 if (packet.inProcessPayload.has_value()) {
                     const auto& action = std::any_cast<const net::ClientBlockAction&>(packet.inProcessPayload);
-                    handleClientBlockAction(client, action);
+                    if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
+                        handleClientBlockAction(client, action);
+                    }
                 }
                 break;
             }
@@ -1083,6 +1189,7 @@ void GameServer::sendSnapshotsToClients() {
         snapshot.ackInputSequence = client.lastAckedInput;
         snapshot.authoritativePosition = client.lastPosition;
         snapshot.authoritativeVelocity = client.lastVelocity;
+        snapshot.playerRespawned = client.respawnSnapshotTicksRemaining > 0;
 
         entt::entity playerEntity = entt::null;
         if (m_ecsRegistry != nullptr) {
@@ -1111,6 +1218,9 @@ void GameServer::sendSnapshotsToClients() {
 
         packet.inProcessPayload = snapshot;
         client.transport->send(std::move(packet));
+        if (client.respawnSnapshotTicksRemaining > 0) {
+            --client.respawnSnapshotTicksRemaining;
+        }
     }
 
     if (m_ecsRegistry != nullptr) {

@@ -65,6 +65,11 @@ static float horizontalDistanceSq(const glm::vec3& a, const glm::vec3& b) {
     return dx * dx + dz * dz;
 }
 
+static float distanceSq(const glm::vec3& a, const glm::vec3& b) {
+    const glm::vec3 d = a - b;
+    return glm::dot(d, d);
+}
+
 static void require(const bool condition, const char* message) {
     if (!condition) {
         std::fprintf(stderr, "[FAIL] %s\n", message);
@@ -182,6 +187,11 @@ static void testClientAppliesPlayerHealthSnapshot() {
     auto& raw = registry.registry();
     const entt::entity player = raw.create();
     raw.emplace<ecs::LocalPlayerTag>(player);
+    raw.emplace<ecs::TransformComponent>(player, glm::vec3(5.0f, 6.0f, 7.0f), 1.62f);
+    raw.emplace<ecs::VelocityComponent>(player, glm::vec3(1.0f, 0.0f, 0.0f));
+    auto& body = raw.emplace<ecs::PhysicsBodyComponent>(player);
+    body.body.position = glm::vec3(5.0f, 6.0f, 7.0f);
+    body.body.velocity = glm::vec3(1.0f, 0.0f, 0.0f);
     raw.emplace<ecs::HealthComponent>(player);
     raw.emplace<ecs::HurtEffectComponent>(player);
     client.initEntityStore(registry, nullptr);
@@ -223,6 +233,28 @@ static void testClientAppliesPlayerHealthSnapshot() {
     require(raw.get<ecs::HealthComponent>(player).current == 10, "client should apply lowered server health");
     require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending,
             "client should infer hurt event from lowered health");
+
+    net::Packet respawnPacket;
+    respawnPacket.type = net::MessageType::ServerSnapshot;
+    snapshot.serverTick = 13;
+    snapshot.authoritativePosition = glm::vec3(2.0f, 64.0f, -3.0f);
+    snapshot.authoritativeVelocity = glm::vec3(0.0f);
+    snapshot.playerHealth = 20;
+    snapshot.playerRespawned = true;
+    respawnPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(respawnPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::HealthComponent>(player).current == 20, "client should apply respawned health");
+    require(raw.get<ecs::TransformComponent>(player).position == snapshot.authoritativePosition,
+            "client should move local player to respawn position");
+    require(raw.get<ecs::VelocityComponent>(player).velocity == snapshot.authoritativeVelocity,
+            "client should clear local velocity on respawn");
+    require(raw.get<ecs::PhysicsBodyComponent>(player).body.position == snapshot.authoritativePosition,
+            "client should move local physics body to respawn position");
+    require(raw.get<ecs::PhysicsBodyComponent>(player).body.velocity == snapshot.authoritativeVelocity,
+            "client should clear local physics body velocity on respawn");
     std::printf("[PASS] testClientAppliesPlayerHealthSnapshot\n");
 }
 
@@ -646,6 +678,103 @@ static void testOwnedServerZombieAttackSyncsPlayerHealth() {
     std::printf("[PASS] testOwnedServerZombieAttackSyncsPlayerHealth\n");
 }
 
+static void testOwnedServerPlayerRespawnsAfterZombieKill() {
+    ServerHarness harness;
+    const glm::vec3 spawnPosition = harness.server.getSpawnPosition();
+    const glm::vec3 playerPosition = spawnPosition + glm::vec3(0.0f, -1.0f, 0.0f);
+    const glm::vec3 spoofedDeadPosition = playerPosition + glm::vec3(80.0f, 0.0f, 80.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    auto pushInput = [&](const uint32_t sequence, const glm::vec3& reportedPosition) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = sequence;
+        input.playerPosition = reportedPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = 0.0f;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    pushInput(1, playerPosition);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 31;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    bool sawDeathSnapshot = false;
+    bool sentSpoofedDeadInput = false;
+    bool sawDeadInputIgnored = false;
+    bool sawRespawnSnapshot = false;
+    glm::vec3 respawnedPosition(0.0f);
+
+    for (uint32_t i = 2; i < 280 && !sawRespawnSnapshot; ++i) {
+        const bool spoofThisTick = sawDeathSnapshot;
+        pushInput(i, spoofThisTick ? spoofedDeadPosition : playerPosition);
+        sentSpoofedDeadInput = sentSpoofedDeadInput || spoofThisTick;
+        harness.server.tick(1.0f / 20.0f);
+
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type != net::MessageType::ServerSnapshot || !packet.inProcessPayload.has_value()) {
+                continue;
+            }
+
+            const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
+            if (snapshot.playerHealth == 0) {
+                sawDeathSnapshot = true;
+                if (sentSpoofedDeadInput && distanceSq(snapshot.authoritativePosition, spoofedDeadPosition) > 1.0f) {
+                    sawDeadInputIgnored = true;
+                }
+            }
+
+            if (snapshot.playerRespawned) {
+                sawRespawnSnapshot = true;
+                respawnedPosition = snapshot.authoritativePosition;
+                require(snapshot.playerHealth == snapshot.playerMaxHealth,
+                        "respawn snapshot should restore player health");
+                require(snapshot.authoritativeVelocity == glm::vec3(0.0f),
+                        "respawn snapshot should clear player velocity");
+            }
+        }
+    }
+
+    require(sawDeathSnapshot, "zombie should be able to reduce player health to zero");
+    require(sawDeadInputIgnored, "server should ignore dead player movement before respawn");
+    require(sawRespawnSnapshot, "server should send a player respawn snapshot");
+    require(distanceSq(respawnedPosition, spawnPosition) < 0.01f,
+            "server should respawn player at world spawn");
+    std::printf("[PASS] testOwnedServerPlayerRespawnsAfterZombieKill\n");
+}
+
 static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
     ServerHarness harness;
     const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
@@ -910,12 +1039,14 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     snapshot.playerHealth = 7;
     snapshot.playerMaxHealth = 20;
     snapshot.playerHurt = true;
+    snapshot.playerRespawned = true;
 
     const auto encoded = net::PacketCodec::encodeServerSnapshot(snapshot);
-    require(encoded.size() == 37, "server snapshot codec should include health payload bytes");
+    require(encoded.size() == 38, "server snapshot codec should include health and respawn payload bytes");
     require(encoded[32] == 7 && encoded[33] == 0, "server snapshot codec should write player health after base payload");
     require(encoded[34] == 20 && encoded[35] == 0, "server snapshot codec should write max health after health");
     require(encoded[36] == 1, "server snapshot codec should write hurt flag after health values");
+    require(encoded[37] == 1, "server snapshot codec should write respawn flag after hurt flag");
     net::ServerSnapshot decoded;
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), encoded.size(), decoded),
             "server snapshot codec should decode health payload");
@@ -924,6 +1055,14 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     require(decoded.playerHealth == 7, "server snapshot codec should keep player health");
     require(decoded.playerMaxHealth == 20, "server snapshot codec should keep max health");
     require(decoded.playerHurt, "server snapshot codec should keep hurt event");
+    require(decoded.playerRespawned, "server snapshot codec should keep respawn event");
+
+    net::ServerSnapshot legacyDecoded;
+    require(net::PacketCodec::decodeServerSnapshot(encoded.data(), encoded.size() - 1, legacyDecoded),
+            "server snapshot codec should decode legacy health payload");
+    require(legacyDecoded.playerHealth == 7, "legacy health payload should keep player health");
+    require(legacyDecoded.playerHurt, "legacy health payload should keep hurt event");
+    require(!legacyDecoded.playerRespawned, "legacy health payload should default respawn event off");
     std::printf("[PASS] testServerSnapshotCodecCarriesPlayerHealth\n");
 }
 
@@ -1313,6 +1452,7 @@ int main() {
     testSummonZombieUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
     testOwnedServerZombieAttackSyncsPlayerHealth();
+    testOwnedServerPlayerRespawnsAfterZombieKill();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
     testPersistentZombieRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
