@@ -185,6 +185,7 @@ entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::ve
     registry.emplace<MoveIntentComponent>(zombie);
     registry.emplace<HealthComponent>(zombie, 20, 20);
     registry.emplace<HurtEffectComponent>(zombie);
+    registry.emplace<DeathEffectComponent>(zombie, BlockIds::ROSE, 28, "mob.zombie.death", 1.0f);
     registry.emplace<EntityTypeComponent>(zombie, "minecraft:zombie");
     registry.emplace<NetworkSyncTag>(zombie);
     return zombie;

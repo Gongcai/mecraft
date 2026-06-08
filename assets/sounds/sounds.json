@@ -60,6 +60,10 @@
     "item.apple.impact": {
       "file": "foo",
       "extension": ".ogg"
+    },
+    "mob.zombie.death": {
+      "file": "foo",
+      "extension": ".ogg"
     }
   }
 }

@@ -1009,6 +1009,7 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
     require(zombieNetId != 0, "melee test should receive zombie net id");
 
     bool sawZombieDespawn = false;
+    bool sawZombieDeathImpact = false;
     bool sawDropSpawn = false;
     uint32_t inputSequence = 100;
 
@@ -1019,6 +1020,13 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
             if (packet.type == net::MessageType::EntityDespawn && packet.inProcessPayload.has_value()) {
                 const auto& despawn = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
                 sawZombieDespawn = sawZombieDespawn || despawn.netId == zombieNetId;
+            }
+            if (packet.type == net::MessageType::EntityImpact && packet.inProcessPayload.has_value()) {
+                const auto& impact = std::any_cast<const net::EntityImpactMessage&>(packet.inProcessPayload);
+                sawZombieDeathImpact = sawZombieDeathImpact ||
+                    (impact.netId == zombieNetId &&
+                     impact.particleBlockId == BlockIds::ROSE &&
+                     impact.particleCount == 28);
             }
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
@@ -1054,6 +1062,7 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
     }
 
     require(sawZombieDespawn, "server melee should despawn the killed zombie");
+    require(sawZombieDeathImpact, "server melee zombie death should emit a final death impact");
     require(sawDropSpawn, "server melee zombie death should spawn a drop");
     std::printf("[PASS] testOwnedServerPlayerMeleeKillsZombieAndDropsItem\n");
 }
@@ -2099,9 +2108,10 @@ static void testEntityImpactCodecRoundTrip() {
     impact.netId = 123;
     impact.position = glm::vec3(1.25f, 64.5f, -3.75f);
     impact.particleBlockId = static_cast<uint16_t>(BlockIds::STONE);
+    impact.particleCount = 28;
 
     const auto encoded = net::PacketCodec::encodeEntityImpact(impact);
-    require(encoded.size() == 18, "entity impact codec should write net id, position, and particle block");
+    require(encoded.size() == 20, "entity impact codec should write net id, position, particle block, and count");
 
     net::EntityImpactMessage decoded;
     require(net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size(), decoded),
@@ -2113,6 +2123,16 @@ static void testEntityImpactCodecRoundTrip() {
             "entity impact codec should keep impact position");
     require(decoded.particleBlockId == impact.particleBlockId,
             "entity impact codec should keep particle block id");
+    require(decoded.particleCount == impact.particleCount,
+            "entity impact codec should keep particle count");
+
+    net::EntityImpactMessage legacyDecoded;
+    require(net::PacketCodec::decodeEntityImpact(encoded.data(), 18, legacyDecoded),
+            "entity impact codec should decode legacy impact payload");
+    require(legacyDecoded.particleBlockId == impact.particleBlockId,
+            "legacy entity impact payload should keep particle block id");
+    require(legacyDecoded.particleCount == 14,
+            "legacy entity impact payload should default particle count");
 
     net::EntityImpactMessage truncated;
     require(!net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size() - 1, truncated),

@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace server {
 namespace {
@@ -59,6 +60,19 @@ net::NetworkWeatherType toNetworkWeather(const WeatherType type) {
     case WeatherType::Clear:
     default:
         return net::NetworkWeatherType::Clear;
+    }
+}
+
+void collectEntityTree(entt::registry& registry, const entt::entity entity, std::vector<entt::entity>& out) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+
+    out.push_back(entity);
+    if (const auto* children = registry.try_get<ecs::ChildrenComponent>(entity)) {
+        for (const entt::entity child : children->children) {
+            collectEntityTree(registry, child, out);
+        }
     }
 }
 
@@ -1919,6 +1933,7 @@ void GameServer::syncEntitiesToClients() {
                 impactMsg.netId = netId;
                 impactMsg.position = impact->position;
                 impactMsg.particleBlockId = static_cast<uint16_t>(impact->particleBlock);
+                impactMsg.particleCount = static_cast<uint16_t>(std::clamp(impact->particleCount, 0, 65535));
                 impactPacket.inProcessPayload = impactMsg;
                 sendToConnectedClients(impactPacket);
             }
@@ -1937,7 +1952,13 @@ void GameServer::syncEntitiesToClients() {
         sendToConnectedClients(despawnPacket);
 
         if (reg.valid(entity)) {
-            reg.destroy(entity);
+            std::vector<entt::entity> toDestroy;
+            collectEntityTree(reg, entity, toDestroy);
+            for (const entt::entity doomed : toDestroy) {
+                if (reg.valid(doomed)) {
+                    reg.destroy(doomed);
+                }
+            }
         }
         m_syncedEntities.erase(syncedIt);
     }

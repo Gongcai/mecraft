@@ -231,6 +231,7 @@ struct EntityImpactMessage {
     EntityNetId netId = 0;
     glm::vec3 position = glm::vec3(0.0f);
     uint16_t particleBlockId = 0;
+    uint16_t particleCount = 14;
 };
 
 /// A single entity's snapshot data.

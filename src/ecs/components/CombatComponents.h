@@ -2,11 +2,14 @@
 #define MECRAFT_ECS_COMBAT_COMPONENTS_H
 
 #include <cstdint>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <entt/entity/entity.hpp>
 
 #include "../../item/Item.h"
+#include "../../world/block/Block.h"
 
 namespace ecs {
 
@@ -40,6 +43,23 @@ struct DamageEvent {
     entt::entity target = entt::null;
     entt::entity source = entt::null;
     int amount = 0;
+};
+
+struct DeathEffectComponent {
+    DeathEffectComponent() = default;
+    DeathEffectComponent(const BlockID particleBlock,
+                         const int particleCount,
+                         std::string soundId,
+                         const float volume = 1.0f)
+        : particleBlock(particleBlock),
+          particleCount(particleCount),
+          soundId(std::move(soundId)),
+          volume(volume) {}
+
+    BlockID particleBlock = 0;
+    int particleCount = 24;
+    std::string soundId;
+    float volume = 1.0f;
 };
 
 } // namespace ecs

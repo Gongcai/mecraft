@@ -36,6 +36,50 @@ void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
     ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, 1.0f});
 }
 
+std::string defaultMobDeathSoundId(const std::string& entityId) {
+    if (entityId == "minecraft:zombie") {
+        return "mob.zombie.death";
+    }
+    return {};
+}
+
+void ensureMobDeathEffect(entt::registry& registry,
+                          const entt::entity entity,
+                          const std::string& entityId) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+
+    if (!registry.all_of<ecs::DeathEffectComponent>(entity)) {
+        registry.emplace<ecs::DeathEffectComponent>(
+            entity,
+            BlockIds::ROSE,
+            28,
+            defaultMobDeathSoundId(entityId),
+            1.0f);
+    }
+}
+
+std::string impactSoundForEntity(entt::registry& registry, const entt::entity entity) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return {};
+    }
+
+    if (const auto* projectile = registry.try_get<ecs::ProjectileComponent>(entity)) {
+        return projectile->impactSoundId;
+    }
+
+    if (const auto* deathEffect = registry.try_get<ecs::DeathEffectComponent>(entity)) {
+        return deathEffect->soundId;
+    }
+
+    if (const auto* type = registry.try_get<ecs::EntityTypeComponent>(entity)) {
+        return defaultMobDeathSoundId(type->entityId);
+    }
+
+    return {};
+}
+
 void setSyncedHealth(entt::registry& registry,
                      const entt::entity entity,
                      const uint16_t current,
@@ -183,14 +227,14 @@ void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
 
     if (msg.particleBlockId != 0) {
         ecs::ensureParticleEventBus(*m_gameplayRegistry)
-            .push(ecs::makeImpactParticleEvent(msg.position, static_cast<BlockID>(msg.particleBlockId)));
+            .push(ecs::makeImpactParticleEvent(msg.position,
+                                               static_cast<BlockID>(msg.particleBlockId),
+                                               msg.particleCount));
     }
 
     auto it = m_netIdToEntity.find(msg.netId);
     if (it != m_netIdToEntity.end() && m_registry->valid(it->second)) {
-        if (const auto* projectile = m_registry->try_get<ecs::ProjectileComponent>(it->second)) {
-            queueAudioEvent(m_gameplayRegistry, projectile->impactSoundId, msg.position);
-        }
+        queueAudioEvent(m_gameplayRegistry, impactSoundForEntity(*m_registry, it->second), msg.position);
     }
 }
 
@@ -399,6 +443,7 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     m_registry->emplace<ecs::HealthComponent>(entity, initialHealth, initialMaxHealth);
     m_registry->emplace<ecs::HurtEffectComponent>(entity);
     m_registry->emplace<ecs::EntityTypeComponent>(entity, entityId);
+    ensureMobDeathEffect(*m_registry, entity, entityId);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
 

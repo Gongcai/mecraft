@@ -276,6 +276,7 @@ public:
         pushFloat(buf, msg.position.y);
         pushFloat(buf, msg.position.z);
         pushU16(buf, msg.particleBlockId);
+        pushU16(buf, msg.particleCount);
         return buf;
     }
 
@@ -662,12 +663,17 @@ public:
 
     static bool decodeEntityImpact(const uint8_t* data, size_t size, EntityImpactMessage& out) {
         if (size < 18) return false;
+        if (size != 18 && size < 20) return false;
         size_t offset = 0;
         out.netId = readU32(data, offset);
         out.position.x = readFloat(data, offset);
         out.position.y = readFloat(data, offset);
         out.position.z = readFloat(data, offset);
         out.particleBlockId = readU16(data, offset);
+        out.particleCount = 14;
+        if (size >= offset + 2) {
+            out.particleCount = readU16(data, offset);
+        }
         return true;
     }
 

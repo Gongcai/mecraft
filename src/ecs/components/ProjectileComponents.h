@@ -43,12 +43,16 @@ struct ProjectileThrowerComponent {
 
 struct EntityImpactComponent {
     EntityImpactComponent() = default;
-    EntityImpactComponent(const glm::vec3& impactPosition, const BlockID impactParticleBlock)
+    EntityImpactComponent(const glm::vec3& impactPosition,
+                          const BlockID impactParticleBlock,
+                          const int impactParticleCount = 14)
         : position(impactPosition),
-          particleBlock(impactParticleBlock) {}
+          particleBlock(impactParticleBlock),
+          particleCount(impactParticleCount) {}
 
     glm::vec3 position{0.0f};
     BlockID particleBlock = 0;
+    int particleCount = 14;
 };
 
 } // namespace ecs

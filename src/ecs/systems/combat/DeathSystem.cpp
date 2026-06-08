@@ -5,6 +5,9 @@
 #include <vector>
 
 #include "../item/ItemSpawnSystem.h"
+#include "../../components/NetworkComponents.h"
+#include "../../util/AudioEventBuffer.h"
+#include "../../util/ParticleEventBuffer.h"
 
 namespace ecs {
 namespace {
@@ -51,6 +54,38 @@ void forEachDropEntry(const DropTableComponent& dropTable, SpawnFn&& spawn) {
     spawn(DropTableEntry{dropTable.itemId, dropTable.minCount, dropTable.maxCount});
 }
 
+bool hasLocalPresentationServices(const SystemContext& ctx) {
+    return static_cast<bool>(ctx.services.audioEngine) ||
+           static_cast<bool>(ctx.services.particleSystem);
+}
+
+void queueLocalDeathEffects(GameplayRegistry& registry,
+                            const DeathEffectComponent& effect,
+                            const glm::vec3& position) {
+    if (effect.particleBlock != 0 && effect.particleCount > 0) {
+        ensureParticleEventBus(registry)
+            .push(makeImpactParticleEvent(position, effect.particleBlock, effect.particleCount));
+    }
+
+    if (!effect.soundId.empty()) {
+        ensureAudioEventBus(registry).push({effect.soundId, position, true, effect.volume});
+    }
+}
+
+void queueNetworkDeathDespawn(entt::registry& registry,
+                              const entt::entity entity,
+                              const DeathEffectComponent* effect,
+                              const glm::vec3& position) {
+    if (effect != nullptr && effect->particleBlock != 0 && effect->particleCount > 0) {
+        registry.emplace_or_replace<EntityImpactComponent>(
+            entity,
+            position,
+            effect->particleBlock,
+            effect->particleCount);
+    }
+    registry.emplace_or_replace<PendingNetworkDespawnTag>(entity);
+}
+
 } // namespace
 
 void DeathSystem::update(SystemContext& ctx) {
@@ -60,6 +95,9 @@ void DeathSystem::update(SystemContext& ctx) {
     std::vector<entt::entity> deadMobs;
     auto view = reg.view<MobTag, HealthComponent>();
     for (const entt::entity entity : view) {
+        if (reg.all_of<PendingNetworkDespawnTag>(entity)) {
+            continue;
+        }
         const auto& health = view.get<HealthComponent>(entity);
         if (health.current <= 0) {
             deadMobs.push_back(entity);
@@ -71,15 +109,26 @@ void DeathSystem::update(SystemContext& ctx) {
             continue;
         }
 
+        const auto* transform = reg.try_get<TransformComponent>(entity);
+        const glm::vec3 position = transform ? transform->position : glm::vec3(0.0f);
+        const auto* deathEffect = reg.try_get<DeathEffectComponent>(entity);
+
         if (const auto* dropTable = reg.try_get<DropTableComponent>(entity)) {
-            const auto* transform = reg.try_get<TransformComponent>(entity);
-            const glm::vec3 position = transform ? transform->position : glm::vec3(0.0f);
             forEachDropEntry(*dropTable, [&](const DropTableEntry& drop) {
                 const uint32_t count = rollDropCount(drop);
                 if (drop.itemId != 0 && count != 0) {
                     ItemSpawnSystem::spawnAtPosition(registry, drop.itemId, position, count);
                 }
             });
+        }
+
+        if (deathEffect != nullptr && hasLocalPresentationServices(ctx)) {
+            queueLocalDeathEffects(registry, *deathEffect, position);
+        }
+
+        if (reg.all_of<EntityNetIdComponent>(entity)) {
+            queueNetworkDeathDespawn(reg, entity, deathEffect, position);
+            continue;
         }
 
         std::vector<entt::entity> toDestroy;

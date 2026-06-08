@@ -87,6 +87,7 @@ static void testMobSpawnCreatesZombieReplica() {
                          ecs::VelocityComponent,
                          ecs::HealthComponent,
                          ecs::HurtEffectComponent,
+                         ecs::DeathEffectComponent,
                          ecs::EntityTypeComponent,
                          ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "mob replica components missing");
@@ -121,6 +122,30 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob snapshot hurt flag should trigger hurt effect");
     require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining > 0.0f,
             "mob snapshot hurt flag should trigger visible hurt flash");
+
+    net::EntityImpactMessage impact;
+    impact.netId = 77;
+    impact.position = glm::vec3(3.25f, 65.0f, -4.0f);
+    impact.particleBlockId = static_cast<uint16_t>(BlockIds::ROSE);
+    impact.particleCount = 28;
+    store.handleImpact(impact);
+
+    require(registry.ctxHas<ecs::ParticleEventBus>(),
+            "mob death impact should queue particle events");
+    auto& particleBus = registry.ctxGet<ecs::ParticleEventBus>();
+    require(particleBus.size() == 1,
+            "mob death impact should queue exactly one particle event");
+    require(particleBus.peek().front().particleCount == 28,
+            "mob death impact should use server-provided particle count");
+    require(particleBus.peek().front().blockType == BlockIds::ROSE,
+            "mob death impact should use server-provided particle block");
+    require(registry.ctxHas<ecs::AudioEventBus>(),
+            "mob death impact should queue audio events");
+    auto& audioBus = registry.ctxGet<ecs::AudioEventBus>();
+    require(audioBus.size() == 1,
+            "mob death impact should queue exactly one audio event");
+    require(audioBus.peek().front().clipName == "mob.zombie.death",
+            "mob death impact should use zombie death sound");
 }
 
 static void testProjectileSpawnCreatesAppleReplica() {
