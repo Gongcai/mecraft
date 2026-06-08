@@ -41,7 +41,7 @@ void DamageSystem::update(SystemContext& ctx) {
 
         health->current = std::max(0, health->current - event.amount);
         if (auto* hurt = reg.try_get<HurtEffectComponent>(event.target)) {
-            hurt->classicHurtEffectPending = true;
+            hurt->triggerClassicHurt();
         }
     }
 

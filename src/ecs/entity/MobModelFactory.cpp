@@ -22,6 +22,7 @@ entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
         reg.emplace<MoveIntentComponent>(root);
         reg.emplace<GroundedStateComponent>(root);
         reg.emplace<HealthComponent>(root, 20, 20);
+        reg.emplace<HurtEffectComponent>(root);
         if (ItemIds::COAL != 0) {
             reg.emplace<DropTableComponent>(root, ItemIds::COAL, 1u, 1u);
         }

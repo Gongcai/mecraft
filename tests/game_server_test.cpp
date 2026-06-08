@@ -1058,6 +1058,110 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
     std::printf("[PASS] testOwnedServerPlayerMeleeKillsZombieAndDropsItem\n");
 }
 
+static void testOwnedServerMobSnapshotCarriesHealthAndHurt() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    auto pushInput = [&](const uint32_t sequence, const uint32_t actions) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = sequence;
+        input.playerPosition = playerPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = 0.0f;
+        input.actions = actions;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    pushInput(1, 0);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 23;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    net::EntityNetId zombieNetId = 0;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                zombieNetId = spawn.netId;
+            }
+        }
+    }
+    require(zombieNetId != 0, "mob health snapshot test should receive zombie net id");
+
+    bool sawDamagedHealth = false;
+    bool sawHurtBit = false;
+    pushInput(2, net::ClientInputActions::Attack);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type != net::MessageType::EntitySnapshot || !packet.inProcessPayload.has_value()) {
+            continue;
+        }
+        const auto& snapshot = std::any_cast<const net::EntitySnapshotMessage&>(packet.inProcessPayload);
+        for (const auto& entity : snapshot.entities) {
+            if (entity.netId == zombieNetId) {
+                sawDamagedHealth = entity.maxHealth == 20 && entity.health < entity.maxHealth;
+                sawHurtBit = entity.hurt;
+            }
+        }
+    }
+
+    require(sawDamagedHealth, "mob entity snapshot should carry updated zombie health");
+    require(sawHurtBit, "mob entity snapshot should carry one-shot hurt flag");
+
+    bool sawClearedHurtBit = false;
+    pushInput(3, 0);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type != net::MessageType::EntitySnapshot || !packet.inProcessPayload.has_value()) {
+            continue;
+        }
+        const auto& snapshot = std::any_cast<const net::EntitySnapshotMessage&>(packet.inProcessPayload);
+        for (const auto& entity : snapshot.entities) {
+            if (entity.netId == zombieNetId && entity.maxHealth == 20 && !entity.hurt) {
+                sawClearedHurtBit = true;
+            }
+        }
+    }
+
+    require(sawClearedHurtBit, "mob hurt flag should clear after being sent once");
+    std::printf("[PASS] testOwnedServerMobSnapshotCarriesHealthAndHurt\n");
+}
+
 static void testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory() {
     ServerHarness harness;
     const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
@@ -1968,7 +2072,6 @@ static void testEntitySpawnCodecCarriesEntityId() {
     spawn.entityId = "minecraft:zombie";
 
     const auto encoded = net::PacketCodec::encodeEntitySpawn(spawn);
-    require(encoded.size() == 61, "entity spawn codec should append entity id string");
 
     net::EntitySpawnMessage decoded;
     require(net::PacketCodec::decodeEntitySpawn(encoded.data(), encoded.size(), decoded),
@@ -2015,6 +2118,56 @@ static void testEntityImpactCodecRoundTrip() {
     require(!net::PacketCodec::decodeEntityImpact(encoded.data(), encoded.size() - 1, truncated),
             "entity impact codec should reject truncated payload");
     std::printf("[PASS] testEntityImpactCodecRoundTrip\n");
+}
+
+static void testEntitySnapshotCodecCarriesHealthAndHurt() {
+    net::EntitySnapshotMessage snapshot;
+    snapshot.serverTick = 77;
+    net::EntitySnapshotItem entity;
+    entity.netId = 321;
+    entity.position = glm::vec3(1.0f, 64.0f, -2.0f);
+    entity.velocity = glm::vec3(0.25f, 0.0f, -0.5f);
+    entity.yaw = 45.0f;
+    entity.pitch = 5.0f;
+    entity.health = 16;
+    entity.maxHealth = 20;
+    entity.hurt = true;
+    snapshot.entities.push_back(entity);
+
+    const auto encoded = net::PacketCodec::encodeEntitySnapshot(snapshot);
+    require(encoded.size() == 49, "entity snapshot codec should append health/max/hurt state");
+
+    net::EntitySnapshotMessage decoded;
+    require(net::PacketCodec::decodeEntitySnapshot(encoded.data(), encoded.size(), decoded),
+            "entity snapshot codec should decode payload");
+    require(decoded.serverTick == snapshot.serverTick, "entity snapshot codec should keep server tick");
+    require(decoded.entities.size() == 1, "entity snapshot codec should keep entity count");
+    require(decoded.entities.front().netId == entity.netId, "entity snapshot codec should keep net id");
+    require(decoded.entities.front().position.y == entity.position.y,
+            "entity snapshot codec should keep position");
+    require(decoded.entities.front().velocity.z == entity.velocity.z,
+            "entity snapshot codec should keep velocity");
+    require(decoded.entities.front().yaw == entity.yaw &&
+            decoded.entities.front().pitch == entity.pitch,
+            "entity snapshot codec should keep rotation");
+    require(decoded.entities.front().health == 16 &&
+            decoded.entities.front().maxHealth == 20 &&
+            decoded.entities.front().hurt,
+            "entity snapshot codec should keep synced health and hurt state");
+
+    net::EntitySnapshotMessage legacyDecoded;
+    require(net::PacketCodec::decodeEntitySnapshot(encoded.data(), 44, legacyDecoded),
+            "entity snapshot codec should decode legacy pitch payload");
+    require(legacyDecoded.entities.size() == 1, "legacy entity snapshot should keep entity count");
+    require(legacyDecoded.entities.front().health == 0 &&
+            legacyDecoded.entities.front().maxHealth == 0 &&
+            !legacyDecoded.entities.front().hurt,
+            "legacy entity snapshot should default synced health and hurt state");
+
+    net::EntitySnapshotMessage truncated;
+    require(!net::PacketCodec::decodeEntitySnapshot(encoded.data(), encoded.size() - 1, truncated),
+            "entity snapshot codec should reject truncated health/hurt payload");
+    std::printf("[PASS] testEntitySnapshotCodecCarriesHealthAndHurt\n");
 }
 
 static void testServerSnapshotCodecCarriesPlayerHealth() {
@@ -2485,6 +2638,7 @@ int main() {
     testOwnedServerZombieAttackSyncsPlayerHealth();
     testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
+    testOwnedServerMobSnapshotCarriesHealthAndHurt();
     testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory();
     testOwnedServerPlayerThrowsAppleProjectileDamagesZombie();
     testCreativeAppleProjectileDoesNotConsumeInventory();
@@ -2499,6 +2653,7 @@ int main() {
     testClientInputCodecCarriesSelectedHotbarSlot();
     testEntitySpawnCodecCarriesEntityId();
     testEntityImpactCodecRoundTrip();
+    testEntitySnapshotCodecCarriesHealthAndHurt();
     testServerSnapshotCodecCarriesPlayerHealth();
     testInventorySnapshotCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();

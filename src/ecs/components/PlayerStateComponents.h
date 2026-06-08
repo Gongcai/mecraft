@@ -45,6 +45,13 @@ struct FoodComponent {
 
 struct HurtEffectComponent {
     bool classicHurtEffectPending = false;
+    float flashSecondsRemaining = 0.0f;
+    float flashDurationSeconds = 0.18f;
+
+    void triggerClassicHurt() {
+        classicHurtEffectPending = true;
+        flashSecondsRemaining = flashDurationSeconds;
+    }
 };
 
 } // namespace ecs

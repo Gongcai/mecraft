@@ -36,6 +36,34 @@ void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
     ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, 1.0f});
 }
 
+void setSyncedHealth(entt::registry& registry,
+                     const entt::entity entity,
+                     const uint16_t current,
+                     const uint16_t max) {
+    if (max == 0 || entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+
+    if (auto* health = registry.try_get<ecs::HealthComponent>(entity)) {
+        health->current = static_cast<int>(current);
+        health->max = static_cast<int>(max);
+    } else {
+        registry.emplace<ecs::HealthComponent>(entity, static_cast<int>(current), static_cast<int>(max));
+    }
+}
+
+void triggerReplicaHurt(entt::registry& registry, const entt::entity entity) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+
+    auto* hurt = registry.try_get<ecs::HurtEffectComponent>(entity);
+    if (hurt == nullptr) {
+        hurt = &registry.emplace<ecs::HurtEffectComponent>(entity);
+    }
+    hurt->triggerClassicHurt();
+}
+
 } // namespace
 
 ClientEntityStore::ClientEntityStore() = default;
@@ -212,6 +240,18 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
         if (mobAI) {
             mobAI->yaw = item.yaw;
         }
+
+        if (item.maxHealth > 0) {
+            const auto* previousHealth = m_registry->try_get<ecs::HealthComponent>(it->second);
+            const bool healthDropped = previousHealth != nullptr &&
+                                       static_cast<int>(item.health) < previousHealth->current;
+            setSyncedHealth(*m_registry, it->second, item.health, item.maxHealth);
+            if (item.hurt || healthDropped) {
+                triggerReplicaHurt(*m_registry, it->second);
+            }
+        } else if (item.hurt) {
+            triggerReplicaHurt(*m_registry, it->second);
+        }
     }
 }
 
@@ -330,23 +370,23 @@ void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {
 void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     entt::entity entity = entt::null;
     const std::string entityId = msg.entityId.empty() ? "minecraft:zombie" : msg.entityId;
+    int initialHealth = 20;
+    int initialMaxHealth = 20;
     if (m_gameplayRegistry) {
         bool useZombieHumanoid = entityId == "minecraft:zombie";
-        if (!useZombieHumanoid) {
-            std::string error;
-            ecs::EntityDefinitionRegistry& definitions = ecs::EntityDefinitionRegistry::instance();
-            if (definitions.ensureLoaded(&error)) {
-                if (const auto* definition = definitions.findMob(entityId)) {
-                    useZombieHumanoid = definition->model == "zombie_humanoid";
-                }
+        std::string error;
+        ecs::EntityDefinitionRegistry& definitions = ecs::EntityDefinitionRegistry::instance();
+        if (definitions.ensureLoaded(&error)) {
+            if (const auto* definition = definitions.findMob(entityId)) {
+                initialHealth = definition->health;
+                initialMaxHealth = definition->maxHealth;
+                useZombieHumanoid = definition->model == "zombie_humanoid";
             }
         }
-
-        if (useZombieHumanoid) {
-            entity = ecs::MobModelFactory::createZombieReplica(*m_gameplayRegistry, msg.position, msg.yaw);
-        } else {
+        if (!useZombieHumanoid) {
             return;
         }
+        entity = ecs::MobModelFactory::createZombieReplica(*m_gameplayRegistry, msg.position, msg.yaw);
     } else {
         entity = m_registry->create();
         m_registry->emplace<ecs::MobTag>(entity);
@@ -356,6 +396,8 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     }
 
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
+    m_registry->emplace<ecs::HealthComponent>(entity, initialHealth, initialMaxHealth);
+    m_registry->emplace<ecs::HurtEffectComponent>(entity);
     m_registry->emplace<ecs::EntityTypeComponent>(entity, entityId);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);

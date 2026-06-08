@@ -48,7 +48,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
             // Trigger classic hurt effect via ECS component
             auto hurtView = registry.view<LocalPlayerTag, HurtEffectComponent>();
             for (auto he : hurtView) {
-                hurtView.get<HurtEffectComponent>(he).classicHurtEffectPending = true;
+                hurtView.get<HurtEffectComponent>(he).triggerClassicHurt();
             }
         }
     }

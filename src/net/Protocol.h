@@ -240,6 +240,9 @@ struct EntitySnapshotItem {
     glm::vec3 velocity = glm::vec3(0.0f);
     float yaw = 0.0f;
     float pitch = 0.0f;
+    uint16_t health = 0;     // 0 means this entity has no synced health
+    uint16_t maxHealth = 0;  // 0 means this entity has no synced health
+    bool hurt = false;
 };
 
 /// Batch of entity snapshots from the server.

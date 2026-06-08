@@ -1998,6 +1998,7 @@ void GameServer::syncEntitiesToClients() {
     // 5. Build and send entity snapshots (batch of all synced entities)
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = m_currentTick;
+    std::vector<entt::entity> hurtEventsSent;
 
     for (const auto& [netId, entity] : m_syncedEntities) {
         if (!reg.valid(entity)) continue;
@@ -2023,6 +2024,17 @@ void GameServer::syncEntitiesToClients() {
             item.yaw = mobAI->yaw;
         }
 
+        if (const auto* health = reg.try_get<ecs::HealthComponent>(entity)) {
+            item.health = static_cast<uint16_t>(std::clamp(health->current, 0, 65535));
+            item.maxHealth = static_cast<uint16_t>(std::clamp(health->max, 0, 65535));
+        }
+        if (auto* hurt = reg.try_get<ecs::HurtEffectComponent>(entity)) {
+            item.hurt = hurt->classicHurtEffectPending;
+            if (item.hurt) {
+                hurtEventsSent.push_back(entity);
+            }
+        }
+
         snapshot.entities.push_back(item);
     }
 
@@ -2038,6 +2050,15 @@ void GameServer::syncEntitiesToClients() {
             }
             net::Packet clientPacket = packet;
             client.transport->send(std::move(clientPacket));
+        }
+    }
+
+    for (const entt::entity entity : hurtEventsSent) {
+        if (!reg.valid(entity)) {
+            continue;
+        }
+        if (auto* hurt = reg.try_get<ecs::HurtEffectComponent>(entity)) {
+            hurt->classicHurtEffectPending = false;
         }
     }
 }

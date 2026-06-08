@@ -332,7 +332,7 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
 
         if (snapshot.playerHurt || healthDropped) {
             if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(player)) {
-                hurt->classicHurtEffectPending = true;
+                hurt->triggerClassicHurt();
             }
         }
         break;

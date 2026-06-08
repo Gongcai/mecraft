@@ -41,6 +41,21 @@ bool shouldRenderSteveRoot(const entt::registry& reg,
         || reg.all_of<ecs::EntityNetIdComponent>(steveRoot);
 }
 
+float hurtFlashForRoot(const entt::registry& reg, const entt::entity root) {
+    const auto* hurt = reg.try_get<ecs::HurtEffectComponent>(root);
+    if (hurt == nullptr || hurt->flashDurationSeconds <= 0.0f) {
+        return 0.0f;
+    }
+    return std::clamp(hurt->flashSecondsRemaining / hurt->flashDurationSeconds, 0.0f, 1.0f);
+}
+
+void setHurtFlash(Shader& shader, const float value) {
+    const int location = shader.getUniformLocation("uHurtFlash");
+    if (location >= 0) {
+        glUniform1f(location, value);
+    }
+}
+
 } // anonymous namespace
 
 HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1) {
@@ -568,6 +583,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     m_shader->use();
     m_shader->setMat4(viewProjLoc, projection * view);
     m_shader->setInt("uTexture", 0);
+    setHurtFlash(*m_shader, 0.0f);
     bindDisabledShadowFallback(*m_shader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
@@ -618,6 +634,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     shader.use();
     shader.setMat4(viewProjLoc, viewProj);
     shader.setInt("uTexture", 0);
+    setHurtFlash(shader, 0.0f);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -632,6 +649,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
         for (auto steveRoot : steveView) {
             if (!shouldRenderSteveRoot(reg, steveRoot, mode)) continue;
 
+            setHurtFlash(shader, hurtFlashForRoot(reg, steveRoot));
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(steveRoot);
 
             // Torso
@@ -690,6 +708,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
         auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
         for (auto mobRoot : mobView) {
+            setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
             // Torso
@@ -758,6 +777,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
     shader.use();
     shader.setMat4(viewProjLoc, viewProj);
     shader.setInt("uTexture", 0);
+    setHurtFlash(shader, 0.0f);
 
     glActiveTexture(GL_TEXTURE0);
     glEnable(GL_CULL_FACE);
@@ -772,6 +792,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
         for (auto steveRoot : steveView) {
             if (!shouldRenderSteveRoot(reg, steveRoot, mode)) continue;
 
+            setHurtFlash(shader, hurtFlashForRoot(reg, steveRoot));
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(steveRoot);
 
             // Query world light at torso position for this entity.
@@ -854,6 +875,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
         auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
         for (auto mobRoot : mobView) {
+            setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
             auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
             // Query world light at torso position for this entity.

@@ -22,6 +22,7 @@ uniform sampler2D uTexture;
 // Per-entity voxel light from CPU world light query (0-1 range, normalized from 0-15).
 uniform float uEntitySunlight;
 uniform float uEntityBlockLight;
+uniform float uHurtFlash;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -33,7 +34,8 @@ void main() {
         discard;
     }
 
-    vec3 albedo = srgbToLinear(texColor.rgb);
+    vec3 skinColor = mix(texColor.rgb, vec3(1.0, 0.22, 0.22), clamp(uHurtFlash, 0.0, 1.0) * 0.70);
+    vec3 albedo = srgbToLinear(skinColor);
     vec3 normal = normalize(vNormal);
 
     // Entity skin: no emissive, no vertex AO.

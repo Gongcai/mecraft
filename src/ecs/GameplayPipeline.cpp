@@ -4,6 +4,7 @@
 #include "systems/audio/PlayerFootstepAudioSystem.h"
 #include "systems/combat/DamageSystem.h"
 #include "systems/combat/DeathSystem.h"
+#include "systems/combat/HurtEffectDecaySystem.h"
 #include "systems/combat/PlayerMeleeSystem.h"
 #include "systems/combat/ProjectileSystem.h"
 #include "systems/interaction/BlockBreakSystem.h"
@@ -72,6 +73,7 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
     addFixedUpdateSystem<PlayerMeleeSystem>();
     addFixedUpdateSystem<ProjectileSystem>();
     addFixedUpdateSystem<DamageSystem>(FixedUpdateDebugCategory::State, PostSystemHook::AfterDamageSystem);
+    addFixedUpdateSystem<HurtEffectDecaySystem>();
     addFixedUpdateSystem<DeathSystem>();
     addFixedUpdateSystem<BlockBreakSystem>();
     addFixedUpdateSystem<BlockPlaceSystem>();
@@ -111,6 +113,7 @@ void GameplayPipeline::buildServerFixedUpdateSystems() {
     addFixedUpdateSystem<PlayerMeleeSystem>();
     addFixedUpdateSystem<ProjectileSystem>();
     addFixedUpdateSystem<DamageSystem>(FixedUpdateDebugCategory::State, PostSystemHook::AfterDamageSystem);
+    addFixedUpdateSystem<HurtEffectDecaySystem>();
     addFixedUpdateSystem<DeathSystem>();
     addFixedUpdateSystem<ItemPhysicsSystem>(FixedUpdateDebugCategory::Drop);
     addFixedUpdateSystem<ItemMergeSystem>(FixedUpdateDebugCategory::Drop);

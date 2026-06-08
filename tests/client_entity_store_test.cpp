@@ -85,6 +85,8 @@ static void testMobSpawnCreatesZombieReplica() {
                          ecs::ChildrenComponent,
                          ecs::MobAIComponent,
                          ecs::VelocityComponent,
+                         ecs::HealthComponent,
+                         ecs::HurtEffectComponent,
                          ecs::EntityTypeComponent,
                          ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "mob replica components missing");
@@ -93,7 +95,9 @@ static void testMobSpawnCreatesZombieReplica() {
     require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:zombie",
             "mob replica should keep the network entity id");
     require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
-    require(!raw.all_of<ecs::HealthComponent>(mob), "mob replica should not be client-authoritative health");
+    require(raw.get<ecs::HealthComponent>(mob).current == 20 &&
+            raw.get<ecs::HealthComponent>(mob).max == 20,
+            "mob replica should initialize configured synced health");
 
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = 12;
@@ -102,12 +106,21 @@ static void testMobSpawnCreatesZombieReplica() {
     item.position = glm::vec3(3.0f, 65.0f, -4.0f);
     item.velocity = glm::vec3(0.0f, 0.0f, 0.5f);
     item.yaw = 90.0f;
+    item.health = 16;
+    item.maxHealth = 20;
+    item.hurt = true;
     snapshot.entities.push_back(item);
     store.handleSnapshot(snapshot);
 
     require(raw.get<ecs::TransformComponent>(mob).position.x == 3.0f, "mob snapshot position was not applied");
     require(raw.get<ecs::VelocityComponent>(mob).velocity.z == 0.5f, "mob snapshot velocity was not applied");
     require(raw.get<ecs::MobAIComponent>(mob).yaw == 90.0f, "mob snapshot yaw was not applied");
+    require(raw.get<ecs::HealthComponent>(mob).current == 16,
+            "mob snapshot health was not applied");
+    require(raw.get<ecs::HurtEffectComponent>(mob).classicHurtEffectPending,
+            "mob snapshot hurt flag should trigger hurt effect");
+    require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining > 0.0f,
+            "mob snapshot hurt flag should trigger visible hurt flash");
 }
 
 static void testProjectileSpawnCreatesAppleReplica() {

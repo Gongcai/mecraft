@@ -290,6 +290,7 @@ set(SRC_ECS
         src/ecs/systems/player/HungerDepletionSystem.cpp
         src/ecs/systems/combat/DamageSystem.cpp
         src/ecs/systems/combat/DeathSystem.cpp
+        src/ecs/systems/combat/HurtEffectDecaySystem.cpp
         src/ecs/systems/combat/PlayerMeleeSystem.cpp
         src/ecs/systems/combat/ProjectileSystem.cpp
         src/ecs/systems/interaction/BlockTargetSystem.cpp

@@ -25,7 +25,7 @@ inline void applyDamage(GameplayRegistry& registry, int amount) {
         auto& hurt = view.get<HurtEffectComponent>(e);
 
         health.current = std::max(0, health.current - amount);
-        hurt.classicHurtEffectPending = true;
+        hurt.triggerClassicHurt();
     }
 }
 

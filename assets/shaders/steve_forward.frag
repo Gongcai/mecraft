@@ -10,6 +10,7 @@ uniform sampler2D uTexture;
 uniform float uSkyIntensity;
 uniform float uHeldSunlight;
 uniform float uHeldBlockLight;
+uniform float uHurtFlash;
 
 out vec4 FragColor;
 
@@ -26,5 +27,6 @@ void main() {
     float ambient = mix(0.08, 0.55, localLight);
     float light = ambient + diffuse * skyLight * (1.0 - ambient);
 
-    FragColor = vec4(texColor.rgb * light, texColor.a);
+    vec3 skinColor = mix(texColor.rgb, vec3(1.0, 0.22, 0.22), clamp(uHurtFlash, 0.0, 1.0) * 0.70);
+    FragColor = vec4(skinColor * light, texColor.a);
 }

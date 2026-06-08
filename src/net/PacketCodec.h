@@ -294,6 +294,9 @@ public:
             pushFloat(buf, e.velocity.z);
             pushFloat(buf, e.yaw);
             pushFloat(buf, e.pitch);
+            pushU16(buf, e.health);
+            pushU16(buf, e.maxHealth);
+            pushU8(buf, e.hurt ? 1 : 0);
         }
         return buf;
     }
@@ -673,15 +676,26 @@ public:
         size_t offset = 0;
         out.serverTick = readU32(data, offset);
         const uint32_t count = readU32(data, offset);
-        constexpr size_t kOldItemBytes = 28;
-        constexpr size_t kItemBytes = 32;
         const size_t remaining = size - 8;
-        size_t itemBytes = kItemBytes;
-        if (remaining < count * kItemBytes) {
-            if (remaining < count * kOldItemBytes) {
+        constexpr size_t kLegacyNoYawItemBytes = 28;
+        constexpr size_t kLegacyNoPitchItemBytes = 32;
+        constexpr size_t kLegacyWithPitchItemBytes = 36;
+        constexpr size_t kEntityStateItemBytes = 41;
+        size_t itemBytes = 0;
+        if (count == 0) {
+            if (remaining != 0) {
                 return false;
             }
-            itemBytes = kOldItemBytes;
+        } else if (remaining == count * kEntityStateItemBytes) {
+            itemBytes = kEntityStateItemBytes;
+        } else if (remaining == count * kLegacyWithPitchItemBytes) {
+            itemBytes = kLegacyWithPitchItemBytes;
+        } else if (remaining == count * kLegacyNoPitchItemBytes) {
+            itemBytes = kLegacyNoPitchItemBytes;
+        } else if (remaining == count * kLegacyNoYawItemBytes) {
+            itemBytes = kLegacyNoYawItemBytes;
+        } else {
+            return false;
         }
         out.entities.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
@@ -692,9 +706,16 @@ public:
             out.entities[i].velocity.x = readFloat(data, offset);
             out.entities[i].velocity.y = readFloat(data, offset);
             out.entities[i].velocity.z = readFloat(data, offset);
-            out.entities[i].yaw = readFloat(data, offset);
-            if (itemBytes >= kItemBytes) {
+            if (itemBytes >= kLegacyNoPitchItemBytes) {
+                out.entities[i].yaw = readFloat(data, offset);
+            }
+            if (itemBytes >= kLegacyWithPitchItemBytes) {
                 out.entities[i].pitch = readFloat(data, offset);
+            }
+            if (itemBytes >= kEntityStateItemBytes) {
+                out.entities[i].health = readU16(data, offset);
+                out.entities[i].maxHealth = readU16(data, offset);
+                out.entities[i].hurt = readU8(data, offset) != 0;
             }
         }
         return true;
