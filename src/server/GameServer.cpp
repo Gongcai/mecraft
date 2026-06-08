@@ -5,10 +5,19 @@
 #include "../thread/ThreadPool.h"
 #include "../save/SaveManager.h"
 #include "../ecs/GameplayRegistry.h"
+#include "../ecs/SystemContext.h"
 #include "../ecs/entity/MobModelFactory.h"
+#include "../ecs/systems/combat/DamageSystem.h"
+#include "../ecs/systems/combat/DeathSystem.h"
+#include "../ecs/systems/item/ItemLifetimeSystem.h"
+#include "../ecs/systems/item/ItemMergeSystem.h"
+#include "../ecs/systems/item/ItemPhysicsSystem.h"
+#include "../ecs/systems/mob/MobAISystem.h"
+#include "../ecs/systems/player/CharacterPhysicsSystem.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
+#include "../physics/PhysicsSystem.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -102,13 +111,141 @@ GameServer::~GameServer() {
 }
 
 void GameServer::setEcsRegistry(entt::registry* registry) {
+    for (auto& client : m_clients) {
+        destroyOwnedPlayerProxy(client);
+    }
     m_ecsRegistry = registry;
     m_gameplayRegistry = nullptr;
+    m_syncedEntities.clear();
+    for (auto& client : m_clients) {
+        client.spawnedEntityNetIds.clear();
+    }
 }
 
 void GameServer::setEcsRegistry(ecs::GameplayRegistry* registry) {
+    if (registry != m_ownedGameplayRegistry.get()) {
+        for (auto& client : m_clients) {
+            destroyOwnedPlayerProxy(client);
+        }
+    }
     m_gameplayRegistry = registry;
     m_ecsRegistry = registry != nullptr ? &registry->registry() : nullptr;
+    m_syncedEntities.clear();
+    for (auto& client : m_clients) {
+        client.spawnedEntityNetIds.clear();
+    }
+    if (registry != nullptr && m_entitiesRestorePending) {
+        restorePersistentEntities();
+    }
+}
+
+void GameServer::ensureOwnedEcsRuntime() {
+    if (!m_ownedGameplayRegistry) {
+        m_ownedGameplayRegistry = std::make_unique<ecs::GameplayRegistry>();
+    }
+    if (!m_ownedPhysicsSystem) {
+        m_ownedPhysicsSystem = std::make_unique<physics::PhysicsSystem>(&m_world);
+    }
+    if (m_gameplayRegistry == nullptr) {
+        m_gameplayRegistry = m_ownedGameplayRegistry.get();
+        m_ecsRegistry = &m_ownedGameplayRegistry->registry();
+    }
+}
+
+bool GameServer::usingOwnedEcsRegistry() const {
+    return m_ownedGameplayRegistry && m_gameplayRegistry == m_ownedGameplayRegistry.get();
+}
+
+void GameServer::destroyOwnedPlayerProxy(ConnectedClient& client) {
+    if (m_ownedGameplayRegistry && client.ecsPlayerEntity != entt::null) {
+        auto& reg = m_ownedGameplayRegistry->registry();
+        if (reg.valid(client.ecsPlayerEntity)) {
+            reg.destroy(client.ecsPlayerEntity);
+        }
+    }
+    client.ecsPlayerEntity = entt::null;
+}
+
+void GameServer::syncOwnedPlayerProxies() {
+    if (!usingOwnedEcsRegistry() || m_ownedGameplayRegistry == nullptr) {
+        return;
+    }
+
+    auto& reg = m_ownedGameplayRegistry->registry();
+    for (auto& client : m_clients) {
+        const bool active = client.receivedHello &&
+                            client.transport &&
+                            client.transport->hasActiveRemote();
+        if (!active) {
+            destroyOwnedPlayerProxy(client);
+            continue;
+        }
+
+        if (client.ecsPlayerEntity == entt::null || !reg.valid(client.ecsPlayerEntity)) {
+            client.ecsPlayerEntity = reg.create();
+            reg.emplace<ecs::LocalPlayerTag>(client.ecsPlayerEntity);
+            reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, client.lastPosition, 1.62f);
+            reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
+            reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
+            auto& velocity = reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
+            velocity.velocity = client.lastVelocity;
+        } else {
+            auto* transform = reg.try_get<ecs::TransformComponent>(client.ecsPlayerEntity);
+            if (transform == nullptr) {
+                reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, client.lastPosition, 1.62f);
+            } else {
+                transform->position = client.lastPosition;
+                transform->eyeHeight = 1.62f;
+            }
+
+            auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity);
+            if (velocity == nullptr) {
+                velocity = &reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
+            }
+            velocity->velocity = client.lastVelocity;
+
+            if (!reg.all_of<ecs::HealthComponent>(client.ecsPlayerEntity)) {
+                reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
+            }
+            if (!reg.all_of<ecs::HurtEffectComponent>(client.ecsPlayerEntity)) {
+                reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
+            }
+        }
+    }
+}
+
+void GameServer::tickServerEcs(const float dt) {
+    if (!usingOwnedEcsRegistry() || m_gameplayRegistry == nullptr) {
+        return;
+    }
+
+    if (m_entitiesRestorePending) {
+        restorePersistentEntities();
+    }
+
+    syncOwnedPlayerProxies();
+
+    ecs::GameplayServices services;
+    services.world = &m_world;
+    services.worldView = &m_world;
+    services.physicsSystem = m_ownedPhysicsSystem.get();
+
+    ecs::SystemContext ctx{*m_gameplayRegistry, services, dt, m_currentTick};
+
+    ecs::MobAISystem mobAI;
+    mobAI.update(ctx);
+    ecs::CharacterPhysicsSystem characterPhysics;
+    characterPhysics.update(ctx);
+    ecs::DamageSystem damage;
+    damage.update(ctx);
+    ecs::DeathSystem death;
+    death.update(ctx);
+    ecs::ItemPhysicsSystem itemPhysics;
+    itemPhysics.update(ctx);
+    ecs::ItemMergeSystem itemMerge;
+    itemMerge.update(ctx);
+    ecs::ItemLifetimeSystem itemLifetime;
+    itemLifetime.update(ctx);
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance) {
@@ -144,6 +281,8 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
                 m_spawnPosition.y,
                 m_spawnPosition.z);
     std::fflush(stdout);
+    ensureOwnedEcsRuntime();
+    m_entitiesRestorePending = m_saveManager != nullptr;
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
@@ -248,8 +387,6 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
 }
 
 void GameServer::tick(float dt) {
-    (void)dt;
-
     // Process incoming client messages first so block edits and player poses
     // participate in this tick's world/light update before snapshots are sent.
     processClientMessages();
@@ -274,6 +411,7 @@ void GameServer::tick(float dt) {
         }
     }
     m_world.update(loadCenter, dt);
+    tickServerEcs(dt);
 
     // Send new chunks to clients
     sendNewChunksToClients();
@@ -458,6 +596,7 @@ void GameServer::cleanupDisconnectedClients() {
             std::fflush(stdout);
             broadcastPlayerDespawn(client.playerNetId, client.id);
         }
+        destroyOwnedPlayerProxy(client);
         client.receivedHello = false;
     }
 
@@ -475,6 +614,7 @@ void GameServer::cleanupDisconnectedClients() {
                     client.playerNetId);
         std::fflush(stdout);
         broadcastPlayerDespawn(client.playerNetId, client.id);
+        destroyOwnedPlayerProxy(client);
         client.receivedHello = false;
         client.receivedViewConfig = false;
         client.lastAckedInput = 0;
@@ -1106,6 +1246,10 @@ void GameServer::restorePersistentEntities() {
     if (!m_saveManager || m_gameplayRegistry == nullptr) {
         return;
     }
+    if (!m_entitiesRestorePending) {
+        return;
+    }
+    m_entitiesRestorePending = false;
 
     std::vector<save::PersistentEntityData> entities;
     if (!m_saveManager->loadPersistentEntities(entities)) {

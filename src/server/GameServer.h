@@ -16,6 +16,7 @@
 
 class ThreadPool;
 namespace ecs { class GameplayRegistry; }
+namespace physics { class PhysicsSystem; }
 
 namespace server {
 
@@ -35,6 +36,7 @@ struct ConnectedClient {
     bool isAdmin = false;
     net::NetworkGameplayMode gameplayMode = net::NetworkGameplayMode::Survival;
     net::EntityNetId playerNetId = 0;
+    entt::entity ecsPlayerEntity = entt::null;
     std::unordered_set<net::EntityNetId> spawnedPlayerNetIds;
     std::unordered_set<net::EntityNetId> spawnedEntityNetIds;
     std::unordered_set<int64_t> sentChunks;  // Chunks this client has received
@@ -116,6 +118,11 @@ private:
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
     void syncEntitiesToClients();
+    void ensureOwnedEcsRuntime();
+    [[nodiscard]] bool usingOwnedEcsRegistry() const;
+    void tickServerEcs(float dt);
+    void syncOwnedPlayerProxies();
+    void destroyOwnedPlayerProxy(ConnectedClient& client);
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);
     [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
@@ -135,6 +142,9 @@ private:
     std::unordered_map<ecs::EntityNetId, entt::entity> m_syncedEntities;
     entt::registry* m_ecsRegistry = nullptr;  // Non-owning pointer to ECS registry
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // Non-owning pointer when model factories are available
+    std::unique_ptr<ecs::GameplayRegistry> m_ownedGameplayRegistry;
+    std::unique_ptr<physics::PhysicsSystem> m_ownedPhysicsSystem;
+    bool m_entitiesRestorePending = false;
 
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;

@@ -58,6 +58,12 @@ struct ServerHarness {
     server::GameServer server;
 };
 
+static float horizontalDistanceSq(const glm::vec3& a, const glm::vec3& b) {
+    const float dx = a.x - b.x;
+    const float dz = a.z - b.z;
+    return dx * dx + dz * dz;
+}
+
 static void testServerInit() {
     ServerHarness harness;
 
@@ -372,6 +378,139 @@ static void testSummonZombieSpawnsNetworkMob() {
     std::printf("[PASS] testSummonZombieSpawnsNetworkMob\n");
 }
 
+static void testSummonZombieUsesOwnedServerEcs() {
+    ServerHarness harness;
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 18;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCommandResult = false;
+    bool sawMobSpawn = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 18 && result.success) {
+                sawCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                sawMobSpawn = true;
+            }
+        }
+    }
+
+    assert(sawCommandResult);
+    assert(sawMobSpawn);
+    std::printf("[PASS] testSummonZombieUsesOwnedServerEcs\n");
+}
+
+static void testOwnedServerZombiePursuesPlayer() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition();
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 20;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawMobSpawn = false;
+    net::EntityNetId zombieNetId = 0;
+    glm::vec3 initialZombiePosition(0.0f);
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                sawMobSpawn = true;
+                zombieNetId = spawn.netId;
+                initialZombiePosition = spawn.position;
+            }
+        }
+    }
+    assert(sawMobSpawn);
+
+    glm::vec3 latestZombiePosition = initialZombiePosition;
+    bool sawMovingSnapshot = false;
+    for (int i = 0; i < 30; ++i) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = static_cast<uint32_t>(i + 1);
+        input.playerPosition = playerPosition;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+
+        harness.server.tick(1.0f / 20.0f);
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type != net::MessageType::EntitySnapshot || !packet.inProcessPayload.has_value()) {
+                continue;
+            }
+
+            const auto& snapshot = std::any_cast<const net::EntitySnapshotMessage&>(packet.inProcessPayload);
+            for (const auto& entity : snapshot.entities) {
+                if (entity.netId == zombieNetId) {
+                    latestZombiePosition = entity.position;
+                    sawMovingSnapshot = true;
+                }
+            }
+        }
+    }
+
+    assert(sawMovingSnapshot);
+    assert(horizontalDistanceSq(latestZombiePosition, playerPosition) <
+           horizontalDistanceSq(initialZombiePosition, playerPosition));
+    std::printf("[PASS] testOwnedServerZombiePursuesPlayer\n");
+}
+
 static void testPersistentZombieRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -424,6 +563,80 @@ static void testPersistentZombieRestoresFromSave() {
 
     std::filesystem::remove_all(saveRoot);
     std::printf("[PASS] testPersistentZombieRestoresFromSave\n");
+}
+
+static void testOwnedServerEcsRestoresPersistentZombie() {
+    const std::filesystem::path saveRoot = "test_owned_server_entities_save";
+    std::filesystem::remove_all(saveRoot);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Owned Entity Save Test");
+
+        auto clientTransport = std::make_unique<ManualTransport>();
+        ManualTransport* clientPtr = clientTransport.get();
+        net::Packet hello;
+        hello.type = net::MessageType::ClientHello;
+        hello.inProcessPayload = net::ClientHello{};
+        clientPtr->pushIncoming(std::move(hello));
+        server.acceptClient(std::move(clientTransport), 1);
+        server.tick(1.0f / 20.0f);
+        while (!clientPtr->sent.empty()) {
+            clientPtr->sent.pop();
+        }
+
+        net::Packet commandPacket;
+        commandPacket.type = net::MessageType::ClientCommandRequest;
+        net::ClientCommandRequest command;
+        command.sequence = 19;
+        command.command = "/summon zombie";
+        commandPacket.inProcessPayload = command;
+        clientPtr->pushIncoming(std::move(commandPacket));
+        server.tick(1.0f / 20.0f);
+
+        bool sawMobSpawn = false;
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                sawMobSpawn = sawMobSpawn || spawn.kind == net::EntityKind::Mob;
+            }
+        }
+        assert(sawMobSpawn);
+
+        server.savePersistentEntities();
+        server.shutdown();
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Owned Entity Save Test");
+
+        auto clientTransport = std::make_unique<ManualTransport>();
+        ManualTransport* clientPtr = clientTransport.get();
+        net::Packet hello;
+        hello.type = net::MessageType::ClientHello;
+        hello.inProcessPayload = net::ClientHello{};
+        clientPtr->pushIncoming(std::move(hello));
+        server.acceptClient(std::move(clientTransport), 1);
+        server.tick(1.0f / 20.0f);
+
+        bool sawMobSpawn = false;
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                sawMobSpawn = sawMobSpawn || (spawn.kind == net::EntityKind::Mob && spawn.netId != 0);
+            }
+        }
+        assert(sawMobSpawn);
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testOwnedServerEcsRestoresPersistentZombie\n");
 }
 
 static void testChatCommandCodecRoundTrip() {
@@ -828,7 +1041,10 @@ int main() {
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();
     testSummonZombieSpawnsNetworkMob();
+    testSummonZombieUsesOwnedServerEcs();
+    testOwnedServerZombiePursuesPlayer();
     testPersistentZombieRestoresFromSave();
+    testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
     testDisconnectedPlayerDespawnsForOtherClients();
