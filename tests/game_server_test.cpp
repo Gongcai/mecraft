@@ -3,6 +3,7 @@
 #include "ecs/GameplayRegistry.h"
 #include "ecs/components/Components.h"
 #include "ecs/components/NetworkComponents.h"
+#include "ecs/entity/EntityFactory.h"
 #include "ecs/entity/MobModelFactory.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
@@ -1470,6 +1471,85 @@ static void testPersistentZombieRestoresFromSave() {
     std::printf("[PASS] testPersistentZombieRestoresFromSave\n");
 }
 
+static void testPersistentDropRestoresFromSave() {
+    const std::filesystem::path saveRoot = "test_server_drop_entities_save";
+    std::filesystem::remove_all(saveRoot);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Drop Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+
+        ecs::ItemDropSpawnParams params;
+        params.itemId = ItemIds::COAL;
+        params.stackCount = 5;
+        params.position = glm::vec3(6.5f, 66.25f, -4.0f);
+        params.velocity = glm::vec3(0.25f, 0.5f, -0.75f);
+        params.halfExtents = glm::vec3(0.2f, 0.21f, 0.22f);
+        params.yawRadians = 1.5f;
+        params.spinSpeedRadians = 2.25f;
+        params.ageSeconds = 3.0f;
+        params.lifeTimeSeconds = 24.0f;
+        params.grounded = true;
+        params.dropId = 77;
+        ecs::EntityFactory::createItemDrop(registry, params);
+
+        server.savePersistentEntities();
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Drop Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+        server.restorePersistentEntities();
+
+        auto view = registry.registry().view<ecs::DropItemTag,
+                                            ecs::DropEntityIdComponent,
+                                            ecs::TransformComponent,
+                                            ecs::ItemComponent,
+                                            ecs::VelocityComponent,
+                                            ecs::BoundsComponent,
+                                            ecs::LifetimeComponent,
+                                            ecs::SpinVisualComponent,
+                                            ecs::GroundedStateComponent,
+                                            ecs::NetworkSyncTag>();
+        require(view.begin() != view.end(), "persistent drop restore should create a synced drop");
+        const entt::entity drop = *view.begin();
+        const auto& id = registry.registry().get<ecs::DropEntityIdComponent>(drop);
+        const auto& transform = registry.registry().get<ecs::TransformComponent>(drop);
+        const auto& item = registry.registry().get<ecs::ItemComponent>(drop);
+        const auto& velocity = registry.registry().get<ecs::VelocityComponent>(drop);
+        const auto& bounds = registry.registry().get<ecs::BoundsComponent>(drop);
+        const auto& lifetime = registry.registry().get<ecs::LifetimeComponent>(drop);
+        const auto& spin = registry.registry().get<ecs::SpinVisualComponent>(drop);
+        const auto& grounded = registry.registry().get<ecs::GroundedStateComponent>(drop);
+        require(id.dropId == 77, "persistent drop restore should keep drop id");
+        require(item.itemId == ItemIds::COAL && item.stackCount == 5,
+                "persistent drop restore should keep item stack");
+        require(transform.position.x == 6.5f && transform.position.z == -4.0f,
+                "persistent drop restore should keep position");
+        require(velocity.velocity.z == -0.75f, "persistent drop restore should keep velocity");
+        require(bounds.halfExtents.y == 0.21f, "persistent drop restore should keep bounds");
+        require(lifetime.ageSeconds == 3.0f && lifetime.lifeTimeSeconds == 24.0f,
+                "persistent drop restore should keep lifetime");
+        require(spin.yawRadians == 1.5f && spin.spinSpeedRadians == 2.25f,
+                "persistent drop restore should keep spin");
+        require(grounded.grounded, "persistent drop restore should keep grounded state");
+
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testPersistentDropRestoresFromSave\n");
+}
+
 static void testOwnedServerEcsRestoresPersistentZombie() {
     const std::filesystem::path saveRoot = "test_owned_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -1542,6 +1622,66 @@ static void testOwnedServerEcsRestoresPersistentZombie() {
 
     std::filesystem::remove_all(saveRoot);
     std::printf("[PASS] testOwnedServerEcsRestoresPersistentZombie\n");
+}
+
+static void testOwnedServerEcsRestoresPersistentDrop() {
+    const std::filesystem::path saveRoot = "test_owned_server_drop_entities_save";
+    std::filesystem::remove_all(saveRoot);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Owned Drop Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+
+        ecs::ItemDropSpawnParams params;
+        params.itemId = ItemIds::COAL;
+        params.stackCount = 3;
+        params.position = glm::vec3(20.5f, 66.0f, 20.5f);
+        params.velocity = glm::vec3(0.0f);
+        params.yawRadians = 0.75f;
+        params.spinSpeedRadians = 2.0f;
+        params.dropId = 99;
+        ecs::EntityFactory::createItemDrop(registry, params);
+
+        server.savePersistentEntities();
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Owned Drop Entity Save Test");
+
+        auto clientTransport = std::make_unique<ManualTransport>();
+        ManualTransport* clientPtr = clientTransport.get();
+        net::Packet hello;
+        hello.type = net::MessageType::ClientHello;
+        hello.inProcessPayload = net::ClientHello{};
+        clientPtr->pushIncoming(std::move(hello));
+        server.acceptClient(std::move(clientTransport), 1);
+        server.tick(1.0f / 20.0f);
+
+        bool sawDropSpawn = false;
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+                const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+                sawDropSpawn = sawDropSpawn ||
+                    (spawn.kind == net::EntityKind::Drop &&
+                     spawn.itemId == ItemIds::COAL &&
+                     spawn.stackCount == 3 &&
+                     spawn.netId != 0);
+            }
+        }
+        require(sawDropSpawn, "owned ECS restore should send restored drop spawn");
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testOwnedServerEcsRestoresPersistentDrop\n");
 }
 
 static void testChatCommandCodecRoundTrip() {
@@ -2097,7 +2237,9 @@ int main() {
     testOwnedServerPlayerThrowsAppleProjectileDamagesZombie();
     testCreativeAppleProjectileDoesNotConsumeInventory();
     testPersistentZombieRestoresFromSave();
+    testPersistentDropRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
+    testOwnedServerEcsRestoresPersistentDrop();
     testChatCommandCodecRoundTrip();
     testClientInputCodecCarriesSelectedHotbarSlot();
     testEntityImpactCodecRoundTrip();

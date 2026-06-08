@@ -1551,6 +1551,51 @@ std::vector<save::PersistentEntityData> GameServer::snapshotPersistentEntities()
         entities.push_back(data);
     }
 
+    auto dropView = reg.view<ecs::DropItemTag,
+                             ecs::DropEntityIdComponent,
+                             ecs::TransformComponent,
+                             ecs::ItemComponent,
+                             ecs::VelocityComponent,
+                             ecs::BoundsComponent,
+                             ecs::LifetimeComponent,
+                             ecs::SpinVisualComponent,
+                             ecs::GroundedStateComponent>();
+    for (const entt::entity entity : dropView) {
+        const auto& item = dropView.get<ecs::ItemComponent>(entity);
+        if (item.itemId == 0 || item.stackCount == 0) {
+            continue;
+        }
+
+        save::PersistentEntityData data;
+        data.type = "minecraft:item";
+        const auto& id = dropView.get<ecs::DropEntityIdComponent>(entity);
+        const auto& transform = dropView.get<ecs::TransformComponent>(entity);
+        const auto& velocity = dropView.get<ecs::VelocityComponent>(entity);
+        const auto& bounds = dropView.get<ecs::BoundsComponent>(entity);
+        const auto& lifetime = dropView.get<ecs::LifetimeComponent>(entity);
+        const auto& spin = dropView.get<ecs::SpinVisualComponent>(entity);
+        const auto& grounded = dropView.get<ecs::GroundedStateComponent>(entity);
+
+        data.dropId = static_cast<uint64_t>(id.dropId);
+        data.itemId = static_cast<uint32_t>(item.itemId);
+        data.stackCount = item.stackCount;
+        data.posX = transform.position.x;
+        data.posY = transform.position.y;
+        data.posZ = transform.position.z;
+        data.velX = velocity.velocity.x;
+        data.velY = velocity.velocity.y;
+        data.velZ = velocity.velocity.z;
+        data.halfExtentX = bounds.halfExtents.x;
+        data.halfExtentY = bounds.halfExtents.y;
+        data.halfExtentZ = bounds.halfExtents.z;
+        data.yaw = spin.yawRadians;
+        data.spinSpeed = spin.spinSpeedRadians;
+        data.ageSeconds = lifetime.ageSeconds;
+        data.lifeTimeSeconds = lifetime.lifeTimeSeconds;
+        data.grounded = grounded.grounded;
+        entities.push_back(data);
+    }
+
     return entities;
 }
 
@@ -1576,6 +1621,27 @@ void GameServer::restorePersistentEntities() {
     }
 
     for (const save::PersistentEntityData& data : entities) {
+        if (data.type == "minecraft:item") {
+            if (data.itemId == 0 || data.stackCount == 0) {
+                continue;
+            }
+
+            ecs::ItemDropSpawnParams params;
+            params.itemId = static_cast<ItemID>(data.itemId);
+            params.stackCount = data.stackCount;
+            params.position = glm::vec3(data.posX, data.posY, data.posZ);
+            params.velocity = glm::vec3(data.velX, data.velY, data.velZ);
+            params.halfExtents = glm::vec3(data.halfExtentX, data.halfExtentY, data.halfExtentZ);
+            params.yawRadians = data.yaw;
+            params.spinSpeedRadians = data.spinSpeed;
+            params.ageSeconds = data.ageSeconds;
+            params.lifeTimeSeconds = data.lifeTimeSeconds;
+            params.grounded = data.grounded;
+            params.dropId = static_cast<std::size_t>(data.dropId);
+            ecs::EntityFactory::createItemDrop(*m_gameplayRegistry, params);
+            continue;
+        }
+
         if (data.type != "minecraft:zombie" || data.health <= 0) {
             continue;
         }

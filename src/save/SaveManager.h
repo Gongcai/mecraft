@@ -47,6 +47,16 @@ struct PersistentEntityData {
     float pitch = 0.0f;
     int health = 20;
     int healthMax = 20;
+    uint32_t itemId = 0;
+    uint32_t stackCount = 0;
+    uint64_t dropId = 0;
+    float halfExtentX = 0.175f;
+    float halfExtentY = 0.175f;
+    float halfExtentZ = 0.175f;
+    float spinSpeed = 0.0f;
+    float ageSeconds = 0.0f;
+    float lifeTimeSeconds = 30.0f;
+    bool grounded = false;
 };
 
 /// World-level metadata persisted in level.json.

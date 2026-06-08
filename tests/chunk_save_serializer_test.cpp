@@ -358,17 +358,58 @@ static void testSaveManagerPersistentEntitiesRoundTrip() {
     zombie.health = 12;
     zombie.healthMax = 20;
 
-    mgr.savePersistentEntities({zombie});
+    save::PersistentEntityData drop;
+    drop.type = "minecraft:item";
+    drop.posX = 8.25f;
+    drop.posY = 65.5f;
+    drop.posZ = -3.0f;
+    drop.velX = 0.4f;
+    drop.velY = 0.5f;
+    drop.velZ = -0.6f;
+    drop.yaw = 1.25f;
+    drop.spinSpeed = 2.75f;
+    drop.itemId = ItemIds::COAL;
+    drop.stackCount = 4;
+    drop.dropId = 42;
+    drop.halfExtentX = 0.2f;
+    drop.halfExtentY = 0.21f;
+    drop.halfExtentZ = 0.22f;
+    drop.ageSeconds = 3.5f;
+    drop.lifeTimeSeconds = 27.0f;
+    drop.grounded = true;
+
+    mgr.savePersistentEntities({zombie, drop});
 
     std::vector<save::PersistentEntityData> loaded;
     assert(mgr.loadPersistentEntities(loaded));
-    assert(loaded.size() == 1);
-    assert(loaded[0].type == "minecraft:zombie");
-    assert(loaded[0].posX == zombie.posX);
-    assert(loaded[0].posZ == zombie.posZ);
-    assert(loaded[0].velZ == zombie.velZ);
-    assert(loaded[0].yaw == zombie.yaw);
-    assert(loaded[0].health == zombie.health);
+    assert(loaded.size() == 2);
+
+    const save::PersistentEntityData* loadedZombie = nullptr;
+    const save::PersistentEntityData* loadedDrop = nullptr;
+    for (const auto& entity : loaded) {
+        if (entity.type == "minecraft:zombie") {
+            loadedZombie = &entity;
+        } else if (entity.type == "minecraft:item") {
+            loadedDrop = &entity;
+        }
+    }
+
+    assert(loadedZombie != nullptr);
+    assert(loadedZombie->posX == zombie.posX);
+    assert(loadedZombie->posZ == zombie.posZ);
+    assert(loadedZombie->velZ == zombie.velZ);
+    assert(loadedZombie->yaw == zombie.yaw);
+    assert(loadedZombie->health == zombie.health);
+
+    assert(loadedDrop != nullptr);
+    assert(loadedDrop->itemId == drop.itemId);
+    assert(loadedDrop->stackCount == drop.stackCount);
+    assert(loadedDrop->dropId == drop.dropId);
+    assert(loadedDrop->halfExtentY == drop.halfExtentY);
+    assert(loadedDrop->spinSpeed == drop.spinSpeed);
+    assert(loadedDrop->ageSeconds == drop.ageSeconds);
+    assert(loadedDrop->lifeTimeSeconds == drop.lifeTimeSeconds);
+    assert(loadedDrop->grounded == drop.grounded);
 
     std::filesystem::remove_all(testRoot);
     std::printf("[PASS] testSaveManagerPersistentEntitiesRoundTrip\n");

@@ -278,7 +278,13 @@ void SaveManager::savePersistentEntities(const std::vector<PersistentEntityData>
     root["entities"] = nlohmann::json::array();
 
     for (const PersistentEntityData& entity : entities) {
-        if (entity.type.empty() || entity.health <= 0) {
+        if (entity.type.empty()) {
+            continue;
+        }
+        if (entity.type != "minecraft:item" && entity.health <= 0) {
+            continue;
+        }
+        if (entity.type == "minecraft:item" && (entity.itemId == 0 || entity.stackCount == 0)) {
             continue;
         }
 
@@ -286,9 +292,18 @@ void SaveManager::savePersistentEntities(const std::vector<PersistentEntityData>
         j["type"] = entity.type;
         j["position"] = {entity.posX, entity.posY, entity.posZ};
         j["velocity"] = {entity.velX, entity.velY, entity.velZ};
-        j["yaw"] = entity.yaw;
-        j["pitch"] = entity.pitch;
-        j["health"] = {{"current", entity.health}, {"max", entity.healthMax}};
+        if (entity.type == "minecraft:item") {
+            j["item"] = {{"id", entity.itemId}, {"count", entity.stackCount}};
+            j["dropId"] = entity.dropId;
+            j["bounds"] = {entity.halfExtentX, entity.halfExtentY, entity.halfExtentZ};
+            j["spin"] = {{"yaw", entity.yaw}, {"speed", entity.spinSpeed}};
+            j["lifetime"] = {{"age", entity.ageSeconds}, {"max", entity.lifeTimeSeconds}};
+            j["grounded"] = entity.grounded;
+        } else {
+            j["yaw"] = entity.yaw;
+            j["pitch"] = entity.pitch;
+            j["health"] = {{"current", entity.health}, {"max", entity.healthMax}};
+        }
         root["entities"].push_back(std::move(j));
     }
 
@@ -364,13 +379,39 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
             }
             entity.yaw = j.value("yaw", entity.yaw);
             entity.pitch = j.value("pitch", entity.pitch);
+            entity.dropId = j.value("dropId", entity.dropId);
+            entity.grounded = j.value("grounded", entity.grounded);
 
             if (j.contains("health") && j["health"].is_object()) {
                 entity.health = j["health"].value("current", entity.health);
                 entity.healthMax = j["health"].value("max", entity.healthMax);
             }
+            if (j.contains("item") && j["item"].is_object()) {
+                entity.itemId = j["item"].value("id", entity.itemId);
+                entity.stackCount = j["item"].value("count", entity.stackCount);
+            } else {
+                entity.itemId = j.value("itemId", entity.itemId);
+                entity.stackCount = j.value("stackCount", entity.stackCount);
+            }
+            if (j.contains("bounds") && j["bounds"].is_array() && j["bounds"].size() >= 3) {
+                entity.halfExtentX = j["bounds"][0].get<float>();
+                entity.halfExtentY = j["bounds"][1].get<float>();
+                entity.halfExtentZ = j["bounds"][2].get<float>();
+            }
+            if (j.contains("spin") && j["spin"].is_object()) {
+                entity.yaw = j["spin"].value("yaw", entity.yaw);
+                entity.spinSpeed = j["spin"].value("speed", entity.spinSpeed);
+            }
+            if (j.contains("lifetime") && j["lifetime"].is_object()) {
+                entity.ageSeconds = j["lifetime"].value("age", entity.ageSeconds);
+                entity.lifeTimeSeconds = j["lifetime"].value("max", entity.lifeTimeSeconds);
+            }
 
-            if (entity.health > 0) {
+            if (entity.type == "minecraft:item") {
+                if (entity.itemId != 0 && entity.stackCount != 0) {
+                    out.push_back(entity);
+                }
+            } else if (entity.health > 0) {
                 out.push_back(entity);
             }
         }
