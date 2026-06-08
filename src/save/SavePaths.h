@@ -27,6 +27,12 @@ public:
     /// Overworld persistent entity file: <root>/entities/dimension_overworld.json
     [[nodiscard]] std::filesystem::path overworldEntitiesPath() const;
 
+    /// Block entities directory: <root>/block_entities/
+    [[nodiscard]] std::filesystem::path blockEntitiesDir() const;
+
+    /// Overworld block entity file: <root>/block_entities/dimension_overworld.json
+    [[nodiscard]] std::filesystem::path overworldBlockEntitiesPath() const;
+
     /// Chunk file path: <root>/chunks/c.<cx>.<cz>.mchk
     [[nodiscard]] std::filesystem::path chunkPath(int cx, int cz) const;
 

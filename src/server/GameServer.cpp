@@ -12,6 +12,7 @@
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
+#include "../game/inventory/ChestInventoryStore.h"
 #include "../physics/PhysicsSystem.h"
 #include <cmath>
 #include <cstdio>
@@ -153,6 +154,9 @@ void GameServer::setEcsRegistry(entt::registry* registry) {
         client.hasLastInventorySnapshot = false;
         client.lastInventorySnapshotSlots.clear();
     }
+    if (registry != nullptr && m_blockEntitiesRestorePending) {
+        restoreBlockEntities();
+    }
 }
 
 void GameServer::setEcsRegistry(ecs::GameplayRegistry* registry) {
@@ -171,6 +175,9 @@ void GameServer::setEcsRegistry(ecs::GameplayRegistry* registry) {
     }
     if (registry != nullptr && m_entitiesRestorePending) {
         restorePersistentEntities();
+    }
+    if (registry != nullptr && m_blockEntitiesRestorePending) {
+        restoreBlockEntities();
     }
 }
 
@@ -515,6 +522,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     std::fflush(stdout);
     ensureOwnedEcsRuntime();
     m_entitiesRestorePending = m_saveManager != nullptr;
+    m_blockEntitiesRestorePending = m_saveManager != nullptr;
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
@@ -574,6 +582,7 @@ void GameServer::shutdown() {
     // Save level metadata with current state
     if (m_saveManager) {
         savePersistentEntities();
+        saveBlockEntities();
         saveLevelMeta();
     }
 }
@@ -631,6 +640,8 @@ void GameServer::tick(float dt) {
         if (m_autosaveTimer >= AUTOSAVE_INTERVAL_SECONDS) {
             m_autosaveTimer = 0.0f;
             m_world.flushSaves();
+            savePersistentEntities();
+            saveBlockEntities();
             saveLevelMeta();
         }
     }
@@ -1599,11 +1610,54 @@ std::vector<save::PersistentEntityData> GameServer::snapshotPersistentEntities()
     return entities;
 }
 
+std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
+    std::vector<save::BlockEntityData> entities;
+    if (m_ecsRegistry == nullptr || !m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
+        return entities;
+    }
+
+    const ChestInventoryStore& store = m_ecsRegistry->ctx().get<ChestInventoryStore>();
+    store.forEach([&entities](const glm::ivec3& position, const ChestInventory& chest) {
+        save::BlockEntityData data;
+        data.type = "minecraft:chest";
+        data.x = position.x;
+        data.y = position.y;
+        data.z = position.z;
+
+        for (int slot = 0; slot < ChestInventory::SLOT_COUNT; ++slot) {
+            const ItemStack stack = chest.getSlotStack(slot);
+            if (stack.isEmpty()) {
+                continue;
+            }
+
+            save::BlockEntitySlotData slotData;
+            slotData.slot = slot;
+            slotData.itemId = static_cast<uint32_t>(stack.itemId);
+            slotData.count = stack.count;
+            slotData.durability = stack.durability;
+            data.slots.push_back(slotData);
+        }
+
+        if (!data.slots.empty()) {
+            entities.push_back(std::move(data));
+        }
+    });
+
+    return entities;
+}
+
 void GameServer::savePersistentEntities() {
     if (!m_saveManager || m_ecsRegistry == nullptr) {
         return;
     }
     m_saveManager->savePersistentEntities(snapshotPersistentEntities());
+}
+
+void GameServer::saveBlockEntities() {
+    if (!m_saveManager || m_ecsRegistry == nullptr) {
+        return;
+    }
+    m_saveManager->saveBlockEntities(snapshotBlockEntities());
 }
 
 void GameServer::restorePersistentEntities() {
@@ -1659,6 +1713,47 @@ void GameServer::restorePersistentEntities() {
         }
         if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(zombie)) {
             physicsBody->body.velocity = glm::vec3(data.velX, data.velY, data.velZ);
+        }
+    }
+}
+
+void GameServer::restoreBlockEntities() {
+    if (!m_saveManager || m_ecsRegistry == nullptr) {
+        return;
+    }
+    if (!m_blockEntitiesRestorePending) {
+        return;
+    }
+    m_blockEntitiesRestorePending = false;
+
+    std::vector<save::BlockEntityData> entities;
+    if (!m_saveManager->loadBlockEntities(entities)) {
+        return;
+    }
+    if (entities.empty()) {
+        return;
+    }
+
+    ChestInventoryStore& store = m_ecsRegistry->ctx().contains<ChestInventoryStore>()
+        ? m_ecsRegistry->ctx().get<ChestInventoryStore>()
+        : m_ecsRegistry->ctx().emplace<ChestInventoryStore>();
+
+    for (const save::BlockEntityData& data : entities) {
+        if (data.type != "minecraft:chest") {
+            continue;
+        }
+
+        ChestInventory& chest = store.getOrCreate(glm::ivec3(data.x, data.y, data.z));
+        for (const save::BlockEntitySlotData& slot : data.slots) {
+            if (!chest.isValidSlot(slot.slot) || slot.itemId == 0 || slot.count == 0) {
+                continue;
+            }
+
+            ItemStack stack;
+            stack.itemId = static_cast<ItemID>(slot.itemId);
+            stack.count = static_cast<uint16_t>(std::min<uint32_t>(slot.count, 65535u));
+            stack.durability = static_cast<uint16_t>(std::min<uint32_t>(slot.durability, 65535u));
+            chest.setSlotStack(slot.slot, stack);
         }
     }
 }

@@ -732,6 +732,7 @@ void GameSession::shutdown() {
     // Save player state before destroying ECS
     if (!m_isMultiplayer && m_server) {
         m_server->savePersistentEntities();
+        m_server->saveBlockEntities();
         saveLocalPlayer();
         m_server->setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
     }

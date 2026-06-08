@@ -59,6 +59,21 @@ struct PersistentEntityData {
     bool grounded = false;
 };
 
+struct BlockEntitySlotData {
+    int slot = 0;
+    uint32_t itemId = 0;
+    uint32_t count = 0;
+    uint32_t durability = 0;
+};
+
+struct BlockEntityData {
+    std::string type;
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    std::vector<BlockEntitySlotData> slots;
+};
+
 /// World-level metadata persisted in level.json.
 struct LevelMeta {
     uint32_t seed = 0;
@@ -134,6 +149,12 @@ public:
 
     /// Load persistent overworld entities. Returns false if file doesn't exist.
     bool loadPersistentEntities(std::vector<PersistentEntityData>& out);
+
+    /// Save persistent block entities such as chests. Uses atomic write.
+    void saveBlockEntities(const std::vector<BlockEntityData>& entities);
+
+    /// Load persistent block entities. Returns false if file doesn't exist.
+    bool loadBlockEntities(std::vector<BlockEntityData>& out);
 
     /// Access the paths helper.
     [[nodiscard]] const SavePaths& paths() const { return m_paths; }

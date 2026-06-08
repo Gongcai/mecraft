@@ -424,6 +424,147 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
     }
 }
 
+void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities) {
+    nlohmann::json root;
+    root["version"] = 1;
+    root["blockEntities"] = nlohmann::json::array();
+
+    for (const BlockEntityData& entity : entities) {
+        if (entity.type.empty() || entity.slots.empty()) {
+            continue;
+        }
+
+        nlohmann::json slots = nlohmann::json::array();
+        for (const BlockEntitySlotData& slot : entity.slots) {
+            if (slot.slot < 0 || slot.itemId == 0 || slot.count == 0) {
+                continue;
+            }
+            slots.push_back({
+                {"slot", slot.slot},
+                {"item", {
+                    {"id", slot.itemId},
+                    {"count", slot.count},
+                    {"durability", slot.durability}
+                }}
+            });
+        }
+
+        if (slots.empty()) {
+            continue;
+        }
+
+        nlohmann::json j;
+        j["type"] = entity.type;
+        j["position"] = {entity.x, entity.y, entity.z};
+        j["slots"] = std::move(slots);
+        root["blockEntities"].push_back(std::move(j));
+    }
+
+    const auto path = m_paths.overworldBlockEntitiesPath();
+    const auto tmpPath = path.string() + ".tmp";
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+
+    {
+        std::ofstream file(tmpPath);
+        if (!file.is_open()) {
+            std::fprintf(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
+            return;
+        }
+        file << root.dump(2) << '\n';
+        file.flush();
+    }
+
+    const auto bakPath = path.string() + ".bak";
+    if (std::filesystem::exists(path, ec)) {
+        std::filesystem::rename(path, bakPath, ec);
+        ec.clear();
+    }
+    std::filesystem::rename(tmpPath, path, ec);
+    if (ec) {
+        std::fprintf(stderr, "[Save] Failed to rename block entity file: %s\n", ec.message().c_str());
+    }
+}
+
+bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
+    out.clear();
+    const auto path = m_paths.overworldBlockEntitiesPath();
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        return false;
+    }
+
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    try {
+        nlohmann::json root;
+        file >> root;
+
+        const int version = root.value("version", 0);
+        if (version != 1 || !root.contains("blockEntities") || !root["blockEntities"].is_array()) {
+            std::fprintf(stderr, "[Save] Unsupported block entity save file\n");
+            return false;
+        }
+
+        for (const auto& j : root["blockEntities"]) {
+            if (!j.is_object()) {
+                continue;
+            }
+
+            BlockEntityData entity;
+            entity.type = j.value("type", "");
+            if (entity.type.empty()) {
+                continue;
+            }
+            if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
+                entity.x = j["position"][0].get<int>();
+                entity.y = j["position"][1].get<int>();
+                entity.z = j["position"][2].get<int>();
+            }
+            if (!j.contains("slots") || !j["slots"].is_array()) {
+                continue;
+            }
+
+            for (const auto& slotJson : j["slots"]) {
+                if (!slotJson.is_object()) {
+                    continue;
+                }
+
+                BlockEntitySlotData slot;
+                slot.slot = slotJson.value("slot", -1);
+                if (slotJson.contains("item") && slotJson["item"].is_object()) {
+                    const auto& item = slotJson["item"];
+                    slot.itemId = item.value("id", slot.itemId);
+                    slot.count = item.value("count", slot.count);
+                    slot.durability = item.value("durability", slot.durability);
+                } else {
+                    slot.itemId = slotJson.value("itemId", slot.itemId);
+                    slot.count = slotJson.value("count", slot.count);
+                    slot.durability = slotJson.value("durability", slot.durability);
+                }
+
+                if (slot.slot < 0 || slot.itemId == 0 || slot.count == 0) {
+                    continue;
+                }
+                entity.slots.push_back(slot);
+            }
+
+            if (!entity.slots.empty()) {
+                out.push_back(std::move(entity));
+            }
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "[Save] Failed to read block entity file: %s\n", e.what());
+        out.clear();
+        return false;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Timestamp and screenshot
 // ---------------------------------------------------------------------------

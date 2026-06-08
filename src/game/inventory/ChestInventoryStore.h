@@ -127,6 +127,17 @@ public:
         return it == m_chests.end() ? nullptr : &it->second;
     }
 
+    [[nodiscard]] bool empty() const {
+        return m_chests.empty();
+    }
+
+    template <typename Fn>
+    void forEach(Fn&& fn) const {
+        for (const auto& [key, chest] : m_chests) {
+            fn(glm::ivec3(key.x, key.y, key.z), chest);
+        }
+    }
+
     [[nodiscard]] std::array<ItemStack, ChestInventory::SLOT_COUNT> extractAndErase(const glm::ivec3& position) {
         std::array<ItemStack, ChestInventory::SLOT_COUNT> contents{};
         const auto it = m_chests.find(toKey(position));

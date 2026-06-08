@@ -5,6 +5,7 @@
 #include "ecs/components/NetworkComponents.h"
 #include "ecs/entity/EntityFactory.h"
 #include "ecs/entity/MobModelFactory.h"
+#include "game/inventory/ChestInventoryStore.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
@@ -1550,6 +1551,62 @@ static void testPersistentDropRestoresFromSave() {
     std::printf("[PASS] testPersistentDropRestoresFromSave\n");
 }
 
+static void testPersistentChestInventoryRestoresFromSave() {
+    const std::filesystem::path saveRoot = "test_server_chest_block_entities_save";
+    std::filesystem::remove_all(saveRoot);
+    const glm::ivec3 chestPos(-3, 70, 8);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Chest Block Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+
+        ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
+        ChestInventory& chest = store.getOrCreate(chestPos);
+        chest.setSlotItem(0, ItemIds::APPLE, 6);
+
+        ItemStack pickaxe;
+        pickaxe.itemId = ItemIds::IRON_PICKAXE;
+        pickaxe.count = 1;
+        pickaxe.durability = 44;
+        chest.setSlotStack(17, pickaxe);
+
+        server.saveBlockEntities();
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Chest Block Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+
+        require(registry.ctxHas<ChestInventoryStore>(),
+                "persistent chest restore should create a chest inventory store");
+        const ChestInventoryStore& store = registry.ctxGet<ChestInventoryStore>();
+        const ChestInventory* chest = store.find(chestPos);
+        require(chest != nullptr, "persistent chest restore should recreate the chest inventory");
+
+        const ItemStack apples = chest->getSlotStack(0);
+        require(apples.itemId == ItemIds::APPLE && apples.count == 6,
+                "persistent chest restore should keep stack item and count");
+
+        const ItemStack pickaxe = chest->getSlotStack(17);
+        require(pickaxe.itemId == ItemIds::IRON_PICKAXE && pickaxe.count == 1 && pickaxe.durability == 44,
+                "persistent chest restore should keep tool durability");
+
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testPersistentChestInventoryRestoresFromSave\n");
+}
+
 static void testOwnedServerEcsRestoresPersistentZombie() {
     const std::filesystem::path saveRoot = "test_owned_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -2238,6 +2295,7 @@ int main() {
     testCreativeAppleProjectileDoesNotConsumeInventory();
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
+    testPersistentChestInventoryRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
     testOwnedServerEcsRestoresPersistentDrop();
     testChatCommandCodecRoundTrip();

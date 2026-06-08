@@ -20,6 +20,14 @@ std::filesystem::path SavePaths::overworldEntitiesPath() const {
     return entitiesDir() / "dimension_overworld.json";
 }
 
+std::filesystem::path SavePaths::blockEntitiesDir() const {
+    return m_root / "block_entities";
+}
+
+std::filesystem::path SavePaths::overworldBlockEntitiesPath() const {
+    return blockEntitiesDir() / "dimension_overworld.json";
+}
+
 std::filesystem::path SavePaths::chunkPath(int cx, int cz) const {
     return chunksDir() / ("c." + std::to_string(cx) + "." + std::to_string(cz) + ".mchk");
 }
@@ -51,6 +59,7 @@ std::filesystem::path SavePaths::screenshotPath() const {
 void SavePaths::ensureDirectories() const {
     std::filesystem::create_directories(chunksDir());
     std::filesystem::create_directories(entitiesDir());
+    std::filesystem::create_directories(blockEntitiesDir());
     std::filesystem::create_directories(playersDir());
 }
 

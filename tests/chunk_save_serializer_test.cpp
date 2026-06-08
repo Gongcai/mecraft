@@ -245,6 +245,7 @@ static void testSavePathsEnsureDirectories() {
 
     paths.ensureDirectories();
     assert(std::filesystem::exists(paths.chunksDir()));
+    assert(std::filesystem::exists(paths.blockEntitiesDir()));
     assert(std::filesystem::exists(paths.playersDir()));
 
     // Cleanup
@@ -415,6 +416,62 @@ static void testSaveManagerPersistentEntitiesRoundTrip() {
     std::printf("[PASS] testSaveManagerPersistentEntitiesRoundTrip\n");
 }
 
+static void testSaveManagerBlockEntitiesRoundTrip() {
+    const std::string testRoot = "test_save_manager_block_entities";
+    save::SaveManager mgr(testRoot);
+    mgr.paths().ensureDirectories();
+
+    save::BlockEntityData chest;
+    chest.type = "minecraft:chest";
+    chest.x = -4;
+    chest.y = 72;
+    chest.z = 9;
+
+    save::BlockEntitySlotData apple;
+    apple.slot = 0;
+    apple.itemId = ItemIds::APPLE;
+    apple.count = 5;
+    chest.slots.push_back(apple);
+
+    save::BlockEntitySlotData pickaxe;
+    pickaxe.slot = 17;
+    pickaxe.itemId = ItemIds::IRON_PICKAXE;
+    pickaxe.count = 1;
+    pickaxe.durability = 93;
+    chest.slots.push_back(pickaxe);
+
+    save::BlockEntityData emptyChest;
+    emptyChest.type = "minecraft:chest";
+    emptyChest.x = 1;
+    emptyChest.y = 2;
+    emptyChest.z = 3;
+
+    mgr.saveBlockEntities({chest, emptyChest});
+
+    std::vector<save::BlockEntityData> loaded;
+    assert(mgr.loadBlockEntities(loaded));
+    assert(loaded.size() == 1);
+    assert(loaded[0].type == "minecraft:chest");
+    assert(loaded[0].x == chest.x);
+    assert(loaded[0].y == chest.y);
+    assert(loaded[0].z == chest.z);
+    assert(loaded[0].slots.size() == 2);
+    assert(loaded[0].slots[0].slot == apple.slot);
+    assert(loaded[0].slots[0].itemId == apple.itemId);
+    assert(loaded[0].slots[0].count == apple.count);
+    assert(loaded[0].slots[1].slot == pickaxe.slot);
+    assert(loaded[0].slots[1].itemId == pickaxe.itemId);
+    assert(loaded[0].slots[1].durability == pickaxe.durability);
+
+    mgr.saveBlockEntities({});
+    loaded.clear();
+    assert(mgr.loadBlockEntities(loaded));
+    assert(loaded.empty());
+
+    std::filesystem::remove_all(testRoot);
+    std::printf("[PASS] testSaveManagerBlockEntitiesRoundTrip\n");
+}
+
 // ---------------------------------------------------------------------------
 // PlayerSerializer tests
 // ---------------------------------------------------------------------------
@@ -537,6 +594,7 @@ int main() {
     testSaveManagerChunkRoundTrip();
     testSaveManagerNonexistentChunk();
     testSaveManagerPersistentEntitiesRoundTrip();
+    testSaveManagerBlockEntitiesRoundTrip();
 
     // PlayerSerializer tests
     testPlayerSerializerRoundTrip();

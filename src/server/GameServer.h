@@ -109,6 +109,12 @@ public:
     /// Restore persisted gameplay entities into the bound GameplayRegistry, if available.
     void restorePersistentEntities();
 
+    /// Persist block entities such as chest inventories through SaveManager, if enabled.
+    void saveBlockEntities();
+
+    /// Restore block entities into the bound GameplayRegistry context, if available.
+    void restoreBlockEntities();
+
 private:
     void processClientMessages();
     void cleanupDisconnectedClients();
@@ -144,6 +150,7 @@ private:
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);
     [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
+    [[nodiscard]] std::vector<save::BlockEntityData> snapshotBlockEntities() const;
     void checkSpawnChunksReady();
     [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, BlockID blockId, int lightPatchRadius) const;
     [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, BlockID blockId) const;
@@ -164,6 +171,7 @@ private:
     std::unique_ptr<ecs::GameplayPipeline> m_ownedGameplayPipeline;
     std::unique_ptr<physics::PhysicsSystem> m_ownedPhysicsSystem;
     bool m_entitiesRestorePending = false;
+    bool m_blockEntitiesRestorePending = false;
 
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;
