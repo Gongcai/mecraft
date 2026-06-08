@@ -30,6 +30,8 @@ inline ProjectileDefinition makeAppleProjectileDefinition() {
     definition.lifetimeSeconds = 4.0f;
     definition.spinSpeedRadians = 10.0f;
     definition.entityImpactParticleBlock = defaultProjectileEntityImpactParticleBlock();
+    definition.throwSoundId = "item.apple.throw";
+    definition.impactSoundId = "item.apple.impact";
     return definition;
 }
 

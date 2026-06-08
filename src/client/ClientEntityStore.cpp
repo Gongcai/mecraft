@@ -3,11 +3,13 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/entity/SteveModelFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
+#include "../ecs/util/AudioEventBuffer.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../ecs/util/ProjectileDefinitions.h"
 #include "../item/Item.h"
 #include "../resource/ResourceMgr.h"
 #include <algorithm>
+#include <string>
 
 namespace client {
 namespace {
@@ -22,6 +24,15 @@ void collectEntityTree(entt::registry& registry, const entt::entity entity, std:
             collectEntityTree(registry, child, out);
         }
     }
+}
+
+void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
+                     const std::string& soundId,
+                     const glm::vec3& position) {
+    if (gameplayRegistry == nullptr || soundId.empty()) {
+        return;
+    }
+    ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, 1.0f});
 }
 
 } // namespace
@@ -106,12 +117,16 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
             m_registry->all_of<ecs::ProjectileTag, ecs::TransformComponent>(it->second)) {
             const auto& transform = m_registry->get<ecs::TransformComponent>(it->second);
             BlockID particleBlock = ecs::defaultProjectileEntityImpactParticleBlock();
-            if (const auto* projectile = m_registry->try_get<ecs::ProjectileComponent>(it->second);
-                projectile != nullptr && projectile->entityImpactParticleBlock != 0) {
-                particleBlock = projectile->entityImpactParticleBlock;
+            std::string impactSoundId;
+            if (const auto* projectile = m_registry->try_get<ecs::ProjectileComponent>(it->second)) {
+                if (projectile->entityImpactParticleBlock != 0) {
+                    particleBlock = projectile->entityImpactParticleBlock;
+                }
+                impactSoundId = projectile->impactSoundId;
             }
             ecs::ensureParticleEventBus(*m_gameplayRegistry)
                 .push(ecs::makeImpactParticleEvent(transform.position, particleBlock));
+            queueAudioEvent(m_gameplayRegistry, impactSoundId, transform.position);
         }
 
         std::vector<entt::entity> toDestroy;
@@ -133,12 +148,21 @@ void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
     }
 
     m_explicitImpactNetIds.insert(msg.netId);
-    if (!m_gameplayRegistry || msg.particleBlockId == 0) {
+    if (!m_gameplayRegistry) {
         return;
     }
 
-    ecs::ensureParticleEventBus(*m_gameplayRegistry)
-        .push(ecs::makeImpactParticleEvent(msg.position, static_cast<BlockID>(msg.particleBlockId)));
+    if (msg.particleBlockId != 0) {
+        ecs::ensureParticleEventBus(*m_gameplayRegistry)
+            .push(ecs::makeImpactParticleEvent(msg.position, static_cast<BlockID>(msg.particleBlockId)));
+    }
+
+    auto it = m_netIdToEntity.find(msg.netId);
+    if (it != m_netIdToEntity.end() && m_registry->valid(it->second)) {
+        if (const auto* projectile = m_registry->try_get<ecs::ProjectileComponent>(it->second)) {
+            queueAudioEvent(m_gameplayRegistry, projectile->impactSoundId, msg.position);
+        }
+    }
 }
 
 void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
@@ -263,7 +287,8 @@ void ClientEntityStore::createProjectileEntity(const net::EntitySpawnMessage& ms
                                                   definition.damage,
                                                   definition.hitRadius,
                                                   definition.gravity,
-                                                  definition.entityImpactParticleBlock);
+                                                  definition.entityImpactParticleBlock,
+                                                  definition.impactSoundId);
     m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 0.0f);
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
     m_registry->emplace<ecs::ItemComponent>(entity,
@@ -277,6 +302,7 @@ void ClientEntityStore::createProjectileEntity(const net::EntitySpawnMessage& ms
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
 
     m_netIdToEntity[msg.netId] = entity;
+    queueAudioEvent(m_gameplayRegistry, definition.throwSoundId, msg.position);
 }
 
 void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {

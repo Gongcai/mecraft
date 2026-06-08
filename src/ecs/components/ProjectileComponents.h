@@ -1,6 +1,8 @@
 #ifndef MECRAFT_ECS_PROJECTILE_COMPONENTS_H
 #define MECRAFT_ECS_PROJECTILE_COMPONENTS_H
 
+#include <string>
+
 #include <entt/entity/entity.hpp>
 #include <glm/glm.hpp>
 
@@ -21,6 +23,8 @@ struct ProjectileDefinition {
     float lifetimeSeconds = 4.0f;
     float spinSpeedRadians = 10.0f;
     BlockID entityImpactParticleBlock = 0;
+    std::string throwSoundId;
+    std::string impactSoundId;
 };
 
 struct ProjectileComponent {
@@ -29,6 +33,7 @@ struct ProjectileComponent {
     float hitRadius = 0.45f;
     float gravity = 8.0f;
     BlockID entityImpactParticleBlock = 0;
+    std::string impactSoundId;
 };
 
 struct ProjectileThrowerComponent {

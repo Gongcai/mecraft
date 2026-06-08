@@ -107,7 +107,8 @@ entt::entity EntityFactory::createProjectile(GameplayRegistry& registry,
                                      definition.damage,
                                      definition.hitRadius,
                                      definition.gravity,
-                                     definition.entityImpactParticleBlock);
+                                     definition.entityImpactParticleBlock,
+                                     definition.impactSoundId);
     reg.emplace<TransformComponent>(projectile, position, 0.0f);
     reg.emplace<VelocityComponent>(projectile, velocity);
     reg.emplace<ItemComponent>(projectile, definition.itemId, 1u);

@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include "../../entity/EntityFactory.h"
 #include "../../components/NetworkComponents.h"
+#include "../../util/AudioEventBuffer.h"
 #include "../../util/DamageEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../util/ParticleEventBuffer.h"
@@ -44,6 +46,15 @@ void emitProjectileImpactParticles(GameplayRegistry& registry,
         return;
     }
     ensureParticleEventBus(registry).push(makeImpactParticleEvent(position, blockType));
+}
+
+void emitProjectileSound(GameplayRegistry& registry,
+                         const std::string& soundId,
+                         const glm::vec3& position) {
+    if (soundId.empty()) {
+        return;
+    }
+    ensureAudioEventBus(registry).push({soundId, position, true, 1.0f});
 }
 
 void queueProjectileDespawn(entt::registry& reg,
@@ -212,6 +223,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
             glm::vec3(0.0f, projectileDefinition.upwardBias, 0.0f);
 
         EntityFactory::createProjectile(registry, player, spawnPosition, velocity, projectileDefinition);
+        emitProjectileSound(registry, projectileDefinition.throwSoundId, spawnPosition);
         thrower.cooldownRemaining = thrower.cooldownSeconds;
         intent.wantsPlace = false;
         if (auto* runtime = reg.try_get<BlockInteractionRuntimeComponent>(player)) {
@@ -259,6 +271,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
             BlockID hitBlock = 0;
             if (isSolidBlockAt(worldView, transform.position, hitBlock)) {
                 emitProjectileImpactParticles(registry, transform.position, hitBlock);
+                emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
                 queueProjectileImpactDespawn(reg, projectile, transform.position, hitBlock, destroyList);
                 destroyed = true;
                 break;
@@ -271,6 +284,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
                     ? projectileData.entityImpactParticleBlock
                     : defaultProjectileEntityImpactParticleBlock();
                 emitProjectileImpactParticles(registry, transform.position, impactBlock);
+                emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
                 queueProjectileImpactDespawn(reg, projectile, transform.position, impactBlock, destroyList);
                 destroyed = true;
                 break;

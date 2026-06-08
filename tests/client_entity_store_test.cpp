@@ -4,6 +4,7 @@
 #include "ecs/GameplayServices.h"
 #include "ecs/SystemContext.h"
 #include "ecs/systems/particle/ParticleSpawnSystem.h"
+#include "ecs/util/AudioEventBuffer.h"
 #include "ecs/util/ParticleEventBuffer.h"
 #include "ecs/util/ProjectileDefinitions.h"
 
@@ -17,6 +18,12 @@ static void require(bool condition, const char* message) {
         std::fprintf(stderr, "[FAIL] %s\n", message);
         std::abort();
     }
+}
+
+static bool nearVec3(const glm::vec3& a, const glm::vec3& b) {
+    return std::fabs(a.x - b.x) < 0.001f &&
+           std::fabs(a.y - b.y) < 0.001f &&
+           std::fabs(a.z - b.z) < 0.001f;
 }
 
 static void testSpawnBeforeInitIsReplayed() {
@@ -139,11 +146,21 @@ static void testProjectileSpawnCreatesAppleReplica() {
             "projectile replica gravity should come from item projectile definition");
     require(projectileComponent.entityImpactParticleBlock == appleDefinition.entityImpactParticleBlock,
             "projectile replica impact particles should come from item projectile definition");
+    require(projectileComponent.impactSoundId == appleDefinition.impactSoundId,
+            "projectile replica impact sound should come from item projectile definition");
     require(std::fabs(raw.get<ecs::BoundsComponent>(projectile).halfExtents.x -
                       appleDefinition.boundsHalfExtent) < 0.001f,
             "projectile replica bounds should come from item projectile definition");
     require(!raw.all_of<ecs::DropItemTag>(projectile),
             "projectile replica should not be collectable as a drop");
+    require(registry.ctxHas<ecs::AudioEventBus>(),
+            "projectile spawn should queue a throw sound event");
+    auto& audioBus = registry.ctxGet<ecs::AudioEventBus>();
+    require(audioBus.size() == 1, "projectile spawn should queue exactly one throw sound");
+    require(audioBus.peek().front().clipName == appleDefinition.throwSoundId,
+            "projectile spawn sound should come from item projectile definition");
+    require(nearVec3(audioBus.peek().front().position, spawn.position),
+            "projectile spawn sound should use server-provided spawn position");
 
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = 13;
@@ -176,6 +193,11 @@ static void testProjectileSpawnCreatesAppleReplica() {
             "projectile impact event should use server-provided world position");
     require(particleBus.peek().front().blockType == appleDefinition.entityImpactParticleBlock,
             "projectile impact event should use server-provided particle texture block");
+    require(audioBus.size() == 2, "projectile impact should queue an impact sound event");
+    require(audioBus.peek().back().clipName == appleDefinition.impactSoundId,
+            "projectile impact sound should come from item projectile definition");
+    require(nearVec3(audioBus.peek().back().position, impact.position),
+            "projectile impact sound should use server-provided world position");
 
     net::EntityDespawnMessage despawn;
     despawn.netId = 91;
@@ -183,6 +205,7 @@ static void testProjectileSpawnCreatesAppleReplica() {
 
     require(!store.hasEntity(91), "projectile despawn should stop tracking net id");
     require(particleBus.size() == 1, "projectile despawn should not duplicate explicit impact particles");
+    require(audioBus.size() == 2, "projectile despawn should not duplicate explicit impact sounds");
     require(particleBus.peek().front().useWorldPos,
             "projectile impact event should retain server-provided world position");
     require(particleBus.peek().front().blockType != 0,
