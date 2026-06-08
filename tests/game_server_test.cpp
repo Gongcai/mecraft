@@ -77,6 +77,17 @@ static void require(const bool condition, const char* message) {
     }
 }
 
+static uint32_t inventoryItemCount(const net::InventorySnapshotMessage& snapshot, const ItemID itemId) {
+    uint32_t total = 0;
+    const auto encodedItemId = static_cast<uint16_t>(itemId);
+    for (const auto& slot : snapshot.slots) {
+        if (slot.itemId == encodedItemId) {
+            total += slot.stackCount;
+        }
+    }
+    return total;
+}
+
 static void testServerInit() {
     ServerHarness harness;
 
@@ -1022,6 +1033,158 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
     std::printf("[PASS] testOwnedServerPlayerMeleeKillsZombieAndDropsItem\n");
 }
 
+static void testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory() {
+    ServerHarness harness;
+    const glm::vec3 playerPosition = harness.server.getSpawnPosition() + glm::vec3(0.0f, -1.0f, 0.0f);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawInventoryBeforePickup = false;
+    net::InventorySnapshotMessage inventoryBeforePickup;
+    auto drainPrePickupPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                inventoryBeforePickup =
+                    std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                sawInventoryBeforePickup = true;
+            }
+        }
+    };
+    drainPrePickupPackets();
+
+    auto pushInput = [&](const uint32_t sequence, const glm::vec3& position, const uint32_t actions) {
+        net::Packet inputPacket;
+        inputPacket.type = net::MessageType::ClientInput;
+        net::ClientInput input;
+        input.sequence = sequence;
+        input.playerPosition = position;
+        input.playerVelocity = glm::vec3(0.0f);
+        input.yaw = 0.0f;
+        input.pitch = 0.0f;
+        input.actions = actions;
+        inputPacket.inProcessPayload = input;
+        clientPtr->pushIncoming(std::move(inputPacket));
+    };
+
+    uint32_t inputSequence = 1;
+    pushInput(inputSequence++, playerPosition, 0);
+    harness.server.tick(1.0f / 20.0f);
+    drainPrePickupPackets();
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 24;
+    command.command = "/summon zombie";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    net::EntityNetId zombieNetId = 0;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+            inventoryBeforePickup =
+                std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+            sawInventoryBeforePickup = true;
+        }
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                zombieNetId = spawn.netId;
+            }
+        }
+    }
+    require(zombieNetId != 0, "pickup test should receive zombie net id");
+
+    net::EntityNetId dropNetId = 0;
+    ItemID dropItemId = 0;
+    uint32_t dropStackCount = 0;
+    glm::vec3 dropPosition(0.0f);
+
+    auto drainCombatPackets = [&]() {
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                inventoryBeforePickup =
+                    std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                sawInventoryBeforePickup = true;
+            }
+            if (packet.type != net::MessageType::EntitySpawn || !packet.inProcessPayload.has_value()) {
+                continue;
+            }
+
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Drop && spawn.netId != 0 && spawn.stackCount > 0) {
+                dropNetId = spawn.netId;
+                dropItemId = spawn.itemId;
+                dropStackCount = spawn.stackCount;
+                dropPosition = spawn.position;
+            }
+        }
+    };
+
+    for (int attempt = 0; attempt < 7 && dropNetId == 0; ++attempt) {
+        pushInput(inputSequence++, playerPosition, net::ClientInputActions::Attack);
+        harness.server.tick(1.0f / 20.0f);
+        drainCombatPackets();
+
+        for (int cooldownTick = 0; cooldownTick < 10 && dropNetId == 0; ++cooldownTick) {
+            pushInput(inputSequence++, playerPosition, 0);
+            harness.server.tick(1.0f / 20.0f);
+            drainCombatPackets();
+        }
+    }
+
+    require(sawInventoryBeforePickup, "pickup test should have an initial authoritative inventory");
+    require(dropNetId != 0, "pickup test should receive dropped item net id");
+    require(dropItemId != 0, "pickup test should receive dropped item id");
+    require(dropStackCount > 0, "pickup test should receive dropped item stack count");
+
+    const uint32_t beforeCount = inventoryItemCount(inventoryBeforePickup, dropItemId);
+    bool sawDropDespawn = false;
+    bool sawInventoryPickup = false;
+
+    for (int i = 0; i < 60 && !(sawDropDespawn && sawInventoryPickup); ++i) {
+        pushInput(inputSequence++, dropPosition, 0);
+        harness.server.tick(1.0f / 20.0f);
+
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type == net::MessageType::EntityDespawn && packet.inProcessPayload.has_value()) {
+                const auto& despawn = std::any_cast<const net::EntityDespawnMessage&>(packet.inProcessPayload);
+                sawDropDespawn = sawDropDespawn || despawn.netId == dropNetId;
+            }
+            if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+                const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+                const uint32_t afterCount = inventoryItemCount(inventory, dropItemId);
+                if (afterCount >= beforeCount + dropStackCount) {
+                    sawInventoryPickup = true;
+                }
+            }
+        }
+    }
+
+    require(sawDropDespawn, "server pickup should despawn the collected drop");
+    require(sawInventoryPickup, "server pickup should sync the collected item into inventory");
+    std::printf("[PASS] testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory\n");
+}
+
 static void testPersistentZombieRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -1645,6 +1808,7 @@ int main() {
     testOwnedServerZombieAttackSyncsPlayerHealth();
     testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
+    testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory();
     testPersistentZombieRestoresFromSave();
     testOwnedServerEcsRestoresPersistentZombie();
     testChatCommandCodecRoundTrip();

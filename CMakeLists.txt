@@ -272,6 +272,7 @@ set(SRC_UI
 set(SRC_ECS
         src/ecs/GameplayScene.cpp
         src/ecs/util/PlayerQuery.cpp
+        src/ecs/entity/EntityFactory.cpp
         src/ecs/entity/SteveModelFactory.cpp
         src/ecs/entity/MobModelFactory.cpp
         src/ecs/systems/player/InputSamplingSystem.cpp

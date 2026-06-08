@@ -6,6 +6,7 @@
 #include "../save/SaveManager.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/SystemContext.h"
+#include "../ecs/entity/EntityFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/systems/combat/DamageSystem.h"
 #include "../ecs/systems/combat/DeathSystem.h"
@@ -434,65 +435,15 @@ void GameServer::syncOwnedPlayerProxies() {
         }
 
         if (client.ecsPlayerEntity == entt::null || !reg.valid(client.ecsPlayerEntity)) {
-            client.ecsPlayerEntity = reg.create();
-            reg.emplace<ecs::LocalPlayerTag>(client.ecsPlayerEntity);
-            reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, client.lastPosition, 1.62f);
-            reg.emplace<ecs::CameraStateComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::BlockTargetComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::BlockInteractionRuntimeComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::MeleeAttackComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
-            reg.emplace<ecs::InventoryComponent>(client.ecsPlayerEntity);
-            auto& inventoryData = reg.emplace<ecs::InventoryDataComponent>(client.ecsPlayerEntity);
-            inventoryData.inventory.initializeDefaultLoadout();
-            auto& velocity = reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
-            velocity.velocity = client.lastVelocity;
+            client.ecsPlayerEntity =
+                ecs::EntityFactory::createServerPlayerProxy(*m_gameplayRegistry,
+                                                            client.lastPosition,
+                                                            client.lastVelocity);
         } else {
-            auto* transform = reg.try_get<ecs::TransformComponent>(client.ecsPlayerEntity);
-            if (transform == nullptr) {
-                reg.emplace<ecs::TransformComponent>(client.ecsPlayerEntity, client.lastPosition, 1.62f);
-            } else {
-                transform->position = client.lastPosition;
-                transform->eyeHeight = 1.62f;
-            }
-
-            auto* velocity = reg.try_get<ecs::VelocityComponent>(client.ecsPlayerEntity);
-            if (velocity == nullptr) {
-                velocity = &reg.emplace<ecs::VelocityComponent>(client.ecsPlayerEntity);
-            }
-            velocity->velocity = client.lastVelocity;
-
-            if (!reg.all_of<ecs::HealthComponent>(client.ecsPlayerEntity)) {
-                reg.emplace<ecs::HealthComponent>(client.ecsPlayerEntity);
-            }
-            if (!reg.all_of<ecs::HurtEffectComponent>(client.ecsPlayerEntity)) {
-                reg.emplace<ecs::HurtEffectComponent>(client.ecsPlayerEntity);
-            }
-        }
-
-        if (!reg.all_of<ecs::CameraStateComponent>(client.ecsPlayerEntity)) {
-            reg.emplace<ecs::CameraStateComponent>(client.ecsPlayerEntity);
-        }
-        if (!reg.all_of<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity)) {
-            reg.emplace<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
-        }
-        if (!reg.all_of<ecs::BlockTargetComponent>(client.ecsPlayerEntity)) {
-            reg.emplace<ecs::BlockTargetComponent>(client.ecsPlayerEntity);
-        }
-        if (!reg.all_of<ecs::BlockInteractionRuntimeComponent>(client.ecsPlayerEntity)) {
-            reg.emplace<ecs::BlockInteractionRuntimeComponent>(client.ecsPlayerEntity);
-        }
-        if (!reg.all_of<ecs::MeleeAttackComponent>(client.ecsPlayerEntity)) {
-            reg.emplace<ecs::MeleeAttackComponent>(client.ecsPlayerEntity);
-        }
-        if (!reg.all_of<ecs::InventoryComponent>(client.ecsPlayerEntity)) {
-            reg.emplace<ecs::InventoryComponent>(client.ecsPlayerEntity);
-        }
-        if (!reg.all_of<ecs::InventoryDataComponent>(client.ecsPlayerEntity)) {
-            auto& inventoryData = reg.emplace<ecs::InventoryDataComponent>(client.ecsPlayerEntity);
-            inventoryData.inventory.initializeDefaultLoadout();
+            ecs::EntityFactory::ensureServerPlayerProxy(*m_gameplayRegistry,
+                                                        client.ecsPlayerEntity,
+                                                        client.lastPosition,
+                                                        client.lastVelocity);
         }
 
         auto& camera = reg.get<ecs::CameraStateComponent>(client.ecsPlayerEntity);
@@ -1663,7 +1614,7 @@ void GameServer::restorePersistentEntities() {
 
 bool GameServer::spawnZombieEntity(const glm::vec3& position) {
     if (m_gameplayRegistry != nullptr) {
-        ecs::MobModelFactory::createZombie(*m_gameplayRegistry, position);
+        ecs::EntityFactory::createZombie(*m_gameplayRegistry, position);
         return true;
     }
 
@@ -1671,15 +1622,7 @@ bool GameServer::spawnZombieEntity(const glm::vec3& position) {
         return false;
     }
 
-    entt::registry& reg = *m_ecsRegistry;
-    const entt::entity zombie = reg.create();
-    reg.emplace<ecs::MobTag>(zombie);
-    reg.emplace<ecs::SkinTypeComponent>(zombie, ecs::SkinTypeComponent::Type::Mob);
-    reg.emplace<ecs::TransformComponent>(zombie, position, 1.62f);
-    reg.emplace<ecs::MobAIComponent>(zombie);
-    reg.emplace<ecs::MoveIntentComponent>(zombie);
-    reg.emplace<ecs::HealthComponent>(zombie, 20, 20);
-    reg.emplace<ecs::NetworkSyncTag>(zombie);
+    ecs::EntityFactory::createZombie(*m_ecsRegistry, position);
     return true;
 }
 
