@@ -95,6 +95,7 @@ set(SRC_GAME
         src/game/presentation/GameplayPresentationBuilder.cpp
         src/game/presentation/GameplayHudPresenter.cpp
         src/game/audio/AudioListenerSyncSystem.cpp
+        src/game/inventory/ChestInventoryLifecycle.cpp
         src/game/session/GameSession.cpp
         src/game/orchestrator/GameFrameOrchestrator.cpp
         src/game/debug/DebugFrameProfiler.cpp
@@ -275,6 +276,7 @@ set(SRC_ECS
         src/ecs/GameplayPipeline.cpp
         src/ecs/GameplayScene.cpp
         src/ecs/util/PlayerQuery.cpp
+        src/ecs/entity/EntityDefinitionRegistry.cpp
         src/ecs/entity/EntityFactory.cpp
         src/ecs/entity/SteveModelFactory.cpp
         src/ecs/entity/MobModelFactory.cpp
@@ -559,6 +561,7 @@ if(MECRAFT_BUILD_TESTS)
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
     add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
+    add_mecraft_test(death_system_test tests/death_system_test.cpp)
     add_mecraft_test(chest_inventory_lifecycle_test tests/chest_inventory_lifecycle_test.cpp)
     add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)
     add_mecraft_test(crosshair_control_test tests/crosshair_control_test.cpp)

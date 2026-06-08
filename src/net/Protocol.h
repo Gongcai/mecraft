@@ -218,6 +218,7 @@ struct EntitySpawnMessage {
     float pitch = 0.0f;
     uint16_t itemId = 0;      // For drops/projectiles
     uint16_t stackCount = 0;  // For drops/projectiles
+    std::string entityId;     // For mobs, e.g. minecraft:zombie
 };
 
 /// Server tells client to destroy an entity.

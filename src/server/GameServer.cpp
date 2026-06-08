@@ -7,13 +7,15 @@
 #include "../ecs/GameplayPipeline.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/entity/EntityFactory.h"
-#include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/systems/item/ItemSpawnSystem.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
+#include "../game/inventory/ChestInventoryLifecycle.h"
 #include "../game/inventory/ChestInventoryStore.h"
+#include "../item/Item.h"
 #include "../physics/PhysicsSystem.h"
+#include "../world/block/BlockStateRegistry.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +42,13 @@ std::string trimCommand(std::string command) {
         command.pop_back();
     }
     return command;
+}
+
+std::string normalizeEntityCommandId(const std::string& value) {
+    if (value.empty()) {
+        return {};
+    }
+    return value.find(':') == std::string::npos ? "minecraft:" + value : value;
 }
 
 net::NetworkWeatherType toNetworkWeather(const WeatherType type) {
@@ -956,7 +965,7 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         sendCommandResult(client,
                           request.sequence,
                           true,
-                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon zombie");
+                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon <entity>");
         return;
     }
 
@@ -1056,8 +1065,9 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
     if (primary == "summon") {
         std::string entityType;
         iss >> entityType;
-        if (entityType != "zombie") {
-            sendCommandResult(client, request.sequence, false, "Usage: /summon zombie");
+        const std::string entityId = normalizeEntityCommandId(entityType);
+        if (entityId.empty()) {
+            sendCommandResult(client, request.sequence, false, "Usage: /summon <entity>");
             return;
         }
 
@@ -1068,12 +1078,12 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         const glm::vec3 basePosition = client.receivedHello ? client.lastPosition : m_spawnPosition;
         const glm::vec3 spawnPosition = basePosition + forward * kSummonDistance;
 
-        if (!spawnZombieEntity(spawnPosition)) {
-            sendCommandResult(client, request.sequence, false, "No ECS registry is available for entity spawning.");
+        if (!spawnMobEntity(entityId, spawnPosition)) {
+            sendCommandResult(client, request.sequence, false, "Unknown or unsupported entity: " + entityId);
             return;
         }
 
-        const std::string message = "Summoned zombie.";
+        const std::string message = "Summoned " + entityType + ".";
         sendCommandResult(client, request.sequence, true, message);
         broadcastSystemMessage(message, net::ChatMessageKind::Success);
         return;
@@ -1181,6 +1191,21 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
         m_world.setBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z, BlockIds::AIR);
+        const bool shouldDrop = client.gameplayMode != net::NetworkGameplayMode::Creative;
+        bool brokeChest = false;
+        if (m_gameplayRegistry != nullptr) {
+            brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, target, action.targetBlock, shouldDrop);
+            if (brokeChest && shouldDrop) {
+                const ItemID chestItem = BlockDropTable::getDropItem(BlockIds::CHEST);
+                ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, chestItem, action.targetBlock, 1);
+            }
+        } else if (BlockStateRegistry::getBlockId(target) == BlockIds::CHEST &&
+                   m_ecsRegistry != nullptr &&
+                   m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
+            const auto discardedContents =
+                m_ecsRegistry->ctx().get<ChestInventoryStore>().extractAndErase(action.targetBlock);
+            static_cast<void>(discardedContents);
+        }
         std::printf("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
                     client.id,
                     action.targetBlock.x,
@@ -1537,7 +1562,12 @@ std::vector<save::PersistentEntityData> GameServer::snapshotPersistentEntities()
         }
 
         save::PersistentEntityData data;
-        data.type = "minecraft:zombie";
+        if (const auto* entityType = reg.try_get<ecs::EntityTypeComponent>(entity);
+            entityType != nullptr && !entityType->entityId.empty()) {
+            data.type = entityType->entityId;
+        } else {
+            data.type = "minecraft:zombie";
+        }
         const auto& transform = view.get<ecs::TransformComponent>(entity);
         data.posX = transform.position.x;
         data.posY = transform.position.y;
@@ -1696,22 +1726,25 @@ void GameServer::restorePersistentEntities() {
             continue;
         }
 
-        if (data.type != "minecraft:zombie" || data.health <= 0) {
+        if (data.health <= 0) {
             continue;
         }
 
         const glm::vec3 position(data.posX, data.posY, data.posZ);
-        const entt::entity zombie = ecs::MobModelFactory::createZombie(*m_gameplayRegistry, position);
+        const entt::entity mob = ecs::EntityFactory::createMob(*m_gameplayRegistry, data.type, position);
+        if (mob == entt::null) {
+            continue;
+        }
         entt::registry& reg = m_gameplayRegistry->registry();
 
-        if (auto* health = reg.try_get<ecs::HealthComponent>(zombie)) {
+        if (auto* health = reg.try_get<ecs::HealthComponent>(mob)) {
             health->current = data.health;
             health->max = data.healthMax > 0 ? data.healthMax : health->max;
         }
-        if (auto* ai = reg.try_get<ecs::MobAIComponent>(zombie)) {
+        if (auto* ai = reg.try_get<ecs::MobAIComponent>(mob)) {
             ai->yaw = data.yaw;
         }
-        if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(zombie)) {
+        if (auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(mob)) {
             physicsBody->body.velocity = glm::vec3(data.velX, data.velY, data.velZ);
         }
     }
@@ -1758,18 +1791,24 @@ void GameServer::restoreBlockEntities() {
     }
 }
 
-bool GameServer::spawnZombieEntity(const glm::vec3& position) {
+bool GameServer::spawnMobEntity(const std::string& entityId, const glm::vec3& position) {
     if (m_gameplayRegistry != nullptr) {
-        ecs::EntityFactory::createZombie(*m_gameplayRegistry, position);
-        return true;
+        return ecs::EntityFactory::createMob(*m_gameplayRegistry, entityId, position) != entt::null;
     }
 
     if (m_ecsRegistry == nullptr) {
         return false;
     }
 
+    if (entityId != "minecraft:zombie") {
+        return false;
+    }
     ecs::EntityFactory::createZombie(*m_ecsRegistry, position);
     return true;
+}
+
+bool GameServer::spawnZombieEntity(const glm::vec3& position) {
+    return spawnMobEntity("minecraft:zombie", position);
 }
 
 net::EntitySpawnMessage GameServer::makeEntitySpawnMessage(const ecs::EntityNetId netId,
@@ -1795,6 +1834,12 @@ net::EntitySpawnMessage GameServer::makeEntitySpawnMessage(const ecs::EntityNetI
         msg.stackCount = static_cast<uint16_t>(std::max<uint32_t>(1u, item.stackCount));
     } else if (reg.all_of<ecs::MobTag>(entity)) {
         msg.kind = net::EntityKind::Mob;
+        if (const auto* entityType = reg.try_get<ecs::EntityTypeComponent>(entity);
+            entityType != nullptr && !entityType->entityId.empty()) {
+            msg.entityId = entityType->entityId;
+        } else {
+            msg.entityId = "minecraft:zombie";
+        }
     } else if (reg.all_of<ecs::SteveTag>(entity)) {
         msg.kind = net::EntityKind::Player;
     } else {

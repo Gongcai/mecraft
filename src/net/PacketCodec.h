@@ -257,6 +257,7 @@ public:
         pushFloat(buf, msg.pitch);
         pushU16(buf, msg.itemId);
         pushU16(buf, msg.stackCount);
+        pushString(buf, msg.entityId);
         return buf;
     }
 
@@ -642,6 +643,10 @@ public:
         }
         out.itemId = readU16(data, offset);
         out.stackCount = readU16(data, offset);
+        out.entityId.clear();
+        if (offset < size && !readString(data, size, offset, out.entityId)) {
+            return false;
+        }
         return true;
     }
 

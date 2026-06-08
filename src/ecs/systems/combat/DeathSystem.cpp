@@ -1,6 +1,7 @@
 #include "DeathSystem.h"
 
 #include <algorithm>
+#include <random>
 #include <vector>
 
 #include "../item/ItemSpawnSystem.h"
@@ -21,8 +22,33 @@ void collectEntityTree(entt::registry& registry, const entt::entity entity, std:
     }
 }
 
-uint32_t dropCount(const DropTableComponent& dropTable) {
-    return std::max(dropTable.minCount, dropTable.maxCount > 0 ? dropTable.maxCount : dropTable.minCount);
+std::mt19937& lootRng() {
+    static std::mt19937 rng{std::random_device{}()};
+    return rng;
+}
+
+uint32_t rollDropCount(const DropTableEntry& drop) {
+    const uint32_t minCount = drop.minCount;
+    uint32_t maxCount = drop.maxCount > 0 ? drop.maxCount : drop.minCount;
+    maxCount = std::max(minCount, maxCount);
+    if (minCount == maxCount) {
+        return minCount;
+    }
+
+    std::uniform_int_distribution<uint32_t> dist(minCount, maxCount);
+    return dist(lootRng());
+}
+
+template <typename SpawnFn>
+void forEachDropEntry(const DropTableComponent& dropTable, SpawnFn&& spawn) {
+    if (!dropTable.entries.empty()) {
+        for (const DropTableEntry& drop : dropTable.entries) {
+            spawn(drop);
+        }
+        return;
+    }
+
+    spawn(DropTableEntry{dropTable.itemId, dropTable.minCount, dropTable.maxCount});
 }
 
 } // namespace
@@ -46,11 +72,14 @@ void DeathSystem::update(SystemContext& ctx) {
         }
 
         if (const auto* dropTable = reg.try_get<DropTableComponent>(entity)) {
-            if (dropTable->itemId != 0) {
-                const auto* transform = reg.try_get<TransformComponent>(entity);
-                const glm::vec3 position = transform ? transform->position : glm::vec3(0.0f);
-                ItemSpawnSystem::spawnAtPosition(registry, dropTable->itemId, position, dropCount(*dropTable));
-            }
+            const auto* transform = reg.try_get<TransformComponent>(entity);
+            const glm::vec3 position = transform ? transform->position : glm::vec3(0.0f);
+            forEachDropEntry(*dropTable, [&](const DropTableEntry& drop) {
+                const uint32_t count = rollDropCount(drop);
+                if (drop.itemId != 0 && count != 0) {
+                    ItemSpawnSystem::spawnAtPosition(registry, drop.itemId, position, count);
+                }
+            });
         }
 
         std::vector<entt::entity> toDestroy;

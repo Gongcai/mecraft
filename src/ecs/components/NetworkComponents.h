@@ -2,6 +2,7 @@
 #define MECRAFT_NETWORK_COMPONENTS_H
 
 #include <cstdint>
+#include <string>
 
 namespace ecs {
 
@@ -24,6 +25,11 @@ struct EntityNetIdComponent {
 /// Tag component marking an entity for network synchronization.
 /// The server checks for this tag to decide which entities to track and sync.
 struct NetworkSyncTag {};
+
+/// Stable gameplay definition id for synced/persistent entities.
+struct EntityTypeComponent {
+    std::string entityId;
+};
 
 /// Tag for synced entities that should despawn after the server has sent final events.
 struct PendingNetworkDespawnTag {};

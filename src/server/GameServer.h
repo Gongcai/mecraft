@@ -148,6 +148,7 @@ private:
                                               net::InventorySnapshotMessage& out) const;
     void destroyOwnedPlayerProxy(ConnectedClient& client);
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
+    [[nodiscard]] bool spawnMobEntity(const std::string& entityId, const glm::vec3& position);
     [[nodiscard]] bool spawnZombieEntity(const glm::vec3& position);
     [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
     [[nodiscard]] std::vector<save::BlockEntityData> snapshotBlockEntities() const;

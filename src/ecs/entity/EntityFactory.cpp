@@ -1,11 +1,14 @@
 #include "EntityFactory.h"
 
+#include "EntityDefinitionRegistry.h"
 #include "MobModelFactory.h"
 #include "../components/Components.h"
 #include "../components/NetworkComponents.h"
 #include "../util/DropRuntimeState.h"
 #include "../util/ProjectileDefinitions.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <utility>
 
 namespace ecs {
@@ -22,6 +25,64 @@ template <typename Component, typename... Args>
 Component& ensureComponentRef(entt::registry& registry, const entt::entity entity, Args&&... args) {
     ensureComponent<Component>(registry, entity, std::forward<Args>(args)...);
     return registry.get<Component>(entity);
+}
+
+void applyMobDefinition(GameplayRegistry& registry,
+                        const entt::entity entity,
+                        const MobEntityDefinition& definition) {
+    entt::registry& reg = registry.registry();
+    if (entity == entt::null || !reg.valid(entity)) {
+        return;
+    }
+
+    if (auto* transform = reg.try_get<TransformComponent>(entity)) {
+        transform->eyeHeight = definition.eyeHeight;
+    }
+
+    if (auto* health = reg.try_get<HealthComponent>(entity)) {
+        health->current = definition.health;
+        health->max = definition.maxHealth;
+    }
+
+    if (auto* ai = reg.try_get<MobAIComponent>(entity)) {
+        ai->wanderInterval = definition.ai.wanderInterval;
+        ai->wanderSpeed = definition.ai.wanderSpeed;
+        ai->pursueSpeed = definition.ai.pursueSpeed;
+        ai->acquisitionRange = definition.ai.acquisitionRange;
+        ai->loseTargetRange = definition.ai.loseTargetRange;
+        ai->attackRange = definition.ai.attackRange;
+        ai->attackCooldownSeconds = definition.ai.attackCooldownSeconds;
+        ai->attackDamage = definition.ai.attackDamage;
+    }
+
+    if (auto* physicsBody = reg.try_get<PhysicsBodyComponent>(entity)) {
+        physicsBody->body.halfExtents = definition.physics.halfExtents;
+        physicsBody->body.colliderOffset = definition.physics.colliderOffset;
+        physicsBody->body.eyeOffsetY = definition.physics.eyeOffsetY;
+    }
+
+    if (definition.drops.empty()) {
+        if (reg.all_of<DropTableComponent>(entity)) {
+            reg.remove<DropTableComponent>(entity);
+        }
+        return;
+    }
+
+    const MobDropDefinition& firstDrop = definition.drops.front();
+    auto* dropTable = reg.try_get<DropTableComponent>(entity);
+    if (dropTable == nullptr) {
+        dropTable = &reg.emplace<DropTableComponent>(entity, firstDrop.itemId, firstDrop.minCount, firstDrop.maxCount);
+    } else {
+        dropTable->itemId = firstDrop.itemId;
+        dropTable->minCount = firstDrop.minCount;
+        dropTable->maxCount = firstDrop.maxCount;
+    }
+
+    dropTable->entries.clear();
+    dropTable->entries.reserve(definition.drops.size());
+    for (const MobDropDefinition& drop : definition.drops) {
+        dropTable->entries.push_back(DropTableEntry{drop.itemId, drop.minCount, drop.maxCount});
+    }
 }
 
 } // namespace
@@ -70,8 +131,49 @@ void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry,
     }
 }
 
+entt::entity EntityFactory::createMob(GameplayRegistry& registry,
+                                      const std::string_view entityId,
+                                      const glm::vec3& position) {
+    std::string error;
+    EntityDefinitionRegistry& definitions = EntityDefinitionRegistry::instance();
+    if (!definitions.ensureLoaded(&error)) {
+        std::printf("[EntityFactory] Failed to load entity definitions: %s\n", error.c_str());
+        std::fflush(stdout);
+        return entt::null;
+    }
+
+    const MobEntityDefinition* definition = definitions.findMob(entityId);
+    if (definition == nullptr) {
+        std::printf("[EntityFactory] Unknown mob definition: %.*s\n",
+                    static_cast<int>(entityId.size()),
+                    entityId.data());
+        std::fflush(stdout);
+        return entt::null;
+    }
+
+    entt::entity entity = entt::null;
+    if (definition->model == "zombie_humanoid") {
+        entity = MobModelFactory::createZombie(registry, position);
+    } else {
+        std::printf("[EntityFactory] Unsupported mob model '%s' for %s\n",
+                    definition->model.c_str(),
+                    definition->id.full().c_str());
+        std::fflush(stdout);
+        return entt::null;
+    }
+
+    entt::registry& reg = registry.registry();
+    if (auto* type = reg.try_get<EntityTypeComponent>(entity)) {
+        type->entityId = definition->id.full();
+    } else {
+        reg.emplace<EntityTypeComponent>(entity, definition->id.full());
+    }
+    applyMobDefinition(registry, entity, *definition);
+    return entity;
+}
+
 entt::entity EntityFactory::createZombie(GameplayRegistry& registry, const glm::vec3& position) {
-    return MobModelFactory::createZombie(registry, position);
+    return createMob(registry, "minecraft:zombie", position);
 }
 
 entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::vec3& position) {
@@ -82,6 +184,7 @@ entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::ve
     registry.emplace<MobAIComponent>(zombie);
     registry.emplace<MoveIntentComponent>(zombie);
     registry.emplace<HealthComponent>(zombie, 20, 20);
+    registry.emplace<EntityTypeComponent>(zombie, "minecraft:zombie");
     registry.emplace<NetworkSyncTag>(zombie);
     return zombie;
 }

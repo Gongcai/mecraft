@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include <entt/entity/registry.hpp>
 #include <glm/glm.hpp>
@@ -39,6 +40,9 @@ public:
                                         const glm::vec3& position,
                                         const glm::vec3& velocity);
 
+    static entt::entity createMob(GameplayRegistry& registry,
+                                  std::string_view entityId,
+                                  const glm::vec3& position);
     static entt::entity createZombie(GameplayRegistry& registry, const glm::vec3& position);
     static entt::entity createZombie(entt::registry& registry, const glm::vec3& position);
     static entt::entity createItemDrop(GameplayRegistry& registry, const ItemDropSpawnParams& params);

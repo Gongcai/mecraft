@@ -2,7 +2,7 @@
 #include <sstream>
 #include "../../world/World.h"
 #include "../../ecs/util/PlayerQuery.h"
-#include "../../ecs/entity/MobModelFactory.h"
+#include "../../ecs/entity/EntityFactory.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../locale/LocaleManager.h"
 
@@ -59,7 +59,10 @@ bool CommandState::executeCommand(const std::string& command) {
         if (mobType == "zombie") {
             ecs::PlayerQuery query(m_ctx.ecsRegistry);
             glm::vec3 playerPos = query.getPosition();
-            ecs::MobModelFactory::createZombie(m_ctx.ecsRegistry, playerPos);
+            if (ecs::EntityFactory::createZombie(m_ctx.ecsRegistry, playerPos) == entt::null) {
+                m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("unknown_mob") + mobType);
+                return false;
+            }
             m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("spawned_zombie"));
             return false;
         }

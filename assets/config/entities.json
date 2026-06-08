@@ -1,0 +1,36 @@
+{
+  "entities": [
+    {
+      "id": "minecraft:zombie",
+      "kind": "mob",
+      "model": "zombie_humanoid",
+      "health": {
+        "current": 20,
+        "max": 20
+      },
+      "eyeHeight": 1.62,
+      "physics": {
+        "halfExtents": [0.3, 0.9, 0.3],
+        "colliderOffset": [0.0, 0.9, 0.0],
+        "eyeOffsetY": 1.62
+      },
+      "ai": {
+        "wanderInterval": 3.0,
+        "wanderSpeed": 0.45,
+        "pursueSpeed": 0.85,
+        "acquisitionRange": 14.0,
+        "loseTargetRange": 20.0,
+        "attackRange": 1.35,
+        "attackCooldownSeconds": 1.1,
+        "attackDamage": 3
+      },
+      "drops": [
+        {
+          "item": "minecraft:coal",
+          "min": 1,
+          "max": 1
+        }
+      ]
+    }
+  ]
+}

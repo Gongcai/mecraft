@@ -3,6 +3,7 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/entity/SteveModelFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
+#include "../ecs/entity/EntityDefinitionRegistry.h"
 #include "../ecs/util/AudioEventBuffer.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../ecs/util/ProjectileDefinitions.h"
@@ -328,8 +329,24 @@ void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {
 
 void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     entt::entity entity = entt::null;
+    const std::string entityId = msg.entityId.empty() ? "minecraft:zombie" : msg.entityId;
     if (m_gameplayRegistry) {
-        entity = ecs::MobModelFactory::createZombieReplica(*m_gameplayRegistry, msg.position, msg.yaw);
+        bool useZombieHumanoid = entityId == "minecraft:zombie";
+        if (!useZombieHumanoid) {
+            std::string error;
+            ecs::EntityDefinitionRegistry& definitions = ecs::EntityDefinitionRegistry::instance();
+            if (definitions.ensureLoaded(&error)) {
+                if (const auto* definition = definitions.findMob(entityId)) {
+                    useZombieHumanoid = definition->model == "zombie_humanoid";
+                }
+            }
+        }
+
+        if (useZombieHumanoid) {
+            entity = ecs::MobModelFactory::createZombieReplica(*m_gameplayRegistry, msg.position, msg.yaw);
+        } else {
+            return;
+        }
     } else {
         entity = m_registry->create();
         m_registry->emplace<ecs::MobTag>(entity);
@@ -339,6 +356,7 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     }
 
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
+    m_registry->emplace<ecs::EntityTypeComponent>(entity, entityId);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
 

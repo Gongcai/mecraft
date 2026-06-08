@@ -85,10 +85,13 @@ static void testMobSpawnCreatesZombieReplica() {
                          ecs::ChildrenComponent,
                          ecs::MobAIComponent,
                          ecs::VelocityComponent,
+                         ecs::EntityTypeComponent,
                          ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "mob replica components missing");
     const entt::entity mob = *view.begin();
     require(raw.get<ecs::ChildrenComponent>(mob).children.size() == 1, "mob replica did not create hierarchy");
+    require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:zombie",
+            "mob replica should keep the network entity id");
     require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
     require(!raw.all_of<ecs::HealthComponent>(mob), "mob replica should not be client-authoritative health");
 

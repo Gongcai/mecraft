@@ -40,6 +40,7 @@
 #define BLOCKS_CONFIG_PATH    CONFIG_DIR "/blocks.json"
 #define FLUIDS_CONFIG_PATH    CONFIG_DIR "/fluids.json"
 #define ITEMS_CONFIG_PATH     CONFIG_DIR "/items.json"
+#define ENTITIES_CONFIG_PATH  CONFIG_DIR "/entities.json"
 #define RECIPES_CONFIG_PATH   CONFIG_DIR "/recipes.json"
 #define KEYBINDINGS_PATH      CONFIG_DIR "/keybindings.txt"
 #define LOCALE_DIR            CONFIG_DIR "/locale"

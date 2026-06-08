@@ -3,6 +3,7 @@
 #include "ecs/GameplayRegistry.h"
 #include "ecs/components/Components.h"
 #include "ecs/components/NetworkComponents.h"
+#include "ecs/entity/EntityDefinitionRegistry.h"
 #include "ecs/entity/EntityFactory.h"
 #include "ecs/entity/MobModelFactory.h"
 #include "game/inventory/ChestInventoryStore.h"
@@ -14,6 +15,7 @@
 #include "world/DayNightSystem.h"
 #include "world/WeatherSystem.h"
 #include "world/block/Block.h"
+#include "world/block/BlockStateRegistry.h"
 #include "renderer/mesh/ChunkMesher.h"
 #include "thread/ThreadPool.h"
 #include <cassert>
@@ -87,6 +89,18 @@ static uint32_t inventoryItemCount(const net::InventorySnapshotMessage& snapshot
     for (const auto& slot : snapshot.slots) {
         if (slot.itemId == encodedItemId) {
             total += slot.stackCount;
+        }
+    }
+    return total;
+}
+
+static uint32_t ecsDroppedItemCount(ecs::GameplayRegistry& registry, const ItemID itemId) {
+    uint32_t total = 0;
+    auto view = registry.view<ecs::DropItemTag, ecs::ItemComponent>();
+    for (const entt::entity entity : view) {
+        const auto& item = view.get<ecs::ItemComponent>(entity);
+        if (item.itemId == itemId) {
+            total += item.stackCount;
         }
     }
     return total;
@@ -535,6 +549,8 @@ static void testSummonZombieSpawnsNetworkMob() {
             if (spawn.kind == net::EntityKind::Mob) {
                 sawMobSpawn = true;
                 spawnedNetId = spawn.netId;
+                require(spawn.entityId == "minecraft:zombie",
+                        "external registry summon should include mob entity id in spawn packet");
             }
         }
     }
@@ -545,12 +561,15 @@ static void testSummonZombieSpawnsNetworkMob() {
 
     auto view = registry.registry().view<ecs::MobTag,
                                         ecs::HealthComponent,
+                                        ecs::EntityTypeComponent,
                                         ecs::NetworkSyncTag,
                                         ecs::EntityNetIdComponent>();
     require(view.begin() != view.end(), "external registry summon should create a networked mob");
     const entt::entity zombie = *view.begin();
     require(registry.registry().get<ecs::EntityNetIdComponent>(zombie).netId == spawnedNetId,
             "external registry mob net id should match spawn packet");
+    require(registry.registry().get<ecs::EntityTypeComponent>(zombie).entityId == "minecraft:zombie",
+            "external registry mob should keep configured entity id");
     std::printf("[PASS] testSummonZombieSpawnsNetworkMob\n");
 }
 
@@ -575,7 +594,7 @@ static void testSummonZombieUsesOwnedServerEcs() {
     commandPacket.type = net::MessageType::ClientCommandRequest;
     net::ClientCommandRequest command;
     command.sequence = 18;
-    command.command = "/summon zombie";
+    command.command = "/summon minecraft:zombie";
     commandPacket.inProcessPayload = command;
     clientPtr->pushIncoming(std::move(commandPacket));
 
@@ -595,6 +614,8 @@ static void testSummonZombieUsesOwnedServerEcs() {
         if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
             const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
             if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                require(spawn.entityId == "minecraft:zombie",
+                        "owned ECS summon should include mob entity id in spawn packet");
                 sawMobSpawn = true;
             }
         }
@@ -1418,6 +1439,48 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
     std::printf("[PASS] testCreativeAppleProjectileDoesNotConsumeInventory\n");
 }
 
+static void testEntityFactoryCreatesConfiguredZombie() {
+    ecs::EntityDefinitionRegistry::instance().clear();
+    std::string error;
+    require(ecs::EntityDefinitionRegistry::instance().ensureLoaded(&error),
+            error.empty() ? "entity definitions should load" : error.c_str());
+
+    ecs::GameplayRegistry registry;
+    const entt::entity zombie =
+        ecs::EntityFactory::createMob(registry, "minecraft:zombie", glm::vec3(1.0f, 64.0f, 2.0f));
+    require(zombie != entt::null, "EntityFactory should create configured zombie");
+
+    auto& raw = registry.registry();
+    require(raw.all_of<ecs::MobTag,
+                       ecs::TransformComponent,
+                       ecs::MobAIComponent,
+                       ecs::HealthComponent,
+                       ecs::PhysicsBodyComponent,
+                       ecs::DropTableComponent,
+                       ecs::EntityTypeComponent,
+                       ecs::NetworkSyncTag>(zombie),
+            "configured zombie should have gameplay mob components");
+
+    const auto& transform = raw.get<ecs::TransformComponent>(zombie);
+    const auto& ai = raw.get<ecs::MobAIComponent>(zombie);
+    const auto& health = raw.get<ecs::HealthComponent>(zombie);
+    const auto& body = raw.get<ecs::PhysicsBodyComponent>(zombie);
+    const auto& drops = raw.get<ecs::DropTableComponent>(zombie);
+    const auto& type = raw.get<ecs::EntityTypeComponent>(zombie);
+
+    require(type.entityId == "minecraft:zombie", "configured zombie should keep entity definition id");
+    require(transform.eyeHeight == 1.62f, "configured zombie should apply eye height");
+    require(health.current == 20 && health.max == 20, "configured zombie should apply health");
+    require(ai.attackDamage == 3 && ai.pursueSpeed == 0.85f,
+            "configured zombie should apply AI tuning");
+    require(body.body.halfExtents.y == 0.9f && body.body.colliderOffset.y == 0.9f,
+            "configured zombie should apply physics bounds");
+    require(drops.itemId == ItemIds::COAL && drops.minCount == 1 && drops.maxCount == 1,
+            "configured zombie should apply drop table");
+
+    std::printf("[PASS] testEntityFactoryCreatesConfiguredZombie\n");
+}
+
 static void testPersistentZombieRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -1451,6 +1514,7 @@ static void testPersistentZombieRestoresFromSave() {
                                             ecs::HealthComponent,
                                             ecs::MobAIComponent,
                                             ecs::PhysicsBodyComponent,
+                                            ecs::EntityTypeComponent,
                                             ecs::NetworkSyncTag>();
         require(view.begin() != view.end(), "persistent zombie restore should create a mob");
         const entt::entity zombie = *view.begin();
@@ -1458,8 +1522,10 @@ static void testPersistentZombieRestoresFromSave() {
         const auto& health = registry.registry().get<ecs::HealthComponent>(zombie);
         const auto& ai = registry.registry().get<ecs::MobAIComponent>(zombie);
         const auto& body = registry.registry().get<ecs::PhysicsBodyComponent>(zombie);
+        const auto& type = registry.registry().get<ecs::EntityTypeComponent>(zombie);
         require(transform.position.x == 4.0f, "persistent zombie restore should keep X position");
         require(transform.position.z == -2.0f, "persistent zombie restore should keep Z position");
+        require(type.entityId == "minecraft:zombie", "persistent zombie restore should keep entity id");
         require(health.current == 9, "persistent zombie restore should keep health");
         require(ai.yaw == 135.0f, "persistent zombie restore should keep yaw");
         require(body.body.velocity.z == -0.5f, "persistent zombie restore should keep velocity");
@@ -1605,6 +1671,100 @@ static void testPersistentChestInventoryRestoresFromSave() {
 
     std::filesystem::remove_all(saveRoot);
     std::printf("[PASS] testPersistentChestInventoryRestoresFromSave\n");
+}
+
+static void testServerBlockActionBreaksChestLifecycle() {
+    ServerHarness harness(2);
+    ecs::GameplayRegistry registry;
+    harness.server.setEcsRegistry(&registry);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+
+    const glm::ivec3 chestPos(0, Chunk::SIZE_Y - 8, 0);
+    for (int tick = 0;
+         tick < 240 && !harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+         ++tick) {
+        harness.server.tick(1.0f / 20.0f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
+            "test setup should load the target chest chunk");
+
+    const StateID chestState = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
+    harness.server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
+
+    ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
+    ChestInventory& chest = store.getOrCreate(chestPos);
+    chest.setSlotItem(0, ItemIds::APPLE, 3);
+    chest.setSlotItem(5, ItemIds::COAL, 2);
+
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet actionPacket;
+    actionPacket.type = net::MessageType::ClientBlockAction;
+    net::ClientBlockAction action;
+    action.sequence = 2;
+    action.action = net::ClientBlockActionType::Break;
+    action.targetBlock = chestPos;
+    action.playerPosition = glm::vec3(chestPos) + glm::vec3(0.5f);
+    actionPacket.inProcessPayload = action;
+    clientPtr->pushIncoming(std::move(actionPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    require(harness.server.world().getBlock(chestPos.x, chestPos.y, chestPos.z) == BlockIds::AIR,
+            "server block break should remove the chest block");
+    require(store.find(chestPos) == nullptr,
+            "server block break should erase the chest inventory store entry");
+    require(ecsDroppedItemCount(registry, ItemIds::APPLE) == 3,
+            "server chest break should spawn stored apple drops");
+    require(ecsDroppedItemCount(registry, ItemIds::COAL) == 2,
+            "server chest break should spawn stored coal drops");
+    require(ecsDroppedItemCount(registry, ItemRegistry::fromBlock(BlockIds::CHEST)) == 1,
+            "server survival chest break should spawn the chest item drop");
+
+    bool sawAirBlockUpdate = false;
+    uint32_t sawDropSpawns = 0;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::BlockUpdateBatch && packet.inProcessPayload.has_value()) {
+            const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
+            for (const auto& update : batch.updates) {
+                if (update.x == chestPos.x &&
+                    update.y == chestPos.y &&
+                    update.z == chestPos.z &&
+                    update.blockId == BlockIds::AIR) {
+                    sawAirBlockUpdate = true;
+                }
+            }
+        }
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Drop &&
+                (spawn.itemId == ItemIds::APPLE ||
+                 spawn.itemId == ItemIds::COAL ||
+                 spawn.itemId == ItemRegistry::fromBlock(BlockIds::CHEST))) {
+                ++sawDropSpawns;
+            }
+        }
+    }
+
+    require(sawAirBlockUpdate, "server chest break should sync the removed block");
+    require(sawDropSpawns >= 3, "server chest break should sync spawned chest drops");
+
+    harness.server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+    std::printf("[PASS] testServerBlockActionBreaksChestLifecycle\n");
 }
 
 static void testOwnedServerEcsRestoresPersistentZombie() {
@@ -1795,6 +1955,40 @@ static void testClientInputCodecCarriesSelectedHotbarSlot() {
     require(legacyDecoded.selectedHotbarSlot == 0,
             "legacy client input payload should default selected slot to zero");
     std::printf("[PASS] testClientInputCodecCarriesSelectedHotbarSlot\n");
+}
+
+static void testEntitySpawnCodecCarriesEntityId() {
+    net::EntitySpawnMessage spawn;
+    spawn.netId = 123;
+    spawn.kind = net::EntityKind::Mob;
+    spawn.position = glm::vec3(1.0f, 64.0f, -2.0f);
+    spawn.velocity = glm::vec3(0.25f, 0.0f, -0.5f);
+    spawn.yaw = 45.0f;
+    spawn.pitch = 0.0f;
+    spawn.entityId = "minecraft:zombie";
+
+    const auto encoded = net::PacketCodec::encodeEntitySpawn(spawn);
+    require(encoded.size() == 61, "entity spawn codec should append entity id string");
+
+    net::EntitySpawnMessage decoded;
+    require(net::PacketCodec::decodeEntitySpawn(encoded.data(), encoded.size(), decoded),
+            "entity spawn codec should decode payload");
+    require(decoded.netId == spawn.netId, "entity spawn codec should keep net id");
+    require(decoded.kind == net::EntityKind::Mob, "entity spawn codec should keep kind");
+    require(decoded.position.z == spawn.position.z, "entity spawn codec should keep position");
+    require(decoded.velocity.x == spawn.velocity.x, "entity spawn codec should keep velocity");
+    require(decoded.yaw == spawn.yaw, "entity spawn codec should keep yaw");
+    require(decoded.entityId == "minecraft:zombie", "entity spawn codec should keep entity id");
+
+    net::EntitySpawnMessage legacyDecoded;
+    require(net::PacketCodec::decodeEntitySpawn(encoded.data(), 41, legacyDecoded),
+            "entity spawn codec should decode legacy payload without entity id");
+    require(legacyDecoded.entityId.empty(), "legacy entity spawn payload should default entity id empty");
+
+    net::EntitySpawnMessage truncated;
+    require(!net::PacketCodec::decodeEntitySpawn(encoded.data(), encoded.size() - 1, truncated),
+            "entity spawn codec should reject truncated entity id payload");
+    std::printf("[PASS] testEntitySpawnCodecCarriesEntityId\n");
 }
 
 static void testEntityImpactCodecRoundTrip() {
@@ -2271,6 +2465,7 @@ int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     BlockRegistry::init(nullptr);
     ItemRegistry::init();
+    BlockDropTable::init();
 
     testServerInit();
     testAcceptClient();
@@ -2293,13 +2488,16 @@ int main() {
     testOwnedServerPlayerPicksUpDropDespawnsAndSyncsInventory();
     testOwnedServerPlayerThrowsAppleProjectileDamagesZombie();
     testCreativeAppleProjectileDoesNotConsumeInventory();
+    testEntityFactoryCreatesConfiguredZombie();
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
     testPersistentChestInventoryRestoresFromSave();
+    testServerBlockActionBreaksChestLifecycle();
     testOwnedServerEcsRestoresPersistentZombie();
     testOwnedServerEcsRestoresPersistentDrop();
     testChatCommandCodecRoundTrip();
     testClientInputCodecCarriesSelectedHotbarSlot();
+    testEntitySpawnCodecCarriesEntityId();
     testEntityImpactCodecRoundTrip();
     testServerSnapshotCodecCarriesPlayerHealth();
     testInventorySnapshotCodecRoundTrip();
