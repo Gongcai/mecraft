@@ -127,6 +127,20 @@ public:
         return it == m_chests.end() ? nullptr : &it->second;
     }
 
+    [[nodiscard]] std::array<ItemStack, ChestInventory::SLOT_COUNT> extractAndErase(const glm::ivec3& position) {
+        std::array<ItemStack, ChestInventory::SLOT_COUNT> contents{};
+        const auto it = m_chests.find(toKey(position));
+        if (it == m_chests.end()) {
+            return contents;
+        }
+
+        for (int slot = 0; slot < ChestInventory::SLOT_COUNT; ++slot) {
+            contents[static_cast<std::size_t>(slot)] = it->second.getSlotStack(slot);
+        }
+        m_chests.erase(it);
+        return contents;
+    }
+
     void erase(const glm::ivec3& position) {
         m_chests.erase(toKey(position));
     }

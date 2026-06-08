@@ -559,6 +559,7 @@ if(MECRAFT_BUILD_TESTS)
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
     add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
+    add_mecraft_test(chest_inventory_lifecycle_test tests/chest_inventory_lifecycle_test.cpp)
     add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)
     add_mecraft_test(crosshair_control_test tests/crosshair_control_test.cpp)
     add_mecraft_test(hotbar_control_test tests/hotbar_control_test.cpp)
