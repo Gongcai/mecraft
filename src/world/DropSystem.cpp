@@ -6,6 +6,7 @@
 #include "World.h"
 #include "../ecs/SystemContext.h"
 #include "../ecs/components/Components.h"
+#include "../ecs/entity/EntityFactory.h"
 #include "../ecs/util/DropRuntimeState.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/systems/item/ItemLifetimeSystem.h"
@@ -187,18 +188,19 @@ void DropSystem::restoreDrops(const std::vector<DropEntity>& drops) {
         return;
     }
 
-    auto& raw = m_registry->registry();
     for (const auto& drop : drops) {
-        const entt::entity e = raw.create();
-        raw.emplace<ecs::DropItemTag>(e);
-        raw.emplace<ecs::TransformComponent>(e, drop.position);
-        raw.emplace<ecs::VelocityComponent>(e, drop.velocity);
-        raw.emplace<ecs::PhysicsBodyComponent>(e, ecs::PhysicsBodyComponent{
-            {drop.position, drop.velocity, drop.halfExtents, glm::vec3(0.0f), 0.0f}
-        });
-        raw.emplace<ecs::ItemComponent>(e, drop.itemId, drop.stackCount);
-        raw.emplace<ecs::LifetimeComponent>(e, drop.ageSeconds, drop.lifeTimeSeconds);
-        raw.emplace<ecs::SpinVisualComponent>(e, drop.yawRadians, drop.spinSpeedRadians);
-        raw.emplace<ecs::GroundedStateComponent>(e, ecs::GroundedStateComponent{drop.grounded});
+        ecs::ItemDropSpawnParams params;
+        params.itemId = drop.itemId;
+        params.stackCount = drop.stackCount;
+        params.position = drop.position;
+        params.velocity = drop.velocity;
+        params.halfExtents = drop.halfExtents;
+        params.yawRadians = drop.yawRadians;
+        params.spinSpeedRadians = drop.spinSpeedRadians;
+        params.ageSeconds = drop.ageSeconds;
+        params.lifeTimeSeconds = drop.lifeTimeSeconds;
+        params.grounded = drop.grounded;
+        params.dropId = drop.id;
+        ecs::EntityFactory::createItemDrop(*m_registry, params);
     }
 }

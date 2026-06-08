@@ -15,7 +15,10 @@
 #include <unordered_map>
 
 class ThreadPool;
-namespace ecs { class GameplayRegistry; }
+namespace ecs {
+class GameplayPipeline;
+class GameplayRegistry;
+}
 namespace physics { class PhysicsSystem; }
 
 namespace server {
@@ -158,6 +161,7 @@ private:
     entt::registry* m_ecsRegistry = nullptr;  // Non-owning pointer to ECS registry
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;  // Non-owning pointer when model factories are available
     std::unique_ptr<ecs::GameplayRegistry> m_ownedGameplayRegistry;
+    std::unique_ptr<ecs::GameplayPipeline> m_ownedGameplayPipeline;
     std::unique_ptr<physics::PhysicsSystem> m_ownedPhysicsSystem;
     bool m_entitiesRestorePending = false;
 

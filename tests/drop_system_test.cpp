@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 
 #include <glm/vec3.hpp>
@@ -6,6 +7,7 @@
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/GameplayServices.h"
 #include "../src/ecs/components/Components.h"
+#include "../src/ecs/components/NetworkComponents.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/block/PropIndices.h"
 #include "../src/world/DropSystem.h"
@@ -28,6 +30,10 @@ uint32_t inventoryItemCount(const Inventory& inventory, const ItemID itemId) {
         }
     }
     return total;
+}
+
+bool nearlyEqual(const float a, const float b) {
+    return std::fabs(a - b) < 0.0001f;
 }
 }
 
@@ -155,6 +161,57 @@ int main() {
     }
     if (inventoryItemCount(inventory, ItemIds::COAL) != coalBefore + 2) {
         return fail("collectNearbyDrops should add items into inventory stacks");
+    }
+
+    DropSystem restoreDropSystem;
+    ecs::GameplayRegistry restoreDropRegistry;
+    restoreDropSystem.bindRegistry(restoreDropRegistry);
+
+    DropEntity savedDrop;
+    savedDrop.id = 42;
+    savedDrop.itemId = ItemIds::COAL;
+    savedDrop.stackCount = 3;
+    savedDrop.position = glm::vec3(8.25f, 123.0f, 8.75f);
+    savedDrop.velocity = glm::vec3(0.1f, 0.2f, 0.3f);
+    savedDrop.halfExtents = glm::vec3(0.2f);
+    savedDrop.yawRadians = 1.25f;
+    savedDrop.spinSpeedRadians = 2.5f;
+    savedDrop.ageSeconds = 4.0f;
+    savedDrop.lifeTimeSeconds = 30.0f;
+    savedDrop.grounded = true;
+    restoreDropSystem.restoreDrops({savedDrop});
+
+    auto restoredDrops = restoreDropSystem.getDrops();
+    if (restoredDrops.size() != 1) {
+        return fail("restoreDrops should restore a visible ECS drop");
+    }
+    const DropEntity& restored = restoredDrops.front();
+    if (restored.id != savedDrop.id || restored.itemId != savedDrop.itemId || restored.stackCount != savedDrop.stackCount) {
+        return fail("restoreDrops should preserve saved drop identity and item stack");
+    }
+    if (!nearlyEqual(restored.position.x, savedDrop.position.x) ||
+        !nearlyEqual(restored.halfExtents.x, savedDrop.halfExtents.x) ||
+        !nearlyEqual(restored.ageSeconds, savedDrop.ageSeconds) ||
+        !restored.grounded) {
+        return fail("restoreDrops should preserve saved transform, bounds, lifetime, and grounded state");
+    }
+
+    auto restoredView = restoreDropRegistry.registry().view<ecs::DropItemTag,
+                                                            ecs::DropEntityIdComponent,
+                                                            ecs::BoundsComponent,
+                                                            ecs::NetworkSyncTag>();
+    if (restoredView.begin() == restoredView.end()) {
+        return fail("restored drops should include required ECS and network sync components");
+    }
+
+    restoreDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(20, 122, 20), 1);
+    restoredDrops = restoreDropSystem.getDrops();
+    bool sawFutureId = false;
+    for (const DropEntity& drop : restoredDrops) {
+        sawFutureId = sawFutureId || drop.id > savedDrop.id;
+    }
+    if (!sawFutureId) {
+        return fail("new drops after restore should not reuse saved drop ids");
     }
 
     const float initialYaw = dropSystem.getDrops().front().yawRadians;

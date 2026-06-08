@@ -26,6 +26,11 @@ public:
                            const glm::vec3& position,
                            float radius,
                            class ::Inventory& inventory);
+    static uint32_t pickup(GameplayRegistry& registry,
+                           const glm::vec3& position,
+                           float radius,
+                           class ::Inventory& inventory,
+                           float minAgeSeconds);
 };
 
 } // namespace ecs

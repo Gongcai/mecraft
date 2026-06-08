@@ -2,105 +2,12 @@
 
 #include "util/InputFrameState.h"
 #include "components/Components.h"
-#include "systems/player/CharacterPhysicsSystem.h"
-#include "systems/player/InputSamplingSystem.h"
-#include "systems/player/PlayerIntentBuildSystem.h"
-#include "systems/player/PlayerRuntimeUpdateSystem.h"
-#include "systems/player/ViewBobSystem.h"
-#include "systems/audio/AudioSyncSystem.h"
-#include "systems/interaction/BlockTargetSystem.h"
-#include "systems/interaction/BlockBreakSystem.h"
-#include "systems/interaction/BlockPlaceSystem.h"
-#include "systems/item/ItemSpawnSystem.h"
-#include "systems/item/ItemPhysicsSystem.h"
-#include "systems/item/ItemMergeSystem.h"
-#include "systems/item/ItemPickupSystem.h"
-#include "systems/item/ItemLifetimeSystem.h"
-#include "systems/particle/ParticleCleanupSystem.h"
-#include "systems/particle/ParticleSimulationSystem.h"
-#include "systems/particle/ParticleSpawnSystem.h"
-#include "systems/player/FallDamageSystem.h"
-#include "systems/player/FallRollEffectSystem.h"
-#include "systems/player/HungerDepletionSystem.h"
-#include "systems/combat/DamageSystem.h"
-#include "systems/combat/DeathSystem.h"
-#include "systems/combat/PlayerMeleeSystem.h"
-#include "systems/combat/ProjectileSystem.h"
-#include "systems/audio/PlayerFootstepAudioSystem.h"
-#include "systems/world/FluidTickSystem.h"
-#include "systems/world/BlockSupportSystem.h"
-#include "systems/steve/SteveAnimationSystem.h"
-#include "systems/steve/SteveSyncSystem.h"
-#include "systems/steve/TransformHierarchySystem.h"
-#include "systems/mob/MobAISystem.h"
-#include "systems/mob/MobAnimationSystem.h"
 #include "../physics/PhysicsSystem.h"
-#include "../world/World.h"
-
-#ifdef MECRAFT_DEBUG
-#include <chrono>
-#include <iostream>
-#include <unordered_set>
-#include <unordered_map>
-#endif
 
 namespace ecs {
 
-GameplayScene::GameplayScene() {
-    m_fixedUpdateSystems.reserve(40);
-
-    // ── Fixed-update pipeline — execution order matches declaration order ──
-    addFixedUpdateSystem<InputSamplingSystem>();
-    addFixedUpdateSystem<PlayerIntentBuildSystem>();
-    addFixedUpdateSystem<MobAISystem>();
-    addFixedUpdateSystem<CharacterPhysicsSystem>();
-    addFixedUpdateSystem<PlayerRuntimeUpdateSystem>();
-    addFixedUpdateSystem<FallDamageSystem>();
-    addFixedUpdateSystem<ViewBobSystem>();
-
-    // ── Block interaction pipeline ──
-    addFixedUpdateSystem<BlockTargetSystem>();
-    addFixedUpdateSystem<PlayerMeleeSystem>();
-    addFixedUpdateSystem<ProjectileSystem>();
-    addFixedUpdateSystem<DamageSystem>();
-    addFixedUpdateSystem<DeathSystem>();
-    addFixedUpdateSystem<BlockBreakSystem>();
-    addFixedUpdateSystem<BlockPlaceSystem>();
-
-    // ── Item pipeline ──
-    addFixedUpdateSystem<ItemSpawnSystem>(FixedUpdateDebugCategory::Drop);
-    addFixedUpdateSystem<ItemPhysicsSystem>(FixedUpdateDebugCategory::Drop);
-    addFixedUpdateSystem<ItemMergeSystem>(FixedUpdateDebugCategory::Drop);
-    addFixedUpdateSystem<ItemPickupSystem>(FixedUpdateDebugCategory::Drop);
-    addFixedUpdateSystem<ItemLifetimeSystem>(FixedUpdateDebugCategory::Drop);
-
-    // ── Particle pipeline ──
-    addFixedUpdateSystem<ParticleSpawnSystem>(FixedUpdateDebugCategory::Particle);
-    addFixedUpdateSystem<ParticleSimulationSystem>(FixedUpdateDebugCategory::Particle);
-    addFixedUpdateSystem<ParticleCleanupSystem>(FixedUpdateDebugCategory::Particle);
-
-    // ── Hunger depletion ──
-    addFixedUpdateSystem<HungerDepletionSystem>();
-
-    // ── Audio pipeline ──
-    addFixedUpdateSystem<PlayerFootstepAudioSystem>();
-    addFixedUpdateSystem<FallRollEffectSystem>();
-    addFixedUpdateSystem<AudioSyncSystem>();
-
-    // ── Steve sync, animation, and transform hierarchy ──
-    addFixedUpdateSystem<SteveSyncSystem>();
-    addFixedUpdateSystem<SteveAnimationSystem>();
-    addFixedUpdateSystem<MobAnimationSystem>();
-    addFixedUpdateSystem<TransformHierarchySystem>();
-
-    // ── Tick-rate pipeline (20 TPS) ──
-    addTickSystem<FluidTickSystem>();
-    addTickSystem<BlockSupportSystem>();
-
-#ifdef MECRAFT_DEBUG
-    validateSystemOrder();
-#endif
-}
+GameplayScene::GameplayScene()
+    : m_pipeline(GameplayPipelineProfile::Client) {}
 
 void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     m_localPlayer = m_registry.create();
@@ -167,69 +74,17 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
 }
 
 void GameplayScene::runFixedUpdate(float dt) {
-    SystemContext ctx{m_registry, m_services, dt, 0};
-    for (auto& system : m_fixedUpdateSystems) {
-        system->update(ctx);
-    }
+    m_pipeline.runFixedUpdate(m_registry, m_services, dt, 0);
 }
 
 #ifdef MECRAFT_DEBUG
 GameplayScene::FixedUpdateProfile GameplayScene::runFixedUpdateProfiled(float dt) {
-    FixedUpdateProfile profile;
-    SystemContext ctx{m_registry, m_services, dt, 0};
-    for (size_t i = 0; i < m_fixedUpdateSystems.size(); ++i) {
-        const auto start = std::chrono::steady_clock::now();
-        m_fixedUpdateSystems[i]->update(ctx);
-        const auto end = std::chrono::steady_clock::now();
-        const auto category = i < m_fixedUpdateDebugCategories.size()
-            ? m_fixedUpdateDebugCategories[i]
-            : FixedUpdateDebugCategory::State;
-        profile.categoryMs[static_cast<size_t>(category)] +=
-            std::chrono::duration<double, std::milli>(end - start).count();
-    }
-    return profile;
+    return m_pipeline.runFixedUpdateProfiled(m_registry, m_services, dt, 0);
 }
 #endif
 
 void GameplayScene::runOneTick() {
-    SystemContext ctx{m_registry, m_services, 0.0f, m_tickClock.tickIndex()};
-    for (auto& system : m_tickSystems) {
-        system->update(ctx);
-    }
+    m_pipeline.runOneTick(m_registry, m_services, 0.0f, m_tickClock.tickIndex());
 }
-
-#ifdef MECRAFT_DEBUG
-void GameplayScene::validateSystemOrder() {
-    std::unordered_set<uint32_t> writtenSoFar;
-    std::unordered_map<uint32_t, const char*> componentWriters;
-
-    // Pre-pass to find all writers
-    for (const auto& info : m_systemDeps) {
-        for (uint32_t written : info.written) {
-            componentWriters[written] = info.systemName;
-        }
-    }
-
-    bool hasWarning = false;
-    // Validate order
-    for (const auto& info : m_systemDeps) {
-        for (uint32_t req : info.required) {
-            if (componentWriters.count(req) && writtenSoFar.count(req) == 0) {
-                std::cerr << "[ECS Order Warning] System " << info.systemName 
-                          << " requires a component written by " << componentWriters[req] 
-                          << ", but is scheduled BEFORE it.\n";
-                hasWarning = true;
-            }
-        }
-        for (uint32_t written : info.written) {
-            writtenSoFar.insert(written);
-        }
-    }
-
-    if (!hasWarning) {
-        // std::cout << "[ECS] System execution order validated successfully.\n";
-    }
-}
-#endif
 
 } // namespace ecs

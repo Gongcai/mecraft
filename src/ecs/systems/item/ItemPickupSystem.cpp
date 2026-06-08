@@ -10,6 +10,7 @@ namespace ecs {
 void ItemPickupSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     constexpr float kDropCollectRadius = 1.35f;
+    constexpr float kAutoPickupDelaySeconds = 0.35f;
 
     auto playerView = registry.view<LocalPlayerTag, TransformComponent, InventoryDataComponent>();
     for (auto e : playerView) {
@@ -19,7 +20,7 @@ void ItemPickupSystem::update(SystemContext& ctx) {
         }
         const auto& transform = playerView.get<TransformComponent>(e);
         auto& inventoryData = playerView.get<InventoryDataComponent>(e);
-        pickup(registry, transform.position, kDropCollectRadius, inventoryData.inventory);
+        pickup(registry, transform.position, kDropCollectRadius, inventoryData.inventory, kAutoPickupDelaySeconds);
     }
 }
 
@@ -27,6 +28,14 @@ uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry,
                                   const glm::vec3& position,
                                   const float radius,
                                   Inventory& inventory) {
+    return pickup(registry, position, radius, inventory, 0.0f);
+}
+
+uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry,
+                                  const glm::vec3& position,
+                                  const float radius,
+                                  Inventory& inventory,
+                                  const float minAgeSeconds) {
     if (radius <= 0.0f) {
         return 0;
     }
@@ -41,6 +50,12 @@ uint32_t ItemPickupSystem::pickup(GameplayRegistry& registry,
         auto& item = view.get<ItemComponent>(e);
         if (item.stackCount == 0 || item.itemId == 0) {
             continue;
+        }
+        if (minAgeSeconds > 0.0f) {
+            const auto* lifetime = registry.registry().try_get<LifetimeComponent>(e);
+            if (lifetime != nullptr && lifetime->ageSeconds < minAgeSeconds) {
+                continue;
+            }
         }
 
         const glm::vec3 delta = transform.position - position;

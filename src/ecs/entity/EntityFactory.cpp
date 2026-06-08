@@ -86,6 +86,33 @@ entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::ve
     return zombie;
 }
 
+entt::entity EntityFactory::createItemDrop(GameplayRegistry& registry, const ItemDropSpawnParams& params) {
+    if (params.itemId == 0 || params.stackCount == 0) {
+        return entt::null;
+    }
+
+    entt::registry& reg = registry.registry();
+    auto& state = ensureDropRuntimeState(registry);
+
+    const std::size_t dropId = params.dropId != 0 ? params.dropId : state.nextId++;
+    if (params.dropId != 0 && state.nextId <= params.dropId) {
+        state.nextId = params.dropId + 1;
+    }
+
+    const entt::entity drop = reg.create();
+    reg.emplace<DropItemTag>(drop);
+    reg.emplace<DropEntityIdComponent>(drop, dropId);
+    reg.emplace<TransformComponent>(drop, params.position, 0.0f);
+    reg.emplace<VelocityComponent>(drop, params.velocity);
+    reg.emplace<ItemComponent>(drop, params.itemId, params.stackCount);
+    reg.emplace<BoundsComponent>(drop, params.halfExtents);
+    reg.emplace<LifetimeComponent>(drop, params.ageSeconds, params.lifeTimeSeconds);
+    reg.emplace<SpinVisualComponent>(drop, params.yawRadians, params.spinSpeedRadians);
+    reg.emplace<GroundedStateComponent>(drop, GroundedStateComponent{params.grounded});
+    reg.emplace<NetworkSyncTag>(drop);
+    return drop;
+}
+
 entt::entity EntityFactory::createAppleProjectile(GameplayRegistry& registry,
                                                   const entt::entity owner,
                                                   const glm::vec3& position,

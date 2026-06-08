@@ -6,47 +6,12 @@
 #include <glm/gtc/constants.hpp>
 
 #include "../../components/Components.h"
-#include "../../components/NetworkComponents.h"
-#include "../../util/DropRuntimeState.h"
+#include "../../entity/EntityFactory.h"
 #include "../../util/DropSpawnEventBuffer.h"
 
 namespace ecs {
 
 namespace {
-
-void ensureDropComponents(entt::registry& registry, const entt::entity e) {
-    if (!registry.all_of<DropItemTag>(e)) {
-        registry.emplace<DropItemTag>(e);
-    }
-    if (!registry.all_of<DropEntityIdComponent>(e)) {
-        registry.emplace<DropEntityIdComponent>(e);
-    }
-    if (!registry.all_of<TransformComponent>(e)) {
-        registry.emplace<TransformComponent>(e);
-    }
-    if (!registry.all_of<ItemComponent>(e)) {
-        registry.emplace<ItemComponent>(e);
-    }
-    if (!registry.all_of<VelocityComponent>(e)) {
-        registry.emplace<VelocityComponent>(e);
-    }
-    if (!registry.all_of<BoundsComponent>(e)) {
-        registry.emplace<BoundsComponent>(e);
-    }
-    if (!registry.all_of<LifetimeComponent>(e)) {
-        registry.emplace<LifetimeComponent>(e);
-    }
-    if (!registry.all_of<SpinVisualComponent>(e)) {
-        registry.emplace<SpinVisualComponent>(e);
-    }
-    if (!registry.all_of<GroundedStateComponent>(e)) {
-        registry.emplace<GroundedStateComponent>(e);
-    }
-    // Mark for network synchronization (EntityNetId assigned by GameServer)
-    if (!registry.all_of<NetworkSyncTag>(e)) {
-        registry.emplace<NetworkSyncTag>(e);
-    }
-}
 
 bool tryMergeDropAtSpawn(GameplayRegistry& registry,
                          const ItemID itemId,
@@ -114,12 +79,20 @@ void ItemSpawnSystem::spawn(GameplayRegistry& registry,
     }
 
     const glm::vec3 spawnPos = glm::vec3(blockPos) + glm::vec3(0.5f, 0.42f, 0.5f);
-    if (tryMergeDropAtSpawn(registry, itemId, spawnPos, stackCount)) {
+    spawnAtPosition(registry, itemId, spawnPos, stackCount);
+}
+
+void ItemSpawnSystem::spawnAtPosition(GameplayRegistry& registry,
+                                      const ItemID itemId,
+                                      const glm::vec3& spawnPos,
+                                      const uint32_t stackCount) {
+    if (itemId == 0 || stackCount == 0) {
         return;
     }
 
-    auto& raw = registry.registry();
-    auto& state = ensureDropRuntimeState(registry);
+    if (tryMergeDropAtSpawn(registry, itemId, spawnPos, stackCount)) {
+        return;
+    }
 
     static std::mt19937 rng{std::random_device{}()};
     std::uniform_real_distribution<float> yawDist(0.0f, glm::two_pi<float>());
@@ -127,30 +100,18 @@ void ItemSpawnSystem::spawn(GameplayRegistry& registry,
     std::uniform_real_distribution<float> horizontalDist(-1.1f, 1.1f);
     std::uniform_real_distribution<float> upwardDist(2.4f, 3.3f);
 
-    const entt::entity e = raw.create();
-    ensureDropComponents(raw, e);
-
-    raw.get<DropEntityIdComponent>(e).dropId = state.nextId++;
-    auto& transform = raw.get<TransformComponent>(e);
-    transform.position = spawnPos;
-    transform.eyeHeight = 0.0f;
-
-    auto& item = raw.get<ItemComponent>(e);
-    item.itemId = itemId;
-    item.stackCount = stackCount;
-
-    raw.get<VelocityComponent>(e).velocity = glm::vec3(horizontalDist(rng), upwardDist(rng), horizontalDist(rng));
-    raw.get<BoundsComponent>(e).halfExtents = glm::vec3(0.175f);
-
-    auto& spin = raw.get<SpinVisualComponent>(e);
-    spin.yawRadians = yawDist(rng);
-    spin.spinSpeedRadians = spinDist(rng);
-
-    auto& lifetime = raw.get<LifetimeComponent>(e);
-    lifetime.ageSeconds = 0.0f;
-    lifetime.lifeTimeSeconds = 30.0f;
-
-    raw.get<GroundedStateComponent>(e).grounded = false;
+    ItemDropSpawnParams params;
+    params.itemId = itemId;
+    params.stackCount = stackCount;
+    params.position = spawnPos;
+    params.velocity = glm::vec3(horizontalDist(rng), upwardDist(rng), horizontalDist(rng));
+    params.halfExtents = glm::vec3(0.175f);
+    params.yawRadians = yawDist(rng);
+    params.spinSpeedRadians = spinDist(rng);
+    params.ageSeconds = 0.0f;
+    params.lifeTimeSeconds = 30.0f;
+    params.grounded = false;
+    EntityFactory::createItemDrop(registry, params);
 }
 
 } // namespace ecs

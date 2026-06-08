@@ -4,21 +4,11 @@
 #include "../world/block/Block.h"
 #include "../thread/ThreadPool.h"
 #include "../save/SaveManager.h"
+#include "../ecs/GameplayPipeline.h"
 #include "../ecs/GameplayRegistry.h"
-#include "../ecs/SystemContext.h"
 #include "../ecs/entity/EntityFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
-#include "../ecs/systems/combat/DamageSystem.h"
-#include "../ecs/systems/combat/DeathSystem.h"
-#include "../ecs/systems/combat/PlayerMeleeSystem.h"
-#include "../ecs/systems/combat/ProjectileSystem.h"
 #include "../ecs/systems/item/ItemSpawnSystem.h"
-#include "../ecs/systems/item/ItemPickupSystem.h"
-#include "../ecs/systems/item/ItemLifetimeSystem.h"
-#include "../ecs/systems/item/ItemMergeSystem.h"
-#include "../ecs/systems/item/ItemPhysicsSystem.h"
-#include "../ecs/systems/mob/MobAISystem.h"
-#include "../ecs/systems/player/CharacterPhysicsSystem.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
@@ -191,6 +181,9 @@ void GameServer::ensureOwnedEcsRuntime() {
     if (!m_ownedPhysicsSystem) {
         m_ownedPhysicsSystem = std::make_unique<physics::PhysicsSystem>(&m_world);
     }
+    if (!m_ownedGameplayPipeline) {
+        m_ownedGameplayPipeline = std::make_unique<ecs::GameplayPipeline>(ecs::GameplayPipelineProfile::Server);
+    }
     if (m_gameplayRegistry == nullptr) {
         m_gameplayRegistry = m_ownedGameplayRegistry.get();
         m_ecsRegistry = &m_ownedGameplayRegistry->registry();
@@ -289,17 +282,13 @@ void GameServer::dropPlayerInventory(ConnectedClient& client) {
         position = transform->position;
     }
 
-    const glm::ivec3 dropBlockPos(static_cast<int>(std::floor(position.x)),
-                                  static_cast<int>(std::floor(position.y)),
-                                  static_cast<int>(std::floor(position.z)));
-
     bool droppedAny = false;
     for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
         const ItemStack stack = inventoryData->inventory.getSlotStack(slot);
         if (stack.isEmpty()) {
             continue;
         }
-        ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, stack.itemId, dropBlockPos, stack.count);
+        ecs::ItemSpawnSystem::spawnAtPosition(*m_gameplayRegistry, stack.itemId, position, stack.count);
         inventoryData->inventory.setSlotStack(slot, {});
         droppedAny = true;
     }
@@ -465,7 +454,7 @@ void GameServer::syncOwnedPlayerProxies() {
 }
 
 void GameServer::tickServerEcs(const float dt) {
-    if (!usingOwnedEcsRegistry() || m_gameplayRegistry == nullptr) {
+    if (!usingOwnedEcsRegistry() || m_gameplayRegistry == nullptr || m_ownedGameplayPipeline == nullptr) {
         return;
     }
 
@@ -480,29 +469,11 @@ void GameServer::tickServerEcs(const float dt) {
     services.worldView = &m_world;
     services.physicsSystem = m_ownedPhysicsSystem.get();
 
-    ecs::SystemContext ctx{*m_gameplayRegistry, services, dt, m_currentTick};
-
-    ecs::MobAISystem mobAI;
-    mobAI.update(ctx);
-    ecs::CharacterPhysicsSystem characterPhysics;
-    characterPhysics.update(ctx);
-    ecs::PlayerMeleeSystem playerMelee;
-    playerMelee.update(ctx);
-    ecs::ProjectileSystem projectileSystem;
-    projectileSystem.update(ctx);
-    ecs::DamageSystem damage;
-    damage.update(ctx);
-    updatePlayerLifecycle(dt);
-    ecs::DeathSystem death;
-    death.update(ctx);
-    ecs::ItemPhysicsSystem itemPhysics;
-    itemPhysics.update(ctx);
-    ecs::ItemMergeSystem itemMerge;
-    itemMerge.update(ctx);
-    ecs::ItemPickupSystem itemPickup;
-    itemPickup.update(ctx);
-    ecs::ItemLifetimeSystem itemLifetime;
-    itemLifetime.update(ctx);
+    ecs::GameplayPipelineHooks hooks;
+    hooks.afterDamageSystem = [this, dt](ecs::SystemContext&) {
+        updatePlayerLifecycle(dt);
+    };
+    m_ownedGameplayPipeline->runFixedUpdate(*m_gameplayRegistry, services, dt, m_currentTick, &hooks);
 
     for (auto& client : m_clients) {
         client.pendingInputActions = 0;

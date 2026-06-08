@@ -24,6 +24,10 @@ public:
                       ItemID itemId,
                       const glm::ivec3& blockPos,
                       uint32_t stackCount);
+    static void spawnAtPosition(GameplayRegistry& registry,
+                                ItemID itemId,
+                                const glm::vec3& spawnPos,
+                                uint32_t stackCount);
 };
 
 } // namespace ecs

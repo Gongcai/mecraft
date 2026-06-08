@@ -1,7 +1,6 @@
 #include "DeathSystem.h"
 
 #include <algorithm>
-#include <cmath>
 #include <vector>
 
 #include "../item/ItemSpawnSystem.h"
@@ -50,12 +49,7 @@ void DeathSystem::update(SystemContext& ctx) {
             if (dropTable->itemId != 0) {
                 const auto* transform = reg.try_get<TransformComponent>(entity);
                 const glm::vec3 position = transform ? transform->position : glm::vec3(0.0f);
-                ItemSpawnSystem::spawn(registry,
-                                       dropTable->itemId,
-                                       glm::ivec3(std::floor(position.x),
-                                                  std::floor(position.y),
-                                                  std::floor(position.z)),
-                                       dropCount(*dropTable));
+                ItemSpawnSystem::spawnAtPosition(registry, dropTable->itemId, position, dropCount(*dropTable));
             }
         }
 

@@ -271,6 +271,7 @@ set(SRC_UI
 
 # [实体与游戏系统]
 set(SRC_ECS
+        src/ecs/GameplayPipeline.cpp
         src/ecs/GameplayScene.cpp
         src/ecs/util/PlayerQuery.cpp
         src/ecs/entity/EntityFactory.cpp
