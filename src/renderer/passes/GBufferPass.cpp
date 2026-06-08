@@ -1,6 +1,7 @@
 #include "GBufferPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../core/RenderSettings.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../../resource/ResourceMgr.h"
@@ -16,6 +17,7 @@ void GBufferPass::shutdown() {
 }
 
 void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContext& ctx,
+                                   const RenderSettings& settings,
                                    DeferredRenderTargets& targets,
                                    HumanoidRenderer* humanoidRenderer,
                                    ecs::GameplayRegistry* gameplayRegistry,
@@ -35,18 +37,20 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
     targets.clearPerObjectVelocity();
     targets.attachPerObjectVelocityToGBuffer();
 
-    // Use jittered view-projection for TAA consistency with terrain.
-    const glm::mat4& viewProj = ctx.camera.jitteredViewProj;
+    // Use the same projection flavor as terrain so depth and velocity agree.
+    const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    const glm::mat4& previousViewProj = settings.taa.enabled ? ctx.previousJitteredViewProj : ctx.previousViewProj;
 
     const HumanoidRenderer::RenderMode mode = renderLocalPlayerModel
         ? HumanoidRenderer::kRenderAll
         : HumanoidRenderer::kRenderMobsOnly;
-    humanoidRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, mode);
+    humanoidRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, previousViewProj, mode);
 
     glBindVertexArray(0);
 }
 
 void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& ctx,
+                                const RenderSettings& settings,
                                 DeferredRenderTargets& targets,
                                 DropRenderer* dropRenderer, DropSystem* dropSystem) {
     if (dropRenderer == nullptr || dropSystem == nullptr) {
@@ -60,8 +64,9 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     // Cross-shaped block drops emit single-sided quads without back-faces
     glDisable(GL_CULL_FACE);
 
-    const glm::mat4& viewProj = ctx.camera.jitteredViewProj;
-    dropRenderer->renderToGBuffer(worldView, *dropSystem, viewProj, ctx.animationTime);
+    const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    const glm::mat4& previousViewProj = settings.taa.enabled ? ctx.previousJitteredViewProj : ctx.previousViewProj;
+    dropRenderer->renderToGBuffer(worldView, *dropSystem, viewProj, previousViewProj, ctx.animationTime);
 
     // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.
     targets.detachPerObjectVelocityFromGBuffer();

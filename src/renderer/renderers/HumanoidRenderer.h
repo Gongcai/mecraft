@@ -34,9 +34,11 @@ public:
     // Caller must have already bound the GBuffer FBO with terrain depth.
     void renderToGBuffer(ecs::GameplayRegistry& registry,
                          const glm::mat4& jitteredViewProj,
+                         const glm::mat4& previousViewProj,
                          RenderMode mode = kRenderAll);
     void renderToGBuffer(const IWorldView& worldView, ecs::GameplayRegistry& registry,
                          const glm::mat4& jitteredViewProj,
+                         const glm::mat4& previousViewProj,
                          RenderMode mode = kRenderAll);
     // Shadow path: renders entities into the CSM shadow map.
     // Caller must have already bound the shadow FBO layer.

@@ -29,7 +29,9 @@ public:
 	// GBuffer path: renders drops into the deferred GBuffer (5 MRT).
 	// Caller must have already bound the GBuffer FBO with terrain+entity depth.
 	void renderToGBuffer(const IWorldView& worldView, const DropSystem& dropSystem,
-	                     const glm::mat4& jitteredViewProj, float animationTime);
+	                     const glm::mat4& jitteredViewProj,
+	                     const glm::mat4& previousViewProj,
+	                     float animationTime);
 	// Shadow path: renders drops into the CSM shadow map.
 	// Caller must have already bound the shadow FBO layer.
 	void renderToShadowMap(const IWorldView& worldView, const DropSystem& dropSystem,

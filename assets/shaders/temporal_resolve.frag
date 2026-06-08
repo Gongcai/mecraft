@@ -51,6 +51,10 @@ vec3 invReinhard(in vec3 color) {
     return color / (1.0 - GetLuminance(color));
 }
 
+bool badVec2(vec2 v) {
+    return any(isnan(v)) || any(isinf(v));
+}
+
 vec3 clipAABB(in vec3 boxMin, in vec3 boxMax, in vec3 previousSample) {
     vec3 p_clip = 0.5 * (boxMax + boxMin);
     vec3 e_clip = 0.5 * (boxMax - boxMin);
@@ -107,6 +111,14 @@ void main() {
 
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
     vec2 previousCoord = screenCoord - velocity;
+
+    // Bad motion vectors make texture() with NaN/Inf coordinates undefined,
+    // which appears as stable-shaped regions filled with drifting history.
+    if (badVec2(velocity) || badVec2(previousCoord) ||
+        any(greaterThan(abs(velocity), vec2(1.0)))) {
+        FragColor = texelFetch(uCurrentTex, texel, 0);
+        return;
+    }
 
     // Out-of-bounds history: use current frame
     if (previousCoord.x < 0.0 || previousCoord.x > 1.0 ||

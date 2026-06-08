@@ -665,7 +665,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(child);
-                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
                 }
                 shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
@@ -690,7 +690,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
                     if (prevModelLoc >= 0) {
                         auto it = m_previousModelMatrices.find(partEntity);
-                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
                     }
                     shader.setMat4(modelLoc, world.worldMatrix);
                     glBindVertexArray(mesh->vao);
@@ -724,7 +724,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(child);
-                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
                 }
                 shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
@@ -749,7 +749,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
                     if (prevModelLoc >= 0) {
                         auto it = m_previousModelMatrices.find(partEntity);
-                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
                     }
                     shader.setMat4(modelLoc, world.worldMatrix);
                     glBindVertexArray(mesh->vao);
@@ -832,7 +832,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(child);
-                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
                 }
                 shader.setMat4(modelLoc, wt.worldMatrix);
                 glBindVertexArray(mesh->vao);
@@ -857,7 +857,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
                     if (prevModelLoc >= 0) {
                         auto it = m_previousModelMatrices.find(partEntity);
-                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
                     }
                     shader.setMat4(modelLoc, wt.worldMatrix);
                     glBindVertexArray(mesh->vao);
@@ -915,7 +915,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(child);
-                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
                 }
                 shader.setMat4(modelLoc, wt.worldMatrix);
                 glBindVertexArray(mesh->vao);
@@ -940,7 +940,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
                     if (prevModelLoc >= 0) {
                         auto it = m_previousModelMatrices.find(partEntity);
-                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
                     }
                     shader.setMat4(modelLoc, wt.worldMatrix);
                     glBindVertexArray(mesh->vao);
@@ -973,6 +973,7 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
 
 void HumanoidRenderer::renderToGBuffer(ecs::GameplayRegistry& gameplayReg,
                                         const glm::mat4& jitteredViewProj,
+                                        const glm::mat4& previousViewProj,
                                         RenderMode mode) {
     if (m_gbufferShader == nullptr || m_resourceMgr == nullptr) return;
 
@@ -982,6 +983,8 @@ void HumanoidRenderer::renderToGBuffer(ecs::GameplayRegistry& gameplayReg,
 
     // GBuffer FBO is already bound by the caller (Renderer).
     // Depth test/write enabled, blend disabled — set by caller.
+    m_gbufferShader->use();
+    m_gbufferShader->setMat4("prevViewProj", previousViewProj);
     drawEntities(gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 
@@ -1000,6 +1003,7 @@ void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
 
 void HumanoidRenderer::renderToGBuffer(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
                                         const glm::mat4& jitteredViewProj,
+                                        const glm::mat4& previousViewProj,
                                         RenderMode mode) {
     if (m_gbufferShader == nullptr || m_resourceMgr == nullptr) return;
 
@@ -1007,6 +1011,8 @@ void HumanoidRenderer::renderToGBuffer(const IWorldView& worldView, ecs::Gamepla
     const int viewProjLoc = m_gbufferShader->getUniformLocation("viewProj");
     const int prevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
 
+    m_gbufferShader->use();
+    m_gbufferShader->setMat4("prevViewProj", previousViewProj);
     drawEntities(worldView, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 

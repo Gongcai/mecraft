@@ -199,11 +199,13 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
         // Entity and drop GBuffer
         if (m_gbufferPass) {
-            m_gbufferPass->executeEntities(*ctx.worldView, ctx, targets,
+            m_gbufferPass->executeEntities(*ctx.worldView, ctx, m_currentSettings,
+                                           targets,
                                            m_shared->humanoidRenderer,
                                            m_shared->gameplayRegistry,
                                            ctx.renderLocalPlayerModel);
-            m_gbufferPass->executeDrops(*ctx.worldView, ctx, targets,
+            m_gbufferPass->executeDrops(*ctx.worldView, ctx, m_currentSettings,
+                                        targets,
                                         m_shared->dropRenderer, m_shared->dropSystem);
         }
     }

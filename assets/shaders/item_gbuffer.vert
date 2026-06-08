@@ -12,6 +12,7 @@ layout (location = 3) in vec3 aNormal;
 uniform mat4 viewProj;
 uniform mat4 model;
 uniform mat4 prevModel;
+uniform mat4 prevViewProj;
 
 out vec2 vUV;
 out float vShade;
@@ -28,8 +29,8 @@ void main() {
     vNormal = normalize(mat3(model) * aNormal);
 
     // Per-object velocity for TAA/motion blur.
-    vec4 prevClip = viewProj * prevModel * vec4(aPos, 1.0);
+    vec4 prevClip = prevViewProj * prevModel * vec4(aPos, 1.0);
     vec2 curNdc = gl_Position.xy / max(gl_Position.w, 0.00001);
     vec2 prevNdc = prevClip.xy / max(prevClip.w, 0.00001);
-    vVelocity = curNdc - prevNdc;
+    vVelocity = (curNdc - prevNdc) * 0.5;
 }

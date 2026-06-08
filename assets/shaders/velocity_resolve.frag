@@ -9,6 +9,7 @@ uniform mat4 uInvViewProj;
 uniform mat4 uPreviousViewProj;
 uniform vec2 uScreenSize;
 uniform int uForceZeroVelocity; // A/B test: 1 = output zero velocity everywhere
+const vec2 kRejectHistoryVelocity = vec2(2.0);
 
 // DerivativeMain: 3x3 neighborhood offsets (excluding center)
 const ivec2 offset3x3N[8] = ivec2[8](
@@ -17,10 +18,30 @@ const ivec2 offset3x3N[8] = ivec2[8](
     ivec2(-1,  1), ivec2(0,  1), ivec2(1,  1)
 );
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
+bool badVec2(vec2 v) {
+    return any(isnan(v)) || any(isinf(v));
+}
+
+bool badVec4(vec4 v) {
+    return any(isnan(v)) || any(isinf(v));
+}
+
+vec2 sanitizeVelocity(vec2 velocity) {
+    if (badVec2(velocity)) {
+        return kRejectHistoryVelocity;
+    }
+    // Keep finite but very large reprojection errors bounded before RG16F storage.
+    return clamp(velocity, vec2(-2.0), vec2(2.0));
+}
+
+vec3 reconstructWorldPosition(vec2 uv, float depth, out bool valid) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
-    return world.xyz / max(world.w, 0.00001);
+    valid = !badVec4(world) && abs(world.w) > 0.00001;
+    if (!valid) {
+        return vec3(0.0);
+    }
+    return world.xyz / world.w;
 }
 
 void main() {
@@ -51,9 +72,19 @@ void main() {
     // DerivativeMain/program/Post/Temporal.frag::GetClosestFragment returns
     // closestFragment.xy *= screenPixelSize, without a half-texel offset.
     vec2 closestUv = closestFragment.xy / uScreenSize;
-    vec3 worldPos = reconstructWorldPosition(closestUv, closestFragment.z);
+    bool worldValid = false;
+    vec3 worldPos = reconstructWorldPosition(closestUv, closestFragment.z, worldValid);
+    if (!worldValid) {
+        FragVelocity = kRejectHistoryVelocity;
+        return;
+    }
+
     vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
-    vec2 previousUv = previousClip.xy / max(previousClip.w, 0.00001) * 0.5 + 0.5;
+    if (badVec4(previousClip) || previousClip.w <= 0.00001) {
+        FragVelocity = kRejectHistoryVelocity;
+        return;
+    }
+    vec2 previousUv = previousClip.xy / previousClip.w * 0.5 + 0.5;
 
     // DerivativeMain raw reprojection: Reproject() uses raw projection
     // matrices and does not manually subtract current/previous jitter.
@@ -63,5 +94,8 @@ void main() {
     // velocity to a separate texture via MRT. Use it when non-zero to
     // override camera-only reprojection for moving objects.
     vec2 perObjectVel = texelFetch(uPerObjectVelocityTex, ivec2(closestFragment.xy), 0).rg;
-    FragVelocity = (dot(perObjectVel, perObjectVel) > 1e-10) ? perObjectVel : cameraVelocity;
+    vec2 velocity = (!badVec2(perObjectVel) && dot(perObjectVel, perObjectVel) > 1e-10)
+        ? perObjectVel
+        : cameraVelocity;
+    FragVelocity = sanitizeVelocity(velocity);
 }

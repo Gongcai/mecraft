@@ -541,6 +541,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
 
 void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem& dropSystem,
                                     const glm::mat4& jitteredViewProj,
+                                    const glm::mat4& previousViewProj,
                                     float animationTime) {
     if (m_resourceMgr == nullptr) {
         return;
@@ -565,6 +566,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
     if (canRenderBlocks) {
         m_gbufferShader->use();
         m_gbufferShader->setMat4("viewProj", jitteredViewProj);
+        m_gbufferShader->setMat4("prevViewProj", previousViewProj);
         blockModelLoc = m_gbufferShader->getUniformLocation("model");
         blockPrevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
         m_gbufferShader->setInt("uVertexFormat", 0);
@@ -581,6 +583,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
     if (canRenderItems) {
         m_itemGBufferShader->use();
         m_itemGBufferShader->setMat4("viewProj", jitteredViewProj);
+        m_itemGBufferShader->setMat4("prevViewProj", previousViewProj);
         itemModelLoc = m_itemGBufferShader->getUniformLocation("model");
         itemPrevModelLoc = m_itemGBufferShader->getUniformLocation("prevModel");
         m_itemGBufferShader->setInt("uAtlas", 0);
@@ -606,7 +609,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
             if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
                 m_itemGBufferShader->use();
                 auto it = m_previousModelMatrices.find(drop.id);
-                m_itemGBufferShader->setMat4(itemPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+                m_itemGBufferShader->setMat4(itemPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
                 m_itemGBufferShader->setMat4(itemModelLoc, model);
                 m_itemGBufferShader->setFloat("uDropSunlight", light.x);
                 m_itemGBufferShader->setFloat("uDropBlockLight", light.y);
@@ -630,7 +633,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
 
         m_gbufferShader->use();
         auto it = m_previousModelMatrices.find(drop.id);
-        m_gbufferShader->setMat4(blockPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : glm::mat4(1.0f));
+        m_gbufferShader->setMat4(blockPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
         m_gbufferShader->setMat4(blockModelLoc, model);
         m_gbufferShader->setFloat("uDropSunlight", light.x);
         m_gbufferShader->setFloat("uDropBlockLight", light.y);
