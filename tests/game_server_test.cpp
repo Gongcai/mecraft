@@ -1428,6 +1428,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
                 sawProjectileImpact =
                     sawProjectileImpact ||
                     (impact.particleBlockId != 0 &&
+                     impact.particleCount == 14 &&
                      std::find(projectileNetIds.begin(), projectileNetIds.end(), impact.netId) != projectileNetIds.end());
             }
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {

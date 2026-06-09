@@ -218,15 +218,17 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
             m_registry->all_of<ecs::ProjectileTag, ecs::TransformComponent>(it->second)) {
             const auto& transform = m_registry->get<ecs::TransformComponent>(it->second);
             BlockID particleBlock = ecs::defaultProjectileEntityImpactParticleBlock();
+            int particleCount = 14;
             std::string impactSoundId;
             if (const auto* projectile = m_registry->try_get<ecs::ProjectileComponent>(it->second)) {
                 if (projectile->entityImpactParticleBlock != 0) {
                     particleBlock = projectile->entityImpactParticleBlock;
                 }
+                particleCount = projectile->entityImpactParticleCount;
                 impactSoundId = projectile->impactSoundId;
             }
             ecs::ensureParticleEventBus(*m_gameplayRegistry)
-                .push(ecs::makeImpactParticleEvent(transform.position, particleBlock));
+                .push(ecs::makeImpactParticleEvent(transform.position, particleBlock, particleCount));
             queueAudioEvent(m_gameplayRegistry, impactSoundId, transform.position);
         }
 
@@ -402,6 +404,7 @@ void ClientEntityStore::createProjectileEntity(const net::EntitySpawnMessage& ms
                                                   definition.hitRadius,
                                                   definition.gravity,
                                                   definition.entityImpactParticleBlock,
+                                                  definition.entityImpactParticleCount,
                                                   definition.impactSoundId);
     m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 0.0f);
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);

@@ -276,6 +276,7 @@ set(SRC_ECS
         src/ecs/GameplayPipeline.cpp
         src/ecs/GameplayScene.cpp
         src/ecs/util/PlayerQuery.cpp
+        src/ecs/util/ProjectileDefinitions.cpp
         src/ecs/entity/EntityDefinitionRegistry.cpp
         src/ecs/entity/EntityFactory.cpp
         src/ecs/entity/SteveModelFactory.cpp
@@ -556,6 +557,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(audio_decoder_registry_test tests/audio_decoder_registry_test.cpp)
     add_mecraft_test(audio_test tests/audio_test.cpp)
     add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
+    add_mecraft_test(projectile_definition_test tests/projectile_definition_test.cpp)
     add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
     add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)

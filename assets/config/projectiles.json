@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "projectiles": [
+    {
+      "item": "minecraft:apple",
+      "damage": 5,
+      "hitRadius": 0.45,
+      "gravity": 8.0,
+      "throwSpeed": 15.0,
+      "upwardBias": 1.2,
+      "spawnForwardOffset": 0.75,
+      "boundsHalfExtent": 0.22,
+      "lifetimeSeconds": 4.0,
+      "spinSpeedRadians": 10.0,
+      "throwSound": "item.apple.throw",
+      "impact": {
+        "particleBlock": "minecraft:rose",
+        "particleCount": 14,
+        "sound": "item.apple.impact"
+      }
+    }
+  ]
+}

@@ -23,6 +23,7 @@ struct ProjectileDefinition {
     float lifetimeSeconds = 4.0f;
     float spinSpeedRadians = 10.0f;
     BlockID entityImpactParticleBlock = 0;
+    int entityImpactParticleCount = 14;
     std::string throwSoundId;
     std::string impactSoundId;
 };
@@ -33,6 +34,7 @@ struct ProjectileComponent {
     float hitRadius = 0.45f;
     float gravity = 8.0f;
     BlockID entityImpactParticleBlock = 0;
+    int entityImpactParticleCount = 14;
     std::string impactSoundId;
 };
 

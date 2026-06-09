@@ -200,6 +200,8 @@ static void testProjectileSpawnCreatesAppleReplica() {
             "projectile replica gravity should come from item projectile definition");
     require(projectileComponent.entityImpactParticleBlock == appleDefinition.entityImpactParticleBlock,
             "projectile replica impact particles should come from item projectile definition");
+    require(projectileComponent.entityImpactParticleCount == appleDefinition.entityImpactParticleCount,
+            "projectile replica impact particle count should come from item projectile definition");
     require(projectileComponent.impactSoundId == appleDefinition.impactSoundId,
             "projectile replica impact sound should come from item projectile definition");
     require(std::fabs(raw.get<ecs::BoundsComponent>(projectile).halfExtents.x -
@@ -237,6 +239,7 @@ static void testProjectileSpawnCreatesAppleReplica() {
     impact.netId = 91;
     impact.position = glm::vec3(2.25f, 66.5f, 3.0f);
     impact.particleBlockId = static_cast<uint16_t>(appleDefinition.entityImpactParticleBlock);
+    impact.particleCount = static_cast<uint16_t>(appleDefinition.entityImpactParticleCount);
     store.handleImpact(impact);
 
     require(registry.ctxHas<ecs::ParticleEventBus>(),
@@ -247,6 +250,8 @@ static void testProjectileSpawnCreatesAppleReplica() {
             "projectile impact event should use server-provided world position");
     require(particleBus.peek().front().blockType == appleDefinition.entityImpactParticleBlock,
             "projectile impact event should use server-provided particle texture block");
+    require(particleBus.peek().front().particleCount == appleDefinition.entityImpactParticleCount,
+            "projectile impact event should use server-provided particle count");
     require(audioBus.size() == 2, "projectile impact should queue an impact sound event");
     require(audioBus.peek().back().clipName == appleDefinition.impactSoundId,
             "projectile impact sound should come from item projectile definition");

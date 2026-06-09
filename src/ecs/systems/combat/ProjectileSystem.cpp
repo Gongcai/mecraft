@@ -41,11 +41,12 @@ bool isSolidBlockAt(const IWorldView& worldView, const glm::vec3& position, Bloc
 
 void emitProjectileImpactParticles(GameplayRegistry& registry,
                                    const glm::vec3& position,
-                                   const BlockID blockType) {
+                                   const BlockID blockType,
+                                   const int particleCount) {
     if (blockType == 0) {
         return;
     }
-    ensureParticleEventBus(registry).push(makeImpactParticleEvent(position, blockType));
+    ensureParticleEventBus(registry).push(makeImpactParticleEvent(position, blockType, particleCount));
 }
 
 void emitProjectileSound(GameplayRegistry& registry,
@@ -71,9 +72,10 @@ void queueProjectileImpactDespawn(entt::registry& reg,
                                   const entt::entity projectile,
                                   const glm::vec3& position,
                                   const BlockID particleBlock,
+                                  const int particleCount,
                                   std::vector<entt::entity>& destroyList) {
     if (reg.all_of<EntityNetIdComponent>(projectile)) {
-        reg.emplace_or_replace<EntityImpactComponent>(projectile, position, particleBlock);
+        reg.emplace_or_replace<EntityImpactComponent>(projectile, position, particleBlock, particleCount);
         reg.emplace_or_replace<PendingNetworkDespawnTag>(projectile);
         return;
     }
@@ -270,9 +272,17 @@ void ProjectileSystem::update(SystemContext& ctx) {
 
             BlockID hitBlock = 0;
             if (isSolidBlockAt(worldView, transform.position, hitBlock)) {
-                emitProjectileImpactParticles(registry, transform.position, hitBlock);
+                emitProjectileImpactParticles(registry,
+                                              transform.position,
+                                              hitBlock,
+                                              projectileData.entityImpactParticleCount);
                 emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
-                queueProjectileImpactDespawn(reg, projectile, transform.position, hitBlock, destroyList);
+                queueProjectileImpactDespawn(reg,
+                                             projectile,
+                                             transform.position,
+                                             hitBlock,
+                                             projectileData.entityImpactParticleCount,
+                                             destroyList);
                 destroyed = true;
                 break;
             }
@@ -283,9 +293,17 @@ void ProjectileSystem::update(SystemContext& ctx) {
                 const BlockID impactBlock = projectileData.entityImpactParticleBlock != 0
                     ? projectileData.entityImpactParticleBlock
                     : defaultProjectileEntityImpactParticleBlock();
-                emitProjectileImpactParticles(registry, transform.position, impactBlock);
+                emitProjectileImpactParticles(registry,
+                                              transform.position,
+                                              impactBlock,
+                                              projectileData.entityImpactParticleCount);
                 emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
-                queueProjectileImpactDespawn(reg, projectile, transform.position, impactBlock, destroyList);
+                queueProjectileImpactDespawn(reg,
+                                             projectile,
+                                             transform.position,
+                                             impactBlock,
+                                             projectileData.entityImpactParticleCount,
+                                             destroyList);
                 destroyed = true;
                 break;
             }
