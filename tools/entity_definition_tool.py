@@ -14,7 +14,9 @@ DEFAULT_ENTITIES_PATH = Path("assets/config/entities.json")
 DEFAULT_ITEMS_PATH = Path("assets/config/items.json")
 DEFAULT_BLOCKS_PATH = Path("assets/config/blocks.json")
 DEFAULT_SOUNDS_PATH = Path("assets/sounds/sounds.json")
+DEFAULT_MOB_TEXTURES_DIR = Path("assets/textures/entity/mobs")
 SUPPORTED_MODELS = {"humanoid"}
+TEXTURE_KEY_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -81,6 +83,7 @@ def validate_entity(
     known_items: set[str],
     known_blocks: set[str],
     known_sounds: set[str],
+    mob_textures_dir: Path,
     seen_ids: set[str],
     errors: list[str],
 ) -> None:
@@ -103,6 +106,14 @@ def validate_entity(
     texture = entity.get("texture", "")
     require(isinstance(texture, str) and bool(texture),
             f"{context}.texture must be a non-empty texture key", errors)
+    if isinstance(texture, str) and texture:
+        require(all(char in TEXTURE_KEY_CHARS for char in texture),
+                f"{context}.texture must be a filename key, not a path: {texture}",
+                errors)
+        texture_path = mob_textures_dir / f"{texture}.png"
+        require(texture_path.exists(),
+                f"{context}.texture references a missing mob texture: {texture_path}",
+                errors)
     scale = entity.get("scale", 1.0)
     require(isinstance(scale, (int, float)) and scale > 0,
             f"{context}.scale must be a positive number", errors)
@@ -194,7 +205,13 @@ def validate_entity(
                     f"{context}.hurtEffect.flashDurationSeconds must be a positive number", errors)
 
 
-def validate_file(path: Path, items_path: Path, blocks_path: Path, sounds_path: Path) -> list[str]:
+def validate_file(
+    path: Path,
+    items_path: Path,
+    blocks_path: Path,
+    sounds_path: Path,
+    mob_textures_dir: Path,
+) -> list[str]:
     data = load_json(path)
     entities = data.get("entities")
     errors: list[str] = []
@@ -207,7 +224,7 @@ def validate_file(path: Path, items_path: Path, blocks_path: Path, sounds_path: 
     known_sounds = collect_known_sound_ids(sounds_path)
     seen_ids: set[str] = set()
     for index, entity in enumerate(entities):
-        validate_entity(entity, index, known_items, known_blocks, known_sounds, seen_ids, errors)
+        validate_entity(entity, index, known_items, known_blocks, known_sounds, mob_textures_dir, seen_ids, errors)
     return errors
 
 
@@ -275,7 +292,7 @@ def scaffold_entity(args: argparse.Namespace) -> int:
 
 
 def validate_command(args: argparse.Namespace) -> int:
-    errors = validate_file(args.path, args.items, args.blocks, args.sounds)
+    errors = validate_file(args.path, args.items, args.blocks, args.sounds, args.mob_textures)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
@@ -293,6 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--items", type=Path, default=DEFAULT_ITEMS_PATH)
     validate.add_argument("--blocks", type=Path, default=DEFAULT_BLOCKS_PATH)
     validate.add_argument("--sounds", type=Path, default=DEFAULT_SOUNDS_PATH)
+    validate.add_argument("--mob-textures", type=Path, default=DEFAULT_MOB_TEXTURES_DIR)
     validate.set_defaults(func=validate_command)
 
     scaffold = subcommands.add_parser("scaffold", help="append a default mob definition")

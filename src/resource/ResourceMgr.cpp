@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <unordered_set>
 #include <vector>
 #include <nlohmann/json.hpp>
 #include "../third_party/stb/stb_image.h"
@@ -996,6 +997,54 @@ void ResourceMgr::preloadTextureAnimationsFromConfig(const std::string& blocksCo
 
             m_declaredTextureAnimations[textureIt->get<std::string>()] = info;
         }
+    }
+}
+
+void ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {
+    std::ifstream file(entitiesConfigPath);
+    if (!file.is_open()) {
+        return;
+    }
+
+    nlohmann::json root;
+    try {
+        file >> root;
+    } catch (const std::exception&) {
+        return;
+    }
+
+    const auto entitiesIt = root.find("entities");
+    if (entitiesIt == root.end() || !entitiesIt->is_array()) {
+        return;
+    }
+
+    std::unordered_set<std::string> loadedTextureKeys;
+    for (const auto& entityJson : *entitiesIt) {
+        if (!entityJson.is_object()) {
+            continue;
+        }
+
+        const auto kindIt = entityJson.find("kind");
+        if (kindIt != entityJson.end() && (!kindIt->is_string() || kindIt->get<std::string>() != "mob")) {
+            continue;
+        }
+
+        const auto textureIt = entityJson.find("texture");
+        if (textureIt == entityJson.end() || !textureIt->is_string()) {
+            continue;
+        }
+
+        const std::string textureKey = textureIt->get<std::string>();
+        if (textureKey.empty() ||
+            textureKey.find('/') != std::string::npos ||
+            textureKey.find('\\') != std::string::npos ||
+            loadedTextureKeys.find(textureKey) != loadedTextureKeys.end()) {
+            continue;
+        }
+
+        loadedTextureKeys.insert(textureKey);
+        const std::string texturePath = std::string(MOBS_TEXTURE_DIR) + "/" + textureKey + ".png";
+        loadGuiTexture(textureKey, texturePath, true);
     }
 }
 

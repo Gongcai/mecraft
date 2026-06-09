@@ -82,6 +82,7 @@ public:
     void buildTextureArray(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureArray& getTextureArray() const;
     void preloadTextureAnimationsFromConfig(const std::string& blocksConfigPath);
+    void preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath);
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
     [[nodiscard]] TextureAnimationInfo getTextureAnimation(const std::string& name) const;
 
