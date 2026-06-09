@@ -183,6 +183,24 @@ static void testChunkStreamingToClient() {
     std::printf("[PASS] testChunkStreamingToClient\n");
 }
 
+static void testClientViewConfigExpandsServerStreamingRadius() {
+    ServerHarness harness(8);
+
+    client::GameClient client;
+
+    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverTransport), 1);
+    client.connect(std::move(clientTransport));
+    client.sendViewConfig(16);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+
+    require(harness.server.world().getRenderDistance() == 16,
+            "client view config should expand server world render distance");
+    std::printf("[PASS] testClientViewConfigExpandsServerStreamingRadius\n");
+}
+
 static void testInputRoundTrip() {
     ServerHarness harness;
 
@@ -2784,6 +2802,7 @@ int main() {
     testClientServerHandshake();
     testServerTick();
     testChunkStreamingToClient();
+    testClientViewConfigExpandsServerStreamingRadius();
     testInputRoundTrip();
     testClientAppliesPlayerHealthSnapshot();
     testClientAppliesInventorySnapshot();

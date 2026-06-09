@@ -6,6 +6,7 @@
 #include "ClientWorld.h"
 #include "ClientEntityStore.h"
 #include <entt/entt.hpp>
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
@@ -76,6 +77,8 @@ public:
 
     /// Check if the client has received initial spawn chunks from the server.
     [[nodiscard]] bool areSpawnChunksReady() const { return m_spawnChunksReady; }
+    [[nodiscard]] int spawnChunksLoadedCount() const { return std::min(m_chunksReceived, kSpawnChunksThreshold); }
+    [[nodiscard]] int spawnChunksTargetCount() const { return kSpawnChunksThreshold; }
     [[nodiscard]] bool hasServerHello() const { return m_hasServerHello; }
 
     /// Get the latest authoritative position from the server.

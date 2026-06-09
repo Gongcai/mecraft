@@ -623,10 +623,11 @@ GameSession::InitialLoadProgress GameSession::getInitialLoadProgress() const {
 
     if (m_client) {
         const auto clientProgress = m_client->clientWorld().getChunkLoadProgress(loadCenter);
-        progress.clientLoaded = clientProgress.loaded;
-        progress.serverLoaded = clientProgress.loaded;
-        progress.target = clientProgress.target;
-        progress.complete = progress.target > 0 && progress.clientLoaded >= progress.target;
+        progress.clientLoaded = m_client->spawnChunksLoadedCount();
+        progress.serverLoaded = progress.clientLoaded;
+        progress.target = m_client->spawnChunksTargetCount();
+        progress.inFlight = std::max(0, clientProgress.target - clientProgress.loaded);
+        progress.complete = m_client->areSpawnChunksReady();
     }
     return progress;
 }

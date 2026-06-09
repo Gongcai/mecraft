@@ -29,6 +29,7 @@ namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
+constexpr int kMaxClientViewDistance = 32;
 
 std::string playerName(const net::ClientId id) {
     return "Player" + std::to_string(id);
@@ -645,6 +646,7 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     client.lastPosition = m_spawnPosition;
     client.playerNetId = kPlayerNetIdBase | id;
     client.isAdmin = id == 1;
+    client.viewDistance = m_world.getRenderDistance();
     m_clients.push_back(std::move(client));
     std::printf("[Server] Accepted transport slot for client %u admin=%d\n", id, id == 1 ? 1 : 0);
     std::fflush(stdout);
@@ -799,10 +801,14 @@ void GameServer::processClientMessages() {
                 client.receivedViewConfig = true;
                 if (packet.inProcessPayload.has_value()) {
                     const auto& config = std::any_cast<const net::ClientViewConfig&>(packet.inProcessPayload);
-                    client.viewDistance = std::max(1, config.renderDistance);
-                    std::printf("[Server] ClientViewConfig client=%u renderDistance=%d\n",
+                    client.viewDistance = std::clamp(config.renderDistance, 1, kMaxClientViewDistance);
+                    if (client.viewDistance > m_world.getRenderDistance()) {
+                        m_world.setRenderDistance(client.viewDistance);
+                    }
+                    std::printf("[Server] ClientViewConfig client=%u renderDistance=%d worldRenderDistance=%d\n",
                                 client.id,
-                                client.viewDistance);
+                                client.viewDistance,
+                                m_world.getRenderDistance());
                     std::fflush(stdout);
                 }
                 break;

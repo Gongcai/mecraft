@@ -35,7 +35,7 @@ struct ConnectedClient {
     uint32_t lastAckedInput = 0;
     uint32_t pendingInputActions = 0;
     net::TickId helloTick = 0;
-    int viewDistance = 16;  // Client's render distance
+    int viewDistance = 8;  // Effective client streaming radius until ClientViewConfig arrives.
     bool receivedHello = false;
     bool receivedViewConfig = false;
     bool isAdmin = false;
