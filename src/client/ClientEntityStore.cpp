@@ -173,12 +173,65 @@ ecs::NetworkInterpolationComponent& ensureNetworkInterpolation(entt::registry& r
     auto* interpolation = registry.try_get<ecs::NetworkInterpolationComponent>(entity);
     if (interpolation == nullptr) {
         interpolation = &registry.emplace<ecs::NetworkInterpolationComponent>(entity);
+        interpolation->targetPosition = position;
+        interpolation->targetVelocity = velocity;
+        interpolation->targetYaw = yaw;
+        interpolation->targetPitch = pitch;
     }
-    interpolation->targetPosition = position;
-    interpolation->targetVelocity = velocity;
-    interpolation->targetYaw = yaw;
-    interpolation->targetPitch = pitch;
     return *interpolation;
+}
+
+void setNetworkInterpolationTarget(ecs::NetworkInterpolationComponent& interpolation,
+                                   const uint32_t serverTick,
+                                   const net::EntitySnapshotItem& item) {
+    interpolation.targetPosition = item.position;
+    interpolation.targetVelocity = item.velocity;
+    interpolation.targetYaw = item.yaw;
+    interpolation.targetPitch = item.pitch;
+    interpolation.latestServerTick = serverTick;
+    interpolation.hasTarget = true;
+}
+
+void insertNetworkSnapshot(ecs::NetworkInterpolationComponent& interpolation,
+                           const uint32_t serverTick,
+                           const net::EntitySnapshotItem& item) {
+    const bool firstBufferedSnapshot = interpolation.snapshotCount == 0;
+    const ecs::NetworkSnapshotSample sample{
+        serverTick,
+        item.position,
+        item.velocity,
+        item.yaw,
+        item.pitch
+    };
+
+    if (interpolation.snapshotCount == 0 || serverTick >= interpolation.latestServerTick) {
+        setNetworkInterpolationTarget(interpolation, serverTick, item);
+    }
+    if (firstBufferedSnapshot && !interpolation.hasRenderServerTick) {
+        interpolation.renderServerTick = static_cast<float>(serverTick);
+        interpolation.hasRenderServerTick = true;
+    }
+
+    for (std::size_t i = 0; i < interpolation.snapshotCount; ++i) {
+        if (interpolation.snapshots[i].serverTick == serverTick) {
+            interpolation.snapshots[i] = sample;
+            return;
+        }
+    }
+
+    if (interpolation.snapshotCount < interpolation.snapshots.size()) {
+        interpolation.snapshots[interpolation.snapshotCount++] = sample;
+    } else if (serverTick > interpolation.snapshots.front().serverTick) {
+        interpolation.snapshots.front() = sample;
+    } else {
+        return;
+    }
+
+    std::sort(interpolation.snapshots.begin(),
+              interpolation.snapshots.begin() + static_cast<std::ptrdiff_t>(interpolation.snapshotCount),
+              [](const ecs::NetworkSnapshotSample& a, const ecs::NetworkSnapshotSample& b) {
+                  return a.serverTick < b.serverTick;
+              });
 }
 
 void snapReplicaToSnapshot(entt::registry& registry,
@@ -362,7 +415,7 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
                                                          item.yaw,
                                                          item.pitch);
         const bool firstSnapshotTarget = !interpolation.hasTarget;
-        interpolation.hasTarget = true;
+        insertNetworkSnapshot(interpolation, msg.serverTick, item);
         if (firstSnapshotTarget) {
             snapReplicaToSnapshot(*m_registry, it->second, item);
         }

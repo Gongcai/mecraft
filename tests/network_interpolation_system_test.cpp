@@ -65,6 +65,84 @@ static void testSnapsWhenTargetIsTooFar() {
             "interpolation should snap large corrections");
 }
 
+static void testSamplesBufferedPoseBetweenServerTicks() {
+    ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    auto& raw = registry.registry();
+
+    const entt::entity entity = raw.create();
+    raw.emplace<ecs::TransformComponent>(entity, glm::vec3(0.0f), 0.0f);
+    auto& interpolation = raw.emplace<ecs::NetworkInterpolationComponent>(entity);
+    interpolation.hasTarget = true;
+    interpolation.serverTickRate = 20.0f;
+    interpolation.interpolationDelayTicks = 0.0f;
+    interpolation.snapDistance = 100.0f;
+    interpolation.renderServerTick = 10.0f;
+    interpolation.hasRenderServerTick = true;
+    interpolation.latestServerTick = 11;
+    interpolation.snapshotCount = 2;
+    interpolation.snapshots[0].serverTick = 10;
+    interpolation.snapshots[0].position = glm::vec3(0.0f, 0.0f, 0.0f);
+    interpolation.snapshots[0].yaw = 0.0f;
+    interpolation.snapshots[0].pitch = 0.0f;
+    interpolation.snapshots[1].serverTick = 11;
+    interpolation.snapshots[1].position = glm::vec3(10.0f, 0.0f, 0.0f);
+    interpolation.snapshots[1].yaw = 90.0f;
+    interpolation.snapshots[1].pitch = 30.0f;
+    raw.emplace<ecs::MobAIComponent>(entity).yaw = 0.0f;
+    auto& camera = raw.emplace<ecs::CameraStateComponent>(entity);
+    camera.yaw = 0.0f;
+    camera.pitch = 0.0f;
+
+    ecs::NetworkInterpolationSystem system;
+    ecs::SystemContext ctx{registry, services, 0.025f, 1};
+    system.update(ctx);
+
+    const auto& transform = raw.get<ecs::TransformComponent>(entity);
+    const auto& mobAI = raw.get<ecs::MobAIComponent>(entity);
+    const auto& updatedCamera = raw.get<ecs::CameraStateComponent>(entity);
+    require(std::fabs(transform.position.x - 5.0f) < 0.001f,
+            "buffered interpolation should sample halfway between server ticks");
+    require(std::fabs(mobAI.yaw - 45.0f) < 0.001f,
+            "buffered mob yaw should interpolate in degrees");
+    require(std::fabs(updatedCamera.yaw - 45.0f) < 0.001f,
+            "buffered camera yaw should interpolate in degrees");
+    require(std::fabs(updatedCamera.pitch - 15.0f) < 0.001f,
+            "buffered camera pitch should interpolate linearly");
+}
+
+static void testBufferedRenderTickDoesNotRegressForLateOldSnapshot() {
+    ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    auto& raw = registry.registry();
+
+    const entt::entity entity = raw.create();
+    raw.emplace<ecs::TransformComponent>(entity, glm::vec3(10.0f, 0.0f, 0.0f), 0.0f);
+    auto& interpolation = raw.emplace<ecs::NetworkInterpolationComponent>(entity);
+    interpolation.hasTarget = true;
+    interpolation.targetPosition = glm::vec3(10.0f, 0.0f, 0.0f);
+    interpolation.serverTickRate = 20.0f;
+    interpolation.interpolationDelayTicks = 2.0f;
+    interpolation.renderServerTick = 10.0f;
+    interpolation.hasRenderServerTick = true;
+    interpolation.latestServerTick = 10;
+    interpolation.snapshotCount = 2;
+    interpolation.snapshots[0].serverTick = 9;
+    interpolation.snapshots[0].position = glm::vec3(9.0f, 0.0f, 0.0f);
+    interpolation.snapshots[1].serverTick = 10;
+    interpolation.snapshots[1].position = glm::vec3(10.0f, 0.0f, 0.0f);
+
+    ecs::NetworkInterpolationSystem system;
+    ecs::SystemContext ctx{registry, services, 1.0f / 60.0f, 1};
+    system.update(ctx);
+
+    const auto& transform = raw.get<ecs::TransformComponent>(entity);
+    require(std::fabs(interpolation.renderServerTick - 10.0f) < 0.001f,
+            "late older snapshots should not move render tick backwards");
+    require(std::fabs(transform.position.x - 10.0f) < 0.001f,
+            "late older snapshots should not move transform backwards");
+}
+
 static void testInterpolatesHumanoidAnglesOnShortestPath() {
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -120,11 +198,46 @@ static void testInterpolatesSpinAnglesOnShortestPath() {
             "spin yaw should use shortest path across zero radians");
 }
 
+static void testSamplesBufferedSpinAnglesInRadians() {
+    ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    auto& raw = registry.registry();
+
+    const entt::entity entity = raw.create();
+    raw.emplace<ecs::TransformComponent>(entity, glm::vec3(0.0f), 0.0f);
+    auto& interpolation = raw.emplace<ecs::NetworkInterpolationComponent>(entity);
+    interpolation.hasTarget = true;
+    interpolation.serverTickRate = 20.0f;
+    interpolation.interpolationDelayTicks = 0.0f;
+    interpolation.renderServerTick = 10.0f;
+    interpolation.hasRenderServerTick = true;
+    interpolation.latestServerTick = 11;
+    interpolation.snapshotCount = 2;
+    interpolation.snapshots[0].serverTick = 10;
+    interpolation.snapshots[0].position = glm::vec3(0.0f);
+    interpolation.snapshots[0].yaw = 6.2f;
+    interpolation.snapshots[1].serverTick = 11;
+    interpolation.snapshots[1].position = glm::vec3(0.0f);
+    interpolation.snapshots[1].yaw = 0.1f;
+    raw.emplace<ecs::SpinVisualComponent>(entity, 6.2f, 0.0f);
+
+    ecs::NetworkInterpolationSystem system;
+    ecs::SystemContext ctx{registry, services, 0.025f, 1};
+    system.update(ctx);
+
+    const float yaw = raw.get<ecs::SpinVisualComponent>(entity).yawRadians;
+    require(yaw > 6.2f && yaw < 6.4f,
+            "buffered spin yaw should interpolate across zero in radians");
+}
+
 int main() {
     testMovesTowardTargetWithoutSnapping();
     testSnapsWhenTargetIsTooFar();
+    testSamplesBufferedPoseBetweenServerTicks();
+    testBufferedRenderTickDoesNotRegressForLateOldSnapshot();
     testInterpolatesHumanoidAnglesOnShortestPath();
     testInterpolatesSpinAnglesOnShortestPath();
+    testSamplesBufferedSpinAnglesInRadians();
     std::printf("All NetworkInterpolationSystem tests passed!\n");
     return 0;
 }

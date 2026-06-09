@@ -73,6 +73,57 @@ static void testSpawnBeforeInitIsReplayed() {
             "pending snapshot should update interpolation target velocity");
 }
 
+static void testSnapshotBufferIgnoresOutOfOrderTargetRegression() {
+    client::ClientEntityStore store;
+    entt::registry registry;
+    store.init(registry, nullptr);
+
+    net::EntitySpawnMessage spawn;
+    spawn.netId = 43;
+    spawn.kind = net::EntityKind::Drop;
+    spawn.position = glm::vec3(0.0f);
+    spawn.velocity = glm::vec3(0.0f);
+    spawn.itemId = 1;
+    spawn.stackCount = 1;
+    store.handleSpawn(spawn);
+
+    net::EntitySnapshotMessage newer;
+    newer.serverTick = 10;
+    net::EntitySnapshotItem item;
+    item.netId = 43;
+    item.position = glm::vec3(10.0f, 0.0f, 0.0f);
+    item.velocity = glm::vec3(1.0f, 0.0f, 0.0f);
+    item.yaw = 1.0f;
+    newer.entities.push_back(item);
+    store.handleSnapshot(newer);
+
+    net::EntitySnapshotMessage older = newer;
+    older.serverTick = 9;
+    older.entities[0].position = glm::vec3(9.0f, 0.0f, 0.0f);
+    older.entities[0].velocity = glm::vec3(0.5f, 0.0f, 0.0f);
+    older.entities[0].yaw = 0.5f;
+    store.handleSnapshot(older);
+
+    auto view = registry.view<ecs::EntityNetIdComponent,
+                              ecs::TransformComponent,
+                              ecs::NetworkInterpolationComponent>();
+    require(view.begin() != view.end(), "drop replica components missing");
+    const entt::entity entity = *view.begin();
+    const auto& transform = registry.get<ecs::TransformComponent>(entity);
+    const auto& interpolation = registry.get<ecs::NetworkInterpolationComponent>(entity);
+    require(interpolation.latestServerTick == 10,
+            "out-of-order snapshot should not regress latest server tick");
+    require(nearVec3(interpolation.targetPosition, item.position),
+            "out-of-order snapshot should not regress interpolation target");
+    require(interpolation.snapshotCount == 2,
+            "out-of-order snapshot should still be buffered for interpolation");
+    require(interpolation.snapshots[0].serverTick == 9 &&
+            interpolation.snapshots[1].serverTick == 10,
+            "snapshot buffer should stay sorted by server tick");
+    require(transform.position.x == 10.0f,
+            "out-of-order snapshot should not snap transform back to old position");
+}
+
 static void testMobSpawnCreatesZombieReplica() {
     client::ClientEntityStore store;
     ecs::GameplayRegistry registry;
@@ -391,6 +442,7 @@ int main() {
     ItemRegistry::init();
 
     testSpawnBeforeInitIsReplayed();
+    testSnapshotBufferIgnoresOutOfOrderTargetRegression();
     testMobSpawnCreatesZombieReplica();
     testMobSpawnCreatesConfiguredHerobrineReplica();
     testProjectileSpawnCreatesAppleReplica();
