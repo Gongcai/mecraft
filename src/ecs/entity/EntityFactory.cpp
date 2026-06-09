@@ -65,23 +65,45 @@ void applyMobDefinition(GameplayRegistry& registry,
         if (reg.all_of<DropTableComponent>(entity)) {
             reg.remove<DropTableComponent>(entity);
         }
-        return;
-    }
-
-    const MobDropDefinition& firstDrop = definition.drops.front();
-    auto* dropTable = reg.try_get<DropTableComponent>(entity);
-    if (dropTable == nullptr) {
-        dropTable = &reg.emplace<DropTableComponent>(entity, firstDrop.itemId, firstDrop.minCount, firstDrop.maxCount);
     } else {
-        dropTable->itemId = firstDrop.itemId;
-        dropTable->minCount = firstDrop.minCount;
-        dropTable->maxCount = firstDrop.maxCount;
+        const MobDropDefinition& firstDrop = definition.drops.front();
+        auto* dropTable = reg.try_get<DropTableComponent>(entity);
+        if (dropTable == nullptr) {
+            dropTable = &reg.emplace<DropTableComponent>(entity, firstDrop.itemId, firstDrop.minCount, firstDrop.maxCount);
+        } else {
+            dropTable->itemId = firstDrop.itemId;
+            dropTable->minCount = firstDrop.minCount;
+            dropTable->maxCount = firstDrop.maxCount;
+        }
+
+        dropTable->entries.clear();
+        dropTable->entries.reserve(definition.drops.size());
+        for (const MobDropDefinition& drop : definition.drops) {
+            dropTable->entries.push_back(DropTableEntry{drop.itemId, drop.minCount, drop.maxCount});
+        }
     }
 
-    dropTable->entries.clear();
-    dropTable->entries.reserve(definition.drops.size());
-    for (const MobDropDefinition& drop : definition.drops) {
-        dropTable->entries.push_back(DropTableEntry{drop.itemId, drop.minCount, drop.maxCount});
+    auto* hurt = reg.try_get<HurtEffectComponent>(entity);
+    if (hurt == nullptr) {
+        hurt = &reg.emplace<HurtEffectComponent>(entity);
+    }
+    if (definition.hurtEffect.enabled) {
+        hurt->soundId = definition.hurtEffect.soundId;
+        hurt->soundVolume = definition.hurtEffect.volume;
+        hurt->flashDurationSeconds = definition.hurtEffect.flashDurationSeconds;
+    } else {
+        hurt->soundId.clear();
+        hurt->soundVolume = 1.0f;
+    }
+
+    if (definition.deathEffect.enabled) {
+        reg.emplace_or_replace<DeathEffectComponent>(entity,
+                                                     definition.deathEffect.particleBlock,
+                                                     definition.deathEffect.particleCount,
+                                                     definition.deathEffect.soundId,
+                                                     definition.deathEffect.volume);
+    } else if (reg.all_of<DeathEffectComponent>(entity)) {
+        reg.remove<DeathEffectComponent>(entity);
     }
 }
 
@@ -185,7 +207,6 @@ entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::ve
     registry.emplace<MoveIntentComponent>(zombie);
     registry.emplace<HealthComponent>(zombie, 20, 20);
     registry.emplace<HurtEffectComponent>(zombie);
-    registry.emplace<DeathEffectComponent>(zombie, BlockIds::ROSE, 28, "mob.zombie.death", 1.0f);
     registry.emplace<EntityTypeComponent>(zombie, "minecraft:zombie");
     registry.emplace<NetworkSyncTag>(zombie);
     return zombie;

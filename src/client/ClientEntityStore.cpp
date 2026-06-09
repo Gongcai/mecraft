@@ -29,52 +29,70 @@ void collectEntityTree(entt::registry& registry, const entt::entity entity, std:
 
 void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
                      const std::string& soundId,
-                     const glm::vec3& position) {
+                     const glm::vec3& position,
+                     const float volume = 1.0f) {
     if (gameplayRegistry == nullptr || soundId.empty()) {
         return;
     }
-    ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, 1.0f});
+    ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, volume});
 }
 
-std::string defaultMobDeathSoundId(const std::string& entityId) {
-    if (entityId == "minecraft:zombie") {
-        return "mob.zombie.death";
-    }
-    return {};
-}
-
-void ensureMobDeathEffect(entt::registry& registry,
-                          const entt::entity entity,
-                          const std::string& entityId) {
+void applyMobHurtEffect(entt::registry& registry,
+                        const entt::entity entity,
+                        const ecs::MobEntityDefinition* definition) {
     if (entity == entt::null || !registry.valid(entity)) {
         return;
     }
 
-    if (!registry.all_of<ecs::DeathEffectComponent>(entity)) {
-        registry.emplace<ecs::DeathEffectComponent>(
-            entity,
-            BlockIds::ROSE,
-            28,
-            defaultMobDeathSoundId(entityId),
-            1.0f);
+    auto* hurt = registry.try_get<ecs::HurtEffectComponent>(entity);
+    if (hurt == nullptr) {
+        hurt = &registry.emplace<ecs::HurtEffectComponent>(entity);
+    }
+    if (definition != nullptr && definition->hurtEffect.enabled) {
+        hurt->soundId = definition->hurtEffect.soundId;
+        hurt->soundVolume = definition->hurtEffect.volume;
+        hurt->flashDurationSeconds = definition->hurtEffect.flashDurationSeconds;
+    } else {
+        hurt->soundId.clear();
+        hurt->soundVolume = 1.0f;
     }
 }
 
-std::string impactSoundForEntity(entt::registry& registry, const entt::entity entity) {
+void applyMobDeathEffect(entt::registry& registry,
+                         const entt::entity entity,
+                         const ecs::MobEntityDefinition* definition) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+
+    if (definition != nullptr && definition->deathEffect.enabled) {
+        registry.emplace_or_replace<ecs::DeathEffectComponent>(
+            entity,
+            definition->deathEffect.particleBlock,
+            definition->deathEffect.particleCount,
+            definition->deathEffect.soundId,
+            definition->deathEffect.volume);
+    } else if (registry.all_of<ecs::DeathEffectComponent>(entity)) {
+        registry.remove<ecs::DeathEffectComponent>(entity);
+    }
+}
+
+struct ImpactAudio {
+    std::string soundId;
+    float volume = 1.0f;
+};
+
+ImpactAudio impactAudioForEntity(entt::registry& registry, const entt::entity entity) {
     if (entity == entt::null || !registry.valid(entity)) {
         return {};
     }
 
     if (const auto* projectile = registry.try_get<ecs::ProjectileComponent>(entity)) {
-        return projectile->impactSoundId;
+        return {projectile->impactSoundId, 1.0f};
     }
 
     if (const auto* deathEffect = registry.try_get<ecs::DeathEffectComponent>(entity)) {
-        return deathEffect->soundId;
-    }
-
-    if (const auto* type = registry.try_get<ecs::EntityTypeComponent>(entity)) {
-        return defaultMobDeathSoundId(type->entityId);
+        return {deathEffect->soundId, deathEffect->volume};
     }
 
     return {};
@@ -96,7 +114,9 @@ void setSyncedHealth(entt::registry& registry,
     }
 }
 
-void triggerReplicaHurt(entt::registry& registry, const entt::entity entity) {
+void triggerReplicaHurt(ecs::GameplayRegistry* gameplayRegistry,
+                        entt::registry& registry,
+                        const entt::entity entity) {
     if (entity == entt::null || !registry.valid(entity)) {
         return;
     }
@@ -106,6 +126,14 @@ void triggerReplicaHurt(entt::registry& registry, const entt::entity entity) {
         hurt = &registry.emplace<ecs::HurtEffectComponent>(entity);
     }
     hurt->triggerClassicHurt();
+
+    if (gameplayRegistry != nullptr && !hurt->soundId.empty()) {
+        glm::vec3 position{0.0f};
+        if (const auto* transform = registry.try_get<ecs::TransformComponent>(entity)) {
+            position = transform->position;
+        }
+        queueAudioEvent(gameplayRegistry, hurt->soundId, position, hurt->soundVolume);
+    }
 }
 
 } // namespace
@@ -234,7 +262,8 @@ void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
 
     auto it = m_netIdToEntity.find(msg.netId);
     if (it != m_netIdToEntity.end() && m_registry->valid(it->second)) {
-        queueAudioEvent(m_gameplayRegistry, impactSoundForEntity(*m_registry, it->second), msg.position);
+        const ImpactAudio audio = impactAudioForEntity(*m_registry, it->second);
+        queueAudioEvent(m_gameplayRegistry, audio.soundId, msg.position, audio.volume);
     }
 }
 
@@ -291,10 +320,10 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
                                        static_cast<int>(item.health) < previousHealth->current;
             setSyncedHealth(*m_registry, it->second, item.health, item.maxHealth);
             if (item.hurt || healthDropped) {
-                triggerReplicaHurt(*m_registry, it->second);
+                triggerReplicaHurt(m_gameplayRegistry, *m_registry, it->second);
             }
         } else if (item.hurt) {
-            triggerReplicaHurt(*m_registry, it->second);
+            triggerReplicaHurt(m_gameplayRegistry, *m_registry, it->second);
         }
     }
 }
@@ -416,12 +445,14 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     const std::string entityId = msg.entityId.empty() ? "minecraft:zombie" : msg.entityId;
     int initialHealth = 20;
     int initialMaxHealth = 20;
+    const ecs::MobEntityDefinition* mobDefinition = nullptr;
     if (m_gameplayRegistry) {
         bool useZombieHumanoid = entityId == "minecraft:zombie";
         std::string error;
         ecs::EntityDefinitionRegistry& definitions = ecs::EntityDefinitionRegistry::instance();
         if (definitions.ensureLoaded(&error)) {
             if (const auto* definition = definitions.findMob(entityId)) {
+                mobDefinition = definition;
                 initialHealth = definition->health;
                 initialMaxHealth = definition->maxHealth;
                 useZombieHumanoid = definition->model == "zombie_humanoid";
@@ -443,7 +474,8 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     m_registry->emplace<ecs::HealthComponent>(entity, initialHealth, initialMaxHealth);
     m_registry->emplace<ecs::HurtEffectComponent>(entity);
     m_registry->emplace<ecs::EntityTypeComponent>(entity, entityId);
-    ensureMobDeathEffect(*m_registry, entity, entityId);
+    applyMobHurtEffect(*m_registry, entity, mobDefinition);
+    applyMobDeathEffect(*m_registry, entity, mobDefinition);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
 

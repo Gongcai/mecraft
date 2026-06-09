@@ -61,6 +61,10 @@
       "file": "foo",
       "extension": ".ogg"
     },
+    "mob.zombie.hurt": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
     "mob.zombie.death": {
       "file": "foo",
       "extension": ".ogg"

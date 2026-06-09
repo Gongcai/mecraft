@@ -238,6 +238,86 @@ bool parseDrops(const json& node,
     return true;
 }
 
+bool parseDeathEffect(const json& node,
+                      MobEntityDefinition& definition,
+                      const std::string& context,
+                      std::string* error) {
+    const auto it = node.find("deathEffect");
+    if (it == node.end()) {
+        return true;
+    }
+    if (!it->is_object()) {
+        setError(error, context + ".deathEffect must be an object");
+        return false;
+    }
+
+    MobDeathEffectDefinition effect;
+    effect.enabled = true;
+
+    std::string particleBlockName;
+    if (!readString(*it, "particleBlock", particleBlockName, context + ".deathEffect", error) ||
+        !readInt(*it, "particleCount", effect.particleCount, context + ".deathEffect", error) ||
+        !readString(*it, "sound", effect.soundId, context + ".deathEffect", error) ||
+        !readFloat(*it, "volume", effect.volume, context + ".deathEffect", error)) {
+        return false;
+    }
+
+    if (!particleBlockName.empty()) {
+        if (!BlockRegistry::tryGetIdByName(particleBlockName, effect.particleBlock) ||
+            effect.particleBlock == 0) {
+            setError(error, context + ".deathEffect.particleBlock references an unknown block: " +
+                                particleBlockName);
+            return false;
+        }
+    }
+
+    if (effect.particleBlock != 0 && effect.particleCount <= 0) {
+        setError(error, context + ".deathEffect.particleCount must be positive when particleBlock is set");
+        return false;
+    }
+    if (effect.volume < 0.0f) {
+        setError(error, context + ".deathEffect.volume must be non-negative");
+        return false;
+    }
+
+    definition.deathEffect = std::move(effect);
+    return true;
+}
+
+bool parseHurtEffect(const json& node,
+                     MobEntityDefinition& definition,
+                     const std::string& context,
+                     std::string* error) {
+    const auto it = node.find("hurtEffect");
+    if (it == node.end()) {
+        return true;
+    }
+    if (!it->is_object()) {
+        setError(error, context + ".hurtEffect must be an object");
+        return false;
+    }
+
+    MobHurtEffectDefinition effect;
+    effect.enabled = true;
+    if (!readString(*it, "sound", effect.soundId, context + ".hurtEffect", error) ||
+        !readFloat(*it, "volume", effect.volume, context + ".hurtEffect", error) ||
+        !readFloat(*it, "flashDurationSeconds", effect.flashDurationSeconds, context + ".hurtEffect", error)) {
+        return false;
+    }
+
+    if (effect.volume < 0.0f) {
+        setError(error, context + ".hurtEffect.volume must be non-negative");
+        return false;
+    }
+    if (effect.flashDurationSeconds <= 0.0f) {
+        setError(error, context + ".hurtEffect.flashDurationSeconds must be positive");
+        return false;
+    }
+
+    definition.hurtEffect = std::move(effect);
+    return true;
+}
+
 bool parseMobDefinition(const json& node,
                         const std::size_t index,
                         MobEntityDefinition& definition,
@@ -259,7 +339,9 @@ bool parseMobDefinition(const json& node,
         !parseHealth(node, definition, context, error) ||
         !parsePhysics(node, definition, context, error) ||
         !parseAI(node, definition, context, error) ||
-        !parseDrops(node, definition, context, error)) {
+        !parseDrops(node, definition, context, error) ||
+        !parseHurtEffect(node, definition, context, error) ||
+        !parseDeathEffect(node, definition, context, error)) {
         return false;
     }
 

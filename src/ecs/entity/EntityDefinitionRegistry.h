@@ -38,6 +38,21 @@ struct MobDropDefinition {
     uint32_t maxCount = 1;
 };
 
+struct MobDeathEffectDefinition {
+    bool enabled = false;
+    BlockID particleBlock = 0;
+    int particleCount = 0;
+    std::string soundId;
+    float volume = 1.0f;
+};
+
+struct MobHurtEffectDefinition {
+    bool enabled = false;
+    std::string soundId;
+    float volume = 1.0f;
+    float flashDurationSeconds = 0.18f;
+};
+
 struct MobEntityDefinition {
     NamespacedId id;
     std::string model = "zombie_humanoid";
@@ -47,6 +62,8 @@ struct MobEntityDefinition {
     MobPhysicsDefinition physics;
     MobAIDefinition ai;
     std::vector<MobDropDefinition> drops;
+    MobHurtEffectDefinition hurtEffect;
+    MobDeathEffectDefinition deathEffect;
 };
 
 class EntityDefinitionRegistry {

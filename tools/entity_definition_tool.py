@@ -13,6 +13,7 @@ from typing import Any
 DEFAULT_ENTITIES_PATH = Path("assets/config/entities.json")
 DEFAULT_ITEMS_PATH = Path("assets/config/items.json")
 DEFAULT_BLOCKS_PATH = Path("assets/config/blocks.json")
+DEFAULT_SOUNDS_PATH = Path("assets/sounds/sounds.json")
 SUPPORTED_MODELS = {"zombie_humanoid"}
 
 
@@ -42,6 +43,26 @@ def collect_known_item_ids(items_path: Path, blocks_path: Path) -> set[str]:
     return ids
 
 
+def collect_known_block_ids(blocks_path: Path) -> set[str]:
+    ids = {"minecraft:air"}
+    if blocks_path.exists():
+        blocks = load_json(blocks_path).get("blocks", [])
+        if isinstance(blocks, list):
+            for block in blocks:
+                if isinstance(block, dict) and isinstance(block.get("id"), str):
+                    ids.add(block["id"])
+    return ids
+
+
+def collect_known_sound_ids(sounds_path: Path) -> set[str]:
+    if not sounds_path.exists():
+        return set()
+    sounds = load_json(sounds_path).get("sounds", {})
+    if not isinstance(sounds, dict):
+        return set()
+    return {sound_id for sound_id in sounds.keys() if isinstance(sound_id, str)}
+
+
 def require(condition: bool, message: str, errors: list[str]) -> None:
     if not condition:
         errors.append(message)
@@ -54,7 +75,15 @@ def validate_vec3(value: Any, context: str, errors: list[str]) -> None:
             require(isinstance(component, (int, float)), f"{context}[{index}] must be a number", errors)
 
 
-def validate_entity(entity: Any, index: int, known_items: set[str], seen_ids: set[str], errors: list[str]) -> None:
+def validate_entity(
+    entity: Any,
+    index: int,
+    known_items: set[str],
+    known_blocks: set[str],
+    known_sounds: set[str],
+    seen_ids: set[str],
+    errors: list[str],
+) -> None:
     context = f"entities[{index}]"
     if not isinstance(entity, dict):
         errors.append(f"{context} must be an object")
@@ -115,8 +144,51 @@ def validate_entity(entity: Any, index: int, known_items: set[str], seen_ids: se
             require(min_ok, f"{drop_context}.min must be a positive integer", errors)
             require(max_ok, f"{drop_context}.max must be >= min", errors)
 
+    death_effect = entity.get("deathEffect")
+    if death_effect is not None:
+        require(isinstance(death_effect, dict), f"{context}.deathEffect must be an object", errors)
+        if isinstance(death_effect, dict):
+            particle_block = death_effect.get("particleBlock", "")
+            require(isinstance(particle_block, str),
+                    f"{context}.deathEffect.particleBlock must be a string", errors)
+            if isinstance(particle_block, str) and particle_block:
+                require(particle_block in known_blocks,
+                        f"{context}.deathEffect.particleBlock references an unknown block: {particle_block}",
+                        errors)
+            particle_count = death_effect.get("particleCount", 0)
+            if particle_block:
+                require(isinstance(particle_count, int) and particle_count > 0,
+                        f"{context}.deathEffect.particleCount must be a positive integer", errors)
+            elif "particleCount" in death_effect:
+                require(isinstance(particle_count, int) and particle_count >= 0,
+                        f"{context}.deathEffect.particleCount must be a non-negative integer", errors)
+            sound = death_effect.get("sound", "")
+            require(isinstance(sound, str), f"{context}.deathEffect.sound must be a string", errors)
+            if isinstance(sound, str) and sound:
+                require(sound in known_sounds,
+                        f"{context}.deathEffect.sound references an unknown sound: {sound}", errors)
+            volume = death_effect.get("volume", 1.0)
+            require(isinstance(volume, (int, float)) and volume >= 0,
+                    f"{context}.deathEffect.volume must be a non-negative number", errors)
 
-def validate_file(path: Path, items_path: Path, blocks_path: Path) -> list[str]:
+    hurt_effect = entity.get("hurtEffect")
+    if hurt_effect is not None:
+        require(isinstance(hurt_effect, dict), f"{context}.hurtEffect must be an object", errors)
+        if isinstance(hurt_effect, dict):
+            sound = hurt_effect.get("sound", "")
+            require(isinstance(sound, str), f"{context}.hurtEffect.sound must be a string", errors)
+            if isinstance(sound, str) and sound:
+                require(sound in known_sounds,
+                        f"{context}.hurtEffect.sound references an unknown sound: {sound}", errors)
+            volume = hurt_effect.get("volume", 1.0)
+            require(isinstance(volume, (int, float)) and volume >= 0,
+                    f"{context}.hurtEffect.volume must be a non-negative number", errors)
+            flash_duration = hurt_effect.get("flashDurationSeconds", 0.18)
+            require(isinstance(flash_duration, (int, float)) and flash_duration > 0,
+                    f"{context}.hurtEffect.flashDurationSeconds must be a positive number", errors)
+
+
+def validate_file(path: Path, items_path: Path, blocks_path: Path, sounds_path: Path) -> list[str]:
     data = load_json(path)
     entities = data.get("entities")
     errors: list[str] = []
@@ -125,9 +197,11 @@ def validate_file(path: Path, items_path: Path, blocks_path: Path) -> list[str]:
         return errors
 
     known_items = collect_known_item_ids(items_path, blocks_path)
+    known_blocks = collect_known_block_ids(blocks_path)
+    known_sounds = collect_known_sound_ids(sounds_path)
     seen_ids: set[str] = set()
     for index, entity in enumerate(entities):
-        validate_entity(entity, index, known_items, seen_ids, errors)
+        validate_entity(entity, index, known_items, known_blocks, known_sounds, seen_ids, errors)
     return errors
 
 
@@ -173,6 +247,17 @@ def scaffold_entity(args: argparse.Namespace) -> int:
             "attackDamage": args.attack_damage,
         },
         "drops": drops,
+        "hurtEffect": {
+            "sound": "mob.zombie.hurt",
+            "volume": 1.0,
+            "flashDurationSeconds": 0.18,
+        },
+        "deathEffect": {
+            "particleBlock": "minecraft:rose",
+            "particleCount": 28,
+            "sound": "mob.zombie.death",
+            "volume": 1.0,
+        },
     }
     entities.append(entity)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,7 +267,7 @@ def scaffold_entity(args: argparse.Namespace) -> int:
 
 
 def validate_command(args: argparse.Namespace) -> int:
-    errors = validate_file(args.path, args.items, args.blocks)
+    errors = validate_file(args.path, args.items, args.blocks, args.sounds)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
@@ -199,6 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("path", nargs="?", type=Path, default=DEFAULT_ENTITIES_PATH)
     validate.add_argument("--items", type=Path, default=DEFAULT_ITEMS_PATH)
     validate.add_argument("--blocks", type=Path, default=DEFAULT_BLOCKS_PATH)
+    validate.add_argument("--sounds", type=Path, default=DEFAULT_SOUNDS_PATH)
     validate.set_defaults(func=validate_command)
 
     scaffold = subcommands.add_parser("scaffold", help="append a default mob definition")

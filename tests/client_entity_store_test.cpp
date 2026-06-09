@@ -99,6 +99,13 @@ static void testMobSpawnCreatesZombieReplica() {
     require(raw.get<ecs::HealthComponent>(mob).current == 20 &&
             raw.get<ecs::HealthComponent>(mob).max == 20,
             "mob replica should initialize configured synced health");
+    require(raw.get<ecs::DeathEffectComponent>(mob).particleBlock == BlockIds::ROSE &&
+            raw.get<ecs::DeathEffectComponent>(mob).particleCount == 28 &&
+            raw.get<ecs::DeathEffectComponent>(mob).soundId == "mob.zombie.death",
+            "mob replica should initialize configured death effect");
+    require(raw.get<ecs::HurtEffectComponent>(mob).soundId == "mob.zombie.hurt" &&
+            std::fabs(raw.get<ecs::HurtEffectComponent>(mob).flashDurationSeconds - 0.18f) < 0.001f,
+            "mob replica should initialize configured hurt effect");
 
     net::EntitySnapshotMessage snapshot;
     snapshot.serverTick = 12;
@@ -122,6 +129,15 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob snapshot hurt flag should trigger hurt effect");
     require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining > 0.0f,
             "mob snapshot hurt flag should trigger visible hurt flash");
+    require(registry.ctxHas<ecs::AudioEventBus>(),
+            "mob snapshot hurt flag should queue audio events");
+    auto& audioBus = registry.ctxGet<ecs::AudioEventBus>();
+    require(audioBus.size() == 1,
+            "mob snapshot hurt flag should queue exactly one hurt audio event");
+    require(audioBus.peek().front().clipName == "mob.zombie.hurt",
+            "mob snapshot hurt flag should use configured hurt sound");
+    require(nearVec3(audioBus.peek().front().position, item.position),
+            "mob snapshot hurt sound should use synced mob position");
 
     net::EntityImpactMessage impact;
     impact.netId = 77;
@@ -139,12 +155,9 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob death impact should use server-provided particle count");
     require(particleBus.peek().front().blockType == BlockIds::ROSE,
             "mob death impact should use server-provided particle block");
-    require(registry.ctxHas<ecs::AudioEventBus>(),
-            "mob death impact should queue audio events");
-    auto& audioBus = registry.ctxGet<ecs::AudioEventBus>();
-    require(audioBus.size() == 1,
-            "mob death impact should queue exactly one audio event");
-    require(audioBus.peek().front().clipName == "mob.zombie.death",
+    require(audioBus.size() == 2,
+            "mob death impact should append one audio event after hurt audio");
+    require(audioBus.peek().back().clipName == "mob.zombie.death",
             "mob death impact should use zombie death sound");
 }
 

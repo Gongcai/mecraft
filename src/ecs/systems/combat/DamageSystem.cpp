@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "../../util/DamageEventBuffer.h"
+#include "../../util/AudioEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
 
 namespace ecs {
@@ -13,6 +14,18 @@ bool isCreativeLocalPlayer(GameplayRegistry& registry, const entt::entity target
         return false;
     }
     return registry.ctxGet<GameplayRuntimeContext>().gameplayMode == GameplayMode::Creative;
+}
+
+void queueHurtAudio(SystemContext& ctx, const entt::entity target, const HurtEffectComponent& hurt) {
+    if (!ctx.services.audioEngine || hurt.soundId.empty()) {
+        return;
+    }
+
+    glm::vec3 position{0.0f};
+    if (const auto* transform = ctx.registry.try_get<TransformComponent>(target)) {
+        position = transform->position;
+    }
+    ensureAudioEventBus(ctx.registry).push({hurt.soundId, position, true, hurt.soundVolume});
 }
 
 } // namespace
@@ -42,6 +55,7 @@ void DamageSystem::update(SystemContext& ctx) {
         health->current = std::max(0, health->current - event.amount);
         if (auto* hurt = reg.try_get<HurtEffectComponent>(event.target)) {
             hurt->triggerClassicHurt();
+            queueHurtAudio(ctx, event.target, *hurt);
         }
     }
 

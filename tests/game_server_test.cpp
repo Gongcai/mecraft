@@ -1568,8 +1568,10 @@ static void testEntityFactoryCreatesConfiguredZombie() {
                        ecs::TransformComponent,
                        ecs::MobAIComponent,
                        ecs::HealthComponent,
+                       ecs::HurtEffectComponent,
                        ecs::PhysicsBodyComponent,
                        ecs::DropTableComponent,
+                       ecs::DeathEffectComponent,
                        ecs::EntityTypeComponent,
                        ecs::NetworkSyncTag>(zombie),
             "configured zombie should have gameplay mob components");
@@ -1579,6 +1581,8 @@ static void testEntityFactoryCreatesConfiguredZombie() {
     const auto& health = raw.get<ecs::HealthComponent>(zombie);
     const auto& body = raw.get<ecs::PhysicsBodyComponent>(zombie);
     const auto& drops = raw.get<ecs::DropTableComponent>(zombie);
+    const auto& hurtEffect = raw.get<ecs::HurtEffectComponent>(zombie);
+    const auto& deathEffect = raw.get<ecs::DeathEffectComponent>(zombie);
     const auto& type = raw.get<ecs::EntityTypeComponent>(zombie);
 
     require(type.entityId == "minecraft:zombie", "configured zombie should keep entity definition id");
@@ -1590,6 +1594,14 @@ static void testEntityFactoryCreatesConfiguredZombie() {
             "configured zombie should apply physics bounds");
     require(drops.itemId == ItemIds::COAL && drops.minCount == 1 && drops.maxCount == 1,
             "configured zombie should apply drop table");
+    require(hurtEffect.soundId == "mob.zombie.hurt" &&
+            hurtEffect.soundVolume == 1.0f &&
+            std::fabs(hurtEffect.flashDurationSeconds - 0.18f) < 0.001f,
+            "configured zombie should apply hurt effect");
+    require(deathEffect.particleBlock == BlockIds::ROSE &&
+            deathEffect.particleCount == 28 &&
+            deathEffect.soundId == "mob.zombie.death",
+            "configured zombie should apply death effect");
 
     std::printf("[PASS] testEntityFactoryCreatesConfiguredZombie\n");
 }
