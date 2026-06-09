@@ -28,10 +28,11 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
     m_velocityShader->use();
     m_velocityShader->setInt("uDepthTex", 0);
     m_velocityShader->setInt("uPerObjectVelocityTex", 1);
-    m_velocityShader->setMat4("uInvViewProj",
-        settings.taa.enabled ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj);
-    m_velocityShader->setMat4("uPreviousViewProj",
-        settings.taa.enabled ? ctx.previousJitteredViewProj : ctx.previousViewProj);
+    // Velocity must reproject into the resolved history grid, not the previous
+    // frame's jittered sample grid. Keep the current depth "raw" relative to
+    // the non-jittered inverse, matching DerivativeMain's Temporal.frag path.
+    m_velocityShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
+    m_velocityShader->setMat4("uPreviousViewProj", ctx.previousViewProj);
     m_velocityShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, targets.width())),
                    static_cast<float>(std::max(1, targets.height()))));

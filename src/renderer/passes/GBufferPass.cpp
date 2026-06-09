@@ -37,9 +37,10 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
     targets.clearPerObjectVelocity();
     targets.attachPerObjectVelocityToGBuffer();
 
-    // Use the same projection flavor as terrain so depth and velocity agree.
+    // Rasterize with the same projection flavor as terrain, but reproject
+    // moving objects into the resolved history grid (raw previous view-proj).
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    const glm::mat4& previousViewProj = settings.taa.enabled ? ctx.previousJitteredViewProj : ctx.previousViewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProj;
 
     const HumanoidRenderer::RenderMode mode = renderLocalPlayerModel
         ? HumanoidRenderer::kRenderAll
@@ -64,8 +65,10 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     // Cross-shaped block drops emit single-sided quads without back-faces
     glDisable(GL_CULL_FACE);
 
+    // Match entity velocity: current rasterization may be jittered, while
+    // previous positions target the resolved history grid.
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    const glm::mat4& previousViewProj = settings.taa.enabled ? ctx.previousJitteredViewProj : ctx.previousViewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProj;
     dropRenderer->renderToGBuffer(worldView, *dropSystem, viewProj, previousViewProj, ctx.animationTime);
 
     // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.

@@ -743,13 +743,13 @@ void DeferredRenderTargets::detachPerObjectVelocityFromGBuffer() {
 }
 
 void DeferredRenderTargets::clearPerObjectVelocity() {
-    // Clear per-object velocity to zero. Attaches the texture to the GBuffer FBO
-    // as COLOR_ATTACHMENT5, clears it, then detaches. This avoids creating a
-    // temporary FBO every frame.
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, m_perObjectVelocityTex, 0);
-    const float zero[] = {0.0f, 0.0f, 0.0f, 0.0f};
-    glClearNamedFramebufferfv(m_gBufferFbo, GL_COLOR, 5, zero);
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, 0, 0);
+    // Clear the velocity texture directly. Clearing COLOR_ATTACHMENT5 through
+    // the GBuffer FBO depends on draw-buffer state and can leave stale values.
+    if (m_perObjectVelocityTex == 0) {
+        return;
+    }
+    const float zero[] = {0.0f, 0.0f};
+    glClearTexImage(m_perObjectVelocityTex, 0, GL_RG, GL_FLOAT, zero);
 }
 
 void DeferredRenderTargets::bindDefaultLike(const GLint framebuffer, const int width, const int height) {
