@@ -3,7 +3,9 @@
     {
       "id": "minecraft:zombie",
       "kind": "mob",
-      "model": "zombie_humanoid",
+      "model": "humanoid",
+      "texture": "zombie",
+      "scale": 1.0,
       "health": {
         "current": 20,
         "max": 20

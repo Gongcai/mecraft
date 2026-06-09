@@ -330,10 +330,16 @@ bool parseMobDefinition(const json& node,
 
     std::string id;
     if (!readString(node, "id", id, context, error, true) ||
-        !readString(node, "model", definition.model, context, error, true)) {
+        !readString(node, "model", definition.model, context, error, true) ||
+        !readString(node, "texture", definition.textureKey, context, error) ||
+        !readFloat(node, "scale", definition.visualScale, context, error)) {
         return false;
     }
     definition.id = NamespacedId(id);
+    if (definition.visualScale <= 0.0f) {
+        setError(error, context + ".scale must be positive");
+        return false;
+    }
 
     if (!readFloat(node, "eyeHeight", definition.eyeHeight, context, error) ||
         !parseHealth(node, definition, context, error) ||

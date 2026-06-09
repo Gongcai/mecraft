@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -54,6 +55,14 @@ void setHurtFlash(Shader& shader, const float value) {
     if (location >= 0) {
         glUniform1f(location, value);
     }
+}
+
+std::string mobTextureKeyForRoot(const entt::registry& reg, const entt::entity root) {
+    if (const auto* visual = reg.try_get<ecs::MobVisualComponent>(root);
+        visual != nullptr && !visual->textureKey.empty()) {
+        return visual->textureKey;
+    }
+    return "zombie";
 }
 
 } // anonymous namespace
@@ -702,60 +711,65 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     }
 
     // ── Render Mob entities ──
-    const GLuint zombieTex = m_resourceMgr->getGuiTexture("zombie");
-    if (zombieTex != 0) {
-        glBindTexture(GL_TEXTURE_2D, zombieTex);
+    GLuint boundMobTex = 0;
+    auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
+    for (auto mobRoot : mobView) {
+        const GLuint mobTex = m_resourceMgr->getGuiTexture(mobTextureKeyForRoot(reg, mobRoot));
+        if (mobTex == 0) {
+            continue;
+        }
+        if (boundMobTex != mobTex) {
+            glBindTexture(GL_TEXTURE_2D, mobTex);
+            boundMobTex = mobTex;
+        }
 
-        auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
-        for (auto mobRoot : mobView) {
-            setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
-            auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
+        setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
+        auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
-            // Torso
-            for (auto child : rootChildren.children) {
-                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
-                auto& part = reg.get<ecs::StevePartComponent>(child);
-                if (part.partType != ecs::StevePartType::Torso) continue;
+        // Torso
+        for (auto child : rootChildren.children) {
+            if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+            auto& part = reg.get<ecs::StevePartComponent>(child);
+            if (part.partType != ecs::StevePartType::Torso) continue;
 
-                auto& world = reg.get<ecs::WorldTransformComponent>(child);
-                PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
+            auto& world = reg.get<ecs::WorldTransformComponent>(child);
+            PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
+                                            ecs::SkinTypeComponent::Type::Mob);
+            if (mesh == nullptr || mesh->vao == 0) continue;
+
+            if (prevModelLoc >= 0) {
+                auto it = m_previousModelMatrices.find(child);
+                shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
+            }
+            shader.setMat4(modelLoc, world.worldMatrix);
+            glBindVertexArray(mesh->vao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            m_previousModelMatrices[child] = world.worldMatrix;
+        }
+
+        // Limbs
+        for (auto child : rootChildren.children) {
+            if (!reg.all_of<ecs::ChildrenComponent>(child)) continue;
+            auto& partChildren = reg.get<ecs::ChildrenComponent>(child);
+
+            for (auto partEntity : partChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) continue;
+
+                auto& part = reg.get<ecs::StevePartComponent>(partEntity);
+                auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
+
+                PartMesh* mesh = getMeshForPart(part.partType,
                                                 ecs::SkinTypeComponent::Type::Mob);
-                if (mesh == nullptr || mesh->vao == 0) continue;
+                if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
                 if (prevModelLoc >= 0) {
-                    auto it = m_previousModelMatrices.find(child);
+                    auto it = m_previousModelMatrices.find(partEntity);
                     shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
                 }
                 shader.setMat4(modelLoc, world.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                m_previousModelMatrices[child] = world.worldMatrix;
-            }
-
-            // Limbs
-            for (auto child : rootChildren.children) {
-                if (!reg.all_of<ecs::ChildrenComponent>(child)) continue;
-                auto& partChildren = reg.get<ecs::ChildrenComponent>(child);
-
-                for (auto partEntity : partChildren.children) {
-                    if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) continue;
-
-                    auto& part = reg.get<ecs::StevePartComponent>(partEntity);
-                    auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
-
-                    PartMesh* mesh = getMeshForPart(part.partType,
-                                                    ecs::SkinTypeComponent::Type::Mob);
-                    if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
-
-                    if (prevModelLoc >= 0) {
-                        auto it = m_previousModelMatrices.find(partEntity);
-                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
-                    }
-                    shader.setMat4(modelLoc, world.worldMatrix);
-                    glBindVertexArray(mesh->vao);
-                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                    m_previousModelMatrices[partEntity] = world.worldMatrix;
-                }
+                m_previousModelMatrices[partEntity] = world.worldMatrix;
             }
         }
     }
@@ -869,84 +883,89 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
     }
 
     // ── Render Mob entities ──
-    const GLuint zombieTex = m_resourceMgr->getGuiTexture("zombie");
-    if (zombieTex != 0) {
-        glBindTexture(GL_TEXTURE_2D, zombieTex);
+    GLuint boundMobTex = 0;
+    auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
+    for (auto mobRoot : mobView) {
+        const GLuint mobTex = m_resourceMgr->getGuiTexture(mobTextureKeyForRoot(reg, mobRoot));
+        if (mobTex == 0) {
+            continue;
+        }
+        if (boundMobTex != mobTex) {
+            glBindTexture(GL_TEXTURE_2D, mobTex);
+            boundMobTex = mobTex;
+        }
 
-        auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
-        for (auto mobRoot : mobView) {
-            setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
-            auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
+        setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
+        auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
-            // Query world light at torso position for this entity.
-            glm::vec3 entityPos(0.0f);
-            bool foundTorso = false;
-            for (auto child : rootChildren.children) {
-                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
-                auto& part = reg.get<ecs::StevePartComponent>(child);
-                if (part.partType != ecs::StevePartType::Torso) continue;
-                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
-                entityPos = glm::vec3(wt.worldMatrix[3]);
-                glm::vec2 light = queryWorldLight(worldView, entityPos);
-                shader.setFloat("uEntitySunlight", light.x);
-                shader.setFloat("uEntityBlockLight", light.y);
-                foundTorso = true;
-                break;
+        // Query world light at torso position for this entity.
+        glm::vec3 entityPos(0.0f);
+        bool foundTorso = false;
+        for (auto child : rootChildren.children) {
+            if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+            auto& part = reg.get<ecs::StevePartComponent>(child);
+            if (part.partType != ecs::StevePartType::Torso) continue;
+            auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+            entityPos = glm::vec3(wt.worldMatrix[3]);
+            glm::vec2 light = queryWorldLight(worldView, entityPos);
+            shader.setFloat("uEntitySunlight", light.x);
+            shader.setFloat("uEntityBlockLight", light.y);
+            foundTorso = true;
+            break;
+        }
+
+        // Cascade Culling: skip rendering if entity is outside this cascade's bounds (plus a small buffer)
+        if (foundTorso && splitFar < FLT_MAX - 1.0f) {
+            float dist = glm::length(entityPos - cameraPos);
+            if (dist < splitNear - 4.0f || dist > splitFar + 4.0f) {
+                continue;
             }
+        }
 
-            // Cascade Culling: skip rendering if entity is outside this cascade's bounds (plus a small buffer)
-            if (foundTorso && splitFar < FLT_MAX - 1.0f) {
-                float dist = glm::length(entityPos - cameraPos);
-                if (dist < splitNear - 4.0f || dist > splitFar + 4.0f) {
-                    continue;
-                }
+        // Torso
+        for (auto child : rootChildren.children) {
+            if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+            auto& part = reg.get<ecs::StevePartComponent>(child);
+            if (part.partType != ecs::StevePartType::Torso) continue;
+
+            auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+            PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
+                                            ecs::SkinTypeComponent::Type::Mob);
+            if (mesh == nullptr || mesh->vao == 0) continue;
+
+            if (prevModelLoc >= 0) {
+                auto it = m_previousModelMatrices.find(child);
+                shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
             }
+            shader.setMat4(modelLoc, wt.worldMatrix);
+            glBindVertexArray(mesh->vao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+            m_previousModelMatrices[child] = wt.worldMatrix;
+        }
 
-            // Torso
-            for (auto child : rootChildren.children) {
-                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
-                auto& part = reg.get<ecs::StevePartComponent>(child);
-                if (part.partType != ecs::StevePartType::Torso) continue;
+        // Limbs
+        for (auto child : rootChildren.children) {
+            if (!reg.all_of<ecs::ChildrenComponent>(child)) continue;
+            auto& partChildren = reg.get<ecs::ChildrenComponent>(child);
 
-                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
-                PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
+            for (auto partEntity : partChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) continue;
+
+                auto& part = reg.get<ecs::StevePartComponent>(partEntity);
+                auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
+
+                PartMesh* mesh = getMeshForPart(part.partType,
                                                 ecs::SkinTypeComponent::Type::Mob);
-                if (mesh == nullptr || mesh->vao == 0) continue;
+                if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
                 if (prevModelLoc >= 0) {
-                    auto it = m_previousModelMatrices.find(child);
+                    auto it = m_previousModelMatrices.find(partEntity);
                     shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
                 }
                 shader.setMat4(modelLoc, wt.worldMatrix);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                m_previousModelMatrices[child] = wt.worldMatrix;
-            }
-
-            // Limbs
-            for (auto child : rootChildren.children) {
-                if (!reg.all_of<ecs::ChildrenComponent>(child)) continue;
-                auto& partChildren = reg.get<ecs::ChildrenComponent>(child);
-
-                for (auto partEntity : partChildren.children) {
-                    if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) continue;
-
-                    auto& part = reg.get<ecs::StevePartComponent>(partEntity);
-                    auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
-
-                    PartMesh* mesh = getMeshForPart(part.partType,
-                                                    ecs::SkinTypeComponent::Type::Mob);
-                    if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
-
-                    if (prevModelLoc >= 0) {
-                        auto it = m_previousModelMatrices.find(partEntity);
-                        shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
-                    }
-                    shader.setMat4(modelLoc, wt.worldMatrix);
-                    glBindVertexArray(mesh->vao);
-                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                    m_previousModelMatrices[partEntity] = wt.worldMatrix;
-                }
+                m_previousModelMatrices[partEntity] = wt.worldMatrix;
             }
         }
     }

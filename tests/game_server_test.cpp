@@ -1570,6 +1570,7 @@ static void testEntityFactoryCreatesConfiguredZombie() {
                        ecs::MobAIComponent,
                        ecs::HealthComponent,
                        ecs::HurtEffectComponent,
+                       ecs::MobVisualComponent,
                        ecs::PhysicsBodyComponent,
                        ecs::DropTableComponent,
                        ecs::DeathEffectComponent,
@@ -1585,8 +1586,13 @@ static void testEntityFactoryCreatesConfiguredZombie() {
     const auto& hurtEffect = raw.get<ecs::HurtEffectComponent>(zombie);
     const auto& deathEffect = raw.get<ecs::DeathEffectComponent>(zombie);
     const auto& type = raw.get<ecs::EntityTypeComponent>(zombie);
+    const auto& visual = raw.get<ecs::MobVisualComponent>(zombie);
 
     require(type.entityId == "minecraft:zombie", "configured zombie should keep entity definition id");
+    require(visual.model == "humanoid" &&
+            visual.textureKey == "zombie" &&
+            std::fabs(visual.scale - 1.0f) < 0.001f,
+            "configured zombie should apply visual data");
     require(transform.eyeHeight == 1.62f, "configured zombie should apply eye height");
     require(health.current == 20 && health.max == 20, "configured zombie should apply health");
     require(ai.attackDamage == 3 && ai.pursueSpeed == 0.85f,

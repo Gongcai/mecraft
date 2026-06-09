@@ -39,6 +39,14 @@ void applyMobDefinition(GameplayRegistry& registry,
         transform->eyeHeight = definition.eyeHeight;
     }
 
+    auto* visual = reg.try_get<MobVisualComponent>(entity);
+    if (visual == nullptr) {
+        visual = &reg.emplace<MobVisualComponent>(entity);
+    }
+    visual->model = definition.model;
+    visual->textureKey = definition.textureKey;
+    visual->scale = definition.visualScale;
+
     if (auto* health = reg.try_get<HealthComponent>(entity)) {
         health->current = definition.health;
         health->max = definition.maxHealth;
@@ -174,8 +182,8 @@ entt::entity EntityFactory::createMob(GameplayRegistry& registry,
     }
 
     entt::entity entity = entt::null;
-    if (definition->model == "zombie_humanoid") {
-        entity = MobModelFactory::createZombie(registry, position);
+    if (definition->model == "humanoid") {
+        entity = MobModelFactory::createHumanoidMob(registry, position);
     } else {
         std::printf("[EntityFactory] Unsupported mob model '%s' for %s\n",
                     definition->model.c_str(),
@@ -202,6 +210,7 @@ entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::ve
     const entt::entity zombie = registry.create();
     registry.emplace<MobTag>(zombie);
     registry.emplace<SkinTypeComponent>(zombie, SkinTypeComponent::Type::Mob);
+    registry.emplace<MobVisualComponent>(zombie);
     registry.emplace<TransformComponent>(zombie, position, 1.62f);
     registry.emplace<MobAIComponent>(zombie);
     registry.emplace<MoveIntentComponent>(zombie);

@@ -5,15 +5,16 @@
 
 namespace ecs {
 
-entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
-                                            const glm::vec3& worldPosition,
-                                            const bool gameplayControlled) {
+entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
+                                                const glm::vec3& worldPosition,
+                                                const bool gameplayControlled) {
     auto& reg = registry.registry();
 
     // Root entity: feet anchor
     auto root = reg.create();
     reg.emplace<MobTag>(root);
     reg.emplace<SkinTypeComponent>(root, SkinTypeComponent::Type::Mob);
+    reg.emplace<MobVisualComponent>(root);
     reg.emplace<TransformComponent>(root, worldPosition, 1.62f);
     reg.emplace<SteveAnimationStateComponent>(root);
     reg.emplace<WorldTransformComponent>(root);
@@ -109,14 +110,26 @@ entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
     return root;
 }
 
-entt::entity MobModelFactory::createZombieReplica(GameplayRegistry& registry,
-                                                   const glm::vec3& worldPosition,
-                                                   const float yaw) {
-    const entt::entity root = createZombie(registry, worldPosition, false);
+entt::entity MobModelFactory::createHumanoidMobReplica(GameplayRegistry& registry,
+                                                       const glm::vec3& worldPosition,
+                                                       const float yaw) {
+    const entt::entity root = createHumanoidMob(registry, worldPosition, false);
     if (auto* ai = registry.try_get<MobAIComponent>(root)) {
         ai->yaw = yaw;
     }
     return root;
+}
+
+entt::entity MobModelFactory::createZombie(GameplayRegistry& registry,
+                                           const glm::vec3& worldPosition,
+                                           const bool gameplayControlled) {
+    return createHumanoidMob(registry, worldPosition, gameplayControlled);
+}
+
+entt::entity MobModelFactory::createZombieReplica(GameplayRegistry& registry,
+                                                  const glm::vec3& worldPosition,
+                                                  const float yaw) {
+    return createHumanoidMobReplica(registry, worldPosition, yaw);
 }
 
 void MobModelFactory::destroyMob(GameplayRegistry& registry, entt::entity mobRoot) {

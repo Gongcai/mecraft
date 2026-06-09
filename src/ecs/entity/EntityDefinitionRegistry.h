@@ -55,7 +55,9 @@ struct MobHurtEffectDefinition {
 
 struct MobEntityDefinition {
     NamespacedId id;
-    std::string model = "zombie_humanoid";
+    std::string model = "humanoid";
+    std::string textureKey = "zombie";
+    float visualScale = 1.0f;
     int health = 20;
     int maxHealth = 20;
     float eyeHeight = 1.62f;

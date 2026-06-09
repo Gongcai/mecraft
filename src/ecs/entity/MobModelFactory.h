@@ -8,6 +8,14 @@ namespace ecs {
 
 class MobModelFactory {
 public:
+    static entt::entity createHumanoidMob(GameplayRegistry& registry,
+                                          const glm::vec3& worldPosition,
+                                          bool gameplayControlled = true);
+
+    static entt::entity createHumanoidMobReplica(GameplayRegistry& registry,
+                                                 const glm::vec3& worldPosition,
+                                                 float yaw = 0.0f);
+
     static entt::entity createZombie(GameplayRegistry& registry,
                                      const glm::vec3& worldPosition,
                                      bool gameplayControlled = true);

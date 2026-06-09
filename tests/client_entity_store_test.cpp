@@ -84,6 +84,7 @@ static void testMobSpawnCreatesZombieReplica() {
     auto view = raw.view<ecs::MobTag,
                          ecs::ChildrenComponent,
                          ecs::MobAIComponent,
+                         ecs::MobVisualComponent,
                          ecs::VelocityComponent,
                          ecs::HealthComponent,
                          ecs::HurtEffectComponent,
@@ -95,6 +96,11 @@ static void testMobSpawnCreatesZombieReplica() {
     require(raw.get<ecs::ChildrenComponent>(mob).children.size() == 1, "mob replica did not create hierarchy");
     require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:zombie",
             "mob replica should keep the network entity id");
+    const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
+    require(visual.model == "humanoid" &&
+            visual.textureKey == "zombie" &&
+            std::fabs(visual.scale - 1.0f) < 0.001f,
+            "mob replica should apply configured visual data");
     require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
     require(raw.get<ecs::HealthComponent>(mob).current == 20 &&
             raw.get<ecs::HealthComponent>(mob).max == 20,

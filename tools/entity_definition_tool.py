@@ -14,7 +14,7 @@ DEFAULT_ENTITIES_PATH = Path("assets/config/entities.json")
 DEFAULT_ITEMS_PATH = Path("assets/config/items.json")
 DEFAULT_BLOCKS_PATH = Path("assets/config/blocks.json")
 DEFAULT_SOUNDS_PATH = Path("assets/sounds/sounds.json")
-SUPPORTED_MODELS = {"zombie_humanoid"}
+SUPPORTED_MODELS = {"humanoid"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -100,6 +100,12 @@ def validate_entity(
 
     model = entity.get("model")
     require(model in SUPPORTED_MODELS, f"{context}.model must be one of {sorted(SUPPORTED_MODELS)}", errors)
+    texture = entity.get("texture", "")
+    require(isinstance(texture, str) and bool(texture),
+            f"{context}.texture must be a non-empty texture key", errors)
+    scale = entity.get("scale", 1.0)
+    require(isinstance(scale, (int, float)) and scale > 0,
+            f"{context}.scale must be a positive number", errors)
 
     health = entity.get("health", 20)
     if isinstance(health, int):
@@ -229,6 +235,8 @@ def scaffold_entity(args: argparse.Namespace) -> int:
         "id": args.entity_id,
         "kind": "mob",
         "model": args.model,
+        "texture": "zombie",
+        "scale": 1.0,
         "health": {"current": args.health, "max": args.health},
         "eyeHeight": 1.62,
         "physics": {
@@ -290,7 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
     scaffold = subcommands.add_parser("scaffold", help="append a default mob definition")
     scaffold.add_argument("entity_id", help="namespaced entity id, e.g. minecraft:pig")
     scaffold.add_argument("--path", type=Path, default=DEFAULT_ENTITIES_PATH)
-    scaffold.add_argument("--model", choices=sorted(SUPPORTED_MODELS), default="zombie_humanoid")
+    scaffold.add_argument("--model", choices=sorted(SUPPORTED_MODELS), default="humanoid")
     scaffold.add_argument("--health", type=int, default=20)
     scaffold.add_argument("--attack-damage", type=int, default=3)
     scaffold.add_argument("--drop", action="append", default=[],

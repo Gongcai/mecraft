@@ -2,6 +2,7 @@
 #define MECRAFT_ECS_STEVE_COMPONENTS_H
 
 #include <cstdint>
+#include <string>
 
 #include <entt/entity/entity.hpp>
 #include <glm/glm.hpp>
@@ -35,6 +36,12 @@ struct MobAIComponent {
     float attackCooldownRemaining = 0.0f;
     int attackDamage = 3;
     float yaw = 0.0f;
+};
+
+struct MobVisualComponent {
+    std::string model = "humanoid";
+    std::string textureKey = "zombie";
+    float scale = 1.0f;
 };
 
 enum class StevePartType : uint8_t {

@@ -77,6 +77,24 @@ void applyMobDeathEffect(entt::registry& registry,
     }
 }
 
+void applyMobVisual(entt::registry& registry,
+                    const entt::entity entity,
+                    const ecs::MobEntityDefinition* definition) {
+    if (entity == entt::null || !registry.valid(entity)) {
+        return;
+    }
+
+    auto* visual = registry.try_get<ecs::MobVisualComponent>(entity);
+    if (visual == nullptr) {
+        visual = &registry.emplace<ecs::MobVisualComponent>(entity);
+    }
+    if (definition != nullptr) {
+        visual->model = definition->model;
+        visual->textureKey = definition->textureKey;
+        visual->scale = definition->visualScale;
+    }
+}
+
 struct ImpactAudio {
     std::string soundId;
     float volume = 1.0f;
@@ -450,7 +468,7 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     int initialMaxHealth = 20;
     const ecs::MobEntityDefinition* mobDefinition = nullptr;
     if (m_gameplayRegistry) {
-        bool useZombieHumanoid = entityId == "minecraft:zombie";
+        bool useHumanoid = entityId == "minecraft:zombie";
         std::string error;
         ecs::EntityDefinitionRegistry& definitions = ecs::EntityDefinitionRegistry::instance();
         if (definitions.ensureLoaded(&error)) {
@@ -458,16 +476,17 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
                 mobDefinition = definition;
                 initialHealth = definition->health;
                 initialMaxHealth = definition->maxHealth;
-                useZombieHumanoid = definition->model == "zombie_humanoid";
+                useHumanoid = definition->model == "humanoid";
             }
         }
-        if (!useZombieHumanoid) {
+        if (!useHumanoid) {
             return;
         }
-        entity = ecs::MobModelFactory::createZombieReplica(*m_gameplayRegistry, msg.position, msg.yaw);
+        entity = ecs::MobModelFactory::createHumanoidMobReplica(*m_gameplayRegistry, msg.position, msg.yaw);
     } else {
         entity = m_registry->create();
         m_registry->emplace<ecs::MobTag>(entity);
+        m_registry->emplace<ecs::MobVisualComponent>(entity);
         m_registry->emplace<ecs::TransformComponent>(entity, msg.position, 1.62f);
         m_registry->emplace<ecs::MobAIComponent>(entity);
         m_registry->get<ecs::MobAIComponent>(entity).yaw = msg.yaw;
@@ -477,6 +496,7 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     m_registry->emplace<ecs::HealthComponent>(entity, initialHealth, initialMaxHealth);
     m_registry->emplace<ecs::HurtEffectComponent>(entity);
     m_registry->emplace<ecs::EntityTypeComponent>(entity, entityId);
+    applyMobVisual(*m_registry, entity, mobDefinition);
     applyMobHurtEffect(*m_registry, entity, mobDefinition);
     applyMobDeathEffect(*m_registry, entity, mobDefinition);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
