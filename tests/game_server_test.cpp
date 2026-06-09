@@ -626,6 +626,61 @@ static void testSummonZombieUsesOwnedServerEcs() {
     std::printf("[PASS] testSummonZombieUsesOwnedServerEcs\n");
 }
 
+static void testSummonHerobrineUsesOwnedServerEcs() {
+    ServerHarness harness;
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 21;
+    command.command = "/summon herobrine";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCommandResult = false;
+    bool sawMobSpawn = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 21 &&
+                result.success &&
+                result.message.find("Summoned herobrine") != std::string::npos) {
+                sawCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                require(spawn.entityId == "minecraft:herobrine",
+                        "owned ECS herobrine summon should include configured entity id in spawn packet");
+                sawMobSpawn = true;
+            }
+        }
+    }
+
+    require(sawCommandResult, "owned ECS herobrine summon should return a successful command result");
+    require(sawMobSpawn, "owned ECS herobrine summon should send a mob spawn");
+    std::printf("[PASS] testSummonHerobrineUsesOwnedServerEcs\n");
+}
+
 static void testOwnedServerZombiePursuesPlayer() {
     ServerHarness harness;
     const glm::vec3 playerPosition = harness.server.getSpawnPosition();
@@ -1611,6 +1666,58 @@ static void testEntityFactoryCreatesConfiguredZombie() {
             "configured zombie should apply death effect");
 
     std::printf("[PASS] testEntityFactoryCreatesConfiguredZombie\n");
+}
+
+static void testEntityFactoryCreatesConfiguredHerobrine() {
+    ecs::EntityDefinitionRegistry::instance().clear();
+    std::string error;
+    require(ecs::EntityDefinitionRegistry::instance().ensureLoaded(&error),
+            error.empty() ? "entity definitions should load" : error.c_str());
+
+    ecs::GameplayRegistry registry;
+    const entt::entity herobrine =
+        ecs::EntityFactory::createMob(registry, "minecraft:herobrine", glm::vec3(2.0f, 64.0f, 1.0f));
+    require(herobrine != entt::null, "EntityFactory should create configured herobrine");
+
+    auto& raw = registry.registry();
+    require(raw.all_of<ecs::MobTag,
+                       ecs::TransformComponent,
+                       ecs::MobAIComponent,
+                       ecs::HealthComponent,
+                       ecs::MobVisualComponent,
+                       ecs::PhysicsBodyComponent,
+                       ecs::DropTableComponent,
+                       ecs::DeathEffectComponent,
+                       ecs::EntityTypeComponent,
+                       ecs::NetworkSyncTag>(herobrine),
+            "configured herobrine should have gameplay mob components");
+
+    const auto& ai = raw.get<ecs::MobAIComponent>(herobrine);
+    const auto& health = raw.get<ecs::HealthComponent>(herobrine);
+    const auto& drops = raw.get<ecs::DropTableComponent>(herobrine);
+    const auto& deathEffect = raw.get<ecs::DeathEffectComponent>(herobrine);
+    const auto& type = raw.get<ecs::EntityTypeComponent>(herobrine);
+    const auto& visual = raw.get<ecs::MobVisualComponent>(herobrine);
+
+    require(type.entityId == "minecraft:herobrine", "configured herobrine should keep entity definition id");
+    require(visual.model == "humanoid" &&
+            visual.textureKey == "herobrine" &&
+            std::fabs(visual.scale - 1.0f) < 0.001f,
+            "configured herobrine should apply visual data");
+    require(health.current == 40 && health.max == 40,
+            "configured herobrine should apply health");
+    require(ai.attackDamage == 6 && std::fabs(ai.pursueSpeed - 1.05f) < 0.001f,
+            "configured herobrine should apply AI tuning");
+    require(drops.itemId == ItemRegistry::findByName("minecraft:diamond") &&
+            drops.minCount == 1 &&
+            drops.maxCount == 1,
+            "configured herobrine should apply drop table");
+    require(deathEffect.particleBlock == BlockIds::DIAMOND_ORE &&
+            deathEffect.particleCount == 36 &&
+            deathEffect.soundId == "mob.zombie.death",
+            "configured herobrine should apply death effect");
+
+    std::printf("[PASS] testEntityFactoryCreatesConfiguredHerobrine\n");
 }
 
 static void testPersistentZombieRestoresFromSave() {
@@ -2673,6 +2780,7 @@ int main() {
     testNonAdminCommandDenied();
     testSummonZombieSpawnsNetworkMob();
     testSummonZombieUsesOwnedServerEcs();
+    testSummonHerobrineUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
     testOwnedServerZombieAttackSyncsPlayerHealth();
     testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
@@ -2682,6 +2790,7 @@ int main() {
     testOwnedServerPlayerThrowsAppleProjectileDamagesZombie();
     testCreativeAppleProjectileDoesNotConsumeInventory();
     testEntityFactoryCreatesConfiguredZombie();
+    testEntityFactoryCreatesConfiguredHerobrine();
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
     testPersistentChestInventoryRestoresFromSave();

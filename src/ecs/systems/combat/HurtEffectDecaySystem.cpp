@@ -13,6 +13,9 @@ void HurtEffectDecaySystem::update(SystemContext& ctx) {
     for (const entt::entity entity : view) {
         auto& hurt = view.get<HurtEffectComponent>(entity);
         hurt.flashSecondsRemaining = std::max(0.0f, hurt.flashSecondsRemaining - ctx.dt);
+        if (hurt.flashSecondsRemaining <= 0.0f) {
+            hurt.classicHurtEffectPending = false;
+        }
     }
 }
 

@@ -1814,11 +1814,11 @@ bool GameServer::spawnMobEntity(const std::string& entityId, const glm::vec3& po
         return false;
     }
 
-    if (entityId != "minecraft:zombie") {
-        return false;
+    if (entityId == "minecraft:zombie") {
+        ecs::EntityFactory::createZombie(*m_ecsRegistry, position);
+        return true;
     }
-    ecs::EntityFactory::createZombie(*m_ecsRegistry, position);
-    return true;
+    return false;
 }
 
 bool GameServer::spawnZombieEntity(const glm::vec3& position) {

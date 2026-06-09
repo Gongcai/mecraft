@@ -44,6 +44,51 @@
         "sound": "mob.zombie.death",
         "volume": 1.0
       }
+    },
+    {
+      "id": "minecraft:herobrine",
+      "kind": "mob",
+      "model": "humanoid",
+      "texture": "herobrine",
+      "scale": 1.0,
+      "health": {
+        "current": 40,
+        "max": 40
+      },
+      "eyeHeight": 1.62,
+      "physics": {
+        "halfExtents": [0.3, 0.9, 0.3],
+        "colliderOffset": [0.0, 0.9, 0.0],
+        "eyeOffsetY": 1.62
+      },
+      "ai": {
+        "wanderInterval": 2.4,
+        "wanderSpeed": 0.55,
+        "pursueSpeed": 1.05,
+        "acquisitionRange": 18.0,
+        "loseTargetRange": 26.0,
+        "attackRange": 1.5,
+        "attackCooldownSeconds": 0.9,
+        "attackDamage": 6
+      },
+      "drops": [
+        {
+          "item": "minecraft:diamond",
+          "min": 1,
+          "max": 1
+        }
+      ],
+      "hurtEffect": {
+        "sound": "mob.zombie.hurt",
+        "volume": 1.0,
+        "flashDurationSeconds": 0.18
+      },
+      "deathEffect": {
+        "particleBlock": "minecraft:diamond_ore",
+        "particleCount": 36,
+        "sound": "mob.zombie.death",
+        "volume": 1.0
+      }
     }
   ]
 }

@@ -21,7 +21,7 @@ float yawFromMove(const glm::vec2& move) {
         return 0.0f;
     }
     const float angle = std::atan2(move.y, move.x);
-    return glm::degrees(angle) - 90.0f;
+    return glm::degrees(angle);
 }
 
 bool isTargetUsable(entt::registry& reg,
@@ -76,7 +76,7 @@ void chooseWanderDirection(MobAIComponent& ai) {
 
     const float angle = (std::rand() / static_cast<float>(RAND_MAX)) * glm::two_pi<float>();
     ai.wanderDir = {std::cos(angle), std::sin(angle)};
-    ai.yaw = glm::degrees(angle) - 90.0f;
+    ai.yaw = glm::degrees(angle);
     ai.state = MobAIComponent::State::Wander;
 }
 

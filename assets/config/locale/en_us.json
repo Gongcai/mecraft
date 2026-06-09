@@ -13,6 +13,7 @@
     "switched_survival": "Switched to Survive Mode",
     "time_set_to": "Time set to ",
     "spawned_zombie": "Spawned zombie",
+    "spawned_mob": "Spawned ",
     "unknown_mob": "Unknown mob: ",
     "unknown_command": "Unknown command: ",
     "select_world": "Select World",

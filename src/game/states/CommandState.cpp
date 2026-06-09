@@ -56,14 +56,11 @@ bool CommandState::executeCommand(const std::string& command) {
     if (primary == "spawn") {
         std::string mobType;
         iss >> mobType;
-        if (mobType == "zombie") {
-            ecs::PlayerQuery query(m_ctx.ecsRegistry);
-            glm::vec3 playerPos = query.getPosition();
-            if (ecs::EntityFactory::createZombie(m_ctx.ecsRegistry, playerPos) == entt::null) {
-                m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("unknown_mob") + mobType);
-                return false;
-            }
-            m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("spawned_zombie"));
+        const std::string entityId = mobType.find(':') == std::string::npos ? "minecraft:" + mobType : mobType;
+        ecs::PlayerQuery query(m_ctx.ecsRegistry);
+        glm::vec3 playerPos = query.getPosition();
+        if (ecs::EntityFactory::createMob(m_ctx.ecsRegistry, entityId, playerPos) != entt::null) {
+            m_ctx.uiRenderer.appendCommandLine(m_ctx.localeManager.tr("spawned_mob") + mobType);
             return false;
         }
         m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("unknown_mob") + mobType);

@@ -167,6 +167,50 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob death impact should use zombie death sound");
 }
 
+static void testMobSpawnCreatesConfiguredHerobrineReplica() {
+    client::ClientEntityStore store;
+    ecs::GameplayRegistry registry;
+    store.init(registry, nullptr);
+
+    net::EntitySpawnMessage spawn;
+    spawn.netId = 78;
+    spawn.kind = net::EntityKind::Mob;
+    spawn.entityId = "minecraft:herobrine";
+    spawn.position = glm::vec3(-2.0f, 64.0f, 3.0f);
+    spawn.velocity = glm::vec3(0.1f, 0.0f, 0.0f);
+    spawn.yaw = 15.0f;
+    store.handleSpawn(spawn);
+
+    require(store.remoteEntityCount() == 1, "herobrine spawn was not tracked");
+    require(store.hasEntity(78), "herobrine netId missing");
+
+    auto& raw = registry.registry();
+    auto view = raw.view<ecs::MobTag,
+                         ecs::MobVisualComponent,
+                         ecs::HealthComponent,
+                         ecs::DeathEffectComponent,
+                         ecs::EntityTypeComponent,
+                         ecs::EntityNetIdComponent>();
+    require(view.begin() != view.end(), "herobrine replica components missing");
+    const entt::entity mob = *view.begin();
+    const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
+    const auto& health = raw.get<ecs::HealthComponent>(mob);
+    const auto& deathEffect = raw.get<ecs::DeathEffectComponent>(mob);
+
+    require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:herobrine",
+            "herobrine replica should keep the network entity id");
+    require(visual.model == "humanoid" &&
+            visual.textureKey == "herobrine" &&
+            std::fabs(visual.scale - 1.0f) < 0.001f,
+            "herobrine replica should apply configured visual data");
+    require(health.current == 40 && health.max == 40,
+            "herobrine replica should initialize configured synced health");
+    require(deathEffect.particleBlock == BlockIds::DIAMOND_ORE &&
+            deathEffect.particleCount == 36 &&
+            deathEffect.soundId == "mob.zombie.death",
+            "herobrine replica should initialize configured death effect");
+}
+
 static void testProjectileSpawnCreatesAppleReplica() {
     client::ClientEntityStore store;
     ecs::GameplayRegistry registry;
@@ -296,6 +340,7 @@ int main() {
 
     testSpawnBeforeInitIsReplayed();
     testMobSpawnCreatesZombieReplica();
+    testMobSpawnCreatesConfiguredHerobrineReplica();
     testProjectileSpawnCreatesAppleReplica();
     std::printf("All ClientEntityStore tests passed!\n");
     return 0;
