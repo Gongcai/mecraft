@@ -315,6 +315,7 @@ set(SRC_ECS
         src/ecs/systems/steve/TransformHierarchySystem.cpp
         src/ecs/systems/mob/MobAISystem.cpp
         src/ecs/systems/mob/MobAnimationSystem.cpp
+        src/ecs/systems/network/NetworkInterpolationSystem.cpp
 )
 
 # [其他子系统]
@@ -612,6 +613,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(in_process_transport_test tests/in_process_transport_test.cpp)
     add_mecraft_test(client_world_test tests/client_world_test.cpp)
     add_mecraft_test(client_entity_store_test tests/client_entity_store_test.cpp)
+    add_mecraft_test(network_interpolation_system_test tests/network_interpolation_system_test.cpp)
     add_mecraft_test(game_server_test tests/game_server_test.cpp)
     add_mecraft_test(chunk_ticket_manager_test tests/chunk_ticket_manager_test.cpp)
     add_mecraft_test(chunk_save_serializer_test tests/chunk_save_serializer_test.cpp)

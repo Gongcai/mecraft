@@ -53,15 +53,24 @@ static void testSpawnBeforeInitIsReplayed() {
     require(store.remoteEntityCount() == 1, "pending spawn was not replayed");
     require(store.hasEntity(42), "spawned entity netId missing");
 
-    auto view = registry.view<ecs::EntityNetIdComponent, ecs::TransformComponent, ecs::VelocityComponent>();
+    auto view = registry.view<ecs::EntityNetIdComponent,
+                              ecs::TransformComponent,
+                              ecs::VelocityComponent,
+                              ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "spawned entity components missing");
     const auto entity = *view.begin();
     const auto& transform = registry.get<ecs::TransformComponent>(entity);
     const auto& velocity = registry.get<ecs::VelocityComponent>(entity);
+    const auto& interpolation = registry.get<ecs::NetworkInterpolationComponent>(entity);
     require(transform.position.x == 4.0f, "snapshot x was not applied");
     require(transform.position.y == 5.0f, "snapshot y was not applied");
     require(transform.position.z == 6.0f, "snapshot z was not applied");
     require(velocity.velocity.y == 0.5f, "snapshot velocity was not applied");
+    require(interpolation.hasTarget, "pending snapshot should initialize interpolation target");
+    require(nearVec3(interpolation.targetPosition, item.position),
+            "pending snapshot should update interpolation target position");
+    require(nearVec3(interpolation.targetVelocity, item.velocity),
+            "pending snapshot should update interpolation target velocity");
 }
 
 static void testMobSpawnCreatesZombieReplica() {
@@ -90,7 +99,8 @@ static void testMobSpawnCreatesZombieReplica() {
                          ecs::HurtEffectComponent,
                          ecs::DeathEffectComponent,
                          ecs::EntityTypeComponent,
-                         ecs::EntityNetIdComponent>();
+                         ecs::EntityNetIdComponent,
+                         ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "mob replica components missing");
     const entt::entity mob = *view.begin();
     require(raw.get<ecs::ChildrenComponent>(mob).children.size() == 1, "mob replica did not create hierarchy");
@@ -129,6 +139,14 @@ static void testMobSpawnCreatesZombieReplica() {
     require(raw.get<ecs::TransformComponent>(mob).position.x == 3.0f, "mob snapshot position was not applied");
     require(raw.get<ecs::VelocityComponent>(mob).velocity.z == 0.5f, "mob snapshot velocity was not applied");
     require(raw.get<ecs::MobAIComponent>(mob).yaw == 90.0f, "mob snapshot yaw was not applied");
+    const auto& interpolation = raw.get<ecs::NetworkInterpolationComponent>(mob);
+    require(interpolation.hasTarget, "mob snapshot should initialize interpolation target");
+    require(nearVec3(interpolation.targetPosition, item.position),
+            "mob snapshot should update interpolation target position");
+    require(nearVec3(interpolation.targetVelocity, item.velocity),
+            "mob snapshot should update interpolation target velocity");
+    require(std::fabs(interpolation.targetYaw - 90.0f) < 0.001f,
+            "mob snapshot should update interpolation target yaw");
     require(raw.get<ecs::HealthComponent>(mob).current == 16,
             "mob snapshot health was not applied");
     require(raw.get<ecs::HurtEffectComponent>(mob).classicHurtEffectPending,
@@ -263,7 +281,8 @@ static void testProjectileSpawnCreatesAppleReplica() {
                          ecs::ProjectileComponent,
                          ecs::ItemComponent,
                          ecs::SpinVisualComponent,
-                         ecs::EntityNetIdComponent>();
+                         ecs::EntityNetIdComponent,
+                         ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "projectile replica components missing");
     const entt::entity projectile = *view.begin();
     require(raw.get<ecs::ItemComponent>(projectile).itemId == ItemIds::APPLE,
@@ -309,6 +328,14 @@ static void testProjectileSpawnCreatesAppleReplica() {
             "projectile snapshot velocity was not applied");
     require(raw.get<ecs::SpinVisualComponent>(projectile).yawRadians == 0.75f,
             "projectile snapshot yaw was not applied");
+    const auto& interpolation = raw.get<ecs::NetworkInterpolationComponent>(projectile);
+    require(interpolation.hasTarget, "projectile snapshot should initialize interpolation target");
+    require(nearVec3(interpolation.targetPosition, item.position),
+            "projectile snapshot should update interpolation target position");
+    require(nearVec3(interpolation.targetVelocity, item.velocity),
+            "projectile snapshot should update interpolation target velocity");
+    require(std::fabs(interpolation.targetYaw - 0.75f) < 0.001f,
+            "projectile snapshot should update interpolation target yaw");
 
     net::EntityImpactMessage impact;
     impact.netId = 91;

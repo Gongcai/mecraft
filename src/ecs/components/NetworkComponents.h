@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include <glm/glm.hpp>
+
 namespace ecs {
 
 /// Unique network identifier for entities that need synchronization.
@@ -33,6 +35,18 @@ struct EntityTypeComponent {
 
 /// Tag for synced entities that should despawn after the server has sent final events.
 struct PendingNetworkDespawnTag {};
+
+/// Client-side smoothing target for server-authoritative entity snapshots.
+struct NetworkInterpolationComponent {
+    glm::vec3 targetPosition{0.0f};
+    glm::vec3 targetVelocity{0.0f};
+    float targetYaw = 0.0f;
+    float targetPitch = 0.0f;
+    float positionLerpSpeed = 12.0f;
+    float rotationLerpSpeed = 16.0f;
+    float snapDistance = 8.0f;
+    bool hasTarget = false;
+};
 
 } // namespace ecs
 

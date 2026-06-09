@@ -17,6 +17,7 @@
 #include "systems/item/ItemSpawnSystem.h"
 #include "systems/mob/MobAISystem.h"
 #include "systems/mob/MobAnimationSystem.h"
+#include "systems/network/NetworkInterpolationSystem.h"
 #include "systems/particle/ParticleCleanupSystem.h"
 #include "systems/particle/ParticleSimulationSystem.h"
 #include "systems/particle/ParticleSpawnSystem.h"
@@ -97,6 +98,7 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
     addFixedUpdateSystem<PlayerFootstepAudioSystem>();
     addFixedUpdateSystem<FallRollEffectSystem>();
     addFixedUpdateSystem<AudioSyncSystem>();
+    addFixedUpdateSystem<NetworkInterpolationSystem>();
 
     // Humanoid visual sync/animation.
     addFixedUpdateSystem<SteveSyncSystem>();

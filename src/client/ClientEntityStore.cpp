@@ -164,6 +164,41 @@ void triggerReplicaHurt(ecs::GameplayRegistry* gameplayRegistry,
     }
 }
 
+ecs::NetworkInterpolationComponent& ensureNetworkInterpolation(entt::registry& registry,
+                                                                const entt::entity entity,
+                                                                const glm::vec3& position,
+                                                                const glm::vec3& velocity,
+                                                                const float yaw,
+                                                                const float pitch) {
+    auto* interpolation = registry.try_get<ecs::NetworkInterpolationComponent>(entity);
+    if (interpolation == nullptr) {
+        interpolation = &registry.emplace<ecs::NetworkInterpolationComponent>(entity);
+    }
+    interpolation->targetPosition = position;
+    interpolation->targetVelocity = velocity;
+    interpolation->targetYaw = yaw;
+    interpolation->targetPitch = pitch;
+    return *interpolation;
+}
+
+void snapReplicaToSnapshot(entt::registry& registry,
+                           const entt::entity entity,
+                           const net::EntitySnapshotItem& item) {
+    if (auto* transform = registry.try_get<ecs::TransformComponent>(entity)) {
+        transform->position = item.position;
+    }
+    if (auto* spin = registry.try_get<ecs::SpinVisualComponent>(entity)) {
+        spin->yawRadians = item.yaw;
+    }
+    if (auto* camera = registry.try_get<ecs::CameraStateComponent>(entity)) {
+        camera->yaw = item.yaw;
+        camera->pitch = item.pitch;
+    }
+    if (auto* mobAI = registry.try_get<ecs::MobAIComponent>(entity)) {
+        mobAI->yaw = item.yaw;
+    }
+}
+
 } // namespace
 
 ClientEntityStore::ClientEntityStore() = default;
@@ -320,33 +355,22 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
             continue;
         }
 
-        // Update transform
-        auto* transform = m_registry->try_get<ecs::TransformComponent>(it->second);
-        if (transform) {
-            transform->position = item.position;
+        auto& interpolation = ensureNetworkInterpolation(*m_registry,
+                                                         it->second,
+                                                         item.position,
+                                                         item.velocity,
+                                                         item.yaw,
+                                                         item.pitch);
+        const bool firstSnapshotTarget = !interpolation.hasTarget;
+        interpolation.hasTarget = true;
+        if (firstSnapshotTarget) {
+            snapReplicaToSnapshot(*m_registry, it->second, item);
         }
 
         // Update velocity if present
         auto* velocity = m_registry->try_get<ecs::VelocityComponent>(it->second);
         if (velocity) {
             velocity->velocity = item.velocity;
-        }
-
-        // Update spin yaw for drops
-        auto* spin = m_registry->try_get<ecs::SpinVisualComponent>(it->second);
-        if (spin) {
-            spin->yawRadians = item.yaw;
-        }
-
-        auto* camera = m_registry->try_get<ecs::CameraStateComponent>(it->second);
-        if (camera) {
-            camera->yaw = item.yaw;
-            camera->pitch = item.pitch;
-        }
-
-        auto* mobAI = m_registry->try_get<ecs::MobAIComponent>(it->second);
-        if (mobAI) {
-            mobAI->yaw = item.yaw;
         }
 
         if (item.maxHealth > 0) {
@@ -424,6 +448,7 @@ void ClientEntityStore::createDropEntity(const net::EntitySpawnMessage& msg) {
     m_registry->emplace<ecs::DropItemTag>(entity);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
+    ensureNetworkInterpolation(*m_registry, entity, msg.position, msg.velocity, msg.yaw, msg.pitch);
 
     m_netIdToEntity[msg.netId] = entity;
 }
@@ -453,6 +478,7 @@ void ClientEntityStore::createProjectileEntity(const net::EntitySpawnMessage& ms
     m_registry->emplace<ecs::DropEntityIdComponent>(entity, static_cast<std::size_t>(msg.netId));
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
+    ensureNetworkInterpolation(*m_registry, entity, msg.position, msg.velocity, msg.yaw, msg.pitch);
 
     m_netIdToEntity[msg.netId] = entity;
     queueAudioEvent(m_gameplayRegistry, definition.throwSoundId, msg.position);
@@ -475,6 +501,7 @@ void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {
     m_registry->emplace<ecs::VelocityComponent>(entity, msg.velocity);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
+    ensureNetworkInterpolation(*m_registry, entity, msg.position, msg.velocity, msg.yaw, msg.pitch);
 
     m_netIdToEntity[msg.netId] = entity;
 }
@@ -519,6 +546,7 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     applyMobDeathEffect(*m_registry, entity, mobDefinition);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);
     m_registry->emplace<ecs::EntityNetIdComponent>(entity, msg.netId);
+    ensureNetworkInterpolation(*m_registry, entity, msg.position, msg.velocity, msg.yaw, msg.pitch);
 
     m_netIdToEntity[msg.netId] = entity;
 }
