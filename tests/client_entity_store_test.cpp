@@ -145,6 +145,31 @@ static void testMobSpawnCreatesZombieReplica() {
     require(nearVec3(audioBus.peek().front().position, item.position),
             "mob snapshot hurt sound should use synced mob position");
 
+    auto& hurtEffect = raw.get<ecs::HurtEffectComponent>(mob);
+    hurtEffect.classicHurtEffectPending = false;
+    hurtEffect.flashSecondsRemaining = 0.0f;
+    store.handleSnapshot(snapshot);
+    require(!raw.get<ecs::HurtEffectComponent>(mob).classicHurtEffectPending,
+            "duplicate latched hurt snapshot should not retrigger pending hurt effect");
+    require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining == 0.0f,
+            "duplicate latched hurt snapshot should not refresh visible hurt flash");
+    require(audioBus.size() == 1,
+            "duplicate latched hurt snapshot should not queue another hurt audio event");
+
+    item.hurt = false;
+    snapshot.entities[0] = item;
+    store.handleSnapshot(snapshot);
+    item.hurt = true;
+    snapshot.serverTick = 13;
+    snapshot.entities[0] = item;
+    store.handleSnapshot(snapshot);
+    require(raw.get<ecs::HurtEffectComponent>(mob).flashSecondsRemaining > 0.0f,
+            "new hurt snapshot after cleared flag should refresh visible hurt flash");
+    require(audioBus.size() == 2,
+            "new hurt snapshot after cleared flag should queue another hurt audio event");
+    hurtEffect.classicHurtEffectPending = false;
+    hurtEffect.flashSecondsRemaining = 0.0f;
+
     net::EntityImpactMessage impact;
     impact.netId = 77;
     impact.position = glm::vec3(3.25f, 65.0f, -4.0f);
@@ -161,7 +186,7 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob death impact should use server-provided particle count");
     require(particleBus.peek().front().blockType == BlockIds::ROSE,
             "mob death impact should use server-provided particle block");
-    require(audioBus.size() == 2,
+    require(audioBus.size() == 3,
             "mob death impact should append one audio event after hurt audio");
     require(audioBus.peek().back().clipName == "mob.zombie.death",
             "mob death impact should use zombie death sound");

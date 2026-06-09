@@ -64,6 +64,7 @@ private:
     std::vector<net::EntityImpactMessage> m_pendingImpacts;
     std::vector<net::EntitySnapshotMessage> m_pendingSnapshots;
     std::unordered_set<net::EntityNetId> m_explicitImpactNetIds;
+    std::unordered_set<net::EntityNetId> m_latchedHurtNetIds;
 };
 
 } // namespace client

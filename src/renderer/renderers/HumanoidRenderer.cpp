@@ -774,6 +774,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
         }
     }
 
+    setHurtFlash(shader, 0.0f);
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
@@ -970,6 +971,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
         }
     }
 
+    setHurtFlash(shader, 0.0f);
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);

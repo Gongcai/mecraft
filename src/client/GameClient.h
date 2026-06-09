@@ -109,6 +109,7 @@ private:
     uint32_t m_respawnSequence = 0;
     bool m_spawnChunksReady = false;
     bool m_hasServerHello = false;
+    bool m_playerHurtLatched = false;
     int m_chunksReceived = 0;
     static constexpr int kSpawnChunksThreshold = 25;  // 5x5 area
     SystemMessageCallback m_systemMessageCallback;

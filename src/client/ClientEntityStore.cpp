@@ -37,6 +37,16 @@ void queueAudioEvent(ecs::GameplayRegistry* gameplayRegistry,
     ecs::ensureAudioEventBus(*gameplayRegistry).push({soundId, position, true, volume});
 }
 
+bool consumeHurtFlag(std::unordered_set<net::EntityNetId>& latchedNetIds,
+                     const net::EntityNetId netId,
+                     const bool hurtFlag) {
+    if (!hurtFlag) {
+        latchedNetIds.erase(netId);
+        return false;
+    }
+    return latchedNetIds.insert(netId).second;
+}
+
 void applyMobHurtEffect(entt::registry& registry,
                         const entt::entity entity,
                         const ecs::MobEntityDefinition* definition) {
@@ -163,6 +173,7 @@ void ClientEntityStore::init(entt::registry& registry, ResourceMgr* resourceMgr)
     m_registry = &registry;
     m_gameplayRegistry = nullptr;
     m_resourceMgr = resourceMgr;
+    m_latchedHurtNetIds.clear();
     flushPendingMessages();
 }
 
@@ -170,6 +181,7 @@ void ClientEntityStore::init(ecs::GameplayRegistry& registry, ResourceMgr* resou
     m_registry = &registry.registry();
     m_gameplayRegistry = &registry;
     m_resourceMgr = resourceMgr;
+    m_latchedHurtNetIds.clear();
     flushPendingMessages();
 }
 
@@ -226,6 +238,7 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     auto it = m_netIdToEntity.find(msg.netId);
     if (it == m_netIdToEntity.end()) {
         m_explicitImpactNetIds.erase(msg.netId);
+        m_latchedHurtNetIds.erase(msg.netId);
         return;
     }
 
@@ -260,6 +273,7 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     }
 
     m_netIdToEntity.erase(it);
+    m_latchedHurtNetIds.erase(msg.netId);
 }
 
 void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
@@ -301,6 +315,7 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
         }
 
         if (!m_registry->valid(it->second)) {
+            m_latchedHurtNetIds.erase(item.netId);
             m_netIdToEntity.erase(it);
             continue;
         }
@@ -339,11 +354,14 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
             const bool healthDropped = previousHealth != nullptr &&
                                        static_cast<int>(item.health) < previousHealth->current;
             setSyncedHealth(*m_registry, it->second, item.health, item.maxHealth);
-            if (item.hurt || healthDropped) {
+            const bool hurtFlagRising = consumeHurtFlag(m_latchedHurtNetIds, item.netId, item.hurt);
+            if (hurtFlagRising || healthDropped) {
                 triggerReplicaHurt(m_gameplayRegistry, *m_registry, it->second);
             }
-        } else if (item.hurt) {
-            triggerReplicaHurt(m_gameplayRegistry, *m_registry, it->second);
+        } else {
+            if (consumeHurtFlag(m_latchedHurtNetIds, item.netId, item.hurt)) {
+                triggerReplicaHurt(m_gameplayRegistry, *m_registry, it->second);
+            }
         }
     }
 }

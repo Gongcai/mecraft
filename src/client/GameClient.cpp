@@ -13,6 +13,7 @@ GameClient::~GameClient() = default;
 
 void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
     m_transport = std::move(transport);
+    m_playerHurtLatched = false;
     std::printf("[Client] Transport connected; sending hello\n");
     std::fflush(stdout);
     sendHello();
@@ -314,6 +315,7 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
     for (const entt::entity player : view) {
         auto& health = view.get<ecs::HealthComponent>(player);
         const bool healthDropped = static_cast<int>(snapshot.playerHealth) < health.current;
+        const bool hurtFlagRising = snapshot.playerHurt && !m_playerHurtLatched;
         health.current = static_cast<int>(snapshot.playerHealth);
         health.max = static_cast<int>(snapshot.playerMaxHealth);
 
@@ -330,11 +332,12 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
             }
         }
 
-        if (snapshot.playerHurt || healthDropped) {
+        if (hurtFlagRising || healthDropped) {
             if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(player)) {
                 hurt->triggerClassicHurt();
             }
         }
+        m_playerHurtLatched = snapshot.playerHurt;
         break;
     }
 }

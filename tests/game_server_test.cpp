@@ -248,6 +248,19 @@ static void testClientAppliesPlayerHealthSnapshot() {
     require(client.lastSnapshot().playerHealth == 13, "client should retain health in last snapshot");
 
     raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending = false;
+    raw.get<ecs::HurtEffectComponent>(player).flashSecondsRemaining = 0.0f;
+
+    net::Packet duplicateHurtPacket;
+    duplicateHurtPacket.type = net::MessageType::ServerSnapshot;
+    duplicateHurtPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(duplicateHurtPacket));
+
+    client.receiveMessages();
+
+    require(!raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending,
+            "duplicate latched player hurt snapshot should not retrigger pending hurt effect");
+    require(raw.get<ecs::HurtEffectComponent>(player).flashSecondsRemaining == 0.0f,
+            "duplicate latched player hurt snapshot should not refresh visible hurt flash");
 
     net::Packet lowerHealthPacket;
     lowerHealthPacket.type = net::MessageType::ServerSnapshot;
