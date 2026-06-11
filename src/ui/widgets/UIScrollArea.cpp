@@ -1,6 +1,7 @@
 #include "UIScrollArea.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include <glad/glad.h>
@@ -12,6 +13,26 @@
 #include "../core/UIRenderUtils.h"
 
 namespace {
+
+struct ScissorBox {
+    GLint x = 0;
+    GLint y = 0;
+    GLint width = 1;
+    GLint height = 1;
+};
+
+ScissorBox makeScaledScissorBox(float x, float y, float width, float height, const UIRenderContext& ctx) {
+    GLint viewport[4] = {0, 0, ctx.screenWidth, ctx.screenHeight};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    const float uiScale = ctx.uiScale > 0.0f ? ctx.uiScale : 1.0f;
+    return {
+        viewport[0] + static_cast<GLint>(std::floor(x * uiScale)),
+        viewport[1] + static_cast<GLint>(std::floor(y * uiScale)),
+        std::max<GLint>(1, static_cast<GLint>(std::ceil(width * uiScale))),
+        std::max<GLint>(1, static_cast<GLint>(std::ceil(height * uiScale))),
+    };
+}
 
 float scrollbarThumbHeight(float trackHeight, float contentHeight) {
     if (trackHeight <= 0.0f || contentHeight <= 0.0f) {
@@ -134,17 +155,14 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
     float aw = width * scaleX;
     float ah = height * scaleY;
 
-    GLint scissorX = static_cast<GLint>(ax);
-    GLint scissorY = static_cast<GLint>(ay);
-    GLint scissorW = static_cast<GLint>(aw);
-    GLint scissorH = static_cast<GLint>(ah);
+    const ScissorBox scissor = makeScaledScissorBox(ax, ay, aw, ah, ctx);
 
     // Save current scissor state
     GLboolean wasScissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
     GLint prevScissor[4];
     glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
 
-    glScissor(scissorX, scissorY, scissorW, scissorH);
+    glScissor(scissor.x, scissor.y, scissor.width, scissor.height);
     glEnable(GL_SCISSOR_TEST);
 
     renderSelf(ctx);
@@ -178,6 +196,19 @@ void UIScrollArea::renderOverlay(const UIRenderContext& ctx) const {
         child->renderOverlay(ctx);
         const_cast<UIWidget*>(child.get())->anchorOffsetY -= m_scrollOffset;
     }
+}
+
+UIEventResult UIScrollArea::onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) {
+    if (!visible) return UIEventResult::Ignored;
+
+    for (auto& child : const_cast<std::vector<std::unique_ptr<UIWidget>>&>(getChildren())) {
+        child->anchorOffsetY += m_scrollOffset;
+    }
+    UIEventResult result = UIWidget::onOverlayInput(event, ctx);
+    for (auto& child : const_cast<std::vector<std::unique_ptr<UIWidget>>&>(getChildren())) {
+        child->anchorOffsetY -= m_scrollOffset;
+    }
+    return result;
 }
 
 void UIScrollArea::renderSelf(const UIRenderContext& ctx) const {

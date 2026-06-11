@@ -551,7 +551,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
 float UIRenderer::computeResponsiveUiScale(float actualW, float actualH)
 {
     const float fitScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
-    return std::max(0.01f, std::min(1.0f, fitScale));
+    return std::max(0.01f, fitScale);
 }
 
 UIRenderContext UIRenderer::makeContextFromViewport() const

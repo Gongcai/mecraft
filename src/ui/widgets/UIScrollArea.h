@@ -33,6 +33,7 @@ public:
     // Override render to apply scissor and child offset
     void render(const UIRenderContext& ctx) const override;
     void renderOverlay(const UIRenderContext& ctx) const override;
+    UIEventResult onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
 
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;

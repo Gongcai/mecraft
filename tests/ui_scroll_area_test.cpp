@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 
 #include "../src/ui/widgets/UIScrollArea.h"
 
@@ -9,6 +10,14 @@ namespace {
 class TestScrollArea final : public UIScrollArea {
 public:
     using UIScrollArea::onInput;
+    using UIScrollArea::onOverlayInput;
+};
+
+class OverlayHitWidget final : public UIWidget {
+public:
+    UIEventResult onOverlayInput(const UIInputEvent& event, const UIRenderContext& ctx) override {
+        return hitTest(event.x, event.y, ctx) ? UIEventResult::Handled : UIEventResult::Ignored;
+    }
 };
 
 int fail(const char* message) {
@@ -72,6 +81,28 @@ int main() {
     if (area.onInput(pointerEvent(UIInputEventType::PointerUp, 96.0f, kThumbCenterScreenYAtTop + kDragDistance), ctx) !=
         UIEventResult::Consumed) {
         return fail("pointer up should finish scrollbar drag");
+    }
+
+    TestScrollArea overlayArea;
+    overlayArea.anchor = Anchor::BottomLeft;
+    overlayArea.width = 100.0f;
+    overlayArea.height = 100.0f;
+    overlayArea.setContentHeight(300.0f);
+    overlayArea.setScrollOffset(40.0f);
+
+    auto overlayChild = std::make_unique<OverlayHitWidget>();
+    overlayChild->anchor = Anchor::BottomLeft;
+    overlayChild->width = 20.0f;
+    overlayChild->height = 20.0f;
+    overlayArea.addChild(std::move(overlayChild));
+
+    if (overlayArea.onOverlayInput(pointerEvent(UIInputEventType::PointerMove, 10.0f, 150.0f), ctx) !=
+        UIEventResult::Handled) {
+        return fail("overlay input should use scrolled child position");
+    }
+    if (overlayArea.onOverlayInput(pointerEvent(UIInputEventType::PointerMove, 10.0f, 190.0f), ctx) !=
+        UIEventResult::Ignored) {
+        return fail("overlay input should not use unscrolled child position");
     }
 
     return EXIT_SUCCESS;
