@@ -1,4 +1,5 @@
 #include "DeferredFrameTargets.h"
+#include "../../Diagnostics.h"
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -246,7 +247,7 @@ void DeferredFrameTargets::generateMipmaps(GLuint texture) {
 bool DeferredFrameTargets::checkFramebufferComplete(GLuint framebuffer, const char* label) {
     GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        std::fprintf(stderr, "DeferredFrameTargets: %s FBO incomplete (status 0x%X)\n", label, status);
+        MECRAFT_LOG_FPRINTF(stderr, "DeferredFrameTargets: %s FBO incomplete (status 0x%X)\n", label, status);
         return false;
     }
     return true;

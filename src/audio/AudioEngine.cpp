@@ -3,6 +3,7 @@
 //
 
 #include "AudioEngine.h"
+#include "../Diagnostics.h"
 #include "AudioFileDiscovery.h"
 #include "Paths.h"
 #include <algorithm>
@@ -24,8 +25,8 @@ void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
                                  ALCdevice* device, ALCsizei length,
                                  const ALCchar* message, void* userPtr) noexcept{
     if (eventType == ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT) {
-#ifdef MECRAFT_DEBUG
-        std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown") << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+        MECRAFT_LOG_STREAM(std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown") << std::endl);
 #endif
         AudioEngine::s_needDeviceReopen = true;
     }
@@ -35,14 +36,14 @@ void AudioEngine::init() {
     // 打开默认音频设备
     _device = alcOpenDevice(nullptr);
     if (!_device) {
-        std::cerr << "[Audio] Failed to open audio device" << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to open audio device" << std::endl);
         return;
     }
 
     // 创建上下文
     m_context = alcCreateContext(_device, nullptr);
     if (!m_context) {
-        std::cerr << "[Audio] Failed to create audio context" << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to create audio context" << std::endl);
         alcCloseDevice(_device);
         _device = nullptr;
         return;
@@ -50,7 +51,7 @@ void AudioEngine::init() {
 
     // 激活上下文
     if (!alcMakeContextCurrent(m_context)) {
-        std::cerr << "[Audio] Failed to make context current" << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to make context current" << std::endl);
         alcDestroyContext(m_context);
         alcCloseDevice(_device);
         m_context = nullptr;
@@ -58,8 +59,8 @@ void AudioEngine::init() {
         return;
     }
 
-#ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] AudioEngine initialized" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] AudioEngine initialized" << std::endl);
 #endif
 
     // 初始化设备切换扩展
@@ -112,15 +113,15 @@ void AudioEngine::shutdown() {
         _device = nullptr;
     }
 
-#ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] AudioEngine shutdown" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] AudioEngine shutdown" << std::endl);
 #endif
 }
 
 AudioClip* AudioEngine::loadClip(const std::string& name) {
     const audio::SoundEntry* entry = m_catalog.find(name);
     if (entry == nullptr) {
-        std::cerr << "[Audio] Sound event not found in catalog: " << name << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Sound event not found in catalog: " << name << std::endl);
         return nullptr;
     }
     return loadClipVariant(name, 0);
@@ -152,15 +153,15 @@ bool AudioEngine::loadCatalog(const std::string& catalogPath,
 
     std::string error;
     if (!m_catalog.loadFromFile(manifestPath, rootDirectory, defaultGroup, defaultPreload, error)) {
-        std::cerr << "[Audio] " << error << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] " << error << std::endl);
         return false;
     }
 
     m_loadedCatalogs.insert(catalogKey);
     preloadCatalogSounds();
-#ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] Loaded audio catalog: " << catalogKey
-              << " (" << m_catalog.size() << " sound event(s))" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded audio catalog: " << catalogKey
+                                << " (" << m_catalog.size() << " sound event(s))" << std::endl);
 #endif
     return true;
 }
@@ -172,7 +173,7 @@ std::vector<std::string> AudioEngine::getSoundNamesByGroup(const std::string& gr
 AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 position, bool loop, float volume, bool spatial) {
     const audio::SoundEntry* entry = m_catalog.find(clipName);
     if (entry == nullptr) {
-        std::cerr << "[Audio] Sound event not found in catalog: " << clipName << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Sound event not found in catalog: " << clipName << std::endl);
         return nullptr;
     }
 
@@ -237,7 +238,9 @@ void AudioEngine::loadDefaultCatalog() {
 }
 
 void AudioEngine::preloadCatalogSounds() {
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
     const size_t loadedBefore = m_clips.size();
+#endif
     for (const std::string& soundName : m_catalog.soundIds()) {
         const audio::SoundEntry* entry = m_catalog.find(soundName);
         if (entry == nullptr || !entry->preload) {
@@ -249,20 +252,20 @@ void AudioEngine::preloadCatalogSounds() {
         }
     }
 
-#ifdef MECRAFT_DEBUG
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
     const size_t loadedCount = m_clips.size() - loadedBefore;
-    std::cout << "[Audio] Preloaded " << loadedCount << " audio clip variant(s)" << std::endl;
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] Preloaded " << loadedCount << " audio clip variant(s)" << std::endl);
 #endif
 }
 
 AudioClip* AudioEngine::loadClipVariant(const std::string& soundName, const size_t variantIndex) {
     const audio::SoundEntry* entry = m_catalog.find(soundName);
     if (entry == nullptr) {
-        std::cerr << "[Audio] Sound event not found in catalog: " << soundName << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Sound event not found in catalog: " << soundName << std::endl);
         return nullptr;
     }
     if (variantIndex >= entry->variants.size()) {
-        std::cerr << "[Audio] Sound event variant out of range: " << soundName << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Sound event variant out of range: " << soundName << std::endl);
         return nullptr;
     }
 
@@ -312,8 +315,8 @@ size_t AudioEngine::chooseVariantIndex(const audio::SoundEntry& entry) {
 bool AudioEngine::initDeviceSwitchExtension() {
     if (!alcIsExtensionPresent(_device, "ALC_SOFT_system_events") ||
         !alcIsExtensionPresent(_device, "ALC_SOFT_reopen_device")) {
-#ifdef MECRAFT_DEBUG
-        std::cout << u8"[Audio] 设备自动切换扩展不可用" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+        MECRAFT_LOG_STREAM(std::cout << u8"[Audio] 设备自动切换扩展不可用" << std::endl);
 #endif
         return false;
     }
@@ -323,7 +326,7 @@ bool AudioEngine::initDeviceSwitchExtension() {
     alcReopenDeviceSOFT = (LPALCREOPENDEVICESOFT)alcGetProcAddress(_device, "alcReopenDeviceSOFT");
 
     if (!alcEventCallbackSOFT || !alcEventControlSOFT || !alcReopenDeviceSOFT) {
-        std::cerr << "[Audio] 获取扩展函数指针失败" << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] 获取扩展函数指针失败" << std::endl);
         return false;
     }
 
@@ -335,8 +338,8 @@ bool AudioEngine::initDeviceSwitchExtension() {
     alcEventControlSOFT(1, &eventToListen, ALC_TRUE);
 
     m_deviceSwitchSupported = true;
-#ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] 设备自动切换已启用" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] 设备自动切换已启用" << std::endl);
 #endif
     return true;
 }
@@ -345,16 +348,16 @@ void AudioEngine::checkDeviceSwitch() {
     if (!m_deviceSwitchSupported) return;
 
     if (s_needDeviceReopen.exchange(false)) {
-#ifdef MECRAFT_DEBUG
-        std::cout << "[Audio] 正在迁移音频上下文到新设备..." << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+        MECRAFT_LOG_STREAM(std::cout << "[Audio] 正在迁移音频上下文到新设备..." << std::endl);
 #endif
 
         // alcReopenDeviceSOFT 会保留所有 AL 对象（Buffer, Source, State）
         if (!alcReopenDeviceSOFT(_device, nullptr, nullptr)) {
-            std::cerr << "[Audio] 设备迁移失败！" << std::endl;
+            MECRAFT_LOG_STREAM(std::cerr << "[Audio] 设备迁移失败！" << std::endl);
         } else {
-#ifdef MECRAFT_DEBUG
-            std::cout << "[Audio] 设备迁移成功，音频已无缝切换" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+            MECRAFT_LOG_STREAM(std::cout << "[Audio] 设备迁移成功，音频已无缝切换" << std::endl);
 #endif
         }
     }

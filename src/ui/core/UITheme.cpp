@@ -1,5 +1,7 @@
 #include "UITheme.h"
 
+#include "../../Diagnostics.h"
+
 #include <fstream>
 #include <iostream>
 
@@ -38,7 +40,7 @@ bool UITheme::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "[UITheme] Failed to open: " << path << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[UITheme] Failed to open: " << path << std::endl);
 #endif
         return false;
     }
@@ -48,7 +50,7 @@ bool UITheme::loadFromFile(const std::string& path) {
         file >> j;
     } catch (const std::exception& e) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "[UITheme] Failed to parse: " << path << " - " << e.what() << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[UITheme] Failed to parse: " << path << " - " << e.what() << std::endl);
 #endif
         return false;
     }

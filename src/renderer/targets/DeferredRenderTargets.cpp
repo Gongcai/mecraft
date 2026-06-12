@@ -1,4 +1,5 @@
 #include "DeferredRenderTargets.h"
+#include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
@@ -1136,8 +1137,8 @@ bool DeferredRenderTargets::checkFramebufferComplete(const GLuint framebuffer, c
     if (status == GL_FRAMEBUFFER_COMPLETE) {
         return true;
     }
-    std::cerr << "DeferredRenderTargets: incomplete " << label << " framebuffer, status=0x"
-              << std::hex << status << std::dec << "\n";
+    MECRAFT_LOG_STREAM(std::cerr << "DeferredRenderTargets: incomplete " << label << " framebuffer, status=0x"
+                                 << std::hex << status << std::dec << "\n");
     return false;
 }
 
@@ -1290,21 +1291,21 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-        std::cerr << "AtmosphereLUT: failed to open " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: failed to open " << path << "\n");
         return false;
     }
 
     const auto fileSize = static_cast<size_t>(file.tellg());
     if (fileSize != kExpectedSize) {
-        std::cerr << "AtmosphereLUT: unexpected file size " << fileSize
-                  << " (expected " << kExpectedSize << ")\n";
+        MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: unexpected file size " << fileSize
+                                     << " (expected " << kExpectedSize << ")\n");
         return false;
     }
 
     file.seekg(0, std::ios::beg);
     std::vector<float> data(kLutWidth * kLutHeight * kLutDepth * 4);
     if (!file.read(reinterpret_cast<char*>(data.data()), kExpectedSize)) {
-        std::cerr << "AtmosphereLUT: failed to read data\n";
+        MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: failed to read data\n");
         return false;
     }
 
@@ -1322,6 +1323,6 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
     // z=32 layer is the sky output (rendered at runtime); make sure it's writable
     // by NOT marking the texture as immutable after upload. Storage is already allocated.
 
-    std::cout << "AtmosphereLUT: loaded " << path << " (256x128x33 RGBA32F)\n";
+    MECRAFT_LOG_STREAM(std::cout << "AtmosphereLUT: loaded " << path << " (256x128x33 RGBA32F)\n");
     return true;
 }

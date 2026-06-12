@@ -1,4 +1,5 @@
 #include "RenderDebugService.h"
+#include "../../Diagnostics.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -180,29 +181,29 @@ void RenderDebugService::beginFrame() {
             }
             m_shadowFrameStats = stats;
             if (++m_shadowStatsPublishCount % 120 == 0) {
-                std::printf("[shadow:csm:gpu] total=%.3fms res=%d submitted=%d culled=%d maxDist=%.1f cascades=%d\n",
-                            stats.gpuTotalMs,
-                            stats.shadowResolution,
-                            stats.submitted,
-                            stats.culled,
-                            stats.maxCasterDistance,
-                            stats.cascadeCount);
+                MECRAFT_LOG_PRINTF("[shadow:csm:gpu] total=%.3fms res=%d submitted=%d culled=%d maxDist=%.1f cascades=%d\n",
+                                   stats.gpuTotalMs,
+                                   stats.shadowResolution,
+                                   stats.submitted,
+                                   stats.culled,
+                                   stats.maxCasterDistance,
+                                   stats.cascadeCount);
                 for (int cascade = 0; cascade < cascadeCount; ++cascade) {
                     const ShadowCascadeStats& cascadeStats = stats.cascades[static_cast<size_t>(cascade)];
-                    std::printf("[shadow:csm:gpu:c%d] total=%.3fms opaque=%.3fms transparent=%.3fms split=%.1f-%.1f texel=%.4f cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
-                                cascade,
-                                cascadeStats.gpuTotalMs,
-                                cascadeStats.gpuOpaqueMs,
-                                cascadeStats.gpuTransparentMs,
-                                cascadeStats.splitNear,
-                                cascadeStats.splitFar,
-                                cascadeStats.texelWorldSize,
-                                cascadeStats.opaqueCommands,
-                                cascadeStats.cutoutCommands,
-                                cascadeStats.transparentCommands,
-                                static_cast<unsigned long long>(cascadeStats.opaqueVertices),
-                                static_cast<unsigned long long>(cascadeStats.cutoutVertices),
-                                static_cast<unsigned long long>(cascadeStats.transparentVertices));
+                    MECRAFT_LOG_PRINTF("[shadow:csm:gpu:c%d] total=%.3fms opaque=%.3fms transparent=%.3fms split=%.1f-%.1f texel=%.4f cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
+                                       cascade,
+                                       cascadeStats.gpuTotalMs,
+                                       cascadeStats.gpuOpaqueMs,
+                                       cascadeStats.gpuTransparentMs,
+                                       cascadeStats.splitNear,
+                                       cascadeStats.splitFar,
+                                       cascadeStats.texelWorldSize,
+                                       cascadeStats.opaqueCommands,
+                                       cascadeStats.cutoutCommands,
+                                       cascadeStats.transparentCommands,
+                                       static_cast<unsigned long long>(cascadeStats.opaqueVertices),
+                                       static_cast<unsigned long long>(cascadeStats.cutoutVertices),
+                                       static_cast<unsigned long long>(cascadeStats.transparentVertices));
                 }
             }
             for (auto& cascade : m_shadowTimestampIssued[readIndex]) {

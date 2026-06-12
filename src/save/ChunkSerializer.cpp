@@ -1,4 +1,5 @@
 #include "ChunkSerializer.h"
+#include "../Diagnostics.h"
 #include "SaveFormat.h"
 
 #include "../world/chunk/Chunk.h"
@@ -171,7 +172,7 @@ bool deserializeLayer(
 
         BlockID rid = BlockIds::AIR;
         if (!BlockRegistry::tryGetId(NamespacedId(name), rid)) {
-            std::fprintf(stderr, "[Save] Unknown block '%s' in chunk data, falling back to AIR\n",
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unknown block '%s' in chunk data, falling back to AIR\n",
                          name.c_str());
             rid = BlockIds::AIR;
         }
@@ -276,7 +277,7 @@ std::shared_ptr<Chunk> ChunkSerializer::deserializePayload(
         uint8_t storedScy = 0;
         if (!readU8(cursor, end, storedScy)) return nullptr;
         if (storedScy != static_cast<uint8_t>(scy)) {
-            std::fprintf(stderr, "[Save] Subchunk Y mismatch: expected %d, got %d\n",
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Subchunk Y mismatch: expected %d, got %d\n",
                          scy, storedScy);
             return nullptr;
         }
@@ -317,7 +318,7 @@ std::shared_ptr<Chunk> ChunkSerializer::deserializeFile(
     const uint8_t* data, size_t size)
 {
     if (size < sizeof(MchkHeader)) {
-        std::fprintf(stderr, "[Save] MCHK file too small (%zu bytes)\n", size);
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK file too small (%zu bytes)\n", size);
         return nullptr;
     }
 
@@ -325,17 +326,17 @@ std::shared_ptr<Chunk> ChunkSerializer::deserializeFile(
     std::memcpy(&header, data, sizeof(MchkHeader));
 
     if (header.magic != MCHK_MAGIC) {
-        std::fprintf(stderr, "[Save] Invalid MCHK magic: 0x%08X\n", header.magic);
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid MCHK magic: 0x%08X\n", header.magic);
         return nullptr;
     }
 
     if (header.version != MCHK_VERSION) {
-        std::fprintf(stderr, "[Save] Unsupported MCHK version: %u\n", header.version);
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported MCHK version: %u\n", header.version);
         return nullptr;
     }
 
     if (size < sizeof(MchkHeader) + header.payloadSize) {
-        std::fprintf(stderr, "[Save] MCHK file truncated: expected %zu, got %zu\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK file truncated: expected %zu, got %zu\n",
                      sizeof(MchkHeader) + header.payloadSize, size);
         return nullptr;
     }
@@ -343,7 +344,7 @@ std::shared_ptr<Chunk> ChunkSerializer::deserializeFile(
     const uint8_t* payload = data + sizeof(MchkHeader);
     const uint32_t computedCrc = detail::crc32(payload, header.payloadSize);
     if (computedCrc != header.payloadCrc32) {
-        std::fprintf(stderr, "[Save] MCHK CRC mismatch: expected 0x%08X, got 0x%08X\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] MCHK CRC mismatch: expected 0x%08X, got 0x%08X\n",
                      header.payloadCrc32, computedCrc);
         return nullptr;
     }

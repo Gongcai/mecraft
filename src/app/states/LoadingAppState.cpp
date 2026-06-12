@@ -2,6 +2,7 @@
 
 #include "GameplayAppState.h"
 #include "MainMenuAppState.h"
+#include "../../Diagnostics.h"
 #include "../../game/Game.h"
 
 #include <cstdio>
@@ -64,7 +65,7 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
             return;
         }
     } catch (const std::exception& ex) {
-        std::cerr << "[LoadingAppState] Failed to load gameplay: " << ex.what() << '\n';
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to load gameplay: " << ex.what() << '\n');
         if (m_game) {
             m_game->shutdown();
             m_game.reset();

@@ -4,6 +4,7 @@
 
 #include "AudioClip.h"
 
+#include "../Diagnostics.h"
 #include "AudioDecoders.h"
 
 #include <cstring>
@@ -34,9 +35,9 @@ AudioClip::AudioClip(const std::string& filepath)
     }
 
     m_valid = load(filepath);
-#ifdef MECRAFT_DEBUG
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
     if (m_valid) {
-        std::cout << "[Audio] Loaded: " << m_name << " (" << m_duration << "s)" << std::endl;
+        MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded: " << m_name << " (" << m_duration << "s)" << std::endl);
     }
 #endif
 }
@@ -52,13 +53,13 @@ bool AudioClip::load(const std::string& filepath) {
     audio::DecodedAudio decoded;
     std::string error;
     if (!audio::AudioDecoderRegistry::instance().decodeFile(filepath, decoded, error)) {
-        std::cerr << "[Audio] Failed to decode " << filepath << ": " << error << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to decode " << filepath << ": " << error << std::endl);
         return false;
     }
 
     const ALenum format = openAlFormatFor(decoded.channels, decoded.bitsPerSample);
     if (format == 0 || decoded.pcm.empty() || decoded.sampleRate <= 0) {
-        std::cerr << "[Audio] Unsupported decoded audio format: " << filepath << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Unsupported decoded audio format: " << filepath << std::endl);
         return false;
     }
 
@@ -77,7 +78,7 @@ bool AudioClip::load(const std::string& filepath) {
 
     const ALenum alError = alGetError();
     if (alError != AL_NO_ERROR) {
-        std::cerr << "[Audio] OpenAL error: " << alError << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] OpenAL error: " << alError << std::endl);
         if (m_buffer != 0) {
             alDeleteBuffers(1, &m_buffer);
             m_buffer = 0;

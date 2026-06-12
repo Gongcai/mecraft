@@ -1,13 +1,15 @@
 #include "Window.h"
 
+#include "../../Diagnostics.h"
+
 #include <iostream>
 #include <stdexcept>
 
 namespace {
 
 void glfwErrorCallback(int error, const char* description) {
-    std::cerr << "GLFW error " << error << ": "
-              << (description != nullptr ? description : "unknown") << "\n";
+    MECRAFT_LOG_STREAM(std::cerr << "GLFW error " << error << ": "
+                                 << (description != nullptr ? description : "unknown") << "\n");
 }
 
 } // namespace
@@ -17,12 +19,12 @@ bool Window::init(int width, int height, const char *title) {
     if (!glfwInit()) {
         const char* description = nullptr;
         const int error = glfwGetError(&description);
-        std::cerr << "Failed to initialize GLFW";
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to initialize GLFW");
         if (error != GLFW_NO_ERROR) {
-            std::cerr << " (" << error << ": "
-                      << (description != nullptr ? description : "unknown") << ")";
+            MECRAFT_LOG_STREAM(std::cerr << " (" << error << ": "
+                                         << (description != nullptr ? description : "unknown") << ")");
         }
-        std::cerr << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "\n");
         return false;
     }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -32,13 +34,13 @@ bool Window::init(int width, int height, const char *title) {
     if (m_window == NULL) {
         const char* description = nullptr;
         const int error = glfwGetError(&description);
-        std::cerr << "Failed to create GLFW window";
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to create GLFW window");
         if (error != GLFW_NO_ERROR) {
-            std::cerr << " (" << error << ": "
-                      << (description != nullptr ? description : "unknown") << ")";
+            MECRAFT_LOG_STREAM(std::cerr << " (" << error << ": "
+                                         << (description != nullptr ? description : "unknown") << ")");
         }
-        std::cerr << "\n";
-        std::cerr << "Mecraft requires a GPU/driver with OpenGL 4.5 core profile support.\n";
+        MECRAFT_LOG_STREAM(std::cerr << "\n");
+        MECRAFT_LOG_STREAM(std::cerr << "Mecraft requires a GPU/driver with OpenGL 4.5 core profile support.\n");
         glfwTerminate();
         return false;
     }
@@ -49,9 +51,9 @@ bool Window::init(int width, int height, const char *title) {
     }
     const auto* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     const auto* glslVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
-    std::cout << "OpenGL: " << (glVersion != nullptr ? glVersion : "unknown") << "\n";
-    std::cout << "GLSL: " << (glslVersion != nullptr ? glslVersion : "unknown") << "\n";
-    std::cout << "GLAD OpenGL 4.5: " << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << "\n";
+    MECRAFT_LOG_STREAM(std::cout << "OpenGL: " << (glVersion != nullptr ? glVersion : "unknown") << "\n");
+    MECRAFT_LOG_STREAM(std::cout << "GLSL: " << (glslVersion != nullptr ? glslVersion : "unknown") << "\n");
+    MECRAFT_LOG_STREAM(std::cout << "GLAD OpenGL 4.5: " << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << "\n");
     if (!GLAD_GL_VERSION_4_5) {
         throw std::runtime_error("OpenGL 4.5 core is required for the hybrid deferred renderer.");
     }
@@ -151,5 +153,5 @@ void APIENTRY Window::debugMessageCallback(GLenum source,
     if (severity == GL_DEBUG_SEVERITY_NOTIFICATION || type == GL_DEBUG_TYPE_PERFORMANCE) {
         return;
     }
-    std::cerr << "OpenGL debug: " << (message != nullptr ? message : "") << "\n";
+    MECRAFT_LOG_STREAM(std::cerr << "OpenGL debug: " << (message != nullptr ? message : "") << "\n");
 }

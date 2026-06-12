@@ -1,4 +1,5 @@
 #include "ShadowTargets.h"
+#include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
 #include <cstdio>
 
@@ -144,7 +145,7 @@ GLuint ShadowTargets::createTexture2DArray(GLenum internalFormat, int width, int
 bool ShadowTargets::checkFramebufferComplete(GLuint framebuffer, const char* label) {
     GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        std::fprintf(stderr, "ShadowTargets: %s FBO incomplete (status 0x%X)\n", label, status);
+        MECRAFT_LOG_FPRINTF(stderr, "ShadowTargets: %s FBO incomplete (status 0x%X)\n", label, status);
         return false;
     }
     return true;

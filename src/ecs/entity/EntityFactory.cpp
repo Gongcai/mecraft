@@ -1,5 +1,6 @@
 #include "EntityFactory.h"
 
+#include "../../Diagnostics.h"
 #include "EntityDefinitionRegistry.h"
 #include "MobModelFactory.h"
 #include "../components/Components.h"
@@ -167,17 +168,17 @@ entt::entity EntityFactory::createMob(GameplayRegistry& registry,
     std::string error;
     EntityDefinitionRegistry& definitions = EntityDefinitionRegistry::instance();
     if (!definitions.ensureLoaded(&error)) {
-        std::printf("[EntityFactory] Failed to load entity definitions: %s\n", error.c_str());
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[EntityFactory] Failed to load entity definitions: %s\n", error.c_str());
+        MECRAFT_LOG_FLUSH(stdout);
         return entt::null;
     }
 
     const MobEntityDefinition* definition = definitions.findMob(entityId);
     if (definition == nullptr) {
-        std::printf("[EntityFactory] Unknown mob definition: %.*s\n",
-                    static_cast<int>(entityId.size()),
-                    entityId.data());
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[EntityFactory] Unknown mob definition: %.*s\n",
+                           static_cast<int>(entityId.size()),
+                           entityId.data());
+        MECRAFT_LOG_FLUSH(stdout);
         return entt::null;
     }
 
@@ -185,10 +186,10 @@ entt::entity EntityFactory::createMob(GameplayRegistry& registry,
     if (definition->model == "humanoid") {
         entity = MobModelFactory::createHumanoidMob(registry, position);
     } else {
-        std::printf("[EntityFactory] Unsupported mob model '%s' for %s\n",
-                    definition->model.c_str(),
-                    definition->id.full().c_str());
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[EntityFactory] Unsupported mob model '%s' for %s\n",
+                           definition->model.c_str(),
+                           definition->id.full().c_str());
+        MECRAFT_LOG_FLUSH(stdout);
         return entt::null;
     }
 

@@ -2,6 +2,7 @@
 // Created by Caiwe on 2026/3/21.
 //
 #include "Game.h"
+#include "../Diagnostics.h"
 #include "states/GameStateMachine.h"
 #include "render/GameplayRenderRuntime.h"
 #include "audio/AudioListenerSyncSystem.h"
@@ -292,7 +293,7 @@ void Game::captureExitScreenshot() {
     }
 
     sm->saveScreenshot(flipped.data(), readW, readH);
-    std::printf("[Save] Captured exit screenshot (%dx%d)\n", readW, readH);
+    MECRAFT_LOG_PRINTF("[Save] Captured exit screenshot (%dx%d)\n", readW, readH);
 }
 
 void Game::clearQuitToMenuRequest() {

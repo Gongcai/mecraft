@@ -1,5 +1,6 @@
 #include "GameManager.h"
 #include "states/MainMenuAppState.h"
+#include "../Diagnostics.h"
 #include "../Paths.h"
 #include "../engine/platform/Time.h"
 #include "../world/block/Block.h"
@@ -32,7 +33,7 @@ void GameManager::init(int width, int height, const char* title) {
     m_localeManager.loadSettings();
     m_uiRenderer.setLocaleManager(&m_localeManager);
     if (!net::ENetTransport::initialize()) {
-        std::cerr << "Failed to initialize ENet; multiplayer connections will fail." << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to initialize ENet; multiplayer connections will fail." << std::endl);
     }
 
     m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
@@ -40,7 +41,7 @@ void GameManager::init(int width, int height, const char* title) {
 
 bool GameManager::initWindow(int width, int height, const char* title) {
     if (!m_window.init(width, height, title)) {
-        std::cerr << "Error while initializing the window." << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "Error while initializing the window." << std::endl);
         return false;
     }
     m_input.init(m_window.getHandle());

@@ -1,5 +1,6 @@
 #include "FirstPersonHeldItemRenderer.h"
 
+#include "../../Diagnostics.h"
 #include "../gl/GlStateGuard.h"
 #include "../mesh/ItemModelMesh.h"
 #include "../contracts/MecraftTextureContract.h"
@@ -148,7 +149,7 @@ void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertice
 }
 
 void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
-#ifdef MECRAFT_DEBUG
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
     static std::unordered_set<std::string> dumpedLabels;
     if (!dumpedLabels.emplace(label).second) {
         return;
@@ -168,11 +169,11 @@ void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
     glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
 
-    std::cerr << "[held-item-shadow] " << label << " program=" << shader.ID << '\n';
+    MECRAFT_LOG_STREAM(std::cerr << "[held-item-shadow] " << label << " program=" << shader.ID << '\n');
     for (const char* name : names) {
         const GLint loc = glGetUniformLocation(shader.ID, name);
         if (loc < 0) {
-            std::cerr << "  " << name << " inactive\n";
+            MECRAFT_LOG_STREAM(std::cerr << "  " << name << " inactive\n");
             continue;
         }
 
@@ -187,12 +188,12 @@ void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
             glGetTextureParameteriv(static_cast<GLuint>(binding), GL_TEXTURE_COMPARE_MODE, &compareMode);
             glGetTextureLevelParameteriv(static_cast<GLuint>(binding), 0, GL_TEXTURE_INTERNAL_FORMAT, &target);
         }
-        std::cerr << "  " << name
-                  << " unit=" << unit
-                  << " texture=" << binding
-                  << " internal=0x" << std::hex << target << std::dec
-                  << " compareMode=0x" << std::hex << compareMode << std::dec
-                  << '\n';
+        MECRAFT_LOG_STREAM(std::cerr << "  " << name
+                                     << " unit=" << unit
+                                     << " texture=" << binding
+                                     << " internal=0x" << std::hex << target << std::dec
+                                     << " compareMode=0x" << std::hex << compareMode << std::dec
+                                     << '\n');
     }
 
     glActiveTexture(static_cast<GLenum>(previousActiveTexture));

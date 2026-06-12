@@ -427,6 +427,7 @@ target_link_libraries(mecraft_third_party PUBLIC glfw)
 target_compile_definitions(mecraft_third_party PUBLIC
         GLFW_INCLUDE_NONE
         $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
+        $<$<CONFIG:RelWithDebInfo>:MECRAFT_ENABLE_CONSOLE_OUTPUT>
 )
 if (MSVC)
     target_compile_options(mecraft_third_party PRIVATE /W0)
@@ -470,6 +471,7 @@ target_compile_definitions(mecraft_core PUBLIC
         GLFW_INCLUDE_NONE
         "MECRAFT_ASSETS_DIR=\"${MECRAFT_ASSETS_DIR_COMPILE}\""
         $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
+        $<$<CONFIG:RelWithDebInfo>:MECRAFT_ENABLE_CONSOLE_OUTPUT>
 )
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）

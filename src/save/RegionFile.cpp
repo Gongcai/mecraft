@@ -1,4 +1,5 @@
 #include "RegionFile.h"
+#include "../Diagnostics.h"
 #include "ChunkSerializer.h"
 #include "SaveFormat.h"
 #include "../world/chunk/Chunk.h"
@@ -34,24 +35,24 @@ std::unique_ptr<RegionFile> RegionFile::open(
         // Open existing file
         std::ifstream file(path, std::ios::binary);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to open region file %s\n", path.string().c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to open region file %s\n", path.string().c_str());
             return nullptr;
         }
 
         // Read header
         file.read(reinterpret_cast<char*>(&rf->m_header), sizeof(RegionHeader));
         if (!file) {
-            std::fprintf(stderr, "[Save] Failed to read region header\n");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read region header\n");
             return nullptr;
         }
 
         if (rf->m_header.magic != MCRG_MAGIC) {
-            std::fprintf(stderr, "[Save] Invalid region magic: 0x%08X\n", rf->m_header.magic);
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid region magic: 0x%08X\n", rf->m_header.magic);
             return nullptr;
         }
 
         if (rf->m_header.version != MCRG_VERSION) {
-            std::fprintf(stderr, "[Save] Unsupported region version: %u\n", rf->m_header.version);
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported region version: %u\n", rf->m_header.version);
             return nullptr;
         }
 
@@ -59,7 +60,7 @@ std::unique_ptr<RegionFile> RegionFile::open(
         file.read(reinterpret_cast<char*>(rf->m_index.data()),
                   sizeof(ChunkIndexEntry) * CHUNKS_PER_REGION);
         if (!file) {
-            std::fprintf(stderr, "[Save] Failed to read chunk index\n");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read chunk index\n");
             return nullptr;
         }
     } else {
@@ -75,7 +76,7 @@ std::unique_ptr<RegionFile> RegionFile::open(
         // Write initial file
         std::ofstream file(path, std::ios::binary);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to create region file %s\n", path.string().c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to create region file %s\n", path.string().c_str());
             return nullptr;
         }
 
@@ -104,7 +105,7 @@ std::shared_ptr<Chunk> RegionFile::readChunk(int cx, int cz) {
     // Validate CRC
     const uint32_t computedCrc = detail::crc32(data.data(), data.size());
     if (computedCrc != entry.crc32) {
-        std::fprintf(stderr, "[Save] Region chunk CRC mismatch at (%d, %d)\n", cx, cz);
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Region chunk CRC mismatch at (%d, %d)\n", cx, cz);
         return nullptr;
     }
 

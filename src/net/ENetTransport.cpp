@@ -1,4 +1,5 @@
 #include "ENetTransport.h"
+#include "../Diagnostics.h"
 #include "PacketCodec.h"
 #include <cstdio>
 #include <cstring>
@@ -95,8 +96,8 @@ bool ENetTransport::connect(const std::string& host, uint16_t port,
     if (enet_host_service(m_host, &event, timeoutMs) > 0 &&
         event.type == ENET_EVENT_TYPE_CONNECT) {
         m_isServer = false;
-        std::printf("[ENet] Connected to %s:%u\n", host.c_str(), port);
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[ENet] Connected to %s:%u\n", host.c_str(), port);
+        MECRAFT_LOG_FLUSH(stdout);
         return true;
     }
 
@@ -128,11 +129,11 @@ bool ENetTransport::listen(uint16_t port, size_t maxClients, size_t channelCount
     }
 
     m_isServer = true;
-    std::printf("[ENet] Listening on port %u maxClients=%zu channels=%zu\n",
-                port,
-                maxClients,
-                channelCount);
-    std::fflush(stdout);
+    MECRAFT_LOG_PRINTF("[ENet] Listening on port %u maxClients=%zu channels=%zu\n",
+                       port,
+                       maxClients,
+                       channelCount);
+    MECRAFT_LOG_FLUSH(stdout);
     return true;
 }
 
@@ -187,12 +188,12 @@ void ENetTransport::send(Packet packet) {
     if (originalType == MessageType::ClientHello ||
         originalType == MessageType::ClientViewConfig ||
         originalType == MessageType::ServerHello) {
-        std::printf("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n",
-                    messageTypeName(originalType),
-                    data.size(),
-                    static_cast<unsigned>(channelId),
-                    (flags & ENET_PACKET_FLAG_RELIABLE) ? "yes" : "no");
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n",
+                           messageTypeName(originalType),
+                           data.size(),
+                           static_cast<unsigned>(channelId),
+                           (flags & ENET_PACKET_FLAG_RELIABLE) ? "yes" : "no");
+        MECRAFT_LOG_FLUSH(stdout);
     }
     enet_host_flush(m_host);
 }
@@ -251,10 +252,10 @@ void ENetTransport::poll() {
                 m_pendingAccepted.push(peerState);
                 char host[256] = {};
                 enet_address_get_host_ip_new(&event.peer->address, host, sizeof(host));
-                std::printf("[ENet] Client connected from %s:%u\n",
-                            host,
-                            event.peer->address.port);
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[ENet] Client connected from %s:%u\n",
+                                   host,
+                                   event.peer->address.port);
+                MECRAFT_LOG_FLUSH(stdout);
             }
             break;
 
@@ -423,11 +424,11 @@ void ENetTransport::poll() {
                 if (packet.type == MessageType::ClientHello ||
                     packet.type == MessageType::ClientViewConfig ||
                     packet.type == MessageType::ServerHello) {
-                    std::printf("[ENet] Received %s bytes=%zu decoded=%s\n",
-                                messageTypeName(packet.type),
-                                static_cast<size_t>(event.packet->dataLength),
-                                packet.inProcessPayload.has_value() ? "yes" : "no");
-                    std::fflush(stdout);
+                    MECRAFT_LOG_PRINTF("[ENet] Received %s bytes=%zu decoded=%s\n",
+                                       messageTypeName(packet.type),
+                                       static_cast<size_t>(event.packet->dataLength),
+                                       packet.inProcessPayload.has_value() ? "yes" : "no");
+                    MECRAFT_LOG_FLUSH(stdout);
                 }
                 {
                     std::lock_guard lock(m_receiveMutex);
@@ -439,9 +440,9 @@ void ENetTransport::poll() {
                     peerIt->second->receiveQueue.push(std::move(packet));
                 }
             } else {
-                std::printf("[ENet] Dropped malformed packet bytes=%zu\n",
-                            static_cast<size_t>(event.packet->dataLength));
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[ENet] Dropped malformed packet bytes=%zu\n",
+                                   static_cast<size_t>(event.packet->dataLength));
+                MECRAFT_LOG_FLUSH(stdout);
             }
             enet_packet_destroy(event.packet);
             break;
@@ -449,8 +450,8 @@ void ENetTransport::poll() {
 
         case ENET_EVENT_TYPE_DISCONNECT:
             if (event.peer == m_peer) {
-                std::printf("[ENet] Peer disconnected\n");
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[ENet] Peer disconnected\n");
+                MECRAFT_LOG_FLUSH(stdout);
                 m_peer = nullptr;
             }
             if (const auto peerIt = m_peerStates.find(event.peer); peerIt != m_peerStates.end()) {
@@ -462,8 +463,8 @@ void ENetTransport::poll() {
 
         case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
             if (event.peer == m_peer) {
-                std::printf("[ENet] Peer disconnect timeout\n");
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[ENet] Peer disconnect timeout\n");
+                MECRAFT_LOG_FLUSH(stdout);
                 m_peer = nullptr;
             }
             if (const auto peerIt = m_peerStates.find(event.peer); peerIt != m_peerStates.end()) {
@@ -546,12 +547,12 @@ void ENetTransport::sendToPeer(ENetPeer* peer, Packet packet) {
     if (originalType == MessageType::ClientHello ||
         originalType == MessageType::ClientViewConfig ||
         originalType == MessageType::ServerHello) {
-        std::printf("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n",
-                    messageTypeName(originalType),
-                    data.size(),
-                    static_cast<unsigned>(channelId),
-                    (flags & ENET_PACKET_FLAG_RELIABLE) ? "yes" : "no");
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[ENet] Sent %s bytes=%zu channel=%u reliable=%s\n",
+                           messageTypeName(originalType),
+                           data.size(),
+                           static_cast<unsigned>(channelId),
+                           (flags & ENET_PACKET_FLAG_RELIABLE) ? "yes" : "no");
+        MECRAFT_LOG_FLUSH(stdout);
     }
 }
 

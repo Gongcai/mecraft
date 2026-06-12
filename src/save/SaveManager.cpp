@@ -1,4 +1,5 @@
 #include "SaveManager.h"
+#include "../Diagnostics.h"
 #include "PlayerSerializer.h"
 #include "RegionFile.h"
 #include "../thread/ThreadPool.h"
@@ -32,7 +33,7 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
 
     std::ifstream file(path);
     if (!file.is_open()) {
-        std::fprintf(stderr, "[Save] Failed to open %s\n", path.string().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to open %s\n", path.string().c_str());
         return false;
     }
 
@@ -42,7 +43,7 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
 
         const int version = j.value("version", 0);
         if (version != 1) {
-            std::fprintf(stderr, "[Save] Unsupported level.json version: %d\n", version);
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported level.json version: %d\n", version);
             return false;
         }
 
@@ -78,7 +79,7 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
 
         return true;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "[Save] Failed to parse level.json: %s\n", e.what());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse level.json: %s\n", e.what());
         return false;
     }
 }
@@ -112,7 +113,7 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     {
         std::ofstream file(tmpPath);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
             return;
         }
         file << j.dump(2) << '\n';
@@ -126,13 +127,13 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     if (std::filesystem::exists(path, ec)) {
         std::filesystem::rename(path, bakPath, ec);
         if (ec) {
-            std::fprintf(stderr, "[Save] Failed to rename old level.json to .bak: %s\n",
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename old level.json to .bak: %s\n",
                          ec.message().c_str());
         }
     }
     std::filesystem::rename(tmpPath, path, ec);
     if (ec) {
-        std::fprintf(stderr, "[Save] Failed to rename tmp to level.json: %s\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename tmp to level.json: %s\n",
                      ec.message().c_str());
     }
 }
@@ -315,7 +316,7 @@ void SaveManager::savePersistentEntities(const std::vector<PersistentEntityData>
     {
         std::ofstream file(tmpPath);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
             return;
         }
         file << root.dump(2) << '\n';
@@ -329,7 +330,7 @@ void SaveManager::savePersistentEntities(const std::vector<PersistentEntityData>
     }
     std::filesystem::rename(tmpPath, path, ec);
     if (ec) {
-        std::fprintf(stderr, "[Save] Failed to rename entity file: %s\n", ec.message().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename entity file: %s\n", ec.message().c_str());
     }
 }
 
@@ -352,7 +353,7 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
 
         const int version = root.value("version", 0);
         if (version != 1 || !root.contains("entities") || !root["entities"].is_array()) {
-            std::fprintf(stderr, "[Save] Unsupported entity save file\n");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported entity save file\n");
             return false;
         }
 
@@ -418,7 +419,7 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
 
         return true;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "[Save] Failed to read entity file: %s\n", e.what());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read entity file: %s\n", e.what());
         out.clear();
         return false;
     }
@@ -468,7 +469,7 @@ void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities
     {
         std::ofstream file(tmpPath);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
             return;
         }
         file << root.dump(2) << '\n';
@@ -482,7 +483,7 @@ void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities
     }
     std::filesystem::rename(tmpPath, path, ec);
     if (ec) {
-        std::fprintf(stderr, "[Save] Failed to rename block entity file: %s\n", ec.message().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename block entity file: %s\n", ec.message().c_str());
     }
 }
 
@@ -505,7 +506,7 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
 
         const int version = root.value("version", 0);
         if (version != 1 || !root.contains("blockEntities") || !root["blockEntities"].is_array()) {
-            std::fprintf(stderr, "[Save] Unsupported block entity save file\n");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported block entity save file\n");
             return false;
         }
 
@@ -559,7 +560,7 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
 
         return true;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "[Save] Failed to read block entity file: %s\n", e.what());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read block entity file: %s\n", e.what());
         out.clear();
         return false;
     }
@@ -603,7 +604,7 @@ void SaveManager::saveScreenshot(const uint8_t* rgbData, int width, int height) 
     const int stride = width * 4;
     const int result = stbi_write_png(tmpPath.c_str(), width, height, 4, rgba.data(), stride);
     if (result == 0) {
-        std::fprintf(stderr, "[Save] Failed to write screenshot PNG\n");
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to write screenshot PNG\n");
         return;
     }
 
@@ -611,7 +612,7 @@ void SaveManager::saveScreenshot(const uint8_t* rgbData, int width, int height) 
     std::error_code ec;
     std::filesystem::rename(tmpPath, path, ec);
     if (ec) {
-        std::fprintf(stderr, "[Save] Failed to rename screenshot: %s\n", ec.message().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename screenshot: %s\n", ec.message().c_str());
     }
 }
 
@@ -632,7 +633,7 @@ void SaveManager::writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t
     {
         std::ofstream file(tmpPath, std::ios::binary);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to create tmp file %s\n",
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to create tmp file %s\n",
                          tmpPath.string().c_str());
             return;
         }
@@ -646,7 +647,7 @@ void SaveManager::writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t
     if (std::filesystem::exists(finalPath, ec)) {
         std::filesystem::rename(finalPath, bakPath, ec);
         if (ec) {
-            std::fprintf(stderr, "[Save] Failed to rename old chunk to .bak: %s\n",
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename old chunk to .bak: %s\n",
                          ec.message().c_str());
             // Continue anyway — the tmp rename below will overwrite
         }
@@ -655,7 +656,7 @@ void SaveManager::writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t
     // Rename .tmp to final
     std::filesystem::rename(tmpPath, finalPath, ec);
     if (ec) {
-        std::fprintf(stderr, "[Save] Failed to rename tmp to final: %s\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename tmp to final: %s\n",
                      ec.message().c_str());
     }
 }

@@ -1,4 +1,5 @@
 #include "ShadowPass.h"
+#include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
 #include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
@@ -440,31 +441,31 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         debugService->endShadowFrame();
     }
 
-#ifndef NDEBUG
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
     static int frameCounter = 0;
     if (++frameCounter % 120 == 0) {
-        printf("[shadow:csm] cascades=%d submitted=%d culled=%d maxDist=%.1f mode=%s halfPlane=%.1f\n",
-               SHADOW_CASCADE_COUNT, visibleTotal, culledTotal, maxCasterDistance, cullingMode, shadowDist);
+        MECRAFT_LOG_PRINTF("[shadow:csm] cascades=%d submitted=%d culled=%d maxDist=%.1f mode=%s halfPlane=%.1f\n",
+                           SHADOW_CASCADE_COUNT, visibleTotal, culledTotal, maxCasterDistance, cullingMode, shadowDist);
         for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
             const ShadowCascadeStats& stats = cascadeStats[static_cast<size_t>(cascade)];
-            printf("[shadow:csm:c%d] split=%.1f-%.1f texel=%.4f radius=%.1f box=%d/%d dist=%d/%d entries(cutout=%d trans=%d) cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
-                   cascade,
-                   stats.splitNear,
-                   stats.splitFar,
-                   stats.texelWorldSize,
-                   stats.radius,
-                   stats.boxVisible,
-                   stats.boxCulled,
-                   stats.distanceVisible,
-                   stats.distanceCulled,
-                   stats.cutoutEntries,
-                   stats.transparentEntries,
-                   stats.opaqueCommands,
-                   stats.cutoutCommands,
-                   stats.transparentCommands,
-                   static_cast<unsigned long long>(stats.opaqueVertices),
-                   static_cast<unsigned long long>(stats.cutoutVertices),
-                   static_cast<unsigned long long>(stats.transparentVertices));
+            MECRAFT_LOG_PRINTF("[shadow:csm:c%d] split=%.1f-%.1f texel=%.4f radius=%.1f box=%d/%d dist=%d/%d entries(cutout=%d trans=%d) cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
+                               cascade,
+                               stats.splitNear,
+                               stats.splitFar,
+                               stats.texelWorldSize,
+                               stats.radius,
+                               stats.boxVisible,
+                               stats.boxCulled,
+                               stats.distanceVisible,
+                               stats.distanceCulled,
+                               stats.cutoutEntries,
+                               stats.transparentEntries,
+                               stats.opaqueCommands,
+                               stats.cutoutCommands,
+                               stats.transparentCommands,
+                               static_cast<unsigned long long>(stats.opaqueVertices),
+                               static_cast<unsigned long long>(stats.cutoutVertices),
+                               static_cast<unsigned long long>(stats.transparentVertices));
         }
     }
 #endif

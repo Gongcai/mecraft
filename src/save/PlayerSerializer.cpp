@@ -1,4 +1,5 @@
 #include "PlayerSerializer.h"
+#include "../Diagnostics.h"
 #include "../player/Inventory.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
@@ -50,7 +51,7 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
     try {
         const int version = j.value("version", 0);
         if (version != 1) {
-            std::fprintf(stderr, "[Save] Unsupported player data version: %d\n", version);
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported player data version: %d\n", version);
             return false;
         }
 
@@ -118,7 +119,7 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
 
         return true;
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "[Save] Failed to parse player data: %s\n", e.what());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse player data: %s\n", e.what());
         return false;
     }
 }
@@ -129,7 +130,7 @@ void PlayerSerializer::saveToFile(const std::string& path, const PlayerData& dat
     {
         std::ofstream file(tmpPath);
         if (!file.is_open()) {
-            std::fprintf(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to write %s\n", tmpPath.c_str());
             return;
         }
         file << serialize(data).dump(2) << '\n';
@@ -144,7 +145,7 @@ void PlayerSerializer::saveToFile(const std::string& path, const PlayerData& dat
     }
     std::filesystem::rename(tmpPath, path, ec);
     if (ec) {
-        std::fprintf(stderr, "[Save] Failed to rename player file: %s\n", ec.message().c_str());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to rename player file: %s\n", ec.message().c_str());
     }
 }
 
@@ -164,7 +165,7 @@ bool PlayerSerializer::loadFromFile(const std::string& path, PlayerData& out) {
         file >> j;
         return deserialize(j, out);
     } catch (const std::exception& e) {
-        std::fprintf(stderr, "[Save] Failed to read player file: %s\n", e.what());
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read player file: %s\n", e.what());
         return false;
     }
 }

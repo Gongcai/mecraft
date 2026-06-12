@@ -1,4 +1,5 @@
 #include "GameClient.h"
+#include "../Diagnostics.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/components/Components.h"
 #include "../world/chunk/Chunk.h"
@@ -14,8 +15,8 @@ GameClient::~GameClient() = default;
 void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
     m_transport = std::move(transport);
     m_playerHurtLatched = false;
-    std::printf("[Client] Transport connected; sending hello\n");
-    std::fflush(stdout);
+    MECRAFT_LOG_PRINTF("[Client] Transport connected; sending hello\n");
+    MECRAFT_LOG_FLUSH(stdout);
     sendHello();
 }
 
@@ -161,16 +162,16 @@ void GameClient::receiveMessages() {
                 m_clientId = hello.assignedId;
                 m_authPosition = hello.spawnPosition;
                 m_hasServerHello = true;
-                std::printf("[Client] ServerHello id=%u spawn=(%.1f, %.1f, %.1f)\n",
-                            m_clientId,
-                            m_authPosition.x,
-                            m_authPosition.y,
-                            m_authPosition.z);
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[Client] ServerHello id=%u spawn=(%.1f, %.1f, %.1f)\n",
+                                   m_clientId,
+                                   m_authPosition.x,
+                                   m_authPosition.y,
+                                   m_authPosition.z);
+                MECRAFT_LOG_FLUSH(stdout);
             } else {
-                std::printf("[Client] Received ServerHello without decoded payload bytes=%zu\n",
-                            packet.payload.size());
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[Client] Received ServerHello without decoded payload bytes=%zu\n",
+                                   packet.payload.size());
+                MECRAFT_LOG_FLUSH(stdout);
             }
             break;
         }
@@ -287,18 +288,18 @@ void GameClient::handleChunkData(const net::ChunkDataMessage& data) {
         m_clientWorld.addChunk(data.chunk);
         ++m_chunksReceived;
         if (m_chunksReceived <= 12 || m_chunksReceived % 25 == 0) {
-            std::printf("[Client] Received ChunkData chunk=(%d,%d) count=%d loaded=%zu\n",
-                        data.chunkX,
-                        data.chunkZ,
-                        m_chunksReceived,
-                        m_clientWorld.loadedChunkCount());
-            std::fflush(stdout);
+            MECRAFT_LOG_PRINTF("[Client] Received ChunkData chunk=(%d,%d) count=%d loaded=%zu\n",
+                               data.chunkX,
+                               data.chunkZ,
+                               m_chunksReceived,
+                               m_clientWorld.loadedChunkCount());
+            MECRAFT_LOG_FLUSH(stdout);
         }
 
         if (!m_spawnChunksReady && m_chunksReceived >= kSpawnChunksThreshold) {
             m_spawnChunksReady = true;
-            std::printf("[Client] Spawn chunks ready after %d chunks\n", m_chunksReceived);
-            std::fflush(stdout);
+            MECRAFT_LOG_PRINTF("[Client] Spawn chunks ready after %d chunks\n", m_chunksReceived);
+            MECRAFT_LOG_FLUSH(stdout);
         }
     }
 }

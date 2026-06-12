@@ -1,4 +1,5 @@
 #include "BgmSystem.h"
+#include "../Diagnostics.h"
 #include "Paths.h"
 
 #include "AudioEngine.h"
@@ -52,15 +53,15 @@ void BgmSystem::buildPlaylist() {
     m_playlist.clear();
 
     if (!m_audioEngine->loadCatalog(BGM_CATALOG_PATH, BGM_DIR, "bgm", false)) {
-        std::cerr << "[Audio] Failed to load BGM catalog: " << BGM_CATALOG_PATH << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to load BGM catalog: " << BGM_CATALOG_PATH << std::endl);
         return;
     }
 
     m_playlist = m_audioEngine->getSoundNamesByGroup("bgm");
     std::sort(m_playlist.begin(), m_playlist.end());
 
-#ifdef MECRAFT_DEBUG
-    std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from catalog" << std::endl;
+#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
+    MECRAFT_LOG_STREAM(std::cout << "[Audio] Loaded " << m_playlist.size() << " BGM track(s) from catalog" << std::endl);
 #endif
 }
 

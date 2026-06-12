@@ -3,6 +3,7 @@
 //
 
 #include "ResourceMgr.h"
+#include "../Diagnostics.h"
 #include "Paths.h"
 #include <algorithm>
 #include <array>
@@ -416,7 +417,7 @@ GLuint ResourceMgr::loadTexture2D(const std::string& name,
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!data || width <= 0 || height <= 0) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Failed to load texture2D '" << name << "': " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to load texture2D '" << name << "': " << path << "\n");
 #endif
         if (data != nullptr) {
             stbi_image_free(data);
@@ -457,24 +458,24 @@ bool ResourceMgr::probeAtmosphereLut(const std::string& name,
     const fs::path lutPath(path);
     const bool exists = fs::exists(lutPath, ec);
     if (ec || !exists) {
-        std::cerr << "Atmosphere LUT missing: " << name << " at " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Atmosphere LUT missing: " << name << " at " << path << "\n");
         return false;
     }
 
     const uintmax_t size = fs::file_size(lutPath, ec);
     if (ec) {
-        std::cerr << "Atmosphere LUT unreadable: " << name << " at " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Atmosphere LUT unreadable: " << name << " at " << path << "\n");
         return false;
     }
 
-    std::cerr << "Atmosphere LUT: " << name << " bytes=" << size;
+    MECRAFT_LOG_STREAM(std::cerr << "Atmosphere LUT: " << name << " bytes=" << size);
     if (expectedBytes > 0) {
-        std::cerr << " expected=" << expectedBytes;
+        MECRAFT_LOG_STREAM(std::cerr << " expected=" << expectedBytes);
         if (size != static_cast<uintmax_t>(expectedBytes)) {
-            std::cerr << " mismatch";
+            MECRAFT_LOG_STREAM(std::cerr << " mismatch");
         }
     }
-    std::cerr << "\n";
+    MECRAFT_LOG_STREAM(std::cerr << "\n");
     return expectedBytes == 0 || size == static_cast<uintmax_t>(expectedBytes);
 }
 
@@ -506,7 +507,7 @@ GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& p
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!data) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Failed to load GUI texture: " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to load GUI texture: " << path << "\n");
 #endif
         return 0;
     }
@@ -619,7 +620,7 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
 
     if (imagePaths.empty()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Texture Atlas generated with 0 images!\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Texture Atlas generated with 0 images!\n");
 #endif
         return;
     }
@@ -646,14 +647,14 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
 
         if (!data) {
 #ifdef MECRAFT_DEBUG
-            std::cerr << "Failed to load image: " << imagePaths[i] << "\n";
+            MECRAFT_LOG_STREAM(std::cerr << "Failed to load image: " << imagePaths[i] << "\n");
 #endif
             continue;
         }
 
         if (width != tileSize || height != tileSize) {
 #ifdef MECRAFT_DEBUG
-            std::cerr << "Warning: Texture size mismatch! " << imagePaths[i] << "\n";
+            MECRAFT_LOG_STREAM(std::cerr << "Warning: Texture size mismatch! " << imagePaths[i] << "\n");
 #endif
         }
 
@@ -804,7 +805,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
     if (imagePaths.empty()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Texture Array generated with 0 images!\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Texture Array generated with 0 images!\n");
 #endif
         return;
     }
@@ -850,7 +851,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
         if (!data) {
 #ifdef MECRAFT_DEBUG
-            std::cerr << "Failed to load image for texture array: " << imagePath << "\n";
+            MECRAFT_LOG_STREAM(std::cerr << "Failed to load image for texture array: " << imagePath << "\n");
 #endif
             currentLayer += layersPerImage[imageIndex];
             continue;
@@ -884,7 +885,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         if (useAnimationFrames) {
             if (width != tileSize || height != tileSize * declaredFrames) {
 #ifdef MECRAFT_DEBUG
-                std::cerr << "Warning: Animated texture size mismatch in texture array: " << imagePath << "\n";
+                MECRAFT_LOG_STREAM(std::cerr << "Warning: Animated texture size mismatch in texture array: " << imagePath << "\n");
 #endif
                 uploadLayer(currentLayer, data, width, height);
             } else {
@@ -898,7 +899,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         } else {
             if (width != tileSize || height != tileSize) {
 #ifdef MECRAFT_DEBUG
-                std::cerr << "Warning: Texture size mismatch in texture array! " << imagePath << "\n";
+                MECRAFT_LOG_STREAM(std::cerr << "Warning: Texture size mismatch in texture array! " << imagePath << "\n");
 #endif
             }
             uploadLayer(currentLayer, data, width, height);
@@ -1076,7 +1077,7 @@ int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
         return it->second;
     }
 #ifdef MECRAFT_DEBUG
-    std::cerr << "[ResourceMgr] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << ", falling back to 0\n";
+    MECRAFT_LOG_STREAM(std::cerr << "[ResourceMgr] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << ", falling back to 0\n");
 #endif
     return 0;
 }
@@ -1090,7 +1091,7 @@ GLuint loadLightmapTexture(const std::string& path) {
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!data) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Failed to load lightmap texture: " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to load lightmap texture: " << path << "\n");
 #endif
         return 0;
     }
@@ -1119,7 +1120,7 @@ GLuint loadColormapTexture(const std::string& path) {
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!data) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Failed to load colormap texture: " << path << "\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to load colormap texture: " << path << "\n");
 #endif
         return 0;
     }
@@ -1235,7 +1236,7 @@ GLuint ResourceMgr::loadCubemap(const std::string& name,
         unsigned char* data = stbi_load(paths[i].c_str(), &width, &height, &channels, 4);
         if (!data) {
 #ifdef MECRAFT_DEBUG
-            std::cerr << "Failed to load cubemap face: " << paths[i] << "\n";
+            MECRAFT_LOG_STREAM(std::cerr << "Failed to load cubemap face: " << paths[i] << "\n");
 #endif
             glDeleteTextures(1, &textureID);
             return 0;
@@ -1419,7 +1420,7 @@ void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSi
 
     if (imagePaths.empty()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Item texture atlas generated with 0 images!\n";
+        MECRAFT_LOG_STREAM(std::cerr << "Item texture atlas generated with 0 images!\n");
 #endif
         return;
     }
@@ -1569,7 +1570,7 @@ void ResourceMgr::buildHudIconAtlas(const std::string& directory, int iconSize) 
 
     if (imagePaths.empty()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "HUD icon atlas generated with 0 images!\n";
+        MECRAFT_LOG_STREAM(std::cerr << "HUD icon atlas generated with 0 images!\n");
 #endif
         return;
     }

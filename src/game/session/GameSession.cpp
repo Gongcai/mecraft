@@ -1,4 +1,5 @@
 #include "GameSession.h"
+#include "../../Diagnostics.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/World.h"
 #include "../../physics/PhysicsSystem.h"
@@ -219,17 +220,17 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
                 m_client->sendHello();
                 m_client->sendViewConfig(config.renderDistance);
                 if (!loggedHandshakeWait) {
-                    std::printf("[Client] Waiting for ServerHello; resending handshake to %s:%u\n",
-                                config.serverAddress.c_str(),
-                                static_cast<unsigned>(config.serverPort));
-                    std::fflush(stdout);
+                    MECRAFT_LOG_PRINTF("[Client] Waiting for ServerHello; resending handshake to %s:%u\n",
+                                       config.serverAddress.c_str(),
+                                       static_cast<unsigned>(config.serverPort));
+                    MECRAFT_LOG_FLUSH(stdout);
                     loggedHandshakeWait = true;
                 }
             } else if (m_client->hasServerHello() && !m_client->areSpawnChunksReady() && i > 0 && i % 200 == 0) {
                 m_client->sendViewConfig(config.renderDistance);
                 if (!loggedChunkWait) {
-                    std::printf("[Client] Waiting for spawn chunks; refreshing view config\n");
-                    std::fflush(stdout);
+                    MECRAFT_LOG_PRINTF("[Client] Waiting for spawn chunks; refreshing view config\n");
+                    MECRAFT_LOG_FLUSH(stdout);
                     loggedChunkWait = true;
                 }
             }
@@ -242,9 +243,9 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
                                      std::to_string(config.serverPort));
         }
         if (!m_client->areSpawnChunksReady()) {
-            std::printf("[Client] Entering gameplay while spawn chunks are still streaming; loaded=%zu\n",
-                        m_client->clientWorld().loadedChunkCount());
-            std::fflush(stdout);
+            MECRAFT_LOG_PRINTF("[Client] Entering gameplay while spawn chunks are still streaming; loaded=%zu\n",
+                               m_client->clientWorld().loadedChunkCount());
+            MECRAFT_LOG_FLUSH(stdout);
         }
 
         m_physicsSystem = std::make_unique<physics::PhysicsSystem>(&m_client->clientWorld());
@@ -708,12 +709,12 @@ bool GameSession::stabilizeLocalPlayerAfterInitialLoad() {
         }
 
         m_server->setClientLoadCenter(stablePosition);
-        std::printf("[Save] Stabilized local player after initial load: pos=(%.2f, %.2f, %.2f)%s\n",
-                    stablePosition.x,
-                    stablePosition.y,
-                    stablePosition.z,
-                    repositioned ? " adjusted" : "");
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[Save] Stabilized local player after initial load: pos=(%.2f, %.2f, %.2f)%s\n",
+                           stablePosition.x,
+                           stablePosition.y,
+                           stablePosition.z,
+                           repositioned ? " adjusted" : "");
+        MECRAFT_LOG_FLUSH(stdout);
         return true;
     }
 
@@ -913,8 +914,8 @@ void GameSession::loadLocalPlayer() {
             }
         }
 
-        std::printf("[Save] Loaded local player: pos=(%.1f, %.1f, %.1f)\n",
-                     data.posX, data.posY, data.posZ);
+        MECRAFT_LOG_PRINTF("[Save] Loaded local player: pos=(%.1f, %.1f, %.1f)\n",
+                           data.posX, data.posY, data.posZ);
         return;
     }
 }

@@ -3,6 +3,7 @@
 //
 
 #include "ActionMap.h"
+#include "../Diagnostics.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -272,7 +273,7 @@ void ActionMap::loadFromFile(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "Failed to open keybindings file: " << path << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "Failed to open keybindings file: " << path << std::endl);
 #endif
         return;
     }
@@ -342,4 +343,3 @@ void ActionMap::loadFromFile(const std::string& path) {
         }
     }
 }
-

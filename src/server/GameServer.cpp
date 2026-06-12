@@ -1,4 +1,5 @@
 #include "GameServer.h"
+#include "../Diagnostics.h"
 #include "../world/World.h"
 #include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
@@ -537,13 +538,13 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     constexpr float kSpawnHeightOffset = 2.0f;
     const int surfaceY = m_world.getSurfaceY(0, 0);
     m_spawnPosition = glm::vec3(0.0f, static_cast<float>(surfaceY + kSpawnHeightOffset), 0.0f);
-    std::printf("[Server] World initialized seed=%u renderDistance=%d spawn=(%.1f, %.1f, %.1f)\n",
-                seed,
-                renderDistance,
-                m_spawnPosition.x,
-                m_spawnPosition.y,
-                m_spawnPosition.z);
-    std::fflush(stdout);
+    MECRAFT_LOG_PRINTF("[Server] World initialized seed=%u renderDistance=%d spawn=(%.1f, %.1f, %.1f)\n",
+                       seed,
+                       renderDistance,
+                       m_spawnPosition.x,
+                       m_spawnPosition.y,
+                       m_spawnPosition.z);
+    MECRAFT_LOG_FLUSH(stdout);
     ensureOwnedEcsRuntime();
     m_entitiesRestorePending = m_saveManager != nullptr;
     m_blockEntitiesRestorePending = m_saveManager != nullptr;
@@ -569,7 +570,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             // Restore time and weather after world init
             m_loadedMeta = meta;
             m_hasLoadedMeta = true;
-            std::printf("[Server] Loaded existing world (seed=%u)\n", seed);
+            MECRAFT_LOG_PRINTF("[Server] Loaded existing world (seed=%u)\n", seed);
         } else {
             // New world - set creation timestamp
             meta.seed = seed;
@@ -578,7 +579,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             meta.displayName = displayName.empty() ? "New World" : displayName;
             m_saveManager->saveLevelMeta(meta);
             m_loadedMeta = meta;
-            std::printf("[Server] Created new world (seed=%u)\n", seed);
+            MECRAFT_LOG_PRINTF("[Server] Created new world (seed=%u)\n", seed);
         }
 
         m_world.setSaveManager(m_saveManager.get());
@@ -648,8 +649,8 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     client.isAdmin = id == 1;
     client.viewDistance = m_world.getRenderDistance();
     m_clients.push_back(std::move(client));
-    std::printf("[Server] Accepted transport slot for client %u admin=%d\n", id, id == 1 ? 1 : 0);
-    std::fflush(stdout);
+    MECRAFT_LOG_PRINTF("[Server] Accepted transport slot for client %u admin=%d\n", id, id == 1 ? 1 : 0);
+    MECRAFT_LOG_FLUSH(stdout);
 }
 
 void GameServer::tick(float dt) {
@@ -752,13 +753,13 @@ void GameServer::processClientMessages() {
                 client.totalChunksSent = 0;
                 if (packet.inProcessPayload.has_value()) {
                     const auto& hello = std::any_cast<const net::ClientHello&>(packet.inProcessPayload);
-                    std::printf("[Server] ClientHello client=%u protocol=%u\n",
-                                client.id,
-                                hello.protocolVersion);
+                    MECRAFT_LOG_PRINTF("[Server] ClientHello client=%u protocol=%u\n",
+                                       client.id,
+                                       hello.protocolVersion);
                 } else {
-                    std::printf("[Server] ClientHello client=%u without decoded payload\n", client.id);
+                    MECRAFT_LOG_PRINTF("[Server] ClientHello client=%u without decoded payload\n", client.id);
                 }
-                std::fflush(stdout);
+                MECRAFT_LOG_FLUSH(stdout);
 
                 // Respond with ServerHello
                 net::Packet response;
@@ -805,11 +806,11 @@ void GameServer::processClientMessages() {
                     if (client.viewDistance > m_world.getRenderDistance()) {
                         m_world.setRenderDistance(client.viewDistance);
                     }
-                    std::printf("[Server] ClientViewConfig client=%u renderDistance=%d worldRenderDistance=%d\n",
-                                client.id,
-                                client.viewDistance,
-                                m_world.getRenderDistance());
-                    std::fflush(stdout);
+                    MECRAFT_LOG_PRINTF("[Server] ClientViewConfig client=%u renderDistance=%d worldRenderDistance=%d\n",
+                                       client.id,
+                                       client.viewDistance,
+                                       m_world.getRenderDistance());
+                    MECRAFT_LOG_FLUSH(stdout);
                 }
                 break;
             }
@@ -880,10 +881,10 @@ void GameServer::cleanupDisconnectedClients() {
         }
 
         if (client.receivedHello) {
-            std::printf("[Server] Removing disconnected client %u netId=%u\n",
-                        client.id,
-                        client.playerNetId);
-            std::fflush(stdout);
+            MECRAFT_LOG_PRINTF("[Server] Removing disconnected client %u netId=%u\n",
+                               client.id,
+                               client.playerNetId);
+            MECRAFT_LOG_FLUSH(stdout);
             broadcastPlayerDespawn(client.playerNetId, client.id);
         }
         destroyOwnedPlayerProxy(client);
@@ -899,10 +900,10 @@ void GameServer::cleanupDisconnectedClients() {
             continue;
         }
 
-        std::printf("[Server] Client %u lost remote peer netId=%u\n",
-                    client.id,
-                    client.playerNetId);
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[Server] Client %u lost remote peer netId=%u\n",
+                           client.id,
+                           client.playerNetId);
+        MECRAFT_LOG_FLUSH(stdout);
         broadcastPlayerDespawn(client.playerNetId, client.id);
         destroyOwnedPlayerProxy(client);
         client.receivedHello = false;
@@ -1226,12 +1227,12 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                 m_ecsRegistry->ctx().get<ChestInventoryStore>().extractAndErase(action.targetBlock);
             static_cast<void>(discardedContents);
         }
-        std::printf("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
-                    client.id,
-                    action.targetBlock.x,
-                    action.targetBlock.y,
-                    action.targetBlock.z);
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
+                           client.id,
+                           action.targetBlock.x,
+                           action.targetBlock.y,
+                           action.targetBlock.z);
+        MECRAFT_LOG_FLUSH(stdout);
         return;
     }
 
@@ -1246,13 +1247,13 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                      action.placeBlock.y,
                      action.placeBlock.z,
                      static_cast<BlockID>(action.blockState));
-    std::printf("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%u\n",
-                client.id,
-                action.placeBlock.x,
-                action.placeBlock.y,
-                action.placeBlock.z,
-                static_cast<unsigned>(action.blockState));
-    std::fflush(stdout);
+    MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%u\n",
+                       client.id,
+                       action.placeBlock.x,
+                       action.placeBlock.y,
+                       action.placeBlock.z,
+                       static_cast<unsigned>(action.blockState));
+    MECRAFT_LOG_FLUSH(stdout);
 }
 
 void GameServer::sendNewChunksToClients() {
@@ -1518,11 +1519,11 @@ void GameServer::syncPlayersToClients() {
                 spawn.pitch = other.lastPitch;
                 spawnPacket.inProcessPayload = spawn;
                 receiver.transport->send(std::move(spawnPacket));
-                std::printf("[Server] Sent PlayerSpawn receiver=%u sourceClient=%u netId=%u\n",
-                            receiver.id,
-                            other.id,
-                            other.playerNetId);
-                std::fflush(stdout);
+                MECRAFT_LOG_PRINTF("[Server] Sent PlayerSpawn receiver=%u sourceClient=%u netId=%u\n",
+                                   receiver.id,
+                                   other.id,
+                                   other.playerNetId);
+                MECRAFT_LOG_FLUSH(stdout);
             }
         }
     }
@@ -2111,13 +2112,13 @@ void GameServer::sendChunkDataToClient(ConnectedClient& client, int cx, int cz) 
 
     ++client.totalChunksSent;
     if (client.chunkSendLogCount < 12 || client.totalChunksSent % 25 == 0) {
-        std::printf("[Server] Sent ChunkData client=%u chunk=(%d,%d) total=%d active=%zu\n",
-                    client.id,
-                    cx,
-                    cz,
-                    client.totalChunksSent,
-                    m_world.getActiveChunks().size());
-        std::fflush(stdout);
+        MECRAFT_LOG_PRINTF("[Server] Sent ChunkData client=%u chunk=(%d,%d) total=%d active=%zu\n",
+                           client.id,
+                           cx,
+                           cz,
+                           client.totalChunksSent,
+                           m_world.getActiveChunks().size());
+        MECRAFT_LOG_FLUSH(stdout);
         ++client.chunkSendLogCount;
     }
 }

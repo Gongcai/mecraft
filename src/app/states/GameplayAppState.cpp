@@ -1,5 +1,6 @@
 #include "GameplayAppState.h"
 #include "MainMenuAppState.h"
+#include "../../Diagnostics.h"
 #include "game/Game.h"
 #include <exception>
 #include <iostream>
@@ -41,7 +42,7 @@ void GameplayAppState::onEnter() {
         m_game = std::make_unique<Game>(m_config, deps);
         m_game->init();
     } catch (const std::exception& ex) {
-        std::cerr << "[GameplayAppState] Failed to enter gameplay: " << ex.what() << '\n';
+        MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Failed to enter gameplay: " << ex.what() << '\n');
         m_game.reset();
         m_enterFailed = true;
         m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
@@ -88,7 +89,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
             accumulator = 0.0;
         }
     } catch (const std::exception& ex) {
-        std::cerr << "[GameplayAppState] Gameplay update failed: " << ex.what() << '\n';
+        MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay update failed: " << ex.what() << '\n');
         if (m_game) {
             m_game->shutdown();
             m_game.reset();
@@ -104,7 +105,7 @@ void GameplayAppState::render(double frameTime) {
         try {
             m_game->renderFrame(static_cast<float>(frameTime));
         } catch (const std::exception& ex) {
-            std::cerr << "[GameplayAppState] Gameplay render failed: " << ex.what() << '\n';
+            MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay render failed: " << ex.what() << '\n');
             m_game->shutdown();
             m_game.reset();
             m_enterFailed = true;

@@ -1,4 +1,5 @@
 #include "CommonFrameTargets.h"
+#include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
 #include <cstdio>
 
@@ -56,7 +57,7 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_sceneDepthTex, 0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::fprintf(stderr, "CommonFrameTargets: scene color FBO incomplete\n");
+        MECRAFT_LOG_FPRINTF(stderr, "CommonFrameTargets: scene color FBO incomplete\n");
         destroyFramebuffers();
         return false;
     }

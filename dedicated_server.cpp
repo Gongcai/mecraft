@@ -10,6 +10,7 @@
 #include "src/net/ENetTransport.h"
 #include "src/thread/ThreadPool.h"
 #include "src/world/block/Block.h"
+#include "src/Diagnostics.h"
 #include <cstdio>
 #include <thread>
 #include <chrono>
@@ -41,14 +42,14 @@ int main(int argc, char* argv[]) {
     if (argc > 2) seed = static_cast<uint32_t>(std::atoi(argv[2]));
     if (argc > 3) renderDistance = std::atoi(argv[3]);
 
-    std::printf("=== Mecraft Dedicated Server ===\n");
-    std::printf("Port: %d\n", port);
-    std::printf("Seed: %u\n", seed);
-    std::printf("Render Distance: %d\n", renderDistance);
+    MECRAFT_LOG_PRINTF("=== Mecraft Dedicated Server ===\n");
+    MECRAFT_LOG_PRINTF("Port: %d\n", port);
+    MECRAFT_LOG_PRINTF("Seed: %u\n", seed);
+    MECRAFT_LOG_PRINTF("Render Distance: %d\n", renderDistance);
 
     // Initialize ENet
     if (!net::ENetTransport::initialize()) {
-        std::fprintf(stderr, "Failed to initialize ENet\n");
+        MECRAFT_LOG_FPRINTF(stderr, "Failed to initialize ENet\n");
         return 1;
     }
 
@@ -60,9 +61,9 @@ int main(int argc, char* argv[]) {
 
     // Create ENet transport for listening
     auto listenTransport = std::make_unique<net::ENetTransport>();
-    std::printf("Attempting to listen on port %d...\n", port);
+    MECRAFT_LOG_PRINTF("Attempting to listen on port %d...\n", port);
     if (!listenTransport->listen(port, 32, 4)) {
-        std::fprintf(stderr, "Failed to listen on port %d. Port may be in use or ENet failed.\n", port);
+        MECRAFT_LOG_FPRINTF(stderr, "Failed to listen on port %d. Port may be in use or ENet failed.\n", port);
         net::ENetTransport::deinitialize();
         return 1;
     }
@@ -73,8 +74,8 @@ int main(int argc, char* argv[]) {
     server.init(seed, &threadPool, renderDistance);
     net::ClientId nextClientId = 1;
 
-    std::printf("Server listening on port %d\n", port);
-    std::printf("Press Ctrl+C to stop\n\n");
+    MECRAFT_LOG_PRINTF("Server listening on port %d\n", port);
+    MECRAFT_LOG_PRINTF("Press Ctrl+C to stop\n\n");
 
     // Set up signal handler
 #ifdef _WIN32
@@ -101,9 +102,9 @@ int main(int argc, char* argv[]) {
         static int statusCounter = 0;
         if (++statusCounter >= 200) {  // Every 10 seconds
             statusCounter = 0;
-            std::printf("[Status] Tick: %u, Chunks: %zu\n",
-                       server.currentTick(),
-                       server.world().getActiveChunks().size());
+            MECRAFT_LOG_PRINTF("[Status] Tick: %u, Chunks: %zu\n",
+                               server.currentTick(),
+                               server.world().getActiveChunks().size());
         }
 
         // Sleep to maintain tick rate
@@ -114,11 +115,11 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::printf("\nShutting down...\n");
+    MECRAFT_LOG_PRINTF("\nShutting down...\n");
 
     // Cleanup
     net::ENetTransport::deinitialize();
 
-    std::printf("Server stopped.\n");
+    MECRAFT_LOG_PRINTF("Server stopped.\n");
     return 0;
 }

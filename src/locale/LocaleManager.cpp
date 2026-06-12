@@ -1,5 +1,7 @@
 #include "LocaleManager.h"
 
+#include "../Diagnostics.h"
+
 #include <fstream>
 #include <iostream>
 #include <filesystem>
@@ -17,7 +19,7 @@ bool LocaleManager::loadLanguage(const std::string& langCode) {
     std::ifstream file(path);
     if (!file.is_open()) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "[LocaleManager] Failed to open: " << path << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[LocaleManager] Failed to open: " << path << std::endl);
 #endif
         return false;
     }
@@ -27,7 +29,7 @@ bool LocaleManager::loadLanguage(const std::string& langCode) {
         file >> j;
     } catch (const std::exception& e) {
 #ifdef MECRAFT_DEBUG
-        std::cerr << "[LocaleManager] Failed to parse: " << path << " - " << e.what() << std::endl;
+        MECRAFT_LOG_STREAM(std::cerr << "[LocaleManager] Failed to parse: " << path << " - " << e.what() << std::endl);
 #endif
         return false;
     }
