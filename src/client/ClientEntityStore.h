@@ -47,6 +47,7 @@ public:
 private:
     void flushPendingMessages();
     [[nodiscard]] entt::entity findExistingEntity(net::EntityNetId netId) const;
+    [[nodiscard]] bool isLocallyAuthoritative(net::EntityNetId netId) const;
     void createDropEntity(const net::EntitySpawnMessage& msg);
     void createProjectileEntity(const net::EntitySpawnMessage& msg);
     void createPlayerEntity(const net::EntitySpawnMessage& msg);
@@ -58,6 +59,7 @@ private:
 
     /// Mapping from network ID to local entity handle.
     std::unordered_map<net::EntityNetId, entt::entity> m_netIdToEntity;
+    std::unordered_set<net::EntityNetId> m_locallyAuthoritativeNetIds;
 
     std::vector<net::EntitySpawnMessage> m_pendingSpawns;
     std::vector<net::EntityDespawnMessage> m_pendingDespawns;

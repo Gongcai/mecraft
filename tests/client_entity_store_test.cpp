@@ -124,6 +124,61 @@ static void testSnapshotBufferIgnoresOutOfOrderTargetRegression() {
             "out-of-order snapshot should not snap transform back to old position");
 }
 
+static void testExistingEntityStaysLocallyAuthoritative() {
+    client::ClientEntityStore store;
+    ecs::GameplayRegistry gameplayRegistry;
+    auto& registry = gameplayRegistry.registry();
+    store.init(gameplayRegistry, nullptr);
+
+    const entt::entity drop = registry.create();
+    registry.emplace<ecs::DropItemTag>(drop);
+    registry.emplace<ecs::EntityNetIdComponent>(drop, ecs::EntityNetId{55});
+    registry.emplace<ecs::TransformComponent>(drop, glm::vec3(1.0f, 2.0f, 3.0f), 0.0f);
+    registry.emplace<ecs::VelocityComponent>(drop, glm::vec3(0.25f, 0.5f, 0.75f));
+    registry.emplace<ecs::ItemComponent>(drop, ItemIds::COAL, 1u);
+    registry.emplace<ecs::NetworkSyncTag>(drop);
+
+    net::EntitySpawnMessage spawn;
+    spawn.netId = 55;
+    spawn.kind = net::EntityKind::Drop;
+    spawn.position = glm::vec3(8.0f, 9.0f, 10.0f);
+    spawn.velocity = glm::vec3(4.0f, 5.0f, 6.0f);
+    spawn.itemId = static_cast<uint16_t>(ItemIds::COAL);
+    spawn.stackCount = 1;
+    store.handleSpawn(spawn);
+
+    require(store.remoteEntityCount() == 1, "existing local entity should be tracked by netId");
+    require(store.hasEntity(55), "existing local entity netId missing");
+    require(!registry.all_of<ecs::NetworkInterpolationComponent>(drop),
+            "existing local entity should not receive interpolation on spawn");
+
+    net::EntitySnapshotMessage snapshot;
+    snapshot.serverTick = 12;
+    net::EntitySnapshotItem item;
+    item.netId = 55;
+    item.position = glm::vec3(20.0f, 30.0f, 40.0f);
+    item.velocity = glm::vec3(-1.0f, -2.0f, -3.0f);
+    snapshot.entities.push_back(item);
+    store.handleSnapshot(snapshot);
+
+    require(nearVec3(registry.get<ecs::TransformComponent>(drop).position, glm::vec3(1.0f, 2.0f, 3.0f)),
+            "snapshot should not move an existing local entity");
+    require(nearVec3(registry.get<ecs::VelocityComponent>(drop).velocity, glm::vec3(0.25f, 0.5f, 0.75f)),
+            "snapshot should not change existing local entity velocity");
+    require(!registry.all_of<ecs::NetworkInterpolationComponent>(drop),
+            "snapshot should not attach interpolation to an existing local entity");
+
+    net::EntityImpactMessage impact;
+    impact.netId = 55;
+    impact.position = glm::vec3(1.5f, 2.5f, 3.5f);
+    impact.particleBlockId = static_cast<uint16_t>(BlockIds::STONE);
+    impact.particleCount = 12;
+    store.handleImpact(impact);
+
+    require(!gameplayRegistry.ctxHas<ecs::ParticleEventBus>(),
+            "network impact should not duplicate effects for an existing local entity");
+}
+
 static void testMobSpawnCreatesZombieReplica() {
     client::ClientEntityStore store;
     ecs::GameplayRegistry registry;
@@ -443,6 +498,7 @@ int main() {
 
     testSpawnBeforeInitIsReplayed();
     testSnapshotBufferIgnoresOutOfOrderTargetRegression();
+    testExistingEntityStaysLocallyAuthoritative();
     testMobSpawnCreatesZombieReplica();
     testMobSpawnCreatesConfiguredHerobrineReplica();
     testProjectileSpawnCreatesAppleReplica();

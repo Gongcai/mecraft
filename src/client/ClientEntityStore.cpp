@@ -262,6 +262,7 @@ void ClientEntityStore::init(entt::registry& registry, ResourceMgr* resourceMgr)
     m_gameplayRegistry = nullptr;
     m_resourceMgr = resourceMgr;
     m_latchedHurtNetIds.clear();
+    m_locallyAuthoritativeNetIds.clear();
     flushPendingMessages();
 }
 
@@ -270,6 +271,7 @@ void ClientEntityStore::init(ecs::GameplayRegistry& registry, ResourceMgr* resou
     m_gameplayRegistry = &registry;
     m_resourceMgr = resourceMgr;
     m_latchedHurtNetIds.clear();
+    m_locallyAuthoritativeNetIds.clear();
     flushPendingMessages();
 }
 
@@ -292,8 +294,11 @@ void ClientEntityStore::handleSpawn(const net::EntitySpawnMessage& msg) {
 
     if (const entt::entity existing = findExistingEntity(msg.netId); existing != entt::null) {
         m_netIdToEntity[msg.netId] = existing;
+        m_locallyAuthoritativeNetIds.insert(msg.netId);
         return;
     }
+
+    m_locallyAuthoritativeNetIds.erase(msg.netId);
 
     switch (msg.kind) {
     case net::EntityKind::Drop:
@@ -327,10 +332,11 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     if (it == m_netIdToEntity.end()) {
         m_explicitImpactNetIds.erase(msg.netId);
         m_latchedHurtNetIds.erase(msg.netId);
+        m_locallyAuthoritativeNetIds.erase(msg.netId);
         return;
     }
 
-    if (m_registry->valid(it->second)) {
+    if (m_registry->valid(it->second) && !isLocallyAuthoritative(msg.netId)) {
         const bool explicitImpactReceived = m_explicitImpactNetIds.erase(msg.netId) > 0;
         if (!explicitImpactReceived &&
             m_gameplayRegistry &&
@@ -361,12 +367,19 @@ void ClientEntityStore::handleDespawn(const net::EntityDespawnMessage& msg) {
     }
 
     m_netIdToEntity.erase(it);
+    m_explicitImpactNetIds.erase(msg.netId);
     m_latchedHurtNetIds.erase(msg.netId);
+    m_locallyAuthoritativeNetIds.erase(msg.netId);
 }
 
 void ClientEntityStore::handleImpact(const net::EntityImpactMessage& msg) {
     if (!m_registry) {
         m_pendingImpacts.push_back(msg);
+        return;
+    }
+
+    if (isLocallyAuthoritative(msg.netId)) {
+        m_explicitImpactNetIds.erase(msg.netId);
         return;
     }
 
@@ -404,7 +417,12 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
 
         if (!m_registry->valid(it->second)) {
             m_latchedHurtNetIds.erase(item.netId);
+            m_locallyAuthoritativeNetIds.erase(item.netId);
             m_netIdToEntity.erase(it);
+            continue;
+        }
+
+        if (isLocallyAuthoritative(item.netId)) {
             continue;
         }
 
@@ -445,6 +463,10 @@ void ClientEntityStore::handleSnapshot(const net::EntitySnapshotMessage& msg) {
 
 bool ClientEntityStore::hasEntity(net::EntityNetId netId) const {
     return m_netIdToEntity.count(netId) > 0;
+}
+
+bool ClientEntityStore::isLocallyAuthoritative(const net::EntityNetId netId) const {
+    return m_locallyAuthoritativeNetIds.count(netId) > 0;
 }
 
 entt::entity ClientEntityStore::findExistingEntity(const net::EntityNetId netId) const {
