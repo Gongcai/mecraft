@@ -147,13 +147,9 @@ void main() {
         vec4 texColor = forceBaseLod
             ? textureLod(texArray, vec3(vUV, sampledLayer), 0.0)
             : texture(texArray, vec3(vUV, sampledLayer));
-        // Foliage cutout textures are a high-frequency opaque/transparent
-        // checker in shadow space. PCF/PCSS averages that into dirty gray
-        // blotches, so leaves cast a coarse solid shadow in the CSM depth
-        // pass while keeping their visual alpha in the G-buffer pass.
-        if (isCrossVegetation) {
-            discard;
-        }
+        // Cutout vegetation (grass/flowers) now casts shadows via alpha testing.
+        // Standard alpha threshold of 0.1 filters out transparent pixels while
+        // preserving the silhouette shape in shadow space.
 
         bool solidFoliageCaster = (vMaterialKind == MATERIAL_LEAVES);
         if (!solidFoliageCaster && texColor.a < 0.1) {

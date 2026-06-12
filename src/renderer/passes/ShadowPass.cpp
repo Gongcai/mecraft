@@ -350,7 +350,13 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
                 }
             }
+            // Cutout shadow: render with polygon offset to prevent self-shadowing artifacts.
+            // Cutout geometry (grass, flowers) are single-layer planes that would otherwise
+            // cast shadows on themselves, producing stripe patterns.
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(2.0f, 4.0f);
             m_terrainRenderer->renderCutoutChunks(cascadeCutoutEntries[cascade], *m_shadowDepthShader);
+            glDisable(GL_POLYGON_OFFSET_FILL);
             // Entity shadow: render humanoid/mob depth into this cascade with distance/split culling.
             renderShadowEntities(worldView, cascadeData.viewProj, ctx.camera.position, cascadeData.splitNear, cascadeData.splitFar);
             // Drop shadow: render dropped items/blocks depth into this cascade.
