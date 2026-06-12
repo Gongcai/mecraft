@@ -301,6 +301,59 @@ void testInteriorBlockChangeOnlyQueuesOwningChunk() {
     }
 }
 
+void testInteractiveFlushAppliesBlockLightBeforeNextWorldTick() {
+    ThreadPool pool(2);
+    pool.start();
+
+    World world;
+    ThreadPoolGuard poolGuard{pool};
+    world.init(20260417);
+    world.setRenderDistance(1);
+    world.setThreadPool(&pool);
+
+    const glm::vec3 playerPos(8.0f, 80.0f, 8.0f);
+    tickWorld(world, playerPos, 10);
+
+    const bool settled = waitUntil(world, playerPos, 240, [&]() {
+        const LightFrameStats stats = world.getLightFrameStats();
+        return stats.queued == 0 && stats.dirty == 0 && stats.inFlight == 0 && stats.pendingCompleted == 0;
+    });
+    if (!settled) {
+        fail("loaded area should settle before testing interactive light flush");
+    }
+
+    constexpr int torchX = 8;
+    constexpr int torchY = 81;
+    constexpr int torchZ = 8;
+    constexpr int sampleX = torchX + 1;
+    world.setBlock(torchX, torchY - 1, torchZ, BlockIds::STONE);
+    world.setBlock(torchX, torchY, torchZ, BlockIds::TORCH);
+
+    const bool torchLit = waitUntil(world, playerPos, 120, [&]() {
+        Chunk* chunk = findChunk(world, 0, 0);
+        return chunk != nullptr && chunk->getBlockLight(sampleX, torchY, torchZ) > 0;
+    });
+    if (!torchLit) {
+        fail("torch should light a neighboring voxel before removal");
+    }
+
+    const bool resettled = waitUntil(world, playerPos, 120, [&]() {
+        const LightFrameStats stats = world.getLightFrameStats();
+        return stats.queued == 0 && stats.dirty == 0 && stats.inFlight == 0 && stats.pendingCompleted == 0;
+    });
+    if (!resettled) {
+        fail("torch placement should settle before testing immediate removal");
+    }
+
+    world.setBlock(torchX, torchY, torchZ, BlockIds::AIR);
+    world.flushInteractiveLighting(playerPos);
+
+    Chunk* chunk = findChunk(world, 0, 0);
+    if (chunk == nullptr || chunk->getBlockLight(sampleX, torchY, torchZ) != 0) {
+        fail("interactive light flush should apply block-light removal before the next world tick");
+    }
+}
+
 void testBoundaryInboxDoesNotDirtyMeshBeforeLightApply() {
     ThreadPool pool(2);
     pool.start();
@@ -364,6 +417,7 @@ int main() {
     testUnloadDropsLateLightingResults();
     testHighFrequencyContinuousBlockChangesRequeueCleanly();
     testInteriorBlockChangeOnlyQueuesOwningChunk();
+    testInteractiveFlushAppliesBlockLightBeforeNextWorldTick();
     testBoundaryInboxDoesNotDirtyMeshBeforeLightApply();
 
     pass();

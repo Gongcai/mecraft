@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <queue>
+#include <deque>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
@@ -35,12 +35,17 @@ public:
 
     void submitJobs(const glm::vec3& cameraPos, int submitBudget);
     void drainCompleted(World& world, int mergeBudget = 32, float timeBudgetMs = 1.0f);
+    int processInteractiveJobsInline(const glm::vec3& cameraPos,
+                                     int jobBudget,
+                                     int mergeBudget = 8,
+                                     float mergeTimeBudgetMs = 2.0f);
 
     using LightChangeCallback = std::function<void(int64_t chunkKey, uint32_t dirtySubChunkMask)>;
     void setLightChangeCallback(LightChangeCallback callback) { m_lightChangeCallback = std::move(callback); }
 
     [[nodiscard]] LightFrameStats getFrameStats() const;
     [[nodiscard]] int countDirtyChunks() const;
+    [[nodiscard]] int countPendingInteractiveJobs() const;
     [[nodiscard]] int completedCount() const { return m_completedCount.load(); }
 
 private:
@@ -65,6 +70,7 @@ private:
         LightResult result;
     };
 
+    static bool isInteractiveReason(LightDirtyReason reason);
     static std::vector<BlockID> captureBlockSnapshot(const Chunk& chunk);
     static std::vector<uint8_t> capturePackedLightSnapshot(const Chunk& chunk);
     static std::vector<BorderUpdateBatch> collectBoundaryInputs(const LightChunkState& state);
@@ -88,7 +94,7 @@ private:
     std::unordered_map<int64_t, LightChunkState> m_chunkStates;
     std::unordered_map<int64_t, CachedBaseLight> m_baseLightCaches;
     std::unordered_set<int64_t> m_frameBlockChangedChunks;
-    std::queue<CompletedTicket> m_completed;
+    std::deque<CompletedTicket> m_completed;
     LightChangeCallback m_lightChangeCallback;
     mutable std::mutex m_stateMutex;
     mutable std::mutex m_completedMutex;

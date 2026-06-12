@@ -131,6 +131,7 @@ void World::init(uint32_t seed) {
     m_lightService = std::make_unique<LightService>(*this);
     m_lightService->setLightChangeCallback(m_lightChangeCallback);
     m_lightService->start(m_threadPool);
+    m_interactiveLightFlushRequested = false;
     m_dayNightSystem.setTimeOfDay(300.0f); // Default to mid-day
 }
 
@@ -156,6 +157,21 @@ void World::updateForInitialLoad(const glm::vec3& playerPos, const float dt) {
                     24,
                     24,
                     4.0f);
+}
+
+void World::flushInteractiveLighting(const glm::vec3& playerPos) {
+    if (!m_lightService || !m_interactiveLightFlushRequested) {
+        return;
+    }
+
+    constexpr int kInteractiveLightJobBudget = 4;
+    constexpr int kInteractiveLightMergeBudget = 16;
+    constexpr float kInteractiveLightMergeTimeBudgetMs = 2.0f;
+    m_lightService->processInteractiveJobsInline(playerPos,
+                                                 kInteractiveLightJobBudget,
+                                                 kInteractiveLightMergeBudget,
+                                                 kInteractiveLightMergeTimeBudgetMs);
+    m_interactiveLightFlushRequested = m_lightService->countPendingInteractiveJobs() > 0;
 }
 
 void World::updateStreaming(const glm::vec3& playerPos,
@@ -535,6 +551,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     if (m_lightService) {
         chunk.setBlockWithoutMeshDirty(localX, y, localZ, targetState);
         m_lightService->onBlockChanged(x, y, z, oldId, targetState);
+        m_interactiveLightFlushRequested = true;
     } else {
         chunk.setBlock(localX, y, localZ, targetState);
     }

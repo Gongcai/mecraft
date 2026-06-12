@@ -35,8 +35,9 @@ public:
     };
 
     void init(uint32_t seed);
-    void update(const glm::vec3& playerPos, float dt);
+    void update(const glm::vec3& playerPos, float dt = 1.0f / 60.0f);
     void updateForInitialLoad(const glm::vec3& playerPos, float dt);
+    void flushInteractiveLighting(const glm::vec3& playerPos);
 
     [[nodiscard]] uint32_t getSeed() const { return m_seed; }
 
@@ -135,6 +136,7 @@ private:
     uint32_t m_seed = 0;
     int m_flatSurfaceY = 63;
     uint64_t m_activeChunkRevision = 1;
+    bool m_interactiveLightFlushRequested = false;
 
     void loadChunk(int cx, int cz);
     void unloadChunk(int cx, int cz);

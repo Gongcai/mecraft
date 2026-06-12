@@ -128,6 +128,11 @@ LightService::LightService(World& world)
 
 LightService::~LightService() = default;
 
+bool LightService::isInteractiveReason(const LightDirtyReason reason) {
+    return reason == LightDirtyReason::BlockChanged ||
+           reason == LightDirtyReason::NeighborBoundary;
+}
+
 void LightService::start(ThreadPool* pool) {
     m_pool = pool;
     m_running = true;
@@ -422,7 +427,7 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
                 break;
             }
             ticket = std::move(m_completed.front());
-            m_completed.pop();
+            m_completed.pop_front();
         }
 
         m_completedCount.fetch_sub(1);
@@ -562,6 +567,127 @@ void LightService::drainCompleted(World& world, const int mergeBudget, const flo
     }
 }
 
+int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos,
+                                               const int jobBudget,
+                                               const int mergeBudget,
+                                               const float mergeTimeBudgetMs) {
+    if (!m_running || m_pool == nullptr || jobBudget <= 0) {
+        return 0;
+    }
+
+    int solved = 0;
+    while (solved < jobBudget) {
+        int64_t chunkKey = 0;
+        LightJob job;
+        LightDirtyReason pickedReason = LightDirtyReason::NeighborBoundary;
+        bool found = false;
+
+        {
+            std::lock_guard<std::mutex> lock(m_stateMutex);
+            float bestPriority = std::numeric_limits<float>::max();
+            auto bestIt = m_chunkStates.end();
+
+            for (auto it = m_chunkStates.begin(); it != m_chunkStates.end(); ++it) {
+                LightChunkState& state = it->second;
+                if (!state.queued || state.inFlight || !state.dirty ||
+                    !isInteractiveReason(state.reason)) {
+                    continue;
+                }
+
+                auto chunkIt = m_world.getActiveChunks().find(it->first);
+                if (chunkIt == m_world.getActiveChunks().end() || !chunkIt->second) {
+                    continue;
+                }
+
+                const float centerX = static_cast<float>(chunkIt->second->m_chunkX * Chunk::SIZE_X + Chunk::SIZE_X / 2);
+                const float centerZ = static_cast<float>(chunkIt->second->m_chunkZ * Chunk::SIZE_Z + Chunk::SIZE_Z / 2);
+                const float dx = centerX - cameraPos.x;
+                const float dz = centerZ - cameraPos.z;
+                const float distanceSq = dx * dx + dz * dz;
+                const float priority = distanceSq + static_cast<float>(reasonBias(state.reason));
+                if (priority < bestPriority) {
+                    bestPriority = priority;
+                    bestIt = it;
+                }
+            }
+
+            if (bestIt != m_chunkStates.end()) {
+                chunkKey = bestIt->first;
+                LightChunkState& state = bestIt->second;
+                auto chunkIt = m_world.getActiveChunks().find(chunkKey);
+                if (chunkIt != m_world.getActiveChunks().end() && chunkIt->second) {
+                    pickedReason = state.reason;
+                    state.lastSubmitReason = pickedReason;
+                    state.inFlight = true;
+                    state.queued = false;
+                    state.dirty = false;
+
+                    job.chunkKey = chunkKey;
+                    job.revision = chunkIt->second->getLightRevision();
+                    job.reason = pickedReason;
+                    job.chunk = chunkIt->second;
+                    job.neighborPosX = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX + 1,
+                                                          chunkIt->second->m_chunkZ);
+                    job.neighborNegX = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX - 1,
+                                                          chunkIt->second->m_chunkZ);
+                    job.neighborPosZ = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX,
+                                                          chunkIt->second->m_chunkZ + 1);
+                    job.neighborNegZ = findSharedByCoords(m_world,
+                                                          chunkIt->second->m_chunkX,
+                                                          chunkIt->second->m_chunkZ - 1);
+                    job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
+                    job.blockChanges = state.pendingBlockChanges;
+                    job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
+                    job.changedBoundaryDirections = state.pendingBoundaryChanged;
+                    job.inbox = collectBoundaryInputs(state);
+                    job.packedLightSnapshot = capturePackedLightSnapshot(*chunkIt->second);
+                    job.forceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
+                    state.inFlightHaloMeshDirtyMask = state.pendingHaloMeshDirtyMask;
+                    state.inFlightForceOutgoingBoundaryMask = state.pendingForceOutgoingBoundaryMask;
+                    state.pendingHaloMeshDirtyMask = 0;
+                    state.pendingForceOutgoingBoundaryMask = 0;
+
+                    auto cacheIt = m_baseLightCaches.find(chunkKey);
+                    if (cacheIt != m_baseLightCaches.end()) {
+                        job.baseLightPacked = cacheIt->second.packed;
+                    }
+
+                    state.inFlightRevision = job.revision;
+                    chunkIt->second->setLightQueued(false);
+                    chunkIt->second->setLightInFlight(true);
+                    found = true;
+                }
+            }
+        }
+
+        if (!found) {
+            break;
+        }
+
+        ++solved;
+        ++m_frameStats.submitted;
+        countReason(pickedReason,
+                    m_frameStats.submittedChunkLoaded,
+                    m_frameStats.submittedBlockChanged,
+                    m_frameStats.submittedNeighborBoundary);
+
+        CompletedTicket ticket;
+        ticket.result = LightSolver::solve(job);
+        {
+            std::lock_guard<std::mutex> lock(m_completedMutex);
+            m_completed.push_front(std::move(ticket));
+        }
+        m_completedCount.fetch_add(1);
+
+        drainCompleted(m_world, mergeBudget, mergeTimeBudgetMs);
+    }
+
+    return solved;
+}
+
 LightFrameStats LightService::getFrameStats() const {
     LightFrameStats stats = m_frameStats;
     stats.pendingCompleted = m_completedCount.load();
@@ -612,7 +738,7 @@ void LightService::markChunkDirty(const int64_t chunkKey, const LightDirtyReason
 
 void LightService::onWorkerCompleted(CompletedTicket ticket) {
     std::lock_guard<std::mutex> lock(m_completedMutex);
-    m_completed.push(std::move(ticket));
+    m_completed.push_back(std::move(ticket));
     m_completedCount.fetch_add(1);
 }
 
@@ -621,6 +747,18 @@ int LightService::countDirtyChunks() const {
     int count = 0;
     for (const auto& entry : m_chunkStates) {
         if (entry.second.dirty) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int LightService::countPendingInteractiveJobs() const {
+    std::lock_guard<std::mutex> lock(m_stateMutex);
+    int count = 0;
+    for (const auto& entry : m_chunkStates) {
+        const LightChunkState& state = entry.second;
+        if (state.dirty && isInteractiveReason(state.reason)) {
             ++count;
         }
     }

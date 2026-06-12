@@ -187,6 +187,7 @@ bool GameFrameOrchestrator::runFixedUpdate(GameSession& session,
 #else
     session.gameplayScene().runFixedUpdate(static_cast<float>(scaledFixedStep));
 #endif
+    session.world().flushInteractiveLighting(session.getLocalPlayerPosition());
     sendClientInput(session, static_cast<float>(scaledFixedStep));
 
 #ifdef MECRAFT_DEBUG
