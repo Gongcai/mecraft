@@ -38,6 +38,8 @@ enum class UICommand {
     Cancel,
     Home,
     End,
+    TabLeft,
+    TabRight,
 };
 
 enum class UIPointerButton {

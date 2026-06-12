@@ -4,6 +4,7 @@
 #include "../../components/Components.h"
 
 #include <glm/glm.hpp>
+#include <cmath>
 
 namespace ecs {
 
@@ -72,8 +73,22 @@ void PlayerIntentBuildSystem::update(SystemContext& ctx) {
         move.wantsCrouch = frame.crouch;
         move.toggleFlightMode = frame.jumpDoubleTap;
 
-        look.deltaX = frame.lookX;
-        look.deltaY = frame.lookY;
+        // Apply gamepad sensitivity multiplier for look input
+        // Gamepad stick returns [-1, 1], while mouse returns pixel delta (much larger values)
+        // To make gamepad feel responsive, we multiply by a factor
+        constexpr float kGamepadLookMultiplier = 50.0f;  // Adjust this value for sensitivity
+
+        // Check if input is from gamepad (small absolute values indicate analog stick)
+        const bool likelyGamepad = (std::abs(frame.lookX) <= 1.5f && std::abs(frame.lookY) <= 1.5f) &&
+                                   (std::abs(frame.lookX) > 0.01f || std::abs(frame.lookY) > 0.01f);
+
+        if (likelyGamepad) {
+            look.deltaX = frame.lookX * kGamepadLookMultiplier;
+            look.deltaY = frame.lookY * kGamepadLookMultiplier;
+        } else {
+            look.deltaX = frame.lookX;
+            look.deltaY = frame.lookY;
+        }
 
         for (int i = 0; i < 9; ++i) {
             hotbar.slotSelected[i] = frame.hotbar[i];

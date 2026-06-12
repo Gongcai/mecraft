@@ -267,13 +267,14 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
         case UIInputEventType::Command: {
             if (isFocused()) {
                 float stepVal = m_step > 0.0f ? m_step : (m_max - m_min) * 0.05f;
-                if (event.command == UICommand::NavigateLeft || event.command == UICommand::NavigateDown) {
+                // Only consume Left/Right for slider adjustment, let Up/Down pass through for focus navigation
+                if (event.command == UICommand::NavigateLeft) {
                     m_value = std::max(m_min, m_value - stepVal);
                     applyStep();
                     if (m_onValueChanged) m_onValueChanged(m_value);
                     return UIEventResult::Consumed;
                 }
-                if (event.command == UICommand::NavigateRight || event.command == UICommand::NavigateUp) {
+                if (event.command == UICommand::NavigateRight) {
                     m_value = std::min(m_max, m_value + stepVal);
                     applyStep();
                     if (m_onValueChanged) m_onValueChanged(m_value);

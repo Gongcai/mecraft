@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 
 #include "engine/input/InputContextManager.h"
 #include "engine/input/InputManager.h"
@@ -201,6 +202,28 @@ UIInputRouteResult UIInputAdapter::routeInput(UIRenderer& renderer,
     }
     if (context.isActionTriggered(Action::Cancel)) {
         routeCommand(renderer, snapshot, routeResult, UICommand::Cancel);
+    }
+    if (context.isActionTriggered(Action::TabLeft)) {
+        routeCommand(renderer, snapshot, routeResult, UICommand::TabLeft);
+    }
+    if (context.isActionTriggered(Action::TabRight)) {
+        routeCommand(renderer, snapshot, routeResult, UICommand::TabRight);
+    }
+
+    // Handle left stick Y-axis for scrolling in UI context
+    // Check if gamepad is connected and read left stick Y axis
+    if (snapshot.isGamepadConnected()) {
+        const float leftStickY = snapshot.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y);
+        constexpr float kStickScrollDeadZone = 0.2f;
+        constexpr float kStickScrollMultiplier = 3.0f;  // Adjust for scroll speed
+
+        if (std::abs(leftStickY) > kStickScrollDeadZone) {
+            // Create a synthetic scroll event
+            // Note: Stick up is negative in OpenGL Y convention, scroll up should be positive
+            UIInputEvent scrollEvent = makeScrollEvent(snapshot);
+            scrollEvent.scrollY = -leftStickY * kStickScrollMultiplier;
+            mergeResult(routeResult.aggregate, renderer.routeUIInput(scrollEvent));
+        }
     }
 
     return routeResult;

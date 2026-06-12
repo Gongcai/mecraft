@@ -326,6 +326,19 @@ UIEventResult UITabControl::onInput(const UIInputEvent& event, const UIRenderCon
         }
         break;
 
+    case UIInputEventType::Command:
+        if (event.command == UICommand::TabLeft) {
+            const int newIndex = (m_activeIndex - 1 + static_cast<int>(m_tabs.size())) % static_cast<int>(m_tabs.size());
+            setActiveTab(newIndex);
+            return UIEventResult::Consumed;
+        }
+        if (event.command == UICommand::TabRight) {
+            const int newIndex = (m_activeIndex + 1) % static_cast<int>(m_tabs.size());
+            setActiveTab(newIndex);
+            return UIEventResult::Consumed;
+        }
+        break;
+
     default:
         break;
     }

@@ -1,45 +1,116 @@
 # Format: Context Action Device Control Trigger Modifiers
+# Supports Keyboard, Mouse, Gamepad, and Scroll devices
+# Gamepad buttons: A, B, X, Y, LB, RB, START, BACK, DPAD_UP/DOWN/LEFT/RIGHT, etc.
+
+# ============================================================
+# Gameplay Context - Main game controls
+# ============================================================
+
+# Jump - Space / Gamepad A
 Gameplay Jump Keyboard SPACE Held -
 Gameplay Jump Keyboard SPACE DoubleTap -
+Gameplay Jump Gamepad A Pressed -
+
+# Crouch - Left Shift / Gamepad Right Stick Press (R3)
 Gameplay Crouch Keyboard LEFT_SHIFT Held -
+Gameplay Crouch Gamepad RIGHT_THUMB Held -
+
+# Sprint - Left Control / Gamepad Left Bumper
 Gameplay Sprint Keyboard LEFT_CONTROL Held -
+Gameplay Sprint Gamepad LB Held -
+
+# Attack - Left Click / Gamepad Right Bumper
 Gameplay Attack Mouse LEFT Held -
+Gameplay Attack Gamepad RB Held -
+
+# Use Item - Right Click / Gamepad Left Trigger (as button)
 Gameplay UseItem Mouse RIGHT Held -
+Gameplay UseItem Gamepad LEFT_BUMPER Held -
+
+# Inventory - E / Gamepad Y
 Gameplay Inventory Keyboard E Pressed -
+Gameplay Inventory Gamepad Y Pressed -
+
+# Menu - Escape / Gamepad Start
 Gameplay Menu Keyboard ESCAPE Pressed -
+Gameplay Menu Gamepad START Pressed -
+
+# Hotbar slots 1-3 - Number keys / Gamepad D-pad
 Gameplay Hotbar1 Keyboard 1 Pressed -
+Gameplay Hotbar1 Gamepad DPAD_LEFT Pressed -
 Gameplay Hotbar2 Keyboard 2 Pressed -
+Gameplay Hotbar2 Gamepad DPAD_UP Pressed -
 Gameplay Hotbar3 Keyboard 3 Pressed -
+Gameplay Hotbar3 Gamepad DPAD_RIGHT Pressed -
+
+# Hotbar slots 4-9 - Number keys only (gamepad uses D-pad for primary slots)
 Gameplay Hotbar4 Keyboard 4 Pressed -
 Gameplay Hotbar5 Keyboard 5 Pressed -
 Gameplay Hotbar6 Keyboard 6 Pressed -
 Gameplay Hotbar7 Keyboard 7 Pressed -
 Gameplay Hotbar8 Keyboard 8 Pressed -
 Gameplay Hotbar9 Keyboard 9 Pressed -
+
+# Hotbar scroll - Mouse wheel / Gamepad bumpers (when not attacking)
 Gameplay HotbarScrollUp Scroll UP Pressed -
 Gameplay HotbarScrollDown Scroll DOWN Pressed -
-Gameplay OpenCommand Keyboard SLASH Pressed -
-Gameplay ToggleViewMode Keyboard F5 Pressed -
 
+# Open command console - Slash key only
+Gameplay OpenCommand Keyboard SLASH Pressed -
+
+# Toggle view mode - F5 / Gamepad Back button
+Gameplay ToggleViewMode Keyboard F5 Pressed -
+Gameplay ToggleViewMode Gamepad BACK Pressed -
+
+# ============================================================
+# UI Context - Menu navigation
+# ============================================================
+
+# Menu / Cancel - Escape / Gamepad B
 UI Menu Keyboard ESCAPE Pressed -
+UI Menu Gamepad B Pressed -
 UI Cancel Keyboard ESCAPE Pressed -
+UI Cancel Gamepad B Pressed -
+
+# UI Click - Mouse buttons / Gamepad A (confirm)
 UI UIPrimaryClick Mouse LEFT Pressed -
+UI UIPrimaryClick Gamepad A Pressed -
 UI UISecondaryClick Mouse RIGHT Pressed -
 UI UISecondaryClick Mouse RIGHT Held -
 UI UIPrimaryRelease Mouse LEFT Released -
 UI UISecondaryRelease Mouse RIGHT Released -
+
+# Confirm - Enter / Gamepad A
 UI Confirm Keyboard ENTER Pressed -
 UI Confirm Keyboard KP_ENTER Pressed -
+UI Confirm Gamepad A Pressed -
+
+# Backspace - Keyboard only
 UI Backspace Keyboard BACKSPACE Held -
+
+# Navigation - Arrow keys / Gamepad D-pad
 UI Up Keyboard UP Pressed -
+UI Up Gamepad DPAD_UP Pressed -
 UI Down Keyboard DOWN Pressed -
+UI Down Gamepad DPAD_DOWN Pressed -
 UI Left Keyboard LEFT Pressed -
+UI Left Gamepad DPAD_LEFT Pressed -
 UI Right Keyboard RIGHT Pressed -
-UI Left Keyboard TAB Pressed SHIFT
-UI Right Keyboard TAB Pressed -
+UI Right Gamepad DPAD_RIGHT Pressed -
+
+# Tab navigation - Keyboard Tab / Gamepad bumpers
+UI TabLeft Keyboard TAB Pressed SHIFT
+UI TabLeft Gamepad LB Pressed -
+UI TabRight Keyboard TAB Pressed -
+UI TabRight Gamepad RB Pressed -
+
+# Hotbar slots in UI - Number keys / Gamepad D-pad
 UI Hotbar1 Keyboard 1 Pressed -
+UI Hotbar1 Gamepad DPAD_LEFT Pressed -
 UI Hotbar2 Keyboard 2 Pressed -
+UI Hotbar2 Gamepad DPAD_UP Pressed -
 UI Hotbar3 Keyboard 3 Pressed -
+UI Hotbar3 Gamepad DPAD_RIGHT Pressed -
 UI Hotbar4 Keyboard 4 Pressed -
 UI Hotbar5 Keyboard 5 Pressed -
 UI Hotbar6 Keyboard 6 Pressed -
@@ -47,9 +118,18 @@ UI Hotbar7 Keyboard 7 Pressed -
 UI Hotbar8 Keyboard 8 Pressed -
 UI Hotbar9 Keyboard 9 Pressed -
 
+# ============================================================
+# Axis Bindings - Movement and camera control
+# ============================================================
 
+# Movement - WASD keys / Gamepad left stick
 Axis Gameplay Vertical Keyboard W S
+Axis Gameplay Vertical Gamepad LStickY - Invert
 Axis Gameplay Horizontal Keyboard D A
+Axis Gameplay Horizontal Gamepad LStickX -
 
+# Camera look - Mouse / Gamepad right stick
 Axis Gameplay LookX Mouse X -
+Axis Gameplay LookX Gamepad RStickX -
 Axis Gameplay LookY Mouse Y - Invert
+Axis Gameplay LookY Gamepad RStickY -

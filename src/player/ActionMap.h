@@ -58,7 +58,9 @@ enum class Action {
     Right,
     Backspace,
     OpenCommand,
-    ToggleViewMode
+    ToggleViewMode,
+    TabLeft,     // Switch to previous tab
+    TabRight     // Switch to next tab
 };
 
 enum class InputDevice {

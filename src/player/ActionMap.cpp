@@ -259,7 +259,9 @@ static Action stringToAction(const std::string& str) {
         {"Right", Action::Right},
         {"Backspace",Action::Backspace},
         {"OpenCommand", Action::OpenCommand},
-        {"ToggleViewMode", Action::ToggleViewMode}
+        {"ToggleViewMode", Action::ToggleViewMode},
+        {"TabLeft", Action::TabLeft},
+        {"TabRight", Action::TabRight}
     };
     auto it = lookup.find(str);
     if (it != lookup.end()) return it->second;
