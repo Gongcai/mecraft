@@ -79,13 +79,20 @@ enum class TriggerType {
 enum class NativeAxis {
     None,
     MouseX,
-    MouseY
+    MouseY,
+    // Gamepad axes
+    GamepadLeftStickX,
+    GamepadLeftStickY,
+    GamepadRightStickX,
+    GamepadRightStickY,
+    GamepadLeftTrigger,
+    GamepadRightTrigger
 };
 
 struct InputBinding {
     InputContextType context = InputContextType::Gameplay;
     InputDevice device = InputDevice::Keyboard;
-    int control = 0; // GLFW_KEY_* or GLFW_MOUSE_BUTTON_*
+    int control = 0; // GLFW_KEY_* or GLFW_MOUSE_BUTTON_* or GLFW_GAMEPAD_BUTTON_*
     TriggerType trigger = TriggerType::Held;
     int modifiers = 0; // GLFW_MOD_* bitmask (Shift=1, Ctrl=2, Alt=4, Super=8)
 };
@@ -117,6 +124,9 @@ public:
 
     // Bind a mouse button to an action
     void bindMouseButton(Action action, int buttonCode, InputContextType context = InputContextType::Gameplay);
+
+    // Bind a gamepad button to an action
+    void bindGamepadButton(Action action, int buttonCode, TriggerType trigger = TriggerType::Pressed, InputContextType context = InputContextType::Gameplay);
 
     // Clear all bindings
     void clearAll();

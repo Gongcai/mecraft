@@ -44,6 +44,25 @@ struct InputSnapshot {
     };
     UIDragPayload draggedItem{};
 
+    // Gamepad state (using GLFW gamepad mapping)
+    struct GamepadState {
+        bool connected = false;
+
+        // Button states (15 buttons in GLFW_GAMEPAD standard)
+        bool buttons[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+        bool buttonsJustPressed[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+        bool buttonsJustReleased[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+        bool buttonsDoubleTapped[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+
+        // Analog axes (6 axes: LStickX/Y, RStickX/Y, LT, RT)
+        float axes[GLFW_GAMEPAD_AXIS_LAST + 1] = {};
+
+        // Dead zone configuration
+        static constexpr float kStickDeadZone = 0.15f;
+        static constexpr float kTriggerThreshold = 0.1f;
+    };
+    GamepadState gamepad{};
+
     [[nodiscard]] bool isKeyHeld(int key) const;
     [[nodiscard]] bool isKeyJustPressed(int key) const;
     [[nodiscard]] bool isKeyJustReleased(int key) const;
@@ -52,6 +71,14 @@ struct InputSnapshot {
     [[nodiscard]] bool isMouseButtonJustPressed(int button) const;
     [[nodiscard]] bool isMouseButtonJustReleased(int button) const;
     [[nodiscard]] bool isMouseButtonDoubleTapped(int button) const;
+
+    // Gamepad query methods
+    [[nodiscard]] bool isGamepadConnected() const;
+    [[nodiscard]] bool isGamepadButtonHeld(int button) const;
+    [[nodiscard]] bool isGamepadButtonJustPressed(int button) const;
+    [[nodiscard]] bool isGamepadButtonJustReleased(int button) const;
+    [[nodiscard]] bool isGamepadButtonDoubleTapped(int button) const;
+    [[nodiscard]] float getGamepadAxis(int axis) const;
 };
 
 class InputManager {
@@ -137,11 +164,25 @@ private:
 
     InputSnapshot m_snapshot{};
     InputSnapshot::UIDragPayload m_draggedItem{};
+
+    // Gamepad state tracking (joystick 0 = first gamepad)
+    static constexpr int kGamepadJoystickId = GLFW_JOYSTICK_1;
+    bool m_gamepadButtons[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+    bool m_gamepadButtonsPrev[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+    bool m_gamepadButtonsJustPressed[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+    bool m_gamepadButtonsJustReleased[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+    double m_gamepadButtonLastPressTime[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
+    float m_gamepadAxes[GLFW_GAMEPAD_AXIS_LAST + 1] = {};
+    bool m_gamepadConnected = false;
+
 #ifdef MECRAFT_DEBUG
     DebugEventStats m_debugEventStats{};
 #endif
 
     static InputManager* fromWindow(GLFWwindow* w);
+
+    // Helper for applying dead zone to stick axes
+    static float applyDeadZone(float value, float deadZone);
 
     // GLFW 回调 (static → 通过 userPointer 转发到实例)
     static void keyCallback(GLFWwindow* w, int key, int scancode, int action, int mods);

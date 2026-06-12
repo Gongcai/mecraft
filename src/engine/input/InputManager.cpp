@@ -46,6 +46,33 @@ bool InputSnapshot::isMouseButtonDoubleTapped(int button) const {
     return button >= 0 && button <= GLFW_MOUSE_BUTTON_LAST && mouseButtonsDoubleTapped[button];
 }
 
+bool InputSnapshot::isGamepadConnected() const {
+    return gamepad.connected;
+}
+
+bool InputSnapshot::isGamepadButtonHeld(int button) const {
+    return button >= 0 && button <= GLFW_GAMEPAD_BUTTON_LAST && gamepad.buttons[button];
+}
+
+bool InputSnapshot::isGamepadButtonJustPressed(int button) const {
+    return button >= 0 && button <= GLFW_GAMEPAD_BUTTON_LAST && gamepad.buttonsJustPressed[button];
+}
+
+bool InputSnapshot::isGamepadButtonJustReleased(int button) const {
+    return button >= 0 && button <= GLFW_GAMEPAD_BUTTON_LAST && gamepad.buttonsJustReleased[button];
+}
+
+bool InputSnapshot::isGamepadButtonDoubleTapped(int button) const {
+    return button >= 0 && button <= GLFW_GAMEPAD_BUTTON_LAST && gamepad.buttonsDoubleTapped[button];
+}
+
+float InputSnapshot::getGamepadAxis(int axis) const {
+    if (axis < 0 || axis > GLFW_GAMEPAD_AXIS_LAST) {
+        return 0.0f;
+    }
+    return gamepad.axes[axis];
+}
+
 void InputManager::init(GLFWwindow* windowHandle) {
     m_handle = windowHandle;
     if (m_handle == nullptr) {
@@ -101,6 +128,60 @@ void InputManager::update() {
         m_mouseButtonsPrev[button] = m_mouseButtons[button];
     }
 
+    // Update gamepad state
+    m_gamepadConnected = glfwJoystickPresent(kGamepadJoystickId) && glfwJoystickIsGamepad(kGamepadJoystickId);
+
+    if (m_gamepadConnected) {
+        GLFWgamepadstate state;
+        if (glfwGetGamepadState(kGamepadJoystickId, &state)) {
+            // Update button states
+            for (int btn = 0; btn <= GLFW_GAMEPAD_BUTTON_LAST; ++btn) {
+                bool pressed = (state.buttons[btn] == GLFW_PRESS);
+                m_gamepadButtonsJustPressed[btn] = pressed && !m_gamepadButtonsPrev[btn];
+                m_gamepadButtonsJustReleased[btn] = !pressed && m_gamepadButtonsPrev[btn];
+
+                // Gamepad button double-tap detection
+                m_snapshot.gamepad.buttonsDoubleTapped[btn] = m_gamepadButtonsJustPressed[btn]
+                    && m_gamepadButtonLastPressTime[btn] > 0.0
+                    && (now - m_gamepadButtonLastPressTime[btn]) <= m_doubleTapTimeout;
+                if (m_gamepadButtonsJustPressed[btn]) {
+                    m_gamepadButtonLastPressTime[btn] = now;
+                }
+
+                m_gamepadButtons[btn] = pressed;
+                m_gamepadButtonsPrev[btn] = pressed;
+            }
+
+            // Update axes with dead zone applied
+            for (int axis = 0; axis <= GLFW_GAMEPAD_AXIS_LAST; ++axis) {
+                float rawValue = state.axes[axis];
+
+                // Apply dead zone for stick axes (left/right stick X/Y)
+                if (axis == GLFW_GAMEPAD_AXIS_LEFT_X || axis == GLFW_GAMEPAD_AXIS_LEFT_Y ||
+                    axis == GLFW_GAMEPAD_AXIS_RIGHT_X || axis == GLFW_GAMEPAD_AXIS_RIGHT_Y) {
+                    rawValue = applyDeadZone(rawValue, InputSnapshot::GamepadState::kStickDeadZone);
+                }
+                // Triggers (LT/RT) are mapped to [-1, 1] by GLFW, normalize to [0, 1]
+                else if (axis == GLFW_GAMEPAD_AXIS_LEFT_TRIGGER || axis == GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER) {
+                    rawValue = (rawValue + 1.0f) * 0.5f; // Map [-1, 1] to [0, 1]
+                }
+
+                m_gamepadAxes[axis] = rawValue;
+            }
+        }
+    } else {
+        // Clear gamepad state if disconnected
+        for (int btn = 0; btn <= GLFW_GAMEPAD_BUTTON_LAST; ++btn) {
+            m_gamepadButtons[btn] = false;
+            m_gamepadButtonsPrev[btn] = false;
+            m_gamepadButtonsJustPressed[btn] = false;
+            m_gamepadButtonsJustReleased[btn] = false;
+        }
+        for (int axis = 0; axis <= GLFW_GAMEPAD_AXIS_LAST; ++axis) {
+            m_gamepadAxes[axis] = 0.0f;
+        }
+    }
+
     if (m_handle == nullptr) {
         m_mouseDeltaX = 0.0;
         m_mouseDeltaY = 0.0;
@@ -127,6 +208,18 @@ void InputManager::update() {
         m_snapshot.mouseButtonsJustPressed[button] = m_mouseButtonsJustPressed[button];
         m_snapshot.mouseButtonsJustReleased[button] = m_mouseButtonsJustReleased[button];
     }
+
+    // Copy gamepad state to snapshot
+    m_snapshot.gamepad.connected = m_gamepadConnected;
+    for (int btn = 0; btn <= GLFW_GAMEPAD_BUTTON_LAST; ++btn) {
+        m_snapshot.gamepad.buttons[btn] = m_gamepadButtons[btn];
+        m_snapshot.gamepad.buttonsJustPressed[btn] = m_gamepadButtonsJustPressed[btn];
+        m_snapshot.gamepad.buttonsJustReleased[btn] = m_gamepadButtonsJustReleased[btn];
+    }
+    for (int axis = 0; axis <= GLFW_GAMEPAD_AXIS_LAST; ++axis) {
+        m_snapshot.gamepad.axes[axis] = m_gamepadAxes[axis];
+    }
+
     m_snapshot.mousePosition = {
         static_cast<float>(m_mouseX),
         static_cast<float>(m_mouseY)
@@ -326,5 +419,15 @@ void InputManager::charCallback(GLFWwindow* w, unsigned int codepoint) {
 #ifdef MECRAFT_DEBUG
     self->m_debugEventStats.charCallbackMs += debugElapsedMs(debugStart);
 #endif
+}
+
+float InputManager::applyDeadZone(float value, float deadZone) {
+    if (value > deadZone) {
+        return (value - deadZone) / (1.0f - deadZone);
+    }
+    if (value < -deadZone) {
+        return (value + deadZone) / (1.0f - deadZone);
+    }
+    return 0.0f;
 }
 

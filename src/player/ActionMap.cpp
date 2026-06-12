@@ -61,6 +61,16 @@ void ActionMap::bindMouseButton(Action action, int buttonCode, InputContextType 
     m_bindings[action].push_back(binding);
 }
 
+void ActionMap::bindGamepadButton(Action action, int buttonCode, TriggerType trigger, InputContextType context) {
+    InputBinding binding;
+    binding.context = context;
+    binding.device = InputDevice::Gamepad;
+    binding.control = buttonCode;
+    binding.trigger = trigger;
+    binding.modifiers = 0;
+    m_bindings[action].push_back(binding);
+}
+
 void ActionMap::clearAll() {
     m_bindings.clear();
 }
@@ -107,6 +117,24 @@ bool ActionMap::evaluateBinding(const InputBinding& binding, const InputSnapshot
                 break;
             case TriggerType::DoubleTap:
                 active = input.isMouseButtonDoubleTapped(binding.control);
+                break;
+        }
+    } else if (binding.device == InputDevice::Gamepad) {
+        if (!input.isGamepadConnected()) {
+            return false;
+        }
+        switch (binding.trigger) {
+            case TriggerType::Pressed:
+                active = input.isGamepadButtonJustPressed(binding.control);
+                break;
+            case TriggerType::Released:
+                active = input.isGamepadButtonJustReleased(binding.control);
+                break;
+            case TriggerType::Held:
+                active = input.isGamepadButtonHeld(binding.control);
+                break;
+            case TriggerType::DoubleTap:
+                active = input.isGamepadButtonDoubleTapped(binding.control);
                 break;
         }
     } else if (binding.device == InputDevice::Scroll) {
@@ -160,6 +188,30 @@ float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSn
                     value = static_cast<float>(input.mouseDelta.x);
                 } else if (binding.nativeAxis == NativeAxis::MouseY) {
                     value = static_cast<float>(input.mouseDelta.y);
+                } else if (binding.nativeAxis == NativeAxis::GamepadLeftStickX) {
+                    if (input.isGamepadConnected()) {
+                        value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_X);
+                    }
+                } else if (binding.nativeAxis == NativeAxis::GamepadLeftStickY) {
+                    if (input.isGamepadConnected()) {
+                        value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y);
+                    }
+                } else if (binding.nativeAxis == NativeAxis::GamepadRightStickX) {
+                    if (input.isGamepadConnected()) {
+                        value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X);
+                    }
+                } else if (binding.nativeAxis == NativeAxis::GamepadRightStickY) {
+                    if (input.isGamepadConnected()) {
+                        value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y);
+                    }
+                } else if (binding.nativeAxis == NativeAxis::GamepadLeftTrigger) {
+                    if (input.isGamepadConnected()) {
+                        value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER);
+                    }
+                } else if (binding.nativeAxis == NativeAxis::GamepadRightTrigger) {
+                    if (input.isGamepadConnected()) {
+                        value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
+                    }
                 } else {
                     if (input.isKeyHeld(binding.positiveKey)) value += 1.0f;
                     if (input.isKeyHeld(binding.negativeKey)) value -= 1.0f;
@@ -267,6 +319,39 @@ static TriggerType stringToTrigger(const std::string& str) {
     return TriggerType::Held;
 }
 
+// Helper for string to gamepad button code
+static int stringToGamepadButton(const std::string& str) {
+    if (str == "A" || str == "CROSS") return GLFW_GAMEPAD_BUTTON_A;
+    if (str == "B" || str == "CIRCLE") return GLFW_GAMEPAD_BUTTON_B;
+    if (str == "X" || str == "SQUARE") return GLFW_GAMEPAD_BUTTON_X;
+    if (str == "Y" || str == "TRIANGLE") return GLFW_GAMEPAD_BUTTON_Y;
+    if (str == "LB" || str == "LEFT_BUMPER") return GLFW_GAMEPAD_BUTTON_LEFT_BUMPER;
+    if (str == "RB" || str == "RIGHT_BUMPER") return GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER;
+    if (str == "BACK" || str == "SELECT") return GLFW_GAMEPAD_BUTTON_BACK;
+    if (str == "START") return GLFW_GAMEPAD_BUTTON_START;
+    if (str == "GUIDE" || str == "HOME") return GLFW_GAMEPAD_BUTTON_GUIDE;
+    if (str == "LEFT_THUMB" || str == "L3") return GLFW_GAMEPAD_BUTTON_LEFT_THUMB;
+    if (str == "RIGHT_THUMB" || str == "R3") return GLFW_GAMEPAD_BUTTON_RIGHT_THUMB;
+    if (str == "DPAD_UP") return GLFW_GAMEPAD_BUTTON_DPAD_UP;
+    if (str == "DPAD_RIGHT") return GLFW_GAMEPAD_BUTTON_DPAD_RIGHT;
+    if (str == "DPAD_DOWN") return GLFW_GAMEPAD_BUTTON_DPAD_DOWN;
+    if (str == "DPAD_LEFT") return GLFW_GAMEPAD_BUTTON_DPAD_LEFT;
+    return GLFW_GAMEPAD_BUTTON_A; // Default fallback
+}
+
+// Helper for string to native axis
+static NativeAxis stringToNativeAxis(const std::string& str) {
+    if (str == "X" || str == "MouseX") return NativeAxis::MouseX;
+    if (str == "Y" || str == "MouseY") return NativeAxis::MouseY;
+    if (str == "LStickX" || str == "LeftStickX") return NativeAxis::GamepadLeftStickX;
+    if (str == "LStickY" || str == "LeftStickY") return NativeAxis::GamepadLeftStickY;
+    if (str == "RStickX" || str == "RightStickX") return NativeAxis::GamepadRightStickX;
+    if (str == "RStickY" || str == "RightStickY") return NativeAxis::GamepadRightStickY;
+    if (str == "LT" || str == "LeftTrigger") return NativeAxis::GamepadLeftTrigger;
+    if (str == "RT" || str == "RightTrigger") return NativeAxis::GamepadRightTrigger;
+    return NativeAxis::None;
+}
+
 // 兼容旧格式：Action BindingType KeyName
 // 新格式：Context Action Device Control Trigger Modifiers
 void ActionMap::loadFromFile(const std::string& path) {
@@ -303,10 +388,11 @@ void ActionMap::loadFromFile(const std::string& path) {
                 bindAxisKey(axis, posKey, negKey, ctx, invert);
             }
             else if (tokens[3] == "Mouse") {
-                NativeAxis nAxis = NativeAxis::None;
-                if (tokens[4] == "X") nAxis = NativeAxis::MouseX;
-                else if (tokens[4] == "Y") nAxis = NativeAxis::MouseY;
-
+                NativeAxis nAxis = stringToNativeAxis(tokens[4]);
+                bindNativeAxis(axis, nAxis, ctx, invert);
+            }
+            else if (tokens[3] == "Gamepad") {
+                NativeAxis nAxis = stringToNativeAxis(tokens[4]);
                 bindNativeAxis(axis, nAxis, ctx, invert);
             }
             continue;
@@ -322,6 +408,7 @@ void ActionMap::loadFromFile(const std::string& path) {
              if (tokens[2] == "Keyboard") binding.device = InputDevice::Keyboard;
              else if (tokens[2] == "Mouse") binding.device = InputDevice::Mouse;
              else if (tokens[2] == "Scroll") binding.device = InputDevice::Scroll;
+             else if (tokens[2] == "Gamepad") binding.device = InputDevice::Gamepad;
 
              if (binding.device == InputDevice::Keyboard) binding.control = stringToKey(tokens[3]);
              else if (binding.device == InputDevice::Mouse) {
@@ -330,6 +417,8 @@ void ActionMap::loadFromFile(const std::string& path) {
              } else if (binding.device == InputDevice::Scroll) {
                  if (tokens[3] == "UP") binding.control = 1;
                  else if (tokens[3] == "DOWN") binding.control = -1;
+             } else if (binding.device == InputDevice::Gamepad) {
+                 binding.control = stringToGamepadButton(tokens[3]);
              }
 
              binding.trigger = stringToTrigger(tokens[4]);

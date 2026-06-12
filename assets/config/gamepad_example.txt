@@ -1,0 +1,85 @@
+# Xbox Gamepad Configuration Example
+# This file demonstrates how to bind Xbox gamepad controls to game actions
+#
+# Button names:
+#   A (Cross on PS)        - South face button
+#   B (Circle on PS)       - East face button
+#   X (Square on PS)       - West face button
+#   Y (Triangle on PS)     - North face button
+#   LB / RB                - Left/Right bumpers
+#   BACK / START           - Back/Start buttons
+#   GUIDE                  - Xbox/PS button
+#   LEFT_THUMB / RIGHT_THUMB (L3/R3) - Stick press
+#   DPAD_UP/DOWN/LEFT/RIGHT - D-pad directions
+#
+# Axis names (for Axis bindings):
+#   LStickX / LStickY      - Left analog stick
+#   RStickX / RStickY      - Right analog stick
+#   LT / RT                - Left/Right triggers
+
+# ============================================================
+# Gameplay Context - Main game controls
+# ============================================================
+
+# Jump - A button (or Space for double jump)
+Gameplay Jump Gamepad A Pressed -
+
+# Sprint - Left bumper
+Gameplay Sprint Gamepad LB Held -
+
+# Crouch - Right stick press (R3)
+Gameplay Crouch Gamepad RIGHT_THUMB Held -
+
+# Attack - Right trigger (as button with threshold)
+Gameplay Attack Gamepad RIGHT_BUMPER Held -
+
+# Use Item - Right bumper
+Gameplay UseItem Gamepad RB Held -
+
+# Inventory - Y button
+Gameplay Inventory Gamepad Y Pressed -
+
+# Menu - Start button
+Gameplay Menu Gamepad START Pressed -
+
+# Hotbar selection - D-pad
+Gameplay Hotbar1 Gamepad DPAD_LEFT Pressed -
+Gameplay Hotbar2 Gamepad DPAD_UP Pressed -
+Gameplay Hotbar3 Gamepad DPAD_RIGHT Pressed -
+
+# Toggle view mode - Back button
+Gameplay ToggleViewMode Gamepad BACK Pressed -
+
+# ============================================================
+# UI Context - Menu navigation
+# ============================================================
+
+# Navigate menus with D-pad
+UI Up Gamepad DPAD_UP Pressed -
+UI Down Gamepad DPAD_DOWN Pressed -
+UI Left Gamepad DPAD_LEFT Pressed -
+UI Right Gamepad DPAD_RIGHT Pressed -
+
+# Confirm - A button
+UI Confirm Gamepad A Pressed -
+
+# Cancel/Back - B button
+UI Cancel Gamepad B Pressed -
+
+# Menu - Start button
+UI Menu Gamepad START Pressed -
+
+# ============================================================
+# Axis Bindings - Analog controls
+# ============================================================
+
+# Movement - Left stick
+Axis Gameplay Vertical Gamepad LStickY
+Axis Gameplay Horizontal Gamepad LStickX
+
+# Camera look - Right stick
+Axis Gameplay LookX Gamepad RStickX
+Axis Gameplay LookY Gamepad RStickY Invert
+
+# Note: Dead zones are automatically applied (0.15 for sticks, 0.1 for triggers)
+# Note: Triggers are normalized to [0, 1] range automatically
