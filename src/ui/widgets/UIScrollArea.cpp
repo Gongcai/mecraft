@@ -216,6 +216,14 @@ void UIScrollArea::renderSelf(const UIRenderContext& ctx) const {
     (void)ctx;
 }
 
+bool UIScrollArea::clipsDescendantInput() const {
+    return true;
+}
+
+bool UIScrollArea::hitTestDescendantInputClip(float px, float py, const UIRenderContext& ctx) const {
+    return hitTestSelf(px, py, ctx);
+}
+
 void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     if (!m_shader || m_vao == 0 || m_contentHeight <= 0.0f) return;
 

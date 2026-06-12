@@ -20,6 +20,19 @@ public:
     }
 };
 
+class InputHitWidget final : public UIWidget {
+public:
+    UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override {
+        if (hitTest(event.x, event.y, ctx)) {
+            ++hitCount;
+            return UIEventResult::Handled;
+        }
+        return UIEventResult::Ignored;
+    }
+
+    int hitCount = 0;
+};
+
 int fail(const char* message) {
     std::cerr << "[ui_scroll_area_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
@@ -81,6 +94,28 @@ int main() {
     if (area.onInput(pointerEvent(UIInputEventType::PointerUp, 96.0f, kThumbCenterScreenYAtTop + kDragDistance), ctx) !=
         UIEventResult::Consumed) {
         return fail("pointer up should finish scrollbar drag");
+    }
+
+    TestScrollArea clippedArea;
+    clippedArea.anchor = Anchor::BottomLeft;
+    clippedArea.width = 100.0f;
+    clippedArea.height = 100.0f;
+    clippedArea.setContentHeight(300.0f);
+    clippedArea.setScrollOffset(100.0f);
+
+    auto inputChild = std::make_unique<InputHitWidget>();
+    inputChild->anchor = Anchor::BottomLeft;
+    inputChild->width = 20.0f;
+    inputChild->height = 20.0f;
+    InputHitWidget* inputChildPtr = inputChild.get();
+    clippedArea.addChild(std::move(inputChild));
+
+    if (clippedArea.onInput(pointerEvent(UIInputEventType::PointerDown, 10.0f, 90.0f), ctx) !=
+        UIEventResult::Ignored) {
+        return fail("input outside scroll viewport should be ignored even when it hits scrolled child bounds");
+    }
+    if (inputChildPtr->hitCount != 0) {
+        return fail("scrolled-out child should not receive clipped pointer input");
     }
 
     TestScrollArea overlayArea;

@@ -118,14 +118,10 @@ public:
     }
 
     [[nodiscard]] bool hitTest(float px, float py, const UIRenderContext& ctx) const {
-        // Input coordinates are already in reference space (converted by routeUIInput).
-        // Flip Y (GLFW Y=0 at top → widget coords Y=0 at bottom).
-        float flippedY = static_cast<float>(ctx.screenHeight) - py;
-        float ax = getAbsoluteX(ctx);
-        float ay = getAbsoluteY(ctx);
-        float aw = width * scaleX;
-        float ah = height * scaleY;
-        return px >= ax && px < ax + aw && flippedY >= ay && flippedY < ay + ah;
+        if (!hitTestSelf(px, py, ctx)) {
+            return false;
+        }
+        return isInsideAncestorInputClip(px, py, ctx);
     }
 
     // Animation
@@ -198,10 +194,33 @@ public:
                 aggregate = UIEventResult::Handled;
             }
         }
+
         return aggregate;
     }
 
 protected:
+    [[nodiscard]] bool hitTestSelf(float px, float py, const UIRenderContext& ctx) const {
+        // Input coordinates are already in reference space (converted by routeUIInput).
+        // Flip Y (GLFW Y=0 at top -> widget coords Y=0 at bottom).
+        float flippedY = static_cast<float>(ctx.screenHeight) - py;
+        float ax = getAbsoluteX(ctx);
+        float ay = getAbsoluteY(ctx);
+        float aw = width * scaleX;
+        float ah = height * scaleY;
+        return px >= ax && px < ax + aw && flippedY >= ay && flippedY < ay + ah;
+    }
+
+    [[nodiscard]] virtual bool clipsDescendantInput() const {
+        return false;
+    }
+
+    [[nodiscard]] virtual bool hitTestDescendantInputClip(float px, float py, const UIRenderContext& ctx) const {
+        (void)px;
+        (void)py;
+        (void)ctx;
+        return true;
+    }
+
     virtual void renderSelf(const UIRenderContext& ctx) const {
         (void)ctx;
     }
@@ -252,6 +271,16 @@ protected:
     }
 
 private:
+    [[nodiscard]] bool isInsideAncestorInputClip(float px, float py, const UIRenderContext& ctx) const {
+        for (const UIWidget* ancestor = m_parent; ancestor; ancestor = ancestor->m_parent) {
+            if (ancestor->clipsDescendantInput() &&
+                !ancestor->hitTestDescendantInputClip(px, py, ctx)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     UIWidget* m_parent = nullptr;
     std::vector<std::unique_ptr<UIWidget>> m_children;
     bool m_focused = false;

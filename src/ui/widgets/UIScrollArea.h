@@ -38,6 +38,8 @@ public:
 protected:
     void renderSelf(const UIRenderContext& ctx) const override;
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
+    [[nodiscard]] bool clipsDescendantInput() const override;
+    [[nodiscard]] bool hitTestDescendantInputClip(float px, float py, const UIRenderContext& ctx) const override;
 
 private:
     void renderScrollbar(const UIRenderContext& ctx) const;
