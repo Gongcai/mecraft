@@ -33,10 +33,13 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
     // the non-jittered inverse, matching DerivativeMain's Temporal.frag path.
     m_velocityShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
     m_velocityShader->setMat4("uPreviousViewProj", ctx.previousViewProj);
+    m_velocityShader->setVec3("uCameraPosition", ctx.camera.position);
+    m_velocityShader->setVec3("uPreviousCameraPosition", ctx.prevCamera.position);
     m_velocityShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, targets.width())),
                    static_cast<float>(std::max(1, targets.height()))));
     m_velocityShader->setInt("uForceZeroVelocity", settings.taa.forceZeroVelocity ? 1 : 0);
+    m_velocityShader->setInt("uDisableCameraTranslation", settings.taa.disableCameraTranslationVelocity ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());

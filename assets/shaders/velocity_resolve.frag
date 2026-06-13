@@ -7,8 +7,11 @@ uniform sampler2D uDepthTex;
 uniform sampler2D uPerObjectVelocityTex;
 uniform mat4 uInvViewProj;
 uniform mat4 uPreviousViewProj;
+uniform vec3 uCameraPosition;
+uniform vec3 uPreviousCameraPosition;
 uniform vec2 uScreenSize;
 uniform int uForceZeroVelocity; // A/B test: 1 = output zero velocity everywhere
+uniform int uDisableCameraTranslation; // Debug: 1 = ignore camera translation for all fragments
 const vec2 kRejectHistoryVelocity = vec2(2.0);
 
 // DerivativeMain: 3x3 neighborhood offsets (excluding center)
@@ -79,15 +82,25 @@ void main() {
         return;
     }
 
-    vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
+    // DerivativeMain raw reprojection: Reproject() uses raw projection
+    // matrices and does not manually subtract current/previous jitter.
+    // CRITICAL: only add camera translation for FAR fragments (depth > 0.56).
+    // Near fragments should only see rotation-induced velocity, not translation.
+    // This prevents motion blur on nearby objects when walking, matching
+    // DerivativeMain's Temporal.frag::Reproject() behavior.
+    vec3 cameraTranslation = vec3(0.0);
+    if (uDisableCameraTranslation == 0 && closestFragment.z > 0.56) {
+        cameraTranslation = uCameraPosition - uPreviousCameraPosition;
+    }
+    vec3 worldPosWithTranslation = worldPos + cameraTranslation;
+
+    vec4 previousClip = uPreviousViewProj * vec4(worldPosWithTranslation, 1.0);
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
         return;
     }
     vec2 previousUv = previousClip.xy / previousClip.w * 0.5 + 0.5;
 
-    // DerivativeMain raw reprojection: Reproject() uses raw projection
-    // matrices and does not manually subtract current/previous jitter.
     vec2 cameraVelocity = closestUv - previousUv;
 
     // Per-object velocity: entity/drop GBuffer shaders write screen-space
