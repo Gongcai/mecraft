@@ -61,6 +61,7 @@ struct PostProcessEffects {
     float cameraRainVisibility = 1.0f;
     float weatherExposureBias = 0.0f;
     float weatherPostRainFog = 1.0f;
+    float gameTime = 0.0f; // Game time in seconds for animated effects
     int postprocessDebugMode = 0;
 };
 

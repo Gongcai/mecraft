@@ -51,6 +51,7 @@ uniform float uWeatherPostRainFog;   // [0,2] multiplier on post-process rain/sn
 uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
 uniform sampler2D uSceneDepthTex;   // Final scene depth, including forward first-person items
 uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
+uniform float uTime; // Game time in seconds for animated effects (screen raindrops)
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -924,6 +925,131 @@ vec3 g_debugColorBeforeBloomyFog = vec3(0.0);
 vec3 g_debugColorAfterBloomyFog = vec3(0.0);
 float g_debugRainMask = 0.0;
 
+// ===== Screen Raindrop Effect =====
+// Adapted from Heartfelt shader by Martijn Steinrucken (BigWings)
+// https://www.shadertoy.com/view/ltffzl
+// License: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+
+#define RAINDROP_SIZE 0.2
+#define RAINDROP_S(a, b, t) smoothstep(a, b, t)
+
+// Hash functions for raindrop randomization
+vec3 raindropN13(float p) {
+    vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.11369, 0.13787));
+    p3 += dot(p3, p3.yzx + 19.19);
+    return fract(vec3((p3.x + p3.y) * p3.z, (p3.x + p3.z) * p3.y, (p3.y + p3.z) * p3.x));
+}
+
+float raindropN(float t) {
+    return fract(sin(t * 12345.564) * 7658.76);
+}
+
+float raindropSaw(float b, float t) {
+    return RAINDROP_S(0.0, b, t) * RAINDROP_S(1.0, b, t);
+}
+
+// Calculate raindrop distortion (returns xy offset for UV distortion and trail intensity)
+vec2 calculateRaindrops(vec2 uv, float t) {
+    vec2 UV = uv;
+
+    // Define grid for raindrops
+    uv.y += t * 0.8;
+    vec2 gridScale = vec2(6.0, 1.0);
+    vec2 grid = gridScale * 2.0;
+    vec2 id = floor(uv * grid);
+
+    // Random Y shift per column
+    float colShift = raindropN(id.x);
+    uv.y += colShift;
+
+    // Recalculate cell ID after shift
+    id = floor(uv * grid);
+    vec3 n = raindropN13(id.x * 35.2 + id.y * 2376.1);
+    vec2 st = fract(uv * grid) - vec2(0.5, 0.0);
+
+    // Position drops within cell
+    float x = n.x - 0.5;
+    float y = UV.y * 20.0;
+
+    // Add horizontal distortion based on vertical position
+    float distort = sin(y + sin(y));
+    x += distort * (0.5 - abs(x)) * (n.z - 0.5);
+    x *= 0.7;
+
+    // Animate drop falling
+    float ti = fract(t + n.z);
+    y = (raindropSaw(0.85, ti) - 0.5) * 0.9 + 0.5;
+    vec2 p = vec2(x, y);
+
+    // Calculate drop shape
+    float d = length((st - p) * gridScale.yx);
+    float dSize = RAINDROP_SIZE;
+    float drop = RAINDROP_S(dSize, 0.0, d);
+
+    // Calculate trail
+    float r = sqrt(RAINDROP_S(1.0, y, st.y));
+    float cd = abs(st.x - x);
+    float trail = RAINDROP_S((dSize * 0.5 + 0.03) * r, (dSize * 0.5 - 0.05) * r, cd);
+    float trailFront = RAINDROP_S(-0.02, 0.02, st.y - y);
+    trail *= trailFront;
+
+    // Calculate droplets along trail
+    y = UV.y;
+    y += raindropN(id.x);
+    float trail2 = RAINDROP_S(dSize * r, 0.0, cd);
+    float droplets = max(0.0, (sin(y * (1.0 - y) * 120.0) - st.y)) * trail2 * trailFront * n.z;
+    y = fract(y * 10.0) + (st.y - 0.5);
+    float dd = length(st - vec2(x, y));
+    droplets = RAINDROP_S(dSize * raindropN(id.x), 0.0, dd);
+
+    float m = drop + droplets * r * trailFront;
+    return vec2(m, trail);
+}
+
+// Static raindrops (for subtle additional texture)
+float staticRaindrops(vec2 uv, float t) {
+    uv *= 30.0;
+    vec2 id = floor(uv);
+    uv = fract(uv) - 0.5;
+    vec3 n = raindropN13(id.x * 107.45 + id.y * 3543.654);
+    vec2 p = (n.xy - 0.5) * 0.5;
+    float d = length(uv - p);
+    float fade = raindropSaw(0.025, fract(t + n.z));
+    float c = RAINDROP_S(RAINDROP_SIZE, 0.0, d) * fract(n.z * 10.0) * fade;
+    return c;
+}
+
+// Combined rain effect with two layers
+vec2 applyScreenRain(vec2 uv, float t) {
+    float s = staticRaindrops(uv, t);
+    vec2 r1 = calculateRaindrops(uv, t);
+    vec2 r2 = calculateRaindrops(uv * 1.8, t);
+
+    float c = s + r1.x + r2.x;
+    c = RAINDROP_S(0.3, 1.0, c);
+
+    return vec2(c, max(r1.y, r2.y));
+}
+
+// Calculate normal map from raindrop pattern for UV distortion
+vec2 calculateRaindropDistortion(vec2 uv, float t, float intensity) {
+    if (intensity < 0.01) {
+        return vec2(0.0);
+    }
+
+    // Sample raindrop pattern
+    vec2 rain = applyScreenRain(uv, t);
+
+    // Calculate normals via finite difference
+    vec2 offset = vec2(0.001, 0.0);
+    float cx = applyScreenRain(uv + offset, t).x;
+    float cy = applyScreenRain(uv + offset.yx, t).x;
+    vec2 normal = vec2(cx - rain.x, cy - rain.x);
+
+    // Apply refraction distortion scaled by intensity
+    return normal * intensity * 0.04;
+}
+
 float rainMaskAt(vec2 sampleUv) {
     ivec2 depthSize = textureSize(uDepthTex, 0);
     if (depthSize.x <= 0 || depthSize.y <= 0) {
@@ -1044,7 +1170,17 @@ void main() {
                     s,  c);
     vec2 rolledUv = rot * centeredUv + vec2(0.5, 0.5);
 
-    vec3 color = resolveHdrColor(rolledUv, vTexCoord);
+    // Apply screen raindrop distortion during rain/storm
+    // Use weatherStorm as primary intensity, wetness as fallback
+    float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
+    vec2 raindropDistortion = vec2(0.0);
+    if (rainIntensity > 0.01) {
+        float t = uTime * 0.2; // Slow down animation
+        raindropDistortion = calculateRaindropDistortion(rolledUv, t, rainIntensity);
+    }
+    vec2 distortedUv = clamp(rolledUv + raindropDistortion, vec2(0.0), vec2(1.0));
+
+    vec3 color = resolveHdrColor(distortedUv, vTexCoord);
     if (uBloomEnabled) {
         if (uSunRaysEnabled && uSunVisibility > 0.001 && uSunRayStrength > 0.001) {
             vec2 toSun = uSunScreenPos - rolledUv;

@@ -130,6 +130,7 @@ void PostProcessPass::execute(const FrameContext& ctx, const RenderSettings& set
     effects.fogWetness = ctx.weather.fogWetness;
     effects.cloudWetness = ctx.weather.cloudWetness;
     effects.cameraRainVisibility = 1.0f;
+    effects.gameTime = ctx.shaderTime;
     effects.postprocessDebugMode = settings.debug.postprocessDebugMode;
     m_effects = effects;
 
@@ -557,6 +558,7 @@ void PostProcessPass::renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex
     m_postProcessShader->setFloat("uCameraRainVisibility", m_effects.cameraRainVisibility);
     m_postProcessShader->setFloat("uWeatherExposureBias", m_effects.weatherExposureBias);
     m_postProcessShader->setFloat("uWeatherPostRainFog", m_effects.weatherPostRainFog);
+    m_postProcessShader->setFloat("uTime", m_effects.gameTime);
     m_postProcessShader->setInt("uDepthTex", 9);
     m_postProcessShader->setInt("uSceneDepthTex", 11);
     m_postProcessShader->setInt("uPostprocessDebugMode", m_effects.postprocessDebugMode);
