@@ -592,6 +592,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
     effects.weatherExposureBias = m_settings.weather.exposureBias;
     effects.weatherPostRainFog = m_settings.weather.postRainFog;
     effects.cameraRainVisibility = cameraRainVisibility;
+    effects.gameTime = static_cast<float>(Time::getRawTime());
     effects.postprocessDebugMode = m_settings.debug.postprocessDebugMode;
 
     // Sun screen position calculation

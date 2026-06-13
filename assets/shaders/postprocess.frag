@@ -952,8 +952,8 @@ float raindropSaw(float b, float t) {
 vec2 calculateRaindrops(vec2 uv, float t) {
     vec2 UV = uv;
 
-    // Define grid for raindrops
-    uv.y += t * 0.8;
+    // Define grid for raindrops - add time offset for falling animation
+    uv.y += t * 0.8; // Vertical scroll speed for falling animation
     vec2 gridScale = vec2(6.0, 1.0);
     vec2 grid = gridScale * 2.0;
     vec2 id = floor(uv * grid);
@@ -1047,7 +1047,8 @@ vec2 calculateRaindropDistortion(vec2 uv, float t, float intensity) {
     vec2 normal = vec2(cx - rain.x, cy - rain.x);
 
     // Apply refraction distortion scaled by intensity
-    return normal * intensity * 0.04;
+    // Increased from 0.04 to 0.08 for more visible effect
+    return normal * intensity * 0.08;
 }
 
 float rainMaskAt(vec2 sampleUv) {
@@ -1175,7 +1176,9 @@ void main() {
     float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
     vec2 raindropDistortion = vec2(0.0);
     if (rainIntensity > 0.01) {
-        float t = uTime * 0.2; // Slow down animation
+        // Scale time appropriately - uTime cycles 0-8192 over ~2.3 hours
+        // Original shader expects time in seconds with reasonable increment
+        float t = uTime * 0.15; // Adjusted scale for visible but not too fast animation
         raindropDistortion = calculateRaindropDistortion(rolledUv, t, rainIntensity);
     }
     vec2 distortedUv = clamp(rolledUv + raindropDistortion, vec2(0.0), vec2(1.0));
@@ -1235,6 +1238,28 @@ void main() {
     if (uPostprocessDebugMode == 4) {
         // Rain mask: white=outdoor/sky (rain visible), black=indoor (rain hidden)
         FragColor = vec4(vec3(rainMaskAt(rolledUv)), 1.0);
+        return;
+    }
+    if (uPostprocessDebugMode == 5) {
+        // Debug: visualize time animation (should pulse between red and green)
+        float pulse = sin(uTime) * 0.5 + 0.5;
+        FragColor = vec4(pulse, 1.0 - pulse, 0.0, 1.0);
+        return;
+    }
+    if (uPostprocessDebugMode == 6) {
+        // Debug: visualize raindrop pattern (static, no animation)
+        float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
+        if (rainIntensity < 0.01) rainIntensity = 1.0; // Force on for debug
+        vec2 rain = applyScreenRain(rolledUv, uTime);
+        FragColor = vec4(vec3(rain.x), 1.0);
+        return;
+    }
+    if (uPostprocessDebugMode == 7) {
+        // Debug: visualize raindrop distortion vectors (should show flowing pattern)
+        float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
+        if (rainIntensity < 0.01) rainIntensity = 1.0; // Force on for debug
+        vec2 distortion = calculateRaindropDistortion(rolledUv, uTime, rainIntensity);
+        FragColor = vec4(abs(distortion.x) * 10.0, abs(distortion.y) * 10.0, 0.0, 1.0);
         return;
     }
 

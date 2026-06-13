@@ -677,7 +677,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "1: BloomData",
             "2: FogTransmittance",
             "3: BloomyFog",
-            "4: RainMask"
+            "4: RainMask",
+            "5: Time Pulse",
+            "6: Raindrop Pattern",
+            "7: Raindrop Distortion"
         };
         int ppDebugMode = settings.debug.postprocessDebugMode;
         pipelineChanged |= ImGui::Combo("Postprocess Debug", &ppDebugMode, kPostprocessDebugModes, IM_ARRAYSIZE(kPostprocessDebugModes));
