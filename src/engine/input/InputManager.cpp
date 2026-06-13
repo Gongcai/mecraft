@@ -4,6 +4,10 @@
 
 #include "InputManager.h"
 
+#include <iostream>
+
+#include "Diagnostics.h"
+
 #ifdef MECRAFT_DEBUG
 #include <chrono>
 
@@ -198,6 +202,16 @@ void InputManager::update() {
     m_accumDeltaX = 0.0;
     m_accumDeltaY = 0.0;
 
+    // Filter out tiny spurious deltas (likely from floating-point noise or cursor drift)
+    // Only keep deltas with magnitude >= 1.5 pixels
+    constexpr double kMouseDeltaThreshold = 1.5;
+    if (std::abs(m_mouseDeltaX) < kMouseDeltaThreshold) {
+        m_mouseDeltaX = 0.0;
+    }
+    if (std::abs(m_mouseDeltaY) < kMouseDeltaThreshold) {
+        m_mouseDeltaY = 0.0;
+    }
+
     for (int key = 0; key <= GLFW_KEY_LAST; ++key) {
         m_snapshot.keys[key] = m_keys[key];
         m_snapshot.keysJustPressed[key] = m_keysJustPressed[key];
@@ -228,6 +242,7 @@ void InputManager::update() {
         static_cast<float>(m_mouseDeltaX),
         static_cast<float>(m_mouseDeltaY)
     };
+
     if (m_draggedItem.active) {
         m_draggedItem.pointerPosition = m_snapshot.mousePosition;
     }

@@ -180,32 +180,33 @@ void RenderDebugService::beginFrame() {
                 stats.gpuTotalMs += cascadeStats.gpuTotalMs;
             }
             m_shadowFrameStats = stats;
-            if (++m_shadowStatsPublishCount % 120 == 0) {
-                MECRAFT_LOG_PRINTF("[shadow:csm:gpu] total=%.3fms res=%d submitted=%d culled=%d maxDist=%.1f cascades=%d\n",
-                                   stats.gpuTotalMs,
-                                   stats.shadowResolution,
-                                   stats.submitted,
-                                   stats.culled,
-                                   stats.maxCasterDistance,
-                                   stats.cascadeCount);
-                for (int cascade = 0; cascade < cascadeCount; ++cascade) {
-                    const ShadowCascadeStats& cascadeStats = stats.cascades[static_cast<size_t>(cascade)];
-                    MECRAFT_LOG_PRINTF("[shadow:csm:gpu:c%d] total=%.3fms opaque=%.3fms transparent=%.3fms split=%.1f-%.1f texel=%.4f cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
-                                       cascade,
-                                       cascadeStats.gpuTotalMs,
-                                       cascadeStats.gpuOpaqueMs,
-                                       cascadeStats.gpuTransparentMs,
-                                       cascadeStats.splitNear,
-                                       cascadeStats.splitFar,
-                                       cascadeStats.texelWorldSize,
-                                       cascadeStats.opaqueCommands,
-                                       cascadeStats.cutoutCommands,
-                                       cascadeStats.transparentCommands,
-                                       static_cast<unsigned long long>(cascadeStats.opaqueVertices),
-                                       static_cast<unsigned long long>(cascadeStats.cutoutVertices),
-                                       static_cast<unsigned long long>(cascadeStats.transparentVertices));
-                }
-            }
+            // Disabled verbose shadow stats logging
+            // if (++m_shadowStatsPublishCount % 120 == 0) {
+            //     MECRAFT_LOG_PRINTF("[shadow:csm:gpu] total=%.3fms res=%d submitted=%d culled=%d maxDist=%.1f cascades=%d\n",
+            //                        stats.gpuTotalMs,
+            //                        stats.shadowResolution,
+            //                        stats.submitted,
+            //                        stats.culled,
+            //                        stats.maxCasterDistance,
+            //                        stats.cascadeCount);
+            //     for (int cascade = 0; cascade < cascadeCount; ++cascade) {
+            //         const ShadowCascadeStats& cascadeStats = stats.cascades[static_cast<size_t>(cascade)];
+            //         MECRAFT_LOG_PRINTF("[shadow:csm:gpu:c%d] total=%.3fms opaque=%.3fms transparent=%.3fms split=%.1f-%.1f texel=%.4f cmds(o=%zu c=%zu t=%zu) verts(o=%llu c=%llu t=%llu)\n",
+            //                            cascade,
+            //                            cascadeStats.gpuTotalMs,
+            //                            cascadeStats.gpuOpaqueMs,
+            //                            cascadeStats.gpuTransparentMs,
+            //                            cascadeStats.splitNear,
+            //                            cascadeStats.splitFar,
+            //                            cascadeStats.texelWorldSize,
+            //                            cascadeStats.opaqueCommands,
+            //                            cascadeStats.cutoutCommands,
+            //                            cascadeStats.transparentCommands,
+            //                            static_cast<unsigned long long>(cascadeStats.opaqueVertices),
+            //                            static_cast<unsigned long long>(cascadeStats.cutoutVertices),
+            //                            static_cast<unsigned long long>(cascadeStats.transparentVertices));
+            //     }
+            // }
             for (auto& cascade : m_shadowTimestampIssued[readIndex]) {
                 cascade.fill(false);
             }

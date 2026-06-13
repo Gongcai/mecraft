@@ -166,7 +166,7 @@ private:
     InputSnapshot::UIDragPayload m_draggedItem{};
 
     // Gamepad state tracking (joystick 0 = first gamepad)
-    static constexpr int kGamepadJoystickId = GLFW_JOYSTICK_1;
+    static constexpr int kGamepadJoystickId = 0; // GLFW_JOYSTICK_1 is actually 0
     bool m_gamepadButtons[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
     bool m_gamepadButtonsPrev[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};
     bool m_gamepadButtonsJustPressed[GLFW_GAMEPAD_BUTTON_LAST + 1] = {};

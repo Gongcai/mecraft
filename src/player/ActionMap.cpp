@@ -212,7 +212,8 @@ float ActionMap::getAxisValue(Axis axis, InputContextType context, const InputSn
                     if (input.isGamepadConnected()) {
                         value = input.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
                     }
-                } else {
+                } else if (binding.nativeAxis == NativeAxis::None) {
+                    // Only check keyboard keys when nativeAxis is None (keyboard binding)
                     if (input.isKeyHeld(binding.positiveKey)) value += 1.0f;
                     if (input.isKeyHeld(binding.negativeKey)) value -= 1.0f;
                 }
