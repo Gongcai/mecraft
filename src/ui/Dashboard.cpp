@@ -77,6 +77,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
         showCameraStats(camera);
         showWorldStats(world, registry, renderDistanceSetter);
         showPerformanceStats(world, render, renderScene, postProcess, profilerStats);
+        showGUIScaleSettings(uiRenderer);
         showCrosshairSettings(uiRenderer);
         showHotbarSettings(uiRenderer);
         showInventoryPanelSettings(uiRenderer);
@@ -1358,6 +1359,36 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Text("Far:    %d", cullingStats.chunkCulledByPlane[static_cast<size_t>(FrustumPlane::Far)]);
             ImGui::Unindent();
         }
+    }
+}
+
+void Dashboard::showGUIScaleSettings(UIRenderer& uiRenderer) {
+    if (ImGui::CollapsingHeader("GUI Scale")) {
+        ImGui::TextWrapped("GUI Scale controls the size of all UI elements (Minecraft-style).");
+        ImGui::Separator();
+
+        // Current GUI scale
+        const GUIScale currentScale = uiRenderer.getGUIScale();
+        int selectedScale = static_cast<int>(currentScale);
+
+        // Scale options
+        const char* scaleOptions[] = {
+            "Auto (Based on Resolution)",
+            "Small (0.5x)",
+            "Normal (1.0x)",
+            "Large (2.0x)",
+            "Extra Large (3.0x)"
+        };
+
+        if (ImGui::Combo("GUI Scale", &selectedScale, scaleOptions, IM_ARRAYSIZE(scaleOptions))) {
+            uiRenderer.setGUIScale(static_cast<GUIScale>(selectedScale));
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Scale Strategy per Element:");
+        ImGui::BulletText("Crosshair: None (pixel-perfect)");
+        ImGui::BulletText("HUD/Hotbar/Inventory: Uniform");
+        ImGui::BulletText("Console/Text: Text-adaptive");
     }
 }
 

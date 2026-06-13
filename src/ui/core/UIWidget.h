@@ -9,6 +9,8 @@
 #include "UIEventResult.h"
 #include "UIRenderContext.h"
 
+enum class UIScaleStrategy;
+
 class UIWidget {
 public:
     virtual ~UIWidget() = default;
@@ -54,6 +56,22 @@ public:
     float scaleX = 1.0f;
     float scaleY = 1.0f;
     void setScale(float s) { scaleX = scaleY = s; }
+
+    // Scale strategy (controls how this widget scales with GUI scale)
+    UIScaleStrategy scaleStrategy = UIScaleStrategy::Uniform;
+
+    void setScaleStrategy(UIScaleStrategy strategy) {
+        scaleStrategy = strategy;
+    }
+
+    [[nodiscard]] UIScaleStrategy getScaleStrategy() const {
+        return scaleStrategy;
+    }
+
+    // Get effective scale for this widget based on strategy
+    [[nodiscard]] float getEffectiveScale(const UIRenderContext& ctx) const {
+        return ctx.getScaleForStrategy(scaleStrategy);
+    }
 
     // Appearance
     std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};

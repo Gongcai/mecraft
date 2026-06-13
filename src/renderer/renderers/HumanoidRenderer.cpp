@@ -594,6 +594,12 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     m_shader->setInt("uTexture", 0);
     setHurtFlash(*m_shader, 0.0f);
     bindDisabledShadowFallback(*m_shader);
+
+    // Set lighting uniforms for UI preview (full bright, no world light sampling)
+    m_shader->setFloat("uHeldSunlight", 1.0f);
+    m_shader->setFloat("uHeldBlockLight", 0.0f);
+    m_shader->setFloat("uSkyIntensity", 1.0f);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
 

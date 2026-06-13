@@ -136,6 +136,7 @@ private:
                         const std::function<void(int)>& renderDistanceSetter);
     void showCameraStats( Camera& camera);
     void showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, FrameProfilerStats& profilerStats);
+    void showGUIScaleSettings(UIRenderer& uiRenderer);
     void showCrosshairSettings(UIRenderer& uiRenderer);
     void showHotbarSettings(UIRenderer& uiRenderer);
     void showInventoryPanelSettings(UIRenderer& uiRenderer);

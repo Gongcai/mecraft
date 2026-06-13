@@ -2,7 +2,11 @@
 
 #include <string>
 
+#include <glm/vec2.hpp>
+
 #include "UITheme.h"
+#include "UIScaleConfig.h"
+#include "../layout/UILayout.h"
 
 class ResourceMgr;
 class LocaleManager;
@@ -22,9 +26,16 @@ struct PlayerStatsData {
 };
 
 struct UIRenderContext {
+    // Screen dimensions (physical pixels)
     int screenWidth = 0;
     int screenHeight = 0;
+
+    // Legacy scale (deprecated - use scaleConfig instead)
     float uiScale = 1.0f;
+
+    // New unified scale configuration
+    UIScaleConfig scaleConfig;
+
     float timeSeconds = 0.0f;
     ResourceMgr* resourceMgr = nullptr;
     HumanoidRenderer* humanoidRenderer = nullptr;
@@ -45,4 +56,28 @@ struct UIRenderContext {
     int backdropSourceHeight = 0;
     int backdropBlurWidth = 0;
     int backdropBlurHeight = 0;
+
+    // Helper: Get anchor position in virtual coordinates
+    [[nodiscard]] glm::vec2 getAnchorPosition(Anchor anchor) const {
+        const float w = static_cast<float>(scaleConfig.virtualWidth);
+        const float h = static_cast<float>(scaleConfig.virtualHeight);
+
+        switch (anchor) {
+            case Anchor::TopLeft:      return {0.0f, h};
+            case Anchor::TopCenter:    return {w * 0.5f, h};
+            case Anchor::TopRight:     return {w, h};
+            case Anchor::CenterLeft:   return {0.0f, h * 0.5f};
+            case Anchor::Center:       return {w * 0.5f, h * 0.5f};
+            case Anchor::CenterRight:  return {w, h * 0.5f};
+            case Anchor::BottomLeft:   return {0.0f, 0.0f};
+            case Anchor::BottomCenter: return {w * 0.5f, 0.0f};
+            case Anchor::BottomRight:  return {w, 0.0f};
+        }
+        return {0.0f, 0.0f};
+    }
+
+    // Helper: Get scale for a specific strategy
+    [[nodiscard]] float getScaleForStrategy(UIScaleStrategy strategy) const {
+        return scaleConfig.getScaleForStrategy(strategy);
+    }
 };

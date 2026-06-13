@@ -13,6 +13,7 @@
 #include "UIRenderUtils.h"
 #include "UIScene.h"
 #include "UIThemePresets.h"
+#include "UIScaleConfig.h"
 
 namespace {
 constexpr int kBackdropBlurDownsample = 4;
@@ -38,13 +39,24 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
     m_theme = UIThemePresets::dark();
+
+    // Crosshair - no scaling (always pixel-perfect)
     m_crosshair.init(resourceMgr);
+    m_crosshair.setScaleStrategy(UIScaleStrategy::None);
+
     m_text.init(resourceMgr);
 
+    // Hotbar - uniform scaling with GUI scale
     m_hotbar.init(resourceMgr);
     m_hotbar.visible = true;
+    m_hotbar.setScaleStrategy(UIScaleStrategy::Uniform);
+
+    // HUD (health/food bars) - uniform scaling
     m_hud.init(resourceMgr);
     m_hud.visible = true;
+    m_hud.setScaleStrategy(UIScaleStrategy::Uniform);
+
+    // Death screen
     m_deathBackdrop.init(resourceMgr);
     m_deathBackdrop.visible = true;
     m_deathBackdrop.setUseLocalColors(true);
@@ -61,18 +73,30 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_deathPrompt.setTextScale(1.6f);
     m_deathPrompt.setTextColor({1.0f, 1.0f, 1.0f, 0.92f});
     m_deathPrompt.setShadowEnabled(true);
+
+    // Inventory panels - uniform scaling
     m_inventoryPanel.init(resourceMgr);
     m_inventoryPanel.visible = false;
+    m_inventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
+
     m_chestPanel.init(resourceMgr);
     m_chestPanel.visible = false;
+    m_chestPanel.setScaleStrategy(UIScaleStrategy::Uniform);
+
     m_creativeInventoryPanel.init(resourceMgr);
     m_creativeInventoryPanel.visible = false;
+    m_creativeInventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
+
+    // Command input and console - text adaptive
     m_commandInput.init(resourceMgr);
     m_commandInput.visible = false;
+    m_commandInput.setScaleStrategy(UIScaleStrategy::TextOnly);
+
     m_console.init(resourceMgr);
     m_console.visible = true;
     m_console.setTextRenderer(&m_text);
     m_console.setMaxLines(m_consoleMaxLines);
+    m_console.setScaleStrategy(UIScaleStrategy::TextOnly);
 
     m_widgetControls = {
         &m_hud,
@@ -201,6 +225,16 @@ void UIRenderer::setInventoryCountTextScale(float scale)
 float UIRenderer::getInventoryCountTextScale() const
 {
     return m_inventoryPanel.itemGrid().getRenderParams().countTextScale;
+}
+
+void UIRenderer::setGUIScale(GUIScale scale)
+{
+    m_guiScale = scale;
+}
+
+GUIScale UIRenderer::getGUIScale() const
+{
+    return m_guiScale;
 }
 
 void UIRenderer::setCommandCaretBlinkPeriodMs(float periodMs)
@@ -527,9 +561,17 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     UIRenderContext context;
     const float actualW = static_cast<float>(std::max(1, window.getWidth()));
     const float actualH = static_cast<float>(std::max(1, window.getHeight()));
+
+    // Legacy scale (for backward compatibility)
     context.uiScale = computeResponsiveUiScale(actualW, actualH);
+
+    // New unified scale configuration
+    context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
+
+    // Screen dimensions
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
+
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
     context.humanoidRenderer = m_humanoidRenderer;
@@ -562,7 +604,13 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     UIRenderContext context;
     const float actualW = static_cast<float>(std::max(1, viewport[2]));
     const float actualH = static_cast<float>(std::max(1, viewport[3]));
+
+    // Legacy scale (for backward compatibility)
     context.uiScale = computeResponsiveUiScale(actualW, actualH);
+
+    // New unified scale configuration
+    context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
+
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());
@@ -603,7 +651,13 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     UIRenderContext context;
     const float actualW = static_cast<float>(windowW);
     const float actualH = static_cast<float>(windowH);
+
+    // Legacy scale (for backward compatibility)
     context.uiScale = computeResponsiveUiScale(actualW, actualH);
+
+    // New unified scale configuration
+    context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
+
     context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
     context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
     context.timeSeconds = static_cast<float>(Time::getRawTime());

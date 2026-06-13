@@ -22,6 +22,7 @@
 #include "../widgets/UIText.h"
 #include "UIRenderContext.h"
 #include "UITheme.h"
+#include "UIScaleConfig.h"
 
 class Window;
 class ResourceMgr;
@@ -36,13 +37,19 @@ class UIWidget;
 class UIRenderer
 {
 public:
+    // Legacy reference resolution (deprecated, kept for backward compatibility)
     static constexpr float kRefScreenWidth = 1280.0f;
     static constexpr float kRefScreenHeight = 720.0f;
 
     UIRenderer();
     ~UIRenderer();
 
+    // Legacy scale computation (deprecated - use UIScaleConfig instead)
     [[nodiscard]] static float computeResponsiveUiScale(float actualW, float actualH);
+
+    // GUI Scale management (new unified system)
+    void setGUIScale(GUIScale scale);
+    [[nodiscard]] GUIScale getGUIScale() const;
 
     void init(ResourceMgr& resourceMgr);
     void shutdown();
@@ -175,6 +182,9 @@ private:
     const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
     bool m_commandInputRequested = false;
+
+    // GUI Scale setting
+    GUIScale m_guiScale = GUIScale::Auto;
 
     std::size_t m_consoleMaxLines = 64;
 
