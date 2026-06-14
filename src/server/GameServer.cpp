@@ -32,6 +32,14 @@ constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
 
+int blockToChunkCoord(const int value) {
+    return static_cast<int>(std::floor(static_cast<float>(value) / static_cast<float>(Chunk::SIZE_X)));
+}
+
+int64_t blockUpdateChunkKey(const net::BlockUpdateEntry& update) {
+    return World::chunkKey(blockToChunkCoord(update.x), blockToChunkCoord(update.z));
+}
+
 std::string playerName(const net::ClientId id) {
     return "Player" + std::to_string(id);
 }
@@ -698,6 +706,12 @@ void GameServer::tick(float dt) {
         if (client.receivedHello) {
             loadCenter = client.lastPosition;
             break;
+        }
+    }
+
+    for (const auto& client : m_clients) {
+        if (client.receivedHello) {
+            m_world.flushInteractiveLighting(client.lastPosition);
         }
     }
     m_world.update(loadCenter, dt);
@@ -1435,20 +1449,29 @@ void GameServer::sendBlockUpdatesToClients() {
         return;
     }
 
-    net::Packet packet;
-    packet.channel = net::PacketChannel::ReliableWorld;
-    packet.type = net::MessageType::BlockUpdateBatch;
-    net::BlockUpdateBatchMessage batch;
-    batch.updates = std::move(m_pendingBlockUpdates);
-    packet.inProcessPayload = std::move(batch);
-
     for (auto& client : m_clients) {
         if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
             continue;
         }
-        // Send a copy to each client
-        net::Packet clientPacket = packet;
-        client.transport->send(std::move(clientPacket));
+
+        net::BlockUpdateBatchMessage batch;
+        batch.updates.reserve(m_pendingBlockUpdates.size());
+        for (const net::BlockUpdateEntry& update : m_pendingBlockUpdates) {
+            if (client.sentChunks.find(blockUpdateChunkKey(update)) == client.sentChunks.end()) {
+                continue;
+            }
+            batch.updates.push_back(update);
+        }
+
+        if (batch.updates.empty()) {
+            continue;
+        }
+
+        net::Packet packet;
+        packet.channel = net::PacketChannel::ReliableWorld;
+        packet.type = net::MessageType::BlockUpdateBatch;
+        packet.inProcessPayload = std::move(batch);
+        client.transport->send(std::move(packet));
     }
 
     m_pendingBlockUpdates.clear();

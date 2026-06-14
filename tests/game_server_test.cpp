@@ -2631,6 +2631,21 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
     assert(server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
     assert(server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
 
+    bool lightSettled = false;
+    for (int tick = 0; tick < 240; ++tick) {
+        const LightFrameStats stats = server.world().getLightFrameStats();
+        if (stats.queued == 0 &&
+            stats.dirty == 0 &&
+            stats.inFlight == 0 &&
+            stats.pendingCompleted == 0) {
+            lightSettled = true;
+            break;
+        }
+        server.tick(1.0f / 20.0f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    assert(lightSettled);
+
     while (!clientPtr->sent.empty()) {
         clientPtr->sent.pop();
     }
@@ -2648,7 +2663,8 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
 
     bool sawTorchBlockUpdate = false;
     bool sawTorchLightPatch = false;
-    for (int i = 0; i < 160 && !sawTorchLightPatch; ++i) {
+    int ticksUntilLightPatch = -1;
+    for (int i = 0; i < 4 && !sawTorchLightPatch; ++i) {
         server.tick(1.0f / 20.0f);
         while (!clientPtr->sent.empty()) {
             net::Packet packet = std::move(clientPtr->sent.front());
@@ -2667,6 +2683,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
                 for (const uint8_t packed : update.packedLightPatch) {
                     if ((packed & 0x0F) >= 12) {
                         sawTorchLightPatch = true;
+                        ticksUntilLightPatch = i + 1;
                         break;
                     }
                 }
@@ -2676,6 +2693,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
 
     assert(sawTorchBlockUpdate);
     assert(sawTorchLightPatch);
+    assert(ticksUntilLightPatch == 1);
     server.world().setThreadPool(nullptr);
     threadPool.shutdown();
     std::printf("[PASS] testServerEmitsLightPatchAfterTorchPlacement\n");
