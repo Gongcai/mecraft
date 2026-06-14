@@ -1152,7 +1152,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Freeze Upscale Bias", &settings.volumetric.freezeBias);
         pipelineChanged |= ImGui::Checkbox("TAA", &settings.taa.enabled);
         pipelineChanged |= ImGui::Checkbox("Force Zero Velocity", &settings.taa.forceZeroVelocity);
-        pipelineChanged |= ImGui::Checkbox("Disable Camera Translation Velocity", &settings.taa.disableCameraTranslationVelocity);
         pipelineChanged |= ImGui::Checkbox("Freeze TAA Jitter", &settings.taa.freezeJitter);
         pipelineChanged |= ImGui::SliderFloat("Color Temperature", &settings.postProcess.colorTemperature, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Vibrance", &settings.postProcess.vibrance, -0.5f, 0.8f, "%.2f");

@@ -105,7 +105,6 @@ struct TaaSettings {
     // A/B testing
     bool forceZeroVelocity = false;
     bool freezeJitter = false;
-    bool disableCameraTranslationVelocity = false; // Debug: ignore camera translation in velocity
 };
 
 /// Post-process settings
