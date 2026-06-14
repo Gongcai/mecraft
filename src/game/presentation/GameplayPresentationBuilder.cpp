@@ -9,7 +9,8 @@
 
 GameplayPresentationSnapshot GameplayPresentationBuilder::build(
     ecs::GameplayRegistry& reg,
-    const CameraController& cameraController) {
+    const CameraController& cameraController,
+    const IWorldView& worldView) {
 
     GameplayPresentationSnapshot snap;
     auto& registry = reg.registry();
@@ -58,7 +59,7 @@ GameplayPresentationSnapshot GameplayPresentationBuilder::build(
         }
 
         // Compute final camera (first/third person)
-        snap.renderCamera = cameraController.computeRenderCamera(renderCamera, eyePosition);
+        snap.renderCamera = cameraController.computeRenderCamera(renderCamera, eyePosition, worldView);
         snap.eyePosition = eyePosition;
         snap.shouldRenderPlayerModel = cameraController.shouldRenderPlayerModel();
         snap.renderLocalPlayerModel = snap.shouldRenderPlayerModel;

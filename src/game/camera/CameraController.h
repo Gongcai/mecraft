@@ -4,6 +4,8 @@
 #include "../../engine/camera/Camera.h"
 #include <glm/glm.hpp>
 
+class IWorldView;
+
 class CameraController {
 public:
     enum class ViewMode { FirstPerson, ThirdPerson, ThirdPersonFront };
@@ -26,6 +28,12 @@ public:
     [[nodiscard]] Camera computeRenderCamera(
         const Camera& eyeCamera,
         const glm::vec3& eyePosition) const;
+    /// Compute the effective render camera and shorten third-person offsets
+    /// when a solid block lies between the eye and desired camera position.
+    [[nodiscard]] Camera computeRenderCamera(
+        const Camera& eyeCamera,
+        const glm::vec3& eyePosition,
+        const IWorldView& worldView) const;
 
 private:
     ViewMode m_viewMode = ViewMode::FirstPerson;

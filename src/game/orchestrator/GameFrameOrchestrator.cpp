@@ -250,7 +250,7 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
-    const auto snap = session.presentationBuilder().build(reg, session.cameraController());
+    const auto snap = session.presentationBuilder().build(reg, session.cameraController(), session.worldView());
 #ifdef MECRAFT_DEBUG
     const auto snapshotEnd = std::chrono::steady_clock::now();
 #endif
