@@ -26,13 +26,28 @@ public:
 
         if (slotIndex == 4) {
             // Result slot: pick up crafted item
+            const ItemID resultItem = craftGrid.getResultSlot();
+            const int resultCount = craftGrid.getResultCount();
+            if (resultItem == 0 || resultCount <= 0) {
+                return;
+            }
+
             if (!dragged.active) {
-                ItemID resultItem = craftGrid.getResultSlot();
-                if (resultItem != 0) {
-                    int resultCount = craftGrid.getResultCount();
-                    craftGrid.clearAll();
+                if (craftGrid.consumeOneCraft()) {
                     m_deps.input.beginUIDragItem(static_cast<int>(resultItem),
                         resultCount, kCraftingSlotBase + 4);
+                }
+                return;
+            }
+
+            if (dragged.itemId == static_cast<int>(resultItem)) {
+                const ItemDef& def = ItemRegistry::get(resultItem);
+                const int maxStack = static_cast<int>(def.maxStack);
+                if (maxStack > 0 && dragged.count <= maxStack - resultCount) {
+                    if (craftGrid.consumeOneCraft()) {
+                        m_deps.input.beginUIDragItem(dragged.itemId,
+                            dragged.count + resultCount, dragged.sourceSlot);
+                    }
                 }
             }
             return;

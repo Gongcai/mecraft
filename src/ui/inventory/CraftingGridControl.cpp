@@ -1,6 +1,8 @@
 #include "CraftingGridControl.h"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "../../crafting/CraftingSystem.h"
@@ -76,6 +78,10 @@ void CraftingGridControl::setCraftingSlot(int index, const ItemID itemId, uint16
     if (index < 0 || index >= CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE) {
         return;
     }
+    if (itemId == 0 || count == 0) {
+        m_slots[static_cast<size_t>(index)] = {};
+        return;
+    }
     m_slots[static_cast<size_t>(index)] = {itemId, count, 0};
 }
 
@@ -86,12 +92,41 @@ ItemID CraftingGridControl::getResultSlot() const
 
 void CraftingGridControl::setResultSlot(const ItemID itemId, uint16_t count)
 {
+    if (itemId == 0 || count == 0) {
+        m_slots[4] = {};
+        return;
+    }
     m_slots[4] = {itemId, count, 0};
 }
 
 int CraftingGridControl::getResultCount() const
 {
     return m_slots[4].count;
+}
+
+bool CraftingGridControl::consumeOneCraft()
+{
+    if (m_slots[4].isEmpty()) {
+        return false;
+    }
+
+    bool consumedAny = false;
+    for (int i = 0; i < CraftingGridLayout::GRID_SIZE * CraftingGridLayout::GRID_SIZE; ++i) {
+        ItemStack& stack = m_slots[static_cast<size_t>(i)];
+        if (stack.isEmpty()) {
+            stack = {};
+            continue;
+        }
+
+        --stack.count;
+        consumedAny = true;
+        if (stack.count == 0) {
+            stack = {};
+        }
+    }
+
+    m_slots[4] = {};
+    return consumedAny;
 }
 
 void CraftingGridControl::clearAll()
@@ -103,13 +138,16 @@ void CraftingGridControl::updateCraftingResult(const CraftingSystem& craftingSys
 {
     // Build a 2x2 grid for the crafting system
     std::vector<ItemID> grid = {
-        m_slots[0].itemId, m_slots[1].itemId,
-        m_slots[2].itemId, m_slots[3].itemId
+        m_slots[0].isEmpty() ? ItemID{0} : m_slots[0].itemId,
+        m_slots[1].isEmpty() ? ItemID{0} : m_slots[1].itemId,
+        m_slots[2].isEmpty() ? ItemID{0} : m_slots[2].itemId,
+        m_slots[3].isEmpty() ? ItemID{0} : m_slots[3].itemId
     };
 
     CraftingResult result = craftingSystem.match(grid, CraftingGridLayout::GRID_SIZE, CraftingGridLayout::GRID_SIZE);
-    if (result.matched) {
-        m_slots[4] = {result.itemId, static_cast<uint16_t>(result.count), 0};
+    if (result.matched && result.itemId != 0 && result.count > 0) {
+        const int clampedCount = std::min(result.count, static_cast<int>(std::numeric_limits<uint16_t>::max()));
+        m_slots[4] = {result.itemId, static_cast<uint16_t>(clampedCount), 0};
     } else {
         m_slots[4] = {};
     }

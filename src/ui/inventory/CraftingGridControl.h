@@ -46,6 +46,9 @@ public:
     void setResultSlot(ItemID itemId, uint16_t count = 0);
     [[nodiscard]] int getResultCount() const;
 
+    // Consume the ingredients for exactly one craft from the current grid.
+    [[nodiscard]] bool consumeOneCraft();
+
     // Clear all crafting slots and result
     void clearAll();
 
