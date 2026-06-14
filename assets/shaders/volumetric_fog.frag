@@ -419,34 +419,29 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
             // Keep this path crisp so water/opaque blockers modulate the ray march.
             float opaqueLit = sampleCsmDepthRawTexel(uv, ci) >= z ? 1.0 : 0.0;
 
-            // Transparent/water detection is only valid in cascade 0. Outside the
-            // contract we still keep the unshadowed water scattering instead of
-            // dropping the sample; UW volumetric light exists even without blockers.
-            if (ci == 0) {
-                float allLit = sampleCsmDepthAllRawTexel(uv, 0) >= z ? 1.0 : 0.0;
-                vec4 color0 = sampleCsmShadowColor0RawTexel(uv, 0);
-                vec4 color1 = sampleCsmShadowColor1RawTexel(uv, 0);
-                float waterSurfaceY = color1.w * 512.0 - 128.0;
-                float waterDepth = waterSurfaceY - samplePos.y;
-                bool hasWaterSurface = color0.a < 0.5 && color1.w > 0.001 && waterDepth > 0.1;
+            // Transparent/water data is maintained per cascade; sample the same
+            // layer selected for the opaque shadow test.
+            float allLit = sampleCsmDepthAllRawTexel(uv, ci) >= z ? 1.0 : 0.0;
+            vec4 color0 = sampleCsmShadowColor0RawTexel(uv, ci);
+            vec4 color1 = sampleCsmShadowColor1RawTexel(uv, ci);
+            float waterSurfaceY = color1.w * 512.0 - 128.0;
+            float waterDepth = waterSurfaceY - samplePos.y;
+            bool hasWaterSurface = color0.a < 0.5 && color1.w > 0.001 && waterDepth > 0.1;
 
-                if (hasWaterSurface) {
-                    // Water surface data is the caustic/shaft carrier. It should
-                    // modulate even when the opaque/all depth comparison is too
-                    // coarse to flag an exact blocker at this sample.
-                    vec3 caustic = pow(max(color0.rgb, vec3(0.0)), vec3(4.0));
-                    sampleShadow = vec3(opaqueLit) * mix(vec3(0.45), caustic * 1.85, 0.85);
-                    sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
-                } else if (allLit < 1.0) {
-                    sampleShadow = vec3(opaqueLit);
-
-                    if (opaqueLit != allLit) {
-                        vec3 shadowColorSample = pow4(color0.rgb);
-                        sampleShadow = shadowColorSample * (vec3(opaqueLit) - vec3(allLit)) + vec3(allLit);
-                    }
-                }
-            } else {
+            if (hasWaterSurface) {
+                // Water surface data is the caustic/shaft carrier. It should
+                // modulate even when the opaque/all depth comparison is too
+                // coarse to flag an exact blocker at this sample.
+                vec3 caustic = pow(max(color0.rgb, vec3(0.0)), vec3(4.0));
+                sampleShadow = vec3(opaqueLit) * mix(vec3(0.45), caustic * 1.85, 0.85);
+                sampleShadow *= fastExp(-coeff * 0.4 * max(waterDepth, 8.0));
+            } else if (allLit < 1.0) {
                 sampleShadow = vec3(opaqueLit);
+
+                if (opaqueLit != allLit) {
+                    vec3 shadowColorSample = pow4(color0.rgb);
+                    sampleShadow = shadowColorSample * (vec3(opaqueLit) - vec3(allLit)) + vec3(allLit);
+                }
             }
         }
 
@@ -502,26 +497,21 @@ void main() {
             vec3 worldPos = reconstructWorldPosition(vTexCoord, sceneDepth);
             VFogShadowData sd = computeVolumetricShadowSetup(worldPos, normalize(uShadowLightDirection));
             if (sd.valid) {
-                // Water shadow contract only maintained for cascade 0.
-                // Show marker color for out-of-contract cascades.
-                if (sd.cascadeIndex != 0) {
-                    FragColor = vec4(0.15, 0.0, 0.0, 1.0); // dark red = no contract data
-                    return;
-                }
                 vec2 uv = sd.proj.xy;
+                int ci = sd.cascadeIndex;
                 if (uVolumetricDebugMode == 30) {
-                    float dAll = sampleCsmDepthAllRaw(uv, 0);
-                    float dOpa = texture(uCsmShadowDepthRaw, vec3(uv, 0.0)).r;
+                    float dAll = sampleCsmDepthAllRaw(uv, ci);
+                    float dOpa = sampleCsmDepthRaw(uv, ci);
                     float gap = abs(dAll - dOpa) * 20.0;
                     FragColor = vec4(heatmap(clamp(gap, 0.0, 1.0)), 1.0);
                     return;
                 }
                 if (uVolumetricDebugMode == 31) {
-                    FragColor = sampleCsmShadowColor0(uv, 0);
+                    FragColor = sampleCsmShadowColor0(uv, ci);
                     return;
                 }
                 if (uVolumetricDebugMode == 32) {
-                    FragColor = sampleCsmShadowColor1(uv, 0);
+                    FragColor = sampleCsmShadowColor1(uv, ci);
                     return;
                 }
             }
@@ -553,11 +543,12 @@ void main() {
                 float t = float(i) / float(steps);
                 vec3 samplePos = uCameraPos + viewDir * (t * rayLength);
                 VFogShadowData shadowData = computeVolumetricShadowSetup(samplePos, shadowLightDir);
-                if (shadowData.valid && shadowData.cascadeIndex == 0) {
-                    float opaqueLit = sampleCsmDepthRawTexel(shadowData.proj.xy, 0) >= shadowData.proj.z ? 1.0 : 0.0;
-                    float allLit = sampleCsmDepthAllRawTexel(shadowData.proj.xy, 0) >= shadowData.proj.z ? 1.0 : 0.0;
-                    vec4 color0 = sampleCsmShadowColor0RawTexel(shadowData.proj.xy, 0);
-                    vec4 color1 = sampleCsmShadowColor1RawTexel(shadowData.proj.xy, 0);
+                if (shadowData.valid) {
+                    int ci = shadowData.cascadeIndex;
+                    float opaqueLit = sampleCsmDepthRawTexel(shadowData.proj.xy, ci) >= shadowData.proj.z ? 1.0 : 0.0;
+                    float allLit = sampleCsmDepthAllRawTexel(shadowData.proj.xy, ci) >= shadowData.proj.z ? 1.0 : 0.0;
+                    vec4 color0 = sampleCsmShadowColor0RawTexel(shadowData.proj.xy, ci);
+                    vec4 color1 = sampleCsmShadowColor1RawTexel(shadowData.proj.xy, ci);
                     float waterDepth = color1.w * 512.0 - 128.0 - samplePos.y;
                     if (color0.a < 0.5 && color1.w > 0.001 && waterDepth > 0.1) {
                         waterHitCount += 1.0;

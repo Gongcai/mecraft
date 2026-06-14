@@ -340,10 +340,9 @@ float shapeShadowVisibility(float lit) {
 vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
     // Mecraft adaptation of DerivativeMain SunLighting.glsl colored shadows:
     // compare shadowtex0 (DepthAll) with shadowtex1 (opaque-only), then read
-    // shadowcolor0. Cascade 0 is the only cascade with transparent caster data.
+    // shadowcolor0 from the same cascade as the receiver.
     float viewDistance = length(worldPos - uCameraPos);
     int cascadeIndex = selectCsmCascade(viewDistance);
-    if (cascadeIndex != 0) return vec3(1.0);
 
     normal = normalize(normal);
     lightDir = normalize(lightDir);

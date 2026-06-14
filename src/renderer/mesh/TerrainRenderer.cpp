@@ -643,6 +643,7 @@ void TerrainRenderer::collectShadowChunks(
     const std::array<CascadeAabbCuller, 4>& cascadeCullers,
     std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
     std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
+    std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges,
     std::array<std::vector<ChunkRenderEntry>, 4>& outOpaqueEntries,
     std::array<std::vector<ChunkRenderEntry>, 4>& outCutoutEntries,
     std::array<std::vector<ChunkRenderEntry>, 4>& outTransparentEntries
@@ -813,24 +814,11 @@ void TerrainRenderer::collectShadowChunks(
                                     outCutoutRanges[c].push_back(mesh.cutoutDistanceRange);
                                 }
                             }
-                            if (c == 0) {
-                                // Transparent shadow ranges only needed for cascade 0
-                                if (mesh.transparentRange.vertexCount > 0) {
-                                    const glm::vec3 sectionCenter(
-                                        static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
-                                        static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
-                                        static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
-                                    const glm::vec3 toCamera = sectionCenter - cameraPos;
-                                    m_terrainCache->addTransparentBatch(mesh.transparentRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Generic);
-                                }
-                                if (mesh.waterRange.vertexCount > 0) {
-                                    const glm::vec3 sectionCenter(
-                                        static_cast<float>(offset.x) + Chunk::SIZE_X * 0.5f,
-                                        static_cast<float>(offset.y + yBase) + SubChunk::SIZE * 0.5f,
-                                        static_cast<float>(offset.z) + Chunk::SIZE_Z * 0.5f);
-                                    const glm::vec3 toCamera = sectionCenter - cameraPos;
-                                    m_terrainCache->addTransparentBatch(mesh.waterRange, glm::dot(toCamera, toCamera), TransparentBatchKind::Water);
-                                }
+                            if (mesh.transparentRange.vertexCount > 0) {
+                                outTransparentRanges[c].push_back(mesh.transparentRange);
+                            }
+                            if (mesh.waterRange.vertexCount > 0) {
+                                outTransparentRanges[c].push_back(mesh.waterRange);
                             }
                         } else {
                             cascadeCullers[c].culledCount++;

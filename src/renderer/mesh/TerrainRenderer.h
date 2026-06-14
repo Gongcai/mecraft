@@ -190,6 +190,7 @@ public:
         const std::array<CascadeAabbCuller, 4>& cascadeCullers,
         std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
         std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
+        std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges,
         std::array<std::vector<ChunkRenderEntry>, 4>& outOpaqueEntries,
         std::array<std::vector<ChunkRenderEntry>, 4>& outCutoutEntries,
         std::array<std::vector<ChunkRenderEntry>, 4>& outTransparentEntries

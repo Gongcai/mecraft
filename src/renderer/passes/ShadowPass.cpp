@@ -238,7 +238,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // Transparent shadow pass: writes DepthAll + Color0/Color1 for:
     // 1. UW VL dual-depth detection (water caustics)
     // 2. Colored shadows (stained glass tint)
-    // Always runs for cascade 0 to support colored shadow tinting.
+    // Maintained for every cascade so caustics/tints do not stop at split 0.
     const bool needTransparentShadow = true;
     RenderDebugService* debugService = ctx.debugService;
     const bool shadowStatsActive = debugService != nullptr &&
@@ -267,6 +267,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
 
     std::array<std::vector<GpuMeshRange>, 4> cascadeOpaqueRanges{};
     std::array<std::vector<GpuMeshRange>, 4> cascadeCutoutRanges{};
+    std::array<std::vector<GpuMeshRange>, 4> cascadeTransparentRanges{};
     std::array<std::vector<ChunkRenderEntry>, 4> cascadeOpaqueEntries{};
     std::array<std::vector<ChunkRenderEntry>, 4> cascadeCutoutEntries{};
     std::array<std::vector<ChunkRenderEntry>, 4> cascadeTransparentEntries{};
@@ -280,6 +281,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         cascadeCullers,
         cascadeOpaqueRanges,
         cascadeCutoutRanges,
+        cascadeTransparentRanges,
         cascadeOpaqueEntries,
         cascadeCutoutEntries,
         cascadeTransparentEntries
@@ -331,7 +333,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         stats.distanceVisible = shadowCuller.getVisibleCount();
         stats.distanceCulled = shadowCuller.getCulledCount();
         stats.cutoutEntries = static_cast<int>(cascadeCutoutEntries[cascade].size());
-        stats.transparentEntries = static_cast<int>(cascadeTransparentEntries[cascade].size());
+        stats.transparentEntries = useMultiDrawIndirect
+            ? static_cast<int>(cascadeTransparentRanges[cascade].size())
+            : static_cast<int>(cascadeTransparentEntries[cascade].size());
         stats.opaqueCommands = m_worldRenderBuffer->opaqueCommandCount();
         stats.cutoutCommands = m_worldRenderBuffer->cutoutCommandCount();
         stats.opaqueVertices = m_worldRenderBuffer->opaqueVertexCount();
@@ -340,6 +344,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         stats.splitFar = cascadeData.splitFar;
         stats.radius = cascadeData.radius;
         stats.texelWorldSize = cascadeData.texelWorldSize;
+        const int cascadeRes = (cascade >= 2) ? settings.shadow.resolution / 2
+                                               : settings.shadow.resolution;
 
         // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
         {
@@ -347,8 +353,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             if (shadowStatsActive) {
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::Start);
             }
-            const int cascadeRes = (cascade >= 2) ? settings.shadow.resolution / 2
-                                                   : settings.shadow.resolution;
             targets.bindCsmShadowLayer(cascade, cascadeRes);
             glClear(GL_DEPTH_BUFFER_BIT);
             m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
@@ -393,20 +397,19 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             }
         }
 
-        // Pass 2: Transparent/all — only cascade 0.
+        // Pass 2: Transparent/all.
         // Copy DepthOpaque → DepthAll, then draw water + stained glass on top with depth writes.
-        if (needTransparentShadow && cascade == 0) {
+        if (needTransparentShadow) {
             renderer::debug::ScopedDebugGroup transparentGroup("Transparent");
-            const int res = targets.shadowResolution();
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
             glCopyImageSubData(
                 targets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
                 0, 0, 0, cascade,
                 targets.csmShadowDepthAllTexture(), GL_TEXTURE_2D_ARRAY,
                 0, 0, 0, cascade,
-                res, res, 1);
+                cascadeRes, cascadeRes, 1);
 
-            targets.bindCsmShadowTransparentLayer(cascade);
+            targets.bindCsmShadowTransparentLayer(cascade, cascadeRes);
             // Depth already contains opaque from the copy; clear color explicitly
             const float clearColor0[] = {0.0f, 0.0f, 0.0f, 1.0f}; // no transparent marker
             const float clearColor1[] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -428,10 +431,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             m_shadowDepthShader->setInt("uForceBaseLod", 1);
             if (useMultiDrawIndirect) {
                 m_worldRenderBuffer->beginFrame();
-                const auto& batch = m_terrainRenderer->transparentBatches();
-                for (const DrawBatchEntry& entry : batch) {
-                    // Shadow pass needs all transparent (including water) in one list
-                    m_worldRenderBuffer->addTransparent(entry.range);
+                for (const GpuMeshRange& range : cascadeTransparentRanges[cascade]) {
+                    m_worldRenderBuffer->addTransparent(range);
                 }
                 stats.transparentCommands = m_worldRenderBuffer->transparentCommandCount();
                 stats.transparentVertices = m_worldRenderBuffer->transparentVertexCount();
