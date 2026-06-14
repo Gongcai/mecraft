@@ -538,10 +538,12 @@ void GameSession::initStateMachine(const GameSessionDependencies& deps) {
             };
             m_stateMachine->changeState(std::make_unique<CreativeModeState>(stateDeps));
             deps.uiRenderer.appendSuccessLine("Switched to creative mode.");
+            syncLocalPlayerMode();
             return;
         }
         m_stateMachine->changeState(createInitialGameplayState(deps));
         deps.uiRenderer.appendSuccessLine("Switched to survival mode.");
+        syncLocalPlayerMode();
     });
 }
 
@@ -916,6 +918,31 @@ void GameSession::loadLocalPlayer() {
 
         MECRAFT_LOG_PRINTF("[Save] Loaded local player: pos=(%.1f, %.1f, %.1f)\n",
                            data.posX, data.posY, data.posZ);
+
+        // Best-effort mode sync; the state machine may not exist yet (it is
+        // created in the next init phase). The authoritative sync happens in the
+        // local-mode callback once the server broadcasts the restored mode.
+        syncLocalPlayerMode();
         return;
+    }
+}
+
+void GameSession::syncLocalPlayerMode() {
+    if (!m_gameplayScene || !m_stateMachine) return;
+
+    // Read the active gameplay mode from the state machine's base state.
+    // CreativeModeState derives from GameplayState and reports GameplayMode::Creative.
+    bool creative = false;
+    if (auto* base = m_stateMachine->baseState()) {
+        if (auto* gameplay = dynamic_cast<GameplayState*>(base)) {
+            creative = (gameplay->gameplayMode() == GameplayMode::Creative);
+        }
+    }
+
+    auto& ecsReg = m_gameplayScene->registry().registry();
+    auto view = ecsReg.view<ecs::LocalPlayerTag>();
+    for (auto e : view) {
+        auto& playerMode = ecsReg.get_or_emplace<ecs::PlayerModeComponent>(e);
+        playerMode.creative = creative;
     }
 }

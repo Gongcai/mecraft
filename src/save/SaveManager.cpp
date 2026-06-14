@@ -76,6 +76,7 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
         outMeta.createdUtc = j.value("createdUtc", "");
         outMeta.lastSavedUtc = j.value("lastSavedUtc", "");
         outMeta.screenshotPath = j.value("screenshotPath", "");
+        outMeta.gameMode = j.value("gameMode", outMeta.gameMode);
 
         return true;
     } catch (const std::exception& e) {
@@ -105,6 +106,7 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     j["createdUtc"] = meta.createdUtc;
     j["lastSavedUtc"] = meta.lastSavedUtc;
     j["screenshotPath"] = meta.screenshotPath;
+    j["gameMode"] = meta.gameMode;
 
     const auto path = m_paths.levelPath();
     const auto tmpPath = path.string() + ".tmp";

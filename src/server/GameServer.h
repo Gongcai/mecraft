@@ -158,6 +158,10 @@ private:
     [[nodiscard]] net::BlockUpdateEntry makeSubChunkLightUpdateEntry(int64_t chunkKey, int scy) const;
     void syncPlayersToClients();
 
+    // Resolve the gameplay mode of the first hello'd client, falling back to the
+    // world default when no client is connected (used when saving level.json).
+    [[nodiscard]] net::NetworkGameplayMode currentGameplayMode() const;
+
     World m_world;
     std::unique_ptr<save::SaveManager> m_saveManager;
     std::vector<ConnectedClient> m_clients;
@@ -182,6 +186,10 @@ private:
     // Loaded metadata for deferred restore
     save::LevelMeta m_loadedMeta;
     bool m_hasLoadedMeta = false;
+
+    // Default gameplay mode applied to newly-accepted clients. Restored from
+    // level.json at init so the world's last-used mode persists across sessions.
+    net::NetworkGameplayMode m_defaultGameplayMode = net::NetworkGameplayMode::Survival;
 
     // Autosave timer
     float m_autosaveTimer = 0.0f;

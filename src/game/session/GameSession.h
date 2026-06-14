@@ -83,6 +83,11 @@ public:
     /// Load saved local player state and apply to ECS entity (called after initECS).
     void loadLocalPlayer();
 
+    /// Mirror the active gameplay mode (from the state machine's base state) into
+    /// the local player's PlayerModeComponent, so client-side systems read the
+    /// correct creative/survival flag. Called after load and on every mode change.
+    void syncLocalPlayerMode();
+
     // Accessors (valid only after init())
     // world() returns the server's authoritative World for ECS/physics use.
     [[nodiscard]] World& world();

@@ -570,7 +570,14 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             // Restore time and weather after world init
             m_loadedMeta = meta;
             m_hasLoadedMeta = true;
-            MECRAFT_LOG_PRINTF("[Server] Loaded existing world (seed=%u)\n", seed);
+            // Restore the world's default gameplay mode (creative/survival) so
+            // it is applied to clients on connect and persists across sessions.
+            net::NetworkGameplayMode savedMode = net::NetworkGameplayMode::Survival;
+            parseGameplayMode(meta.gameMode, savedMode);
+            m_defaultGameplayMode = savedMode;
+            MECRAFT_LOG_PRINTF("[Server] Loaded existing world (seed=%u, mode=%s)\n",
+                               seed,
+                               modeName(m_defaultGameplayMode));
         } else {
             // New world - set creation timestamp
             meta.seed = seed;
@@ -635,9 +642,22 @@ void GameServer::saveLevelMeta() {
     meta.lastSavedUtc = save::SaveManager::currentUtcTimestamp();
     meta.screenshotPath = "thumb.png";
     meta.displayName = m_loadedMeta.displayName;
+    // Persist the current gameplay mode so it is restored next session.
+    meta.gameMode = modeName(currentGameplayMode());
 
     m_saveManager->saveLevelMeta(meta);
     m_loadedMeta = meta;
+}
+
+net::NetworkGameplayMode GameServer::currentGameplayMode() const {
+    // Prefer the first connected client's authoritative mode; fall back to the
+    // world default when no client is online (e.g. shutting down).
+    for (const auto& client : m_clients) {
+        if (client.receivedHello) {
+            return client.gameplayMode;
+        }
+    }
+    return m_defaultGameplayMode;
 }
 
 void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport, net::ClientId id) {
@@ -648,6 +668,7 @@ void GameServer::acceptClient(std::unique_ptr<net::ITransportEndpoint> transport
     client.playerNetId = kPlayerNetIdBase | id;
     client.isAdmin = id == 1;
     client.viewDistance = m_world.getRenderDistance();
+    client.gameplayMode = m_defaultGameplayMode;  // restored from level.json at init
     m_clients.push_back(std::move(client));
     MECRAFT_LOG_PRINTF("[Server] Accepted transport slot for client %u admin=%d\n", id, id == 1 ? 1 : 0);
     MECRAFT_LOG_FLUSH(stdout);

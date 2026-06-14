@@ -31,6 +31,10 @@ public:
     void onEnter() override;
     void update(float dt, const InputSnapshot& snapshot) override;
 
+    /// The gameplay mode represented by this state (survival or creative).
+    /// Used to keep the local player's PlayerModeComponent in sync.
+    [[nodiscard]] GameplayMode gameplayMode() const { return m_gameplayMode; }
+
 private:
     bool handleChestInteraction(const InputSnapshot& snapshot);
     bool handleInventoryTransition();

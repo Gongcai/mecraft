@@ -88,6 +88,7 @@ struct LevelMeta {
     float weatherWetness = 0.0f;
     float weatherStorm = 0.0f;
     float weatherAerialReduction = 0.55f;
+    std::string gameMode = "survival";  // "survival" | "creative" - world default gameplay mode
     std::string createdUtc;           // ISO 8601 UTC timestamp
     std::string lastSavedUtc;         // ISO 8601 UTC timestamp
     std::string screenshotPath;       // Relative path to thumbnail PNG (e.g. "thumb.png")
