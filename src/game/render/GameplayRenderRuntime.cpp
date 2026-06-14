@@ -2,6 +2,7 @@
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
 #include "../../renderer/renderers/DropRenderer.h"
+#include "../../renderer/renderers/FallingBlockRenderer.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../session/GameSession.h"
@@ -30,6 +31,7 @@ struct GameplayRenderRuntime::Impl {
     RenderResourceHub resourceHub;
     RenderScene scene;
     DropRenderer dropRenderer;
+    FallingBlockRenderer fallingBlockRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
     HumanoidRenderer humanoidRenderer;
 
@@ -57,6 +59,7 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& dropRenderer = m_impl->dropRenderer;
+    auto& fallingBlockRenderer = m_impl->fallingBlockRenderer;
     auto& firstPersonHeldItemRenderer = m_impl->firstPersonHeldItemRenderer;
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
@@ -86,12 +89,14 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
     // Entity renderers
     dropRenderer.init(resourceMgr);
+    fallingBlockRenderer.init(resourceMgr);
     firstPersonHeldItemRenderer.init(resourceMgr);
     humanoidRenderer.init(resourceMgr);
 
     // Cross-wire renderers into RenderScene
     renderScene.setHumanoidRenderer(&humanoidRenderer);
     renderScene.setDropRenderer(&dropRenderer);
+    renderScene.setFallingBlockRenderer(&fallingBlockRenderer);
     renderScene.setDropSystem(&session.dropSystem());
     renderScene.setGameplayRegistry(&session.gameplayScene().registry());
     renderScene.setParticleSystem(&session.particleSystem());
@@ -113,6 +118,7 @@ void GameplayRenderRuntime::shutdown() {
 #endif
     m_impl->humanoidRenderer.shutdown();
     m_impl->firstPersonHeldItemRenderer.shutdown();
+    m_impl->fallingBlockRenderer.shutdown();
     m_impl->dropRenderer.shutdown();
     m_impl->scene.shutdown();
     m_impl->resourceHub.shutdown();

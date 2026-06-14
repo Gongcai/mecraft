@@ -341,6 +341,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].isTransparent = false;
         s_blocks[i].isLightSource = false;
         s_blocks[i].allowsFluidCoexistence = false;
+        s_blocks[i].affectedByGravity = false;
         s_blocks[i].renderShape = BlockRenderShape::Cube;
         s_blocks[i].renderLayer = BlockRenderLayer::Opaque;
         s_blocks[i].cutoutDistanceCull = true;
@@ -505,6 +506,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("allowsFluidCoexistence") && blockJson["allowsFluidCoexistence"].is_boolean()) {
             def.allowsFluidCoexistence = blockJson["allowsFluidCoexistence"].get<bool>();
+        }
+        if (blockJson.contains("affectedByGravity") && blockJson["affectedByGravity"].is_boolean()) {
+            def.affectedByGravity = blockJson["affectedByGravity"].get<bool>();
         }
         const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
         const bool hasExplicitDerivativeMaterialId = parseDerivativeMaterialId(blockJson, def.derivativeMaterialId);

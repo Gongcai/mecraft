@@ -737,7 +737,13 @@ World::ChunkLoadProgress GameServer::getWorldLoadProgress(const glm::vec3& loadC
 
 void GameServer::tickWorldSystems() {
     m_world.fluidSystem().processScheduledBlockTicks(m_currentTick, 4096);
-    ecs::BlockSupportSystem::processWorldQueue(m_world, 1024);
+    // When the game session provides a shared GameplayRegistry, the client
+    // tick pipeline consumes this queue and emits falling-block entities for
+    // local rendering. The server-only fallback keeps dedicated/headless tests
+    // advancing support rules even without that presentation path.
+    if (m_gameplayRegistry == nullptr || usingOwnedEcsRegistry()) {
+        ecs::BlockSupportSystem::processWorldQueue(m_world, 1024);
+    }
 }
 
 void GameServer::processClientMessages() {

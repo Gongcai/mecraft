@@ -6,6 +6,7 @@
 #include "ecs/entity/EntityDefinitionRegistry.h"
 #include "ecs/entity/EntityFactory.h"
 #include "ecs/entity/MobModelFactory.h"
+#include "ecs/systems/world/BlockSupportSystem.h"
 #include "game/inventory/ChestInventoryStore.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
@@ -2443,6 +2444,24 @@ static void testServerTickBreaksUnsupportedPlant() {
     std::printf("[PASS] testServerTickBreaksUnsupportedPlant\n");
 }
 
+static void testPlacedUnsupportedSandQueuesItself() {
+    ServerHarness harness;
+
+    for (int i = 0; i < 40; ++i) {
+        harness.server.tick(1.0f / 20.0f);
+    }
+
+    const int surfaceY = static_cast<int>(harness.server.getSpawnPosition().y) - 2;
+    const glm::ivec3 sandPos(0, surfaceY + 4, 0);
+    harness.server.world().setBlock(sandPos.x, sandPos.y - 1, sandPos.z, BlockIds::AIR);
+    harness.server.world().setBlock(sandPos.x, sandPos.y, sandPos.z, BlockIds::SAND);
+
+    ecs::BlockSupportSystem::processWorldQueue(harness.server.world(), 1024);
+
+    assert(harness.server.world().getBlock(sandPos.x, sandPos.y, sandPos.z) == BlockIds::AIR);
+    std::printf("[PASS] testPlacedUnsupportedSandQueuesItself\n");
+}
+
 static void testDisconnectedPlayerDespawnsForOtherClients() {
     ServerHarness harness;
 
@@ -2837,6 +2856,7 @@ int main() {
     testServerSnapshotCodecCarriesPlayerHealth();
     testInventorySnapshotCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
+    testPlacedUnsupportedSandQueuesItself();
     testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();
     testBlockUpdateCodecKeepsVariableLightPatch();

@@ -39,6 +39,7 @@
     {
       "id": "minecraft:sand",
       "drop": "minecraft:sand",
+      "affectedByGravity": true,
       "timeToBreak": 250,
       "textures": {
         "all": "sand"

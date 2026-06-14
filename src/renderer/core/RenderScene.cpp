@@ -400,6 +400,14 @@ void RenderScene::setDropRenderer(DropRenderer* dr) {
     }
 }
 
+void RenderScene::setFallingBlockRenderer(FallingBlockRenderer* fbr) {
+    m_fallingBlockRenderer = fbr;
+    m_shared.fallingBlockRenderer = fbr;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setFallingBlockRenderer(fbr);
+    }
+}
+
 void RenderScene::setParticleSystem(ParticleSystem* ps) {
     m_particleSystem = ps;
     m_shared.particleSystem = ps;

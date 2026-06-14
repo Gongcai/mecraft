@@ -10,6 +10,7 @@ class ResourceMgr;
 class Shader;
 class HumanoidRenderer;
 class DropRenderer;
+class FallingBlockRenderer;
 class DropSystem;
 class IWorldView;
 struct RenderSettings;
@@ -39,6 +40,14 @@ public:
                       const RenderSettings& settings,
                       DeferredRenderTargets& targets,
                       DropRenderer* dropRenderer, DropSystem* dropSystem);
+
+    /// Execute falling-block GBuffer rendering.
+    /// Prerequisites: GBuffer FBO bound, per-object velocity attached (same as drops).
+    void executeFallingBlocks(const IWorldView& worldView, const FrameContext& ctx,
+                              const RenderSettings& settings,
+                              DeferredRenderTargets& targets,
+                              FallingBlockRenderer* fallingBlockRenderer,
+                              ecs::GameplayRegistry* gameplayRegistry);
 
 private:
     Shader* m_entityGBufferShader = nullptr;

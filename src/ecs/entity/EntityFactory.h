@@ -11,6 +11,7 @@
 #include <glm/glm.hpp>
 
 #include "../../item/Item.h"
+#include "../../world/block/Block.h"
 
 namespace ecs {
 
@@ -30,6 +31,14 @@ struct ItemDropSpawnParams {
     std::size_t dropId = 0;
 };
 
+/// Spawn parameters for a falling block entity.
+/// `gridPosition` is the integer cell the block occupied before falling;
+/// the entity renders centered on that cell and advances one cell per tick.
+struct FallingBlockSpawnParams {
+    BlockID blockId = 0;
+    glm::ivec3 gridPosition{};
+};
+
 class EntityFactory {
 public:
     static entt::entity createServerPlayerProxy(GameplayRegistry& registry,
@@ -46,6 +55,7 @@ public:
     static entt::entity createZombie(GameplayRegistry& registry, const glm::vec3& position);
     static entt::entity createZombie(entt::registry& registry, const glm::vec3& position);
     static entt::entity createItemDrop(GameplayRegistry& registry, const ItemDropSpawnParams& params);
+    static entt::entity createFallingBlock(GameplayRegistry& registry, const FallingBlockSpawnParams& params);
     static entt::entity createProjectile(GameplayRegistry& registry,
                                          entt::entity owner,
                                          const glm::vec3& position,

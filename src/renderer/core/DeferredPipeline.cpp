@@ -106,6 +106,7 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
         m_shadowPass->setWorldRenderBuffer(shared.worldRenderBuffer);
         m_shadowPass->setHumanoidRenderer(shared.humanoidRenderer);
         m_shadowPass->setDropRenderer(shared.dropRenderer);
+        m_shadowPass->setFallingBlockRenderer(shared.fallingBlockRenderer);
         m_shadowPass->setDropSystem(shared.dropSystem);
         m_shadowPass->setGameplayRegistry(shared.gameplayRegistry);
     }
@@ -207,6 +208,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
             m_gbufferPass->executeDrops(*ctx.worldView, ctx, m_currentSettings,
                                         targets,
                                         m_shared->dropRenderer, m_shared->dropSystem);
+            m_gbufferPass->executeFallingBlocks(*ctx.worldView, ctx, m_currentSettings,
+                                                targets,
+                                                m_shared->fallingBlockRenderer, m_shared->gameplayRegistry);
         }
     }
 

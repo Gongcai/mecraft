@@ -222,6 +222,7 @@ struct BlockDef {
     bool isLightSource  = false;
     bool isSelectable   = true;
     bool allowsFluidCoexistence = false;
+    bool affectedByGravity = false;   // gravity-affected blocks fall as entities when unsupported (sand/gravel)
     BlockRenderShape renderShape = BlockRenderShape::Cube;
     BlockRenderLayer renderLayer = BlockRenderLayer::Opaque;
     bool cutoutDistanceCull = true;

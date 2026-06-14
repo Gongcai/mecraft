@@ -4,6 +4,7 @@
 #include "../core/RenderSettings.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
+#include "../renderers/FallingBlockRenderer.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
@@ -74,5 +75,31 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.
     targets.detachPerObjectVelocityFromGBuffer();
 
+    glBindVertexArray(0);
+}
+
+void GBufferPass::executeFallingBlocks(const IWorldView& worldView, const FrameContext& ctx,
+                                       const RenderSettings& settings,
+                                       DeferredRenderTargets& targets,
+                                       FallingBlockRenderer* fallingBlockRenderer,
+                                       ecs::GameplayRegistry* gameplayRegistry) {
+    if (fallingBlockRenderer == nullptr || gameplayRegistry == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+
+    // Re-attach per-object velocity (executeDrops detached it) so falling
+    // blocks also write per-object motion vectors for TAA/motion blur.
+    targets.attachPerObjectVelocityToGBuffer();
+
+    const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProj;
+    fallingBlockRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, previousViewProj, ctx.animationTime);
+
+    targets.detachPerObjectVelocityFromGBuffer();
     glBindVertexArray(0);
 }

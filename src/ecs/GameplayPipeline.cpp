@@ -33,6 +33,9 @@
 #include "systems/steve/SteveSyncSystem.h"
 #include "systems/steve/TransformHierarchySystem.h"
 #include "systems/world/BlockSupportSystem.h"
+#include "systems/world/FallingBlockSpawnSystem.h"
+#include "systems/world/FallingBlockTickSystem.h"
+#include "systems/world/FallingBlockInterpolateSystem.h"
 #include "systems/world/FluidTickSystem.h"
 
 #ifdef MECRAFT_DEBUG
@@ -105,6 +108,9 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
     addFixedUpdateSystem<SteveAnimationSystem>();
     addFixedUpdateSystem<MobAnimationSystem>();
     addFixedUpdateSystem<TransformHierarchySystem>();
+
+    // Falling-block render interpolation (smooths 20 TPS tick motion to 60 Hz).
+    addFixedUpdateSystem<FallingBlockInterpolateSystem>();
 }
 
 void GameplayPipeline::buildServerFixedUpdateSystems() {
@@ -126,6 +132,10 @@ void GameplayPipeline::buildServerFixedUpdateSystems() {
 void GameplayPipeline::buildClientTickSystems() {
     addTickSystem<FluidTickSystem>();
     addTickSystem<BlockSupportSystem>();
+    // Spawn falling-block entities from events emitted by BlockSupportSystem,
+    // then advance each entity one cell per tick (Minecraft falling semantics).
+    addTickSystem<FallingBlockSpawnSystem>();
+    addTickSystem<FallingBlockTickSystem>();
 }
 
 void GameplayPipeline::runFixedUpdate(GameplayRegistry& registry,

@@ -1,6 +1,7 @@
 #include "BlockSupportSystem.h"
 
 #include "../../util/DropSpawnEventBuffer.h"
+#include "../../util/FallingBlockEventBuffer.h"
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/ParticleEventBuffer.h"
 #include "../../components/Components.h"
@@ -72,6 +73,12 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
     if (blockId == 0) return true;  // air always survives
 
     const BlockDef& def = BlockRegistry::getFast(blockId);
+
+    // Gravity-affected blocks (sand/gravel) only require solid ground below.
+    if (def.affectedByGravity) {
+        return checkGround(world, pos);
+    }
+
     if (def.supportRule.empty()) return true;  // no rule = always survives
 
     const StateID stateId = world.getBlockState(pos.x, pos.y, pos.z);
@@ -100,6 +107,7 @@ void BlockSupportSystem::update(SystemContext& ctx) {
     auto& dropBus = ensureDropSpawnEventBus(registry);
     auto& audioBus = ensureAudioEventBus(registry);
     auto& particleBus = ensureParticleEventBus(registry);
+    auto& fallingBlockBus = ensureFallingBlockSpawnEventBus(registry);
 
     // Drain up to 1024 positions per tick to avoid frame spikes.
     std::vector<glm::ivec3> positions;
@@ -107,8 +115,19 @@ void BlockSupportSystem::update(SystemContext& ctx) {
     updateQueue.drain(positions, 1024);
 
     for (const glm::ivec3& pos : positions) {
-        if (!canSurvive(world, pos)) {
-            const BlockID blockId = world.getBlock(pos.x, pos.y, pos.z);
+        if (canSurvive(world, pos)) {
+            continue;
+        }
+
+        const BlockID blockId = world.getBlock(pos.x, pos.y, pos.z);
+        const BlockDef& def = BlockRegistry::getFast(blockId);
+
+        if (def.affectedByGravity) {
+            // Gravity-affected block: clear the cell and spawn a falling entity
+            // (no item drop — the block continues to exist as a falling entity).
+            world.setBlock(pos.x, pos.y, pos.z, 0);
+            fallingBlockBus.push({blockId, pos});
+        } else {
             world.setBlock(pos.x, pos.y, pos.z, 0);
             dropBus.push({blockId, pos});
             particleBus.push({pos, blockId});

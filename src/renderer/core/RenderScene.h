@@ -25,6 +25,7 @@ class WeatherSystem;
 class Window;
 class HumanoidRenderer;
 class DropRenderer;
+class FallingBlockRenderer;
 class ParticleSystem;
 class DropSystem;
 class TerrainRenderCache;
@@ -75,6 +76,7 @@ struct SharedRenderResources {
     // Sub-renderers (non-owning)
     HumanoidRenderer* humanoidRenderer = nullptr;
     DropRenderer* dropRenderer = nullptr;
+    FallingBlockRenderer* fallingBlockRenderer = nullptr;
     ParticleSystem* particleSystem = nullptr;
     DropSystem* dropSystem = nullptr;
     ecs::GameplayRegistry* gameplayRegistry = nullptr;
@@ -130,6 +132,7 @@ public:
     // Sub-renderer injection (temporary until ECS-driven)
     void setHumanoidRenderer(HumanoidRenderer* hr);
     void setDropRenderer(DropRenderer* dr);
+    void setFallingBlockRenderer(FallingBlockRenderer* fbr);
     void setParticleSystem(ParticleSystem* ps);
     void setDropSystem(DropSystem* ds);
     void setGameplayRegistry(ecs::GameplayRegistry* reg);
@@ -257,6 +260,7 @@ private:
     // Sub-renderers (non-owning)
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
+    FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
     ParticleSystem* m_particleSystem = nullptr;
     DropSystem* m_dropSystem = nullptr;
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;

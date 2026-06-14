@@ -162,6 +162,11 @@ void DropSystem::clear() {
     for (const entt::entity e : view) {
         entities.push_back(e);
     }
+    // Falling-block entities share the drop lifecycle/cleanup path.
+    auto fallingView = raw.view<ecs::FallingBlockTag>();
+    for (const entt::entity e : fallingView) {
+        entities.push_back(e);
+    }
     for (const entt::entity e : entities) {
         if (raw.valid(e)) {
             m_registry->destroy(e);

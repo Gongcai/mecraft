@@ -249,6 +249,33 @@ entt::entity EntityFactory::createItemDrop(GameplayRegistry& registry, const Ite
     return drop;
 }
 
+entt::entity EntityFactory::createFallingBlock(GameplayRegistry& registry, const FallingBlockSpawnParams& params) {
+    if (params.blockId == 0) {
+        return entt::null;
+    }
+
+    entt::registry& reg = registry.registry();
+    auto& state = ensureDropRuntimeState(registry);
+    const std::size_t dropId = state.nextId++;
+
+    const entt::entity entity = reg.create();
+    // Render position starts at the center of the source cell (full-block cube).
+    const glm::vec3 renderPos = glm::vec3(params.gridPosition) + glm::vec3(0.5f);
+
+    reg.emplace<FallingBlockTag>(entity);
+    reg.emplace<FallingBlockComponent>(entity,
+                                       params.blockId,
+                                       params.gridPosition,
+                                       params.gridPosition,
+                                       0.0f);
+    reg.emplace<TransformComponent>(entity, renderPos, 0.0f);
+    reg.emplace<BoundsComponent>(entity, glm::vec3(0.5f));
+    reg.emplace<GroundedStateComponent>(entity, GroundedStateComponent{false});
+    reg.emplace<DropEntityIdComponent>(entity, dropId);
+    reg.emplace<NetworkSyncTag>(entity);
+    return entity;
+}
+
 entt::entity EntityFactory::createAppleProjectile(GameplayRegistry& registry,
                                                   const entt::entity owner,
                                                   const glm::vec3& position,

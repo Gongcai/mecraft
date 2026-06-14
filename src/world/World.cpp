@@ -584,12 +584,15 @@ void World::setBlockState(int x, int y, int z, StateID id) {
 
     m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), changesFluidPathing(oldId, targetState));
 
-    // Enqueue 6 neighbors for support-rule validation (block tick physics).
+    // Enqueue the edited cell and its 6 neighbors for support-rule validation.
+    // The edited cell matters for gravity blocks placed directly into an
+    // unsupported position; neighbors matter when this edit removes support.
     static constexpr glm::ivec3 kNeighborOffsets[6] = {
         { 1,  0,  0}, {-1,  0,  0},
         { 0,  1,  0}, { 0, -1,  0},
         { 0,  0,  1}, { 0,  0, -1},
     };
+    m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z));
     for (const auto& off : kNeighborOffsets) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
     }

@@ -177,6 +177,7 @@ set(SRC_RENDERER
 
         # Sub-renderers
         src/renderer/renderers/DropRenderer.cpp
+        src/renderer/renderers/FallingBlockRenderer.cpp
         src/renderer/renderers/FirstPersonHeldItemRenderer.cpp
         src/renderer/renderers/GameplaySkyRenderer.cpp
         src/renderer/renderers/HumanoidRenderer.cpp
@@ -185,6 +186,7 @@ set(SRC_RENDERER
         # Mesh system
         src/renderer/mesh/ChunkMesher.cpp
         src/renderer/mesh/ChunkMeshingService.cpp
+        src/renderer/mesh/BlockMeshBuilder.cpp
         src/renderer/mesh/ItemModelMesh.cpp
         src/renderer/mesh/MeshBuilderRegistry.cpp
         src/renderer/mesh/WorldRenderBuffer.cpp
@@ -310,6 +312,9 @@ set(SRC_ECS
         src/ecs/systems/audio/PlayerFootstepAudioSystem.cpp
         src/ecs/systems/world/FluidTickSystem.cpp
         src/ecs/systems/world/BlockSupportSystem.cpp
+        src/ecs/systems/world/FallingBlockSpawnSystem.cpp
+        src/ecs/systems/world/FallingBlockTickSystem.cpp
+        src/ecs/systems/world/FallingBlockInterpolateSystem.cpp
         src/ecs/systems/steve/SteveAnimationSystem.cpp
         src/ecs/systems/steve/SteveSyncSystem.cpp
         src/ecs/systems/steve/TransformHierarchySystem.cpp

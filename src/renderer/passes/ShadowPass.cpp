@@ -17,6 +17,7 @@
 #include "../../world/chunk/SubChunk.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
+#include "../renderers/FallingBlockRenderer.h"
 #include "../../world/DropSystem.h"
 #include "../../ecs/GameplayRegistry.h"
 
@@ -141,6 +142,26 @@ void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4&
 
     m_dropRenderer->renderToShadowMap(worldView, *m_dropSystem, shadowViewProj,
                                        shadowView, shadowProjection, animationTime, shaderTime);
+
+    glBindVertexArray(0);
+}
+
+void ShadowPass::renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
+                                            const glm::mat4& shadowView, const glm::mat4& shadowProjection,
+                                            float animationTime, float shaderTime) {
+    // Render falling-block entities into the current shadow cascade layer.
+    // Shadow FBO layer is already bound by the caller (execute).
+    if (m_fallingBlockRenderer == nullptr || m_gameplayRegistry == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+
+    m_fallingBlockRenderer->renderToShadowMap(*m_gameplayRegistry, shadowViewProj,
+                                               shadowView, shadowProjection, animationTime, shaderTime);
 
     glBindVertexArray(0);
 }
@@ -362,6 +383,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             // Drop shadow: render dropped items/blocks depth into this cascade.
             renderShadowDrops(worldView, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
                               ctx.animationTime, ctx.shaderTime);
+            // Falling-block shadow: render falling sand/gravel depth into this cascade.
+            renderShadowFallingBlocks(cascadeData.viewProj, cascadeData.view, cascadeData.projection,
+                                      ctx.animationTime, ctx.shaderTime);
             // Restore shadow_depth shader — renderShadowEntities()/renderShadowDrops() activated other shaders.
             m_shadowDepthShader->use();
             if (shadowStatsActive) {

@@ -17,6 +17,7 @@ class IWorldView;
 class World;
 class HumanoidRenderer;
 class DropRenderer;
+class FallingBlockRenderer;
 class DropSystem;
 class WorldRenderBuffer;
 class TerrainRenderer;
@@ -39,6 +40,7 @@ public:
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
     void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
     void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
+    void setFallingBlockRenderer(FallingBlockRenderer* fbr) { m_fallingBlockRenderer = fbr; }
     void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
 
@@ -75,6 +77,11 @@ private:
                             const glm::mat4& shadowView, const glm::mat4& shadowProjection,
                             float animationTime, float shaderTime);
 
+    /// Render falling-block entities into the current shadow cascade layer.
+    void renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
+                                    const glm::mat4& shadowView, const glm::mat4& shadowProjection,
+                                    float animationTime, float shaderTime);
+
     Shader* m_shadowDepthShader = nullptr;
     Shader* m_entityShadowShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
@@ -82,6 +89,7 @@ private:
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
+    FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
     DropSystem* m_dropSystem = nullptr;
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
