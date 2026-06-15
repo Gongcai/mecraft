@@ -603,6 +603,29 @@ int main() {
 
     {
         Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, BlockIds::GLASS);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+
+        if (!meshData.opaqueVertices.empty()) {
+            return fail("glass must not emit opaque geometry");
+        }
+        if (meshData.transparentVertices.size() != 36) {
+            return fail("isolated glass block should emit six transparent faces");
+        }
+        const bool allGlassMaterial = std::all_of(meshData.transparentVertices.begin(),
+                                                  meshData.transparentVertices.end(),
+                                                  [](const BlockVertex& vertex) {
+                                                      return ((vertex.tintPacked >> 8U) & 0x3FU) ==
+                                                             DerivativeMaterialIds::STAINED_GLASS;
+                                                  });
+        if (!allGlassMaterial) {
+            return fail("glass transparent vertices should carry stained-glass material id");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
         chunk.setBlock(1, 32, 0, BlockIds::GLASS);
 

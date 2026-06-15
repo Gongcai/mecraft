@@ -337,10 +337,36 @@ float shapeShadowVisibility(float lit) {
     return mix(clamp(uShadowMinLight, 0.0, 0.8), 1.0, contrasted);
 }
 
+vec3 transparentShadowTintSample(vec2 uv, int cascadeIndex, float refZ) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return vec3(1.0);
+    }
+
+    float opaqueLit = step(refZ, sampleCsmDepthRawTexel(uv, cascadeIndex));
+    float allLit = step(refZ, sampleCsmDepthAllRawTexel(uv, cascadeIndex));
+    if (opaqueLit <= 0.5 || abs(opaqueLit - allLit) < 0.5) {
+        return vec3(1.0);
+    }
+
+    vec4 colorSample = sampleCsmShadowColor0RawTexel(uv, cascadeIndex);
+    if (colorSample.a >= 0.5) return vec3(1.0);
+
+    vec4 auxSample = sampleCsmShadowColor1RawTexel(uv, cascadeIndex);
+    bool waterCaster = auxSample.a > 0.20 && auxSample.a < 0.60;
+    if (waterCaster) {
+        float caustic = dot(colorSample.rgb, vec3(0.333333));
+        float line = smoothstep(0.52, 0.92, caustic);
+        line *= line;
+        return vec3(1.0) + vec3(0.35, 0.85, 1.20) * line * 1.65;
+    }
+
+    return pow4(colorSample.rgb);
+}
+
 vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
-    // Mecraft adaptation of DerivativeMain SunLighting.glsl colored shadows:
-    // compare shadowtex0 (DepthAll) with shadowtex1 (opaque-only), then read
-    // shadowcolor0 from the same cascade as the receiver.
+    // DerivativeMain SunLighting.glsl colored shadow contract:
+    // each PCF tap compares shadowtex0 (DepthAll) with shadowtex1 (opaque-only)
+    // and only taps that hit alpha-tested transparent texels read shadowcolor0.
     float viewDistance = length(worldPos - uCameraPos);
     int cascadeIndex = selectCsmCascade(viewDistance);
 
@@ -350,6 +376,8 @@ vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
     if (ndotl <= 1.0e-3) return vec3(1.0);
 
     ivec3 shadowSize = textureSize(uCsmShadowMap, 0);
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    vec2 texelUv = (1.0 / vec2(max(shadowSize.x, 1), max(shadowSize.y, 1))) / scale;
     float texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
     float normalOffset = shadowNormalOffsetWorld(ndotl, viewDistance, texelWorld,
                                                  uShadowDistance, uShadowNormalOffset);
@@ -359,26 +387,22 @@ vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float bias = csmDepthBias(ndotl, viewDistance, cascadeIndex, shadowSize,
                               uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
     float refZ = proj.z - bias;
-    float opaqueLit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
-    float allLit = sampleCsmDepthAllCompare(proj.xy, cascadeIndex, refZ);
-    float transparentHit = saturate(opaqueLit - allLit);
-    if (transparentHit <= 1.0e-3) return vec3(1.0);
 
-    vec4 colorSample = sampleCsmShadowColor0RawTexel(proj.xy, cascadeIndex);
-    if (colorSample.a >= 0.5) return vec3(1.0);
+    vec3 tint = transparentShadowTintSample(proj.xy, cascadeIndex, refZ) * 1.5;
+    float weight = 1.5;
 
-    vec4 auxSample = sampleCsmShadowColor1RawTexel(proj.xy, cascadeIndex);
-    bool waterCaster = auxSample.a > 0.20 && auxSample.a < 0.60;
-    if (waterCaster) {
-        float caustic = dot(colorSample.rgb, vec3(0.333333));
-        float line = smoothstep(0.52, 0.92, caustic);
-        line *= line;
-        vec3 causticTint = vec3(1.0) + vec3(0.35, 0.85, 1.20) * line * 1.65;
-        return mix(vec3(1.0), causticTint, transparentHit);
+    if (uSoftShadowsEnabled != 0) {
+        float radius = cascadePcfRadius(cascadeIndex, uShadowSoftness);
+        float jitter = shadowDither();
+        float angle = csmKernelAngle(proj.xy, cascadeIndex, texelUv);
+        for (int i = 0; i < 12; ++i) {
+            vec2 offset = csmRotateOffset(spiralDiskSample(i, 12, jitter), angle) * texelUv * radius;
+            tint += transparentShadowTintSample(proj.xy + offset, cascadeIndex, refZ);
+            weight += 1.0;
+        }
     }
 
-    vec3 tint = pow4(colorSample.rgb);
-    return mix(vec3(1.0), tint, transparentHit);
+    return tint / weight;
 }
 
 // DerivativeMain ScreenSpaceShadow (SunLighting.glsl:88-125)

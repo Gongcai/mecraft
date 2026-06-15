@@ -220,14 +220,27 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     m_shadowDepthShader->setInt("uGrassColormap", 2);
     m_shadowDepthShader->setInt("uFoliageColormap", 3);
     const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, noiseTex);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+    // Entity/drop shadow sub-passes bind their own textures, so restore terrain inputs before terrain draws.
+    auto bindTerrainShadowInputs = [&]() {
+        m_shadowDepthShader->use();
+        m_shadowDepthShader->setInt("uUseModel", 0);
+        m_shadowDepthShader->setInt("uVertexFormat", 1);
+        m_shadowDepthShader->setInt("uForceBaseLod", 1);
+        m_shadowDepthShader->setInt("texArray", 0);
+        m_shadowDepthShader->setInt("uNoiseTex", 1);
+        m_shadowDepthShader->setInt("uGrassColormap", 2);
+        m_shadowDepthShader->setInt("uFoliageColormap", 3);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, noiseTex);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glActiveTexture(GL_TEXTURE0);
+    };
+    bindTerrainShadowInputs();
 
     const float shadowDist = std::max(64.0f, settings.shadow.distance);
     int visibleTotal = 0;
@@ -355,6 +368,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             }
             targets.bindCsmShadowLayer(cascade, cascadeRes);
             glClear(GL_DEPTH_BUFFER_BIT);
+            bindTerrainShadowInputs();
             m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
             m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
             m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
@@ -415,6 +429,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             const float clearColor1[] = {0.0f, 0.0f, 0.0f, 0.0f};
             glClearBufferfv(GL_COLOR, 0, clearColor0);
             glClearBufferfv(GL_COLOR, 1, clearColor1);
+            bindTerrainShadowInputs();
             m_shadowDepthShader->setInt("uShadowPassMode", 1);
             m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
             m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
