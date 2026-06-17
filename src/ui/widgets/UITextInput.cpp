@@ -313,7 +313,7 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
         glGetIntegerv(GL_VIEWPORT, viewport);
 
         glEnable(GL_SCISSOR_TEST);
-        const float uiScale = ctx.uiScale > 0.0f ? ctx.uiScale : 1.0f;
+        const float uiScale = ctx.pixelScale();
         const int sx = viewport[0] + static_cast<int>(std::floor((ax + 2.0f) * uiScale));
         const int sy = viewport[1] + static_cast<int>(std::floor((ay + 2.0f) * uiScale));
         const int sw = static_cast<int>(std::ceil((aw - 4.0f) * uiScale));

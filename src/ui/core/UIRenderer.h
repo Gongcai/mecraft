@@ -37,15 +37,8 @@ class UIWidget;
 class UIRenderer
 {
 public:
-    // Legacy reference resolution (deprecated, kept for backward compatibility)
-    static constexpr float kRefScreenWidth = 1280.0f;
-    static constexpr float kRefScreenHeight = 720.0f;
-
     UIRenderer();
     ~UIRenderer();
-
-    // Legacy scale computation (deprecated - use UIScaleConfig instead)
-    [[nodiscard]] static float computeResponsiveUiScale(float actualW, float actualH);
 
     // GUI Scale management (new unified system)
     void setGUIScale(GUIScale scale);

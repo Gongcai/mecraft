@@ -294,7 +294,7 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
             GLint prevScissor[4] = {};
             glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
             glEnable(GL_SCISSOR_TEST);
-            const float uiScale = ctx.uiScale > 0.0f ? ctx.uiScale : 1.0f;
+            const float uiScale = ctx.pixelScale();
             glScissor(static_cast<int>((valueX + 2.0f) * uiScale),
                       static_cast<int>(((ctx.screenHeight - ay - ah) + 2.0f) * uiScale),
                       static_cast<int>((valueW - 4.0f) * uiScale),

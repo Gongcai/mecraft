@@ -331,13 +331,7 @@ void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
 UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
 {
     UIEventResult aggregate = UIEventResult::Ignored;
-
-    // Convert event coordinates from actual pixels to reference space
     UIInputEvent refEvent = event;
-    if (m_lastSceneContext.uiScale > 0.0f) {
-        refEvent.x /= m_lastSceneContext.uiScale;
-        refEvent.y /= m_lastSceneContext.uiScale;
-    }
 
     // Active scene has priority (menu screens overlay gameplay controls)
     if (m_activeScene && m_activeScene->visible) {
@@ -346,15 +340,21 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
             glGetIntegerv(GL_VIEWPORT, viewport);
             const float vpW = static_cast<float>(std::max(1, viewport[2]));
             const float vpH = static_cast<float>(std::max(1, viewport[3]));
-            const float vpScale = computeResponsiveUiScale(vpW, vpH);
-            m_lastSceneContext.uiScale = vpScale;
-            m_lastSceneContext.screenWidth = static_cast<int>(std::round(vpW / vpScale));
-            m_lastSceneContext.screenHeight = static_cast<int>(std::round(vpH / vpScale));
+            m_lastSceneContext.scaleConfig = UIScaleConfig::create(vpW, vpH, m_guiScale);
+            m_lastSceneContext.screenWidth = m_lastSceneContext.scaleConfig.virtualWidth;
+            m_lastSceneContext.screenHeight = m_lastSceneContext.scaleConfig.virtualHeight;
         }
-        m_lastSceneContext.resourceMgr = m_resourceMgr;
-        m_lastSceneContext.textRenderer = &m_text;
-        m_lastSceneContext.pointerX = refEvent.x;
-        m_lastSceneContext.pointerY = refEvent.y;
+    }
+
+    const float pixelScale = m_lastSceneContext.pixelScale();
+    refEvent.x /= pixelScale;
+    refEvent.y /= pixelScale;
+    m_lastSceneContext.resourceMgr = m_resourceMgr;
+    m_lastSceneContext.textRenderer = &m_text;
+    m_lastSceneContext.pointerX = refEvent.x;
+    m_lastSceneContext.pointerY = refEvent.y;
+
+    if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(m_lastSceneContext);
 
         UIEventResult sceneResult = m_activeScene->onInput(refEvent, m_lastSceneContext);
@@ -562,15 +562,9 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     const float actualW = static_cast<float>(std::max(1, window.getWidth()));
     const float actualH = static_cast<float>(std::max(1, window.getHeight()));
 
-    // Legacy scale (for backward compatibility)
-    context.uiScale = computeResponsiveUiScale(actualW, actualH);
-
-    // New unified scale configuration
     context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
-
-    // Screen dimensions
-    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
-    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
+    context.screenWidth = context.scaleConfig.virtualWidth;
+    context.screenHeight = context.scaleConfig.virtualHeight;
 
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
@@ -581,19 +575,13 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.visible;
-    context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
-    context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
+    context.pointerX = inputSnapshot.mousePosition.x / context.pixelScale();
+    context.pointerY = inputSnapshot.mousePosition.y / context.pixelScale();
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
     context.theme = &m_theme;
     context.localeManager = m_localeManager;
     return context;
-}
-
-float UIRenderer::computeResponsiveUiScale(float actualW, float actualH)
-{
-    const float fitScale = std::min(actualW / kRefScreenWidth, actualH / kRefScreenHeight);
-    return std::max(0.01f, fitScale);
 }
 
 UIRenderContext UIRenderer::makeContextFromViewport() const
@@ -605,14 +593,9 @@ UIRenderContext UIRenderer::makeContextFromViewport() const
     const float actualW = static_cast<float>(std::max(1, viewport[2]));
     const float actualH = static_cast<float>(std::max(1, viewport[3]));
 
-    // Legacy scale (for backward compatibility)
-    context.uiScale = computeResponsiveUiScale(actualW, actualH);
-
-    // New unified scale configuration
     context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
-
-    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
-    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
+    context.screenWidth = context.scaleConfig.virtualWidth;
+    context.screenHeight = context.scaleConfig.virtualHeight;
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
     context.humanoidRenderer = m_humanoidRenderer;
@@ -652,14 +635,9 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     const float actualW = static_cast<float>(windowW);
     const float actualH = static_cast<float>(windowH);
 
-    // Legacy scale (for backward compatibility)
-    context.uiScale = computeResponsiveUiScale(actualW, actualH);
-
-    // New unified scale configuration
     context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
-
-    context.screenWidth = static_cast<int>(std::round(actualW / context.uiScale));
-    context.screenHeight = static_cast<int>(std::round(actualH / context.uiScale));
+    context.screenWidth = context.scaleConfig.virtualWidth;
+    context.screenHeight = context.scaleConfig.virtualHeight;
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resourceMgr = m_resourceMgr;
     context.humanoidRenderer = m_humanoidRenderer;
@@ -668,8 +646,8 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     context.commandInputVisible = m_commandInput.visible;
     context.theme = &m_theme;
     context.localeManager = m_localeManager;
-    context.pointerX = inputSnapshot.mousePosition.x / context.uiScale;
-    context.pointerY = inputSnapshot.mousePosition.y / context.uiScale;
+    context.pointerX = inputSnapshot.mousePosition.x / context.pixelScale();
+    context.pointerY = inputSnapshot.mousePosition.y / context.pixelScale();
     m_lastSceneContext = context;
 
     if (m_activeScene && m_activeScene->visible) {

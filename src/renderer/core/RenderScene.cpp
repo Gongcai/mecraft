@@ -186,7 +186,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
         : internalRenderSize(request.window);
     if (!skipPostProcess) {
-        m_postProcessPass.beginScene(frameRenderSize.x, frameRenderSize.y);
+        m_postProcessPass.beginSceneCapture(frameRenderSize.x, frameRenderSize.y);
     } else {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, frameRenderSize.x, frameRenderSize.y);
@@ -257,14 +257,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             request.worldView, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians,
             request.dayNightSystem, request.weatherSystem);
-        m_postProcessPass.setEffects(effects);
+        m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
-            m_postProcessPass.blitSceneToBackbuffer(request.window);
+            m_postProcessPass.blitSceneCaptureToBackbuffer(request.window);
         } else {
             const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
                                     m_settings.upscale.renderScale < 0.999f;
             if (fsrEnabled) {
-                const GLuint postTex = m_postProcessPass.endSceneAndCompositeToTexture(
+                const GLuint postTex = m_postProcessPass.compositeToTexture(
                     request.window,
                     request.frameTime,
                     m_lastFrameOutput.gbufferDepthTex,
@@ -284,14 +284,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 if (!upscaled && postTex != 0) {
                     m_postProcessPass.blitTextureToBackbuffer(postTex, request.window);
                 } else if (!upscaled) {
-                    m_postProcessPass.endSceneAndComposite(
+                    m_postProcessPass.compositeToBackbuffer(
                         request.window,
                         request.frameTime,
                         m_lastFrameOutput.gbufferDepthTex,
                         m_lastFrameOutput.weatherMaskTex);
                 }
             } else {
-                m_postProcessPass.endSceneAndComposite(
+                m_postProcessPass.compositeToBackbuffer(
                     request.window,
                     request.frameTime,
                     m_lastFrameOutput.gbufferDepthTex,

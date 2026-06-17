@@ -2,9 +2,6 @@
 #define MECRAFT_POST_PROCESS_PASS_H
 
 #include "RenderPass.h"
-#include "../core/FrameContext.h"
-#include "../core/FrameOutput.h"
-#include "../core/RenderSettings.h"
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -13,8 +10,7 @@ class ResourceMgr;
 class Shader;
 class Window;
 
-/// Post-process effects configuration (legacy bridge).
-/// Will be replaced by RenderSettings in Phase 10.
+/// Per-frame post-process effects configuration.
 struct PostProcessEffects {
     bool underwaterEnabled = false;
     glm::vec3 underwaterTint = glm::vec3(0.24f, 0.46f, 0.72f);
@@ -67,9 +63,6 @@ struct PostProcessEffects {
 
 /// Shared post-processing pass: bloom, auto-exposure, tonemap, color grading, underwater, etc.
 /// Used by both Forward and Deferred pipelines through RenderScene.
-///
-/// Legacy API (beginScene/endSceneAndComposite) is preserved for backward compatibility
-/// during the transition period. Phase 10/11 will migrate callers to the execute() path.
 class PostProcessPass : public RenderPass {
 public:
     ~PostProcessPass() override;
@@ -78,35 +71,28 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "PostProcess"; }
 
-    // --- New API (Phase 10+) ---
-    /// Execute post-processing from a FrameOutput produced by any pipeline.
-    /// Reads scene color/depth from FrameOutput, applies bloom/exposure/tonemap/composite.
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 const FrameOutput& output, float frameTime);
-
-    // --- Legacy API (backward compatible, will be removed in Phase 11) ---
     /// Start capturing world-space rendering into an off-screen scene target.
-    void beginScene(const Window& window);
-    void beginScene(int width, int height);
+    void beginSceneCapture(const Window& window);
+    void beginSceneCapture(int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
-    void endSceneAndComposite(const Window& window, float frameTime,
-                              GLuint gbufDepthTex = 0,
-                              GLuint weatherMaskTex = 0);
+    void compositeToBackbuffer(const Window& window, float frameTime,
+                               GLuint gbufDepthTex = 0,
+                               GLuint weatherMaskTex = 0);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
-    [[nodiscard]] GLuint endSceneAndCompositeToTexture(const Window& window, float frameTime,
-                                                       GLuint gbufDepthTex = 0,
-                                                       GLuint weatherMaskTex = 0);
+    [[nodiscard]] GLuint compositeToTexture(const Window& window, float frameTime,
+                                            GLuint gbufDepthTex = 0,
+                                            GLuint weatherMaskTex = 0);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
-    void blitSceneToBackbuffer(const Window& window);
+    void blitSceneCaptureToBackbuffer(const Window& window);
 
     /// Blit an already composited LDR texture to the back buffer.
     void blitTextureToBackbuffer(GLuint texture, const Window& window);
 
-    /// Set effects configuration (legacy path).
-    void setEffects(const PostProcessEffects& effects);
+    /// Set effects configuration for the current frame.
+    void setFrameEffects(const PostProcessEffects& effects);
 
     // Debug accessors for exposure diagnostics
     [[nodiscard]] float getAdaptedExposure() const { return m_adaptedExposure; }
@@ -147,7 +133,7 @@ private:
     Shader* m_blitShader = nullptr;
     GLuint m_noiseTexture = 0;
 
-    // Scene capture FBO (legacy path)
+    // Scene capture FBO
     GLuint m_sceneFbo = 0;
     GLuint m_sceneColorTex = 0;
     GLuint m_sceneDepthTex = 0;

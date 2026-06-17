@@ -329,7 +329,7 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
 void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
                                                 const ResolvedPanelRect& panelRect) const
 {
-    if (!context.humanoidRenderer || context.uiScale <= 0.0f) {
+    if (!context.humanoidRenderer || context.pixelScale() <= 0.0f) {
         return;
     }
 
@@ -344,7 +344,7 @@ void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
                                                      previewY,
                                                      previewWidth,
                                                      previewHeight,
-                                                     context.uiScale,
+                                                     context.pixelScale(),
                                                      context.pointerX,
                                                      pointerBottomY,
                                                      context.timeSeconds);

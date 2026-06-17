@@ -25,7 +25,7 @@ ScissorBox makeScaledScissorBox(float x, float y, float width, float height, con
     GLint viewport[4] = {0, 0, ctx.screenWidth, ctx.screenHeight};
     glGetIntegerv(GL_VIEWPORT, viewport);
 
-    const float uiScale = ctx.uiScale > 0.0f ? ctx.uiScale : 1.0f;
+    const float uiScale = ctx.pixelScale();
     return {
         viewport[0] + static_cast<GLint>(std::floor(x * uiScale)),
         viewport[1] + static_cast<GLint>(std::floor(y * uiScale)),

@@ -39,7 +39,7 @@ void PostProcessPass::shutdown() {
     m_targetHeight = 0;
 }
 
-void PostProcessPass::setEffects(const PostProcessEffects& effects) {
+void PostProcessPass::setFrameEffects(const PostProcessEffects& effects) {
     m_effects = effects;
     m_effects.underwaterStrength = std::clamp(m_effects.underwaterStrength, 0.0f, 1.0f);
     m_effects.bloomThreshold = std::clamp(m_effects.bloomThreshold, 0.0f, 4.0f);
@@ -78,96 +78,11 @@ void PostProcessPass::setEffects(const PostProcessEffects& effects) {
     m_effects.cloudWetness = std::clamp(m_effects.cloudWetness, 0.0f, 1.0f);
 }
 
-// --- New API ---
-
-void PostProcessPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                               const FrameOutput& output, const float frameTime) {
-    const int width = std::max(1, ctx.frameWidth);
-    const int height = std::max(1, ctx.frameHeight);
-
-    if (output.skipPostProcess || m_postProcessShader == nullptr || m_fullscreenVao == 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, width, height);
-        return;
-    }
-
-    // Convert RenderSettings to PostProcessEffects for the legacy composite path.
-    // This bridge will be eliminated in Phase 10 when the composite path is refactored
-    // to read directly from RenderSettings/FrameContext.
-    PostProcessEffects effects{};
-    effects.bloomEnabled = settings.postProcess.bloomEnabled;
-    effects.bloomStrength = settings.postProcess.bloomStrength;
-    effects.bloomMipCount = settings.postProcess.bloomMipCount;
-    effects.autoExposureEnabled = settings.postProcess.autoExposureEnabled;
-    effects.autoExposureSpeed = settings.postProcess.autoExposureSpeed;
-    effects.autoExposureBias = settings.postProcess.autoExposureBias;
-    effects.exposure = settings.postProcess.exposure;
-    effects.tonemapMode = settings.postProcess.tonemapMode;
-    effects.gamma = settings.postProcess.gamma;
-    effects.saturation = settings.postProcess.saturation;
-    effects.contrast = settings.postProcess.contrast;
-    effects.colorTemperature = settings.postProcess.colorTemperature;
-    effects.vibrance = settings.postProcess.vibrance;
-    effects.highlightCompression = settings.postProcess.highlightCompression;
-    effects.filmEmulationStrength = settings.postProcess.filmEmulationStrength;
-    effects.redModifierStrength = settings.postProcess.redModifierStrength;
-    effects.colorLuma = glm::vec3(settings.postProcess.colorLumaR,
-                                    settings.postProcess.colorLumaG,
-                                    settings.postProcess.colorLumaB);
-    effects.splitToneStrength = settings.postProcess.splitToneStrength;
-    effects.vignetteStrength = settings.postProcess.vignetteStrength;
-    effects.noiseDitherStrength = settings.postProcess.noiseDitherStrength;
-    effects.sharpenStrength = settings.postProcess.sharpenStrength;
-    effects.shaderpackGradingEnabled = settings.postProcess.shaderpackGradingEnabled;
-    effects.purkinjeShiftEnabled = settings.postProcess.purkinjeShiftEnabled;
-    effects.bloomyFogEnabled = settings.postProcess.bloomyFogEnabled;
-    effects.underwaterEnabled = ctx.eyeInWater;
-    effects.underwaterTint = glm::vec3(0.24f, 0.46f, 0.72f);
-    effects.underwaterStrength = 0.68f;
-    effects.weatherWetness = ctx.weather.wetness;
-    effects.weatherStorm = ctx.weather.storm;
-    effects.skyWetness = ctx.weather.skyWetness;
-    effects.fogWetness = ctx.weather.fogWetness;
-    effects.cloudWetness = ctx.weather.cloudWetness;
-    effects.cameraRainVisibility = 1.0f;
-    effects.gameTime = ctx.shaderTime;
-    effects.postprocessDebugMode = settings.debug.postprocessDebugMode;
-    m_effects = effects;
-
-    // Use the FrameOutput textures as the scene source
-    // For the new API path, we treat the output textures as our "scene"
-    m_sceneColorTex = output.sceneColorTex;
-    m_sceneDepthTex = output.sceneDepthTex;
-    m_sceneCaptured = true;
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    const float resolvedExposure = updateAutoExposure(frameTime);
-    static_cast<void>(resolvedExposure);
-
-    const bool hasBloom = renderBloom(settings.postProcess.bloomMipCount);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
-
-    renderComposite(output.gbufferDepthTex, output.weatherMaskTex, hasBloom);
-
-    // Restore scene capture state
-    m_sceneCaptured = false;
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+void PostProcessPass::beginSceneCapture(const Window& window) {
+    beginSceneCapture(window.getWidth(), window.getHeight());
 }
 
-// --- Legacy API ---
-
-void PostProcessPass::beginScene(const Window& window) {
-    beginScene(window.getWidth(), window.getHeight());
-}
-
-void PostProcessPass::beginScene(const int requestedWidth, const int requestedHeight) {
+void PostProcessPass::beginSceneCapture(const int requestedWidth, const int requestedHeight) {
     m_sceneCaptured = false;
 
     const int width = requestedWidth;
@@ -191,9 +106,9 @@ void PostProcessPass::beginScene(const int requestedWidth, const int requestedHe
     m_sceneCaptured = true;
 }
 
-void PostProcessPass::endSceneAndComposite(const Window& window, const float frameTime,
-                                             GLuint gbufDepthTex,
-                                             GLuint weatherMaskTex) {
+void PostProcessPass::compositeToBackbuffer(const Window& window, const float frameTime,
+                                            GLuint gbufDepthTex,
+                                            GLuint weatherMaskTex) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
@@ -222,9 +137,9 @@ void PostProcessPass::endSceneAndComposite(const Window& window, const float fra
     glEnable(GL_DEPTH_TEST);
 }
 
-GLuint PostProcessPass::endSceneAndCompositeToTexture(const Window& window, const float frameTime,
-                                                       GLuint gbufDepthTex,
-                                                       GLuint weatherMaskTex) {
+GLuint PostProcessPass::compositeToTexture(const Window& window, const float frameTime,
+                                           GLuint gbufDepthTex,
+                                           GLuint weatherMaskTex) {
     static_cast<void>(window);
     const int width = std::max(1, m_targetWidth);
     const int height = std::max(1, m_targetHeight);
@@ -251,7 +166,7 @@ GLuint PostProcessPass::endSceneAndCompositeToTexture(const Window& window, cons
     return m_compositeTex;
 }
 
-void PostProcessPass::blitSceneToBackbuffer(const Window& window) {
+void PostProcessPass::blitSceneCaptureToBackbuffer(const Window& window) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 

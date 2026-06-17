@@ -30,10 +30,7 @@ struct UIRenderContext {
     int screenWidth = 0;
     int screenHeight = 0;
 
-    // Legacy scale (deprecated - use scaleConfig instead)
-    float uiScale = 1.0f;
-
-    // New unified scale configuration
+    // Unified scale configuration
     UIScaleConfig scaleConfig;
 
     float timeSeconds = 0.0f;
@@ -79,5 +76,9 @@ struct UIRenderContext {
     // Helper: Get scale for a specific strategy
     [[nodiscard]] float getScaleForStrategy(UIScaleStrategy strategy) const {
         return scaleConfig.getScaleForStrategy(strategy);
+    }
+
+    [[nodiscard]] float pixelScale() const {
+        return scaleConfig.effectiveScale > 0.0f ? scaleConfig.effectiveScale : 1.0f;
     }
 };

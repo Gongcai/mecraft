@@ -18,14 +18,17 @@ bool almostEqual(float a, float b) {
 int main() {
     UIRenderer renderer;
 
-    if (!almostEqual(UIRenderer::computeResponsiveUiScale(1280.0f, 720.0f), 1.0f)) {
-        return fail("reference resolution should use 1x UI scale");
+    const UIScaleConfig hdScale = UIScaleConfig::create(1280.0f, 720.0f, GUIScale::Auto);
+    if (!almostEqual(hdScale.effectiveScale, 1.0f) || hdScale.virtualWidth != 1280 || hdScale.virtualHeight != 720) {
+        return fail("720p auto GUI scale should use 1x virtual coordinates");
     }
-    if (!almostEqual(UIRenderer::computeResponsiveUiScale(640.0f, 360.0f), 0.5f)) {
-        return fail("smaller matching windows should downscale UI");
+    const UIScaleConfig smallScale = UIScaleConfig::create(640.0f, 360.0f, GUIScale::Auto);
+    if (!almostEqual(smallScale.effectiveScale, 0.5f) || smallScale.virtualWidth != 1280 || smallScale.virtualHeight != 720) {
+        return fail("sub-720p auto GUI scale should preserve readable virtual coordinates");
     }
-    if (!almostEqual(UIRenderer::computeResponsiveUiScale(1920.0f, 1080.0f), 1.5f)) {
-        return fail("larger matching windows should upscale UI");
+    const UIScaleConfig normalScale = UIScaleConfig::create(1920.0f, 1080.0f, GUIScale::Normal);
+    if (!almostEqual(normalScale.effectiveScale, 1.0f) || normalScale.virtualWidth != 1920 || normalScale.virtualHeight != 1080) {
+        return fail("explicit normal GUI scale should use 1x coordinates");
     }
 
     // Smoke/API: routing without init should be safe and ignored.
