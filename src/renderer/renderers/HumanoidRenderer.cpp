@@ -7,7 +7,6 @@
 #include <array>
 #include <cassert>
 #include <cmath>
-#include <exception>
 #include <string>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
@@ -75,34 +74,6 @@ glm::mat4 applyMobVisualScale(const glm::mat4& model,
            model;
 }
 
-std::size_t partTypeIndex(const ecs::StevePartType partType) {
-    switch (partType) {
-    case ecs::StevePartType::Torso:
-        return 0;
-    case ecs::StevePartType::Head:
-        return 1;
-    case ecs::StevePartType::RightArm:
-        return 2;
-    case ecs::StevePartType::LeftArm:
-        return 3;
-    case ecs::StevePartType::RightLeg:
-        return 4;
-    case ecs::StevePartType::LeftLeg:
-        return 5;
-    }
-    std::terminate();
-}
-
-std::size_t skinLayoutIndex(const ecs::EntitySkinLayoutKind skinLayout) {
-    switch (skinLayout) {
-    case ecs::EntitySkinLayoutKind::Steve64x64:
-        return 0;
-    case ecs::EntitySkinLayoutKind::Classic64x32:
-        return 1;
-    }
-    std::terminate();
-}
-
 } // anonymous namespace
 
 HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1) {
@@ -114,12 +85,12 @@ HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0,
     };
 }
 
-HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const PartMeshDefinition& definition) const {
+HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition) const {
     PartMesh mesh;
 
     std::array<FaceUvRect, 6> uv{};
     for (std::size_t i = 0; i < uv.size(); ++i) {
-        const PixelRect& rect = definition.faceUvs[i];
+        const renderer::HumanoidSkinPixelRect& rect = definition.faceUvs[i];
         uv[i] = pixelRectToUv(rect.x0, rect.y0, rect.x1, rect.y1);
     }
 
@@ -210,7 +181,8 @@ void HumanoidRenderer::destroyMesh(PartMesh& mesh) {
 
 HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType partType,
                                                               ecs::EntitySkinLayoutKind skinLayout) {
-    return &m_skinLayoutMeshes[skinLayoutIndex(skinLayout)][partTypeIndex(partType)];
+    return &m_skinLayoutMeshes[renderer::humanoidSkinLayoutIndex(skinLayout)]
+                              [renderer::humanoidPartTypeIndex(partType)];
 }
 
 void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
@@ -220,84 +192,7 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
     m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowShader = resourceMgr.getShader("entity_shadow");
 
-    constexpr PartMeshDefinition torso{
-        0.25f, 0.375f, 0.125f, 0.0f,
-        {{{20, 16, 28, 20},
-          {28, 16, 36, 20},
-          {20, 20, 28, 32},
-          {32, 20, 40, 32},
-          {16, 20, 20, 32},
-          {28, 20, 32, 32}}}
-    };
-    constexpr PartMeshDefinition head{
-        0.25f, 0.25f, 0.25f, 0.25f,
-        {{{8, 0, 16, 8},
-          {16, 0, 24, 8},
-          {8, 8, 16, 16},
-          {24, 8, 32, 16},
-          {0, 8, 8, 16},
-          {16, 8, 24, 16}}}
-    };
-    constexpr PartMeshDefinition rightArm{
-        0.125f, 0.375f, 0.125f, -0.375f,
-        {{{44, 16, 48, 20},
-          {48, 16, 52, 20},
-          {44, 20, 48, 32},
-          {52, 20, 56, 32},
-          {40, 20, 44, 32},
-          {48, 20, 52, 32}}}
-    };
-    constexpr PartMeshDefinition leftArm64x64{
-        0.125f, 0.375f, 0.125f, -0.375f,
-        {{{36, 48, 40, 52},
-          {40, 48, 44, 52},
-          {36, 52, 40, 64},
-          {44, 52, 48, 64},
-          {32, 52, 36, 64},
-          {40, 52, 44, 64}}}
-    };
-    constexpr PartMeshDefinition leftArmClassic64x32{
-        0.125f, 0.375f, 0.125f, -0.375f,
-        {{{44, 16, 48, 20},
-          {48, 16, 52, 20},
-          {44, 20, 48, 32},
-          {52, 20, 56, 32},
-          {48, 20, 52, 32},
-          {40, 20, 44, 32}}}
-    };
-    constexpr PartMeshDefinition rightLeg{
-        0.125f, 0.375f, 0.125f, -0.375f,
-        {{{4, 16, 8, 20},
-          {8, 16, 12, 20},
-          {4, 20, 8, 32},
-          {12, 20, 16, 32},
-          {0, 20, 4, 32},
-          {8, 20, 12, 32}}}
-    };
-    constexpr PartMeshDefinition leftLeg64x64{
-        0.125f, 0.375f, 0.125f, -0.375f,
-        {{{20, 48, 24, 52},
-          {24, 48, 28, 52},
-          {20, 52, 24, 64},
-          {28, 52, 32, 64},
-          {16, 52, 20, 64},
-          {24, 52, 28, 64}}}
-    };
-    constexpr PartMeshDefinition leftLegClassic64x32{
-        0.125f, 0.375f, 0.125f, -0.375f,
-        {{{4, 16, 8, 20},
-          {8, 16, 12, 20},
-          {4, 20, 8, 32},
-          {12, 20, 16, 32},
-          {8, 20, 12, 32},
-          {0, 20, 4, 32}}}
-    };
-
-    constexpr std::array<std::array<PartMeshDefinition, kPartTypeCount>, kSkinLayoutCount> skinLayouts{{
-        {{torso, head, rightArm, leftArm64x64, rightLeg, leftLeg64x64}},
-        {{torso, head, rightArm, leftArmClassic64x32, rightLeg, leftLegClassic64x32}}
-    }};
-
+    const renderer::HumanoidSkinLayoutDefinitions& skinLayouts = renderer::humanoidSkinLayoutDefinitions();
     for (std::size_t layout = 0; layout < skinLayouts.size(); ++layout) {
         for (std::size_t part = 0; part < skinLayouts[layout].size(); ++part) {
             m_skinLayoutMeshes[layout][part] = buildPartMesh(skinLayouts[layout][part]);

@@ -10,6 +10,7 @@
 #include <entt/entt.hpp>
 #include "../../ecs/components/Components.h"
 #include "../../ecs/entity/EntitySkinLayout.h"
+#include "HumanoidSkinLayoutCatalog.h"
 
 class Camera;
 class IWorldView;
@@ -78,22 +79,7 @@ private:
         float u0, v0, u1, v1;
     };
 
-    struct PixelRect {
-        float x0, y0, x1, y1;
-    };
-
-    struct PartMeshDefinition {
-        float halfWidth;
-        float halfHeight;
-        float halfDepth;
-        float offsetY;
-        std::array<PixelRect, 6> faceUvs;
-    };
-
-    static constexpr std::size_t kSkinLayoutCount = 2;
-    static constexpr std::size_t kPartTypeCount = 6;
-
-    std::array<std::array<PartMesh, kPartTypeCount>, kSkinLayoutCount> m_skinLayoutMeshes{};
+    std::array<std::array<PartMesh, renderer::kHumanoidPartTypeCount>, renderer::kHumanoidSkinLayoutCount> m_skinLayoutMeshes{};
 
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
@@ -110,7 +96,7 @@ private:
 
     static void destroyMesh(PartMesh& mesh);
 
-    PartMesh buildPartMesh(const PartMeshDefinition& definition) const;
+    PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition) const;
 
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
 

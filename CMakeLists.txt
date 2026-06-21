@@ -181,6 +181,7 @@ set(SRC_RENDERER
         src/renderer/renderers/FirstPersonHeldItemRenderer.cpp
         src/renderer/renderers/GameplaySkyRenderer.cpp
         src/renderer/renderers/HumanoidRenderer.cpp
+        src/renderer/renderers/HumanoidSkinLayoutCatalog.cpp
         src/renderer/renderers/SkyboxRenderer.cpp
 
         # Mesh system
@@ -599,6 +600,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(player_intent_build_system_test tests/player_intent_build_system_test.cpp)
     add_mecraft_test(creative_flight_system_test tests/creative_flight_system_test.cpp)
     add_mecraft_test(entity_skin_layout_test tests/entity_skin_layout_test.cpp)
+    add_mecraft_test(humanoid_skin_layout_catalog_test tests/humanoid_skin_layout_catalog_test.cpp)
     # add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
     add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
     add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
