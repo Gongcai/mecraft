@@ -12,6 +12,7 @@
 
 #include "../../engine/registry/NamespacedId.h"
 #include "../../item/Item.h"
+#include "EntitySkinLayout.h"
 
 namespace ecs {
 
@@ -57,7 +58,7 @@ struct MobEntityDefinition {
     NamespacedId id;
     std::string model = "humanoid";
     std::string textureKey = "zombie";
-    std::string skinLayoutId = "minecraft:steve_64x64";
+    EntitySkinLayoutKind skinLayout = EntitySkinLayoutKind::Steve64x64;
     float visualScale = 1.0f;
     int health = 20;
     int maxHealth = 20;

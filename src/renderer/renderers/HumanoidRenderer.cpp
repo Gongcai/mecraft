@@ -4,9 +4,11 @@
 #include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <cmath>
+#include <exception>
 #include <string>
-#include <string_view>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -59,47 +61,46 @@ void setHurtFlash(Shader& shader, const float value) {
     }
 }
 
-std::string mobTextureKeyForRoot(const entt::registry& reg, const entt::entity root) {
-    if (const auto* visual = reg.try_get<ecs::MobVisualComponent>(root);
-        visual != nullptr && !visual->textureKey.empty()) {
-        return visual->textureKey;
-    }
-    return "zombie";
-}
-
-std::string_view mobSkinLayoutIdForRoot(const entt::registry& reg, const entt::entity root) {
-    if (const auto* visual = reg.try_get<ecs::MobVisualComponent>(root);
-        visual != nullptr && !visual->skinLayoutId.empty()) {
-        return visual->skinLayoutId;
-    }
-    return ecs::EntitySkinLayoutIds::STEVE_64X64;
-}
-
-float mobVisualScaleForRoot(const entt::registry& reg, const entt::entity root) {
-    const auto* visual = reg.try_get<ecs::MobVisualComponent>(root);
-    if (visual == nullptr || visual->scale <= 0.0f) {
-        return 1.0f;
-    }
-    return visual->scale;
-}
-
-glm::mat4 applyMobVisualScale(const entt::registry& reg,
-                              const entt::entity root,
-                              const glm::mat4& model,
+glm::mat4 applyMobVisualScale(const glm::mat4& model,
+                              const glm::vec3& pivot,
                               const float scale) {
+    assert(scale > 0.0f);
     if (std::abs(scale - 1.0f) <= 0.0001f) {
         return model;
-    }
-
-    glm::vec3 pivot(model[3]);
-    if (const auto* transform = reg.try_get<ecs::TransformComponent>(root)) {
-        pivot = transform->position;
     }
 
     return glm::translate(glm::mat4(1.0f), pivot) *
            glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
            glm::translate(glm::mat4(1.0f), -pivot) *
            model;
+}
+
+std::size_t partTypeIndex(const ecs::StevePartType partType) {
+    switch (partType) {
+    case ecs::StevePartType::Torso:
+        return 0;
+    case ecs::StevePartType::Head:
+        return 1;
+    case ecs::StevePartType::RightArm:
+        return 2;
+    case ecs::StevePartType::LeftArm:
+        return 3;
+    case ecs::StevePartType::RightLeg:
+        return 4;
+    case ecs::StevePartType::LeftLeg:
+        return 5;
+    }
+    std::terminate();
+}
+
+std::size_t skinLayoutIndex(const ecs::EntitySkinLayoutKind skinLayout) {
+    switch (skinLayout) {
+    case ecs::EntitySkinLayoutKind::Steve64x64:
+        return 0;
+    case ecs::EntitySkinLayoutKind::Classic64x32:
+        return 1;
+    }
+    std::terminate();
 }
 
 } // anonymous namespace
@@ -113,17 +114,21 @@ HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0,
     };
 }
 
-HumanoidRenderer::PartMesh HumanoidRenderer::buildBoxMesh(float hw, float hh, float hd,
-                                                           float offsetY,
-                                                           const FaceUvRect uv[6]) const {
+HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const PartMeshDefinition& definition) const {
     PartMesh mesh;
 
-    const float ymin = -hh + offsetY;
-    const float ymax =  hh + offsetY;
-    const float xmin = -hw;
-    const float xmax =  hw;
-    const float zmin = -hd;
-    const float zmax =  hd;
+    std::array<FaceUvRect, 6> uv{};
+    for (std::size_t i = 0; i < uv.size(); ++i) {
+        const PixelRect& rect = definition.faceUvs[i];
+        uv[i] = pixelRectToUv(rect.x0, rect.y0, rect.x1, rect.y1);
+    }
+
+    const float ymin = -definition.halfHeight + definition.offsetY;
+    const float ymax =  definition.halfHeight + definition.offsetY;
+    const float xmin = -definition.halfWidth;
+    const float xmax =  definition.halfWidth;
+    const float zmin = -definition.halfDepth;
+    const float zmax =  definition.halfDepth;
 
     struct FaceCorners {
         glm::vec3 pos[4];
@@ -191,239 +196,6 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildBoxMesh(float hw, float hh, fl
     return mesh;
 }
 
-HumanoidRenderer::PartMesh HumanoidRenderer::buildHeadMesh() const {
-    const float hw = 0.25f, hh = 0.25f, hd = 0.25f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(8, 0, 16, 8),
-        pixelRectToUv(16, 0, 24, 8),
-        pixelRectToUv(8, 8, 16, 16),
-        pixelRectToUv(24, 8, 32, 16),
-        pixelRectToUv(0, 8, 8, 16),
-        pixelRectToUv(16, 8, 24, 16)
-    };
-    return buildBoxMesh(hw, hh, hd, hh, uv);
-}
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildTorsoMesh() const {
-    const float hw = 0.25f, hh = 0.375f, hd = 0.125f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(20, 16, 28, 20),
-        pixelRectToUv(28, 16, 36, 20),
-        pixelRectToUv(20, 20, 28, 32),
-        pixelRectToUv(32, 20, 40, 32),
-        pixelRectToUv(16, 20, 20, 32),
-        pixelRectToUv(28, 20, 32, 32)
-    };
-    return buildBoxMesh(hw, hh, hd, 0.0f, uv);
-}
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildRightArmMesh() const {
-    const float hw = 0.125f, hh = 0.375f, hd = 0.125f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(44, 16, 48, 20),
-        pixelRectToUv(48, 16, 52, 20),
-        pixelRectToUv(44, 20, 48, 32),
-        pixelRectToUv(52, 20, 56, 32),
-        pixelRectToUv(40, 20, 44, 32),
-        pixelRectToUv(48, 20, 52, 32)
-    };
-    return buildBoxMesh(hw, hh, hd, -hh, uv);
-}
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildLeftArmMesh() const {
-    const float hw = 0.125f, hh = 0.375f, hd = 0.125f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(36, 48, 40, 52),
-        pixelRectToUv(40, 48, 44, 52),
-        pixelRectToUv(36, 52, 40, 64),
-        pixelRectToUv(44, 52, 48, 64),
-        pixelRectToUv(32, 52, 36, 64),
-        pixelRectToUv(40, 52, 44, 64)
-    };
-    return buildBoxMesh(hw, hh, hd, -hh, uv);
-}
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildRightLegMesh() const {
-    const float hw = 0.125f, hh = 0.375f, hd = 0.125f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(4, 16, 8, 20),
-        pixelRectToUv(8, 16, 12, 20),
-        pixelRectToUv(4, 20, 8, 32),
-        pixelRectToUv(12, 20, 16, 32),
-        pixelRectToUv(0, 20, 4, 32),
-        pixelRectToUv(8, 20, 12, 32)
-    };
-    return buildBoxMesh(hw, hh, hd, -hh, uv);
-}
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildLeftLegMesh() const {
-    const float hw = 0.125f, hh = 0.375f, hd = 0.125f;
-    const FaceUvRect uv[6] = {
-        pixelRectToUv(20, 48, 24, 52),
-        pixelRectToUv(24, 48, 28, 52),
-        pixelRectToUv(20, 52, 24, 64),
-        pixelRectToUv(28, 52, 32, 64),
-        pixelRectToUv(16, 52, 20, 64),
-        pixelRectToUv(24, 52, 28, 64)
-    };
-    return buildBoxMesh(hw, hh, hd, -hh, uv);
-}
-
-// ── Mob mirrored meshes (64x32 skin: left limbs = mirrored right limbs) ──
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildMirroredArmMesh() const {
-    // Mirror of right arm: X negated, UV left/right faces swapped.
-    // Negating X automatically reverses winding → normals stay outward.
-    PartMesh mesh;
-
-    const float hw = 0.125f, hh = 0.375f, hd = 0.125f;
-    const float offsetY = -hh;
-    const float ymin = -hh + offsetY;
-    const float ymax =  hh + offsetY;
-
-    // Right arm UV (same pixel regions as player right arm)
-    const FaceUvRect rightArmUv[6] = {
-        pixelRectToUv(44, 16, 48, 20),   // top
-        pixelRectToUv(48, 16, 52, 20),   // bottom
-        pixelRectToUv(44, 20, 48, 32),   // front
-        pixelRectToUv(52, 20, 56, 32),   // back
-        pixelRectToUv(40, 20, 44, 32),   // left(-X) → becomes right face after mirror
-        pixelRectToUv(48, 20, 52, 32)    // right(+X) → becomes left face after mirror
-    };
-
-    // UV with left/right swapped for the mirrored mesh
-    const FaceUvRect uv[6] = {
-        rightArmUv[0], rightArmUv[1], rightArmUv[2], rightArmUv[3],
-        rightArmUv[5], rightArmUv[4]   // swapped: left←right, right←left
-    };
-
-    // X-negated face corners — same winding order as original (negate X auto-reverses winding)
-    struct FaceCorners { glm::vec3 pos[4]; };
-    const FaceCorners faces[6] = {
-        {{{-hw, ymax,  hd}, { hw, ymax,  hd}, { hw, ymax, -hd}, {-hw, ymax, -hd}}},  // top
-        {{{-hw, ymin, -hd}, { hw, ymin, -hd}, { hw, ymin,  hd}, {-hw, ymin,  hd}}},  // bottom
-        {{{-hw, ymin,  hd}, { hw, ymin,  hd}, { hw, ymax,  hd}, {-hw, ymax,  hd}}},  // front
-        {{{ hw, ymin, -hd}, {-hw, ymin, -hd}, {-hw, ymax, -hd}, { hw, ymax, -hd}}},  // back
-        {{{-hw, ymin, -hd}, {-hw, ymin,  hd}, {-hw, ymax,  hd}, {-hw, ymax, -hd}}},  // left → now right(+X)
-        {{{ hw, ymin,  hd}, { hw, ymin, -hd}, { hw, ymax, -hd}, { hw, ymax,  hd}}}   // right → now left(-X)
-    };
-
-    std::vector<SteveVertex> vertices;
-    vertices.reserve(36);
-
-    for (int f = 0; f < 6; ++f) {
-        const glm::vec2 faceUvs[4] = {
-            {uv[f].u0, uv[f].v0},
-            {uv[f].u1, uv[f].v0},
-            {uv[f].u1, uv[f].v1},
-            {uv[f].u0, uv[f].v1}
-        };
-        for (int idx : kQuadIndices) {
-            const auto& p = faces[f].pos[idx];
-            const auto& t = faceUvs[idx];
-            const auto& n = kFaceNormals[f];
-            vertices.push_back({p.x, p.y, p.z, t.x, t.y, n.x, n.y, n.z});
-        }
-    }
-
-    mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(SteveVertex)),
-                 vertices.data(), GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    return mesh;
-}
-
-HumanoidRenderer::PartMesh HumanoidRenderer::buildMirroredLegMesh() const {
-    // Mirror of right leg: X negated, UV left/right faces swapped.
-    // Negating X automatically reverses winding → normals stay outward.
-    PartMesh mesh;
-
-    const float hw = 0.125f, hh = 0.375f, hd = 0.125f;
-    const float offsetY = -hh;
-    const float ymin = -hh + offsetY;
-    const float ymax =  hh + offsetY;
-
-    const FaceUvRect rightLegUv[6] = {
-        pixelRectToUv(4, 16, 8, 20),
-        pixelRectToUv(8, 16, 12, 20),
-        pixelRectToUv(4, 20, 8, 32),
-        pixelRectToUv(12, 20, 16, 32),
-        pixelRectToUv(0, 20, 4, 32),
-        pixelRectToUv(8, 20, 12, 32)
-    };
-
-    const FaceUvRect uv[6] = {
-        rightLegUv[0], rightLegUv[1], rightLegUv[2], rightLegUv[3],
-        rightLegUv[5], rightLegUv[4]
-    };
-
-    struct FaceCorners { glm::vec3 pos[4]; };
-    const FaceCorners faces[6] = {
-        {{{-hw, ymax,  hd}, { hw, ymax,  hd}, { hw, ymax, -hd}, {-hw, ymax, -hd}}},
-        {{{-hw, ymin, -hd}, { hw, ymin, -hd}, { hw, ymin,  hd}, {-hw, ymin,  hd}}},
-        {{{-hw, ymin,  hd}, { hw, ymin,  hd}, { hw, ymax,  hd}, {-hw, ymax,  hd}}},
-        {{{ hw, ymin, -hd}, {-hw, ymin, -hd}, {-hw, ymax, -hd}, { hw, ymax, -hd}}},
-        {{{-hw, ymin, -hd}, {-hw, ymin,  hd}, {-hw, ymax,  hd}, {-hw, ymax, -hd}}},
-        {{{ hw, ymin,  hd}, { hw, ymin, -hd}, { hw, ymax, -hd}, { hw, ymax,  hd}}}
-    };
-
-    std::vector<SteveVertex> vertices;
-    vertices.reserve(36);
-
-    for (int f = 0; f < 6; ++f) {
-        const glm::vec2 faceUvs[4] = {
-            {uv[f].u0, uv[f].v0},
-            {uv[f].u1, uv[f].v0},
-            {uv[f].u1, uv[f].v1},
-            {uv[f].u0, uv[f].v1}
-        };
-        for (int idx : kQuadIndices) {
-            const auto& p = faces[f].pos[idx];
-            const auto& t = faceUvs[idx];
-            const auto& n = kFaceNormals[f];
-            vertices.push_back({p.x, p.y, p.z, t.x, t.y, n.x, n.y, n.z});
-        }
-    }
-
-    mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(SteveVertex)),
-                 vertices.data(), GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    return mesh;
-}
-
 void HumanoidRenderer::destroyMesh(PartMesh& mesh) {
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
@@ -437,19 +209,8 @@ void HumanoidRenderer::destroyMesh(PartMesh& mesh) {
 }
 
 HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType partType,
-                                                              std::string_view skinLayoutId) {
-    const bool mirrorLeftLimbs = ecs::entitySkinLayoutUsesMirroredLeftLimbs(skinLayoutId);
-    switch (partType) {
-    case ecs::StevePartType::Torso:     return &m_torsoMesh;
-    case ecs::StevePartType::Head:      return &m_headMesh;
-    case ecs::StevePartType::RightArm:  return &m_rightArmMesh;
-    case ecs::StevePartType::RightLeg:  return &m_rightLegMesh;
-    case ecs::StevePartType::LeftArm:
-        return mirrorLeftLimbs ? &m_mobLeftArmMesh : &m_leftArmMesh;
-    case ecs::StevePartType::LeftLeg:
-        return mirrorLeftLimbs ? &m_mobLeftLegMesh : &m_leftLegMesh;
-    default: return nullptr;
-    }
+                                                              ecs::EntitySkinLayoutKind skinLayout) {
+    return &m_skinLayoutMeshes[skinLayoutIndex(skinLayout)][partTypeIndex(partType)];
 }
 
 void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
@@ -459,28 +220,97 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
     m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowShader = resourceMgr.getShader("entity_shadow");
 
-    // Player meshes (64x64 skin)
-    m_headMesh = buildHeadMesh();
-    m_torsoMesh = buildTorsoMesh();
-    m_rightArmMesh = buildRightArmMesh();
-    m_leftArmMesh = buildLeftArmMesh();
-    m_rightLegMesh = buildRightLegMesh();
-    m_leftLegMesh = buildLeftLegMesh();
+    constexpr PartMeshDefinition torso{
+        0.25f, 0.375f, 0.125f, 0.0f,
+        {{{20, 16, 28, 20},
+          {28, 16, 36, 20},
+          {20, 20, 28, 32},
+          {32, 20, 40, 32},
+          {16, 20, 20, 32},
+          {28, 20, 32, 32}}}
+    };
+    constexpr PartMeshDefinition head{
+        0.25f, 0.25f, 0.25f, 0.25f,
+        {{{8, 0, 16, 8},
+          {16, 0, 24, 8},
+          {8, 8, 16, 16},
+          {24, 8, 32, 16},
+          {0, 8, 8, 16},
+          {16, 8, 24, 16}}}
+    };
+    constexpr PartMeshDefinition rightArm{
+        0.125f, 0.375f, 0.125f, -0.375f,
+        {{{44, 16, 48, 20},
+          {48, 16, 52, 20},
+          {44, 20, 48, 32},
+          {52, 20, 56, 32},
+          {40, 20, 44, 32},
+          {48, 20, 52, 32}}}
+    };
+    constexpr PartMeshDefinition leftArm64x64{
+        0.125f, 0.375f, 0.125f, -0.375f,
+        {{{36, 48, 40, 52},
+          {40, 48, 44, 52},
+          {36, 52, 40, 64},
+          {44, 52, 48, 64},
+          {32, 52, 36, 64},
+          {40, 52, 44, 64}}}
+    };
+    constexpr PartMeshDefinition leftArmClassic64x32{
+        0.125f, 0.375f, 0.125f, -0.375f,
+        {{{44, 16, 48, 20},
+          {48, 16, 52, 20},
+          {44, 20, 48, 32},
+          {52, 20, 56, 32},
+          {48, 20, 52, 32},
+          {40, 20, 44, 32}}}
+    };
+    constexpr PartMeshDefinition rightLeg{
+        0.125f, 0.375f, 0.125f, -0.375f,
+        {{{4, 16, 8, 20},
+          {8, 16, 12, 20},
+          {4, 20, 8, 32},
+          {12, 20, 16, 32},
+          {0, 20, 4, 32},
+          {8, 20, 12, 32}}}
+    };
+    constexpr PartMeshDefinition leftLeg64x64{
+        0.125f, 0.375f, 0.125f, -0.375f,
+        {{{20, 48, 24, 52},
+          {24, 48, 28, 52},
+          {20, 52, 24, 64},
+          {28, 52, 32, 64},
+          {16, 52, 20, 64},
+          {24, 52, 28, 64}}}
+    };
+    constexpr PartMeshDefinition leftLegClassic64x32{
+        0.125f, 0.375f, 0.125f, -0.375f,
+        {{{4, 16, 8, 20},
+          {8, 16, 12, 20},
+          {4, 20, 8, 32},
+          {12, 20, 16, 32},
+          {8, 20, 12, 32},
+          {0, 20, 4, 32}}}
+    };
 
-    // Mob meshes (64x32 skin — left limbs are mirrored right limbs)
-    m_mobLeftArmMesh = buildMirroredArmMesh();
-    m_mobLeftLegMesh = buildMirroredLegMesh();
+    constexpr std::array<std::array<PartMeshDefinition, kPartTypeCount>, kSkinLayoutCount> skinLayouts{{
+        {{torso, head, rightArm, leftArm64x64, rightLeg, leftLeg64x64}},
+        {{torso, head, rightArm, leftArmClassic64x32, rightLeg, leftLegClassic64x32}}
+    }};
+
+    for (std::size_t layout = 0; layout < skinLayouts.size(); ++layout) {
+        for (std::size_t part = 0; part < skinLayouts[layout].size(); ++part) {
+            m_skinLayoutMeshes[layout][part] = buildPartMesh(skinLayouts[layout][part]);
+        }
+    }
 }
 
 void HumanoidRenderer::shutdown() {
-    destroyMesh(m_headMesh);
-    destroyMesh(m_torsoMesh);
-    destroyMesh(m_rightArmMesh);
-    destroyMesh(m_leftArmMesh);
-    destroyMesh(m_rightLegMesh);
-    destroyMesh(m_leftLegMesh);
-    destroyMesh(m_mobLeftArmMesh);
-    destroyMesh(m_mobLeftLegMesh);
+    for (auto& layoutMeshes : m_skinLayoutMeshes) {
+        for (PartMesh& mesh : layoutMeshes) {
+            destroyMesh(mesh);
+        }
+    }
     if (m_fallbackShadowDepth != 0) {
         glDeleteTextures(1, &m_fallbackShadowDepth);
         m_fallbackShadowDepth = 0;
@@ -642,7 +472,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     glBindTexture(GL_TEXTURE_2D, steveTex);
 
     const auto drawPart = [&](ecs::StevePartType partType, const glm::mat4& model) {
-        PartMesh* mesh = getMeshForPart(partType, ecs::EntitySkinLayoutIds::STEVE_64X64);
+        PartMesh* mesh = getMeshForPart(partType, ecs::EntitySkinLayoutKind::Steve64x64);
         if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
             return;
         }
@@ -713,7 +543,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
                 auto& world = reg.get<ecs::WorldTransformComponent>(child);
                 PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                                ecs::EntitySkinLayoutIds::STEVE_64X64);
+                                                ecs::EntitySkinLayoutKind::Steve64x64);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
                 if (prevModelLoc >= 0) {
@@ -738,7 +568,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                     auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                     PartMesh* mesh = getMeshForPart(part.partType,
-                                                    ecs::EntitySkinLayoutIds::STEVE_64X64);
+                                                    ecs::EntitySkinLayoutKind::Steve64x64);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
                     if (prevModelLoc >= 0) {
@@ -756,9 +586,14 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
     // ── Render Mob entities ──
     GLuint boundMobTex = 0;
-    auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
+    auto mobView = reg.view<ecs::MobTag,
+                            ecs::ChildrenComponent,
+                            ecs::MobVisualComponent,
+                            ecs::TransformComponent>();
     for (auto mobRoot : mobView) {
-        const GLuint mobTex = m_resourceMgr->getGuiTexture(mobTextureKeyForRoot(reg, mobRoot));
+        const auto& visual = mobView.get<ecs::MobVisualComponent>(mobRoot);
+        const auto& rootTransform = mobView.get<ecs::TransformComponent>(mobRoot);
+        const GLuint mobTex = m_resourceMgr->getGuiTexture(visual.textureKey);
         if (mobTex == 0) {
             continue;
         }
@@ -768,8 +603,6 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
         }
 
         setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
-        const std::string_view mobSkinLayoutId = mobSkinLayoutIdForRoot(reg, mobRoot);
-        const float mobVisualScale = mobVisualScaleForRoot(reg, mobRoot);
         auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
         // Torso
@@ -780,10 +613,12 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
             auto& world = reg.get<ecs::WorldTransformComponent>(child);
             PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                            mobSkinLayoutId);
+                                            visual.skinLayout);
             if (mesh == nullptr || mesh->vao == 0) continue;
 
-            const glm::mat4 model = applyMobVisualScale(reg, mobRoot, world.worldMatrix, mobVisualScale);
+            const glm::mat4 model = applyMobVisualScale(world.worldMatrix,
+                                                        rootTransform.position,
+                                                        visual.scale);
 
             if (prevModelLoc >= 0) {
                 auto it = m_previousModelMatrices.find(child);
@@ -807,10 +642,12 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                 auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                 PartMesh* mesh = getMeshForPart(part.partType,
-                                                mobSkinLayoutId);
+                                                visual.skinLayout);
                 if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
-                const glm::mat4 model = applyMobVisualScale(reg, mobRoot, world.worldMatrix, mobVisualScale);
+                const glm::mat4 model = applyMobVisualScale(world.worldMatrix,
+                                                            rootTransform.position,
+                                                            visual.scale);
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(partEntity);
@@ -892,7 +729,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
                 auto& wt = reg.get<ecs::WorldTransformComponent>(child);
                 PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                                ecs::EntitySkinLayoutIds::STEVE_64X64);
+                                                ecs::EntitySkinLayoutKind::Steve64x64);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
                 if (prevModelLoc >= 0) {
@@ -917,7 +754,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
                     auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                     PartMesh* mesh = getMeshForPart(part.partType,
-                                                    ecs::EntitySkinLayoutIds::STEVE_64X64);
+                                                    ecs::EntitySkinLayoutKind::Steve64x64);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
                     if (prevModelLoc >= 0) {
@@ -935,9 +772,14 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
     // ── Render Mob entities ──
     GLuint boundMobTex = 0;
-    auto mobView = reg.view<ecs::MobTag, ecs::ChildrenComponent>();
+    auto mobView = reg.view<ecs::MobTag,
+                            ecs::ChildrenComponent,
+                            ecs::MobVisualComponent,
+                            ecs::TransformComponent>();
     for (auto mobRoot : mobView) {
-        const GLuint mobTex = m_resourceMgr->getGuiTexture(mobTextureKeyForRoot(reg, mobRoot));
+        const auto& visual = mobView.get<ecs::MobVisualComponent>(mobRoot);
+        const auto& rootTransform = mobView.get<ecs::TransformComponent>(mobRoot);
+        const GLuint mobTex = m_resourceMgr->getGuiTexture(visual.textureKey);
         if (mobTex == 0) {
             continue;
         }
@@ -947,8 +789,6 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
         }
 
         setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
-        const std::string_view mobSkinLayoutId = mobSkinLayoutIdForRoot(reg, mobRoot);
-        const float mobVisualScale = mobVisualScaleForRoot(reg, mobRoot);
         auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
         // Query world light at torso position for this entity.
@@ -983,10 +823,12 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
             auto& wt = reg.get<ecs::WorldTransformComponent>(child);
             PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                            mobSkinLayoutId);
+                                            visual.skinLayout);
             if (mesh == nullptr || mesh->vao == 0) continue;
 
-            const glm::mat4 model = applyMobVisualScale(reg, mobRoot, wt.worldMatrix, mobVisualScale);
+            const glm::mat4 model = applyMobVisualScale(wt.worldMatrix,
+                                                        rootTransform.position,
+                                                        visual.scale);
 
             if (prevModelLoc >= 0) {
                 auto it = m_previousModelMatrices.find(child);
@@ -1010,10 +852,12 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
                 auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                 PartMesh* mesh = getMeshForPart(part.partType,
-                                                mobSkinLayoutId);
+                                                visual.skinLayout);
                 if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
-                const glm::mat4 model = applyMobVisualScale(reg, mobRoot, wt.worldMatrix, mobVisualScale);
+                const glm::mat4 model = applyMobVisualScale(wt.worldMatrix,
+                                                            rootTransform.position,
+                                                            visual.scale);
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(partEntity);

@@ -497,7 +497,6 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
 
     ecs::PlayerQuery query(reg);
     auto steveRoot = ecs::SteveModelFactory::createSteve(reg, query.getPosition());
-    reg.emplace<ecs::SkinTypeComponent>(steveRoot, ecs::SkinTypeComponent::Type::Player);
     auto playerView = reg.view<ecs::LocalPlayerTag, ecs::TransformComponent>();
     for (auto e : playerView) {
         auto& playerTransform = reg.get<ecs::TransformComponent>(e);

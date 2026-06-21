@@ -2,7 +2,6 @@
 
 #include "../../Diagnostics.h"
 #include "EntityDefinitionRegistry.h"
-#include "EntitySkinLayout.h"
 #include "MobModelFactory.h"
 #include "../components/Components.h"
 #include "../components/NetworkComponents.h"
@@ -47,7 +46,7 @@ void applyMobDefinition(GameplayRegistry& registry,
     }
     visual->model = definition.model;
     visual->textureKey = definition.textureKey;
-    visual->skinLayoutId = normalizeEntitySkinLayoutId(definition.skinLayoutId);
+    visual->skinLayout = definition.skinLayout;
     visual->scale = definition.visualScale;
 
     if (auto* health = reg.try_get<HealthComponent>(entity)) {
@@ -212,7 +211,6 @@ entt::entity EntityFactory::createZombie(GameplayRegistry& registry, const glm::
 entt::entity EntityFactory::createZombie(entt::registry& registry, const glm::vec3& position) {
     const entt::entity zombie = registry.create();
     registry.emplace<MobTag>(zombie);
-    registry.emplace<SkinTypeComponent>(zombie, SkinTypeComponent::Type::Mob);
     registry.emplace<MobVisualComponent>(zombie);
     registry.emplace<TransformComponent>(zombie, position, 1.62f);
     registry.emplace<MobAIComponent>(zombie);

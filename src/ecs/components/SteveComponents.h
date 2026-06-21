@@ -7,12 +7,9 @@
 #include <entt/entity/entity.hpp>
 #include <glm/glm.hpp>
 
-namespace ecs {
+#include "../entity/EntitySkinLayout.h"
 
-struct SkinTypeComponent {
-    enum class Type : uint8_t { Player, Mob };
-    Type type = Type::Player;
-};
+namespace ecs {
 
 struct MobAIComponent {
     enum class State : uint8_t {
@@ -41,7 +38,7 @@ struct MobAIComponent {
 struct MobVisualComponent {
     std::string model = "humanoid";
     std::string textureKey = "zombie";
-    std::string skinLayoutId = "minecraft:steve_64x64";
+    EntitySkinLayoutKind skinLayout = EntitySkinLayoutKind::Steve64x64;
     float scale = 1.0f;
 };
 

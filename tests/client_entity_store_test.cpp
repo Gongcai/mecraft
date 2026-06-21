@@ -215,7 +215,7 @@ static void testMobSpawnCreatesZombieReplica() {
     const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
     require(visual.model == "humanoid" &&
             visual.textureKey == "zombie" &&
-            visual.skinLayoutId == "minecraft:steve_64x64" &&
+            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
             std::fabs(visual.scale - 1.0f) < 0.001f,
             "mob replica should apply configured visual data");
     require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
@@ -351,7 +351,7 @@ static void testMobSpawnCreatesConfiguredHerobrineReplica() {
             "herobrine replica should keep the network entity id");
     require(visual.model == "humanoid" &&
             visual.textureKey == "herobrine" &&
-            visual.skinLayoutId == "minecraft:steve_64x64" &&
+            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
             std::fabs(visual.scale - 1.0f) < 0.001f,
             "herobrine replica should apply configured visual data");
     require(health.current == 40 && health.max == 40,

@@ -1,6 +1,5 @@
 #include "EntityDefinitionRegistry.h"
 
-#include "EntitySkinLayout.h"
 #include "../../Paths.h"
 
 #include <algorithm>
@@ -330,15 +329,21 @@ bool parseMobDefinition(const json& node,
     }
 
     std::string id;
+    std::string skinLayoutId;
     if (!readString(node, "id", id, context, error, true) ||
         !readString(node, "model", definition.model, context, error, true) ||
         !readString(node, "texture", definition.textureKey, context, error) ||
-        !readString(node, "skinLayout", definition.skinLayoutId, context, error) ||
+        !readString(node, "skinLayout", skinLayoutId, context, error, true) ||
         !readFloat(node, "scale", definition.visualScale, context, error)) {
         return false;
     }
     definition.id = NamespacedId(id);
-    definition.skinLayoutId = normalizeEntitySkinLayoutId(definition.skinLayoutId);
+    const std::optional<EntitySkinLayoutKind> skinLayout = tryParseEntitySkinLayoutId(skinLayoutId);
+    if (!skinLayout.has_value()) {
+        setError(error, context + ".skinLayout is unsupported: " + skinLayoutId);
+        return false;
+    }
+    definition.skinLayout = *skinLayout;
     if (definition.visualScale <= 0.0f) {
         setError(error, context + ".scale must be positive");
         return false;

@@ -1,13 +1,15 @@
 #ifndef MECRAFT_HUMANOID_RENDERER_H
 #define MECRAFT_HUMANOID_RENDERER_H
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <string_view>
 #include <unordered_map>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include "../../ecs/components/Components.h"
+#include "../../ecs/entity/EntitySkinLayout.h"
 
 class Camera;
 class IWorldView;
@@ -76,20 +78,22 @@ private:
         float u0, v0, u1, v1;
     };
 
-    // ── Player (64x64) meshes ──
-    PartMesh m_torsoMesh;
-    PartMesh m_headMesh;
-    PartMesh m_rightArmMesh;
-    PartMesh m_leftArmMesh;
-    PartMesh m_rightLegMesh;
-    PartMesh m_leftLegMesh;
+    struct PixelRect {
+        float x0, y0, x1, y1;
+    };
 
-    // ── Mob (64x32) meshes ──
-    // Head and torso share the same UV layout as player.
-    // Right arm/leg use the same pixel coords as player.
-    // Left arm/leg are mirrored copies of right arm/leg.
-    PartMesh m_mobLeftArmMesh;
-    PartMesh m_mobLeftLegMesh;
+    struct PartMeshDefinition {
+        float halfWidth;
+        float halfHeight;
+        float halfDepth;
+        float offsetY;
+        std::array<PixelRect, 6> faceUvs;
+    };
+
+    static constexpr std::size_t kSkinLayoutCount = 2;
+    static constexpr std::size_t kPartTypeCount = 6;
+
+    std::array<std::array<PartMesh, kPartTypeCount>, kSkinLayoutCount> m_skinLayoutMeshes{};
 
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
@@ -106,26 +110,11 @@ private:
 
     static void destroyMesh(PartMesh& mesh);
 
-    PartMesh buildBoxMesh(float hw, float hh, float hd,
-                          float offsetY,
-                          const FaceUvRect uv[6]) const;
-
-    // Player mesh builders (64x64 skin layout)
-    PartMesh buildHeadMesh() const;
-    PartMesh buildTorsoMesh() const;
-    PartMesh buildRightArmMesh() const;
-    PartMesh buildLeftArmMesh() const;
-    PartMesh buildRightLegMesh() const;
-    PartMesh buildLeftLegMesh() const;
-
-    // Mob mirrored mesh builders (64x32 skin layout)
-    // Left arm/leg = right arm/leg with X-flip and UV left/right face swap
-    PartMesh buildMirroredArmMesh() const;
-    PartMesh buildMirroredLegMesh() const;
+    PartMesh buildPartMesh(const PartMeshDefinition& definition) const;
 
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
 
-    PartMesh* getMeshForPart(ecs::StevePartType partType, std::string_view skinLayoutId);
+    PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     void ensureShadowFallbackTextures();
     void bindDisabledShadowFallback(Shader& shader);
 

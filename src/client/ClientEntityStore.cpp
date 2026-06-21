@@ -4,7 +4,6 @@
 #include "../ecs/entity/SteveModelFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/entity/EntityDefinitionRegistry.h"
-#include "../ecs/entity/EntitySkinLayout.h"
 #include "../ecs/util/AudioEventBuffer.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../ecs/util/ProjectileDefinitions.h"
@@ -102,7 +101,7 @@ void applyMobVisual(entt::registry& registry,
     if (definition != nullptr) {
         visual->model = definition->model;
         visual->textureKey = definition->textureKey;
-        visual->skinLayoutId = ecs::normalizeEntitySkinLayoutId(definition->skinLayoutId);
+        visual->skinLayout = definition->skinLayout;
         visual->scale = definition->visualScale;
     }
 }
@@ -565,7 +564,6 @@ void ClientEntityStore::createPlayerEntity(const net::EntitySpawnMessage& msg) {
     entt::entity entity = entt::null;
     if (m_gameplayRegistry) {
         entity = ecs::SteveModelFactory::createSteve(*m_gameplayRegistry, msg.position);
-        m_registry->emplace<ecs::SkinTypeComponent>(entity, ecs::SkinTypeComponent::Type::Player);
         if (auto* camera = m_registry->try_get<ecs::CameraStateComponent>(entity)) {
             camera->yaw = msg.yaw;
             camera->pitch = msg.pitch;

@@ -13,7 +13,6 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
     // Root entity: feet anchor
     auto root = reg.create();
     reg.emplace<MobTag>(root);
-    reg.emplace<SkinTypeComponent>(root, SkinTypeComponent::Type::Mob);
     reg.emplace<MobVisualComponent>(root);
     reg.emplace<TransformComponent>(root, worldPosition, 1.62f);
     reg.emplace<SteveAnimationStateComponent>(root);
