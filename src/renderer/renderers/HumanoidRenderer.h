@@ -96,9 +96,12 @@ private:
 
     static void destroyMesh(PartMesh& mesh);
 
-    PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition) const;
+    PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
+                           float textureWidth,
+                           float textureHeight) const;
 
-    static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
+    static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1,
+                                    float textureWidth, float textureHeight);
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     void ensureShadowFallbackTextures();

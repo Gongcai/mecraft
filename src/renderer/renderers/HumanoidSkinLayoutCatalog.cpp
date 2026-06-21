@@ -45,7 +45,7 @@ constexpr HumanoidPartMeshDefinition leftArm64x64{
       {40, 52, 44, 64}}}
 };
 
-constexpr HumanoidPartMeshDefinition leftArmClassic64x32{
+constexpr HumanoidPartMeshDefinition leftArmClassicMirrored{
     0.125f, 0.375f, 0.125f, -0.375f,
     {{{44, 16, 48, 20},
       {48, 16, 52, 20},
@@ -75,7 +75,7 @@ constexpr HumanoidPartMeshDefinition leftLeg64x64{
       {24, 52, 28, 64}}}
 };
 
-constexpr HumanoidPartMeshDefinition leftLegClassic64x32{
+constexpr HumanoidPartMeshDefinition leftLegClassicMirrored{
     0.125f, 0.375f, 0.125f, -0.375f,
     {{{4, 16, 8, 20},
       {8, 16, 12, 20},
@@ -86,8 +86,9 @@ constexpr HumanoidPartMeshDefinition leftLegClassic64x32{
 };
 
 constexpr HumanoidSkinLayoutDefinitions kSkinLayouts{{
-    {{torso, head, rightArm, leftArm64x64, rightLeg, leftLeg64x64}},
-    {{torso, head, rightArm, leftArmClassic64x32, rightLeg, leftLegClassic64x32}}
+    {64.0f, 64.0f, {{torso, head, rightArm, leftArm64x64, rightLeg, leftLeg64x64}}},
+    {64.0f, 64.0f, {{torso, head, rightArm, leftArmClassicMirrored, rightLeg, leftLegClassicMirrored}}},
+    {64.0f, 32.0f, {{torso, head, rightArm, leftArmClassicMirrored, rightLeg, leftLegClassicMirrored}}}
 }};
 
 } // namespace
@@ -114,8 +115,10 @@ std::size_t humanoidSkinLayoutIndex(const ecs::EntitySkinLayoutKind skinLayout) 
     switch (skinLayout) {
     case ecs::EntitySkinLayoutKind::Steve64x64:
         return 0;
-    case ecs::EntitySkinLayoutKind::Classic64x32:
+    case ecs::EntitySkinLayoutKind::Classic64x64:
         return 1;
+    case ecs::EntitySkinLayoutKind::Classic64x32:
+        return 2;
     }
     std::terminate();
 }

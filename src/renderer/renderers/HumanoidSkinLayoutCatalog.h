@@ -4,7 +4,7 @@
 #include <array>
 #include <cstddef>
 
-#include "../../ecs/components/Components.h"
+#include "../../ecs/components/SteveComponents.h"
 #include "../../ecs/entity/EntitySkinLayout.h"
 
 namespace renderer {
@@ -24,11 +24,18 @@ struct HumanoidPartMeshDefinition {
     std::array<HumanoidSkinPixelRect, 6> faceUvs;
 };
 
-inline constexpr std::size_t kHumanoidSkinLayoutCount = 2;
+inline constexpr std::size_t kHumanoidSkinLayoutCount = 3;
 inline constexpr std::size_t kHumanoidPartTypeCount = 6;
 
 using HumanoidPartDefinitions = std::array<HumanoidPartMeshDefinition, kHumanoidPartTypeCount>;
-using HumanoidSkinLayoutDefinitions = std::array<HumanoidPartDefinitions, kHumanoidSkinLayoutCount>;
+
+struct HumanoidSkinLayoutDefinition {
+    float textureWidth;
+    float textureHeight;
+    HumanoidPartDefinitions parts;
+};
+
+using HumanoidSkinLayoutDefinitions = std::array<HumanoidSkinLayoutDefinition, kHumanoidSkinLayoutCount>;
 
 [[nodiscard]] std::size_t humanoidPartTypeIndex(ecs::StevePartType partType);
 [[nodiscard]] std::size_t humanoidSkinLayoutIndex(ecs::EntitySkinLayoutKind skinLayout);

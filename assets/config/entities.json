@@ -5,7 +5,7 @@
       "kind": "mob",
       "model": "humanoid",
       "texture": "zombie",
-      "skinLayout": "minecraft:steve_64x64",
+      "skinLayout": "minecraft:classic_64x64",
       "scale": 1.0,
       "health": {
         "current": 20,

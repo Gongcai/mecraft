@@ -24,9 +24,6 @@
 #include "../../world/chunk/Chunk.h"
 
 namespace {
-constexpr float SKIN_W = 64.0f;
-constexpr float SKIN_H = 64.0f;
-
 constexpr unsigned int kQuadIndices[] = {0, 1, 2, 0, 2, 3};
 
 constexpr glm::vec3 kFaceNormals[] = {
@@ -76,22 +73,25 @@ glm::mat4 applyMobVisualScale(const glm::mat4& model,
 
 } // anonymous namespace
 
-HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1) {
+HumanoidRenderer::FaceUvRect HumanoidRenderer::pixelRectToUv(float x0, float y0, float x1, float y1,
+                                                             float textureWidth, float textureHeight) {
     return {
-        x0 / SKIN_W,
-        1.0f - y1 / SKIN_H,
-        x1 / SKIN_W,
-        1.0f - y0 / SKIN_H
+        x0 / textureWidth,
+        1.0f - y1 / textureHeight,
+        x1 / textureWidth,
+        1.0f - y0 / textureHeight
     };
 }
 
-HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition) const {
+HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
+                                                           const float textureWidth,
+                                                           const float textureHeight) const {
     PartMesh mesh;
 
     std::array<FaceUvRect, 6> uv{};
     for (std::size_t i = 0; i < uv.size(); ++i) {
         const renderer::HumanoidSkinPixelRect& rect = definition.faceUvs[i];
-        uv[i] = pixelRectToUv(rect.x0, rect.y0, rect.x1, rect.y1);
+        uv[i] = pixelRectToUv(rect.x0, rect.y0, rect.x1, rect.y1, textureWidth, textureHeight);
     }
 
     const float ymin = -definition.halfHeight + definition.offsetY;
@@ -194,8 +194,11 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
 
     const renderer::HumanoidSkinLayoutDefinitions& skinLayouts = renderer::humanoidSkinLayoutDefinitions();
     for (std::size_t layout = 0; layout < skinLayouts.size(); ++layout) {
-        for (std::size_t part = 0; part < skinLayouts[layout].size(); ++part) {
-            m_skinLayoutMeshes[layout][part] = buildPartMesh(skinLayouts[layout][part]);
+        const renderer::HumanoidSkinLayoutDefinition& skinLayout = skinLayouts[layout];
+        for (std::size_t part = 0; part < skinLayout.parts.size(); ++part) {
+            m_skinLayoutMeshes[layout][part] = buildPartMesh(skinLayout.parts[part],
+                                                             skinLayout.textureWidth,
+                                                             skinLayout.textureHeight);
         }
     }
 }

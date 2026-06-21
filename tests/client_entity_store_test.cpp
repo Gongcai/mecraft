@@ -215,7 +215,7 @@ static void testMobSpawnCreatesZombieReplica() {
     const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
     require(visual.model == "humanoid" &&
             visual.textureKey == "zombie" &&
-            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:steve_64x64" &&
+            ecs::entitySkinLayoutId(visual.skinLayout) == "minecraft:classic_64x64" &&
             std::fabs(visual.scale - 1.0f) < 0.001f,
             "mob replica should apply configured visual data");
     require(!raw.all_of<ecs::MoveIntentComponent>(mob), "mob replica should not run local AI movement");
