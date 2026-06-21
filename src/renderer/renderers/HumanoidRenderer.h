@@ -2,6 +2,7 @@
 #define MECRAFT_HUMANOID_RENDERER_H
 
 #include <cstdint>
+#include <string_view>
 #include <unordered_map>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
@@ -124,7 +125,7 @@ private:
 
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1);
 
-    PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::SkinTypeComponent::Type skinType);
+    PartMesh* getMeshForPart(ecs::StevePartType partType, std::string_view skinLayoutId);
     void ensureShadowFallbackTextures();
     void bindDisabledShadowFallback(Shader& shader);
 

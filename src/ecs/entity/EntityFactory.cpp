@@ -2,6 +2,7 @@
 
 #include "../../Diagnostics.h"
 #include "EntityDefinitionRegistry.h"
+#include "EntitySkinLayout.h"
 #include "MobModelFactory.h"
 #include "../components/Components.h"
 #include "../components/NetworkComponents.h"
@@ -46,6 +47,7 @@ void applyMobDefinition(GameplayRegistry& registry,
     }
     visual->model = definition.model;
     visual->textureKey = definition.textureKey;
+    visual->skinLayoutId = normalizeEntitySkinLayoutId(definition.skinLayoutId);
     visual->scale = definition.visualScale;
 
     if (auto* health = reg.try_get<HealthComponent>(entity)) {

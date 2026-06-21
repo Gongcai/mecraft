@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -14,6 +15,7 @@
 #include "engine/platform/Window.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../ecs/GameplayRegistry.h"
+#include "../../ecs/entity/EntitySkinLayout.h"
 #include "../../world/IWorldView.h"
 #include "../../ecs/components/Components.h"
 #include "../../ecs/components/NetworkComponents.h"
@@ -63,6 +65,41 @@ std::string mobTextureKeyForRoot(const entt::registry& reg, const entt::entity r
         return visual->textureKey;
     }
     return "zombie";
+}
+
+std::string_view mobSkinLayoutIdForRoot(const entt::registry& reg, const entt::entity root) {
+    if (const auto* visual = reg.try_get<ecs::MobVisualComponent>(root);
+        visual != nullptr && !visual->skinLayoutId.empty()) {
+        return visual->skinLayoutId;
+    }
+    return ecs::EntitySkinLayoutIds::STEVE_64X64;
+}
+
+float mobVisualScaleForRoot(const entt::registry& reg, const entt::entity root) {
+    const auto* visual = reg.try_get<ecs::MobVisualComponent>(root);
+    if (visual == nullptr || visual->scale <= 0.0f) {
+        return 1.0f;
+    }
+    return visual->scale;
+}
+
+glm::mat4 applyMobVisualScale(const entt::registry& reg,
+                              const entt::entity root,
+                              const glm::mat4& model,
+                              const float scale) {
+    if (std::abs(scale - 1.0f) <= 0.0001f) {
+        return model;
+    }
+
+    glm::vec3 pivot(model[3]);
+    if (const auto* transform = reg.try_get<ecs::TransformComponent>(root)) {
+        pivot = transform->position;
+    }
+
+    return glm::translate(glm::mat4(1.0f), pivot) *
+           glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
+           glm::translate(glm::mat4(1.0f), -pivot) *
+           model;
 }
 
 } // anonymous namespace
@@ -400,16 +437,17 @@ void HumanoidRenderer::destroyMesh(PartMesh& mesh) {
 }
 
 HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType partType,
-                                                              ecs::SkinTypeComponent::Type skinType) {
+                                                              std::string_view skinLayoutId) {
+    const bool mirrorLeftLimbs = ecs::entitySkinLayoutUsesMirroredLeftLimbs(skinLayoutId);
     switch (partType) {
     case ecs::StevePartType::Torso:     return &m_torsoMesh;
     case ecs::StevePartType::Head:      return &m_headMesh;
     case ecs::StevePartType::RightArm:  return &m_rightArmMesh;
     case ecs::StevePartType::RightLeg:  return &m_rightLegMesh;
     case ecs::StevePartType::LeftArm:
-        return (skinType == ecs::SkinTypeComponent::Type::Mob) ? &m_mobLeftArmMesh : &m_leftArmMesh;
+        return mirrorLeftLimbs ? &m_mobLeftArmMesh : &m_leftArmMesh;
     case ecs::StevePartType::LeftLeg:
-        return (skinType == ecs::SkinTypeComponent::Type::Mob) ? &m_mobLeftLegMesh : &m_leftLegMesh;
+        return mirrorLeftLimbs ? &m_mobLeftLegMesh : &m_leftLegMesh;
     default: return nullptr;
     }
 }
@@ -604,7 +642,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     glBindTexture(GL_TEXTURE_2D, steveTex);
 
     const auto drawPart = [&](ecs::StevePartType partType, const glm::mat4& model) {
-        PartMesh* mesh = getMeshForPart(partType, ecs::SkinTypeComponent::Type::Player);
+        PartMesh* mesh = getMeshForPart(partType, ecs::EntitySkinLayoutIds::STEVE_64X64);
         if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
             return;
         }
@@ -675,7 +713,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
                 auto& world = reg.get<ecs::WorldTransformComponent>(child);
                 PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                                ecs::SkinTypeComponent::Type::Player);
+                                                ecs::EntitySkinLayoutIds::STEVE_64X64);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
                 if (prevModelLoc >= 0) {
@@ -700,7 +738,7 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                     auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                     PartMesh* mesh = getMeshForPart(part.partType,
-                                                    ecs::SkinTypeComponent::Type::Player);
+                                                    ecs::EntitySkinLayoutIds::STEVE_64X64);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
                     if (prevModelLoc >= 0) {
@@ -730,6 +768,8 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
         }
 
         setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
+        const std::string_view mobSkinLayoutId = mobSkinLayoutIdForRoot(reg, mobRoot);
+        const float mobVisualScale = mobVisualScaleForRoot(reg, mobRoot);
         auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
         // Torso
@@ -740,17 +780,19 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
             auto& world = reg.get<ecs::WorldTransformComponent>(child);
             PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                            ecs::SkinTypeComponent::Type::Mob);
+                                            mobSkinLayoutId);
             if (mesh == nullptr || mesh->vao == 0) continue;
+
+            const glm::mat4 model = applyMobVisualScale(reg, mobRoot, world.worldMatrix, mobVisualScale);
 
             if (prevModelLoc >= 0) {
                 auto it = m_previousModelMatrices.find(child);
-                shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
+                shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
             }
-            shader.setMat4(modelLoc, world.worldMatrix);
+            shader.setMat4(modelLoc, model);
             glBindVertexArray(mesh->vao);
             glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-            m_previousModelMatrices[child] = world.worldMatrix;
+            m_previousModelMatrices[child] = model;
         }
 
         // Limbs
@@ -765,17 +807,19 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
                 auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                 PartMesh* mesh = getMeshForPart(part.partType,
-                                                ecs::SkinTypeComponent::Type::Mob);
+                                                mobSkinLayoutId);
                 if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
+
+                const glm::mat4 model = applyMobVisualScale(reg, mobRoot, world.worldMatrix, mobVisualScale);
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(partEntity);
-                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : world.worldMatrix);
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
                 }
-                shader.setMat4(modelLoc, world.worldMatrix);
+                shader.setMat4(modelLoc, model);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                m_previousModelMatrices[partEntity] = world.worldMatrix;
+                m_previousModelMatrices[partEntity] = model;
             }
         }
     }
@@ -848,7 +892,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
                 auto& wt = reg.get<ecs::WorldTransformComponent>(child);
                 PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                                ecs::SkinTypeComponent::Type::Player);
+                                                ecs::EntitySkinLayoutIds::STEVE_64X64);
                 if (mesh == nullptr || mesh->vao == 0) continue;
 
                 if (prevModelLoc >= 0) {
@@ -873,7 +917,7 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
                     auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                     PartMesh* mesh = getMeshForPart(part.partType,
-                                                    ecs::SkinTypeComponent::Type::Player);
+                                                    ecs::EntitySkinLayoutIds::STEVE_64X64);
                     if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
 
                     if (prevModelLoc >= 0) {
@@ -903,6 +947,8 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
         }
 
         setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
+        const std::string_view mobSkinLayoutId = mobSkinLayoutIdForRoot(reg, mobRoot);
+        const float mobVisualScale = mobVisualScaleForRoot(reg, mobRoot);
         auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
 
         // Query world light at torso position for this entity.
@@ -937,17 +983,19 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
             auto& wt = reg.get<ecs::WorldTransformComponent>(child);
             PartMesh* mesh = getMeshForPart(ecs::StevePartType::Torso,
-                                            ecs::SkinTypeComponent::Type::Mob);
+                                            mobSkinLayoutId);
             if (mesh == nullptr || mesh->vao == 0) continue;
+
+            const glm::mat4 model = applyMobVisualScale(reg, mobRoot, wt.worldMatrix, mobVisualScale);
 
             if (prevModelLoc >= 0) {
                 auto it = m_previousModelMatrices.find(child);
-                shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
+                shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
             }
-            shader.setMat4(modelLoc, wt.worldMatrix);
+            shader.setMat4(modelLoc, model);
             glBindVertexArray(mesh->vao);
             glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-            m_previousModelMatrices[child] = wt.worldMatrix;
+            m_previousModelMatrices[child] = model;
         }
 
         // Limbs
@@ -962,17 +1010,19 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
                 auto& wt = reg.get<ecs::WorldTransformComponent>(partEntity);
 
                 PartMesh* mesh = getMeshForPart(part.partType,
-                                                ecs::SkinTypeComponent::Type::Mob);
+                                                mobSkinLayoutId);
                 if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) continue;
+
+                const glm::mat4 model = applyMobVisualScale(reg, mobRoot, wt.worldMatrix, mobVisualScale);
 
                 if (prevModelLoc >= 0) {
                     auto it = m_previousModelMatrices.find(partEntity);
-                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : wt.worldMatrix);
+                    shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
                 }
-                shader.setMat4(modelLoc, wt.worldMatrix);
+                shader.setMat4(modelLoc, model);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                m_previousModelMatrices[partEntity] = wt.worldMatrix;
+                m_previousModelMatrices[partEntity] = model;
             }
         }
     }

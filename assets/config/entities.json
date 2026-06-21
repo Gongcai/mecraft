@@ -5,6 +5,7 @@
       "kind": "mob",
       "model": "humanoid",
       "texture": "zombie",
+      "skinLayout": "minecraft:steve_64x64",
       "scale": 1.0,
       "health": {
         "current": 20,
@@ -50,6 +51,7 @@
       "kind": "mob",
       "model": "humanoid",
       "texture": "herobrine",
+      "skinLayout": "minecraft:steve_64x64",
       "scale": 1.0,
       "health": {
         "current": 40,

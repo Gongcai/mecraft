@@ -4,6 +4,7 @@
 #include "../ecs/entity/SteveModelFactory.h"
 #include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/entity/EntityDefinitionRegistry.h"
+#include "../ecs/entity/EntitySkinLayout.h"
 #include "../ecs/util/AudioEventBuffer.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../ecs/util/ProjectileDefinitions.h"
@@ -101,6 +102,7 @@ void applyMobVisual(entt::registry& registry,
     if (definition != nullptr) {
         visual->model = definition->model;
         visual->textureKey = definition->textureKey;
+        visual->skinLayoutId = ecs::normalizeEntitySkinLayoutId(definition->skinLayoutId);
         visual->scale = definition->visualScale;
     }
 }

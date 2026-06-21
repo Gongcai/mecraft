@@ -41,6 +41,7 @@ struct MobAIComponent {
 struct MobVisualComponent {
     std::string model = "humanoid";
     std::string textureKey = "zombie";
+    std::string skinLayoutId = "minecraft:steve_64x64";
     float scale = 1.0f;
 };
 

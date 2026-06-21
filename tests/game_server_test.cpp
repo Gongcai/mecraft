@@ -1678,6 +1678,7 @@ static void testEntityFactoryCreatesConfiguredZombie() {
     require(type.entityId == "minecraft:zombie", "configured zombie should keep entity definition id");
     require(visual.model == "humanoid" &&
             visual.textureKey == "zombie" &&
+            visual.skinLayoutId == "minecraft:steve_64x64" &&
             std::fabs(visual.scale - 1.0f) < 0.001f,
             "configured zombie should apply visual data");
     require(transform.eyeHeight == 1.62f, "configured zombie should apply eye height");
@@ -1734,6 +1735,7 @@ static void testEntityFactoryCreatesConfiguredHerobrine() {
     require(type.entityId == "minecraft:herobrine", "configured herobrine should keep entity definition id");
     require(visual.model == "humanoid" &&
             visual.textureKey == "herobrine" &&
+            visual.skinLayoutId == "minecraft:steve_64x64" &&
             std::fabs(visual.scale - 1.0f) < 0.001f,
             "configured herobrine should apply visual data");
     require(health.current == 40 && health.max == 40,

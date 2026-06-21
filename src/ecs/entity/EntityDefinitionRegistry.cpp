@@ -1,5 +1,6 @@
 #include "EntityDefinitionRegistry.h"
 
+#include "EntitySkinLayout.h"
 #include "../../Paths.h"
 
 #include <algorithm>
@@ -332,10 +333,12 @@ bool parseMobDefinition(const json& node,
     if (!readString(node, "id", id, context, error, true) ||
         !readString(node, "model", definition.model, context, error, true) ||
         !readString(node, "texture", definition.textureKey, context, error) ||
+        !readString(node, "skinLayout", definition.skinLayoutId, context, error) ||
         !readFloat(node, "scale", definition.visualScale, context, error)) {
         return false;
     }
     definition.id = NamespacedId(id);
+    definition.skinLayoutId = normalizeEntitySkinLayoutId(definition.skinLayoutId);
     if (definition.visualScale <= 0.0f) {
         setError(error, context + ".scale must be positive");
         return false;
