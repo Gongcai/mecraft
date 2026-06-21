@@ -57,9 +57,9 @@
       "placementStrategy": "axis_oriented",
       "timeToBreak": 1000,
       "textures": {
-        "top": "wood_top",
-        "bottom": "wood_top",
-        "side": "wood_side"
+        "top": "oak_log_top",
+        "bottom": "oak_log_top",
+        "side": "oak_log"
       }
     },
     {
@@ -344,6 +344,959 @@
       "timeToBreak": 1000,
       "textures": {
         "all": "blue_wool"
+      }
+    },
+    {
+      "id": "minecraft:cobblestone",
+      "drop": "minecraft:cobblestone",
+      "timeToBreak": 2000,
+      "textures": {
+        "all": "cobblestone"
+      }
+    },
+    {
+      "id": "minecraft:gravel",
+      "drop": "minecraft:gravel",
+      "affectedByGravity": true,
+      "timeToBreak": 600,
+      "textures": {
+        "all": "gravel"
+      }
+    },
+    {
+      "id": "minecraft:clay",
+      "drop": "minecraft:clay",
+      "timeToBreak": 600,
+      "textures": {
+        "all": "clay"
+      }
+    },
+    {
+      "id": "minecraft:snow_block",
+      "drop": "minecraft:snow_block",
+      "timeToBreak": 200,
+      "textures": {
+        "all": "snow"
+      }
+    },
+    {
+      "id": "minecraft:ice",
+      "drop": "minecraft:ice",
+      "isTransparent": true,
+      "opacity": 3,
+      "timeToBreak": 500,
+      "textures": {
+        "all": "ice"
+      }
+    },
+    {
+      "id": "minecraft:packed_ice",
+      "drop": "minecraft:packed_ice",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "packed_ice"
+      }
+    },
+    {
+      "id": "minecraft:blue_ice",
+      "drop": "minecraft:blue_ice",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "blue_ice"
+      }
+    },
+    {
+      "id": "minecraft:obsidian",
+      "drop": "minecraft:obsidian",
+      "timeToBreak": 50000,
+      "textures": {
+        "all": "obsidian"
+      }
+    },
+    {
+      "id": "minecraft:netherrack",
+      "drop": "minecraft:netherrack",
+      "timeToBreak": 400,
+      "textures": {
+        "all": "netherrack"
+      }
+    },
+    {
+      "id": "minecraft:soul_sand",
+      "drop": "minecraft:soul_sand",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "soul_sand"
+      }
+    },
+    {
+      "id": "minecraft:glowstone",
+      "drop": "minecraft:glowstone",
+      "isLightSource": true,
+      "lightLevel": 15,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "glowstone"
+      }
+    },
+    {
+      "id": "minecraft:magma_block",
+      "drop": "minecraft:magma_block",
+      "isLightSource": true,
+      "lightLevel": 3,
+      "timeToBreak": 500,
+      "textures": {
+        "all": "magma"
+      }
+    },
+    {
+      "id": "minecraft:redstone_ore",
+      "drop": "minecraft:redstone",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "redstone_ore"
+      }
+    },
+    {
+      "id": "minecraft:lapis_ore",
+      "drop": "minecraft:lapis_lazuli",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "lapis_ore"
+      }
+    },
+    {
+      "id": "minecraft:emerald_ore",
+      "drop": "minecraft:emerald",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "emerald_ore"
+      }
+    },
+    {
+      "id": "minecraft:copper_ore",
+      "drop": "minecraft:copper_ingot",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "copper_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate",
+      "drop": "minecraft:deepslate",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "deepslate"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_coal_ore",
+      "drop": "minecraft:coal",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_coal_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_iron_ore",
+      "drop": "minecraft:iron_ingot",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_iron_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_gold_ore",
+      "drop": "minecraft:gold_ingot",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_gold_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_diamond_ore",
+      "drop": "minecraft:diamond",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_diamond_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_redstone_ore",
+      "drop": "minecraft:redstone",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_redstone_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_lapis_ore",
+      "drop": "minecraft:lapis_lazuli",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_lapis_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_emerald_ore",
+      "drop": "minecraft:emerald",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_emerald_ore"
+      }
+    },
+    {
+      "id": "minecraft:deepslate_copper_ore",
+      "drop": "minecraft:copper_ingot",
+      "timeToBreak": 4500,
+      "textures": {
+        "all": "deepslate_copper_ore"
+      }
+    },
+    {
+      "id": "minecraft:andesite",
+      "drop": "minecraft:andesite",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "andesite"
+      }
+    },
+    {
+      "id": "minecraft:diorite",
+      "drop": "minecraft:diorite",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "diorite"
+      }
+    },
+    {
+      "id": "minecraft:granite",
+      "drop": "minecraft:granite",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "granite"
+      }
+    },
+    {
+      "id": "minecraft:tuff",
+      "drop": "minecraft:tuff",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "tuff"
+      }
+    },
+    {
+      "id": "minecraft:calcite",
+      "drop": "minecraft:calcite",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "calcite"
+      }
+    },
+    {
+      "id": "minecraft:dripstone_block",
+      "drop": "minecraft:dripstone_block",
+      "timeToBreak": 1500,
+      "textures": {
+        "all": "dripstone_block"
+      }
+    },
+    {
+      "id": "minecraft:sandstone",
+      "drop": "minecraft:sandstone",
+      "timeToBreak": 800,
+      "textures": {
+        "top": "sandstone_top",
+        "bottom": "sandstone_bottom",
+        "side": "sandstone"
+      }
+    },
+    {
+      "id": "minecraft:red_sand",
+      "drop": "minecraft:red_sand",
+      "affectedByGravity": true,
+      "timeToBreak": 250,
+      "textures": {
+        "all": "red_sand"
+      }
+    },
+    {
+      "id": "minecraft:red_sandstone",
+      "drop": "minecraft:red_sandstone",
+      "timeToBreak": 800,
+      "textures": {
+        "top": "red_sandstone_top",
+        "bottom": "red_sandstone_bottom",
+        "side": "red_sandstone"
+      }
+    },
+    {
+      "id": "minecraft:bricks",
+      "drop": "minecraft:bricks",
+      "timeToBreak": 2000,
+      "textures": {
+        "all": "bricks"
+      }
+    },
+    {
+      "id": "minecraft:mossy_cobblestone",
+      "drop": "minecraft:mossy_cobblestone",
+      "timeToBreak": 2000,
+      "textures": {
+        "all": "mossy_cobblestone"
+      }
+    },
+    {
+      "id": "minecraft:iron_block",
+      "drop": "minecraft:iron_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "iron_block"
+      }
+    },
+    {
+      "id": "minecraft:gold_block",
+      "drop": "minecraft:gold_block",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "gold_block"
+      }
+    },
+    {
+      "id": "minecraft:diamond_block",
+      "drop": "minecraft:diamond_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "diamond_block"
+      }
+    },
+    {
+      "id": "minecraft:emerald_block",
+      "drop": "minecraft:emerald_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "emerald_block"
+      }
+    },
+    {
+      "id": "minecraft:lapis_block",
+      "drop": "minecraft:lapis_block",
+      "timeToBreak": 3000,
+      "textures": {
+        "all": "lapis_block"
+      }
+    },
+    {
+      "id": "minecraft:redstone_block",
+      "drop": "minecraft:redstone_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "redstone_block"
+      }
+    },
+    {
+      "id": "minecraft:coal_block",
+      "drop": "minecraft:coal_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "coal_block"
+      }
+    },
+    {
+      "id": "minecraft:copper_block",
+      "drop": "minecraft:copper_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "copper_block"
+      }
+    },
+    {
+      "id": "minecraft:raw_iron_block",
+      "drop": "minecraft:raw_iron_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "raw_iron_block"
+      }
+    },
+    {
+      "id": "minecraft:raw_gold_block",
+      "drop": "minecraft:raw_gold_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "raw_gold_block"
+      }
+    },
+    {
+      "id": "minecraft:raw_copper_block",
+      "drop": "minecraft:raw_copper_block",
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "raw_copper_block"
+      }
+    },
+    {
+      "id": "minecraft:white_wool",
+      "drop": "minecraft:white_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "white_wool"
+      }
+    },
+    {
+      "id": "minecraft:light_gray_wool",
+      "drop": "minecraft:light_gray_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "light_gray_wool"
+      }
+    },
+    {
+      "id": "minecraft:gray_wool",
+      "drop": "minecraft:gray_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "gray_wool"
+      }
+    },
+    {
+      "id": "minecraft:black_wool",
+      "drop": "minecraft:black_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "black_wool"
+      }
+    },
+    {
+      "id": "minecraft:brown_wool",
+      "drop": "minecraft:brown_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "brown_wool"
+      }
+    },
+    {
+      "id": "minecraft:red_wool",
+      "drop": "minecraft:red_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "red_wool"
+      }
+    },
+    {
+      "id": "minecraft:orange_wool",
+      "drop": "minecraft:orange_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "orange_wool"
+      }
+    },
+    {
+      "id": "minecraft:yellow_wool",
+      "drop": "minecraft:yellow_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "yellow_wool"
+      }
+    },
+    {
+      "id": "minecraft:lime_wool",
+      "drop": "minecraft:lime_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "lime_wool"
+      }
+    },
+    {
+      "id": "minecraft:green_wool",
+      "drop": "minecraft:green_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "green_wool"
+      }
+    },
+    {
+      "id": "minecraft:cyan_wool",
+      "drop": "minecraft:cyan_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "cyan_wool"
+      }
+    },
+    {
+      "id": "minecraft:light_blue_wool",
+      "drop": "minecraft:light_blue_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "light_blue_wool"
+      }
+    },
+    {
+      "id": "minecraft:purple_wool",
+      "drop": "minecraft:purple_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "purple_wool"
+      }
+    },
+    {
+      "id": "minecraft:magenta_wool",
+      "drop": "minecraft:magenta_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "magenta_wool"
+      }
+    },
+    {
+      "id": "minecraft:pink_wool",
+      "drop": "minecraft:pink_wool",
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "pink_wool"
+      }
+    },
+    {
+      "id": "minecraft:spruce_log",
+      "drop": "minecraft:spruce_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "spruce_log_top",
+        "bottom": "spruce_log_top",
+        "side": "spruce_log"
+      }
+    },
+    {
+      "id": "minecraft:jungle_log",
+      "drop": "minecraft:jungle_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "jungle_log_top",
+        "bottom": "jungle_log_top",
+        "side": "jungle_log"
+      }
+    },
+    {
+      "id": "minecraft:acacia_log",
+      "drop": "minecraft:acacia_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "acacia_log_top",
+        "bottom": "acacia_log_top",
+        "side": "acacia_log"
+      }
+    },
+    {
+      "id": "minecraft:dark_oak_log",
+      "drop": "minecraft:dark_oak_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "dark_oak_log_top",
+        "bottom": "dark_oak_log_top",
+        "side": "dark_oak_log"
+      }
+    },
+    {
+      "id": "minecraft:mangrove_log",
+      "drop": "minecraft:mangrove_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "mangrove_log_top",
+        "bottom": "mangrove_log_top",
+        "side": "mangrove_log"
+      }
+    },
+    {
+      "id": "minecraft:cherry_log",
+      "drop": "minecraft:cherry_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "cherry_log_top",
+        "bottom": "cherry_log_top",
+        "side": "cherry_log"
+      }
+    },
+    {
+      "id": "minecraft:pale_oak_log",
+      "drop": "minecraft:pale_oak_log",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "pale_oak_log_top",
+        "bottom": "pale_oak_log_top",
+        "side": "pale_oak_log"
+      }
+    },
+    {
+      "id": "minecraft:crimson_stem",
+      "drop": "minecraft:crimson_stem",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "crimson_stem_top",
+        "bottom": "crimson_stem_top",
+        "side": "crimson_stem"
+      }
+    },
+    {
+      "id": "minecraft:warped_stem",
+      "drop": "minecraft:warped_stem",
+      "properties": {
+        "axis": ["x", "y", "z"]
+      },
+      "defaultState": {
+        "axis": "y"
+      },
+      "placementStrategy": "axis_oriented",
+      "timeToBreak": 1000,
+      "textures": {
+        "top": "warped_stem_top",
+        "bottom": "warped_stem_top",
+        "side": "warped_stem"
+      }
+    },
+    {
+      "id": "minecraft:spruce_leaves",
+      "drop": "minecraft:spruce_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "spruce_leaves"
+      }
+    },
+    {
+      "id": "minecraft:jungle_leaves",
+      "drop": "minecraft:jungle_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "biomeTint": "foliage",
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "jungle_leaves"
+      }
+    },
+    {
+      "id": "minecraft:acacia_leaves",
+      "drop": "minecraft:acacia_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "biomeTint": "foliage",
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "acacia_leaves"
+      }
+    },
+    {
+      "id": "minecraft:dark_oak_leaves",
+      "drop": "minecraft:dark_oak_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "biomeTint": "foliage",
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "dark_oak_leaves"
+      }
+    },
+    {
+      "id": "minecraft:mangrove_leaves",
+      "drop": "minecraft:mangrove_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "biomeTint": "foliage",
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "mangrove_leaves"
+      }
+    },
+    {
+      "id": "minecraft:cherry_leaves",
+      "drop": "minecraft:cherry_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "cherry_leaves"
+      }
+    },
+    {
+      "id": "minecraft:pale_oak_leaves",
+      "drop": "minecraft:pale_oak_leaves",
+      "isSolid": true,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "cutoutDistanceCull": false,
+      "opacity": 0,
+      "timeToBreak": 300,
+      "textures": {
+        "all": "pale_oak_leaves"
+      }
+    },
+    {
+      "id": "minecraft:oak_sapling",
+      "drop": "minecraft:oak_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "oak_sapling"
+      }
+    },
+    {
+      "id": "minecraft:spruce_sapling",
+      "drop": "minecraft:spruce_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "spruce_sapling"
+      }
+    },
+    {
+      "id": "minecraft:birch_sapling",
+      "drop": "minecraft:birch_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "birch_sapling"
+      }
+    },
+    {
+      "id": "minecraft:jungle_sapling",
+      "drop": "minecraft:jungle_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "jungle_sapling"
+      }
+    },
+    {
+      "id": "minecraft:acacia_sapling",
+      "drop": "minecraft:acacia_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "acacia_sapling"
+      }
+    },
+    {
+      "id": "minecraft:dark_oak_sapling",
+      "drop": "minecraft:dark_oak_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "dark_oak_sapling"
+      }
+    },
+    {
+      "id": "minecraft:mangrove_propagule",
+      "drop": "minecraft:mangrove_propagule",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "mangrove_propagule"
+      }
+    },
+    {
+      "id": "minecraft:cherry_sapling",
+      "drop": "minecraft:cherry_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "cherry_sapling"
+      }
+    },
+    {
+      "id": "minecraft:pale_oak_sapling",
+      "drop": "minecraft:pale_oak_sapling",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "pale_oak_sapling"
+      }
+    },
+    {
+      "id": "minecraft:poppy",
+      "drop": "minecraft:poppy",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "poppy"
+      }
+    },
+    {
+      "id": "minecraft:dandelion",
+      "drop": "minecraft:dandelion",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "dandelion"
+      }
+    },
+    {
+      "id": "minecraft:red_mushroom",
+      "drop": "minecraft:red_mushroom",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "red_mushroom"
+      }
+    },
+    {
+      "id": "minecraft:short_grass",
+      "drop": "minecraft:air",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "biomeTint": "grass",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "short_grass"
+      }
+    },
+    {
+      "id": "minecraft:fern",
+      "drop": "minecraft:air",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "biomeTint": "grass",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "fern"
+      }
+    },
+    {
+      "id": "minecraft:dead_bush",
+      "drop": "minecraft:dead_bush",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "dead_bush"
       }
     },
     {

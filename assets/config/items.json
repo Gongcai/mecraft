@@ -64,6 +64,226 @@
       "icon": "minecraft:torch",
       "placeBlock": "minecraft:torch",
       "renderBlock": "minecraft:torch"
+    },
+    {
+      "id": "minecraft:redstone",
+      "iconTexture": "redstone",
+      "maxStack": 64,
+      "icon": "minecraft:redstone",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:lapis_lazuli",
+      "iconTexture": "lapis_lazuli",
+      "maxStack": 64,
+      "icon": "minecraft:lapis_lazuli",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:emerald",
+      "iconTexture": "emerald",
+      "maxStack": 64,
+      "icon": "minecraft:emerald",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:copper_ingot",
+      "iconTexture": "copper_ingot",
+      "maxStack": 64,
+      "icon": "minecraft:copper_ingot",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:raw_copper",
+      "iconTexture": "raw_copper",
+      "maxStack": 64,
+      "icon": "minecraft:raw_copper",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:raw_iron",
+      "iconTexture": "raw_iron",
+      "maxStack": 64,
+      "icon": "minecraft:raw_iron",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:raw_gold",
+      "iconTexture": "raw_gold",
+      "maxStack": 64,
+      "icon": "minecraft:raw_gold",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:stick",
+      "iconTexture": "stick",
+      "maxStack": 64,
+      "icon": "minecraft:stick",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:flint",
+      "iconTexture": "flint",
+      "maxStack": 64,
+      "icon": "minecraft:flint",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:wheat",
+      "iconTexture": "wheat",
+      "maxStack": 64,
+      "icon": "minecraft:wheat",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:bread",
+      "iconTexture": "bread",
+      "maxStack": 64,
+      "icon": "minecraft:bread",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:carrot",
+      "iconTexture": "carrot",
+      "maxStack": 64,
+      "icon": "minecraft:carrot",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:potato",
+      "iconTexture": "potato",
+      "maxStack": 64,
+      "icon": "minecraft:potato",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:baked_potato",
+      "iconTexture": "baked_potato",
+      "maxStack": 64,
+      "icon": "minecraft:baked_potato",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:beef",
+      "iconTexture": "beef",
+      "maxStack": 64,
+      "icon": "minecraft:beef",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:cooked_beef",
+      "iconTexture": "cooked_beef",
+      "maxStack": 64,
+      "icon": "minecraft:cooked_beef",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:porkchop",
+      "iconTexture": "porkchop",
+      "maxStack": 64,
+      "icon": "minecraft:porkchop",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:cooked_porkchop",
+      "iconTexture": "cooked_porkchop",
+      "maxStack": 64,
+      "icon": "minecraft:cooked_porkchop",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:chicken",
+      "iconTexture": "chicken",
+      "maxStack": 64,
+      "icon": "minecraft:chicken",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:cooked_chicken",
+      "iconTexture": "cooked_chicken",
+      "maxStack": 64,
+      "icon": "minecraft:cooked_chicken",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:wooden_pickaxe",
+      "iconTexture": "wooden_pickaxe",
+      "maxStack": 1,
+      "icon": "minecraft:wooden_pickaxe",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "maxDurability": 59
+    },
+    {
+      "id": "minecraft:stone_pickaxe",
+      "iconTexture": "stone_pickaxe",
+      "maxStack": 1,
+      "icon": "minecraft:stone_pickaxe",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "maxDurability": 131
+    },
+    {
+      "id": "minecraft:diamond_pickaxe",
+      "iconTexture": "diamond_pickaxe",
+      "maxStack": 1,
+      "icon": "minecraft:diamond_pickaxe",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "maxDurability": 1561
+    },
+    {
+      "id": "minecraft:iron_shovel",
+      "iconTexture": "iron_shovel",
+      "maxStack": 1,
+      "icon": "minecraft:iron_shovel",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "maxDurability": 250
+    },
+    {
+      "id": "minecraft:iron_axe",
+      "iconTexture": "iron_axe",
+      "maxStack": 1,
+      "icon": "minecraft:iron_axe",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "maxDurability": 250
+    },
+    {
+      "id": "minecraft:iron_sword",
+      "iconTexture": "iron_sword",
+      "maxStack": 1,
+      "icon": "minecraft:iron_sword",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "maxDurability": 250
     }
   ]
 }
