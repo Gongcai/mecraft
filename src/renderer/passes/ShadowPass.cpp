@@ -268,7 +268,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             cascadePaddingWorld / std::max(1.0f, cascadeData.radius),
             std::max(64.0f, cascadeData.texelWorldSize * 64.0f) /
                 std::max(1.0f, cascadeData.depthExtent),
-            true,
+            false,
             0,
             0
         };

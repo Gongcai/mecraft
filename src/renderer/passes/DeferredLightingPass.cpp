@@ -77,7 +77,12 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
 
     // Shadow uniforms via ShadowRenderer
     if (m_shadowRenderer) {
-        m_shadowRenderer->bindShadowUniforms(*m_deferredLightingShader, ctx.moonShadowActive);
+        const shadow::ShadowRenderer::BiasSettings bias{
+            settings.shadow.constantBias,
+            settings.shadow.slopeBias,
+            settings.shadow.normalOffset
+        };
+        m_shadowRenderer->bindShadowUniforms(*m_deferredLightingShader, ctx.moonShadowActive, bias);
     }
 
     // Sky lighting (inlined from bindSkyLightingUniforms)

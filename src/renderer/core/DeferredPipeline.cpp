@@ -796,6 +796,36 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
         output.weatherMaskTex = m_shared->deferredTargets->weatherMaskTexture();
     }
 
+    if (m_shared && m_shared->deferredTargets && m_shared->shadowRenderer) {
+        auto& shadowData = output.heldItemShadow;
+        const auto& cascades = m_shared->shadowRenderer->cascades();
+        for (int i = 0; i < shadow::ShadowRenderer::CASCADE_COUNT; ++i) {
+            shadowData.cascadeViewProj[i] = cascades[i].viewProj;
+            shadowData.cascadeSplitFar[i] = cascades[i].splitFar;
+            shadowData.cascadeTexelWorldSize[i] = cascades[i].texelWorldSize;
+            shadowData.cascadeDepthExtent[i] = cascades[i].depthExtent;
+        }
+        shadowData.shadowTexture = m_shared->deferredTargets->csmShadowDepthComparisonTexture();
+        shadowData.shadowDepthRaw = m_shared->deferredTargets->csmShadowDepthTexture();
+        shadowData.shadowDepthAll = m_shared->deferredTargets->csmShadowDepthAllComparisonTexture();
+        shadowData.shadowDepthAllRaw = m_shared->deferredTargets->csmShadowDepthAllTexture();
+        shadowData.shadowColor0 = m_shared->deferredTargets->csmShadowColor0Texture();
+        shadowData.shadowColor1 = m_shared->deferredTargets->csmShadowColor1Texture();
+        shadowData.cameraPos = ctx.camera.position;
+        shadowData.sunDirection = m_shared->shadowRenderer->lightDirection();
+        shadowData.shadowDistance = m_currentSettings.shadow.distance;
+        shadowData.constantBias = m_currentSettings.shadow.constantBias;
+        shadowData.slopeBias = m_currentSettings.shadow.slopeBias;
+        shadowData.normalOffset = m_currentSettings.shadow.normalOffset;
+        shadowData.softness = m_currentSettings.shadow.softness;
+        shadowData.pcssStrength = m_currentSettings.shadow.pcssStrength;
+        shadowData.cascadeCount = shadow::ShadowRenderer::CASCADE_COUNT;
+        shadowData.softShadowsEnabled = m_currentSettings.shadow.softShadowsEnabled ? 1 : 0;
+        shadowData.pcssShadowsEnabled = m_currentSettings.shadow.pcssShadowsEnabled ? 1 : 0;
+        shadowData.shadowsEnabled = m_currentSettings.shadow.enabled ? 1 : 0;
+        shadowData.skyIntensity = ctx.skyIntensity;
+    }
+
     output.hasDeferredInputs = m_deferredFrameActive;
     output.hasDebugView = (m_debugPass != nullptr);
     output.skipPostProcess = false;

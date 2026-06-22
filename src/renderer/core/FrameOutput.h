@@ -9,6 +9,7 @@ struct FirstPersonShadowData {
     glm::mat4 cascadeViewProj[4]{};
     float cascadeSplitFar[4]{};
     float cascadeTexelWorldSize[4]{};
+    float cascadeDepthExtent[4]{};
     GLuint shadowTexture = 0;
     GLuint shadowDepthRaw = 0;
     GLuint shadowDepthAll = 0;

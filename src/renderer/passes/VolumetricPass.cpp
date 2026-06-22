@@ -113,7 +113,12 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
 
     // Shadow uniforms
     if (m_shadowRenderer) {
-        m_shadowRenderer->bindShadowUniforms(*m_volumetricFogShader, ctx.moonShadowActive);
+        const shadow::ShadowRenderer::BiasSettings bias{
+            settings.shadow.constantBias,
+            settings.shadow.slopeBias,
+            settings.shadow.normalOffset
+        };
+        m_shadowRenderer->bindShadowUniforms(*m_volumetricFogShader, ctx.moonShadowActive, bias);
     }
 
     // Sky lighting (inlined)

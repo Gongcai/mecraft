@@ -51,7 +51,7 @@ float sampleHeldItemShadow(vec3 modelPos, vec3 normal) {
     vec3 worldPos = uCameraPos + modelPos;
     vec3 lightDir = normalize(uSunDirection);
     ShadowSample s = sampleCsmShadow(worldPos, normal, lightDir);
-    return s.visibility;
+    return mix(1.0, s.visibility, s.fade);
 }
 
 #endif

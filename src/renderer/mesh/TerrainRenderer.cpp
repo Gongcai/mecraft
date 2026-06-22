@@ -704,6 +704,14 @@ void TerrainRenderer::collectShadowChunks(
         }
         return visible;
     };
+    auto isAabbVisibleInAnyCascade = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
+        for (const CascadeAabbCuller& culler : cascadeCullers) {
+            if (isAabbVisibleInCascade(boundsMin, boundsMax, culler)) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     size_t regionBegin = 0;
     while (regionBegin < chunkRenderColumns.size()) {
@@ -738,8 +746,7 @@ void TerrainRenderer::collectShadowChunks(
             regionBegin = regionEnd;
             continue;
         }
-        // Region must be visible in the outermost cascade (cascade 3) to be visible in any cascade
-        if (!isAabbVisibleInCascade(regionMin, regionMax, cascadeCullers[3])) {
+        if (!isAabbVisibleInAnyCascade(regionMin, regionMax)) {
             regionBegin = regionEnd;
             continue;
         }
@@ -753,7 +760,7 @@ void TerrainRenderer::collectShadowChunks(
             if (!boundsWithinCameraDistance(column.columnBoundsMin, column.columnBoundsMax)) {
                 continue;
             }
-            if (!isAabbVisibleInCascade(column.columnBoundsMin, column.columnBoundsMax, cascadeCullers[3])) {
+            if (!isAabbVisibleInAnyCascade(column.columnBoundsMin, column.columnBoundsMax)) {
                 continue;
             }
 
@@ -788,7 +795,7 @@ void TerrainRenderer::collectShadowChunks(
                     if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
                         continue;
                     }
-                    if (!isAabbVisibleInCascade(boundsMin, boundsMax, cascadeCullers[3])) {
+                    if (!isAabbVisibleInAnyCascade(boundsMin, boundsMax)) {
                         continue;
                     }
 
@@ -828,7 +835,7 @@ void TerrainRenderer::collectShadowChunks(
             } else {
                 // Non-MDI path
                 if (column.aggregatedPresent) {
-                    if (isAabbVisibleInCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers[3])) {
+                    if (isAabbVisibleInAnyCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
                         for (int c = 0; c < 4; ++c) {
                             if (isAabbVisibleInCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers[c])) {
                                 cascadeCullers[c].visibleCount++;
@@ -850,7 +857,7 @@ void TerrainRenderer::collectShadowChunks(
                     const int scy = column.transparentScys[transparentIndex];
                     const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
 
-                    if (isAabbVisibleInCascade(transparent.boundsMin, transparent.boundsMax, cascadeCullers[3])) {
+                    if (isAabbVisibleInAnyCascade(transparent.boundsMin, transparent.boundsMax)) {
                         for (int c = 0; c < 4; ++c) {
                             if (isAabbVisibleInCascade(transparent.boundsMin, transparent.boundsMax, cascadeCullers[c])) {
                                 cascadeCullers[c].visibleCount++;

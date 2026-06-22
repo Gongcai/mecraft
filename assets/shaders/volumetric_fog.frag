@@ -283,8 +283,7 @@ VFogShadowData computeVolumetricShadowSetup(vec3 worldPos, vec3 lightDir) {
     data.texel = 1.0 / vec2(max(size.x, 1), max(size.y, 1));
     float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float biasWorld = texelWorld * distanceScale * (0.5 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 16.0);
-    float radiusWorld = texelWorld * float(max(size.x, 1)) * 0.5;
-    float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
+    float depthExtent = max(uCsmCascades[data.cascadeIndex].depthExtent, 1.0);
     data.bias = max(biasWorld / (2.0 * depthExtent), 4.0e-5) * uVolumetricShadowBiasScale;
     data.projectionFade = csmProjectionFade(data.proj, data.texel);
     if (data.projectionFade <= 0.001) return data;

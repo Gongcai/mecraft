@@ -19,6 +19,7 @@ struct CsmCascade {
     float splitFar;
     float texelWorldSize;
     float resolutionScale;
+    float depthExtent;
 };
 
 uniform int uCsmCascadeCount;
@@ -36,9 +37,9 @@ uniform sampler2DArray uCsmShadowColor1;           // shadowcolor1: RG normal, B
 #endif
 
 struct ShadowSample {
-    float visibility;
+    float visibility;    // Raw cascade visibility before projection/distance fade.
     int cascadeIndex;
-    float fade;
+    float fade;          // Weight used to blend raw visibility back to fully lit.
     float blockerDepth; // signed receiver-blocker delta from PCSS (negative = blocker present); 0 when unavailable
     float sssWeight;    // contribution weight for PCSS-derived SSS; fades across cascade/projection edges
 };
@@ -91,8 +92,7 @@ float csmDepthBias(float ndotl,
                    float constantBias,
                    float slopeBias) {
     float texelWorld = max(uCsmCascades[cascadeIndex].texelWorldSize, 0.0001);
-    float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
-    float depthExtent = max(shadowDistance + radiusWorld * 3.0, 1.0);
+    float depthExtent = max(uCsmCascades[cascadeIndex].depthExtent, 1.0);
     float biasWorld = shadowWorldBias(ndotl, viewDistance, texelWorld,
                                       shadowDistance, constantBias, slopeBias);
     return max(biasWorld / (2.0 * depthExtent), 4.0e-5);
@@ -340,8 +340,7 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
         } else {
             // PCSS for near cascade. Keep the sun angular scale conservative so
             // contact shadows remain crisp and only separated casters get soft.
-            float radiusWorld = texelWorld * float(max(shadowSize.x, 1)) * 0.5;
-            float depthExtent = max(uShadowDistance + radiusWorld * 3.0, 1.0);
+            float depthExtent = max(uCsmCascades[cascadeIndex].depthExtent, 1.0);
             float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
             float lightAngularScale = 0.010 + strength * 0.028;
             float searchRadius = 1.75 + strength * 2.75;
@@ -413,7 +412,7 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         projectionFade *= oneMinus(distanceFade);
     }
 
-    result.visibility = clamp(lit * projectionFade, 0.0, 1.0);
+    result.visibility = clamp(lit, 0.0, 1.0);
     result.fade = projectionFade;
     result.sssWeight *= projectionFade;
     return result;

@@ -11,6 +11,29 @@ namespace {
 glm::vec3 normalizeOr(const glm::vec3& value, const glm::vec3& fallback) {
     return glm::dot(value, value) > 1.0e-8f ? glm::normalize(value) : fallback;
 }
+
+std::array<glm::vec3, 8> buildAabbCorners(const glm::vec3& boundsMin,
+                                          const glm::vec3& boundsMax) {
+    std::array<glm::vec3, 8> corners{};
+    for (int corner = 0; corner < 8; ++corner) {
+        corners[corner] = glm::vec3(
+            (corner & 1) != 0 ? boundsMax.x : boundsMin.x,
+            (corner & 2) != 0 ? boundsMax.y : boundsMin.y,
+            (corner & 4) != 0 ? boundsMax.z : boundsMin.z);
+    }
+    return corners;
+}
+
+float maxAbsLightDepth(const glm::mat4& lightView,
+                       const std::array<glm::vec3, 8>& corners,
+                       float currentMax) {
+    float depth = currentMax;
+    for (const glm::vec3& corner : corners) {
+        const float lightZ = (lightView * glm::vec4(corner, 1.0f)).z;
+        depth = std::max(depth, std::abs(lightZ));
+    }
+    return depth;
+}
 }
 
 std::array<Cascade, CASCADE_COUNT> buildCascades(const CameraBasis& camera,
@@ -70,7 +93,13 @@ std::array<Cascade, CASCADE_COUNT> buildCascades(const CameraBasis& camera,
         const glm::vec3 centerLight = glm::vec3(lightView * glm::vec4(center, 1.0f));
         const float snappedX = std::floor(centerLight.x / texelWorldSize) * texelWorldSize;
         const float snappedY = std::floor(centerLight.y / texelWorldSize) * texelWorldSize;
-        const float depthExtent = shadowDistance + radius * 3.0f;
+        const glm::vec3 casterBoundsMin = camera.position - glm::vec3(shadowDistance);
+        const glm::vec3 casterBoundsMax = camera.position + glm::vec3(shadowDistance);
+        const std::array<glm::vec3, 8> casterCorners = buildAabbCorners(casterBoundsMin, casterBoundsMax);
+        float depthExtent = shadowDistance + radius * 3.0f;
+        depthExtent = maxAbsLightDepth(lightView, corners, depthExtent);
+        depthExtent = maxAbsLightDepth(lightView, casterCorners, depthExtent);
+        depthExtent += std::max(16.0f, texelWorldSize * 32.0f);
         const glm::mat4 projection = glm::ortho(snappedX - radius, snappedX + radius,
                                                 snappedY - radius, snappedY + radius,
                                                 -depthExtent, depthExtent);

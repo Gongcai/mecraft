@@ -108,6 +108,7 @@ public:
         glm::mat4 cascadeViewProj[4]{};
         float cascadeSplitFar[4]{};
         float cascadeTexelWorldSize[4]{};
+        float cascadeDepthExtent[4]{};
         GLuint shadowTexture = 0;        // sampler2DArrayShadow (shadowtex1)
         GLuint shadowDepthRaw = 0;       // sampler2DArray
         GLuint shadowDepthAll = 0;       // sampler2DArrayShadow (shadowtex0)

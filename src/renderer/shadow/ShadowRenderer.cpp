@@ -106,6 +106,10 @@ void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive,
         "uCsmCascades[0].resolutionScale", "uCsmCascades[1].resolutionScale",
         "uCsmCascades[2].resolutionScale", "uCsmCascades[3].resolutionScale"
     };
+    static const std::string prefix_depthExtent[] = {
+        "uCsmCascades[0].depthExtent", "uCsmCascades[1].depthExtent",
+        "uCsmCascades[2].depthExtent", "uCsmCascades[3].depthExtent"
+    };
 
     for (int i = 0; i < CASCADE_COUNT; ++i) {
         shader.setMat4(prefix_viewProj[i], m_cascades[i].viewProj);
@@ -113,6 +117,7 @@ void ShadowRenderer::bindShadowUniforms(Shader& shader, bool moonShadowActive,
         shader.setFloat(prefix_splitFar[i], m_cascades[i].splitFar);
         shader.setFloat(prefix_texelWorldSize[i], m_cascades[i].texelWorldSize);
         shader.setFloat(prefix_resolutionScale[i], (i >= 2) ? 0.5f : 1.0f);
+        shader.setFloat(prefix_depthExtent[i], m_cascades[i].depthExtent);
     }
 }
 

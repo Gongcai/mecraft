@@ -464,6 +464,7 @@ FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPe
         shadow.cascadeViewProj[i] = sd.cascadeViewProj[i];
         shadow.cascadeSplitFar[i] = sd.cascadeSplitFar[i];
         shadow.cascadeTexelWorldSize[i] = sd.cascadeTexelWorldSize[i];
+        shadow.cascadeDepthExtent[i] = sd.cascadeDepthExtent[i];
     }
     shadow.shadowTexture = sd.shadowTexture;
     shadow.shadowDepthRaw = sd.shadowDepthRaw;
@@ -533,6 +534,10 @@ void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
         "uCsmCascades[0].resolutionScale", "uCsmCascades[1].resolutionScale",
         "uCsmCascades[2].resolutionScale", "uCsmCascades[3].resolutionScale"
     };
+    static const std::string prefix_depthExtent[] = {
+        "uCsmCascades[0].depthExtent", "uCsmCascades[1].depthExtent",
+        "uCsmCascades[2].depthExtent", "uCsmCascades[3].depthExtent"
+    };
 
     for (int i = 0; i < m_shadowData.cascadeCount && i < 4; ++i) {
         shader.setMat4(prefix_viewProj[i], m_shadowData.cascadeViewProj[i]);
@@ -540,6 +545,7 @@ void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
         shader.setFloat(prefix_splitFar[i], m_shadowData.cascadeSplitFar[i]);
         shader.setFloat(prefix_texelWorldSize[i], m_shadowData.cascadeTexelWorldSize[i]);
         shader.setFloat(prefix_resolutionScale[i], (i >= 2) ? 0.5f : 1.0f);
+        shader.setFloat(prefix_depthExtent[i], m_shadowData.cascadeDepthExtent[i]);
     }
 
     // Sampler unit assignment is handled by MecraftTextureContract::bindShadowSamplers().
