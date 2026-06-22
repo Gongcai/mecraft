@@ -542,6 +542,7 @@ if(MECRAFT_BUILD_TESTS)
             target_precompile_headers(${TEST_NAME} REUSE_FROM mecraft_pch)
         endif()
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+        set_tests_properties(${TEST_NAME} PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
     endfunction()
 
     # 物理测试 (需要特殊宏定义)

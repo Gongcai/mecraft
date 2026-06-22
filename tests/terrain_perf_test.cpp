@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "../src/world/gen/TerrainGenerator.h"
-#include "../src/world/light/Chunk.h"
+#include "../src/world/chunk/Chunk.h"
 
 namespace {
 struct BenchmarkStats {

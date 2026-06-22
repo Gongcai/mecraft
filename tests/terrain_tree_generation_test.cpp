@@ -1,6 +1,8 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 #include "../src/world/fluid/FluidState.h"
 #include "../src/world/gen/TerrainGenerator.h"
@@ -19,15 +21,65 @@ int worldToChunkCoord(int world, int chunkSize) {
     return static_cast<int>(std::floor(static_cast<float>(world) / static_cast<float>(chunkSize)));
 }
 
-bool isTreeBlock(BlockID id) {
-    return id == BlockIds::WOOD ||
-           id == BlockIds::BIRCH_LOG ||
-           id == BlockIds::OAK_LEAVES ||
-           id == BlockIds::BIRCH_LEAVES;
+bool containsBlockId(const std::vector<BlockID>& ids, const BlockID id) {
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
 }
 
-bool isLog(BlockID id) {
-    return id == BlockIds::WOOD || id == BlockIds::BIRCH_LOG;
+const std::vector<BlockID>& naturalLogIds() {
+    static const std::vector<BlockID> ids = {
+        BlockRegistry::findByName("oak_log"),
+        BlockRegistry::findByName("birch_log"),
+        BlockRegistry::findByName("spruce_log"),
+        BlockRegistry::findByName("jungle_log"),
+        BlockRegistry::findByName("acacia_log"),
+        BlockRegistry::findByName("dark_oak_log"),
+        BlockRegistry::findByName("cherry_log"),
+        BlockRegistry::findByName("pale_oak_log"),
+    };
+    return ids;
+}
+
+const std::vector<BlockID>& naturalLeavesIds() {
+    static const std::vector<BlockID> ids = {
+        BlockRegistry::findByName("oak_leaves"),
+        BlockRegistry::findByName("birch_leaves"),
+        BlockRegistry::findByName("spruce_leaves"),
+        BlockRegistry::findByName("jungle_leaves"),
+        BlockRegistry::findByName("acacia_leaves"),
+        BlockRegistry::findByName("dark_oak_leaves"),
+        BlockRegistry::findByName("cherry_leaves"),
+        BlockRegistry::findByName("pale_oak_leaves"),
+    };
+    return ids;
+}
+
+bool isTreeBlock(const BlockID id) {
+    return containsBlockId(naturalLogIds(), id) ||
+           containsBlockId(naturalLeavesIds(), id);
+}
+
+bool isLog(const BlockID id) {
+    return containsBlockId(naturalLogIds(), id);
+}
+
+bool findSampledBlock(const TerrainGenerator& generator,
+                      const std::vector<BlockID>& targets,
+                      const int minX,
+                      const int maxX,
+                      const int minY,
+                      const int maxY,
+                      const int minZ,
+                      const int maxZ) {
+    for (int z = minZ; z <= maxZ; ++z) {
+        for (int x = minX; x <= maxX; ++x) {
+            for (int y = minY; y <= maxY; ++y) {
+                if (containsBlockId(targets, generator.sampleBlock(x, y, z))) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 struct TreeRoot {
@@ -132,8 +184,8 @@ bool findUnsuitableRoot(const TerrainGenerator& generator, int& outX, int& outZ,
 }
 
 bool findNaturalWaterColumn(const TerrainGenerator& generator, int& outX, int& outZ, int& outSurfaceY) {
-    for (int z = -128; z <= 128; ++z) {
-        for (int x = -128; x <= 128; ++x) {
+    for (int z = -512; z <= 512; ++z) {
+        for (int x = -512; x <= 512; ++x) {
             const int surfaceY = generator.sampleSurfaceY(x, z);
             if (surfaceY < kSeaLevel) {
                 outX = x;
@@ -152,6 +204,28 @@ int main() {
 
     TerrainGenerator generator;
     generator.init(kSeed, kSeaLevel);
+
+    const std::vector<BlockID> undergroundTargets = {
+        BlockRegistry::findByName("deepslate"),
+        BlockRegistry::findByName("tuff"),
+        BlockRegistry::findByName("granite"),
+        BlockRegistry::findByName("diorite"),
+        BlockRegistry::findByName("andesite"),
+        BlockRegistry::findByName("copper_ore"),
+        BlockRegistry::findByName("redstone_ore"),
+        BlockRegistry::findByName("lapis_ore"),
+        BlockRegistry::findByName("deepslate_copper_ore"),
+        BlockRegistry::findByName("deepslate_redstone_ore"),
+        BlockRegistry::findByName("deepslate_lapis_ore"),
+    };
+    for (const BlockID target : undergroundTargets) {
+        if (target == BlockIds::AIR) {
+            return fail("expected new underground block ids to be registered from blocks.json");
+        }
+    }
+    if (!findSampledBlock(generator, undergroundTargets, -32, 32, 4, 64, -32, 32)) {
+        return fail("expected new underground block types in deterministic terrain samples");
+    }
 
     int waterX = 0;
     int waterZ = 0;
