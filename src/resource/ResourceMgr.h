@@ -5,6 +5,7 @@
 #ifndef MECRAFT_RESOURCEMGR_H
 #define MECRAFT_RESOURCEMGR_H
 #include <memory>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -45,6 +46,19 @@ struct TextureAnimationInfo {
     bool isAnimated = false;
 };
 
+enum class ResourceTextureTint : uint8_t {
+    None = 0,
+    Grass = 1,
+    Foliage = 2,
+};
+
+struct BlockTextureCatalogEntry {
+    TextureAnimationInfo animation;
+    ResourceTextureTint tint = ResourceTextureTint::None;
+    bool verticalFrames = false;
+    bool topFrameFirst = true;
+};
+
 class ResourceMgr {
 public:
     void init();
@@ -81,10 +95,11 @@ public:
     // 纹理数组 (方块渲染使用)
     void buildTextureArray(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureArray& getTextureArray() const;
-    void preloadTextureAnimationsFromConfig(const std::string& blocksConfigPath);
+    void loadBlockTextureCatalog(const std::string& textureConfigPath);
     void preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath);
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
     [[nodiscard]] TextureAnimationInfo getTextureAnimation(const std::string& name) const;
+    [[nodiscard]] ResourceTextureTint getTextureTint(const std::string& name) const;
 
     // Mapping from TextureArray layer index back to Atlas tile index.
     // Used by UI icon generation (buildBlockIconAtlas) to convert face layers to atlas tiles.
@@ -145,7 +160,7 @@ private:
     std::unordered_map<std::string, int> m_itemTextureIndices;
     std::unordered_map<std::string, int> m_hudIconIndices;
     std::unordered_map<std::string, int> m_textureArrayLayers;
-    std::unordered_map<std::string, TextureAnimationInfo> m_declaredTextureAnimations;
+    std::unordered_map<std::string, BlockTextureCatalogEntry> m_blockTextureCatalog;
     // Mapping from TextureArray layer -> Atlas tile index. Built during buildTextureArray.
     std::unordered_map<int, int> m_arrayLayerToAtlasTile;
     float m_atlasAnisotropy = 1.0f;

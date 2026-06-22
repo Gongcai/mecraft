@@ -16,6 +16,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -79,6 +80,18 @@ BiomeTintKind parseBiomeTintKind(const nlohmann::json& blockJson) {
         return blockJson["useGrassTint"].get<bool>() ? BiomeTintKind::Grass : BiomeTintKind::None;
     }
     return BiomeTintKind::None;
+}
+
+BiomeTintKind biomeTintKindFromResourceTint(const ResourceTextureTint tint) {
+    switch (tint) {
+        case ResourceTextureTint::Grass:
+            return BiomeTintKind::Grass;
+        case ResourceTextureTint::Foliage:
+            return BiomeTintKind::Foliage;
+        case ResourceTextureTint::None:
+        default:
+            return BiomeTintKind::None;
+    }
 }
 
 bool containsToken(const std::string_view value, const std::string_view token) {
@@ -500,6 +513,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
             def.supportRule = blockJson["supportRule"].get<std::string>();
         }
+        const bool hasExplicitBiomeTint =
+            blockJson.contains("biomeTint") ||
+            blockJson.contains("useBiomeTint") ||
+            blockJson.contains("useGrassTint");
         def.biomeTint = parseBiomeTintKind(blockJson);
         if (blockJson.contains("timeToBreak") && blockJson["timeToBreak"].is_number_integer()) {
             def.timeToBreak = blockJson["timeToBreak"].get<int>();
@@ -513,6 +530,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
         const bool hasExplicitDerivativeMaterialId = parseDerivativeMaterialId(blockJson, def.derivativeMaterialId);
 
+        bool hasTintedTexture = false;
+        bool hasUntintedTexture = false;
+        BiomeTintKind textureTint = BiomeTintKind::None;
+
         if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
             const auto& tex = blockJson["textures"];
 
@@ -520,10 +541,25 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 #ifdef MECRAFT_NO_TEXTURES
                 return makeStaticWorldTexture(0);
 #else
-                if (!tex.contains(key) || !tex[key].is_string() || resourceMgr == nullptr) {
+                if (!tex.contains(key) || resourceMgr == nullptr) {
                     return makeStaticWorldTexture(0);
                 }
+                if (!tex[key].is_string()) {
+                    throw std::runtime_error(std::string("Block texture key must be a string: ") +
+                                             def.namespacedId.full() + "." + key);
+                }
                 const std::string name = tex[key].get<std::string>();
+                const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(resourceMgr->getTextureTint(name));
+                if (resolvedTint == BiomeTintKind::None) {
+                    hasUntintedTexture = true;
+                } else {
+                    hasTintedTexture = true;
+                    if (textureTint == BiomeTintKind::None) {
+                        textureTint = resolvedTint;
+                    } else if (textureTint != resolvedTint) {
+                        hasUntintedTexture = true;
+                    }
+                }
                 return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
 #endif
             };
@@ -558,6 +594,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
 
+        if (!hasExplicitBiomeTint && hasTintedTexture && !hasUntintedTexture) {
+            def.biomeTint = textureTint;
+        }
+
         if (blockJson.contains("animatedTextures") && blockJson["animatedTextures"].is_object()) {
             for (auto it = blockJson["animatedTextures"].begin(); it != blockJson["animatedTextures"].end(); ++it) {
                 if (!it.value().is_object()) {
@@ -581,14 +621,14 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 #ifndef MECRAFT_NO_TEXTURES
                 if (resourceMgr != nullptr) {
                     const TextureAnimationInfo resolved = resourceMgr->getTextureAnimation(animation.textureName);
-                    animation.ref.firstLayer = resolved.firstLayer;
-                    if (resolved.isAnimated) {
-                        animation.ref.frameCount = static_cast<uint16_t>(resolved.frameCount);
-                        animation.ref.fps = resolved.fps;
-                        animation.ref.isAnimated = true;
-                    } else {
-                        animation.ref.firstLayer = resourceMgr->getTextureArrayLayer(animation.textureName);
+                    if (!resolved.isAnimated) {
+                        throw std::runtime_error("Block animated texture is not declared as animated: " +
+                                                 def.namespacedId.full() + "." + it.key());
                     }
+                    animation.ref.firstLayer = resolved.firstLayer;
+                    animation.ref.frameCount = static_cast<uint16_t>(resolved.frameCount);
+                    animation.ref.fps = resolved.fps;
+                    animation.ref.isAnimated = true;
                 }
 #endif
                 def.namedTextureAnimations[it.key()] = animation;

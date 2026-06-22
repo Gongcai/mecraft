@@ -38,6 +38,7 @@
 
 
 #define BLOCKS_CONFIG_PATH    CONFIG_DIR "/blocks.json"
+#define BLOCK_TEXTURES_CONFIG_PATH CONFIG_DIR "/block_textures.json"
 #define FLUIDS_CONFIG_PATH    CONFIG_DIR "/fluids.json"
 #define ITEMS_CONFIG_PATH     CONFIG_DIR "/items.json"
 #define ENTITIES_CONFIG_PATH  CONFIG_DIR "/entities.json"

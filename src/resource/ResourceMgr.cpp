@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <stdexcept>
 #include <unordered_set>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -375,7 +376,7 @@ void ResourceMgr::shutdown() {
     m_itemAtlasPixels.clear();
     m_itemTextureIndices.clear();
     m_textureArrayLayers.clear();
-    m_declaredTextureAnimations.clear();
+    m_blockTextureCatalog.clear();
 }
 
 Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {
@@ -576,10 +577,12 @@ inline bool supportsAnisotropicFiltering() {
 namespace {
 int computeTextureArrayLayerCount(const std::filesystem::path& imagePath,
                                   const int tileSize,
-                                  const std::unordered_map<std::string, TextureAnimationInfo>& declaredAnimations) {
+                                  const std::unordered_map<std::string, BlockTextureCatalogEntry>& catalog) {
     const std::string textureName = imagePath.stem().string();
-    const auto declaredIt = declaredAnimations.find(textureName);
-    if (declaredIt == declaredAnimations.end() || !declaredIt->second.isAnimated || declaredIt->second.frameCount <= 1) {
+    const auto catalogIt = catalog.find(textureName);
+    if (catalogIt == catalog.end() ||
+        !catalogIt->second.verticalFrames ||
+        catalogIt->second.animation.frameCount <= 1) {
         return 1;
     }
 
@@ -590,12 +593,34 @@ int computeTextureArrayLayerCount(const std::filesystem::path& imagePath,
         return 1;
     }
 
-    const TextureAnimationInfo& animation = declaredIt->second;
+    const TextureAnimationInfo& animation = catalogIt->second.animation;
     if (width != tileSize || height != tileSize * animation.frameCount) {
-        return 1;
+        throw std::runtime_error("Texture catalog dimensions do not match vertical frames for " + imagePath.string());
     }
 
     return animation.frameCount;
+}
+
+ResourceTextureTint parseResourceTextureTint(const nlohmann::json& textureJson) {
+    const auto tintIt = textureJson.find("tint");
+    if (tintIt == textureJson.end()) {
+        return ResourceTextureTint::None;
+    }
+    if (!tintIt->is_string()) {
+        throw std::runtime_error("block_textures.json texture tint must be a string");
+    }
+
+    const std::string tint = tintIt->get<std::string>();
+    if (tint == "none") {
+        return ResourceTextureTint::None;
+    }
+    if (tint == "grass") {
+        return ResourceTextureTint::Grass;
+    }
+    if (tint == "foliage") {
+        return ResourceTextureTint::Foliage;
+    }
+    throw std::runtime_error("Unknown block texture tint: " + tint);
 }
 }
 
@@ -652,14 +677,33 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
             continue;
         }
 
-        if (width != tileSize || height != tileSize) {
+        const std::string texName = imagePaths[i].stem().string();
+        const auto catalogIt = m_blockTextureCatalog.find(texName);
+        const bool useVerticalFrame =
+            catalogIt != m_blockTextureCatalog.end() &&
+            catalogIt->second.verticalFrames &&
+            catalogIt->second.animation.frameCount > 1;
+        int sourceHeight = height;
+        const unsigned char* sourcePixels = data;
+        if (useVerticalFrame) {
+            const int frameCount = catalogIt->second.animation.frameCount;
+            if (width != tileSize || height != tileSize * frameCount) {
+                stbi_image_free(data);
+                throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + imagePaths[i].string());
+            }
+            const int frameIndex = catalogIt->second.topFrameFirst ? frameCount - 1 : 0;
+            sourcePixels = data + static_cast<size_t>(frameIndex * tileSize * width) * 4;
+            sourceHeight = tileSize;
+        }
+
+        if (!useVerticalFrame && (width != tileSize || height != tileSize)) {
 #ifdef MECRAFT_DEBUG
             MECRAFT_LOG_STREAM(std::cerr << "Warning: Texture size mismatch! " << imagePaths[i] << "\n");
 #endif
         }
 
         const int copyWidth = std::min(tileSize, width);
-        const int copyHeight = std::min(tileSize, height);
+        const int copyHeight = std::min(tileSize, sourceHeight);
 
         const int tileCol = i % tilesPerRow;
         const int tileRow = i / tilesPerRow;
@@ -672,10 +716,10 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
             for (int x = 0; x < copyWidth; ++x) {
                 const int destIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
                 const int srcIndex = (y * width + x) * 4;
-                atlasPixels[destIndex + 0] = data[srcIndex + 0];
-                atlasPixels[destIndex + 1] = data[srcIndex + 1];
-                atlasPixels[destIndex + 2] = data[srcIndex + 2];
-                atlasPixels[destIndex + 3] = data[srcIndex + 3];
+                atlasPixels[destIndex + 0] = sourcePixels[srcIndex + 0];
+                atlasPixels[destIndex + 1] = sourcePixels[srcIndex + 1];
+                atlasPixels[destIndex + 2] = sourcePixels[srcIndex + 2];
+                atlasPixels[destIndex + 3] = sourcePixels[srcIndex + 3];
             }
         }
 
@@ -718,7 +762,6 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
 
         stbi_image_free(data);
 
-        std::string texName = imagePaths[i].stem().string();
         m_textures[texName] = i;
     }
 
@@ -783,8 +826,11 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         m_textureArray.textureID = 0;
     }
     m_textureArrayLayers.clear();
-    for (auto& [_, animation] : m_declaredTextureAnimations) {
-        animation.firstLayer = 0;
+    for (auto& [_, texture] : m_blockTextureCatalog) {
+        texture.animation.firstLayer = 0;
+        if (texture.animation.frameCount > 1) {
+            texture.animation.isAnimated = false;
+        }
     }
 
     std::vector<fs::path> imagePaths;
@@ -815,9 +861,12 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
     int numLayers = 0;
     for (const fs::path& imagePath : imagePaths) {
-        const int layerCount = computeTextureArrayLayerCount(imagePath, tileSize, m_declaredTextureAnimations);
+        const int layerCount = computeTextureArrayLayerCount(imagePath, tileSize, m_blockTextureCatalog);
         layersPerImage.push_back(layerCount);
         numLayers += layerCount;
+    }
+    if (numLayers > 1024) {
+        throw std::runtime_error("Block texture array exceeds the 1024-layer vertex encoding limit");
     }
 
     GLuint textureID = 0;
@@ -836,12 +885,12 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         const std::string textureName = imagePath.stem().string();
         m_textureArrayLayers[textureName] = currentLayer;
 
-        auto declaredIt = m_declaredTextureAnimations.find(textureName);
-        const int declaredFrames = (declaredIt != m_declaredTextureAnimations.end()) ? declaredIt->second.frameCount : 1;
+        auto catalogIt = m_blockTextureCatalog.find(textureName);
+        const int declaredFrames = (catalogIt != m_blockTextureCatalog.end()) ? catalogIt->second.animation.frameCount : 1;
         const bool useAnimationFrames = layersPerImage[imageIndex] > 1;
-        if (declaredIt != m_declaredTextureAnimations.end()) {
-            declaredIt->second.firstLayer = currentLayer;
-            declaredIt->second.isAnimated = useAnimationFrames && declaredIt->second.frameCount > 1;
+        if (catalogIt != m_blockTextureCatalog.end()) {
+            catalogIt->second.animation.firstLayer = currentLayer;
+            catalogIt->second.animation.isAnimated = useAnimationFrames && catalogIt->second.animation.frameCount > 1;
         }
 
         int width = 0;
@@ -884,14 +933,12 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
         if (useAnimationFrames) {
             if (width != tileSize || height != tileSize * declaredFrames) {
-#ifdef MECRAFT_DEBUG
-                MECRAFT_LOG_STREAM(std::cerr << "Warning: Animated texture size mismatch in texture array: " << imagePath << "\n");
-#endif
-                uploadLayer(currentLayer, data, width, height);
+                stbi_image_free(data);
+                throw std::runtime_error("Texture catalog dimensions do not match texture array source for " + imagePath.string());
             } else {
-                const bool reverseFrameOrder = textureName == "water_flow";
+                const bool topFrameFirst = catalogIt != m_blockTextureCatalog.end() && catalogIt->second.topFrameFirst;
                 for (int frame = 0; frame < declaredFrames; ++frame) {
-                    const int flippedFrameIndex = reverseFrameOrder ? frame : declaredFrames - 1 - frame;
+                    const int flippedFrameIndex = topFrameFirst ? declaredFrames - 1 - frame : frame;
                     const unsigned char* framePixels = data + static_cast<size_t>(flippedFrameIndex * tileSize * width) * 4;
                     uploadLayer(currentLayer + frame, framePixels, width, tileSize);
                 }
@@ -950,54 +997,111 @@ const TextureArray& ResourceMgr::getTextureArray() const {
     return m_textureArray;
 }
 
-void ResourceMgr::preloadTextureAnimationsFromConfig(const std::string& blocksConfigPath) {
-    m_declaredTextureAnimations.clear();
+void ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) {
+    m_blockTextureCatalog.clear();
 
-    std::ifstream file(blocksConfigPath);
+    std::ifstream file(textureConfigPath);
     if (!file.is_open()) {
-        return;
+        throw std::runtime_error("Failed to open block texture catalog: " + textureConfigPath);
     }
 
     nlohmann::json root;
     try {
         file >> root;
-    } catch (const std::exception&) {
-        return;
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("Failed to parse block texture catalog: ") + e.what());
     }
 
-    const auto blocksIt = root.find("blocks");
-    if (blocksIt == root.end() || !blocksIt->is_array()) {
-        return;
+    int tileSize = 16;
+    const auto tileSizeIt = root.find("tileSize");
+    if (tileSizeIt != root.end()) {
+        if (!tileSizeIt->is_number_integer()) {
+            throw std::runtime_error("block_textures.json tileSize must be an integer");
+        }
+        tileSize = tileSizeIt->get<int>();
+        if (tileSize <= 0) {
+            throw std::runtime_error("block_textures.json tileSize must be positive");
+        }
     }
 
-    for (const auto& blockJson : *blocksIt) {
-        const auto animationsIt = blockJson.find("animatedTextures");
-        if (animationsIt == blockJson.end() || !animationsIt->is_object()) {
-            continue;
+    const auto texturesIt = root.find("textures");
+    if (texturesIt == root.end() || !texturesIt->is_array()) {
+        throw std::runtime_error("block_textures.json must contain a textures array");
+    }
+
+    for (const auto& textureJson : *texturesIt) {
+        if (!textureJson.is_object()) {
+            throw std::runtime_error("block_textures.json texture entry must be an object");
         }
 
-        for (auto it = animationsIt->begin(); it != animationsIt->end(); ++it) {
-            if (!it.value().is_object()) {
-                continue;
-            }
-
-            const auto textureIt = it.value().find("texture");
-            const auto framesIt = it.value().find("frames");
-            const auto fpsIt = it.value().find("fps");
-            if (textureIt == it.value().end() || !textureIt->is_string() ||
-                framesIt == it.value().end() || !framesIt->is_number_integer() ||
-                fpsIt == it.value().end() || !fpsIt->is_number()) {
-                continue;
-            }
-
-            TextureAnimationInfo info;
-            info.firstLayer = 0;
-            info.frameCount = std::max(1, framesIt->get<int>());
-            info.fps = std::max(0.0f, fpsIt->get<float>());
-            info.isAnimated = info.frameCount > 1;
-
-            m_declaredTextureAnimations[textureIt->get<std::string>()] = info;
+        const auto nameIt = textureJson.find("name");
+        if (nameIt == textureJson.end() || !nameIt->is_string()) {
+            throw std::runtime_error("block_textures.json texture entry requires a string name");
         }
+        const std::string name = nameIt->get<std::string>();
+        if (name.empty() || name.find('/') != std::string::npos || name.find('\\') != std::string::npos) {
+            throw std::runtime_error("Invalid block texture name: " + name);
+        }
+        if (m_blockTextureCatalog.find(name) != m_blockTextureCatalog.end()) {
+            throw std::runtime_error("Duplicate block texture catalog entry: " + name);
+        }
+
+        BlockTextureCatalogEntry entry;
+        entry.tint = parseResourceTextureTint(textureJson);
+
+        const auto framesIt = textureJson.find("frames");
+        if (framesIt != textureJson.end()) {
+            if (!framesIt->is_number_integer()) {
+                throw std::runtime_error("block_textures.json frames must be an integer for " + name);
+            }
+            entry.animation.frameCount = framesIt->get<int>();
+            if (entry.animation.frameCount <= 0 || entry.animation.frameCount > 63) {
+                throw std::runtime_error("block_textures.json frames out of range for " + name);
+            }
+        }
+
+        const auto fpsIt = textureJson.find("fps");
+        if (fpsIt != textureJson.end()) {
+            if (!fpsIt->is_number()) {
+                throw std::runtime_error("block_textures.json fps must be numeric for " + name);
+            }
+            entry.animation.fps = fpsIt->get<float>();
+            if (entry.animation.fps < 0.0f || entry.animation.fps > 63.0f) {
+                throw std::runtime_error("block_textures.json fps out of range for " + name);
+            }
+        }
+
+        if (entry.animation.frameCount > 1) {
+            const auto layoutIt = textureJson.find("frameLayout");
+            if (layoutIt == textureJson.end() || !layoutIt->is_string()) {
+                throw std::runtime_error("Animated block texture requires frameLayout for " + name);
+            }
+            const std::string frameLayout = layoutIt->get<std::string>();
+            if (frameLayout != "vertical") {
+                throw std::runtime_error("Unsupported block texture frameLayout for " + name + ": " + frameLayout);
+            }
+            entry.verticalFrames = true;
+            entry.animation.isAnimated = true;
+
+            const auto frameOrderIt = textureJson.find("frameOrder");
+            if (frameOrderIt == textureJson.end() || !frameOrderIt->is_string()) {
+                throw std::runtime_error("Animated block texture requires frameOrder for " + name);
+            }
+            const std::string frameOrder = frameOrderIt->get<std::string>();
+            if (frameOrder == "top_to_bottom") {
+                entry.topFrameFirst = true;
+            } else if (frameOrder == "bottom_to_top") {
+                entry.topFrameFirst = false;
+            } else {
+                throw std::runtime_error("Unsupported block texture frameOrder for " + name + ": " + frameOrder);
+            }
+        }
+
+        if (tileSize != 16) {
+            throw std::runtime_error("Only 16px block texture tiles are currently supported");
+        }
+
+        m_blockTextureCatalog.emplace(name, entry);
     }
 }
 
@@ -1054,21 +1158,30 @@ int ResourceMgr::getTextureArrayLayer(const std::string& name) const {
     if (it != m_textureArrayLayers.end()) {
         return it->second;
     }
-    return 0;
+    throw std::runtime_error("Unknown block texture array layer: " + name);
 }
 
 TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) const {
-    const auto it = m_declaredTextureAnimations.find(name);
-    if (it != m_declaredTextureAnimations.end()) {
-        return it->second;
+    const auto catalogIt = m_blockTextureCatalog.find(name);
+    if (catalogIt != m_blockTextureCatalog.end()) {
+        TextureAnimationInfo info = catalogIt->second.animation;
+        if (info.firstLayer == 0) {
+            info.firstLayer = getTextureArrayLayer(name);
+        }
+        return info;
     }
 
-    TextureAnimationInfo fallback;
-    fallback.firstLayer = getTextureArrayLayer(name);
-    fallback.frameCount = 1;
-    fallback.fps = 0.0f;
-    fallback.isAnimated = false;
-    return fallback;
+    TextureAnimationInfo info;
+    info.firstLayer = getTextureArrayLayer(name);
+    info.frameCount = 1;
+    info.fps = 0.0f;
+    info.isAnimated = false;
+    return info;
+}
+
+ResourceTextureTint ResourceMgr::getTextureTint(const std::string& name) const {
+    const auto catalogIt = m_blockTextureCatalog.find(name);
+    return catalogIt != m_blockTextureCatalog.end() ? catalogIt->second.tint : ResourceTextureTint::None;
 }
 
 int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
@@ -1077,9 +1190,9 @@ int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
         return it->second;
     }
 #ifdef MECRAFT_DEBUG
-    MECRAFT_LOG_STREAM(std::cerr << "[ResourceMgr] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << ", falling back to 0\n");
+    MECRAFT_LOG_STREAM(std::cerr << "[ResourceMgr] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << "\n");
 #endif
-    return 0;
+    return -1;
 }
 
 namespace {

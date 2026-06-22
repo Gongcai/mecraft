@@ -5,10 +5,7 @@
       "drop": "minecraft:air",
       "isSolid": false,
       "isTransparent": true,
-      "timeToBreak": 0,
-      "textures": {
-        "all": "air"
-      }
+      "timeToBreak": 0
     },
     {
       "id": "minecraft:dirt",

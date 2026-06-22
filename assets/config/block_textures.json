@@ -1,0 +1,92 @@
+{
+  "tileSize": 16,
+  "textures": [
+    {
+      "name": "water_still",
+      "frames": 32,
+      "fps": 6,
+      "frameLayout": "vertical",
+      "frameOrder": "top_to_bottom"
+    },
+    {
+      "name": "water_flow",
+      "frames": 32,
+      "fps": 8,
+      "frameLayout": "vertical",
+      "frameOrder": "bottom_to_top"
+    },
+    {
+      "name": "magma",
+      "frames": 3,
+      "fps": 8,
+      "frameLayout": "vertical",
+      "frameOrder": "top_to_bottom"
+    },
+    {
+      "name": "crimson_stem",
+      "frames": 5,
+      "fps": 8,
+      "frameLayout": "vertical",
+      "frameOrder": "top_to_bottom"
+    },
+    {
+      "name": "warped_stem",
+      "frames": 5,
+      "fps": 8,
+      "frameLayout": "vertical",
+      "frameOrder": "top_to_bottom"
+    },
+    {
+      "name": "grass_top",
+      "tint": "grass"
+    },
+    {
+      "name": "grass_side",
+      "tint": "grass"
+    },
+    {
+      "name": "tall_grass_bottom",
+      "tint": "grass"
+    },
+    {
+      "name": "short_grass",
+      "tint": "grass"
+    },
+    {
+      "name": "fern",
+      "tint": "grass"
+    },
+    {
+      "name": "oak_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "birch_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "spruce_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "jungle_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "acacia_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "dark_oak_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "mangrove_leaves",
+      "tint": "foliage"
+    },
+    {
+      "name": "pale_oak_leaves",
+      "tint": "foliage"
+    }
+  ]
+}

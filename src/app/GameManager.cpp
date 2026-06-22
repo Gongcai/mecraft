@@ -54,8 +54,8 @@ bool GameManager::initWindow(int width, int height, const char* title) {
 
 void GameManager::initResources() {
     m_resourceMgr.init();
+    m_resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH);
     m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
-    m_resourceMgr.preloadTextureAnimationsFromConfig(BLOCKS_CONFIG_PATH);
     m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
     m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     m_resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
