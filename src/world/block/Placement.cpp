@@ -56,10 +56,26 @@ uint16_t horizontalFacingFromYaw(const float playerYaw) {
     if (angle >= 135.0f && angle < 225.0f) {
         return PropIndices::FACING_WEST;
     }
-    if (angle >= 225.0f && angle <= 315.0f) {
+    if (angle >= 225.0f && angle < 315.0f) {
         return PropIndices::FACING_NORTH;
     }
     return PropIndices::FACING_EAST;
+}
+
+uint16_t facingFromSideNormal(const glm::ivec3& normal) {
+    if (normal.x > 0) {
+        return PropIndices::FACING_EAST;
+    }
+    if (normal.x < 0) {
+        return PropIndices::FACING_WEST;
+    }
+    if (normal.z > 0) {
+        return PropIndices::FACING_SOUTH;
+    }
+    if (normal.z < 0) {
+        return PropIndices::FACING_NORTH;
+    }
+    throw std::runtime_error("Stair side placement requires a horizontal hit normal");
 }
 
 uint16_t halfFromHit(const PlacementContext& ctx) {
@@ -99,7 +115,9 @@ StateID strategyAxisOriented(const PlacementContext& ctx) {
 }
 
 StateID strategyStairs(const PlacementContext& ctx) {
-    const uint16_t facingValue = horizontalFacingFromYaw(ctx.playerYaw);
+    const uint16_t facingValue = (ctx.hitNormal.y == 0)
+        ? facingFromSideNormal(ctx.hitNormal)
+        : horizontalFacingFromYaw(ctx.playerYaw);
     const uint16_t halfValue = halfFromHit(ctx);
 
     return BlockStateRegistry::getState(

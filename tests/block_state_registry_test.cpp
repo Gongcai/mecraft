@@ -339,13 +339,13 @@ int main() {
         return fail("stairs placement should derive north-facing bottom stairs from camera yaw and top-face hits");
     }
 
-    PlacementContext stairsNorthEastBoundaryPlacement;
-    stairsNorthEastBoundaryPlacement.blockId = oakStairs;
-    stairsNorthEastBoundaryPlacement.playerYaw = 315.0f;
-    stairsNorthEastBoundaryPlacement.hitNormal = {0, 1, 0};
-    const StateID stairsPlacedNorthEastBoundary = stairsStrategy(stairsNorthEastBoundaryPlacement);
-    if (BlockStateRegistry::getPropertyIndex(stairsPlacedNorthEastBoundary, PropIndices::FACING) != PropIndices::FACING_NORTH) {
-        return fail("stairs placement should classify the +X/-Z yaw boundary as north-facing");
+    PlacementContext stairsEastNorthBoundaryPlacement;
+    stairsEastNorthBoundaryPlacement.blockId = oakStairs;
+    stairsEastNorthBoundaryPlacement.playerYaw = 315.0f;
+    stairsEastNorthBoundaryPlacement.hitNormal = {0, 1, 0};
+    const StateID stairsPlacedEastNorthBoundary = stairsStrategy(stairsEastNorthBoundaryPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stairsPlacedEastNorthBoundary, PropIndices::FACING) != PropIndices::FACING_EAST) {
+        return fail("stairs placement should classify the +X/-Z yaw boundary as east-facing");
     }
 
     PlacementContext stairsSideTopPlacement;
@@ -353,10 +353,29 @@ int main() {
     stairsSideTopPlacement.playerYaw = 0.0f;
     stairsSideTopPlacement.hitNormal = {0, 0, 1};
     stairsSideTopPlacement.hitPosition = {4.5f, 32.75f, 4.0f};
-    const StateID stairsPlacedEastTop = stairsStrategy(stairsSideTopPlacement);
-    if (BlockStateRegistry::getPropertyIndex(stairsPlacedEastTop, PropIndices::FACING) != PropIndices::FACING_EAST ||
-        BlockStateRegistry::getPropertyIndex(stairsPlacedEastTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
-        return fail("stairs side placement should derive facing from yaw and half from hit position");
+    const StateID stairsPlacedSouthTop = stairsStrategy(stairsSideTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stairsPlacedSouthTop, PropIndices::FACING) != PropIndices::FACING_SOUTH ||
+        BlockStateRegistry::getPropertyIndex(stairsPlacedSouthTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
+        return fail("stairs side placement should derive facing from the side normal and half from hit position");
+    }
+
+    const std::vector<std::pair<glm::ivec3, uint16_t>> stairSideCases = {
+        {{1, 0, 0}, PropIndices::FACING_EAST},
+        {{-1, 0, 0}, PropIndices::FACING_WEST},
+        {{0, 0, 1}, PropIndices::FACING_SOUTH},
+        {{0, 0, -1}, PropIndices::FACING_NORTH},
+    };
+    for (const auto& [normal, expectedFacing] : stairSideCases) {
+        PlacementContext sidePlacement;
+        sidePlacement.blockId = oakStairs;
+        sidePlacement.playerYaw = 180.0f;
+        sidePlacement.hitNormal = normal;
+        sidePlacement.hitPosition = {4.5f, 32.25f, 4.0f};
+        const StateID placed = stairsStrategy(sidePlacement);
+        if (BlockStateRegistry::getPropertyIndex(placed, PropIndices::FACING) != expectedFacing ||
+            BlockStateRegistry::getPropertyIndex(placed, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+            return fail("stairs side placement should derive facing from the clicked side normal");
+        }
     }
 
     const StateID chestDefault = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
