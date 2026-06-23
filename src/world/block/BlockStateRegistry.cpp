@@ -1,10 +1,13 @@
 #include "BlockStateRegistry.h"
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 
+#include "BlockModelRegistry.h"
 #include "PropIndices.h"
 
 std::vector<std::string> BlockStateRegistry::s_propertyNamePool{};
@@ -15,6 +18,7 @@ std::unordered_map<BlockID, BlockStateRegistry::RegisteredBlockProperties> Block
 std::vector<BlockStateEntry> BlockStateRegistry::s_states{};
 std::vector<PropertyKey> BlockStateRegistry::s_statePropertiesPool{};
 std::vector<StateTextureIndices> BlockStateRegistry::s_stateTextures{};
+std::vector<ModelVariant> BlockStateRegistry::s_stateModelVariants{};
 std::unordered_map<BlockID, StateID> BlockStateRegistry::s_defaultState{};
 std::unordered_map<uint64_t, StateID> BlockStateRegistry::s_stateLookup{};
 std::unordered_map<BlockID, BlockStateRegistry::BlockPropertyLayout> BlockStateRegistry::s_blockPropertyLayouts{};
@@ -51,7 +55,7 @@ StateTextureIndices makeTexturesForBlock(const BlockID blockId) {
 }
 
 StateTextureIndices makeTexturesForState(const BlockID blockId,
-                                         const std::vector<PropertyKey>& props) {
+                                          const std::vector<PropertyKey>& props) {
     StateTextureIndices textures = makeTexturesForBlock(blockId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
 
@@ -127,6 +131,86 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
     }
 
     return textures;
+}
+
+std::string trimCopy(const std::string& value) {
+    const auto first = std::find_if_not(value.begin(), value.end(), [](const unsigned char ch) {
+        return std::isspace(ch) != 0;
+    });
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](const unsigned char ch) {
+        return std::isspace(ch) != 0;
+    }).base();
+    if (first >= last) {
+        return {};
+    }
+    return std::string(first, last);
+}
+
+ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
+    ModelTransform transform;
+    const auto transformIt = variantJson.find("transform");
+    if (transformIt == variantJson.end()) {
+        return transform;
+    }
+    if (!transformIt->is_object()) {
+        throw std::runtime_error("Model variant transform must be an object");
+    }
+
+    const auto readRotation = [&](const char* key) -> uint8_t {
+        const auto it = transformIt->find(key);
+        if (it == transformIt->end()) {
+            return 0;
+        }
+        if (!it->is_number_integer()) {
+            throw std::runtime_error(std::string("Model variant rotation must be integer: ") + key);
+        }
+        const int rotation = it->get<int>();
+        if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
+            throw std::runtime_error(std::string("Model variant rotation must be 0, 90, 180, or 270: ") + key);
+        }
+        return static_cast<uint8_t>(rotation);
+    };
+
+    transform.rotX = readRotation("rotX");
+    transform.rotY = readRotation("rotY");
+    transform.rotZ = readRotation("rotZ");
+    return transform;
+}
+
+StateID parseModelVariantStateKey(const BlockID blockId, const std::string& key) {
+    const std::string trimmedKey = trimCopy(key);
+    if (trimmedKey.empty()) {
+        return BlockStateRegistry::getDefaultState(blockId);
+    }
+
+    std::vector<std::pair<uint16_t, uint16_t>> props;
+    std::istringstream input(trimmedKey);
+    std::string segment;
+    while (std::getline(input, segment, ',')) {
+        const std::string trimmedSegment = trimCopy(segment);
+        const size_t equals = trimmedSegment.find('=');
+        if (equals == std::string::npos) {
+            throw std::runtime_error("Model variant state key segment is missing '=': " + trimmedSegment);
+        }
+
+        const std::string propName = trimCopy(trimmedSegment.substr(0, equals));
+        const std::string propValue = trimCopy(trimmedSegment.substr(equals + 1));
+        const uint16_t nameIndex = BlockStateRegistry::getPropertyNameIndex(propName);
+        if (nameIndex == BlockStateRegistry::INVALID_INDEX) {
+            throw std::runtime_error("Unknown model variant property name: " + propName);
+        }
+        const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(nameIndex, propValue);
+        if (valueIndex == BlockStateRegistry::INVALID_INDEX) {
+            throw std::runtime_error("Unknown model variant property value: " + propName + "=" + propValue);
+        }
+        props.emplace_back(nameIndex, valueIndex);
+    }
+
+    const StateID stateId = BlockStateRegistry::getState(blockId, props);
+    if (BlockStateRegistry::getBlockId(stateId) != blockId) {
+        throw std::runtime_error("Model variant state key resolved to a different block");
+    }
+    return stateId;
 }
 }
 
@@ -213,6 +297,7 @@ void BlockStateRegistry::clearHotData() {
     s_states.clear();
     s_statePropertiesPool.clear();
     s_stateTextures.clear();
+    s_stateModelVariants.clear();
     s_defaultState.clear();
     s_stateLookup.clear();
     s_blockPropertyLayouts.clear();
@@ -457,6 +542,52 @@ const StateTextureIndices& BlockStateRegistry::getStateTextures(const StateID st
         }
     }
     return s_fallbackTextures;
+}
+
+void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const nlohmann::json& variantsJson) {
+    if (!variantsJson.is_object()) {
+        throw std::runtime_error("modelVariants must be an object for block: " +
+                                 BlockRegistry::getNamespacedId(blockId).full());
+    }
+
+    if (s_stateModelVariants.size() < s_states.size()) {
+        s_stateModelVariants.resize(s_states.size());
+    }
+
+    for (auto it = variantsJson.begin(); it != variantsJson.end(); ++it) {
+        if (!it.value().is_object()) {
+            throw std::runtime_error("Model variant entry must be an object: " + it.key());
+        }
+
+        const auto modelIt = it.value().find("model");
+        if (modelIt == it.value().end() || !modelIt->is_string()) {
+            throw std::runtime_error("Model variant entry requires model string: " + it.key());
+        }
+
+        const std::string modelName = modelIt->get<std::string>();
+        const BlockModel* model = BlockModelRegistry::get(modelName);
+        if (model == nullptr) {
+            throw std::runtime_error("Unknown block model referenced by variant: " + modelName);
+        }
+
+        const StateID stateId = parseModelVariantStateKey(blockId, it.key());
+        if (stateId >= s_stateModelVariants.size()) {
+            throw std::runtime_error("Model variant state id is outside state registry");
+        }
+
+        ModelVariant variant;
+        variant.model = model;
+        variant.transform = parseModelTransform(it.value());
+        s_stateModelVariants[stateId] = variant;
+    }
+}
+
+const ModelVariant* BlockStateRegistry::getModelVariant(const StateID stateId) {
+    if (stateId >= s_stateModelVariants.size()) {
+        return nullptr;
+    }
+    const ModelVariant& variant = s_stateModelVariants[stateId];
+    return variant.model != nullptr ? &variant : nullptr;
 }
 
 uint16_t BlockStateRegistry::getPropertyNameIndex(const std::string& name) {

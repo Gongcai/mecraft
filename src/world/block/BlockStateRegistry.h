@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Block.h"
+#include "BlockModel.h"
 
 using StateID = uint16_t;
 
@@ -70,6 +71,8 @@ public:
     static StateID withProperty(StateID currentState, uint16_t propKey, uint16_t newValue);
     static StateID withProperty(StateID currentState, uint16_t propKey, const std::string& newValue);
     static const StateTextureIndices& getStateTextures(StateID stateId);
+    static void registerBlockModelVariants(BlockID blockId, const nlohmann::json& variantsJson);
+    static const ModelVariant* getModelVariant(StateID stateId);
 
     static uint16_t getPropertyNameIndex(const std::string& name);
     static uint16_t getPropertyValueIndex(uint16_t nameIndex, const std::string& value);
@@ -104,6 +107,7 @@ private:
     static std::vector<BlockStateEntry> s_states;
     static std::vector<PropertyKey> s_statePropertiesPool;
     static std::vector<StateTextureIndices> s_stateTextures;
+    static std::vector<ModelVariant> s_stateModelVariants;
     static std::unordered_map<BlockID, StateID> s_defaultState;
     static std::unordered_map<uint64_t, StateID> s_stateLookup;
     static std::unordered_map<BlockID, BlockPropertyLayout> s_blockPropertyLayouts;

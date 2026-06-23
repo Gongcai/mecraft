@@ -6,6 +6,7 @@
 
 #include "../src/world/block/Block.h"
 #include "../src/world/block/BlockStateRegistry.h"
+#include "../src/renderer/mesh/MeshBuilderRegistry.h"
 #include "../src/world/fluid/FluidRegistry.h"
 #include "../src/world/fluid/FluidState.h"
 #include "../src/world/block/Placement.h"
@@ -107,6 +108,43 @@ int main() {
     const BlockDef& birchLogDef = BlockRegistry::get(BlockIds::BIRCH_LOG);
     if (birchLogDef.placementStrategy != "axis_oriented") {
         return fail("birch log should parse axis-oriented placement strategy");
+    }
+
+    const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
+    if (oakStairs == BlockIds::AIR) {
+        return fail("oak_stairs should be registered from blocks.json");
+    }
+    const BlockDef& oakStairsDef = BlockRegistry::get(oakStairs);
+    if (oakStairsDef.renderShapeName != "model" ||
+        oakStairsDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
+        return fail("oak_stairs should use the model mesh builder");
+    }
+    const StateID oakStairsSouth = BlockStateRegistry::getState(
+        oakStairs,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_SOUTH},
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM}
+        });
+    const ModelVariant* oakStairsVariant = BlockStateRegistry::getModelVariant(oakStairsSouth);
+    if (oakStairsVariant == nullptr || oakStairsVariant->model == nullptr ||
+        oakStairsVariant->model->name != "block/oak_stairs" ||
+        oakStairsVariant->transform.rotY != 90) {
+        return fail("oak_stairs south state should resolve to the rotated oak stairs model");
+    }
+
+    const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
+    if (oakSlab == BlockIds::AIR) {
+        return fail("oak_slab should be registered from blocks.json");
+    }
+    const StateID oakSlabTop = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_TOP}
+        });
+    const ModelVariant* oakSlabVariant = BlockStateRegistry::getModelVariant(oakSlabTop);
+    if (oakSlabVariant == nullptr || oakSlabVariant->model == nullptr ||
+        oakSlabVariant->model->name != "block/oak_slab_top") {
+        return fail("oak_slab top state should resolve to the top slab model");
     }
 
     PlacementStrategyFn torchStrategy = PlacementStrategyRegistry::getStrategy(torchDef.placementStrategy);

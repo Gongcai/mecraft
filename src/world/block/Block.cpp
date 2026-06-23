@@ -4,6 +4,7 @@
 
 #include "Block.h"
 #include "../../Diagnostics.h"
+#include "BlockModelRegistry.h"
 #include "BlockStateRegistry.h"
 #include "../fluid/FluidRegistry.h"
 #include "Placement.h"
@@ -388,6 +389,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     // Step 3: Load config from JSON
     PlacementStrategyRegistry::initBuiltinStrategies();
     MeshBuilderRegistry::initBuiltinBuilders();
+    BlockModelRegistry::init(resourceMgr);
 
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
@@ -419,6 +421,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         BlockIds::init();
         return;
     }
+
+    std::vector<std::pair<BlockID, nlohmann::json>> pendingModelVariants;
 
     for (const auto& blockJson : root["blocks"]) {
         BlockID id = 0;
@@ -674,6 +678,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
 
+        if (blockJson.contains("modelVariants")) {
+            pendingModelVariants.emplace_back(id, blockJson["modelVariants"]);
+        }
+
         if (!hasExplicitMaterialKind) {
             def.materialKind = inferBlockMaterialKind(def);
         }
@@ -685,6 +693,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     }
 
     BlockStateRegistry::explodeAllStates();
+    for (const auto& [blockId, variantsJson] : pendingModelVariants) {
+        BlockStateRegistry::registerBlockModelVariants(blockId, variantsJson);
+    }
     PropIndices::init();
 
     s_initialized = true;

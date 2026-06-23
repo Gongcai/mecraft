@@ -180,6 +180,55 @@
       }
     },
     {
+      "id": "minecraft:oak_stairs",
+      "drop": "minecraft:oak_stairs",
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "stairs",
+      "properties": {
+        "facing": ["east", "south", "west", "north"],
+        "half": ["bottom", "top"]
+      },
+      "defaultState": {
+        "facing": "east",
+        "half": "bottom"
+      },
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "facing=east,half=bottom": { "model": "block/oak_stairs" },
+        "facing=south,half=bottom": { "model": "block/oak_stairs", "transform": { "rotY": 90 } },
+        "facing=west,half=bottom": { "model": "block/oak_stairs", "transform": { "rotY": 180 } },
+        "facing=north,half=bottom": { "model": "block/oak_stairs", "transform": { "rotY": 270 } },
+        "facing=east,half=top": { "model": "block/oak_stairs", "transform": { "rotX": 180 } },
+        "facing=south,half=top": { "model": "block/oak_stairs", "transform": { "rotY": 90, "rotX": 180 } },
+        "facing=west,half=top": { "model": "block/oak_stairs", "transform": { "rotY": 180, "rotX": 180 } },
+        "facing=north,half=top": { "model": "block/oak_stairs", "transform": { "rotY": 270, "rotX": 180 } }
+      }
+    },
+    {
+      "id": "minecraft:oak_slab",
+      "drop": "minecraft:oak_slab",
+      "isSolid": false,
+      "renderShape": "model",
+      "properties": {
+        "half": ["bottom", "top"]
+      },
+      "defaultState": {
+        "half": "bottom"
+      },
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "half=bottom": { "model": "block/oak_slab" },
+        "half=top": { "model": "block/oak_slab_top" }
+      }
+    },
+    {
       "id": "minecraft:spruce_planks",
       "drop": "minecraft:spruce_planks",
       "timeToBreak": 1000,

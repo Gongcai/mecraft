@@ -6,13 +6,16 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <mutex>
+#include <stdexcept>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec2.hpp>
 
 #include "MeshBuilderRegistry.h"
 #include "../../world/fluid/FluidFlow.h"
+#include "../../world/block/BlockModelRegistry.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/fluid/FluidState.h"
 #include "../../world/block/PropIndices.h"
@@ -1296,6 +1299,305 @@ void emitCustomFace(std::vector<BlockVertex>& vertices,
                     const FaceRenderData& renderData) {
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
+}
+
+glm::vec3 rotatePointX90(const glm::vec3& p, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {p.x, 1.0f - p.z, p.y};
+        case 2: return {p.x, 1.0f - p.y, 1.0f - p.z};
+        case 3: return {p.x, p.z, 1.0f - p.y};
+        case 0:
+        default: return p;
+    }
+}
+
+glm::vec3 rotatePointY90(const glm::vec3& p, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {1.0f - p.z, p.y, p.x};
+        case 2: return {1.0f - p.x, p.y, 1.0f - p.z};
+        case 3: return {p.z, p.y, 1.0f - p.x};
+        case 0:
+        default: return p;
+    }
+}
+
+glm::vec3 rotatePointZ90(const glm::vec3& p, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {1.0f - p.y, p.x, p.z};
+        case 2: return {1.0f - p.x, 1.0f - p.y, p.z};
+        case 3: return {p.y, 1.0f - p.x, p.z};
+        case 0:
+        default: return p;
+    }
+}
+
+glm::vec3 applyModelTransform(glm::vec3 p, const ModelTransform& transform) {
+    p = rotatePointX90(p, transform.rotX);
+    p = rotatePointY90(p, transform.rotY);
+    p = rotatePointZ90(p, transform.rotZ);
+    return p;
+}
+
+IVec3 rotateDirectionX90(const IVec3 direction, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {direction.x, -direction.z, direction.y};
+        case 2: return {direction.x, -direction.y, -direction.z};
+        case 3: return {direction.x, direction.z, -direction.y};
+        case 0:
+        default: return direction;
+    }
+}
+
+IVec3 rotateDirectionY90(const IVec3 direction, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {-direction.z, direction.y, direction.x};
+        case 2: return {-direction.x, direction.y, -direction.z};
+        case 3: return {direction.z, direction.y, -direction.x};
+        case 0:
+        default: return direction;
+    }
+}
+
+IVec3 rotateDirectionZ90(const IVec3 direction, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {-direction.y, direction.x, direction.z};
+        case 2: return {-direction.x, -direction.y, direction.z};
+        case 3: return {direction.y, -direction.x, direction.z};
+        case 0:
+        default: return direction;
+    }
+}
+
+IVec3 applyModelTransformToDirection(IVec3 direction, const ModelTransform& transform) {
+    direction = rotateDirectionX90(direction, transform.rotX);
+    direction = rotateDirectionY90(direction, transform.rotY);
+    direction = rotateDirectionZ90(direction, transform.rotZ);
+    return direction;
+}
+
+int faceFromDirection(const IVec3 direction) {
+    if (direction.x == 0 && direction.y == 1 && direction.z == 0) return FACE_TOP;
+    if (direction.x == 0 && direction.y == -1 && direction.z == 0) return FACE_BOTTOM;
+    if (direction.x == 0 && direction.y == 0 && direction.z == 1) return FACE_FRONT;
+    if (direction.x == 0 && direction.y == 0 && direction.z == -1) return FACE_BACK;
+    if (direction.x == -1 && direction.y == 0 && direction.z == 0) return FACE_LEFT;
+    if (direction.x == 1 && direction.y == 0 && direction.z == 0) return FACE_RIGHT;
+    throw std::runtime_error("Model transform produced an invalid face direction");
+}
+
+int transformFaceIndex(const int face, const ModelTransform& transform) {
+    return faceFromDirection(applyModelTransformToDirection(kFaceNormals[static_cast<size_t>(face)], transform));
+}
+
+uint8_t transformCullfaceBits(const uint8_t bits, const ModelTransform& transform) {
+    uint8_t transformed = 0;
+    for (int face = 0; face < 6; ++face) {
+        if ((bits & static_cast<uint8_t>(1u << static_cast<uint8_t>(face))) == 0) {
+            continue;
+        }
+        const int transformedFace = transformFaceIndex(face, transform);
+        transformed |= static_cast<uint8_t>(1u << static_cast<uint8_t>(transformedFace));
+    }
+    return transformed;
+}
+
+bool shouldCullModelFace(const uint8_t transformedCullfaceBits,
+                         const SubChunkMeshingSnapshot& snapshot,
+                         const int x,
+                         const int y,
+                         const int z) {
+    for (int face = 0; face < 6; ++face) {
+        if ((transformedCullfaceBits & static_cast<uint8_t>(1u << static_cast<uint8_t>(face))) == 0) {
+            continue;
+        }
+        const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+        const BlockID neighborId = getResolvedBlockSC(snapshot, x + normal.x, y + normal.y, z + normal.z);
+        const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborId);
+        if (neighborInfo.cubeClass == MeshCubeClass::Opaque && neighborInfo.isSolid) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::array<glm::vec3, 4> buildModelFaceCorners(const ModelElement& element, const int face) {
+    const float x0 = element.from[0] / 16.0f;
+    const float y0 = element.from[1] / 16.0f;
+    const float z0 = element.from[2] / 16.0f;
+    const float x1 = element.to[0] / 16.0f;
+    const float y1 = element.to[1] / 16.0f;
+    const float z1 = element.to[2] / 16.0f;
+
+    switch (face) {
+        case FACE_TOP:
+            return {{{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}};
+        case FACE_BOTTOM:
+            return {{{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}};
+        case FACE_FRONT:
+            return {{{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}};
+        case FACE_BACK:
+            return {{{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}};
+        case FACE_LEFT:
+            return {{{x0, y0, z0}, {x0, y0, z1}, {x0, y1, z1}, {x0, y1, z0}}};
+        case FACE_RIGHT:
+        default:
+            return {{{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}};
+    }
+}
+
+std::array<glm::vec2, 4> buildModelFaceUv(const ModelFace& face) {
+    const float x0 = face.uv[0] / 16.0f;
+    const float y0 = face.uv[1] / 16.0f;
+    const float x1 = face.uv[2] / 16.0f;
+    const float y1 = face.uv[3] / 16.0f;
+
+    switch ((face.uvRotation / 90u) % 4u) {
+        case 1:
+            return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};
+        case 2:
+            return {{{x1, y1}, {x0, y1}, {x0, y0}, {x1, y0}}};
+        case 3:
+            return {{{x0, y1}, {x0, y0}, {x1, y0}, {x1, y1}}};
+        case 0:
+        default:
+            return {{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}}};
+    }
+}
+
+std::array<VertexLightData, 4> computeModelFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
+                                                          const int x,
+                                                          const int y,
+                                                          const int z,
+                                                          const int face,
+                                                          const std::array<glm::vec3, 4>& localCorners,
+                                                          const bool ambientOcclusion) {
+    const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
+    const int bx = x + normal.x;
+    const int by = y + normal.y;
+    const int bz = z + normal.z;
+
+    int axis0 = 0;
+    int axis1 = 0;
+    if (normal.y != 0) {
+        axis0 = 0;
+        axis1 = 2;
+    } else if (normal.z != 0) {
+        axis0 = 0;
+        axis1 = 1;
+    } else {
+        axis0 = 2;
+        axis1 = 1;
+    }
+
+    std::array<VertexLightData, 4> data{};
+    const uint8_t basePacked = getResolvedLightSC(snapshot, bx, by, bz);
+    const uint8_t baseSun = static_cast<uint8_t>((basePacked >> 4) & 0x0F);
+    const uint8_t baseBlock = static_cast<uint8_t>(basePacked & 0x0F);
+
+    for (size_t i = 0; i < data.size(); ++i) {
+        const glm::vec3& corner = localCorners[i];
+        const int d0 = (corner[static_cast<size_t>(axis0)] > 0.5f) ? 1 : -1;
+        const int d1 = (corner[static_cast<size_t>(axis1)] > 0.5f) ? 1 : -1;
+
+        int s1[3] = {bx, by, bz};
+        int s2[3] = {bx, by, bz};
+        int cn[3] = {bx, by, bz};
+        s1[axis0] += d0;
+        s2[axis1] += d1;
+        cn[axis0] += d0;
+        cn[axis1] += d1;
+
+        const bool side1 = isSolidForAO(snapshot, s1[0], s1[1], s1[2]);
+        const bool side2 = isSolidForAO(snapshot, s2[0], s2[1], s2[2]);
+        const bool cornerSolid = isSolidForAO(snapshot, cn[0], cn[1], cn[2]);
+
+        data[i].ao = ambientOcclusion ? computeVertexAO(side1, side2, cornerSolid) : 3;
+
+        const uint8_t s1Packed = getSafePackedLightForAO(snapshot, s1[0], s1[1], s1[2], side1, basePacked);
+        const uint8_t s2Packed = getSafePackedLightForAO(snapshot, s2[0], s2[1], s2[2], side2, basePacked);
+        const uint8_t cnPacked = getSafePackedLightForAO(snapshot, cn[0], cn[1], cn[2], cornerSolid, basePacked);
+
+        const uint8_t s1Sun = static_cast<uint8_t>((s1Packed >> 4) & 0x0F);
+        const uint8_t s2Sun = static_cast<uint8_t>((s2Packed >> 4) & 0x0F);
+        const uint8_t cnSun = static_cast<uint8_t>((cnPacked >> 4) & 0x0F);
+        const uint8_t s1Block = static_cast<uint8_t>(s1Packed & 0x0F);
+        const uint8_t s2Block = static_cast<uint8_t>(s2Packed & 0x0F);
+        const uint8_t cnBlock = static_cast<uint8_t>(cnPacked & 0x0F);
+
+        data[i].sunNormalized = computeVertexNormalized(baseSun, s1Sun, s2Sun, cnSun, side1, side2);
+        data[i].blockNormalized = computeVertexNormalized(baseBlock, s1Block, s2Block, cnBlock, side1, side2);
+        data[i].sunKey = computeVertexLightKey(baseSun, s1Sun, s2Sun, cnSun, side1, side2);
+        data[i].blockKey = computeVertexLightKey(baseBlock, s1Block, s2Block, cnBlock, side1, side2);
+    }
+    return data;
+}
+
+AnimatedTextureRef resolveModelFaceTexture(const BlockModel& model, const ModelFace& face) {
+    const std::string textureKey = face.textureVar.substr(1);
+    const auto it = model.textures.find(textureKey);
+    if (it == model.textures.end()) {
+        throw std::runtime_error("Model face references unknown texture variable: " + model.name + "." + textureKey);
+    }
+    return BlockModelRegistry::resolveTextureRef(it->second);
+}
+
+std::vector<BlockVertex>& selectModelVertexTarget(ChunkMeshData& meshData, const BlockDef& def) {
+    switch (def.renderLayer) {
+        case BlockRenderLayer::Opaque:
+            return meshData.opaqueVertices;
+        case BlockRenderLayer::Cutout:
+            return def.cutoutDistanceCull ? meshData.cutoutDistanceVertices : meshData.cutoutVertices;
+        case BlockRenderLayer::Transparent:
+            return meshData.transparentVertices;
+    }
+    throw std::runtime_error("Unknown render layer for model block");
+}
+
+FaceRenderData buildModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
+                                        const BlockDef& def,
+                                        const BlockModel& model,
+                                        const ModelFace& face,
+                                        const int x,
+                                        const int y,
+                                        const int z,
+                                        const int transformedFace,
+                                        const std::array<glm::vec3, 4>& localCorners) {
+    const AnimatedTextureRef textureRef = resolveModelFaceTexture(model, face);
+
+    FaceRenderData renderData;
+    renderData.tileIndex = std::max(0, textureRef.firstLayer);
+    renderData.layer = static_cast<float>(textureRef.firstLayer);
+    renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, textureRef.frameCount));
+    renderData.animationFps = textureRef.isAnimated ? textureRef.fps : 0.0f;
+    renderData.animated = textureRef.isAnimated ? 1.0f : 0.0f;
+    renderData.derivativeMaterialId = def.derivativeMaterialId;
+    renderData.tintKind = face.tintIndex >= 0 ? blockTintKindFromBiomeTint(def.biomeTint) : BlockTintKinds::NONE;
+    if (renderData.tintKind != BlockTintKinds::NONE) {
+        computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);
+    }
+    renderData.vertices = computeModelFaceVertexData(
+        snapshot,
+        x,
+        y,
+        z,
+        transformedFace,
+        localCorners,
+        model.ambientOcclusion);
+
+    int metric02 = 0;
+    int metric13 = 0;
+    for (const int index : {0, 2}) {
+        metric02 += renderData.vertices[static_cast<size_t>(index)].ao;
+        metric02 += renderData.vertices[static_cast<size_t>(index)].sunKey;
+        metric02 += renderData.vertices[static_cast<size_t>(index)].blockKey;
+    }
+    for (const int index : {1, 3}) {
+        metric13 += renderData.vertices[static_cast<size_t>(index)].ao;
+        metric13 += renderData.vertices[static_cast<size_t>(index)].sunKey;
+        metric13 += renderData.vertices[static_cast<size_t>(index)].blockKey;
+    }
+    renderData.flipDiagonal = metric02 < metric13;
+    return renderData;
 }
 
 bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
@@ -2856,6 +3158,64 @@ void ChunkMeshBuilders::buildWater(ChunkMeshData& meshData,
                                    const int y,
                                    const int z) {
     addWaterFacesImpl(meshData, snapshot, blockId, def, x, y, z);
+}
+
+void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
+                                        const SubChunkMeshingSnapshot& snapshot,
+                                        const BlockID blockId,
+                                        const BlockDef& def,
+                                        const int x,
+                                        const int y,
+                                        const int z) {
+    const ModelVariant* variant = BlockStateRegistry::getModelVariant(blockId);
+    if (variant == nullptr || variant->model == nullptr) {
+        throw std::runtime_error("Model block is missing a model variant: " +
+                                 BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(blockId)).full());
+    }
+
+    const BlockModel& model = *variant->model;
+    std::vector<BlockVertex>& target = selectModelVertexTarget(meshData, def);
+
+    for (const ModelElement& element : model.elements) {
+        for (int faceIndex = 0; faceIndex < 6; ++faceIndex) {
+            const std::unique_ptr<ModelFace>& facePtr = element.faces[static_cast<size_t>(faceIndex)];
+            if (!facePtr) {
+                continue;
+            }
+
+            const ModelFace& face = *facePtr;
+            const uint8_t transformedCullfaceBits = transformCullfaceBits(face.cullfaceBits, variant->transform);
+            if (shouldCullModelFace(transformedCullfaceBits, snapshot, x, y, z)) {
+                continue;
+            }
+
+            std::array<glm::vec3, 4> localCorners = buildModelFaceCorners(element, faceIndex);
+            for (glm::vec3& corner : localCorners) {
+                corner = applyModelTransform(corner, variant->transform);
+            }
+
+            std::array<glm::vec3, 4> worldCorners = localCorners;
+            const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+            for (glm::vec3& corner : worldCorners) {
+                corner += blockOffset;
+            }
+
+            const int transformedFace = transformFaceIndex(faceIndex, variant->transform);
+            const std::array<glm::vec2, 4> faceUv = buildModelFaceUv(face);
+            FaceRenderData renderData = buildModelFaceRenderData(
+                snapshot,
+                def,
+                model,
+                face,
+                x,
+                y,
+                z,
+                transformedFace,
+                localCorners);
+            appendFaceVertices(target, worldCorners, faceUv, transformedFace, renderData);
+            expandBoundsForCorners(meshData, worldCorners);
+        }
+    }
 }
 
 void buildWaterSkippingTop(ChunkMeshData& meshData,
