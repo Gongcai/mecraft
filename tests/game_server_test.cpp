@@ -550,6 +550,10 @@ static void testGiveCommandAddsRuntimeBlockItem() {
     require(oakFenceBlock != BlockIds::AIR, "oak_fence should be registered from block config");
     const ItemID oakFenceItem = ItemRegistry::fromBlock(oakFenceBlock);
     require(oakFenceItem != ItemIds::AIR, "oak_fence should have a runtime block item");
+    const BlockID cobblestoneWallBlock = BlockRegistry::findByName("cobblestone_wall");
+    require(cobblestoneWallBlock != BlockIds::AIR, "cobblestone_wall should be registered from block config");
+    const ItemID cobblestoneWallItem = ItemRegistry::fromBlock(cobblestoneWallBlock);
+    require(cobblestoneWallItem != ItemIds::AIR, "cobblestone_wall should have a runtime block item");
 
     auto clientTransport = std::make_unique<ManualTransport>();
     ManualTransport* clientPtr = clientTransport.get();
@@ -576,6 +580,7 @@ static void testGiveCommandAddsRuntimeBlockItem() {
     const uint32_t beforeCauldronCount = inventoryItemCount(inventoryBeforeGive, cauldronItem);
     const uint32_t beforeAnvilCount = inventoryItemCount(inventoryBeforeGive, anvilItem);
     const uint32_t beforeOakFenceCount = inventoryItemCount(inventoryBeforeGive, oakFenceItem);
+    const uint32_t beforeCobblestoneWallCount = inventoryItemCount(inventoryBeforeGive, cobblestoneWallItem);
 
     net::Packet commandPacket;
     commandPacket.type = net::MessageType::ClientCommandRequest;
@@ -678,6 +683,40 @@ static void testGiveCommandAddsRuntimeBlockItem() {
 
     require(sawFenceCommandResult, "give command should return a successful oak fence command result");
     require(sawFenceInventoryAfterGive, "give command should sync the added oak fence runtime block item");
+
+    net::Packet wallCommandPacket;
+    wallCommandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest wallCommand;
+    wallCommand.sequence = 36;
+    wallCommand.command = "/give cobblestone_wall 3";
+    wallCommandPacket.inProcessPayload = wallCommand;
+    clientPtr->pushIncoming(std::move(wallCommandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawWallCommandResult = false;
+    bool sawWallInventoryAfterGive = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 36 && result.success &&
+                result.message.find("minecraft:cobblestone_wall") != std::string::npos) {
+                sawWallCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+            const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+            const uint32_t afterCount = inventoryItemCount(inventory, cobblestoneWallItem);
+            if (afterCount == beforeCobblestoneWallCount + 3) {
+                sawWallInventoryAfterGive = true;
+            }
+        }
+    }
+
+    require(sawWallCommandResult, "give command should return a successful cobblestone wall command result");
+    require(sawWallInventoryAfterGive, "give command should sync the added cobblestone wall runtime block item");
     std::printf("[PASS] testGiveCommandAddsRuntimeBlockItem\n");
 }
 

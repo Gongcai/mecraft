@@ -117,6 +117,10 @@ StateID strategyFence(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
 
+StateID strategyWall(const PlacementContext& ctx) {
+    return BlockStateRegistry::getDefaultState(ctx.blockId);
+}
+
 } // namespace
 
 void PlacementStrategyRegistry::initBuiltinStrategies() {
@@ -127,4 +131,5 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("stairs", strategyStairs);
     registerStrategy("slab", strategySlab);
     registerStrategy("fence", strategyFence);
+    registerStrategy("wall", strategyWall);
 }

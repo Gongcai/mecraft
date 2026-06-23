@@ -201,6 +201,33 @@ int main() {
         return fail("oak_fence east/west state should resolve to the connected fence model");
     }
 
+    const BlockID cobblestoneWall = BlockRegistry::findByName("cobblestone_wall");
+    if (cobblestoneWall == BlockIds::AIR) {
+        return fail("cobblestone_wall should be registered from blocks.json");
+    }
+    const BlockDef& cobblestoneWallDef = BlockRegistry::get(cobblestoneWall);
+    if (cobblestoneWallDef.renderShapeName != "model" ||
+        cobblestoneWallDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
+        return fail("cobblestone_wall should use the model mesh builder");
+    }
+    if (cobblestoneWallDef.placementStrategy != "wall") {
+        return fail("cobblestone_wall should parse wall placement strategy");
+    }
+    const StateID cobblestoneWallNorthSouth = BlockStateRegistry::getState(
+        cobblestoneWall,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::NORTH, PropIndices::NORTH_TRUE},
+            {PropIndices::SOUTH, PropIndices::SOUTH_TRUE},
+            {PropIndices::EAST, PropIndices::EAST_FALSE},
+            {PropIndices::WEST, PropIndices::WEST_FALSE}
+        });
+    const ModelVariant* cobblestoneWallVariant = BlockStateRegistry::getModelVariant(cobblestoneWallNorthSouth);
+    if (cobblestoneWallVariant == nullptr || cobblestoneWallVariant->model == nullptr ||
+        cobblestoneWallVariant->model->name != "block/cobblestone_wall_north_south" ||
+        cobblestoneWallVariant->model->elements.size() != 3) {
+        return fail("cobblestone_wall north/south state should resolve to the connected wall model");
+    }
+
     const BlockID anvil = BlockRegistry::findByName("anvil");
     if (anvil == BlockIds::AIR) {
         return fail("anvil should be registered from blocks.json");
@@ -331,6 +358,18 @@ int main() {
     const StateID fencePlaced = fenceStrategy(fencePlacement);
     if (fencePlaced != BlockStateRegistry::getDefaultState(oakFence)) {
         return fail("fence placement should start from the default disconnected state");
+    }
+
+    PlacementStrategyFn wallStrategy = PlacementStrategyRegistry::getStrategy(cobblestoneWallDef.placementStrategy);
+    if (wallStrategy == nullptr) {
+        return fail("wall placement strategy should be registered");
+    }
+
+    PlacementContext wallPlacement;
+    wallPlacement.blockId = cobblestoneWall;
+    const StateID wallPlaced = wallStrategy(wallPlacement);
+    if (wallPlaced != BlockStateRegistry::getDefaultState(cobblestoneWall)) {
+        return fail("wall placement should start from the default disconnected state");
     }
 
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {

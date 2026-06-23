@@ -178,6 +178,29 @@ int main() {
         return fail("east/west oak fence selection should cover the connected rail span");
     }
 
+    const BlockID cobblestoneWall = BlockRegistry::findByName("cobblestone_wall");
+    if (cobblestoneWall == BlockIds::AIR) {
+        return fail("cobblestone_wall should be registered for collision tests");
+    }
+    const StateID cobblestoneWallNorthSouth = BlockStateRegistry::getState(
+        cobblestoneWall,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::NORTH, PropIndices::NORTH_TRUE},
+            {PropIndices::SOUTH, PropIndices::SOUTH_TRUE},
+            {PropIndices::EAST, PropIndices::EAST_FALSE},
+            {PropIndices::WEST, PropIndices::WEST_FALSE}
+        });
+    const std::vector<BlockCollisionBox> wallCollision = BlockCollision::getBoxes(cobblestoneWallNorthSouth);
+    if (wallCollision.size() != 3) {
+        return fail("north/south cobblestone wall collision should include post and two wall arms");
+    }
+    const BlockSelectionBox wallSelection = BlockSelection::getBox(cobblestoneWallNorthSouth);
+    if (wallSelection.min.x != 0.25f || wallSelection.max.x != 0.75f ||
+        wallSelection.min.z != 0.0f || wallSelection.max.z != 1.0f ||
+        wallSelection.min.y != 0.0f || wallSelection.max.y != 1.0f) {
+        return fail("north/south cobblestone wall selection should cover the connected wall span");
+    }
+
     const BlockID anvil = BlockRegistry::findByName("anvil");
     if (anvil == BlockIds::AIR) {
         return fail("anvil should be registered for collision tests");
@@ -230,6 +253,24 @@ int main() {
     placedFence = world.getBlockState(2, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_FALSE) {
         return fail("oak fence should disconnect when the east neighbor is removed");
+    }
+
+    world.setBlockState(4, baseY, 0, BlockIds::AIR);
+    world.setBlockState(4, baseY, -1, BlockIds::AIR);
+    world.setBlockState(4, baseY, 0, cobblestoneWall);
+    StateID placedWall = world.getBlockState(4, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_FALSE) {
+        return fail("isolated cobblestone wall should start disconnected");
+    }
+    world.setBlockState(4, baseY, -1, oakFence);
+    placedWall = world.getBlockState(4, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_TRUE) {
+        return fail("cobblestone wall should connect to a north fence neighbor after placement");
+    }
+    world.setBlockState(4, baseY, -1, BlockIds::AIR);
+    placedWall = world.getBlockState(4, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_FALSE) {
+        return fail("cobblestone wall should disconnect when the north neighbor is removed");
     }
 
     for (int y = baseY; y <= baseY + 4; ++y) {

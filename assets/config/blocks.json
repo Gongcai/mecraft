@@ -482,6 +482,47 @@
       }
     },
     {
+      "id": "minecraft:cobblestone_wall",
+      "drop": "minecraft:cobblestone_wall",
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "wall",
+      "properties": {
+        "north": ["false", "true"],
+        "south": ["false", "true"],
+        "east": ["false", "true"],
+        "west": ["false", "true"]
+      },
+      "defaultState": {
+        "north": "false",
+        "south": "false",
+        "east": "false",
+        "west": "false"
+      },
+      "timeToBreak": 2000,
+      "textures": {
+        "all": "cobblestone"
+      },
+      "modelVariants": {
+        "north=false,south=false,east=false,west=false": { "model": "block/cobblestone_wall_post" },
+        "north=false,south=false,east=false,west=true": { "model": "block/cobblestone_wall_west" },
+        "north=false,south=false,east=true,west=false": { "model": "block/cobblestone_wall_east" },
+        "north=false,south=false,east=true,west=true": { "model": "block/cobblestone_wall_east_west" },
+        "north=false,south=true,east=false,west=false": { "model": "block/cobblestone_wall_south" },
+        "north=false,south=true,east=false,west=true": { "model": "block/cobblestone_wall_south_west" },
+        "north=false,south=true,east=true,west=false": { "model": "block/cobblestone_wall_south_east" },
+        "north=false,south=true,east=true,west=true": { "model": "block/cobblestone_wall_south_east_west" },
+        "north=true,south=false,east=false,west=false": { "model": "block/cobblestone_wall_north" },
+        "north=true,south=false,east=false,west=true": { "model": "block/cobblestone_wall_north_west" },
+        "north=true,south=false,east=true,west=false": { "model": "block/cobblestone_wall_north_east" },
+        "north=true,south=false,east=true,west=true": { "model": "block/cobblestone_wall_north_east_west" },
+        "north=true,south=true,east=false,west=false": { "model": "block/cobblestone_wall_north_south" },
+        "north=true,south=true,east=false,west=true": { "model": "block/cobblestone_wall_north_south_west" },
+        "north=true,south=true,east=true,west=false": { "model": "block/cobblestone_wall_north_south_east" },
+        "north=true,south=true,east=true,west=true": { "model": "block/cobblestone_wall_north_south_east_west" }
+      }
+    },
+    {
       "id": "minecraft:gravel",
       "drop": "minecraft:gravel",
       "affectedByGravity": true,

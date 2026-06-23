@@ -53,21 +53,21 @@ StateID normalizeDefaultBlockState(const StateID stateId) {
     return stateId;
 }
 
-bool isFenceBlockDef(const BlockDef& def) {
-    return def.placementStrategy == "fence";
+bool isConnectedBlockDef(const BlockDef& def) {
+    return def.placementStrategy == "fence" || def.placementStrategy == "wall";
 }
 
-bool canFenceConnectTo(const StateID stateId) {
+bool canConnectedBlockAttachTo(const StateID stateId) {
     if (stateId == BlockIds::AIR) {
         return false;
     }
 
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    return isFenceBlockDef(def) || def.isSolid;
+    return isConnectedBlockDef(def) || def.isSolid;
 }
 
-void requireFenceConnectionProperties() {
+void requireHorizontalConnectionProperties() {
     if (PropIndices::NORTH == PropIndices::INVALID ||
         PropIndices::SOUTH == PropIndices::INVALID ||
         PropIndices::EAST == PropIndices::INVALID ||
@@ -80,7 +80,7 @@ void requireFenceConnectionProperties() {
         PropIndices::EAST_FALSE == PropIndices::INVALID ||
         PropIndices::WEST_TRUE == PropIndices::INVALID ||
         PropIndices::WEST_FALSE == PropIndices::INVALID) {
-        throw std::runtime_error("Fence connection updates require north/south/east/west boolean properties");
+        throw std::runtime_error("Horizontal connection updates require north/south/east/west boolean properties");
     }
 }
 
@@ -662,35 +662,35 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
 
     const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isFenceBlockDef(def)) {
+    if (!isConnectedBlockDef(def)) {
         return;
     }
 
-    requireFenceConnectionProperties();
+    requireHorizontalConnectionProperties();
 
     StateID connectedState = currentState;
     connectedState = BlockStateRegistry::withProperty(
         connectedState,
         PropIndices::NORTH,
-        canFenceConnectTo(getBlockState(pos.x, pos.y, pos.z - 1))
+        canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z - 1))
             ? PropIndices::NORTH_TRUE
             : PropIndices::NORTH_FALSE);
     connectedState = BlockStateRegistry::withProperty(
         connectedState,
         PropIndices::SOUTH,
-        canFenceConnectTo(getBlockState(pos.x, pos.y, pos.z + 1))
+        canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z + 1))
             ? PropIndices::SOUTH_TRUE
             : PropIndices::SOUTH_FALSE);
     connectedState = BlockStateRegistry::withProperty(
         connectedState,
         PropIndices::EAST,
-        canFenceConnectTo(getBlockState(pos.x + 1, pos.y, pos.z))
+        canConnectedBlockAttachTo(getBlockState(pos.x + 1, pos.y, pos.z))
             ? PropIndices::EAST_TRUE
             : PropIndices::EAST_FALSE);
     connectedState = BlockStateRegistry::withProperty(
         connectedState,
         PropIndices::WEST,
-        canFenceConnectTo(getBlockState(pos.x - 1, pos.y, pos.z))
+        canConnectedBlockAttachTo(getBlockState(pos.x - 1, pos.y, pos.z))
             ? PropIndices::WEST_TRUE
             : PropIndices::WEST_FALSE);
 
