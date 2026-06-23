@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <stdexcept>
 #include <glm/common.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec4.hpp>
@@ -102,6 +103,85 @@ BlockSelectionBox getTorchBox(const StateID stateId) {
         buildWallTorchTransform(facingValue));
 }
 
+glm::vec3 rotateModelPointX90(const glm::vec3& point, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {point.x, 1.0f - point.z, point.y};
+        case 2: return {point.x, 1.0f - point.y, 1.0f - point.z};
+        case 3: return {point.x, point.z, 1.0f - point.y};
+        case 0:
+        default: return point;
+    }
+}
+
+glm::vec3 rotateModelPointY90(const glm::vec3& point, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {1.0f - point.z, point.y, point.x};
+        case 2: return {1.0f - point.x, point.y, 1.0f - point.z};
+        case 3: return {point.z, point.y, 1.0f - point.x};
+        case 0:
+        default: return point;
+    }
+}
+
+glm::vec3 rotateModelPointZ90(const glm::vec3& point, const uint8_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {1.0f - point.y, point.x, point.z};
+        case 2: return {1.0f - point.x, 1.0f - point.y, point.z};
+        case 3: return {point.y, 1.0f - point.x, point.z};
+        case 0:
+        default: return point;
+    }
+}
+
+glm::vec3 applyModelSelectionTransform(glm::vec3 point, const ModelTransform& transform) {
+    point = rotateModelPointX90(point, transform.rotX);
+    point = rotateModelPointY90(point, transform.rotY);
+    point = rotateModelPointZ90(point, transform.rotZ);
+    return point;
+}
+
+BlockSelectionBox getModelBox(const StateID stateId) {
+    const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
+    if (variant == nullptr || variant->model == nullptr) {
+        throw std::runtime_error("Model selection requires a registered model variant");
+    }
+    if (variant->model->elements.empty()) {
+        throw std::runtime_error("Model selection requires at least one element");
+    }
+
+    bool hasPoint = false;
+    BlockSelectionBox box;
+    for (const ModelElement& element : variant->model->elements) {
+        const glm::vec3 from(element.from[0] / 16.0f, element.from[1] / 16.0f, element.from[2] / 16.0f);
+        const glm::vec3 to(element.to[0] / 16.0f, element.to[1] / 16.0f, element.to[2] / 16.0f);
+        const std::array<glm::vec3, 8> corners = {{
+            {from.x, from.y, from.z},
+            {to.x, from.y, from.z},
+            {from.x, to.y, from.z},
+            {to.x, to.y, from.z},
+            {from.x, from.y, to.z},
+            {to.x, from.y, to.z},
+            {from.x, to.y, to.z},
+            {to.x, to.y, to.z},
+        }};
+
+        for (const glm::vec3& corner : corners) {
+            const glm::vec3 transformed = applyModelSelectionTransform(corner, variant->transform);
+            if (!hasPoint) {
+                box.min = transformed;
+                box.max = transformed;
+                hasPoint = true;
+            } else {
+                expand(box, transformed);
+            }
+        }
+    }
+
+    box.min = glm::clamp(box.min, glm::vec3(0.0f), glm::vec3(1.0f));
+    box.max = glm::clamp(box.max, glm::vec3(0.0f), glm::vec3(1.0f));
+    return box;
+}
+
 } // namespace
 
 BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
@@ -113,6 +193,9 @@ BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
     if (def.renderShape == BlockRenderShape::Cross) {
         return {glm::vec3(kCrossInset, 0.0f, kCrossInset),
                 glm::vec3(1.0f - kCrossInset, 1.0f, 1.0f - kCrossInset)};
+    }
+    if (def.renderShapeName == "model") {
+        return getModelBox(stateId);
     }
 
     return {};

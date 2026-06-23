@@ -3,6 +3,7 @@
 #include "PropIndices.h"
 
 #include <cmath>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -97,6 +98,21 @@ StateID strategyStairs(const PlacementContext& ctx) {
         });
 }
 
+StateID strategySlab(const PlacementContext& ctx) {
+    if (PropIndices::HALF == PropIndices::INVALID ||
+        PropIndices::HALF_TOP == PropIndices::INVALID ||
+        PropIndices::HALF_BOTTOM == PropIndices::INVALID) {
+        throw std::runtime_error("Slab placement requires registered half=top/bottom properties");
+    }
+
+    uint16_t halfValue = (ctx.hitNormal.y == -1) ? PropIndices::HALF_TOP : PropIndices::HALF_BOTTOM;
+    if (ctx.isSneaking) {
+        halfValue = (halfValue == PropIndices::HALF_TOP) ? PropIndices::HALF_BOTTOM : PropIndices::HALF_TOP;
+    }
+
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, halfValue);
+}
+
 } // namespace
 
 void PlacementStrategyRegistry::initBuiltinStrategies() {
@@ -105,4 +121,5 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("horizontal_facing", strategyHorizontalFacing);
     registerStrategy("axis_oriented", strategyAxisOriented);
     registerStrategy("stairs", strategyStairs);
+    registerStrategy("slab", strategySlab);
 }

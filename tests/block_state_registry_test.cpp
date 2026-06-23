@@ -136,6 +136,10 @@ int main() {
     if (oakSlab == BlockIds::AIR) {
         return fail("oak_slab should be registered from blocks.json");
     }
+    const BlockDef& oakSlabDef = BlockRegistry::get(oakSlab);
+    if (oakSlabDef.placementStrategy != "slab") {
+        return fail("oak_slab should parse slab placement strategy");
+    }
     const StateID oakSlabTop = BlockStateRegistry::getState(
         oakSlab,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -171,6 +175,33 @@ int main() {
     const StateID birchLogPlacedX = logStrategy(logPlacement);
     if (BlockStateRegistry::getPropertyIndex(birchLogPlacedX, PropIndices::AXIS) != PropIndices::AXIS_X) {
         return fail("axis_oriented placement should derive log axis from hit normal");
+    }
+
+    PlacementStrategyFn slabStrategy = PlacementStrategyRegistry::getStrategy(oakSlabDef.placementStrategy);
+    if (slabStrategy == nullptr) {
+        return fail("slab placement strategy should be registered");
+    }
+
+    PlacementContext slabBottomPlacement;
+    slabBottomPlacement.blockId = oakSlab;
+    slabBottomPlacement.hitNormal = {0, 1, 0};
+    const StateID slabPlacedBottom = slabStrategy(slabBottomPlacement);
+    if (BlockStateRegistry::getPropertyIndex(slabPlacedBottom, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        return fail("slab placement should place bottom slabs on upward-facing hits");
+    }
+
+    PlacementContext slabTopPlacement;
+    slabTopPlacement.blockId = oakSlab;
+    slabTopPlacement.hitNormal = {0, -1, 0};
+    const StateID slabPlacedTop = slabStrategy(slabTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(slabPlacedTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
+        return fail("slab placement should place top slabs on downward-facing hits");
+    }
+
+    slabTopPlacement.isSneaking = true;
+    const StateID slabSneakPlacedBottom = slabStrategy(slabTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(slabSneakPlacedBottom, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        return fail("sneaking slab placement should invert the selected half");
     }
 
     const StateID chestDefault = BlockStateRegistry::getDefaultState(BlockIds::CHEST);

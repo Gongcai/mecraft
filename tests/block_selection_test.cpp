@@ -60,7 +60,7 @@ int main() {
             {PropIndices::FACING, PropIndices::FACING_EAST}
         });
     const BlockSelectionBox eastBox = BlockSelection::getBox(eastTorch);
-    if (eastBox.min.x <= 0.45f || eastBox.max.y < 0.7f) {
+    if (eastBox.max.x >= 0.55f || eastBox.max.y < 0.7f) {
         return fail("east wall torch selection box should rotate onto the X axis");
     }
 
@@ -70,7 +70,7 @@ int main() {
             {PropIndices::FACING, PropIndices::FACING_WEST}
         });
     const BlockSelectionBox westBox = BlockSelection::getBox(westTorch);
-    if (westBox.max.x >= 0.55f || westBox.max.y < 0.7f) {
+    if (westBox.min.x <= 0.45f || westBox.max.y < 0.7f) {
         return fail("west wall torch selection box should mirror the east wall model");
     }
 
@@ -78,6 +78,25 @@ int main() {
     if (crossBox.min.x <= 0.1f || crossBox.max.x >= 0.9f ||
         crossBox.min.z <= 0.1f || crossBox.max.z >= 0.9f) {
         return fail("cross-shaped plants should not use a full horizontal voxel selection box");
+    }
+
+    const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
+    if (oakSlab == BlockIds::AIR) {
+        return fail("oak_slab should be registered for selection tests");
+    }
+    const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
+    const BlockSelectionBox bottomSlabBox = BlockSelection::getBox(bottomSlab);
+    if (bottomSlabBox.min.y != 0.0f || bottomSlabBox.max.y != 0.5f) {
+        return fail("bottom slab selection box should cover the lower half");
+    }
+    const StateID topSlab = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_TOP}
+        });
+    const BlockSelectionBox topSlabBox = BlockSelection::getBox(topSlab);
+    if (topSlabBox.min.y != 0.5f || topSlabBox.max.y != 1.0f) {
+        return fail("top slab selection box should cover the upper half");
     }
 
     World world;

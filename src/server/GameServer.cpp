@@ -1027,7 +1027,7 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         sendCommandResult(client,
                           request.sequence,
                           true,
-                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon <entity>");
+                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /give <item> [count] [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon <entity>");
         return;
     }
 
@@ -1080,6 +1080,84 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         const std::string message = "Set " + playerName(target->id) + " to " + modeName(mode) + " mode.";
         sendCommandResult(client, request.sequence, true, message);
         broadcastSystemMessage(message, net::ChatMessageKind::Success);
+        return;
+    }
+
+    if (primary == "give") {
+        std::string itemName;
+        iss >> itemName;
+        if (itemName.empty()) {
+            sendCommandResult(client, request.sequence, false, "Usage: /give <item> [count] [clientId]");
+            return;
+        }
+
+        uint32_t count = 1;
+        std::string countStr;
+        iss >> countStr;
+        if (!countStr.empty()) {
+            char* endPtr = nullptr;
+            const unsigned long parsed = std::strtoul(countStr.c_str(), &endPtr, 10);
+            if (endPtr == countStr.c_str() || *endPtr != '\0' || parsed == 0 || parsed > 0xFFFFul) {
+                sendCommandResult(client, request.sequence, false, "Usage: /give <item> [count] [clientId]");
+                return;
+            }
+            count = static_cast<uint32_t>(parsed);
+        }
+
+        net::ClientId targetId = client.id;
+        std::string idStr;
+        iss >> idStr;
+        if (!idStr.empty()) {
+            char* endPtr = nullptr;
+            const unsigned long parsed = std::strtoul(idStr.c_str(), &endPtr, 10);
+            if (endPtr == idStr.c_str() || *endPtr != '\0') {
+                sendCommandResult(client, request.sequence, false, "Invalid client id.");
+                return;
+            }
+            targetId = static_cast<net::ClientId>(parsed);
+        }
+
+        const ItemID itemId = ItemRegistry::findByName(itemName);
+        if (itemId == ItemIds::AIR) {
+            sendCommandResult(client, request.sequence, false, "Unknown item: " + itemName);
+            return;
+        }
+
+        ConnectedClient* target = findClient(targetId);
+        if (!target || !target->receivedHello) {
+            sendCommandResult(client, request.sequence, false, "Target client is not online.");
+            return;
+        }
+        if (m_ecsRegistry == nullptr) {
+            sendCommandResult(client, request.sequence, false, "Inventory system is not available.");
+            return;
+        }
+
+        const entt::entity playerEntity = resolvePlayerEntity(*target);
+        if (playerEntity == entt::null || !m_ecsRegistry->valid(playerEntity)) {
+            sendCommandResult(client, request.sequence, false, "Target inventory is not available.");
+            return;
+        }
+
+        auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(playerEntity);
+        if (inventoryData == nullptr) {
+            sendCommandResult(client, request.sequence, false, "Target inventory is not available.");
+            return;
+        }
+
+        const uint32_t remaining = inventoryData->inventory.addItem(itemId, count);
+        const uint32_t added = count - remaining;
+        if (added == 0) {
+            sendCommandResult(client, request.sequence, false, "Inventory is full.");
+            return;
+        }
+
+        target->hasLastInventorySnapshot = false;
+        const std::string message = "Gave " + std::to_string(added) + " " +
+                                    ItemRegistry::getNamespacedId(itemId).full() +
+                                    " to " + playerName(target->id) + ".";
+        sendCommandResult(client, request.sequence, true, message);
+        sendInventorySnapshotsToClients();
         return;
     }
 

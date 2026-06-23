@@ -213,6 +213,7 @@
       "drop": "minecraft:oak_slab",
       "isSolid": false,
       "renderShape": "model",
+      "placementStrategy": "slab",
       "properties": {
         "half": ["bottom", "top"]
       },

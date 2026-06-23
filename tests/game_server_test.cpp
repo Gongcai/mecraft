@@ -535,6 +535,123 @@ static void testNonAdminCommandDenied() {
     std::printf("[PASS] testNonAdminCommandDenied\n");
 }
 
+static void testGiveCommandAddsRuntimeBlockItem() {
+    ServerHarness harness;
+
+    const BlockID oakSlabBlock = BlockRegistry::findByName("oak_slab");
+    require(oakSlabBlock != BlockIds::AIR, "oak_slab should be registered from block config");
+    const ItemID oakSlabItem = ItemRegistry::fromBlock(oakSlabBlock);
+    require(oakSlabItem != ItemIds::AIR, "oak_slab should have a runtime block item");
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+
+    net::InventorySnapshotMessage inventoryBeforeGive;
+    bool sawInventoryBeforeGive = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+            inventoryBeforeGive = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+            sawInventoryBeforeGive = true;
+        }
+    }
+    require(sawInventoryBeforeGive, "give test should receive the initial inventory snapshot");
+    const uint32_t beforeCount = inventoryItemCount(inventoryBeforeGive, oakSlabItem);
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 32;
+    command.command = "/give oak_slab 5";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCommandResult = false;
+    bool sawInventoryAfterGive = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 32 && result.success &&
+                result.message.find("minecraft:oak_slab") != std::string::npos) {
+                sawCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+            const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+            const uint32_t afterCount = inventoryItemCount(inventory, oakSlabItem);
+            if (afterCount == beforeCount + 5) {
+                sawInventoryAfterGive = true;
+            }
+        }
+    }
+
+    require(sawCommandResult, "give command should return a successful command result");
+    require(sawInventoryAfterGive, "give command should sync the added runtime block item");
+    std::printf("[PASS] testGiveCommandAddsRuntimeBlockItem\n");
+}
+
+static void testGiveCommandRejectsUnknownItem() {
+    ServerHarness harness;
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 33;
+    command.command = "/give definitely_missing_item 1";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCommandResult = false;
+    bool sawInventorySnapshot = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 33 && !result.success &&
+                result.message.find("Unknown item") != std::string::npos) {
+                sawCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::InventorySnapshot) {
+            sawInventorySnapshot = true;
+        }
+    }
+
+    require(sawCommandResult, "give command should reject an unknown item");
+    require(!sawInventorySnapshot, "failed give command should not sync an inventory change");
+    std::printf("[PASS] testGiveCommandRejectsUnknownItem\n");
+}
+
 static void testSummonZombieSpawnsNetworkMob() {
     ServerHarness harness;
     ecs::GameplayRegistry registry;
@@ -2849,6 +2966,8 @@ int main() {
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();
+    testGiveCommandAddsRuntimeBlockItem();
+    testGiveCommandRejectsUnknownItem();
     testSummonZombieSpawnsNetworkMob();
     testSummonZombieUsesOwnedServerEcs();
     testSummonHerobrineUsesOwnedServerEcs();
