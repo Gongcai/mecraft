@@ -546,6 +546,10 @@ static void testGiveCommandAddsRuntimeBlockItem() {
     require(anvilBlock != BlockIds::AIR, "anvil should be registered from block config");
     const ItemID anvilItem = ItemRegistry::fromBlock(anvilBlock);
     require(anvilItem != ItemIds::AIR, "anvil should have a runtime block item");
+    const BlockID oakFenceBlock = BlockRegistry::findByName("oak_fence");
+    require(oakFenceBlock != BlockIds::AIR, "oak_fence should be registered from block config");
+    const ItemID oakFenceItem = ItemRegistry::fromBlock(oakFenceBlock);
+    require(oakFenceItem != ItemIds::AIR, "oak_fence should have a runtime block item");
 
     auto clientTransport = std::make_unique<ManualTransport>();
     ManualTransport* clientPtr = clientTransport.get();
@@ -571,6 +575,7 @@ static void testGiveCommandAddsRuntimeBlockItem() {
     require(sawInventoryBeforeGive, "give test should receive the initial inventory snapshot");
     const uint32_t beforeCauldronCount = inventoryItemCount(inventoryBeforeGive, cauldronItem);
     const uint32_t beforeAnvilCount = inventoryItemCount(inventoryBeforeGive, anvilItem);
+    const uint32_t beforeOakFenceCount = inventoryItemCount(inventoryBeforeGive, oakFenceItem);
 
     net::Packet commandPacket;
     commandPacket.type = net::MessageType::ClientCommandRequest;
@@ -639,6 +644,40 @@ static void testGiveCommandAddsRuntimeBlockItem() {
 
     require(sawAnvilCommandResult, "give command should return a successful anvil command result");
     require(sawAnvilInventoryAfterGive, "give command should sync the added anvil runtime block item");
+
+    net::Packet fenceCommandPacket;
+    fenceCommandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest fenceCommand;
+    fenceCommand.sequence = 35;
+    fenceCommand.command = "/give oak_fence 4";
+    fenceCommandPacket.inProcessPayload = fenceCommand;
+    clientPtr->pushIncoming(std::move(fenceCommandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawFenceCommandResult = false;
+    bool sawFenceInventoryAfterGive = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 35 && result.success &&
+                result.message.find("minecraft:oak_fence") != std::string::npos) {
+                sawFenceCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+            const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+            const uint32_t afterCount = inventoryItemCount(inventory, oakFenceItem);
+            if (afterCount == beforeOakFenceCount + 4) {
+                sawFenceInventoryAfterGive = true;
+            }
+        }
+    }
+
+    require(sawFenceCommandResult, "give command should return a successful oak fence command result");
+    require(sawFenceInventoryAfterGive, "give command should sync the added oak fence runtime block item");
     std::printf("[PASS] testGiveCommandAddsRuntimeBlockItem\n");
 }
 

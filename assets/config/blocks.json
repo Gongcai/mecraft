@@ -230,6 +230,47 @@
       }
     },
     {
+      "id": "minecraft:oak_fence",
+      "drop": "minecraft:oak_fence",
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "fence",
+      "properties": {
+        "north": ["false", "true"],
+        "south": ["false", "true"],
+        "east": ["false", "true"],
+        "west": ["false", "true"]
+      },
+      "defaultState": {
+        "north": "false",
+        "south": "false",
+        "east": "false",
+        "west": "false"
+      },
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "north=false,south=false,east=false,west=false": { "model": "block/oak_fence_post" },
+        "north=false,south=false,east=false,west=true": { "model": "block/oak_fence_west" },
+        "north=false,south=false,east=true,west=false": { "model": "block/oak_fence_east" },
+        "north=false,south=false,east=true,west=true": { "model": "block/oak_fence_east_west" },
+        "north=false,south=true,east=false,west=false": { "model": "block/oak_fence_south" },
+        "north=false,south=true,east=false,west=true": { "model": "block/oak_fence_south_west" },
+        "north=false,south=true,east=true,west=false": { "model": "block/oak_fence_south_east" },
+        "north=false,south=true,east=true,west=true": { "model": "block/oak_fence_south_east_west" },
+        "north=true,south=false,east=false,west=false": { "model": "block/oak_fence_north" },
+        "north=true,south=false,east=false,west=true": { "model": "block/oak_fence_north_west" },
+        "north=true,south=false,east=true,west=false": { "model": "block/oak_fence_north_east" },
+        "north=true,south=false,east=true,west=true": { "model": "block/oak_fence_north_east_west" },
+        "north=true,south=true,east=false,west=false": { "model": "block/oak_fence_north_south" },
+        "north=true,south=true,east=false,west=true": { "model": "block/oak_fence_north_south_west" },
+        "north=true,south=true,east=true,west=false": { "model": "block/oak_fence_north_south_east" },
+        "north=true,south=true,east=true,west=true": { "model": "block/oak_fence_north_south_east_west" }
+      }
+    },
+    {
       "id": "minecraft:cauldron",
       "drop": "minecraft:cauldron",
       "isSolid": false,

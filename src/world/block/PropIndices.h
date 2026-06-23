@@ -16,6 +16,10 @@ extern uint16_t LIT;
 extern uint16_t WATERLOGGED;
 extern uint16_t LEVEL;
 extern uint16_t FALLING;
+extern uint16_t NORTH;
+extern uint16_t SOUTH;
+extern uint16_t EAST;
+extern uint16_t WEST;
 
 extern uint16_t FACING_FLOOR;
 extern uint16_t FACING_NORTH;
@@ -48,6 +52,14 @@ extern uint16_t LEVEL_6;
 extern uint16_t LEVEL_7;
 extern uint16_t FALLING_TRUE;
 extern uint16_t FALLING_FALSE;
+extern uint16_t NORTH_TRUE;
+extern uint16_t NORTH_FALSE;
+extern uint16_t SOUTH_TRUE;
+extern uint16_t SOUTH_FALSE;
+extern uint16_t EAST_TRUE;
+extern uint16_t EAST_FALSE;
+extern uint16_t WEST_TRUE;
+extern uint16_t WEST_FALSE;
 
 void init();
 

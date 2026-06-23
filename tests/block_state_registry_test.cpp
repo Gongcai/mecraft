@@ -32,6 +32,12 @@ int main() {
     if (PropIndices::LEVEL == PropIndices::INVALID || PropIndices::FALLING == PropIndices::INVALID) {
         return fail("water properties should be registered from blocks.json");
     }
+    if (PropIndices::NORTH == PropIndices::INVALID ||
+        PropIndices::SOUTH == PropIndices::INVALID ||
+        PropIndices::EAST == PropIndices::INVALID ||
+        PropIndices::WEST == PropIndices::INVALID) {
+        return fail("connection properties should be registered from blocks.json");
+    }
 
     const StateID torchDefault = BlockStateRegistry::getDefaultState(BlockIds::TORCH);
     if (torchDefault == BlockIds::TORCH) {
@@ -168,6 +174,33 @@ int main() {
         return fail("cauldron default state should resolve to the multi-element cauldron model");
     }
 
+    const BlockID oakFence = BlockRegistry::findByName("oak_fence");
+    if (oakFence == BlockIds::AIR) {
+        return fail("oak_fence should be registered from blocks.json");
+    }
+    const BlockDef& oakFenceDef = BlockRegistry::get(oakFence);
+    if (oakFenceDef.renderShapeName != "model" ||
+        oakFenceDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
+        return fail("oak_fence should use the model mesh builder");
+    }
+    if (oakFenceDef.placementStrategy != "fence") {
+        return fail("oak_fence should parse fence placement strategy");
+    }
+    const StateID oakFenceEastWest = BlockStateRegistry::getState(
+        oakFence,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::NORTH, PropIndices::NORTH_FALSE},
+            {PropIndices::SOUTH, PropIndices::SOUTH_FALSE},
+            {PropIndices::EAST, PropIndices::EAST_TRUE},
+            {PropIndices::WEST, PropIndices::WEST_TRUE}
+        });
+    const ModelVariant* oakFenceVariant = BlockStateRegistry::getModelVariant(oakFenceEastWest);
+    if (oakFenceVariant == nullptr || oakFenceVariant->model == nullptr ||
+        oakFenceVariant->model->name != "block/oak_fence_east_west" ||
+        oakFenceVariant->model->elements.size() != 5) {
+        return fail("oak_fence east/west state should resolve to the connected fence model");
+    }
+
     const BlockID anvil = BlockRegistry::findByName("anvil");
     if (anvil == BlockIds::AIR) {
         return fail("anvil should be registered from blocks.json");
@@ -286,6 +319,18 @@ int main() {
     const StateID anvilPlacedEast = anvilStrategy(anvilPlacement);
     if (BlockStateRegistry::getPropertyIndex(anvilPlacedEast, PropIndices::FACING) != PropIndices::FACING_EAST) {
         return fail("anvil placement should derive facing from player yaw");
+    }
+
+    PlacementStrategyFn fenceStrategy = PlacementStrategyRegistry::getStrategy(oakFenceDef.placementStrategy);
+    if (fenceStrategy == nullptr) {
+        return fail("fence placement strategy should be registered");
+    }
+
+    PlacementContext fencePlacement;
+    fencePlacement.blockId = oakFence;
+    const StateID fencePlaced = fenceStrategy(fencePlacement);
+    if (fencePlaced != BlockStateRegistry::getDefaultState(oakFence)) {
+        return fail("fence placement should start from the default disconnected state");
     }
 
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {

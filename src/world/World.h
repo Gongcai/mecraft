@@ -140,6 +140,8 @@ private:
 
     void loadChunk(int cx, int cz);
     void unloadChunk(int cx, int cz);
+    void refreshConnectedBlockAt(const glm::ivec3& pos);
+    void refreshConnectedBlocksAround(const glm::ivec3& pos);
     void submitChunkLoad(int cx, int cz);
     void finalizeChunkLoad(std::shared_ptr<Chunk> chunk);
     void updateStreaming(const glm::vec3& playerPos,

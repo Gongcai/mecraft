@@ -155,6 +155,29 @@ int main() {
         return fail("cauldron collision should include wall and inner floor elements");
     }
 
+    const BlockID oakFence = BlockRegistry::findByName("oak_fence");
+    if (oakFence == BlockIds::AIR) {
+        return fail("oak_fence should be registered for collision tests");
+    }
+    const StateID oakFenceEastWest = BlockStateRegistry::getState(
+        oakFence,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::NORTH, PropIndices::NORTH_FALSE},
+            {PropIndices::SOUTH, PropIndices::SOUTH_FALSE},
+            {PropIndices::EAST, PropIndices::EAST_TRUE},
+            {PropIndices::WEST, PropIndices::WEST_TRUE}
+        });
+    const std::vector<BlockCollisionBox> fenceCollision = BlockCollision::getBoxes(oakFenceEastWest);
+    if (fenceCollision.size() != 5) {
+        return fail("east/west oak fence collision should include post and four rail boxes");
+    }
+    const BlockSelectionBox fenceSelection = BlockSelection::getBox(oakFenceEastWest);
+    if (fenceSelection.min.x != 0.0f || fenceSelection.max.x != 1.0f ||
+        fenceSelection.min.z != 0.375f || fenceSelection.max.z != 0.625f ||
+        fenceSelection.min.y != 0.0f || fenceSelection.max.y != 1.0f) {
+        return fail("east/west oak fence selection should cover the connected rail span");
+    }
+
     const BlockID anvil = BlockRegistry::findByName("anvil");
     if (anvil == BlockIds::AIR) {
         return fail("anvil should be registered for collision tests");
@@ -191,6 +214,24 @@ int main() {
     loadChunks(world);
 
     const int baseY = world.getSurfaceY(0, 0) + 2;
+    world.setBlockState(2, baseY, 0, BlockIds::AIR);
+    world.setBlockState(3, baseY, 0, BlockIds::AIR);
+    world.setBlockState(2, baseY, 0, oakFence);
+    StateID placedFence = world.getBlockState(2, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_FALSE) {
+        return fail("isolated oak fence should start disconnected");
+    }
+    world.setBlockState(3, baseY, 0, BlockIds::STONE);
+    placedFence = world.getBlockState(2, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_TRUE) {
+        return fail("oak fence should connect to a solid east neighbor after placement");
+    }
+    world.setBlockState(3, baseY, 0, BlockIds::AIR);
+    placedFence = world.getBlockState(2, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_FALSE) {
+        return fail("oak fence should disconnect when the east neighbor is removed");
+    }
+
     for (int y = baseY; y <= baseY + 4; ++y) {
         world.setBlockState(0, y, 0, BlockIds::AIR);
     }

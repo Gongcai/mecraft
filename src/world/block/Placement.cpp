@@ -113,6 +113,10 @@ StateID strategySlab(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, halfValue);
 }
 
+StateID strategyFence(const PlacementContext& ctx) {
+    return BlockStateRegistry::getDefaultState(ctx.blockId);
+}
+
 } // namespace
 
 void PlacementStrategyRegistry::initBuiltinStrategies() {
@@ -122,4 +126,5 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("axis_oriented", strategyAxisOriented);
     registerStrategy("stairs", strategyStairs);
     registerStrategy("slab", strategySlab);
+    registerStrategy("fence", strategyFence);
 }

@@ -2,11 +2,15 @@
 #include "WorldRaycast.h"
 #include "../save/SaveManager.h"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <iterator>
+#include <stdexcept>
 #include "engine//platform/Time.h"
 #include "block/BlockSelection.h"
+#include "block/BlockStateRegistry.h"
+#include "block/PropIndices.h"
 #include "fluid/FluidRegistry.h"
 #include "fluid/FluidState.h"
 
@@ -40,6 +44,44 @@ StateID normalizeFluidBlockState(const StateID stateId) {
         return FluidState::makeWater(0, false);
     }
     return stateId;
+}
+
+StateID normalizeDefaultBlockState(const StateID stateId) {
+    if (stateId < BlockRegistry::getBlockCount()) {
+        return BlockStateRegistry::getDefaultState(stateId);
+    }
+    return stateId;
+}
+
+bool isFenceBlockDef(const BlockDef& def) {
+    return def.placementStrategy == "fence";
+}
+
+bool canFenceConnectTo(const StateID stateId) {
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    return isFenceBlockDef(def) || def.isSolid;
+}
+
+void requireFenceConnectionProperties() {
+    if (PropIndices::NORTH == PropIndices::INVALID ||
+        PropIndices::SOUTH == PropIndices::INVALID ||
+        PropIndices::EAST == PropIndices::INVALID ||
+        PropIndices::WEST == PropIndices::INVALID ||
+        PropIndices::NORTH_TRUE == PropIndices::INVALID ||
+        PropIndices::NORTH_FALSE == PropIndices::INVALID ||
+        PropIndices::SOUTH_TRUE == PropIndices::INVALID ||
+        PropIndices::SOUTH_FALSE == PropIndices::INVALID ||
+        PropIndices::EAST_TRUE == PropIndices::INVALID ||
+        PropIndices::EAST_FALSE == PropIndices::INVALID ||
+        PropIndices::WEST_TRUE == PropIndices::INVALID ||
+        PropIndices::WEST_FALSE == PropIndices::INVALID) {
+        throw std::runtime_error("Fence connection updates require north/south/east/west boolean properties");
+    }
 }
 
 bool isWithinChunkRenderDistance(const int cx,
@@ -513,6 +555,7 @@ bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
 void World::setBlockState(int x, int y, int z, StateID id) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
     id = normalizeFluidBlockState(id);
+    id = normalizeDefaultBlockState(id);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -604,6 +647,112 @@ void World::setBlockState(int x, int y, int z, StateID id) {
 
     // Mark chunk dirty for persistence
     markChunkSaveDirty(chunkX, chunkZ);
+    refreshConnectedBlocksAround(glm::ivec3(x, y, z));
+}
+
+void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
+    if (pos.y < 0 || pos.y >= Chunk::SIZE_Y) {
+        return;
+    }
+
+    const StateID currentState = getBlockState(pos.x, pos.y, pos.z);
+    if (currentState == BlockIds::AIR) {
+        return;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (!isFenceBlockDef(def)) {
+        return;
+    }
+
+    requireFenceConnectionProperties();
+
+    StateID connectedState = currentState;
+    connectedState = BlockStateRegistry::withProperty(
+        connectedState,
+        PropIndices::NORTH,
+        canFenceConnectTo(getBlockState(pos.x, pos.y, pos.z - 1))
+            ? PropIndices::NORTH_TRUE
+            : PropIndices::NORTH_FALSE);
+    connectedState = BlockStateRegistry::withProperty(
+        connectedState,
+        PropIndices::SOUTH,
+        canFenceConnectTo(getBlockState(pos.x, pos.y, pos.z + 1))
+            ? PropIndices::SOUTH_TRUE
+            : PropIndices::SOUTH_FALSE);
+    connectedState = BlockStateRegistry::withProperty(
+        connectedState,
+        PropIndices::EAST,
+        canFenceConnectTo(getBlockState(pos.x + 1, pos.y, pos.z))
+            ? PropIndices::EAST_TRUE
+            : PropIndices::EAST_FALSE);
+    connectedState = BlockStateRegistry::withProperty(
+        connectedState,
+        PropIndices::WEST,
+        canFenceConnectTo(getBlockState(pos.x - 1, pos.y, pos.z))
+            ? PropIndices::WEST_TRUE
+            : PropIndices::WEST_FALSE);
+
+    if (connectedState == currentState) {
+        return;
+    }
+
+    const int chunkX = worldToChunkCoord(pos.x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(pos.z, Chunk::SIZE_Z);
+    auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it == m_chunks.end()) {
+        return;
+    }
+
+    const int localX = pos.x - chunkX * Chunk::SIZE_X;
+    const int localZ = pos.z - chunkZ * Chunk::SIZE_Z;
+    const int editedScy = Chunk::toSubChunkIndex(pos.y);
+    const int localY = Chunk::toSubChunkLocalY(pos.y);
+    Chunk& chunk = *it->second;
+
+    if (m_lightService) {
+        chunk.setBlockWithoutMeshDirty(localX, pos.y, localZ, connectedState);
+    } else {
+        chunk.setBlock(localX, pos.y, localZ, connectedState);
+    }
+
+    markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
+    if (localX == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+    if (localX == Chunk::SIZE_X - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+    if (localZ == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+    if (localZ == Chunk::SIZE_Z - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+
+    if (m_blockChangeCallback) {
+        m_blockChangeCallback(pos.x, pos.y, pos.z, connectedState);
+    }
+    markChunkSaveDirty(chunkX, chunkZ);
+}
+
+void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
+    static constexpr std::array<glm::ivec3, 5> kRefreshOffsets = {{
+        { 0, 0,  0},
+        { 1, 0,  0},
+        {-1, 0,  0},
+        { 0, 0,  1},
+        { 0, 0, -1},
+    }};
+
+    for (const glm::ivec3& offset : kRefreshOffsets) {
+        refreshConnectedBlockAt(pos + offset);
+    }
 }
 
 void World::setThreadPool(ThreadPool* pool) {
