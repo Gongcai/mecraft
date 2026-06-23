@@ -121,6 +121,24 @@ int main() {
     if (stairCollision.size() < 2) {
         return fail("stairs collision should keep separate model element boxes");
     }
+    const StateID northBottomStairs = BlockStateRegistry::getState(
+        oakStairs,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_NORTH},
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM}
+        });
+    const std::vector<BlockCollisionBox> northStairCollision = BlockCollision::getBoxes(northBottomStairs);
+    bool foundNorthUpperHalf = false;
+    for (const BlockCollisionBox& box : northStairCollision) {
+        if (box.min.x == 0.0f && box.max.x == 1.0f &&
+            box.min.y == 0.5f && box.max.y == 1.0f &&
+            box.min.z == 0.0f && box.max.z == 0.5f) {
+            foundNorthUpperHalf = true;
+        }
+    }
+    if (!foundNorthUpperHalf) {
+        return fail("north-facing stairs collision should place the upper half on the north side");
+    }
 
     const BlockID cauldron = BlockRegistry::findByName("cauldron");
     if (cauldron == BlockIds::AIR) {

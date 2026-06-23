@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -136,6 +137,32 @@ int main() {
         oakStairsVariant->model->name != "block/oak_stairs" ||
         oakStairsVariant->transform.rotY != 90) {
         return fail("oak_stairs south state should resolve to the rotated oak stairs model");
+    }
+
+    const std::vector<std::tuple<uint16_t, uint16_t, uint16_t, uint16_t>> oakStairsVariantCases = {
+        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, 0, 0},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, 90, 0},
+        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, 180, 0},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, 270, 0},
+        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, 0, 180},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, 90, 180},
+        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, 180, 180},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, 270, 180},
+    };
+    for (const auto& [facing, half, expectedRotY, expectedRotX] : oakStairsVariantCases) {
+        const StateID state = BlockStateRegistry::getState(
+            oakStairs,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, facing},
+                {PropIndices::HALF, half}
+            });
+        const ModelVariant* variant = BlockStateRegistry::getModelVariant(state);
+        if (variant == nullptr || variant->model == nullptr ||
+            variant->model->name != "block/oak_stairs" ||
+            variant->transform.rotY != expectedRotY ||
+            variant->transform.rotX != expectedRotX) {
+            return fail("all oak_stairs facing/half states should resolve to their JSON model transforms");
+        }
     }
 
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");

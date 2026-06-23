@@ -10,7 +10,7 @@ struct ModelFace {
     std::string textureVar;
     std::array<float, 4> uv{};
     uint8_t cullfaceBits = 0;
-    uint8_t uvRotation = 0;
+    uint16_t uvRotation = 0;
     int8_t tintIndex = -1;
 };
 
@@ -28,9 +28,9 @@ struct BlockModel {
 };
 
 struct ModelTransform {
-    uint8_t rotY = 0;
-    uint8_t rotX = 0;
-    uint8_t rotZ = 0;
+    uint16_t rotY = 0;
+    uint16_t rotX = 0;
+    uint16_t rotZ = 0;
 };
 
 struct ModelVariant {

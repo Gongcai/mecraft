@@ -156,7 +156,7 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
         throw std::runtime_error("Model variant transform must be an object");
     }
 
-    const auto readRotation = [&](const char* key) -> uint8_t {
+    const auto readRotation = [&](const char* key) -> uint16_t {
         const auto it = transformIt->find(key);
         if (it == transformIt->end()) {
             return 0;
@@ -168,7 +168,7 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
         if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
             throw std::runtime_error(std::string("Model variant rotation must be 0, 90, 180, or 270: ") + key);
         }
-        return static_cast<uint8_t>(rotation);
+        return static_cast<uint16_t>(rotation);
     };
 
     transform.rotX = readRotation("rotX");

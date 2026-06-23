@@ -4,11 +4,15 @@
 
 #include "../world/chunk/Chunk.h"
 #include "../world/block/Block.h"
+#include "../world/block/BlockStateRegistry.h"
 #include "../engine/registry/NamespacedId.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <sstream>
 
 namespace save {
 namespace {
@@ -50,6 +54,67 @@ bool readString(const uint8_t*& cursor, const uint8_t* end, std::string& outStr)
     if (cursor + len > end) return false;
     outStr.assign(reinterpret_cast<const char*>(cursor), len);
     cursor += len;
+    return true;
+}
+
+std::string trimCopy(const std::string& value) {
+    const auto first = std::find_if_not(value.begin(), value.end(), [](const unsigned char ch) {
+        return std::isspace(ch) != 0;
+    });
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](const unsigned char ch) {
+        return std::isspace(ch) != 0;
+    }).base();
+    if (first >= last) {
+        return {};
+    }
+    return std::string(first, last);
+}
+
+bool parseStoredRuntimeId(const std::string& encoded, RuntimeId& outId) {
+    const size_t propsBegin = encoded.find('[');
+    if (propsBegin == std::string::npos) {
+        return BlockRegistry::tryGetId(NamespacedId(encoded), outId);
+    }
+
+    if (encoded.empty() || encoded.back() != ']' || propsBegin == 0) {
+        return false;
+    }
+
+    BlockID blockId = BlockIds::AIR;
+    if (!BlockRegistry::tryGetId(NamespacedId(encoded.substr(0, propsBegin)), blockId)) {
+        return false;
+    }
+
+    const std::string propsText = encoded.substr(propsBegin + 1, encoded.size() - propsBegin - 2);
+    std::vector<std::pair<uint16_t, uint16_t>> props;
+    std::istringstream input(propsText);
+    std::string segment;
+    while (std::getline(input, segment, ',')) {
+        const std::string trimmedSegment = trimCopy(segment);
+        const size_t equals = trimmedSegment.find('=');
+        if (equals == std::string::npos) {
+            return false;
+        }
+
+        const std::string propName = trimCopy(trimmedSegment.substr(0, equals));
+        const std::string propValue = trimCopy(trimmedSegment.substr(equals + 1));
+        const uint16_t nameIndex = BlockStateRegistry::getPropertyNameIndex(propName);
+        if (nameIndex == BlockStateRegistry::INVALID_INDEX) {
+            return false;
+        }
+        const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(nameIndex, propValue);
+        if (valueIndex == BlockStateRegistry::INVALID_INDEX) {
+            return false;
+        }
+        props.emplace_back(nameIndex, valueIndex);
+    }
+
+    const StateID stateId = BlockStateRegistry::getState(blockId, props);
+    if (BlockStateRegistry::getBlockId(stateId) != blockId) {
+        return false;
+    }
+
+    outId = stateId;
     return true;
 }
 
@@ -117,8 +182,7 @@ void serializeLayer(
     // Write palette entries as NamespacedId strings
     for (size_t i = 0; i < paletteSize; ++i) {
         RuntimeId rid = palette.getRuntimeId(static_cast<uint16_t>(i));
-        const NamespacedId& nid = BlockRegistry::getNamespacedId(rid);
-        writeString(out, nid.full());
+        writeString(out, BlockStateRegistry::stateToString(rid));
     }
 
     // Write bits per entry
@@ -170,11 +234,11 @@ bool deserializeLayer(
         std::string name;
         if (!readString(cursor, end, name)) return false;
 
-        BlockID rid = BlockIds::AIR;
-        if (!BlockRegistry::tryGetId(NamespacedId(name), rid)) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unknown block '%s' in chunk data, falling back to AIR\n",
-                         name.c_str());
-            rid = BlockIds::AIR;
+        RuntimeId rid = BlockIds::AIR;
+        if (!parseStoredRuntimeId(name, rid)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unknown block state '%s' in chunk data\n",
+                                name.c_str());
+            return false;
         }
         palette.push_back(rid);
     }

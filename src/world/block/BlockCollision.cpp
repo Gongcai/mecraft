@@ -15,7 +15,7 @@ void expand(BlockCollisionBox& box, const glm::vec3& point) {
     box.max = glm::max(box.max, point);
 }
 
-glm::vec3 rotateModelPointX90(const glm::vec3& point, const uint8_t rotation) {
+glm::vec3 rotateModelPointX90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {point.x, 1.0f - point.z, point.y};
         case 2: return {point.x, 1.0f - point.y, 1.0f - point.z};
@@ -25,7 +25,7 @@ glm::vec3 rotateModelPointX90(const glm::vec3& point, const uint8_t rotation) {
     }
 }
 
-glm::vec3 rotateModelPointY90(const glm::vec3& point, const uint8_t rotation) {
+glm::vec3 rotateModelPointY90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {1.0f - point.z, point.y, point.x};
         case 2: return {1.0f - point.x, point.y, 1.0f - point.z};
@@ -35,7 +35,7 @@ glm::vec3 rotateModelPointY90(const glm::vec3& point, const uint8_t rotation) {
     }
 }
 
-glm::vec3 rotateModelPointZ90(const glm::vec3& point, const uint8_t rotation) {
+glm::vec3 rotateModelPointZ90(const glm::vec3& point, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {1.0f - point.y, point.x, point.z};
         case 2: return {1.0f - point.x, 1.0f - point.y, point.z};

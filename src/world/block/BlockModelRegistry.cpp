@@ -242,7 +242,7 @@ std::unique_ptr<ModelFace> BlockModelRegistry::parseFace(const nlohmann::json& j
         if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
             throw std::runtime_error("Model face rotation must be 0, 90, 180, or 270");
         }
-        face->uvRotation = static_cast<uint8_t>(rotation);
+        face->uvRotation = static_cast<uint16_t>(rotation);
     }
 
     if (const auto tintIt = json.find("tintindex"); tintIt != json.end()) {

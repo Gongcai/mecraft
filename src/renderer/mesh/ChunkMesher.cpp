@@ -82,9 +82,9 @@ struct CachedModelGeometry {
 
 struct ModelGeometryCacheKey {
     const BlockModel* model = nullptr;
-    uint8_t rotX = 0;
-    uint8_t rotY = 0;
-    uint8_t rotZ = 0;
+    uint16_t rotX = 0;
+    uint16_t rotY = 0;
+    uint16_t rotZ = 0;
 
     bool operator==(const ModelGeometryCacheKey& other) const {
         return model == other.model &&
@@ -1346,7 +1346,7 @@ void emitCustomFace(std::vector<BlockVertex>& vertices,
     appendFaceVertices(vertices, corners, faceUV, face, renderData);
 }
 
-glm::vec3 rotatePointX90(const glm::vec3& p, const uint8_t rotation) {
+glm::vec3 rotatePointX90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {p.x, 1.0f - p.z, p.y};
         case 2: return {p.x, 1.0f - p.y, 1.0f - p.z};
@@ -1356,7 +1356,7 @@ glm::vec3 rotatePointX90(const glm::vec3& p, const uint8_t rotation) {
     }
 }
 
-glm::vec3 rotatePointY90(const glm::vec3& p, const uint8_t rotation) {
+glm::vec3 rotatePointY90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {1.0f - p.z, p.y, p.x};
         case 2: return {1.0f - p.x, p.y, 1.0f - p.z};
@@ -1366,7 +1366,7 @@ glm::vec3 rotatePointY90(const glm::vec3& p, const uint8_t rotation) {
     }
 }
 
-glm::vec3 rotatePointZ90(const glm::vec3& p, const uint8_t rotation) {
+glm::vec3 rotatePointZ90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {1.0f - p.y, p.x, p.z};
         case 2: return {1.0f - p.x, 1.0f - p.y, p.z};
@@ -1383,7 +1383,7 @@ glm::vec3 applyModelTransform(glm::vec3 p, const ModelTransform& transform) {
     return p;
 }
 
-IVec3 rotateDirectionX90(const IVec3 direction, const uint8_t rotation) {
+IVec3 rotateDirectionX90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {direction.x, -direction.z, direction.y};
         case 2: return {direction.x, -direction.y, -direction.z};
@@ -1393,7 +1393,7 @@ IVec3 rotateDirectionX90(const IVec3 direction, const uint8_t rotation) {
     }
 }
 
-IVec3 rotateDirectionY90(const IVec3 direction, const uint8_t rotation) {
+IVec3 rotateDirectionY90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {-direction.z, direction.y, direction.x};
         case 2: return {-direction.x, direction.y, -direction.z};
@@ -1403,7 +1403,7 @@ IVec3 rotateDirectionY90(const IVec3 direction, const uint8_t rotation) {
     }
 }
 
-IVec3 rotateDirectionZ90(const IVec3 direction, const uint8_t rotation) {
+IVec3 rotateDirectionZ90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {-direction.y, direction.x, direction.z};
         case 2: return {-direction.x, -direction.y, direction.z};

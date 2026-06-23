@@ -7,9 +7,12 @@
 #include "save/PlayerSerializer.h"
 #include "world/chunk/Chunk.h"
 #include "world/block/Block.h"
+#include "world/block/BlockStateRegistry.h"
+#include "world/block/PropIndices.h"
 #include "item/Item.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -174,6 +177,42 @@ static void testMixedBlocksInSubchunk() {
         assert(loaded->getBlock(x, 68, 0) == BlockIds::OAK_PLANKS);
     }
     std::printf("[PASS] testMixedBlocksInSubchunk\n");
+}
+
+static void testBlockStateRoundTrip() {
+    auto original = std::make_shared<Chunk>(0, 0);
+
+    const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
+    if (oakStairs == BlockIds::AIR) {
+        std::fprintf(stderr, "[FAIL] oak_stairs should be registered\n");
+        std::abort();
+    }
+    const StateID northBottomStairs = BlockStateRegistry::getState(
+        oakStairs,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_NORTH},
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM}
+        });
+    original->setBlock(4, 64, 4, northBottomStairs);
+
+    std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded == nullptr) {
+        std::fprintf(stderr, "[FAIL] chunk with state ids should deserialize\n");
+        std::abort();
+    }
+
+    const StateID loadedState = loaded->getBlock(4, 64, 4);
+    if (loadedState != northBottomStairs ||
+        BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) != PropIndices::FACING_NORTH ||
+        BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        std::fprintf(stderr,
+                     "[FAIL] chunk serializer should preserve stair facing and half state: expected=%s loaded=%s\n",
+                     BlockStateRegistry::stateToString(northBottomStairs).c_str(),
+                     BlockStateRegistry::stateToString(loadedState).c_str());
+        std::abort();
+    }
+    std::printf("[PASS] testBlockStateRoundTrip\n");
 }
 
 static void testFluidLayerRoundTrip() {
@@ -581,6 +620,7 @@ int main() {
     testMultipleSubchunksRoundTrip();
     testNegativeCoordinatesRoundTrip();
     testMixedBlocksInSubchunk();
+    testBlockStateRoundTrip();
     testFluidLayerRoundTrip();
     testPayloadSizeReasonable();
 
