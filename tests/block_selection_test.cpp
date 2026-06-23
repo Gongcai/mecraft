@@ -122,6 +122,70 @@ int main() {
         return fail("stairs collision should keep separate model element boxes");
     }
 
+    const BlockID cauldron = BlockRegistry::findByName("cauldron");
+    if (cauldron == BlockIds::AIR) {
+        return fail("cauldron should be registered for collision tests");
+    }
+    const StateID defaultCauldron = BlockStateRegistry::getDefaultState(cauldron);
+    const BlockSelectionBox cauldronBox = BlockSelection::getBox(defaultCauldron);
+    if (cauldronBox.min.y != 0.0f || cauldronBox.max.y != 1.0f ||
+        cauldronBox.min.x != 0.0f || cauldronBox.max.x != 1.0f ||
+        cauldronBox.min.z != 0.0f || cauldronBox.max.z != 1.0f) {
+        return fail("cauldron selection box should cover the full model bounds");
+    }
+    const std::vector<BlockCollisionBox> cauldronCollision = BlockCollision::getBoxes(defaultCauldron);
+    if (cauldronCollision.size() != 13) {
+        return fail("cauldron collision should keep each model element box");
+    }
+    bool foundLeftWall = false;
+    bool foundInnerFloor = false;
+    for (const BlockCollisionBox& box : cauldronCollision) {
+        if (box.min.x == 0.0f && box.max.x == 0.125f &&
+            box.min.y == 0.1875f && box.max.y == 1.0f &&
+            box.min.z == 0.0f && box.max.z == 1.0f) {
+            foundLeftWall = true;
+        }
+        if (box.min.x == 0.125f && box.max.x == 0.875f &&
+            box.min.y == 0.1875f && box.max.y == 0.25f &&
+            box.min.z == 0.125f && box.max.z == 0.875f) {
+            foundInnerFloor = true;
+        }
+    }
+    if (!foundLeftWall || !foundInnerFloor) {
+        return fail("cauldron collision should include wall and inner floor elements");
+    }
+
+    const BlockID anvil = BlockRegistry::findByName("anvil");
+    if (anvil == BlockIds::AIR) {
+        return fail("anvil should be registered for collision tests");
+    }
+    const StateID anvilEast = BlockStateRegistry::getState(
+        anvil,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST}
+        });
+    const BlockSelectionBox anvilEastBox = BlockSelection::getBox(anvilEast);
+    if (anvilEastBox.min.x != 0.0f || anvilEastBox.max.x != 1.0f ||
+        anvilEastBox.min.z != 0.125f || anvilEastBox.max.z != 0.875f ||
+        anvilEastBox.min.y != 0.0f || anvilEastBox.max.y != 1.0f) {
+        return fail("east-facing anvil selection box should rotate the model bounds");
+    }
+    const std::vector<BlockCollisionBox> anvilCollision = BlockCollision::getBoxes(anvilEast);
+    if (anvilCollision.size() != 4) {
+        return fail("anvil collision should keep each model element box");
+    }
+    bool foundRotatedTop = false;
+    for (const BlockCollisionBox& box : anvilCollision) {
+        if (box.min.x == 0.0f && box.max.x == 1.0f &&
+            box.min.y == 0.625f && box.max.y == 1.0f &&
+            box.min.z == 0.1875f && box.max.z == 0.8125f) {
+            foundRotatedTop = true;
+        }
+    }
+    if (!foundRotatedTop) {
+        return fail("east-facing anvil collision should include the rotated top element");
+    }
+
     World world;
     world.init(20260507);
     loadChunks(world);

@@ -230,6 +230,45 @@
       }
     },
     {
+      "id": "minecraft:cauldron",
+      "drop": "minecraft:cauldron",
+      "isSolid": false,
+      "renderShape": "model",
+      "timeToBreak": 2000,
+      "textures": {
+        "top": "cauldron_top",
+        "bottom": "cauldron_bottom",
+        "side": "cauldron_side"
+      },
+      "modelVariants": {
+        "": { "model": "block/cauldron" }
+      }
+    },
+    {
+      "id": "minecraft:anvil",
+      "drop": "minecraft:anvil",
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "horizontal_facing",
+      "properties": {
+        "facing": ["north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "south"
+      },
+      "timeToBreak": 5000,
+      "textures": {
+        "all": "anvil",
+        "top": "anvil_top"
+      },
+      "modelVariants": {
+        "facing=north": { "model": "block/anvil", "transform": { "rotY": 180 } },
+        "facing=south": { "model": "block/anvil" },
+        "facing=east": { "model": "block/anvil", "transform": { "rotY": 90 } },
+        "facing=west": { "model": "block/anvil", "transform": { "rotY": 270 } }
+      }
+    },
+    {
       "id": "minecraft:spruce_planks",
       "drop": "minecraft:spruce_planks",
       "timeToBreak": 1000,

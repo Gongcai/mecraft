@@ -151,6 +151,48 @@ int main() {
         return fail("oak_slab top state should resolve to the top slab model");
     }
 
+    const BlockID cauldron = BlockRegistry::findByName("cauldron");
+    if (cauldron == BlockIds::AIR) {
+        return fail("cauldron should be registered from blocks.json");
+    }
+    const BlockDef& cauldronDef = BlockRegistry::get(cauldron);
+    if (cauldronDef.renderShapeName != "model" ||
+        cauldronDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
+        return fail("cauldron should use the model mesh builder");
+    }
+    const StateID cauldronDefault = BlockStateRegistry::getDefaultState(cauldron);
+    const ModelVariant* cauldronVariant = BlockStateRegistry::getModelVariant(cauldronDefault);
+    if (cauldronVariant == nullptr || cauldronVariant->model == nullptr ||
+        cauldronVariant->model->name != "block/cauldron" ||
+        cauldronVariant->model->elements.size() != 13) {
+        return fail("cauldron default state should resolve to the multi-element cauldron model");
+    }
+
+    const BlockID anvil = BlockRegistry::findByName("anvil");
+    if (anvil == BlockIds::AIR) {
+        return fail("anvil should be registered from blocks.json");
+    }
+    const BlockDef& anvilDef = BlockRegistry::get(anvil);
+    if (anvilDef.renderShapeName != "model" ||
+        anvilDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
+        return fail("anvil should use the model mesh builder");
+    }
+    if (anvilDef.placementStrategy != "horizontal_facing") {
+        return fail("anvil should parse horizontal_facing placement strategy");
+    }
+    const StateID anvilEast = BlockStateRegistry::getState(
+        anvil,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST}
+        });
+    const ModelVariant* anvilVariant = BlockStateRegistry::getModelVariant(anvilEast);
+    if (anvilVariant == nullptr || anvilVariant->model == nullptr ||
+        anvilVariant->model->name != "block/anvil" ||
+        anvilVariant->model->elements.size() != 4 ||
+        anvilVariant->transform.rotY != 90) {
+        return fail("anvil east state should resolve to the rotated anvil model");
+    }
+
     PlacementStrategyFn torchStrategy = PlacementStrategyRegistry::getStrategy(torchDef.placementStrategy);
     if (torchStrategy == nullptr) {
         return fail("torch placement strategy should be registered");
@@ -231,6 +273,19 @@ int main() {
     const StateID chestPlacedNorth = chestStrategy(chestPlacement);
     if (BlockStateRegistry::getPropertyIndex(chestPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
         return fail("horizontal_facing placement should derive chest facing from player yaw");
+    }
+
+    PlacementStrategyFn anvilStrategy = PlacementStrategyRegistry::getStrategy(anvilDef.placementStrategy);
+    if (anvilStrategy == nullptr) {
+        return fail("anvil placement strategy should be registered");
+    }
+
+    PlacementContext anvilPlacement;
+    anvilPlacement.blockId = anvil;
+    anvilPlacement.playerYaw = 270.0f;
+    const StateID anvilPlacedEast = anvilStrategy(anvilPlacement);
+    if (BlockStateRegistry::getPropertyIndex(anvilPlacedEast, PropIndices::FACING) != PropIndices::FACING_EAST) {
+        return fail("anvil placement should derive facing from player yaw");
     }
 
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {
