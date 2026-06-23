@@ -7,6 +7,7 @@
 #include "PhysicsInfo.h"
 #include "../world/IWorldView.h"
 #include "../world/block/Block.h"
+#include "../world/block/BlockCollision.h"
 #include "../world/fluid/FluidFlow.h"
 #include "../world/fluid/FluidState.h"
 #include "../world/World.h"
@@ -25,14 +26,6 @@ struct AABB {
 AABB makeBodyAABBAt(const PhysicsBody& body, const glm::vec3& position) {
     const glm::vec3 center = position + body.colliderOffset;
     return AABB{center - body.halfExtents, center + body.halfExtents};
-}
-
-bool isSolidBlock(const IWorldView& world, const int x, const int y, const int z) {
-    const BlockID id = world.getBlock(x, y, z);
-    if (id == 0) {
-        return false;
-    }
-    return BlockRegistry::get(id).isSolid;
 }
 
 bool isWaterBlock(const IWorldView& world, const int x, const int y, const int z) {
@@ -128,7 +121,7 @@ float overlapLen(const float aMin, const float aMax, const float bMin, const flo
     return std::max(0.0f, std::min(aMax, bMax) - std::max(aMin, bMin));
 }
 
-bool overlapsSolid(const IWorldView& world, const AABB& box) {
+bool overlapsCollision(const IWorldView& world, const AABB& box) {
     const int minX = static_cast<int>(std::floor(box.min.x));
     const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
     const int minY = static_cast<int>(std::floor(box.min.y));
@@ -139,7 +132,8 @@ bool overlapsSolid(const IWorldView& world, const AABB& box) {
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
-                if (isSolidBlock(world, x, y, z)) {
+                const StateID stateId = world.getBlockState(x, y, z);
+                if (BlockCollision::intersects(stateId, glm::ivec3(x, y, z), box.min, box.max)) {
                     return true;
                 }
             }
@@ -186,8 +180,16 @@ bool hasGroundSupportAt(const PhysicsBody& body, const IWorldView& world, const 
     for (const glm::vec2& probe : probes) {
         const int bx = static_cast<int>(std::floor(probe.x));
         const int bz = static_cast<int>(std::floor(probe.y));
+        constexpr float kProbeRadius = 0.005f;
+        const glm::vec3 probeMin(probe.x - kProbeRadius,
+                                 box.min.y - kSupportProbeDepth,
+                                 probe.y - kProbeRadius);
+        const glm::vec3 probeMax(probe.x + kProbeRadius,
+                                 box.min.y,
+                                 probe.y + kProbeRadius);
         for (int by = supportMinY; by <= supportMaxY; ++by) {
-            if (isSolidBlock(world, bx, by, bz)) {
+            const StateID stateId = world.getBlockState(bx, by, bz);
+            if (BlockCollision::intersects(stateId, glm::ivec3(bx, by, bz), probeMin, probeMax)) {
                 return true;
             }
         }
@@ -328,7 +330,7 @@ void moveAndCollideAxis(PhysicsBody& body, const IWorldView& world, const MoveIn
 
         body.position[axis] += stepDelta;
 
-        if (!overlapsSolid(world, makeBodyAABBAt(body, body.position))) {
+        if (!overlapsCollision(world, makeBodyAABBAt(body, body.position))) {
             continue;
         }
 

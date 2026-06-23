@@ -6,6 +6,8 @@
 
 #include "../src/physics/PhysicsSystem.h"
 #include "../src/world/fluid/FluidState.h"
+#include "../src/world/block/BlockStateRegistry.h"
+#include "../src/world/block/PropIndices.h"
 #include "../src/world/World.h"
 
 namespace {
@@ -212,7 +214,59 @@ int main() {
         return fail("non-crouching body should be able to walk off ledge");
     }
 
-    // Case 6: fluid flow should impart a repeatable horizontal push.
+    // Case 6: model blocks should collide at their model element height.
+    const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
+    if (oakSlab == BlockIds::AIR) {
+        return fail("oak_slab should be registered for model collision physics");
+    }
+    const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
+    const StateID topSlab = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_TOP}
+        });
+
+    const int slabY = surfaceY + 9;
+    for (int x = -2; x <= 2; ++x) {
+        for (int y = surfaceY + 1; y <= slabY + 4; ++y) {
+            for (int z = 20; z <= 24; ++z) {
+                world.setBlock(x, y, z, BlockIds::AIR);
+            }
+        }
+    }
+
+    world.setBlock(0, slabY, 21, bottomSlab);
+    PhysicsBody bottomSlabBody;
+    bottomSlabBody.position = glm::vec3(0.5f, static_cast<float>(slabY) + 4.0f, 21.5f);
+    for (int i = 0; i < 600; ++i) {
+        phys.updateBody(bottomSlabBody, idleIntent, kDt);
+    }
+
+    const float bottomSlabBodyY = static_cast<float>(slabY) + 0.5f + bottomSlabBody.halfExtents.y;
+    if (!bottomSlabBody.isGrounded) {
+        return fail("body should land on a bottom slab collision box");
+    }
+    if (std::abs(bottomSlabBody.position.y - bottomSlabBodyY) > 0.03f) {
+        return fail("bottom slab collision should settle at half-block height");
+    }
+
+    world.setBlock(0, slabY, 21, BlockIds::AIR);
+    world.setBlock(0, slabY, 23, topSlab);
+    PhysicsBody topSlabBody;
+    topSlabBody.position = glm::vec3(0.5f, static_cast<float>(slabY) + 4.0f, 23.5f);
+    for (int i = 0; i < 600; ++i) {
+        phys.updateBody(topSlabBody, idleIntent, kDt);
+    }
+
+    const float topSlabBodyY = static_cast<float>(slabY) + 1.0f + topSlabBody.halfExtents.y;
+    if (!topSlabBody.isGrounded) {
+        return fail("body should land on a top slab collision box");
+    }
+    if (std::abs(topSlabBody.position.y - topSlabBodyY) > 0.03f) {
+        return fail("top slab collision should settle at full-block height");
+    }
+
+    // Case 7: fluid flow should impart a repeatable horizontal push.
     const int flowY = surfaceY + 8;
     for (int x = -2; x <= 4; ++x) {
         for (int y = surfaceY + 1; y <= flowY + 2; ++y) {

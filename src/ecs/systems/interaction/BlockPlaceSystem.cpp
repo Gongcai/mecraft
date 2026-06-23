@@ -8,6 +8,7 @@
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../client/GameClient.h"
 #include "../../../world/IWorldView.h"
+#include "../../../world/block/BlockCollision.h"
 #include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
@@ -27,19 +28,12 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
     return SurvivalModeRules::instance();
 }
 
-bool wouldOverlapBlock(const PhysicsBody& body, const glm::ivec3& blockPos) {
+bool wouldOverlapPlacedState(const PhysicsBody& body, const glm::ivec3& blockPos, const StateID stateId) {
     const glm::vec3 bodyCenter = body.position + body.colliderOffset;
     const glm::vec3 bodyMin = bodyCenter - body.halfExtents;
     const glm::vec3 bodyMax = bodyCenter + body.halfExtents;
 
-    const glm::vec3 blockMin(static_cast<float>(blockPos.x),
-                             static_cast<float>(blockPos.y),
-                             static_cast<float>(blockPos.z));
-    const glm::vec3 blockMax = blockMin + glm::vec3(1.0f, 1.0f, 1.0f);
-
-    return bodyMin.x < blockMax.x && bodyMax.x > blockMin.x &&
-           bodyMin.y < blockMax.y && bodyMax.y > blockMin.y &&
-           bodyMin.z < blockMax.z && bodyMax.z > blockMin.z;
+    return BlockCollision::intersects(stateId, blockPos, bodyMin, bodyMax);
 }
 
 void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime,
@@ -122,7 +116,13 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        // Decide if placement is allowed via mode rules
+        Inventory& inventory = inventoryData.inventory;
+        const ItemID selectedItem = inventory.getSelectedItem();
+        const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
+        BlockID placedState = BlockIds::AIR;
+        if (blockToPlace != 0) {
+            placedState = resolvePlacementState(blockToPlace, camera, moveIntent, target.hitNormal);
+        }
 
         GameplayBlockActionRequest request;
         request.hasHit = target.hasTarget;
@@ -131,7 +131,8 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         request.placeCooldownRemaining = runtime.placeCooldownRemaining;
         if (target.hasTarget) {
             request.targetBlock = worldView.getBlock(placeBlock.x, placeBlock.y, placeBlock.z);
-            request.playerWouldOverlapPlaceBlock = wouldOverlapBlock(physicsBody.body, placeBlock);
+            request.playerWouldOverlapPlaceBlock =
+                placedState != BlockIds::AIR && wouldOverlapPlacedState(physicsBody.body, placeBlock, placedState);
         }
 
         const GameplayBlockAction action = modeRules.decideBlockAction(request);
@@ -139,14 +140,10 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        Inventory& inventory = inventoryData.inventory;
-        const ItemID selectedItem = inventory.getSelectedItem();
-        const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
         if (blockToPlace == 0) {
             continue;
         }
 
-        const BlockID placedState = resolvePlacementState(blockToPlace, camera, moveIntent, target.hitNormal);
         if (placedState == BlockIds::AIR) {
             continue;
         }

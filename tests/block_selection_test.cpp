@@ -5,6 +5,7 @@
 
 #include <glm/vec3.hpp>
 
+#include "../src/world/block/BlockCollision.h"
 #include "../src/world/block/BlockSelection.h"
 #include "../src/world/block/PropIndices.h"
 #include "../src/world/World.h"
@@ -97,6 +98,28 @@ int main() {
     const BlockSelectionBox topSlabBox = BlockSelection::getBox(topSlab);
     if (topSlabBox.min.y != 0.5f || topSlabBox.max.y != 1.0f) {
         return fail("top slab selection box should cover the upper half");
+    }
+    const std::vector<BlockCollisionBox> bottomSlabCollision = BlockCollision::getBoxes(bottomSlab);
+    if (bottomSlabCollision.size() != 1 ||
+        bottomSlabCollision.front().min.y != 0.0f ||
+        bottomSlabCollision.front().max.y != 0.5f) {
+        return fail("bottom slab collision should use the lower model element");
+    }
+    const std::vector<BlockCollisionBox> topSlabCollision = BlockCollision::getBoxes(topSlab);
+    if (topSlabCollision.size() != 1 ||
+        topSlabCollision.front().min.y != 0.5f ||
+        topSlabCollision.front().max.y != 1.0f) {
+        return fail("top slab collision should use the upper model element");
+    }
+
+    const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
+    if (oakStairs == BlockIds::AIR) {
+        return fail("oak_stairs should be registered for collision tests");
+    }
+    const StateID defaultStairs = BlockStateRegistry::getDefaultState(oakStairs);
+    const std::vector<BlockCollisionBox> stairCollision = BlockCollision::getBoxes(defaultStairs);
+    if (stairCollision.size() < 2) {
+        return fail("stairs collision should keep separate model element boxes");
     }
 
     World world;

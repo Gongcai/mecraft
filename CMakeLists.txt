@@ -112,6 +112,7 @@ set(SRC_CORE
 # [世界与地形]
 set(SRC_WORLD
         src/world/block/Block.cpp
+        src/world/block/BlockCollision.cpp
         src/world/block/BlockModelRegistry.cpp
         src/world/block/BlockSelection.cpp
         src/world/block/BlockStateRegistry.cpp

@@ -6,21 +6,19 @@
 
 #include "../components/Components.h"
 #include "../../world/World.h"
+#include "../../world/block/BlockCollision.h"
 
 namespace ecs::drop_detail {
 
 constexpr float kAxisStep = 0.2f;
 constexpr float kContactEpsilon = 0.0005f;
 
-inline bool isSolidBlock(const World& world, const int x, const int y, const int z) {
-    const BlockID id = world.getBlock(x, y, z);
-    if (id == 0) {
-        return false;
-    }
-    return BlockRegistry::get(id).isSolid;
+inline bool hasCollisionBlock(const World& world, const int x, const int y, const int z) {
+    const StateID stateId = world.getBlockState(x, y, z);
+    return !BlockCollision::getBoxes(stateId).empty();
 }
 
-inline bool overlapsSolid(const World& world, const glm::vec3& center, const glm::vec3& halfExtents) {
+inline bool overlapsCollision(const World& world, const glm::vec3& center, const glm::vec3& halfExtents) {
     const glm::vec3 minPos = center - halfExtents;
     const glm::vec3 maxPos = center + halfExtents;
 
@@ -34,7 +32,8 @@ inline bool overlapsSolid(const World& world, const glm::vec3& center, const glm
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
-                if (isSolidBlock(world, x, y, z)) {
+                const StateID stateId = world.getBlockState(x, y, z);
+                if (BlockCollision::intersects(stateId, glm::ivec3(x, y, z), minPos, maxPos)) {
                     return true;
                 }
             }
@@ -44,22 +43,23 @@ inline bool overlapsSolid(const World& world, const glm::vec3& center, const glm
     return false;
 }
 
-inline bool overlapsBlockAabb(const glm::vec3& position,
-                              const glm::vec3& halfExtents,
-                              const glm::ivec3& blockPos) {
+inline bool overlapsBlockCollision(const World& world,
+                                   const glm::vec3& position,
+                                   const glm::vec3& halfExtents,
+                                   const glm::ivec3& blockPos) {
     const glm::vec3 minPos = position - halfExtents;
     const glm::vec3 maxPos = position + halfExtents;
+    const StateID stateId = world.getBlockState(blockPos.x, blockPos.y, blockPos.z);
+    return BlockCollision::intersects(stateId, blockPos, minPos, maxPos);
+}
 
-    const auto blockMinX = static_cast<float>(blockPos.x);
-    const auto blockMinY = static_cast<float>(blockPos.y);
-    const auto blockMinZ = static_cast<float>(blockPos.z);
-    const float blockMaxX = blockMinX + 1.0f;
-    const float blockMaxY = blockMinY + 1.0f;
-    const float blockMaxZ = blockMinZ + 1.0f;
-
-    return minPos.x < blockMaxX && maxPos.x > blockMinX &&
-           minPos.y < blockMaxY && maxPos.y > blockMinY &&
-           minPos.z < blockMaxZ && maxPos.z > blockMinZ;
+inline float collisionTopY(const World& world, const glm::ivec3& blockPos) {
+    const StateID stateId = world.getBlockState(blockPos.x, blockPos.y, blockPos.z);
+    float topY = static_cast<float>(blockPos.y);
+    for (const BlockCollisionBox& box : BlockCollision::getBoxes(stateId)) {
+        topY = std::max(topY, static_cast<float>(blockPos.y) + box.max.y);
+    }
+    return topY;
 }
 
 inline void moveAndCollideAxis(TransformComponent& transform,
@@ -81,7 +81,7 @@ inline void moveAndCollideAxis(TransformComponent& transform,
         const glm::vec3 previousPos = transform.position;
         transform.position[axis] += stepDelta;
 
-        if (!overlapsSolid(world, transform.position, bounds.halfExtents)) {
+        if (!overlapsCollision(world, transform.position, bounds.halfExtents)) {
             continue;
         }
 

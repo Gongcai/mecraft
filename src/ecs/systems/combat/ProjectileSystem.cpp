@@ -15,6 +15,7 @@
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/block/Block.h"
+#include "../../../world/block/BlockCollision.h"
 #include "../../../world/chunk/Chunk.h"
 
 namespace ecs {
@@ -22,7 +23,7 @@ namespace {
 
 constexpr float kProjectileStepLength = 0.25f;
 
-bool isSolidBlockAt(const IWorldView& worldView, const glm::vec3& position, BlockID& outBlock) {
+bool isCollisionBlockAt(const IWorldView& worldView, const glm::vec3& position, BlockID& outBlock) {
     outBlock = 0;
     const int x = static_cast<int>(std::floor(position.x));
     const int y = static_cast<int>(std::floor(position.y));
@@ -31,9 +32,9 @@ bool isSolidBlockAt(const IWorldView& worldView, const glm::vec3& position, Bloc
         return true;
     }
 
-    const BlockID block = worldView.getBlock(x, y, z);
-    if (block != BlockIds::AIR && BlockRegistry::getFast(block).isSolid) {
-        outBlock = block;
+    const StateID stateId = worldView.getBlockState(x, y, z);
+    if (BlockCollision::containsPoint(stateId, glm::ivec3(x, y, z), position)) {
+        outBlock = stateId;
         return true;
     }
     return false;
@@ -271,7 +272,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
             transform.position += step;
 
             BlockID hitBlock = 0;
-            if (isSolidBlockAt(worldView, transform.position, hitBlock)) {
+            if (isCollisionBlockAt(worldView, transform.position, hitBlock)) {
                 emitProjectileImpactParticles(registry,
                                               transform.position,
                                               hitBlock,
