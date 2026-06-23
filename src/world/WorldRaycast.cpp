@@ -98,6 +98,7 @@ RayHit raycastWorldView(const IWorldView& worldView,
                     ? aabbNormal
                     : hitNormal;
                 hitResult.distance = aabbDistance;
+                hitResult.position = rayOri + rayDir * aabbDistance;
                 return hitResult;
             }
         }

@@ -18,6 +18,7 @@ struct RayHit {
     bool hit = false;
     glm::ivec3 blockPos{};
     glm::ivec3 normal{};   // 命中面的法线，用于计算放置位置
+    glm::vec3 position{};
     float distance = 0.0f;
 };
 

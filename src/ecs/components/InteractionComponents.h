@@ -23,6 +23,7 @@ struct BlockTargetComponent {
     glm::ivec3 targetBlock{};
     glm::ivec3 placeBlock{};
     glm::ivec3 hitNormal{};
+    glm::vec3 hitPosition{};
 };
 
 struct BlockBreakComponent {

@@ -36,6 +36,7 @@ void BlockTargetSystem::update(SystemContext& ctx) {
         target.targetBlock = hit.hit ? hit.blockPos : glm::ivec3{};
         target.placeBlock = hit.hit ? hit.blockPos + hit.normal : glm::ivec3{};
         target.hitNormal = hit.hit ? hit.normal : glm::ivec3{};
+        target.hitPosition = hit.hit ? hit.position : glm::vec3{};
     }
 }
 

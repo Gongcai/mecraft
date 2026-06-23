@@ -10,6 +10,7 @@
 struct PlacementContext {
     BlockID blockId = 0;
     glm::ivec3 hitNormal{};
+    glm::vec3 hitPosition{};
     float playerYaw = 0.0f;
     bool isSneaking = false;
 };

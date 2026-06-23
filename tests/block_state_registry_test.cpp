@@ -300,10 +300,63 @@ int main() {
         return fail("slab placement should place top slabs on downward-facing hits");
     }
 
+    PlacementContext slabSideTopPlacement;
+    slabSideTopPlacement.blockId = oakSlab;
+    slabSideTopPlacement.hitNormal = {1, 0, 0};
+    slabSideTopPlacement.hitPosition = {12.0f, 64.75f, 8.5f};
+    const StateID slabSidePlacedTop = slabStrategy(slabSideTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(slabSidePlacedTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
+        return fail("slab side placement should use the hit position to select the top half");
+    }
+
+    PlacementContext slabSideBottomPlacement;
+    slabSideBottomPlacement.blockId = oakSlab;
+    slabSideBottomPlacement.hitNormal = {-1, 0, 0};
+    slabSideBottomPlacement.hitPosition = {12.0f, 64.25f, 8.5f};
+    const StateID slabSidePlacedBottom = slabStrategy(slabSideBottomPlacement);
+    if (BlockStateRegistry::getPropertyIndex(slabSidePlacedBottom, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        return fail("slab side placement should use the hit position to select the bottom half");
+    }
+
     slabTopPlacement.isSneaking = true;
     const StateID slabSneakPlacedBottom = slabStrategy(slabTopPlacement);
     if (BlockStateRegistry::getPropertyIndex(slabSneakPlacedBottom, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
         return fail("sneaking slab placement should invert the selected half");
+    }
+
+    PlacementStrategyFn stairsStrategy = PlacementStrategyRegistry::getStrategy(oakStairsDef.placementStrategy);
+    if (stairsStrategy == nullptr) {
+        return fail("stairs placement strategy should be registered");
+    }
+
+    PlacementContext stairsNorthPlacement;
+    stairsNorthPlacement.blockId = oakStairs;
+    stairsNorthPlacement.playerYaw = -90.0f;
+    stairsNorthPlacement.hitNormal = {0, 1, 0};
+    const StateID stairsPlacedNorth = stairsStrategy(stairsNorthPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stairsPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH ||
+        BlockStateRegistry::getPropertyIndex(stairsPlacedNorth, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        return fail("stairs placement should derive north-facing bottom stairs from camera yaw and top-face hits");
+    }
+
+    PlacementContext stairsNorthEastBoundaryPlacement;
+    stairsNorthEastBoundaryPlacement.blockId = oakStairs;
+    stairsNorthEastBoundaryPlacement.playerYaw = 315.0f;
+    stairsNorthEastBoundaryPlacement.hitNormal = {0, 1, 0};
+    const StateID stairsPlacedNorthEastBoundary = stairsStrategy(stairsNorthEastBoundaryPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stairsPlacedNorthEastBoundary, PropIndices::FACING) != PropIndices::FACING_NORTH) {
+        return fail("stairs placement should classify the +X/-Z yaw boundary as north-facing");
+    }
+
+    PlacementContext stairsSideTopPlacement;
+    stairsSideTopPlacement.blockId = oakStairs;
+    stairsSideTopPlacement.playerYaw = 0.0f;
+    stairsSideTopPlacement.hitNormal = {0, 0, 1};
+    stairsSideTopPlacement.hitPosition = {4.5f, 32.75f, 4.0f};
+    const StateID stairsPlacedEastTop = stairsStrategy(stairsSideTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stairsPlacedEastTop, PropIndices::FACING) != PropIndices::FACING_EAST ||
+        BlockStateRegistry::getPropertyIndex(stairsPlacedEastTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
+        return fail("stairs side placement should derive facing from yaw and half from hit position");
     }
 
     const StateID chestDefault = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
@@ -330,8 +383,8 @@ int main() {
     PlacementContext chestPlacement;
     chestPlacement.blockId = BlockIds::CHEST;
     chestPlacement.playerYaw = 180.0f;
-    const StateID chestPlacedNorth = chestStrategy(chestPlacement);
-    if (BlockStateRegistry::getPropertyIndex(chestPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
+    const StateID chestPlacedWest = chestStrategy(chestPlacement);
+    if (BlockStateRegistry::getPropertyIndex(chestPlacedWest, PropIndices::FACING) != PropIndices::FACING_WEST) {
         return fail("horizontal_facing placement should derive chest facing from player yaw");
     }
 
@@ -343,8 +396,8 @@ int main() {
     PlacementContext anvilPlacement;
     anvilPlacement.blockId = anvil;
     anvilPlacement.playerYaw = 270.0f;
-    const StateID anvilPlacedEast = anvilStrategy(anvilPlacement);
-    if (BlockStateRegistry::getPropertyIndex(anvilPlacedEast, PropIndices::FACING) != PropIndices::FACING_EAST) {
+    const StateID anvilPlacedNorth = anvilStrategy(anvilPlacement);
+    if (BlockStateRegistry::getPropertyIndex(anvilPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
         return fail("anvil placement should derive facing from player yaw");
     }
 

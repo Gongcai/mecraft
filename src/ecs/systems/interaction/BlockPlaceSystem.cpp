@@ -45,7 +45,8 @@ void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime,
 BlockID resolvePlacementState(const BlockID blockId,
                               const CameraStateComponent& camera,
                               const MoveIntentComponent& moveIntent,
-                              const glm::ivec3& hitNormal) {
+                              const glm::ivec3& hitNormal,
+                              const glm::vec3& hitPosition) {
     const BlockDef& def = BlockRegistry::get(blockId);
     PlacementStrategyFn strategy = PlacementStrategyRegistry::getStrategy(def.placementStrategy);
     if (strategy == nullptr) {
@@ -55,6 +56,7 @@ BlockID resolvePlacementState(const BlockID blockId,
     PlacementContext pctx;
     pctx.blockId = blockId;
     pctx.hitNormal = hitNormal;
+    pctx.hitPosition = hitPosition;
     pctx.playerYaw = camera.yaw;
     pctx.isSneaking = moveIntent.wantsCrouch;
 
@@ -121,7 +123,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
         BlockID placedState = BlockIds::AIR;
         if (blockToPlace != 0) {
-            placedState = resolvePlacementState(blockToPlace, camera, moveIntent, target.hitNormal);
+            placedState = resolvePlacementState(blockToPlace, camera, moveIntent, target.hitNormal, target.hitPosition);
         }
 
         GameplayBlockActionRequest request;

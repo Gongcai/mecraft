@@ -47,19 +47,44 @@ StateID strategyAttachWall(const PlacementContext& ctx) {
     return 0;
 }
 
-StateID strategyHorizontalFacing(const PlacementContext& ctx) {
-    const float angle = std::fmod(ctx.playerYaw + 360.0f, 360.0f);
+uint16_t horizontalFacingFromYaw(const float playerYaw) {
+    const float angle = std::fmod(playerYaw + 360.0f, 360.0f);
 
-    uint16_t facingValue = PropIndices::FACING_SOUTH;
     if (angle >= 45.0f && angle < 135.0f) {
-        facingValue = PropIndices::FACING_WEST;
-    } else if (angle >= 135.0f && angle < 225.0f) {
-        facingValue = PropIndices::FACING_NORTH;
-    } else if (angle >= 225.0f && angle < 315.0f) {
-        facingValue = PropIndices::FACING_EAST;
+        return PropIndices::FACING_SOUTH;
+    }
+    if (angle >= 135.0f && angle < 225.0f) {
+        return PropIndices::FACING_WEST;
+    }
+    if (angle >= 225.0f && angle <= 315.0f) {
+        return PropIndices::FACING_NORTH;
+    }
+    return PropIndices::FACING_EAST;
+}
+
+uint16_t halfFromHit(const PlacementContext& ctx) {
+    if (PropIndices::HALF == PropIndices::INVALID ||
+        PropIndices::HALF_TOP == PropIndices::INVALID ||
+        PropIndices::HALF_BOTTOM == PropIndices::INVALID) {
+        throw std::runtime_error("Half-block placement requires registered half=top/bottom properties");
     }
 
-    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facingValue);
+    uint16_t halfValue = PropIndices::HALF_BOTTOM;
+    if (ctx.hitNormal.y < 0) {
+        halfValue = PropIndices::HALF_TOP;
+    } else if (ctx.hitNormal.y == 0) {
+        const float localY = ctx.hitPosition.y - std::floor(ctx.hitPosition.y);
+        halfValue = localY >= 0.5f ? PropIndices::HALF_TOP : PropIndices::HALF_BOTTOM;
+    }
+
+    if (ctx.isSneaking) {
+        halfValue = (halfValue == PropIndices::HALF_TOP) ? PropIndices::HALF_BOTTOM : PropIndices::HALF_TOP;
+    }
+    return halfValue;
+}
+
+StateID strategyHorizontalFacing(const PlacementContext& ctx) {
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, horizontalFacingFromYaw(ctx.playerYaw));
 }
 
 StateID strategyAxisOriented(const PlacementContext& ctx) {
@@ -74,21 +99,8 @@ StateID strategyAxisOriented(const PlacementContext& ctx) {
 }
 
 StateID strategyStairs(const PlacementContext& ctx) {
-    const float angle = std::fmod(ctx.playerYaw + 360.0f, 360.0f);
-
-    uint16_t facingValue = PropIndices::FACING_SOUTH;
-    if (angle >= 45.0f && angle < 135.0f) {
-        facingValue = PropIndices::FACING_WEST;
-    } else if (angle >= 135.0f && angle < 225.0f) {
-        facingValue = PropIndices::FACING_NORTH;
-    } else if (angle >= 225.0f && angle < 315.0f) {
-        facingValue = PropIndices::FACING_EAST;
-    }
-
-    uint16_t halfValue = (ctx.hitNormal.y == -1) ? PropIndices::HALF_TOP : PropIndices::HALF_BOTTOM;
-    if (ctx.isSneaking) {
-        halfValue = (halfValue == PropIndices::HALF_TOP) ? PropIndices::HALF_BOTTOM : PropIndices::HALF_TOP;
-    }
+    const uint16_t facingValue = horizontalFacingFromYaw(ctx.playerYaw);
+    const uint16_t halfValue = halfFromHit(ctx);
 
     return BlockStateRegistry::getState(
         ctx.blockId,
@@ -99,18 +111,7 @@ StateID strategyStairs(const PlacementContext& ctx) {
 }
 
 StateID strategySlab(const PlacementContext& ctx) {
-    if (PropIndices::HALF == PropIndices::INVALID ||
-        PropIndices::HALF_TOP == PropIndices::INVALID ||
-        PropIndices::HALF_BOTTOM == PropIndices::INVALID) {
-        throw std::runtime_error("Slab placement requires registered half=top/bottom properties");
-    }
-
-    uint16_t halfValue = (ctx.hitNormal.y == -1) ? PropIndices::HALF_TOP : PropIndices::HALF_BOTTOM;
-    if (ctx.isSneaking) {
-        halfValue = (halfValue == PropIndices::HALF_TOP) ? PropIndices::HALF_BOTTOM : PropIndices::HALF_TOP;
-    }
-
-    return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, halfValue);
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, halfFromHit(ctx));
 }
 
 StateID strategyFence(const PlacementContext& ctx) {
