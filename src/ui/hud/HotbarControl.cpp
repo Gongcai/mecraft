@@ -14,6 +14,7 @@
 #include "../font/TextRenderer.h"
 #include "../layout/UILayout.h"
 #include "../../locale/LocaleManager.h"
+#include "../ItemIconPolicy.h"
 #include "../core/UIRenderUtils.h"
 #include "../core/UITheme.h"
 
@@ -298,7 +299,15 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         glm::vec2 uvMin;
         glm::vec2 uvMax;
         std::vector<float>* targetBuffer = nullptr;
-        if (hasItemTextures) {
+        const bool useBakedBlockIcon = hasBakedItemIcons && ui::shouldUseBakedBlockIcon(itemDef);
+        if (useBakedBlockIcon) {
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(itemDef.renderBlock));
+            uvMin = uv.first;
+            uvMax = uv.second;
+            targetBuffer = &fallbackIconVerts;
+        }
+
+        if (!targetBuffer && hasItemTextures) {
             const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
             if (itemTileIndex >= 0) {
                 const auto uv = itemTextureAtlas.getUV(itemTileIndex);

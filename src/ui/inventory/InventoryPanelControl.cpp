@@ -18,6 +18,7 @@
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"
+#include "../ItemIconPolicy.h"
 
 namespace {
 void addQuad(std::vector<float>& vertices,
@@ -373,9 +374,10 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
     const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
     const bool hasFallbackIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
-    const int itemTileIndex = hasItemTextures ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
-    const bool useItemTexture = itemTileIndex >= 0;
-    if (!useItemTexture && !hasFallbackIcons) {
+    const bool useBakedBlockIcon = hasFallbackIcons && ui::shouldUseBakedBlockIcon(itemDef);
+    const int itemTileIndex = (!useBakedBlockIcon && hasItemTextures) ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
+    const bool useItemTexture = !useBakedBlockIcon && itemTileIndex >= 0;
+    if (!useBakedBlockIcon && !useItemTexture && !hasFallbackIcons) {
         return;
     }
 

@@ -5,6 +5,7 @@
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
 #include "../../item/Item.h"
+#include "../ItemIconPolicy.h"
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
 
@@ -95,7 +96,19 @@ void Pickable::render(const SlotInfo* slots, int count,
         const float x1 = static_cast<float>(s.x + s.size);
         const float y1 = static_cast<float>(screenH - s.y);
 
-        if (hasItemTextures) {
+        const bool useBakedBlockIcon = hasBakedItemIcons && ui::shouldUseBakedBlockIcon(itemDef);
+        if (useBakedBlockIcon) {
+            const auto uv = itemIconAtlas.getUV(static_cast<int>(itemDef.renderBlock));
+            fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.first.y);
+            fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.first.y);
+            fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.second.y);
+            fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y0); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.first.y);
+            fallbackIconVerts.push_back(x1); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.second.x); fallbackIconVerts.push_back(uv.second.y);
+            fallbackIconVerts.push_back(x0); fallbackIconVerts.push_back(y1); fallbackIconVerts.push_back(uv.first.x);  fallbackIconVerts.push_back(uv.second.y);
+            pushed = true;
+        }
+
+        if (!pushed && hasItemTextures) {
             const int tileIndex = resourceMgr.getItemTextureIndex(itemDef.iconTextureName);
             if (tileIndex >= 0) {
                 const auto uv = itemTextureAtlas.getUV(tileIndex);

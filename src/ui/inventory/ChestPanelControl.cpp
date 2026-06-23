@@ -13,6 +13,7 @@
 #include "../../player/Inventory.h"
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
+#include "../ItemIconPolicy.h"
 #include "../core/UIRenderUtils.h"
 
 namespace {
@@ -301,9 +302,10 @@ void ChestPanelControl::renderDraggedItem(const UIRenderContext& context) const 
 
     const bool hasItemTextures = itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0;
     const bool hasFallbackIcons = itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0;
-    const int itemTileIndex = hasItemTextures ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
-    const bool useItemTexture = itemTileIndex >= 0;
-    if (!useItemTexture && !hasFallbackIcons) {
+    const bool useBakedBlockIcon = hasFallbackIcons && ui::shouldUseBakedBlockIcon(itemDef);
+    const int itemTileIndex = (!useBakedBlockIcon && hasItemTextures) ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
+    const bool useItemTexture = !useBakedBlockIcon && itemTileIndex >= 0;
+    if (!useBakedBlockIcon && !useItemTexture && !hasFallbackIcons) {
         return;
     }
 

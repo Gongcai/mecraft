@@ -16,6 +16,7 @@
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
+#include "../ItemIconPolicy.h"
 
 namespace {
 constexpr int kColumns = 9;
@@ -643,9 +644,10 @@ void CreativeInventoryPanelControl::renderDraggedItem(const UIRenderContext& con
 
     const auto draggedItem = static_cast<ItemID>(context.draggedItemId);
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
-    const int itemTileIndex = hasItemTextures ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
-    const bool useItemTexture = itemTileIndex >= 0;
-    if (!useItemTexture && !hasFallbackIcons) {
+    const bool useBakedBlockIcon = hasFallbackIcons && ui::shouldUseBakedBlockIcon(itemDef);
+    const int itemTileIndex = (!useBakedBlockIcon && hasItemTextures) ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
+    const bool useItemTexture = !useBakedBlockIcon && itemTileIndex >= 0;
+    if (!useBakedBlockIcon && !useItemTexture && !hasFallbackIcons) {
         return;
     }
 
