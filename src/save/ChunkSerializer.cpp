@@ -73,7 +73,12 @@ std::string trimCopy(const std::string& value) {
 bool parseStoredRuntimeId(const std::string& encoded, RuntimeId& outId) {
     const size_t propsBegin = encoded.find('[');
     if (propsBegin == std::string::npos) {
-        return BlockRegistry::tryGetId(NamespacedId(encoded), outId);
+        BlockID blockId = BlockIds::AIR;
+        if (!BlockRegistry::tryGetId(NamespacedId(encoded), blockId)) {
+            return false;
+        }
+        outId = BlockStateRegistry::getDefaultState(blockId);
+        return true;
     }
 
     if (encoded.empty() || encoded.back() != ']' || propsBegin == 0) {
@@ -179,7 +184,7 @@ void serializeLayer(
         return;
     }
 
-    // Write palette entries as NamespacedId strings
+    // Write palette entries as block state strings.
     for (size_t i = 0; i < paletteSize; ++i) {
         RuntimeId rid = palette.getRuntimeId(static_cast<uint16_t>(i));
         writeString(out, BlockStateRegistry::stateToString(rid));
@@ -268,10 +273,15 @@ bool deserializeLayer(
                                            static_cast<size_t>(i), bpe);
         }
 
-        RuntimeId rid = BlockIds::AIR;
-        if (paletteIndex < palette.size()) {
-            rid = palette[paletteIndex];
+        if (paletteIndex >= palette.size()) {
+            MECRAFT_LOG_FPRINTF(stderr,
+                                "[Save] Packed palette index %u exceeds palette size %zu\n",
+                                paletteIndex,
+                                palette.size());
+            return false;
         }
+
+        const RuntimeId rid = palette[paletteIndex];
 
         if (isFluidLayer) {
             sub.setFluidLayer(static_cast<int>(lx), static_cast<int>(ly),

@@ -14,13 +14,83 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // ChunkSerializer round-trip tests
 // ---------------------------------------------------------------------------
+
+namespace {
+
+void appendU8(std::vector<uint8_t>& out, const uint8_t value) {
+    out.push_back(value);
+}
+
+void appendU16(std::vector<uint8_t>& out, const uint16_t value) {
+    out.push_back(static_cast<uint8_t>(value));
+    out.push_back(static_cast<uint8_t>(value >> 8));
+}
+
+void appendU32(std::vector<uint8_t>& out, const uint32_t value) {
+    out.push_back(static_cast<uint8_t>(value));
+    out.push_back(static_cast<uint8_t>(value >> 8));
+    out.push_back(static_cast<uint8_t>(value >> 16));
+    out.push_back(static_cast<uint8_t>(value >> 24));
+}
+
+void appendVaruint(std::vector<uint8_t>& out, uint32_t value) {
+    while (value >= 0x80u) {
+        out.push_back(static_cast<uint8_t>((value & 0x7Fu) | 0x80u));
+        value >>= 7;
+    }
+    out.push_back(static_cast<uint8_t>(value));
+}
+
+void appendString(std::vector<uint8_t>& out, const std::string& value) {
+    appendVaruint(out, static_cast<uint32_t>(value.size()));
+    out.insert(out.end(), value.begin(), value.end());
+}
+
+std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
+                                                 const int32_t cz,
+                                                 const uint8_t scy,
+                                                 const std::string& stateName,
+                                                 const uint8_t bitsPerEntry,
+                                                 const std::vector<uint8_t>& packedData) {
+    std::vector<uint8_t> payload;
+    appendU8(payload, save::MCHK_ENCODING_PALLETIZED);
+    appendU16(payload, static_cast<uint16_t>(1u << scy));
+    appendU8(payload, scy);
+
+    appendVaruint(payload, 1);
+    appendString(payload, stateName);
+    appendU8(payload, bitsPerEntry);
+    appendU32(payload, static_cast<uint32_t>(packedData.size()));
+    payload.insert(payload.end(), packedData.begin(), packedData.end());
+
+    appendVaruint(payload, 0);
+
+    save::MchkHeader header{};
+    header.magic = save::MCHK_MAGIC;
+    header.version = save::MCHK_VERSION;
+    header.flags = 0;
+    header.chunkX = cx;
+    header.chunkZ = cz;
+    header.payloadSize = static_cast<uint32_t>(payload.size());
+    header.payloadCrc32 = save::detail::crc32(payload.data(), payload.size());
+
+    std::vector<uint8_t> file(sizeof(save::MchkHeader));
+    std::memcpy(file.data(), &header, sizeof(header));
+    file.insert(file.end(), payload.begin(), payload.end());
+    return file;
+}
+
+} // namespace
 
 static void testEmptyChunkRoundTrip() {
     auto original = std::make_shared<Chunk>(0, 0);
@@ -215,6 +285,58 @@ static void testBlockStateRoundTrip() {
     std::printf("[PASS] testBlockStateRoundTrip\n");
 }
 
+static void testBareStateNameLoadsDefaultBlockState() {
+    const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
+    if (oakStairs == BlockIds::AIR) {
+        std::fprintf(stderr, "[FAIL] oak_stairs should be registered\n");
+        std::abort();
+    }
+
+    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
+        0,
+        0,
+        4,
+        "minecraft:oak_stairs",
+        0,
+        {});
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded == nullptr) {
+        std::fprintf(stderr, "[FAIL] bare block state names should deserialize\n");
+        std::abort();
+    }
+
+    const StateID expectedDefault = BlockStateRegistry::getDefaultState(oakStairs);
+    const StateID loadedState = loaded->getBlock(0, 64, 0);
+    if (loadedState != expectedDefault ||
+        loadedState == oakStairs ||
+        BlockStateRegistry::getModelVariant(loadedState) == nullptr) {
+        std::fprintf(stderr,
+                     "[FAIL] bare state name should resolve to default block state: expected=%s loaded=%s\n",
+                     BlockStateRegistry::stateToString(expectedDefault).c_str(),
+                     BlockStateRegistry::stateToString(loadedState).c_str());
+        std::abort();
+    }
+    std::printf("[PASS] testBareStateNameLoadsDefaultBlockState\n");
+}
+
+static void testInvalidPackedPaletteIndexRejected() {
+    const std::vector<uint8_t> packedData(512, 0xFFu);
+    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
+        0,
+        0,
+        4,
+        "minecraft:stone",
+        1,
+        packedData);
+
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded != nullptr) {
+        std::fprintf(stderr, "[FAIL] packed palette indices outside the palette should be rejected\n");
+        std::abort();
+    }
+    std::printf("[PASS] testInvalidPackedPaletteIndexRejected\n");
+}
+
 static void testFluidLayerRoundTrip() {
     auto original = std::make_shared<Chunk>(0, 0);
 
@@ -247,7 +369,7 @@ static void testPayloadSizeReasonable() {
     original->setBlockFast(0, 64, 0, BlockIds::STONE);
 
     std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
-    // Header is 20 bytes, payload should be modest (< 500 bytes for a mostly-empty chunk)
+    // Header is 24 bytes, payload should be modest for a mostly-empty chunk.
     assert(fileData.size() < 500);
     std::printf("[PASS] testPayloadSizeReasonable\n");
 }
@@ -621,6 +743,8 @@ int main() {
     testNegativeCoordinatesRoundTrip();
     testMixedBlocksInSubchunk();
     testBlockStateRoundTrip();
+    testBareStateNameLoadsDefaultBlockState();
+    testInvalidPackedPaletteIndexRejected();
     testFluidLayerRoundTrip();
     testPayloadSizeReasonable();
 

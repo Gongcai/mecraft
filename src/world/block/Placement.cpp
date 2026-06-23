@@ -78,6 +78,26 @@ uint16_t facingFromSideNormal(const glm::ivec3& normal) {
     throw std::runtime_error("Stair side placement requires a horizontal hit normal");
 }
 
+uint16_t oppositeHorizontalFacing(const uint16_t facing) {
+    if (facing == PropIndices::FACING_EAST) {
+        return PropIndices::FACING_WEST;
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return PropIndices::FACING_EAST;
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return PropIndices::FACING_NORTH;
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        return PropIndices::FACING_SOUTH;
+    }
+    throw std::runtime_error("Stair side placement requires a horizontal facing value");
+}
+
+uint16_t stairFacingFromSideNormal(const glm::ivec3& normal) {
+    return oppositeHorizontalFacing(facingFromSideNormal(normal));
+}
+
 uint16_t halfFromHit(const PlacementContext& ctx) {
     if (PropIndices::HALF == PropIndices::INVALID ||
         PropIndices::HALF_TOP == PropIndices::INVALID ||
@@ -116,7 +136,7 @@ StateID strategyAxisOriented(const PlacementContext& ctx) {
 
 StateID strategyStairs(const PlacementContext& ctx) {
     const uint16_t facingValue = (ctx.hitNormal.y == 0)
-        ? facingFromSideNormal(ctx.hitNormal)
+        ? stairFacingFromSideNormal(ctx.hitNormal)
         : horizontalFacingFromYaw(ctx.playerYaw);
     const uint16_t halfValue = halfFromHit(ctx);
 

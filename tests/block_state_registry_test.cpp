@@ -380,17 +380,17 @@ int main() {
     stairsSideTopPlacement.playerYaw = 0.0f;
     stairsSideTopPlacement.hitNormal = {0, 0, 1};
     stairsSideTopPlacement.hitPosition = {4.5f, 32.75f, 4.0f};
-    const StateID stairsPlacedSouthTop = stairsStrategy(stairsSideTopPlacement);
-    if (BlockStateRegistry::getPropertyIndex(stairsPlacedSouthTop, PropIndices::FACING) != PropIndices::FACING_SOUTH ||
-        BlockStateRegistry::getPropertyIndex(stairsPlacedSouthTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
-        return fail("stairs side placement should derive facing from the side normal and half from hit position");
+    const StateID stairsPlacedNorthTop = stairsStrategy(stairsSideTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stairsPlacedNorthTop, PropIndices::FACING) != PropIndices::FACING_NORTH ||
+        BlockStateRegistry::getPropertyIndex(stairsPlacedNorthTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
+        return fail("stairs side placement should reverse the side normal for stair descent direction and derive half from hit position");
     }
 
     const std::vector<std::pair<glm::ivec3, uint16_t>> stairSideCases = {
-        {{1, 0, 0}, PropIndices::FACING_EAST},
-        {{-1, 0, 0}, PropIndices::FACING_WEST},
-        {{0, 0, 1}, PropIndices::FACING_SOUTH},
-        {{0, 0, -1}, PropIndices::FACING_NORTH},
+        {{1, 0, 0}, PropIndices::FACING_WEST},
+        {{-1, 0, 0}, PropIndices::FACING_EAST},
+        {{0, 0, 1}, PropIndices::FACING_NORTH},
+        {{0, 0, -1}, PropIndices::FACING_SOUTH},
     };
     for (const auto& [normal, expectedFacing] : stairSideCases) {
         PlacementContext sidePlacement;
@@ -401,7 +401,7 @@ int main() {
         const StateID placed = stairsStrategy(sidePlacement);
         if (BlockStateRegistry::getPropertyIndex(placed, PropIndices::FACING) != expectedFacing ||
             BlockStateRegistry::getPropertyIndex(placed, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
-            return fail("stairs side placement should derive facing from the clicked side normal");
+            return fail("stairs side placement should reverse the clicked side normal for stair descent direction");
         }
     }
 

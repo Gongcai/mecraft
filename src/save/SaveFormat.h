@@ -5,21 +5,24 @@
 // MCHK = "Mecraft Chunk" — a self-contained binary format for a single chunk column.
 //
 // File layout:
-//   MchkHeader (20 bytes, fixed)
+//   MchkHeader (24 bytes, fixed)
 //   payload[]  (payloadSize bytes)
 //
 // Payload layout:
 //   uint8_t   encoding (MCHK_ENCODING_PALLETIZED = 1)
 //   uint16_t  subChunkMask (bit N = 1 if subchunk N is present)
 //   For each present subchunk:
+//     uint8_t scy
 //     LayerPayload blockLayer
 //     LayerPayload fluidLayer
 //
 // LayerPayload:
-//   uint8_t   paletteCount (0 = all-air, skip packed data)
+//   varuint   paletteCount (0 = all-air, skip packed data)
 //   For each palette entry:
-//     uint16_t nameLength
-//     char[nameLength] namespacedId (e.g. "minecraft:stone")
+//     varuint stateLength
+//     char[stateLength] block state string
+//       e.g. "minecraft:stone"
+//       e.g. "minecraft:oak_stairs[facing=north, half=bottom]"
 //   uint8_t   bitsPerEntry
 //   uint32_t  packedDataSize (bytes)
 //   uint8_t[packedDataSize] packedIndices
