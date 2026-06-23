@@ -2,7 +2,6 @@
 #include "../mesh/BlockMeshBuilder.h"
 #include "../mesh/ItemModelMesh.h"
 
-#include <array>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -19,86 +18,16 @@
 #include "../../item/Item.h"
 
 namespace {
-// Torch opaque texels occupy inclusive pixel coordinates:
-// left=7, right=8, top=6, bottom=15 on a 16x16 tile.
-// We sample at texel centers to avoid pulling in the transparent neighbors.
-constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
-constexpr float kTorchPixelLeft = 7.0f;
-constexpr float kTorchPixelRight = 8.0f;
-constexpr float kTorchPixelTop = 6.0f;
-constexpr float kTorchPixelBottom = 15.0f;
-constexpr float kTorchU0 = (kTorchPixelLeft + 0.5f) / 16.0f;
-constexpr float kTorchU1 = (kTorchPixelRight + 0.5f) / 16.0f;
-constexpr float kTorchSideV0 = (kTorchPixelTop + 0.5f) / 16.0f;
-constexpr float kTorchSideV1 = (kTorchPixelBottom + 0.5f) / 16.0f;
-constexpr float kTorchTopV0 = (kTorchPixelTop + 0.5f) / 16.0f;
-constexpr float kTorchTopV1 = (kTorchPixelTop + 1.5f) / 16.0f;
-constexpr float kTorchHalfWidth = 1.0f / 16.0f;
-constexpr float kTorchHeight = 10.0f / 16.0f;
-constexpr float kTorchModelPixel = 1.0f / 16.0f;
-constexpr float kTorchModelCoreMin = 7.0f * kTorchModelPixel;
-constexpr float kTorchModelCoreMax = 9.0f * kTorchModelPixel;
-constexpr float kTorchModelCoreTop = 10.0f * kTorchModelPixel;
-
-struct TorchModelUvRect {
-    float u0;
-    float v0;
-    float u1;
-    float v1;
-};
-
 bool isTorchShape(const BlockDef& def) {
     return def.renderShapeName == "torch";
 }
 
-TorchModelUvRect makeTorchModelSourceUvRect(const float left,
-                                            const float top,
-                                            const float right,
-                                            const float bottom) {
-    return {
-        left * kTorchModelPixel,
-        1.0f - bottom * kTorchModelPixel,
-        right * kTorchModelPixel,
-        1.0f - top * kTorchModelPixel
-    };
-}
-
-void emitTorchModelFace(std::vector<BlockVertex>& vertices,
-                        const float layer,
-                        const float normal,
-                        const std::array<glm::vec3, 4>& corners,
-                        const TorchModelUvRect& uvRect,
-                        const uint8_t derivativeMaterialId) {
-    const std::array<glm::vec2, 4> uv = {{
-        {uvRect.u0, uvRect.v0},
-        {uvRect.u1, uvRect.v0},
-        {uvRect.u1, uvRect.v1},
-        {uvRect.u0, uvRect.v1}
-    }};
-
-    for (const int idx : kFaceIndices) {
-        const glm::vec3& pos = corners[static_cast<size_t>(idx)];
-        const glm::vec2& uvCoord = uv[static_cast<size_t>(idx)];
-        vertices.push_back(makeBlockVertex(
-            pos.x,
-            pos.y,
-            pos.z,
-            uvCoord.x,
-            uvCoord.y,
-            normal,
-            1.0f,
-            0.0f,
-            3.0f,
-            layer,
-            1.0f,
-            0.0f,
-            0.0f,
-            BlockTintKinds::NONE,
-            0,
-            0,
-            derivativeMaterialId
-        ));
+bool prefersBlockMeshForItem(const BlockID renderBlock) {
+    if (renderBlock == 0) {
+        return false;
     }
+    const BlockDef& def = BlockRegistry::get(renderBlock);
+    return isTorchShape(def) || def.renderShapeName == "model";
 }
 }
 
@@ -200,7 +129,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
-        const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+        const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
 
         glm::mat4 model(1.0f);
         model = glm::translate(model, drop.position);
@@ -334,75 +263,7 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
         return mesh;
     }
 
-    const BlockDef& def = BlockRegistry::get(blockId);
-
-    // Torch keeps a bespoke model; cubes and cross-shapes share the block-cube builder.
-    if (!isTorchShape(def)) {
-        const renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
-        mesh.vao = shared.vao;
-        mesh.vbo = shared.vbo;
-        mesh.vertexCount = shared.vertexCount;
-        return mesh;
-    }
-
-    std::vector<BlockVertex> vertices;
-    vertices.reserve(36);
-
-    int tileIndex = def.faceTop.firstLayer;
-    if (tileIndex < 0) {
-        tileIndex = def.faceFront.firstLayer;
-    }
-    if (tileIndex < 0) {
-        tileIndex = 0;
-    }
-
-    const float layer = static_cast<float>(tileIndex);
-    const TorchModelUvRect kTorchTopUv = makeTorchModelSourceUvRect(7.0f, 6.0f, 9.0f, 8.0f);
-    const TorchModelUvRect kTorchBottomUv = makeTorchModelSourceUvRect(7.0f, 13.0f, 9.0f, 15.0f);
-    const TorchModelUvRect kTorchFullUv = makeTorchModelSourceUvRect(0.0f, 0.0f, 16.0f, 16.0f);
-
-    emitTorchModelFace(vertices, layer, 0.0f, {{
-        {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMax},
-        {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax},
-        {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMin},
-        {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMin}
-    }}, kTorchTopUv, def.derivativeMaterialId);
-    emitTorchModelFace(vertices, layer, 1.0f, {{
-        {kTorchModelCoreMin, 0.0f, kTorchModelCoreMin},
-        {kTorchModelCoreMax, 0.0f, kTorchModelCoreMin},
-        {kTorchModelCoreMax, 0.0f, kTorchModelCoreMax},
-        {kTorchModelCoreMin, 0.0f, kTorchModelCoreMax}
-    }}, kTorchBottomUv, def.derivativeMaterialId);
-    emitTorchModelFace(vertices, layer, 4.0f, {{
-        {kTorchModelCoreMin, 0.0f, 0.0f},
-        {kTorchModelCoreMin, 0.0f, 1.0f},
-        {kTorchModelCoreMin, 1.0f, 1.0f},
-        {kTorchModelCoreMin, 1.0f, 0.0f}
-    }}, kTorchFullUv, def.derivativeMaterialId);
-    emitTorchModelFace(vertices, layer, 5.0f, {{
-        {kTorchModelCoreMax, 0.0f, 1.0f},
-        {kTorchModelCoreMax, 0.0f, 0.0f},
-        {kTorchModelCoreMax, 1.0f, 0.0f},
-        {kTorchModelCoreMax, 1.0f, 1.0f}
-    }}, kTorchFullUv, def.derivativeMaterialId);
-    emitTorchModelFace(vertices, layer, 2.0f, {{
-        {0.0f, 0.0f, kTorchModelCoreMax},
-        {1.0f, 0.0f, kTorchModelCoreMax},
-        {1.0f, 1.0f, kTorchModelCoreMax},
-        {0.0f, 1.0f, kTorchModelCoreMax}
-    }}, kTorchFullUv, def.derivativeMaterialId);
-    emitTorchModelFace(vertices, layer, 3.0f, {{
-        {1.0f, 0.0f, kTorchModelCoreMin},
-        {0.0f, 0.0f, kTorchModelCoreMin},
-        {0.0f, 1.0f, kTorchModelCoreMin},
-        {1.0f, 1.0f, kTorchModelCoreMin}
-    }}, kTorchFullUv, def.derivativeMaterialId);
-
-    if (vertices.empty()) {
-        return mesh;
-    }
-
-    const renderer::BlockCubeMesh shared = renderer::uploadBlockCubeMesh(vertices);
+    const renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
     mesh.vao = shared.vao;
     mesh.vbo = shared.vbo;
     mesh.vertexCount = shared.vertexCount;
@@ -463,7 +324,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
-        const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+        const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
 
         glm::mat4 model(1.0f);
         model = glm::translate(model, drop.position);
@@ -585,7 +446,7 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
-        const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+        const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
 
         glm::mat4 model(1.0f);
         model = glm::translate(model, drop.position);

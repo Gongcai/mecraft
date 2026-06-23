@@ -2,6 +2,7 @@
 
 #include "../../Diagnostics.h"
 #include "../gl/GlStateGuard.h"
+#include "../mesh/BlockMeshBuilder.h"
 #include "../mesh/ItemModelMesh.h"
 #include "../contracts/MecraftTextureContract.h"
 #include "../core/Shader.h"
@@ -29,25 +30,8 @@
 #include "../../world/chunk/SubChunk.h"
 
 namespace {
-constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
-    {{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}},
-    {{{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}},
-    {{{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}},
-    {{{1, 0, 0}, {0, 0, 0}, {0, 1, 0}, {1, 1, 0}}},
-    {{{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}},
-    {{{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}}
-}};
-
-constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
-constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 constexpr std::array<int, 6> kFaceIndices = {{0, 1, 2, 0, 2, 3}};
 
-constexpr float kCrossBiomeTintMarker = -1.0f;
-constexpr float kCrossFlowerMarker = -2.0f;
-constexpr float kTorchModelPixel = 1.0f / 16.0f;
-constexpr float kTorchModelCoreMin = 7.0f * kTorchModelPixel;
-constexpr float kTorchModelCoreMax = 9.0f * kTorchModelPixel;
-constexpr float kTorchModelCoreTop = 10.0f * kTorchModelPixel;
 constexpr float kPi = 3.14159265358979323846f;
 
 struct FaceUvRect {
@@ -57,60 +41,16 @@ struct FaceUvRect {
     float v1 = 0.0f;
 };
 
-int getFaceTextureIndex(const BlockDef& def, const int face) {
-    return def.getFaceLayer(face);
-}
-
 bool isTorchShape(const BlockDef& def) {
     return def.renderShapeName == "torch";
 }
 
-FaceUvRect makeTorchUvRect(const float left,
-                           const float top,
-                           const float right,
-                           const float bottom) {
-    return {
-        left * kTorchModelPixel,
-        1.0f - bottom * kTorchModelPixel,
-        right * kTorchModelPixel,
-        1.0f - top * kTorchModelPixel
-    };
-}
-
-void emitTorchFace(std::vector<BlockVertex>& vertices,
-                   const float layer,
-                   const float normal,
-                   const std::array<glm::vec3, 4>& corners,
-                   const FaceUvRect& uvRect,
-                   const uint8_t derivativeMaterialId) {
-    const std::array<glm::vec2, 4> uv = {{
-        {uvRect.u0, uvRect.v0},
-        {uvRect.u1, uvRect.v0},
-        {uvRect.u1, uvRect.v1},
-        {uvRect.u0, uvRect.v1}
-    }};
-
-    for (const int idx : kFaceIndices) {
-        const glm::vec3& pos = corners[static_cast<size_t>(idx)];
-        const glm::vec2& uvCoord = uv[static_cast<size_t>(idx)];
-        vertices.push_back(makeBlockVertex(pos.x,
-                                           pos.y,
-                                           pos.z,
-                                           uvCoord.x,
-                                           uvCoord.y,
-                                           normal,
-                                           1.0f,
-                                           0.0f,
-                                           3.0f,
-                                           layer,
-                                           1.0f,
-                                           0.0f,
-                                           0.0f,
-                                           BlockTintKinds::NONE,
-                                           0,
-                                           0,
-                                           derivativeMaterialId));
+bool prefersBlockMeshForItem(const BlockID renderBlock) {
+    if (renderBlock == 0) {
+        return false;
     }
+    const BlockDef& def = BlockRegistry::get(renderBlock);
+    return isTorchShape(def) || def.renderShapeName == "model";
 }
 
 FaceUvRect pixelRectToUv(const float x0,
@@ -680,7 +620,7 @@ void FirstPersonHeldItemRenderer::render(const int width,
     const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const BlockID renderBlock = ItemRegistry::toRenderBlock(m_visibleItemId);
-    const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+    const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
     const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
     const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArray.textureID != 0 && m_blockShader != nullptr);
 
@@ -758,7 +698,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const BlockID renderBlock = ItemRegistry::toRenderBlock(itemId);
-    const bool preferBlockMesh = (renderBlock != 0 && isTorchShape(BlockRegistry::get(renderBlock)));
+    const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
     const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
     const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArray.textureID != 0 && m_blockShader != nullptr);
 
@@ -886,140 +826,10 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
         return mesh;
     }
 
-    const BlockDef& def = BlockRegistry::get(blockId);
-    std::vector<BlockVertex> vertices;
-    vertices.reserve(36);
-
-    if (def.renderShape == BlockRenderShape::Cross) {
-        int tileIndex = def.faceTop.firstLayer;
-        if (tileIndex < 0) tileIndex = def.faceFront.firstLayer;
-        if (tileIndex < 0) tileIndex = 0;
-
-        const float layer = static_cast<float>(tileIndex);
-        const std::array<glm::vec2, 4> quadUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-        uint8_t tintU = 0;
-        uint8_t tintV = 0;
-        computeDefaultBlockTintMapPosition(tintU, tintV);
-        const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
-        const float crossMarker = tintKind != BlockTintKinds::NONE ? kCrossBiomeTintMarker : kCrossFlowerMarker;
-
-        const auto emitQuad = [&](const std::array<glm::vec3, 4>& corners) {
-            for (const int idx : kFaceIndices) {
-                const glm::vec3& pos = corners[static_cast<size_t>(idx)];
-                const glm::vec2& uvCoord = quadUV[static_cast<size_t>(idx)];
-                vertices.push_back(makeBlockVertex(pos.x,
-                                                   pos.y,
-                                                   pos.z,
-                                                   uvCoord.x,
-                                                   uvCoord.y,
-                                                   crossMarker,
-                                                   1.0f,
-                                                   0.0f,
-                                                   3.0f,
-                                                   layer,
-                                                   1.0f,
-                                                   0.0f,
-                                                   0.0f,
-                                                   tintKind,
-                                                   tintU,
-                                                   tintV,
-                                                   def.derivativeMaterialId));
-            }
-        };
-        emitQuad(kCrossQuadA);
-        emitQuad(kCrossQuadB);
-    } else if (isTorchShape(def)) {
-        int tileIndex = def.faceTop.firstLayer;
-        if (tileIndex < 0) tileIndex = def.faceFront.firstLayer;
-        if (tileIndex < 0) tileIndex = 0;
-
-        const float layer = static_cast<float>(tileIndex);
-        const FaceUvRect topUv = makeTorchUvRect(7.0f, 6.0f, 9.0f, 8.0f);
-        const FaceUvRect bottomUv = makeTorchUvRect(7.0f, 13.0f, 9.0f, 15.0f);
-        const FaceUvRect fullUv = makeTorchUvRect(0.0f, 0.0f, 16.0f, 16.0f);
-        emitTorchFace(vertices, layer, 0.0f, {{{kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMax}, {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMax}, {kTorchModelCoreMax, kTorchModelCoreTop, kTorchModelCoreMin}, {kTorchModelCoreMin, kTorchModelCoreTop, kTorchModelCoreMin}}}, topUv, def.derivativeMaterialId);
-        emitTorchFace(vertices, layer, 1.0f, {{{kTorchModelCoreMin, 0.0f, kTorchModelCoreMin}, {kTorchModelCoreMax, 0.0f, kTorchModelCoreMin}, {kTorchModelCoreMax, 0.0f, kTorchModelCoreMax}, {kTorchModelCoreMin, 0.0f, kTorchModelCoreMax}}}, bottomUv, def.derivativeMaterialId);
-        emitTorchFace(vertices, layer, 4.0f, {{{kTorchModelCoreMin, 0.0f, 0.0f}, {kTorchModelCoreMin, 0.0f, 1.0f}, {kTorchModelCoreMin, 1.0f, 1.0f}, {kTorchModelCoreMin, 1.0f, 0.0f}}}, fullUv, def.derivativeMaterialId);
-        emitTorchFace(vertices, layer, 5.0f, {{{kTorchModelCoreMax, 0.0f, 1.0f}, {kTorchModelCoreMax, 0.0f, 0.0f}, {kTorchModelCoreMax, 1.0f, 0.0f}, {kTorchModelCoreMax, 1.0f, 1.0f}}}, fullUv, def.derivativeMaterialId);
-        emitTorchFace(vertices, layer, 2.0f, {{{0.0f, 0.0f, kTorchModelCoreMax}, {1.0f, 0.0f, kTorchModelCoreMax}, {1.0f, 1.0f, kTorchModelCoreMax}, {0.0f, 1.0f, kTorchModelCoreMax}}}, fullUv, def.derivativeMaterialId);
-        emitTorchFace(vertices, layer, 3.0f, {{{1.0f, 0.0f, kTorchModelCoreMin}, {0.0f, 0.0f, kTorchModelCoreMin}, {0.0f, 1.0f, kTorchModelCoreMin}, {1.0f, 1.0f, kTorchModelCoreMin}}}, fullUv, def.derivativeMaterialId);
-    } else {
-        for (int face = 0; face < 6; ++face) {
-            int tileIndex = getFaceTextureIndex(def, face);
-            if (tileIndex < 0) tileIndex = 0;
-
-            const float layer = static_cast<float>(tileIndex);
-            const std::array<glm::vec2, 4> faceUV = {{{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}}};
-            uint8_t tintU = 0;
-            uint8_t tintV = 0;
-            computeDefaultBlockTintMapPosition(tintU, tintV);
-            const uint8_t tintKind = blockTintKindFromBiomeTint(def.biomeTint);
-
-            for (const int idx : kFaceIndices) {
-                const glm::vec3& pos = kFaceCorners[static_cast<size_t>(face)][static_cast<size_t>(idx)];
-                const glm::vec2& uvCoord = faceUV[static_cast<size_t>(idx)];
-                vertices.push_back(makeBlockVertex(pos.x,
-                                                   pos.y,
-                                                   pos.z,
-                                                   uvCoord.x,
-                                                   uvCoord.y,
-                                                   static_cast<float>(face),
-                                                   1.0f,
-                                                   0.0f,
-                                                   3.0f,
-                                                   layer,
-                                                   1.0f,
-                                                   0.0f,
-                                                   0.0f,
-                                                   tintKind,
-                                                   tintU,
-                                                   tintV,
-                                                   def.derivativeMaterialId));
-            }
-        }
-    }
-
-    if (vertices.empty()) {
-        return mesh;
-    }
-
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-    mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
-    glEnableVertexAttribArray(7);
-    glVertexAttribPointer(7, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
-    glEnableVertexAttribArray(8);
-    glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
-    glEnableVertexAttribArray(9);
-    glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
-    glEnableVertexAttribArray(10);
-    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
-    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
-        glDisableVertexAttribArray(attrib);
-    }
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    const renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
+    mesh.vao = shared.vao;
+    mesh.vbo = shared.vbo;
+    mesh.vertexCount = shared.vertexCount;
     return mesh;
 }
 
