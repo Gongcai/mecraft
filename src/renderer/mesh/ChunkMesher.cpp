@@ -9,6 +9,8 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <unordered_map>
+#include <utility>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec2.hpp>
@@ -63,6 +65,49 @@ struct FaceRenderData {
     uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
     uint8_t uvQuarterTurns = 0;
 };
+
+struct CachedModelFace {
+    std::array<glm::vec3, 4> localCorners{};
+    std::array<glm::vec2, 4> uv{};
+    std::string textureName;
+    int transformedFace = 0;
+    uint8_t cullfaceBits = 0;
+    int8_t tintIndex = -1;
+    bool ambientOcclusion = true;
+};
+
+struct CachedModelGeometry {
+    std::vector<CachedModelFace> faces;
+};
+
+struct ModelGeometryCacheKey {
+    const BlockModel* model = nullptr;
+    uint8_t rotX = 0;
+    uint8_t rotY = 0;
+    uint8_t rotZ = 0;
+
+    bool operator==(const ModelGeometryCacheKey& other) const {
+        return model == other.model &&
+               rotX == other.rotX &&
+               rotY == other.rotY &&
+               rotZ == other.rotZ;
+    }
+};
+
+struct ModelGeometryCacheKeyHash {
+    size_t operator()(const ModelGeometryCacheKey& key) const {
+        size_t hash = std::hash<const BlockModel*>{}(key.model);
+        hash ^= static_cast<size_t>(key.rotX) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
+        hash ^= static_cast<size_t>(key.rotY) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
+        hash ^= static_cast<size_t>(key.rotZ) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
+        return hash;
+    }
+};
+
+std::mutex g_modelGeometryCacheMutex;
+std::unordered_map<ModelGeometryCacheKey,
+                   std::shared_ptr<const CachedModelGeometry>,
+                   ModelGeometryCacheKeyHash> g_modelGeometryCache;
 
 struct FaceMergeKey {
     BlockID blockId = 0;
@@ -1464,6 +1509,83 @@ std::array<glm::vec2, 4> buildModelFaceUv(const ModelFace& face) {
     }
 }
 
+std::string resolveModelFaceTextureName(const BlockModel& model, const ModelFace& face) {
+    const std::string textureKey = face.textureVar.substr(1);
+    const auto it = model.textures.find(textureKey);
+    if (it == model.textures.end()) {
+        throw std::runtime_error("Model face references unknown texture variable: " + model.name + "." + textureKey);
+    }
+    return it->second;
+}
+
+std::shared_ptr<const CachedModelGeometry> buildCachedModelGeometry(const ModelVariant& variant) {
+    const BlockModel& model = *variant.model;
+    auto geometry = std::make_shared<CachedModelGeometry>();
+
+    size_t faceCount = 0;
+    for (const ModelElement& element : model.elements) {
+        for (const std::unique_ptr<ModelFace>& face : element.faces) {
+            if (face) {
+                ++faceCount;
+            }
+        }
+    }
+    geometry->faces.reserve(faceCount);
+
+    for (const ModelElement& element : model.elements) {
+        for (int faceIndex = 0; faceIndex < 6; ++faceIndex) {
+            const std::unique_ptr<ModelFace>& facePtr = element.faces[static_cast<size_t>(faceIndex)];
+            if (!facePtr) {
+                continue;
+            }
+
+            const ModelFace& face = *facePtr;
+            CachedModelFace cached;
+            cached.localCorners = buildModelFaceCorners(element, faceIndex);
+            for (glm::vec3& corner : cached.localCorners) {
+                corner = applyModelTransform(corner, variant.transform);
+            }
+            cached.uv = buildModelFaceUv(face);
+            cached.textureName = resolveModelFaceTextureName(model, face);
+            cached.transformedFace = transformFaceIndex(faceIndex, variant.transform);
+            cached.cullfaceBits = transformCullfaceBits(face.cullfaceBits, variant.transform);
+            cached.tintIndex = face.tintIndex;
+            cached.ambientOcclusion = model.ambientOcclusion;
+            geometry->faces.push_back(std::move(cached));
+        }
+    }
+
+    return geometry;
+}
+
+const CachedModelGeometry& getCachedModelGeometry(const ModelVariant& variant) {
+    if (variant.model == nullptr) {
+        throw std::runtime_error("Model geometry cache requires a model");
+    }
+
+    const ModelGeometryCacheKey key{
+        variant.model,
+        variant.transform.rotX,
+        variant.transform.rotY,
+        variant.transform.rotZ,
+    };
+
+    {
+        std::lock_guard<std::mutex> lock(g_modelGeometryCacheMutex);
+        const auto it = g_modelGeometryCache.find(key);
+        if (it != g_modelGeometryCache.end()) {
+            return *it->second;
+        }
+    }
+
+    std::shared_ptr<const CachedModelGeometry> built = buildCachedModelGeometry(variant);
+
+    std::lock_guard<std::mutex> lock(g_modelGeometryCacheMutex);
+    auto [it, inserted] = g_modelGeometryCache.emplace(key, built);
+    (void)inserted;
+    return *it->second;
+}
+
 std::array<VertexLightData, 4> computeModelFaceVertexData(const SubChunkMeshingSnapshot& snapshot,
                                                           const int x,
                                                           const int y,
@@ -1532,15 +1654,6 @@ std::array<VertexLightData, 4> computeModelFaceVertexData(const SubChunkMeshingS
     return data;
 }
 
-AnimatedTextureRef resolveModelFaceTexture(const BlockModel& model, const ModelFace& face) {
-    const std::string textureKey = face.textureVar.substr(1);
-    const auto it = model.textures.find(textureKey);
-    if (it == model.textures.end()) {
-        throw std::runtime_error("Model face references unknown texture variable: " + model.name + "." + textureKey);
-    }
-    return BlockModelRegistry::resolveTextureRef(it->second);
-}
-
 std::vector<BlockVertex>& selectModelVertexTarget(ChunkMeshData& meshData, const BlockDef& def) {
     switch (def.renderLayer) {
         case BlockRenderLayer::Opaque:
@@ -1553,16 +1666,13 @@ std::vector<BlockVertex>& selectModelVertexTarget(ChunkMeshData& meshData, const
     throw std::runtime_error("Unknown render layer for model block");
 }
 
-FaceRenderData buildModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
-                                        const BlockDef& def,
-                                        const BlockModel& model,
-                                        const ModelFace& face,
-                                        const int x,
-                                        const int y,
-                                        const int z,
-                                        const int transformedFace,
-                                        const std::array<glm::vec3, 4>& localCorners) {
-    const AnimatedTextureRef textureRef = resolveModelFaceTexture(model, face);
+FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
+                                              const BlockDef& def,
+                                              const CachedModelFace& face,
+                                              const int x,
+                                              const int y,
+                                              const int z) {
+    const AnimatedTextureRef textureRef = BlockModelRegistry::resolveTextureRef(face.textureName);
 
     FaceRenderData renderData;
     renderData.tileIndex = std::max(0, textureRef.firstLayer);
@@ -1580,9 +1690,9 @@ FaceRenderData buildModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
         x,
         y,
         z,
-        transformedFace,
-        localCorners,
-        model.ambientOcclusion);
+        face.transformedFace,
+        face.localCorners,
+        face.ambientOcclusion);
 
     int metric02 = 0;
     int metric13 = 0;
@@ -3173,48 +3283,23 @@ void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
                                  BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(blockId)).full());
     }
 
-    const BlockModel& model = *variant->model;
+    const CachedModelGeometry& geometry = getCachedModelGeometry(*variant);
     std::vector<BlockVertex>& target = selectModelVertexTarget(meshData, def);
 
-    for (const ModelElement& element : model.elements) {
-        for (int faceIndex = 0; faceIndex < 6; ++faceIndex) {
-            const std::unique_ptr<ModelFace>& facePtr = element.faces[static_cast<size_t>(faceIndex)];
-            if (!facePtr) {
-                continue;
-            }
-
-            const ModelFace& face = *facePtr;
-            const uint8_t transformedCullfaceBits = transformCullfaceBits(face.cullfaceBits, variant->transform);
-            if (shouldCullModelFace(transformedCullfaceBits, snapshot, x, y, z)) {
-                continue;
-            }
-
-            std::array<glm::vec3, 4> localCorners = buildModelFaceCorners(element, faceIndex);
-            for (glm::vec3& corner : localCorners) {
-                corner = applyModelTransform(corner, variant->transform);
-            }
-
-            std::array<glm::vec3, 4> worldCorners = localCorners;
-            const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-            for (glm::vec3& corner : worldCorners) {
-                corner += blockOffset;
-            }
-
-            const int transformedFace = transformFaceIndex(faceIndex, variant->transform);
-            const std::array<glm::vec2, 4> faceUv = buildModelFaceUv(face);
-            FaceRenderData renderData = buildModelFaceRenderData(
-                snapshot,
-                def,
-                model,
-                face,
-                x,
-                y,
-                z,
-                transformedFace,
-                localCorners);
-            appendFaceVertices(target, worldCorners, faceUv, transformedFace, renderData);
-            expandBoundsForCorners(meshData, worldCorners);
+    for (const CachedModelFace& face : geometry.faces) {
+        if (shouldCullModelFace(face.cullfaceBits, snapshot, x, y, z)) {
+            continue;
         }
+
+        std::array<glm::vec3, 4> worldCorners = face.localCorners;
+        const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+        for (glm::vec3& corner : worldCorners) {
+            corner += blockOffset;
+        }
+
+        FaceRenderData renderData = buildCachedModelFaceRenderData(snapshot, def, face, x, y, z);
+        appendFaceVertices(target, worldCorners, face.uv, face.transformedFace, renderData);
+        expandBoundsForCorners(meshData, worldCorners);
     }
 }
 

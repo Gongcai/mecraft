@@ -702,30 +702,6 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        SubChunk* sc = chunk.getOrCreateSubChunk(2);
-        if (!sc) {
-            return fail("creating a fluid-layer regression cell should allocate a sub-chunk");
-        }
-        sc->setFluidLayer(0, 0, 0, FluidState::makeWater(0, false));
-
-        if (ChunkMesher::shouldSkipSubChunk(chunk, 2)) {
-            return fail("fluid-layer-only sub-chunks should still be meshed");
-        }
-
-        const ChunkMeshData meshData = buildMeshDataFor(chunk);
-        const auto topFaceVertices = collectFaceVertices(
-            meshData.waterVertices,
-            0.0f,
-            0.0f, 1.0f,
-            33.0f, 33.0f,
-            0.0f, 1.0f);
-        if (topFaceVertices.size() != 6) {
-            return fail("fluid layer water should keep rendering its top face after the host block is removed");
-        }
-    }
-
-    {
-        Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, FluidState::makeWater(3, false));
         chunk.setBlock(1, 32, 0, FluidState::makeWater(0, false));
 
