@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 #include <glm/vec3.hpp>
 
@@ -266,7 +267,78 @@ int main() {
         return fail("top slab collision should settle at full-block height");
     }
 
-    // Case 7: fluid flow should impart a repeatable horizontal push.
+    // Case 7: grounded movement should step onto half-height model blocks.
+    const int stepLaneY = surfaceY + 13;
+    for (int x = -2; x <= 14; ++x) {
+        for (int y = surfaceY + 1; y <= stepLaneY + 4; ++y) {
+            for (int z = 25; z <= 29; ++z) {
+                world.setBlock(x, y, z, BlockIds::AIR);
+            }
+        }
+    }
+    for (int x = -1; x <= 13; ++x) {
+        world.setBlock(x, stepLaneY, 26, BlockIds::STONE);
+    }
+    for (int x = 1; x <= 12; ++x) {
+        world.setBlock(x, stepLaneY + 1, 26, bottomSlab);
+    }
+
+    PhysicsBody slabStepper;
+    slabStepper.position = glm::vec3(0.5f,
+                                     static_cast<float>(stepLaneY) + 1.0f + slabStepper.halfExtents.y,
+                                     26.5f);
+    slabStepper.isGrounded = true;
+
+    MoveIntent stepForward{};
+    stepForward.move = glm::vec2(1.0f, 0.0f);
+    for (int i = 0; i < 120; ++i) {
+        phys.updateBody(slabStepper, stepForward, kDt);
+    }
+
+    const float slabStepY = static_cast<float>(stepLaneY) + 1.5f + slabStepper.halfExtents.y;
+    if (slabStepper.position.x <= 1.25f) {
+        return fail("body should move onto a bottom slab instead of treating it as a wall");
+    }
+    if (std::abs(slabStepper.position.y - slabStepY) > 0.08f) {
+        return fail("body should step up to bottom slab height during horizontal movement");
+    }
+
+    const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
+    if (oakStairs == BlockIds::AIR) {
+        return fail("oak_stairs should be registered for stair step physics");
+    }
+    const StateID eastStairs = BlockStateRegistry::getDefaultState(oakStairs);
+    for (int x = -2; x <= 14; ++x) {
+        for (int y = surfaceY + 1; y <= stepLaneY + 4; ++y) {
+            for (int z = 30; z <= 34; ++z) {
+                world.setBlock(x, y, z, BlockIds::AIR);
+            }
+        }
+    }
+    for (int x = -1; x <= 13; ++x) {
+        world.setBlock(x, stepLaneY, 31, BlockIds::STONE);
+    }
+    for (int x = 1; x <= 12; ++x) {
+        world.setBlock(x, stepLaneY + 1, 31, eastStairs);
+    }
+
+    PhysicsBody stairStepper;
+    stairStepper.position = glm::vec3(0.5f,
+                                      static_cast<float>(stepLaneY) + 1.0f + stairStepper.halfExtents.y,
+                                      31.5f);
+    stairStepper.isGrounded = true;
+    for (int i = 0; i < 120; ++i) {
+        phys.updateBody(stairStepper, stepForward, kDt);
+    }
+
+    if (stairStepper.position.x <= 1.25f) {
+        return fail("body should move onto stairs instead of treating them as a wall");
+    }
+    if (stairStepper.position.y <= static_cast<float>(stepLaneY) + 1.0f + stairStepper.halfExtents.y + 0.2f) {
+        return fail("body should gain height while stepping through stairs");
+    }
+
+    // Case 8: fluid flow should impart a repeatable horizontal push.
     const int flowY = surfaceY + 8;
     for (int x = -2; x <= 4; ++x) {
         for (int y = surfaceY + 1; y <= flowY + 2; ++y) {

@@ -17,6 +17,7 @@ namespace {
 
 constexpr float kContactEpsilon = 0.0005f;
 constexpr float kAxisStepLength = 0.45f;
+constexpr float kStepLiftEpsilon = 0.001f;
 
 struct AABB {
     glm::vec3 min{};
@@ -142,6 +143,57 @@ bool overlapsCollision(const IWorldView& world, const AABB& box) {
     return false;
 }
 
+bool aabbIntersects(const glm::vec3& aMin,
+                    const glm::vec3& aMax,
+                    const glm::vec3& bMin,
+                    const glm::vec3& bMax) {
+    return aMin.x < bMax.x && aMax.x > bMin.x &&
+           aMin.y < bMax.y && aMax.y > bMin.y &&
+           aMin.z < bMax.z && aMax.z > bMin.z;
+}
+
+bool computeRequiredStepLift(const IWorldView& world,
+                             const AABB& box,
+                             const float maxStepHeight,
+                             float& outLift) {
+    outLift = 0.0f;
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
+    const int minY = static_cast<int>(std::floor(box.min.y));
+    const int maxY = static_cast<int>(std::floor(box.max.y - kContactEpsilon));
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kContactEpsilon));
+
+    bool hasContact = false;
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                const StateID stateId = world.getBlockState(x, y, z);
+                const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+                for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
+                    const glm::vec3 obstacleMin = blockOffset + localBox.min;
+                    const glm::vec3 obstacleMax = blockOffset + localBox.max;
+                    if (!aabbIntersects(box.min, box.max, obstacleMin, obstacleMax)) {
+                        continue;
+                    }
+
+                    hasContact = true;
+                    const float requiredLift = obstacleMax.y - box.min.y;
+                    if (requiredLift <= 0.0f) {
+                        continue;
+                    }
+                    if (requiredLift > maxStepHeight + kStepLiftEpsilon) {
+                        return false;
+                    }
+                    outLift = std::max(outLift, requiredLift + kStepLiftEpsilon);
+                }
+            }
+        }
+    }
+
+    return hasContact && outLift > 0.0f && outLift <= maxStepHeight + kStepLiftEpsilon;
+}
+
 bool queryEyesInWater(const PhysicsBody& body, const IWorldView& world) {
     const glm::vec3 eyePos = body.position + glm::vec3(0.0f, body.eyeOffsetY, 0.0f);
     const int blockX = static_cast<int>(std::floor(eyePos.x));
@@ -196,6 +248,35 @@ bool hasGroundSupportAt(const PhysicsBody& body, const IWorldView& world, const 
     }
 
     return false;
+}
+
+bool tryStepUp(PhysicsBody& body,
+               const IWorldView& world,
+               const MoveIntent& intent,
+               const float maxStepHeight) {
+    if (intent.isFlying || body.isInWater || !body.isGrounded || maxStepHeight <= 0.0f) {
+        return false;
+    }
+
+    const AABB collisionBox = makeBodyAABBAt(body, body.position);
+    float lift = 0.0f;
+    if (!computeRequiredStepLift(world, collisionBox, maxStepHeight, lift)) {
+        return false;
+    }
+
+    glm::vec3 steppedPosition = body.position;
+    steppedPosition.y += lift;
+    if (overlapsCollision(world, makeBodyAABBAt(body, steppedPosition))) {
+        return false;
+    }
+    if (!hasGroundSupportAt(body, world, steppedPosition)) {
+        return false;
+    }
+
+    body.position = steppedPosition;
+    body.velocity.y = std::max(body.velocity.y, 0.0f);
+    body.isGrounded = true;
+    return true;
 }
 
 float moveTowards(const float current, const float target, const float maxDelta) {
@@ -305,7 +386,12 @@ void applyFluidFlow(PhysicsBody& body, const IWorldView& world, const MoveIntent
     body.velocity += flow * (tuning.waterFlowPush * pushScale * dt);
 }
 
-void moveAndCollideAxis(PhysicsBody& body, const IWorldView& world, const MoveIntent& intent, const float dt, const int axis) {
+void moveAndCollideAxis(PhysicsBody& body,
+                        const IWorldView& world,
+                        const MoveIntent& intent,
+                        const PhysicsTuning& tuning,
+                        const float dt,
+                        const int axis) {
     const float delta = body.velocity[axis] * dt;
     if (std::abs(delta) <= 0.0f) {
         return;
@@ -331,6 +417,10 @@ void moveAndCollideAxis(PhysicsBody& body, const IWorldView& world, const MoveIn
         body.position[axis] += stepDelta;
 
         if (!overlapsCollision(world, makeBodyAABBAt(body, body.position))) {
+            continue;
+        }
+
+        if (axis != 1 && tryStepUp(body, world, intent, tuning.stepHeight)) {
             continue;
         }
 
@@ -383,9 +473,9 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     applyFluidFlow(body, *m_worldView, intent, tuningOverride, waterFillRatio, dt, m_concreteWorld);
 
     body.isGrounded = false;
-    moveAndCollideAxis(body, *m_worldView, intent, dt, 1); // Y
-    moveAndCollideAxis(body, *m_worldView, intent, dt, 0); // X
-    moveAndCollideAxis(body, *m_worldView, intent, dt, 2); // Z
+    moveAndCollideAxis(body, *m_worldView, intent, tuningOverride, dt, 1); // Y
+    moveAndCollideAxis(body, *m_worldView, intent, tuningOverride, dt, 0); // X
+    moveAndCollideAxis(body, *m_worldView, intent, tuningOverride, dt, 2); // Z
 
     // Keep grounded state stable while resting on solid support to avoid
     // one-frame false negatives that can retrigger landing events.
