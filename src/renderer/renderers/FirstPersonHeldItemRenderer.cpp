@@ -196,6 +196,7 @@ void FirstPersonHeldItemRenderer::shutdown() {
     m_swingActive = false;
     m_continuousSwing = false;
     m_swingElapsed = 0.0f;
+    m_sceneHdrScale = 1.0f;
     m_initialized = false;
 }
 
@@ -392,6 +393,10 @@ void FirstPersonHeldItemRenderer::setContinuousSwing(const bool active) {
 void FirstPersonHeldItemRenderer::setEnvironmentLight(const float sunlight, const float blockLight) {
     m_environmentSunlight = std::clamp(sunlight, 0.0f, 1.0f);
     m_environmentBlockLight = std::clamp(blockLight, 0.0f, 1.0f);
+}
+
+void FirstPersonHeldItemRenderer::setSceneHdrScale(const float scale) {
+    m_sceneHdrScale = std::clamp(scale, 1.0f, 8.0f);
 }
 
 void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
@@ -662,11 +667,19 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     m_steveShader->setMat4("viewProj", viewProj);
     m_steveShader->setMat4("model", model);
     m_steveShader->setInt("uTexture", 0);
+    m_steveShader->setInt("uLightmapDay", 1);
+    m_steveShader->setInt("uLightmapNight", 2);
     m_steveShader->setFloat("uHeldSunlight", m_environmentSunlight);
     m_steveShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
+    m_steveShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
+    m_steveShader->setFloat("uHurtFlash", 0.0f);
     bindShadowUniforms(*m_steveShader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     // Shadow textures (units 5-10)
     MecraftTextureContract::ShadowTextureBundle shadowBundle{
         m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::fallbackDepthCompare(),
@@ -727,6 +740,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         m_blockShader->setFloat("uSkyIntensity", 1.0f);
         m_blockShader->setFloat("uHeldSunlight", m_environmentSunlight);
         m_blockShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
+        m_blockShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
         m_blockShader->setFloat("uAnimationTime", 0.0f);
         m_blockShader->setInt("uLightmapDay", 1);
         m_blockShader->setInt("uLightmapNight", 2);
@@ -775,11 +789,18 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     m_itemShader->setMat4("model", model);
     m_itemShader->setMat4("viewProj", viewProj);
     m_itemShader->setInt("uAtlas", 0);
+    m_itemShader->setInt("uLightmapDay", 1);
+    m_itemShader->setInt("uLightmapNight", 2);
     m_itemShader->setFloat("uHeldSunlight", m_environmentSunlight);
     m_itemShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
+    m_itemShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
     bindShadowUniforms(*m_itemShader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     // Shadow textures (units 5-10)
     MecraftTextureContract::ShadowTextureBundle shadowBundle{
         m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::fallbackDepthCompare(),

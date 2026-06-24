@@ -1,7 +1,7 @@
 // Block/item forward lit fragment shader — Mecraft Phase 5.4 enhanced.
 // Used for held blocks in first-person view.
-// Phase 5.4: adds CSM shadow sampling via held_item_shadow.glsl.
-// The lightmap provides base lighting; shadow modulates sunlight contribution.
+// The lightmap provides stable first-person lighting, while CSM adds a soft
+// deferred accent without crushing the view model to black.
 
 #version 450 core
 #include "held_item_shadow.glsl"
@@ -41,6 +41,7 @@ uniform float uAnimationTime;
 uniform float uAmbientStrength;
 uniform float uHeldSunlight;
 uniform float uHeldBlockLight;
+uniform float uHeldSceneHdrScale;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -128,15 +129,16 @@ void main() {
     vec3 nightLight = srgbToLinear(texture(uLightmapNight, lightmapUV).rgb);
     vec3 lightColor = mix(nightLight, dayLight, clamp(uSkyIntensity, 0.0, 1.0));
 
-    // CSM shadow sampling for held blocks.
     vec3 faceNormal = decodeFaceNormal(vNormal);
+    vec3 lightDir = normalize(uSunDirection);
+    float ndotl = max(dot(faceNormal, lightDir), 0.0);
     float shadow = sampleHeldItemShadow(vWorldPos, faceNormal);
-    // Modulate sunlight contribution by shadow; blocklight is unaffected.
-    float sunFraction = clamp(uHeldSunlight * uSkyIntensity, 0.0, 1.0);
-    float shadowDarken = mix(1.0, shadow, sunFraction);
-    lightColor *= shadowDarken;
+    float shadowVisibility = mix(0.72, 1.0, shadow);
+    float directionalShape = mix(0.90, 1.14, ndotl) * shadowVisibility;
+    float sunAmount = clamp(uHeldSunlight * uSkyIntensity, 0.0, 1.0);
+    float deferredAccent = mix(1.0, directionalShape, 0.65 * sunAmount);
 
-    vec3 finalColor = albedo * lightColor * aoFactor;
+    vec3 finalColor = albedo * lightColor * aoFactor * deferredAccent * uHeldSceneHdrScale;
     if (uFogEnabled != 0) {
         float fogFactor = computeFogFactor(vFogDist);
         finalColor = mix(srgbToLinear(uFogColor), finalColor, fogFactor);

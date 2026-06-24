@@ -775,6 +775,7 @@
       "isSolid": false,
       "isTransparent": true,
       "renderLayer": "cutout",
+      "biomeTint": "foliage",
       "allowsFluidCoexistence": true,
       "placementStrategy": "face_plane_floor",
       "supportRule": "attached_face",

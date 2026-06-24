@@ -68,14 +68,67 @@ SkyIlluminanceData toSkyIlluminanceData(const GameplaySkyRenderer::SkyIlluminanc
     return dst;
 }
 
+glm::vec2 decodePackedLight(const uint8_t packed) {
+    return glm::vec2(
+        static_cast<float>((packed >> 4) & 0x0F) / 15.0f,
+        static_cast<float>(packed & 0x0F) / 15.0f);
+}
+
+glm::vec2 mixLight(const glm::vec2& a, const glm::vec2& b, const float t) {
+    return a + (b - a) * t;
+}
+
+float luminance(const glm::vec3& color) {
+    return glm::dot(color, glm::vec3(0.2126f, 0.7152f, 0.0722f));
+}
+
+float computeHeldItemSceneHdrScale(const FrameContext& ctx,
+                                   const RenderSettings& settings,
+                                   const PipelineMode pipelineMode) {
+    if (pipelineMode == PipelineMode::Forward) {
+        return 1.0f;
+    }
+
+    const float directEnergy = luminance(ctx.skyIlluminance.directIlluminance) *
+                               settings.postProcess.directSunStrength;
+    const float skyEnergy = luminance(ctx.skyIlluminance.skyIlluminance) *
+                            settings.postProcess.skyAmbientStrength *
+                            settings.weather.skylightScale;
+    const float weatherAttenuation = 1.0f - std::clamp(ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.45f,
+                                                       0.0f,
+                                                       0.70f);
+    const float scale = 1.0f + directEnergy * 2.25f * weatherAttenuation + skyEnergy * 1.20f;
+    return std::clamp(scale, 1.0f, 6.5f);
+}
+
 glm::vec2 sampleHeldItemLight(const IWorldView& worldView, const glm::vec3& cameraPosition) {
-    const int x = static_cast<int>(std::floor(cameraPosition.x));
-    const int y = static_cast<int>(std::floor(cameraPosition.y));
-    const int z = static_cast<int>(std::floor(cameraPosition.z));
-    const uint8_t packed = worldView.getPackedLight(x, y, z);
-    const float sunlight = static_cast<float>((packed >> 4) & 0x0F) / 15.0f;
-    const float blockLight = static_cast<float>(packed & 0x0F) / 15.0f;
-    return glm::vec2(sunlight, blockLight);
+    const int x0 = static_cast<int>(std::floor(cameraPosition.x));
+    const int y0 = static_cast<int>(std::floor(cameraPosition.y));
+    const int z0 = static_cast<int>(std::floor(cameraPosition.z));
+    const int x1 = x0 + 1;
+    const int y1 = y0 + 1;
+    const int z1 = z0 + 1;
+
+    const float tx = glm::fract(cameraPosition.x);
+    const float ty = glm::fract(cameraPosition.y);
+    const float tz = glm::fract(cameraPosition.z);
+
+    const glm::vec2 c000 = decodePackedLight(worldView.getPackedLight(x0, y0, z0));
+    const glm::vec2 c100 = decodePackedLight(worldView.getPackedLight(x1, y0, z0));
+    const glm::vec2 c010 = decodePackedLight(worldView.getPackedLight(x0, y1, z0));
+    const glm::vec2 c110 = decodePackedLight(worldView.getPackedLight(x1, y1, z0));
+    const glm::vec2 c001 = decodePackedLight(worldView.getPackedLight(x0, y0, z1));
+    const glm::vec2 c101 = decodePackedLight(worldView.getPackedLight(x1, y0, z1));
+    const glm::vec2 c011 = decodePackedLight(worldView.getPackedLight(x0, y1, z1));
+    const glm::vec2 c111 = decodePackedLight(worldView.getPackedLight(x1, y1, z1));
+
+    const glm::vec2 x00 = mixLight(c000, c100, tx);
+    const glm::vec2 x10 = mixLight(c010, c110, tx);
+    const glm::vec2 x01 = mixLight(c001, c101, tx);
+    const glm::vec2 x11 = mixLight(c011, c111, tx);
+    const glm::vec2 y0Mix = mixLight(x00, x10, ty);
+    const glm::vec2 y1Mix = mixLight(x01, x11, ty);
+    return mixLight(y0Mix, y1Mix, tz);
 }
 } // anonymous namespace
 
@@ -243,6 +296,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
         const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
+        request.firstPersonHeldItemRenderer->setSceneHdrScale(
+            computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
         request.firstPersonHeldItemRenderer->render(
             frameRenderSize.x,
             frameRenderSize.y,
