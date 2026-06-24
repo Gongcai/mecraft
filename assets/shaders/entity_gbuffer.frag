@@ -23,6 +23,7 @@ uniform sampler2D uTexture;
 uniform float uEntitySunlight;
 uniform float uEntityBlockLight;
 uniform float uHurtFlash;
+uniform int uForceZeroVelocity;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -48,6 +49,6 @@ void main() {
     GMaterial = packGBufferMaterial(surfaceMaterialForKind(float(MATERIAL_SKIN), 0.0));
     GMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(float(MATERIAL_SKIN)));
 
-    // Per-object screen-space velocity for TAA/motion blur.
-    FragPerObjectVelocity = vVelocity;
+    // Static entity-style meshes can request camera-only reprojection.
+    FragPerObjectVelocity = (uForceZeroVelocity != 0) ? vec2(0.0) : vVelocity;
 }

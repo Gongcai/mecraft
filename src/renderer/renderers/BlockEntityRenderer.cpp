@@ -67,8 +67,8 @@ std::array<FaceUvRect, 6> buildBoxUvs(const BlockEntityRenderer::CuboidDefinitio
     const float v = cuboid.textureV;
 
     return {{
-        pixelRectToUv(u + depth, v, u + depth + width, v + depth, textureWidth, textureHeight),
         pixelRectToUv(u + depth + width, v, u + depth + width + width, v + depth, textureWidth, textureHeight),
+        pixelRectToUv(u + depth, v, u + depth + width, v + depth, textureWidth, textureHeight),
         pixelRectToUv(u + depth, v + depth, u + depth + width, v + depth + height, textureWidth, textureHeight),
         pixelRectToUv(u + depth + width + depth, v + depth, u + depth + width + depth + width, v + depth + height, textureWidth, textureHeight),
         pixelRectToUv(u, v + depth, u + depth, v + depth + height, textureWidth, textureHeight),
@@ -405,6 +405,7 @@ void BlockEntityRenderer::renderToGBuffer(const IWorldView& worldView,
     m_gbufferShader->setMat4("prevViewProj", previousViewProj);
     m_gbufferShader->setInt("uTexture", 0);
     m_gbufferShader->setFloat("uHurtFlash", 0.0f);
+    m_gbufferShader->setInt("uForceZeroVelocity", 1);
 
     const int modelLoc = m_gbufferShader->getUniformLocation("model");
     const int prevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
@@ -420,6 +421,7 @@ void BlockEntityRenderer::renderToGBuffer(const IWorldView& worldView,
                       glm::vec3(0.0f),
                       0.0f,
                       0.0f);
+    m_gbufferShader->setInt("uForceZeroVelocity", 0);
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE0);

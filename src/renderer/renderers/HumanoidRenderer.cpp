@@ -985,6 +985,7 @@ void HumanoidRenderer::renderToGBuffer(ecs::GameplayRegistry& gameplayReg,
     // Depth test/write enabled, blend disabled — set by caller.
     m_gbufferShader->use();
     m_gbufferShader->setMat4("prevViewProj", previousViewProj);
+    m_gbufferShader->setInt("uForceZeroVelocity", 0);
     drawEntities(gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 
@@ -1013,6 +1014,7 @@ void HumanoidRenderer::renderToGBuffer(const IWorldView& worldView, ecs::Gamepla
 
     m_gbufferShader->use();
     m_gbufferShader->setMat4("prevViewProj", previousViewProj);
+    m_gbufferShader->setInt("uForceZeroVelocity", 0);
     drawEntities(worldView, gameplayReg, *m_gbufferShader, modelLoc, viewProjLoc, prevModelLoc, jitteredViewProj, mode);
 }
 
