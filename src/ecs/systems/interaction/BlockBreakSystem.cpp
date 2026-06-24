@@ -10,6 +10,7 @@
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../game/inventory/ChestInventoryLifecycle.h"
+#include "../../../game/inventory/FurnaceInventoryLifecycle.h"
 #include "../../../client/GameClient.h"
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
@@ -181,7 +182,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
             const bool handledChest = handleChestInventoryBreak(registry, brokenBlock, hitBlock, false);
+            const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, false);
             static_cast<void>(handledChest);
+            static_cast<void>(handledFurnace);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
@@ -225,7 +228,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
             mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
             const bool handledChest = handleChestInventoryBreak(registry, brokenBlock, hitBlock, true);
+            const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, true);
             static_cast<void>(handledChest);
+            static_cast<void>(handledFurnace);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             dropBus.push({brokenBlock, hitBlock});

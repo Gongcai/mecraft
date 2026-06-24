@@ -84,6 +84,35 @@ public:
         return std::clamp(m_cookSeconds / m_cookTargetSeconds, 0.0f, 1.0f);
     }
 
+    [[nodiscard]] float burnSecondsRemaining() const {
+        return m_burnSecondsRemaining;
+    }
+
+    [[nodiscard]] float burnSecondsTotal() const {
+        return m_burnSecondsTotal;
+    }
+
+    [[nodiscard]] float cookSeconds() const {
+        return m_cookSeconds;
+    }
+
+    [[nodiscard]] float cookTargetSeconds() const {
+        return m_cookTargetSeconds;
+    }
+
+    void setProgress(const float burnSecondsRemaining,
+                     const float burnSecondsTotal,
+                     const float cookSeconds,
+                     const float cookTargetSeconds) {
+        m_burnSecondsRemaining = std::max(0.0f, burnSecondsRemaining);
+        m_burnSecondsTotal = std::max(0.0f, burnSecondsTotal);
+        m_cookSeconds = std::max(0.0f, cookSeconds);
+        m_cookTargetSeconds = std::max(0.0f, cookTargetSeconds);
+        if (m_burnSecondsRemaining > m_burnSecondsTotal) {
+            m_burnSecondsRemaining = m_burnSecondsTotal;
+        }
+    }
+
 private:
     [[nodiscard]] const SmeltingRecipe* currentRecipe(const SmeltingSystem& smeltingSystem) const {
         const ItemStack input = m_slots[INPUT_SLOT];
@@ -165,6 +194,35 @@ public:
             return nullptr;
         }
         return &it->second;
+    }
+
+    [[nodiscard]] bool empty() const {
+        return m_furnaces.empty();
+    }
+
+    template <typename Fn>
+    void forEach(Fn&& fn) const {
+        for (const auto& [key, furnace] : m_furnaces) {
+            fn(glm::ivec3(key.x, key.y, key.z), furnace);
+        }
+    }
+
+    [[nodiscard]] std::array<ItemStack, FurnaceInventory::SLOT_COUNT> extractAndErase(const glm::ivec3& position) {
+        std::array<ItemStack, FurnaceInventory::SLOT_COUNT> contents{};
+        const auto it = m_furnaces.find(positionKey(position));
+        if (it == m_furnaces.end()) {
+            return contents;
+        }
+
+        for (int slot = 0; slot < FurnaceInventory::SLOT_COUNT; ++slot) {
+            contents[static_cast<std::size_t>(slot)] = it->second.getSlotStack(slot);
+        }
+        m_furnaces.erase(it);
+        return contents;
+    }
+
+    void erase(const glm::ivec3& position) {
+        m_furnaces.erase(positionKey(position));
     }
 
 private:

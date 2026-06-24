@@ -638,11 +638,27 @@ static void testSaveManagerBlockEntitiesRoundTrip() {
     emptyChest.y = 2;
     emptyChest.z = 3;
 
-    mgr.saveBlockEntities({chest, emptyChest});
+    save::BlockEntityData furnace;
+    furnace.type = "minecraft:furnace";
+    furnace.x = 8;
+    furnace.y = 65;
+    furnace.z = -2;
+    furnace.burnSecondsRemaining = 3.5f;
+    furnace.burnSecondsTotal = 8.0f;
+    furnace.cookSeconds = 6.25f;
+    furnace.cookTargetSeconds = 10.0f;
+
+    save::BlockEntitySlotData fuel;
+    fuel.slot = 1;
+    fuel.itemId = ItemIds::COAL;
+    fuel.count = 2;
+    furnace.slots.push_back(fuel);
+
+    mgr.saveBlockEntities({chest, emptyChest, furnace});
 
     std::vector<save::BlockEntityData> loaded;
     assert(mgr.loadBlockEntities(loaded));
-    assert(loaded.size() == 2);
+    assert(loaded.size() == 3);
     assert(loaded[0].type == "minecraft:chest");
     assert(loaded[0].x == chest.x);
     assert(loaded[0].y == chest.y);
@@ -659,6 +675,18 @@ static void testSaveManagerBlockEntitiesRoundTrip() {
     assert(loaded[1].y == emptyChest.y);
     assert(loaded[1].z == emptyChest.z);
     assert(loaded[1].slots.empty());
+    assert(loaded[2].type == "minecraft:furnace");
+    assert(loaded[2].x == furnace.x);
+    assert(loaded[2].y == furnace.y);
+    assert(loaded[2].z == furnace.z);
+    assert(loaded[2].burnSecondsRemaining == furnace.burnSecondsRemaining);
+    assert(loaded[2].burnSecondsTotal == furnace.burnSecondsTotal);
+    assert(loaded[2].cookSeconds == furnace.cookSeconds);
+    assert(loaded[2].cookTargetSeconds == furnace.cookTargetSeconds);
+    assert(loaded[2].slots.size() == 1);
+    assert(loaded[2].slots[0].slot == fuel.slot);
+    assert(loaded[2].slots[0].itemId == fuel.itemId);
+    assert(loaded[2].slots[0].count == fuel.count);
 
     mgr.saveBlockEntities({});
     loaded.clear();

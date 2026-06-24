@@ -9,6 +9,7 @@
 #include "ecs/entity/MobModelFactory.h"
 #include "ecs/systems/world/BlockSupportSystem.h"
 #include "game/inventory/ChestInventoryStore.h"
+#include "game/inventory/FurnaceInventoryStore.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
@@ -2386,6 +2387,82 @@ static void testPersistentChestInventoryRestoresFromSave() {
     std::printf("[PASS] testPersistentChestInventoryRestoresFromSave\n");
 }
 
+static void testPersistentFurnaceInventoryRestoresFromSave() {
+    const std::filesystem::path saveRoot = "test_server_furnace_block_entities_save";
+    std::filesystem::remove_all(saveRoot);
+    const glm::ivec3 furnacePos(5, 71, -6);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Furnace Block Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+
+        FurnaceInventoryStore& store = registry.ctxSet<FurnaceInventoryStore>();
+        FurnaceInventory& furnace = store.getOrCreate(furnacePos);
+
+        ItemStack input;
+        input.itemId = ItemIds::APPLE;
+        input.count = 3;
+        furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, input);
+
+        ItemStack fuel;
+        fuel.itemId = ItemIds::COAL;
+        fuel.count = 2;
+        furnace.setSlotStack(FurnaceInventory::FUEL_SLOT, fuel);
+
+        ItemStack output;
+        output.itemId = ItemIds::IRON_PICKAXE;
+        output.count = 1;
+        output.durability = 17;
+        furnace.setSlotStack(FurnaceInventory::OUTPUT_SLOT, output);
+        furnace.setProgress(4.0f, 8.0f, 2.5f, 10.0f);
+
+        server.saveBlockEntities();
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Furnace Block Entity Save Test");
+
+        ecs::GameplayRegistry registry;
+        server.setEcsRegistry(&registry);
+
+        require(registry.ctxHas<FurnaceInventoryStore>(),
+                "persistent furnace restore should create a furnace inventory store");
+        const FurnaceInventoryStore& store = registry.ctxGet<FurnaceInventoryStore>();
+        const FurnaceInventory* furnace = store.find(furnacePos);
+        require(furnace != nullptr, "persistent furnace restore should recreate the furnace inventory");
+
+        const ItemStack input = furnace->getSlotStack(FurnaceInventory::INPUT_SLOT);
+        require(input.itemId == ItemIds::APPLE && input.count == 3,
+                "persistent furnace restore should keep the input slot");
+
+        const ItemStack fuel = furnace->getSlotStack(FurnaceInventory::FUEL_SLOT);
+        require(fuel.itemId == ItemIds::COAL && fuel.count == 2,
+                "persistent furnace restore should keep the fuel slot");
+
+        const ItemStack output = furnace->getSlotStack(FurnaceInventory::OUTPUT_SLOT);
+        require(output.itemId == ItemIds::IRON_PICKAXE && output.count == 1 && output.durability == 17,
+                "persistent furnace restore should keep the output slot");
+
+        require(furnace->burnSecondsRemaining() == 4.0f &&
+                furnace->burnSecondsTotal() == 8.0f &&
+                furnace->cookSeconds() == 2.5f &&
+                furnace->cookTargetSeconds() == 10.0f,
+                "persistent furnace restore should keep burn and cook progress");
+
+        server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testPersistentFurnaceInventoryRestoresFromSave\n");
+}
+
 static void testPersistentChestBlockRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_chest_block_save";
     std::filesystem::remove_all(saveRoot);
@@ -3383,6 +3460,7 @@ int main() {
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
     testPersistentChestInventoryRestoresFromSave();
+    testPersistentFurnaceInventoryRestoresFromSave();
     testPersistentChestBlockRestoresFromSave();
     testServerBlockActionBreaksChestLifecycle();
     testOwnedServerEcsRestoresPersistentZombie();

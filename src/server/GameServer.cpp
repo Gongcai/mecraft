@@ -15,6 +15,8 @@
 #include "../ecs/components/NetworkComponents.h"
 #include "../game/inventory/ChestInventoryLifecycle.h"
 #include "../game/inventory/ChestInventoryStore.h"
+#include "../game/inventory/FurnaceInventoryLifecycle.h"
+#include "../game/inventory/FurnaceInventoryStore.h"
 #include "../item/Item.h"
 #include "../physics/PhysicsSystem.h"
 #include "../world/block/BlockStateRegistry.h"
@@ -34,6 +36,10 @@ constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
+
+BlockID furnaceBlockId() {
+    return BlockRegistry::findByName("minecraft:furnace");
+}
 
 int blockToChunkCoord(const int value) {
     return static_cast<int>(std::floor(static_cast<float>(value) / static_cast<float>(Chunk::SIZE_X)));
@@ -1356,17 +1362,29 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         m_world.setBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z, BlockIds::AIR);
         const bool shouldDrop = client.gameplayMode != net::NetworkGameplayMode::Creative;
         bool brokeChest = false;
+        bool brokeFurnace = false;
         if (m_gameplayRegistry != nullptr) {
             brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, target, action.targetBlock, shouldDrop);
+            brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, target, action.targetBlock, shouldDrop);
             if (brokeChest && shouldDrop) {
                 const ItemID chestItem = BlockDropTable::getDropItem(BlockIds::CHEST);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, chestItem, action.targetBlock, 1);
+            }
+            if (brokeFurnace && shouldDrop) {
+                const ItemID furnaceItem = BlockDropTable::getDropItem(furnaceBlockId());
+                ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, furnaceItem, action.targetBlock, 1);
             }
         } else if (BlockStateRegistry::getBlockId(target) == BlockIds::CHEST &&
                    m_ecsRegistry != nullptr &&
                    m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
             const auto discardedContents =
                 m_ecsRegistry->ctx().get<ChestInventoryStore>().extractAndErase(action.targetBlock);
+            static_cast<void>(discardedContents);
+        } else if (BlockStateRegistry::getBlockId(target) == furnaceBlockId() &&
+                   m_ecsRegistry != nullptr &&
+                   m_ecsRegistry->ctx().contains<FurnaceInventoryStore>()) {
+            const auto discardedContents =
+                m_ecsRegistry->ctx().get<FurnaceInventoryStore>().extractAndErase(action.targetBlock);
             static_cast<void>(discardedContents);
         }
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
@@ -1820,7 +1838,9 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
     std::vector<save::BlockEntityData> entities;
     std::unordered_map<BlockEntityPositionKey, std::size_t, BlockEntityPositionHash> entityByPosition;
 
-    const auto ensureChestEntry = [&entities, &entityByPosition](const glm::ivec3& position) -> save::BlockEntityData& {
+    const auto ensureBlockEntityEntry =
+        [&entities, &entityByPosition](const glm::ivec3& position,
+                                       const char* type) -> save::BlockEntityData& {
         const BlockEntityPositionKey key{position.x, position.y, position.z};
         const auto found = entityByPosition.find(key);
         if (found != entityByPosition.end()) {
@@ -1828,7 +1848,7 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
         }
 
         save::BlockEntityData data;
-        data.type = "minecraft:chest";
+        data.type = type;
         data.x = position.x;
         data.y = position.y;
         data.z = position.z;
@@ -1856,41 +1876,77 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
                 for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                     for (int x = 0; x < Chunk::SIZE_X; ++x) {
                         const StateID state = subChunk->getBlock(x, ly, z);
-                        if (BlockStateRegistry::getBlockId(state) != BlockIds::CHEST) {
-                            continue;
+                        const BlockID blockId = BlockStateRegistry::getBlockId(state);
+                        if (blockId == BlockIds::CHEST) {
+                            ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x,
+                                                              yBase + ly,
+                                                              worldOffset.z + z),
+                                                   "minecraft:chest");
+                        } else if (blockId == furnaceBlockId()) {
+                            ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x,
+                                                              yBase + ly,
+                                                              worldOffset.z + z),
+                                                   "minecraft:furnace");
                         }
-                        ensureChestEntry(glm::ivec3(worldOffset.x + x,
-                                                    yBase + ly,
-                                                    worldOffset.z + z));
                     }
                 }
             }
         }
     }
 
-    if (m_ecsRegistry == nullptr || !m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
+    if (m_ecsRegistry == nullptr) {
         return entities;
     }
 
-    const ChestInventoryStore& store = m_ecsRegistry->ctx().get<ChestInventoryStore>();
-    store.forEach([&ensureChestEntry](const glm::ivec3& position, const ChestInventory& chest) {
-        save::BlockEntityData& data = ensureChestEntry(position);
-        data.slots.clear();
+    if (m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
+        const ChestInventoryStore& store = m_ecsRegistry->ctx().get<ChestInventoryStore>();
+        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position, const ChestInventory& chest) {
+            save::BlockEntityData& data = ensureBlockEntityEntry(position, "minecraft:chest");
+            data.type = "minecraft:chest";
+            data.slots.clear();
 
-        for (int slot = 0; slot < ChestInventory::SLOT_COUNT; ++slot) {
-            const ItemStack stack = chest.getSlotStack(slot);
-            if (stack.isEmpty()) {
-                continue;
+            for (int slot = 0; slot < ChestInventory::SLOT_COUNT; ++slot) {
+                const ItemStack stack = chest.getSlotStack(slot);
+                if (stack.isEmpty()) {
+                    continue;
+                }
+
+                save::BlockEntitySlotData slotData;
+                slotData.slot = slot;
+                slotData.itemId = static_cast<uint32_t>(stack.itemId);
+                slotData.count = stack.count;
+                slotData.durability = stack.durability;
+                data.slots.push_back(slotData);
             }
+        });
+    }
 
-            save::BlockEntitySlotData slotData;
-            slotData.slot = slot;
-            slotData.itemId = static_cast<uint32_t>(stack.itemId);
-            slotData.count = stack.count;
-            slotData.durability = stack.durability;
-            data.slots.push_back(slotData);
-        }
-    });
+    if (m_ecsRegistry->ctx().contains<FurnaceInventoryStore>()) {
+        const FurnaceInventoryStore& store = m_ecsRegistry->ctx().get<FurnaceInventoryStore>();
+        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position, const FurnaceInventory& furnace) {
+            save::BlockEntityData& data = ensureBlockEntityEntry(position, "minecraft:furnace");
+            data.type = "minecraft:furnace";
+            data.slots.clear();
+            data.burnSecondsRemaining = furnace.burnSecondsRemaining();
+            data.burnSecondsTotal = furnace.burnSecondsTotal();
+            data.cookSeconds = furnace.cookSeconds();
+            data.cookTargetSeconds = furnace.cookTargetSeconds();
+
+            for (int slot = 0; slot < FurnaceInventory::SLOT_COUNT; ++slot) {
+                const ItemStack stack = furnace.getSlotStack(slot);
+                if (stack.isEmpty()) {
+                    continue;
+                }
+
+                save::BlockEntitySlotData slotData;
+                slotData.slot = slot;
+                slotData.itemId = static_cast<uint32_t>(stack.itemId);
+                slotData.count = stack.count;
+                slotData.durability = stack.durability;
+                data.slots.push_back(slotData);
+            }
+        });
+    }
 
     return entities;
 }
@@ -1990,26 +2046,43 @@ void GameServer::restoreBlockEntities() {
         return;
     }
 
-    ChestInventoryStore& store = m_ecsRegistry->ctx().contains<ChestInventoryStore>()
-        ? m_ecsRegistry->ctx().get<ChestInventoryStore>()
-        : m_ecsRegistry->ctx().emplace<ChestInventoryStore>();
-
     for (const save::BlockEntityData& data : entities) {
-        if (data.type != "minecraft:chest") {
-            continue;
-        }
+        if (data.type == "minecraft:chest") {
+            ChestInventoryStore& store = m_ecsRegistry->ctx().contains<ChestInventoryStore>()
+                ? m_ecsRegistry->ctx().get<ChestInventoryStore>()
+                : m_ecsRegistry->ctx().emplace<ChestInventoryStore>();
+            ChestInventory& chest = store.getOrCreate(glm::ivec3(data.x, data.y, data.z));
+            for (const save::BlockEntitySlotData& slot : data.slots) {
+                if (!chest.isValidSlot(slot.slot) || slot.itemId == 0 || slot.count == 0) {
+                    continue;
+                }
 
-        ChestInventory& chest = store.getOrCreate(glm::ivec3(data.x, data.y, data.z));
-        for (const save::BlockEntitySlotData& slot : data.slots) {
-            if (!chest.isValidSlot(slot.slot) || slot.itemId == 0 || slot.count == 0) {
-                continue;
+                ItemStack stack;
+                stack.itemId = static_cast<ItemID>(slot.itemId);
+                stack.count = static_cast<uint16_t>(std::min<uint32_t>(slot.count, 65535u));
+                stack.durability = static_cast<uint16_t>(std::min<uint32_t>(slot.durability, 65535u));
+                chest.setSlotStack(slot.slot, stack);
             }
+        } else if (data.type == "minecraft:furnace") {
+            FurnaceInventoryStore& store = m_ecsRegistry->ctx().contains<FurnaceInventoryStore>()
+                ? m_ecsRegistry->ctx().get<FurnaceInventoryStore>()
+                : m_ecsRegistry->ctx().emplace<FurnaceInventoryStore>();
+            FurnaceInventory& furnace = store.getOrCreate(glm::ivec3(data.x, data.y, data.z));
+            furnace.setProgress(data.burnSecondsRemaining,
+                                data.burnSecondsTotal,
+                                data.cookSeconds,
+                                data.cookTargetSeconds);
+            for (const save::BlockEntitySlotData& slot : data.slots) {
+                if (!furnace.isValidSlot(slot.slot) || slot.itemId == 0 || slot.count == 0) {
+                    continue;
+                }
 
-            ItemStack stack;
-            stack.itemId = static_cast<ItemID>(slot.itemId);
-            stack.count = static_cast<uint16_t>(std::min<uint32_t>(slot.count, 65535u));
-            stack.durability = static_cast<uint16_t>(std::min<uint32_t>(slot.durability, 65535u));
-            chest.setSlotStack(slot.slot, stack);
+                ItemStack stack;
+                stack.itemId = static_cast<ItemID>(slot.itemId);
+                stack.count = static_cast<uint16_t>(std::min<uint32_t>(slot.count, 65535u));
+                stack.durability = static_cast<uint16_t>(std::min<uint32_t>(slot.durability, 65535u));
+                furnace.setSlotStack(slot.slot, stack);
+            }
         }
     }
 }

@@ -54,6 +54,48 @@ StateTextureIndices makeTexturesForBlock(const BlockID blockId) {
     return textures;
 }
 
+void applyFurnaceFacingTextures(StateTextureIndices& textures,
+                                const BlockDef& def,
+                                const std::vector<PropertyKey>& props) {
+    if (def.namespacedId != NamespacedId("minecraft", "furnace")) {
+        return;
+    }
+
+    uint16_t facingValue = BlockStateRegistry::INVALID_INDEX;
+    for (const PropertyKey& prop : props) {
+        const std::string& name = BlockStateRegistry::getPropertyName(prop.nameIndex);
+        if (name == "facing") {
+            facingValue = prop.valueIndex;
+            break;
+        }
+    }
+
+    if (facingValue == BlockStateRegistry::INVALID_INDEX) {
+        return;
+    }
+
+    const AnimatedTextureRef sideRef = def.faceLeft;
+    textures.faceLeft = sideRef;
+    textures.faceRight = sideRef;
+    textures.faceFront = sideRef;
+    textures.faceBack = sideRef;
+
+    const std::string& value = BlockStateRegistry::getPropertyValue(
+        BlockStateRegistry::getPropertyNameIndex("facing"),
+        facingValue);
+    if (value == "north") {
+        textures.faceBack = def.faceFront;
+    } else if (value == "south") {
+        textures.faceFront = def.faceFront;
+    } else if (value == "east") {
+        textures.faceRight = def.faceFront;
+    } else if (value == "west") {
+        textures.faceLeft = def.faceFront;
+    } else {
+        throw std::runtime_error("Furnace facing state requires a horizontal value");
+    }
+}
+
 StateTextureIndices makeTexturesForState(const BlockID blockId,
                                           const std::vector<PropertyKey>& props) {
     StateTextureIndices textures = makeTexturesForBlock(blockId);
@@ -103,6 +145,8 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
         }
         break;
     }
+
+    applyFurnaceFacingTextures(textures, def, props);
 
     if (def.namespacedId == NamespacedId("minecraft", "water")) {
         bool isSource = true;

@@ -72,6 +72,10 @@ struct BlockEntityData {
     int y = 0;
     int z = 0;
     std::vector<BlockEntitySlotData> slots;
+    float burnSecondsRemaining = 0.0f;
+    float burnSecondsTotal = 0.0f;
+    float cookSeconds = 0.0f;
+    float cookTargetSeconds = 0.0f;
 };
 
 /// World-level metadata persisted in level.json.

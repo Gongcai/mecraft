@@ -456,6 +456,12 @@ void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities
         j["type"] = entity.type;
         j["position"] = {entity.x, entity.y, entity.z};
         j["slots"] = std::move(slots);
+        if (entity.type == "minecraft:furnace") {
+            j["burnSecondsRemaining"] = entity.burnSecondsRemaining;
+            j["burnSecondsTotal"] = entity.burnSecondsTotal;
+            j["cookSeconds"] = entity.cookSeconds;
+            j["cookTargetSeconds"] = entity.cookTargetSeconds;
+        }
         root["blockEntities"].push_back(std::move(j));
     }
 
@@ -525,6 +531,13 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
             }
             if (!j.contains("slots") || !j["slots"].is_array()) {
                 continue;
+            }
+
+            if (entity.type == "minecraft:furnace") {
+                entity.burnSecondsRemaining = j.value("burnSecondsRemaining", 0.0f);
+                entity.burnSecondsTotal = j.value("burnSecondsTotal", 0.0f);
+                entity.cookSeconds = j.value("cookSeconds", 0.0f);
+                entity.cookTargetSeconds = j.value("cookTargetSeconds", 0.0f);
             }
 
             for (const auto& slotJson : j["slots"]) {

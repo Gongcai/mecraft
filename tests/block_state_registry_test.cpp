@@ -104,6 +104,33 @@ int main() {
         return fail("birch log x-axis state should rotate bark textures onto top/bottom faces");
     }
 
+    const BlockID furnace = BlockRegistry::findByName("furnace");
+    if (furnace == BlockIds::AIR) {
+        return fail("furnace should be registered from blocks.json");
+    }
+    const StateID furnaceSouth = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_SOUTH);
+    const StateID furnaceNorth = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_NORTH);
+    const StateID furnaceEast = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_EAST);
+    const StateID furnaceWest = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_WEST);
+    const StateTextureIndices& furnaceSouthTextures = BlockStateRegistry::getStateTextures(furnaceSouth);
+    const StateTextureIndices& furnaceNorthTextures = BlockStateRegistry::getStateTextures(furnaceNorth);
+    const StateTextureIndices& furnaceEastTextures = BlockStateRegistry::getStateTextures(furnaceEast);
+    const StateTextureIndices& furnaceWestTextures = BlockStateRegistry::getStateTextures(furnaceWest);
+    const int furnaceFrontLayer = furnaceSouthTextures.faceFront.firstLayer;
+    const int furnaceSideLayer = furnaceSouthTextures.faceLeft.firstLayer;
+    if (furnaceNorthTextures.faceBack.firstLayer != furnaceFrontLayer ||
+        furnaceNorthTextures.faceFront.firstLayer != furnaceSideLayer) {
+        return fail("north-facing furnace should place the front texture on the back face");
+    }
+    if (furnaceEastTextures.faceRight.firstLayer != furnaceFrontLayer ||
+        furnaceEastTextures.faceFront.firstLayer != furnaceSideLayer) {
+        return fail("east-facing furnace should place the front texture on the right face");
+    }
+    if (furnaceWestTextures.faceLeft.firstLayer != furnaceFrontLayer ||
+        furnaceWestTextures.faceFront.firstLayer != furnaceSideLayer) {
+        return fail("west-facing furnace should place the front texture on the left face");
+    }
+
     const std::string torchStateString = BlockStateRegistry::stateToString(torchNorth);
     if (torchStateString.find("facing=north") == std::string::npos) {
         return fail("stateToString should include the resolved torch facing");

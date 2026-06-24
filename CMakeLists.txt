@@ -96,6 +96,7 @@ set(SRC_GAME
         src/game/presentation/GameplayHudPresenter.cpp
         src/game/audio/AudioListenerSyncSystem.cpp
         src/game/inventory/ChestInventoryLifecycle.cpp
+        src/game/inventory/FurnaceInventoryLifecycle.cpp
         src/game/session/GameSession.cpp
         src/game/orchestrator/GameFrameOrchestrator.cpp
         src/game/debug/DebugFrameProfiler.cpp
