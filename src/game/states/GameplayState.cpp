@@ -8,7 +8,9 @@
 #include "GameplayStateEcsBridge.h"
 #include "../inventory/ChestInventoryState.h"
 #include "../inventory/CreativeInventoryState.h"
+#include "../inventory/FurnaceState.h"
 #include "../inventory/InventoryState.h"
+#include "../inventory/WorkbenchState.h"
 #include "../modes/CreativeModeState.h"
 #include "UIState.h"
 #include "UIStateContext.h"
@@ -90,6 +92,7 @@ void GameplayState::onEnter()
     m_ctx.input.captureMouse(true);
     m_ctx.uiRenderer.setInventoryPanelVisible(false);
     m_ctx.uiRenderer.setChestPanelVisible(false);
+    m_ctx.uiRenderer.setFurnacePanelVisible(false);
     m_ctx.uiRenderer.setCreativeInventoryVisible(false);
     m_ctx.input.clearUIDragItem();
 
@@ -106,7 +109,7 @@ void GameplayState::onEnter()
 void GameplayState::update(float dt, const InputSnapshot& snapshot)
 {
     static_cast<void>(snapshot);
-    if (handleChestInteraction(snapshot)) {
+    if (handleBlockContainerInteraction(snapshot)) {
         resetBlockBreakSession();
         return;
     }
@@ -126,7 +129,7 @@ void GameplayState::update(float dt, const InputSnapshot& snapshot)
     driveLegacyGameplayBridge(dt);
 }
 
-bool GameplayState::handleChestInteraction(const InputSnapshot& snapshot)
+bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapshot)
 {
     if (!m_ctx.context.isActionTriggered(Action::UseItem) ||
         !snapshot.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT)) {
@@ -145,16 +148,28 @@ bool GameplayState::handleChestInteraction(const InputSnapshot& snapshot)
         if (!target.hasTarget) {
             continue;
         }
-        if (BlockStateRegistry::getBlockId(target.targetState) != BlockIds::CHEST) {
-            continue;
-        }
         if (runtime.postPlaceInteractionSuppressSeconds > 0.0f &&
             runtime.recentlyPlacedBlock == target.targetBlock) {
             continue;
         }
 
-        m_ctx.fsm.pushState(std::make_unique<ChestInventoryState>(m_inventoryCtx, target.targetBlock));
-        return true;
+        const BlockID targetBlock = BlockStateRegistry::getBlockId(target.targetState);
+        const BlockID craftingTableBlock = BlockRegistry::findByName("minecraft:crafting_table");
+        if (targetBlock == craftingTableBlock) {
+            m_ctx.fsm.pushState(std::make_unique<WorkbenchState>(m_inventoryCtx));
+            return true;
+        }
+
+        const BlockID furnaceBlock = BlockRegistry::findByName("minecraft:furnace");
+        if (targetBlock == furnaceBlock) {
+            m_ctx.fsm.pushState(std::make_unique<FurnaceState>(m_inventoryCtx, target.targetBlock));
+            return true;
+        }
+
+        if (targetBlock == BlockIds::CHEST) {
+            m_ctx.fsm.pushState(std::make_unique<ChestInventoryState>(m_inventoryCtx, target.targetBlock));
+            return true;
+        }
     }
 
     return false;

@@ -266,6 +266,7 @@ set(SRC_UI
         src/ui/inventory/CraftingGridControl.cpp
         src/ui/inventory/InventoryPanelControl.cpp
         src/ui/inventory/ChestPanelControl.cpp
+        src/ui/inventory/FurnacePanelControl.cpp
         src/ui/inventory/CreativeInventoryPanelControl.cpp
 
         # Screens
@@ -337,7 +338,7 @@ set(SRC_PLAYER
 set(SRC_PHYSICS src/physics/PhysicsSystem.cpp)
 set(SRC_PARTICLE src/particle/ParticleSystem.cpp src/particle/RainRenderer.cpp)
 set(SRC_ITEM src/item/Item.cpp)
-set(SRC_CRAFTING src/crafting/CraftingSystem.cpp)
+set(SRC_CRAFTING src/crafting/CraftingSystem.cpp src/crafting/SmeltingSystem.cpp)
 set(SRC_AUDIO
         src/audio/AudioCatalog.cpp
         src/audio/AudioEngine.cpp
@@ -593,6 +594,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
     add_mecraft_test(item_grid_control_test tests/item_grid_control_test.cpp)
     add_mecraft_test(crafting_grid_control_test tests/crafting_grid_control_test.cpp)
+    add_mecraft_test(smelting_system_test tests/smelting_system_test.cpp)
     add_mecraft_test(inventory_panel_control_test tests/inventory_panel_control_test.cpp)
     add_mecraft_test(creative_inventory_panel_control_test tests/creative_inventory_panel_control_test.cpp)
     add_mecraft_test(inventory_drag_logic_test tests/inventory_drag_logic_test.cpp)

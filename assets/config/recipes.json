@@ -123,6 +123,13 @@
       "resultCount": 1
     },
     {
+      "comment": "Furnace",
+      "pattern": ["CCC", "C C", "CCC"],
+      "key": { "C": "minecraft:cobblestone" },
+      "result": "minecraft:furnace",
+      "resultCount": 1
+    },
+    {
       "comment": "Wooden pickaxe",
       "pattern": ["PPP", " S ", " S "],
       "key": {

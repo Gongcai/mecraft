@@ -88,7 +88,7 @@
     },
     {
       "id": "minecraft:gold_ore",
-      "drop": "minecraft:gold_ingot",
+      "drop": "minecraft:raw_gold",
       "timeToBreak": 1500,
       "textures": {
         "all": "gold_ore"
@@ -96,7 +96,7 @@
     },
     {
       "id": "minecraft:iron_ore",
-      "drop": "minecraft:iron_ingot",
+      "drop": "minecraft:raw_iron",
       "timeToBreak": 1500,
       "textures": {
         "all": "iron_ore"
@@ -189,6 +189,25 @@
         "bottom": "oak_planks",
         "side": "crafting_table_side",
         "front": "crafting_table_front"
+      }
+    },
+    {
+      "id": "minecraft:furnace",
+      "drop": "minecraft:furnace",
+      "materialKind": "stone",
+      "placementStrategy": "horizontal_facing",
+      "properties": {
+        "facing": ["north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "south"
+      },
+      "timeToBreak": 3500,
+      "textures": {
+        "top": "furnace_top",
+        "bottom": "furnace_top",
+        "side": "furnace_side",
+        "front": "furnace_front"
       }
     },
     {
@@ -719,7 +738,7 @@
     },
     {
       "id": "minecraft:copper_ore",
-      "drop": "minecraft:copper_ingot",
+      "drop": "minecraft:raw_copper",
       "timeToBreak": 3000,
       "textures": {
         "all": "copper_ore"
@@ -743,7 +762,7 @@
     },
     {
       "id": "minecraft:deepslate_iron_ore",
-      "drop": "minecraft:iron_ingot",
+      "drop": "minecraft:raw_iron",
       "timeToBreak": 4500,
       "textures": {
         "all": "deepslate_iron_ore"
@@ -751,7 +770,7 @@
     },
     {
       "id": "minecraft:deepslate_gold_ore",
-      "drop": "minecraft:gold_ingot",
+      "drop": "minecraft:raw_gold",
       "timeToBreak": 4500,
       "textures": {
         "all": "deepslate_gold_ore"
@@ -791,7 +810,7 @@
     },
     {
       "id": "minecraft:deepslate_copper_ore",
-      "drop": "minecraft:copper_ingot",
+      "drop": "minecraft:raw_copper",
       "timeToBreak": 4500,
       "textures": {
         "all": "deepslate_copper_ore"

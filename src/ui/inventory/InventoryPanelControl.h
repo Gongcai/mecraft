@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <string>
 
 #include "CraftingGridControl.h"
 #include "ItemGridControl.h"
@@ -14,6 +15,8 @@ class CraftingSystem;
 struct InventoryPanelLayout {
     static constexpr float kTextureWidth = 176.0f;
     static constexpr float kTextureHeight = 166.0f;
+    std::string backgroundTextureName = "inventory";
+    bool showPlayerPreview = true;
 
     // Anchor is normalized to current screen size (0..1).
     float anchorX = 0.5f;

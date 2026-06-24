@@ -36,7 +36,7 @@ public:
     [[nodiscard]] GameplayMode gameplayMode() const { return m_gameplayMode; }
 
 private:
-    bool handleChestInteraction(const InputSnapshot& snapshot);
+    bool handleBlockContainerInteraction(const InputSnapshot& snapshot);
     bool handleInventoryTransition();
     bool handleMenuTransition();
     bool handleCommandTransition();

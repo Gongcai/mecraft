@@ -15,6 +15,7 @@
 #include "../hud/HotbarControl.h"
 #include "../hud/HudControl.h"
 #include "../inventory/ChestPanelControl.h"
+#include "../inventory/FurnacePanelControl.h"
 #include "../inventory/InventoryPanelControl.h"
 #include "../hud/Pickable.h"
 #include "../font/TextRenderer.h"
@@ -68,6 +69,15 @@ public:
     [[nodiscard]] int getChestPanelHoveredSlot() const;
     [[nodiscard]] int getChestPanelPlayerHoveredSlot() const;
     void clearChestPanelActivations();
+
+    void setFurnacePanelVisible(bool visible);
+    void setFurnacePanelSource(const FurnaceInventory* furnace);
+    void setFurnacePanelProgress(float burnFraction, float cookFraction);
+    [[nodiscard]] int getFurnacePanelLastActivatedSlot() const;
+    [[nodiscard]] int getFurnacePanelPlayerLastActivatedSlot() const;
+    [[nodiscard]] int getFurnacePanelHoveredSlot() const;
+    [[nodiscard]] int getFurnacePanelPlayerHoveredSlot() const;
+    void clearFurnacePanelActivations();
 
     void setCreativeInventoryVisible(bool visible);
     void setCreativeInventoryTab(CreativeInventoryTab tab);
@@ -163,6 +173,7 @@ private:
     UIText m_deathPrompt;
     InventoryPanelControl m_inventoryPanel;
     ChestPanelControl m_chestPanel;
+    FurnacePanelControl m_furnacePanel;
     CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;

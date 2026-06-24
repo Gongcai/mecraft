@@ -1,0 +1,86 @@
+{
+  "recipes": [
+    {
+      "comment": "Raw iron",
+      "input": "minecraft:raw_iron",
+      "result": "minecraft:iron_ingot",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Raw gold",
+      "input": "minecraft:raw_gold",
+      "result": "minecraft:gold_ingot",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Raw copper",
+      "input": "minecraft:raw_copper",
+      "result": "minecraft:copper_ingot",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Glass",
+      "input": "minecraft:sand",
+      "result": "minecraft:glass",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Baked potato",
+      "input": "minecraft:potato",
+      "result": "minecraft:baked_potato",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Cooked beef",
+      "input": "minecraft:beef",
+      "result": "minecraft:cooked_beef",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Cooked porkchop",
+      "input": "minecraft:porkchop",
+      "result": "minecraft:cooked_porkchop",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    },
+    {
+      "comment": "Cooked chicken",
+      "input": "minecraft:chicken",
+      "result": "minecraft:cooked_chicken",
+      "resultCount": 1,
+      "cookSeconds": 10.0
+    }
+  ],
+  "fuels": [
+    {
+      "item": "minecraft:coal",
+      "seconds": 80.0
+    },
+    {
+      "item": "minecraft:oak_log",
+      "seconds": 15.0
+    },
+    {
+      "item": "minecraft:birch_log",
+      "seconds": 15.0
+    },
+    {
+      "item": "minecraft:oak_planks",
+      "seconds": 15.0
+    },
+    {
+      "item": "minecraft:birch_planks",
+      "seconds": 15.0
+    },
+    {
+      "item": "minecraft:stick",
+      "seconds": 5.0
+    }
+  ]
+}

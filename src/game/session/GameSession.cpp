@@ -17,6 +17,7 @@
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
 #include "../../crafting/CraftingSystem.h"
+#include "../../crafting/SmeltingSystem.h"
 #include "../camera/CameraController.h"
 #include "../presentation/GameplayPresentationBuilder.h"
 #include "../states/GameStateMachine.h"
@@ -464,6 +465,8 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     deps.uiRenderer.setCraftingSystem(m_craftingSystem.get());
 
     auto& reg = m_gameplayScene->registry();
+    SmeltingSystem& smeltingSystem = reg.ctxSet<SmeltingSystem>();
+    smeltingSystem.loadRecipes(SMELTING_CONFIG_PATH);
     if (m_server) {
         m_server->setEcsRegistry(&reg);
     }

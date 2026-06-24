@@ -88,9 +88,21 @@ int main() {
         return fail("crafting_table item should place the crafting table block");
     }
 
+    const ItemID furnaceItem = ItemRegistry::findByName("furnace");
+    const BlockID furnaceBlock = BlockRegistry::findByName("furnace");
+    if (furnaceItem == ItemIds::AIR || furnaceBlock == BlockIds::AIR) {
+        return fail("furnace should register both block and item IDs");
+    }
+    if (ItemRegistry::toPlaceBlock(furnaceItem) != furnaceBlock) {
+        return fail("furnace item should place the furnace block");
+    }
+
     // BlockDropTable tests
     if (BlockDropTable::getDropItem(BlockIds::COAL_ORE) != ItemIds::COAL) {
         return fail("coal_ore should drop coal item");
+    }
+    if (BlockDropTable::getDropItem(BlockRegistry::findByName("iron_ore")) != ItemRegistry::findByName("raw_iron")) {
+        return fail("iron_ore should drop raw iron for furnace smelting");
     }
     if (BlockDropTable::getDropItem(BlockIds::STONE) != ItemRegistry::findByName("cobblestone")) {
         return fail("stone should drop cobblestone");

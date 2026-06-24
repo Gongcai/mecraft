@@ -119,12 +119,12 @@ public:
         const auto& dragged = m_deps.input.getUIDragItem();
         if (!dragged.active || dragged.itemId <= 0) return;
 
-        if (dragged.sourceSlot >= kCraftingSlotBase) {
+        if (dragged.sourceSlot >= kCraftingSlotBase && m_craftGrid != nullptr) {
             const int craftIdx = dragged.sourceSlot - kCraftingSlotBase;
-            if (craftIdx < 4) {
+            if (craftIdx < m_craftGrid->getCraftingCellCount()) {
                 m_craftGrid->setCraftingSlot(craftIdx, static_cast<ItemID>(dragged.itemId),
                     static_cast<uint16_t>(dragged.count));
-            } else if (craftIdx == 4) {
+            } else if (craftIdx == m_craftGrid->getResultSlotIndex()) {
                 m_craftGrid->setResultSlot(static_cast<ItemID>(dragged.itemId),
                     static_cast<uint16_t>(dragged.count));
             }
@@ -234,7 +234,9 @@ private:
     // Find hovered empty slot in unified space (inventory or crafting grid).
     int findUnifiedHoveredEmptySlot() {
         const int hoveredCraftingSlot = m_deps.uiRenderer.getCraftingGridHoveredSlot();
-        if (hoveredCraftingSlot >= 0 && hoveredCraftingSlot < 4) {
+        if (m_craftGrid != nullptr &&
+            hoveredCraftingSlot >= 0 &&
+            hoveredCraftingSlot < m_craftGrid->getCraftingCellCount()) {
             if (m_craftGrid->getCraftingSlot(hoveredCraftingSlot) == 0) {
                 return kCraftingSlotBase + hoveredCraftingSlot;
             }
@@ -265,7 +267,7 @@ private:
         for (int i = 0; i < n; ++i) {
             const int count = base + (i >= n - remainder ? 1 : 0);
             const int slot = m_primaryDragEmptySlots[i];
-            if (slot >= kCraftingSlotBase) {
+            if (slot >= kCraftingSlotBase && m_craftGrid != nullptr) {
                 m_craftGrid->setCraftingSlot(slot - kCraftingSlotBase, itemId,
                     static_cast<uint16_t>(count));
             } else {

@@ -112,7 +112,7 @@ void InventoryPanelControl::renderSelf(const UIRenderContext& context) const
         if (hoveredId == 0) {
             // Check crafting grid hover
             const int craftSlot = m_craftingGrid.getHoveredSlot();
-            if (craftSlot >= 0 && craftSlot < 4) {
+            if (craftSlot >= 0 && craftSlot < m_craftingGrid.getCraftingCellCount()) {
                 hoveredId = m_craftingGrid.getCraftingSlot(craftSlot);
             }
         }
@@ -249,13 +249,13 @@ void InventoryPanelControl::syncSlotsFromInventory()
 
     int outIndex = 0;
     for (int row = 0; row < Inventory::INVENTORY_ROWS; ++row) {
-        const int y = baseY + row * rowStep + (row >= 3 ? extraRow4 : 0);
+        const int slotY = baseY + row * rowStep + (row >= 3 ? extraRow4 : 0);
         for (int col = 0; col < Inventory::INVENTORY_COLUMNS; ++col) {
             const int inventoryIndex = Inventory::toInventoryIndex(row, col);
             const ItemStack stack = m_inventory->getSlotStack(inventoryIndex);
             slots[static_cast<size_t>(outIndex)] = {
                 baseX + col * colStep,
-                y,
+                slotY,
                 slotSize,
                 static_cast<int>(stack.itemId),
                 static_cast<int>(stack.count)
@@ -282,7 +282,7 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
         return;
     }
 
-    const unsigned int texture = m_resourceMgr->getGuiTexture("inventory");
+    const unsigned int texture = m_resourceMgr->getGuiTexture(m_layout.backgroundTextureName);
     if (texture == 0) {
         return;
     }
@@ -331,6 +331,9 @@ void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
                                                 const ResolvedPanelRect& panelRect) const
 {
     if (!context.humanoidRenderer || context.pixelScale() <= 0.0f) {
+        return;
+    }
+    if (!m_layout.showPlayerPreview) {
         return;
     }
 

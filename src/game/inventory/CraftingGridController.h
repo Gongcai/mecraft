@@ -19,13 +19,13 @@ public:
     CraftingGridController(InventoryStateContext& deps, InventoryDragController& dragCtrl)
         : m_deps(deps), m_dragCtrl(dragCtrl) {}
 
-    // Handle click on a crafting grid slot (0-3 = grid, 4 = result).
+    // Handle click on a crafting grid slot. The result slot index is provided by CraftingGridControl.
     void handleClick(int slotIndex) {
         CraftingGridControl& craftGrid = m_deps.uiRenderer.getCraftingGrid();
         const auto& dragged = m_deps.input.getUIDragItem();
+        const int resultSlot = craftGrid.getResultSlotIndex();
 
-        if (slotIndex == 4) {
-            // Result slot: pick up crafted item
+        if (slotIndex == resultSlot) {
             const ItemID resultItem = craftGrid.getResultSlot();
             const int resultCount = craftGrid.getResultCount();
             if (resultItem == 0 || resultCount <= 0) {
@@ -98,7 +98,7 @@ public:
         CraftingGridControl& craftGrid = m_deps.uiRenderer.getCraftingGrid();
         Inventory& inventory = m_deps.inventory;
 
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < craftGrid.getCraftingCellCount(); ++i) {
             ItemID item = craftGrid.getCraftingSlot(i);
             if (item != 0) {
                 uint16_t count = craftGrid.getCraftingSlotCount(i);
