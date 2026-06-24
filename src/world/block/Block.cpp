@@ -701,6 +701,39 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
 
+        if (blockJson.contains("randomTick")) {
+            const auto& randomTickJson = blockJson["randomTick"];
+            if (!randomTickJson.is_object()) {
+                throw std::runtime_error("randomTick must be an object for block: " + def.namespacedId.full());
+            }
+            const auto behaviorIt = randomTickJson.find("behavior");
+            if (behaviorIt == randomTickJson.end() || !behaviorIt->is_string()) {
+                throw std::runtime_error("randomTick.behavior must be a string for block: " + def.namespacedId.full());
+            }
+
+            def.randomTick.enabled = true;
+            def.randomTick.behavior = behaviorIt->get<std::string>();
+
+            const auto propertyIt = randomTickJson.find("property");
+            if (propertyIt != randomTickJson.end()) {
+                if (!propertyIt->is_string()) {
+                    throw std::runtime_error("randomTick.property must be a string for block: " + def.namespacedId.full());
+                }
+                def.randomTick.propertyName = propertyIt->get<std::string>();
+            }
+
+            const auto chanceIt = randomTickJson.find("chance");
+            if (chanceIt != randomTickJson.end()) {
+                if (!chanceIt->is_number()) {
+                    throw std::runtime_error("randomTick.chance must be numeric for block: " + def.namespacedId.full());
+                }
+                def.randomTick.chance = chanceIt->get<float>();
+                if (def.randomTick.chance < 0.0f || def.randomTick.chance > 1.0f) {
+                    throw std::runtime_error("randomTick.chance must be between 0 and 1 for block: " + def.namespacedId.full());
+                }
+            }
+        }
+
         if (!hasExplicitBiomeTint && hasTintedTexture && !hasUntintedTexture) {
             def.biomeTint = textureTint;
         }

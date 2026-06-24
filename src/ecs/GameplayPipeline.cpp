@@ -39,6 +39,7 @@
 #include "systems/world/FallingBlockInterpolateSystem.h"
 #include "systems/world/FarmlandMoistureSystem.h"
 #include "systems/world/FluidTickSystem.h"
+#include "systems/world/RandomTickSystem.h"
 
 #ifdef MECRAFT_DEBUG
 #include <chrono>
@@ -135,6 +136,7 @@ void GameplayPipeline::buildServerFixedUpdateSystems() {
 void GameplayPipeline::buildClientTickSystems() {
     addTickSystem<FluidTickSystem>();
     addTickSystem<FarmlandMoistureSystem>();
+    addTickSystem<RandomTickSystem>();
     addTickSystem<BlockSupportSystem>();
     // Spawn falling-block entities from events emitted by BlockSupportSystem,
     // then advance each entity one cell per tick (Minecraft falling semantics).

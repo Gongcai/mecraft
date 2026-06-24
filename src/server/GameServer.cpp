@@ -11,6 +11,8 @@
 #include "../ecs/entity/EntityFactory.h"
 #include "../ecs/systems/item/ItemSpawnSystem.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
+#include "../ecs/systems/world/FarmlandMoistureSystem.h"
+#include "../ecs/systems/world/RandomTickSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
 #include "../game/inventory/ChestInventoryLifecycle.h"
@@ -801,6 +803,8 @@ World::ChunkLoadProgress GameServer::getWorldLoadProgress(const glm::vec3& loadC
 
 void GameServer::tickWorldSystems() {
     m_world.fluidSystem().processScheduledBlockTicks(m_currentTick, 4096);
+    ecs::FarmlandMoistureSystem::hydrateLoadedFarmland(m_world);
+    ecs::RandomTickSystem::processWorld(m_world, m_currentTick);
     // When the game session provides a shared GameplayRegistry, the client
     // tick pipeline consumes this queue and emits falling-block entities for
     // local rendering. The server-only fallback keeps dedicated/headless tests

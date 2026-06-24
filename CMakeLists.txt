@@ -115,8 +115,10 @@ set(SRC_WORLD
         src/world/block/Block.cpp
         src/world/block/BlockCollision.cpp
         src/world/block/BlockModelRegistry.cpp
+        src/world/block/BlockRandomTick.cpp
         src/world/block/BlockSelection.cpp
         src/world/block/BlockStateRegistry.cpp
+        src/world/block/FarmlandRules.cpp
         src/world/chunk/Chunk.cpp
         src/world/chunk/SubChunk.cpp
         src/world/block/Palette.cpp
@@ -321,6 +323,7 @@ set(SRC_ECS
         src/ecs/systems/audio/PlayerFootstepAudioSystem.cpp
         src/ecs/systems/world/FluidTickSystem.cpp
         src/ecs/systems/world/FarmlandMoistureSystem.cpp
+        src/ecs/systems/world/RandomTickSystem.cpp
         src/ecs/systems/world/BlockSupportSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp

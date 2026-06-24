@@ -722,6 +722,10 @@ int main() {
         BlockStateRegistry::getBlockId(farmlandMoist) != farmland) {
         return fail("farmland moisture 7 should resolve to a distinct farmland state");
     }
+    if (!BlockRegistry::get(farmland).randomTick.enabled ||
+        BlockRegistry::get(farmland).randomTick.behavior != "farmland_moisture") {
+        return fail("farmland should register its random tick moisture behavior");
+    }
 
     const BlockID wheat = BlockRegistry::findByName("wheat");
     if (wheat == BlockIds::AIR) {
@@ -739,6 +743,11 @@ int main() {
         wheatDef.stateTextureRules.front().propertyName != "age" ||
         wheatDef.stateTextureRules.front().texturesByValue.size() != 8) {
         return fail("wheat crop should register age texture rules");
+    }
+    if (!wheatDef.randomTick.enabled ||
+        wheatDef.randomTick.behavior != "increment_property" ||
+        wheatDef.randomTick.propertyName != "age") {
+        return fail("wheat crop should register generic random tick age increment behavior");
     }
     const StateID wheatDefault = BlockStateRegistry::getDefaultState(wheat);
     if (BlockStateRegistry::getPropertyIndex(wheatDefault, ageProperty) !=

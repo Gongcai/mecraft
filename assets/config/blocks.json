@@ -197,6 +197,9 @@
           "6": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
           "7": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" }
         }
+      },
+      "randomTick": {
+        "behavior": "farmland_moisture"
       }
     },
     {
@@ -229,6 +232,11 @@
           "6": { "all": "wheat_stage6" },
           "7": { "all": "wheat_stage7" }
         }
+      },
+      "randomTick": {
+        "behavior": "increment_property",
+        "property": "age",
+        "chance": 0.25
       }
     },
     {
@@ -257,6 +265,11 @@
           "2": { "all": "carrots_stage2" },
           "3": { "all": "carrots_stage3" }
         }
+      },
+      "randomTick": {
+        "behavior": "increment_property",
+        "property": "age",
+        "chance": 0.25
       }
     },
     {
@@ -285,6 +298,11 @@
           "2": { "all": "potatoes_stage2" },
           "3": { "all": "potatoes_stage3" }
         }
+      },
+      "randomTick": {
+        "behavior": "increment_property",
+        "property": "age",
+        "chance": 0.25
       }
     },
     {

@@ -2,14 +2,11 @@
 
 #include "../../../world/World.h"
 #include "../../../world/block/BlockStateRegistry.h"
-#include "../../../world/fluid/FluidState.h"
+#include "../../../world/block/FarmlandRules.h"
 
 namespace ecs {
 
 namespace {
-
-constexpr int kHydrationHorizontalRadius = 4;
-constexpr int kHydrationVerticalSearchTop = 1;
 
 struct FarmlandMoistureProperties {
     uint16_t moisture = BlockStateRegistry::INVALID_INDEX;
@@ -29,20 +26,6 @@ bool paletteContainsFarmland(const Palette& palette, const BlockID farmlandBlock
     for (size_t i = 0; i < palette.size(); ++i) {
         if (BlockStateRegistry::getBlockId(palette.getRuntimeId(static_cast<uint16_t>(i))) == farmlandBlock) {
             return true;
-        }
-    }
-    return false;
-}
-
-bool hasWaterForFarmland(const World& world, const glm::ivec3& farmlandPos) {
-    for (int dz = -kHydrationHorizontalRadius; dz <= kHydrationHorizontalRadius; ++dz) {
-        for (int dx = -kHydrationHorizontalRadius; dx <= kHydrationHorizontalRadius; ++dx) {
-            for (int dy = 0; dy <= kHydrationVerticalSearchTop; ++dy) {
-                const glm::ivec3 sample = farmlandPos + glm::ivec3(dx, dy, dz);
-                if (FluidState::decode(world.getFluidState(sample.x, sample.y, sample.z)).kind == FluidKind::Water) {
-                    return true;
-                }
-            }
         }
     }
     return false;
@@ -79,6 +62,10 @@ size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
         }
 
         Chunk& chunk = *chunkPtr;
+        if (!world.ticketManager().shouldTick(chunk.m_chunkX, chunk.m_chunkZ)) {
+            continue;
+        }
+
         const glm::ivec3 chunkOffset = chunk.getWorldOffset();
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
             const SubChunk* subChunk = chunk.getSubChunk(scy);
@@ -99,7 +86,7 @@ size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
                         }
 
                         const glm::ivec3 pos(chunkOffset.x + localX, worldY, chunkOffset.z + localZ);
-                        if (!hasWaterForFarmland(world, pos)) {
+                        if (!FarmlandRules::hasHydrationWater(world, pos)) {
                             continue;
                         }
 

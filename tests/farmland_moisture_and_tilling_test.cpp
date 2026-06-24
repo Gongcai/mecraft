@@ -9,8 +9,10 @@
 #include "../src/ecs/components/Components.h"
 #include "../src/ecs/systems/interaction/SoilTillingSystem.h"
 #include "../src/ecs/systems/world/FarmlandMoistureSystem.h"
+#include "../src/ecs/systems/world/RandomTickSystem.h"
 #include "../src/item/Item.h"
 #include "../src/world/World.h"
+#include "../src/world/block/BlockRandomTick.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/fluid/FluidState.h"
 
@@ -28,12 +30,29 @@ void loadSpawnChunks(World& world) {
     }
 }
 
+void loadWideSpawnChunks(World& world) {
+    world.setRenderDistance(5);
+    for (int i = 0; i < 64; ++i) {
+        world.updateForInitialLoad(glm::vec3(0.0f), 1.0f / 20.0f);
+    }
+}
+
 uint16_t moistureValue(StateID state) {
     const uint16_t moisture = BlockStateRegistry::getPropertyNameIndex("moisture");
     if (moisture == BlockStateRegistry::INVALID_INDEX) {
         return BlockStateRegistry::INVALID_INDEX;
     }
     return BlockStateRegistry::getPropertyIndex(state, moisture);
+}
+
+void fillSubChunkWithState(World& world, const glm::ivec3& origin, const StateID state) {
+    for (int y = 0; y < 16; ++y) {
+        for (int z = 0; z < 16; ++z) {
+            for (int x = 0; x < 16; ++x) {
+                world.setBlockState(origin.x + x, origin.y + y, origin.z + z, state);
+            }
+        }
+    }
 }
 
 } // namespace
@@ -78,6 +97,98 @@ int main() {
     }
     if (moistureValue(hydrationWorld.getBlockState(dryPos.x, dryPos.y, dryPos.z)) != moisture0) {
         return fail("farmland outside hydration range should remain dry");
+    }
+
+    World simulationRangeWorld;
+    simulationRangeWorld.init(20260626);
+    simulationRangeWorld.setSimulationDistance(1);
+    loadWideSpawnChunks(simulationRangeWorld);
+    const glm::ivec3 outsideSimulationPos(48, 122, 0);
+    if (!simulationRangeWorld.isChunkLoadedForBlock(outsideSimulationPos.x, outsideSimulationPos.y, outsideSimulationPos.z)) {
+        return fail("wide render range should load the chunk used by the simulation range test");
+    }
+    simulationRangeWorld.setBlockState(
+        outsideSimulationPos.x,
+        outsideSimulationPos.y,
+        outsideSimulationPos.z,
+        dryFarmland);
+    simulationRangeWorld.setFluidState(
+        outsideSimulationPos.x + 1,
+        outsideSimulationPos.y,
+        outsideSimulationPos.z,
+        FluidState::makeWater(0, false));
+    if (ecs::FarmlandMoistureSystem::hydrateLoadedFarmland(simulationRangeWorld) != 0 ||
+        moistureValue(simulationRangeWorld.getBlockState(
+            outsideSimulationPos.x,
+            outsideSimulationPos.y,
+            outsideSimulationPos.z)) != moisture0) {
+        return fail("farmland moisture updates should only process chunks inside simulation distance");
+    }
+
+    const BlockID wheat = BlockRegistry::findByName("wheat");
+    if (wheat == BlockIds::AIR) {
+        return fail("wheat block should be registered");
+    }
+    const StateID wheatAge0 = BlockStateRegistry::getDefaultState(wheat);
+    const glm::ivec3 outsideRandomTickOrigin(48, 128, 0);
+    fillSubChunkWithState(simulationRangeWorld, outsideRandomTickOrigin, wheatAge0);
+    if (ecs::RandomTickSystem::processWorld(simulationRangeWorld, 99, 4096) != 0) {
+        return fail("random ticks should skip chunks outside simulation distance");
+    }
+
+    const glm::ivec3 insideRandomTickOrigin(0, 128, 0);
+    fillSubChunkWithState(simulationRangeWorld, insideRandomTickOrigin, wheatAge0);
+    if (ecs::RandomTickSystem::processWorld(simulationRangeWorld, 100, 4096) == 0) {
+        return fail("random ticks should process random-tick blocks inside simulation distance");
+    }
+
+    const StateID moistFarmland = BlockStateRegistry::withProperty(
+        dryFarmland,
+        moisture,
+        BlockStateRegistry::getPropertyValueIndex(moisture, "2"));
+    hydrationWorld.setBlockState(dryPos.x, dryPos.y, dryPos.z, moistFarmland);
+    BlockRandomTickContext dryTickCtx{
+        hydrationWorld,
+        dryPos,
+        moistFarmland,
+        2,
+        0
+    };
+    if (!BlockRandomTick::dispatch(BlockRegistry::get(farmland).randomTick, dryTickCtx) ||
+        moistureValue(hydrationWorld.getBlockState(dryPos.x, dryPos.y, dryPos.z)) !=
+            BlockStateRegistry::getPropertyValueIndex(moisture, "1")) {
+        return fail("farmland random tick should reduce moisture when no water is nearby");
+    }
+
+    const glm::ivec3 revertPos(-8, 122, 0);
+    hydrationWorld.setBlockState(revertPos.x, revertPos.y, revertPos.z, dryFarmland);
+    BlockRandomTickContext revertTickCtx{
+        hydrationWorld,
+        revertPos,
+        dryFarmland,
+        3,
+        0
+    };
+    if (!BlockRandomTick::dispatch(BlockRegistry::get(farmland).randomTick, revertTickCtx) ||
+        hydrationWorld.getBlock(revertPos.x, revertPos.y, revertPos.z) != BlockIds::DIRT) {
+        return fail("dry farmland random tick should revert to dirt when no crop is above");
+    }
+
+    const glm::ivec3 wheatPos(1, 123, 1);
+    hydrationWorld.setBlockState(wheatPos.x, wheatPos.y - 1, wheatPos.z, dryFarmland);
+    hydrationWorld.setBlockState(wheatPos.x, wheatPos.y, wheatPos.z, wheatAge0);
+    BlockRandomTickContext wheatTickCtx{
+        hydrationWorld,
+        wheatPos,
+        wheatAge0,
+        4,
+        0
+    };
+    const uint16_t age = BlockStateRegistry::getPropertyNameIndex("age");
+    if (!BlockRandomTick::dispatch(BlockRegistry::get(wheat).randomTick, wheatTickCtx) ||
+        BlockStateRegistry::getPropertyIndex(hydrationWorld.getBlockState(wheatPos.x, wheatPos.y, wheatPos.z), age) !=
+            BlockStateRegistry::getPropertyValueIndex(age, "1")) {
+        return fail("generic random tick property increment should advance crop age");
     }
 
     World tillWorld;
