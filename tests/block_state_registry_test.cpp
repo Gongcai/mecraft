@@ -113,6 +113,9 @@ int main() {
     if (torchDef.placementStrategy != "attach_wall") {
         return fail("torch should parse placementStrategy from blocks.json");
     }
+    if (torchDef.revertPlacementFacing) {
+        return fail("torch should keep the default non-reverted placement facing semantics");
+    }
     if (torchDef.supportRule != "attached_face") {
         return fail("torch should parse supportRule from blocks.json");
     }
@@ -133,6 +136,9 @@ int main() {
     if (oakStairsDef.renderShapeName != "model" ||
         oakStairsDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
         return fail("oak_stairs should use the model mesh builder");
+    }
+    if (!oakStairsDef.revertPlacementFacing) {
+        return fail("oak_stairs should parse placement facing revert from blocks.json");
     }
     const StateID oakStairsSouth = BlockStateRegistry::getState(
         oakStairs,
@@ -448,7 +454,7 @@ int main() {
         if (BlockStateRegistry::getPropertyIndex(placed, PropIndices::FACING) != expectedFacing ||
             BlockStateRegistry::getPropertyIndex(placed, PropIndices::HALF) != PropIndices::HALF_BOTTOM ||
             BlockStateRegistry::getPropertyIndex(placed, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
-            return fail("stairs side placement should reverse the clicked side normal for stair descent direction");
+            return fail("stairs side placement should use the configured facing revert for stair descent direction");
         }
     }
 
@@ -467,6 +473,9 @@ int main() {
     if (chestDef.placementStrategy != "horizontal_facing") {
         return fail("chest should parse horizontal_facing placement strategy");
     }
+    if (!chestDef.revertPlacementFacing) {
+        return fail("chest should parse placement facing revert from blocks.json");
+    }
 
     PlacementStrategyFn chestStrategy = PlacementStrategyRegistry::getStrategy(chestDef.placementStrategy);
     if (chestStrategy == nullptr) {
@@ -476,9 +485,9 @@ int main() {
     PlacementContext chestPlacement;
     chestPlacement.blockId = BlockIds::CHEST;
     chestPlacement.playerYaw = 180.0f;
-    const StateID chestPlacedWest = chestStrategy(chestPlacement);
-    if (BlockStateRegistry::getPropertyIndex(chestPlacedWest, PropIndices::FACING) != PropIndices::FACING_WEST) {
-        return fail("horizontal_facing placement should derive chest facing from player yaw");
+    const StateID chestPlacedEast = chestStrategy(chestPlacement);
+    if (BlockStateRegistry::getPropertyIndex(chestPlacedEast, PropIndices::FACING) != PropIndices::FACING_EAST) {
+        return fail("horizontal_facing placement should apply the configured facing revert");
     }
 
     PlacementStrategyFn anvilStrategy = PlacementStrategyRegistry::getStrategy(anvilDef.placementStrategy);

@@ -185,6 +185,7 @@
       "isSolid": false,
       "renderShape": "model",
       "placementStrategy": "stairs",
+      "revert": true,
       "properties": {
         "facing": ["east", "south", "west", "north"],
         "half": ["bottom", "top"],
@@ -458,6 +459,7 @@
         "facing": "south"
       },
       "placementStrategy": "horizontal_facing",
+      "revert": true,
       "materialKind": "wood",
       "timeToBreak": 2500,
       "textures": {

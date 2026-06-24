@@ -364,6 +364,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].materialKind = BlockMaterialKinds::DEFAULT;
         s_blocks[i].derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
         s_blocks[i].placementStrategy = "simple";
+        s_blocks[i].revertPlacementFacing = false;
         s_blocks[i].supportRule.clear();
         s_blocks[i].biomeTint = BiomeTintKind::None;
         s_blocks[i].lightLevel = 0;
@@ -461,6 +462,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.materialKind = BlockMaterialKinds::DEFAULT;
         def.derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
         def.placementStrategy = "simple";
+        def.revertPlacementFacing = false;
         def.supportRule.clear();
         def.namedTextureAnimations.clear();
 
@@ -513,6 +515,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("placementStrategy") && blockJson["placementStrategy"].is_string()) {
             def.placementStrategy = blockJson["placementStrategy"].get<std::string>();
+        }
+        if (blockJson.contains("revert") && blockJson["revert"].is_boolean()) {
+            def.revertPlacementFacing = blockJson["revert"].get<bool>();
         }
         if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
             def.supportRule = blockJson["supportRule"].get<std::string>();

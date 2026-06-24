@@ -94,8 +94,14 @@ uint16_t oppositeHorizontalFacing(const uint16_t facing) {
     throw std::runtime_error("Stair side placement requires a horizontal facing value");
 }
 
-uint16_t stairFacingFromSideNormal(const glm::ivec3& normal) {
-    return oppositeHorizontalFacing(facingFromSideNormal(normal));
+uint16_t applyPlacementFacingRevert(const BlockID blockId, const uint16_t facing) {
+    return BlockRegistry::get(blockId).revertPlacementFacing
+        ? oppositeHorizontalFacing(facing)
+        : facing;
+}
+
+uint16_t stairFacingFromSideNormal(const BlockID blockId, const glm::ivec3& normal) {
+    return applyPlacementFacingRevert(blockId, facingFromSideNormal(normal));
 }
 
 uint16_t halfFromHit(const PlacementContext& ctx) {
@@ -120,7 +126,10 @@ uint16_t halfFromHit(const PlacementContext& ctx) {
 }
 
 StateID strategyHorizontalFacing(const PlacementContext& ctx) {
-    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, horizontalFacingFromYaw(ctx.playerYaw));
+    return BlockStateRegistry::getState(
+        ctx.blockId,
+        PropIndices::FACING,
+        applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
 }
 
 StateID strategyAxisOriented(const PlacementContext& ctx) {
@@ -141,7 +150,7 @@ StateID strategyStairs(const PlacementContext& ctx) {
     }
 
     const uint16_t facingValue = (ctx.hitNormal.y == 0)
-        ? stairFacingFromSideNormal(ctx.hitNormal)
+        ? stairFacingFromSideNormal(ctx.blockId, ctx.hitNormal)
         : horizontalFacingFromYaw(ctx.playerYaw);
     const uint16_t halfValue = halfFromHit(ctx);
 

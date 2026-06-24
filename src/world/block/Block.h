@@ -231,6 +231,7 @@ struct BlockDef {
     uint8_t materialKind = 0;
     uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
     std::string placementStrategy = "simple";
+    bool revertPlacementFacing = false;
     std::string supportRule;
     BiomeTintKind biomeTint = BiomeTintKind::None;
     uint8_t lightLevel  = 0;
