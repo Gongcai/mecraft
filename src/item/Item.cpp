@@ -6,6 +6,7 @@
 #include <array>
 #include <cstring>
 #include <fstream>
+#include <stdexcept>
 #include <nlohmann/json.hpp>
 
 IdRegistry ItemRegistry::s_idRegistry{};
@@ -84,6 +85,33 @@ bool resolveBlockToken(const nlohmann::json& value, BlockID& outId) {
 
     return BlockRegistry::tryGetIdByName(token, outId);
 }
+
+std::vector<NamespacedId> parseItemTagList(const nlohmann::json& ownerJson, const std::string& ownerName) {
+    std::vector<NamespacedId> tags;
+    const auto tagsIt = ownerJson.find("tags");
+    if (tagsIt == ownerJson.end()) {
+        return tags;
+    }
+    if (!tagsIt->is_array()) {
+        throw std::runtime_error("Item tags must be an array: " + ownerName);
+    }
+
+    for (const nlohmann::json& tagJson : *tagsIt) {
+        if (!tagJson.is_string()) {
+            throw std::runtime_error("Item tag entries must be strings: " + ownerName);
+        }
+        tags.emplace_back(tagJson.get<std::string>());
+    }
+    return tags;
+}
+
+void appendUniqueTags(std::vector<NamespacedId>& target, const std::vector<NamespacedId>& tags) {
+    for (const NamespacedId& tag : tags) {
+        if (std::find(target.begin(), target.end(), tag) == target.end()) {
+            target.push_back(tag);
+        }
+    }
+}
 }
 
 void ItemRegistry::init() {
@@ -142,6 +170,7 @@ void ItemRegistry::init() {
         itemDef.iconItemId = itemId;
         itemDef.placeBlock = blockId;
         itemDef.renderBlock = blockId;
+        itemDef.tags = BlockRegistry::getFast(blockId).tags;
 
         registerBlockItem(blockId, itemId);
     };
@@ -254,6 +283,8 @@ void ItemRegistry::init() {
             const int durability = itemJson["maxDurability"].get<int>();
             def.maxDurability = static_cast<uint16_t>(std::max(0, std::min(durability, 65535)));
         }
+
+        appendUniqueTags(def.tags, parseItemTagList(itemJson, def.namespacedId.full()));
 
         if (itemJson.contains("icon")) {
             ItemID iconId = def.iconItemId;
@@ -381,6 +412,11 @@ BlockID ItemRegistry::toRenderBlock(const ItemID itemId) {
         return it->second;
     }
     return 0;  // AIR
+}
+
+bool ItemRegistry::hasTag(const ItemID itemId, const NamespacedId& tag) {
+    const ItemDef& def = get(itemId);
+    return std::find(def.tags.begin(), def.tags.end(), tag) != def.tags.end();
 }
 
 ItemID ItemRegistry::registerItem(const NamespacedId& id, ItemDef def) {

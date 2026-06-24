@@ -58,6 +58,9 @@ int main() {
     if (std::string(coal.iconTextureName) != "coal") {
         return fail("coal should provide iconTexture from items.json");
     }
+    if (!ItemRegistry::hasTag(ItemIds::COAL, NamespacedId("minecraft", "coals"))) {
+        return fail("coal should expose the coals item tag");
+    }
 
     const ItemDef& apple = ItemRegistry::get(ItemIds::APPLE);
     if (ItemRegistry::findByName("apple") != ItemIds::APPLE) {
@@ -98,6 +101,16 @@ int main() {
     }
     if (ItemRegistry::toPlaceBlock(craftingTableItem) != craftingTableBlock) {
         return fail("crafting_table item should place the crafting table block");
+    }
+
+    const ItemID cherryPlanksItem = ItemRegistry::findByName("cherry_planks");
+    const BlockID cherryPlanksBlock = BlockRegistry::findByName("cherry_planks");
+    if (cherryPlanksItem == ItemIds::AIR || cherryPlanksBlock == BlockIds::AIR) {
+        return fail("cherry_planks should register both block and item IDs");
+    }
+    if (!BlockRegistry::hasTag(cherryPlanksBlock, NamespacedId("minecraft", "planks")) ||
+        !ItemRegistry::hasTag(cherryPlanksItem, NamespacedId("minecraft", "planks"))) {
+        return fail("block-backed planks item should inherit the planks tag");
     }
 
     const ItemID furnaceItem = ItemRegistry::findByName("furnace");

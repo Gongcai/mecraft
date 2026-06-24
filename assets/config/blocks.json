@@ -45,6 +45,7 @@
     {
       "id": "minecraft:oak_log",
       "drop": "minecraft:oak_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -308,6 +309,7 @@
     {
       "id": "minecraft:oak_planks",
       "drop": "minecraft:oak_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "oak_planks"
@@ -538,6 +540,7 @@
     {
       "id": "minecraft:spruce_planks",
       "drop": "minecraft:spruce_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "spruce_planks"
@@ -546,6 +549,7 @@
     {
       "id": "minecraft:birch_planks",
       "drop": "minecraft:birch_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "birch_planks"
@@ -554,6 +558,7 @@
     {
       "id": "minecraft:jungle_planks",
       "drop": "minecraft:jungle_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "jungle_planks"
@@ -562,6 +567,7 @@
     {
       "id": "minecraft:acacia_planks",
       "drop": "minecraft:acacia_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "acacia_planks"
@@ -570,6 +576,7 @@
     {
       "id": "minecraft:dark_oak_planks",
       "drop": "minecraft:dark_oak_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "dark_oak_planks"
@@ -578,6 +585,7 @@
     {
       "id": "minecraft:mangrove_planks",
       "drop": "minecraft:mangrove_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "mangrove_planks"
@@ -586,6 +594,7 @@
     {
       "id": "minecraft:cherry_planks",
       "drop": "minecraft:cherry_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "cherry_planks"
@@ -594,6 +603,7 @@
     {
       "id": "minecraft:pale_oak_planks",
       "drop": "minecraft:pale_oak_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "pale_oak_planks"
@@ -602,6 +612,7 @@
     {
       "id": "minecraft:bamboo_planks",
       "drop": "minecraft:bamboo_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "bamboo_planks"
@@ -610,6 +621,7 @@
     {
       "id": "minecraft:crimson_planks",
       "drop": "minecraft:crimson_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "crimson_planks"
@@ -618,6 +630,7 @@
     {
       "id": "minecraft:warped_planks",
       "drop": "minecraft:warped_planks",
+      "tags": ["minecraft:planks"],
       "timeToBreak": 1000,
       "textures": {
         "all": "warped_planks"
@@ -626,6 +639,7 @@
     {
       "id": "minecraft:birch_log",
       "drop": "minecraft:birch_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -812,6 +826,7 @@
     {
       "id": "minecraft:blue_wool",
       "drop": "minecraft:blue_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "blue_wool"
@@ -820,6 +835,7 @@
     {
       "id": "minecraft:cobblestone",
       "drop": "minecraft:cobblestone",
+      "tags": ["minecraft:stone_crafting_materials", "minecraft:stone_tool_materials"],
       "timeToBreak": 2000,
       "textures": {
         "all": "cobblestone"
@@ -1249,6 +1265,7 @@
     {
       "id": "minecraft:white_wool",
       "drop": "minecraft:white_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "white_wool"
@@ -1257,6 +1274,7 @@
     {
       "id": "minecraft:light_gray_wool",
       "drop": "minecraft:light_gray_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "light_gray_wool"
@@ -1265,6 +1283,7 @@
     {
       "id": "minecraft:gray_wool",
       "drop": "minecraft:gray_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "gray_wool"
@@ -1273,6 +1292,7 @@
     {
       "id": "minecraft:black_wool",
       "drop": "minecraft:black_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "black_wool"
@@ -1281,6 +1301,7 @@
     {
       "id": "minecraft:brown_wool",
       "drop": "minecraft:brown_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "brown_wool"
@@ -1289,6 +1310,7 @@
     {
       "id": "minecraft:red_wool",
       "drop": "minecraft:red_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "red_wool"
@@ -1297,6 +1319,7 @@
     {
       "id": "minecraft:orange_wool",
       "drop": "minecraft:orange_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "orange_wool"
@@ -1305,6 +1328,7 @@
     {
       "id": "minecraft:yellow_wool",
       "drop": "minecraft:yellow_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "yellow_wool"
@@ -1313,6 +1337,7 @@
     {
       "id": "minecraft:lime_wool",
       "drop": "minecraft:lime_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "lime_wool"
@@ -1321,6 +1346,7 @@
     {
       "id": "minecraft:green_wool",
       "drop": "minecraft:green_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "green_wool"
@@ -1329,6 +1355,7 @@
     {
       "id": "minecraft:cyan_wool",
       "drop": "minecraft:cyan_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "cyan_wool"
@@ -1337,6 +1364,7 @@
     {
       "id": "minecraft:light_blue_wool",
       "drop": "minecraft:light_blue_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "light_blue_wool"
@@ -1345,6 +1373,7 @@
     {
       "id": "minecraft:purple_wool",
       "drop": "minecraft:purple_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "purple_wool"
@@ -1353,6 +1382,7 @@
     {
       "id": "minecraft:magenta_wool",
       "drop": "minecraft:magenta_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "magenta_wool"
@@ -1361,6 +1391,7 @@
     {
       "id": "minecraft:pink_wool",
       "drop": "minecraft:pink_wool",
+      "tags": ["minecraft:wool"],
       "timeToBreak": 1000,
       "textures": {
         "all": "pink_wool"
@@ -1369,6 +1400,7 @@
     {
       "id": "minecraft:spruce_log",
       "drop": "minecraft:spruce_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1386,6 +1418,7 @@
     {
       "id": "minecraft:jungle_log",
       "drop": "minecraft:jungle_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1403,6 +1436,7 @@
     {
       "id": "minecraft:acacia_log",
       "drop": "minecraft:acacia_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1420,6 +1454,7 @@
     {
       "id": "minecraft:dark_oak_log",
       "drop": "minecraft:dark_oak_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1437,6 +1472,7 @@
     {
       "id": "minecraft:mangrove_log",
       "drop": "minecraft:mangrove_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1454,6 +1490,7 @@
     {
       "id": "minecraft:cherry_log",
       "drop": "minecraft:cherry_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1471,6 +1508,7 @@
     {
       "id": "minecraft:pale_oak_log",
       "drop": "minecraft:pale_oak_log",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1488,6 +1526,7 @@
     {
       "id": "minecraft:crimson_stem",
       "drop": "minecraft:crimson_stem",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },
@@ -1505,6 +1544,7 @@
     {
       "id": "minecraft:warped_stem",
       "drop": "minecraft:warped_stem",
+      "tags": ["minecraft:logs"],
       "properties": {
         "axis": ["x", "y", "z"]
       },

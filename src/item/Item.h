@@ -46,6 +46,7 @@ struct ItemDef {
     uint8_t toolTier = 0;
     float toolEfficiency = 1.0f;
     uint16_t maxDurability = 0;
+    std::vector<NamespacedId> tags;
 };
 
 // Block drop table entry
@@ -81,6 +82,7 @@ public:
     [[nodiscard]] static ItemID fromBlock(BlockID blockId);
     [[nodiscard]] static BlockID toPlaceBlock(ItemID itemId);
     [[nodiscard]] static BlockID toRenderBlock(ItemID itemId);
+    [[nodiscard]] static bool hasTag(ItemID itemId, const NamespacedId& tag);
 
     // Register a new item (Mod API)
     static ItemID registerItem(const NamespacedId& id, ItemDef def);

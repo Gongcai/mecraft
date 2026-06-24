@@ -78,62 +78,110 @@
       "resultCount": 4
     },
     {
-      "comment": "Oak planks to sticks",
+      "comment": "Planks to sticks",
       "pattern": ["P", "P"],
-      "key": { "P": "minecraft:oak_planks" },
+      "key": { "P": "#minecraft:planks" },
       "result": "minecraft:stick",
       "resultCount": 4
     },
     {
-      "comment": "Birch planks to sticks",
-      "pattern": ["P", "P"],
-      "key": { "P": "minecraft:birch_planks" },
-      "result": "minecraft:stick",
-      "resultCount": 4
-    },
-    {
-      "comment": "Oak crafting table",
+      "comment": "Crafting table",
       "pattern": ["PP", "PP"],
-      "key": { "P": "minecraft:oak_planks" },
+      "key": { "P": "#minecraft:planks" },
       "result": "minecraft:crafting_table",
       "resultCount": 1
     },
     {
-      "comment": "Birch crafting table",
-      "pattern": ["PP", "PP"],
-      "key": { "P": "minecraft:birch_planks" },
-      "result": "minecraft:crafting_table",
+      "comment": "Chest",
+      "pattern": ["PPP", "P P", "PPP"],
+      "key": { "P": "#minecraft:planks" },
+      "result": "minecraft:chest",
       "resultCount": 1
     },
     {
       "comment": "Torch",
       "pattern": ["C", "S"],
       "key": {
-        "C": "minecraft:coal",
+        "C": "#minecraft:coals",
         "S": "minecraft:stick"
       },
       "result": "minecraft:torch",
       "resultCount": 4
     },
     {
-      "comment": "Chest",
-      "pattern": ["PPP", "P P", "PPP"],
-      "key": { "P": "minecraft:oak_planks" },
-      "result": "minecraft:chest",
+      "comment": "Furnace",
+      "pattern": ["CCC", "C C", "CCC"],
+      "key": { "C": "#minecraft:stone_crafting_materials" },
+      "result": "minecraft:furnace",
       "resultCount": 1
     },
     {
-      "comment": "Furnace",
-      "pattern": ["CCC", "C C", "CCC"],
+      "comment": "Oak slab",
+      "pattern": ["PPP"],
+      "key": { "P": "minecraft:oak_planks" },
+      "result": "minecraft:oak_slab",
+      "resultCount": 6
+    },
+    {
+      "comment": "Oak vertical slab",
+      "pattern": ["P", "P", "P"],
+      "key": { "P": "minecraft:oak_planks" },
+      "result": "minecraft:oak_vertical_slab",
+      "resultCount": 6
+    },
+    {
+      "comment": "Oak stairs",
+      "pattern": ["P  ", "PP ", "PPP"],
+      "key": { "P": "minecraft:oak_planks" },
+      "result": "minecraft:oak_stairs",
+      "resultCount": 4
+    },
+    {
+      "comment": "Oak stairs mirrored",
+      "pattern": ["  P", " PP", "PPP"],
+      "key": { "P": "minecraft:oak_planks" },
+      "result": "minecraft:oak_stairs",
+      "resultCount": 4
+    },
+    {
+      "comment": "Oak fence",
+      "pattern": ["PSP", "PSP"],
+      "key": {
+        "P": "minecraft:oak_planks",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:oak_fence",
+      "resultCount": 3
+    },
+    {
+      "comment": "Cobblestone wall",
+      "pattern": ["CCC", "CCC"],
       "key": { "C": "minecraft:cobblestone" },
-      "result": "minecraft:furnace",
+      "result": "minecraft:cobblestone_wall",
+      "resultCount": 6
+    },
+    {
+      "comment": "Cauldron",
+      "pattern": ["I I", "I I", "III"],
+      "key": { "I": "minecraft:iron_ingot" },
+      "result": "minecraft:cauldron",
+      "resultCount": 1
+    },
+    {
+      "comment": "Anvil",
+      "pattern": ["BBB", " I ", "III"],
+      "key": {
+        "B": "minecraft:iron_block",
+        "I": "minecraft:iron_ingot"
+      },
+      "result": "minecraft:anvil",
       "resultCount": 1
     },
     {
       "comment": "Wooden pickaxe",
       "pattern": ["PPP", " S ", " S "],
       "key": {
-        "P": "minecraft:oak_planks",
+        "P": "#minecraft:planks",
         "S": "minecraft:stick"
       },
       "result": "minecraft:wooden_pickaxe",
@@ -143,7 +191,7 @@
       "comment": "Stone pickaxe",
       "pattern": ["CCC", " S ", " S "],
       "key": {
-        "C": "minecraft:cobblestone",
+        "C": "#minecraft:stone_tool_materials",
         "S": "minecraft:stick"
       },
       "result": "minecraft:stone_pickaxe",
@@ -168,6 +216,251 @@
       },
       "result": "minecraft:diamond_pickaxe",
       "resultCount": 1
+    },
+    {
+      "comment": "Iron shovel",
+      "pattern": ["I", "S", "S"],
+      "key": {
+        "I": "minecraft:iron_ingot",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:iron_shovel",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron axe",
+      "pattern": ["II", "IS", " S"],
+      "key": {
+        "I": "minecraft:iron_ingot",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:iron_axe",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron axe mirrored",
+      "pattern": ["II", "SI", "S "],
+      "key": {
+        "I": "minecraft:iron_ingot",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:iron_axe",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron sword",
+      "pattern": ["I", "I", "S"],
+      "key": {
+        "I": "minecraft:iron_ingot",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:iron_sword",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron hoe",
+      "pattern": ["II", " S", " S"],
+      "key": {
+        "I": "minecraft:iron_ingot",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:iron_hoe",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron hoe mirrored",
+      "pattern": ["II", "S ", "S "],
+      "key": {
+        "I": "minecraft:iron_ingot",
+        "S": "minecraft:stick"
+      },
+      "result": "minecraft:iron_hoe",
+      "resultCount": 1
+    },
+    {
+      "comment": "Bread",
+      "pattern": ["WWW"],
+      "key": { "W": "minecraft:wheat" },
+      "result": "minecraft:bread",
+      "resultCount": 1
+    },
+    {
+      "comment": "Sandstone",
+      "pattern": ["SS", "SS"],
+      "key": { "S": "minecraft:sand" },
+      "result": "minecraft:sandstone",
+      "resultCount": 1
+    },
+    {
+      "comment": "Red sandstone",
+      "pattern": ["SS", "SS"],
+      "key": { "S": "minecraft:red_sand" },
+      "result": "minecraft:red_sandstone",
+      "resultCount": 1
+    },
+    {
+      "comment": "Mossy cobblestone",
+      "type": "shapeless",
+      "ingredients": [
+        "minecraft:cobblestone",
+        "minecraft:vine"
+      ],
+      "result": "minecraft:mossy_cobblestone",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron block",
+      "pattern": ["III", "III", "III"],
+      "key": { "I": "minecraft:iron_ingot" },
+      "result": "minecraft:iron_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Iron block to ingots",
+      "type": "shapeless",
+      "ingredients": ["minecraft:iron_block"],
+      "result": "minecraft:iron_ingot",
+      "resultCount": 9
+    },
+    {
+      "comment": "Gold block",
+      "pattern": ["GGG", "GGG", "GGG"],
+      "key": { "G": "minecraft:gold_ingot" },
+      "result": "minecraft:gold_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Gold block to ingots",
+      "type": "shapeless",
+      "ingredients": ["minecraft:gold_block"],
+      "result": "minecraft:gold_ingot",
+      "resultCount": 9
+    },
+    {
+      "comment": "Copper block",
+      "pattern": ["CCC", "CCC", "CCC"],
+      "key": { "C": "minecraft:copper_ingot" },
+      "result": "minecraft:copper_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Copper block to ingots",
+      "type": "shapeless",
+      "ingredients": ["minecraft:copper_block"],
+      "result": "minecraft:copper_ingot",
+      "resultCount": 9
+    },
+    {
+      "comment": "Diamond block",
+      "pattern": ["DDD", "DDD", "DDD"],
+      "key": { "D": "minecraft:diamond" },
+      "result": "minecraft:diamond_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Diamond block to diamonds",
+      "type": "shapeless",
+      "ingredients": ["minecraft:diamond_block"],
+      "result": "minecraft:diamond",
+      "resultCount": 9
+    },
+    {
+      "comment": "Emerald block",
+      "pattern": ["EEE", "EEE", "EEE"],
+      "key": { "E": "minecraft:emerald" },
+      "result": "minecraft:emerald_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Emerald block to emeralds",
+      "type": "shapeless",
+      "ingredients": ["minecraft:emerald_block"],
+      "result": "minecraft:emerald",
+      "resultCount": 9
+    },
+    {
+      "comment": "Lapis block",
+      "pattern": ["LLL", "LLL", "LLL"],
+      "key": { "L": "minecraft:lapis_lazuli" },
+      "result": "minecraft:lapis_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Lapis block to lapis lazuli",
+      "type": "shapeless",
+      "ingredients": ["minecraft:lapis_block"],
+      "result": "minecraft:lapis_lazuli",
+      "resultCount": 9
+    },
+    {
+      "comment": "Redstone block",
+      "pattern": ["RRR", "RRR", "RRR"],
+      "key": { "R": "minecraft:redstone" },
+      "result": "minecraft:redstone_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Redstone block to redstone",
+      "type": "shapeless",
+      "ingredients": ["minecraft:redstone_block"],
+      "result": "minecraft:redstone",
+      "resultCount": 9
+    },
+    {
+      "comment": "Coal block",
+      "pattern": ["CCC", "CCC", "CCC"],
+      "key": { "C": "minecraft:coal" },
+      "result": "minecraft:coal_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Coal block to coal",
+      "type": "shapeless",
+      "ingredients": ["minecraft:coal_block"],
+      "result": "minecraft:coal",
+      "resultCount": 9
+    },
+    {
+      "comment": "Raw iron block",
+      "pattern": ["RRR", "RRR", "RRR"],
+      "key": { "R": "minecraft:raw_iron" },
+      "result": "minecraft:raw_iron_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Raw iron block to raw iron",
+      "type": "shapeless",
+      "ingredients": ["minecraft:raw_iron_block"],
+      "result": "minecraft:raw_iron",
+      "resultCount": 9
+    },
+    {
+      "comment": "Raw gold block",
+      "pattern": ["RRR", "RRR", "RRR"],
+      "key": { "R": "minecraft:raw_gold" },
+      "result": "minecraft:raw_gold_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Raw gold block to raw gold",
+      "type": "shapeless",
+      "ingredients": ["minecraft:raw_gold_block"],
+      "result": "minecraft:raw_gold",
+      "resultCount": 9
+    },
+    {
+      "comment": "Raw copper block",
+      "pattern": ["RRR", "RRR", "RRR"],
+      "key": { "R": "minecraft:raw_copper" },
+      "result": "minecraft:raw_copper_block",
+      "resultCount": 1
+    },
+    {
+      "comment": "Raw copper block to raw copper",
+      "type": "shapeless",
+      "ingredients": ["minecraft:raw_copper_block"],
+      "result": "minecraft:raw_copper",
+      "resultCount": 9
     }
   ]
 }

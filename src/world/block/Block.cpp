@@ -325,6 +325,25 @@ bool parseDerivativeMaterialId(const nlohmann::json& blockJson, uint8_t& outId) 
     return true;
 }
 
+std::vector<NamespacedId> parseTagList(const nlohmann::json& ownerJson, const std::string& ownerName) {
+    std::vector<NamespacedId> tags;
+    const auto tagsIt = ownerJson.find("tags");
+    if (tagsIt == ownerJson.end()) {
+        return tags;
+    }
+    if (!tagsIt->is_array()) {
+        throw std::runtime_error("Block tags must be an array: " + ownerName);
+    }
+
+    for (const nlohmann::json& tagJson : *tagsIt) {
+        if (!tagJson.is_string()) {
+            throw std::runtime_error("Block tag entries must be strings: " + ownerName);
+        }
+        tags.emplace_back(tagJson.get<std::string>());
+    }
+    return tags;
+}
+
 BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool isTransparent) {
     if (blockJson.contains("renderLayer") && blockJson["renderLayer"].is_string()) {
         const std::string layer = blockJson["renderLayer"].get<std::string>();
@@ -386,6 +405,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].placementStrategy = "simple";
         s_blocks[i].revertPlacementFacing = false;
         s_blocks[i].supportRule.clear();
+        s_blocks[i].tags.clear();
         s_blocks[i].biomeTint = BiomeTintKind::None;
         s_blocks[i].lightLevel = 0;
         s_blocks[i].opacity = 15;
@@ -484,6 +504,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.placementStrategy = "simple";
         def.revertPlacementFacing = false;
         def.supportRule.clear();
+        def.tags.clear();
         def.namedTextureAnimations.clear();
         def.stateTextureRules.clear();
 
@@ -543,6 +564,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
             def.supportRule = blockJson["supportRule"].get<std::string>();
         }
+        def.tags = parseTagList(blockJson, def.namespacedId.full());
         const bool hasExplicitBiomeTint =
             blockJson.contains("biomeTint") ||
             blockJson.contains("useBiomeTint") ||
@@ -927,6 +949,11 @@ const NamespacedId& BlockRegistry::getBlockDropId(const BlockID id) {
         return empty;
     }
     return s_blockDropIds[resolvedId];
+}
+
+bool BlockRegistry::hasTag(const BlockID id, const NamespacedId& tag) {
+    const BlockDef& def = getFast(id);
+    return std::find(def.tags.begin(), def.tags.end(), tag) != def.tags.end();
 }
 
 BlockID BlockRegistry::registerBlock(const NamespacedId& id, BlockDef def) {

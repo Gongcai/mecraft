@@ -71,14 +71,26 @@ void testLoadAndMatch() {
 
     {
         const std::vector<ItemID> grid = makeGrid({
-            item("minecraft:oak_planks"), item("minecraft:oak_planks"),
-            item("minecraft:oak_planks"), item("minecraft:oak_planks")
+            item("minecraft:cherry_planks"), 0,
+            item("minecraft:cherry_planks"), 0
+        });
+        const CraftingResult result = sys.match(grid, 2, 2);
+        assert(result.matched);
+        assert(result.itemId == item("minecraft:stick"));
+        assert(result.count == 4);
+        std::cout << "  PASS: tagged cherry planks -> sticks x4\n";
+    }
+
+    {
+        const std::vector<ItemID> grid = makeGrid({
+            item("minecraft:oak_planks"), item("minecraft:cherry_planks"),
+            item("minecraft:birch_planks"), item("minecraft:spruce_planks")
         });
         const CraftingResult result = sys.match(grid, 2, 2);
         assert(result.matched);
         assert(result.itemId == item("minecraft:crafting_table"));
         assert(result.count == 1);
-        std::cout << "  PASS: oak planks 2x2 -> crafting table\n";
+        std::cout << "  PASS: mixed tagged planks 2x2 -> crafting table\n";
     }
 
     {
@@ -104,6 +116,58 @@ void testLoadAndMatch() {
         assert(result.itemId == item("minecraft:stone_pickaxe"));
         assert(result.count == 1);
         std::cout << "  PASS: cobblestone + sticks -> stone pickaxe\n";
+    }
+
+    {
+        const std::vector<ItemID> grid = makeGrid({
+            item("minecraft:spruce_planks"), item("minecraft:spruce_planks"), item("minecraft:spruce_planks"),
+            0, item("minecraft:stick"), 0,
+            0, item("minecraft:stick"), 0
+        });
+        const CraftingResult result = sys.match(grid, 3, 3);
+        assert(result.matched);
+        assert(result.itemId == item("minecraft:wooden_pickaxe"));
+        assert(result.count == 1);
+        std::cout << "  PASS: tagged spruce planks + sticks -> wooden pickaxe\n";
+    }
+
+    {
+        const std::vector<ItemID> grid = makeGrid({
+            item("minecraft:vine"), 0, 0,
+            0, item("minecraft:cobblestone"), 0,
+            0, 0, 0
+        });
+        const CraftingResult result = sys.match(grid, 3, 3);
+        assert(result.matched);
+        assert(result.itemId == item("minecraft:mossy_cobblestone"));
+        assert(result.count == 1);
+        std::cout << "  PASS: shapeless vine + cobblestone -> mossy cobblestone\n";
+    }
+
+    {
+        const std::vector<ItemID> grid = makeGrid({
+            0, 0, 0,
+            0, item("minecraft:diamond_block"), 0,
+            0, 0, 0
+        });
+        const CraftingResult result = sys.match(grid, 3, 3);
+        assert(result.matched);
+        assert(result.itemId == item("minecraft:diamond"));
+        assert(result.count == 9);
+        std::cout << "  PASS: shapeless diamond block -> diamonds x9\n";
+    }
+
+    {
+        const std::vector<ItemID> grid = makeGrid({
+            item("minecraft:wheat"), item("minecraft:wheat"), item("minecraft:wheat"),
+            0, 0, 0,
+            0, 0, 0
+        });
+        const CraftingResult result = sys.match(grid, 3, 3);
+        assert(result.matched);
+        assert(result.itemId == item("minecraft:bread"));
+        assert(result.count == 1);
+        std::cout << "  PASS: wheat -> bread\n";
     }
 
     {

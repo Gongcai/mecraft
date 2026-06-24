@@ -10,6 +10,7 @@
     {
       "id": "minecraft:coal",
       "iconTexture": "coal",
+      "tags": ["minecraft:coals"],
       "maxStack": 64,
       "icon": "minecraft:coal_ore",
       "placeBlock": "minecraft:air",

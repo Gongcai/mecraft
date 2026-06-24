@@ -254,6 +254,7 @@ struct BlockDef {
     std::string placementStrategy = "simple";
     bool revertPlacementFacing = false;
     std::string supportRule;
+    std::vector<NamespacedId> tags;
     BiomeTintKind biomeTint = BiomeTintKind::None;
     uint8_t lightLevel  = 0;
     uint8_t opacity     = 0;
@@ -307,6 +308,7 @@ public:
     [[nodiscard]] static bool tryGetId(const NamespacedId& namespacedId, BlockID& outId);
     [[nodiscard]] static const NamespacedId& getNamespacedId(BlockID runtimeId);
     [[nodiscard]] static const NamespacedId& getBlockDropId(BlockID id);
+    [[nodiscard]] static bool hasTag(BlockID id, const NamespacedId& tag);
     static void printAllBlocks();
 
     // Register a new block (Mod API)
