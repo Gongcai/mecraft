@@ -57,6 +57,24 @@
       "tint": "grass"
     },
     {
+      "name": "bed_head_top"
+    },
+    {
+      "name": "bed_head_side"
+    },
+    {
+      "name": "bed_head_end"
+    },
+    {
+      "name": "bed_feet_top"
+    },
+    {
+      "name": "bed_feet_side"
+    },
+    {
+      "name": "bed_feet_end"
+    },
+    {
       "name": "vine",
       "tint": "foliage"
     },

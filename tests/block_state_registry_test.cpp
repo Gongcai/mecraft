@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -7,6 +8,7 @@
 
 #include "../src/world/block/Block.h"
 #include "../src/world/block/BlockStateRegistry.h"
+#include "../src/world/block/BedBlock.h"
 #include "../src/renderer/mesh/MeshBuilderRegistry.h"
 #include "../src/world/fluid/FluidRegistry.h"
 #include "../src/world/fluid/FluidState.h"
@@ -46,6 +48,11 @@ int main() {
         PropIndices::EAST == PropIndices::INVALID ||
         PropIndices::WEST == PropIndices::INVALID) {
         return fail("connection properties should be registered from blocks.json");
+    }
+    if (PropIndices::PART == PropIndices::INVALID ||
+        PropIndices::PART_HEAD == PropIndices::INVALID ||
+        PropIndices::PART_FOOT == PropIndices::INVALID) {
+        return fail("bed part properties should be registered from blocks.json");
     }
 
     const StateID torchDefault = BlockStateRegistry::getDefaultState(BlockIds::TORCH);
@@ -258,6 +265,115 @@ int main() {
             variant->transform.uvLock != expectedUvLock) {
             return fail("all oak_stairs facing/half/shape states should resolve to their JSON model transforms");
         }
+    }
+
+    const BlockID redBed = BlockRegistry::findByName("red_bed");
+    if (redBed == BlockIds::AIR) {
+        return fail("red_bed should be registered from blocks.json");
+    }
+    const BlockDef& redBedDef = BlockRegistry::get(redBed);
+    if (redBedDef.renderShapeName != "model" ||
+        redBedDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("model")) {
+        return fail("red_bed should use the model mesh builder");
+    }
+    if (redBedDef.placementStrategy != "bed" ||
+        redBedDef.isSolid ||
+        redBedDef.isTransparent ||
+        redBedDef.renderLayer != BlockRenderLayer::Opaque ||
+        redBedDef.opacity != 0) {
+        return fail("red_bed should parse bed placement and opaque non-full-block properties");
+    }
+    if (!BedBlockLogic::isBedBlock(redBed)) {
+        return fail("red_bed should be recognized by bed block logic");
+    }
+    if (BedBlockLogic::isBedState(redBed)) {
+        return fail("raw red_bed block id should not be treated as a complete bed state");
+    }
+
+    const StateID redBedDefault = BlockStateRegistry::getDefaultState(redBed);
+    if (BlockStateRegistry::getBlockId(redBedDefault) != redBed ||
+        BlockStateRegistry::getPropertyIndex(redBedDefault, PropIndices::FACING) != PropIndices::FACING_EAST ||
+        BlockStateRegistry::getPropertyIndex(redBedDefault, PropIndices::PART) != PropIndices::PART_FOOT ||
+        !BedBlockLogic::isFootState(redBedDefault)) {
+        return fail("red_bed default state should be east-facing foot");
+    }
+
+    const StateID redBedHead = BedBlockLogic::makeBedState(redBed, PropIndices::FACING_EAST, PropIndices::PART_HEAD);
+    if (!BedBlockLogic::isHeadState(redBedHead) ||
+        BlockStateRegistry::getPropertyIndex(redBedHead, PropIndices::PART) != PropIndices::PART_HEAD) {
+        return fail("bed helper should construct head states");
+    }
+    const ModelVariant* redBedFootVariant = BlockStateRegistry::getModelVariant(redBedDefault);
+    const ModelVariant* redBedHeadVariant = BlockStateRegistry::getModelVariant(redBedHead);
+    if (redBedFootVariant == nullptr ||
+        redBedFootVariant->model == nullptr ||
+        redBedHeadVariant == nullptr ||
+        redBedHeadVariant->model == nullptr ||
+        redBedFootVariant->model->elements.empty() ||
+        redBedHeadVariant->model->elements.empty()) {
+        return fail("red_bed foot and head states should resolve to model elements");
+    }
+    const auto bedBodyUvMatches = [](const std::unique_ptr<ModelFace>& face) {
+        return face != nullptr &&
+               face->uv[0] == 0.0f &&
+               face->uv[1] == 3.0f &&
+               face->uv[2] == 16.0f &&
+               face->uv[3] == 9.0f;
+    };
+    if (!bedBodyUvMatches(redBedFootVariant->model->elements.front().faces[3]) ||
+        !bedBodyUvMatches(redBedFootVariant->model->elements.front().faces[4]) ||
+        !bedBodyUvMatches(redBedHeadVariant->model->elements.front().faces[3]) ||
+        !bedBodyUvMatches(redBedHeadVariant->model->elements.front().faces[5])) {
+        return fail("red_bed body side and end faces should use the visible strip of the legacy bed textures");
+    }
+    const glm::ivec3 eastHeadOffset = BedBlockLogic::headOffsetForFacing(PropIndices::FACING_EAST);
+    if (eastHeadOffset.x != 1 || eastHeadOffset.y != 0 || eastHeadOffset.z != 0) {
+        return fail("east-facing bed head offset should point east");
+    }
+
+    const std::vector<std::tuple<uint16_t, uint16_t, const char*, uint16_t, bool>> bedVariantCases = {
+        {PropIndices::FACING_EAST, PropIndices::PART_FOOT, "block/bed_foot", 0, false},
+        {PropIndices::FACING_EAST, PropIndices::PART_HEAD, "block/bed_head", 0, false},
+        {PropIndices::FACING_SOUTH, PropIndices::PART_FOOT, "block/bed_foot", 90, false},
+        {PropIndices::FACING_SOUTH, PropIndices::PART_HEAD, "block/bed_head", 90, false},
+        {PropIndices::FACING_WEST, PropIndices::PART_FOOT, "block/bed_foot", 180, false},
+        {PropIndices::FACING_WEST, PropIndices::PART_HEAD, "block/bed_head", 180, false},
+        {PropIndices::FACING_NORTH, PropIndices::PART_FOOT, "block/bed_foot", 270, false},
+        {PropIndices::FACING_NORTH, PropIndices::PART_HEAD, "block/bed_head", 270, false},
+    };
+    for (const auto& [facing, part, expectedModel, expectedRotY, expectedUvLock] : bedVariantCases) {
+        const StateID state = BlockStateRegistry::getState(
+            redBed,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, facing},
+                {PropIndices::PART, part}
+            });
+        const ModelVariant* variant = BlockStateRegistry::getModelVariant(state);
+        if (variant == nullptr || variant->model == nullptr ||
+            variant->model->name != expectedModel ||
+            variant->transform.rotY != expectedRotY ||
+            variant->transform.rotX != 0 ||
+            variant->transform.uvLock != expectedUvLock) {
+            return fail("all red_bed facing/part states should resolve to their JSON model transforms");
+        }
+    }
+
+    PlacementStrategyFn bedStrategy = PlacementStrategyRegistry::getStrategy(redBedDef.placementStrategy);
+    if (bedStrategy == nullptr) {
+        return fail("bed placement strategy should be registered");
+    }
+    PlacementContext bedPlacement;
+    bedPlacement.blockId = redBed;
+    bedPlacement.playerYaw = 180.0f;
+    const StateID redBedPlacedWest = bedStrategy(bedPlacement);
+    if (BlockStateRegistry::getPropertyIndex(redBedPlacedWest, PropIndices::FACING) != PropIndices::FACING_WEST ||
+        BlockStateRegistry::getPropertyIndex(redBedPlacedWest, PropIndices::PART) != PropIndices::PART_FOOT) {
+        return fail("bed placement should create a west-facing foot state from player yaw");
+    }
+    glm::ivec3 otherHalfPos{};
+    if (!BedBlockLogic::tryGetOtherHalfPosition(glm::ivec3(10, 64, 10), redBedPlacedWest, otherHalfPos) ||
+        otherHalfPos.x != 9 || otherHalfPos.y != 64 || otherHalfPos.z != 10) {
+        return fail("bed helper should locate the head from a west-facing foot");
     }
 
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");

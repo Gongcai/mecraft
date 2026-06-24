@@ -1,0 +1,48 @@
+{
+  "format": "mecraft_model_v1",
+  "ambientocclusion": true,
+  "textures": {
+    "particle": "#top",
+    "top": "bed_head_top",
+    "side": "bed_head_side",
+    "end": "bed_head_end",
+    "leg": "oak_planks"
+  },
+  "elements": [
+    {
+      "from": [0, 3, 0],
+      "to": [16, 9, 16],
+      "faces": {
+        "down": { "texture": "#leg", "uv": [0, 0, 16, 16] },
+        "up": { "texture": "#top", "uv": [0, 0, 16, 16] },
+        "north": { "texture": "#side", "uv": [0, 3, 16, 9], "cullface": "north" },
+        "south": { "texture": "#side", "uv": [0, 3, 16, 9], "cullface": "south" },
+        "east": { "texture": "#end", "uv": [0, 3, 16, 9], "cullface": "east" }
+      }
+    },
+    {
+      "from": [13, 0, 0],
+      "to": [16, 3, 3],
+      "faces": {
+        "down": { "texture": "#leg", "uv": [0, 0, 3, 3], "cullface": "down" },
+        "up": { "texture": "#leg", "uv": [0, 0, 3, 3] },
+        "north": { "texture": "#leg", "uv": [0, 13, 3, 16], "cullface": "north" },
+        "south": { "texture": "#leg", "uv": [0, 13, 3, 16] },
+        "west": { "texture": "#leg", "uv": [0, 13, 3, 16] },
+        "east": { "texture": "#leg", "uv": [0, 13, 3, 16], "cullface": "east" }
+      }
+    },
+    {
+      "from": [13, 0, 13],
+      "to": [16, 3, 16],
+      "faces": {
+        "down": { "texture": "#leg", "uv": [0, 0, 3, 3], "cullface": "down" },
+        "up": { "texture": "#leg", "uv": [0, 0, 3, 3] },
+        "north": { "texture": "#leg", "uv": [0, 13, 3, 16] },
+        "south": { "texture": "#leg", "uv": [0, 13, 3, 16], "cullface": "south" },
+        "west": { "texture": "#leg", "uv": [0, 13, 3, 16] },
+        "east": { "texture": "#leg", "uv": [0, 13, 3, 16], "cullface": "east" }
+      }
+    }
+  ]
+}

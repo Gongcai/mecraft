@@ -83,6 +83,14 @@
       "renderBlock": "minecraft:torch"
     },
     {
+      "id": "minecraft:red_bed",
+      "iconTexture": "bed",
+      "maxStack": 64,
+      "icon": "minecraft:red_bed",
+      "placeBlock": "minecraft:red_bed",
+      "renderBlock": "minecraft:red_bed"
+    },
+    {
       "id": "minecraft:vine",
       "iconTexture": "vine",
       "maxStack": 64,

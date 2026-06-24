@@ -5,6 +5,7 @@
 
 #include <glm/vec3.hpp>
 
+#include "../src/world/block/BedBlock.h"
 #include "../src/world/block/BlockCollision.h"
 #include "../src/world/block/BlockSelection.h"
 #include "../src/world/block/PropIndices.h"
@@ -339,11 +340,61 @@ int main() {
         return fail("east-facing anvil collision should include the rotated top element");
     }
 
+    const BlockID redBed = BlockRegistry::findByName("red_bed");
+    if (redBed == BlockIds::AIR) {
+        return fail("red_bed should be registered for selection tests");
+    }
+    const StateID redBedFoot = BlockStateRegistry::getDefaultState(redBed);
+    const BlockSelectionBox redBedBox = BlockSelection::getBox(redBedFoot);
+    if (redBedBox.min.x != 0.0f || redBedBox.max.x != 1.0f ||
+        redBedBox.min.y != 0.0f || redBedBox.max.y != 0.5625f ||
+        redBedBox.min.z != 0.0f || redBedBox.max.z != 1.0f) {
+        return fail("red_bed selection box should cover the low bed model bounds");
+    }
+    const std::vector<BlockCollisionBox> redBedCollision = BlockCollision::getBoxes(redBedFoot);
+    if (redBedCollision.size() != 3) {
+        return fail("red_bed collision should include the mattress and two legs");
+    }
+    bool foundBedBody = false;
+    for (const BlockCollisionBox& box : redBedCollision) {
+        if (box.min.x == 0.0f && box.max.x == 1.0f &&
+            box.min.y == 0.1875f && box.max.y == 0.5625f &&
+            box.min.z == 0.0f && box.max.z == 1.0f) {
+            foundBedBody = true;
+        }
+    }
+    if (!foundBedBody) {
+        return fail("red_bed collision should include the mattress body");
+    }
+
     World world;
     world.init(20260507);
     loadChunks(world);
 
     const int baseY = world.getSurfaceY(0, 0) + 2;
+    world.setBlockState(12, baseY, 0, BlockIds::AIR);
+    world.setBlockState(13, baseY, 0, BlockIds::AIR);
+    const BedBlockLogic::BedPlacement bedPlacement =
+        BedBlockLogic::resolvePlacement(world, glm::ivec3(12, baseY, 0), redBedFoot);
+    if (!bedPlacement.valid ||
+        bedPlacement.footPos != glm::ivec3(12, baseY, 0) ||
+        bedPlacement.headPos != glm::ivec3(13, baseY, 0)) {
+        return fail("east-facing red_bed placement should occupy foot and head cells");
+    }
+    BedBlockLogic::placeBed(world, bedPlacement);
+    if (!BedBlockLogic::isFootState(world.getBlockState(12, baseY, 0)) ||
+        !BedBlockLogic::isHeadState(world.getBlockState(13, baseY, 0))) {
+        return fail("red_bed placement should write foot and head states");
+    }
+    std::vector<glm::ivec3> removedBedPositions;
+    const BlockID removedBed = BedBlockLogic::removeBed(world, glm::ivec3(13, baseY, 0), &removedBedPositions);
+    if (removedBed != redBed ||
+        world.getBlockState(12, baseY, 0) != BlockIds::AIR ||
+        world.getBlockState(13, baseY, 0) != BlockIds::AIR ||
+        removedBedPositions.size() != 2) {
+        return fail("breaking either red_bed half should remove both bed states");
+    }
+
     const auto makeBottomStairs = [&](const uint16_t facing) {
         return BlockStateRegistry::getState(
             oakStairs,

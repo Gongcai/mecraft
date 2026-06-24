@@ -8,6 +8,7 @@
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../client/GameClient.h"
 #include "../../../world/IWorldView.h"
+#include "../../../world/block/BedBlock.h"
 #include "../../../world/block/BlockCollision.h"
 #include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
@@ -67,8 +68,21 @@ StateID resolvePlacementState(const BlockID blockId,
 struct PlacementResolution {
     glm::ivec3 placeBlock{};
     StateID stateId = BlockIds::AIR;
+    glm::ivec3 secondaryBlock{};
+    StateID secondaryStateId = BlockIds::AIR;
+    bool hasSecondaryBlock = false;
     bool replacesExisting = false;
 };
+
+bool wouldOverlapPlacement(const PhysicsBody& body, const PlacementResolution& placement) {
+    if (placement.stateId != BlockIds::AIR &&
+        wouldOverlapPlacedState(body, placement.placeBlock, placement.stateId)) {
+        return true;
+    }
+    return placement.hasSecondaryBlock &&
+           placement.secondaryStateId != BlockIds::AIR &&
+           wouldOverlapPlacedState(body, placement.secondaryBlock, placement.secondaryStateId);
+}
 
 PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
                                            const BlockTargetComponent& target,
@@ -78,6 +92,22 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
     PlacementResolution result;
     result.placeBlock = target.placeBlock;
     result.stateId = resolvePlacementState(blockId, camera, moveIntent, target.hitNormal, target.hitPosition);
+
+    if (BedBlockLogic::isBedBlock(blockId)) {
+        const BedBlockLogic::BedPlacement bedPlacement =
+            BedBlockLogic::resolvePlacement(worldView, result.placeBlock, result.stateId);
+        if (!bedPlacement.valid) {
+            result.stateId = BlockIds::AIR;
+            return result;
+        }
+
+        result.placeBlock = bedPlacement.footPos;
+        result.stateId = bedPlacement.footState;
+        result.secondaryBlock = bedPlacement.headPos;
+        result.secondaryStateId = bedPlacement.headState;
+        result.hasSecondaryBlock = true;
+        return result;
+    }
 
     const StateID existingTargetState =
         worldView.getBlockState(target.targetBlock.x, target.targetBlock.y, target.targetBlock.z);
@@ -167,8 +197,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         if (target.hasTarget) {
             request.targetBlock = worldView.getBlock(placeBlock.x, placeBlock.y, placeBlock.z);
             request.placementReplacesTarget = placement.replacesExisting;
-            request.playerWouldOverlapPlaceBlock =
-                placedState != BlockIds::AIR && wouldOverlapPlacedState(physicsBody.body, placeBlock, placedState);
+            request.playerWouldOverlapPlaceBlock = wouldOverlapPlacement(physicsBody.body, placement);
         }
 
         const GameplayBlockAction action = modeRules.decideBlockAction(request);
@@ -202,10 +231,23 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        mutableWorld->setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
-        // Notify DropSystem of placement (transitional — will be internalized later)
+        if (placement.hasSecondaryBlock) {
+            BedBlockLogic::BedPlacement bedPlacement;
+            bedPlacement.valid = true;
+            bedPlacement.footPos = placement.placeBlock;
+            bedPlacement.headPos = placement.secondaryBlock;
+            bedPlacement.footState = placement.stateId;
+            bedPlacement.headState = placement.secondaryStateId;
+            BedBlockLogic::placeBed(*mutableWorld, bedPlacement);
+        } else {
+            mutableWorld->setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
+        }
+        // Notify DropSystem of placement so nearby drops resolve against new collision.
         if (ctx.services.dropSystem) {
             ctx.services.dropSystem->onBlockPlaced(placeBlock, *mutableWorld);
+            if (placement.hasSecondaryBlock) {
+                ctx.services.dropSystem->onBlockPlaced(placement.secondaryBlock, *mutableWorld);
+            }
         }
         if (modeRules.shouldReportBreakProgress()) {
             static_cast<void>(inventory.consumeSelectedOne());

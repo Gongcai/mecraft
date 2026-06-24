@@ -3,6 +3,7 @@
 #include "../world/World.h"
 #include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
+#include "../world/block/BedBlock.h"
 #include "../world/block/Placement.h"
 #include "../thread/ThreadPool.h"
 #include "../save/SaveManager.h"
@@ -1356,6 +1357,19 @@ bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
            world.getFluidState(above.x, above.y, above.z) == BlockIds::AIR;
 }
 
+BlockID removeServerTargetBlock(World& world,
+                                const glm::ivec3& hitBlock,
+                                std::vector<glm::ivec3>& removedPositions) {
+    const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+    if (BedBlockLogic::isBedState(targetState)) {
+        return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
+    }
+
+    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockIds::AIR);
+    removedPositions.push_back(hitBlock);
+    return BlockStateRegistry::getBlockId(targetState);
+}
+
 } // namespace
 
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
@@ -1377,13 +1391,15 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         if (target == BlockIds::AIR || !BlockRegistry::get(target).isSelectable) {
             return;
         }
-        m_world.setBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z, BlockIds::AIR);
+        std::vector<glm::ivec3> removedPositions;
+        const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
         const bool shouldDrop = client.gameplayMode != net::NetworkGameplayMode::Creative;
         bool brokeChest = false;
         bool brokeFurnace = false;
+        const bool brokeBed = BedBlockLogic::isBedBlock(brokenBlock);
         if (m_gameplayRegistry != nullptr) {
-            brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, target, action.targetBlock, shouldDrop);
-            brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, target, action.targetBlock, shouldDrop);
+            brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
+            brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
             if (brokeChest && shouldDrop) {
                 const ItemID chestItem = BlockDropTable::getDropItem(BlockIds::CHEST);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, chestItem, action.targetBlock, 1);
@@ -1391,6 +1407,10 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             if (brokeFurnace && shouldDrop) {
                 const ItemID furnaceItem = BlockDropTable::getDropItem(furnaceBlockId());
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, furnaceItem, action.targetBlock, 1);
+            }
+            if (brokeBed && shouldDrop) {
+                const ItemID bedItem = BlockDropTable::getDropItem(brokenBlock);
+                ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, bedItem, action.targetBlock, 1);
             }
         } else if (BlockStateRegistry::getBlockId(target) == BlockIds::CHEST &&
                    m_ecsRegistry != nullptr &&
@@ -1441,6 +1461,25 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
 
     if (action.blockState == BlockIds::AIR) {
+        return;
+    }
+    if (BedBlockLogic::isBedState(action.blockState)) {
+        const BedBlockLogic::BedPlacement bedPlacement =
+            BedBlockLogic::resolvePlacement(m_world, action.placeBlock, action.blockState);
+        if (!bedPlacement.valid) {
+            return;
+        }
+
+        BedBlockLogic::placeBed(m_world, bedPlacement);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place bed client=%u foot=(%d,%d,%d) head=(%d,%d,%d)\n",
+                           client.id,
+                           bedPlacement.footPos.x,
+                           bedPlacement.footPos.y,
+                           bedPlacement.footPos.z,
+                           bedPlacement.headPos.x,
+                           bedPlacement.headPos.y,
+                           bedPlacement.headPos.z);
+        MECRAFT_LOG_FLUSH(stdout);
         return;
     }
     const StateID existingPlaceState =

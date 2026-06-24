@@ -135,6 +135,21 @@ int main() {
         return fail("vine item icon should use its tinted item texture");
     }
 
+    const ItemID redBedItem = ItemRegistry::findByName("red_bed");
+    const BlockID redBedBlock = BlockRegistry::findByName("red_bed");
+    if (redBedItem == ItemIds::AIR || redBedBlock == BlockIds::AIR) {
+        return fail("red_bed item and block should be registered");
+    }
+    const ItemDef& redBed = ItemRegistry::get(redBedItem);
+    if (redBed.placeBlock != redBedBlock ||
+        redBed.renderBlock != redBedBlock ||
+        std::string(redBed.iconTextureName) != "bed") {
+        return fail("red_bed item should place the bed block and use the bed item texture");
+    }
+    if (ui::shouldUseBakedBlockIcon(redBed)) {
+        return fail("red_bed item icon should use its explicit item texture");
+    }
+
     const ItemID wildflowersItem = ItemRegistry::findByName("wildflowers");
     const ItemID leafLitterItem = ItemRegistry::findByName("leaf_litter");
     const ItemID glowLichenItem = ItemRegistry::findByName("glow_lichen");
@@ -228,6 +243,9 @@ int main() {
     if (BlockDropTable::getDropItem(carrotsBlock) != carrotItem ||
         BlockDropTable::getDropItem(potatoesBlock) != potatoItem) {
         return fail("carrot and potato crops should drop their food items");
+    }
+    if (BlockDropTable::getDropItem(redBedBlock) != redBedItem) {
+        return fail("red_bed should drop its bed item");
     }
 
     std::cout << "[item_registry_test] PASS\n";

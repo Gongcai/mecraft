@@ -14,8 +14,9 @@ inline bool shouldUseBakedBlockIcon(const ItemDef& itemDef) {
 
     const BlockDef& blockDef = BlockRegistry::get(itemDef.renderBlock);
     const bool hasExplicitItemTexture = std::string(itemDef.iconTextureName) != "unknown";
-    return blockDef.renderShapeName == "model" ||
-           (blockDef.biomeTint != BiomeTintKind::None && !hasExplicitItemTexture);
+    return !hasExplicitItemTexture &&
+           (blockDef.renderShapeName == "model" ||
+            blockDef.biomeTint != BiomeTintKind::None);
 }
 
 }

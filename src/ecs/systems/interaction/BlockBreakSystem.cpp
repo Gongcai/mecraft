@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <string_view>
+#include <vector>
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/DropSpawnEventBuffer.h"
@@ -15,6 +16,7 @@
 #include "../../../client/GameClient.h"
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
+#include "../../../world/block/BedBlock.h"
 #include "../../../world/World.h"
 
 namespace ecs {
@@ -74,6 +76,19 @@ float survivalBreakDurationMs(const BlockID targetBlock, const ItemStack& heldSt
     }
 
     return std::max(1.0f, baseDurationMs / itemDef.toolEfficiency);
+}
+
+BlockID removeTargetBlock(World& world,
+                          const glm::ivec3& hitBlock,
+                          std::vector<glm::ivec3>& removedPositions) {
+    const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+    if (BedBlockLogic::isBedState(targetState)) {
+        return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
+    }
+
+    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockIds::AIR);
+    removedPositions.push_back(hitBlock);
+    return BlockStateRegistry::getBlockId(targetState);
 }
 
 } // namespace
@@ -156,14 +171,16 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 continue;
             }
 
-            const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
-            mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
+            std::vector<glm::ivec3> removedPositions;
+            const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
             const bool handledChest = handleChestInventoryBreak(registry, brokenBlock, hitBlock, false);
             const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, false);
             static_cast<void>(handledChest);
             static_cast<void>(handledFurnace);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
-            particleBus.push({hitBlock, brokenBlock});
+            for (const glm::ivec3& removedPos : removedPositions) {
+                particleBus.push({removedPos, brokenBlock});
+            }
             runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
             ++runtime.heldItemSwingSequence;
             resetBreakSession(blockBreak, runtime);
@@ -202,14 +219,16 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 resetBreakSession(blockBreak, runtime);
                 continue;
             }
-            const BlockID brokenBlock = mutableWorld->getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
-            mutableWorld->setBlock(hitBlock.x, hitBlock.y, hitBlock.z, 0);
+            std::vector<glm::ivec3> removedPositions;
+            const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
             const bool handledChest = handleChestInventoryBreak(registry, brokenBlock, hitBlock, true);
             const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, true);
             static_cast<void>(handledChest);
             static_cast<void>(handledFurnace);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
-            particleBus.push({hitBlock, brokenBlock});
+            for (const glm::ivec3& removedPos : removedPositions) {
+                particleBus.push({removedPos, brokenBlock});
+            }
             dropBus.push({brokenBlock, hitBlock});
             applySelectedToolDurabilityWear(inventoryData.inventory);
             ++runtime.heldItemSwingSequence;

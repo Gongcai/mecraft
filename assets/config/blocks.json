@@ -316,6 +316,38 @@
       }
     },
     {
+      "id": "minecraft:red_bed",
+      "drop": "minecraft:red_bed",
+      "isSolid": false,
+      "opacity": 0,
+      "renderShape": "model",
+      "placementStrategy": "bed",
+      "properties": {
+        "facing": ["east", "south", "west", "north"],
+        "part": ["foot", "head"]
+      },
+      "defaultState": {
+        "facing": "east",
+        "part": "foot"
+      },
+      "timeToBreak": 200,
+      "textures": {
+        "top": "bed_feet_top",
+        "bottom": "oak_planks",
+        "side": "bed_feet_side"
+      },
+      "modelVariants": {
+        "facing=east,part=foot": { "model": "block/bed_foot" },
+        "facing=east,part=head": { "model": "block/bed_head" },
+        "facing=south,part=foot": { "model": "block/bed_foot", "transform": { "rotY": 90 } },
+        "facing=south,part=head": { "model": "block/bed_head", "transform": { "rotY": 90 } },
+        "facing=west,part=foot": { "model": "block/bed_foot", "transform": { "rotY": 180 } },
+        "facing=west,part=head": { "model": "block/bed_head", "transform": { "rotY": 180 } },
+        "facing=north,part=foot": { "model": "block/bed_foot", "transform": { "rotY": 270 } },
+        "facing=north,part=head": { "model": "block/bed_head", "transform": { "rotY": 270 } }
+      }
+    },
+    {
       "id": "minecraft:crafting_table",
       "drop": "minecraft:crafting_table",
       "materialKind": "wood",

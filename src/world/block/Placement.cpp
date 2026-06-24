@@ -1,5 +1,6 @@
 #include "Placement.h"
 
+#include "BedBlock.h"
 #include "BlockCollision.h"
 #include "PropIndices.h"
 
@@ -335,6 +336,10 @@ StateID strategyVerticalSlab(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, verticalHalfFromHit(ctx));
 }
 
+StateID strategyBed(const PlacementContext& ctx) {
+    return BedBlockLogic::makeBedState(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw), PropIndices::PART_FOOT);
+}
+
 StateID strategyFence(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
@@ -421,6 +426,7 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("stairs", strategyStairs);
     registerStrategy("slab", strategySlab);
     registerStrategy("vertical_slab", strategyVerticalSlab);
+    registerStrategy("bed", strategyBed);
     registerStrategy("fence", strategyFence);
     registerStrategy("wall", strategyWall);
     registerStrategy("face_plane_wall", strategyFacePlaneWall);
