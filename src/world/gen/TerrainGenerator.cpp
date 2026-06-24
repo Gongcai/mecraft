@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "../block/BlockStateRegistry.h"
+#include "../block/PropIndices.h"
 #include "../fluid/FluidState.h"
 
 #if defined(__SSE2__) || defined(_M_X64) || defined(__AVX2__)
@@ -69,6 +71,8 @@ constexpr uint32_t kOreSaltEmerald = 0x9d72e4a5U;
 constexpr uint32_t kDecorSaltDensity = 0x4a3c2f1dU;
 constexpr uint32_t kDecorSaltFlower = 0xc13f7e59U;
 constexpr uint32_t kDecorSaltVariant = 0x8b44f2d7U;
+constexpr uint32_t kDecorSaltGroundPlane = 0x7037c1afU;
+constexpr uint32_t kDecorSaltCavePlane = 0x91d4a8b3U;
 constexpr uint32_t kTreeSaltDensity = 0x7b9d3f25U;
 constexpr uint32_t kTreeSaltSpecies = 0x2f4c8a91U;
 constexpr uint32_t kTreeSaltHeight = 0x5e6b1c37U;
@@ -165,9 +169,27 @@ struct WorldGenBlocks {
     BlockID rose = 0;
     BlockID poppy = 0;
     BlockID dandelion = 0;
+    BlockID blueOrchid = 0;
+    BlockID allium = 0;
+    BlockID azureBluet = 0;
+    BlockID oxeyeDaisy = 0;
+    BlockID cornflower = 0;
+    BlockID lilyOfTheValley = 0;
+    BlockID redTulip = 0;
+    BlockID orangeTulip = 0;
+    BlockID whiteTulip = 0;
+    BlockID pinkTulip = 0;
     BlockID deadBush = 0;
+    BlockID bush = 0;
+    BlockID shortDryGrass = 0;
     BlockID brownMushroom = 0;
     BlockID redMushroom = 0;
+    BlockID wildflowers = 0;
+    BlockID leafLitter = 0;
+    BlockID glowLichenNorth = 0;
+    BlockID glowLichenSouth = 0;
+    BlockID glowLichenEast = 0;
+    BlockID glowLichenWest = 0;
 
     std::array<OreRule, 8> stoneOreRules{};
     std::array<OreRule, 8> deepslateOreRules{};
@@ -195,6 +217,22 @@ BlockID requireBlockId(const char* path) {
         throw std::runtime_error(std::string("Missing required world generation block: minecraft:") + path);
     }
     return id;
+}
+
+BlockID requireDefaultState(const char* path) {
+    return BlockStateRegistry::getDefaultState(requireBlockId(path));
+}
+
+BlockID requireFacingState(const char* path, const uint16_t facing) {
+    if (PropIndices::FACING == PropIndices::INVALID || facing == PropIndices::INVALID) {
+        throw std::runtime_error("World generation facing states require registered facing properties");
+    }
+    const BlockID blockId = requireBlockId(path);
+    const StateID state = BlockStateRegistry::getState(blockId, PropIndices::FACING, facing);
+    if (state == BlockIds::AIR || BlockStateRegistry::getBlockId(state) != blockId) {
+        throw std::runtime_error(std::string("Missing required facing state for world generation block: minecraft:") + path);
+    }
+    return state;
 }
 
 WorldGenBlocks makeWorldGenBlocks() {
@@ -260,9 +298,27 @@ WorldGenBlocks makeWorldGenBlocks() {
     blocks.rose = requireBlockId("rose");
     blocks.poppy = requireBlockId("poppy");
     blocks.dandelion = requireBlockId("dandelion");
+    blocks.blueOrchid = requireBlockId("blue_orchid");
+    blocks.allium = requireBlockId("allium");
+    blocks.azureBluet = requireBlockId("azure_bluet");
+    blocks.oxeyeDaisy = requireBlockId("oxeye_daisy");
+    blocks.cornflower = requireBlockId("cornflower");
+    blocks.lilyOfTheValley = requireBlockId("lily_of_the_valley");
+    blocks.redTulip = requireBlockId("red_tulip");
+    blocks.orangeTulip = requireBlockId("orange_tulip");
+    blocks.whiteTulip = requireBlockId("white_tulip");
+    blocks.pinkTulip = requireBlockId("pink_tulip");
     blocks.deadBush = requireBlockId("dead_bush");
+    blocks.bush = requireBlockId("bush");
+    blocks.shortDryGrass = requireBlockId("short_dry_grass");
     blocks.brownMushroom = requireBlockId("brown_mushroom");
     blocks.redMushroom = requireBlockId("red_mushroom");
+    blocks.wildflowers = requireDefaultState("wildflowers");
+    blocks.leafLitter = requireDefaultState("leaf_litter");
+    blocks.glowLichenNorth = requireFacingState("glow_lichen", PropIndices::FACING_NORTH);
+    blocks.glowLichenSouth = requireFacingState("glow_lichen", PropIndices::FACING_SOUTH);
+    blocks.glowLichenEast = requireFacingState("glow_lichen", PropIndices::FACING_EAST);
+    blocks.glowLichenWest = requireFacingState("glow_lichen", PropIndices::FACING_WEST);
 
     blocks.stoneOreRules = {{
         {blocks.stone, blocks.diamondOre, 1, 16, kOreSaltDiamond, kOreCutoffDiamond},
@@ -1011,6 +1067,74 @@ bool isCaveCarvableBlock(const BlockID id, const WorldGenBlocks& blocks) {
            id == blocks.dripstoneBlock;
 }
 
+struct CaveWallSupportCandidate {
+    int dx = 0;
+    int dz = 0;
+    BlockID decorationState = 0;
+};
+
+bool isSolidCaveWallSupport(const int worldX,
+                            const int y,
+                            const int worldZ,
+                            const uint32_t seed,
+                            const int seaLevel,
+                            const WorldGenBlocks& blocks) {
+    if (y <= 0 || y >= Chunk::SIZE_Y) {
+        return false;
+    }
+
+    const TerrainColumnSample column = sampleTerrainColumn(worldX, worldZ, seed, seaLevel, blocks);
+    if (y > column.surfaceY) {
+        return false;
+    }
+
+    const BlockID solid = sampleTerrainSolidBlock(worldX, y, worldZ, seed, column, blocks);
+    if (!isCaveCarvableBlock(solid, blocks)) {
+        return false;
+    }
+
+    if (y >= 10 &&
+        y <= column.surfaceY - 5 &&
+        shouldCarveCaveFromNoise(sampleCaveNoise(worldX, y, worldZ, seed), y, column.surfaceY)) {
+        return false;
+    }
+
+    return true;
+}
+
+BlockID sampleCaveWallDecorationBlock(const int worldX,
+                                      const int y,
+                                      const int worldZ,
+                                      const uint32_t seed,
+                                      const int seaLevel,
+                                      const WorldGenBlocks& blocks) {
+    if (y < 10 || y >= Chunk::SIZE_Y) {
+        return 0;
+    }
+
+    uint32_t h = seed ^ kDecorSaltCavePlane;
+    h ^= hash32(static_cast<uint32_t>(worldX) * kOreXMul);
+    h ^= hash32(static_cast<uint32_t>(y) * kOreYMul);
+    h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
+    h = hash32(h);
+    if (h >= probabilityToCutoff(0.055)) {
+        return 0;
+    }
+
+    const std::array<CaveWallSupportCandidate, 4> candidates{{
+        {-1, 0, blocks.glowLichenEast},
+        {1, 0, blocks.glowLichenWest},
+        {0, -1, blocks.glowLichenSouth},
+        {0, 1, blocks.glowLichenNorth},
+    }};
+    const CaveWallSupportCandidate& candidate = candidates[hash32(h ^ kDecorSaltVariant) & 3U];
+    if (isSolidCaveWallSupport(worldX + candidate.dx, y, worldZ + candidate.dz, seed, seaLevel, blocks)) {
+        return candidate.decorationState;
+    }
+
+    return 0;
+}
+
 BlockID sampleOreBlockFromHash(const int y,
                                const BlockID baseBlock,
                                const uint32_t oreColumnSeed,
@@ -1251,9 +1375,27 @@ bool isReplaceableDecoration(const BlockID id, const WorldGenBlocks& blocks) {
            id == blocks.rose ||
            id == blocks.poppy ||
            id == blocks.dandelion ||
+           id == blocks.blueOrchid ||
+           id == blocks.allium ||
+           id == blocks.azureBluet ||
+           id == blocks.oxeyeDaisy ||
+           id == blocks.cornflower ||
+           id == blocks.lilyOfTheValley ||
+           id == blocks.redTulip ||
+           id == blocks.orangeTulip ||
+           id == blocks.whiteTulip ||
+           id == blocks.pinkTulip ||
            id == blocks.deadBush ||
+           id == blocks.bush ||
+           id == blocks.shortDryGrass ||
            id == blocks.brownMushroom ||
-           id == blocks.redMushroom;
+           id == blocks.redMushroom ||
+           id == blocks.wildflowers ||
+           id == blocks.leafLitter ||
+           id == blocks.glowLichenNorth ||
+           id == blocks.glowLichenSouth ||
+           id == blocks.glowLichenEast ||
+           id == blocks.glowLichenWest;
 }
 
 bool canTreeLogReplace(const BlockID id, const WorldGenBlocks& blocks) {
@@ -1283,8 +1425,19 @@ BlockID sampleVegetationBlock(int worldX,
     const uint32_t h = hashColumn(worldX, worldZ, seed);
 
     if (surfaceBlock == blocks.sand || surfaceBlock == blocks.redSand) {
-        const double dryDensity = surfaceBlock == blocks.redSand ? 0.055 : 0.035;
-        return hash32(h ^ kDecorSaltDensity) < probabilityToCutoff(dryDensity) ? blocks.deadBush : 0;
+        const double dryDensity = surfaceBlock == blocks.redSand ? 0.080 : 0.050;
+        if (hash32(h ^ kDecorSaltDensity) >= probabilityToCutoff(dryDensity)) {
+            return 0;
+        }
+
+        const uint32_t dryVariant = hash32(h ^ kDecorSaltVariant);
+        if ((dryVariant & 3U) == 0U) {
+            return blocks.bush;
+        }
+        if ((dryVariant & 1U) == 0U) {
+            return blocks.shortDryGrass;
+        }
+        return blocks.deadBush;
     }
 
     if (surfaceBlock != blocks.grass || moisture < 0.36) {
@@ -1305,15 +1458,41 @@ BlockID sampleVegetationBlock(int worldX,
     }
 
     const uint32_t variant = hash32(h ^ kDecorSaltVariant);
+    const uint32_t groundPlane = hash32(h ^ kDecorSaltGroundPlane);
+    if (biome == TerrainBiome::Temperate && moisture > 0.48 &&
+        groundPlane < probabilityToCutoff(0.018 + moisture * 0.030)) {
+        return (variant & 1U) == 0U ? blocks.wildflowers : blocks.leafLitter;
+    }
+
     const double flowerChance = biome == TerrainBiome::Temperate
                                     ? (0.06 + moisture * 0.06)
                                     : (0.02 + moisture * 0.02);
     if (hash32(h ^ kDecorSaltFlower) < probabilityToCutoff(flowerChance)) {
-        switch (variant % 3U) {
+        switch (variant % 13U) {
             case 0U:
                 return blocks.rose;
             case 1U:
                 return blocks.poppy;
+            case 2U:
+                return blocks.blueOrchid;
+            case 3U:
+                return blocks.allium;
+            case 4U:
+                return blocks.azureBluet;
+            case 5U:
+                return blocks.oxeyeDaisy;
+            case 6U:
+                return blocks.cornflower;
+            case 7U:
+                return blocks.lilyOfTheValley;
+            case 8U:
+                return blocks.redTulip;
+            case 9U:
+                return blocks.orangeTulip;
+            case 10U:
+                return blocks.whiteTulip;
+            case 11U:
+                return blocks.pinkTulip;
             default:
                 return blocks.dandelion;
         }
@@ -1345,11 +1524,13 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
     const TerrainColumnSample column = sampleTerrainColumn(worldX, worldZ, m_seed, m_seaLevel, blocks);
 
     BlockID id = 0;
+    bool carvedCave = false;
     if (y <= column.surfaceY) {
         id = sampleTerrainSolidBlock(worldX, y, worldZ, m_seed, column, blocks);
 
         if (isCaveCarvableBlock(id, blocks) && shouldCarveCave(worldX, y, worldZ, column.surfaceY)) {
             id = 0;
+            carvedCave = true;
         }
 
         if (id == blocks.stone || id == blocks.deepslate) {
@@ -1357,6 +1538,10 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
         }
     } else if (y <= m_seaLevel) {
         id = naturalWaterState();
+    }
+
+    if (id == 0 && carvedCave) {
+        id = sampleCaveWallDecorationBlock(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
     }
 
     if (id == 0) {
@@ -1510,11 +1695,13 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 int highestOpaqueY = 0;
                 for (int y = 0; y <= columnTop; ++y) {
                     BlockID id = 0;
+                    bool carvedCave = false;
                     if (y <= surfaceY) {
                         id = sampleTerrainSolidBlock(worldX, y, worldZ, m_seed, column, blocks);
 
                         if (isCaveCarvableBlock(id, blocks) && y >= 10 && y <= surfaceY - 5 && caveMask[y] != 0) {
                             id = 0;
+                            carvedCave = true;
                         }
 
                         if (id == blocks.stone || id == blocks.deepslate) {
@@ -1522,6 +1709,10 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                         }
                     } else if (y <= m_seaLevel) {
                         id = waterState;
+                    }
+
+                    if (id == 0 && carvedCave) {
+                        id = sampleCaveWallDecorationBlock(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
                     }
 
                     if (id != 0) {

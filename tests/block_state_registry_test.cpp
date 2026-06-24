@@ -825,6 +825,42 @@ int main() {
         return fail("floor face plane placement should reject wall hits");
     }
 
+    const BlockID wildflowers = BlockRegistry::findByName("wildflowers");
+    const BlockID leafLitter = BlockRegistry::findByName("leaf_litter");
+    const BlockID glowLichen = BlockRegistry::findByName("glow_lichen");
+    if (wildflowers == BlockIds::AIR || leafLitter == BlockIds::AIR || glowLichen == BlockIds::AIR) {
+        return fail("new face plane decoration blocks should be registered");
+    }
+
+    const BlockDef& wildflowersDef = BlockRegistry::get(wildflowers);
+    const BlockDef& leafLitterDef = BlockRegistry::get(leafLitter);
+    const BlockDef& glowLichenDef = BlockRegistry::get(glowLichen);
+    if (wildflowersDef.renderShapeName != "face_plane" ||
+        leafLitterDef.renderShapeName != "face_plane" ||
+        glowLichenDef.renderShapeName != "face_plane") {
+        return fail("new decoration blocks should use the face plane render shape");
+    }
+    if (wildflowersDef.placementStrategy != "face_plane_floor" ||
+        leafLitterDef.placementStrategy != "face_plane_floor" ||
+        glowLichenDef.placementStrategy != "face_plane_wall") {
+        return fail("new face plane decorations should use the matching placement strategy");
+    }
+    if (glowLichenDef.lightLevel != 7) {
+        return fail("glow_lichen should emit level 7 block light");
+    }
+    if (BlockStateRegistry::getPropertyIndex(BlockStateRegistry::getDefaultState(wildflowers),
+                                             PropIndices::FACING) != PropIndices::FACING_FLOOR ||
+        BlockStateRegistry::getPropertyIndex(BlockStateRegistry::getDefaultState(leafLitter),
+                                             PropIndices::FACING) != PropIndices::FACING_FLOOR) {
+        return fail("floor face plane decorations should default to facing=floor");
+    }
+    if (BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_NORTH) == BlockIds::AIR ||
+        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_SOUTH) == BlockIds::AIR ||
+        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_EAST) == BlockIds::AIR ||
+        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_WEST) == BlockIds::AIR) {
+        return fail("glow_lichen should expose all horizontal wall facing states");
+    }
+
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {
         return fail("state registry should contain expanded states beyond raw block ids");
     }

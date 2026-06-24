@@ -122,6 +122,37 @@ int main() {
         return fail("vine item icon should use its tinted item texture");
     }
 
+    const ItemID wildflowersItem = ItemRegistry::findByName("wildflowers");
+    const ItemID leafLitterItem = ItemRegistry::findByName("leaf_litter");
+    const ItemID glowLichenItem = ItemRegistry::findByName("glow_lichen");
+    const BlockID wildflowersBlock = BlockRegistry::findByName("wildflowers");
+    const BlockID leafLitterBlock = BlockRegistry::findByName("leaf_litter");
+    const BlockID glowLichenBlock = BlockRegistry::findByName("glow_lichen");
+    if (wildflowersItem == ItemIds::AIR ||
+        leafLitterItem == ItemIds::AIR ||
+        glowLichenItem == ItemIds::AIR ||
+        wildflowersBlock == BlockIds::AIR ||
+        leafLitterBlock == BlockIds::AIR ||
+        glowLichenBlock == BlockIds::AIR) {
+        return fail("new face plane decoration items and blocks should be registered");
+    }
+    const ItemDef& wildflowers = ItemRegistry::get(wildflowersItem);
+    const ItemDef& leafLitter = ItemRegistry::get(leafLitterItem);
+    const ItemDef& glowLichen = ItemRegistry::get(glowLichenItem);
+    if (wildflowers.placeBlock != wildflowersBlock ||
+        leafLitter.placeBlock != leafLitterBlock ||
+        glowLichen.placeBlock != glowLichenBlock ||
+        std::string(wildflowers.iconTextureName) != "wildflowers" ||
+        std::string(leafLitter.iconTextureName) != "leaf_litter" ||
+        std::string(glowLichen.iconTextureName) != "glow_lichen") {
+        return fail("new face plane items should place their block and use explicit item textures");
+    }
+    if (ui::shouldUseBakedBlockIcon(wildflowers) ||
+        ui::shouldUseBakedBlockIcon(leafLitter) ||
+        ui::shouldUseBakedBlockIcon(glowLichen)) {
+        return fail("new face plane item icons should use their item textures");
+    }
+
     const ItemID oakLeavesItem = ItemRegistry::findByName("oak_leaves");
     if (oakLeavesItem == ItemIds::AIR) {
         return fail("oak_leaves should register a block-backed item");

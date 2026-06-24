@@ -98,6 +98,30 @@
       "renderBlock": "minecraft:pink_petals"
     },
     {
+      "id": "minecraft:wildflowers",
+      "iconTexture": "wildflowers",
+      "maxStack": 64,
+      "icon": "minecraft:wildflowers",
+      "placeBlock": "minecraft:wildflowers",
+      "renderBlock": "minecraft:wildflowers"
+    },
+    {
+      "id": "minecraft:leaf_litter",
+      "iconTexture": "leaf_litter",
+      "maxStack": 64,
+      "icon": "minecraft:leaf_litter",
+      "placeBlock": "minecraft:leaf_litter",
+      "renderBlock": "minecraft:leaf_litter"
+    },
+    {
+      "id": "minecraft:glow_lichen",
+      "iconTexture": "glow_lichen",
+      "maxStack": 64,
+      "icon": "minecraft:glow_lichen",
+      "placeBlock": "minecraft:glow_lichen",
+      "renderBlock": "minecraft:glow_lichen"
+    },
+    {
       "id": "minecraft:redstone",
       "iconTexture": "redstone",
       "maxStack": 64,

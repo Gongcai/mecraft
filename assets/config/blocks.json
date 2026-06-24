@@ -742,6 +742,73 @@
       }
     },
     {
+      "id": "minecraft:wildflowers",
+      "drop": "minecraft:wildflowers",
+      "properties": {
+        "facing": ["floor"]
+      },
+      "defaultState": {
+        "facing": "floor"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_floor",
+      "supportRule": "attached_face",
+      "renderShape": "face_plane",
+      "materialKind": "plant",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "wildflowers"
+      }
+    },
+    {
+      "id": "minecraft:leaf_litter",
+      "drop": "minecraft:leaf_litter",
+      "properties": {
+        "facing": ["floor"]
+      },
+      "defaultState": {
+        "facing": "floor"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_floor",
+      "supportRule": "attached_face",
+      "renderShape": "face_plane",
+      "materialKind": "plant",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "leaf_litter"
+      }
+    },
+    {
+      "id": "minecraft:glow_lichen",
+      "drop": "minecraft:glow_lichen",
+      "properties": {
+        "facing": ["north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "north"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_wall",
+      "supportRule": "attached_face",
+      "renderShape": "face_plane",
+      "materialKind": "plant",
+      "lightLevel": 7,
+      "timeToBreak": 10,
+      "textures": {
+        "all": "glow_lichen"
+      }
+    },
+    {
       "id": "minecraft:blue_wool",
       "drop": "minecraft:blue_wool",
       "timeToBreak": 1000,
@@ -1690,6 +1757,136 @@
       }
     },
     {
+      "id": "minecraft:blue_orchid",
+      "drop": "minecraft:blue_orchid",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "blue_orchid"
+      }
+    },
+    {
+      "id": "minecraft:allium",
+      "drop": "minecraft:allium",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "allium"
+      }
+    },
+    {
+      "id": "minecraft:azure_bluet",
+      "drop": "minecraft:azure_bluet",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "azure_bluet"
+      }
+    },
+    {
+      "id": "minecraft:oxeye_daisy",
+      "drop": "minecraft:oxeye_daisy",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "oxeye_daisy"
+      }
+    },
+    {
+      "id": "minecraft:cornflower",
+      "drop": "minecraft:cornflower",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "cornflower"
+      }
+    },
+    {
+      "id": "minecraft:lily_of_the_valley",
+      "drop": "minecraft:lily_of_the_valley",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "lily_of_the_valley"
+      }
+    },
+    {
+      "id": "minecraft:red_tulip",
+      "drop": "minecraft:red_tulip",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "red_tulip"
+      }
+    },
+    {
+      "id": "minecraft:orange_tulip",
+      "drop": "minecraft:orange_tulip",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "orange_tulip"
+      }
+    },
+    {
+      "id": "minecraft:white_tulip",
+      "drop": "minecraft:white_tulip",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "white_tulip"
+      }
+    },
+    {
+      "id": "minecraft:pink_tulip",
+      "drop": "minecraft:pink_tulip",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 30,
+      "textures": {
+        "all": "pink_tulip"
+      }
+    },
+    {
       "id": "minecraft:red_mushroom",
       "drop": "minecraft:red_mushroom",
       "isSolid": false,
@@ -1741,6 +1938,32 @@
       "timeToBreak": 10,
       "textures": {
         "all": "dead_bush"
+      }
+    },
+    {
+      "id": "minecraft:bush",
+      "drop": "minecraft:bush",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "bush"
+      }
+    },
+    {
+      "id": "minecraft:short_dry_grass",
+      "drop": "minecraft:air",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "ground",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "short_dry_grass"
       }
     },
     {
