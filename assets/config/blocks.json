@@ -1153,6 +1153,7 @@
       },
       "renderShape": "model",
       "placementStrategy": "six_way_facing",
+      "revert": true,
       "timeToBreak": 500,
       "textures": {
         "top": "piston_top",
@@ -1187,6 +1188,7 @@
       },
       "renderShape": "model",
       "placementStrategy": "six_way_facing",
+      "revert": true,
       "timeToBreak": 500,
       "textures": {
         "top": "piston_top_sticky",

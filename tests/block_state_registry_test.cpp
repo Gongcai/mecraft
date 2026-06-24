@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "../src/world/block/Block.h"
+#include "../src/world/block/BlockModelRegistry.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/block/BedBlock.h"
 #include "../src/renderer/mesh/MeshBuilderRegistry.h"
@@ -1037,6 +1038,28 @@ int main() {
                variant->transform.rotY == expectedRotY &&
                variant->transform.rotX == expectedRotX;
     };
+    const auto modelFaceTextureMatches = [](const BlockModel* model,
+                                            const size_t faceIndex,
+                                            const char* expectedTexture) {
+        if (model == nullptr || model->elements.empty() || faceIndex >= model->elements.front().faces.size()) {
+            return false;
+        }
+        const std::unique_ptr<ModelFace>& face = model->elements.front().faces[faceIndex];
+        if (face == nullptr || face->textureVar.empty() || face->textureVar.front() != '#') {
+            return false;
+        }
+        const auto textureIt = model->textures.find(face->textureVar.substr(1));
+        return textureIt != model->textures.end() && textureIt->second == expectedTexture;
+    };
+    const auto modelFaceRotationMatches = [](const BlockModel* model,
+                                             const size_t faceIndex,
+                                             const uint16_t expectedRotation) {
+        if (model == nullptr || model->elements.empty() || faceIndex >= model->elements.front().faces.size()) {
+            return false;
+        }
+        const std::unique_ptr<ModelFace>& face = model->elements.front().faces[faceIndex];
+        return face != nullptr && face->uvRotation == expectedRotation;
+    };
 
     const std::vector<BlockID> redstoneModelBlocks = {
         BlockIds::LEVER,
@@ -1063,6 +1086,31 @@ int main() {
                 return fail("redstone model blocks should expose model variants for every state");
             }
         }
+    }
+    constexpr size_t modelFaceUp = 0;
+    constexpr size_t modelFaceDown = 1;
+    constexpr size_t modelFaceSouth = 2;
+    constexpr size_t modelFaceNorth = 3;
+    constexpr size_t modelFaceWest = 4;
+    constexpr size_t modelFaceEast = 5;
+    const auto pistonBodyFacesMatch = [&](const char* modelName, const char* frontTexture) {
+        const BlockModel* model = BlockModelRegistry::get(modelName);
+        return modelFaceTextureMatches(model, modelFaceUp, "piston_side") &&
+               modelFaceTextureMatches(model, modelFaceDown, "piston_side") &&
+               modelFaceTextureMatches(model, modelFaceSouth, frontTexture) &&
+               modelFaceTextureMatches(model, modelFaceNorth, "piston_bottom") &&
+               modelFaceTextureMatches(model, modelFaceWest, "piston_side") &&
+               modelFaceTextureMatches(model, modelFaceEast, "piston_side") &&
+               modelFaceRotationMatches(model, modelFaceUp, 180) &&
+               modelFaceRotationMatches(model, modelFaceDown, 0) &&
+               modelFaceRotationMatches(model, modelFaceWest, 90) &&
+               modelFaceRotationMatches(model, modelFaceEast, 270);
+    };
+    if (!pistonBodyFacesMatch("block/piston", "piston_top") ||
+        !pistonBodyFacesMatch("block/sticky_piston", "piston_top_sticky") ||
+        !pistonBodyFacesMatch("block/piston_extended", "piston_inner") ||
+        !pistonBodyFacesMatch("block/sticky_piston_extended", "piston_inner")) {
+        return fail("piston body models should orient side textures toward the local front face");
     }
 
     const BlockDef& redstoneWireDef = BlockRegistry::get(BlockIds::REDSTONE_WIRE);
@@ -1232,6 +1280,10 @@ int main() {
     }
 
     const BlockDef& pistonDef = BlockRegistry::get(BlockIds::PISTON);
+    const BlockDef& stickyPistonDef = BlockRegistry::get(BlockIds::STICKY_PISTON);
+    if (!pistonDef.revertPlacementFacing || !stickyPistonDef.revertPlacementFacing) {
+        return fail("pistons should parse placement facing revert from blocks.json");
+    }
     PlacementStrategyFn pistonStrategy = PlacementStrategyRegistry::getStrategy(pistonDef.placementStrategy);
     if (pistonStrategy == nullptr) {
         return fail("six_way_facing placement strategy should be registered");
@@ -1247,6 +1299,12 @@ int main() {
     const StateID pistonPlacedDown = pistonStrategy(pistonPlacement);
     if (BlockStateRegistry::getPropertyIndex(pistonPlacedDown, PropIndices::FACING) != PropIndices::FACING_DOWN) {
         return fail("six_way_facing placement should derive downward piston facing from ceiling hits");
+    }
+    pistonPlacement.hitNormal = glm::ivec3(1, 0, 0);
+    pistonPlacement.playerYaw = 0.0f;
+    const StateID pistonPlacedHorizontal = pistonStrategy(pistonPlacement);
+    if (BlockStateRegistry::getPropertyIndex(pistonPlacedHorizontal, PropIndices::FACING) != PropIndices::FACING_WEST) {
+        return fail("six_way_facing placement should apply the configured piston facing revert");
     }
 
     const BlockDef& hopperDef = BlockRegistry::get(BlockIds::HOPPER);
