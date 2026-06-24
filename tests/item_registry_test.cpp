@@ -150,6 +150,61 @@ int main() {
         return fail("red_bed item icon should use its explicit item texture");
     }
 
+    const ItemID redstoneItem = ItemRegistry::findByName("redstone");
+    const BlockID redstoneWireBlock = BlockRegistry::findByName("redstone_wire");
+    if (redstoneItem == ItemIds::AIR || redstoneWireBlock == BlockIds::AIR) {
+        return fail("redstone item and redstone_wire block should be registered");
+    }
+    const ItemDef& redstone = ItemRegistry::get(redstoneItem);
+    if (ItemRegistry::toPlaceBlock(redstoneItem) != redstoneWireBlock ||
+        ItemRegistry::toRenderBlock(redstoneItem) != BlockIds::AIR ||
+        std::string(redstone.iconTextureName) != "redstone") {
+        return fail("redstone item should place redstone_wire while keeping its powder icon");
+    }
+
+    const ItemID redstoneTorchItem = ItemRegistry::findByName("redstone_torch");
+    const BlockID redstoneTorchBlock = BlockRegistry::findByName("redstone_torch");
+    if (redstoneTorchItem == ItemIds::AIR || redstoneTorchBlock == BlockIds::AIR) {
+        return fail("redstone_torch item and block should be registered");
+    }
+    const ItemDef& redstoneTorch = ItemRegistry::get(redstoneTorchItem);
+    if (redstoneTorch.placeBlock != redstoneTorchBlock ||
+        redstoneTorch.renderBlock != redstoneTorchBlock ||
+        std::string(redstoneTorch.iconTextureName) != "redstone_torch") {
+        return fail("redstone_torch item should place the torch block and use its item texture");
+    }
+
+    const ItemID repeaterItem = ItemRegistry::findByName("repeater");
+    const ItemID comparatorItem = ItemRegistry::findByName("comparator");
+    const ItemID hopperItem = ItemRegistry::findByName("hopper");
+    const BlockID repeaterBlock = BlockRegistry::findByName("repeater");
+    const BlockID comparatorBlock = BlockRegistry::findByName("comparator");
+    const BlockID hopperBlock = BlockRegistry::findByName("hopper");
+    if (repeaterItem == ItemIds::AIR ||
+        comparatorItem == ItemIds::AIR ||
+        hopperItem == ItemIds::AIR ||
+        repeaterBlock == BlockIds::AIR ||
+        comparatorBlock == BlockIds::AIR ||
+        hopperBlock == BlockIds::AIR) {
+        return fail("redstone component items and blocks should be registered");
+    }
+    const ItemDef& repeater = ItemRegistry::get(repeaterItem);
+    const ItemDef& comparator = ItemRegistry::get(comparatorItem);
+    const ItemDef& hopper = ItemRegistry::get(hopperItem);
+    if (repeater.placeBlock != repeaterBlock ||
+        comparator.placeBlock != comparatorBlock ||
+        hopper.placeBlock != hopperBlock ||
+        std::string(repeater.iconTextureName) != "repeater" ||
+        std::string(comparator.iconTextureName) != "comparator" ||
+        std::string(hopper.iconTextureName) != "hopper") {
+        return fail("redstone component items should place their blocks and use explicit item textures");
+    }
+    if (ui::shouldUseBakedBlockIcon(repeater) ||
+        ui::shouldUseBakedBlockIcon(comparator) ||
+        ui::shouldUseBakedBlockIcon(hopper)) {
+        return fail("redstone component item icons should use their item textures");
+    }
+
     const ItemID wildflowersItem = ItemRegistry::findByName("wildflowers");
     const ItemID leafLitterItem = ItemRegistry::findByName("leaf_litter");
     const ItemID glowLichenItem = ItemRegistry::findByName("glow_lichen");
@@ -246,6 +301,15 @@ int main() {
     }
     if (BlockDropTable::getDropItem(redBedBlock) != redBedItem) {
         return fail("red_bed should drop its bed item");
+    }
+    if (BlockDropTable::getDropItem(redstoneWireBlock) != redstoneItem) {
+        return fail("redstone_wire should drop redstone powder");
+    }
+    if (BlockDropTable::getDropItem(redstoneTorchBlock) != redstoneTorchItem) {
+        return fail("redstone_torch should drop its torch item");
+    }
+    if (BlockDropTable::getDropItem(BlockRegistry::findByName("piston_head")) != ItemIds::AIR) {
+        return fail("piston_head should not drop a block item");
     }
 
     std::cout << "[item_registry_test] PASS\n";

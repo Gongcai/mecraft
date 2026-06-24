@@ -45,6 +45,11 @@ uniform float uFogDensity;
 // Debug
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined
 
+vec3 redstoneTintSrgb(vec2 tintUV) {
+    float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;
+    return mix(vec3(0.30, 0.0, 0.0), vec3(1.0, 0.10, 0.02), power);
+}
+
 // Ambient Occlusion brightness levels
 // Level 0 (fully occluded corner) = 0.62, level 3 (open) = 1.0.
 const float aoLevels[4] = float[](0.62, 0.75, 0.87, 1.0);
@@ -109,6 +114,8 @@ void main() {
         texColor.rgb *= texture(uGrassColormap, vTintUV).rgb;
     } else if (vTintKind > 1.5 && vTintKind < 2.5) {
         texColor.rgb *= texture(uFoliageColormap, vTintUV).rgb;
+    } else if (vTintKind > 2.5 && vTintKind < 3.5) {
+        texColor.rgb *= redstoneTintSrgb(vTintUV);
     }
 
     // AO: bilinear interpolate through the discrete AO levels

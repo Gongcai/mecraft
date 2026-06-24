@@ -24,6 +24,11 @@ uniform vec3 uShadowLightDirection;
 uniform mat4 uShadowModelView;
 uniform int uShadowPassMode; // 0 = opaque-only, 1 = transparent shadow (DepthAll + Color)
 
+vec3 redstoneTintSrgb(vec2 tintUV) {
+    float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;
+    return mix(vec3(0.30, 0.0, 0.0), vec3(1.0, 0.10, 0.02), power);
+}
+
 // Shadow color outputs:
 // layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics),
 //                           A = 0.0 for transparent casters (water/glass), 1.0 for opaque
@@ -174,6 +179,8 @@ void main() {
             shadowColor *= texture(uGrassColormap, vTintUV).rgb;
         } else if (vTintKind > 1.5 && vTintKind < 2.5) {
             shadowColor *= texture(uFoliageColormap, vTintUV).rgb;
+        } else if (vTintKind > 2.5 && vTintKind < 3.5) {
+            shadowColor *= redstoneTintSrgb(vTintUV);
         }
 
         // DerivativeMain writes sRGB values directly; PCF reader applies pow4() decode

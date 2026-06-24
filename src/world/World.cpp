@@ -61,6 +61,11 @@ bool isStairsBlockDef(const BlockDef& def) {
     return def.placementStrategy == "stairs";
 }
 
+bool isRedstoneWireState(const StateID stateId) {
+    return stateId != BlockIds::AIR &&
+           BlockStateRegistry::getBlockId(stateId) == BlockIds::REDSTONE_WIRE;
+}
+
 bool canConnectedBlockAttachTo(const StateID stateId) {
     if (stateId == BlockIds::AIR) {
         return false;
@@ -69,6 +74,10 @@ bool canConnectedBlockAttachTo(const StateID stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     return isConnectedBlockDef(def) || def.isSolid;
+}
+
+bool canRedstoneWireAttachTo(const StateID stateId) {
+    return isRedstoneWireState(stateId);
 }
 
 void requireHorizontalConnectionProperties() {
@@ -739,7 +748,8 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
     const BlockDef& def = BlockRegistry::getFast(blockId);
     const bool isConnectedBlock = isConnectedBlockDef(def);
     const bool isStairsBlock = isStairsBlockDef(def);
-    if (!isConnectedBlock && !isStairsBlock) {
+    const bool isRedstoneWireBlock = isRedstoneWireState(currentState);
+    if (!isConnectedBlock && !isStairsBlock && !isRedstoneWireBlock) {
         return;
     }
 
@@ -769,6 +779,33 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
             updatedState,
             PropIndices::WEST,
             canConnectedBlockAttachTo(getBlockState(pos.x - 1, pos.y, pos.z))
+                ? PropIndices::WEST_TRUE
+                : PropIndices::WEST_FALSE);
+    } else if (isRedstoneWireBlock) {
+        requireHorizontalConnectionProperties();
+
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::NORTH,
+            canRedstoneWireAttachTo(getBlockState(pos.x, pos.y, pos.z - 1))
+                ? PropIndices::NORTH_TRUE
+                : PropIndices::NORTH_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::SOUTH,
+            canRedstoneWireAttachTo(getBlockState(pos.x, pos.y, pos.z + 1))
+                ? PropIndices::SOUTH_TRUE
+                : PropIndices::SOUTH_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::EAST,
+            canRedstoneWireAttachTo(getBlockState(pos.x + 1, pos.y, pos.z))
+                ? PropIndices::EAST_TRUE
+                : PropIndices::EAST_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::WEST,
+            canRedstoneWireAttachTo(getBlockState(pos.x - 1, pos.y, pos.z))
                 ? PropIndices::WEST_TRUE
                 : PropIndices::WEST_FALSE);
     } else if (isStairsBlock) {

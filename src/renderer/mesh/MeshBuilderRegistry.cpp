@@ -57,6 +57,7 @@ void MeshBuilderRegistry::initBuiltinBuilders() {
     registerBuilder("model", MODEL_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildModelBlock);
     registerBuilder("block_entity", BLOCK_ENTITY_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildBlockEntity);
     registerBuilder("face_plane", FACE_PLANE_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildFacePlane);
+    registerBuilder("redstone_wire", REDSTONE_WIRE_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildRedstoneWire);
 
     g_initialized = true;
 }

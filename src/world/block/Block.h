@@ -267,6 +267,7 @@ struct BlockDef {
     AnimatedTextureRef faceRight;
     AnimatedTextureRef faceFront;
     AnimatedTextureRef faceBack;
+    std::unordered_map<std::string, AnimatedTextureRef> namedTextureRefs;
     std::unordered_map<std::string, NamedTextureAnimation> namedTextureAnimations;
     std::vector<StateTextureRule> stateTextureRules;
     BlockRandomTickRule randomTick;

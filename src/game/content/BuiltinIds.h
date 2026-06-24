@@ -34,7 +34,26 @@
     X(BROWN_MUSHROOM, "brown_mushroom") \
     X(BLUE_WOOL, "blue_wool") \
     X(OAK_LEAVES, "oak_leaves") \
-    X(BIRCH_LEAVES, "birch_leaves")
+    X(BIRCH_LEAVES, "birch_leaves") \
+    X(REDSTONE_WIRE, "redstone_wire") \
+    X(REDSTONE_TORCH, "redstone_torch") \
+    X(REDSTONE_LAMP, "redstone_lamp") \
+    X(LEVER, "lever") \
+    X(STONE_BUTTON, "stone_button") \
+    X(OAK_BUTTON, "oak_button") \
+    X(STONE_PRESSURE_PLATE, "stone_pressure_plate") \
+    X(OAK_PRESSURE_PLATE, "oak_pressure_plate") \
+    X(REPEATER, "repeater") \
+    X(COMPARATOR, "comparator") \
+    X(PISTON, "piston") \
+    X(STICKY_PISTON, "sticky_piston") \
+    X(PISTON_HEAD, "piston_head") \
+    X(OBSERVER, "observer") \
+    X(DISPENSER, "dispenser") \
+    X(DROPPER, "dropper") \
+    X(HOPPER, "hopper") \
+    X(NOTE_BLOCK, "note_block") \
+    X(TARGET, "target")
 
 #define MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(X) \
     X(COAL, "coal") \

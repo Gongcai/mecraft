@@ -69,6 +69,29 @@ void requireFloorFacePlanePlacementProperties() {
     }
 }
 
+void requireSixWayFacingPlacementProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID ||
+        PropIndices::FACING_UP == PropIndices::INVALID ||
+        PropIndices::FACING_DOWN == PropIndices::INVALID) {
+        throw std::runtime_error("Six-way placement requires facing=north/south/east/west/up/down properties");
+    }
+}
+
+void requireHopperFacingPlacementProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID ||
+        PropIndices::FACING_DOWN == PropIndices::INVALID) {
+        throw std::runtime_error("Hopper placement requires facing=north/south/east/west/down properties");
+    }
+}
+
 uint16_t facePlaneFacingFromWallNormal(const glm::ivec3& normal) {
     if (normal.z == -1) {
         return PropIndices::FACING_NORTH;
@@ -297,6 +320,31 @@ StateID strategyHorizontalFacing(const PlacementContext& ctx) {
         applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
 }
 
+StateID strategySixWayFacing(const PlacementContext& ctx) {
+    requireSixWayFacingPlacementProperties();
+    if (ctx.hitNormal.y > 0) {
+        return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_UP);
+    }
+    if (ctx.hitNormal.y < 0) {
+        return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_DOWN);
+    }
+    return BlockStateRegistry::getState(
+        ctx.blockId,
+        PropIndices::FACING,
+        applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
+}
+
+StateID strategyHopperFacing(const PlacementContext& ctx) {
+    requireHopperFacingPlacementProperties();
+    if (ctx.hitNormal.y != 0) {
+        return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_DOWN);
+    }
+    return BlockStateRegistry::getState(
+        ctx.blockId,
+        PropIndices::FACING,
+        oppositeHorizontalFacing(facingFromSideNormal(ctx.hitNormal)));
+}
+
 StateID strategyAxisOriented(const PlacementContext& ctx) {
     const auto& n = ctx.hitNormal;
     if (n.y != 0) {
@@ -422,6 +470,8 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("simple", strategySimple);
     registerStrategy("attach_wall", strategyAttachWall);
     registerStrategy("horizontal_facing", strategyHorizontalFacing);
+    registerStrategy("six_way_facing", strategySixWayFacing);
+    registerStrategy("hopper_facing", strategyHopperFacing);
     registerStrategy("axis_oriented", strategyAxisOriented);
     registerStrategy("stairs", strategyStairs);
     registerStrategy("slab", strategySlab);

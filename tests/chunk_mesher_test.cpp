@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 
 #include "../src/renderer/mesh/ChunkMesher.h"
 #include "../src/renderer/mesh/MeshBuilderRegistry.h"
@@ -180,6 +181,10 @@ int main() {
         }
         if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::FACE_PLANE_TAG) == nullptr) {
             return fail("face_plane shape should resolve to a mesh builder");
+        }
+        if (MeshBuilderRegistry::getShapeTag("redstone_wire") != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
+            MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::REDSTONE_WIRE_TAG) == nullptr) {
+            return fail("redstone_wire shape should resolve to the custom wire mesh builder");
         }
         const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
         if (torchDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("torch")) {
@@ -1121,6 +1126,81 @@ int main() {
                 vertex.z < 0.0f || vertex.z > 1.0f) {
                 return fail("floor face plane should hug the ground boundary");
             }
+        }
+    }
+
+    {
+        const StateID redstoneWire = BlockStateRegistry::withProperty(
+            BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE),
+            PropIndices::POWER,
+            PropIndices::POWER_15);
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, redstoneWire);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("isolated redstone wire should emit one tinted floor quad");
+        }
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
+            const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
+            if (tintKind != BlockTintKinds::REDSTONE ||
+                tintU != 15 ||
+                !approxEqual(vertex.normal, 0.0f) ||
+                !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f)) {
+                return fail("redstone wire vertices should encode redstone tint and lie on the floor plane");
+            }
+        }
+    }
+
+    {
+        const StateID redstoneWireEast = BlockStateRegistry::getState(
+            BlockIds::REDSTONE_WIRE,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_FLOOR},
+                {PropIndices::POWER, PropIndices::POWER_0},
+                {PropIndices::NORTH, PropIndices::NORTH_FALSE},
+                {PropIndices::SOUTH, PropIndices::SOUTH_FALSE},
+                {PropIndices::EAST, PropIndices::EAST_TRUE},
+                {PropIndices::WEST, PropIndices::WEST_FALSE}
+            });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, redstoneWireEast);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("one-sided redstone wire should emit one vanilla-style half segment");
+        }
+
+        float minX = std::numeric_limits<float>::max();
+        float minZ = std::numeric_limits<float>::max();
+        float minU = std::numeric_limits<float>::max();
+        float minV = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxZ = std::numeric_limits<float>::lowest();
+        float maxU = std::numeric_limits<float>::lowest();
+        float maxV = std::numeric_limits<float>::lowest();
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            minX = std::min(minX, vertex.x);
+            minZ = std::min(minZ, vertex.z);
+            minU = std::min(minU, vertex.u);
+            minV = std::min(minV, vertex.v);
+            maxX = std::max(maxX, vertex.x);
+            maxZ = std::max(maxZ, vertex.z);
+            maxU = std::max(maxU, vertex.u);
+            maxV = std::max(maxV, vertex.v);
+        }
+        if (!approxEqual(minX, 0.5f) ||
+            !approxEqual(maxX, 1.0f) ||
+            !approxEqual(minZ, 0.0f) ||
+            !approxEqual(maxZ, 1.0f) ||
+            !approxEqual(minU, 0.0f) ||
+            !approxEqual(maxU, 1.0f) ||
+            !approxEqual(minV, 0.0f) ||
+            !approxEqual(maxV, 0.5f)) {
+            return fail("east redstone wire segment should rotate the half-tile line texture horizontally");
         }
     }
 

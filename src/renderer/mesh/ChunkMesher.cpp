@@ -1898,6 +1898,14 @@ void applyWaterTextureRef(FaceRenderData& renderData, const AnimatedTextureRef& 
     renderData.animated = texture.isAnimated ? 1.0f : 0.0f;
 }
 
+void applyTextureRef(FaceRenderData& renderData, const AnimatedTextureRef& texture) {
+    renderData.tileIndex = std::max(0, texture.firstLayer);
+    renderData.layer = static_cast<float>(texture.firstLayer);
+    renderData.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, texture.frameCount));
+    renderData.animationFps = texture.isAnimated ? texture.fps : 0.0f;
+    renderData.animated = texture.isAnimated ? 1.0f : 0.0f;
+}
+
 void addWaterFacesImpl(ChunkMeshData& meshData,
                        const SubChunkMeshingSnapshot& snapshot,
                        const BlockID blockId,
@@ -3317,6 +3325,127 @@ std::array<glm::vec3, 4> buildFacePlaneCorners(const glm::vec3& pos, const uint1
     throw std::runtime_error("Face plane mesh received an unsupported facing value");
 }
 
+void requireRedstoneWireMeshProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::POWER == PropIndices::INVALID ||
+        PropIndices::NORTH == PropIndices::INVALID ||
+        PropIndices::SOUTH == PropIndices::INVALID ||
+        PropIndices::EAST == PropIndices::INVALID ||
+        PropIndices::WEST == PropIndices::INVALID ||
+        PropIndices::FACING_FLOOR == PropIndices::INVALID ||
+        PropIndices::NORTH_TRUE == PropIndices::INVALID ||
+        PropIndices::NORTH_FALSE == PropIndices::INVALID ||
+        PropIndices::SOUTH_TRUE == PropIndices::INVALID ||
+        PropIndices::SOUTH_FALSE == PropIndices::INVALID ||
+        PropIndices::EAST_TRUE == PropIndices::INVALID ||
+        PropIndices::EAST_FALSE == PropIndices::INVALID ||
+        PropIndices::WEST_TRUE == PropIndices::INVALID ||
+        PropIndices::WEST_FALSE == PropIndices::INVALID ||
+        PropIndices::POWER_0 == PropIndices::INVALID ||
+        PropIndices::POWER_1 == PropIndices::INVALID ||
+        PropIndices::POWER_2 == PropIndices::INVALID ||
+        PropIndices::POWER_3 == PropIndices::INVALID ||
+        PropIndices::POWER_4 == PropIndices::INVALID ||
+        PropIndices::POWER_5 == PropIndices::INVALID ||
+        PropIndices::POWER_6 == PropIndices::INVALID ||
+        PropIndices::POWER_7 == PropIndices::INVALID ||
+        PropIndices::POWER_8 == PropIndices::INVALID ||
+        PropIndices::POWER_9 == PropIndices::INVALID ||
+        PropIndices::POWER_10 == PropIndices::INVALID ||
+        PropIndices::POWER_11 == PropIndices::INVALID ||
+        PropIndices::POWER_12 == PropIndices::INVALID ||
+        PropIndices::POWER_13 == PropIndices::INVALID ||
+        PropIndices::POWER_14 == PropIndices::INVALID ||
+        PropIndices::POWER_15 == PropIndices::INVALID) {
+        throw std::runtime_error("Redstone wire mesh requires facing, power, and horizontal connection properties");
+    }
+}
+
+uint8_t redstonePowerLevel(const StateID stateId) {
+    const uint16_t powerValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::POWER);
+    static const std::array<uint16_t, 16> kPowerValues = {{
+        PropIndices::POWER_0,
+        PropIndices::POWER_1,
+        PropIndices::POWER_2,
+        PropIndices::POWER_3,
+        PropIndices::POWER_4,
+        PropIndices::POWER_5,
+        PropIndices::POWER_6,
+        PropIndices::POWER_7,
+        PropIndices::POWER_8,
+        PropIndices::POWER_9,
+        PropIndices::POWER_10,
+        PropIndices::POWER_11,
+        PropIndices::POWER_12,
+        PropIndices::POWER_13,
+        PropIndices::POWER_14,
+        PropIndices::POWER_15
+    }};
+
+    for (size_t i = 0; i < kPowerValues.size(); ++i) {
+        if (powerValue == kPowerValues[i]) {
+            return static_cast<uint8_t>(i);
+        }
+    }
+
+    throw std::runtime_error("Redstone wire mesh received an unsupported power value");
+}
+
+bool redstoneWireConnected(const StateID stateId,
+                           const uint16_t property,
+                           const uint16_t trueValue,
+                           const uint16_t falseValue,
+                           const char* propertyName) {
+    const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
+    if (value == trueValue) {
+        return true;
+    }
+    if (value == falseValue) {
+        return false;
+    }
+    throw std::runtime_error(std::string("Redstone wire mesh received an unsupported ") + propertyName + " value");
+}
+
+const AnimatedTextureRef& requireNamedTextureRef(const BlockDef& def, const char* name) {
+    const auto it = def.namedTextureRefs.find(name);
+    if (it == def.namedTextureRefs.end()) {
+        throw std::runtime_error("Redstone wire mesh requires named texture: " + std::string(name));
+    }
+    return it->second;
+}
+
+std::array<glm::vec3, 4> buildFloorWireQuad(const glm::vec3& pos,
+                                            const float x0,
+                                            const float z0,
+                                            const float x1,
+                                            const float z1) {
+    const float y = pos.y + kFacePlaneSurfaceOffset;
+    return {{{pos.x + x0, y, pos.z + z1},
+             {pos.x + x1, y, pos.z + z1},
+             {pos.x + x1, y, pos.z + z0},
+             {pos.x + x0, y, pos.z + z0}}};
+}
+
+std::array<glm::vec3, 4> buildRotatedFloorWireSegment(const glm::vec3& pos,
+                                                      const uint16_t rotY) {
+    const float y = kFacePlaneSurfaceOffset;
+    std::array<glm::vec3, 4> corners = {{{0.0f, y, 0.5f},
+                                          {1.0f, y, 0.5f},
+                                          {1.0f, y, 0.0f},
+                                          {0.0f, y, 0.0f}}};
+    for (glm::vec3& corner : corners) {
+        corner = rotatePointY90(corner, rotY) + pos;
+    }
+    return corners;
+}
+
+std::array<glm::vec2, 4> buildUvRect(const float u0,
+                                     const float v0,
+                                     const float u1,
+                                     const float v1) {
+    return {{{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}}};
+}
+
 } // anonymous namespace
 
 void ChunkMesher::setDebugDisableGreedyMeshing(const bool disabled) {
@@ -3432,6 +3561,95 @@ void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
     appendFaceVertices(selectModelVertexTarget(meshData, def), corners, faceUV, face, renderData);
     expandBoundsForCorners(meshData, corners);
+}
+
+void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
+                                          const SubChunkMeshingSnapshot& snapshot,
+                                          const BlockID blockId,
+                                          const BlockDef& def,
+                                          const int x,
+                                          const int y,
+                                          const int z) {
+    requireRedstoneWireMeshProperties();
+
+    const uint16_t facing = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    if (facing != PropIndices::FACING_FLOOR) {
+        throw std::runtime_error("Redstone wire mesh requires facing=floor");
+    }
+
+    const bool north = redstoneWireConnected(blockId,
+                                             PropIndices::NORTH,
+                                             PropIndices::NORTH_TRUE,
+                                             PropIndices::NORTH_FALSE,
+                                             "north");
+    const bool south = redstoneWireConnected(blockId,
+                                             PropIndices::SOUTH,
+                                             PropIndices::SOUTH_TRUE,
+                                             PropIndices::SOUTH_FALSE,
+                                             "south");
+    const bool east = redstoneWireConnected(blockId,
+                                            PropIndices::EAST,
+                                            PropIndices::EAST_TRUE,
+                                            PropIndices::EAST_FALSE,
+                                            "east");
+    const bool west = redstoneWireConnected(blockId,
+                                            PropIndices::WEST,
+                                            PropIndices::WEST_TRUE,
+                                            PropIndices::WEST_FALSE,
+                                            "west");
+    const bool isolated = !north && !south && !east && !west;
+    const uint8_t power = redstonePowerLevel(blockId);
+
+    const AnimatedTextureRef& dotTexture = requireNamedTextureRef(def, "dot");
+    const AnimatedTextureRef& lineTexture = requireNamedTextureRef(def, "line0");
+    std::vector<BlockVertex>& target = selectModelVertexTarget(meshData, def);
+    const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+
+    auto renderDataFor = [&](const AnimatedTextureRef& texture) {
+        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, FACE_TOP);
+        applyTextureRef(renderData, texture);
+        renderData.tintKind = BlockTintKinds::REDSTONE;
+        renderData.tintU = static_cast<uint8_t>(power << 4U);
+        renderData.tintV = 0;
+        renderData.flipDiagonal = false;
+        return renderData;
+    };
+
+    auto emitWireQuad = [&](const AnimatedTextureRef& texture,
+                            const std::array<glm::vec3, 4>& corners,
+                            const std::array<glm::vec2, 4>& uv) {
+        const FaceRenderData renderData = renderDataFor(texture);
+        appendFaceVertices(target, corners, uv, FACE_TOP, renderData);
+        expandBoundsForCorners(meshData, corners);
+    };
+
+    if (isolated) {
+        emitWireQuad(dotTexture,
+                     buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 1.0f),
+                     buildUvRect(0.0f, 0.0f, 1.0f, 1.0f));
+        return;
+    }
+
+    if (north) {
+        emitWireQuad(lineTexture,
+                     buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 0.5f),
+                     buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    }
+    if (south) {
+        emitWireQuad(lineTexture,
+                     buildFloorWireQuad(blockOffset, 0.0f, 0.5f, 1.0f, 1.0f),
+                     buildUvRect(0.0f, 0.5f, 1.0f, 1.0f));
+    }
+    if (east) {
+        emitWireQuad(lineTexture,
+                     buildRotatedFloorWireSegment(blockOffset, 90),
+                     buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    }
+    if (west) {
+        emitWireQuad(lineTexture,
+                     buildRotatedFloorWireSegment(blockOffset, 270),
+                     buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    }
 }
 
 void buildWaterSkippingTop(ChunkMeshData& meshData,

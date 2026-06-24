@@ -124,7 +124,7 @@ std::vector<BlockCollisionBox> getBoxes(const StateID stateId) {
     }
 
     const BlockDef& def = BlockRegistry::getFast(stateId);
-    if (def.renderShapeName == "face_plane") {
+    if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return boxes;
     }
     if (def.renderShapeName == "model") {
@@ -154,7 +154,7 @@ bool intersects(const StateID stateId,
     }
 
     const BlockDef& def = BlockRegistry::getFast(stateId);
-    if (def.renderShapeName == "face_plane") {
+    if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return false;
     }
     if (def.renderShapeName == "model") {
@@ -186,7 +186,7 @@ bool containsPoint(const StateID stateId,
     }
 
     const BlockDef& def = BlockRegistry::getFast(stateId);
-    if (def.renderShapeName == "face_plane") {
+    if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return false;
     }
     if (def.renderShapeName == "model") {

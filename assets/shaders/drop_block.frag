@@ -35,6 +35,11 @@ vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
 }
 
+vec3 redstoneTintSrgb(vec2 tintUV) {
+    float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;
+    return mix(vec3(0.30, 0.0, 0.0), vec3(1.0, 0.10, 0.02), power);
+}
+
 const float aoLevels[4] = float[](0.72, 0.82, 0.91, 1.0);
 
 float computeFogFactor(float fogDistance) {
@@ -97,6 +102,8 @@ void main() {
         albedo *= srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
     } else if (vTintKind > 1.5 && vTintKind < 2.5) {
         albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
+    } else if (vTintKind > 2.5 && vTintKind < 3.5) {
+        albedo *= srgbToLinear(redstoneTintSrgb(vTintUV));
     }
 
     float aoIdx = clamp(vAO, 0.0, 3.0);

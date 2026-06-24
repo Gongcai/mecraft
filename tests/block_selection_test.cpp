@@ -186,6 +186,17 @@ int main() {
         return fail("face plane blocks should not create movement collision");
     }
 
+    const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE);
+    const BlockSelectionBox redstoneWireBox = BlockSelection::getBox(redstoneWireDefault);
+    if (redstoneWireBox.min.y != 0.0f || redstoneWireBox.max.y != 0.0625f ||
+        redstoneWireBox.min.x != 0.0f || redstoneWireBox.max.x != 1.0f ||
+        redstoneWireBox.min.z != 0.0f || redstoneWireBox.max.z != 1.0f) {
+        return fail("redstone_wire selection should stay on the floor face plane");
+    }
+    if (!BlockCollision::getBoxes(redstoneWireDefault).empty()) {
+        return fail("redstone_wire should not create movement collision");
+    }
+
     const BlockID pinkPetals = BlockRegistry::findByName("pink_petals");
     if (pinkPetals == BlockIds::AIR) {
         return fail("pink_petals should be registered for face plane selection tests");
@@ -439,6 +450,29 @@ int main() {
     placedWall = world.getBlockState(4, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_FALSE) {
         return fail("cobblestone wall should disconnect when the north neighbor is removed");
+    }
+
+    const int wireY = baseY + 1;
+    world.setBlockState(10, baseY, 2, BlockIds::STONE);
+    world.setBlockState(11, baseY, 2, BlockIds::STONE);
+    world.setBlockState(10, wireY, 2, BlockIds::AIR);
+    world.setBlockState(11, wireY, 2, BlockIds::AIR);
+    world.setBlockState(10, wireY, 2, BlockIds::REDSTONE_WIRE);
+    StateID placedWire = world.getBlockState(10, wireY, 2);
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_FALSE) {
+        return fail("isolated redstone_wire should start visually disconnected");
+    }
+    world.setBlockState(11, wireY, 2, BlockIds::REDSTONE_WIRE);
+    placedWire = world.getBlockState(10, wireY, 2);
+    const StateID eastWire = world.getBlockState(11, wireY, 2);
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_TRUE ||
+        BlockStateRegistry::getPropertyIndex(eastWire, PropIndices::WEST) != PropIndices::WEST_TRUE) {
+        return fail("adjacent redstone_wire blocks should refresh visual connection states");
+    }
+    world.setBlockState(11, wireY, 2, BlockIds::AIR);
+    placedWire = world.getBlockState(10, wireY, 2);
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_FALSE) {
+        return fail("redstone_wire should disconnect visually when its neighbor is removed");
     }
 
     world.setBlockState(6, baseY, 0, BlockIds::AIR);

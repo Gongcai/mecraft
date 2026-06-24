@@ -22,12 +22,17 @@ extern uint16_t NORTH;
 extern uint16_t SOUTH;
 extern uint16_t EAST;
 extern uint16_t WEST;
+extern uint16_t EXTENDED;
+extern uint16_t POWER;
+extern uint16_t TYPE;
 
 extern uint16_t FACING_FLOOR;
 extern uint16_t FACING_NORTH;
 extern uint16_t FACING_SOUTH;
 extern uint16_t FACING_EAST;
 extern uint16_t FACING_WEST;
+extern uint16_t FACING_UP;
+extern uint16_t FACING_DOWN;
 
 extern uint16_t AXIS_X;
 extern uint16_t AXIS_Y;
@@ -74,6 +79,26 @@ extern uint16_t EAST_TRUE;
 extern uint16_t EAST_FALSE;
 extern uint16_t WEST_TRUE;
 extern uint16_t WEST_FALSE;
+extern uint16_t EXTENDED_TRUE;
+extern uint16_t EXTENDED_FALSE;
+extern uint16_t POWER_0;
+extern uint16_t POWER_1;
+extern uint16_t POWER_2;
+extern uint16_t POWER_3;
+extern uint16_t POWER_4;
+extern uint16_t POWER_5;
+extern uint16_t POWER_6;
+extern uint16_t POWER_7;
+extern uint16_t POWER_8;
+extern uint16_t POWER_9;
+extern uint16_t POWER_10;
+extern uint16_t POWER_11;
+extern uint16_t POWER_12;
+extern uint16_t POWER_13;
+extern uint16_t POWER_14;
+extern uint16_t POWER_15;
+extern uint16_t TYPE_NORMAL;
+extern uint16_t TYPE_STICKY;
 
 void init();
 

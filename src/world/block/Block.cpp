@@ -505,6 +505,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.revertPlacementFacing = false;
         def.supportRule.clear();
         def.tags.clear();
+        def.namedTextureRefs.clear();
         def.namedTextureAnimations.clear();
         def.stateTextureRules.clear();
 
@@ -623,6 +624,12 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
         auto applyTextureObjectToBlock = [&](const nlohmann::json& tex,
                                              const std::string& context) {
+            for (auto it = tex.begin(); it != tex.end(); ++it) {
+                if (!it.value().is_string()) {
+                    throw std::runtime_error("Block texture key must be a string: " + context + "." + it.key());
+                }
+                def.namedTextureRefs[it.key()] = resolveTextureName(it.value().get<std::string>());
+            }
             if (tex.contains("all")) {
                 setAllFaces(def, resolveTextureKey(tex, "all", context));
             }

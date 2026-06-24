@@ -856,6 +856,523 @@
       }
     },
     {
+      "id": "minecraft:redstone_wire",
+      "drop": "minecraft:redstone",
+      "properties": {
+        "facing": ["floor"],
+        "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
+        "north": ["false", "true"],
+        "south": ["false", "true"],
+        "east": ["false", "true"],
+        "west": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "floor",
+        "power": "0",
+        "north": "false",
+        "south": "false",
+        "east": "false",
+        "west": "false"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_floor",
+      "supportRule": "attached_face",
+      "renderShape": "redstone_wire",
+      "timeToBreak": 0,
+      "textures": {
+        "all": "redstone_dust_dot",
+        "dot": "redstone_dust_dot",
+        "line0": "redstone_dust_line0",
+        "line1": "redstone_dust_line1",
+        "overlay": "redstone_dust_overlay"
+      }
+    },
+    {
+      "id": "minecraft:redstone_torch",
+      "drop": "minecraft:redstone_torch",
+      "properties": {
+        "facing": ["floor", "north", "south", "east", "west"],
+        "lit": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "floor",
+        "lit": "true"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "isLightSource": true,
+      "lightLevel": 7,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "cutoutDistanceCull": false,
+      "placementStrategy": "attach_wall",
+      "supportRule": "attached_face",
+      "renderShape": "torch",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "redstone_torch"
+      },
+      "stateTextures": {
+        "lit": {
+          "false": { "all": "redstone_torch_off" },
+          "true": { "all": "redstone_torch" }
+        }
+      }
+    },
+    {
+      "id": "minecraft:redstone_lamp",
+      "drop": "minecraft:redstone_lamp",
+      "properties": {
+        "lit": ["false", "true"]
+      },
+      "defaultState": {
+        "lit": "false"
+      },
+      "timeToBreak": 300,
+      "textures": {
+        "all": "redstone_lamp"
+      },
+      "stateTextures": {
+        "lit": {
+          "false": { "all": "redstone_lamp" },
+          "true": { "all": "redstone_lamp_on" }
+        }
+      }
+    },
+    {
+      "id": "minecraft:lever",
+      "drop": "minecraft:lever",
+      "properties": {
+        "facing": ["floor", "north", "south", "east", "west"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "floor",
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "attach_wall",
+      "supportRule": "attached_face",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "lever"
+      },
+      "modelVariants": {
+        "facing=floor,powered=false": { "model": "block/lever_floor" },
+        "facing=floor,powered=true": { "model": "block/lever_floor_powered" },
+        "facing=north,powered=false": { "model": "block/lever_wall" },
+        "facing=north,powered=true": { "model": "block/lever_wall_powered" },
+        "facing=south,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 180 } },
+        "facing=south,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 180 } },
+        "facing=east,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 90 } },
+        "facing=east,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 90 } },
+        "facing=west,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 270 } },
+        "facing=west,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:stone_button",
+      "drop": "minecraft:stone_button",
+      "properties": {
+        "facing": ["floor", "north", "south", "east", "west"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "floor",
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "attach_wall",
+      "supportRule": "attached_face",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "stone"
+      },
+      "modelVariants": {
+        "facing=floor,powered=false": { "model": "block/stone_button_floor" },
+        "facing=floor,powered=true": { "model": "block/stone_button_floor_pressed" },
+        "facing=north,powered=false": { "model": "block/stone_button_wall" },
+        "facing=north,powered=true": { "model": "block/stone_button_wall_pressed" },
+        "facing=south,powered=false": { "model": "block/stone_button_wall", "transform": { "rotY": 180 } },
+        "facing=south,powered=true": { "model": "block/stone_button_wall_pressed", "transform": { "rotY": 180 } },
+        "facing=east,powered=false": { "model": "block/stone_button_wall", "transform": { "rotY": 90 } },
+        "facing=east,powered=true": { "model": "block/stone_button_wall_pressed", "transform": { "rotY": 90 } },
+        "facing=west,powered=false": { "model": "block/stone_button_wall", "transform": { "rotY": 270 } },
+        "facing=west,powered=true": { "model": "block/stone_button_wall_pressed", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:oak_button",
+      "drop": "minecraft:oak_button",
+      "properties": {
+        "facing": ["floor", "north", "south", "east", "west"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "floor",
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "attach_wall",
+      "supportRule": "attached_face",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "facing=floor,powered=false": { "model": "block/oak_button_floor" },
+        "facing=floor,powered=true": { "model": "block/oak_button_floor_pressed" },
+        "facing=north,powered=false": { "model": "block/oak_button_wall" },
+        "facing=north,powered=true": { "model": "block/oak_button_wall_pressed" },
+        "facing=south,powered=false": { "model": "block/oak_button_wall", "transform": { "rotY": 180 } },
+        "facing=south,powered=true": { "model": "block/oak_button_wall_pressed", "transform": { "rotY": 180 } },
+        "facing=east,powered=false": { "model": "block/oak_button_wall", "transform": { "rotY": 90 } },
+        "facing=east,powered=true": { "model": "block/oak_button_wall_pressed", "transform": { "rotY": 90 } },
+        "facing=west,powered=false": { "model": "block/oak_button_wall", "transform": { "rotY": 270 } },
+        "facing=west,powered=true": { "model": "block/oak_button_wall_pressed", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:stone_pressure_plate",
+      "drop": "minecraft:stone_pressure_plate",
+      "properties": {
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "supportRule": "ground",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "stone"
+      },
+      "modelVariants": {
+        "powered=false": { "model": "block/stone_pressure_plate" },
+        "powered=true": { "model": "block/stone_pressure_plate_pressed" }
+      }
+    },
+    {
+      "id": "minecraft:oak_pressure_plate",
+      "drop": "minecraft:oak_pressure_plate",
+      "properties": {
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "supportRule": "ground",
+      "timeToBreak": 500,
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "powered=false": { "model": "block/oak_pressure_plate" },
+        "powered=true": { "model": "block/oak_pressure_plate_pressed" }
+      }
+    },
+    {
+      "id": "minecraft:repeater",
+      "drop": "minecraft:repeater",
+      "properties": {
+        "facing": ["north", "south", "east", "west"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "south",
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "horizontal_facing",
+      "supportRule": "ground",
+      "timeToBreak": 100,
+      "textures": {
+        "all": "repeater"
+      },
+      "modelVariants": {
+        "facing=north,powered=false": { "model": "block/repeater", "transform": { "rotY": 180 } },
+        "facing=north,powered=true": { "model": "block/repeater_powered", "transform": { "rotY": 180 } },
+        "facing=south,powered=false": { "model": "block/repeater" },
+        "facing=south,powered=true": { "model": "block/repeater_powered" },
+        "facing=east,powered=false": { "model": "block/repeater", "transform": { "rotY": 270 } },
+        "facing=east,powered=true": { "model": "block/repeater_powered", "transform": { "rotY": 270 } },
+        "facing=west,powered=false": { "model": "block/repeater", "transform": { "rotY": 90 } },
+        "facing=west,powered=true": { "model": "block/repeater_powered", "transform": { "rotY": 90 } }
+      }
+    },
+    {
+      "id": "minecraft:comparator",
+      "drop": "minecraft:comparator",
+      "properties": {
+        "facing": ["north", "south", "east", "west"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "south",
+        "powered": "false"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "horizontal_facing",
+      "supportRule": "ground",
+      "timeToBreak": 100,
+      "textures": {
+        "all": "comparator"
+      },
+      "modelVariants": {
+        "facing=north,powered=false": { "model": "block/comparator", "transform": { "rotY": 180 } },
+        "facing=north,powered=true": { "model": "block/comparator_powered", "transform": { "rotY": 180 } },
+        "facing=south,powered=false": { "model": "block/comparator" },
+        "facing=south,powered=true": { "model": "block/comparator_powered" },
+        "facing=east,powered=false": { "model": "block/comparator", "transform": { "rotY": 270 } },
+        "facing=east,powered=true": { "model": "block/comparator_powered", "transform": { "rotY": 270 } },
+        "facing=west,powered=false": { "model": "block/comparator", "transform": { "rotY": 90 } },
+        "facing=west,powered=true": { "model": "block/comparator_powered", "transform": { "rotY": 90 } }
+      }
+    },
+    {
+      "id": "minecraft:piston",
+      "drop": "minecraft:piston",
+      "properties": {
+        "facing": ["down", "up", "north", "south", "west", "east"],
+        "extended": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "south",
+        "extended": "false"
+      },
+      "renderShape": "model",
+      "placementStrategy": "six_way_facing",
+      "timeToBreak": 500,
+      "textures": {
+        "top": "piston_top",
+        "bottom": "piston_bottom",
+        "side": "piston_side"
+      },
+      "modelVariants": {
+        "facing=down,extended=false": { "model": "block/piston", "transform": { "rotX": 90 } },
+        "facing=down,extended=true": { "model": "block/piston_extended", "transform": { "rotX": 90 } },
+        "facing=up,extended=false": { "model": "block/piston", "transform": { "rotX": 270 } },
+        "facing=up,extended=true": { "model": "block/piston_extended", "transform": { "rotX": 270 } },
+        "facing=north,extended=false": { "model": "block/piston", "transform": { "rotY": 180 } },
+        "facing=north,extended=true": { "model": "block/piston_extended", "transform": { "rotY": 180 } },
+        "facing=south,extended=false": { "model": "block/piston" },
+        "facing=south,extended=true": { "model": "block/piston_extended" },
+        "facing=west,extended=false": { "model": "block/piston", "transform": { "rotY": 90 } },
+        "facing=west,extended=true": { "model": "block/piston_extended", "transform": { "rotY": 90 } },
+        "facing=east,extended=false": { "model": "block/piston", "transform": { "rotY": 270 } },
+        "facing=east,extended=true": { "model": "block/piston_extended", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:sticky_piston",
+      "drop": "minecraft:sticky_piston",
+      "properties": {
+        "facing": ["down", "up", "north", "south", "west", "east"],
+        "extended": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "south",
+        "extended": "false"
+      },
+      "renderShape": "model",
+      "placementStrategy": "six_way_facing",
+      "timeToBreak": 500,
+      "textures": {
+        "top": "piston_top_sticky",
+        "bottom": "piston_bottom",
+        "side": "piston_side"
+      },
+      "modelVariants": {
+        "facing=down,extended=false": { "model": "block/sticky_piston", "transform": { "rotX": 90 } },
+        "facing=down,extended=true": { "model": "block/sticky_piston_extended", "transform": { "rotX": 90 } },
+        "facing=up,extended=false": { "model": "block/sticky_piston", "transform": { "rotX": 270 } },
+        "facing=up,extended=true": { "model": "block/sticky_piston_extended", "transform": { "rotX": 270 } },
+        "facing=north,extended=false": { "model": "block/sticky_piston", "transform": { "rotY": 180 } },
+        "facing=north,extended=true": { "model": "block/sticky_piston_extended", "transform": { "rotY": 180 } },
+        "facing=south,extended=false": { "model": "block/sticky_piston" },
+        "facing=south,extended=true": { "model": "block/sticky_piston_extended" },
+        "facing=west,extended=false": { "model": "block/sticky_piston", "transform": { "rotY": 90 } },
+        "facing=west,extended=true": { "model": "block/sticky_piston_extended", "transform": { "rotY": 90 } },
+        "facing=east,extended=false": { "model": "block/sticky_piston", "transform": { "rotY": 270 } },
+        "facing=east,extended=true": { "model": "block/sticky_piston_extended", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:piston_head",
+      "drop": "minecraft:air",
+      "properties": {
+        "facing": ["down", "up", "north", "south", "west", "east"],
+        "type": ["normal", "sticky"]
+      },
+      "defaultState": {
+        "facing": "south",
+        "type": "normal"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "timeToBreak": 0,
+      "textures": {
+        "top": "piston_top",
+        "bottom": "piston_bottom",
+        "side": "piston_side"
+      },
+      "modelVariants": {
+        "facing=down,type=normal": { "model": "block/piston_head", "transform": { "rotX": 90 } },
+        "facing=down,type=sticky": { "model": "block/sticky_piston_head", "transform": { "rotX": 90 } },
+        "facing=up,type=normal": { "model": "block/piston_head", "transform": { "rotX": 270 } },
+        "facing=up,type=sticky": { "model": "block/sticky_piston_head", "transform": { "rotX": 270 } },
+        "facing=north,type=normal": { "model": "block/piston_head", "transform": { "rotY": 180 } },
+        "facing=north,type=sticky": { "model": "block/sticky_piston_head", "transform": { "rotY": 180 } },
+        "facing=south,type=normal": { "model": "block/piston_head" },
+        "facing=south,type=sticky": { "model": "block/sticky_piston_head" },
+        "facing=west,type=normal": { "model": "block/piston_head", "transform": { "rotY": 90 } },
+        "facing=west,type=sticky": { "model": "block/sticky_piston_head", "transform": { "rotY": 90 } },
+        "facing=east,type=normal": { "model": "block/piston_head", "transform": { "rotY": 270 } },
+        "facing=east,type=sticky": { "model": "block/sticky_piston_head", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:observer",
+      "drop": "minecraft:observer",
+      "properties": {
+        "facing": ["down", "up", "north", "south", "west", "east"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "south",
+        "powered": "false"
+      },
+      "renderShape": "model",
+      "placementStrategy": "six_way_facing",
+      "timeToBreak": 3500,
+      "textures": {
+        "top": "observer_top",
+        "bottom": "observer_top",
+        "side": "observer_side",
+        "front": "observer_front",
+        "back": "observer_back"
+      },
+      "modelVariants": {
+        "facing=down,powered=false": { "model": "block/observer", "transform": { "rotX": 90 } },
+        "facing=down,powered=true": { "model": "block/observer_powered", "transform": { "rotX": 90 } },
+        "facing=up,powered=false": { "model": "block/observer", "transform": { "rotX": 270 } },
+        "facing=up,powered=true": { "model": "block/observer_powered", "transform": { "rotX": 270 } },
+        "facing=north,powered=false": { "model": "block/observer", "transform": { "rotY": 180 } },
+        "facing=north,powered=true": { "model": "block/observer_powered", "transform": { "rotY": 180 } },
+        "facing=south,powered=false": { "model": "block/observer" },
+        "facing=south,powered=true": { "model": "block/observer_powered" },
+        "facing=west,powered=false": { "model": "block/observer", "transform": { "rotY": 90 } },
+        "facing=west,powered=true": { "model": "block/observer_powered", "transform": { "rotY": 90 } },
+        "facing=east,powered=false": { "model": "block/observer", "transform": { "rotY": 270 } },
+        "facing=east,powered=true": { "model": "block/observer_powered", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:dispenser",
+      "drop": "minecraft:dispenser",
+      "properties": {
+        "facing": ["down", "up", "north", "south", "west", "east"]
+      },
+      "defaultState": {
+        "facing": "south"
+      },
+      "renderShape": "model",
+      "placementStrategy": "six_way_facing",
+      "timeToBreak": 3500,
+      "textures": {
+        "all": "cobblestone",
+        "front": "dispenser_front"
+      },
+      "modelVariants": {
+        "facing=down": { "model": "block/dispenser", "transform": { "rotX": 90 } },
+        "facing=up": { "model": "block/dispenser", "transform": { "rotX": 270 } },
+        "facing=north": { "model": "block/dispenser", "transform": { "rotY": 180 } },
+        "facing=south": { "model": "block/dispenser" },
+        "facing=west": { "model": "block/dispenser", "transform": { "rotY": 90 } },
+        "facing=east": { "model": "block/dispenser", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:dropper",
+      "drop": "minecraft:dropper",
+      "properties": {
+        "facing": ["down", "up", "north", "south", "west", "east"]
+      },
+      "defaultState": {
+        "facing": "south"
+      },
+      "renderShape": "model",
+      "placementStrategy": "six_way_facing",
+      "timeToBreak": 3500,
+      "textures": {
+        "all": "cobblestone",
+        "front": "dropper_front"
+      },
+      "modelVariants": {
+        "facing=down": { "model": "block/dropper", "transform": { "rotX": 90 } },
+        "facing=up": { "model": "block/dropper", "transform": { "rotX": 270 } },
+        "facing=north": { "model": "block/dropper", "transform": { "rotY": 180 } },
+        "facing=south": { "model": "block/dropper" },
+        "facing=west": { "model": "block/dropper", "transform": { "rotY": 90 } },
+        "facing=east": { "model": "block/dropper", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:hopper",
+      "drop": "minecraft:hopper",
+      "properties": {
+        "facing": ["down", "north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "down"
+      },
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "hopper_facing",
+      "timeToBreak": 3000,
+      "textures": {
+        "top": "hopper_top",
+        "side": "hopper_outside"
+      },
+      "modelVariants": {
+        "facing=down": { "model": "block/hopper_down" },
+        "facing=north": { "model": "block/hopper_side" },
+        "facing=south": { "model": "block/hopper_side", "transform": { "rotY": 180 } },
+        "facing=east": { "model": "block/hopper_side", "transform": { "rotY": 90 } },
+        "facing=west": { "model": "block/hopper_side", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:note_block",
+      "drop": "minecraft:note_block",
+      "materialKind": "wood",
+      "timeToBreak": 800,
+      "textures": {
+        "all": "note_block"
+      }
+    },
+    {
+      "id": "minecraft:target",
+      "drop": "minecraft:target",
+      "timeToBreak": 500,
+      "textures": {
+        "top": "target_top",
+        "bottom": "target_top",
+        "side": "target_side"
+      }
+    },
+    {
       "id": "minecraft:blue_wool",
       "drop": "minecraft:blue_wool",
       "tags": ["minecraft:wool"],

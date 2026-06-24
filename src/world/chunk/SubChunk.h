@@ -65,6 +65,7 @@ namespace BlockTintKinds {
 constexpr uint8_t NONE = 0;
 constexpr uint8_t GRASS = 1;
 constexpr uint8_t FOLIAGE = 2;
+constexpr uint8_t REDSTONE = 3;
 }
 
 inline uint8_t blockTintKindFromBiomeTint(const BiomeTintKind tintKind) {

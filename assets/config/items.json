@@ -83,6 +83,14 @@
       "renderBlock": "minecraft:torch"
     },
     {
+      "id": "minecraft:redstone_torch",
+      "iconTexture": "redstone_torch",
+      "maxStack": 64,
+      "icon": "minecraft:redstone_torch",
+      "placeBlock": "minecraft:redstone_torch",
+      "renderBlock": "minecraft:redstone_torch"
+    },
+    {
       "id": "minecraft:red_bed",
       "iconTexture": "bed",
       "maxStack": 64,
@@ -135,8 +143,32 @@
       "iconTexture": "redstone",
       "maxStack": 64,
       "icon": "minecraft:redstone",
-      "placeBlock": "minecraft:air",
+      "placeBlock": "minecraft:redstone_wire",
       "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:repeater",
+      "iconTexture": "repeater",
+      "maxStack": 64,
+      "icon": "minecraft:repeater",
+      "placeBlock": "minecraft:repeater",
+      "renderBlock": "minecraft:repeater"
+    },
+    {
+      "id": "minecraft:comparator",
+      "iconTexture": "comparator",
+      "maxStack": 64,
+      "icon": "minecraft:comparator",
+      "placeBlock": "minecraft:comparator",
+      "renderBlock": "minecraft:comparator"
+    },
+    {
+      "id": "minecraft:hopper",
+      "iconTexture": "hopper",
+      "maxStack": 64,
+      "icon": "minecraft:hopper",
+      "placeBlock": "minecraft:hopper",
+      "renderBlock": "minecraft:hopper"
     },
     {
       "id": "minecraft:lapis_lazuli",

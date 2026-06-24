@@ -235,7 +235,7 @@ BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
     if (def.renderShapeName == "model") {
         return getModelBox(stateId);
     }
-    if (def.renderShapeName == "face_plane") {
+    if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return getFacePlaneBox(stateId);
     }
 

@@ -984,6 +984,289 @@ int main() {
         return fail("glow_lichen should expose all horizontal wall facing states");
     }
 
+    if (PropIndices::EXTENDED == PropIndices::INVALID ||
+        PropIndices::EXTENDED_TRUE == PropIndices::INVALID ||
+        PropIndices::EXTENDED_FALSE == PropIndices::INVALID ||
+        PropIndices::POWER == PropIndices::INVALID ||
+        PropIndices::POWER_0 == PropIndices::INVALID ||
+        PropIndices::POWER_15 == PropIndices::INVALID ||
+        PropIndices::TYPE == PropIndices::INVALID ||
+        PropIndices::TYPE_NORMAL == PropIndices::INVALID ||
+        PropIndices::TYPE_STICKY == PropIndices::INVALID ||
+        PropIndices::FACING_UP == PropIndices::INVALID ||
+        PropIndices::FACING_DOWN == PropIndices::INVALID) {
+        return fail("redstone support properties should be registered from blocks.json");
+    }
+
+    const std::vector<std::pair<BlockID, const char*>> redstoneBlocks = {
+        {BlockIds::REDSTONE_WIRE, "redstone_wire"},
+        {BlockIds::REDSTONE_TORCH, "redstone_torch"},
+        {BlockIds::REDSTONE_LAMP, "redstone_lamp"},
+        {BlockIds::LEVER, "lever"},
+        {BlockIds::STONE_BUTTON, "stone_button"},
+        {BlockIds::OAK_BUTTON, "oak_button"},
+        {BlockIds::STONE_PRESSURE_PLATE, "stone_pressure_plate"},
+        {BlockIds::OAK_PRESSURE_PLATE, "oak_pressure_plate"},
+        {BlockIds::REPEATER, "repeater"},
+        {BlockIds::COMPARATOR, "comparator"},
+        {BlockIds::PISTON, "piston"},
+        {BlockIds::STICKY_PISTON, "sticky_piston"},
+        {BlockIds::PISTON_HEAD, "piston_head"},
+        {BlockIds::OBSERVER, "observer"},
+        {BlockIds::DISPENSER, "dispenser"},
+        {BlockIds::DROPPER, "dropper"},
+        {BlockIds::HOPPER, "hopper"},
+        {BlockIds::NOTE_BLOCK, "note_block"},
+        {BlockIds::TARGET, "target"},
+    };
+    for (const auto& [blockId, name] : redstoneBlocks) {
+        if (blockId == BlockIds::AIR) {
+            std::cerr << "[block_state_registry_test] missing redstone block: " << name << '\n';
+            return fail("redstone blocks should be registered from blocks.json");
+        }
+    }
+
+    const auto modelVariantMatches = [](const StateID state,
+                                        const char* expectedModel,
+                                        const uint16_t expectedRotY,
+                                        const uint16_t expectedRotX) {
+        const ModelVariant* variant = BlockStateRegistry::getModelVariant(state);
+        return variant != nullptr &&
+               variant->model != nullptr &&
+               variant->model->name == expectedModel &&
+               variant->transform.rotY == expectedRotY &&
+               variant->transform.rotX == expectedRotX;
+    };
+
+    const std::vector<BlockID> redstoneModelBlocks = {
+        BlockIds::LEVER,
+        BlockIds::STONE_BUTTON,
+        BlockIds::OAK_BUTTON,
+        BlockIds::STONE_PRESSURE_PLATE,
+        BlockIds::OAK_PRESSURE_PLATE,
+        BlockIds::REPEATER,
+        BlockIds::COMPARATOR,
+        BlockIds::PISTON,
+        BlockIds::STICKY_PISTON,
+        BlockIds::PISTON_HEAD,
+        BlockIds::OBSERVER,
+        BlockIds::DISPENSER,
+        BlockIds::DROPPER,
+        BlockIds::HOPPER,
+    };
+    for (const BlockID blockId : redstoneModelBlocks) {
+        for (const StateID state : BlockStateRegistry::getStatesForBlock(blockId)) {
+            const ModelVariant* variant = BlockStateRegistry::getModelVariant(state);
+            if (variant == nullptr || variant->model == nullptr) {
+                std::cerr << "[block_state_registry_test] missing redstone model variant for "
+                          << BlockStateRegistry::stateToString(state) << '\n';
+                return fail("redstone model blocks should expose model variants for every state");
+            }
+        }
+    }
+
+    const BlockDef& redstoneWireDef = BlockRegistry::get(BlockIds::REDSTONE_WIRE);
+    if (redstoneWireDef.renderShapeName != "redstone_wire" ||
+        redstoneWireDef.renderShapeTag != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
+        redstoneWireDef.placementStrategy != "face_plane_floor" ||
+        redstoneWireDef.supportRule != "attached_face") {
+        return fail("redstone_wire should use the custom wire render shape and floor support path");
+    }
+    const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE);
+    if (BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::POWER) != PropIndices::POWER_0 ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::NORTH) != PropIndices::NORTH_FALSE ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::SOUTH) != PropIndices::SOUTH_FALSE ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::EAST) != PropIndices::EAST_FALSE ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::WEST) != PropIndices::WEST_FALSE) {
+        return fail("redstone_wire default state should be floor power 0 with no visual connections");
+    }
+    const StateID redstoneWirePower15 = BlockStateRegistry::withProperty(
+        redstoneWireDefault,
+        PropIndices::POWER,
+        PropIndices::POWER_15);
+    if (redstoneWirePower15 == redstoneWireDefault ||
+        BlockStateRegistry::getPropertyIndex(redstoneWirePower15, PropIndices::POWER) != PropIndices::POWER_15) {
+        return fail("redstone_wire should expose power 15 state");
+    }
+    const StateID redstoneWireEast = BlockStateRegistry::withProperty(
+        redstoneWireDefault,
+        PropIndices::EAST,
+        PropIndices::EAST_TRUE);
+    if (redstoneWireEast == redstoneWireDefault ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireEast, PropIndices::EAST) != PropIndices::EAST_TRUE) {
+        return fail("redstone_wire should expose directional visual connection states");
+    }
+
+    const BlockDef& redstoneTorchDef = BlockRegistry::get(BlockIds::REDSTONE_TORCH);
+    if (redstoneTorchDef.renderShapeName != "torch" ||
+        redstoneTorchDef.placementStrategy != "attach_wall" ||
+        redstoneTorchDef.supportRule != "attached_face") {
+        return fail("redstone_torch should use torch rendering and attach-wall placement");
+    }
+    const StateID redstoneTorchDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_TORCH);
+    if (BlockStateRegistry::getPropertyIndex(redstoneTorchDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||
+        BlockStateRegistry::getPropertyIndex(redstoneTorchDefault, PropIndices::LIT) != PropIndices::LIT_TRUE) {
+        return fail("redstone_torch default state should be floor lit true");
+    }
+
+    const StateID redstoneLampLit = BlockStateRegistry::getState(
+        BlockIds::REDSTONE_LAMP,
+        PropIndices::LIT,
+        PropIndices::LIT_TRUE);
+    if (redstoneLampLit == BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP) ||
+        BlockStateRegistry::getPropertyIndex(redstoneLampLit, PropIndices::LIT) != PropIndices::LIT_TRUE) {
+        return fail("redstone_lamp should expose lit and unlit display states");
+    }
+
+    const StateID leverWestPowered = BlockStateRegistry::getState(
+        BlockIds::LEVER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_WEST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(leverWestPowered, "block/lever_wall_powered", 270, 0)) {
+        return fail("lever west powered state should resolve to the rotated powered wall model");
+    }
+
+    const StateID stoneButtonEastPressed = BlockStateRegistry::getState(
+        BlockIds::STONE_BUTTON,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(stoneButtonEastPressed, "block/stone_button_wall_pressed", 90, 0)) {
+        return fail("stone_button east powered state should resolve to the rotated pressed wall model");
+    }
+
+    const StateID oakPressurePlatePressed = BlockStateRegistry::getState(
+        BlockIds::OAK_PRESSURE_PLATE,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (!modelVariantMatches(oakPressurePlatePressed, "block/oak_pressure_plate_pressed", 0, 0)) {
+        return fail("oak_pressure_plate powered state should resolve to the pressed model");
+    }
+
+    const StateID repeaterEastPowered = BlockStateRegistry::getState(
+        BlockIds::REPEATER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(repeaterEastPowered, "block/repeater_powered", 270, 0)) {
+        return fail("repeater east powered state should resolve to the rotated powered model");
+    }
+
+    const StateID comparatorWestPowered = BlockStateRegistry::getState(
+        BlockIds::COMPARATOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_WEST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(comparatorWestPowered, "block/comparator_powered", 90, 0)) {
+        return fail("comparator west powered state should resolve to the rotated powered model");
+    }
+
+    const StateID pistonExtendedNorth = BlockStateRegistry::getState(
+        BlockIds::PISTON,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_NORTH},
+            {PropIndices::EXTENDED, PropIndices::EXTENDED_TRUE}
+        });
+    if (!modelVariantMatches(pistonExtendedNorth, "block/piston_extended", 180, 0)) {
+        return fail("piston extended north state should resolve to the extended piston model");
+    }
+
+    const StateID stickyPistonUp = BlockStateRegistry::getState(
+        BlockIds::STICKY_PISTON,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_UP},
+            {PropIndices::EXTENDED, PropIndices::EXTENDED_FALSE}
+        });
+    if (!modelVariantMatches(stickyPistonUp, "block/sticky_piston", 0, 270)) {
+        return fail("sticky_piston up state should resolve to the rotated sticky piston model");
+    }
+
+    const StateID stickyPistonHeadEast = BlockStateRegistry::getState(
+        BlockIds::PISTON_HEAD,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::TYPE, PropIndices::TYPE_STICKY}
+        });
+    if (!modelVariantMatches(stickyPistonHeadEast, "block/sticky_piston_head", 270, 0)) {
+        return fail("sticky piston head east state should resolve to the sticky head model");
+    }
+
+    const StateID observerDownPowered = BlockStateRegistry::getState(
+        BlockIds::OBSERVER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_DOWN},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(observerDownPowered, "block/observer_powered", 0, 90)) {
+        return fail("observer down powered state should resolve to the powered observer model");
+    }
+
+    const StateID dispenserUp = BlockStateRegistry::getState(
+        BlockIds::DISPENSER,
+        PropIndices::FACING,
+        PropIndices::FACING_UP);
+    if (!modelVariantMatches(dispenserUp, "block/dispenser", 0, 270)) {
+        return fail("dispenser up state should resolve to the rotated dispenser model");
+    }
+
+    const StateID dropperEast = BlockStateRegistry::getState(
+        BlockIds::DROPPER,
+        PropIndices::FACING,
+        PropIndices::FACING_EAST);
+    if (!modelVariantMatches(dropperEast, "block/dropper", 270, 0)) {
+        return fail("dropper east state should resolve to the rotated dropper model");
+    }
+
+    const StateID hopperSouth = BlockStateRegistry::getState(
+        BlockIds::HOPPER,
+        PropIndices::FACING,
+        PropIndices::FACING_SOUTH);
+    if (!modelVariantMatches(hopperSouth, "block/hopper_side", 180, 0)) {
+        return fail("hopper south state should resolve to the rotated side hopper model");
+    }
+
+    const BlockDef& pistonDef = BlockRegistry::get(BlockIds::PISTON);
+    PlacementStrategyFn pistonStrategy = PlacementStrategyRegistry::getStrategy(pistonDef.placementStrategy);
+    if (pistonStrategy == nullptr) {
+        return fail("six_way_facing placement strategy should be registered");
+    }
+    PlacementContext pistonPlacement;
+    pistonPlacement.blockId = BlockIds::PISTON;
+    pistonPlacement.hitNormal = glm::ivec3(0, 1, 0);
+    const StateID pistonPlacedUp = pistonStrategy(pistonPlacement);
+    if (BlockStateRegistry::getPropertyIndex(pistonPlacedUp, PropIndices::FACING) != PropIndices::FACING_UP) {
+        return fail("six_way_facing placement should derive upward piston facing from floor hits");
+    }
+    pistonPlacement.hitNormal = glm::ivec3(0, -1, 0);
+    const StateID pistonPlacedDown = pistonStrategy(pistonPlacement);
+    if (BlockStateRegistry::getPropertyIndex(pistonPlacedDown, PropIndices::FACING) != PropIndices::FACING_DOWN) {
+        return fail("six_way_facing placement should derive downward piston facing from ceiling hits");
+    }
+
+    const BlockDef& hopperDef = BlockRegistry::get(BlockIds::HOPPER);
+    PlacementStrategyFn hopperStrategy = PlacementStrategyRegistry::getStrategy(hopperDef.placementStrategy);
+    if (hopperStrategy == nullptr) {
+        return fail("hopper_facing placement strategy should be registered");
+    }
+    PlacementContext hopperPlacement;
+    hopperPlacement.blockId = BlockIds::HOPPER;
+    hopperPlacement.hitNormal = glm::ivec3(0, 1, 0);
+    const StateID hopperPlacedDown = hopperStrategy(hopperPlacement);
+    if (BlockStateRegistry::getPropertyIndex(hopperPlacedDown, PropIndices::FACING) != PropIndices::FACING_DOWN) {
+        return fail("hopper floor placement should produce facing=down");
+    }
+    hopperPlacement.hitNormal = glm::ivec3(1, 0, 0);
+    const StateID hopperPlacedWest = hopperStrategy(hopperPlacement);
+    if (BlockStateRegistry::getPropertyIndex(hopperPlacedWest, PropIndices::FACING) != PropIndices::FACING_WEST) {
+        return fail("hopper side placement should point into the clicked side");
+    }
+
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {
         return fail("state registry should contain expanded states beyond raw block ids");
     }

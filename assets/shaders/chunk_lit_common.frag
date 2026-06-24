@@ -95,6 +95,11 @@ uniform vec3 uCameraPos;
         return pow(max(color, vec3(0.0)), vec3(2.2));
     }
 
+    vec3 redstoneTintSrgb(vec2 tintUV) {
+        float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;
+        return mix(vec3(0.30, 0.0, 0.0), vec3(1.0, 0.10, 0.02), power);
+    }
+
     vec3 desaturateLinear(vec3 color, float amount) {
         float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
         return mix(color, vec3(luma), clamp(amount, 0.0, 1.0));
@@ -408,6 +413,8 @@ uniform vec3 uCameraPos;
             albedo *= srgbToLinear(texture(uGrassColormap, vTintUV).rgb);
         } else if (vTintKind > 1.5 && vTintKind < 2.5) {
             albedo *= srgbToLinear(texture(uFoliageColormap, vTintUV).rgb);
+        } else if (vTintKind > 2.5 && vTintKind < 3.5) {
+            albedo *= srgbToLinear(redstoneTintSrgb(vTintUV));
         }
         albedo = desaturateLinear(albedo, uAlbedoDesaturation);
 
