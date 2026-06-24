@@ -127,6 +127,34 @@ int main() {
         return fail("double slab collision should cover the full block");
     }
 
+    const BlockID oakVerticalSlab = BlockRegistry::findByName("oak_vertical_slab");
+    if (oakVerticalSlab == BlockIds::AIR) {
+        return fail("oak_vertical_slab should be registered for selection tests");
+    }
+    const StateID eastVerticalSlab = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_EAST}
+        });
+    const BlockSelectionBox eastVerticalSlabBox = BlockSelection::getBox(eastVerticalSlab);
+    if (eastVerticalSlabBox.min.x != 0.5f || eastVerticalSlabBox.max.x != 1.0f ||
+        eastVerticalSlabBox.min.y != 0.0f || eastVerticalSlabBox.max.y != 1.0f ||
+        eastVerticalSlabBox.min.z != 0.0f || eastVerticalSlabBox.max.z != 1.0f) {
+        return fail("east vertical slab selection box should cover the eastern half");
+    }
+    const StateID northVerticalSlab = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_NORTH}
+        });
+    const std::vector<BlockCollisionBox> northVerticalSlabCollision = BlockCollision::getBoxes(northVerticalSlab);
+    if (northVerticalSlabCollision.size() != 1 ||
+        northVerticalSlabCollision.front().min.z != 0.0f ||
+        northVerticalSlabCollision.front().max.z != 0.5f ||
+        northVerticalSlabCollision.front().max.y != 1.0f) {
+        return fail("north vertical slab collision should cover the northern half");
+    }
+
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
     if (oakStairs == BlockIds::AIR) {
         return fail("oak_stairs should be registered for collision tests");

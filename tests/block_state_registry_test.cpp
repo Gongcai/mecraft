@@ -247,6 +247,56 @@ int main() {
         return fail("oak_slab double state should resolve to the full slab model");
     }
 
+    const BlockID oakVerticalSlab = BlockRegistry::findByName("oak_vertical_slab");
+    if (oakVerticalSlab == BlockIds::AIR) {
+        return fail("oak_vertical_slab should be registered from blocks.json");
+    }
+    const BlockDef& oakVerticalSlabDef = BlockRegistry::get(oakVerticalSlab);
+    if (oakVerticalSlabDef.placementStrategy != "vertical_slab") {
+        return fail("oak_vertical_slab should parse vertical slab placement strategy");
+    }
+    if (PropIndices::HALF_NORTH == PropIndices::INVALID ||
+        PropIndices::HALF_SOUTH == PropIndices::INVALID ||
+        PropIndices::HALF_EAST == PropIndices::INVALID ||
+        PropIndices::HALF_WEST == PropIndices::INVALID) {
+        return fail("horizontal half values should be registered for vertical slabs");
+    }
+    const StateID oakVerticalSlabEast = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_EAST}
+        });
+    const ModelVariant* oakVerticalSlabEastVariant = BlockStateRegistry::getModelVariant(oakVerticalSlabEast);
+    if (oakVerticalSlabEastVariant == nullptr || oakVerticalSlabEastVariant->model == nullptr ||
+        oakVerticalSlabEastVariant->model->name != "block/oak_vertical_slab_east") {
+        return fail("oak_vertical_slab east state should resolve to the east vertical slab model");
+    }
+    const StateID oakVerticalSlabWest = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_WEST}
+        });
+    const StateID oakVerticalSlabNorth = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_NORTH}
+        });
+    const StateID oakVerticalSlabSouth = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_SOUTH}
+        });
+    const StateID oakVerticalSlabDouble = BlockStateRegistry::getState(
+        oakVerticalSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_DOUBLE}
+        });
+    const ModelVariant* oakVerticalSlabDoubleVariant = BlockStateRegistry::getModelVariant(oakVerticalSlabDouble);
+    if (oakVerticalSlabDoubleVariant == nullptr || oakVerticalSlabDoubleVariant->model == nullptr ||
+        oakVerticalSlabDoubleVariant->model->name != "block/oak_slab_double") {
+        return fail("oak_vertical_slab double state should resolve to the full slab model");
+    }
+
     const BlockID cauldron = BlockRegistry::findByName("cauldron");
     if (cauldron == BlockIds::AIR) {
         return fail("cauldron should be registered from blocks.json");
@@ -400,6 +450,48 @@ int main() {
     }
     if (canReplaceWithMergedPlacementResult(slabPlacedBottom, slabPlacedTop)) {
         return fail("server placement validation should reject non-merged occupied slab replacement");
+    }
+
+    PlacementStrategyFn verticalSlabStrategy =
+        PlacementStrategyRegistry::getStrategy(oakVerticalSlabDef.placementStrategy);
+    if (verticalSlabStrategy == nullptr) {
+        return fail("vertical slab placement strategy should be registered");
+    }
+
+    PlacementContext verticalSlabSidePlacement;
+    verticalSlabSidePlacement.blockId = oakVerticalSlab;
+    verticalSlabSidePlacement.hitNormal = {1, 0, 0};
+    const StateID verticalSlabSidePlaced = verticalSlabStrategy(verticalSlabSidePlacement);
+    if (BlockStateRegistry::getPropertyIndex(verticalSlabSidePlaced, PropIndices::HALF) != PropIndices::HALF_WEST) {
+        return fail("vertical slab side placement should occupy the half touching the clicked face");
+    }
+
+    PlacementContext verticalSlabTopPlacement;
+    verticalSlabTopPlacement.blockId = oakVerticalSlab;
+    verticalSlabTopPlacement.hitNormal = {0, 1, 0};
+    verticalSlabTopPlacement.hitPosition = {12.75f, 64.0f, 8.5f};
+    const StateID verticalSlabTopPlaced = verticalSlabStrategy(verticalSlabTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(verticalSlabTopPlaced, PropIndices::HALF) != PropIndices::HALF_EAST) {
+        return fail("vertical slab top placement should use hit position to select the east half");
+    }
+
+    verticalSlabTopPlacement.isSneaking = true;
+    const StateID verticalSlabSneakPlaced = verticalSlabStrategy(verticalSlabTopPlacement);
+    if (BlockStateRegistry::getPropertyIndex(verticalSlabSneakPlaced, PropIndices::HALF) != PropIndices::HALF_WEST) {
+        return fail("sneaking vertical slab placement should invert the selected horizontal half");
+    }
+
+    StateID verticalSlabMerged = BlockIds::AIR;
+    if (!tryMergePlacementStates(oakVerticalSlabEast, oakVerticalSlabWest, verticalSlabMerged) ||
+        verticalSlabMerged != oakVerticalSlabDouble) {
+        return fail("east and west vertical slab states should merge into a double slab");
+    }
+    if (!tryMergePlacementStates(oakVerticalSlabNorth, oakVerticalSlabSouth, verticalSlabMerged) ||
+        verticalSlabMerged != oakVerticalSlabDouble) {
+        return fail("north and south vertical slab states should merge into a double slab");
+    }
+    if (tryMergePlacementStates(oakVerticalSlabNorth, oakVerticalSlabEast, verticalSlabMerged)) {
+        return fail("overlapping vertical slab states should not merge");
     }
 
     PlacementContext slabSideTopPlacement;

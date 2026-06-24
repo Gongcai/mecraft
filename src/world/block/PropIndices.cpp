@@ -32,6 +32,10 @@ uint16_t AXIS_Z = INVALID;
 uint16_t HALF_TOP = INVALID;
 uint16_t HALF_BOTTOM = INVALID;
 uint16_t HALF_DOUBLE = INVALID;
+uint16_t HALF_NORTH = INVALID;
+uint16_t HALF_SOUTH = INVALID;
+uint16_t HALF_EAST = INVALID;
+uint16_t HALF_WEST = INVALID;
 
 uint16_t OPEN_TRUE = INVALID;
 uint16_t OPEN_FALSE = INVALID;
@@ -104,6 +108,10 @@ void init() {
     HALF_TOP = lookupValue(HALF, "top");
     HALF_BOTTOM = lookupValue(HALF, "bottom");
     HALF_DOUBLE = lookupValue(HALF, "double");
+    HALF_NORTH = lookupValue(HALF, "north");
+    HALF_SOUTH = lookupValue(HALF, "south");
+    HALF_EAST = lookupValue(HALF, "east");
+    HALF_WEST = lookupValue(HALF, "west");
 
     OPEN_TRUE = lookupValue(OPEN, "true");
     OPEN_FALSE = lookupValue(OPEN, "false");

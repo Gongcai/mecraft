@@ -3,6 +3,7 @@
 #include "BlockCollision.h"
 #include "PropIndices.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -185,6 +186,76 @@ uint16_t halfFromHit(const PlacementContext& ctx) {
     return halfValue;
 }
 
+uint16_t halfFromHorizontalFacing(const uint16_t facing) {
+    if (facing == PropIndices::FACING_NORTH) {
+        return PropIndices::HALF_NORTH;
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return PropIndices::HALF_SOUTH;
+    }
+    if (facing == PropIndices::FACING_EAST) {
+        return PropIndices::HALF_EAST;
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return PropIndices::HALF_WEST;
+    }
+    throw std::runtime_error("Vertical slab placement requires a horizontal facing value");
+}
+
+uint16_t oppositeVerticalHalf(const uint16_t halfValue) {
+    if (halfValue == PropIndices::HALF_NORTH) {
+        return PropIndices::HALF_SOUTH;
+    }
+    if (halfValue == PropIndices::HALF_SOUTH) {
+        return PropIndices::HALF_NORTH;
+    }
+    if (halfValue == PropIndices::HALF_EAST) {
+        return PropIndices::HALF_WEST;
+    }
+    if (halfValue == PropIndices::HALF_WEST) {
+        return PropIndices::HALF_EAST;
+    }
+    throw std::runtime_error("Vertical slab placement requires a vertical half value");
+}
+
+uint16_t verticalHalfFromHitPosition(const PlacementContext& ctx) {
+    constexpr float kCenterEpsilon = 0.001f;
+    const float localX = ctx.hitPosition.x - std::floor(ctx.hitPosition.x);
+    const float localZ = ctx.hitPosition.z - std::floor(ctx.hitPosition.z);
+    const float offsetX = localX - 0.5f;
+    const float offsetZ = localZ - 0.5f;
+
+    if (std::max(std::abs(offsetX), std::abs(offsetZ)) < kCenterEpsilon) {
+        return halfFromHorizontalFacing(horizontalFacingFromYaw(ctx.playerYaw));
+    }
+    if (std::abs(offsetX) >= std::abs(offsetZ)) {
+        return offsetX >= 0.0f ? PropIndices::HALF_EAST : PropIndices::HALF_WEST;
+    }
+    return offsetZ >= 0.0f ? PropIndices::HALF_SOUTH : PropIndices::HALF_NORTH;
+}
+
+uint16_t verticalHalfFromHit(const PlacementContext& ctx) {
+    if (PropIndices::HALF == PropIndices::INVALID ||
+        PropIndices::HALF_NORTH == PropIndices::INVALID ||
+        PropIndices::HALF_SOUTH == PropIndices::INVALID ||
+        PropIndices::HALF_EAST == PropIndices::INVALID ||
+        PropIndices::HALF_WEST == PropIndices::INVALID) {
+        throw std::runtime_error("Vertical slab placement requires registered horizontal half properties");
+    }
+
+    uint16_t halfValue = PropIndices::HALF_NORTH;
+    if (ctx.hitNormal.y == 0) {
+        halfValue = halfFromHorizontalFacing(oppositeHorizontalFacing(facingFromSideNormal(ctx.hitNormal)));
+    } else {
+        halfValue = verticalHalfFromHitPosition(ctx);
+    }
+
+    if (ctx.isSneaking) {
+        halfValue = oppositeVerticalHalf(halfValue);
+    }
+    return halfValue;
+}
+
 StateID strategyHorizontalFacing(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(
         ctx.blockId,
@@ -225,6 +296,10 @@ StateID strategyStairs(const PlacementContext& ctx) {
 
 StateID strategySlab(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, halfFromHit(ctx));
+}
+
+StateID strategyVerticalSlab(const PlacementContext& ctx) {
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, verticalHalfFromHit(ctx));
 }
 
 StateID strategyFence(const PlacementContext& ctx) {
@@ -296,6 +371,7 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("axis_oriented", strategyAxisOriented);
     registerStrategy("stairs", strategyStairs);
     registerStrategy("slab", strategySlab);
+    registerStrategy("vertical_slab", strategyVerticalSlab);
     registerStrategy("fence", strategyFence);
     registerStrategy("wall", strategyWall);
 }

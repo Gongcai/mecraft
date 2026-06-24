@@ -266,6 +266,30 @@
       }
     },
     {
+      "id": "minecraft:oak_vertical_slab",
+      "drop": "minecraft:oak_vertical_slab",
+      "isSolid": false,
+      "renderShape": "model",
+      "placementStrategy": "vertical_slab",
+      "properties": {
+        "half": ["north", "south", "east", "west", "double"]
+      },
+      "defaultState": {
+        "half": "north"
+      },
+      "timeToBreak": 1000,
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "half=north": { "model": "block/oak_vertical_slab_north" },
+        "half=south": { "model": "block/oak_vertical_slab_south" },
+        "half=east": { "model": "block/oak_vertical_slab_east" },
+        "half=west": { "model": "block/oak_vertical_slab_west" },
+        "half=double": { "model": "block/oak_slab_double" }
+      }
+    },
+    {
       "id": "minecraft:oak_fence",
       "drop": "minecraft:oak_fence",
       "isSolid": false,
